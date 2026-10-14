@@ -40,6 +40,7 @@ updates. Security alerts remain eligible for immediate updates and must not be m
 until their compatibility and required checks are reviewed.
 
 The SPA CI job owns the dependency install, checks, and build. Its short-lived build
-artifact is reused by Go tests; the container build remains a separate deployment
-smoke test and uses the GitHub Actions build cache. Concurrent outdated runs are
-cancelled. Required check names remain stable for branch protection.
+artifact is reused by Go tests, including both current and planned executable output
+paths. The container build remains a separate deployment smoke test and uses the
+GitHub Actions build cache. Concurrent outdated runs are cancelled. Required check
+names remain stable for branch protection.
