@@ -28,7 +28,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: spa-build
-          path: .
+          path: cmd/learnvault/web/build
       - shell: bash
         run: test -z "$(gofmt -l .)"
       - run: go test -race ./...
