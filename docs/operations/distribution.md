@@ -31,7 +31,8 @@ primary development model.
 The packaging tool will be selected after the first native binary milestone. It must
 support reproducible versioned builds without making Docker a hidden prerequisite.
 Candidate layers include Go cross-compilation, a Windows installer builder, Debian/RPM
-recipes, and Flatpak metadata. The final choice will be recorded in an ADR.
+recipes, and Flatpak metadata. The final choice will be recorded in an ADR under
+`docs/architecture/adr/`.
 
 ## Configuration model
 

@@ -31,10 +31,11 @@ web/src/              SvelteKit source
 deploy/container/     OCI image definition
 deploy/compose/       Local Docker Compose stack and env example
 deploy/quadlet/       Rootless Podman systemd unit
-docs/                 Architecture, governance, roadmap, distribution, and releases
+docs/                 Versioned architecture, product, governance, operations, and release docs
 scripts/              Local verification helpers
 testdata/             Synthetic fixtures; never real course data
 .github/              CI, releases, ownership, and contribution forms
+.agents/              Agent policies, playbooks, checklists, and templates
 ```
 
 Root files are intentionally reserved for tool manifests (`go.mod`, `package.json`),
@@ -56,7 +57,7 @@ The SvelteKit source lives in `web/src`. Its generated output is written to
 `cmd/learnvault/web/build` and embedded into the Go executable with `go:embed`.
 
 The native executable is the foundation for future `.exe`, MSI, `.deb`, `.rpm`, and
-Flatpak artifacts. See [docs/distribution.md](docs/distribution.md) for the release matrix.
+Flatpak artifacts. See [distribution](docs/operations/distribution.md) for the release matrix.
 
 ## Optional Docker Compose adapter
 
@@ -97,12 +98,12 @@ The initial admin is provisioned from `ADMIN_USERNAME` and `ADMIN_PASSWORD`; the
 
 ## Roadmap
 
-The maintained product roadmap is in [ROADMAP.md](ROADMAP.md). GitHub Issues track the
+The maintained product roadmap is in [docs/product/roadmap.md](docs/product/roadmap.md). GitHub Issues track the
 individual tasks, Milestones group releases, and the private GitHub Project provides the
 operational board. The Markdown roadmap remains the durable, reviewable summary.
-The [GitHub Wiki](https://github.com/AndersonTavares0/LearnVault/wiki) provides navigable
-getting-started, architecture, roadmap, governance, and operations guidance; the repository
-remains the canonical source for code and reviewed policy.
+The [GitHub Wiki](https://github.com/AndersonTavares0/LearnVault/wiki) is generated from
+the versioned documentation after changes merge into `main`; do not edit managed pages in the
+Wiki. The repository remains the canonical source for code and reviewed policy.
 
 ## Not in this phase
 
@@ -112,9 +113,9 @@ Media delivery/player, FFmpeg, thumbnails, progress, search, notes, favorites, C
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Changes to `main`
 must go through a pull request and pass the required GitHub Actions checks. See
-[docs/architecture.md](docs/architecture.md) for design boundaries,
-[docs/governance.md](docs/governance.md) for repository rules,
-[ROADMAP.md](ROADMAP.md) for planned work, and [docs/releases.md](docs/releases.md) for
+[architecture](docs/architecture/overview.md) for design boundaries,
+[governance](docs/governance/overview.md) for repository rules,
+[roadmap](docs/product/roadmap.md) for planned work, and [release process](docs/releases/process.md) for
 the release process.
 
 Security issues should be reported privately as described in [SECURITY.md](SECURITY.md), not opened as public issues.
