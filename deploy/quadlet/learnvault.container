@@ -1,0 +1,33 @@
+[Unit]
+Description=LearnVault personal course library
+RequiresMountsFor=/mnt/cursos /mnt/scratch /home/media/stacks/learnvault/data
+
+[Container]
+Image=localhost/learnvault:latest
+ContainerName=learnvault
+UserNS=keep-id:uid=10001,gid=10001
+PublishPort=8090:8090
+Environment=LISTEN_ADDR=0.0.0.0
+Environment=PORT=8090
+Environment=DATA_DIR=/data
+Environment=CACHE_DIR=/cache
+Environment=LIBRARY_DIR=/library
+Environment=COOKIE_SECURE=true
+EnvironmentFile=%h/stacks/learnvault/learnvault.env
+Volume=/home/media/stacks/learnvault/data:/data:rw
+Volume=/mnt/scratch/learnvault-cache:/cache:rw
+Volume=/mnt/cursos:/library:ro
+ReadOnly=true
+Tmpfs=/tmp:rw,noexec,nosuid,size=16m
+NoNewPrivileges=true
+DropCapability=ALL
+HealthCmd=wget -q -O - http://127.0.0.1:8090/api/healthz
+HealthInterval=30s
+HealthTimeout=3s
+
+[Service]
+Restart=always
+TimeoutStartSec=900
+
+[Install]
+WantedBy=default.target
