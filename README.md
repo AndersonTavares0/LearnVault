@@ -22,7 +22,7 @@ The physical course library is never part of this repository. Do not commit cour
 
 ## Build and tests
 
-Requires Go 1.24+ and Node.js 24+ for local development, or Docker for a container build.
+Requires Go 1.25+ and Node.js 24+ for local development, or Docker for a container build.
 
 ```sh
 npm ci

@@ -22,7 +22,7 @@ jobs:
       - run: npm run build
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.24.13'
+          go-version: '1.25.14'
       - shell: bash
         run: test -z "$(gofmt -l .)"
       - run: go test -race ./...
