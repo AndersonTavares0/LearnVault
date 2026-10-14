@@ -30,7 +30,9 @@ Tests must use fixtures and temporary directories; they must not access `/mnt/cu
 - Document migrations and deployment changes.
 - Add or update tests for behavior changes.
 
-All changes to `main` require a pull request and passing required checks. Direct pushes and force-pushes are disabled.
+All changes to `main` require a pull request and passing required checks. Direct pushes
+and force-pushes are disabled. The repository settings and enforceable policy are
+described in [docs/governance.md](docs/governance.md); correct any drift before merging.
 
 ## Commit style
 
