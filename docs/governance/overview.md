@@ -13,8 +13,8 @@ protection is configured on GitHub and this document records the project rule.
 
 The collaboration path is `Issue → branch → pull request → review → squash merge`.
 Private forks are unavailable for this user-owned private repository, so collaborators
-with Write access work on branches in the repository. The owner remains CODEOWNER and
-controls approval into `main`.
+with Write access work on branches in the repository. `.github/CODEOWNERS` documents
+ownership, but CODEOWNER approval is not required for merge.
 
 ## Template policy
 
@@ -59,7 +59,7 @@ only the pages declared in `wiki/mapping.md` are mirrored to GitHub Wiki.
 
 ## Ownership and releases
 
-`.github/CODEOWNERS` defines review ownership. Releases are tag-driven through the release
+`.github/CODEOWNERS` documents review ownership. Releases are tag-driven through the release
 workflow, with `CHANGELOG.md` and `docs/releases/process.md` updated as part of the change.
 
 ## Wiki synchronization
