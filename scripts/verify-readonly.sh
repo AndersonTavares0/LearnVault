@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-compose=${COMPOSE:-docker compose}
+compose=${COMPOSE:-docker compose --env-file deploy/compose/.env -f deploy/compose/compose.yaml}
 if sh -c "$compose run --rm --no-deps --entrypoint sh learnvault -c 'touch /library/.learnvault-write-probe'"; then
 	printf '%s\n' 'ERROR: write to /library unexpectedly succeeded' >&2
 	exit 1

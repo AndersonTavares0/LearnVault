@@ -2,7 +2,7 @@
 .svelte-kit/
 build/
 node_modules/
-web/build/
+cmd/learnvault/web/build/
 data/
 cache/
 *.sqlite

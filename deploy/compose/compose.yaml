@@ -1,8 +1,8 @@
 services:
   learnvault:
     build:
-      context: .
-      dockerfile: Containerfile
+      context: ../..
+      dockerfile: deploy/container/Containerfile
     image: learnvault:local
     container_name: learnvault
     restart: unless-stopped
@@ -18,9 +18,9 @@ services:
     ports:
       - "${PORT:-8090}:${PORT:-8090}"
     volumes:
-      - ${DATA_DIR:-./data}:/data:rw
-      - ${CACHE_DIR:-./cache}:/cache:rw
-      - ${LIBRARY_DIR:-./testdata/library}:/library:ro
+      - ${DATA_DIR:-../../data}:/data:rw
+      - ${CACHE_DIR:-../../cache}:/cache:rw
+      - ${LIBRARY_DIR:-../../testdata/library}:/library:ro
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=16m
