@@ -2,6 +2,14 @@ import adapter from '@sveltejs/adapter-static';
 
 export default {
 	kit: {
-		adapter: adapter({ fallback: '200.html', pages: 'web/build', assets: 'web/build' })
+		files: {
+			routes: 'web/src/routes',
+			appTemplate: 'web/src/app.html'
+		},
+		adapter: adapter({
+			fallback: '200.html',
+			pages: 'cmd/learnvault/web/build',
+			assets: 'cmd/learnvault/web/build'
+		})
 	}
 };

@@ -34,6 +34,22 @@ All changes to `main` require a pull request and passing required checks. Direct
 and force-pushes are disabled. The repository settings and enforceable policy are
 described in [docs/governance.md](docs/governance.md); correct any drift before merging.
 
+## Issue → branch → pull request → merge
+
+For collaborators such as `WesleyQDev`:
+
+1. Start from a GitHub Issue using the bug or feature form.
+2. Create a branch from `main`, for example `feat/lesson-progress` or `fix/catalog-scan`.
+3. Make the change and push the branch to this repository.
+4. Open a pull request and reference the Issue with `Closes #<number>` when appropriate.
+5. Wait for CI, address review comments, and keep the branch focused.
+6. The repository owner reviews and approves the PR as CODEOWNER.
+7. Merge through GitHub using squash merge; never push directly to `main`.
+
+This private, user-owned repository uses collaborator branches instead of private forks.
+If a fork-based workflow becomes necessary, the repository must first move to an
+organization that permits private forks or become public after a separate review.
+
 ## Commit style
 
 Use short Conventional Commit-style messages: `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, or `chore:`.
