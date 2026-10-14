@@ -2,23 +2,55 @@ package httpapi
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"learnvault/internal/catalog"
 	"learnvault/internal/library"
 	"learnvault/internal/storage"
 )
 
-func TestAPIRejectsUnsupportedMethodsAndUnknownRoutes(t *testing.T) {
-	db, err := storage.Open(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
-	if err != nil {
-		t.Fatal(err)
+var errTestStore = errors.New("test store unavailable")
+
+type fakeStore struct {
+	healthErr error
+	user      storage.User
+}
+
+func (s fakeStore) Ping(context.Context) error { return s.healthErr }
+func (s fakeStore) VerifyPassword(context.Context, string, string) (bool, error) {
+	return s.healthErr == nil, s.healthErr
+}
+func (s fakeStore) UserByName(context.Context, string) (storage.User, error) {
+	return s.user, s.healthErr
+}
+func (s fakeStore) CreateSession(context.Context, int64, time.Duration) (string, error) {
+	return "fixture-session", s.healthErr
+}
+func (s fakeStore) UserForSession(_ context.Context, token string) (storage.User, error) {
+	if s.healthErr != nil || token != "fixture-session" {
+		return storage.User{}, errTestStore
 	}
-	defer db.Close()
-	srv := New(db)
+	return s.user, nil
+}
+func (s fakeStore) DeleteSession(context.Context, string) error { return s.healthErr }
+func (s fakeStore) Catalog(context.Context) (catalog.Catalog, error) {
+	return catalog.Catalog{}, s.healthErr
+}
+func (s fakeStore) ReplaceCatalog(context.Context, catalog.Catalog) error { return s.healthErr }
+
+func newFakeServer(t *testing.T) (*Server, *http.Cookie) {
+	t.Helper()
+	srv := newWithStore(fakeStore{user: storage.User{ID: 1, Username: "owner", Role: "admin"}}, false)
+	return srv, loginForTest(t, srv)
+}
+
+func TestAPIRejectsUnsupportedMethodsAndUnknownRoutes(t *testing.T) {
+	srv, _ := newFakeServer(t)
 
 	cases := []struct {
 		path   string
@@ -56,15 +88,7 @@ func TestAPIRejectsUnsupportedMethodsAndUnknownRoutes(t *testing.T) {
 }
 
 func TestLoginRejectsMalformedUnknownAndInvalidCredentials(t *testing.T) {
-	db, err := storage.Open(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if err := db.BootstrapAdmin(context.Background(), "owner", "a sufficiently long password"); err != nil {
-		t.Fatal(err)
-	}
-	srv := NewWithOptions(db, false)
+	srv, _ := newFakeServer(t)
 	cases := []struct {
 		name string
 		body string
@@ -87,18 +111,8 @@ func TestLoginRejectsMalformedUnknownAndInvalidCredentials(t *testing.T) {
 }
 
 func TestUnavailableStorageAndLibraryReturnSafeErrors(t *testing.T) {
-	db, err := storage.Open(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := db.BootstrapAdmin(context.Background(), "owner", "a sufficiently long password"); err != nil {
-		t.Fatal(err)
-	}
-	srv := New(db)
-	cookie := loginForTest(t, srv)
-	if err := db.Close(); err != nil {
-		t.Fatal(err)
-	}
+	srv, cookie := newFakeServer(t)
+	srv.db = fakeStore{healthErr: errTestStore}
 
 	for _, tc := range []struct {
 		path   string
@@ -125,21 +139,14 @@ func TestUnavailableStorageAndLibraryReturnSafeErrors(t *testing.T) {
 }
 
 func TestMediaAndRescanRejectInvalidOrUnavailableRequests(t *testing.T) {
-	db, err := storage.Open(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if err := db.BootstrapAdmin(context.Background(), "owner", "a sufficiently long password"); err != nil {
-		t.Fatal(err)
-	}
 	root, err := library.Open(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := NewWithLibrary(db, false, root)
-	withoutLibrary := New(db)
-	cookie := loginForTest(t, srv)
+	srv, cookie := newFakeServer(t)
+	srv.libraryPath = root.Path()
+	srv.libraryRoot = root
+	withoutLibrary := newWithStore(srv.db, false)
 
 	for _, tc := range []struct {
 		name string
