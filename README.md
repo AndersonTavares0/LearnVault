@@ -1,6 +1,21 @@
 # LearnVault
 
-Self-hosted course library for turning an existing folder of courses into a calm, searchable study space. LearnVault uses useful course-platform patterns as clean-room product references, without copying code, assets, branding, or pixel-level layouts.
+[![CI](https://github.com/AndersonTavares0/LearnVault/actions/workflows/ci.yml/badge.svg)](https://github.com/AndersonTavares0/LearnVault/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/AndersonTavares0/LearnVault?display_name=tag)](https://github.com/AndersonTavares0/LearnVault/releases)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)](https://go.dev/)
+[![Node.js](https://img.shields.io/badge/Node.js-24.x-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![npm](https://img.shields.io/badge/npm-11.x-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/)
+[![SvelteKit](https://img.shields.io/badge/SvelteKit-2-FF3E00?logo=svelte&logoColor=white)](https://svelte.dev/docs/kit)
+[![Svelte](https://img.shields.io/badge/Svelte-5-FF3E00?logo=svelte&logoColor=white)](https://svelte.dev/)
+[![Vite](https://img.shields.io/badge/Vite-7-646CFF?logo=vite&logoColor=white)](https://vite.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![SQLite](https://img.shields.io/badge/SQLite-modernc.org-003B57?logo=sqlite&logoColor=white)](https://sqlite.org/)
+
+LearnVault transforms an existing course folder into a self-hosted study space. It is
+designed around a read-only physical library, individual accounts, and a calm local
+study workflow. Course-platform products are clean-room product references only; this
+project does not copy their code, assets, branding, text, or pixel-level layouts.
 
 The repository is private during the initial collaboration phase. It may become public later after the homelab and documentation have been reviewed.
 
@@ -8,9 +23,12 @@ The current foundation provides a portable Go API, an embedded SvelteKit SPA, lo
 authentication, SQLite migrations, optional container deployment, and an explicit
 read-only catalog indexer.
 
-## Project status
+## Status
 
-LearnVault is under active development. The current release line is the foundation/catalog phase. Player navigation, progress persistence, thumbnails, search, notes, favorites, and FFmpeg remuxing are planned follow-up milestones.
+LearnVault is under active development. The current release line covers the Go service,
+local authentication, SQLite migrations, catalog indexing, and the embedded SPA.
+Player navigation, progress persistence, thumbnails, search, notes, favorites, and
+FFmpeg remuxing are planned follow-up milestones.
 
 The physical course library is never part of this repository. Do not commit course files, personal data, homelab credentials, or generated media.
 
@@ -41,14 +59,14 @@ testdata/             Synthetic fixtures; never real course data
 Root files are intentionally reserved for tool manifests (`go.mod`, `package.json`),
 project policy, and files required by common tooling. Generated output is ignored.
 
-## Standard technology stack
+## Stack
 
 Use the same toolchain across development, CI, container builds, and releases:
 
 | Area | Standard |
 | --- | --- |
 | Backend | Go 1.25; CI and release builds pin Go 1.25.14 |
-| Frontend runtime | Node.js 24.x with npm 11.x (npm 11.19.0 verified locally) |
+| Frontend runtime | Node.js 24.x with npm 11.x |
 | Frontend | SvelteKit 2, Svelte 5, Vite 7, TypeScript 5 |
 | Dependency installation | `package-lock.json` is authoritative; use `npm ci`, not `npm install`, in CI |
 | Persistence | SQLite through `modernc.org/sqlite` (pure Go) |
@@ -56,11 +74,10 @@ Use the same toolchain across development, CI, container builds, and releases:
 | Optional deployment | Docker Compose or rootless Podman/Quadlet; neither is required to develop or run the native executable |
 
 Dependency versions are locked in `package-lock.json` and `go.sum`. Keep the major
-toolchain versions aligned with this table; propose upgrades through a reviewed PR and
-update this section when the baseline changes. Do not add a second JavaScript package
-manager or a competing lockfile.
+toolchain versions aligned with this table and propose upgrades through a reviewed PR.
+`npm` is the only JavaScript package manager; do not add a competing lockfile.
 
-## Build and tests
+## Development
 
 Requires Go 1.25, Node.js 24.x, and npm 11.x for local development. Docker is optional.
 
@@ -78,7 +95,7 @@ The SvelteKit source lives in `web/src`. Its generated output is written to
 The native executable is the foundation for future `.exe`, MSI, `.deb`, `.rpm`, and
 Flatpak artifacts. See [distribution](docs/operations/distribution.md) for the release matrix.
 
-## Optional Docker Compose adapter
+## Optional container adapters
 
 Copy `deploy/compose/.env.example` to `deploy/compose/.env`, set a unique initial admin
 password of at least 12 characters, and configure `DATA_DIR`, `CACHE_DIR` and
@@ -93,7 +110,7 @@ docker compose --env-file deploy/compose/.env -f deploy/compose/compose.yaml up 
 
 The container runs as UID/GID 10001, with a read-only root filesystem, dropped capabilities, and `no-new-privileges`. Only `/data` and `/cache` are writable. On Linux, ensure the host data/cache directories are writable by UID 10001 (or configure a matching user in the image); `/library` is mounted read-only. To verify the mount protection with Docker Compose, run `scripts/verify-readonly.sh` from a POSIX shell after configuring `.env`; a failed write is the expected passing result. Never point the foundation test fixture at `/mnt/cursos`.
 
-## Podman rootless / Quadlet
+### Rootless Podman / Quadlet
 
 Build and tag the image as `localhost/learnvault:latest`, install `deploy/quadlet/learnvault.container` under `/home/media/.config/containers/systemd/`, create data/cache directories owned by `media`, and create `%h/stacks/learnvault/learnvault.env` with the initial admin credentials (restrict it to owner read/write). The unit uses port 8090 as its example deployment value; edit its `PORT`, `PublishPort` and health-check URL together as needed. Its library volume is explicitly `/mnt/cursos:/library:ro`.
 
