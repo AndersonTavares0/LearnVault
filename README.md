@@ -100,8 +100,9 @@ The initial admin is provisioned from `ADMIN_USERNAME` and `ADMIN_PASSWORD`; the
 The maintained product roadmap is in [ROADMAP.md](ROADMAP.md). GitHub Issues track the
 individual tasks, Milestones group releases, and the private GitHub Project provides the
 operational board. The Markdown roadmap remains the durable, reviewable summary.
-The [GitHub Wiki](https://github.com/AndersonTavares0/LearnVault/wiki) is reserved for
-navigable operational notes after its initial page is created.
+The [GitHub Wiki](https://github.com/AndersonTavares0/LearnVault/wiki) provides navigable
+getting-started, architecture, roadmap, governance, and operations guidance; the repository
+remains the canonical source for code and reviewed policy.
 
 ## Not in this phase
 
