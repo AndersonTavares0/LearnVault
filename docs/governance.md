@@ -11,6 +11,11 @@
 Direct pushes, force-pushes, and branch deletion on `main` are not allowed. Branch
 protection is configured on GitHub and this document records the project rule.
 
+The collaboration path is `Issue → branch → pull request → review → squash merge`.
+Private forks are unavailable for this user-owned private repository, so collaborators
+with Write access work on branches in the repository. The owner remains CODEOWNER and
+controls approval into `main`.
+
 ## Template policy
 
 - Blank issues are disabled.
