@@ -5,7 +5,7 @@
 ## Governance impact
 
 - [ ] No repository setting, ownership rule, required check, or release-policy change.
-- [ ] Governance impact is described below and documented in `docs/governance.md` if needed.
+- [ ] Governance impact is described below and documented in `docs/governance/overview.md` if needed.
 
 <!-- Explain any governance, permissions, branch protection, or release-policy change. -->
 

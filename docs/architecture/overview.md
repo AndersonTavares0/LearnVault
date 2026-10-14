@@ -20,4 +20,4 @@ Rootless Podman with Quadlet and Docker Compose are deployment adapters for the 
 not application dependencies. Native desktop and server builds remain first-class.
 Durable application data and disposable cache use separate locations in every adapter.
 
-See [distribution.md](distribution.md) for executable and package targets.
+See [distribution](../operations/distribution.md) for executable and package targets.

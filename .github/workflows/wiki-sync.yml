@@ -1,0 +1,48 @@
+name: Wiki sync
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - README.md
+      - docs/architecture/overview.md
+      - docs/governance/overview.md
+      - docs/operations/distribution.md
+      - docs/product/roadmap.md
+      - docs/wiki/**
+      - scripts/sync-wiki.sh
+      - .github/workflows/wiki-sync.yml
+  workflow_dispatch:
+
+concurrency:
+  group: wiki-sync-main
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    name: Sync managed Wiki pages
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clone Wiki
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: git clone "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git" wiki
+      - name: Render managed pages
+        run: scripts/sync-wiki.sh wiki
+      - name: Commit changed pages
+        working-directory: wiki
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Home.md Getting-Started.md Architecture.md Roadmap.md Development-and-Governance.md Operations.md
+          git commit -m "docs: sync managed Wiki pages"
+          git push

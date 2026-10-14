@@ -28,7 +28,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: spa-build
-          path: .
+          path: cmd/learnvault/web/build
       - shell: bash
         run: test -z "$(gofmt -l .)"
       - run: go test -race ./...
@@ -51,9 +51,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: spa-build
-          path: |
-            web/build
-            cmd/learnvault/web/build
+          path: cmd/learnvault/web/build
           if-no-files-found: error
           retention-days: 1
           compression-level: 1

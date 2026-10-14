@@ -32,7 +32,7 @@ Tests must use fixtures and temporary directories; they must not access `/mnt/cu
 
 All changes to `main` require a pull request and passing required checks. Direct pushes
 and force-pushes are disabled. The repository settings and enforceable policy are
-described in [docs/governance.md](docs/governance.md); correct any drift before merging.
+described in [docs/governance/overview.md](docs/governance/overview.md); correct any drift before merging.
 
 ## Issue → branch → pull request → merge
 

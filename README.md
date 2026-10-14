@@ -31,18 +31,38 @@ web/src/              SvelteKit source
 deploy/container/     OCI image definition
 deploy/compose/       Local Docker Compose stack and env example
 deploy/quadlet/       Rootless Podman systemd unit
-docs/                 Architecture, governance, roadmap, distribution, and releases
+docs/                 Versioned architecture, product, governance, operations, and release docs
 scripts/              Local verification helpers
 testdata/             Synthetic fixtures; never real course data
 .github/              CI, releases, ownership, and contribution forms
+.agents/              Agent policies, playbooks, checklists, and templates
 ```
 
 Root files are intentionally reserved for tool manifests (`go.mod`, `package.json`),
 project policy, and files required by common tooling. Generated output is ignored.
 
+## Standard technology stack
+
+Use the same toolchain across development, CI, container builds, and releases:
+
+| Area | Standard |
+| --- | --- |
+| Backend | Go 1.25; CI and release builds pin Go 1.25.14 |
+| Frontend runtime | Node.js 24.x with npm 11.x (npm 11.19.0 verified locally) |
+| Frontend | SvelteKit 2, Svelte 5, Vite 7, TypeScript 5 |
+| Dependency installation | `package-lock.json` is authoritative; use `npm ci`, not `npm install`, in CI |
+| Persistence | SQLite through `modernc.org/sqlite` (pure Go) |
+| Application delivery | One Go executable with the static SPA embedded |
+| Optional deployment | Docker Compose or rootless Podman/Quadlet; neither is required to develop or run the native executable |
+
+Dependency versions are locked in `package-lock.json` and `go.sum`. Keep the major
+toolchain versions aligned with this table; propose upgrades through a reviewed PR and
+update this section when the baseline changes. Do not add a second JavaScript package
+manager or a competing lockfile.
+
 ## Build and tests
 
-Requires Go 1.25+ and Node.js 24+ for local development. Docker is optional.
+Requires Go 1.25, Node.js 24.x, and npm 11.x for local development. Docker is optional.
 
 ```sh
 npm ci
@@ -56,7 +76,7 @@ The SvelteKit source lives in `web/src`. Its generated output is written to
 `cmd/learnvault/web/build` and embedded into the Go executable with `go:embed`.
 
 The native executable is the foundation for future `.exe`, MSI, `.deb`, `.rpm`, and
-Flatpak artifacts. See [docs/distribution.md](docs/distribution.md) for the release matrix.
+Flatpak artifacts. See [distribution](docs/operations/distribution.md) for the release matrix.
 
 ## Optional Docker Compose adapter
 
@@ -97,12 +117,12 @@ The initial admin is provisioned from `ADMIN_USERNAME` and `ADMIN_PASSWORD`; the
 
 ## Roadmap
 
-The maintained product roadmap is in [ROADMAP.md](ROADMAP.md). GitHub Issues track the
+The maintained product roadmap is in [docs/product/roadmap.md](docs/product/roadmap.md). GitHub Issues track the
 individual tasks, Milestones group releases, and the private GitHub Project provides the
 operational board. The Markdown roadmap remains the durable, reviewable summary.
-The [GitHub Wiki](https://github.com/AndersonTavares0/LearnVault/wiki) provides navigable
-getting-started, architecture, roadmap, governance, and operations guidance; the repository
-remains the canonical source for code and reviewed policy.
+The [GitHub Wiki](https://github.com/AndersonTavares0/LearnVault/wiki) is generated from
+the versioned documentation after changes merge into `main`; do not edit managed pages in the
+Wiki. The repository remains the canonical source for code and reviewed policy.
 
 ## Not in this phase
 
@@ -112,9 +132,9 @@ Media delivery/player, FFmpeg, thumbnails, progress, search, notes, favorites, C
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Changes to `main`
 must go through a pull request and pass the required GitHub Actions checks. See
-[docs/architecture.md](docs/architecture.md) for design boundaries,
-[docs/governance.md](docs/governance.md) for repository rules,
-[ROADMAP.md](ROADMAP.md) for planned work, and [docs/releases.md](docs/releases.md) for
+[architecture](docs/architecture/overview.md) for design boundaries,
+[governance](docs/governance/overview.md) for repository rules,
+[roadmap](docs/product/roadmap.md) for planned work, and [release process](docs/releases/process.md) for
 the release process.
 
 Security issues should be reported privately as described in [SECURITY.md](SECURITY.md), not opened as public issues.

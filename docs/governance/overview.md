@@ -39,10 +39,14 @@ Application code belongs in these directories:
 | `deploy/compose/` | Local Docker Compose stack and environment example |
 | `deploy/quadlet/` | Rootless Podman systemd unit |
 | `scripts/` | Local verification scripts |
-| `docs/` | Architecture, governance, roadmap, distribution, and release documentation |
+| `docs/` | Versioned architecture, governance, operations, product, release, and Wiki documentation |
 
 Generated output (`cmd/learnvault/web/build`, `.svelte-kit`, `node_modules`, local
 data/cache) must stay ignored and must not be committed.
+
+Documentation is grouped by responsibility: `architecture/`, `governance/`,
+`operations/`, `product/`, `releases/`, and `wiki/`. The repository is canonical;
+only the pages declared in `wiki/mapping.md` are mirrored to GitHub Wiki.
 
 ## Repository boundaries
 
@@ -56,31 +60,38 @@ data/cache) must stay ignored and must not be committed.
 ## Ownership and releases
 
 `.github/CODEOWNERS` defines review ownership. Releases are tag-driven through the release
-workflow, with `CHANGELOG.md` and `docs/releases.md` updated as part of the change.
+workflow, with `CHANGELOG.md` and `docs/releases/process.md` updated as part of the change.
 
-## Dependency updates and CI cost
+## Wiki synchronization
+
+`Wiki sync` runs only after mapped documentation reaches `main`, or by an explicit
+manual dispatch. It has independent path filters and is not a required CI check. The
+workflow writes only managed pages in the Wiki Git repository, commits only a real diff,
+and does not react to Wiki (`gollum`) events, preventing sync loops. Manual edits to a
+managed page are intentionally replaced by the next canonical documentation change.
+
+## CI efficiency
+
+The three required CI job names remain stable: `SPA checks`, `Go tests and vet`, and
+`Container build`. CI always runs for pull requests so a required check is never skipped.
+It cancels obsolete runs for the same branch, builds the SPA once for the Go embed step,
+uses dependency/build caches, applies short timeouts, and retains the generated SPA
+artifact for one day. Container build remains an independent deployment smoke test with
+its own BuildKit cache. The non-required Wiki workflow uses path filters because it only
+updates derived documentation.
+
+## Dependency updates
 
 Dependabot groups compatible npm, Go-module, and GitHub Actions patch/minor updates;
 major updates remain individual so peer incompatibilities are visible. Updates are
 staggered weekly (Actions monthly), with a small open-PR cap and cooldown for routine
-updates. Security alerts remain eligible for immediate updates and must not be merged
-until their compatibility and required checks are reviewed.
-
-The SPA CI job owns the dependency install, checks, and build. Its short-lived build
-artifact is reused by Go tests, including both current and planned executable output
-paths. The container build remains a separate deployment smoke test and uses the
-GitHub Actions build cache. Concurrent outdated runs are cancelled. Required check
-names remain stable for branch protection.
-
-CI jobs have finite timeouts to stop stalled work from consuming runner minutes. The
-Go setup caches module and compiler output using `go.sum`; the SPA artifact is kept
-for one day and uses low-cost compression because it consists primarily of already
-minified build assets. These optimizations never skip a required check.
+updates. Security alerts remain eligible for immediate updates and require compatibility
+review and current required checks before merging.
 
 ## Test efficiency
 
 Tests keep real Argon2id coverage in storage and end-to-end authentication tests.
-HTTP route tests use an in-memory store only when they are verifying response mapping,
-method handling, or unavailable dependencies; this avoids repeating password hashing
-and SQLite setup without weakening production authentication. Test fixtures remain
-isolated and must not read the external course library.
+HTTP route tests use an in-memory store only when verifying response mapping, method
+handling, or unavailable dependencies. This avoids repeating password hashing and
+SQLite setup without weakening production authentication. Fixtures remain isolated
+and must not read the external course library.
