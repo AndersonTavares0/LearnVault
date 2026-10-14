@@ -1,7 +1,7 @@
 .git
 node_modules
 .svelte-kit
-web/build
+cmd/learnvault/web/build
 data
 cache
 library

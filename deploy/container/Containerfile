@@ -3,7 +3,7 @@ WORKDIR /src
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY svelte.config.js vite.config.ts tsconfig.json ./
-COPY src ./src
+COPY web ./web
 RUN npm run build
 
 FROM golang:1.25-alpine AS go-build
@@ -11,8 +11,8 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-COPY --from=web-build /src/web/build ./web/build
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/learnvault .
+COPY --from=web-build /src/cmd/learnvault/web/build ./cmd/learnvault/web/build
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/learnvault ./cmd/learnvault
 
 FROM alpine:3.22
 RUN apk add --no-cache ca-certificates wget && addgroup -S -g 10001 learnvault && adduser -S -D -H -u 10001 -G learnvault learnvault
