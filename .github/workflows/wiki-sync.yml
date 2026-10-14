@@ -24,6 +24,7 @@ permissions:
 jobs:
   sync:
     name: Sync managed Wiki pages
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
