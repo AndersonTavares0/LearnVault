@@ -44,3 +44,16 @@ artifact is reused by Go tests, including both current and planned executable ou
 paths. The container build remains a separate deployment smoke test and uses the
 GitHub Actions build cache. Concurrent outdated runs are cancelled. Required check
 names remain stable for branch protection.
+
+CI jobs have finite timeouts to stop stalled work from consuming runner minutes. The
+Go setup caches module and compiler output using `go.sum`; the SPA artifact is kept
+for one day and uses low-cost compression because it consists primarily of already
+minified build assets. These optimizations never skip a required check.
+
+## Test efficiency
+
+Tests keep real Argon2id coverage in storage and end-to-end authentication tests.
+HTTP route tests use an in-memory store only when they are verifying response mapping,
+method handling, or unavailable dependencies; this avoids repeating password hashing
+and SQLite setup without weakening production authentication. Test fixtures remain
+isolated and must not read the external course library.

@@ -16,12 +16,15 @@ jobs:
   go:
     name: Go tests and vet
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: [web]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: '1.25.14'
+          cache: true
+          cache-dependency-path: go.sum
       - uses: actions/download-artifact@v4
         with:
           name: spa-build
@@ -34,6 +37,7 @@ jobs:
   web:
     name: SPA checks
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -52,10 +56,12 @@ jobs:
             cmd/learnvault/web/build
           if-no-files-found: error
           retention-days: 1
+          compression-level: 1
 
   container:
     name: Container build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: [go, web]
     steps:
       - uses: actions/checkout@v4
