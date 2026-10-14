@@ -30,3 +30,16 @@ protection is configured on GitHub and this document records the project rule.
 
 `.github/CODEOWNERS` defines review ownership. Releases are tag-driven through the release
 workflow, with `CHANGELOG.md` and `docs/releases.md` updated as part of the change.
+
+## Dependency updates and CI cost
+
+Dependabot groups compatible npm, Go-module, and GitHub Actions patch/minor updates;
+major updates remain individual so peer incompatibilities are visible. Updates are
+staggered weekly (Actions monthly), with a small open-PR cap and cooldown for routine
+updates. Security alerts remain eligible for immediate updates and must not be merged
+until their compatibility and required checks are reviewed.
+
+The SPA CI job owns the dependency install, checks, and build. Its short-lived build
+artifact is reused by Go tests; the container build remains a separate deployment
+smoke test and uses the GitHub Actions build cache. Concurrent outdated runs are
+cancelled. Required check names remain stable for branch protection.
