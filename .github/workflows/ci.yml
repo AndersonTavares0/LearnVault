@@ -52,6 +52,6 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
-           file: deploy/container/Containerfile
+          file: deploy/container/Containerfile
           push: false
           tags: learnvault:ci
