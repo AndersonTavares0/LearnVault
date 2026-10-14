@@ -37,3 +37,26 @@ func TestSPAFallbackDoesNotMaskMissingAssetsOrAPI(t *testing.T) {
 		}
 	}
 }
+
+func TestSecurityHeadersWrapResponse(t *testing.T) {
+	called := false
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusNoContent)
+	})
+	recorder := httptest.NewRecorder()
+	securityHeaders(next).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	if !called || recorder.Code != http.StatusNoContent {
+		t.Fatalf("wrapped handler called=%v status=%d", called, recorder.Code)
+	}
+	for header, want := range map[string]string{
+		"X-Content-Type-Options": "nosniff",
+		"X-Frame-Options":        "DENY",
+		"Referrer-Policy":        "no-referrer",
+	} {
+		if got := recorder.Header().Get(header); got != want {
+			t.Errorf("%s = %q; want %q", header, got, want)
+		}
+	}
+}
