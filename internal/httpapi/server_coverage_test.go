@@ -22,11 +22,17 @@ type fakeStore struct {
 }
 
 func (s fakeStore) Ping(context.Context) error { return s.healthErr }
-func (s fakeStore) VerifyPassword(context.Context, string, string) (bool, error) {
-	return s.healthErr == nil, s.healthErr
+func (s fakeStore) VerifyPassword(_ context.Context, username, password string) (bool, error) {
+	if s.healthErr != nil {
+		return false, s.healthErr
+	}
+	return username == "owner" && password == "a sufficiently long password", nil
 }
-func (s fakeStore) UserByName(context.Context, string) (storage.User, error) {
-	return s.user, s.healthErr
+func (s fakeStore) UserByName(_ context.Context, username string) (storage.User, error) {
+	if s.healthErr != nil || username != s.user.Username {
+		return storage.User{}, errTestStore
+	}
+	return s.user, nil
 }
 func (s fakeStore) CreateSession(context.Context, int64, time.Duration) (string, error) {
 	return "fixture-session", s.healthErr

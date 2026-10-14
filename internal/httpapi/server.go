@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"mime"
 	"net/http"
@@ -18,11 +19,25 @@ const sessionCookie = "learnvault_session"
 const sessionLifetime = 12 * time.Hour
 
 type Server struct {
-	db           *storage.DB
+	db           store
 	cookieSecure bool
 	libraryPath  string
 	libraryRoot  *library.Root
 	rescanMu     sync.Mutex
+}
+
+// store is the API boundary required by Server. Production uses storage.DB;
+// keeping the boundary narrow lets HTTP behavior be tested without repeating
+// password derivation or database setup for every request-path test.
+type store interface {
+	Ping(context.Context) error
+	VerifyPassword(context.Context, string, string) (bool, error)
+	UserByName(context.Context, string) (storage.User, error)
+	CreateSession(context.Context, int64, time.Duration) (string, error)
+	UserForSession(context.Context, string) (storage.User, error)
+	DeleteSession(context.Context, string) error
+	Catalog(context.Context) (catalog.Catalog, error)
+	ReplaceCatalog(context.Context, catalog.Catalog) error
 }
 
 func New(db *storage.DB) *Server {
@@ -30,6 +45,10 @@ func New(db *storage.DB) *Server {
 }
 
 func NewWithOptions(db *storage.DB, cookieSecure bool) *Server {
+	return newWithStore(db, cookieSecure)
+}
+
+func newWithStore(db store, cookieSecure bool) *Server {
 	return &Server{db: db, cookieSecure: cookieSecure}
 }
 
