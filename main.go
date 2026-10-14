@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -25,61 +26,75 @@ import (
 var webBuild embed.FS
 
 func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatal(err)
 	}
+	if err := run(ctx, cfg, net.Listen); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run(ctx context.Context, cfg config.Config, listen func(string, string) (net.Listener, error)) error {
 	root, err := library.Open(cfg.LibraryDir)
 	if err != nil {
-		log.Fatalf("open read-only library mount: %v", err)
+		return err
 	}
 	for _, dir := range []string{cfg.DataDir, cfg.CacheDir} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
-			log.Fatal(err)
+			return err
 		}
 	}
-	db, err := storage.Open(context.Background(), cfg.DatabasePath)
+	db, err := storage.Open(ctx, cfg.DatabasePath)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	defer db.Close()
 
-	hasAdmin, err := db.HasAdmin(context.Background())
+	hasAdmin, err := db.HasAdmin(ctx)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	if !hasAdmin {
 		if cfg.AdminUser == "" || cfg.AdminPass == "" {
-			log.Fatal("first run requires ADMIN_USERNAME and ADMIN_PASSWORD (minimum 12 characters)")
+			return errors.New("first run requires ADMIN_USERNAME and ADMIN_PASSWORD (minimum 12 characters)")
 		}
-		if err := db.BootstrapAdmin(context.Background(), cfg.AdminUser, cfg.AdminPass); err != nil {
-			log.Fatal(err)
+		if err := db.BootstrapAdmin(ctx, cfg.AdminUser, cfg.AdminPass); err != nil {
+			return err
 		}
 		log.Printf("bootstrapped initial admin account %q", cfg.AdminUser)
 	}
 
 	staticFiles, err := fs.Sub(webBuild, "web/build")
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	api := httpapi.NewWithLibrary(db, cfg.CookieSecure, root)
 	mux := http.NewServeMux()
 	mux.Handle("/api/", api)
 	mux.HandleFunc("/", spaHandler(staticFiles))
-	server := &http.Server{Addr: cfg.ListenAddr + ":" + cfg.Port, Handler: securityHeaders(mux), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
+	address := cfg.ListenAddr + ":" + cfg.Port
+	listener, err := listen("tcp", address)
+	if err != nil {
+		return err
+	}
+	server := &http.Server{Addr: address, Handler: securityHeaders(mux), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	serverCtx, stop := context.WithCancel(ctx)
 	defer stop()
 	go func() {
-		<-ctx.Done()
+		<-serverCtx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		_ = server.Shutdown(shutdownCtx)
 	}()
 	log.Printf("LearnVault listening on %s", server.Addr)
-	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		log.Fatal(err)
+	if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return err
 	}
+	return nil
 }
 
 func spaHandler(files fs.FS) http.HandlerFunc {
