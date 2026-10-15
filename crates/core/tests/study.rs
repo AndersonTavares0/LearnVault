@@ -92,6 +92,31 @@ fn count(db: &Database, table: &str) -> i64 {
         .expect("contagem")
 }
 
+/// Conteúdo das linhas de mídia, para provar que o progresso não altera nenhuma coluna.
+fn media_snapshot(db: &Database) -> Vec<(String, String, String, i64, i64, String)> {
+    let conn = db.connection();
+    let mut statement = conn
+        .prepare(
+            "SELECT media_id, library_id, relative_path, size, mtime, availability
+             FROM media ORDER BY media_id",
+        )
+        .expect("preparo da consulta");
+    let rows = statement
+        .query_map([], |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+                row.get(5)?,
+            ))
+        })
+        .expect("consulta de mídia");
+
+    rows.map(|row| row.expect("linha de mídia")).collect()
+}
+
 #[test]
 fn progress_of_an_unknown_pair_is_absent_and_is_not_an_error() -> TestResult {
     let db = library_db()?;
@@ -300,6 +325,15 @@ fn recent_study_never_exceeds_its_ceiling() -> TestResult {
         "o teto é fixo e não depende de configuração"
     );
     assert_eq!(states[0].media_id, format!("m{:04}", total - 1));
+    assert_eq!(
+        states.last().map(|state| state.media_id.as_str()),
+        Some(format!("m{:04}", total - MAX_RECENT_STUDY).as_str()),
+        "o teto corta os mais antigos, não os mais recentes"
+    );
+    assert!(
+        !states.iter().any(|state| state.media_id == "m0000"),
+        "o mais antigo fica fora do teto"
+    );
     Ok(())
 }
 
@@ -407,15 +441,17 @@ fn an_empty_owner_is_rejected_everywhere() -> TestResult {
     let db = library_db()?;
     insert_media(&db, "m1", "available")?;
 
-    for result in [
-        record_position(&db, "", "m1", 10).map(|_| ()),
-        set_completed(&db, "", "m1", true).map(|_| ()),
-        study_progress(&db, "", "m1").map(|_| ()),
-        recent_study(&db, "", 10).map(|_| ()),
-    ] {
-        match result {
-            Err(Error::InvalidOwnerId) => {}
-            other => panic!("esperava Error::InvalidOwnerId, obtive {other:?}"),
+    for owner in ["", "   ", "\t"] {
+        for result in [
+            record_position(&db, owner, "m1", 10).map(|_| ()),
+            set_completed(&db, owner, "m1", true).map(|_| ()),
+            study_progress(&db, owner, "m1").map(|_| ()),
+            recent_study(&db, owner, 10).map(|_| ()),
+        ] {
+            match result {
+                Err(Error::InvalidOwnerId) => {}
+                other => panic!("esperava Error::InvalidOwnerId para {owner:?}, obtive {other:?}"),
+            }
         }
     }
 
@@ -446,7 +482,10 @@ fn a_failed_write_leaves_the_previous_state_intact() -> TestResult {
 
     let result = record_position(&db, OWNER, "m1", 99);
 
-    assert!(result.is_err(), "a escrita precisa falhar");
+    match result {
+        Err(Error::Database(_)) => {}
+        other => panic!("esperava a falha injetada no banco, obtive {other:?}"),
+    }
     assert_eq!(
         row(&db, OWNER, "m1"),
         Some((10, 0, SEEDED_AT)),
@@ -459,16 +498,183 @@ fn a_failed_write_leaves_the_previous_state_intact() -> TestResult {
 fn recording_progress_does_not_touch_other_tables() -> TestResult {
     let db = library_db()?;
     insert_media(&db, "m1", "available")?;
-    let media_before = count(&db, "media");
+    let media_before = media_snapshot(&db);
     let scan_before = count(&db, "scan");
     let library_before = count(&db, "library");
 
     record_position(&db, OWNER, "m1", 10)?;
     set_completed(&db, OWNER, "m1", true)?;
 
-    assert_eq!(count(&db, "media"), media_before);
+    assert_eq!(
+        media_snapshot(&db),
+        media_before,
+        "o progresso não altera nenhuma coluna de mídia"
+    );
     assert_eq!(count(&db, "scan"), scan_before);
     assert_eq!(count(&db, "library"), library_before);
     assert_eq!(count(&db, "study_state"), 1);
+    Ok(())
+}
+
+#[test]
+fn progress_of_an_unknown_media_is_reported_on_read() -> TestResult {
+    let db = library_db()?;
+
+    match study_progress(&db, OWNER, "m-inexistente") {
+        Err(Error::MediaNotFound { media_id }) => assert_eq!(media_id, "m-inexistente"),
+        other => panic!("esperava Error::MediaNotFound, obtive {other:?}"),
+    }
+    Ok(())
+}
+
+#[test]
+fn a_real_change_promotes_the_media_in_recent_study() -> TestResult {
+    let db = library_db()?;
+    for media in ["m1", "m2"] {
+        insert_media(&db, media, "available")?;
+    }
+    seed(&db, OWNER, "m1", 10, false, 100)?;
+    seed(&db, OWNER, "m2", 20, false, 200)?;
+    assert_eq!(recent_ids(&db, OWNER, 10), ["m2", "m1"]);
+
+    record_position(&db, OWNER, "m1", 99)?;
+
+    assert_eq!(
+        recent_ids(&db, OWNER, 10),
+        ["m1", "m2"],
+        "uma mudança real torna a mídia a mais recente"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_write_from_another_owner_does_not_touch_the_row() -> TestResult {
+    let db = library_db()?;
+    insert_media(&db, "m1", "available")?;
+    insert_media(&db, "m2", "available")?;
+    record_position(&db, OWNER, "m1", 42)?;
+    set_completed(&db, OWNER, "m1", true)?;
+    let before = row(&db, OWNER, "m1");
+
+    record_position(&db, OTHER, "m1", 7)?;
+    set_completed(&db, OTHER, "m1", true)?;
+    record_position(&db, OTHER, "m2", 5)?;
+
+    assert_eq!(
+        row(&db, OWNER, "m1"),
+        before,
+        "nenhuma escrita de outro dono pode tocar a linha do primeiro"
+    );
+    assert_eq!(
+        recent_ids(&db, OWNER, 10),
+        ["m1"],
+        "os recentes de um dono não incluem mídias do outro"
+    );
+
+    let mut other_ids = recent_ids(&db, OTHER, 10);
+    other_ids.sort();
+    assert_eq!(other_ids, ["m1", "m2"]);
+    Ok(())
+}
+
+#[test]
+fn the_first_write_of_a_neutral_value_still_creates_the_state() -> TestResult {
+    let db = library_db()?;
+    insert_media(&db, "m1", "available")?;
+    insert_media(&db, "m2", "available")?;
+
+    let cleared = set_completed(&db, OWNER, "m1", false)?;
+    assert!(!cleared.completed);
+    assert_eq!(cleared.position_seconds, 0);
+    assert!(
+        cleared.updated_at > SEEDED_AT,
+        "a primeira chamada é atividade do usuário"
+    );
+
+    let at_zero = record_position(&db, OWNER, "m2", 0)?;
+    assert_eq!(at_zero.position_seconds, 0);
+    assert_eq!(count(&db, "study_state"), 2);
+    Ok(())
+}
+
+#[test]
+fn set_completed_is_idempotent_when_already_false() -> TestResult {
+    let db = library_db()?;
+    insert_media(&db, "m1", "available")?;
+    seed(&db, OWNER, "m1", 5, false, SEEDED_AT)?;
+
+    let state = set_completed(&db, OWNER, "m1", false)?;
+
+    assert_eq!(state.updated_at, SEEDED_AT);
+    assert_eq!(row(&db, OWNER, "m1"), Some((5, 0, SEEDED_AT)));
+    Ok(())
+}
+
+#[test]
+fn the_position_boundaries_are_accepted() -> TestResult {
+    let db = library_db()?;
+    insert_media(&db, "m1", "available")?;
+
+    assert_eq!(record_position(&db, OWNER, "m1", 0)?.position_seconds, 0);
+    assert_eq!(
+        record_position(&db, OWNER, "m1", i64::MAX)?.position_seconds,
+        i64::MAX
+    );
+    Ok(())
+}
+
+#[test]
+fn validation_happens_before_any_write() -> TestResult {
+    let db = library_db()?;
+    insert_media(&db, "m1", "available")?;
+
+    match record_position(&db, "", "m1", -1) {
+        Err(Error::InvalidOwnerId) => {}
+        other => panic!("o dono é validado primeiro: {other:?}"),
+    }
+    match record_position(&db, OWNER, "m-inexistente", -1) {
+        Err(Error::InvalidStudyPosition { .. }) => {}
+        other => panic!("a posição é validada antes da mídia: {other:?}"),
+    }
+
+    assert_eq!(count(&db, "study_state"), 0);
+    Ok(())
+}
+
+#[test]
+fn recent_study_of_an_owner_without_progress_is_empty() -> TestResult {
+    let db = library_db()?;
+    insert_media(&db, "m1", "available")?;
+
+    assert!(recent_study(&db, OWNER, 10)?.is_empty());
+    assert!(recent_study(&db, OWNER, 0)?.is_empty());
+    Ok(())
+}
+
+#[test]
+fn set_completed_is_atomic_under_failure() -> TestResult {
+    let directory = tempfile::tempdir()?;
+    let path = directory.path().join("learnvault.sqlite");
+    let db = Database::open(&path)?;
+    db.connection().execute(
+        "INSERT INTO library (library_id, available) VALUES (?1, 1)",
+        [LIB],
+    )?;
+    insert_media(&db, "m1", "available")?;
+    seed(&db, OWNER, "m1", 10, false, SEEDED_AT)?;
+
+    {
+        let injected = rusqlite::Connection::open(&path)?;
+        injected.execute_batch(
+            "CREATE TRIGGER falha_na_conclusao BEFORE UPDATE ON study_state
+             BEGIN SELECT RAISE(ABORT, 'falha injetada'); END;",
+        )?;
+    }
+
+    match set_completed(&db, OWNER, "m1", true) {
+        Err(Error::Database(_)) => {}
+        other => panic!("esperava a falha injetada no banco, obtive {other:?}"),
+    }
+    assert_eq!(row(&db, OWNER, "m1"), Some((10, 0, SEEDED_AT)));
     Ok(())
 }

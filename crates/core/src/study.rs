@@ -11,11 +11,27 @@
 //!   move o ponto de retomada;
 //! - reenviar um valor idêntico não é uma alteração e **não** move `updated_at`, que
 //!   representa a última mudança real;
-//! - a mídia precisa existir no catálogo; estar marcada como ausente **não** impede ler nem
-//!   gravar o progresso, porque a identidade da mídia sobrevive à falta temporária do
-//!   arquivo;
-//! - cada mutação é uma única instrução SQL, então não existe leitura-modificação-escrita;
+//! - a mídia precisa existir no catálogo, tanto na leitura quanto na escrita; estar marcada
+//!   como ausente **não** impede ler nem gravar o progresso, porque a identidade da mídia
+//!   sobrevive à falta temporária do arquivo;
+//! - a primeira chamada para um par sem estado cria a linha e conta como atividade do
+//!   usuário, mesmo quando o valor enviado é neutro (posição zero ou não concluída);
+//! - cada mutação é uma única instrução SQL: não há leitura-modificação-escrita do estado, e
+//!   a existência da mídia é uma pré-checagem cuja garantia última é a chave estrangeira;
 //! - nenhuma operação escreve em `media`, `scan`, `library` ou na biblioteca física.
+//!
+//! # Limites conhecidos
+//!
+//! - `updated_at` tem resolução de um segundo: duas alterações reais no mesmo segundo gravam
+//!   o mesmo instante, e a ordem dos recentes cai no desempate por `media_id`. Um relógio que
+//!   retroceda também faz a alteração mais nova perder prioridade. Os dois casos exigiriam
+//!   uma precisão que a coluna não oferece.
+//! - o par `owner_id` + `media_id` é global: o núcleo não sabe a qual biblioteca a mídia
+//!   pertence, então decidir se um dono pode pedir aquela mídia é responsabilidade do
+//!   adaptador.
+//! - `owner_id` é usado exatamente como recebido e precisa ser canônico — o mesmo valor para
+//!   o mesmo dono em todas as chamadas. A coluna compara bytes, então `"a"` e `"a "` seriam
+//!   donos diferentes.
 
 use rusqlite::OptionalExtension;
 
@@ -38,12 +54,16 @@ pub struct StudyProgress {
     /// Indica que a aula foi concluída.
     pub completed: bool,
     /// Instante da última alteração real, em segundos desde a época Unix.
+    ///
+    /// Resolução de um segundo: duas alterações no mesmo segundo gravam o mesmo instante.
     pub updated_at: i64,
 }
 
 /// Lê o progresso registrado, se existir.
 ///
 /// Ausência de progresso não é erro: significa que a mídia nunca foi estudada por este dono.
+/// Uma mídia que não existe no catálogo é reportada, para não confundir "desconhecida" com
+/// "nunca estudada".
 pub fn study_progress(
     db: &Database,
     owner_id: &str,
@@ -51,15 +71,17 @@ pub fn study_progress(
 ) -> Result<Option<StudyProgress>> {
     validate_owner(owner_id)?;
 
-    db.connection()
-        .query_row(
-            "SELECT media_id, position_seconds, completed, updated_at FROM study_state
+    let conn = db.connection();
+    require_media(conn, media_id)?;
+
+    conn.query_row(
+        "SELECT media_id, position_seconds, completed, updated_at FROM study_state
              WHERE owner_id = ?1 AND media_id = ?2",
-            rusqlite::params![owner_id, media_id],
-            progress_from_row,
-        )
-        .optional()
-        .map_err(Error::from)
+        rusqlite::params![owner_id, media_id],
+        progress_from_row,
+    )
+    .optional()
+    .map_err(Error::from)
 }
 
 /// Registra a posição de retomada, preservando a conclusão já registrada.
