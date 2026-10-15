@@ -1,0 +1,10 @@
+[package]
+name = "learnvault-core"
+description = "Domínio do LearnVault: bibliotecas, catálogo, identidade de mídia e estado de estudo."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
