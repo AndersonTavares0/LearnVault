@@ -6,8 +6,12 @@
 //!
 //! A resolução é **puramente lexical**: estas funções não tocam o sistema de arquivos.
 //! O confinamento lexical é necessário, mas não é suficiente: a verificação do destino
-//! real do arquivo — links simbólicos, junctions e fluxos alternativos do Windows —
-//! pertence à entrega de resolução de mídia, que confere o objeto aberto.
+//! real do arquivo — links simbólicos e junctions — pertence à entrega de resolução de
+//! mídia, que confere o objeto aberto.
+//!
+//! No modo do Windows um componente que contenha `:` é recusado, porque `:` abre um
+//! fluxo alternativo de dados (`aula.mp4:fluxo`) em vez do arquivo previsto. Em sistemas
+//! Unix `:` é um caractere comum em nomes de arquivo e continua válido.
 
 use std::path::{Path, PathBuf};
 
@@ -17,6 +21,12 @@ use crate::error::{Error, Result};
 ///
 /// O modo é um parâmetro explícito, e não uma consulta ao sistema operacional, para que
 /// os dois comportamentos possam ser verificados no mesmo ambiente de testes.
+///
+/// Neste projeto [`KeyMode::Insensitive`] corresponde ao modo do Windows: é o que
+/// [`KeyMode::for_host`] devolve lá e é o modo em que as regras de caminho específicas do
+/// Windows valem — em especial a recusa de componentes com `:`, que abririam um fluxo
+/// alternativo de dados. O modo insensível não deve ser confundido com uma montagem
+/// insensível a maiúsculas em outro sistema, que continua sem essas regras.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeyMode {
     /// Diferencia maiúsculas de minúsculas.
@@ -55,7 +65,9 @@ impl KeyMode {
 /// de um caminho aninhado equivalente; a colisão é detectada pela restrição de
 /// unicidade do banco, e o caso está registrado como limitação conhecida.
 pub fn relative_path_key(path: &str, mode: KeyMode) -> Result<String> {
-    let normalized = normalize_relative(path)?;
+    // O modo insensível é o modo do Windows (ver [`KeyMode::for_host`]), e é nele que a
+    // regra de fluxo alternativo de dados precisa valer.
+    let normalized = normalize_relative(path, mode == KeyMode::Insensitive)?;
 
     Ok(match mode {
         KeyMode::Sensitive => normalized,
@@ -79,7 +91,7 @@ pub(crate) fn is_under_area(key: &str, area: &str) -> bool {
 /// componentes `.` ou `..`, vazios, malformados ou com prefixo de unidade. Nenhum acesso
 /// ao sistema de arquivos é feito aqui.
 pub fn resolve_within(root: &Path, relative: &str) -> Result<PathBuf> {
-    let normalized = normalize_relative(relative)?;
+    let normalized = normalize_relative(relative, host_is_windows())?;
 
     let mut resolved = root.to_path_buf();
     for component in normalized.split('/') {
@@ -99,7 +111,12 @@ pub fn resolve_within(root: &Path, relative: &str) -> Result<PathBuf> {
     Ok(resolved)
 }
 
-fn normalize_relative(path: &str) -> Result<String> {
+/// Indica se a plataforma atual é o Windows, onde `:` abre um fluxo alternativo de dados.
+fn host_is_windows() -> bool {
+    cfg!(windows)
+}
+
+fn normalize_relative(path: &str, windows: bool) -> Result<String> {
     if path.is_empty() || is_absolute_like(path) {
         return Err(Error::InvalidRelativePath {
             path: path.to_owned(),
@@ -115,6 +132,7 @@ fn normalize_relative(path: &str) -> Result<String> {
             || component == ".."
             || component.contains('\0')
             || is_absolute_like(component)
+            || (windows && component.contains(':'))
         {
             return Err(Error::InvalidRelativePath {
                 path: path.to_owned(),

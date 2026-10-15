@@ -29,6 +29,13 @@
 //! montada como somente leitura: outro processo pode alterar o diretório. Fechar essa
 //! lacuna exigiria APIs específicas de plataforma e não se justifica no modelo de ameaça
 //! atual; fica registrada como endurecimento futuro, condicionado a necessidade real.
+//!
+//! # Responsabilidade de quem chama
+//!
+//! A raiz é um parâmetro explícito e precisa ser a raiz da biblioteca indicada. Este
+//! núcleo confina o arquivo sob a raiz recebida, mas não tem como saber se ela pertence
+//! ao `library_id` informado: manter esse vínculo é responsabilidade da integração. O
+//! adaptador HTTP ou Tauri resolve o mapa `library_id` → raiz antes de chamar.
 
 use std::fs::{File, Metadata};
 use std::io;
