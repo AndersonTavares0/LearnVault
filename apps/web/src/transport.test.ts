@@ -128,13 +128,15 @@ describe('desktop transport over IPC', () => {
 		vi.unstubAllGlobals();
 	});
 
-	it('keeps the sanitized desktop error message when the command fails', async () => {
-		vi.mocked(invoke).mockRejectedValue({ code: 'catalog_unavailable', message: 'catálogo indisponível' });
+	it('maps a known IPC code to its stable sanitized message, ignoring arbitrary text', async () => {
+		vi.mocked(invoke).mockRejectedValue({ code: 'catalog_unavailable', message: 'mensagem arbitrária em /mnt/cursos' });
 		await expect(new DesktopStub().catalog()).rejects.toThrow('catálogo indisponível');
 	});
 
-	it('falls back to a stable message when the desktop error carries none', async () => {
-		vi.mocked(invoke).mockRejectedValue({ code: 'catalog_unavailable' });
+	it('falls back to a stable message for an unknown or missing IPC code', async () => {
+		vi.mocked(invoke).mockRejectedValue({ code: 'algo_desconhecido', message: 'CAMINHO privado /mnt/cursos' });
+		await expect(new DesktopStub().catalog()).rejects.toThrow('Não foi possível carregar o catálogo.');
+		vi.mocked(invoke).mockRejectedValue({ message: 'sem código /etc/shadow' });
 		await expect(new DesktopStub().catalog()).rejects.toThrow('Não foi possível carregar o catálogo.');
 	});
 
