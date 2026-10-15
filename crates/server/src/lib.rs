@@ -2,11 +2,15 @@
 
 #![forbid(unsafe_code)]
 
-mod config;
 mod auth;
+mod config;
 mod health;
 mod state;
 
+pub use auth::{
+    AuthError, generate_session_token, hash_password, hash_session_token, validate_password,
+    validate_username, verify_password,
+};
 pub use config::{Command, Config, ConfigError, parse_command};
 pub use state::AppState;
 
