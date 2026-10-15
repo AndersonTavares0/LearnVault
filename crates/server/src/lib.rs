@@ -40,6 +40,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Monta as rotas públicas mínimas do servidor.
 pub fn build_router(state: AppState) -> Router {
     let inline_script_hashes = state.inline_script_hashes.clone();
+    let inline_style_hashes = state.inline_style_hashes.clone();
     Router::new()
         .route("/api/healthz", get(health::healthz))
         .route("/api/login", axum::routing::post(auth::login))
@@ -51,7 +52,11 @@ pub fn build_router(state: AppState) -> Router {
         .fallback(spa::serve)
         .layer(DefaultBodyLimit::max(8 * 1024))
         .layer(map_response(move |response| {
-            security_headers(response, inline_script_hashes.clone())
+            security_headers(
+                response,
+                inline_script_hashes.clone(),
+                inline_style_hashes.clone(),
+            )
         }))
         .with_state(state)
 }
@@ -59,6 +64,7 @@ pub fn build_router(state: AppState) -> Router {
 async fn security_headers(
     mut response: Response,
     inline_script_hashes: std::sync::Arc<[String]>,
+    inline_style_hashes: std::sync::Arc<[String]>,
 ) -> Response {
     let headers = response.headers_mut();
     headers.insert(
@@ -73,9 +79,13 @@ async fn security_headers(
         csp.push_str(hash);
         csp.push('\'');
     }
-    csp.push_str(
-        "; style-src 'self' 'unsafe-hashes' 'sha256-tcbDxjMo+xKqM21aCGYbs/QAJqB7yUXC06oPWDapBgc='; media-src 'self' data:; frame-ancestors 'none'",
-    );
+    csp.push_str("; style-src 'self' 'unsafe-hashes'");
+    for hash in inline_style_hashes.iter() {
+        csp.push_str(" '");
+        csp.push_str(hash);
+        csp.push('\'');
+    }
+    csp.push_str("; media-src 'self' data:; frame-ancestors 'none'");
     headers.insert(
         HeaderName::from_static("content-security-policy"),
         csp.parse()
@@ -421,5 +431,51 @@ mod tests {
             serde_json::from_slice::<serde_json::Value>(&body).unwrap()["error"],
             "server busy"
         );
+    }
+
+    #[tokio::test]
+    async fn media_stream_capacity_is_held_until_response_bodies_are_dropped() {
+        let (app, _temp, _state) = media_app().await;
+        let cookie = media_cookie(&app).await;
+        let mut slow_responses = Vec::new();
+
+        for _ in 0..4 {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::get("/api/media?path=lesson.mp4")
+                        .header("cookie", &cookie)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            slow_responses.push(response);
+        }
+
+        let saturated = app
+            .clone()
+            .oneshot(
+                Request::get("/api/media?path=lesson.mp4")
+                    .header("cookie", &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(saturated.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+        drop(slow_responses);
+        let recovered = app
+            .oneshot(
+                Request::get("/api/media?path=lesson.mp4")
+                    .header("cookie", cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(recovered.status(), StatusCode::OK);
     }
 }

@@ -1,6 +1,12 @@
 //! Entrega autenticada e somente leitura de mídia.
 
-use std::io::SeekFrom;
+use std::{
+    future::Future,
+    io::SeekFrom,
+    pin::Pin,
+    task::{Context, Poll},
+    time::Duration,
+};
 
 use axum::{
     body::Body,
@@ -9,7 +15,11 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde::Deserialize;
-use tokio::io::{AsyncReadExt, AsyncSeekExt};
+use tokio::{
+    io::{AsyncRead, AsyncReadExt, AsyncSeekExt, ReadBuf},
+    sync::OwnedSemaphorePermit,
+    time::{Instant, Sleep},
+};
 use tokio_util::io::ReaderStream;
 
 use crate::{
@@ -22,6 +32,8 @@ use crate::{
 pub(crate) struct MediaQuery {
     path: String,
 }
+
+const MEDIA_STREAM_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub(crate) async fn media(
     State(state): State<AppState>,
@@ -74,15 +86,25 @@ pub(crate) async fn media(
     };
     let partial = headers.get(header::RANGE).is_some();
     let length = if opened.size == 0 { 0 } else { end - start + 1 };
+    let stream_permit = if method == Method::HEAD {
+        None
+    } else {
+        match state.try_acquire_media_stream() {
+            Some(permit) => Some(permit),
+            None => return service_unavailable(),
+        }
+    };
     let mut file = tokio::fs::File::from_std(opened.file);
     if file.seek(SeekFrom::Start(start)).await.is_err() {
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
-    let stream = ReaderStream::new(file.take(length));
+    let stream = stream_permit.map(|stream_permit| {
+        ReaderStream::new(IdleTimeoutReader::new(file.take(length), stream_permit))
+    });
     let mut response = Response::new(if method == Method::HEAD {
         Body::empty()
     } else {
-        Body::from_stream(stream)
+        Body::from_stream(stream.expect("GET creates a media stream"))
     });
     *response.status_mut() = if partial {
         StatusCode::PARTIAL_CONTENT
@@ -104,6 +126,46 @@ pub(crate) async fn media(
         );
     }
     response
+}
+
+/// Fecha um stream que não faz progresso e mantém sua reserva até o corpo ser descartado.
+struct IdleTimeoutReader<R> {
+    reader: R,
+    _permit: OwnedSemaphorePermit,
+    idle_deadline: Pin<Box<Sleep>>,
+}
+
+impl<R> IdleTimeoutReader<R> {
+    fn new(reader: R, permit: OwnedSemaphorePermit) -> Self {
+        Self {
+            reader,
+            _permit: permit,
+            idle_deadline: Box::pin(tokio::time::sleep(MEDIA_STREAM_IDLE_TIMEOUT)),
+        }
+    }
+}
+
+impl<R: AsyncRead + Unpin> AsyncRead for IdleTimeoutReader<R> {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        let this = self.get_mut();
+        match Pin::new(&mut this.reader).poll_read(cx, buf) {
+            Poll::Ready(Ok(())) => {
+                this.idle_deadline
+                    .as_mut()
+                    .reset(Instant::now() + MEDIA_STREAM_IDLE_TIMEOUT);
+                Poll::Ready(Ok(()))
+            }
+            Poll::Ready(Err(error)) => Poll::Ready(Err(error)),
+            Poll::Pending if this.idle_deadline.as_mut().poll(cx).is_ready() => Poll::Ready(Err(
+                std::io::Error::new(std::io::ErrorKind::TimedOut, "media stream idle timeout"),
+            )),
+            Poll::Pending => Poll::Pending,
+        }
+    }
 }
 
 fn media_error_response(error: &learnvault_core::Error) -> Response {

@@ -77,6 +77,7 @@ async fn login_me_and_logout_use_an_expiring_secure_cookie() {
         .await
         .unwrap();
     assert_eq!(me.status(), StatusCode::OK);
+    assert_eq!(me.headers()["cache-control"], "private, no-store");
     assert_eq!(body(me).await["is_admin"], true);
 
     let logout = app

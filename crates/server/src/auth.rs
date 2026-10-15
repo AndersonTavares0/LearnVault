@@ -233,12 +233,17 @@ pub(crate) async fn me(State(state): State<AppState>, headers: HeaderMap) -> imp
         Err(StateError::Capacity) => return service_unavailable(),
         Ok(None) | Err(_) => return StatusCode::UNAUTHORIZED.into_response(),
     };
-    Json(UserResponse {
+    let mut response = Json(UserResponse {
         user_id: user.user_id,
         username: user.username,
         is_admin: user.is_admin,
     })
-    .into_response()
+    .into_response();
+    response.headers_mut().insert(
+        "cache-control",
+        HeaderValue::from_static("private, no-store"),
+    );
+    response
 }
 
 pub(crate) async fn logout(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {

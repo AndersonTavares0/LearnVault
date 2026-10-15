@@ -128,9 +128,10 @@ async fn spa_serves_existing_assets_with_mime_security_and_immutable_cache_heade
         .to_str()
         .unwrap();
     assert!(csp.contains("default-src 'self'"));
-    assert!(csp.contains(
-        "style-src 'self' 'unsafe-hashes' 'sha256-tcbDxjMo+xKqM21aCGYbs/QAJqB7yUXC06oPWDapBgc='"
-    ));
+    let style_hash = STANDARD.encode(Sha256::digest(b"display: contents"));
+    assert!(csp.contains(&format!(
+        "style-src 'self' 'unsafe-hashes' 'sha256-{style_hash}'"
+    )));
     assert!(csp.contains("media-src 'self' data:"));
     assert!(csp.contains("frame-ancestors 'none'"));
     assert!(!csp.contains("'unsafe-inline'"));
@@ -213,6 +214,39 @@ async fn csp_hashes_the_inline_scripts_from_the_configured_shell() {
     assert!(csp.contains(&format!("script-src 'self' 'sha256-{alternate_hash}'")));
     assert!(!csp.contains(&original_hash));
     assert!(!csp.contains("app.js"));
+    assert!(!csp.contains("'unsafe-inline'"));
+    assert!(!csp.contains("'unsafe-eval'"));
+}
+
+#[tokio::test]
+async fn csp_hashes_all_inline_styles_from_the_configured_shell() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = web_root(&temp);
+    let first_style = "display: grid";
+    let second_style = "color: rebeccapurple";
+    fs::write(
+        root.join("200.html"),
+        format!(
+            "<html><body><main style=\"{first_style}\"><span STYLE='{second_style}'></span></main><script>{ALTERNATE_BOOTSTRAP}</script></body></html>"
+        ),
+    )
+    .unwrap();
+    let response = app(&temp, &root)
+        .await
+        .oneshot(Request::get("/catalog/rust").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    let csp = response.headers()["content-security-policy"]
+        .to_str()
+        .unwrap();
+    let first_hash = STANDARD.encode(Sha256::digest(first_style.as_bytes()));
+    let second_hash = STANDARD.encode(Sha256::digest(second_style.as_bytes()));
+    assert!(csp.contains(&format!(
+        "style-src 'self' 'unsafe-hashes' 'sha256-{first_hash}'"
+    )));
+    assert!(csp.contains(&format!("'sha256-{second_hash}'")));
+    assert!(!csp.contains("sha256-tcbDxjMo+xKqM21aCGYbs/QAJqB7yUXC06oPWDapBgc="));
     assert!(!csp.contains("'unsafe-inline'"));
     assert!(!csp.contains("'unsafe-eval'"));
 }
@@ -304,13 +338,13 @@ async fn spa_rejects_requests_when_blocking_capacity_is_saturated() {
 }
 
 #[tokio::test]
-async fn spa_stream_capacity_is_held_until_response_bodies_are_dropped() {
+async fn slow_spa_assets_cannot_exhaust_the_shell_stream_reservation() {
     let temp = tempfile::tempdir().unwrap();
     let root = web_root(&temp);
     let app = app(&temp, &root).await;
     let mut slow_responses = Vec::new();
 
-    for _ in 0..4 {
+    for _ in 0..3 {
         let response = app
             .clone()
             .oneshot(
@@ -324,7 +358,7 @@ async fn spa_stream_capacity_is_held_until_response_bodies_are_dropped() {
         slow_responses.push(response);
     }
 
-    let saturated = app
+    let saturated_asset = app
         .clone()
         .oneshot(
             Request::get("/_app/immutable/assets/app.css")
@@ -333,7 +367,15 @@ async fn spa_stream_capacity_is_held_until_response_bodies_are_dropped() {
         )
         .await
         .unwrap();
-    assert_eq!(saturated.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(saturated_asset.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+    let shell = app
+        .clone()
+        .oneshot(Request::get("/catalog/rust").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(shell.status(), StatusCode::OK);
+    drop(shell);
 
     drop(slow_responses);
     let recovered = app

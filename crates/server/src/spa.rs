@@ -89,9 +89,6 @@ async fn open_file(
     target: &Path,
     shell: bool,
 ) -> Result<Response, FileError> {
-    let Some(stream_permit) = state.try_acquire_spa_stream() else {
-        return Err(FileError::Busy);
-    };
     let Some(blocking_task) = state.try_acquire_blocking_task() else {
         return Err(FileError::Busy);
     };
@@ -104,6 +101,12 @@ async fn open_file(
     })
     .await
     .map_err(|_| FileError::Busy)??;
+    // Só reserve um stream após confirmar que o arquivo existe. Rotas SPA extensionless
+    // verificam primeiro um possível asset e então fazem fallback para o shell; consumir a
+    // reserva de assets nessa verificação faria assets lentos bloquearem o fallback.
+    let Some(stream_permit) = state.try_acquire_spa_stream(shell) else {
+        return Err(FileError::Busy);
+    };
 
     let stream = ReaderStream::new(PermitReader {
         reader: tokio::fs::File::from_std(opened.file).take(opened.size),
