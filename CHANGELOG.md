@@ -19,7 +19,8 @@ The format follows Keep a Changelog and releases use Semantic Versioning.
 
 ### Changed
 
-- Standardized the repository around Go 1.25, Node.js 24, pnpm 11.28.5, and a frozen pnpm lockfile.
+- Standardized the repository around Go 1.26, Node.js 24, pnpm 11.28.5, and a frozen pnpm lockfile.
+- Upgraded `golang.org/x/crypto` to v0.58.0 and `modernc.org/sqlite` to v1.60.1 alongside the Go 1.26 toolchain.
 - Kept generated SPA output, runtime data, caches, secrets, and local tooling out of Git.
 
 ### Security
