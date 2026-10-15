@@ -32,6 +32,9 @@ go -C services/go test ./...
 go -C services/go vet ./...
 ```
 
+O desktop Tauri (Fase 4) e a distribuição por plataforma (Fase 5) ainda não estão concluídos;
+por isso não há checks de desktop ou de empacotamento no repositório.
+
 Os testes devem usar fixtures e diretórios temporários; não devem acessar dados externos.
 
 ## Pull requests

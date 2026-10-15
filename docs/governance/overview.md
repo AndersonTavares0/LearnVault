@@ -61,8 +61,9 @@ Arquivos de comunidade (`CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`) 
 fica em `.github/release-please/`. Os perfis específicos do OpenCode ficam em `.opencode/`.
 A raiz mantém apenas `AGENTS.md`, `README.md`, `LICENSE`, `.dockerignore`, `.gitignore`,
 `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, `package.json`, `pnpm-lock.yaml` e
-`pnpm-workspace.yaml`. O crate `desktop` surge na Fase 4; `crates/core` e `crates/server` já
-existem.
+`pnpm-workspace.yaml`. O crate `desktop` (Tauri) pertence à Fase 4 e ainda não existe; a
+distribuição por plataforma e a remoção do serviço Go pertencem à Fase 5 e permanecem
+incompletas. `crates/core` e `crates/server` já existem.
 
 Saída gerada (`services/go/cmd/learnvault/web/build`,
 `services/go/cmd/learnvault/web/desktop-build`, `target`, `node_modules` e dados/cache locais)

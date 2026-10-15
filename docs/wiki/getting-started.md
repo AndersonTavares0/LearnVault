@@ -29,4 +29,7 @@ Use secret file ou mecanismo equivalente do ambiente para valores configurados; 
 valores reais em documentação, compose ou logs. Use a fixture sintética em `testdata/`. Nunca aponte a
 automação para dados externos; a biblioteca deve permanecer somente leitura.
 
+O aplicativo desktop Tauri (`crates/desktop`, Fase 4) e a distribuição por plataforma (Fase 5)
+ainda não estão concluídos; este guia cobre apenas o núcleo Rust, o servidor e a SPA.
+
 Consulte o README do repositório para configuração e deploy opcional com Compose/Quadlet.
