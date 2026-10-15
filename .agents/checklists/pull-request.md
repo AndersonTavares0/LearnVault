@@ -1,5 +1,6 @@
 # Pull request checklist
 
+- [ ] Agent instructions and the relevant repository policies were read before changes.
 - [ ] Branch is focused and based on current `main`.
 - [ ] The PR template has factual summary, governance impact, validation, and safety entries.
 - [ ] Required tests and affected configuration checks have run.

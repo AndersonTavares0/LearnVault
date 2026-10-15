@@ -1,5 +1,10 @@
 # Agent working agreement
 
+Every agent must follow `AGENTS.md` and this index before working in the repository. This
+rule applies to implementation, review, planning, documentation, and automation agents.
+Agent-specific profiles may specialize the workflow but may not override the repository
+policies, playbooks, or checklists.
+
 This file is the short, mandatory index for agents. Read the relevant document under
 `.agents/policies/`, `.agents/playbooks/`, or `.agents/checklists/` before changing
 that area.
@@ -25,6 +30,8 @@ that area.
 ## GitHub governance
 
 - Follow `.agents/policies/governance.md` and `.agents/checklists/pull-request.md`.
+- For pull requests, replace every template prompt with factual content and record only
+  validations that actually ran.
 
 ## Canonical documentation
 
