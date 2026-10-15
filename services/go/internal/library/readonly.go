@@ -36,7 +36,9 @@ func Open(path string) (*Root, error) {
 
 func (r *Root) ReadFile(relative string) ([]byte, error) {
 	file, err := r.OpenFile(relative)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer file.Close()
 	return io.ReadAll(file)
 }
@@ -50,14 +52,28 @@ func (r *Root) OpenFile(relative string) (*os.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	if mismatch, err := identityMismatch(path, file); err != nil { file.Close(); return nil, err } else if mismatch { file.Close(); return nil, errors.New("library file changed during open") }
+	if mismatch, err := identityMismatch(path, file); err != nil {
+		file.Close()
+		return nil, err
+	} else if mismatch {
+		file.Close()
+		return nil, errors.New("library file changed during open")
+	}
 	return file, nil
 }
 
 func identityMismatch(path string, file *os.File) (bool, error) {
-	pathInfo, err := os.Stat(path); if err != nil { return false, err }
-	openInfo, err := file.Stat(); if err != nil { return false, err }
-	if !pathInfo.Mode().IsRegular() || !openInfo.Mode().IsRegular() { return true, nil }
+	pathInfo, err := os.Stat(path)
+	if err != nil {
+		return false, err
+	}
+	openInfo, err := file.Stat()
+	if err != nil {
+		return false, err
+	}
+	if !pathInfo.Mode().IsRegular() || !openInfo.Mode().IsRegular() {
+		return true, nil
+	}
 	// SameFile uses the platform's available file identity (inode/device on
 	// Unix and file index/volume on Windows) without requiring native callers.
 	return !os.SameFile(pathInfo, openInfo), nil

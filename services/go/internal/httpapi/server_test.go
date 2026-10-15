@@ -42,19 +42,30 @@ func TestHealthEndpoint(t *testing.T) {
 func TestMutatingAuthEndpointsRequireSameOrigin(t *testing.T) {
 	db := openTestDB(t)
 	defer db.Close()
-	if err := db.BootstrapAdmin(context.Background(), "owner", "a sufficiently long password"); err != nil { t.Fatal(err) }
+	if err := db.BootstrapAdmin(context.Background(), "owner", "a sufficiently long password"); err != nil {
+		t.Fatal(err)
+	}
 	srv := NewWithOptions(db, false)
 	for _, path := range []string{"/api/login", "/api/logout", "/api/account/credentials", "/api/admin/catalog/rescan"} {
 		for _, origin := range []string{"", "http://evil.example"} {
 			req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"username":"owner","password":"a sufficiently long password"}`))
-			if origin != "" { req.Header.Set("Origin", origin) }
-			result := httptest.NewRecorder(); srv.ServeHTTP(result, req)
-			if result.Code != http.StatusForbidden || !strings.Contains(result.Body.String(), `"error":"csrf_failed"`) { t.Fatalf("%s origin %q: %d %s", path, origin, result.Code, result.Body.String()) }
+			if origin != "" {
+				req.Header.Set("Origin", origin)
+			}
+			result := httptest.NewRecorder()
+			srv.ServeHTTP(result, req)
+			if result.Code != http.StatusForbidden || !strings.Contains(result.Body.String(), `"error":"csrf_failed"`) {
+				t.Fatalf("%s origin %q: %d %s", path, origin, result.Code, result.Body.String())
+			}
 		}
 	}
-	req := httptest.NewRequest(http.MethodPost, "/api/login", strings.NewReader(`{"username":"owner","password":"a sufficiently long password"}`)); req.Header.Set("Origin", "http://example.com")
-	result := httptest.NewRecorder(); srv.ServeHTTP(result, req)
-	if result.Code != http.StatusOK { t.Fatalf("allowed origin returned %d: %s", result.Code, result.Body.String()) }
+	req := httptest.NewRequest(http.MethodPost, "/api/login", strings.NewReader(`{"username":"owner","password":"a sufficiently long password"}`))
+	req.Header.Set("Origin", "http://example.com")
+	result := httptest.NewRecorder()
+	srv.ServeHTTP(result, req)
+	if result.Code != http.StatusOK {
+		t.Fatalf("allowed origin returned %d: %s", result.Code, result.Body.String())
+	}
 }
 
 func TestHealthEndpointIncludesVersion(t *testing.T) {
@@ -183,31 +194,166 @@ func TestAuthenticatedMediaSupportsRangeAndRejectsUnauthenticatedAccess(t *testi
 	}
 }
 
-func TestRescanTombstonesRemovedMedia(t *testing.T) {
+// TestMediaAuthorizationWalksCanonicalNodes cobre o bloqueio P1: a autorização de mídia
+// deve percorrer os nós canônicos persistidos (Catalog.Nodes) em qualquer profundidade,
+// inclusive um arquivo solto diretamente na categoria, e não apenas a projeção categórica
+// que a SPA nem renderiza. Caminhos ignorados pelo scanner, traversal e removidos por
+// tombstone continuam 404.
+func TestMediaAuthorizationWalksCanonicalNodes(t *testing.T) {
 	root := t.TempDir()
-	lesson := filepath.Join(root, "Cat", "Curso", "Modulo", "Aula")
-	if err := os.MkdirAll(lesson, 0o755); err != nil { t.Fatal(err) }
-	mediaPath := filepath.Join(lesson, "removed.mp4")
-	if err := os.WriteFile(mediaPath, []byte("video"), 0o644); err != nil { t.Fatal(err) }
+	shallow := filepath.Join(root, "Cat", "avulsa.mp4")
+	deep := filepath.Join(root, "Cat", "Curso", "Modulo", "Aula", "Rec", "deep.mp4")
+	ignored := filepath.Join(root, "Cat", "temp_cache", "secret.mp4")
+	loose := filepath.Join(root, "fora.mp4")
+	for _, dir := range []string{filepath.Dir(shallow), filepath.Dir(deep), filepath.Dir(ignored)} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for path, content := range map[string]string{
+		shallow: "raso",
+		deep:    "recursivo",
+		ignored: "ignorado",
+		loose:   "raiz",
+	} {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	db := openTestDB(t)
-	if err := db.BootstrapAdmin(context.Background(), "owner", "a sufficiently long password"); err != nil { t.Fatal(err) }
-	lib, err := library.Open(root); if err != nil { t.Fatal(err) }
+	if err := db.BootstrapAdmin(context.Background(), "owner", "a sufficiently long password"); err != nil {
+		t.Fatal(err)
+	}
+	lib, err := library.Open(root)
+	if err != nil {
+		t.Fatal(err)
+	}
 	srv := NewWithLibrary(db, false, lib)
 	cookie := loginForTest(t, srv)
 	rescan := httptest.NewRequest(http.MethodPost, "/api/admin/catalog/rescan", nil)
-	rescan.Header.Set("Origin", "http://example.com"); rescan.AddCookie(cookie)
-	first := httptest.NewRecorder(); srv.ServeHTTP(first, rescan)
-	if first.Code != http.StatusOK { t.Fatalf("initial rescan returned %d", first.Code) }
-	if err := os.Remove(mediaPath); err != nil { t.Fatal(err) }
+	rescan.Header.Set("Origin", "http://example.com")
+	rescan.AddCookie(cookie)
+	rescanResult := httptest.NewRecorder()
+	srv.ServeHTTP(rescanResult, rescan)
+	if rescanResult.Code != http.StatusOK {
+		t.Fatalf("rescan returned %d: %s", rescanResult.Code, rescanResult.Body.String())
+	}
+
+	media := func(relative string) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodGet, "/api/media?path="+url.QueryEscape(relative), nil)
+		request.AddCookie(cookie)
+		result := httptest.NewRecorder()
+		srv.ServeHTTP(result, request)
+		return result
+	}
+
+	for _, tc := range []struct {
+		name string
+		path string
+		body string
+	}{
+		{"raso solto na categoria", "Cat/avulsa.mp4", "raso"},
+		{"recursivo profundo", "Cat/Curso/Modulo/Aula/Rec/deep.mp4", "recursivo"},
+		{"solto na raiz", "fora.mp4", "raiz"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			result := media(tc.path)
+			if result.Code != http.StatusOK || result.Body.String() != tc.body {
+				t.Fatalf("autorizado = %d %q; quer 200 %q", result.Code, result.Body.String(), tc.body)
+			}
+			if got := result.Header().Get("Cache-Control"); got != "private, no-store" {
+				t.Fatalf("Cache-Control = %q; quer private, no-store", got)
+			}
+		})
+	}
+
+	for _, tc := range []struct {
+		name string
+		path string
+	}{
+		{"ignorado pelo scanner", "Cat/temp_cache/secret.mp4"},
+		{"inexistente", "Cat/nao-existe.mp4"},
+		{"traversal", "Cat/../fora.mp4"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			result := media(tc.path)
+			if result.Code != http.StatusNotFound {
+				t.Fatalf("%s = %d; quer 404", tc.name, result.Code)
+			}
+			if got := result.Header().Get("Cache-Control"); got != "private, no-store" {
+				t.Fatalf("%s Cache-Control = %q; quer private, no-store", tc.name, got)
+			}
+		})
+	}
+
+	// O tombstone explícito tira a mídia da árvore canônica mesmo com o arquivo ainda no
+	// disco e um rescan posterior.
+	if err := db.RemoveMedia(context.Background(), "Cat/avulsa.mp4"); err != nil {
+		t.Fatal(err)
+	}
 	second := httptest.NewRequest(http.MethodPost, "/api/admin/catalog/rescan", nil)
-	second.Header.Set("Origin", "http://example.com"); second.AddCookie(cookie)
-	result := httptest.NewRecorder(); srv.ServeHTTP(result, second)
-	if result.Code != http.StatusOK { t.Fatalf("removal rescan returned %d", result.Code) }
+	second.Header.Set("Origin", "http://example.com")
+	second.AddCookie(cookie)
+	secondResult := httptest.NewRecorder()
+	srv.ServeHTTP(secondResult, second)
+	if secondResult.Code != http.StatusOK {
+		t.Fatalf("rescan pós-remoção retornou %d: %s", secondResult.Code, secondResult.Body.String())
+	}
+	if result := media("Cat/avulsa.mp4"); result.Code != http.StatusNotFound {
+		t.Fatalf("mídia removida = %d; quer 404", result.Code)
+	}
+}
+
+func TestRescanTombstonesRemovedMedia(t *testing.T) {
+	root := t.TempDir()
+	lesson := filepath.Join(root, "Cat", "Curso", "Modulo", "Aula")
+	if err := os.MkdirAll(lesson, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mediaPath := filepath.Join(lesson, "removed.mp4")
+	if err := os.WriteFile(mediaPath, []byte("video"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	db := openTestDB(t)
+	if err := db.BootstrapAdmin(context.Background(), "owner", "a sufficiently long password"); err != nil {
+		t.Fatal(err)
+	}
+	lib, err := library.Open(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := NewWithLibrary(db, false, lib)
+	cookie := loginForTest(t, srv)
+	rescan := httptest.NewRequest(http.MethodPost, "/api/admin/catalog/rescan", nil)
+	rescan.Header.Set("Origin", "http://example.com")
+	rescan.AddCookie(cookie)
+	first := httptest.NewRecorder()
+	srv.ServeHTTP(first, rescan)
+	if first.Code != http.StatusOK {
+		t.Fatalf("initial rescan returned %d", first.Code)
+	}
+	if err := os.Remove(mediaPath); err != nil {
+		t.Fatal(err)
+	}
+	second := httptest.NewRequest(http.MethodPost, "/api/admin/catalog/rescan", nil)
+	second.Header.Set("Origin", "http://example.com")
+	second.AddCookie(cookie)
+	result := httptest.NewRecorder()
+	srv.ServeHTTP(result, second)
+	if result.Code != http.StatusOK {
+		t.Fatalf("removal rescan returned %d", result.Code)
+	}
 	request := httptest.NewRequest(http.MethodGet, "/api/media?path=Cat/Curso/Modulo/Aula/removed.mp4", nil)
 	request.AddCookie(cookie)
-	media := httptest.NewRecorder(); srv.ServeHTTP(media, request)
-	if media.Code != http.StatusNotFound { t.Fatalf("removed media returned %d; want 404", media.Code) }
-	if got := media.Header().Get("Cache-Control"); got != "private, no-store" { t.Fatalf("removed media Cache-Control = %q", got) }
+	media := httptest.NewRecorder()
+	srv.ServeHTTP(media, request)
+	if media.Code != http.StatusNotFound {
+		t.Fatalf("removed media returned %d; want 404", media.Code)
+	}
+	if got := media.Header().Get("Cache-Control"); got != "private, no-store" {
+		t.Fatalf("removed media Cache-Control = %q", got)
+	}
 }
 
 // TestRescanKeepsExplicitRemovalAndCatalogIdentity cobre o tombstone explícito: depois
@@ -216,43 +362,76 @@ func TestRescanTombstonesRemovedMedia(t *testing.T) {
 func TestRescanKeepsExplicitRemovalAndCatalogIdentity(t *testing.T) {
 	root := t.TempDir()
 	lesson := filepath.Join(root, "Cat", "Curso", "Modulo", "Aula")
-	if err := os.MkdirAll(lesson, 0o755); err != nil { t.Fatal(err) }
+	if err := os.MkdirAll(lesson, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	mediaPath := "Cat/Curso/Modulo/Aula/removed.mp4"
-	if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(mediaPath)), []byte("video"), 0o644); err != nil { t.Fatal(err) }
+	if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(mediaPath)), []byte("video"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	db := openTestDB(t)
-	if err := db.BootstrapAdmin(context.Background(), "owner", "a sufficiently long password"); err != nil { t.Fatal(err) }
-	lib, err := library.Open(root); if err != nil { t.Fatal(err) }
+	if err := db.BootstrapAdmin(context.Background(), "owner", "a sufficiently long password"); err != nil {
+		t.Fatal(err)
+	}
+	lib, err := library.Open(root)
+	if err != nil {
+		t.Fatal(err)
+	}
 	srv := NewWithLibrary(db, false, lib)
 	cookie := loginForTest(t, srv)
 
 	rescan := func() {
 		req := httptest.NewRequest(http.MethodPost, "/api/admin/catalog/rescan", nil)
-		req.Header.Set("Origin", "http://example.com"); req.AddCookie(cookie)
-		res := httptest.NewRecorder(); srv.ServeHTTP(res, req)
-		if res.Code != http.StatusOK { t.Fatalf("rescan returned %d: %s", res.Code, res.Body.String()) }
+		req.Header.Set("Origin", "http://example.com")
+		req.AddCookie(cookie)
+		res := httptest.NewRecorder()
+		srv.ServeHTTP(res, req)
+		if res.Code != http.StatusOK {
+			t.Fatalf("rescan returned %d: %s", res.Code, res.Body.String())
+		}
 	}
 	mediaStatus := func() int {
 		req := httptest.NewRequest(http.MethodGet, "/api/media?path="+url.QueryEscape(mediaPath), nil)
 		req.AddCookie(cookie)
-		res := httptest.NewRecorder(); srv.ServeHTTP(res, req)
+		res := httptest.NewRecorder()
+		srv.ServeHTTP(res, req)
 		return res.Code
 	}
 
 	rescan()
-	if code := mediaStatus(); code != http.StatusOK { t.Fatalf("media before removal = %d; want 200", code) }
+	if code := mediaStatus(); code != http.StatusOK {
+		t.Fatalf("media before removal = %d; want 200", code)
+	}
 
-	if err := db.RemoveMedia(context.Background(), mediaPath); err != nil { t.Fatal(err) }
+	if err := db.RemoveMedia(context.Background(), mediaPath); err != nil {
+		t.Fatal(err)
+	}
 	// O arquivo continua no disco; o rescan não pode desfazer a remoção.
 	rescan()
-	removed, err := db.RemovedMedia(context.Background()); if err != nil { t.Fatal(err) }
-	if len(removed) != 1 { t.Fatalf("removal rows after rescan = %d; want 1", len(removed)) }
-	if _, ok := removed[mediaPath]; !ok { t.Fatalf("removal identity lost after rescan: %v", removed) }
+	removed, err := db.RemovedMedia(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(removed) != 1 {
+		t.Fatalf("removal rows after rescan = %d; want 1", len(removed))
+	}
+	if _, ok := removed[mediaPath]; !ok {
+		t.Fatalf("removal identity lost after rescan: %v", removed)
+	}
 
-	if code := mediaStatus(); code != http.StatusNotFound { t.Fatalf("removed media after rescan = %d; want 404", code) }
-	catalogReq := httptest.NewRequest(http.MethodGet, "/api/catalog", nil); catalogReq.AddCookie(cookie)
-	catalogRes := httptest.NewRecorder(); srv.ServeHTTP(catalogRes, catalogReq)
-	if catalogRes.Code != http.StatusOK { t.Fatalf("catalog returned %d", catalogRes.Code) }
-	if strings.Contains(catalogRes.Body.String(), "removed.mp4") { t.Fatalf("removed media still present in catalog: %s", catalogRes.Body.String()) }
+	if code := mediaStatus(); code != http.StatusNotFound {
+		t.Fatalf("removed media after rescan = %d; want 404", code)
+	}
+	catalogReq := httptest.NewRequest(http.MethodGet, "/api/catalog", nil)
+	catalogReq.AddCookie(cookie)
+	catalogRes := httptest.NewRecorder()
+	srv.ServeHTTP(catalogRes, catalogReq)
+	if catalogRes.Code != http.StatusOK {
+		t.Fatalf("catalog returned %d", catalogRes.Code)
+	}
+	if strings.Contains(catalogRes.Body.String(), "removed.mp4") {
+		t.Fatalf("removed media still present in catalog: %s", catalogRes.Body.String())
+	}
 }
 
 // TestCredentialsChangeRequiresCurrentPassword garante que uma sessão válida não troca
@@ -260,18 +439,25 @@ func TestRescanKeepsExplicitRemovalAndCatalogIdentity(t *testing.T) {
 // senha atual é um pedido malformado (422). A troca correta sucede e invalida a sessão.
 func TestCredentialsChangeRequiresCurrentPassword(t *testing.T) {
 	db := openTestDB(t)
-	if err := db.BootstrapAdmin(context.Background(), "owner", "a sufficiently long password"); err != nil { t.Fatal(err) }
+	if err := db.BootstrapAdmin(context.Background(), "owner", "a sufficiently long password"); err != nil {
+		t.Fatal(err)
+	}
 	srv := NewWithOptions(db, false)
 	login := httptest.NewRequest(http.MethodPost, "/api/login", strings.NewReader(`{"username":"owner","password":"a sufficiently long password"}`))
 	login.Header.Set("Origin", "http://example.com")
-	loginResult := httptest.NewRecorder(); srv.ServeHTTP(loginResult, login)
-	if loginResult.Code != http.StatusOK { t.Fatalf("login returned %d", loginResult.Code) }
+	loginResult := httptest.NewRecorder()
+	srv.ServeHTTP(loginResult, login)
+	if loginResult.Code != http.StatusOK {
+		t.Fatalf("login returned %d", loginResult.Code)
+	}
 	cookie := loginResult.Result().Cookies()[0]
 
 	change := func(body string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodPost, "/api/account/credentials", strings.NewReader(body))
-		req.Header.Set("Origin", "http://example.com"); req.AddCookie(cookie)
-		res := httptest.NewRecorder(); srv.ServeHTTP(res, req)
+		req.Header.Set("Origin", "http://example.com")
+		req.AddCookie(cookie)
+		res := httptest.NewRecorder()
+		srv.ServeHTTP(res, req)
 		return res
 	}
 	if res := change(`{"username":"owner2","password":"a sufficiently long replacement password"}`); res.Code != http.StatusUnprocessableEntity {
@@ -285,14 +471,20 @@ func TestCredentialsChangeRequiresCurrentPassword(t *testing.T) {
 	}
 
 	valid := change(`{"current_password":"a sufficiently long password","username":"owner2","password":"a sufficiently long replacement password"}`)
-	if valid.Code != http.StatusOK { t.Fatalf("valid change = %d: %s", valid.Code, valid.Body.String()) }
+	if valid.Code != http.StatusOK {
+		t.Fatalf("valid change = %d: %s", valid.Code, valid.Body.String())
+	}
 	if ok, _ := db.VerifyPassword(context.Background(), "owner2", "a sufficiently long replacement password"); !ok {
 		t.Fatal("valid change did not update credentials")
 	}
 	// A troca invalida as sessões anteriores e emite uma sessão nova.
-	stillOld := httptest.NewRequest(http.MethodGet, "/api/me", nil); stillOld.AddCookie(cookie)
-	oldResult := httptest.NewRecorder(); srv.ServeHTTP(oldResult, stillOld)
-	if oldResult.Code != http.StatusUnauthorized { t.Fatalf("old session still valid after change: %d", oldResult.Code) }
+	stillOld := httptest.NewRequest(http.MethodGet, "/api/me", nil)
+	stillOld.AddCookie(cookie)
+	oldResult := httptest.NewRecorder()
+	srv.ServeHTTP(oldResult, stillOld)
+	if oldResult.Code != http.StatusUnauthorized {
+		t.Fatalf("old session still valid after change: %d", oldResult.Code)
+	}
 }
 
 func TestMediaMaterialsAreDownloadsButVTTRemainsPlayable(t *testing.T) {
@@ -384,8 +576,11 @@ func loginForTest(t *testing.T, srv http.Handler) *http.Cookie {
 	change := httptest.NewRequest(http.MethodPost, "/api/account/credentials", strings.NewReader(`{"current_password":"a sufficiently long password","username":"owner2","password":"a sufficiently long replacement password"}`))
 	change.Header.Set("Origin", "http://example.com")
 	change.AddCookie(cookie)
-	changed := httptest.NewRecorder(); srv.ServeHTTP(changed, change)
-	if changed.Code != http.StatusOK { t.Fatalf("credential change returned %d: %s", changed.Code, changed.Body.String()) }
+	changed := httptest.NewRecorder()
+	srv.ServeHTTP(changed, change)
+	if changed.Code != http.StatusOK {
+		t.Fatalf("credential change returned %d: %s", changed.Code, changed.Body.String())
+	}
 	return changed.Result().Cookies()[0]
 }
 

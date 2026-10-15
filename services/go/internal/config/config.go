@@ -45,4 +45,9 @@ func env(key, fallback string) string {
 	return fallback
 }
 
-func firstEnv(primary, alias string) string { if value := os.Getenv(primary); value != "" { return value }; return os.Getenv(alias) }
+func firstEnv(primary, alias string) string {
+	if value := os.Getenv(primary); value != "" {
+		return value
+	}
+	return os.Getenv(alias)
+}

@@ -28,12 +28,12 @@ var migrationFiles embed.FS
 type DB struct{ sql *sql.DB }
 
 type User struct {
-	ID       int64  `json:"-"`
-	UserID   int64  `json:"user_id"`
-	Username string `json:"username"`
-	Role     string `json:"-"`
-	IsAdmin  bool `json:"is_admin"`
-	MustChangeCredentials bool `json:"must_change_credentials"`
+	ID                    int64  `json:"-"`
+	UserID                int64  `json:"user_id"`
+	Username              string `json:"username"`
+	Role                  string `json:"-"`
+	IsAdmin               bool   `json:"is_admin"`
+	MustChangeCredentials bool   `json:"must_change_credentials"`
 }
 
 func Open(ctx context.Context, path string) (*DB, error) {
@@ -60,10 +60,18 @@ func Open(ctx context.Context, path string) (*DB, error) {
 	}
 	for _, entry := range entries {
 		var applied int
-		if _, err := fmt.Sscanf(entry.Name(), "%d_", &applied); err != nil { db.Close(); return nil, fmt.Errorf("invalid migration %s", entry.Name()) }
+		if _, err := fmt.Sscanf(entry.Name(), "%d_", &applied); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("invalid migration %s", entry.Name())
+		}
 		var exists int
-		if err := db.QueryRowContext(ctx, `SELECT count(*) FROM schema_migrations WHERE version=?`, applied).Scan(&exists); err != nil { db.Close(); return nil, err }
-		if exists > 0 { continue }
+		if err := db.QueryRowContext(ctx, `SELECT count(*) FROM schema_migrations WHERE version=?`, applied).Scan(&exists); err != nil {
+			db.Close()
+			return nil, err
+		}
+		if exists > 0 {
+			continue
+		}
 		contents, err := migrationFiles.ReadFile("migrations/" + entry.Name())
 		if err != nil {
 			db.Close()
@@ -94,19 +102,36 @@ func (d *DB) BootstrapAdmin(ctx context.Context, username, password string) erro
 		return err
 	}
 	mustChange := 0
-	if username == "admin" && password == "admin" { mustChange = 1 }
+	if username == "admin" && password == "admin" {
+		mustChange = 1
+	}
 	_, err = d.sql.ExecContext(ctx, `INSERT OR IGNORE INTO users(username,password_hash,role,must_change_credentials) SELECT ?,?,'admin',? WHERE NOT EXISTS (SELECT 1 FROM users WHERE role='admin')`, username, hash, mustChange)
 	return err
 }
 
 func (d *DB) UpdateCredentialsAndSession(ctx context.Context, userID int64, username, password, token string, lifetime time.Duration) error {
-	if len([]rune(username)) < 2 || len([]rune(username)) > 64 || strings.TrimSpace(username) != username || len([]rune(password)) < 12 || len([]rune(password)) > 1024 { return errors.New("invalid credentials") }
-	hash, err := hashPassword(password); if err != nil { return err }
-	tx, err := d.sql.BeginTx(ctx, nil); if err != nil { return err }; defer tx.Rollback()
-	if _, err = tx.ExecContext(ctx, `UPDATE users SET username=?, password_hash=?, must_change_credentials=0 WHERE id=?`, username, hash, userID); err != nil { return err }
-	if _, err = tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id=?`, userID); err != nil { return err }
+	if len([]rune(username)) < 2 || len([]rune(username)) > 64 || strings.TrimSpace(username) != username || len([]rune(password)) < 12 || len([]rune(password)) > 1024 {
+		return errors.New("invalid credentials")
+	}
+	hash, err := hashPassword(password)
+	if err != nil {
+		return err
+	}
+	tx, err := d.sql.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.ExecContext(ctx, `UPDATE users SET username=?, password_hash=?, must_change_credentials=0 WHERE id=?`, username, hash, userID); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id=?`, userID); err != nil {
+		return err
+	}
 	expires := time.Now().UTC().Add(lifetime).Format(time.RFC3339Nano)
-	if _, err = tx.ExecContext(ctx, `INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)`, tokenHash(token), userID, expires); err != nil { return err }
+	if _, err = tx.ExecContext(ctx, `INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)`, tokenHash(token), userID, expires); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
@@ -129,7 +154,9 @@ func (d *DB) VerifyPassword(ctx context.Context, username, password string) (boo
 
 func (d *DB) UserByName(ctx context.Context, username string) (User, error) {
 	var u User
-	err := d.sql.QueryRowContext(ctx, `SELECT id,username,role,must_change_credentials FROM users WHERE username=? COLLATE NOCASE`, username).Scan(&u.ID, &u.Username, &u.Role, &u.MustChangeCredentials); u.UserID = u.ID; u.IsAdmin = u.Role == "admin"
+	err := d.sql.QueryRowContext(ctx, `SELECT id,username,role,must_change_credentials FROM users WHERE username=? COLLATE NOCASE`, username).Scan(&u.ID, &u.Username, &u.Role, &u.MustChangeCredentials)
+	u.UserID = u.ID
+	u.IsAdmin = u.Role == "admin"
 	return u, err
 }
 
@@ -146,16 +173,31 @@ func (d *DB) CreateSession(ctx context.Context, userID int64, lifetime time.Dura
 
 func (d *DB) UserForSession(ctx context.Context, token string) (User, error) {
 	var u User
-	err := d.sql.QueryRowContext(ctx, `SELECT u.id,u.username,u.role,u.must_change_credentials FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?`, tokenHash(token), time.Now().UTC().Format(time.RFC3339Nano)).Scan(&u.ID, &u.Username, &u.Role, &u.MustChangeCredentials); u.UserID = u.ID; u.IsAdmin = u.Role == "admin"
+	err := d.sql.QueryRowContext(ctx, `SELECT u.id,u.username,u.role,u.must_change_credentials FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?`, tokenHash(token), time.Now().UTC().Format(time.RFC3339Nano)).Scan(&u.ID, &u.Username, &u.Role, &u.MustChangeCredentials)
+	u.UserID = u.ID
+	u.IsAdmin = u.Role == "admin"
 	return u, err
 }
 
 func (d *DB) UpdateCredentials(ctx context.Context, userID int64, username, password string) error {
-	if len([]rune(username)) < 2 || len([]rune(username)) > 64 || strings.TrimSpace(username) != username || len([]rune(password)) < 12 || len([]rune(password)) > 1024 { return errors.New("invalid credentials") }
-	hash, err := hashPassword(password); if err != nil { return err }
-	tx, err := d.sql.BeginTx(ctx, nil); if err != nil { return err }; defer tx.Rollback()
-	if _, err = tx.ExecContext(ctx, `UPDATE users SET username=?, password_hash=?, must_change_credentials=0 WHERE id=?`, username, hash, userID); err != nil { return err }
-	if _, err = tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id=?`, userID); err != nil { return err }
+	if len([]rune(username)) < 2 || len([]rune(username)) > 64 || strings.TrimSpace(username) != username || len([]rune(password)) < 12 || len([]rune(password)) > 1024 {
+		return errors.New("invalid credentials")
+	}
+	hash, err := hashPassword(password)
+	if err != nil {
+		return err
+	}
+	tx, err := d.sql.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.ExecContext(ctx, `UPDATE users SET username=?, password_hash=?, must_change_credentials=0 WHERE id=?`, username, hash, userID); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id=?`, userID); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 

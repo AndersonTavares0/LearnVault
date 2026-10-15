@@ -51,7 +51,9 @@ func (s fakeStore) UserForSession(_ context.Context, token string) (storage.User
 	return s.user, nil
 }
 func (s fakeStore) DeleteSession(context.Context, string) error { return s.healthErr }
-func (s fakeStore) UpdateCredentials(context.Context, int64, string, string) error { return s.healthErr }
+func (s fakeStore) UpdateCredentials(context.Context, int64, string, string) error {
+	return s.healthErr
+}
 func (s fakeStore) UpdateCredentialsAndSession(_ context.Context, _ int64, username, _ string, token string, _ time.Duration) error {
 	if s.healthErr != nil {
 		return s.healthErr
