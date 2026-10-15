@@ -28,7 +28,7 @@ Os testes devem usar fixtures e diretórios temporários; não devem acessar dad
 
 ## Pull requests
 
-- Use um título claro, como `feat: add lesson progress persistence`.
+- Use um título claro, como `feat: adicionar persistência de progresso da aula`.
 - Descreva o problema, a solução e a validação realizada.
 - Inclua screenshots para mudanças de interface.
 - Documente migrações e mudanças de deploy.
@@ -64,14 +64,14 @@ repositório; essa decisão pode ser revista quando a equipe crescer.
 
 ## Estilo de commits
 
-Use Conventional Commits. Os prefixos são fixos em inglês e as descrições também devem
-ser escritas em inglês para manter o `CHANGELOG.md` consistente com o Release Please:
+Use Conventional Commits. Os prefixos são fixos em inglês e as descrições devem ser escritas
+em pt-BR, mantendo o `CHANGELOG.md` consistente com o Release Please:
 
 ```text
-feat: add lesson progress persistence
-fix: handle expired sessions
-docs: update contribution guide
-chore: update dependencies
+feat: adicionar persistência de progresso da aula
+fix: tratar sessões expiradas
+docs: atualizar guia de contribuição
+chore: atualizar dependências
 ```
 
 O `pnpm` é o gerenciador oficial do frontend. Não use `npm` para alterar dependências ou

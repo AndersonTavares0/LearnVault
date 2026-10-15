@@ -37,5 +37,5 @@ that area.
 
 - Read `docs/README.md` for navigation and `docs/governance/overview.md` for repository rules.
 - Use GitHub Discussions for unresolved questions; use Issues for features and behavior changes.
-- `README.md` and `CHANGELOG.md` remain in English. Wiki and editorial documentation are in pt-BR.
-- Conventional Commit prefixes and descriptions remain in English for Release Please.
+- `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, the Wiki, and editorial documentation are in pt-BR. Only `LICENSE` stays in English.
+- Conventional Commit prefixes stay in English while descriptions are written in pt-BR for Release Please.

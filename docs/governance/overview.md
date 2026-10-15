@@ -52,6 +52,14 @@ entrada de deploy. O código da aplicação pertence a estas pastas:
 | `deploy/quadlet/` | Unidade systemd para Podman rootless |
 | `scripts/` | Scripts de verificação local |
 | `docs/` | Arquitetura, governança, operações, produto, releases e Wiki |
+| `.github/` | Actions, configuração do Release Please e arquivos de comunidade |
+| `.agents/` | Políticas, playbooks, checklists e templates para agentes |
+
+Arquivos de comunidade (`CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`) ficam em
+`.github/`. O changelog fica em `docs/releases/CHANGELOG.md`. A configuração do Release Please
+fica em `.github/release-please/`. A raiz mantém apenas `AGENTS.md`, `README.md`, `LICENSE`,
+`.dockerignore`, `.gitignore`, `go.mod`, `go.sum`, `package.json`, `pnpm-lock.yaml`,
+`pnpm-workspace.yaml`, `tsconfig.json` e `vite.config.ts`.
 
 Saída gerada (`cmd/learnvault/web/build`, `.svelte-kit`, `node_modules` e dados/cache
 locais) deve permanecer ignorada e não pode ser commitada.
@@ -69,9 +77,10 @@ O repositório é a fonte canônica. O índice em [`docs/README.md`](../README.m
 cada material deve ser colocado. A Wiki é uma superfície derivada; apenas as páginas em
 `docs/wiki/mapping.md` são sincronizadas automaticamente.
 
-`README.md` e `CHANGELOG.md` permanecem em inglês. Governança, templates, Wiki e documentação
-editorial permanecem em pt-BR. Prefixos e descrições de Conventional Commits permanecem em
-inglês para manter o Release Please consistente.
+`README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` e `SECURITY.md` são
+mantidos em pt-BR, assim como a governança, os templates, a Wiki e a documentação editorial.
+Apenas a `LICENSE` permanece em inglês. Prefixos de Conventional Commits permanecem em inglês;
+as descrições ficam em pt-BR para manter o Release Please consistente.
 
 ## Releases e CI
 

@@ -1,7 +1,7 @@
 # Project agent configuration
 
 This directory contains LearnVault-specific working rules and reusable guidance
-for AI coding agents. Keep these instructions aligned with `CONTRIBUTING.md`,
+for AI coding agents. Keep these instructions aligned with `.github/CONTRIBUTING.md`,
 `docs/architecture/overview.md`, and `docs/governance/overview.md`.
 
 ## OpenCode integration
