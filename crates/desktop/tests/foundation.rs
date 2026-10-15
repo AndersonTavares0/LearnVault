@@ -163,6 +163,60 @@ fn capability_is_deny_by_default_without_remote_sources() {
 }
 
 #[test]
+fn build_registers_the_app_commands_in_the_acl_manifest() {
+    let build = read(&crate_root().join("build.rs"));
+    assert!(
+        build.contains("app_manifest"),
+        "o build precisa declarar o AppManifest do ACL"
+    );
+    for command in ["desktop_config", "desktop_catalog"] {
+        assert!(
+            build.contains(command),
+            "o comando '{command}' precisa ser declarado no ACL app-defined"
+        );
+    }
+}
+
+#[test]
+fn capability_grants_only_the_core_default_and_the_two_app_commands() {
+    let raw = read(&crate_root().join("capabilities/default.json"));
+    let capability: serde_json::Value =
+        serde_json::from_str(&raw).expect("a capability precisa ser JSON válido");
+    let permissions: Vec<&str> = capability["permissions"]
+        .as_array()
+        .expect("a capability precisa listar permissões")
+        .iter()
+        .map(|permission| permission.as_str().unwrap_or_default())
+        .collect();
+
+    assert!(permissions.contains(&"core:default"));
+    assert!(permissions.contains(&"allow-desktop-config"));
+    assert!(permissions.contains(&"allow-desktop-catalog"));
+    assert_eq!(
+        permissions.len(),
+        3,
+        "a capability não pode ampliar além do núcleo e dos dois comandos: {permissions:?}"
+    );
+}
+
+#[test]
+fn invoke_handler_registers_only_the_desktop_commands() {
+    let lib = read(&crate_root().join("src/lib.rs"));
+    assert!(
+        lib.contains("desktop_config"),
+        "o handler precisa registrar desktop_config"
+    );
+    assert!(
+        lib.contains("desktop_catalog"),
+        "o handler precisa registrar desktop_catalog"
+    );
+    assert!(
+        !lib.contains("rescan"),
+        "rescan pertence a uma fatia posterior e não pode ser registrado agora"
+    );
+}
+
+#[test]
 fn desktop_source_has_no_network_listener_or_http_server() {
     for source in rust_sources() {
         let content = read(&source);

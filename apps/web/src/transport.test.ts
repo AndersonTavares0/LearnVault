@@ -1,6 +1,11 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { invoke } from '@tauri-apps/api/core';
 import { findLesson } from './router';
 import { DesktopStub, HttpTransport, normalizeCatalog, normalizeUser, type Transport } from './transport';
+
+// O Tauri só é carregado no desktop: fora dele o módulo é substituído pelo mock, de modo
+// que a suíte nunca toca `window.__TAURI_INTERNALS__`.
+vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 
 describe('transport contract', () => {
 	it('exposes the HTTP transport seam without routing assumptions', () => {
@@ -93,4 +98,42 @@ describe('transport contract', () => {
 		expect(catalog.categories[0].courses[0].modules[0].lessons[0].path).toBe('programming/go/basics/first');
 	});
 	it('rejects an unknown catalog shape with a controlled error', () => expect(() => normalizeCatalog({ nope: true })).toThrow('Resposta inválida do servidor'));
+});
+
+describe('desktop transport over IPC', () => {
+	beforeEach(() => { vi.mocked(invoke).mockReset(); });
+
+	it('loads the catalog through the desktop_catalog command without touching fetch', async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+		vi.mocked(invoke).mockResolvedValue({
+			complete: true,
+			loose_files: [],
+			categories: [{ title: 'Curso', path: 'cat', role: 'category', files: [], loose_files: [], children: [] }]
+		});
+
+		const catalog = await new DesktopStub().catalog();
+
+		expect(invoke).toHaveBeenCalledWith('desktop_catalog');
+		expect(fetchMock).not.toHaveBeenCalled();
+		expect(catalog.nodes[0].role).toBe('category');
+		expect(catalog.categories[0].title).toBe('Curso');
+		vi.unstubAllGlobals();
+	});
+
+	it('keeps the sanitized desktop error message when the command fails', async () => {
+		vi.mocked(invoke).mockRejectedValue({ code: 'catalog_unavailable', message: 'catálogo indisponível' });
+		await expect(new DesktopStub().catalog()).rejects.toThrow('catálogo indisponível');
+	});
+
+	it('falls back to a stable message when the desktop error carries none', async () => {
+		vi.mocked(invoke).mockRejectedValue({ code: 'catalog_unavailable' });
+		await expect(new DesktopStub().catalog()).rejects.toThrow('Não foi possível carregar o catálogo.');
+	});
+
+	it('keeps rescan and credential changes unimplemented on the desktop', async () => {
+		const desktop: Transport = new DesktopStub();
+		await expect(desktop.rescan()).rejects.toThrow('ainda não implementado');
+		await expect(desktop.updateCredentials('u', 'senha')).rejects.toThrow('ainda não implementado');
+	});
 });
