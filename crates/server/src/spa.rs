@@ -1,8 +1,7 @@
 use std::{
     fs::File,
     path::{Component, Path, PathBuf},
-    pin::Pin,
-    task::{Context, Poll},
+    time::Duration,
 };
 
 use axum::{
@@ -11,17 +10,15 @@ use axum::{
     http::{StatusCode, Uri, header},
     response::{IntoResponse, Response},
 };
-use tokio::{
-    io::{AsyncRead, AsyncReadExt, ReadBuf},
-    sync::OwnedSemaphorePermit,
-};
+use tokio::io::AsyncReadExt;
 use tokio_util::io::ReaderStream;
 
-use crate::AppState;
+use crate::{AppState, stream::IdleTimeoutReader};
 
 /// Arquivos estáticos permanecem pequenos para que uma raiz web mal configurada não esgote
 /// recursos. Após validar os metadados, o arquivo é transmitido sem carregá-lo em memória.
 const MAX_SPA_FILE_SIZE: u64 = 16 * 1024 * 1024;
+const SPA_STREAM_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Entrega arquivos da SPA sem permitir que a requisição saia da raiz configurada.
 pub(crate) async fn serve(State(state): State<AppState>, uri: Uri) -> Response {
@@ -108,10 +105,11 @@ async fn open_file(
         return Err(FileError::Busy);
     };
 
-    let stream = ReaderStream::new(PermitReader {
-        reader: tokio::fs::File::from_std(opened.file).take(opened.size),
-        _permit: stream_permit,
-    });
+    let stream = ReaderStream::new(IdleTimeoutReader::new(
+        tokio::fs::File::from_std(opened.file).take(opened.size),
+        stream_permit,
+        SPA_STREAM_IDLE_TIMEOUT,
+    ));
     Ok(file_response(
         Body::from_stream(stream),
         &root,
@@ -119,22 +117,6 @@ async fn open_file(
         shell,
         opened.size,
     ))
-}
-
-/// Mantém a reserva de streaming viva enquanto `ReaderStream` ainda puder ler o corpo.
-struct PermitReader<R> {
-    reader: R,
-    _permit: OwnedSemaphorePermit,
-}
-
-impl<R: AsyncRead + Unpin> AsyncRead for PermitReader<R> {
-    fn poll_read(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut ReadBuf<'_>,
-    ) -> Poll<std::io::Result<()>> {
-        Pin::new(&mut self.get_mut().reader).poll_read(cx, buf)
-    }
 }
 
 struct OpenedFile {

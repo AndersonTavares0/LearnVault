@@ -6,7 +6,7 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use http_body_util::BodyExt;
 use learnvault_server::{AppState, Config, build_router};
 use sha2::{Digest, Sha256};
-use std::fs;
+use std::{fs, time::Duration};
 use tempfile::TempDir;
 use tower::ServiceExt;
 
@@ -387,6 +387,55 @@ async fn slow_spa_assets_cannot_exhaust_the_shell_stream_reservation() {
         .await
         .unwrap();
     assert_eq!(recovered.status(), StatusCode::OK);
+}
+
+#[tokio::test(start_paused = true)]
+async fn idle_spa_streams_release_asset_capacity_without_reading_the_body() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = web_root(&temp);
+    let app = app(&temp, &root).await;
+    let mut idle_responses = Vec::new();
+
+    for _ in 0..3 {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::get("/_app/immutable/assets/app.css")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        idle_responses.push(response);
+    }
+
+    let saturated = app
+        .clone()
+        .oneshot(
+            Request::get("/_app/immutable/assets/app.css")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(saturated.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+    tokio::task::yield_now().await;
+    tokio::time::advance(Duration::from_secs(30)).await;
+    tokio::task::yield_now().await;
+
+    let recovered = app
+        .oneshot(
+            Request::get("/_app/immutable/assets/app.css")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(recovered.status(), StatusCode::OK);
+
+    drop(idle_responses);
 }
 
 #[tokio::test]

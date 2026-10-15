@@ -80,10 +80,10 @@ pub(crate) async fn catalog(State(state): State<AppState>, headers: HeaderMap) -
         Ok(false) | Err(_) => return StatusCode::UNAUTHORIZED.into_response(),
     }
 
+    let database = state.database.clone().lock_owned().await;
     let Some(blocking_task) = state.try_acquire_blocking_task() else {
         return service_unavailable();
     };
-    let database = state.database.clone().lock_owned().await;
     match tokio::task::spawn_blocking(move || {
         let _blocking_task = blocking_task;
         learnvault_core::build_catalog(&database, LIBRARY_ID)
@@ -104,9 +104,6 @@ pub(crate) async fn rescan(State(state): State<AppState>, headers: HeaderMap) ->
     if !user.is_admin || !same_origin(&headers) {
         return StatusCode::FORBIDDEN.into_response();
     }
-    let Some(blocking_task) = state.try_acquire_blocking_task() else {
-        return service_unavailable();
-    };
     let Ok(local_lock) = state.rescan_lock.clone().try_lock_owned() else {
         return StatusCode::CONFLICT.into_response();
     };
@@ -115,6 +112,9 @@ pub(crate) async fn rescan(State(state): State<AppState>, headers: HeaderMap) ->
     let root = state.config.library_root.clone();
     let lock_path = rescan_lock_path(&state.config.database_path);
     let mut database = database.lock_owned().await;
+    let Some(blocking_task) = state.try_acquire_blocking_task() else {
+        return service_unavailable();
+    };
     match tokio::task::spawn_blocking(move || {
         // Os guards e o permit pertencem deliberadamente à tarefa blocking. Tokio continua
         // executando-a depois que o JoinHandle é descartado, então um timeout HTTP não libera

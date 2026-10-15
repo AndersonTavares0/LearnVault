@@ -147,7 +147,7 @@ impl AppState {
         self.blocking_tasks.clone().try_acquire_owned().ok()
     }
 
-    /// Reserva uma conexão da SPA até que o corpo HTTP seja consumido ou descartado.
+    /// Reserva uma conexão da SPA até que o corpo HTTP seja consumido, descartado ou fique ocioso.
     ///
     /// O shell recebe uma reserva própria para que clientes lentos baixando assets não o impeçam
     /// de carregar uma rota da aplicação.
@@ -191,10 +191,10 @@ impl AppState {
     }
 
     pub(crate) async fn user(&self, username: String) -> Result<Option<AuthUser>, StateError> {
+        let database = self.database.clone().lock_owned().await;
         let blocking_task = self
             .try_acquire_blocking_task()
             .ok_or(StateError::Capacity)?;
-        let database = self.database.clone().lock_owned().await;
         tokio::task::spawn_blocking(move || {
             let _blocking_task = blocking_task;
             learnvault_core::find_user_by_username(&database, &username)
@@ -208,10 +208,10 @@ impl AppState {
         &self,
         token_hash: String,
     ) -> Result<Option<AuthSession>, StateError> {
+        let database = self.database.clone().lock_owned().await;
         let blocking_task = self
             .try_acquire_blocking_task()
             .ok_or(StateError::Capacity)?;
-        let database = self.database.clone().lock_owned().await;
         tokio::task::spawn_blocking(move || {
             let _blocking_task = blocking_task;
             learnvault_core::session_user(&database, &token_hash, unix_now())
@@ -226,10 +226,10 @@ impl AppState {
         token_hash: String,
         user_id: String,
     ) -> Result<(), StateError> {
+        let mut database = self.database.clone().lock_owned().await;
         let blocking_task = self
             .try_acquire_blocking_task()
             .ok_or(StateError::Capacity)?;
-        let mut database = self.database.clone().lock_owned().await;
         tokio::task::spawn_blocking(move || {
             let _blocking_task = blocking_task;
             learnvault_core::create_session(
@@ -245,10 +245,10 @@ impl AppState {
     }
 
     pub(crate) async fn delete_session(&self, token_hash: String) -> Result<(), StateError> {
+        let mut database = self.database.clone().lock_owned().await;
         let blocking_task = self
             .try_acquire_blocking_task()
             .ok_or(StateError::Capacity)?;
-        let mut database = self.database.clone().lock_owned().await;
         tokio::task::spawn_blocking(move || {
             let _blocking_task = blocking_task;
             learnvault_core::delete_session(&mut database, &token_hash)
@@ -521,6 +521,29 @@ mod tests {
             state.delete_session("token".to_owned()).await,
             Err(StateError::Capacity)
         ));
+    }
+
+    #[tokio::test]
+    async fn database_waiters_do_not_consume_blocking_capacity() {
+        let state = AppState::new(config());
+        let database = state.database.clone().lock_owned().await;
+        let tasks: Vec<_> = (0..4)
+            .map(|_| {
+                let state = state.clone();
+                tokio::spawn(async move { state.user("admin".to_owned()).await })
+            })
+            .collect();
+
+        tokio::task::yield_now().await;
+        tokio::task::yield_now().await;
+        let permit = state.try_acquire_blocking_task();
+        assert!(permit.is_some());
+        drop(permit);
+
+        drop(database);
+        for task in tasks {
+            assert!(matches!(task.await.unwrap(), Ok(None)));
+        }
     }
 
     #[tokio::test]

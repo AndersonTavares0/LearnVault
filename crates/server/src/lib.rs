@@ -9,6 +9,7 @@ mod health;
 mod media;
 mod spa;
 mod state;
+mod stream;
 
 pub use auth::{
     AuthError, generate_session_token, hash_password, hash_session_token, validate_password,
@@ -138,8 +139,8 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
     use std::path::PathBuf;
+    use std::{fs, time::Duration};
 
     use axum::{
         body::Body,
@@ -477,5 +478,56 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(recovered.status(), StatusCode::OK);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn idle_media_streams_release_capacity_without_reading_the_body() {
+        let (app, _temp, _state) = media_app().await;
+        let cookie = media_cookie(&app).await;
+        let mut idle_responses = Vec::new();
+
+        for _ in 0..4 {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::get("/api/media?path=lesson.mp4")
+                        .header("cookie", &cookie)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            idle_responses.push(response);
+        }
+
+        let saturated = app
+            .clone()
+            .oneshot(
+                Request::get("/api/media?path=lesson.mp4")
+                    .header("cookie", &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(saturated.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+        tokio::task::yield_now().await;
+        tokio::time::advance(Duration::from_secs(30)).await;
+        tokio::task::yield_now().await;
+
+        let recovered = app
+            .oneshot(
+                Request::get("/api/media?path=lesson.mp4")
+                    .header("cookie", cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(recovered.status(), StatusCode::OK);
+
+        drop(idle_responses);
     }
 }
