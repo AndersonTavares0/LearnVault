@@ -44,9 +44,9 @@ describe('production shell contract', () => {
 		expect(http).toContain('Falha ao carregar legenda.');
 		// A entrega de arquivos pequenos no desktop usa o protocolo customizado por mediaId,
 		// nunca o endpoint HTTP por caminho; o HTTP mantém `/api/media?path=`.
-		expect(desktop).toContain('learnvault-media://');
+		expect(desktop).toContain('learnvault-media');
 		expect(desktop).not.toContain('/api/media?path=');
 		expect(http).toContain('/api/media?path=');
-		expect(http).not.toContain('learnvault-media://');
+		expect(http).not.toContain('learnvault-media');
 	});
 });

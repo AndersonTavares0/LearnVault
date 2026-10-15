@@ -19,6 +19,11 @@ export type StudyProgress = { mediaId: string; positionSeconds: number; complete
 export type RecentStudy = { items: StudyProgress[] };
 export const STUDY_NOT_AVAILABLE = 'study_not_available';
 
+// Protocolo customizado do desktop para arquivos pequenos. O webview aponta somente pelo
+// `mediaId` autorizado; nenhum caminho cruza a fronteira do webview.
+export const DESKTOP_MEDIA_SCHEME = 'learnvault-media';
+export const DESKTOP_MEDIA_HOST = 'localhost';
+
 export interface Transport {
 	me(): Promise<User | null>;
 	login(username: string, password: string): Promise<User>;
@@ -32,7 +37,7 @@ export interface Transport {
 	recordPosition(mediaId: string, positionSeconds: number): Promise<StudyProgress>;
 	setCompleted(mediaId: string, completed: boolean): Promise<StudyProgress>;
 	recentStudy(limit?: number): Promise<RecentStudy>;
-	mediaUrl(path: string): string | null;
+	mediaUrl(file: FileEntry): string | null;
 }
 
 type RustFile = { media_id?: string; name?: string; path?: string; size?: number; kind?: string; availability?: string; unverified?: boolean };
@@ -202,7 +207,7 @@ export class HttpTransport implements Transport {
 	async recordPosition(mediaId: string, positionSeconds: number) { const response = await fetch('/api/study/position', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: mediaId, position_seconds: positionSeconds }) }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? 'Mídia não encontrada.' : response.status === 422 ? 'Posição inválida.' : 'Não foi possível salvar o progresso.'); return normalizeStudyProgress(await response.json()); }
 	async setCompleted(mediaId: string, completed: boolean) { const response = await fetch('/api/study/completed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: mediaId, completed }) }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? 'Mídia não encontrada.' : 'Não foi possível atualizar a conclusão.'); return normalizeStudyProgress(await response.json()); }
 	async recentStudy(limit?: number) { const url = limit === undefined ? '/api/study/recent' : `/api/study/recent?limit=${limit}`; const response = await fetch(url); if (!response.ok) throw response.status === 404 ? Object.assign(new Error('Estudo não disponível neste servidor.'), { code: STUDY_NOT_AVAILABLE }) : new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar o histórico.'); return normalizeRecentStudy(await response.json()); }
-	mediaUrl(path: string) { return `/api/media?path=${encodeURIComponent(path)}`; }
+	mediaUrl(file: FileEntry) { return `/api/media?path=${encodeURIComponent(file.path)}`; }
 }
 
 // Códigos estáveis de erro IPC e a mensagem sanitizada correspondente. Um código
@@ -245,7 +250,13 @@ export class DesktopStub implements Transport {
 	recordPosition() { return Promise.reject(new Error('Transporte desktop ainda não implementado.')); }
 	setCompleted() { return Promise.reject(new Error('Transporte desktop ainda não implementado.')); }
 	recentStudy() { return Promise.reject(new Error('Transporte desktop ainda não implementado.')); }
-	mediaUrl(_path: string) { return null; }
+	// Somente materiais pequenos (imagens/thumbnails e materiais) com identidade autorizada
+	// usam o protocolo. Vídeo/áudio e legendas ficam fora desta fatia; um arquivo sem
+	// `mediaId` não é endereçável e o caminho cru nunca é usado.
+	mediaUrl(file: FileEntry) {
+		if (file.kind !== 'material' || !file.mediaId) return null;
+		return `${DESKTOP_MEDIA_SCHEME}://${DESKTOP_MEDIA_HOST}/${encodeURIComponent(file.mediaId)}`;
+	}
 }
 
 export const transportKind: TransportKind = __LEARNVAULT_TRANSPORT__ === 'desktop' ? 'desktop' : 'http';

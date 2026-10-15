@@ -6,6 +6,13 @@
 //! explícita (`desktop_rescan`). O catálogo e o resumo do rescan são derivados pelo núcleo
 //! `learnvault-core` sobre um banco SQLite local, no diretório de dados do aplicativo.
 //!
+//! Além do IPC, o desktop entrega **arquivos pequenos** — imagens/thumbnails e materiais
+//! pequenos — por um protocolo customizado do Tauri 2 (`learnvault-media://localhost/...`,
+//! ver [`media`]). A entrega é por `media_id` opaco, justificada apenas no catálogo, com
+//! allowlist de tipo de conteúdo e limite explícito de resposta. Vídeo e áudio ficam fora
+//! deste protocolo nesta fatia por causa da reprodução parcial incompatível no webview do
+//! Linux (`WebKitGTK`); legendas continuam no caminho HTTP.
+//!
 //! A raiz da biblioteca é escolhida por um seletor nativo acionado pelo Rust
 //! (`tauri-plugin-dialog`, interno e não concedido ao webview) e persistida de forma
 //! atômica e versionada no diretório de configuração do aplicativo — nunca dentro da
@@ -17,8 +24,8 @@
 //! andamento. Não há worker, progresso nem cancelamento nesta fatia.
 //!
 //! Não há listener de rede, servidor HTTP, plugin de shell, filesystem, http ou updater,
-//! nem entrega de mídia ou autenticação nesta fatia. A biblioteca permanece externa e
-//! somente leitura: o rescan apenas a lê e nenhum caminho de biblioteca é escrito.
+//! nem autenticação nesta fatia. A biblioteca permanece externa e somente leitura: o
+//! rescan e a entrega de mídia apenas a leem e nenhum caminho de biblioteca é escrito.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -28,6 +35,7 @@ pub mod config;
 pub mod dto;
 pub mod error;
 pub mod library;
+pub mod media;
 pub mod state;
 
 pub use command::{
@@ -52,7 +60,7 @@ use tauri::Manager;
 /// interno do Rust e não é concedido ao webview pelo ACL. O deny-by-default do ACL garante
 /// que nada fora das permissões declaradas em `capabilities/` seja executável pelo webview.
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
@@ -62,7 +70,8 @@ pub fn run() {
             })?;
             app.manage(state);
             Ok(())
-        })
+        });
+    media::register(builder)
         .invoke_handler(tauri::generate_handler![
             command::desktop_config,
             command::desktop_catalog,

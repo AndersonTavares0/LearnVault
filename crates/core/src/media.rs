@@ -134,6 +134,12 @@ pub struct OpenMedia {
     pub mtime: i64,
     /// Classificação derivada do nome do arquivo.
     pub kind: MediaKind,
+    /// Nome do arquivo (apenas o componente final, nunca um caminho).
+    ///
+    /// É a única informação de localização exposta a um adaptador, e serve para decisões
+    /// de tipo de conteúdo (por exemplo a allowlist de MIME do protocolo de mídia do
+    /// desktop). O caminho completo nunca cruza a fronteira do núcleo.
+    pub name: String,
     /// Verdadeiro quando o arquivo difere do que a última varredura registrou.
     pub changed: bool,
 }
@@ -243,7 +249,8 @@ pub fn open_media(
     let size = metadata.len();
     let mtime = mtime_seconds(&metadata);
     let changed = size != stored.size || mtime != stored.mtime;
-    let kind = classify(&file_name(&resolved), size);
+    let name = file_name(&resolved);
+    let kind = classify(&name, size);
 
     Ok(OpenMedia {
         media_id: media_id.to_owned(),
@@ -251,6 +258,7 @@ pub fn open_media(
         size,
         mtime,
         kind,
+        name,
         changed,
     })
 }
@@ -338,12 +346,14 @@ pub fn open_media_reference(
     verify_identity(&resolved, &metadata, media_id)?;
     let size = metadata.len();
     let mtime = mtime_seconds(&metadata);
+    let name = file_name(&resolved);
     Ok(OpenMedia {
         media_id: media_id.to_owned(),
         file,
         size,
         mtime,
-        kind: classify(&file_name(&resolved), size),
+        kind: classify(&name, size),
+        name,
         changed: size != reference.size || mtime != reference.mtime,
     })
 }
