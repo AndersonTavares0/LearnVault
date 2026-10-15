@@ -166,11 +166,11 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
-		contentType := mime.TypeByExtension(filepath.Ext(relative))
-		if contentType == "" {
-			contentType = "application/octet-stream"
-		}
+		contentType, playable := safeMediaType(filepath.Ext(relative))
 		w.Header().Set("Content-Type", contentType)
+		if !playable {
+			w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": filepath.Base(relative)}))
+		}
 		http.ServeContent(w, r, filepath.Base(relative), info.ModTime(), file)
 	case "/api/admin/catalog/rescan":
 		if r.Method != http.MethodPost {
@@ -203,6 +203,33 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]int{"categories": len(value.Categories)})
 	default:
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
+	}
+}
+
+// safeMediaType only permits formats consumed by the player. Everything else,
+// including browser-active documents such as HTML and SVG, is downloaded.
+func safeMediaType(extension string) (string, bool) {
+	switch strings.ToLower(extension) {
+	case ".mp4":
+		return "video/mp4", true
+	case ".webm":
+		return "video/webm", true
+	case ".ogv":
+		return "video/ogg", true
+	case ".mp3":
+		return "audio/mpeg", true
+	case ".m4a":
+		return "audio/mp4", true
+	case ".ogg", ".oga":
+		return "audio/ogg", true
+	case ".wav":
+		return "audio/wav", true
+	case ".flac":
+		return "audio/flac", true
+	case ".vtt":
+		return "text/vtt", true
+	default:
+		return "application/octet-stream", false
 	}
 }
 

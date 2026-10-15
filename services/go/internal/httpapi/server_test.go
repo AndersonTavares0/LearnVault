@@ -124,6 +124,69 @@ func TestAuthenticatedMediaSupportsRangeAndRejectsUnauthenticatedAccess(t *testi
 	if result.Header().Get("Accept-Ranges") != "bytes" {
 		t.Fatal("range support header missing")
 	}
+	if result.Header().Get("Content-Type") != "video/mp4" {
+		t.Fatalf("video content type = %q; want video/mp4", result.Header().Get("Content-Type"))
+	}
+}
+
+func TestMediaMaterialsAreDownloadsButVTTRemainsPlayable(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "unsafe.html"), []byte("<script>alert(1)</script>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "unsafe.svg"), []byte("<svg onload=alert(1) />"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "captions.vtt"), []byte("WEBVTT\n\n00:00.000 --> 00:01.000\nOlá"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	db, err := storage.Open(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := db.BootstrapAdmin(context.Background(), "owner", "a sufficiently long password"); err != nil {
+		t.Fatal(err)
+	}
+	lib, err := library.Open(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := NewWithLibrary(db, false, lib)
+	cookie := loginForTest(t, srv)
+
+	for _, name := range []string{"unsafe.html", "unsafe.svg"} {
+		req := httptest.NewRequest(http.MethodGet, "/api/media?path="+name, nil)
+		req.AddCookie(cookie)
+		result := httptest.NewRecorder()
+		srv.ServeHTTP(result, req)
+		if result.Code != http.StatusOK {
+			t.Fatalf("%s returned %d", name, result.Code)
+		}
+		if got := result.Header().Get("Content-Disposition"); !strings.HasPrefix(got, "attachment") {
+			t.Errorf("%s Content-Disposition = %q; want attachment", name, got)
+		}
+		if got := result.Header().Get("Content-Type"); got != "application/octet-stream" {
+			t.Errorf("%s Content-Type = %q; want application/octet-stream", name, got)
+		}
+		if got := result.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+			t.Errorf("%s nosniff = %q; want nosniff", name, got)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/media?path=captions.vtt", nil)
+	req.AddCookie(cookie)
+	result := httptest.NewRecorder()
+	srv.ServeHTTP(result, req)
+	if result.Code != http.StatusOK || result.Body.String() != "WEBVTT\n\n00:00.000 --> 00:01.000\nOlá" {
+		t.Fatalf("unexpected VTT response: %d %q", result.Code, result.Body.String())
+	}
+	if got := result.Header().Get("Content-Type"); got != "text/vtt" {
+		t.Errorf("VTT Content-Type = %q; want text/vtt", got)
+	}
+	if result.Header().Get("Content-Disposition") != "" {
+		t.Errorf("VTT Content-Disposition = %q; want empty", result.Header().Get("Content-Disposition"))
+	}
 }
 
 func loginForTest(t *testing.T, srv http.Handler) *http.Cookie {

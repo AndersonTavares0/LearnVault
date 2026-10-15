@@ -55,9 +55,10 @@ func TestSecurityHeadersWrapResponse(t *testing.T) {
 		t.Fatalf("wrapped handler called=%v status=%d", called, recorder.Code)
 	}
 	for header, want := range map[string]string{
-		"X-Content-Type-Options": "nosniff",
-		"X-Frame-Options":        "DENY",
-		"Referrer-Policy":        "no-referrer",
+		"X-Content-Type-Options":  "nosniff",
+		"X-Frame-Options":         "DENY",
+		"Referrer-Policy":         "no-referrer",
+		"Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; media-src 'self' data:; object-src 'none'; frame-ancestors 'none'",
 	} {
 		if got := recorder.Header().Get(header); got != want {
 			t.Errorf("%s = %q; want %q", header, got, want)
