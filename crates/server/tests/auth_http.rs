@@ -185,15 +185,23 @@ async fn login_rejects_when_blocking_capacity_is_saturated() {
 }
 
 #[tokio::test]
-async fn startup_fails_without_an_admin_or_valid_initial_credentials() {
+async fn startup_without_credentials_creates_temporary_admin() {
     let temp = tempfile::tempdir().unwrap();
 
-    let error = AppState::initialize(config(&temp, false))
+    let app = build_router(AppState::initialize(config(&temp, false)).await.unwrap());
+    let login = app
+        .oneshot(
+            Request::post("/api/login")
+                .header("content-type", "application/json")
+                .header("origin", "http://localhost")
+                .body(Body::from(r#"{"username":"admin","password":"admin"}"#))
+                .unwrap(),
+        )
         .await
-        .unwrap_err();
+        .unwrap();
 
-    assert!(error.to_string().contains("administrator"));
-    assert!(!error.to_string().contains(temp.path().to_str().unwrap()));
+    assert_eq!(login.status(), StatusCode::OK);
+    assert_eq!(body(login).await["must_change_credentials"], true);
 }
 
 #[tokio::test]

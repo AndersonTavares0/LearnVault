@@ -410,10 +410,8 @@ pub(crate) fn same_origin(headers: &HeaderMap) -> bool {
                 .and_then(|value| value.to_str().ok())?;
             let (scheme, remainder) = if let Some(value) = referer.strip_prefix("http://") {
                 ("http://", value)
-            } else if let Some(value) = referer.strip_prefix("https://") {
-                ("https://", value)
             } else {
-                return None;
+                ("https://", referer.strip_prefix("https://")?)
             };
             Some(format!("{scheme}{}", remainder.split('/').next()?))
         });

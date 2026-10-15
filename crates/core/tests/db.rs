@@ -192,8 +192,17 @@ fn a_version_one_database_is_upgraded_additively_preserving_rows() -> TestResult
                  status TEXT NOT NULL CHECK (status IN ('completed', 'failed')),
                  completed_at INTEGER NOT NULL
              );
+             CREATE TABLE user (
+                 user_id TEXT PRIMARY KEY NOT NULL,
+                 username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                 password_hash TEXT NOT NULL,
+                 is_admin INTEGER NOT NULL CHECK (is_admin IN (0, 1)),
+                 created_at INTEGER NOT NULL
+             );
              INSERT INTO scan (library_id, status, completed_at)
              VALUES ('bib-1', 'completed', 1760000000);
+             INSERT INTO user (user_id, username, password_hash, is_admin, created_at)
+             VALUES ('usr-1', 'admin', 'hash', 1, 1760000000);
              PRAGMA user_version = 1;",
         )?;
     }
@@ -217,6 +226,15 @@ fn a_version_one_database_is_upgraded_additively_preserving_rows() -> TestResult
         complete, 1,
         "a coluna nova precisa de um valor compatível para as linhas antigas"
     );
+    let must_change_credentials: i64 = db.connection().query_row(
+        "SELECT must_change_credentials FROM user WHERE user_id = 'usr-1'",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(
+        must_change_credentials, 0,
+        "usuários existentes não devem exigir troca de credenciais"
+    );
     Ok(())
 }
 
@@ -237,8 +255,17 @@ fn a_version_two_database_is_upgraded_additively_preserving_rows() -> TestResult
                  completed_at INTEGER NOT NULL,
                  complete INTEGER NOT NULL DEFAULT 1 CHECK (complete IN (0, 1))
              );
+             CREATE TABLE user (
+                 user_id TEXT PRIMARY KEY NOT NULL,
+                 username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                 password_hash TEXT NOT NULL,
+                 is_admin INTEGER NOT NULL CHECK (is_admin IN (0, 1)),
+                 created_at INTEGER NOT NULL
+             );
              INSERT INTO scan (library_id, status, completed_at, complete)
              VALUES ('bib-1', 'completed', 1760000000, 0);
+             INSERT INTO user (user_id, username, password_hash, is_admin, created_at)
+             VALUES ('usr-1', 'admin', 'hash', 1, 1760000000);
              PRAGMA user_version = 2;",
         )?;
     }
@@ -259,5 +286,14 @@ fn a_version_two_database_is_upgraded_additively_preserving_rows() -> TestResult
         .connection()
         .query_row("SELECT complete FROM scan", [], |row| row.get(0))?;
     assert_eq!(complete, 0, "a linha existente sobrevive com seu valor");
+    let must_change_credentials: i64 = db.connection().query_row(
+        "SELECT must_change_credentials FROM user WHERE user_id = 'usr-1'",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(
+        must_change_credentials, 0,
+        "usuários existentes não devem exigir troca de credenciais"
+    );
     Ok(())
 }
