@@ -1,7 +1,7 @@
-# Getting started
+# Primeiros passos
 
-LearnVault requires Go 1.26+ and Node.js 24+ for native development. Docker and Podman
-are optional deployment adapters.
+O LearnVault exige Go 1.26+ e Node.js 24+ para desenvolvimento nativo. Docker e Podman
+são adaptadores opcionais de deploy.
 
 ```sh
 pnpm install --frozen-lockfile
@@ -11,8 +11,8 @@ go test ./...
 go run ./cmd/learnvault
 ```
 
-The app requires `ADMIN_USERNAME` and `ADMIN_PASSWORD` only for its first startup. Use
-the synthetic fixture in `testdata/` for development and tests. Never point automated
-work at `/mnt/cursos`; it is external, user-owned, and read-only.
+A aplicação exige `ADMIN_USERNAME` e `ADMIN_PASSWORD` somente na primeira inicialização.
+Use a fixture sintética em `testdata/` para desenvolvimento e testes. Nunca aponte a
+automação para dados externos; a biblioteca deve permanecer somente leitura.
 
-See the repository README for configuration and optional Compose/Quadlet deployment.
+Consulte o README do repositório para configuração e deploy opcional com Compose/Quadlet.

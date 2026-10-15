@@ -14,3 +14,10 @@
 - Do not move a file merely by extension. Root files such as `go.mod`, `package.json`,
   lockfiles, Svelte/Vite configs, `.gitignore`, and GitHub-recognized policy files stay
   at the root when their tools require that location.
+- Use GitHub Flow: issue when required, branch in this repository, pull request, review,
+  required checks, and squash merge. Forks are not part of the current workflow.
+- Use Discussions for unresolved questions and design alternatives. Features and behavior
+  changes require an issue; typos, dependency updates, and simple CI changes do not.
+- Keep `README.md` and `CHANGELOG.md` in English. Wiki, governance, templates, and
+  editorial documentation are maintained in Brazilian Portuguese. Conventional Commit
+  prefixes and descriptions remain in English for Release Please consistency.

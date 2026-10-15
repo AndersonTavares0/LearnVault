@@ -1,33 +1,33 @@
 name: Bug report
-description: Report a reproducible problem
+description: Relate um problema reproduzível
 title: "bug: "
 labels:
   - bug
 body:
   - type: markdown
     attributes:
-      value: Remove credentials, course files, private IPs, and personal data before posting.
+      value: Remova credenciais, arquivos de cursos, endereços privados e dados pessoais antes de publicar.
   - type: input
     id: version
     attributes:
-      label: Version or commit
+      label: Versão ou commit
     validations:
       required: true
   - type: textarea
     id: steps
     attributes:
-      label: Steps to reproduce
+      label: Passos para reproduzir
     validations:
       required: true
   - type: textarea
     id: expected
     attributes:
-      label: Expected behavior
+      label: Comportamento esperado
     validations:
       required: true
   - type: textarea
     id: actual
     attributes:
-      label: Actual behavior
+      label: Comportamento atual
     validations:
       required: true

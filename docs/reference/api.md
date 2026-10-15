@@ -1,29 +1,28 @@
-# API reference
+# Referência da API
 
-The API is served by the Go executable. All routes below use JSON unless noted
-otherwise. Authentication uses an HttpOnly, SameSite=Strict session cookie.
+A API é servida pelo executável Go. Todas as rotas abaixo usam JSON, salvo indicação
+contrária. A autenticação usa um cookie de sessão HttpOnly com SameSite=Strict.
 
-## Health and session
+## Saúde e sessão
 
-| Method | Route | Authentication | Purpose |
+| Método | Rota | Autenticação | Finalidade |
 | --- | --- | --- | --- |
-| `GET` | `/api/healthz` | No | Process and database health, including the running version |
-| `POST` | `/api/login` | No | Accepts `{ "username": "...", "password": "..." }` |
-| `POST` | `/api/logout` | Session | Invalidates the current session |
-| `GET` | `/api/me` | Session | Returns the current account |
+| `GET` | `/api/healthz` | Não | Saúde do processo e do banco, incluindo a versão em execução |
+| `POST` | `/api/login` | Não | Aceita `{ "username": "...", "password": "..." }` |
+| `POST` | `/api/logout` | Sessão | Invalida a sessão atual |
+| `GET` | `/api/me` | Sessão | Retorna a conta atual |
 
-## Catalog and media
+## Catálogo e mídia
 
-| Method | Route | Authentication | Purpose |
+| Método | Rota | Autenticação | Finalidade |
 | --- | --- | --- | --- |
-| `GET` | `/api/catalog` | Session | Returns the persisted category/course/module/lesson tree |
-| `POST` | `/api/admin/catalog/rescan` | Admin session | Explicitly scans `LIBRARY_DIR` and replaces the catalog |
-| `GET`, `HEAD` | `/api/media?path=...` | Session | Streams an approved library file with HTTP Range support |
+| `GET` | `/api/catalog` | Sessão | Retorna a árvore persistida de categorias, cursos, módulos e aulas |
+| `POST` | `/api/admin/catalog/rescan` | Sessão admin | Faz scan explícito de `LIBRARY_DIR` e substitui o catálogo |
+| `GET`, `HEAD` | `/api/media?path=...` | Sessão | Transmite um arquivo aprovado da biblioteca com suporte a HTTP Range |
 
-The scanner reads directory entries and metadata only. It ignores downloader
-temporary directories, classifies recognized media/subtitles/materials, and treats
-`.ts` as video only when it is larger than 1 MiB to avoid confusing TypeScript with
-MPEG-TS. The physical library is external, mounted read-only, and never modified.
+O scanner lê somente entradas e metadados de diretórios. Ignora diretórios temporários de
+download, classifica mídias, legendas e materiais reconhecidos, e trata `.ts` como vídeo
+somente quando é maior que 1 MiB para não confundir TypeScript com MPEG-TS. A biblioteca
+física é externa, montada como somente leitura e nunca é modificada.
 
-For architecture and deployment boundaries, see
-[`../architecture/overview.md`](../architecture/overview.md).
+Para limites de arquitetura e deploy, consulte a [visão de arquitetura](../architecture/overview.md).

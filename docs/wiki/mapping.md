@@ -1,9 +1,9 @@
-# GitHub Wiki mapping
+# Mapeamento da Wiki do GitHub
 
-The repository is the source of truth. `scripts/sync-wiki.sh` mirrors the following
-documents into the GitHub Wiki after a change reaches `main`.
+O repositório é a fonte da verdade. `scripts/sync-wiki.sh` espelha os documentos abaixo
+na Wiki do GitHub depois que uma mudança chega à `main`.
 
-| Wiki page | Canonical source |
+| Página da Wiki | Fonte canônica |
 | --- | --- |
 | `Home` | `docs/wiki/home.md` |
 | `Getting-Started` | `docs/wiki/getting-started.md` |
@@ -12,5 +12,6 @@ documents into the GitHub Wiki after a change reaches `main`.
 | `Development-and-Governance` | `docs/governance/overview.md` |
 | `Operations` | `docs/operations/distribution.md` |
 
-The workflow owns only these six pages. Other Wiki pages may be maintained manually.
-Do not edit a managed page in GitHub Wiki: the next sync replaces it with this source.
+O workflow gerencia somente estas seis páginas. Outras páginas da Wiki podem ser mantidas
+manualmente. Não edite uma página gerenciada diretamente na Wiki: a próxima sincronização
+a substituirá por esta fonte.

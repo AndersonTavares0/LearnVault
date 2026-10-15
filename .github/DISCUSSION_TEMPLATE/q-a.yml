@@ -1,0 +1,27 @@
+title: "[Dúvida] "
+labels: ["discussion", "question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use esta categoria para dúvidas técnicas e de design.
+        Se já houver uma decisão clara de implementação, abra uma Issue.
+  - type: textarea
+    id: question
+    attributes:
+      label: Dúvida
+      description: Faça uma pergunta específica e forneça o contexto necessário.
+    validations:
+      required: true
+  - type: textarea
+    id: explored
+    attributes:
+      label: O que já foi investigado
+      description: Registre tentativas, alternativas ou documentação consultada.
+    validations:
+      required: true
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Restrições
+      description: Liste requisitos, riscos ou limites relevantes.

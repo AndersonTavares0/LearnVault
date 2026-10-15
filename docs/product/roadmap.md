@@ -1,69 +1,72 @@
-# LearnVault roadmap
+# Roadmap do LearnVault
 
-This roadmap is the durable product summary. It is intentionally outcome-oriented;
-implementation details belong in linked GitHub Issues and pull requests.
+Este roadmap é o resumo durável do produto e é orientado a resultados. Detalhes de
+implementação pertencem às Issues e pull requests relacionadas.
 
-## Current — foundation and catalog
+## Atual — fundação e catálogo
 
-- [x] Go service with embedded SvelteKit SPA
-- [x] Local admin bootstrap and secure sessions
-- [x] SQLite migrations and catalog persistence
-- [x] Explicit read-only library scan
-- [x] Authenticated catalog and Range-capable media endpoint
-- [x] Reproducible Docker/Podman deployment baseline
-- [x] CI, release automation, and repository governance
+- [x] Serviço Go com SPA SvelteKit embutida
+- [x] Bootstrap do administrador e sessões seguras
+- [x] Migrações SQLite e persistência do catálogo
+- [x] Scan explícito e somente leitura da biblioteca
+- [x] Catálogo autenticado e endpoint de mídia com suporte a Range
+- [x] Base reproduzível de deploy com Docker/Podman
+- [x] CI, automação de releases e governança do repositório
 
-## Next — usable study loop
+## Próximo — ciclo de estudo utilizável
 
-- [ ] Course detail and lesson navigation
-- [ ] Direct-play player with subtitle/material links
-- [ ] Individual progress and resume position
-- [ ] Mark lesson complete and recent-history dashboard
-- [ ] Admin course-access permissions for multiple local users
+- [ ] Detalhes do curso e navegação de aulas
+- [ ] Player direto com links de legendas e materiais
+- [ ] Progresso individual e posição de retomada
+- [ ] Marcar aula como concluída e painel de histórico recente
+- [ ] Permissões de acesso a cursos para múltiplos usuários locais
 
 ## Interface — mesa de estudo
 
-- [ ] Establish persistent desktop sidebar and mobile navigation
-- [ ] Prioritize “Continuar estudando” on the home screen
-- [ ] Build the player as the primary study canvas with a lesson index
-- [ ] Add course covers, meaningful empty states, loading states, and recovery states
-- [ ] Validate keyboard navigation, focus visibility, contrast, reduced motion, and screen-reader labels
-- [ ] Keep the visual identity original: blue-petroleum, dark ink, cool paper, and lime signal
+- [ ] Estabelecer sidebar persistente no desktop e navegação mobile
+- [ ] Priorizar “Continuar estudando” na tela inicial
+- [ ] Construir o player como canvas principal de estudo com índice de aulas
+- [ ] Adicionar capas, estados vazios, carregamento e recuperação
+- [ ] Validar navegação por teclado, foco, contraste, movimento reduzido e labels para leitores de tela
+- [ ] Manter identidade visual original: azul-petróleo, tinta escura, papel frio e sinal lima
 
-## Then — richer library experience
+## Depois — experiência de biblioteca ampliada
 
-- [ ] Generated and manual course covers
-- [ ] Remux-on-demand cache for incompatible media
-- [ ] Search across catalog, materials, and notes
-- [ ] Favorites and timestamped notes
-- [ ] Responsive “mesa de estudo” navigation and accessibility polish
+- [ ] Capas de cursos geradas e manuais
+- [ ] Cache de remux sob demanda para mídias incompatíveis
+- [ ] Busca no catálogo, materiais e notas
+- [ ] Favoritos e notas com timestamp
+- [ ] Navegação responsiva e melhorias de acessibilidade
 
-## Distribution — portable first
+## Distribuição — portabilidade primeiro
 
-- [ ] Keep the core application buildable without Docker or Podman
-- [ ] Publish versioned Windows `.exe` artifacts
-- [ ] Package Windows installers as `.msi`
-- [ ] Publish Linux `.deb` packages
-- [ ] Publish Linux `.rpm` packages
-- [ ] Publish a Flatpak bundle and metadata
-- [ ] Sign desktop artifacts where platform credentials are available
-- [ ] Generate checksums and provenance metadata for every release
-- [ ] Keep Docker Compose and rootless Podman/Quadlet as optional server adapters
+- [ ] Manter o núcleo compilável sem Docker ou Podman
+- [ ] Publicar artefatos Windows `.exe` versionados
+- [ ] Empacotar instaladores Windows `.msi`
+- [ ] Publicar pacotes Linux `.deb`
+- [ ] Publicar pacotes Linux `.rpm`
+- [ ] Publicar bundle e metadados Flatpak
+- [ ] Assinar artefatos desktop quando houver credenciais de plataforma
+- [ ] Gerar checksums e metadados de proveniência para cada release
+- [ ] Manter Docker Compose e Podman rootless/Quadlet como adaptadores opcionais de servidor
 
-## Later — optional intelligence and operations
+## Mais tarde — inteligência e operações opcionais
 
-- [ ] On-demand Whisper integration as a separately packaged capability
-- [ ] Transcript indexing and searchable captions
-- [ ] Backup automation with retention and restore verification
-- [ ] Homelab deployment behind Caddy at `cursos.home.arpa`
-- [ ] Native mobile client after the web experience is stable
+- [ ] Integração opcional com Whisper como capacidade separada
+- [ ] Indexação de transcrições e legendas pesquisáveis
+- [ ] Automação de backup com retenção e verificação de restauração
+- [ ] Deploy em ambiente doméstico atrás de Caddy
+- [ ] Cliente mobile nativo depois que a experiência web estiver estável
 
-## Delivery rules
+## Regras de entrega
 
-- Each milestone must have a clear user outcome, tests, documentation, and rollback notes.
-- Distribution targets are additive: container build failures must not block native
-  desktop development, and packaging failures must not block server builds.
-- Performance-sensitive work must include resource and cache behavior measurements.
-- No roadmap item may modify or copy the physical library; `/mnt/cursos` remains external
-  and read-only.
-- Scope changes are discussed in GitHub Issues and reflected here through a pull request.
+- Cada marco deve ter resultado claro para o usuário, testes, documentação e notas de rollback.
+- Alvos de distribuição são aditivos: falha de container não deve bloquear desenvolvimento nativo.
+- Trabalho sensível a performance deve incluir medições de recursos e cache.
+- Nenhum item pode modificar ou copiar a biblioteca física, que permanece externa e somente leitura.
+- Mudanças de escopo são discutidas no GitHub e refletidas aqui por pull request.
+
+## Decisões em aberto
+
+- [Escopo e prioridades das próximas versões](https://github.com/AndersonTavares0/LearnVault/discussions/32)
+- [Camada de análise e dados](https://github.com/AndersonTavares0/LearnVault/discussions/33)

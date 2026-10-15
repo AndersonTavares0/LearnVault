@@ -1,35 +1,38 @@
-## Summary
+## Resumo
 
-<!-- Explain the user/problem impact in a few sentences. Replace this comment; do not leave sections blank. -->
+<!-- Explique o impacto para o usuário em poucas frases. Remova este comentário. -->
 
-## Governance impact
+## Issue e governança
 
-- [ ] No repository setting, ownership rule, required check, or release-policy change.
-- [ ] Governance impact is described below and documented in `docs/governance/overview.md` if needed.
+- Issue relacionada: <!-- use "Não aplicável" para typo, dependência ou CI simples. -->
+- [ ] Esta mudança não altera governança, permissões, checks obrigatórios ou releases.
+- [ ] O impacto de governança está descrito abaixo e documentado em `docs/governance/overview.md`.
 
-<!-- Explain any governance, permissions, branch protection, or release-policy change. -->
+<!-- Explique mudanças de governança, permissões, proteção de branch ou releases. -->
 
-## Changes
+## Alterações
 
-- <!-- List the meaningful code, configuration, or documentation changes. -->
+- <!-- Liste as alterações relevantes. -->
 
-## Validation
+## Validação
 
-- <!-- List only commands actually run and their result. Do not check items that were not run. -->
+- <!-- Liste somente comandos executados e seus resultados. -->
 - [ ] `pnpm install --frozen-lockfile`
 - [ ] `pnpm run check`
 - [ ] `pnpm run build`
 - [ ] `pnpm audit --audit-level=low`
 - [ ] `go test -race ./...`
 - [ ] `go vet ./...`
-- [ ] Container/Compose validation (include exact command)
+- [ ] Validação de Container/Compose, com o comando exato
 
-## Safety checklist
+## Segurança e idioma
 
-- [ ] No course files, credentials, personal data, or homelab secrets are included.
-- [ ] Tests use isolated fixtures; `/mnt/cursos` was not accessed or modified.
-- [ ] Read-only library behavior is preserved.
-- [ ] Migrations and deployment documentation are updated if needed.
-- [ ] UI changes include screenshots or a short visual description.
+- [ ] Não incluí arquivos de cursos, credenciais, dados pessoais ou segredos privados.
+- [ ] Os testes usam fixtures isoladas e não acessam dados externos.
+- [ ] O comportamento de biblioteca somente leitura foi preservado.
+- [ ] Migrações e documentação de deploy foram atualizadas, quando necessário.
+- [ ] Mudanças de interface incluem screenshot ou descrição visual breve.
+- [ ] O idioma está consistente: README/CHANGELOG em inglês; Wiki e documentação editorial em pt-BR.
+- [ ] Prefixo e descrição do commit estão em inglês para o Release Please.
 
-<!-- Remove non-applicable checklist items and state any known limitations. -->
+<!-- Remova itens não aplicáveis e registre limitações conhecidas. -->
