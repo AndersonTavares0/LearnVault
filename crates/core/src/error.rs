@@ -55,7 +55,9 @@ pub enum Error {
     ///
     /// A conversão não é automática: abrir esse arquivo como Rust poderia criar um segundo
     /// administrador e deixar os dados legados invisíveis.
-    #[error("legacy_go_database_requires_migration: back up the database and migrate it before using the Rust server")]
+    #[error(
+        "legacy_go_database_requires_migration: back up the database and migrate it before using the Rust server"
+    )]
     LegacyGoDatabase,
 
     /// Falha de SQL que não se enquadra nas variantes anteriores.

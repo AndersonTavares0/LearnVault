@@ -151,7 +151,10 @@ fn legacy_go_database_is_rejected_before_bootstrap_or_migration() -> TestResult 
         )?;
     }
 
-    assert!(matches!(Database::open(&path), Err(Error::LegacyGoDatabase)));
+    assert!(matches!(
+        Database::open(&path),
+        Err(Error::LegacyGoDatabase)
+    ));
     let conn = rusqlite::Connection::open(&path)?;
     let rust_tables: i64 = conn.query_row(
         "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('user', 'session')",

@@ -30,6 +30,8 @@ pub struct AuthSession {
     pub user_id: String,
     /// Nome de usuário autenticado.
     pub username: String,
+    /// Hash PHC da senha persistida, usado apenas para validar a troca inicial.
+    pub password_hash: String,
     /// Indica se o usuário autenticado é administrador.
     pub is_admin: bool,
     /// Indica se a sessão está limitada à troca das credenciais temporárias.
@@ -134,7 +136,7 @@ pub fn session_user(db: &Database, token_hash: &str, now: i64) -> Result<Option<
     Ok(db
         .connection()
         .query_row(
-            "SELECT s.user_id, u.username, u.is_admin, u.must_change_credentials, s.expires_at
+            "SELECT s.user_id, u.username, u.password_hash, u.is_admin, u.must_change_credentials, s.expires_at
                FROM session s
                JOIN user u ON u.user_id = s.user_id
               WHERE s.token_hash = ?1
@@ -144,9 +146,10 @@ pub fn session_user(db: &Database, token_hash: &str, now: i64) -> Result<Option<
                 Ok(AuthSession {
                     user_id: row.get(0)?,
                     username: row.get(1)?,
-                    is_admin: row.get::<_, i64>(2)? != 0,
-                    must_change_credentials: row.get::<_, i64>(3)? != 0,
-                    expires_at: row.get(4)?,
+                    password_hash: row.get(2)?,
+                    is_admin: row.get::<_, i64>(3)? != 0,
+                    must_change_credentials: row.get::<_, i64>(4)? != 0,
+                    expires_at: row.get(5)?,
                 })
             },
         )

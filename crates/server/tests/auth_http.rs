@@ -339,11 +339,14 @@ async fn credentials_change_is_transactional_and_invalidates_old_sessions() {
                 .header("content-type", "application/json")
                 .header("origin", "http://localhost")
                 .header("cookie", &old_cookie)
-                .body(Body::from(serde_json::json!({
-                    "current_password": "senha atual incorreta",
-                    "username": "owner",
-                    "password": "uma senha nova muito segura"
-                }).to_string()))
+                .body(Body::from(
+                    serde_json::json!({
+                        "current_password": "senha atual incorreta",
+                        "username": "owner",
+                        "password": "uma senha nova muito segura"
+                    })
+                    .to_string(),
+                ))
                 .unwrap(),
         )
         .await
@@ -358,11 +361,14 @@ async fn credentials_change_is_transactional_and_invalidates_old_sessions() {
                 .header("content-type", "application/json")
                 .header("origin", "http://localhost")
                 .header("cookie", &old_cookie)
-                .body(Body::from(serde_json::json!({
-                    "current_password": "admin",
-                    "username": "x",
-                    "password": "curta"
-                }).to_string()))
+                .body(Body::from(
+                    serde_json::json!({
+                        "current_password": "admin",
+                        "username": "x",
+                        "password": "curta"
+                    })
+                    .to_string(),
+                ))
                 .unwrap(),
         )
         .await
@@ -376,25 +382,47 @@ async fn credentials_change_is_transactional_and_invalidates_old_sessions() {
                 .header("content-type", "application/json")
                 .header("origin", "http://localhost")
                 .header("cookie", &old_cookie)
-                .body(Body::from(serde_json::json!({
-                    "current_password": "admin",
-                    "username": "owner",
-                    "password": "uma senha nova muito segura"
-                }).to_string()))
+                .body(Body::from(
+                    serde_json::json!({
+                        "current_password": "admin",
+                        "username": "owner",
+                        "password": "uma senha nova muito segura"
+                    })
+                    .to_string(),
+                ))
                 .unwrap(),
         )
         .await
         .unwrap();
     assert_eq!(changed.status(), StatusCode::OK);
-    let new_cookie = changed.headers()["set-cookie"].to_str().unwrap().split(';').next().unwrap().to_owned();
+    let new_cookie = changed.headers()["set-cookie"]
+        .to_str()
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap()
+        .to_owned();
 
-    let old_session = app.clone().oneshot(
-        Request::get("/api/me").header("cookie", &old_cookie).body(Body::empty()).unwrap()
-    ).await.unwrap();
+    let old_session = app
+        .clone()
+        .oneshot(
+            Request::get("/api/me")
+                .header("cookie", &old_cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(old_session.status(), StatusCode::UNAUTHORIZED);
-    let new_session = app.oneshot(
-        Request::get("/api/me").header("cookie", new_cookie).body(Body::empty()).unwrap()
-    ).await.unwrap();
+    let new_session = app
+        .oneshot(
+            Request::get("/api/me")
+                .header("cookie", new_cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(new_session.status(), StatusCode::OK);
     assert_eq!(body(new_session).await["username"], "owner");
 }
@@ -407,9 +435,14 @@ async fn temporary_credentials_block_protected_endpoints_until_changed() {
     for mut request in [
         Request::get("/api/catalog").body(Body::empty()).unwrap(),
         Request::get("/api/media").body(Body::empty()).unwrap(),
-        Request::post("/api/admin/catalog/rescan").header("origin", "http://localhost").body(Body::empty()).unwrap(),
+        Request::post("/api/admin/catalog/rescan")
+            .header("origin", "http://localhost")
+            .body(Body::empty())
+            .unwrap(),
     ] {
-        request.headers_mut().insert("cookie", cookie.parse().unwrap());
+        request
+            .headers_mut()
+            .insert("cookie", cookie.parse().unwrap());
         let response = app.clone().oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
         assert_eq!(body(response).await["error"], "credentials_change_required");
