@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"net"
@@ -77,6 +78,25 @@ func TestRunReturnsListenErrors(t *testing.T) {
 	got := run(context.Background(), cfg, func(string, string) (net.Listener, error) { return nil, want })
 	if !errors.Is(got, want) {
 		t.Fatalf("run() error = %v; want %v", got, want)
+	}
+}
+
+func TestVersionDefaultsToDevelopment(t *testing.T) {
+	if version != "dev" {
+		t.Fatalf("version = %q; want dev", version)
+	}
+}
+
+func TestPrintVersion(t *testing.T) {
+	var output bytes.Buffer
+	if !printVersion([]string{"learnvault", "--version"}, &output) {
+		t.Fatal("printVersion() did not handle --version")
+	}
+	if output.String() != "dev\n" {
+		t.Fatalf("version output = %q; want dev", output.String())
+	}
+	if printVersion([]string{"learnvault"}, &output) {
+		t.Fatal("printVersion() handled missing flag")
 	}
 }
 

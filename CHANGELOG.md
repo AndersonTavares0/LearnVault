@@ -6,16 +6,18 @@ The format follows Keep a Changelog and releases use Semantic Versioning.
 
 ## [Unreleased]
 
+### Planned
+
+- Study-focused player and progress persistence.
+- Course curation, thumbnails, search, notes, and favorites.
+
+## [0.1.0] - 2026-10-14
+
 ### Added
 
 - Initial project governance and contribution documentation.
 - Repository policies, playbooks, checklists, and ADR template under `.agents/`.
 - Canonical documentation layout and controlled Wiki synchronization workflow.
-
-### Planned
-
-- Study-focused player and progress persistence.
-- Course curation, thumbnails, search, notes, and favorites.
 
 ### Changed
 
