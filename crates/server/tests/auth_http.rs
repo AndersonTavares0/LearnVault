@@ -138,6 +138,34 @@ async fn invalid_credentials_have_a_uniform_unauthorized_response() {
 }
 
 #[tokio::test]
+async fn login_rejects_when_blocking_capacity_is_saturated() {
+    let temp = tempfile::tempdir().unwrap();
+    let state = AppState::initialize(config(&temp, true)).await.unwrap();
+    let app = build_router(state.clone());
+    let permits: Vec<_> = std::iter::from_fn(|| state.try_acquire_blocking_task()).collect();
+    assert_eq!(permits.len(), 4);
+
+    let response = app
+        .oneshot(
+            Request::post("/api/login")
+                .header("content-type", "application/json")
+                .header("origin", "http://localhost")
+                .body(Body::from(
+                    r#"{"username":"admin","password":"uma senha local muito segura"}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(
+        body(response).await,
+        serde_json::json!({ "error": "server busy" })
+    );
+}
+
+#[tokio::test]
 async fn startup_fails_without_an_admin_or_valid_initial_credentials() {
     let temp = tempfile::tempdir().unwrap();
 

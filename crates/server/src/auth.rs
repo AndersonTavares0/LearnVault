@@ -183,10 +183,15 @@ pub(crate) async fn login(
     };
     let password = request.password;
     let hash = user.password_hash.clone();
-    let valid =
-        tokio::task::spawn_blocking(move || verify_password(&password, &hash).unwrap_or(false))
-            .await
-            .unwrap_or(false);
+    let Some(blocking_task) = state.try_acquire_blocking_task() else {
+        return service_unavailable();
+    };
+    let valid = tokio::task::spawn_blocking(move || {
+        let _blocking_task = blocking_task;
+        verify_password(&password, &hash).unwrap_or(false)
+    })
+    .await
+    .unwrap_or(false);
     if !valid {
         return (
             StatusCode::UNAUTHORIZED,
