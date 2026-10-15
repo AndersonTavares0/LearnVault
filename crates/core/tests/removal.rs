@@ -13,7 +13,7 @@ use learnvault_core::paths::relative_path_key;
 use learnvault_core::{
     Availability, Catalog, CatalogFile, Database, Error, KeyMode, MediaRemovalImpact,
     MediaRemovalOutcome, build_catalog, media_removal_impact, open_media, recent_study,
-    remove_media, rescan,
+    record_position, remove_media, rescan, set_completed, study_progress,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -130,11 +130,11 @@ fn availability_of(db: &Database, media_id: &str) -> String {
 fn only_media_id(db: &Database, library_id: &str) -> String {
     db.connection()
         .query_row(
-            "SELECT media_id FROM media WHERE library_id = ?1",
+            "SELECT media_id FROM media WHERE library_id = ?1 ORDER BY media_id LIMIT 1",
             [library_id],
             |row| row.get(0),
         )
-        .expect("deve existir exatamente uma mídia")
+        .expect("media deve ser consultável")
 }
 
 /// Coleta todos os arquivos do catálogo, em qualquer nível.
@@ -494,8 +494,13 @@ fn a_failed_removal_rolls_back_and_preserves_the_progress() -> TestResult {
     }
 
     match remove_media(&mut db, LIB, "m1", true) {
-        Err(Error::Database(_)) => {}
-        other => panic!("esperava Error::Database, obtive {other:?}"),
+        Err(Error::Database(rusqlite::Error::SqliteFailure(_, Some(message)))) => {
+            assert!(
+                message.contains("falha injetada"),
+                "o erro precisa vir do gatilho injetado: {message}"
+            );
+        }
+        other => panic!("esperava Error::Database do gatilho, obtive {other:?}"),
     }
 
     assert_eq!(removal_count(&db, LIB), 0, "nada pode ficar gravado");
@@ -504,6 +509,21 @@ fn a_failed_removal_rolls_back_and_preserves_the_progress() -> TestResult {
         Some((42, 1, SEEDED_AT)),
         "o progresso sobrevive à falha"
     );
+
+    // O rollback libera a transação: a conexão continua utilizável e a remoção volta a
+    // funcionar assim que o gatilho sai do caminho.
+    {
+        let conn = rusqlite::Connection::open(&path)?;
+        conn.execute_batch("DROP TRIGGER falha_na_remocao;")?;
+    }
+
+    let outcome = remove_media(&mut db, LIB, "m1", true)?;
+    assert!(
+        outcome.removed_now,
+        "a conexão segue funcional após o rollback"
+    );
+    assert_eq!(removal_count(&db, LIB), 1);
+    assert_eq!(progress_row(&db, OWNER, "m1"), Some((42, 1, SEEDED_AT)));
     Ok(())
 }
 
@@ -536,5 +556,222 @@ fn removal_does_not_touch_other_media() -> TestResult {
 
     assert_eq!(media_count(&db, LIB), 2);
     assert_eq!(progress_row(&db, OWNER, "m2"), Some((5, 0, SEEDED_AT)));
+    Ok(())
+}
+
+#[test]
+fn a_removed_media_is_refused_even_when_absent_or_gone() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let root = dir.path();
+
+    // Removida e marcada como ausente na última varredura, com o arquivo ainda no disco:
+    // a remoção é o motivo reportado, e não a disponibilidade.
+    let mut db = library_db()?;
+    write_file(root, "Curso/Aula/aula.mp4", b"a")?;
+    insert_media(
+        &db,
+        LIB,
+        "m1",
+        "Curso/Aula/aula.mp4",
+        1024,
+        1_760_000_000,
+        "missing",
+    )?;
+    remove_media(&mut db, LIB, "m1", false)?;
+
+    match open_media(&db, LIB, "m1", root) {
+        Err(Error::MediaRemoved { media_id }) => assert_eq!(media_id, "m1"),
+        other => panic!("esperava Error::MediaRemoved, obtive {other:?}"),
+    }
+
+    // Removida com o arquivo já apagado: a remoção tem precedência sobre a ausência no disco.
+    let dir2 = tempfile::tempdir()?;
+    let root2 = dir2.path();
+
+    let mut db2 = library_db()?;
+    media(&db2, "m2", "Curso/Aula/outra.mp4")?;
+    remove_media(&mut db2, LIB, "m2", false)?;
+
+    match open_media(&db2, LIB, "m2", root2) {
+        Err(Error::MediaRemoved { .. }) => {}
+        other => panic!("esperava Error::MediaRemoved, obtive {other:?}"),
+    }
+    Ok(())
+}
+
+#[test]
+fn impact_reports_a_removal_that_already_happened() -> TestResult {
+    let mut db = library_db()?;
+    media(&db, "m1", "Curso/Aula/aula.mp4")?;
+    seed_progress(&db, OWNER, "m1", 42, true)?;
+
+    let before = media_removal_impact(&db, LIB, "m1")?;
+    assert_eq!(before.media_id, "m1");
+    assert_eq!(before.relative_path, "Curso/Aula/aula.mp4");
+    assert_eq!(before.availability, Availability::Available);
+    assert_eq!(before.progress_owners, 1);
+    assert!(!before.already_removed);
+
+    remove_media(&mut db, LIB, "m1", true)?;
+
+    let after = media_removal_impact(&db, LIB, "m1")?;
+    assert!(after.already_removed, "a remoção passa a ser relatada");
+    assert_eq!(after.progress_owners, 1, "o progresso continua lá");
+    assert_eq!(
+        after.availability,
+        Availability::Available,
+        "disponibilidade e remoção são fatos separados"
+    );
+    Ok(())
+}
+
+#[test]
+fn an_idempotent_repeat_does_not_require_confirmation() -> TestResult {
+    let mut db = library_db()?;
+    media(&db, "m1", "Curso/Aula/aula.mp4")?;
+    seed_progress(&db, OWNER, "m1", 42, true)?;
+
+    let first = remove_media(&mut db, LIB, "m1", true)?;
+    assert_eq!(first.media_id, "m1");
+    assert!(first.removed_now);
+    assert_eq!(first.preserved_owners, 1);
+
+    // Repetir sem confirmação é inofensivo: nada mudaria com a operação.
+    let again = remove_media(&mut db, LIB, "m1", false)?;
+    assert_eq!(again.media_id, "m1");
+    assert!(!again.removed_now);
+    assert_eq!(again.preserved_owners, 1, "o progresso continua preservado");
+    assert_eq!(removal_count(&db, LIB), 1);
+    assert_eq!(progress_row(&db, OWNER, "m1"), Some((42, 1, SEEDED_AT)));
+    Ok(())
+}
+
+#[test]
+fn confirmation_error_reports_every_owner() -> TestResult {
+    let mut db = library_db()?;
+    media(&db, "m1", "Curso/Aula/aula.mp4")?;
+    seed_progress(&db, OWNER, "m1", 10, false)?;
+    seed_progress(&db, OTHER_OWNER, "m1", 20, false)?;
+
+    match remove_media(&mut db, LIB, "m1", false) {
+        Err(Error::MediaRemovalNeedsConfirmation {
+            media_id,
+            progress_owners,
+        }) => {
+            assert_eq!(media_id, "m1");
+            assert_eq!(progress_owners, 2);
+        }
+        other => panic!("esperava Error::MediaRemovalNeedsConfirmation, obtive {other:?}"),
+    }
+
+    assert_eq!(removal_count(&db, LIB), 0, "a recusa não grava nada");
+    assert_eq!(progress_row(&db, OWNER, "m1"), Some((10, 0, SEEDED_AT)));
+    assert_eq!(
+        progress_row(&db, OTHER_OWNER, "m1"),
+        Some((20, 0, SEEDED_AT))
+    );
+    Ok(())
+}
+
+#[test]
+fn impact_of_an_absent_media_reports_missing() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let root = dir.path();
+
+    let mut db = library_db()?;
+    write_file(root, "Curso/Aula/aula.mp4", b"a")?;
+    insert_media(
+        &db,
+        LIB,
+        "m1",
+        "Curso/Aula/aula.mp4",
+        1024,
+        1_760_000_000,
+        "missing",
+    )?;
+
+    let impact = media_removal_impact(&db, LIB, "m1")?;
+    assert_eq!(impact.availability, Availability::Missing);
+    assert_eq!(impact.progress_owners, 0);
+
+    remove_media(&mut db, LIB, "m1", false)?;
+    assert_eq!(removal_count(&db, LIB), 1);
+    assert_eq!(
+        availability_of(&db, "m1"),
+        "missing",
+        "a linha de media não muda com a remoção"
+    );
+    Ok(())
+}
+
+#[test]
+fn progress_of_a_removed_media_is_still_read_and_written() -> TestResult {
+    let mut db = library_db()?;
+    media(&db, "m1", "Curso/Aula/aula.mp4")?;
+    seed_progress(&db, OWNER, "m1", 42, true)?;
+    remove_media(&mut db, LIB, "m1", true)?;
+
+    // O progresso é preservado de propósito: a remoção não o apaga nem o torna ilegível.
+    assert_eq!(
+        study_progress(&db, OWNER, "m1")?.map(|state| state.position_seconds),
+        Some(42)
+    );
+    record_position(&db, OWNER, "m1", 43)?;
+    set_completed(&db, OWNER, "m1", false)?;
+    assert_eq!(progress_row(&db, OWNER, "m1").map(|row| row.0), Some(43));
+    Ok(())
+}
+
+#[test]
+fn recent_study_applies_the_limit_after_hiding_removed_media() -> TestResult {
+    let mut db = library_db()?;
+    media(&db, "m1", "Curso/Aula/a.mp4")?;
+    media(&db, "m2", "Curso/Aula/b.mp4")?;
+    seed_progress(&db, OWNER, "m2", 1, false)?;
+    seed_progress(&db, OWNER, "m1", 2, false)?;
+
+    // m1 fica mais recente que m2.
+    db.connection().execute(
+        "UPDATE study_state SET updated_at = ?1 WHERE owner_id = ?2 AND media_id = ?3",
+        rusqlite::params![SEEDED_AT + 10, OWNER, "m1"],
+    )?;
+
+    let before: Vec<String> = recent_study(&db, OWNER, 1)?
+        .into_iter()
+        .map(|state| state.media_id)
+        .collect();
+    assert_eq!(
+        before,
+        vec!["m1"],
+        "sem remoção, o mais recente vem primeiro"
+    );
+
+    remove_media(&mut db, LIB, "m1", true)?;
+
+    let after: Vec<String> = recent_study(&db, OWNER, 1)?
+        .into_iter()
+        .map(|state| state.media_id)
+        .collect();
+    assert_eq!(after, vec!["m2"], "o limite é aplicado depois do filtro");
+    Ok(())
+}
+
+#[test]
+fn recent_study_ignores_a_removal_recorded_for_another_library() -> TestResult {
+    let db = library_db()?;
+    insert_library(&db, OTHER_LIB)?;
+    media(&db, "m1", "Curso/Aula/aula.mp4")?;
+    seed_progress(&db, OWNER, "m1", 42, false)?;
+
+    // Uma remoção gravada com o par divergente (outra biblioteca, mesma mídia) não é a
+    // remoção desta mídia: o filtro confere o par, não apenas o identificador.
+    db.connection().execute(
+        "INSERT INTO media_removal (library_id, media_id, removed_at) VALUES (?1, ?2, ?3)",
+        rusqlite::params![OTHER_LIB, "m1", SEEDED_AT],
+    )?;
+
+    let recent = recent_study(&db, OWNER, 10)?;
+    assert_eq!(recent.len(), 1, "a mídia continua nos recentes");
+    assert_eq!(recent[0].media_id, "m1");
     Ok(())
 }
