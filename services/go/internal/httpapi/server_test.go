@@ -266,6 +266,7 @@ func loginForTest(t *testing.T, srv http.Handler) *http.Cookie {
 	}
 	cookie := rr.Result().Cookies()[0]
 	change := httptest.NewRequest(http.MethodPost, "/api/account/credentials", strings.NewReader(`{"username":"owner2","password":"a sufficiently long replacement password"}`))
+	change.Header.Set("Origin", "http://example.com")
 	change.AddCookie(cookie)
 	changed := httptest.NewRecorder(); srv.ServeHTTP(changed, change)
 	if changed.Code != http.StatusOK { t.Fatalf("credential change returned %d: %s", changed.Code, changed.Body.String()) }

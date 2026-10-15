@@ -19,6 +19,7 @@ var errTestStore = errors.New("test store unavailable")
 type fakeStore struct {
 	healthErr error
 	user      storage.User
+	session   *string
 }
 
 func (s fakeStore) Ping(context.Context) error { return s.healthErr }
@@ -35,17 +36,33 @@ func (s fakeStore) UserByName(_ context.Context, username string) (storage.User,
 	return s.user, nil
 }
 func (s fakeStore) CreateSession(context.Context, int64, time.Duration) (string, error) {
-	return "fixture-session", s.healthErr
+	if s.healthErr != nil {
+		return "", s.healthErr
+	}
+	if s.session != nil {
+		*s.session = "fixture-session"
+	}
+	return "fixture-session", nil
 }
 func (s fakeStore) UserForSession(_ context.Context, token string) (storage.User, error) {
-	if s.healthErr != nil || token != "fixture-session" {
+	if s.healthErr != nil || s.session == nil || token != *s.session {
 		return storage.User{}, errTestStore
 	}
 	return s.user, nil
 }
 func (s fakeStore) DeleteSession(context.Context, string) error { return s.healthErr }
 func (s fakeStore) UpdateCredentials(context.Context, int64, string, string) error { return s.healthErr }
-func (s fakeStore) UpdateCredentialsAndSession(context.Context, int64, string, string, string, time.Duration) error { return s.healthErr }
+func (s fakeStore) UpdateCredentialsAndSession(_ context.Context, _ int64, username, _ string, token string, _ time.Duration) error {
+	if s.healthErr != nil {
+		return s.healthErr
+	}
+	s.user.Username = username
+	s.user.MustChangeCredentials = false
+	if s.session != nil {
+		*s.session = token
+	}
+	return nil
+}
 func (s fakeStore) Catalog(context.Context) (catalog.Catalog, error) {
 	return catalog.Catalog{}, s.healthErr
 }
@@ -53,7 +70,8 @@ func (s fakeStore) ReplaceCatalog(context.Context, catalog.Catalog) error { retu
 
 func newFakeServer(t *testing.T) (*Server, *http.Cookie) {
 	t.Helper()
-	srv := newWithStore(fakeStore{user: storage.User{ID: 1, Username: "owner", Role: "admin"}}, false)
+	session := ""
+	srv := newWithStore(fakeStore{user: storage.User{ID: 1, Username: "owner", Role: "admin"}, session: &session}, false)
 	return srv, loginForTest(t, srv)
 }
 
@@ -110,7 +128,9 @@ func TestLoginRejectsMalformedUnknownAndInvalidCredentials(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			recorder := httptest.NewRecorder()
-			srv.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/login", strings.NewReader(tc.body)))
+			request := httptest.NewRequest(http.MethodPost, "/api/login", strings.NewReader(tc.body))
+			request.Header.Set("Origin", "http://example.com")
+			srv.ServeHTTP(recorder, request)
 			if recorder.Code != tc.want {
 				t.Fatalf("status = %d; want %d (body %s)", recorder.Code, tc.want, recorder.Body.String())
 			}
@@ -135,6 +155,9 @@ func TestUnavailableStorageAndLibraryReturnSafeErrors(t *testing.T) {
 		t.Run(tc.path, func(t *testing.T) {
 			recorder := httptest.NewRecorder()
 			request := httptest.NewRequest(tc.method, tc.path, strings.NewReader(`{"username":"owner","password":"a sufficiently long password"}`))
+			if tc.path == "/api/login" {
+				request.Header.Set("Origin", "http://example.com")
+			}
 			if tc.cookie {
 				request.AddCookie(cookie)
 			}
@@ -171,6 +194,7 @@ func TestMediaAndRescanRejectInvalidOrUnavailableRequests(t *testing.T) {
 			request := httptest.NewRequest(http.MethodGet, tc.path, nil)
 			if strings.Contains(tc.path, "rescan") {
 				request.Method = http.MethodPost
+				request.Header.Set("Origin", "http://example.com")
 			}
 			request.AddCookie(cookie)
 			handler := srv
