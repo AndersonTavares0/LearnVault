@@ -18,6 +18,10 @@ O formato segue o Keep a Changelog e as versões usam Semantic Versioning.
 
 ## [Unreleased]
 
+### Adicionado
+
+- Fundação do aplicativo desktop em `crates/desktop` (Tauri 2.12.x): shell da SPA embutido por `frontendDist`, capability deny-by-default para a janela principal, CSP explícita e nenhum listener de rede ou plugin privilegiado. O IPC de domínio permanece pendente.
+
 ### Correções
 
 - Catálogo recursivo preserva aulas e arquivos em qualquer profundidade, com rescan seguro contra resultados parciais.

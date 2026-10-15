@@ -12,6 +12,10 @@ O repositório ainda contém a implementação em **Go com SQLite e SPA SvelteKi
 a implementação atual, a **referência funcional e visual** da reescrita, e será removida em pull
 request próprio quando o MVP em Rust cobrir os requisitos aprovados.
 
+A reescrita em Rust já entrega `crates/core`, `crates/server` e a **fundação** de `crates/desktop`:
+um crate Tauri 2 que embute a SPA por `frontendDist`, mantém a capability em deny-by-default e não
+abre portas de rede. O IPC de domínio do desktop ainda não existe.
+
 ```text
 Proxy HTTPS local
         |
