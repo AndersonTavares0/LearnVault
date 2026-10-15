@@ -162,6 +162,20 @@ pub enum Error {
         /// Identificador consultado.
         media_id: String,
     },
+
+    /// O dono do progresso de estudo não foi identificado.
+    ///
+    /// O identificador de dono é opaco para o domínio, mas precisa existir: o progresso é
+    /// sempre de alguém, e um dono vazio misturaria dados de donos diferentes.
+    #[error("o dono do progresso precisa ser identificado")]
+    InvalidOwnerId,
+
+    /// A posição de retomada é inválida.
+    #[error("posição de retomada inválida: {position_seconds}")]
+    InvalidStudyPosition {
+        /// Posição recusada, em segundos.
+        position_seconds: i64,
+    },
 }
 
 /// Resultado das operações do domínio.

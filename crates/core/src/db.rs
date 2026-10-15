@@ -1,6 +1,7 @@
 //! Abertura do banco de dados e garantia do schema.
 
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::Connection;
 use rusqlite::config::DbConfig;
@@ -88,4 +89,16 @@ impl Database {
 /// Traduz a falha de leitura da versão do schema, que não é uma migração.
 fn read_schema_version(source: rusqlite_migration::Error) -> Error {
     Error::ReadSchemaVersion { source }
+}
+
+/// Instante atual em segundos desde a época Unix.
+///
+/// Um relógio anterior à época Unix é registrado como `0`, que o domínio documenta como
+/// "momento desconhecido". É a fonte única das colunas de tempo do domínio (`completed_at`
+/// na varredura e `updated_at` no progresso de estudo).
+pub(crate) fn now_unix_seconds() -> i64 {
+    match SystemTime::now().duration_since(UNIX_EPOCH) {
+        Ok(elapsed) => i64::try_from(elapsed.as_secs()).unwrap_or(i64::MAX),
+        Err(_) => 0,
+    }
 }

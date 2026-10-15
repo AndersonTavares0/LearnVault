@@ -5,10 +5,9 @@
 //! expõe operações e erros tipados e recebe, como parâmetros explícitos, a raiz da
 //! biblioteca já resolvida pela integração de plataforma, o `library_id` e o `owner_id`.
 //!
-//! Estado atual: workspace, persistência SQLite com cadeia única de migrações (1.2),
-//! scanner da biblioteca e identidade de mídia (1.3) e política de rescan (1.4). As
-//! entregas seguintes desta fase adicionam catálogo derivado (1.5), resolução segura de
-//! mídia (1.6) e estado de estudo (1.7).
+//! Estado atual: workspace e persistência SQLite com cadeia única de migrações (1.2),
+//! scanner da biblioteca e identidade de mídia (1.3), política de rescan (1.4), catálogo
+//! derivado (1.5), resolução segura de mídia (1.6) e progresso de estudo (1.7).
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -21,6 +20,7 @@ pub mod media;
 pub mod paths;
 pub mod rescan;
 pub mod scanner;
+pub mod study;
 
 mod migrations;
 
@@ -31,3 +31,6 @@ pub use media::{OpenMedia, open_media};
 pub use paths::KeyMode;
 pub use rescan::{RescanSummary, apply_scan, rescan};
 pub use scanner::{MediaKind, ScanOutcome, ScannedFile, scan};
+pub use study::{
+    MAX_RECENT_STUDY, StudyProgress, recent_study, record_position, set_completed, study_progress,
+};
