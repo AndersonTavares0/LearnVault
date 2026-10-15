@@ -20,6 +20,14 @@ pnpm install --frozen-lockfile
 pnpm run check
 pnpm run build
 pnpm audit --audit-level=low
+cargo fmt --all -- --check
+cargo clippy --all-targets -- -D warnings
+cargo test --all
+```
+
+A implementação de referência em Go continua verificada com:
+
+```sh
 go -C services/go test ./...
 go -C services/go vet ./...
 ```
