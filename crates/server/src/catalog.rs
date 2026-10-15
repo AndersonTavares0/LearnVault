@@ -1,9 +1,14 @@
 //! Endpoints HTTP do catálogo e do rescan administrativo.
 
+use std::{
+    fs::{File, OpenOptions},
+    path::{Path, PathBuf},
+};
+
 use axum::{
     Json,
     extract::State,
-    http::{HeaderMap, StatusCode},
+    http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
 use learnvault_core::{
@@ -17,6 +22,11 @@ use crate::{
 };
 
 const LIBRARY_ID: &str = "library-1";
+
+enum RescanFailure {
+    Busy,
+    Failed,
+}
 
 #[derive(Serialize)]
 struct ErrorResponse {
@@ -74,7 +84,7 @@ pub(crate) async fn catalog(State(state): State<AppState>, headers: HeaderMap) -
     })
     .await
     {
-        Ok(Ok(catalog)) => Json(CatalogResponse::from(catalog)).into_response(),
+        Ok(Ok(catalog)) => private_no_store(Json(CatalogResponse::from(catalog)).into_response()),
         Ok(Err(_)) | Err(_) => internal_error("catalog unavailable"),
     }
 }
@@ -86,20 +96,27 @@ pub(crate) async fn rescan(State(state): State<AppState>, headers: HeaderMap) ->
     if !user.is_admin || !same_origin(&headers) {
         return StatusCode::FORBIDDEN.into_response();
     }
-    let Ok(_rescan_guard) = state.rescan_lock.try_lock() else {
+    let Ok(local_lock) = state.rescan_lock.clone().try_lock_owned() else {
         return StatusCode::CONFLICT.into_response();
     };
 
     let database = state.database.clone();
     let root = state.config.library_root.clone();
+    let lock_path = rescan_lock_path(&state.config.database_path);
     match tokio::task::spawn_blocking(move || {
+        // Both guards deliberately belong to the blocking task. Tokio continues running a
+        // blocking task after its JoinHandle is dropped, so a request timeout cannot release
+        // either lock while the scan is still using the database.
+        let _local_lock = local_lock;
+        let _file_lock = try_rescan_file_lock(&lock_path)?;
         let mut database = database.blocking_lock();
-        learnvault_core::rescan(&mut database, LIBRARY_ID, &root)
+        learnvault_core::rescan(&mut database, LIBRARY_ID, &root).map_err(|_| RescanFailure::Failed)
     })
     .await
     {
         Ok(Ok(summary)) => Json(RescanResponse::from(summary)).into_response(),
-        Ok(Err(_)) | Err(_) => internal_error("rescan failed"),
+        Ok(Err(RescanFailure::Busy)) => StatusCode::CONFLICT.into_response(),
+        Ok(Err(RescanFailure::Failed)) | Err(_) => internal_error("rescan failed"),
     }
 }
 
@@ -125,6 +142,35 @@ fn internal_error(message: &'static str) -> Response {
         Json(ErrorResponse { error: message }),
     )
         .into_response()
+}
+
+fn private_no_store(mut response: Response) -> Response {
+    response.headers_mut().insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("private, no-store"),
+    );
+    response
+}
+
+fn rescan_lock_path(database_path: &Path) -> PathBuf {
+    let mut path = database_path.as_os_str().to_os_string();
+    path.push(".rescan.lock");
+    path.into()
+}
+
+fn try_rescan_file_lock(path: &Path) -> Result<File, RescanFailure> {
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(path)
+        .map_err(|_| RescanFailure::Failed)?;
+    file.try_lock().map_err(|error| match error {
+        std::fs::TryLockError::WouldBlock => RescanFailure::Busy,
+        std::fs::TryLockError::Error(_) => RescanFailure::Failed,
+    })?;
+    Ok(file)
 }
 
 impl From<Catalog> for CatalogResponse {
