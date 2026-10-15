@@ -6,7 +6,9 @@ settings:
 
 importers:
 
-  .:
+  .: {}
+
+  apps/web:
     devDependencies:
       '@sveltejs/adapter-static':
         specifier: ^4.0.0

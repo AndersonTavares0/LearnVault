@@ -6,13 +6,13 @@ export default defineConfig({
 	plugins: [
 		sveltekit({
 			files: {
-				routes: 'web/src/routes',
-				appTemplate: 'web/src/app.html'
+				routes: 'src/routes',
+				appTemplate: 'src/app.html'
 			},
 			adapter: adapter({
 				fallback: '200.html',
-				pages: 'services/go/cmd/learnvault/web/build',
-				assets: 'services/go/cmd/learnvault/web/build'
+				pages: '../../services/go/cmd/learnvault/web/build',
+				assets: '../../services/go/cmd/learnvault/web/build'
 			})
 		})
 	]

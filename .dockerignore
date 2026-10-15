@@ -3,7 +3,7 @@ node_modules
 .svelte-kit
 target
 services/go/cmd/learnvault/web/build
-web/build
+apps/web/build
 data
 cache
 library

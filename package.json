@@ -1,27 +1,10 @@
 {
-  "name": "learnvault-web",
+  "name": "learnvault",
   "private": true,
   "version": "0.1.0",
-  "type": "module",
   "packageManager": "pnpm@11.28.5",
-  "devEngines": {
-    "runtime": {
-      "name": "node",
-      "version": "24.x",
-      "onFail": "error"
-    }
-  },
   "scripts": {
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "build": "svelte-kit sync && vite build"
-  },
-  "devDependencies": {
-    "@sveltejs/adapter-static": "^4.0.0",
-    "@sveltejs/kit": "^3.1.0",
-    "@sveltejs/vite-plugin-svelte": "^7.3.1",
-    "svelte": "^5.0.0",
-    "svelte-check": "^4.0.0",
-    "typescript": "^6.0.3",
-    "vite": "^8.3.4"
+    "check": "pnpm -r check",
+    "build": "pnpm -r build"
   }
 }

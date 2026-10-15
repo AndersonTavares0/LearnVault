@@ -12,10 +12,10 @@
 		"moduleResolution": "bundler"
 	},
 	"include": [
-		"web",
+		"src",
 		"*"
 	],
 	"exclude": [
-		"web/src/service-worker"
+		"src/service-worker"
 	]
 }
