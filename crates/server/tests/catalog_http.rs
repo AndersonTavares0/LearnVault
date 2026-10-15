@@ -1,6 +1,7 @@
 use axum::{
     body::Body,
     http::{Request, StatusCode},
+    response::Response,
 };
 use http_body_util::BodyExt;
 use learnvault_core::Database;
@@ -53,6 +54,16 @@ async fn login(app: &axum::Router) -> String {
         .to_owned()
 }
 
+fn assert_private_no_store(response: &Response) {
+    assert_eq!(
+        response
+            .headers()
+            .get("cache-control")
+            .and_then(|value| value.to_str().ok()),
+        Some("private, no-store")
+    );
+}
+
 #[tokio::test]
 async fn catalog_requires_authentication() {
     let temp = tempfile::tempdir().unwrap();
@@ -64,6 +75,7 @@ async fn catalog_requires_authentication() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_private_no_store(&response);
 }
 
 #[tokio::test]
@@ -82,6 +94,7 @@ async fn rescan_requires_authentication() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_private_no_store(&response);
 }
 
 #[tokio::test]
@@ -101,6 +114,7 @@ async fn catalog_and_rescan_reject_invalid_sessions() {
         .await
         .unwrap();
     assert_eq!(catalog.status(), StatusCode::UNAUTHORIZED);
+    assert_private_no_store(&catalog);
 
     let rescan = app
         .oneshot(
@@ -113,6 +127,7 @@ async fn catalog_and_rescan_reject_invalid_sessions() {
         .await
         .unwrap();
     assert_eq!(rescan.status(), StatusCode::UNAUTHORIZED);
+    assert_private_no_store(&rescan);
 }
 
 #[tokio::test]
@@ -134,6 +149,7 @@ async fn catalog_and_rescan_reject_requests_when_blocking_capacity_is_saturated(
         .await
         .unwrap();
     assert_eq!(catalog.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_private_no_store(&catalog);
     let catalog_body = catalog.into_body().collect().await.unwrap().to_bytes();
     assert_eq!(
         serde_json::from_slice::<serde_json::Value>(&catalog_body).unwrap()["error"],
@@ -151,6 +167,7 @@ async fn catalog_and_rescan_reject_requests_when_blocking_capacity_is_saturated(
         .await
         .unwrap();
     assert_eq!(rescan.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_private_no_store(&rescan);
     let rescan_body = rescan.into_body().collect().await.unwrap().to_bytes();
     assert_eq!(
         serde_json::from_slice::<serde_json::Value>(&rescan_body).unwrap()["error"],
@@ -206,6 +223,7 @@ async fn non_admin_cannot_rescan() {
         .await
         .unwrap();
     assert_eq!(rescan.status(), StatusCode::FORBIDDEN);
+    assert_private_no_store(&rescan);
 }
 
 #[tokio::test]
@@ -239,10 +257,7 @@ async fn admin_rescan_populates_the_authenticated_catalog() {
         .await
         .unwrap();
     assert_eq!(missing_origin.status(), StatusCode::FORBIDDEN);
-    assert_eq!(
-        missing_origin.headers()["cache-control"],
-        "private, no-store"
-    );
+    assert_private_no_store(&missing_origin);
 
     let rescan = app
         .clone()
@@ -256,7 +271,7 @@ async fn admin_rescan_populates_the_authenticated_catalog() {
         .await
         .unwrap();
     assert_eq!(rescan.status(), StatusCode::OK);
-    assert_eq!(rescan.headers()["cache-control"], "private, no-store");
+    assert_private_no_store(&rescan);
     let rescan_body = rescan.into_body().collect().await.unwrap().to_bytes();
     let rescan_json: serde_json::Value = serde_json::from_slice(&rescan_body).unwrap();
     assert_eq!(rescan_json["complete"], true);
@@ -273,7 +288,7 @@ async fn admin_rescan_populates_the_authenticated_catalog() {
         .await
         .unwrap();
     assert_eq!(catalog.status(), StatusCode::OK);
-    assert_eq!(catalog.headers()["cache-control"], "private, no-store");
+    assert_private_no_store(&catalog);
     let body = catalog.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(json["complete"], true);
@@ -318,6 +333,7 @@ async fn rescan_sanitizes_a_missing_library_root_error() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    assert_private_no_store(&response);
     let body = response.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(json["error"], "library root changed");
@@ -360,6 +376,7 @@ async fn rescan_returns_conflict_while_another_process_holds_its_lock() {
     fs::write(release_path, []).unwrap();
     assert!(child.wait().unwrap().success());
     assert_eq!(response.status(), StatusCode::CONFLICT);
+    assert_private_no_store(&response);
     assert_eq!(response.headers()["cache-control"], "private, no-store");
 }
 
