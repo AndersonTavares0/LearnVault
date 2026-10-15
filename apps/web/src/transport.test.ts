@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { HttpTransport, type Transport } from './transport';
+import { HttpTransport, normalizeCatalog, normalizeUser, type Transport } from './transport';
 
 describe('transport contract', () => {
 	it('exposes the HTTP transport seam without routing assumptions', () => {
@@ -20,4 +20,16 @@ describe('transport contract', () => {
 		await expect(new HttpTransport().rescan()).rejects.toThrow('Já existe um rescan em andamento.');
 		vi.unstubAllGlobals();
 	});
+	it('normalizes the Rust user and recursive catalog contract', () => {
+		expect(normalizeUser({ user_id: 'u1', username: 'admin', is_admin: true })).toEqual({ username: 'admin', role: 'admin' });
+		const catalog = normalizeCatalog({ categories: [{ title: 'Categoria', path: 'cat', role: 'category', files: [], loose_files: [], children: [{ title: 'Curso', path: 'cat/curso', role: 'course', files: [], loose_files: [], children: [{ title: 'Módulo', path: 'cat/curso/mod', role: 'module', files: [], loose_files: [], children: [{ title: 'Aula', path: 'cat/curso/mod/aula', role: 'lesson', files: [{ media_id: 'm1', name: 'aula.mp4', path: 'cat/curso/mod/aula.mp4', size: 10, kind: 'media', availability: 'available', unverified: false }, { media_id: 's1', name: 'aula.vtt', path: 'cat/curso/mod/aula.vtt', size: 2, kind: 'subtitle', availability: 'available', unverified: false }], loose_files: [], children: [] }] }] }] }] });
+		expect(catalog.categories[0].courses[0].modules[0].lessons[0].media[0].path).toBe('cat/curso/mod/aula.mp4');
+		expect(catalog.categories[0].courses[0].modules[0].lessons[0].subtitles).toHaveLength(1);
+	});
+	it('keeps the Go tree and material files compatible', () => {
+		const catalog = normalizeCatalog({ categories: [{ title: 'Categoria', courses: [{ title: 'Curso', modules: [{ title: 'Módulo', lessons: [{ title: 'Aula', path: 'aula', media: [], subtitles: [{ name: 'legenda.vtt', path: 'legenda.vtt', size: 1 }], materials: [{ name: 'slide.pdf', path: 'slide.pdf', size: 2 }] }] }] }] }] });
+		expect(catalog.categories[0].courses[0].modules[0].lessons[0].materials[0].path).toBe('slide.pdf');
+		expect(catalog.categories[0].courses[0].modules[0].lessons[0].subtitles[0].path).toBe('legenda.vtt');
+	});
+	it('rejects an unknown catalog shape with a controlled error', () => expect(() => normalizeCatalog({ nope: true })).toThrow('Resposta inválida do servidor'));
 });
