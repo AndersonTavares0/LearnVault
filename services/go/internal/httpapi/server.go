@@ -93,6 +93,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.api(w, r)
 		return
 	}
+	// Unknown routes outside the API namespace are served by the SPA handler in
+	// production; when the server is mounted directly this branch still forbids
+	// storing the 404, so a stale error is never cached.
+	w.Header().Set("Cache-Control", "no-store")
 	http.NotFound(w, r)
 }
 

@@ -118,6 +118,8 @@ func TestAPIRejectsUnsupportedMethodsAndUnknownRoutes(t *testing.T) {
 				if recorder.Header().Get("Cache-Control") != wantCache {
 					t.Fatalf("%s Cache-Control = %q; want %q", tc.path, recorder.Header().Get("Cache-Control"), wantCache)
 				}
+			} else if recorder.Header().Get("Cache-Control") != "no-store" {
+				t.Fatalf("%s Cache-Control = %q; want no-store", tc.path, recorder.Header().Get("Cache-Control"))
 			}
 		})
 	}

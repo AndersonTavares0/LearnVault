@@ -125,7 +125,7 @@ func spaHandler(files fs.FS) http.HandlerFunc {
 		// Defense in depth: even if the bare `/api` route is ever unmounted, the SPA
 		// fallback must never turn an API path into an HTML shell.
 		if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
-			http.NotFound(w, r)
+			notFoundUncacheable(w, r)
 			return
 		}
 		path := strings.TrimPrefix(filepath.ToSlash(filepath.Clean("/"+r.URL.Path)), "/")
@@ -139,25 +139,47 @@ func spaHandler(files fs.FS) http.HandlerFunc {
 				return
 			}
 			if strings.Contains(filepath.Base(path), ".") {
-				http.NotFound(w, r)
+				// An unknown asset outside the API namespace: a stale 404 must not be
+				// stored, matching the API namespace and the documented SPA error policy.
+				notFoundUncacheable(w, r)
 				return
 			}
 		}
 		fallback, err := files.Open("200.html")
 		if err != nil {
-			http.Error(w, "frontend assets unavailable", http.StatusServiceUnavailable)
+			errorUncacheable(w, "frontend assets unavailable", http.StatusServiceUnavailable)
 			return
 		}
 		defer fallback.Close()
 		contents, err := io.ReadAll(fallback)
 		if err != nil {
-			http.Error(w, "frontend assets unavailable", http.StatusInternalServerError)
+			errorUncacheable(w, "frontend assets unavailable", http.StatusInternalServerError)
 			return
 		}
+		// The shell fallback serves valid client routes and unknown extensionless routes.
+		// It must be revalidated instead of cached: a new shell only takes effect after a
+		// restart, so a cached HTML response could outlive the deploy (`no-cache`, not
+		// `no-store`, is the documented SPA shell policy).
+		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(contents)
 	}
+}
+
+// notFoundUncacheable answers an unknown route with 404 and forbids storing the response.
+// SPA and API error responses use `no-store`: a stale 404 would outlive the deploy that
+// fixed the route and mask it from browsers or intermediaries.
+func notFoundUncacheable(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	http.NotFound(w, r)
+}
+
+// errorUncacheable answers a missing or unreadable SPA artifact with an error status and
+// forbids storing it, mirroring the documented SPA error policy (`no-store`).
+func errorUncacheable(w http.ResponseWriter, message string, status int) {
+	w.Header().Set("Cache-Control", "no-store")
+	http.Error(w, message, status)
 }
 
 func securityHeaders(next http.Handler) http.Handler {
