@@ -151,21 +151,25 @@ async fn authenticated_user(
 }
 
 fn internal_error(message: &'static str) -> Response {
-    (
-        StatusCode::INTERNAL_SERVER_ERROR,
-        Json(ErrorResponse { error: message }),
+    private_no_store(
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse { error: message }),
+        )
+            .into_response(),
     )
-        .into_response()
 }
 
 pub(crate) fn service_unavailable() -> Response {
-    (
-        StatusCode::SERVICE_UNAVAILABLE,
-        Json(ErrorResponse {
-            error: "server busy",
-        }),
+    private_no_store(
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ErrorResponse {
+                error: "server busy",
+            }),
+        )
+            .into_response(),
     )
-        .into_response()
 }
 
 fn private_no_store(mut response: Response) -> Response {

@@ -234,26 +234,22 @@ pub(crate) async fn login(
     no_store(response)
 }
 
-pub(crate) async fn me(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
+pub(crate) async fn me(State(state): State<AppState>, headers: HeaderMap) -> Response {
     let Some(token) = request_token(&headers) else {
-        return StatusCode::UNAUTHORIZED.into_response();
+        return private_no_store(StatusCode::UNAUTHORIZED.into_response());
     };
     let user = match state.session_user(hash_session_token(&token)).await {
         Ok(Some(user)) => user,
-        Err(StateError::Capacity) => return service_unavailable(),
-        Ok(None) | Err(_) => return StatusCode::UNAUTHORIZED.into_response(),
+        Err(StateError::Capacity) => return private_no_store(service_unavailable()),
+        Ok(None) | Err(_) => return private_no_store(StatusCode::UNAUTHORIZED.into_response()),
     };
-    let mut response = Json(UserResponse {
+    let response = Json(UserResponse {
         user_id: user.user_id,
         username: user.username,
         is_admin: user.is_admin,
     })
     .into_response();
-    response.headers_mut().insert(
-        "cache-control",
-        HeaderValue::from_static("private, no-store"),
-    );
-    response
+    private_no_store(response)
 }
 
 pub(crate) async fn logout(State(state): State<AppState>, headers: HeaderMap) -> Response {
@@ -279,6 +275,14 @@ fn no_store(mut response: Response) -> Response {
     response
         .headers_mut()
         .insert("cache-control", HeaderValue::from_static("no-store"));
+    response
+}
+
+fn private_no_store(mut response: Response) -> Response {
+    response.headers_mut().insert(
+        "cache-control",
+        HeaderValue::from_static("private, no-store"),
+    );
     response
 }
 

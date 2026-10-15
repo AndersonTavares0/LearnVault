@@ -308,7 +308,7 @@ fn load_spa_shell(web_root: Option<&Path>) -> Option<SpaShell> {
     };
     Some(SpaShell {
         script_hashes: csp_hashes(inline_scripts(&source)),
-        style_hashes: csp_hashes(inline_style_attributes(&source)),
+        style_hashes: csp_hashes(inline_styles(&source)),
         bytes: source.into(),
     })
 }
@@ -353,8 +353,7 @@ fn inline_scripts(source: &[u8]) -> Vec<&[u8]> {
         let Some(open_end) = tag_end(source, name_end) else {
             break;
         };
-        let Some(close_start) = find_ascii_case_insensitive(source, b"</script", open_end + 1)
-        else {
+        let Some(close_start) = find_closing_tag(source, b"script", open_end + 1) else {
             break;
         };
         let Some(close_end) = tag_end(source, close_start + b"</script".len()) else {
@@ -366,6 +365,33 @@ fn inline_scripts(source: &[u8]) -> Vec<&[u8]> {
         offset = close_end + 1;
     }
     scripts
+}
+
+fn inline_styles(source: &[u8]) -> Vec<&[u8]> {
+    let mut styles = inline_style_attributes(source);
+    let mut offset = 0;
+    while let Some(start) = find_ascii_case_insensitive(source, b"<style", offset) {
+        let name_end = start + b"<style".len();
+        let valid_name_end = source
+            .get(name_end)
+            .is_some_and(|byte| *byte == b'>' || *byte == b'/' || byte.is_ascii_whitespace());
+        if !valid_name_end {
+            offset = name_end;
+            continue;
+        }
+        let Some(open_end) = tag_end(source, name_end) else {
+            break;
+        };
+        let Some(close_start) = find_closing_tag(source, b"style", open_end + 1) else {
+            break;
+        };
+        styles.push(&source[open_end + 1..close_start]);
+        let Some(close_end) = tag_end(source, close_start + b"</style".len()) else {
+            break;
+        };
+        offset = close_end + 1;
+    }
+    styles
 }
 
 fn inline_style_attributes(source: &[u8]) -> Vec<&[u8]> {
@@ -390,8 +416,7 @@ fn inline_style_attributes(source: &[u8]) -> Vec<&[u8]> {
             .position(|byte| byte.is_ascii_whitespace() || *byte == b'/')
             .unwrap_or(tag.len());
         if tag[..name_end].eq_ignore_ascii_case(b"script") {
-            let Some(close_start) = find_ascii_case_insensitive(source, b"</script", end + 1)
-            else {
+            let Some(close_start) = find_closing_tag(source, b"script", end + 1) else {
                 break;
             };
             let Some(close_end) = tag_end(source, close_start + b"</script".len()) else {
@@ -478,6 +503,23 @@ fn find_ascii_case_insensitive(source: &[u8], needle: &[u8], offset: usize) -> O
         .windows(needle.len())
         .position(|window| window.eq_ignore_ascii_case(needle))
         .map(|index| offset + index)
+}
+
+fn find_closing_tag(source: &[u8], name: &[u8], mut offset: usize) -> Option<usize> {
+    let mut needle = Vec::with_capacity(name.len() + 2);
+    needle.extend_from_slice(b"</");
+    needle.extend_from_slice(name);
+    while let Some(start) = find_ascii_case_insensitive(source, &needle, offset) {
+        let name_end = start + needle.len();
+        if source
+            .get(name_end)
+            .is_some_and(|byte| *byte == b'>' || *byte == b'/' || byte.is_ascii_whitespace())
+        {
+            return Some(start);
+        }
+        offset = name_end;
+    }
+    None
 }
 
 fn tag_end(source: &[u8], mut offset: usize) -> Option<usize> {

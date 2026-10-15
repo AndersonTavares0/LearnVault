@@ -252,6 +252,54 @@ async fn csp_hashes_all_inline_styles_from_the_configured_shell() {
 }
 
 #[tokio::test]
+async fn csp_hashes_inline_style_blocks_without_enabling_unsafe_inline() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = web_root(&temp);
+    let style = "main { display: grid; }";
+    fs::write(
+        root.join("200.html"),
+        format!("<html><head><style>{style}</style></head><body></body></html>"),
+    )
+    .unwrap();
+    let response = app(&temp, &root)
+        .await
+        .oneshot(Request::get("/catalog/rust").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    let csp = response.headers()["content-security-policy"]
+        .to_str()
+        .unwrap();
+    let hash = STANDARD.encode(Sha256::digest(style.as_bytes()));
+    assert!(csp.contains(&format!("style-src 'self' 'unsafe-hashes' 'sha256-{hash}'")));
+    assert!(!csp.contains("'unsafe-inline'"));
+    assert!(!csp.contains("'unsafe-eval'"));
+}
+
+#[tokio::test]
+async fn csp_does_not_truncate_scripts_at_longer_closing_tag_names() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = web_root(&temp);
+    let script = "const marker = '</scripture>'; window.learnvault = marker;";
+    fs::write(
+        root.join("200.html"),
+        format!("<html><body><script>{script}</script></body></html>"),
+    )
+    .unwrap();
+    let response = app(&temp, &root)
+        .await
+        .oneshot(Request::get("/catalog/rust").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    let csp = response.headers()["content-security-policy"]
+        .to_str()
+        .unwrap();
+    let hash = STANDARD.encode(Sha256::digest(script.as_bytes()));
+    assert!(csp.contains(&format!("script-src 'self' 'sha256-{hash}'")));
+}
+
+#[tokio::test]
 async fn changed_shell_is_not_served_with_the_startup_csp() {
     let temp = tempfile::tempdir().unwrap();
     let root = web_root(&temp);
@@ -403,6 +451,33 @@ async fn slow_spa_assets_cannot_exhaust_the_shell_stream_reservation() {
                 .body(Body::empty())
                 .unwrap(),
         )
+        .await
+        .unwrap();
+    assert_eq!(recovered.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn retained_shell_body_uses_its_own_stream_reservation() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = web_root(&temp);
+    let app = app(&temp, &root).await;
+    let retained_shell = app
+        .clone()
+        .oneshot(Request::get("/catalog/rust").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(retained_shell.status(), StatusCode::OK);
+
+    let saturated = app
+        .clone()
+        .oneshot(Request::get("/catalog/rust").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(saturated.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+    drop(retained_shell);
+    let recovered = app
+        .oneshot(Request::get("/catalog/rust").body(Body::empty()).unwrap())
         .await
         .unwrap();
     assert_eq!(recovered.status(), StatusCode::OK);

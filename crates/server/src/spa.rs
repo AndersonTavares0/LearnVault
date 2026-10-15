@@ -5,12 +5,13 @@ use std::{
 };
 
 use axum::{
-    body::Body,
+    body::{Body, Bytes},
     extract::State,
     http::{StatusCode, Uri, header},
     response::{IntoResponse, Response},
 };
 use tokio::io::AsyncReadExt;
+use tokio_util::io::StreamReader;
 
 use crate::{AppState, stream::idle_timeout_stream};
 
@@ -87,8 +88,21 @@ async fn serve_shell(state: &AppState) -> Result<Response, FileError> {
     .map_err(|_| FileError::Busy)?
     .ok_or(FileError::Missing)?;
     let size = bytes.len() as u64;
+    let Some(stream_permit) = state.try_acquire_spa_stream(true) else {
+        return Err(FileError::Busy);
+    };
+    // O shell já foi conferido contra o cache de hashes acima. Recriar um reader a partir desses
+    // bytes mantém a reserva até o body ser consumido, descartado ou ficar ocioso, sem reabrir o
+    // caminho e sem introduzir uma segunda janela TOCTOU.
+    let reader = StreamReader::new(tokio_stream::once(Ok::<_, std::io::Error>(
+        Bytes::copy_from_slice(&bytes),
+    )));
     Ok(file_response(
-        Body::from(bytes.as_ref().to_vec()),
+        Body::from_stream(idle_timeout_stream(
+            reader,
+            stream_permit,
+            SPA_STREAM_IDLE_TIMEOUT,
+        )),
         state
             .config
             .web_root

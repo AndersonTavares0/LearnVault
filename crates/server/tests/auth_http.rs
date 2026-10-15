@@ -111,6 +111,25 @@ async fn login_me_and_logout_use_an_expiring_secure_cookie() {
         .await
         .unwrap();
     assert_eq!(after_logout.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(after_logout.headers()["cache-control"], "private, no-store");
+}
+
+#[tokio::test]
+async fn me_never_caches_unauthorized_responses() {
+    let temp = tempfile::tempdir().unwrap();
+    let app = build_router(AppState::initialize(config(&temp, true)).await.unwrap());
+
+    for request in [
+        Request::get("/api/me").body(Body::empty()).unwrap(),
+        Request::get("/api/me")
+            .header("cookie", "learnvault_session=unknown")
+            .body(Body::empty())
+            .unwrap(),
+    ] {
+        let response = app.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(response.headers()["cache-control"], "private, no-store");
+    }
 }
 
 #[tokio::test]
