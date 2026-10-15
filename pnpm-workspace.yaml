@@ -1,5 +1,7 @@
 # pnpm 11 denies dependency lifecycle scripts by default. esbuild is explicitly
 # allowed because Vite uses its platform binary during the frontend build.
+packages:
+  - "apps/*"
 allowBuilds:
   esbuild: true
 minimumReleaseAgeExclude:

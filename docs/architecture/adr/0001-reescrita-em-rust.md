@@ -32,8 +32,8 @@ O LearnVault passa a ser um workspace Rust:
 - `crates/desktop` — aplicativo Tauri 2 com comandos IPC, integração com o sistema de arquivos,
   seleção de diretórios e protocolo de reprodução de mídia. Sem HTTP, sem cookies, sem portas de
   rede e sem autenticação.
-- `web/` — uma única SPA em Svelte 5 + TypeScript + Vite, sem SvelteKit, com roteamento por hash
-  e dois builds que selecionam o transporte em tempo de compilação.
+- `apps/web/` — uma única SPA em Svelte 5 + TypeScript + Vite, sem SvelteKit, com roteamento por
+  hash e dois builds que selecionam o transporte em tempo de compilação.
 
 Decisões de domínio que a reescrita mantém:
 
@@ -50,7 +50,7 @@ Distribuição: instalador NSIS no Windows; **Flatpak como formato Linux prefere
 validação técnica de permissões, acesso persistente às bibliotecas e reprodução de mídia; imagem
 OCI mais binário nativo para instalação self-hosted. Uma única versão por release.
 
-A execução acontece por fases: governança, `crates/core`, `crates/server`, `web/`,
+A execução acontece por fases: governança, `crates/core`, `crates/server`, `apps/web/`,
 `crates/desktop` e distribuição, com a remoção do serviço Go em pull request próprio.
 
 ## Alternativas consideradas

@@ -44,9 +44,8 @@ entrada de deploy. O código da aplicação pertence a estas pastas:
 | Caminho | Responsabilidade |
 | --- | --- |
 | `crates/` | Espaço de trabalho Rust; `crates/core` concentra o domínio compartilhado (SQLite, catálogo, scanner, identidade de mídia e estado de estudo) |
-| `web/src/` | Código-fonte da SPA |
-| `cmd/learnvault/` | Implementação Go de referência (executável e saída embutida da SPA), em remoção gradual |
-| `internal/` | Implementação Go de referência (pacotes internos, backend e migrações), em remoção gradual |
+| `apps/web/` | Código-fonte e configuração da SPA SvelteKit (`src/`, `vite.config.ts`, `tsconfig.json`, `package.json`) |
+| `services/go/` | Módulo Go de referência (executável, pacotes internos, migrações e saída embutida da SPA), em remoção gradual |
 | `testdata/` | Fixtures sintéticas pequenas |
 | `deploy/container/` | Definição da imagem OCI |
 | `deploy/compose/` | Stack Docker Compose e exemplo de ambiente |
@@ -55,17 +54,18 @@ entrada de deploy. O código da aplicação pertence a estas pastas:
 | `docs/` | Arquitetura, governança, operações, produto, releases e Wiki |
 | `.github/` | Actions, configuração do Release Please e arquivos de comunidade |
 | `.agents/` | Políticas, playbooks, checklists e templates para agentes |
+| `.opencode/` | Perfis específicos do OpenCode (somente leitura) |
 
 Arquivos de comunidade (`CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`) ficam em
 `.github/`. O changelog fica em `docs/releases/CHANGELOG.md`. A configuração do Release Please
-fica em `.github/release-please/`. A raiz mantém apenas `AGENTS.md`, `README.md`, `LICENSE`,
-`.dockerignore`, `.gitignore`, `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, `go.mod`,
-`go.sum`, `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `tsconfig.json` e
-`vite.config.ts`. Os crates `server` e `desktop` surgem nas suas fases correspondentes; só
+fica em `.github/release-please/`. Os perfis específicos do OpenCode ficam em `.opencode/`.
+A raiz mantém apenas `AGENTS.md`, `README.md`, `LICENSE`, `.dockerignore`, `.gitignore`,
+`Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, `package.json`, `pnpm-lock.yaml` e
+`pnpm-workspace.yaml`. Os crates `server` e `desktop` surgem nas suas fases correspondentes; só
 existe `crates/core` até lá.
 
-Saída gerada (`cmd/learnvault/web/build`, `target`, `.svelte-kit`, `node_modules` e dados/cache
-locais) deve permanecer ignorada e não pode ser commitada.
+Saída gerada (`services/go/cmd/learnvault/web/build`, `apps/web/.svelte-kit`, `target`, `node_modules`
+e dados/cache locais) deve permanecer ignorada e não pode ser commitada.
 
 ## Limites do repositório
 

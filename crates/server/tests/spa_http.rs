@@ -320,11 +320,15 @@ async fn changed_shell_is_not_served_with_the_startup_csp() {
 
 #[tokio::test]
 async fn csp_hashes_the_downloaded_canonical_spa_shell_when_available() {
-    let canonical_root = std::path::Path::new("cmd/learnvault/web/build");
+    let canonical_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
+        .join("services/go/cmd/learnvault/web/build");
     let shell_path = canonical_root.join("200.html");
-    if !shell_path.is_file() {
-        return;
-    }
+    assert!(
+        shell_path.is_file(),
+        "o shell canônico da SPA deve existir antes do teste CSP"
+    );
     let shell = fs::read_to_string(&shell_path).unwrap();
     let script_start = shell.find("<script").unwrap();
     let content_start = shell[script_start..].find('>').unwrap() + script_start + 1;
@@ -334,7 +338,7 @@ async fn csp_hashes_the_downloaded_canonical_spa_shell_when_available() {
     ));
 
     let temp = tempfile::tempdir().unwrap();
-    let response = app(&temp, canonical_root)
+    let response = app(&temp, &canonical_root)
         .await
         .oneshot(Request::get("/catalog/rust").body(Body::empty()).unwrap())
         .await

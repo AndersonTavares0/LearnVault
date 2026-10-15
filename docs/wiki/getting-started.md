@@ -7,8 +7,8 @@ são adaptadores opcionais de deploy.
 pnpm install --frozen-lockfile
 pnpm run check
 pnpm run build
-go test ./...
-go run ./cmd/learnvault
+go -C services/go test ./...
+go -C services/go run ./cmd/learnvault
 ```
 
 A aplicação exige `ADMIN_USERNAME` e `ADMIN_PASSWORD` somente na primeira inicialização.

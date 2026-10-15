@@ -19,8 +19,8 @@ preferencial do desktop.
 
 ## Limites de build
 
-- O comando Go em `cmd/learnvault` é a fonte da verdade para builds executáveis da implementação
-  atual. Na reescrita, cada binário Rust passa a ser a fonte da verdade do seu alvo.
+- O comando Go em `services/go/cmd/learnvault` é a fonte da verdade para builds executáveis da
+  implementação atual. Na reescrita, cada binário Rust passa a ser a fonte da verdade do seu alvo.
 - A SPA é construída uma vez e embutida no executável.
 - Receitas de pacotes ficarão em `deploy/packages/` quando forem implementadas.
 - Definições de containers ficam em `deploy/container/`, `deploy/compose/` e `deploy/quadlet/`.

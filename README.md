@@ -27,21 +27,20 @@ Requisitos: Go 1.26, Node.js 24.x e pnpm 11.28.5. Docker é opcional.
 pnpm install --frozen-lockfile
 pnpm run check
 pnpm run build
-go test ./...
-go run ./cmd/learnvault
+go -C services/go test ./...
+go -C services/go run ./cmd/learnvault
 ```
 
-A SPA é construída a partir de `web/src`, gravada em `cmd/learnvault/web/build` e embutida no
-executável Go. A primeira execução exige `ADMIN_USERNAME` e `ADMIN_PASSWORD` com pelo menos
-12 caracteres. Veja `.env.example` para as configurações locais.
+A SPA é construída a partir de `apps/web/src`, gravada em `services/go/cmd/learnvault/web/build` e
+embutida no executável Go. A primeira execução exige `ADMIN_USERNAME` e `ADMIN_PASSWORD` com
+pelo menos 12 caracteres. Veja `deploy/compose/.env.example` para as configurações locais.
 
 ## Mapa do repositório
 
 ```text
 crates/           Núcleo de domínio em Rust (SQLite, catálogo, scanner e identidade de mídia)
-cmd/learnvault/   Implementação Go de referência (executável e saída embutida da SPA)
-internal/         Implementação Go de referência (backend, catálogo, biblioteca e API HTTP)
-web/src/          Código-fonte da SPA SvelteKit
+apps/web/         SPA SvelteKit (fonte, configuração e scripts)
+services/go/      Módulo Go de referência (executável, pacotes internos, migrações e saída embutida da SPA)
 deploy/           Adaptadores de contêiner, Compose e Quadlet rootless
 docs/             Arquitetura, API, governança, operações, produto e releases
 .agents/          Políticas, playbooks, checklists e templates para agentes
