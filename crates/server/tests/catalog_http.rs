@@ -116,6 +116,49 @@ async fn catalog_and_rescan_reject_invalid_sessions() {
 }
 
 #[tokio::test]
+async fn catalog_and_rescan_reject_requests_when_blocking_capacity_is_saturated() {
+    let temp = tempfile::tempdir().unwrap();
+    let state = AppState::initialize(config(&temp)).await.unwrap();
+    let app = build_router(state.clone());
+    let cookie = login(&app).await;
+    let _permits: Vec<_> = std::iter::from_fn(|| state.try_acquire_blocking_task()).collect();
+
+    let catalog = app
+        .clone()
+        .oneshot(
+            Request::get("/api/catalog")
+                .header("cookie", &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(catalog.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let catalog_body = catalog.into_body().collect().await.unwrap().to_bytes();
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&catalog_body).unwrap()["error"],
+        "server busy"
+    );
+
+    let rescan = app
+        .oneshot(
+            Request::post("/api/admin/catalog/rescan")
+                .header("origin", "http://localhost")
+                .header("cookie", cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rescan.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let rescan_body = rescan.into_body().collect().await.unwrap().to_bytes();
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&rescan_body).unwrap()["error"],
+        "server busy"
+    );
+}
+
+#[tokio::test]
 async fn non_admin_cannot_rescan() {
     let temp = tempfile::tempdir().unwrap();
     let database = Database::open(temp.path().join("catalog.sqlite")).unwrap();

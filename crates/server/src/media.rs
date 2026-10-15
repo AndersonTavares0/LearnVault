@@ -13,8 +13,9 @@ use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio_util::io::ReaderStream;
 
 use crate::{
-    AppState,
+    AppState, StateError,
     auth::{hash_session_token, request_token},
+    catalog::service_unavailable,
 };
 
 #[derive(Debug, Deserialize)]
@@ -31,14 +32,10 @@ pub(crate) async fn media(
     let Some(token) = request_token(&headers) else {
         return StatusCode::UNAUTHORIZED.into_response();
     };
-    if state
-        .session_user(hash_session_token(&token))
-        .await
-        .ok()
-        .flatten()
-        .is_none()
-    {
-        return StatusCode::UNAUTHORIZED.into_response();
+    match state.session_user(hash_session_token(&token)).await {
+        Ok(Some(_)) => {}
+        Err(StateError::Capacity) => return service_unavailable(),
+        Ok(None) | Err(_) => return StatusCode::UNAUTHORIZED.into_response(),
     }
     let query = match raw_query.0.as_deref() {
         Some(raw) => match serde_urlencoded::from_str::<MediaQuery>(raw) {
@@ -51,9 +48,12 @@ pub(crate) async fn media(
     let root = state.config.library_root.clone();
     let path = query.path;
     let lookup_path = path.clone();
-    let database = state.database.clone();
+    let Some(blocking_task) = state.try_acquire_blocking_task() else {
+        return service_unavailable();
+    };
+    let database = state.database.clone().lock_owned().await;
     let opened = tokio::task::spawn_blocking(move || {
-        let database = database.blocking_lock();
+        let _blocking_task = blocking_task;
         let reference = learnvault_core::find_media_by_path(&database, &lookup_path)
             .ok()
             .flatten()?;

@@ -17,7 +17,7 @@ use learnvault_core::{
 use serde::Serialize;
 
 use crate::{
-    AppState,
+    AppState, StateError,
     auth::{hash_session_token, request_token, same_origin},
 };
 
@@ -74,13 +74,21 @@ struct RescanResponse {
 }
 
 pub(crate) async fn catalog(State(state): State<AppState>, headers: HeaderMap) -> Response {
-    if !authenticated(&state, &headers).await {
-        return StatusCode::UNAUTHORIZED.into_response();
+    match authenticated(&state, &headers).await {
+        Ok(true) => {}
+        Err(StateError::Capacity) => return service_unavailable(),
+        Ok(false) | Err(_) => return StatusCode::UNAUTHORIZED.into_response(),
     }
 
+    let Some(blocking_task) = state.try_acquire_blocking_task() else {
+        return service_unavailable();
+    };
     let database = state.database.clone().lock_owned().await;
-    match tokio::task::spawn_blocking(move || learnvault_core::build_catalog(&database, LIBRARY_ID))
-        .await
+    match tokio::task::spawn_blocking(move || {
+        let _blocking_task = blocking_task;
+        learnvault_core::build_catalog(&database, LIBRARY_ID)
+    })
+    .await
     {
         Ok(Ok(catalog)) => private_no_store(Json(CatalogResponse::from(catalog)).into_response()),
         Ok(Err(_)) | Err(_) => internal_error("catalog unavailable"),
@@ -88,12 +96,17 @@ pub(crate) async fn catalog(State(state): State<AppState>, headers: HeaderMap) -
 }
 
 pub(crate) async fn rescan(State(state): State<AppState>, headers: HeaderMap) -> Response {
-    let Some(user) = authenticated_user(&state, &headers).await else {
-        return StatusCode::UNAUTHORIZED.into_response();
+    let user = match authenticated_user(&state, &headers).await {
+        Ok(Some(user)) => user,
+        Err(StateError::Capacity) => return service_unavailable(),
+        Ok(None) | Err(_) => return StatusCode::UNAUTHORIZED.into_response(),
     };
     if !user.is_admin || !same_origin(&headers) {
         return StatusCode::FORBIDDEN.into_response();
     }
+    let Some(blocking_task) = state.try_acquire_blocking_task() else {
+        return service_unavailable();
+    };
     let Ok(local_lock) = state.rescan_lock.clone().try_lock_owned() else {
         return StatusCode::CONFLICT.into_response();
     };
@@ -103,9 +116,10 @@ pub(crate) async fn rescan(State(state): State<AppState>, headers: HeaderMap) ->
     let lock_path = rescan_lock_path(&state.config.database_path);
     let mut database = database.lock_owned().await;
     match tokio::task::spawn_blocking(move || {
-        // Both guards deliberately belong to the blocking task. Tokio continues running a
-        // blocking task after its JoinHandle is dropped, so a request timeout cannot release
-        // either lock while the scan is still using the database.
+        // Os guards e o permit pertencem deliberadamente à tarefa blocking. Tokio continua
+        // executando-a depois que o JoinHandle é descartado, então um timeout HTTP não libera
+        // a capacidade nem os locks enquanto o scan ainda usa o banco.
+        let _blocking_task = blocking_task;
         let _local_lock = local_lock;
         let _file_lock = try_rescan_file_lock(&lock_path)?;
         if root.canonicalize().ok().as_deref() != Some(root.as_path()) {
@@ -122,26 +136,34 @@ pub(crate) async fn rescan(State(state): State<AppState>, headers: HeaderMap) ->
     }
 }
 
-async fn authenticated(state: &AppState, headers: &HeaderMap) -> bool {
-    authenticated_user(state, headers).await.is_some()
+async fn authenticated(state: &AppState, headers: &HeaderMap) -> Result<bool, StateError> {
+    Ok(authenticated_user(state, headers).await?.is_some())
 }
 
 async fn authenticated_user(
     state: &AppState,
     headers: &HeaderMap,
-) -> Option<learnvault_core::AuthSession> {
-    let token = request_token(headers)?;
-    state
-        .session_user(hash_session_token(&token))
-        .await
-        .ok()
-        .flatten()
+) -> Result<Option<learnvault_core::AuthSession>, StateError> {
+    let Some(token) = request_token(headers) else {
+        return Ok(None);
+    };
+    state.session_user(hash_session_token(&token)).await
 }
 
 fn internal_error(message: &'static str) -> Response {
     (
         StatusCode::INTERNAL_SERVER_ERROR,
         Json(ErrorResponse { error: message }),
+    )
+        .into_response()
+}
+
+pub(crate) fn service_unavailable() -> Response {
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(ErrorResponse {
+            error: "server busy",
+        }),
     )
         .into_response()
 }

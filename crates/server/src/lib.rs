@@ -124,7 +124,7 @@ mod tests {
 
     use super::{AppState, Command, Config, VERSION, build_router, parse_command, serve};
 
-    async fn media_app() -> (axum::Router, tempfile::TempDir) {
+    async fn media_app() -> (axum::Router, tempfile::TempDir, AppState) {
         let temp = tempfile::tempdir().unwrap();
         fs::write(temp.path().join("lesson.mp4"), b"0123456789").unwrap();
         let mut config = config_fixture(&temp);
@@ -141,7 +141,7 @@ mod tests {
             )
             .unwrap();
         }
-        (build_router(state), temp)
+        (build_router(state.clone()), temp, state)
     }
 
     async fn media_cookie(app: &axum::Router) -> String {
@@ -280,7 +280,7 @@ mod tests {
 
     #[tokio::test]
     async fn media_requires_authentication_and_supports_get_head_and_ranges() {
-        let (app, _temp) = media_app().await;
+        let (app, _temp, _state) = media_app().await;
         let unauthenticated = app
             .clone()
             .oneshot(
@@ -353,7 +353,7 @@ mod tests {
 
     #[tokio::test]
     async fn media_rejects_unsatisfiable_ranges_and_path_traversal() {
-        let (app, _temp) = media_app().await;
+        let (app, _temp, _state) = media_app().await;
         let cookie = media_cookie(&app).await;
         let range = app
             .clone()
@@ -379,5 +379,29 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(traversal.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn media_rejects_requests_when_blocking_capacity_is_saturated() {
+        let (app, _temp, state) = media_app().await;
+        let cookie = media_cookie(&app).await;
+        let _permits: Vec<_> = std::iter::from_fn(|| state.try_acquire_blocking_task()).collect();
+
+        let response = app
+            .oneshot(
+                Request::get("/api/media?path=lesson.mp4")
+                    .header("cookie", cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&body).unwrap()["error"],
+            "server busy"
+        );
     }
 }
