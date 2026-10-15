@@ -38,9 +38,10 @@ executável Go. A primeira execução exige `ADMIN_USERNAME` e `ADMIN_PASSWORD` 
 ## Mapa do repositório
 
 ```text
-cmd/learnvault/   Executável Go e saída embutida da SPA
-internal/         Pacotes de backend, catálogo, biblioteca, API HTTP e SQLite
-web/src/          Código-fonte SvelteKit
+crates/           Núcleo de domínio em Rust (SQLite, catálogo, scanner e identidade de mídia)
+cmd/learnvault/   Implementação Go de referência (executável e saída embutida da SPA)
+internal/         Implementação Go de referência (backend, catálogo, biblioteca e API HTTP)
+web/src/          Código-fonte da SPA SvelteKit
 deploy/           Adaptadores de contêiner, Compose e Quadlet rootless
 docs/             Arquitetura, API, governança, operações, produto e releases
 .agents/          Políticas, playbooks, checklists e templates para agentes

@@ -37,6 +37,23 @@ self-hosted. Os builds devem ser versionados e reproduzíveis, sem tornar Docker
 oculto. O Flatpak permanece sujeito à validação técnica de permissões, acesso persistente às
 bibliotecas e reprodução de mídia.
 
+## Verificação manual de somente leitura
+
+`scripts/verify-readonly.sh` confirma que o contêiner não consegue gravar na biblioteca
+montada. O script sobe o serviço definido em `deploy/compose/compose.yaml` e tenta criar um
+arquivo dentro de `/library`, esperando que a escrita falhe.
+
+```sh
+COMPOSE="docker compose --env-file deploy/compose/.env.example -f deploy/compose/compose.yaml" \
+  ./scripts/verify-readonly.sh
+```
+
+- Exige uma imagem `learnvault` construída localmente e o Docker disponível.
+- Use sempre uma biblioteca de teste. Com o ambiente de exemplo, `LIBRARY_DIR` aponta para
+  `testdata/library`. A sonda **tenta escrever** em `/library`; nunca aponte o script para uma
+  biblioteca real.
+- Não faz parte do CI; é uma verificação manual.
+
 ## Modelo de configuração
 
 Instalações nativas usam variáveis de ambiente ou arquivo de configuração adjacente para

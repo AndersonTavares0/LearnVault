@@ -3,6 +3,7 @@ node_modules
 .svelte-kit
 target
 cmd/learnvault/web/build
+web/build
 data
 cache
 library
