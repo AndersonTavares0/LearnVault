@@ -89,6 +89,15 @@ pub fn find_user_by_username(db: &Database, username: &str) -> Result<Option<Aut
         .optional()?)
 }
 
+/// Informa se o banco já possui pelo menos um administrador.
+pub fn has_admin(db: &Database) -> Result<bool> {
+    Ok(db.connection().query_row(
+        "SELECT EXISTS (SELECT 1 FROM user WHERE is_admin = 1)",
+        [],
+        |row| row.get(0),
+    )?)
+}
+
 /// Grava o hash de um token de sessão até o instante de expiração informado.
 pub fn create_session(
     db: &mut Database,

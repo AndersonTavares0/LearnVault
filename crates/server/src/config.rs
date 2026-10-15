@@ -15,6 +15,12 @@ pub struct Config {
     pub database_path: PathBuf,
     /// Raiz autorizada da biblioteca física.
     pub library_root: PathBuf,
+    /// Usuário inicial usado somente quando o banco ainda não possui administrador.
+    pub admin_username: Option<String>,
+    /// Senha inicial usada somente quando o banco ainda não possui administrador.
+    pub admin_password: Option<String>,
+    /// Define se cookies de sessão recebem o atributo `Secure`.
+    pub cookie_secure: bool,
 }
 
 /// Comando aceito pelo executável antes de iniciar o listener.
@@ -77,6 +83,9 @@ where
     let mut listen_addr = DEFAULT_LISTEN_ADDR.parse().expect("endereço padrão válido");
     let mut database_path = PathBuf::from(DEFAULT_DATABASE_PATH);
     let mut library_root = PathBuf::from(DEFAULT_LIBRARY_ROOT);
+    let mut admin_username = std::env::var("ADMIN_USERNAME").ok();
+    let mut admin_password = std::env::var("ADMIN_PASSWORD").ok();
+    let mut cookie_secure = true;
     let mut version_requested = false;
 
     while let Some(argument) = args.next() {
@@ -94,6 +103,9 @@ where
             }
             "--database" => database_path = PathBuf::from(next_value(&mut args)?),
             "--library-root" => library_root = PathBuf::from(next_value(&mut args)?),
+            "--admin-username" => admin_username = Some(next_value(&mut args)?),
+            "--admin-password" => admin_password = Some(next_value(&mut args)?),
+            "--insecure-http" => cookie_secure = false,
             _ => return Err(ConfigError::UnknownArgument),
         }
     }
@@ -116,6 +128,9 @@ where
         listen_addr,
         database_path,
         library_root,
+        admin_username,
+        admin_password,
+        cookie_secure,
     }))
 }
 

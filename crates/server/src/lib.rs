@@ -12,7 +12,7 @@ pub use auth::{
     validate_username, verify_password,
 };
 pub use config::{Command, Config, ConfigError, parse_command};
-pub use state::AppState;
+pub use state::{AppState, StateError};
 
 use std::{future::Future, time::Duration};
 
@@ -27,6 +27,9 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/api/healthz", get(health::healthz))
+        .route("/api/login", axum::routing::post(auth::login))
+        .route("/api/me", get(auth::me))
+        .route("/api/logout", axum::routing::post(auth::logout))
         .with_state(state)
 }
 
@@ -39,6 +42,9 @@ pub enum ServeError {
     /// O servidor HTTP terminou com erro.
     #[error("HTTP server failed")]
     Serve(#[source] std::io::Error),
+    /// A autenticação não pôde ser inicializada com segurança.
+    #[error("server startup failed: {0}")]
+    Startup(String),
 }
 
 /// Inicia o servidor e aguarda o futuro de encerramento fornecido pelo processo.
@@ -49,7 +55,10 @@ where
     let listener = TcpListener::bind(config.listen_addr)
         .await
         .map_err(ServeError::Bind)?;
-    let app = build_router(AppState::new(config)).layer(
+    let state = AppState::initialize(config)
+        .await
+        .map_err(|error| ServeError::Startup(error.to_string()))?;
+    let app = build_router(state).layer(
         ServiceBuilder::new()
             .layer(HandleErrorLayer::new(|_: BoxError| async {
                 (StatusCode::REQUEST_TIMEOUT, "request timeout")
@@ -79,7 +88,7 @@ mod tests {
     use super::{AppState, Command, Config, VERSION, build_router, parse_command, serve};
 
     fn config_fixture(temp: &TempDir) -> Config {
-        Config::from_args([
+        let mut config = Config::from_args([
             "learnvault-server",
             "--listen-addr",
             "127.0.0.1:18090",
@@ -88,7 +97,11 @@ mod tests {
             "--library-root",
             temp.path().to_str().unwrap(),
         ])
-        .expect("configuração de teste válida")
+        .expect("configuração de teste válida");
+        config.admin_username = Some("admin".to_owned());
+        config.admin_password = Some("uma senha local muito segura".to_owned());
+        config.cookie_secure = false;
+        config
     }
 
     #[tokio::test]

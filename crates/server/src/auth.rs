@@ -1,10 +1,18 @@
 //! Primitivas de autenticação do servidor.
 
+use crate::AppState;
 use argon2::{
     Algorithm, Argon2, Params, PasswordHash, PasswordHasher, PasswordVerifier, Version,
     password_hash::SaltString,
 };
+use axum::{
+    Json,
+    extract::State,
+    http::{HeaderMap, HeaderValue, StatusCode},
+    response::IntoResponse,
+};
 use rand_core::OsRng;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
@@ -103,6 +111,176 @@ fn hex_encode(bytes: &[u8]) -> String {
         output.push(HEX[(byte & 0x0f) as usize] as char);
     }
     output
+}
+
+const COOKIE_NAME: &str = "learnvault_session";
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct LoginRequest {
+    username: String,
+    password: String,
+}
+
+#[derive(Debug, Serialize)]
+struct UserResponse {
+    user_id: String,
+    username: String,
+    is_admin: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct ErrorResponse {
+    error: &'static str,
+}
+
+pub(crate) async fn login(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<LoginRequest>,
+) -> impl IntoResponse {
+    if !state.allow_login_attempt(&request.username).await {
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(ErrorResponse {
+                error: "try again later",
+            }),
+        )
+            .into_response();
+    }
+    if !same_origin(&headers)
+        || validate_username(&request.username).is_err()
+        || validate_password(&request.password).is_err()
+    {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(ErrorResponse {
+                error: "invalid credentials",
+            }),
+        )
+            .into_response();
+    }
+    let Ok(user) = state.user(request.username).await else {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(ErrorResponse {
+                error: "invalid credentials",
+            }),
+        )
+            .into_response();
+    };
+    let Some(user) = user else {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(ErrorResponse {
+                error: "invalid credentials",
+            }),
+        )
+            .into_response();
+    };
+    let password = request.password;
+    let hash = user.password_hash.clone();
+    let valid =
+        tokio::task::spawn_blocking(move || verify_password(&password, &hash).unwrap_or(false))
+            .await
+            .unwrap_or(false);
+    if !valid {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(ErrorResponse {
+                error: "invalid credentials",
+            }),
+        )
+            .into_response();
+    }
+    let Ok(token) = generate_session_token() else {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    };
+    if state
+        .create_session(hash_session_token(&token), user.user_id.clone())
+        .await
+        .is_err()
+    {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+    let mut response = Json(UserResponse {
+        user_id: user.user_id,
+        username: user.username,
+        is_admin: user.is_admin,
+    })
+    .into_response();
+    response
+        .headers_mut()
+        .insert("set-cookie", session_cookie(&state, &token, false));
+    response
+}
+
+pub(crate) async fn me(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
+    let Some(token) = request_token(&headers) else {
+        return StatusCode::UNAUTHORIZED.into_response();
+    };
+    let Ok(Some(user)) = state.session_user(hash_session_token(&token)).await else {
+        return StatusCode::UNAUTHORIZED.into_response();
+    };
+    Json(UserResponse {
+        user_id: user.user_id,
+        username: user.username,
+        is_admin: user.is_admin,
+    })
+    .into_response()
+}
+
+pub(crate) async fn logout(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
+    if !same_origin(&headers) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    if let Some(token) = request_token(&headers) {
+        let _ = state.delete_session(hash_session_token(&token)).await;
+    }
+    let mut response = StatusCode::NO_CONTENT.into_response();
+    response
+        .headers_mut()
+        .insert("set-cookie", session_cookie(&state, "", true));
+    response
+}
+
+fn request_token(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get("cookie")?
+        .to_str()
+        .ok()?
+        .split(';')
+        .find_map(|part| {
+            let (name, value) = part.trim().split_once('=')?;
+            (name == COOKIE_NAME && !value.is_empty()).then(|| value.to_owned())
+        })
+}
+
+fn session_cookie(state: &AppState, token: &str, clear: bool) -> HeaderValue {
+    let mut value = format!(
+        "{COOKIE_NAME}={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={}",
+        if clear { 0 } else { 43_200 }
+    );
+    if state.config.cookie_secure {
+        value.push_str("; Secure");
+    }
+    HeaderValue::from_str(&value).expect("cookie attributes are valid ASCII")
+}
+
+fn same_origin(headers: &HeaderMap) -> bool {
+    let Some(origin) = headers.get("origin").and_then(|value| value.to_str().ok()) else {
+        return false;
+    };
+    let Some(host) = headers.get("host").and_then(|value| value.to_str().ok()) else {
+        return origin == "http://localhost"
+            || origin == "https://localhost"
+            || origin
+                .strip_prefix("http://localhost:")
+                .is_some_and(|port| port.parse::<u16>().is_ok())
+            || origin
+                .strip_prefix("https://localhost:")
+                .is_some_and(|port| port.parse::<u16>().is_ok());
+    };
+    origin == format!("http://{host}") || origin == format!("https://{host}")
 }
 
 #[cfg(test)]
