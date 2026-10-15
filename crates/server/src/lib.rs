@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 
 mod auth;
+mod catalog;
 mod config;
 mod health;
 mod media;
