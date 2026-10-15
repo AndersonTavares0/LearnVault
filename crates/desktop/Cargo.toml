@@ -10,10 +10,10 @@ publish = false
 # O crate desktop existe para embutir a SPA e falar com o núcleo por IPC. Ele nunca
 # abre sockets de rede nem embute um servidor HTTP.
 #
-# `learnvault-core` entrou com a integração de domínio: o desktop deriva o catálogo do
-# mesmo núcleo usado pelo servidor, sem duplicar regras. Nesta fatia o IPC expõe a
-# configuração, a seleção da raiz da biblioteca e o catálogo; rescan, mídia e autenticação
-# pertencem a fatias posteriores.
+# `learnvault-core` entrou com a integração de domínio: o desktop deriva o catálogo e o
+# resumo do rescan do mesmo núcleo usado pelo servidor, sem duplicar regras. O IPC expõe a
+# configuração, a seleção da raiz da biblioteca, o catálogo e o rescan explícito; mídia e
+# autenticação pertencem a fatias posteriores.
 #
 # `tauri-plugin-dialog` fornece o seletor nativo de diretórios usado **internamente no
 # Rust**. Ele não é concedido ao webview em `capabilities/`, então não expõe diálogo nem
