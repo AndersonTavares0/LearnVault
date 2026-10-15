@@ -31,6 +31,31 @@ async fn body(response: axum::response::Response) -> serde_json::Value {
     serde_json::from_slice(&bytes).unwrap()
 }
 
+async fn login(app: &axum::Router, username: &str, password: &str) -> (StatusCode, String) {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/api/login")
+                .header("content-type", "application/json")
+                .header("origin", "http://localhost")
+                .body(Body::from(
+                    serde_json::json!({"username": username, "password": password}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let cookie = response
+        .headers()
+        .get("set-cookie")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(';').next())
+        .unwrap_or_default()
+        .to_owned();
+    (status, cookie)
+}
+
 #[tokio::test]
 async fn login_me_and_logout_use_an_expiring_secure_cookie() {
     let temp = tempfile::tempdir().unwrap();
@@ -298,4 +323,95 @@ async fn startup_creates_missing_database_parent_and_rejects_oversized_login() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+}
+
+#[tokio::test]
+async fn credentials_change_is_transactional_and_invalidates_old_sessions() {
+    let temp = tempfile::tempdir().unwrap();
+    let app = build_router(AppState::initialize(config(&temp, false)).await.unwrap());
+    let (status, old_cookie) = login(&app, "admin", "admin").await;
+    assert_eq!(status, StatusCode::OK);
+
+    let invalid = app
+        .clone()
+        .oneshot(
+            Request::post("/api/account/credentials")
+                .header("content-type", "application/json")
+                .header("origin", "http://localhost")
+                .header("cookie", &old_cookie)
+                .body(Body::from(serde_json::json!({
+                    "current_password": "senha atual incorreta",
+                    "username": "owner",
+                    "password": "uma senha nova muito segura"
+                }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(body(invalid).await["error"], "invalid credentials");
+
+    let invalid_new = app
+        .clone()
+        .oneshot(
+            Request::post("/api/account/credentials")
+                .header("content-type", "application/json")
+                .header("origin", "http://localhost")
+                .header("cookie", &old_cookie)
+                .body(Body::from(serde_json::json!({
+                    "current_password": "admin",
+                    "username": "x",
+                    "password": "curta"
+                }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(invalid_new.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+    let changed = app
+        .clone()
+        .oneshot(
+            Request::post("/api/account/credentials")
+                .header("content-type", "application/json")
+                .header("origin", "http://localhost")
+                .header("cookie", &old_cookie)
+                .body(Body::from(serde_json::json!({
+                    "current_password": "admin",
+                    "username": "owner",
+                    "password": "uma senha nova muito segura"
+                }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(changed.status(), StatusCode::OK);
+    let new_cookie = changed.headers()["set-cookie"].to_str().unwrap().split(';').next().unwrap().to_owned();
+
+    let old_session = app.clone().oneshot(
+        Request::get("/api/me").header("cookie", &old_cookie).body(Body::empty()).unwrap()
+    ).await.unwrap();
+    assert_eq!(old_session.status(), StatusCode::UNAUTHORIZED);
+    let new_session = app.oneshot(
+        Request::get("/api/me").header("cookie", new_cookie).body(Body::empty()).unwrap()
+    ).await.unwrap();
+    assert_eq!(new_session.status(), StatusCode::OK);
+    assert_eq!(body(new_session).await["username"], "owner");
+}
+
+#[tokio::test]
+async fn temporary_credentials_block_protected_endpoints_until_changed() {
+    let temp = tempfile::tempdir().unwrap();
+    let app = build_router(AppState::initialize(config(&temp, false)).await.unwrap());
+    let (_, cookie) = login(&app, "admin", "admin").await;
+    for mut request in [
+        Request::get("/api/catalog").body(Body::empty()).unwrap(),
+        Request::get("/api/media").body(Body::empty()).unwrap(),
+        Request::post("/api/admin/catalog/rescan").header("origin", "http://localhost").body(Body::empty()).unwrap(),
+    ] {
+        request.headers_mut().insert("cookie", cookie.parse().unwrap());
+        let response = app.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        assert_eq!(body(response).await["error"], "credentials_change_required");
+    }
 }

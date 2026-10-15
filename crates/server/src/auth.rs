@@ -134,6 +134,8 @@ struct UserResponse {
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct CredentialsRequest {
+    /// Senha atualmente usada, exigida para impedir troca por uma sessão roubada.
+    current_password: String,
     username: String,
     password: String,
 }
@@ -154,7 +156,8 @@ pub(crate) async fn credentials(
         Err(StateError::Capacity) => return private_no_store(service_unavailable()),
         Ok(None) | Err(_) => return private_no_store(StatusCode::UNAUTHORIZED.into_response()),
     };
-    if validate_username(&request.username).is_err()
+    if request.current_password.is_empty()
+        || validate_username(&request.username).is_err()
         || validate_password(&request.password).is_err()
     {
         return private_no_store(
@@ -162,6 +165,28 @@ pub(crate) async fn credentials(
                 StatusCode::UNPROCESSABLE_ENTITY,
                 Json(ErrorResponse {
                     error: "invalid_credentials_format",
+                }),
+            )
+                .into_response(),
+        );
+    }
+    let current_password = request.current_password.clone();
+    let current_hash = user.password_hash.clone();
+    let Some(permit) = state.try_acquire_blocking_task() else {
+        return private_no_store(service_unavailable());
+    };
+    let current_valid = tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        verify_password(&current_password, &current_hash).unwrap_or(false)
+    })
+    .await
+    .unwrap_or(false);
+    if !current_valid {
+        return private_no_store(
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(ErrorResponse {
+                    error: "invalid credentials",
                 }),
             )
                 .into_response(),

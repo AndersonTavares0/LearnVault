@@ -139,6 +139,39 @@ fn database_with_a_newer_schema_is_rejected_without_panicking() -> TestResult {
 }
 
 #[test]
+fn legacy_go_database_is_rejected_before_bootstrap_or_migration() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("legacy.sqlite");
+    {
+        let conn = rusqlite::Connection::open(&path)?;
+        conn.execute_batch(
+            "CREATE TABLE users (id INTEGER PRIMARY KEY);
+             CREATE TABLE sessions (token_hash TEXT PRIMARY KEY);
+             CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY);",
+        )?;
+    }
+
+    assert!(matches!(Database::open(&path), Err(Error::LegacyGoDatabase)));
+    let conn = rusqlite::Connection::open(&path)?;
+    let rust_tables: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('user', 'session')",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(rust_tables, 0, "a recusa não cria o schema Rust");
+    Ok(())
+}
+
+#[test]
+fn new_empty_database_is_not_mistaken_for_legacy_go() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let db = Database::open(dir.path().join("new.sqlite"))?;
+    assert_eq!(db.schema_version()?, 4);
+    assert!(table_exists(&db, "user"));
+    Ok(())
+}
+
+#[test]
 fn rejecting_a_newer_schema_leaves_the_database_untouched() -> TestResult {
     let dir = tempfile::tempdir()?;
     let path = dir.path().join("learnvault.sqlite");

@@ -34,6 +34,23 @@ de deploy confiável e somente leitura: publicar um shell novo exige reiniciar o
 | `POST` | `/api/login` | Não | Aceita `{ "username": "...", "password": "..." }` |
 | `POST` | `/api/logout` | Sessão | Invalida a sessão atual |
 | `GET` | `/api/me` | Sessão | Retorna a conta atual |
+| `POST` | `/api/account/credentials` | Sessão | Aceita `{ "current_password": "...", "username": "...", "password": "..." }`, troca as credenciais, invalida as sessões anteriores e emite uma nova |
+
+O primeiro administrador temporário pode ser `admin/admin` somente no bootstrap; a resposta marca
+`must_change_credentials` e todos os endpoints protegidos recusam acesso com
+`403 credentials_change_required` até a troca. A senha atual é verificada antes da troca e os
+novos valores obedecem aos limites públicos. A operação é transacional: uma falha não substitui
+credenciais nem sessões.
+
+## Compatibilidade e migração do banco
+
+O servidor Rust detecta a assinatura do banco legado Go (`users`, `sessions` e
+`schema_migrations`) antes de aplicar qualquer bootstrap ou migração e encerra com a mensagem
+estável `legacy_go_database_requires_migration: back up the database and migrate it before using the Rust server`.
+Ele não cria `admin/admin`, não converte automaticamente e não sobrescreve dados. Faça uma cópia
+de segurança do arquivo antes de qualquer migração; a conversão do banco Go está fora desta fatia
+e será publicada separadamente. Um banco novo vazio e um banco Rust existente continuam sendo
+abertos normalmente.
 
 ## Catálogo e mídia
 
@@ -47,5 +64,10 @@ O scanner lê somente entradas e metadados de diretórios. Ignora diretórios te
 download, classifica mídias, legendas e materiais reconhecidos, e trata `.ts` como vídeo
 somente quando é maior que 1 MiB para não confundir TypeScript com MPEG-TS. A biblioteca
 física é externa, montada como somente leitura e nunca é modificada.
+
+O catálogo Go adota uma política fail-closed para remoções: cada rescan substitui
+transacionalmente as entradas persistidas, e um arquivo que deixou de aparecer no scan deixa
+de ser autorizado por `/api/media`, mesmo que ainda exista uma resposta ou referência antiga.
+Não há tombstone convertido silenciosamente nem reautorização de caminho removido.
 
 Para limites de arquitetura e deploy, consulte a [visão de arquitetura](../architecture/overview.md).

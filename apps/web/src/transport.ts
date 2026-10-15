@@ -13,7 +13,7 @@ export interface Transport {
 	logout(): Promise<void>;
 	catalog(): Promise<Catalog>;
 	rescan(): Promise<void>;
-	updateCredentials(username: string, password: string): Promise<User>;
+	updateCredentials(username: string, password: string, currentPassword?: string): Promise<User>;
 	mediaUrl(path: string): string | null;
 }
 
@@ -143,7 +143,7 @@ export class HttpTransport implements Transport {
 	async logout() { await fetch('/api/logout', { method: 'POST' }); }
 	async catalog() { const response = await fetch('/api/catalog'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar o catálogo.'); return normalizeCatalog(await response.json()); }
 	async rescan() { const response = await fetch('/api/admin/catalog/rescan', { method: 'POST' }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 409 ? 'Já existe um rescan em andamento.' : 'Não foi possível indexar a biblioteca.'); }
-	async updateCredentials(username: string, password: string) { const response = await fetch('/api/account/credentials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) }); if (!response.ok) throw new Error(response.status === 422 ? 'Usuário ou senha inválidos.' : 'Não foi possível atualizar as credenciais.'); return normalizeUser(await response.json()); }
+	async updateCredentials(username: string, password: string, currentPassword = password) { const response = await fetch('/api/account/credentials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ current_password: currentPassword, username, password }) }); if (!response.ok) throw new Error(response.status === 422 ? 'Usuário ou senha inválidos.' : response.status === 401 ? 'Senha atual incorreta.' : 'Não foi possível atualizar as credenciais.'); return normalizeUser(await response.json()); }
 	mediaUrl(path: string) { return `/api/media?path=${encodeURIComponent(path)}`; }
 }
 

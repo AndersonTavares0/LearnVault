@@ -65,6 +65,13 @@ impl Database {
         conn.busy_timeout(Duration::from_secs(5))?;
         conn.set_db_config(DbConfig::SQLITE_DBCONFIG_ENABLE_FKEY, true)?;
 
+        // A assinatura legada é lida antes de qualquer alteração no arquivo. Isso precisa
+        // ocorrer antes da versão para que um banco Go nunca seja tratado como uma migração
+        // Rust, ainda que o arquivo tenha uma versão SQLite inesperada.
+        if is_legacy_go_database(&conn)? {
+            return Err(Error::LegacyGoDatabase);
+        }
+
         // A versão é lida antes de qualquer alteração no arquivo. Recusar um schema mais
         // novo precisa ser uma operação sem efeito colateral: nada de trocar o journal ou
         // criar tabelas em um banco que este binário não conhece.
@@ -87,6 +94,21 @@ impl Database {
 
         Ok(Self { conn })
     }
+}
+
+/// Reconhece a assinatura do banco Go sem criar schema, alterar pragmas persistentes ou
+/// consultar tabelas que possam não existir. A checagem acontece antes do bootstrap.
+fn is_legacy_go_database(conn: &Connection) -> Result<bool> {
+    let has_signature: i64 = conn.query_row(
+        "SELECT (
+            EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'users')
+            AND EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'sessions')
+            AND EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations')
+        )",
+        [],
+        |row| row.get(0),
+    )?;
+    Ok(has_signature != 0)
 }
 
 /// Traduz a falha de leitura da versão do schema, que não é uma migração.
