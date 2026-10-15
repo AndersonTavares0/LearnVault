@@ -12,7 +12,7 @@ A execução avança por fases, com um pull request por fase:
 - [x] Fase 1 — `crates/core` com domínio, SQLite, catálogo, identidade e política de rescan
 - [x] Fase 1 (complemento) — remoção explícita de mídia no núcleo
 - [x] Fase 2 — `crates/server` com Axum, autenticação, sessões e mídia com Range
-- [ ] Fase 3 — SPA Svelte 5 + TypeScript + Vite com dois builds
+- [x] Fase 3 — SPA Svelte 5 + TypeScript + Vite com dois builds
 - [ ] Fase 4 — `crates/desktop` com Tauri 2, offline e sem portas de rede
 - [ ] Fase 5 — distribuição por plataforma e remoção do serviço Go
 

@@ -18,6 +18,10 @@ O formato segue o Keep a Changelog e as versões usam Semantic Versioning.
 
 ## [Unreleased]
 
+### Correções
+
+- Catálogo recursivo preserva aulas e arquivos em qualquer profundidade, com rescan seguro contra resultados parciais.
+
 ### Planejado
 
 - Player focado em estudo e persistência de progresso.

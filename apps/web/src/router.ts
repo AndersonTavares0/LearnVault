@@ -29,6 +29,19 @@ export function destinationAfterLogin(hash: string): string {
 
 export function findLesson(catalog: Catalog | null, lessonPath: string | null): Lesson | null {
 	if (!catalog || !lessonPath) return null;
+	function visit(nodes: Catalog['nodes']): Lesson | null {
+		for (const node of nodes) {
+			if (node.role === 'lesson' && node.path === lessonPath) {
+				const files = [...node.files, ...node.looseFiles];
+				return { title: node.title, path: node.path, media: files.filter((file) => file.kind === 'media'), subtitles: files.filter((file) => file.kind === 'subtitle'), materials: files.filter((file) => file.kind === 'material') };
+			}
+			const found = visit(node.children);
+			if (found) return found;
+		}
+		return null;
+	}
+	const recursive = visit(catalog.nodes);
+	if (recursive) return recursive;
 	for (const category of catalog.categories) for (const course of category.courses) for (const module of course.modules) {
 		const lesson = module.lessons.find((candidate) => candidate.path === lessonPath);
 		if (lesson) return lesson;

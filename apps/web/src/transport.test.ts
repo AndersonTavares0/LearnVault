@@ -38,6 +38,11 @@ describe('transport contract', () => {
 		expect(catalog.categories).toEqual([]);
 		expect(catalog.looseFiles[0].path).toBe('nota.pdf');
 	});
+	it('keeps shallow recursive lessons and files addressable by path', () => {
+		const catalog = normalizeCatalog({ complete: true, loose_files: [], nodes: [{ title: 'Categoria', path: 'cat', role: 'category', files: [{ name: 'cat.pdf', path: 'cat/cat.pdf', size: 1, kind: 'material' }], loose_files: [], children: [{ title: 'Aula', path: 'cat/aula', role: 'lesson', files: [{ name: 'aula.mp4', path: 'cat/aula.mp4', size: 4, kind: 'media' }], loose_files: [], children: [] }] }] });
+		expect(catalog.nodes[0].children[0].path).toBe('cat/aula');
+		expect(catalog.nodes[0].children[0].files[0].path).toBe('cat/aula.mp4');
+	});
 	it('keeps the Go tree and material files compatible', () => {
 		const catalog = normalizeCatalog({ categories: [{ title: 'Categoria', courses: [{ title: 'Curso', modules: [{ title: 'Módulo', lessons: [{ title: 'Aula', path: 'aula', media: [], subtitles: [{ name: 'legenda.vtt', path: 'legenda.vtt', size: 1 }], materials: [{ name: 'slide.pdf', path: 'slide.pdf', size: 2 }] }] }] }] }] });
 		expect(catalog.categories[0].courses[0].modules[0].lessons[0].materials[0].path).toBe('slide.pdf');

@@ -18,7 +18,7 @@ export interface Transport {
 
 type RustFile = { media_id?: string; name?: string; path?: string; size?: number; kind?: string; availability?: string; unverified?: boolean };
 type RustNode = { title?: string; path?: string; role?: string; files?: RustFile[]; loose_files?: RustFile[]; children?: RustNode[] };
-type RustCatalog = { complete?: boolean; categories?: RustNode[]; loose_files?: RustFile[]; looseFiles?: RustFile[] };
+type RustCatalog = { complete?: boolean; categories?: RustNode[]; nodes?: RustNode[]; loose_files?: RustFile[]; looseFiles?: RustFile[] };
 type GoFile = { name?: string; path?: string; size?: number; media_id?: string; kind?: string; availability?: string; unverified?: boolean };
 
 function invalidPayload(message: string): Error { return new Error(`Resposta inválida do servidor: ${message}`); }
@@ -76,16 +76,17 @@ function projectRust(nodes: CatalogNode[]): Catalog['categories'] {
 		courses: category.children.filter((node) => node.role === 'course').map((course) => ({
 			title: course.title,
 			looseFiles: [...course.files, ...course.looseFiles],
-			modules: course.children.filter((node) => node.role === 'module').map(projectedModule).concat(course.children.filter((node) => node.role === 'lesson').map(projectedModule))
+			modules: course.children.filter((node) => node.role === 'module' || node.role === 'lesson').map(projectedModule)
 		})).concat(category.children.filter((node) => node.role === 'lesson').map((node) => ({ title: category.title, looseFiles: [], modules: [projectedModule(node)] })))
 	}));
 }
 
 function normalizeRustCatalog(value: RustCatalog): Catalog {
-	if (!Array.isArray(value.categories)) throw invalidPayload('catálogo Rust sem categories.');
+	const rawNodes = value.nodes ?? value.categories;
+	if (!Array.isArray(rawNodes)) throw invalidPayload('catálogo Rust sem nodes.');
 	const looseFiles = value.loose_files ?? value.looseFiles;
 	if (!Array.isArray(looseFiles)) throw invalidPayload('catálogo Rust sem loose_files.');
-	const nodes = value.categories.map(normalizeRustNode);
+	const nodes = rawNodes.map(normalizeRustNode);
 	return { complete: value.complete === true, looseFiles: looseFiles.map(normalizeFile), nodes, categories: projectRust(nodes) };
 }
 
@@ -97,7 +98,8 @@ export function normalizeUser(value: unknown): User {
 
 export function normalizeCatalog(value: unknown): Catalog {
 	if (!value || typeof value !== 'object') throw invalidPayload('catálogo ausente.');
-	const payload = value as { categories?: unknown; loose_files?: unknown; looseFiles?: unknown };
+	const payload = value as { categories?: unknown; nodes?: unknown; loose_files?: unknown; looseFiles?: unknown };
+	if (Array.isArray(payload.nodes)) return normalizeRustCatalog(value as RustCatalog);
 	if (Array.isArray(payload.categories) && payload.categories.every((item) => item && typeof item === 'object' && ('courses' in item || 'children' in item))) {
 		if (payload.categories.some((item) => 'courses' in (item as object))) {
 			return { complete: true, looseFiles: [], nodes: [], categories: payload.categories.map((category) => {

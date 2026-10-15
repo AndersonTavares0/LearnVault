@@ -9,6 +9,7 @@ import (
 	"embed"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -142,9 +143,23 @@ func (d *DB) ReplaceCatalog(ctx context.Context, value catalog.Catalog) error {
 	if _, err = tx.ExecContext(ctx, `DELETE FROM catalog_categories`); err != nil {
 		return err
 	}
-	if _, err = tx.ExecContext(ctx, `DELETE FROM catalog_root_files`); err != nil { return err }
+	encoded, err := json.Marshal(value.Nodes)
+	if err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM catalog_nodes_json`); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO catalog_nodes_json(id,value) VALUES(1,?)`, string(encoded)); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM catalog_root_files`); err != nil {
+		return err
+	}
 	for _, file := range value.LooseFiles {
-		if _, err = tx.ExecContext(ctx, `INSERT INTO catalog_root_files(path,name,size) VALUES(?,?,?)`, file.Path, file.Name, file.Size); err != nil { return err }
+		if _, err = tx.ExecContext(ctx, `INSERT INTO catalog_root_files(path,name,size) VALUES(?,?,?)`, file.Path, file.Name, file.Size); err != nil {
+			return err
+		}
 	}
 	for _, category := range value.Categories {
 		res, err := tx.ExecContext(ctx, `INSERT INTO catalog_categories(path,title) VALUES(?,?)`, category.Path, category.Title)
@@ -211,10 +226,31 @@ func insertCatalogFile(ctx context.Context, tx *sql.Tx, lessonID int64, file cat
 
 func (d *DB) Catalog(ctx context.Context) (catalog.Catalog, error) {
 	var result catalog.Catalog
+	var nodesJSON string
+	if err := d.sql.QueryRowContext(ctx, `SELECT value FROM catalog_nodes_json WHERE id=1`).Scan(&nodesJSON); err == nil {
+		if err := json.Unmarshal([]byte(nodesJSON), &result.Nodes); err != nil {
+			return result, err
+		}
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return result, err
+	}
 	rootRows, err := d.sql.QueryContext(ctx, `SELECT name,path,size FROM catalog_root_files ORDER BY path`)
-	if err != nil { return result, err }
-	for rootRows.Next() { var file catalog.File; if err := rootRows.Scan(&file.Name, &file.Path, &file.Size); err != nil { rootRows.Close(); return result, err }; result.LooseFiles = append(result.LooseFiles, file) }
-	if err := rootRows.Err(); err != nil { rootRows.Close(); return result, err }; rootRows.Close()
+	if err != nil {
+		return result, err
+	}
+	for rootRows.Next() {
+		var file catalog.File
+		if err := rootRows.Scan(&file.Name, &file.Path, &file.Size); err != nil {
+			rootRows.Close()
+			return result, err
+		}
+		result.LooseFiles = append(result.LooseFiles, file)
+	}
+	if err := rootRows.Err(); err != nil {
+		rootRows.Close()
+		return result, err
+	}
+	rootRows.Close()
 	rows, err := d.sql.QueryContext(ctx, `SELECT c.id,c.path,c.title, co.id,co.path,co.title, m.id,m.path,m.title, l.id,l.path,l.title, f.name,f.path,f.kind,f.size FROM catalog_categories c LEFT JOIN catalog_courses co ON co.category_id=c.id LEFT JOIN catalog_modules m ON m.course_id=co.id LEFT JOIN catalog_lessons l ON l.module_id=m.id LEFT JOIN catalog_files f ON f.lesson_id=l.id ORDER BY c.path,co.path,m.path,l.path,f.path`)
 	if err != nil {
 		return result, err
