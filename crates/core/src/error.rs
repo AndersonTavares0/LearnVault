@@ -3,6 +3,9 @@
 //! Cada variante nomeia uma falha concreta do domínio. Nenhum caminho de erro usa
 //! `panic` ou `unwrap`: falhas são propagadas como valores e traduzidas pelos
 //! adaptadores (servidor HTTP, comandos Tauri) para o formato de cada plataforma.
+//!
+//! As mensagens de `Display` são para log e diagnóstico local. Os adaptadores escolhem o
+//! texto apresentado ao cliente e não devem ecoar caminhos do sistema de arquivos.
 
 use std::path::PathBuf;
 
@@ -51,6 +54,37 @@ pub enum Error {
     /// Falha de SQL que não se enquadra nas variantes anteriores.
     #[error("erro de banco de dados")]
     Database(#[from] rusqlite::Error),
+
+    /// A raiz da biblioteca não existe.
+    #[error("a raiz da biblioteca não existe em {path}")]
+    LibraryRootMissing {
+        /// Caminho informado como raiz da biblioteca.
+        path: PathBuf,
+    },
+
+    /// A raiz da biblioteca existe, mas não é um diretório.
+    #[error("a raiz da biblioteca em {path} não é um diretório")]
+    LibraryRootNotDirectory {
+        /// Caminho informado como raiz da biblioteca.
+        path: PathBuf,
+    },
+
+    /// A raiz da biblioteca existe, mas não pôde ser lida.
+    #[error("não foi possível ler a raiz da biblioteca em {path}")]
+    LibraryRootUnreadable {
+        /// Caminho informado como raiz da biblioteca.
+        path: PathBuf,
+        /// Causa original reportada pelo sistema de arquivos.
+        #[source]
+        source: std::io::Error,
+    },
+
+    /// Um caminho relativo da biblioteca é inválido ou tentaria escapar da raiz.
+    #[error("caminho relativo inválido na biblioteca: {path}")]
+    InvalidRelativePath {
+        /// Caminho recusado.
+        path: String,
+    },
 }
 
 /// Resultado das operações do domínio.
