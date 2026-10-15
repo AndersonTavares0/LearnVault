@@ -95,48 +95,21 @@ The SvelteKit source lives in `web/src`. Its generated output is written to
 The native executable is the foundation for future `.exe`, MSI, `.deb`, `.rpm`, and
 Flatpak artifacts. See [distribution](docs/operations/distribution.md) for the release matrix.
 
-## Optional container adapters
+## Deployment and API
 
-Copy `deploy/compose/.env.example` to `deploy/compose/.env`, set a unique initial admin
-password of at least 12 characters, and configure `DATA_DIR`, `CACHE_DIR` and
-`LIBRARY_DIR`. The default library is a tiny fake fixture for local foundation testing,
-not real courses.
+Docker Compose and rootless Podman/Quadlet are optional adapters. Their complete
+configuration, mounts, bootstrap rules, and read-only verification are documented in
+[`deploy/compose/`](deploy/compose/) and [`docs/operations/distribution.md`](docs/operations/distribution.md).
 
-```sh
-docker compose --env-file deploy/compose/.env -f deploy/compose/compose.yaml up --build -d
-```
-
-`PORT` and `LISTEN_ADDR` are configurable. Port 8090 is only the suggested local deployment default. First startup requires `ADMIN_USERNAME` and `ADMIN_PASSWORD`; the first admin is created once and subsequent starts do not replace it. Use HTTPS when `COOKIE_SECURE=true` (the homelab reverse proxy will provide TLS).
-
-The container runs as UID/GID 10001, with a read-only root filesystem, dropped capabilities, and `no-new-privileges`. Only `/data` and `/cache` are writable. On Linux, ensure the host data/cache directories are writable by UID 10001 (or configure a matching user in the image); `/library` is mounted read-only. To verify the mount protection with Docker Compose, run `scripts/verify-readonly.sh` from a POSIX shell after configuring `.env`; a failed write is the expected passing result. Never point the foundation test fixture at `/mnt/cursos`.
-
-### Rootless Podman / Quadlet
-
-Build and tag the image as `localhost/learnvault:latest`, install `deploy/quadlet/learnvault.container` under `/home/media/.config/containers/systemd/`, create data/cache directories owned by `media`, and create `%h/stacks/learnvault/learnvault.env` with the initial admin credentials (restrict it to owner read/write). The unit uses port 8090 as its example deployment value; edit its `PORT`, `PublishPort` and health-check URL together as needed. Its library volume is explicitly `/mnt/cursos:/library:ro`.
-
-The host's initial admin environment values are only used for first-time bootstrap and should be removed from the environment file after the database has been initialized. Back up the SQLite database consistently along with the required configuration and manually uploaded assets; destination, retention, and automation belong to the homelab.
-
-## Phase 1 API
-
-- `GET /api/healthz`: process/database health.
-- `POST /api/login`: JSON `{ "username": "...", "password": "..." }`, sets an HttpOnly, SameSite=Strict session cookie.
-- `POST /api/logout`: invalidates the current session.
-- `GET /api/me`: current account; returns 401 when unauthenticated.
-
-## Catalog API
-
-- `GET /api/catalog`: returns the persisted category/course/module/lesson tree for an authenticated user.
-- `POST /api/admin/catalog/rescan`: scans `LIBRARY_DIR` and replaces the persisted catalog. Admin authentication is required; scanning is explicit and is not performed automatically at startup.
-
-The scanner reads directory entries and file metadata only. It ignores downloader temporary directories, treats common video extensions as media, groups subtitle files and other lesson files as materials, and only treats `.ts` files larger than 1 MiB as video to avoid confusing TypeScript source with MPEG-TS. The physical library remains outside the database and is never modified.
-
-The initial admin is provisioned from `ADMIN_USERNAME` and `ADMIN_PASSWORD`; there is no public self-registration endpoint. `LIBRARY_DIR` must point to an existing directory. The application library abstraction only offers reads; container mount flags provide the OS-level read-only guarantee.
+The endpoint summary is in [`docs/reference/api.md`](docs/reference/api.md). The API
+requires local admin bootstrap, keeps the external library read-only, and performs
+catalog indexing only through an explicit admin action.
 
 ## Roadmap
 
-The maintained product roadmap is in [docs/product/roadmap.md](docs/product/roadmap.md). GitHub Issues track the
-individual tasks, Milestones group releases, and the private GitHub Project provides the
-operational board. The Markdown roadmap remains the durable, reviewable summary.
+The maintained product roadmap is in [docs/product/roadmap.md](docs/product/roadmap.md). GitHub Issues
+track individual tasks and Milestones may group releases. The Markdown roadmap remains the durable,
+reviewable summary; any project board is an optional planning surface, not the source of truth.
 The [GitHub Wiki](https://github.com/AndersonTavares0/LearnVault/wiki) is generated from
 the versioned documentation after changes merge into `main`; do not edit managed pages in the
 Wiki. The repository remains the canonical source for code and reviewed policy.

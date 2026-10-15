@@ -45,7 +45,8 @@ Generated output (`cmd/learnvault/web/build`, `.svelte-kit`, `node_modules`, loc
 data/cache) must stay ignored and must not be committed.
 
 Documentation is grouped by responsibility: `architecture/`, `governance/`,
-`operations/`, `product/`, `releases/`, and `wiki/`. The repository is canonical;
+`operations/`, `product/`, `releases/`, `reference/`, and `wiki/`. The index at
+`docs/README.md` explains where new material belongs. The repository is canonical;
 only the pages declared in `wiki/mapping.md` are mirrored to GitHub Wiki.
 
 ## Repository boundaries
