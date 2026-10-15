@@ -520,8 +520,13 @@ async fn idle_spa_streams_release_asset_capacity_without_reading_the_body() {
         .unwrap();
     assert_eq!(saturated.status(), StatusCode::SERVICE_UNAVAILABLE);
 
-    tokio::task::yield_now().await;
-    tokio::time::advance(Duration::from_secs(30)).await;
+    // Avança em passos de 1s para que os produtores sejam escalonados e enfileirem
+    // o primeiro chunk antes do deadline de 30s; um único yield + advance(30s)
+    // é racy sob carga (os produtores podem expirar sem nunca escrever).
+    for _ in 0..30 {
+        tokio::task::yield_now().await;
+        tokio::time::advance(Duration::from_secs(1)).await;
+    }
     tokio::task::yield_now().await;
 
     let recovered = app

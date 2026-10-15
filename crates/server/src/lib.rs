@@ -215,6 +215,35 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn rescan_returns_conflict_while_the_local_lock_is_held() {
+        let temp = tempfile::tempdir().unwrap();
+        let state = AppState::initialize(config_fixture(&temp)).await.unwrap();
+        let app = build_router(state.clone());
+        let cookie = media_cookie(&app).await;
+        let _local_lock = state.rescan_lock.lock_owned().await;
+
+        let response = app
+            .oneshot(
+                Request::post("/api/admin/catalog/rescan")
+                    .header("origin", "http://localhost")
+                    .header("cookie", cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        assert_eq!(
+            response
+                .headers()
+                .get("cache-control")
+                .and_then(|value| value.to_str().ok()),
+            Some("private, no-store")
+        );
+    }
+
+    #[tokio::test]
     async fn healthz_is_public_and_returns_status_and_version() {
         let temp = tempfile::tempdir().unwrap();
         let app = build_router(AppState::new(config_fixture(&temp)));
@@ -514,8 +543,13 @@ mod tests {
             .unwrap();
         assert_eq!(saturated.status(), StatusCode::SERVICE_UNAVAILABLE);
 
-        tokio::task::yield_now().await;
-        tokio::time::advance(Duration::from_secs(30)).await;
+        // Avança em passos de 1s para que os produtores sejam escalonados e enfileirem
+        // o primeiro chunk antes do deadline de 30s; um único yield + advance(30s)
+        // é racy sob carga (os produtores podem expirar sem nunca escrever).
+        for _ in 0..30 {
+            tokio::task::yield_now().await;
+            tokio::time::advance(Duration::from_secs(1)).await;
+        }
         tokio::task::yield_now().await;
 
         let recovered = app

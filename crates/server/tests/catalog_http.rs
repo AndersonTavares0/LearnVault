@@ -303,6 +303,34 @@ async fn admin_rescan_populates_the_authenticated_catalog() {
 }
 
 #[tokio::test]
+async fn catalog_reports_database_errors_without_caching_or_leaking_paths() {
+    let temp = tempfile::tempdir().unwrap();
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let cookie = login(&app).await;
+    Database::open(temp.path().join("catalog.sqlite"))
+        .unwrap()
+        .connection()
+        .execute_batch("DROP TABLE media;")
+        .unwrap();
+
+    let response = app
+        .oneshot(
+            Request::get("/api/catalog")
+                .header("cookie", cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    assert_private_no_store(&response);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["error"], "catalog unavailable");
+}
+
+#[tokio::test]
 async fn rescan_sanitizes_a_missing_library_root_error() {
     let temp = tempfile::tempdir().unwrap();
     let library = temp.path().join("library");
@@ -377,7 +405,6 @@ async fn rescan_returns_conflict_while_another_process_holds_its_lock() {
     assert!(child.wait().unwrap().success());
     assert_eq!(response.status(), StatusCode::CONFLICT);
     assert_private_no_store(&response);
-    assert_eq!(response.headers()["cache-control"], "private, no-store");
 }
 
 #[test]
