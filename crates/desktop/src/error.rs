@@ -19,6 +19,12 @@ pub enum IpcErrorCode {
     LibraryRootInvalid,
     /// A configuração do aplicativo não pôde ser gravada.
     LibraryConfigUnavailable,
+    /// Nenhuma raiz de biblioteca está configurada para indexar.
+    LibraryNotConfigured,
+    /// Já existe um rescan em andamento.
+    RescanInProgress,
+    /// A varredura da biblioteca não pôde ser concluída.
+    RescanUnavailable,
 }
 
 /// Erro IPC serializável devolvido ao webview.
@@ -60,6 +66,30 @@ impl IpcError {
         Self {
             code: IpcErrorCode::LibraryConfigUnavailable,
             message: "não foi possível salvar a configuração do aplicativo",
+        }
+    }
+
+    /// Nenhuma raiz de biblioteca está configurada para indexar.
+    pub fn library_not_configured() -> Self {
+        Self {
+            code: IpcErrorCode::LibraryNotConfigured,
+            message: "nenhuma biblioteca está configurada",
+        }
+    }
+
+    /// Já existe um rescan em andamento.
+    pub fn rescan_in_progress() -> Self {
+        Self {
+            code: IpcErrorCode::RescanInProgress,
+            message: "já existe uma indexação em andamento",
+        }
+    }
+
+    /// A varredura da biblioteca não pôde ser concluída.
+    pub fn rescan_unavailable() -> Self {
+        Self {
+            code: IpcErrorCode::RescanUnavailable,
+            message: "não foi possível indexar a biblioteca",
         }
     }
 }

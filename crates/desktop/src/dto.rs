@@ -4,7 +4,9 @@
 //! e o shape snake_case (`loose_files`, `media_id`, ...) é idêntico ao do adaptador HTTP,
 //! de modo que o `normalizeCatalog` da SPA aceita o payload do desktop sem alteração.
 
-use learnvault_core::{Availability, Catalog, CatalogFile, CatalogNode, MediaKind, NodeRole};
+use learnvault_core::{
+    Availability, Catalog, CatalogFile, CatalogNode, MediaKind, NodeRole, RescanSummary,
+};
 use serde::Serialize;
 
 /// Catálogo do desktop derivado do banco local.
@@ -131,5 +133,38 @@ fn availability(value: Availability) -> &'static str {
     match value {
         Availability::Available => "available",
         Availability::Missing => "missing",
+    }
+}
+
+/// Resumo de um rescan explícito da biblioteca, sem caminho do sistema de arquivos.
+///
+/// É a projeção serializável de [`learnvault_core::RescanSummary`]: só as contagens do
+/// contrato, sem o identificador interno do histórico. Nenhum campo carrega localização.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct RescanSummaryDto {
+    /// Verdadeiro quando a varredura cobriu toda a biblioteca.
+    pub complete: bool,
+    /// Arquivos novos inseridos no catálogo.
+    pub inserted: usize,
+    /// Registros já conhecidos que a varredura reafirmou.
+    pub updated: usize,
+    /// Registros marcados como ausentes.
+    pub marked_missing: usize,
+    /// Registros preservados por estarem em uma área não verificada.
+    pub preserved: usize,
+    /// Chaves relativas ambíguas recusadas nesta varredura.
+    pub ambiguous: Vec<String>,
+}
+
+impl From<RescanSummary> for RescanSummaryDto {
+    fn from(summary: RescanSummary) -> Self {
+        Self {
+            complete: summary.complete,
+            inserted: summary.inserted,
+            updated: summary.updated,
+            marked_missing: summary.marked_missing,
+            preserved: summary.preserved,
+            ambiguous: summary.ambiguous,
+        }
     }
 }

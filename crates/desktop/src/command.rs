@@ -12,7 +12,7 @@ use learnvault_core::Database;
 use tauri::State;
 
 use crate::config::DesktopConfigDto;
-use crate::dto::CatalogDto;
+use crate::dto::{CatalogDto, RescanSummaryDto};
 use crate::error::IpcError;
 use crate::state::DesktopState;
 
@@ -68,6 +68,22 @@ pub async fn desktop_select_library(
     tauri::async_runtime::spawn_blocking(move || state.select_library(|| pick_folder(&app)))
         .await
         .map_err(|_| IpcError::library_config_unavailable())?
+}
+
+/// Comando IPC: executa o rescan explícito da biblioteca configurada.
+///
+/// Sem argumentos: o webview não envia caminho nem parâmetro algum, apenas dispara a
+/// indexação quando o usuário pede. A varredura lê o sistema de arquivos e o SQLite de
+/// forma bloqueante, então roda em `spawn_blocking` — como o catálogo —, sem `tokio`
+/// direto. O resultado é o resumo sanitizado do núcleo; sem raiz configurada ou com a
+/// raiz inacessível a falha vira um erro estável. Chamadas concorrentes devolvem
+/// `rescan_in_progress`, sem cancelar nem corromper o estado.
+#[tauri::command]
+pub async fn desktop_rescan(state: State<'_, DesktopState>) -> Result<RescanSummaryDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.rescan())
+        .await
+        .map_err(|_| IpcError::rescan_unavailable())?
 }
 
 /// Abre o seletor nativo de diretórios e devolve o caminho escolhido, se houver.
