@@ -5,13 +5,13 @@
  import Player from './Player.svelte';
  import { destinationAfterLogin, findLesson, href, locationFromHash, type Route } from './router';
  import { transport, type Catalog, type Lesson, type User } from './transport';
- import { initialView, readConfig, type ConfigState } from './session';
+ import { initialView, resolveSession, type ConfigState } from './session';
  let route: Route = locationFromHash(location.hash).route;
  let lessonPath: string | null = locationFromHash(location.hash).lessonPath;
  let user: User | null = null; let catalog: Catalog | null = null; let lesson: Lesson | null = null; let config: ConfigState = 'unknown';
   let loading = true; let error = ''; let username = ''; let password = ''; let currentPassword = ''; let rescanning = false; let rescanMessage = ''; let mediaError = '';
  onMount(() => { const change = () => { const next = locationFromHash(location.hash); route = next.route; lessonPath = next.lessonPath; lesson = findLesson(catalog, lessonPath); mediaError = ''; }; window.addEventListener('hashchange', change); void initialize(); return () => window.removeEventListener('hashchange', change); });
-  async function initialize() { try { user = await transport.me(); if (user && !user.mustChangeCredentials) { catalog = await transport.catalog(); lesson = findLesson(catalog, lessonPath); if (route === 'login') route = 'home'; } else if (!user) { config = await readConfig(() => transport.config()); } } catch { error = 'Não foi possível conectar ao serviço.'; } finally { loading = false; } }
+  async function initialize() { try { const session = await resolveSession(() => transport.me(), () => transport.config()); user = session.user; config = session.config; error = session.error; if (user && !user.mustChangeCredentials) { catalog = await transport.catalog(); lesson = findLesson(catalog, lessonPath); if (route === 'login') route = 'home'; } } catch { error = 'Não foi possível conectar ao serviço.'; } finally { loading = false; } }
   async function login(event: SubmitEvent) { event.preventDefault(); error = ''; loading = true; const destination = location.hash; try { user = await transport.login(username, password); password = ''; if (!user.mustChangeCredentials) { catalog = await transport.catalog(); lesson = findLesson(catalog, lessonPath); location.hash = destinationAfterLogin(destination); } } catch (cause) { error = cause instanceof Error ? cause.message : 'Não foi possível entrar.'; } finally { loading = false; } }
   async function credentials(event: SubmitEvent) { event.preventDefault(); error = ''; loading = true; try { user = await transport.updateCredentials(username, password, currentPassword); username = ''; password = ''; currentPassword = ''; catalog = await transport.catalog(); lesson = findLesson(catalog, lessonPath); location.hash = destinationAfterLogin(location.hash); } catch (cause) { error = cause instanceof Error ? cause.message : 'Não foi possível atualizar as credenciais.'; } finally { loading = false; } }
  async function logout() { await transport.logout(); user = null; catalog = null; lesson = null; location.hash = href('login'); }
