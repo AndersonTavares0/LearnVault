@@ -2,7 +2,13 @@
 //!
 //! A remoção existe para o item sair do catálogo por decisão de quem usa o produto. Ela é
 //! deliberada e persistente: nenhuma varredura cria ou desfaz uma remoção, e encontrar o
-//! arquivo novamente no disco não devolve a mídia ao catálogo.
+//! arquivo novamente no mesmo caminho não devolve a mídia ao catálogo.
+//!
+//! A remoção vale para a identidade atual da mídia (`media_id`), não para o conteúdo do
+//! arquivo. Mover ou renomear o arquivo faz a varredura seguinte criar uma identidade nova
+//! — é a política de rescan aprovada, em que o mesmo caminho reutiliza a identidade e um
+//! caminho novo gera outra —, de modo que o item reaparece no catálogo como registro
+//! distinto, sem a remoção anterior.
 //!
 //! # O que a remoção faz e o que ela não faz
 //!
@@ -22,6 +28,12 @@
 //! Retirar do catálogo uma mídia com progresso associado exige confirmação explícita,
 //! porque o progresso é preservado e a mídia sai da vista de quem estudava. A recusa
 //! devolve [`Error::MediaRemovalNeedsConfirmation`] sem alterar nada.
+//!
+//! # Autorização
+//!
+//! O núcleo não autoriza: ele não sabe quem está chamando. Decidir quem pode retirar uma
+//! mídia do catálogo — e quem pode consultar o impacto, que revela quantos donos têm
+//! progresso — é responsabilidade do adaptador de plataforma.
 //!
 //! # Consistência e concorrência
 //!

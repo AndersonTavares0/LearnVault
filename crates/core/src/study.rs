@@ -170,7 +170,10 @@ pub fn recent_study(db: &Database, owner_id: &str, limit: usize) -> Result<Vec<S
          WHERE owner_id = ?1
            AND NOT EXISTS (SELECT 1
                              FROM media_removal r
-                            WHERE r.media_id = study_state.media_id)
+                             JOIN media m
+                               ON m.library_id = r.library_id
+                              AND m.media_id = r.media_id
+                            WHERE m.media_id = study_state.media_id)
          ORDER BY updated_at DESC, media_id ASC
          LIMIT ?2",
     )?;
