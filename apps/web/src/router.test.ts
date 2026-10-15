@@ -7,6 +7,7 @@ describe('hash router', () => {
 		expect(routeFromHash('#/catalog')).toBe('catalog');
 		expect(routeFromHash('#/player/lesson')).toBe('player');
 		expect(locationFromHash('#/player/modules/lesson%20one')).toEqual({ route: 'player', lessonPath: 'modules/lesson one' });
+		expect(locationFromHash('#/player/%E0%A4%A')).toEqual({ route: 'player', lessonPath: null });
 	});
 	it('creates server-independent links and preserves the lesson path', () => {
 		expect(href('home')).toBe('#/home');

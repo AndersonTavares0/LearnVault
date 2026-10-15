@@ -7,7 +7,12 @@ export function locationFromHash(hash: string): HashLocation {
 	const value = hash.replace(/^#\/?/, '');
 	const [name, ...parts] = value.split('/');
 	const route = name === 'home' || name === 'catalog' || name === 'player' ? name : 'login';
-	return { route, lessonPath: route === 'player' && parts.length > 0 ? decodeURIComponent(parts.join('/')) : null };
+	if (route !== 'player' || parts.length === 0) return { route, lessonPath: null };
+	try {
+		return { route, lessonPath: decodeURIComponent(parts.join('/')) };
+	} catch {
+		return { route, lessonPath: null };
+	}
 }
 
 export function routeFromHash(hash: string): Route {
