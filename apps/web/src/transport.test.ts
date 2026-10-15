@@ -143,10 +143,37 @@ describe('desktop transport over IPC', () => {
 		await expect(new DesktopStub().catalog()).rejects.toThrow('Não foi possível carregar o catálogo.');
 	});
 
-	it('keeps rescan and credential changes unimplemented on the desktop', async () => {
+	it('keeps credential changes unimplemented on the desktop', async () => {
 		const desktop: Transport = new DesktopStub();
-		await expect(desktop.rescan()).rejects.toThrow('ainda não implementado');
 		await expect(desktop.updateCredentials('u', 'senha')).rejects.toThrow('ainda não implementado');
+	});
+
+	it('triggers an explicit desktop rescan through the command without touching fetch', async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+		vi.mocked(invoke).mockResolvedValue({ complete: true, inserted: 1 });
+
+		await expect(new DesktopStub().rescan()).resolves.toBeUndefined();
+
+		expect(invoke).toHaveBeenCalledWith('desktop_rescan');
+		expect(fetchMock).not.toHaveBeenCalled();
+		vi.unstubAllGlobals();
+	});
+
+	it('maps each stable desktop rescan error code to a sanitized message', async () => {
+		vi.mocked(invoke).mockRejectedValue({ code: 'rescan_in_progress', message: '/mnt/cursos em uso' });
+		await expect(new DesktopStub().rescan()).rejects.toThrow('Já existe uma indexação em andamento.');
+		vi.mocked(invoke).mockRejectedValue({ code: 'library_not_configured', message: '/mnt/cursos não configurada' });
+		await expect(new DesktopStub().rescan()).rejects.toThrow('Nenhuma biblioteca está configurada.');
+		vi.mocked(invoke).mockRejectedValue({ code: 'rescan_unavailable', message: 'falha em C:\\segredo\\cursos' });
+		await expect(new DesktopStub().rescan()).rejects.toThrow('Não foi possível indexar a biblioteca.');
+	});
+
+	it('falls back to a stable message for an unknown desktop rescan error code', async () => {
+		vi.mocked(invoke).mockRejectedValue({ code: 'algo_desconhecido', message: 'CAMINHO privado /mnt/cursos' });
+		await expect(new DesktopStub().rescan()).rejects.toThrow('Não foi possível indexar a biblioteca.');
+		vi.mocked(invoke).mockRejectedValue({ message: 'sem código /etc/shadow' });
+		await expect(new DesktopStub().rescan()).rejects.toThrow('Não foi possível indexar a biblioteca.');
 	});
 
 	it('reports the desktop as unconfigured through the desktop_config command', async () => {
