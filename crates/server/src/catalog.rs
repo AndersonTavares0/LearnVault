@@ -77,13 +77,17 @@ pub(crate) async fn catalog(State(state): State<AppState>, headers: HeaderMap) -
     match authenticated(&state, &headers).await {
         Ok(true) => {}
         Err(StateError::Capacity) => return service_unavailable(),
-        Ok(false) | Err(_) => return StatusCode::UNAUTHORIZED.into_response(),
+        Ok(false) | Err(_) => return status_private_no_store(StatusCode::UNAUTHORIZED),
     }
 
+    // Evita segurar o mutex do banco só para devolver 503 sob saturação.
+    if !state.has_blocking_capacity() {
+        return service_unavailable();
+    }
+    let database = state.database.clone().lock_owned().await;
     let Some(blocking_task) = state.try_acquire_blocking_task() else {
         return service_unavailable();
     };
-    let database = state.database.clone().lock_owned().await;
     match tokio::task::spawn_blocking(move || {
         let _blocking_task = blocking_task;
         learnvault_core::build_catalog(&database, LIBRARY_ID)
@@ -99,22 +103,26 @@ pub(crate) async fn rescan(State(state): State<AppState>, headers: HeaderMap) ->
     let user = match authenticated_user(&state, &headers).await {
         Ok(Some(user)) => user,
         Err(StateError::Capacity) => return service_unavailable(),
-        Ok(None) | Err(_) => return StatusCode::UNAUTHORIZED.into_response(),
+        Ok(None) | Err(_) => return status_private_no_store(StatusCode::UNAUTHORIZED),
     };
     if !user.is_admin || !same_origin(&headers) {
-        return StatusCode::FORBIDDEN.into_response();
+        return status_private_no_store(StatusCode::FORBIDDEN);
     }
-    let Some(blocking_task) = state.try_acquire_blocking_task() else {
+    // Evita segurar locks só para devolver 503 sob saturação.
+    if !state.has_blocking_capacity() {
         return service_unavailable();
-    };
+    }
     let Ok(local_lock) = state.rescan_lock.clone().try_lock_owned() else {
-        return StatusCode::CONFLICT.into_response();
+        return status_private_no_store(StatusCode::CONFLICT);
     };
 
     let database = state.database.clone();
     let root = state.config.library_root.clone();
     let lock_path = rescan_lock_path(&state.config.database_path);
     let mut database = database.lock_owned().await;
+    let Some(blocking_task) = state.try_acquire_blocking_task() else {
+        return service_unavailable();
+    };
     match tokio::task::spawn_blocking(move || {
         // Os guards e o permit pertencem deliberadamente à tarefa blocking. Tokio continua
         // executando-a depois que o JoinHandle é descartado, então um timeout HTTP não libera
@@ -129,8 +137,8 @@ pub(crate) async fn rescan(State(state): State<AppState>, headers: HeaderMap) ->
     })
     .await
     {
-        Ok(Ok(summary)) => Json(RescanResponse::from(summary)).into_response(),
-        Ok(Err(RescanFailure::Busy)) => StatusCode::CONFLICT.into_response(),
+        Ok(Ok(summary)) => private_no_store(Json(RescanResponse::from(summary)).into_response()),
+        Ok(Err(RescanFailure::Busy)) => status_private_no_store(StatusCode::CONFLICT),
         Ok(Err(RescanFailure::RootChanged)) => internal_error("library root changed"),
         Ok(Err(RescanFailure::Failed)) | Err(_) => internal_error("rescan failed"),
     }
@@ -151,21 +159,25 @@ async fn authenticated_user(
 }
 
 fn internal_error(message: &'static str) -> Response {
-    (
-        StatusCode::INTERNAL_SERVER_ERROR,
-        Json(ErrorResponse { error: message }),
+    private_no_store(
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse { error: message }),
+        )
+            .into_response(),
     )
-        .into_response()
 }
 
 pub(crate) fn service_unavailable() -> Response {
-    (
-        StatusCode::SERVICE_UNAVAILABLE,
-        Json(ErrorResponse {
-            error: "server busy",
-        }),
+    private_no_store(
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ErrorResponse {
+                error: "server busy",
+            }),
+        )
+            .into_response(),
     )
-        .into_response()
 }
 
 fn private_no_store(mut response: Response) -> Response {
@@ -174,6 +186,10 @@ fn private_no_store(mut response: Response) -> Response {
         HeaderValue::from_static("private, no-store"),
     );
     response
+}
+
+fn status_private_no_store(status: StatusCode) -> Response {
+    private_no_store(status.into_response())
 }
 
 fn rescan_lock_path(database_path: &Path) -> PathBuf {

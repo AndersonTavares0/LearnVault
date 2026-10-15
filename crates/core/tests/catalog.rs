@@ -5,7 +5,7 @@
 
 use learnvault_core::paths::relative_path_key;
 use learnvault_core::{
-    Availability, CatalogNode, Database, KeyMode, MediaKind, NodeRole, build_catalog,
+    Availability, CatalogNode, Database, Error, KeyMode, MediaKind, NodeRole, build_catalog,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -532,13 +532,13 @@ fn files_are_ordered_by_path_regardless_of_insertion_order() -> TestResult {
 }
 
 #[test]
-fn a_negative_size_is_read_as_zero() -> TestResult {
+fn a_negative_size_fails_the_catalog_as_corrupt() -> TestResult {
     let db = library_db()?;
     insert_media(&db, "m1", "Cat/Aula/aula.mp4", -1, "available")?;
 
-    let catalog = build_catalog(&db, LIB)?;
-    let lesson = node(&node(&catalog.categories, "Cat").children, "Cat/Aula");
-
-    assert_eq!(lesson.files[0].size, 0);
+    assert!(
+        matches!(build_catalog(&db, LIB), Err(Error::MediaCorruptSize { .. })),
+        "tamanho negativo indica corrupção do catálogo, não arquivo vazio"
+    );
     Ok(())
 }

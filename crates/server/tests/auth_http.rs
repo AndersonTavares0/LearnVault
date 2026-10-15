@@ -52,15 +52,13 @@ async fn login_me_and_logout_use_an_expiring_secure_cookie() {
         .unwrap();
 
     assert_eq!(login.status(), StatusCode::OK);
+    assert_eq!(login.headers()["cache-control"], "no-store");
     assert_eq!(login.headers()["x-content-type-options"], "nosniff");
     assert_eq!(login.headers()["x-frame-options"], "DENY");
     assert_eq!(login.headers()["referrer-policy"], "no-referrer");
-    assert!(
-        login.headers()["content-security-policy"]
-            .to_str()
-            .unwrap()
-            .contains("frame-ancestors")
-    );
+    let csp = login.headers()["content-security-policy"].to_str().unwrap();
+    assert!(csp.contains("frame-ancestors"));
+    assert!(csp.contains("script-src 'self'; style-src"));
     let cookie = login.headers()["set-cookie"].to_str().unwrap().to_owned();
     assert!(cookie.starts_with("learnvault_session="));
     assert!(cookie.contains("HttpOnly"));
@@ -80,6 +78,7 @@ async fn login_me_and_logout_use_an_expiring_secure_cookie() {
         .await
         .unwrap();
     assert_eq!(me.status(), StatusCode::OK);
+    assert_eq!(me.headers()["cache-control"], "private, no-store");
     assert_eq!(body(me).await["is_admin"], true);
 
     let logout = app
@@ -94,6 +93,7 @@ async fn login_me_and_logout_use_an_expiring_secure_cookie() {
         .await
         .unwrap();
     assert_eq!(logout.status(), StatusCode::NO_CONTENT);
+    assert_eq!(logout.headers()["cache-control"], "no-store");
     assert!(
         logout.headers()["set-cookie"]
             .to_str()
@@ -111,6 +111,25 @@ async fn login_me_and_logout_use_an_expiring_secure_cookie() {
         .await
         .unwrap();
     assert_eq!(after_logout.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(after_logout.headers()["cache-control"], "private, no-store");
+}
+
+#[tokio::test]
+async fn me_never_caches_unauthorized_responses() {
+    let temp = tempfile::tempdir().unwrap();
+    let app = build_router(AppState::initialize(config(&temp, true)).await.unwrap());
+
+    for request in [
+        Request::get("/api/me").body(Body::empty()).unwrap(),
+        Request::get("/api/me")
+            .header("cookie", "learnvault_session=unknown")
+            .body(Body::empty())
+            .unwrap(),
+    ] {
+        let response = app.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(response.headers()["cache-control"], "private, no-store");
+    }
 }
 
 #[tokio::test]

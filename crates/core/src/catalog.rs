@@ -130,7 +130,9 @@ pub fn build_catalog(db: &Database, library_id: &str) -> Result<Catalog> {
     let mut nodes: BTreeMap<String, PendingNode> = BTreeMap::new();
 
     for row in rows {
-        let size = u64::try_from(row.size).unwrap_or(0);
+        let size = u64::try_from(row.size).map_err(|_| crate::error::Error::MediaCorruptSize {
+            media_id: row.media_id.clone(),
+        })?;
         let name = row
             .relative_path
             .rsplit('/')

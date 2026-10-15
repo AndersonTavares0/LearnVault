@@ -78,8 +78,15 @@ jobs:
     name: Rust tests and lints
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    needs: [web]
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: spa-build
+          path: cmd/learnvault/web/build
+      - name: Verify the canonical SPA shell
+        run: test -f cmd/learnvault/web/build/200.html
       - name: Install Rust toolchain
         run: rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --component llvm-tools-preview
       - name: Cache Cargo registry and target
@@ -106,5 +113,7 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Run clippy
         run: cargo clippy --all-targets -- -D warnings
+      - name: Run all Rust tests
+        run: cargo test --all
       - name: Run tests with coverage
         run: cargo llvm-cov --package learnvault-core --all-targets --fail-under-lines 80

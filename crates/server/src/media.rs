@@ -1,6 +1,6 @@
 //! Entrega autenticada e somente leitura de mídia.
 
-use std::io::SeekFrom;
+use std::{io::SeekFrom, time::Duration};
 
 use axum::{
     body::Body,
@@ -10,18 +10,20 @@ use axum::{
 };
 use serde::Deserialize;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
-use tokio_util::io::ReaderStream;
 
 use crate::{
     AppState, StateError,
     auth::{hash_session_token, request_token},
     catalog::service_unavailable,
+    stream::idle_timeout_stream,
 };
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct MediaQuery {
     path: String,
 }
+
+const MEDIA_STREAM_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub(crate) async fn media(
     State(state): State<AppState>,
@@ -30,42 +32,55 @@ pub(crate) async fn media(
     method: Method,
 ) -> Response {
     let Some(token) = request_token(&headers) else {
-        return StatusCode::UNAUTHORIZED.into_response();
+        return error_private_no_store(StatusCode::UNAUTHORIZED);
     };
     match state.session_user(hash_session_token(&token)).await {
         Ok(Some(_)) => {}
         Err(StateError::Capacity) => return service_unavailable(),
-        Ok(None) | Err(_) => return StatusCode::UNAUTHORIZED.into_response(),
+        Ok(None) | Err(_) => return error_private_no_store(StatusCode::UNAUTHORIZED),
     }
     let query = match raw_query.0.as_deref() {
         Some(raw) => match serde_urlencoded::from_str::<MediaQuery>(raw) {
             Ok(query) => query,
-            Err(_) => return StatusCode::BAD_REQUEST.into_response(),
+            Err(_) => return error_private_no_store(StatusCode::BAD_REQUEST),
         },
-        None => return StatusCode::BAD_REQUEST.into_response(),
+        None => return error_private_no_store(StatusCode::BAD_REQUEST),
     };
 
     let root = state.config.library_root.clone();
     let path = query.path;
     let lookup_path = path.clone();
+    // Evita segurar o mutex do banco só para devolver 503 sob saturação.
+    if !state.has_blocking_capacity() {
+        return service_unavailable();
+    }
+    let database = state.database.clone().lock_owned().await;
     let Some(blocking_task) = state.try_acquire_blocking_task() else {
         return service_unavailable();
     };
-    let database = state.database.clone().lock_owned().await;
-    let opened = tokio::task::spawn_blocking(move || {
+    let reference = tokio::task::spawn_blocking(move || {
         let _blocking_task = blocking_task;
-        let Some(reference) = learnvault_core::find_media_by_path(&database, &lookup_path)? else {
-            return Ok(None);
-        };
-        learnvault_core::open_media(&database, &reference.library_id, &reference.media_id, &root)
-            .map(Some)
+        learnvault_core::find_media_by_path(&database, &lookup_path)
     })
     .await;
-    let opened = match opened {
-        Ok(Ok(Some(opened))) => opened,
-        Ok(Ok(None)) => return StatusCode::NOT_FOUND.into_response(),
+    let reference = match reference {
+        Ok(Ok(Some(reference))) => reference,
+        Ok(Ok(None)) => return error_private_no_store(StatusCode::NOT_FOUND),
         Ok(Err(error)) => return media_error_response(&error),
         // A tarefa abortada é uma indisponibilidade operacional, não ausência de mídia.
+        Err(_) => return service_unavailable(),
+    };
+    let Some(blocking_task) = state.try_acquire_blocking_task() else {
+        return service_unavailable();
+    };
+    let opened = match tokio::task::spawn_blocking(move || {
+        let _blocking_task = blocking_task;
+        learnvault_core::open_media_reference(&reference, &root)
+    })
+    .await
+    {
+        Ok(Ok(opened)) => opened,
+        Ok(Err(error)) => return media_error_response(&error),
         Err(_) => return service_unavailable(),
     };
 
@@ -74,14 +89,29 @@ pub(crate) async fn media(
     };
     let partial = headers.get(header::RANGE).is_some();
     let length = if opened.size == 0 { 0 } else { end - start + 1 };
+    let stream_permit = if method == Method::HEAD {
+        None
+    } else {
+        match state.try_acquire_media_stream() {
+            Some(permit) => Some(permit),
+            None => return service_unavailable(),
+        }
+    };
     let mut file = tokio::fs::File::from_std(opened.file);
     if file.seek(SeekFrom::Start(start)).await.is_err() {
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        return error_private_no_store(StatusCode::INTERNAL_SERVER_ERROR);
     }
-    let stream = ReaderStream::new(file.take(length));
+    let stream = stream_permit.map(|stream_permit| {
+        idle_timeout_stream(file.take(length), stream_permit, MEDIA_STREAM_IDLE_TIMEOUT)
+    });
     let mut response = Response::new(if method == Method::HEAD {
         Body::empty()
     } else {
+        let Some(stream) = stream else {
+            // Só é `None` para `HEAD`; um `GET` sem stream indica estado
+            // interno inconsistente, nunca ausência de mídia.
+            return error_private_no_store(StatusCode::INTERNAL_SERVER_ERROR);
+        };
         Body::from_stream(stream)
     });
     *response.status_mut() = if partial {
@@ -98,16 +128,28 @@ pub(crate) async fn media(
     );
     response_headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     if partial {
-        response_headers.insert(
-            header::CONTENT_RANGE,
-            HeaderValue::from_str(&format!("bytes {start}-{end}/{}", opened.size)).unwrap(),
-        );
+        let Ok(content_range) =
+            HeaderValue::from_str(&format!("bytes {start}-{end}/{}", opened.size))
+        else {
+            return error_private_no_store(StatusCode::INTERNAL_SERVER_ERROR);
+        };
+        response_headers.insert(header::CONTENT_RANGE, content_range);
     }
     response
 }
 
 fn media_error_response(error: &learnvault_core::Error) -> Response {
-    media_error_status(error).into_response()
+    error_private_no_store(media_error_status(error))
+}
+
+/// Erros da superfície autenticada nunca devem ser armazenados por proxies.
+fn error_private_no_store(status: StatusCode) -> Response {
+    let mut response = status.into_response();
+    response.headers_mut().insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("private, no-store"),
+    );
+    response
 }
 
 fn media_error_status(error: &learnvault_core::Error) -> StatusCode {
@@ -153,11 +195,12 @@ fn parse_range(value: Option<&HeaderValue>, size: u64) -> Option<(u64, u64)> {
 }
 
 fn range_not_satisfiable(size: u64) -> Response {
-    let mut response = StatusCode::RANGE_NOT_SATISFIABLE.into_response();
-    response.headers_mut().insert(
-        header::CONTENT_RANGE,
-        HeaderValue::from_str(&format!("bytes */{size}")).unwrap(),
-    );
+    let mut response = error_private_no_store(StatusCode::RANGE_NOT_SATISFIABLE);
+    if let Ok(content_range) = HeaderValue::from_str(&format!("bytes */{size}")) {
+        response
+            .headers_mut()
+            .insert(header::CONTENT_RANGE, content_range);
+    }
     response
 }
 
@@ -234,6 +277,11 @@ mod tests {
                 media_id: "media-1".to_owned(),
             },
             Error::MediaIdentityMismatch {
+                media_id: "media-1".to_owned(),
+            },
+            // Corrupção de catálogo nunca pode virar 404: isso confundiria ausência
+            // legítima com um banco corrompido e criaria um oráculo de existência.
+            Error::MediaCorruptSize {
                 media_id: "media-1".to_owned(),
             },
             Error::MediaUnreadable {

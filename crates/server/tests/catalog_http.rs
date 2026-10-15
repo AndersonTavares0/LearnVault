@@ -1,6 +1,7 @@
 use axum::{
     body::Body,
     http::{Request, StatusCode},
+    response::Response,
 };
 use http_body_util::BodyExt;
 use learnvault_core::Database;
@@ -8,12 +9,16 @@ use learnvault_server::{AppState, Config, build_router, hash_password};
 use std::{
     fs::{self, OpenOptions},
     path::Path,
-    process::Command,
+    process::{Command, Stdio},
     thread,
     time::{Duration, Instant},
 };
 use tempfile::TempDir;
 use tower::ServiceExt;
+
+/// Deadline generoso para a sincronização entre processos do teste de lock de
+/// rescan. Um valor curto (segundos) vira flake em runners de CI carregados.
+const RESCAN_LOCK_TIMEOUT: Duration = Duration::from_secs(60);
 
 fn config(temp: &TempDir) -> Config {
     let mut config = Config::from_args([
@@ -53,6 +58,16 @@ async fn login(app: &axum::Router) -> String {
         .to_owned()
 }
 
+fn assert_private_no_store(response: &Response) {
+    assert_eq!(
+        response
+            .headers()
+            .get("cache-control")
+            .and_then(|value| value.to_str().ok()),
+        Some("private, no-store")
+    );
+}
+
 #[tokio::test]
 async fn catalog_requires_authentication() {
     let temp = tempfile::tempdir().unwrap();
@@ -64,6 +79,7 @@ async fn catalog_requires_authentication() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_private_no_store(&response);
 }
 
 #[tokio::test]
@@ -82,6 +98,7 @@ async fn rescan_requires_authentication() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_private_no_store(&response);
 }
 
 #[tokio::test]
@@ -101,6 +118,7 @@ async fn catalog_and_rescan_reject_invalid_sessions() {
         .await
         .unwrap();
     assert_eq!(catalog.status(), StatusCode::UNAUTHORIZED);
+    assert_private_no_store(&catalog);
 
     let rescan = app
         .oneshot(
@@ -113,6 +131,7 @@ async fn catalog_and_rescan_reject_invalid_sessions() {
         .await
         .unwrap();
     assert_eq!(rescan.status(), StatusCode::UNAUTHORIZED);
+    assert_private_no_store(&rescan);
 }
 
 #[tokio::test]
@@ -134,6 +153,7 @@ async fn catalog_and_rescan_reject_requests_when_blocking_capacity_is_saturated(
         .await
         .unwrap();
     assert_eq!(catalog.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_private_no_store(&catalog);
     let catalog_body = catalog.into_body().collect().await.unwrap().to_bytes();
     assert_eq!(
         serde_json::from_slice::<serde_json::Value>(&catalog_body).unwrap()["error"],
@@ -151,6 +171,7 @@ async fn catalog_and_rescan_reject_requests_when_blocking_capacity_is_saturated(
         .await
         .unwrap();
     assert_eq!(rescan.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_private_no_store(&rescan);
     let rescan_body = rescan.into_body().collect().await.unwrap().to_bytes();
     assert_eq!(
         serde_json::from_slice::<serde_json::Value>(&rescan_body).unwrap()["error"],
@@ -206,6 +227,7 @@ async fn non_admin_cannot_rescan() {
         .await
         .unwrap();
     assert_eq!(rescan.status(), StatusCode::FORBIDDEN);
+    assert_private_no_store(&rescan);
 }
 
 #[tokio::test]
@@ -239,6 +261,7 @@ async fn admin_rescan_populates_the_authenticated_catalog() {
         .await
         .unwrap();
     assert_eq!(missing_origin.status(), StatusCode::FORBIDDEN);
+    assert_private_no_store(&missing_origin);
 
     let rescan = app
         .clone()
@@ -252,6 +275,7 @@ async fn admin_rescan_populates_the_authenticated_catalog() {
         .await
         .unwrap();
     assert_eq!(rescan.status(), StatusCode::OK);
+    assert_private_no_store(&rescan);
     let rescan_body = rescan.into_body().collect().await.unwrap().to_bytes();
     let rescan_json: serde_json::Value = serde_json::from_slice(&rescan_body).unwrap();
     assert_eq!(rescan_json["complete"], true);
@@ -268,7 +292,7 @@ async fn admin_rescan_populates_the_authenticated_catalog() {
         .await
         .unwrap();
     assert_eq!(catalog.status(), StatusCode::OK);
-    assert_eq!(catalog.headers()["cache-control"], "private, no-store");
+    assert_private_no_store(&catalog);
     let body = catalog.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(json["complete"], true);
@@ -280,6 +304,39 @@ async fn admin_rescan_populates_the_authenticated_catalog() {
     assert_eq!(file["kind"], "media");
     assert_eq!(file["availability"], "available");
     assert_eq!(file["unverified"], false);
+}
+
+#[tokio::test]
+async fn catalog_reports_database_errors_without_caching_or_leaking_paths() {
+    let temp = tempfile::tempdir().unwrap();
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let cookie = login(&app).await;
+    Database::open(temp.path().join("catalog.sqlite"))
+        .unwrap()
+        .connection()
+        .execute_batch("DROP TABLE media;")
+        .unwrap();
+
+    let response = app
+        .oneshot(
+            Request::get("/api/catalog")
+                .header("cookie", cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    assert_private_no_store(&response);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["error"], "catalog unavailable");
+    assert!(
+        !body
+            .windows(temp.path().to_str().unwrap().len())
+            .any(|window| { window == temp.path().to_str().unwrap().as_bytes() })
+    );
 }
 
 #[tokio::test]
@@ -313,6 +370,7 @@ async fn rescan_sanitizes_a_missing_library_root_error() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    assert_private_no_store(&response);
     let body = response.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(json["error"], "library root changed");
@@ -328,19 +386,28 @@ async fn rescan_returns_conflict_while_another_process_holds_its_lock() {
     let temp = tempfile::tempdir().unwrap();
     let lock_path = temp.path().join("catalog.sqlite.rescan.lock");
     let ready_path = temp.path().join("lock-ready");
-    let release_path = temp.path().join("lock-release");
+
+    // Bootstrap (Argon2id do admin) e login (Argon2id) são deliberadamente lentos
+    // e podem levar segundos num runner de CI carregado. Prepare-os antes de
+    // spawnar o filho para que a janela entre `lock-ready` e o release cubra
+    // apenas o request, e não o trabalho pesado de startup.
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let cookie = login(&app).await;
+
     let mut child = Command::new(std::env::current_exe().unwrap())
         .arg("--exact")
         .arg("rescan_lock_helper")
+        .env("LEARNVAULT_RESCAN_LOCK_HELPER", "1")
         .env("LEARNVAULT_RESCAN_LOCK_PATH", &lock_path)
         .env("LEARNVAULT_RESCAN_LOCK_READY", &ready_path)
-        .env("LEARNVAULT_RESCAN_LOCK_RELEASE", &release_path)
+        // O release é sinalizado pelo canal de stdin do filho, não por um arquivo
+        // com deadline: um canal real é determinístico e libera o processo no
+        // fechamento mesmo se o pai falhar, sem deixar auxiliar órfão preso.
+        .stdin(Stdio::piped())
         .spawn()
         .unwrap();
     wait_for_file(&ready_path);
 
-    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
-    let cookie = login(&app).await;
     let response = app
         .oneshot(
             Request::post("/api/admin/catalog/rescan")
@@ -352,18 +419,32 @@ async fn rescan_returns_conflict_while_another_process_holds_its_lock() {
         .await
         .unwrap();
 
-    fs::write(release_path, []).unwrap();
-    assert!(child.wait().unwrap().success());
+    // Fechar o stdin do filho faz o `read_line` retornar EOF e o auxiliar encerrar.
+    // `Stdio::piped()` é invariante do teste: se sumir, `wait()` travaria para
+    // sempre, então falhe alto em vez de pendurar a suíte.
+    let stdin = child
+        .stdin
+        .take()
+        .expect("o filho deve ter stdin encanado para o release");
+    drop(stdin);
+    assert!(
+        child.wait().unwrap().success(),
+        "o processo auxiliar deve sair com sucesso depois do release"
+    );
     assert_eq!(response.status(), StatusCode::CONFLICT);
+    assert_private_no_store(&response);
 }
 
 #[test]
 fn rescan_lock_helper() {
-    let Ok(lock_path) = std::env::var("LEARNVAULT_RESCAN_LOCK_PATH") else {
+    // Marcador dedicado: só o processo auxiliar spawnado por este arquivo o define.
+    // Sem ele, o teste nunca executa o corpo, evitando travar em `read_line` quando
+    // rodado dentro da suíte principal (regressão que o poll com deadline continha).
+    if std::env::var("LEARNVAULT_RESCAN_LOCK_HELPER").as_deref() != Ok("1") {
         return;
-    };
+    }
+    let lock_path = std::env::var("LEARNVAULT_RESCAN_LOCK_PATH").unwrap();
     let ready_path = std::env::var("LEARNVAULT_RESCAN_LOCK_READY").unwrap();
-    let release_path = std::env::var("LEARNVAULT_RESCAN_LOCK_RELEASE").unwrap();
     let _lock = OpenOptions::new()
         .read(true)
         .write(true)
@@ -373,11 +454,19 @@ fn rescan_lock_helper() {
         .unwrap();
     _lock.lock().unwrap();
     fs::write(ready_path, []).unwrap();
-    wait_for_file(Path::new(&release_path));
+
+    // Segura o lock até o pai sinalizar o release pelo canal de stdin. Um
+    // `read_line` bloqueante (ou EOF) substitui o polling com deadline: o filho
+    // nunca faz `sleep` e nunca fica preso além do fechamento do pai.
+    let mut release = String::new();
+    let _ = std::io::stdin().read_line(&mut release);
 }
 
+/// Espera por um arquivo de sincronização entre processos com um deadline
+/// generoso: em CI carregado, o processo auxiliar pode demorar bem mais que
+/// alguns segundos para ser spawnado e sinalizar `lock-ready`.
 fn wait_for_file(path: &Path) {
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + RESCAN_LOCK_TIMEOUT;
     while !path.exists() {
         assert!(Instant::now() < deadline, "timed out waiting for {path:?}");
         thread::sleep(Duration::from_millis(10));

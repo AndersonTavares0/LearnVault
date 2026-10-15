@@ -15,6 +15,8 @@ pub struct Config {
     pub database_path: PathBuf,
     /// Raiz autorizada da biblioteca física.
     pub library_root: PathBuf,
+    /// Raiz opcional dos arquivos estáticos da interface web.
+    pub web_root: Option<PathBuf>,
     /// Usuário inicial usado somente quando o banco ainda não possui administrador.
     pub admin_username: Option<String>,
     /// Senha inicial usada somente quando o banco ainda não possui administrador.
@@ -44,6 +46,9 @@ pub enum ConfigError {
     /// A raiz da biblioteca não existe ou não é um diretório.
     #[error("invalid library root")]
     InvalidLibraryRoot,
+    /// A raiz da interface web não existe ou não é um diretório.
+    #[error("invalid web root")]
+    InvalidWebRoot,
     /// Um argumento exige um valor seguinte.
     #[error("missing argument value")]
     MissingArgumentValue,
@@ -83,6 +88,7 @@ where
     let mut listen_addr = DEFAULT_LISTEN_ADDR.parse().expect("endereço padrão válido");
     let mut database_path = PathBuf::from(DEFAULT_DATABASE_PATH);
     let mut library_root = PathBuf::from(DEFAULT_LIBRARY_ROOT);
+    let mut web_root = None;
     let mut admin_username = std::env::var("ADMIN_USERNAME").ok();
     let mut admin_password = std::env::var("ADMIN_PASSWORD").ok();
     let mut cookie_secure = true;
@@ -103,6 +109,7 @@ where
             }
             "--database" => database_path = PathBuf::from(next_value(&mut args)?),
             "--library-root" => library_root = PathBuf::from(next_value(&mut args)?),
+            "--web-root" => web_root = Some(PathBuf::from(next_value(&mut args)?)),
             "--admin-username" => admin_username = Some(next_value(&mut args)?),
             "--admin-password" => admin_password = Some(next_value(&mut args)?),
             "--insecure-http" => cookie_secure = false,
@@ -123,11 +130,20 @@ where
         .ok()
         .filter(|path| path.is_dir())
         .ok_or(ConfigError::InvalidLibraryRoot)?;
+    let web_root = web_root
+        .map(|path| {
+            path.canonicalize()
+                .ok()
+                .filter(|path| path.is_dir())
+                .ok_or(ConfigError::InvalidWebRoot)
+        })
+        .transpose()?;
 
     Ok(Command::Run(Config {
         listen_addr,
         database_path,
         library_root,
+        web_root,
         admin_username,
         admin_password,
         cookie_secure,

@@ -9,7 +9,7 @@ use axum::{
     Json,
     extract::State,
     http::{HeaderMap, HeaderValue, StatusCode},
-    response::IntoResponse,
+    response::{IntoResponse, Response},
 };
 use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
@@ -137,54 +137,62 @@ pub(crate) async fn login(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(request): Json<LoginRequest>,
-) -> impl IntoResponse {
+) -> Response {
     if !state.allow_login_attempt(&request.username).await {
-        return (
-            StatusCode::TOO_MANY_REQUESTS,
-            Json(ErrorResponse {
-                error: "try again later",
-            }),
-        )
-            .into_response();
+        return no_store(
+            (
+                StatusCode::TOO_MANY_REQUESTS,
+                Json(ErrorResponse {
+                    error: "try again later",
+                }),
+            )
+                .into_response(),
+        );
     }
     if !same_origin(&headers)
         || validate_username(&request.username).is_err()
         || validate_password(&request.password).is_err()
     {
-        return (
-            StatusCode::UNAUTHORIZED,
-            Json(ErrorResponse {
-                error: "invalid credentials",
-            }),
-        )
-            .into_response();
-    }
-    let user = match state.user(request.username).await {
-        Ok(user) => user,
-        Err(StateError::Capacity) => return service_unavailable(),
-        Err(_) => {
-            return (
+        return no_store(
+            (
                 StatusCode::UNAUTHORIZED,
                 Json(ErrorResponse {
                     error: "invalid credentials",
                 }),
             )
-                .into_response();
+                .into_response(),
+        );
+    }
+    let user = match state.user(request.username).await {
+        Ok(user) => user,
+        Err(StateError::Capacity) => return no_store(service_unavailable()),
+        Err(_) => {
+            return no_store(
+                (
+                    StatusCode::UNAUTHORIZED,
+                    Json(ErrorResponse {
+                        error: "invalid credentials",
+                    }),
+                )
+                    .into_response(),
+            );
         }
     };
     let Some(user) = user else {
-        return (
-            StatusCode::UNAUTHORIZED,
-            Json(ErrorResponse {
-                error: "invalid credentials",
-            }),
-        )
-            .into_response();
+        return no_store(
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(ErrorResponse {
+                    error: "invalid credentials",
+                }),
+            )
+                .into_response(),
+        );
     };
     let password = request.password;
     let hash = user.password_hash.clone();
     let Some(blocking_task) = state.try_acquire_blocking_task() else {
-        return service_unavailable();
+        return no_store(service_unavailable());
     };
     let valid = tokio::task::spawn_blocking(move || {
         let _blocking_task = blocking_task;
@@ -193,24 +201,26 @@ pub(crate) async fn login(
     .await
     .unwrap_or(false);
     if !valid {
-        return (
-            StatusCode::UNAUTHORIZED,
-            Json(ErrorResponse {
-                error: "invalid credentials",
-            }),
-        )
-            .into_response();
+        return no_store(
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(ErrorResponse {
+                    error: "invalid credentials",
+                }),
+            )
+                .into_response(),
+        );
     }
     let Ok(token) = generate_session_token() else {
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        return no_store(StatusCode::INTERNAL_SERVER_ERROR.into_response());
     };
     match state
         .create_session(hash_session_token(&token), user.user_id.clone())
         .await
     {
         Ok(()) => {}
-        Err(StateError::Capacity) => return service_unavailable(),
-        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        Err(StateError::Capacity) => return no_store(service_unavailable()),
+        Err(_) => return no_store(StatusCode::INTERNAL_SERVER_ERROR.into_response()),
     }
     let mut response = Json(UserResponse {
         user_id: user.user_id,
@@ -218,32 +228,34 @@ pub(crate) async fn login(
         is_admin: user.is_admin,
     })
     .into_response();
-    response
-        .headers_mut()
-        .insert("set-cookie", session_cookie(&state, &token, false));
-    response
+    let Some(cookie) = session_cookie(&state, &token, false) else {
+        return no_store(StatusCode::INTERNAL_SERVER_ERROR.into_response());
+    };
+    response.headers_mut().insert("set-cookie", cookie);
+    no_store(response)
 }
 
-pub(crate) async fn me(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
+pub(crate) async fn me(State(state): State<AppState>, headers: HeaderMap) -> Response {
     let Some(token) = request_token(&headers) else {
-        return StatusCode::UNAUTHORIZED.into_response();
+        return private_no_store(StatusCode::UNAUTHORIZED.into_response());
     };
     let user = match state.session_user(hash_session_token(&token)).await {
         Ok(Some(user)) => user,
-        Err(StateError::Capacity) => return service_unavailable(),
-        Ok(None) | Err(_) => return StatusCode::UNAUTHORIZED.into_response(),
+        Err(StateError::Capacity) => return private_no_store(service_unavailable()),
+        Ok(None) | Err(_) => return private_no_store(StatusCode::UNAUTHORIZED.into_response()),
     };
-    Json(UserResponse {
+    let response = Json(UserResponse {
         user_id: user.user_id,
         username: user.username,
         is_admin: user.is_admin,
     })
-    .into_response()
+    .into_response();
+    private_no_store(response)
 }
 
-pub(crate) async fn logout(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
+pub(crate) async fn logout(State(state): State<AppState>, headers: HeaderMap) -> Response {
     if !same_origin(&headers) {
-        return StatusCode::FORBIDDEN.into_response();
+        return no_store(StatusCode::FORBIDDEN.into_response());
     }
     if let Some(token) = request_token(&headers)
         && matches!(
@@ -251,12 +263,28 @@ pub(crate) async fn logout(State(state): State<AppState>, headers: HeaderMap) ->
             Err(StateError::Capacity)
         )
     {
-        return service_unavailable();
+        return no_store(service_unavailable());
     }
     let mut response = StatusCode::NO_CONTENT.into_response();
+    let Some(cookie) = session_cookie(&state, "", true) else {
+        return no_store(StatusCode::INTERNAL_SERVER_ERROR.into_response());
+    };
+    response.headers_mut().insert("set-cookie", cookie);
+    no_store(response)
+}
+
+fn no_store(mut response: Response) -> Response {
     response
         .headers_mut()
-        .insert("set-cookie", session_cookie(&state, "", true));
+        .insert("cache-control", HeaderValue::from_static("no-store"));
+    response
+}
+
+fn private_no_store(mut response: Response) -> Response {
+    response.headers_mut().insert(
+        "cache-control",
+        HeaderValue::from_static("private, no-store"),
+    );
     response
 }
 
@@ -272,7 +300,7 @@ pub(crate) fn request_token(headers: &HeaderMap) -> Option<String> {
         })
 }
 
-fn session_cookie(state: &AppState, token: &str, clear: bool) -> HeaderValue {
+fn session_cookie(state: &AppState, token: &str, clear: bool) -> Option<HeaderValue> {
     let mut value = format!(
         "{COOKIE_NAME}={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={}",
         if clear { 0 } else { 43_200 }
@@ -280,7 +308,9 @@ fn session_cookie(state: &AppState, token: &str, clear: bool) -> HeaderValue {
     if state.config.cookie_secure {
         value.push_str("; Secure");
     }
-    HeaderValue::from_str(&value).expect("cookie attributes are valid ASCII")
+    // O token é hexadecimal por construção, então a conversão é infalível na
+    // prática; ainda assim, nunca faça `panic` num caminho de resposta.
+    HeaderValue::from_str(&value).ok()
 }
 
 pub(crate) fn same_origin(headers: &HeaderMap) -> bool {

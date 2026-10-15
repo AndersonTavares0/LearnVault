@@ -60,3 +60,12 @@ Instalações nativas usam variáveis de ambiente ou arquivo de configuração a
 `DATA_DIR`, `CACHE_DIR`, `LIBRARY_DIR`, `LISTEN_ADDR`, `PORT` e o bootstrap de autenticação.
 A biblioteca física permanece externa e somente leitura em todas as plataformas. Instaladores
 nunca devem copiar a biblioteca para o diretório da aplicação ou para backups.
+
+## Proteção do listener HTTP
+
+O timeout de 30 segundos do serviço Rust é aplicado depois que a requisição HTTP foi aceita pelo
+router; ele não limita clientes que mantêm uma conexão aberta enquanto enviam cabeçalhos lentamente.
+Em deploys expostos à rede, coloque o serviço atrás de um proxy HTTPS que imponha timeout de leitura
+de cabeçalhos, limite de conexões por origem e limites de tamanho de cabeçalho. Esses controles são
+responsabilidade do proxy ou da infraestrutura de implantação: esta documentação não afirma que o
+servidor, sozinho, elimina slowloris ou outros limites de rede externos.

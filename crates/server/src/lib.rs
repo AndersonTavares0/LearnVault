@@ -7,7 +7,9 @@ mod catalog;
 mod config;
 mod health;
 mod media;
+mod spa;
 mod state;
+mod stream;
 
 pub use auth::{
     AuthError, generate_session_token, hash_password, hash_session_token, validate_password,
@@ -38,6 +40,8 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Monta as rotas públicas mínimas do servidor.
 pub fn build_router(state: AppState) -> Router {
+    let inline_script_hashes = state.inline_script_hashes.clone();
+    let inline_style_hashes = state.inline_style_hashes.clone();
     Router::new()
         .route("/api/healthz", get(health::healthz))
         .route("/api/login", axum::routing::post(auth::login))
@@ -46,12 +50,23 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/catalog", get(catalog::catalog))
         .route("/api/admin/catalog/rescan", post(catalog::rescan))
         .route("/api/media", get(media::media).head(media::media))
+        .fallback(spa::serve)
         .layer(DefaultBodyLimit::max(8 * 1024))
-        .layer(map_response(security_headers))
+        .layer(map_response(move |response| {
+            security_headers(
+                response,
+                inline_script_hashes.clone(),
+                inline_style_hashes.clone(),
+            )
+        }))
         .with_state(state)
 }
 
-async fn security_headers(mut response: Response) -> Response {
+async fn security_headers(
+    mut response: Response,
+    inline_script_hashes: std::sync::Arc<[String]>,
+    inline_style_hashes: std::sync::Arc<[String]>,
+) -> Response {
     let headers = response.headers_mut();
     headers.insert(
         "x-content-type-options",
@@ -59,10 +74,24 @@ async fn security_headers(mut response: Response) -> Response {
     );
     headers.insert("x-frame-options", HeaderValue::from_static("DENY"));
     headers.insert("referrer-policy", HeaderValue::from_static("no-referrer"));
-    headers.insert(
-        HeaderName::from_static("content-security-policy"),
-        HeaderValue::from_static("default-src 'none'; frame-ancestors 'none'"),
-    );
+    let mut csp = "default-src 'self'; script-src 'self'".to_owned();
+    for hash in inline_script_hashes.iter() {
+        csp.push_str(" '");
+        csp.push_str(hash);
+        csp.push('\'');
+    }
+    csp.push_str("; style-src 'self' 'unsafe-hashes'");
+    for hash in inline_style_hashes.iter() {
+        csp.push_str(" '");
+        csp.push_str(hash);
+        csp.push('\'');
+    }
+    csp.push_str("; media-src 'self' data:; frame-ancestors 'none'");
+    // Os hashes são base64 por construção, então a conversão é infalível na
+    // prática; ainda assim, prefira responder sem CSP a travar o worker.
+    if let Ok(csp) = csp.parse() {
+        headers.insert(HeaderName::from_static("content-security-policy"), csp);
+    }
     response
 }
 
@@ -110,8 +139,8 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
     use std::path::PathBuf;
+    use std::{fs, time::Duration};
 
     use axum::{
         body::Body,
@@ -127,6 +156,7 @@ mod tests {
     async fn media_app() -> (axum::Router, tempfile::TempDir, AppState) {
         let temp = tempfile::tempdir().unwrap();
         fs::write(temp.path().join("lesson.mp4"), b"0123456789").unwrap();
+        fs::write(temp.path().join("slow.mp4"), vec![b'x'; 16 * 1024]).unwrap();
         let mut config = config_fixture(&temp);
         config.database_path = temp.path().join("media.sqlite");
         let state = AppState::initialize(config).await.unwrap();
@@ -185,6 +215,35 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn rescan_returns_conflict_while_the_local_lock_is_held() {
+        let temp = tempfile::tempdir().unwrap();
+        let state = AppState::initialize(config_fixture(&temp)).await.unwrap();
+        let app = build_router(state.clone());
+        let cookie = media_cookie(&app).await;
+        let _local_lock = state.rescan_lock.lock_owned().await;
+
+        let response = app
+            .oneshot(
+                Request::post("/api/admin/catalog/rescan")
+                    .header("origin", "http://localhost")
+                    .header("cookie", cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        assert_eq!(
+            response
+                .headers()
+                .get("cache-control")
+                .and_then(|value| value.to_str().ok()),
+            Some("private, no-store")
+        );
+    }
+
+    #[tokio::test]
     async fn healthz_is_public_and_returns_status_and_version() {
         let temp = tempfile::tempdir().unwrap();
         let app = build_router(AppState::new(config_fixture(&temp)));
@@ -212,6 +271,13 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            response
+                .headers()
+                .get("cache-control")
+                .and_then(|value| value.to_str().ok()),
+            Some("private, no-store")
+        );
     }
 
     #[test]
@@ -368,6 +434,13 @@ mod tests {
             .unwrap();
         assert_eq!(range.status(), StatusCode::RANGE_NOT_SATISFIABLE);
         assert_eq!(range.headers()["content-range"], "bytes */10");
+        assert_eq!(
+            range
+                .headers()
+                .get("cache-control")
+                .and_then(|value| value.to_str().ok()),
+            Some("private, no-store")
+        );
 
         let traversal = app
             .oneshot(
@@ -379,6 +452,49 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(traversal.status(), StatusCode::NOT_FOUND);
+        assert_eq!(
+            traversal
+                .headers()
+                .get("cache-control")
+                .and_then(|value| value.to_str().ok()),
+            Some("private, no-store")
+        );
+    }
+
+    #[tokio::test]
+    async fn media_reports_a_corrupt_stored_size_as_a_sanitized_internal_error() {
+        let (app, _temp, state) = media_app().await;
+        let cookie = media_cookie(&app).await;
+        // Um tamanho negativo é corrupção de catálogo: a resolução precisa falhar
+        // alto (500) em vez de tratar a linha como arquivo vazio.
+        state
+            .database
+            .try_lock()
+            .unwrap()
+            .connection()
+            .execute("UPDATE media SET size = -1", [])
+            .unwrap();
+
+        let response = app
+            .oneshot(
+                Request::get("/api/media?path=lesson.mp4")
+                    .header("cookie", &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(
+            response
+                .headers()
+                .get("cache-control")
+                .and_then(|value| value.to_str().ok()),
+            Some("private, no-store")
+        );
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        assert!(body.is_empty(), "erros sanitizados não expõem detalhes");
     }
 
     #[tokio::test]
@@ -403,5 +519,110 @@ mod tests {
             serde_json::from_slice::<serde_json::Value>(&body).unwrap()["error"],
             "server busy"
         );
+    }
+
+    #[tokio::test]
+    async fn media_stream_capacity_is_held_until_response_bodies_are_dropped() {
+        let (app, _temp, _state) = media_app().await;
+        let cookie = media_cookie(&app).await;
+        let mut slow_responses = Vec::new();
+
+        for _ in 0..4 {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::get("/api/media?path=slow.mp4")
+                        .header("cookie", &cookie)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            slow_responses.push(response);
+        }
+
+        let saturated = app
+            .clone()
+            .oneshot(
+                Request::get("/api/media?path=slow.mp4")
+                    .header("cookie", &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(saturated.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+        drop(slow_responses);
+        let recovered = app
+            .oneshot(
+                Request::get("/api/media?path=slow.mp4")
+                    .header("cookie", cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(recovered.status(), StatusCode::OK);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn idle_media_streams_release_capacity_without_reading_the_body() {
+        let (app, _temp, _state) = media_app().await;
+        let cookie = media_cookie(&app).await;
+        let mut idle_responses = Vec::new();
+
+        for _ in 0..4 {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::get("/api/media?path=slow.mp4")
+                        .header("cookie", &cookie)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            idle_responses.push(response);
+        }
+
+        let saturated = app
+            .clone()
+            .oneshot(
+                Request::get("/api/media?path=slow.mp4")
+                    .header("cookie", &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(saturated.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+        // Avança em passos de 1s para que os produtores sejam escalonados e enfileirem
+        // o primeiro chunk antes do deadline de 30s; um único yield + advance(30s)
+        // é racy sob carga (os produtores podem expirar sem nunca escrever).
+        for _ in 0..30 {
+            tokio::task::yield_now().await;
+            tokio::time::advance(Duration::from_secs(1)).await;
+        }
+        tokio::task::yield_now().await;
+
+        let recovered = app
+            .oneshot(
+                Request::get("/api/media?path=slow.mp4")
+                    .header("cookie", cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(recovered.status(), StatusCode::OK);
+
+        let mut timed_out = idle_responses.pop().unwrap();
+        assert!(timed_out.body_mut().frame().await.unwrap().is_ok());
+        assert!(timed_out.body_mut().frame().await.is_none());
+        drop(idle_responses);
     }
 }
