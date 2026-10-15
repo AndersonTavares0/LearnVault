@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![Node.js](https://img.shields.io/badge/Node.js-24.x-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
-[![npm](https://img.shields.io/badge/npm-11.x-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/)
+[![pnpm](https://img.shields.io/badge/pnpm-11.28.5-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
 [![SvelteKit](https://img.shields.io/badge/SvelteKit-2-FF3E00?logo=svelte&logoColor=white)](https://svelte.dev/docs/kit)
 [![Svelte](https://img.shields.io/badge/Svelte-5-FF3E00?logo=svelte&logoColor=white)](https://svelte.dev/)
 [![Vite](https://img.shields.io/badge/Vite-7-646CFF?logo=vite&logoColor=white)](https://vite.dev/)
@@ -66,25 +66,25 @@ Use the same toolchain across development, CI, container builds, and releases:
 | Area | Standard |
 | --- | --- |
 | Backend | Go 1.25; CI and release builds pin Go 1.25.14 |
-| Frontend runtime | Node.js 24.x with npm 11.x |
+| Frontend runtime | Node.js 24.x with pnpm 11.28.5 |
 | Frontend | SvelteKit 2, Svelte 5, Vite 7, TypeScript 5 |
-| Dependency installation | `package-lock.json` is authoritative; use `npm ci`, not `npm install`, in CI |
+| Dependency installation | `pnpm-lock.yaml` is authoritative; use `pnpm install --frozen-lockfile` in CI |
 | Persistence | SQLite through `modernc.org/sqlite` (pure Go) |
 | Application delivery | One Go executable with the static SPA embedded |
 | Optional deployment | Docker Compose or rootless Podman/Quadlet; neither is required to develop or run the native executable |
 
-Dependency versions are locked in `package-lock.json` and `go.sum`. Keep the major
+Dependency versions are locked in `pnpm-lock.yaml` and `go.sum`. Keep the major
 toolchain versions aligned with this table and propose upgrades through a reviewed PR.
-`npm` is the only JavaScript package manager; do not add a competing lockfile.
+`pnpm` is the only JavaScript package manager; do not add a competing lockfile.
 
 ## Development
 
-Requires Go 1.25, Node.js 24.x, and npm 11.x for local development. Docker is optional.
+Requires Go 1.25, Node.js 24.x, and pnpm 11.28.5 for local development. Docker is optional.
 
 ```sh
-npm ci
-npm run check
-npm run build
+pnpm install --frozen-lockfile
+pnpm run check
+pnpm run build
 go test ./...
 go run ./cmd/learnvault
 ```

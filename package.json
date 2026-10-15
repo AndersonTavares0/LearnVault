@@ -3,15 +3,11 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "packageManager": "pnpm@11.28.5",
   "devEngines": {
     "runtime": {
       "name": "node",
       "version": "24.x",
-      "onFail": "error"
-    },
-    "packageManager": {
-      "name": "npm",
-      "version": "11.x",
       "onFail": "error"
     }
   },
@@ -27,8 +23,5 @@
     "svelte-check": "^4.0.0",
     "typescript": "^5.0.0",
     "vite": "^7.0.0"
-  },
-  "overrides": {
-    "cookie": "^0.7.2"
   }
 }

@@ -19,7 +19,7 @@ The format follows Keep a Changelog and releases use Semantic Versioning.
 
 ### Changed
 
-- Standardized the repository around Go 1.25, Node.js 24, npm 11, and `npm ci`.
+- Standardized the repository around Go 1.25, Node.js 24, pnpm 11.28.5, and a frozen pnpm lockfile.
 - Kept generated SPA output, runtime data, caches, secrets, and local tooling out of Git.
 
 ### Security

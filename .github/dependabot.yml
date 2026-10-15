@@ -14,7 +14,7 @@ updates:
       semver-minor-days: 7
       semver-patch-days: 3
     groups:
-      npm-non-major:
+      frontend-non-major:
         applies-to: version-updates
         update-types:
           - minor

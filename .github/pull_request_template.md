@@ -16,9 +16,10 @@
 ## Validation
 
 - <!-- List only commands actually run and their result. Do not check items that were not run. -->
-- [ ] `npm run check`
-- [ ] `npm run build`
-- [ ] `npm audit --audit-level=low`
+- [ ] `pnpm install --frozen-lockfile`
+- [ ] `pnpm run check`
+- [ ] `pnpm run build`
+- [ ] `pnpm audit --audit-level=low`
 - [ ] `go test -race ./...`
 - [ ] `go vet ./...`
 - [ ] Container/Compose validation (include exact command)

@@ -40,14 +40,15 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: npm
-      - run: npm ci
-      - run: npm run check
-      - run: npm run build
-      - run: npm audit --audit-level=low
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check
+      - run: pnpm run build
+      - run: pnpm audit --audit-level=low
       - uses: actions/upload-artifact@v7
         with:
           name: spa-build

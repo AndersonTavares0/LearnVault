@@ -4,9 +4,9 @@ LearnVault requires Go 1.25+ and Node.js 24+ for native development. Docker and 
 are optional deployment adapters.
 
 ```sh
-npm ci
-npm run check
-npm run build
+pnpm install --frozen-lockfile
+pnpm run check
+pnpm run build
 go test ./...
 go run ./cmd/learnvault
 ```

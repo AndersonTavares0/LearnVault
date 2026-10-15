@@ -82,7 +82,7 @@ updates derived documentation.
 
 ## Dependency updates
 
-Dependabot groups compatible npm, Go-module, and GitHub Actions patch/minor updates;
+Dependabot groups compatible pnpm-managed frontend, Go-module, and GitHub Actions patch/minor updates;
 major updates remain individual so peer incompatibilities are visible. Updates are
 staggered weekly (Actions monthly), with a small open-PR cap and cooldown for routine
 updates. Security alerts remain eligible for immediate updates and require compatibility
