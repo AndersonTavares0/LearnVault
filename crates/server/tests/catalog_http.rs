@@ -168,9 +168,21 @@ async fn non_admin_cannot_rescan() {
 #[tokio::test]
 async fn admin_rescan_populates_the_authenticated_catalog() {
     let temp = tempfile::tempdir().unwrap();
-    std::fs::create_dir_all(temp.path().join("Categoria/Curso")).unwrap();
-    std::fs::write(temp.path().join("Categoria/Curso/lesson.mp4"), b"video").unwrap();
-    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let library = temp.path().join("library");
+    std::fs::create_dir_all(library.join("Categoria/Curso")).unwrap();
+    std::fs::write(library.join("Categoria/Curso/lesson.mp4"), b"video").unwrap();
+    let mut server_config = Config::from_args([
+        "learnvault-server",
+        "--database",
+        temp.path().join("catalog.sqlite").to_str().unwrap(),
+        "--library-root",
+        library.to_str().unwrap(),
+    ])
+    .unwrap();
+    server_config.admin_username = Some("admin".to_owned());
+    server_config.admin_password = Some("uma senha local muito segura".to_owned());
+    server_config.cookie_secure = false;
+    let app = build_router(AppState::initialize(server_config).await.unwrap());
     let cookie = login(&app).await;
 
     let missing_origin = app
@@ -197,6 +209,11 @@ async fn admin_rescan_populates_the_authenticated_catalog() {
         .await
         .unwrap();
     assert_eq!(rescan.status(), StatusCode::OK);
+    let rescan_body = rescan.into_body().collect().await.unwrap().to_bytes();
+    let rescan_json: serde_json::Value = serde_json::from_slice(&rescan_body).unwrap();
+    assert_eq!(rescan_json["complete"], true);
+    assert_eq!(rescan_json["inserted"], 1);
+    assert!(rescan_json["scan_id"].as_i64().unwrap() > 0);
 
     let catalog = app
         .oneshot(
@@ -213,6 +230,54 @@ async fn admin_rescan_populates_the_authenticated_catalog() {
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(json["complete"], true);
     assert_eq!(json["categories"][0]["title"], "Categoria");
+    let file = find_file(&json["categories"][0]).expect("lesson file in catalog");
+    assert_eq!(file["name"], "lesson.mp4");
+    assert_eq!(file["path"], "Categoria/Curso/lesson.mp4");
+    assert_eq!(file["size"], 5);
+    assert_eq!(file["kind"], "media");
+    assert_eq!(file["availability"], "available");
+    assert_eq!(file["unverified"], false);
+}
+
+#[tokio::test]
+async fn rescan_sanitizes_a_missing_library_root_error() {
+    let temp = tempfile::tempdir().unwrap();
+    let library = temp.path().join("library");
+    fs::create_dir(&library).unwrap();
+    let mut server_config = Config::from_args([
+        "learnvault-server",
+        "--database",
+        temp.path().join("catalog.sqlite").to_str().unwrap(),
+        "--library-root",
+        library.to_str().unwrap(),
+    ])
+    .unwrap();
+    server_config.admin_username = Some("admin".to_owned());
+    server_config.admin_password = Some("uma senha local muito segura".to_owned());
+    server_config.cookie_secure = false;
+    let app = build_router(AppState::initialize(server_config).await.unwrap());
+    let cookie = login(&app).await;
+    fs::remove_dir(&library).unwrap();
+
+    let response = app
+        .oneshot(
+            Request::post("/api/admin/catalog/rescan")
+                .header("origin", "http://localhost")
+                .header("cookie", cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["error"], "library root changed");
+    assert!(
+        !body
+            .windows(library.to_str().unwrap().len())
+            .any(|window| { window == library.to_str().unwrap().as_bytes() })
+    );
 }
 
 #[tokio::test]
@@ -274,4 +339,20 @@ fn wait_for_file(path: &Path) {
         assert!(Instant::now() < deadline, "timed out waiting for {path:?}");
         thread::sleep(Duration::from_millis(10));
     }
+}
+
+fn find_file(value: &serde_json::Value) -> Option<&serde_json::Value> {
+    if value.get("name").and_then(serde_json::Value::as_str) == Some("lesson.mp4") {
+        return Some(value);
+    }
+    for key in ["files", "loose_files", "children"] {
+        if let Some(values) = value.get(key).and_then(serde_json::Value::as_array) {
+            for value in values {
+                if let Some(file) = find_file(value) {
+                    return Some(file);
+                }
+            }
+        }
+    }
+    None
 }
