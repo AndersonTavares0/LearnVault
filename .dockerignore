@@ -1,6 +1,6 @@
 .git
-node_modules
-.svelte-kit
+**/node_modules
+**/.svelte-kit
 target
 services/go/cmd/learnvault/web/build
 apps/web/build
