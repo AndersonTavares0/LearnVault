@@ -138,7 +138,37 @@ fn resolve_within_refuses_escapes_and_absolute_paths() {
     ] {
         match resolve_within(root, relative) {
             Err(Error::InvalidRelativePath { .. }) => {}
-            other => panic!("escape foi aceito para {relative}: {other:?}"),
+            other => panic!("esperava Error::InvalidRelativePath para {relative}: {other:?}"),
         }
+    }
+}
+
+#[test]
+fn windows_mode_rejects_colons_because_they_open_alternate_data_streams() {
+    for path in [
+        "Curso/Aula/aula.mp4:fluxo",
+        "Curso/Aula:oculto/aula.mp4",
+        "Curso/Dia 1: Introdução/aula.mp4",
+        "aula.mp4:",
+    ] {
+        assert!(
+            relative_path_key(path, KeyMode::Insensitive).is_err(),
+            "componente com `:` foi aceito no modo do Windows: {path}"
+        );
+    }
+}
+
+#[test]
+fn sensitive_mode_keeps_colons_because_unix_allows_them_in_names() {
+    for path in [
+        "Curso/Aula/aula.mp4:fluxo",
+        "Curso/Dia 1: Introdução/aula.mp4",
+        "aula.mp4:",
+    ] {
+        assert_eq!(
+            relative_path_key(path, KeyMode::Sensitive).unwrap(),
+            path,
+            "o modo Unix deve preservar nomes com `:`, que são legítimos: {path}"
+        );
     }
 }

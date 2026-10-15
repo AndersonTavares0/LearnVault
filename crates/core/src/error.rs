@@ -99,6 +99,69 @@ pub enum Error {
         /// Causa original reportada pelo SQLite ao gravar o histórico.
         history_error: rusqlite::Error,
     },
+
+    /// O identificador de mídia não existe na biblioteca.
+    #[error("mídia desconhecida na biblioteca: {media_id}")]
+    MediaNotFound {
+        /// Identificador consultado.
+        media_id: String,
+    },
+
+    /// A linha de catálogo existe, mas está marcada como ausente.
+    #[error("a mídia está marcada como ausente: {media_id}")]
+    MediaUnavailable {
+        /// Identificador consultado.
+        media_id: String,
+    },
+
+    /// A mídia estava disponível na última varredura e não está mais no disco.
+    #[error("a mídia desapareceu do disco: {media_id}")]
+    MediaMissingOnDisk {
+        /// Identificador consultado.
+        media_id: String,
+    },
+
+    /// O caminho resolvido saiu da raiz da biblioteca.
+    #[error("o caminho resolvido está fora da biblioteca: {media_id}")]
+    MediaOutsideLibrary {
+        /// Identificador consultado.
+        media_id: String,
+    },
+
+    /// O componente final do caminho é um link simbólico.
+    ///
+    /// A biblioteca é indexada sem seguir links, então um link não é uma mídia conhecida.
+    #[error("a mídia é um link simbólico e não é seguida: {media_id}")]
+    MediaIsSymlink {
+        /// Identificador consultado.
+        media_id: String,
+    },
+
+    /// O caminho aponta para algo que não é um arquivo comum.
+    #[error("a mídia não é um arquivo comum: {media_id}")]
+    MediaNotAFile {
+        /// Identificador consultado.
+        media_id: String,
+    },
+
+    /// O arquivo não pôde ser aberto ou inspecionado.
+    #[error("não foi possível abrir a mídia: {media_id}")]
+    MediaUnreadable {
+        /// Identificador consultado.
+        media_id: String,
+        /// Causa original reportada pelo sistema de arquivos.
+        #[source]
+        source: std::io::Error,
+    },
+
+    /// O arquivo aberto não é o arquivo que foi validado no caminho.
+    ///
+    /// Só é verificável no Unix, onde o sistema expõe a identidade do descritor aberto.
+    #[error("o arquivo aberto não corresponde ao caminho validado: {media_id}")]
+    MediaIdentityMismatch {
+        /// Identificador consultado.
+        media_id: String,
+    },
 }
 
 /// Resultado das operações do domínio.
