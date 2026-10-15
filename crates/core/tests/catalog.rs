@@ -426,3 +426,119 @@ fn building_the_catalog_does_not_write() -> TestResult {
     );
     Ok(())
 }
+
+#[test]
+fn a_node_role_does_not_depend_on_the_order_of_the_files() -> TestResult {
+    // A chave de `a-bonus/...` ordena antes da chave de `z.mp4`. O papel do diretório
+    // que contém mídia não pode depender de qual arquivo foi lido primeiro.
+    let db = library_db()?;
+    media(&db, "m1", "Curso/Modulo1/a-bonus/x.mp4")?;
+    media(&db, "m2", "Curso/Modulo1/z.mp4")?;
+
+    let catalog = build_catalog(&db, LIB)?;
+    let lesson = node(&catalog.categories[0].children, "Curso/Modulo1");
+
+    assert_eq!(
+        lesson.role,
+        NodeRole::Lesson,
+        "um diretório com mídia é uma aula, independentemente da ordem de leitura"
+    );
+    assert_eq!(lesson.files.len(), 1);
+    assert_eq!(lesson.files[0].media_id, "m2");
+
+    let nested = node(&lesson.children, "Curso/Modulo1/a-bonus");
+    assert_eq!(nested.role, NodeRole::Lesson);
+    assert_eq!(nested.files[0].media_id, "m1");
+    Ok(())
+}
+
+#[test]
+fn an_unverified_area_does_not_cover_a_shared_prefix_sibling() -> TestResult {
+    let db = library_db()?;
+    let scan_id = insert_scan(&db, 0)?;
+    insert_unverified(&db, scan_id, "Cat")?;
+    media(&db, "m1", "Catalog/Aula/aula.mp4")?;
+    media(&db, "m2", "Cat/Aula/aula.mp4")?;
+
+    let catalog = build_catalog(&db, LIB)?;
+
+    let fora = node(&catalog.categories, "Catalog");
+    let fora_lesson = node(&fora.children, "Catalog/Aula");
+    assert!(
+        !fora_lesson.files[0].unverified,
+        "Cat não pode cobrir Catalog"
+    );
+
+    let dentro = node(&catalog.categories, "Cat");
+    let dentro_lesson = node(&dentro.children, "Cat/Aula");
+    assert!(dentro_lesson.files[0].unverified);
+    Ok(())
+}
+
+#[test]
+fn a_shared_prefix_directory_is_not_adopted_as_an_ancestor() -> TestResult {
+    let db = library_db()?;
+    media(&db, "m1", "A/aula.mp4")?;
+    media(&db, "m2", "AB/C/aula.mp4")?;
+
+    let catalog = build_catalog(&db, LIB)?;
+    assert_eq!(catalog.categories.len(), 2);
+
+    let a = node(&catalog.categories, "A");
+    assert_eq!(a.loose_files.len(), 1);
+    assert!(a.children.is_empty(), "A não contém a árvore de AB");
+
+    let ab = node(&catalog.categories, "AB");
+    assert_eq!(node(&ab.children, "AB/C").files[0].media_id, "m2");
+    Ok(())
+}
+
+#[test]
+fn a_failed_scan_marks_every_file_as_unverified() -> TestResult {
+    let db = library_db()?;
+    let scan_id = insert_scan(&db, 0)?;
+    db.connection().execute(
+        "UPDATE scan SET status = 'failed' WHERE scan_id = ?1",
+        [scan_id],
+    )?;
+    media(&db, "m1", "Cat/Aula/aula.mp4")?;
+
+    let catalog = build_catalog(&db, LIB)?;
+
+    assert!(
+        !catalog.complete,
+        "a última tentativa não conseguiu ler a raiz"
+    );
+    let lesson = node(&node(&catalog.categories, "Cat").children, "Cat/Aula");
+    assert!(
+        lesson.files[0].unverified,
+        "nada foi verificado na tentativa que falhou"
+    );
+    Ok(())
+}
+
+#[test]
+fn files_are_ordered_by_path_regardless_of_insertion_order() -> TestResult {
+    let db = library_db()?;
+    media(&db, "m2", "Cat/Aula/b.mp4")?;
+    media(&db, "m1", "Cat/Aula/a.mp4")?;
+
+    let catalog = build_catalog(&db, LIB)?;
+    let lesson = node(&node(&catalog.categories, "Cat").children, "Cat/Aula");
+
+    let names: Vec<&str> = lesson.files.iter().map(|file| file.name.as_str()).collect();
+    assert_eq!(names, ["a.mp4", "b.mp4"]);
+    Ok(())
+}
+
+#[test]
+fn a_negative_size_is_read_as_zero() -> TestResult {
+    let db = library_db()?;
+    insert_media(&db, "m1", "Cat/Aula/aula.mp4", -1, "available")?;
+
+    let catalog = build_catalog(&db, LIB)?;
+    let lesson = node(&node(&catalog.categories, "Cat").children, "Cat/Aula");
+
+    assert_eq!(lesson.files[0].size, 0);
+    Ok(())
+}
