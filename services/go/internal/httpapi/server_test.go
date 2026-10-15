@@ -177,6 +177,36 @@ func TestAuthenticatedMediaSupportsRangeAndRejectsUnauthenticatedAccess(t *testi
 	if served.Code != http.StatusOK || served.Body.String() != "secret" {
 		t.Fatalf("root media returned %d %q; want catalogued file", served.Code, served.Body.String())
 	}
+	if got := result.Header().Get("Cache-Control"); got != "private, no-store" {
+		t.Fatalf("media Cache-Control = %q; want private, no-store", got)
+	}
+}
+
+func TestRescanTombstonesRemovedMedia(t *testing.T) {
+	root := t.TempDir()
+	lesson := filepath.Join(root, "Cat", "Curso", "Modulo", "Aula")
+	if err := os.MkdirAll(lesson, 0o755); err != nil { t.Fatal(err) }
+	mediaPath := filepath.Join(lesson, "removed.mp4")
+	if err := os.WriteFile(mediaPath, []byte("video"), 0o644); err != nil { t.Fatal(err) }
+	db := openTestDB(t)
+	if err := db.BootstrapAdmin(context.Background(), "owner", "a sufficiently long password"); err != nil { t.Fatal(err) }
+	lib, err := library.Open(root); if err != nil { t.Fatal(err) }
+	srv := NewWithLibrary(db, false, lib)
+	cookie := loginForTest(t, srv)
+	rescan := httptest.NewRequest(http.MethodPost, "/api/admin/catalog/rescan", nil)
+	rescan.Header.Set("Origin", "http://example.com"); rescan.AddCookie(cookie)
+	first := httptest.NewRecorder(); srv.ServeHTTP(first, rescan)
+	if first.Code != http.StatusOK { t.Fatalf("initial rescan returned %d", first.Code) }
+	if err := os.Remove(mediaPath); err != nil { t.Fatal(err) }
+	second := httptest.NewRequest(http.MethodPost, "/api/admin/catalog/rescan", nil)
+	second.Header.Set("Origin", "http://example.com"); second.AddCookie(cookie)
+	result := httptest.NewRecorder(); srv.ServeHTTP(result, second)
+	if result.Code != http.StatusOK { t.Fatalf("removal rescan returned %d", result.Code) }
+	request := httptest.NewRequest(http.MethodGet, "/api/media?path=Cat/Curso/Modulo/Aula/removed.mp4", nil)
+	request.AddCookie(cookie)
+	media := httptest.NewRecorder(); srv.ServeHTTP(media, request)
+	if media.Code != http.StatusNotFound { t.Fatalf("removed media returned %d; want 404", media.Code) }
+	if got := media.Header().Get("Cache-Control"); got != "private, no-store" { t.Fatalf("removed media Cache-Control = %q", got) }
 }
 
 func TestMediaMaterialsAreDownloadsButVTTRemainsPlayable(t *testing.T) {

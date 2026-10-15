@@ -79,11 +79,25 @@ func NewWithLibraryVersion(db *storage.DB, cookieSecure bool, root *library.Root
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Referrer-Policy", "no-referrer")
+	if noStoreAPIPath(r.URL.Path) {
+		// Session state, catalogs, and media must never be stored by an
+		// intermediary or remain available from a browser cache after logout.
+		w.Header().Set("Cache-Control", "private, no-store")
+	}
 	if strings.HasPrefix(r.URL.Path, "/api/") {
 		s.api(w, r)
 		return
 	}
 	http.NotFound(w, r)
+}
+
+func noStoreAPIPath(path string) bool {
+	switch path {
+	case "/api/login", "/api/me", "/api/catalog", "/api/media", "/api/account/credentials", "/api/logout", "/api/admin/catalog/rescan":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Server) api(w http.ResponseWriter, r *http.Request) {

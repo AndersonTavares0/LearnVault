@@ -85,6 +85,7 @@ func TestAPIRejectsUnsupportedMethodsAndUnknownRoutes(t *testing.T) {
 		{"/api/healthz", http.MethodPost},
 		{"/api/login", http.MethodGet},
 		{"/api/logout", http.MethodGet},
+		{"/api/account/credentials", http.MethodGet},
 		{"/api/me", http.MethodPost},
 		{"/api/catalog", http.MethodPost},
 		{"/api/media", http.MethodPost},
@@ -108,6 +109,9 @@ func TestAPIRejectsUnsupportedMethodsAndUnknownRoutes(t *testing.T) {
 			}
 			if recorder.Header().Get("X-Content-Type-Options") != "nosniff" || recorder.Header().Get("Referrer-Policy") != "no-referrer" {
 				t.Fatal("API security headers are missing")
+			}
+			if strings.HasPrefix(tc.path, "/api/") && tc.path != "/api/healthz" && tc.path != "/api/unknown" && recorder.Header().Get("Cache-Control") != "private, no-store" {
+				t.Fatalf("%s Cache-Control = %q; want private, no-store", tc.path, recorder.Header().Get("Cache-Control"))
 			}
 		})
 	}
@@ -133,6 +137,9 @@ func TestLoginRejectsMalformedUnknownAndInvalidCredentials(t *testing.T) {
 			srv.ServeHTTP(recorder, request)
 			if recorder.Code != tc.want {
 				t.Fatalf("status = %d; want %d (body %s)", recorder.Code, tc.want, recorder.Body.String())
+			}
+			if recorder.Header().Get("Cache-Control") != "private, no-store" {
+				t.Fatalf("login %s Cache-Control = %q; want private, no-store", tc.name, recorder.Header().Get("Cache-Control"))
 			}
 		})
 	}
@@ -164,6 +171,9 @@ func TestUnavailableStorageAndLibraryReturnSafeErrors(t *testing.T) {
 			srv.ServeHTTP(recorder, request)
 			if recorder.Code != tc.want {
 				t.Fatalf("status = %d; want %d (body %s)", recorder.Code, tc.want, recorder.Body.String())
+			}
+			if tc.path != "/api/healthz" && recorder.Header().Get("Cache-Control") != "private, no-store" {
+				t.Fatalf("%s Cache-Control = %q; want private, no-store", tc.path, recorder.Header().Get("Cache-Control"))
 			}
 		})
 	}
@@ -204,6 +214,9 @@ func TestMediaAndRescanRejectInvalidOrUnavailableRequests(t *testing.T) {
 			handler.ServeHTTP(recorder, request)
 			if recorder.Code != tc.want {
 				t.Fatalf("status = %d; want %d (body %s)", recorder.Code, tc.want, recorder.Body.String())
+			}
+			if recorder.Header().Get("Cache-Control") != "private, no-store" {
+				t.Fatalf("%s Cache-Control = %q; want private, no-store", tc.path, recorder.Header().Get("Cache-Control"))
 			}
 		})
 	}
