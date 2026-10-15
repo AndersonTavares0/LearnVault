@@ -126,3 +126,41 @@ fn database_with_a_newer_schema_is_rejected_without_panicking() -> TestResult {
     }
     Ok(())
 }
+
+#[test]
+fn rejecting_a_newer_schema_leaves_the_database_untouched() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("learnvault.sqlite");
+
+    {
+        let conn = rusqlite::Connection::open(&path)?;
+        conn.pragma_update(None, "user_version", 2)?;
+    }
+
+    match Database::open(&path) {
+        Err(Error::SchemaTooNew { .. }) => {}
+        other => panic!("esperava Error::SchemaTooNew, obtive {other:?}"),
+    }
+
+    // A recusa não pode ter efeito colateral: nem tabela criada, nem versão alterada,
+    // nem journal trocado em um banco que este binário não conhece.
+    let conn = rusqlite::Connection::open(&path)?;
+    let tables: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(tables, 0, "nenhuma tabela deve ter sido criada");
+
+    let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    assert_eq!(version, 2, "a versão do banco não deve ser alterada");
+
+    let journal: String =
+        conn.query_row("PRAGMA journal_mode", [], |row| row.get::<_, String>(0))?;
+    assert_ne!(
+        journal.to_lowercase(),
+        "wal",
+        "recusar o schema não deve trocar o journal do arquivo"
+    );
+    Ok(())
+}
