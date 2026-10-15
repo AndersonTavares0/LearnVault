@@ -376,7 +376,9 @@ fn recent_study_hides_removed_media_without_erasing_progress() -> TestResult {
     seed_progress(&db, OWNER, "m1", 10, false)?;
     seed_progress(&db, OWNER, "m2", 20, false)?;
 
-    remove_media(&mut db, LIB, "m1", false)?;
+    // A mídia tem progresso, então a remoção exige confirmação: é justamente esse progresso
+    // que precisa sobreviver à remoção.
+    remove_media(&mut db, LIB, "m1", true)?;
 
     let recent = recent_study(&db, OWNER, 10)?;
     assert_eq!(recent.len(), 1, "só a mídia não removida aparece");
@@ -402,7 +404,11 @@ fn a_rescan_with_the_file_on_disk_keeps_the_removal() -> TestResult {
     remove_media(&mut db, LIB, &media_id, false)?;
     rescan(&mut db, LIB, root)?;
 
-    assert_eq!(removal_count(&db, LIB), 1, "a varredura não desfaz a remoção");
+    assert_eq!(
+        removal_count(&db, LIB),
+        1,
+        "a varredura não desfaz a remoção"
+    );
     assert!(
         root.join("Curso/Aula/aula.mp4").exists(),
         "o arquivo continua no disco"
