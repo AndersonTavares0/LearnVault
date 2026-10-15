@@ -16,6 +16,10 @@ use std::{
 use tempfile::TempDir;
 use tower::ServiceExt;
 
+/// Deadline generoso para a sincronização entre processos do teste de lock de
+/// rescan. Um valor curto (segundos) vira flake em runners de CI carregados.
+const RESCAN_LOCK_TIMEOUT: Duration = Duration::from_secs(60);
+
 fn config(temp: &TempDir) -> Config {
     let mut config = Config::from_args([
         "learnvault-server",
@@ -383,6 +387,14 @@ async fn rescan_returns_conflict_while_another_process_holds_its_lock() {
     let lock_path = temp.path().join("catalog.sqlite.rescan.lock");
     let ready_path = temp.path().join("lock-ready");
     let release_path = temp.path().join("lock-release");
+
+    // Bootstrap (Argon2id do admin) e login (Argon2id) são deliberadamente lentos
+    // e podem levar segundos num runner de CI carregado. Prepare-os antes de
+    // spawnar o filho para que a janela entre `lock-ready` e `lock-release` cubra
+    // apenas o request, e não o trabalho pesado de startup.
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let cookie = login(&app).await;
+
     let mut child = Command::new(std::env::current_exe().unwrap())
         .arg("--exact")
         .arg("rescan_lock_helper")
@@ -393,8 +405,6 @@ async fn rescan_returns_conflict_while_another_process_holds_its_lock() {
         .unwrap();
     wait_for_file(&ready_path);
 
-    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
-    let cookie = login(&app).await;
     let response = app
         .oneshot(
             Request::post("/api/admin/catalog/rescan")
@@ -407,7 +417,10 @@ async fn rescan_returns_conflict_while_another_process_holds_its_lock() {
         .unwrap();
 
     fs::write(release_path, []).unwrap();
-    assert!(child.wait().unwrap().success());
+    assert!(
+        child.wait().unwrap().success(),
+        "o processo auxiliar deve sair com sucesso depois do release"
+    );
     assert_eq!(response.status(), StatusCode::CONFLICT);
     assert_private_no_store(&response);
 }
@@ -431,8 +444,11 @@ fn rescan_lock_helper() {
     wait_for_file(Path::new(&release_path));
 }
 
+/// Espera por um arquivo de sincronização entre processos com um deadline
+/// generoso: em CI carregado, o processo auxiliar pode demorar bem mais que
+/// alguns segundos para ser spawnado e para reagir ao release.
 fn wait_for_file(path: &Path) {
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + RESCAN_LOCK_TIMEOUT;
     while !path.exists() {
         assert!(Instant::now() < deadline, "timed out waiting for {path:?}");
         thread::sleep(Duration::from_millis(10));
