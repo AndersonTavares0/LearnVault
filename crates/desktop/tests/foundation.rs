@@ -228,6 +228,39 @@ fn invoke_handler_registers_only_the_desktop_commands() {
 }
 
 #[test]
+fn catalog_command_offloads_blocking_sqlite_off_the_main_thread() {
+    let command = read(&crate_root().join("src/command.rs"));
+
+    // O catálogo lê o SQLite de forma bloqueante. Um `#[tauri::command]` síncrono roda na
+    // main thread do webview e travaria a UI; o comando precisa ser `async` e executar o
+    // trabalho bloqueante em `spawn_blocking` do runtime do Tauri, sem adicionar `tokio`
+    // como dependência direta.
+    assert!(
+        !command.contains("pub fn desktop_catalog"),
+        "desktop_catalog não pode continuar síncrono (executaria o SQLite na main thread)"
+    );
+
+    let marker = "pub async fn desktop_catalog";
+    let start = command
+        .find(marker)
+        .expect("desktop_catalog precisa ser um comando assíncrono (pub async fn)");
+    let rest = &command[start..];
+    let end = rest
+        .find("\n}")
+        .expect("o comando desktop_catalog precisa fechar o corpo");
+    let body = &rest[..end];
+
+    assert!(
+        body.contains("tauri::async_runtime::spawn_blocking"),
+        "o SQLite bloqueante precisa rodar em spawn_blocking do Tauri: {body}"
+    );
+    assert!(
+        body.contains("state.catalog()"),
+        "o trabalho bloqueante continua sendo o catálogo do estado: {body}"
+    );
+}
+
+#[test]
 fn desktop_source_has_no_network_listener_or_http_server() {
     for source in rust_sources() {
         let content = read(&source);
