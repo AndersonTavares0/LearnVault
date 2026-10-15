@@ -1,21 +1,15 @@
 {
-	"extends": "$app/tsconfig",
 	"compilerOptions": {
-		"allowJs": true,
-		"checkJs": true,
 		"esModuleInterop": true,
 		"forceConsistentCasingInFileNames": true,
 		"resolveJsonModule": true,
 		"skipLibCheck": true,
 		"sourceMap": true,
 		"strict": true,
-		"moduleResolution": "bundler"
+		"moduleResolution": "bundler",
+		"target": "ES2022",
+		"module": "ESNext",
+		"lib": ["ES2022", "DOM"]
 	},
-	"include": [
-		"src",
-		"*"
-	],
-	"exclude": [
-		"src/service-worker"
-	]
+	"include": ["src", "vite.config.ts"]
 }
