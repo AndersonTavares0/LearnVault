@@ -16,7 +16,18 @@ pub use state::{AppState, StateError};
 
 use std::{future::Future, time::Duration};
 
-use axum::{BoxError, Router, error_handling::HandleErrorLayer, http::StatusCode, routing::get};
+use axum::{
+    BoxError, Router,
+    error_handling::HandleErrorLayer,
+    extract::DefaultBodyLimit,
+    http::{
+        StatusCode,
+        header::{HeaderName, HeaderValue},
+    },
+    middleware::map_response,
+    response::Response,
+    routing::get,
+};
 use tokio::net::TcpListener;
 use tower::ServiceBuilder;
 
@@ -30,7 +41,24 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/login", axum::routing::post(auth::login))
         .route("/api/me", get(auth::me))
         .route("/api/logout", axum::routing::post(auth::logout))
+        .layer(DefaultBodyLimit::max(8 * 1024))
+        .layer(map_response(security_headers))
         .with_state(state)
+}
+
+async fn security_headers(mut response: Response) -> Response {
+    let headers = response.headers_mut();
+    headers.insert(
+        "x-content-type-options",
+        HeaderValue::from_static("nosniff"),
+    );
+    headers.insert("x-frame-options", HeaderValue::from_static("DENY"));
+    headers.insert("referrer-policy", HeaderValue::from_static("no-referrer"));
+    headers.insert(
+        HeaderName::from_static("content-security-policy"),
+        HeaderValue::from_static("default-src 'none'; frame-ancestors 'none'"),
+    );
+    response
 }
 
 /// Erros públicos do ciclo de vida do servidor.
@@ -66,10 +94,13 @@ where
             .timeout(Duration::from_secs(30)),
     );
 
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown)
-        .await
-        .map_err(ServeError::Serve)
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown)
+    .await
+    .map_err(ServeError::Serve)
 }
 
 #[cfg(test)]

@@ -1,7 +1,9 @@
 //! Abertura do banco de dados e garantia do schema.
 
-use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    path::{Path, PathBuf},
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 use rusqlite::Connection;
 use rusqlite::config::DbConfig;
@@ -60,6 +62,7 @@ impl Database {
     }
 
     fn from_connection(conn: Connection, persistent: bool) -> Result<Self> {
+        conn.busy_timeout(Duration::from_secs(5))?;
         conn.set_db_config(DbConfig::SQLITE_DBCONFIG_ENABLE_FKEY, true)?;
 
         // A versão é lida antes de qualquer alteração no arquivo. Recusar um schema mais

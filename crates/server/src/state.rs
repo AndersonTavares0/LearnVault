@@ -26,6 +26,9 @@ pub enum StateError {
     /// Falha de persistência do core.
     #[error("database initialization failed")]
     Database(#[source] CoreError),
+    /// O diretório pai do banco não pôde ser criado.
+    #[error("database directory initialization failed")]
+    DatabaseDirectory,
     /// Não existe administrador e não foram fornecidas credenciais válidas.
     #[error("administrator credentials are required for first startup")]
     MissingAdministrator,
@@ -52,6 +55,13 @@ impl AppState {
     pub async fn initialize(config: Config) -> Result<Self, StateError> {
         let setup = config.clone();
         let (database, _) = tokio::task::spawn_blocking(move || {
+            if let Some(parent) = setup
+                .database_path
+                .parent()
+                .filter(|parent| !parent.as_os_str().is_empty())
+            {
+                std::fs::create_dir_all(parent).map_err(|_| StateError::DatabaseDirectory)?;
+            }
             let mut database =
                 Database::open(&setup.database_path).map_err(StateError::Database)?;
             let existing = learnvault_core::has_admin(&database).map_err(StateError::Database)?;
@@ -92,9 +102,12 @@ impl AppState {
     pub(crate) async fn allow_login_attempt(&self, username: &str) -> bool {
         let mut attempts = self.login_attempts.lock().await;
         let now = Instant::now();
-        let entry = attempts
-            .entry(username.to_ascii_lowercase())
-            .or_insert((0, now));
+        attempts.retain(|_, (_, started)| now.duration_since(*started) < Duration::from_secs(60));
+        let key = username.to_ascii_lowercase();
+        if attempts.len() >= 1024 && !attempts.contains_key(&key) {
+            return false;
+        }
+        let entry = attempts.entry(key).or_insert((0, now));
         if now.duration_since(entry.1) >= Duration::from_secs(60) {
             *entry = (0, now);
         }

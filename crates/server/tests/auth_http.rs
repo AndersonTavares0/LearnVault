@@ -52,6 +52,15 @@ async fn login_me_and_logout_use_an_expiring_secure_cookie() {
         .unwrap();
 
     assert_eq!(login.status(), StatusCode::OK);
+    assert_eq!(login.headers()["x-content-type-options"], "nosniff");
+    assert_eq!(login.headers()["x-frame-options"], "DENY");
+    assert_eq!(login.headers()["referrer-policy"], "no-referrer");
+    assert!(
+        login.headers()["content-security-policy"]
+            .to_str()
+            .unwrap()
+            .contains("frame-ancestors")
+    );
     let cookie = login.headers()["set-cookie"].to_str().unwrap().to_owned();
     assert!(cookie.starts_with("learnvault_session="));
     assert!(cookie.contains("HttpOnly"));
@@ -202,4 +211,36 @@ async fn login_is_rate_limited_and_secure_is_default() {
             .unwrap()
             .contains("Secure")
     );
+}
+
+#[tokio::test]
+async fn startup_creates_missing_database_parent_and_rejects_oversized_login() {
+    let temp = tempfile::tempdir().unwrap();
+    let mut config = Config::from_args([
+        "learnvault-server",
+        "--database",
+        temp.path().join("nested/data.sqlite").to_str().unwrap(),
+        "--library-root",
+        temp.path().to_str().unwrap(),
+    ])
+    .unwrap();
+    config.admin_username = Some("admin".to_owned());
+    config.admin_password = Some("uma senha local muito segura".to_owned());
+    config.cookie_secure = false;
+    let app = build_router(AppState::initialize(config).await.unwrap());
+
+    let response = app
+        .oneshot(
+            Request::post("/api/login")
+                .header("origin", "http://localhost")
+                .header("content-type", "application/json")
+                .body(Body::from(format!(
+                    r#"{{"username":"admin","password":"{}"}}"#,
+                    "x".repeat(10_000)
+                )))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
 }
