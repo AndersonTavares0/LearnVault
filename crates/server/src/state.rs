@@ -32,6 +32,8 @@ pub struct AppState {
     pub(crate) rescan_lock: Arc<Mutex<()>>,
     pub(crate) inline_script_hashes: Arc<[String]>,
     pub(crate) inline_style_hashes: Arc<[String]>,
+    spa_shell: Option<Arc<SpaShell>>,
+    spa_shell_too_large: bool,
     blocking_tasks: Arc<Semaphore>,
     spa_asset_streams: Arc<Semaphore>,
     spa_shell_streams: Arc<Semaphore>,
@@ -65,11 +67,14 @@ impl AppState {
     /// Cria o estado inicial da aplicação.
     pub fn new(config: Config) -> Self {
         let database = Database::open_in_memory().expect("in-memory database must initialize");
-        let (inline_script_hashes, inline_style_hashes) =
-            shell_inline_hashes(config.web_root.as_deref());
+        let spa_shell_too_large = shell_too_large(config.web_root.as_deref());
+        let spa_shell = load_spa_shell(config.web_root.as_deref()).map(Arc::new);
+        let (inline_script_hashes, inline_style_hashes) = shell_hashes(spa_shell.as_deref());
         Self {
             inline_script_hashes: inline_script_hashes.into(),
             inline_style_hashes: inline_style_hashes.into(),
+            spa_shell,
+            spa_shell_too_large,
             config,
             database: Arc::new(Mutex::new(database)),
             login_attempts: Arc::new(Mutex::new(HashMap::new())),
@@ -84,47 +89,47 @@ impl AppState {
     /// Abre o banco e executa o bootstrap administrativo fora das threads Tokio.
     pub async fn initialize(config: Config) -> Result<Self, StateError> {
         let setup = config.clone();
-        let (database, (inline_script_hashes, inline_style_hashes)) =
-            tokio::task::spawn_blocking(move || {
-                let hashes = shell_inline_hashes(setup.web_root.as_deref());
-                if let Some(parent) = setup
-                    .database_path
-                    .parent()
-                    .filter(|parent| !parent.as_os_str().is_empty())
-                {
-                    std::fs::create_dir_all(parent).map_err(|_| StateError::DatabaseDirectory)?;
-                }
-                let mut database =
-                    Database::open(&setup.database_path).map_err(StateError::Database)?;
-                let existing =
-                    learnvault_core::has_admin(&database).map_err(StateError::Database)?;
-                if existing {
-                    return Ok((database, hashes));
-                }
-                let (Some(username), Some(password)) = (
-                    setup.admin_username.as_deref(),
-                    setup.admin_password.as_deref(),
-                ) else {
-                    return Err(StateError::MissingAdministrator);
-                };
-                crate::auth::validate_username(username)
-                    .map_err(|_| StateError::InvalidAdministrator)?;
-                crate::auth::validate_password(password)
-                    .map_err(|_| StateError::InvalidAdministrator)?;
-                let password_hash =
-                    hash_password(password).map_err(|_| StateError::InvalidAdministrator)?;
-                learnvault_core::bootstrap_admin(
-                    &mut database,
-                    "usr-admin",
-                    username,
-                    &password_hash,
-                    unix_now(),
-                )
-                .map_err(StateError::Database)?;
-                Ok((database, hashes))
-            })
-            .await
-            .map_err(StateError::Blocking)??;
+        let (database, spa_shell, spa_shell_too_large) = tokio::task::spawn_blocking(move || {
+            let shell_too_large = shell_too_large(setup.web_root.as_deref());
+            let shell = load_spa_shell(setup.web_root.as_deref()).map(Arc::new);
+            if let Some(parent) = setup
+                .database_path
+                .parent()
+                .filter(|parent| !parent.as_os_str().is_empty())
+            {
+                std::fs::create_dir_all(parent).map_err(|_| StateError::DatabaseDirectory)?;
+            }
+            let mut database =
+                Database::open(&setup.database_path).map_err(StateError::Database)?;
+            let existing = learnvault_core::has_admin(&database).map_err(StateError::Database)?;
+            if existing {
+                return Ok((database, shell, shell_too_large));
+            }
+            let (Some(username), Some(password)) = (
+                setup.admin_username.as_deref(),
+                setup.admin_password.as_deref(),
+            ) else {
+                return Err(StateError::MissingAdministrator);
+            };
+            crate::auth::validate_username(username)
+                .map_err(|_| StateError::InvalidAdministrator)?;
+            crate::auth::validate_password(password)
+                .map_err(|_| StateError::InvalidAdministrator)?;
+            let password_hash =
+                hash_password(password).map_err(|_| StateError::InvalidAdministrator)?;
+            learnvault_core::bootstrap_admin(
+                &mut database,
+                "usr-admin",
+                username,
+                &password_hash,
+                unix_now(),
+            )
+            .map_err(StateError::Database)?;
+            Ok((database, shell, shell_too_large))
+        })
+        .await
+        .map_err(StateError::Blocking)??;
+        let (inline_script_hashes, inline_style_hashes) = shell_hashes(spa_shell.as_deref());
         Ok(Self {
             config,
             database: Arc::new(Mutex::new(database)),
@@ -132,6 +137,8 @@ impl AppState {
             rescan_lock: Arc::new(Mutex::new(())),
             inline_script_hashes: inline_script_hashes.into(),
             inline_style_hashes: inline_style_hashes.into(),
+            spa_shell,
+            spa_shell_too_large,
             blocking_tasks: Arc::new(Semaphore::new(MAX_BLOCKING_TASKS)),
             spa_asset_streams: Arc::new(Semaphore::new(MAX_SPA_ASSET_STREAMS)),
             spa_shell_streams: Arc::new(Semaphore::new(MAX_SPA_SHELL_STREAMS)),
@@ -163,6 +170,21 @@ impl AppState {
     /// Reserva um stream autenticado de mídia até que o corpo seja consumido ou descartado.
     pub(crate) fn try_acquire_media_stream(&self) -> Option<OwnedSemaphorePermit> {
         self.media_streams.clone().try_acquire_owned().ok()
+    }
+
+    /// Retorna o shell imutável carregado na inicialização apenas se o arquivo configurado ainda
+    /// tiver os mesmos bytes. Assim, uma troca de `200.html` não pode ser servida com hashes CSP
+    /// antigos; o deploy deve reiniciar o processo para publicar um novo shell.
+    pub(crate) fn current_spa_shell(&self) -> Option<Arc<[u8]>> {
+        let shell = self.spa_shell.as_ref()?;
+        (load_spa_shell(self.config.web_root.as_deref()).as_ref()? == shell.as_ref())
+            .then(|| shell.bytes.clone())
+    }
+
+    /// O tamanho do shell é validado na inicialização, antes de disputar a capacidade blocking.
+    /// Isso preserva o 413 para uma configuração inválida mesmo sob saturação operacional.
+    pub(crate) fn spa_shell_is_too_large(&self) -> bool {
+        self.spa_shell_too_large
     }
 
     pub(crate) async fn allow_login_attempt(&self, username: &str) -> bool {
@@ -259,28 +281,53 @@ impl AppState {
     }
 }
 
-/// Deriva hashes CSP apenas do shell que pode ser servido pela raiz configurada. Falhas de I/O
-/// ou um shell ausente deixam a política sem hashes, preservando o fallback HTTP sem revelar
-/// caminhos locais.
-fn shell_inline_hashes(web_root: Option<&Path>) -> (Vec<String>, Vec<String>) {
-    let Some(root) = web_root else {
-        return (Vec::new(), Vec::new());
-    };
+#[derive(Debug, PartialEq, Eq)]
+struct SpaShell {
+    bytes: Arc<[u8]>,
+    script_hashes: Vec<String>,
+    style_hashes: Vec<String>,
+}
+
+/// Carrega o shell pelo mesmo conteúdo que é usado para os hashes CSP. Falhas de I/O ou um
+/// shell ausente deixam a política sem hashes, preservando o fallback HTTP sem revelar caminhos
+/// locais. A raiz web precisa permanecer sem escrita não confiável: essa verificação detecta
+/// alterações entre requisições, mas não substitui contenção atômica contra um processo hostil.
+fn load_spa_shell(web_root: Option<&Path>) -> Option<SpaShell> {
+    let root = web_root?;
     let shell = root.join("200.html");
     let metadata = match fs::symlink_metadata(&shell) {
         Ok(metadata) if metadata.is_file() && !metadata.file_type().is_symlink() => metadata,
-        _ => return (Vec::new(), Vec::new()),
+        _ => return None,
     };
     if metadata.len() > MAX_SPA_SHELL_SIZE {
-        return (Vec::new(), Vec::new());
+        return None;
     }
     let source = match fs::read(shell) {
         Ok(source) => source,
-        Err(_) => return (Vec::new(), Vec::new()),
+        Err(_) => return None,
     };
-    (
-        csp_hashes(inline_scripts(&source)),
-        csp_hashes(inline_style_attributes(&source)),
+    Some(SpaShell {
+        script_hashes: csp_hashes(inline_scripts(&source)),
+        style_hashes: csp_hashes(inline_style_attributes(&source)),
+        bytes: source.into(),
+    })
+}
+
+fn shell_too_large(web_root: Option<&Path>) -> bool {
+    web_root
+        .map(|root| root.join("200.html"))
+        .and_then(|shell| fs::symlink_metadata(shell).ok())
+        .is_some_and(|metadata| {
+            metadata.is_file()
+                && !metadata.file_type().is_symlink()
+                && metadata.len() > MAX_SPA_SHELL_SIZE
+        })
+}
+
+fn shell_hashes(shell: Option<&SpaShell>) -> (Vec<String>, Vec<String>) {
+    shell.map_or_else(
+        || (Vec::new(), Vec::new()),
+        |shell| (shell.script_hashes.clone(), shell.style_hashes.clone()),
     )
 }
 
@@ -384,6 +431,9 @@ fn attribute_values<'a>(tag: &'a [u8], name: &[u8]) -> Vec<&'a [u8]> {
             offset += 1;
         }
         if tag.get(offset) != Some(&b'=') {
+            // O nome e todo separador que o sucede já foram consumidos. Manter `offset` nesse
+            // ponto garante que atributos booleanos (por exemplo `hidden` e `defer`) avancem
+            // para o próximo atributo em vez de reprocessar o nome atual.
             continue;
         }
         offset += 1;
@@ -483,7 +533,7 @@ fn unix_now() -> i64 {
 mod tests {
     use std::{path::PathBuf, time::Instant};
 
-    use super::{AppState, StateError};
+    use super::{AppState, StateError, attribute_values};
     use crate::Config;
 
     fn config() -> Config {
@@ -568,5 +618,16 @@ mod tests {
         assert_eq!(attempts.len(), 1024);
         assert!(attempts.contains_key("admin"));
         assert!(!attempts.contains_key("new-user"));
+    }
+
+    #[test]
+    fn attribute_values_skips_boolean_and_valueless_attributes() {
+        let tag =
+            br#"div hidden defer data-pending style="display: grid" disabled STYLE='color: red'"#;
+
+        assert_eq!(
+            attribute_values(tag, b"style"),
+            vec![b"display: grid".as_slice(), b"color: red".as_slice()]
+        );
     }
 }

@@ -252,6 +252,25 @@ async fn csp_hashes_all_inline_styles_from_the_configured_shell() {
 }
 
 #[tokio::test]
+async fn changed_shell_is_not_served_with_the_startup_csp() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = web_root(&temp);
+    let app = app(&temp, &root).await;
+    fs::write(
+        root.join("200.html"),
+        format!("<html><script>{ALTERNATE_BOOTSTRAP}</script></html>"),
+    )
+    .unwrap();
+
+    let response = app
+        .oneshot(Request::get("/catalog/rust").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[tokio::test]
 async fn csp_hashes_the_downloaded_canonical_spa_shell_when_available() {
     let canonical_root = std::path::Path::new("cmd/learnvault/web/build");
     let shell_path = canonical_root.join("200.html");
@@ -447,6 +466,51 @@ async fn idle_spa_streams_release_asset_capacity_without_reading_the_body() {
 }
 
 #[tokio::test]
+async fn completed_spa_streams_release_capacity_when_eof_is_observed() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = web_root(&temp);
+    fs::write(
+        root.join("_app/immutable/assets/app.css"),
+        vec![b'x'; 16 * 1024],
+    )
+    .unwrap();
+    let app = app(&temp, &root).await;
+
+    for _ in 0..3 {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::get("/_app/immutable/assets/app.css")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response
+                .into_body()
+                .collect()
+                .await
+                .unwrap()
+                .to_bytes()
+                .len(),
+            16 * 1024
+        );
+    }
+
+    let recovered = app
+        .oneshot(
+            Request::get("/_app/immutable/assets/app.css")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(recovered.status(), StatusCode::OK);
+}
+
+#[tokio::test]
 async fn spa_rejects_assets_larger_than_the_explicit_limit() {
     let temp = tempfile::tempdir().unwrap();
     let root = web_root(&temp);
@@ -476,8 +540,9 @@ async fn spa_rejects_a_shell_larger_than_the_explicit_limit() {
         .unwrap()
         .set_len(MAX_SPA_FILE_SIZE + 1)
         .unwrap();
-    let response = app(&temp, &root)
-        .await
+    let state = AppState::initialize(config(&temp, &root)).await.unwrap();
+    let _permits: Vec<_> = std::iter::from_fn(|| state.try_acquire_blocking_task()).collect();
+    let response = build_router(state)
         .oneshot(Request::get("/catalog/rust").body(Body::empty()).unwrap())
         .await
         .unwrap();

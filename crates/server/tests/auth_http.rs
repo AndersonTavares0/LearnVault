@@ -52,6 +52,7 @@ async fn login_me_and_logout_use_an_expiring_secure_cookie() {
         .unwrap();
 
     assert_eq!(login.status(), StatusCode::OK);
+    assert_eq!(login.headers()["cache-control"], "no-store");
     assert_eq!(login.headers()["x-content-type-options"], "nosniff");
     assert_eq!(login.headers()["x-frame-options"], "DENY");
     assert_eq!(login.headers()["referrer-policy"], "no-referrer");
@@ -92,6 +93,7 @@ async fn login_me_and_logout_use_an_expiring_secure_cookie() {
         .await
         .unwrap();
     assert_eq!(logout.status(), StatusCode::NO_CONTENT);
+    assert_eq!(logout.headers()["cache-control"], "no-store");
     assert!(
         logout.headers()["set-cookie"]
             .to_str()

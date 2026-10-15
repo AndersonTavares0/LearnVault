@@ -34,6 +34,24 @@ pub(crate) async fn serve(State(state): State<AppState>, uri: Uri) -> Response {
         None => return StatusCode::NOT_FOUND.into_response(),
     };
 
+    if target == root.join("200.html") {
+        return serve_shell(&state)
+            .await
+            .unwrap_or_else(|error| match error {
+                FileError::TooLarge => StatusCode::PAYLOAD_TOO_LARGE.into_response(),
+                FileError::Missing | FileError::Busy => {
+                    StatusCode::SERVICE_UNAVAILABLE.into_response()
+                }
+            });
+    }
+
+    // Rotas sem extensão podem depender do fallback para o shell. Verifique o limite dele antes
+    // de reservar capacidade para um possível asset, para não mascarar uma configuração inválida
+    // (413) como saturação operacional (503).
+    if Path::new(path).extension().is_none() && state.spa_shell_is_too_large() {
+        return StatusCode::PAYLOAD_TOO_LARGE.into_response();
+    }
+
     match open_file(&state, root, &target, false).await {
         Ok(response) => return response,
         Err(FileError::TooLarge) => return StatusCode::PAYLOAD_TOO_LARGE.into_response(),
@@ -44,14 +62,42 @@ pub(crate) async fn serve(State(state): State<AppState>, uri: Uri) -> Response {
         return StatusCode::NOT_FOUND.into_response();
     }
 
-    let shell = root.join("200.html");
-    match open_file(&state, root, &shell, true).await {
+    match serve_shell(&state).await {
         Ok(response) => response,
         Err(FileError::TooLarge) => StatusCode::PAYLOAD_TOO_LARGE.into_response(),
         Err(FileError::Missing | FileError::Busy) => {
             StatusCode::SERVICE_UNAVAILABLE.into_response()
         }
     }
+}
+
+async fn serve_shell(state: &AppState) -> Result<Response, FileError> {
+    if state.spa_shell_is_too_large() {
+        return Err(FileError::TooLarge);
+    }
+    let Some(blocking_task) = state.try_acquire_blocking_task() else {
+        return Err(FileError::Busy);
+    };
+    let shell_state = state.clone();
+    let bytes = tokio::task::spawn_blocking(move || {
+        let _blocking_task = blocking_task;
+        shell_state.current_spa_shell()
+    })
+    .await
+    .map_err(|_| FileError::Busy)?
+    .ok_or(FileError::Missing)?;
+    let size = bytes.len() as u64;
+    Ok(file_response(
+        Body::from(bytes.as_ref().to_vec()),
+        state
+            .config
+            .web_root
+            .as_deref()
+            .expect("shell has a web root"),
+        Path::new("200.html"),
+        true,
+        size,
+    ))
 }
 
 fn requested_path(root: &Path, path: &str) -> Option<PathBuf> {

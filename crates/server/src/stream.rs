@@ -53,6 +53,9 @@ where
             if read == 0 {
                 drop(reader);
                 drop(sender);
+                // O produtor pode descobrir EOF antes de o transporte consultar o último frame.
+                // Mantenha o slot enquanto o body ainda está retido; `poll_next` libera-o assim
+                // que o consumidor observa `None`, e drop/timeout cobrem os demais casos.
                 deadline.as_mut().await;
                 release_permit(&task_permit);
                 return;
@@ -104,7 +107,16 @@ impl Stream for IdleTimeoutStream {
     type Item = std::io::Result<Bytes>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        Pin::new(&mut self.get_mut().receiver).poll_next(cx)
+        let this = self.get_mut();
+        match Pin::new(&mut this.receiver).poll_next(cx) {
+            Poll::Ready(None) => {
+                // EOF observado pelo consumidor encerra a vida útil do body. O produtor pode
+                // já ter terminado, mas não deve reter a capacidade até o timeout ocioso.
+                release_permit(&this.permit);
+                Poll::Ready(None)
+            }
+            result => result,
+        }
     }
 }
 
