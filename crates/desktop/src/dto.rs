@@ -152,8 +152,10 @@ pub struct RescanSummaryDto {
     pub marked_missing: usize,
     /// Registros preservados por estarem em uma área não verificada.
     pub preserved: usize,
-    /// Chaves relativas ambíguas recusadas nesta varredura.
-    pub ambiguous: Vec<String>,
+    /// Quantidade de chaves relativas ambíguas recusadas nesta varredura.
+    ///
+    /// É apenas a contagem: as chaves em si são caminhos relativos e nunca cruzam o IPC.
+    pub ambiguous_count: usize,
 }
 
 impl From<RescanSummary> for RescanSummaryDto {
@@ -164,7 +166,7 @@ impl From<RescanSummary> for RescanSummaryDto {
             updated: summary.updated,
             marked_missing: summary.marked_missing,
             preserved: summary.preserved,
-            ambiguous: summary.ambiguous,
+            ambiguous_count: summary.ambiguous.len(),
         }
     }
 }

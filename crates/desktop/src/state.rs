@@ -124,17 +124,28 @@ impl DesktopState {
     ///
     /// Só é executado por ação explícita: nem a inicialização nem a seleção da raiz o
     /// chamam. Sem raiz configurada devolve [`IpcError::library_not_configured`]; se a raiz
-    /// registrada sumiu ou ficou inacessível, a política do núcleo devolve
-    /// [`IpcError::rescan_unavailable`]. A raiz é copiada antes da varredura e nenhum
-    /// cadeado da configuração é mantido durante a leitura; o banco permanece fora da
-    /// biblioteca e a biblioteca permanece somente leitura. Chamadas concorrentes devolvem
+    /// registrada sumiu, virou link/junction ou ficou inacessível, a revalidação imediata
+    /// devolve [`IpcError::rescan_unavailable`] e a política do núcleo cobre a raiz que já
+    /// não pode ser lida. A raiz é revalidada e copiada antes da varredura e nenhum cadeado
+    /// da configuração é mantido durante a leitura; o banco permanece fora da biblioteca e
+    /// a biblioteca permanece somente leitura. Chamadas concorrentes devolvem
     /// [`IpcError::rescan_in_progress`] sem tocar o catálogo.
+    ///
+    /// Limitação conhecida desta fatia: o cadeado do banco SQLite é mantido durante toda a
+    /// varredura, então uma leitura de catálogo concorrente aguarda a indexação terminar.
+    /// O estado ocupado recusa um segundo rescan, mas não paraleliza a leitura do catálogo.
     pub fn rescan(&self) -> Result<RescanSummaryDto, IpcError> {
         let _guard = self.begin_rescan()?;
 
         let root = self
             .library_root()
             .ok_or_else(IpcError::library_not_configured)?;
+
+        // Revalida a raiz imediatamente antes de varrer: se o diretório foi removido,
+        // substituído por um link/junction ou deixou de ser legível desde a seleção, a
+        // varredura é recusada sem seguir o alvo. A varredura usa a forma revalidada.
+        let root =
+            LibraryRoot::resolve(root.as_path()).map_err(|_| IpcError::rescan_unavailable())?;
 
         let mut database = self
             .database
