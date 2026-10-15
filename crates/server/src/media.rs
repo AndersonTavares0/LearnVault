@@ -4,7 +4,7 @@ use std::io::SeekFrom;
 
 use axum::{
     body::Body,
-    extract::{Query, State},
+    extract::{RawQuery, State},
     http::{HeaderMap, HeaderValue, Method, StatusCode, header},
     response::{IntoResponse, Response},
 };
@@ -24,7 +24,7 @@ pub(crate) struct MediaQuery {
 
 pub(crate) async fn media(
     State(state): State<AppState>,
-    Query(query): Query<MediaQuery>,
+    raw_query: RawQuery,
     headers: HeaderMap,
     method: Method,
 ) -> Response {
@@ -40,6 +40,13 @@ pub(crate) async fn media(
     {
         return StatusCode::UNAUTHORIZED.into_response();
     }
+    let query = match raw_query.0.as_deref() {
+        Some(raw) => match serde_urlencoded::from_str::<MediaQuery>(raw) {
+            Ok(query) => query,
+            Err(_) => return StatusCode::BAD_REQUEST.into_response(),
+        },
+        None => return StatusCode::BAD_REQUEST.into_response(),
+    };
 
     let root = state.config.library_root.clone();
     let path = query.path;
@@ -62,7 +69,7 @@ pub(crate) async fn media(
         return range_not_satisfiable(opened.size);
     };
     let partial = headers.get(header::RANGE).is_some();
-    let length = end - start + 1;
+    let length = if opened.size == 0 { 0 } else { end - start + 1 };
     let mut file = tokio::fs::File::from_std(opened.file);
     if file.seek(SeekFrom::Start(start)).await.is_err() {
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
@@ -97,7 +104,7 @@ pub(crate) async fn media(
 
 fn parse_range(value: Option<&HeaderValue>, size: u64) -> Option<(u64, u64)> {
     let Some(value) = value else {
-        return (size > 0).then_some((0, size - 1));
+        return Some((0, size.saturating_sub(1)));
     };
     let text = value.to_str().ok()?;
     let spec = text.strip_prefix("bytes=")?;
@@ -150,5 +157,20 @@ fn content_type(path: &str) -> &'static str {
         "vtt" => "text/vtt",
         "srt" => "application/x-subrip",
         _ => "application/octet-stream",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_range;
+    use axum::http::HeaderValue;
+
+    #[test]
+    fn empty_files_have_a_valid_full_response_but_ranges_do_not() {
+        assert_eq!(parse_range(None, 0), Some((0, 0)));
+        assert_eq!(
+            parse_range(Some(&HeaderValue::from_static("bytes=0-")), 0),
+            None
+        );
     }
 }

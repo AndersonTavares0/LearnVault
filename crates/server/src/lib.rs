@@ -199,6 +199,18 @@ mod tests {
         assert_eq!(json["version"], VERSION);
     }
 
+    #[tokio::test]
+    async fn media_authenticates_before_validating_a_missing_query() {
+        let temp = tempfile::tempdir().unwrap();
+        let app = build_router(AppState::new(config_fixture(&temp)));
+        let response = app
+            .oneshot(Request::get("/api/media").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
     #[test]
     fn invalid_listen_address_is_rejected_before_startup() {
         let error = Config::from_args([
