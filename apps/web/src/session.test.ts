@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { initialView, readConfig } from './session';
+import { initialView, readConfig, resolveSession } from './session';
 import type { User } from './transport';
 
 const user: User = { userId: 'u1', username: 'admin', role: 'admin', isAdmin: true, mustChangeCredentials: false };
@@ -35,5 +35,47 @@ describe('platform configuration read', () => {
 				throw new Error('banco de dados local indisponível');
 			})
 		).resolves.toBe('unknown');
+	});
+});
+
+describe('session bootstrap', () => {
+	it('keeps the HTTP login reachable when the session probe fails', async () => {
+		const session = await resolveSession(
+			async () => {
+				throw new Error('rede indisponível');
+			},
+			async () => ({ configured: true })
+		);
+
+		expect(session.user).toBeNull();
+		expect(session.error).toBe('Não foi possível conectar ao serviço.');
+		// A falha de `me()` não pode virar "biblioteca não configurada": a configuração
+		// continua sendo lida e o HTTP mantém o login com o erro apropriado.
+		expect(session.config).toBe('configured');
+		expect(initialView(session.user, session.config)).toBe('login');
+	});
+
+	it('never offers desktop login when the configuration is unconfigured or unknown', async () => {
+		const unconfigured = await resolveSession(
+			async () => null,
+			async () => ({ configured: false })
+		);
+		expect(initialView(unconfigured.user, unconfigured.config)).toBe('offline');
+
+		const unknown = await resolveSession(async () => null, async () => {
+			throw new Error('IPC indisponível');
+		});
+		expect(initialView(unknown.user, unknown.config)).toBe('offline');
+	});
+
+	it('opens the app for an existing session without reading the platform configuration', async () => {
+		let reads = 0;
+		const session = await resolveSession(async () => user, async () => {
+			reads += 1;
+			return { configured: true };
+		});
+
+		expect(initialView(session.user, session.config)).toBe('app');
+		expect(reads).toBe(0);
 	});
 });
