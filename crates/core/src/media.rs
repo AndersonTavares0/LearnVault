@@ -87,8 +87,9 @@ pub fn find_media_by_path(db: &Database, path: &str) -> Result<Option<MediaRefer
     db.connection()
         .query_row(
             "SELECT library_id, media_id, relative_path, size, mtime
-           FROM media
-          WHERE relative_path_key = ?1 AND availability = 'available'
+            FROM media
+           WHERE media.relative_path_key = ?1 AND media.availability = 'available'
+             AND NOT EXISTS (SELECT 1 FROM media_removal r WHERE r.library_id = media.library_id AND r.media_id = media.media_id)
           LIMIT 1",
             [key],
             |row| {

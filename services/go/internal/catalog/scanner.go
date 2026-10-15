@@ -11,6 +11,7 @@ import (
 
 type Catalog struct {
 	Categories []Category `json:"categories"`
+	LooseFiles []File `json:"loose_files,omitempty"`
 }
 type Category struct {
 	Title   string   `json:"title"`
@@ -60,6 +61,10 @@ func Scan(root string) (Catalog, error) {
 	}
 	var result Catalog
 	for _, categoryEntry := range entries {
+		if !categoryEntry.IsDir() && !ignoredFile(categoryEntry.Name()) {
+			if file, ok := scanFile(root, root, categoryEntry); ok { result.LooseFiles = append(result.LooseFiles, file) }
+			continue
+		}
 		if !categoryEntry.IsDir() || ignoredDir(categoryEntry.Name()) {
 			continue
 		}
@@ -78,6 +83,12 @@ func Scan(root string) (Catalog, error) {
 	}
 	sort.Slice(result.Categories, func(i, j int) bool { return result.Categories[i].Path < result.Categories[j].Path })
 	return result, nil
+}
+
+func scanFile(root, dir string, entry fs.DirEntry) (File, bool) {
+	info, err := entry.Info()
+	if err != nil || !info.Mode().IsRegular() { return File{}, false }
+	return File{Name: entry.Name(), Path: relPath(root, filepath.Join(dir, entry.Name())), Size: info.Size()}, true
 }
 
 func findCourseRoots(category string) []string {

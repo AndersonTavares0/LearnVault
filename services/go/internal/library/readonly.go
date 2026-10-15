@@ -2,6 +2,7 @@ package library
 
 import (
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,7 +16,9 @@ func (r *Root) Path() string { return r.path }
 
 // Open requires the mount itself to be non-writable, in addition to the
 // container's read-only bind mount. This is a startup guard, not a substitute
-// for filesystem/container permissions.
+// for filesystem/container permissions. Operationally, the library root and
+// contents must be immutable to untrusted actors while the process runs; this
+// is not a complete cross-platform guarantee against concurrent replacement.
 func Open(path string) (*Root, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
@@ -32,11 +35,10 @@ func Open(path string) (*Root, error) {
 }
 
 func (r *Root) ReadFile(relative string) ([]byte, error) {
-	path, err := r.resolve(relative)
-	if err != nil {
-		return nil, err
-	}
-	return os.ReadFile(path)
+	file, err := r.OpenFile(relative)
+	if err != nil { return nil, err }
+	defer file.Close()
+	return io.ReadAll(file)
 }
 
 func (r *Root) OpenFile(relative string) (*os.File, error) {
@@ -48,7 +50,17 @@ func (r *Root) OpenFile(relative string) (*os.File, error) {
 	if err != nil {
 		return nil, err
 	}
+	if mismatch, err := identityMismatch(path, file); err != nil { file.Close(); return nil, err } else if mismatch { file.Close(); return nil, errors.New("library file changed during open") }
 	return file, nil
+}
+
+func identityMismatch(path string, file *os.File) (bool, error) {
+	pathInfo, err := os.Stat(path); if err != nil { return false, err }
+	openInfo, err := file.Stat(); if err != nil { return false, err }
+	if !pathInfo.Mode().IsRegular() || !openInfo.Mode().IsRegular() { return true, nil }
+	// SameFile uses the platform's available file identity (inode/device on
+	// Unix and file index/volume on Windows) without requiring native callers.
+	return !os.SameFile(pathInfo, openInfo), nil
 }
 
 func (r *Root) WriteFile(string, []byte) error { return ErrReadOnly }

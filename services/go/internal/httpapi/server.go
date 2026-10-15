@@ -236,6 +236,9 @@ func catalogAllowsPath(value catalog.Catalog, relative string) bool {
 			}
 		}
 	}
+	for _, file := range value.LooseFiles {
+		if path, valid := normalizeCatalogPath(file.Path); valid && path == clean { return true }
+	}
 	return false
 }
 

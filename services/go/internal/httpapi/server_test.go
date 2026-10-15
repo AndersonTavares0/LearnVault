@@ -140,12 +140,12 @@ func TestAuthenticatedMediaSupportsRangeAndRejectsUnauthenticatedAccess(t *testi
 	if result.Header().Get("Content-Type") != "video/mp4" {
 		t.Fatalf("video content type = %q; want video/mp4", result.Header().Get("Content-Type"))
 	}
-	notCataloged := httptest.NewRequest(http.MethodGet, "/api/media?path=not-cataloged.mp4", nil)
-	notCataloged.AddCookie(cookie)
-	blocked := httptest.NewRecorder()
-	srv.ServeHTTP(blocked, notCataloged)
-	if blocked.Code != http.StatusNotFound {
-		t.Fatalf("uncataloged media returned %d; want %d", blocked.Code, http.StatusNotFound)
+	rootMedia := httptest.NewRequest(http.MethodGet, "/api/media?path=not-cataloged.mp4", nil)
+	rootMedia.AddCookie(cookie)
+	served := httptest.NewRecorder()
+	srv.ServeHTTP(served, rootMedia)
+	if served.Code != http.StatusOK || served.Body.String() != "secret" {
+		t.Fatalf("root media returned %d %q; want catalogued file", served.Code, served.Body.String())
 	}
 }
 

@@ -61,19 +61,23 @@ function rustLesson(node: CatalogNode): Lesson {
 }
 
 function normalizeRustNode(node: RustNode): CatalogNode {
-	if (typeof node.title !== 'string' || typeof node.path !== 'string' || typeof node.role !== 'string' || !Array.isArray(node.files) || !Array.isArray(node.loose_files) || !Array.isArray(node.children)) throw invalidPayload('node Rust incompleto.');
-	return { title: node.title, path: node.path, role: node.role, files: node.files.map(normalizeFile), looseFiles: node.loose_files.map(normalizeFile), children: node.children.map(normalizeRustNode) };
+	if (typeof node.title !== 'string' || typeof node.path !== 'string' || typeof node.role !== 'string' || !Array.isArray(node.files ?? []) || !Array.isArray(node.loose_files ?? []) || !Array.isArray(node.children ?? [])) throw invalidPayload('node Rust incompleto.');
+	return { title: node.title, path: node.path, role: node.role, files: (node.files ?? []).map(normalizeFile), looseFiles: (node.loose_files ?? []).map(normalizeFile), children: (node.children ?? []).map(normalizeRustNode) };
+}
+
+function projectedModule(node: CatalogNode): ProjectedModule {
+	return { title: node.title, looseFiles: node.role === 'lesson' ? [] : [...node.files, ...node.looseFiles], lessons: node.role === 'lesson' ? [rustLesson(node)] : node.children.filter((child) => child.role === 'lesson').map(rustLesson) };
 }
 
 function projectRust(nodes: CatalogNode[]): Catalog['categories'] {
 	return nodes.filter((node) => node.role === 'category').map((category) => ({
 		title: category.title,
-		looseFiles: category.looseFiles,
+		looseFiles: [...category.files, ...category.looseFiles],
 		courses: category.children.filter((node) => node.role === 'course').map((course) => ({
 			title: course.title,
-			looseFiles: course.looseFiles,
-			modules: course.children.filter((node) => node.role === 'module').map((module) => ({ title: module.title, looseFiles: module.looseFiles, lessons: module.children.filter((node) => node.role === 'lesson').map(rustLesson) }))
-		}))
+			looseFiles: [...course.files, ...course.looseFiles],
+			modules: course.children.filter((node) => node.role === 'module').map(projectedModule).concat(course.children.filter((node) => node.role === 'lesson').map(projectedModule))
+		})).concat(category.children.filter((node) => node.role === 'lesson').map((node) => ({ title: category.title, looseFiles: [], modules: [projectedModule(node)] })))
 	}));
 }
 
