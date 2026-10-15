@@ -6,7 +6,12 @@ fn media_path_lookup_returns_the_indexed_identity() -> Result<(), Box<dyn std::e
     let root = tempfile::tempdir()?;
     fs::write(root.path().join("lesson.mp4"), b"0123456789")?;
     let mut db = Database::open_in_memory()?;
-    apply_scan(&mut db, "library-1", &scan(root.path())?, learnvault_core::KeyMode::for_host())?;
+    apply_scan(
+        &mut db,
+        "library-1",
+        &scan(root.path())?,
+        learnvault_core::KeyMode::for_host(),
+    )?;
 
     let reference = find_media_by_path(&db, "lesson.mp4")?.expect("media should be indexed");
     assert_eq!(reference.library_id, "library-1");
