@@ -85,6 +85,20 @@ pub enum Error {
         /// Caminho recusado.
         path: String,
     },
+
+    /// A tentativa de varredura não pôde ser registrada no histórico.
+    ///
+    /// Registrar o histórico é secundário: a falha original da varredura é preservada
+    /// como causa, para que a razão pela qual a biblioteca não pôde ser lida nunca seja
+    /// escondida por um erro de escrita no banco.
+    #[error("não foi possível registrar a varredura com falha no histórico")]
+    ScanHistoryNotRecorded {
+        /// Falha original da varredura.
+        #[source]
+        scan_error: Box<Error>,
+        /// Causa original reportada pelo SQLite ao gravar o histórico.
+        history_error: rusqlite::Error,
+    },
 }
 
 /// Resultado das operações do domínio.

@@ -17,7 +17,7 @@ use crate::migrations::{MIGRATIONS, SCHEMA_VERSION};
 /// recusado antes de qualquer escrita.
 #[derive(Debug)]
 pub struct Database {
-    conn: Connection,
+    pub(crate) conn: Connection,
 }
 
 impl Database {

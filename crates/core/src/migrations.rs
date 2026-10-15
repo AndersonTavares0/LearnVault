@@ -11,7 +11,7 @@ use rusqlite_migration::{M, Migrations};
 /// A recusa de um schema mais novo não depende desta constante — ela vem de
 /// `SchemaVersion::Outside` —, mas ela deve acompanhar a cadeia de migrações porque
 /// aparece na mensagem de diagnóstico de [`crate::Error::SchemaTooNew`].
-pub(crate) const SCHEMA_VERSION: usize = 1;
+pub(crate) const SCHEMA_VERSION: usize = 2;
 
 /// Versão 1: bibliotecas, mídia, varreduras e estado de estudo.
 ///
@@ -84,7 +84,29 @@ CREATE TABLE session (
 CREATE INDEX session_expires_at_idx ON session (expires_at);
 ";
 
-const MIGRATIONS_SLICE: &[M<'static>] = &[M::up(V1)];
+/// Versão 2: registro da cobertura de cada varredura.
+///
+/// A migração é aditiva e não toca a versão 1. `scan.complete` distingue uma varredura
+/// completa de uma parcial: `0` significa que alguma área da biblioteca não pôde ser
+/// lida, e não que nenhuma ausência possa ser registrada. `scan_inaccessible` guarda os
+/// caminhos relativos que não puderam ser verificados, para que uma leitura futura
+/// consiga separar os registros preservados por falta de informação daqueles que foram
+/// encontrados.
+///
+/// A coluna nasce com `DEFAULT 1` para que as linhas gravadas pela versão 1 continuem
+/// válidas: uma varredura só era registrada quando terminava.
+const V2: &str = "
+ALTER TABLE scan ADD COLUMN complete INTEGER NOT NULL DEFAULT 1 CHECK (complete IN (0, 1));
+
+-- Áreas que a varredura não conseguiu verificar, em caminhos relativos à raiz.
+CREATE TABLE scan_inaccessible (
+    scan_id INTEGER NOT NULL REFERENCES scan (scan_id) ON DELETE NO ACTION,
+    relative_path TEXT NOT NULL,
+    PRIMARY KEY (scan_id, relative_path)
+);
+";
+
+const MIGRATIONS_SLICE: &[M<'static>] = &[M::up(V1), M::up(V2)];
 
 /// Cadeia de migrações aplicada por [`crate::db::Database`].
 pub(crate) const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATIONS_SLICE);

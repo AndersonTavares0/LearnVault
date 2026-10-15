@@ -74,7 +74,15 @@ fn insert_user(
 #[test]
 fn all_domain_tables_are_created() -> TestResult {
     let db = database();
-    for table in ["library", "media", "scan", "study_state", "user", "session"] {
+    for table in [
+        "library",
+        "media",
+        "scan",
+        "scan_inaccessible",
+        "study_state",
+        "user",
+        "session",
+    ] {
         let found: i64 = db.connection().query_row(
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
             [table],
@@ -141,6 +149,60 @@ fn scan_status_accepts_only_known_states() -> TestResult {
     assert!(insert("completed").is_ok());
     assert!(insert("failed").is_ok());
     assert_constraint_violation(insert("interrupted"), "status desconhecido em scan");
+    Ok(())
+}
+
+#[test]
+fn scan_complete_accepts_only_boolean_values() -> TestResult {
+    let db = database();
+    insert_library(&db, "bib-1", 1)?;
+
+    let insert = |complete: i64| {
+        db.connection().execute(
+            "INSERT INTO scan (library_id, status, completed_at, complete)
+             VALUES (?1, 'completed', ?2, ?3)",
+            rusqlite::params!["bib-1", 1_760_000_000_i64, complete],
+        )
+    };
+    assert!(
+        insert(0).is_ok(),
+        "uma varredura parcial é registrada como 0"
+    );
+    assert!(insert(1).is_ok());
+    assert_constraint_violation(insert(2), "complete = 2");
+    assert_constraint_violation(insert(-1), "complete = -1");
+    Ok(())
+}
+
+#[test]
+fn scan_inaccessible_requires_an_existing_scan() -> TestResult {
+    let db = database();
+    insert_library(&db, "bib-1", 1)?;
+
+    let orphan = db.connection().execute(
+        "INSERT INTO scan_inaccessible (scan_id, relative_path) VALUES (999, 'Curso/aula.mp4')",
+        [],
+    );
+    assert_constraint_violation(orphan, "varredura inexistente em scan_inaccessible");
+
+    db.connection().execute(
+        "INSERT INTO scan (library_id, status, completed_at) VALUES (?1, 'completed', ?2)",
+        rusqlite::params!["bib-1", 1_760_000_000_i64],
+    )?;
+    let scan_id = db.connection().last_insert_rowid();
+
+    let linked = |path: &str| {
+        db.connection().execute(
+            "INSERT INTO scan_inaccessible (scan_id, relative_path) VALUES (?1, ?2)",
+            rusqlite::params![scan_id, path],
+        )
+    };
+    assert!(linked("Curso/aula.mp4").is_ok());
+    assert!(linked("temp_download").is_ok());
+    assert_constraint_violation(
+        linked("Curso/aula.mp4"),
+        "o mesmo caminho não se repete na mesma varredura",
+    );
     Ok(())
 }
 

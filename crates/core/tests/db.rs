@@ -27,17 +27,28 @@ fn table_count(db: &Database) -> i64 {
         .expect("sqlite_master deve ser consultável")
 }
 
+fn table_exists(db: &Database, name: &str) -> bool {
+    db.connection()
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+            [name],
+            |row| row.get::<_, i64>(0),
+        )
+        .expect("sqlite_master deve ser consultável")
+        == 1
+}
+
 #[test]
-fn in_memory_database_starts_at_the_backed_schema_version() -> TestResult {
+fn in_memory_database_starts_at_the_current_schema_version() -> TestResult {
     let db = Database::open_in_memory()?;
-    assert_eq!(db.schema_version()?, 1);
+    assert_eq!(db.schema_version()?, 2);
     Ok(())
 }
 
 #[test]
 fn in_memory_database_creates_all_domain_tables() -> TestResult {
     let db = Database::open_in_memory()?;
-    assert_eq!(table_count(&db), 6);
+    assert_eq!(table_count(&db), 7);
     Ok(())
 }
 
@@ -65,7 +76,7 @@ fn persistent_database_is_created_and_uses_the_wal_journal() -> TestResult {
     assert!(path.exists(), "o arquivo do banco deve existir");
     assert_eq!(journal_mode(&db), "wal");
     assert_eq!(foreign_keys_enabled(&db), 1);
-    assert_eq!(db.schema_version()?, 1);
+    assert_eq!(db.schema_version()?, 2);
     Ok(())
 }
 
@@ -84,7 +95,7 @@ fn reopening_applies_migrations_once_and_preserves_data() -> TestResult {
 
     let db = Database::open(&path)?;
 
-    assert_eq!(db.schema_version()?, 1);
+    assert_eq!(db.schema_version()?, 2);
     let libraries: i64 = db
         .connection()
         .query_row("SELECT COUNT(*) FROM library", [], |row| row.get(0))?;
@@ -114,13 +125,13 @@ fn database_with_a_newer_schema_is_rejected_without_panicking() -> TestResult {
 
     {
         let conn = rusqlite::Connection::open(&path)?;
-        conn.pragma_update(None, "user_version", 2)?;
+        conn.pragma_update(None, "user_version", 3)?;
     }
 
     match Database::open(&path) {
         Err(Error::SchemaTooNew { found, known }) => {
-            assert_eq!(found, 2);
-            assert_eq!(known, 1);
+            assert_eq!(found, 3);
+            assert_eq!(known, 2);
         }
         other => panic!("esperava Error::SchemaTooNew, obtive {other:?}"),
     }
@@ -134,7 +145,7 @@ fn rejecting_a_newer_schema_leaves_the_database_untouched() -> TestResult {
 
     {
         let conn = rusqlite::Connection::open(&path)?;
-        conn.pragma_update(None, "user_version", 2)?;
+        conn.pragma_update(None, "user_version", 3)?;
     }
 
     match Database::open(&path) {
@@ -153,7 +164,7 @@ fn rejecting_a_newer_schema_leaves_the_database_untouched() -> TestResult {
     assert_eq!(tables, 0, "nenhuma tabela deve ter sido criada");
 
     let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(version, 2, "a versão do banco não deve ser alterada");
+    assert_eq!(version, 3, "a versão do banco não deve ser alterada");
 
     let journal: String =
         conn.query_row("PRAGMA journal_mode", [], |row| row.get::<_, String>(0))?;
@@ -161,6 +172,50 @@ fn rejecting_a_newer_schema_leaves_the_database_untouched() -> TestResult {
         journal.to_lowercase(),
         "wal",
         "recusar o schema não deve trocar o journal do arquivo"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_version_one_database_is_upgraded_additively_preserving_rows() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("learnvault.sqlite");
+
+    // Banco gravado pela versão 1 do schema: a tabela `scan` ainda não tem a coluna
+    // `complete` e a tabela `scan_inaccessible` não existe.
+    {
+        let conn = rusqlite::Connection::open(&path)?;
+        conn.execute_batch(
+            "CREATE TABLE scan (
+                 scan_id INTEGER PRIMARY KEY,
+                 library_id TEXT NOT NULL,
+                 status TEXT NOT NULL CHECK (status IN ('completed', 'failed')),
+                 completed_at INTEGER NOT NULL
+             );
+             INSERT INTO scan (library_id, status, completed_at)
+             VALUES ('bib-1', 'completed', 1760000000);
+             PRAGMA user_version = 1;",
+        )?;
+    }
+
+    let db = Database::open(&path)?;
+
+    assert_eq!(
+        db.schema_version()?,
+        2,
+        "a cadeia deve aplicar a migração aditiva"
+    );
+    assert!(table_exists(&db, "scan_inaccessible"));
+
+    let (status, complete): (String, i64) =
+        db.connection()
+            .query_row("SELECT status, complete FROM scan", [], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })?;
+    assert_eq!(status, "completed", "a linha existente deve sobreviver");
+    assert_eq!(
+        complete, 1,
+        "a coluna nova precisa de um valor compatível para as linhas antigas"
     );
     Ok(())
 }
