@@ -66,6 +66,18 @@ async fn admin_rescan_populates_the_authenticated_catalog() {
     let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
     let cookie = login(&app).await;
 
+    let missing_origin = app
+        .clone()
+        .oneshot(
+            Request::post("/api/admin/catalog/rescan")
+                .header("cookie", &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(missing_origin.status(), StatusCode::FORBIDDEN);
+
     let rescan = app
         .clone()
         .oneshot(

@@ -18,6 +18,7 @@ pub struct AppState {
     pub config: Config,
     pub(crate) database: Arc<Mutex<Database>>,
     pub(crate) login_attempts: Arc<Mutex<HashMap<String, (u32, Instant)>>>,
+    pub(crate) rescan_lock: Arc<Mutex<()>>,
 }
 
 /// Erro de inicialização seguro para logs do servidor.
@@ -48,6 +49,7 @@ impl AppState {
             config,
             database: Arc::new(Mutex::new(database)),
             login_attempts: Arc::new(Mutex::new(HashMap::new())),
+            rescan_lock: Arc::new(Mutex::new(())),
         }
     }
 
@@ -96,6 +98,7 @@ impl AppState {
             config,
             database: Arc::new(Mutex::new(database)),
             login_attempts: Arc::new(Mutex::new(HashMap::new())),
+            rescan_lock: Arc::new(Mutex::new(())),
         })
     }
 

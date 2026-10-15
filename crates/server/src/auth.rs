@@ -266,7 +266,7 @@ fn session_cookie(state: &AppState, token: &str, clear: bool) -> HeaderValue {
     HeaderValue::from_str(&value).expect("cookie attributes are valid ASCII")
 }
 
-fn same_origin(headers: &HeaderMap) -> bool {
+pub(crate) fn same_origin(headers: &HeaderMap) -> bool {
     let Some(origin) = headers.get("origin").and_then(|value| value.to_str().ok()) else {
         return false;
     };

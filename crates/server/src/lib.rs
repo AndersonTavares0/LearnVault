@@ -28,7 +28,7 @@ use axum::{
     },
     middleware::map_response,
     response::Response,
-    routing::get,
+    routing::{get, post},
 };
 use tokio::net::TcpListener;
 use tower::ServiceBuilder;
@@ -43,6 +43,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/login", axum::routing::post(auth::login))
         .route("/api/me", get(auth::me))
         .route("/api/logout", axum::routing::post(auth::logout))
+        .route("/api/catalog", get(catalog::catalog))
+        .route("/api/admin/catalog/rescan", post(catalog::rescan))
         .route("/api/media", get(media::media).head(media::media))
         .layer(DefaultBodyLimit::max(8 * 1024))
         .layer(map_response(security_headers))
