@@ -51,8 +51,8 @@ Responsabilidades:
   segurança e entrega da SPA.
 - `crates/desktop` integra com o sistema de arquivos e entrega a mídia ao webview, sem
   autenticação e sem portas de rede.
-- `web/` é uma única SPA em Svelte 5 + TypeScript + Vite, com roteamento por hash e dois builds
-  que escolhem o transporte em tempo de compilação.
+- `apps/web/` é uma única SPA em Svelte 5 + TypeScript + Vite, com roteamento por hash e dois
+  builds que escolhem o transporte em tempo de compilação.
 
 Invariantes:
 

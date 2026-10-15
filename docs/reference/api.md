@@ -18,7 +18,7 @@ uma origem HTTP(S) compatível, além de SameSite=Strict.
 ## Entrega da SPA no servidor Rust
 
 A entrega é opcional e fica desabilitada por padrão. Use `--web-root` apontando para o diretório
-gerado pelo build estático (`cmd/learnvault/web/build`), que contém o shell `200.html`. Arquivos
+gerado pelo build estático (`services/go/cmd/learnvault/web/build`), que contém o shell `200.html`. Arquivos
 existentes são servidos diretamente; caminhos sem extensão usam `200.html` como fallback; assets
 ausentes com extensão retornam 404, e caminhos `/api/*` nunca são convertidos em HTML. Se o shell
 não existir, o servidor retorna 503. O shell usa `Cache-Control: no-cache`; assets sob
