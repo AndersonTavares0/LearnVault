@@ -2,7 +2,10 @@ export type User = { username: string; role: string };
 export type FileEntry = { name: string; path: string; size: number; mediaId?: string; kind?: string; availability?: string; unverified?: boolean };
 export type Lesson = { title: string; path: string; media: FileEntry[]; subtitles: FileEntry[]; materials: FileEntry[]; availability?: string; unverified?: boolean };
 export type CatalogNode = { title: string; path: string; role: string; files: FileEntry[]; looseFiles: FileEntry[]; children: CatalogNode[] };
-export type Catalog = { complete: boolean; looseFiles: FileEntry[]; nodes: CatalogNode[]; categories: { title: string; courses: { title: string; modules: { title: string; lessons: Lesson[] }[] }[] }[] };
+export type ProjectedModule = { title: string; lessons: Lesson[]; looseFiles: FileEntry[] };
+export type ProjectedCourse = { title: string; modules: ProjectedModule[]; looseFiles: FileEntry[] };
+export type ProjectedCategory = { title: string; courses: ProjectedCourse[]; looseFiles: FileEntry[] };
+export type Catalog = { complete: boolean; looseFiles: FileEntry[]; nodes: CatalogNode[]; categories: ProjectedCategory[] };
 
 export interface Transport {
 	me(): Promise<User | null>;
@@ -19,6 +22,10 @@ type RustCatalog = { complete?: boolean; categories?: RustNode[]; loose_files?: 
 type GoFile = { name?: string; path?: string; size?: number; media_id?: string; kind?: string; availability?: string; unverified?: boolean };
 
 function invalidPayload(message: string): Error { return new Error(`Resposta inválida do servidor: ${message}`); }
+
+export function fileStatus(file: FileEntry): string {
+	return [file.availability === 'missing' ? 'ausente' : '', file.unverified ? 'não verificado' : ''].filter(Boolean).join(' · ');
+}
 
 function normalizeFile(value: RustFile | GoFile): FileEntry {
 	if (typeof value.name !== 'string' || typeof value.path !== 'string' || typeof value.size !== 'number') throw invalidPayload('arquivo sem nome, caminho ou tamanho.');
@@ -61,9 +68,11 @@ function normalizeRustNode(node: RustNode): CatalogNode {
 function projectRust(nodes: CatalogNode[]): Catalog['categories'] {
 	return nodes.filter((node) => node.role === 'category').map((category) => ({
 		title: category.title,
+		looseFiles: category.looseFiles,
 		courses: category.children.filter((node) => node.role === 'course').map((course) => ({
 			title: course.title,
-			modules: course.children.filter((node) => node.role === 'module').map((module) => ({ title: module.title, lessons: module.children.filter((node) => node.role === 'lesson').map(rustLesson) }))
+			looseFiles: course.looseFiles,
+			modules: course.children.filter((node) => node.role === 'module').map((module) => ({ title: module.title, looseFiles: module.looseFiles, lessons: module.children.filter((node) => node.role === 'lesson').map(rustLesson) }))
 		}))
 	}));
 }
@@ -93,17 +102,19 @@ export function normalizeCatalog(value: unknown): Catalog {
 				if (!Array.isArray(currentCategory.courses)) throw invalidPayload('categoria Go sem courses.');
 				return {
 					title: typeof currentCategory.title === 'string' ? currentCategory.title : 'Categoria',
+					looseFiles: [],
 					courses: currentCategory.courses.map((course) => {
 						if (!course || typeof course !== 'object') throw invalidPayload('curso Go inválido.');
 						const currentCourse = course as { title?: unknown; modules?: unknown };
 						if (!Array.isArray(currentCourse.modules)) throw invalidPayload('curso Go sem modules.');
 						return {
 							title: typeof currentCourse.title === 'string' ? currentCourse.title : 'Curso',
+							looseFiles: [],
 							modules: currentCourse.modules.map((module) => {
 								if (!module || typeof module !== 'object') throw invalidPayload('módulo Go inválido.');
 								const currentModule = module as { title?: unknown; lessons?: unknown };
 								if (!Array.isArray(currentModule.lessons)) throw invalidPayload('módulo Go sem lessons.');
-								return { title: typeof currentModule.title === 'string' ? currentModule.title : 'Módulo', lessons: currentModule.lessons.map(goLesson) };
+								return { title: typeof currentModule.title === 'string' ? currentModule.title : 'Módulo', looseFiles: [], lessons: currentModule.lessons.map(goLesson) };
 							})
 						};
 					})
