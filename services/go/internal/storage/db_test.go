@@ -32,6 +32,16 @@ func TestOpenMigratesDatabaseAndBootstrapsAdmin(t *testing.T) {
 	}
 }
 
+func TestBootstrapAdminAcceptsTemporaryAdminDefaultsAndStoresOnlyHash(t *testing.T) {
+	db := openTestDB(t)
+	if err := db.BootstrapAdmin(context.Background(), "admin", "admin"); err != nil { t.Fatal(err) }
+	u, err := db.UserByName(context.Background(), "admin"); if err != nil { t.Fatal(err) }
+	if !u.MustChangeCredentials || !u.IsAdmin { t.Fatalf("temporary bootstrap state = %+v", u) }
+	var stored string
+	if err := db.sql.QueryRow(`SELECT password_hash FROM users WHERE username='admin'`).Scan(&stored); err != nil { t.Fatal(err) }
+	if stored == "admin" || stored == "" { t.Fatalf("plaintext temporary password stored: %q", stored) }
+}
+
 func TestBootstrapAdminDoesNotReplaceExistingAccount(t *testing.T) {
 	db, err := Open(context.Background(), filepath.Join(t.TempDir(), "learnvault.db"))
 	if err != nil {

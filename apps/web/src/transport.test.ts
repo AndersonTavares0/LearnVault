@@ -3,8 +3,16 @@ import { DesktopStub, HttpTransport, normalizeCatalog, normalizeUser, type Trans
 
 describe('transport contract', () => {
 	it('exposes the HTTP transport seam without routing assumptions', () => {
-		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'rescan', 'mediaUrl'];
-		expect(methods).toHaveLength(6);
+		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'rescan', 'updateCredentials', 'mediaUrl'];
+		expect(methods).toHaveLength(7);
+	});
+	it('troca credenciais temporárias pelo contrato autenticado', async () => {
+		const user = { user_id: 'u1', username: 'novo', is_admin: true, must_change_credentials: false };
+		const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(user), { status: 200 }));
+		vi.stubGlobal('fetch', fetchMock);
+		await expect(new HttpTransport().updateCredentials('novo', 'senha suficientemente longa')).resolves.toMatchObject({ username: 'novo', mustChangeCredentials: false });
+		expect(fetchMock).toHaveBeenCalledWith('/api/account/credentials', expect.objectContaining({ method: 'POST' }));
+		vi.unstubAllGlobals();
 	});
 	it('builds media and caption URLs using the existing endpoint contract', () => {
 		const transport = new HttpTransport();

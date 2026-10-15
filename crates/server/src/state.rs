@@ -105,18 +105,16 @@ impl AppState {
             if existing {
                 return Ok((database, shell, shell_too_large));
             }
-            let (Some(username), Some(password)) = (
-                setup.admin_username.as_deref(),
-                setup.admin_password.as_deref(),
-            ) else {
-                return Err(StateError::MissingAdministrator);
-            };
+            let using_temporary_default = setup.admin_username.is_none() && setup.admin_password.is_none();
+            let username = setup.admin_username.as_deref().unwrap_or("admin");
+            let password = setup.admin_password.as_deref().unwrap_or("admin");
             crate::auth::validate_username(username)
                 .map_err(|_| StateError::InvalidAdministrator)?;
-            crate::auth::validate_password(password)
-                .map_err(|_| StateError::InvalidAdministrator)?;
-            let password_hash =
-                hash_password(password).map_err(|_| StateError::InvalidAdministrator)?;
+            let password_hash = if using_temporary_default {
+                crate::auth::hash_password_unchecked(password)
+            } else {
+                hash_password(password)
+            }.map_err(|_| StateError::InvalidAdministrator)?;
             learnvault_core::bootstrap_admin(
                 &mut database,
                 "usr-admin",
@@ -590,6 +588,7 @@ fn unix_now() -> i64 {
 #[cfg(test)]
 mod tests {
     use std::{path::PathBuf, time::Instant};
+    use tempfile::tempdir;
 
     use super::{AppState, StateError, attribute_values};
     use crate::Config;
@@ -629,6 +628,20 @@ mod tests {
             state.delete_session("token".to_owned()).await,
             Err(StateError::Capacity)
         ));
+    }
+
+    #[tokio::test]
+    async fn missing_bootstrap_configuration_creates_temporary_admin_admin() {
+        let directory = tempdir().unwrap();
+        let mut setup = config();
+        setup.database_path = directory.path().join("learnvault.sqlite");
+        let state = AppState::initialize(setup).await.unwrap();
+        let user = state.user("admin".to_owned()).await.unwrap().unwrap();
+        assert_eq!(user.username, "admin");
+        assert!(user.is_admin);
+        assert!(user.must_change_credentials);
+        assert!(crate::verify_password("admin", &user.password_hash).unwrap());
+        assert_ne!(user.password_hash, "admin");
     }
 
     #[tokio::test]

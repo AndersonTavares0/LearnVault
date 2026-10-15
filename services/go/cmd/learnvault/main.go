@@ -71,9 +71,8 @@ func run(ctx context.Context, cfg config.Config, listen func(string, string) (ne
 		return err
 	}
 	if !hasAdmin {
-		if cfg.AdminUser == "" || cfg.AdminPass == "" {
-			return errors.New("first run requires ADMIN_USERNAME and ADMIN_PASSWORD (minimum 12 characters)")
-		}
+		if cfg.AdminUser == "" { cfg.AdminUser = "admin" }
+		if cfg.AdminPass == "" { cfg.AdminPass = "admin" }
 		if err := db.BootstrapAdmin(ctx, cfg.AdminUser, cfg.AdminPass); err != nil {
 			return err
 		}

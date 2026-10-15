@@ -42,6 +42,10 @@ pub enum AuthError {
 /// Gera um hash PHC Argon2id compatível com os dados legados do Go.
 pub fn hash_password(password: &str) -> Result<String, AuthError> {
     validate_password(password)?;
+    hash_password_unchecked(password)
+}
+
+pub(crate) fn hash_password_unchecked(password: &str) -> Result<String, AuthError> {
     let params = Params::new(
         ARGON_MEMORY_KIB,
         ARGON_ITERATIONS,
@@ -60,7 +64,6 @@ pub fn hash_password(password: &str) -> Result<String, AuthError> {
 
 /// Verifica uma senha sem diferenciar senha errada de hash persistido inválido.
 pub fn verify_password(password: &str, encoded_hash: &str) -> Result<bool, AuthError> {
-    validate_password(password)?;
     let Ok(parsed) = PasswordHash::new(encoded_hash) else {
         return Ok(false);
     };
@@ -175,7 +178,7 @@ pub(crate) async fn login(
     }
     if !same_origin(&headers)
         || validate_username(&request.username).is_err()
-        || validate_password(&request.password).is_err()
+        || request.password.is_empty()
     {
         return no_store(
             (
