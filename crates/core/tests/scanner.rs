@@ -6,8 +6,10 @@
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::UNIX_EPOCH;
 
 use learnvault_core::Error;
+use learnvault_core::paths::KeyMode;
 use learnvault_core::scanner::{MediaKind, ScanOutcome, scan};
 
 fn write_file(root: &Path, relative: &str, bytes: &[u8]) -> PathBuf {
@@ -36,14 +38,15 @@ fn kind_of(outcome: &ScanOutcome, relative: &str) -> MediaKind {
         .kind
 }
 
-/// Manifesto recursivo da árvore: par (caminho relativo, tamanho) em ordem estável.
-fn manifest(root: &Path) -> BTreeSet<(String, u64)> {
+/// Manifesto recursivo da árvore: par (caminho relativo, tamanho, instante de
+/// modificação) em ordem estável.
+fn manifest(root: &Path) -> BTreeSet<(String, u64, u128)> {
     let mut entries = BTreeSet::new();
     collect_manifest(root, root, &mut entries);
     entries
 }
 
-fn collect_manifest(root: &Path, current: &Path, entries: &mut BTreeSet<(String, u64)>) {
+fn collect_manifest(root: &Path, current: &Path, entries: &mut BTreeSet<(String, u64, u128)>) {
     for entry in fs::read_dir(current).unwrap() {
         let entry = entry.unwrap();
         let path = entry.path();
@@ -52,12 +55,19 @@ fn collect_manifest(root: &Path, current: &Path, entries: &mut BTreeSet<(String,
             .unwrap()
             .to_string_lossy()
             .replace('\\', "/");
+        let metadata = entry.metadata().unwrap();
+        let modified = metadata
+            .modified()
+            .unwrap()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
 
         if entry.file_type().unwrap().is_dir() {
-            entries.insert((format!("{relative}/"), 0));
+            entries.insert((format!("{relative}/"), 0, modified));
             collect_manifest(root, &path, entries);
         } else {
-            entries.insert((relative, entry.metadata().unwrap().len()));
+            entries.insert((relative, metadata.len(), modified));
         }
     }
 }
@@ -80,7 +90,10 @@ fn nested_tree_is_classified() {
             "Curso/Modulo 1/aula.srt".to_owned(),
         ]
     );
-    assert_eq!(kind_of(&outcome, "Curso/Modulo 1/aula.mp4"), MediaKind::Media);
+    assert_eq!(
+        kind_of(&outcome, "Curso/Modulo 1/aula.mp4"),
+        MediaKind::Media
+    );
     assert_eq!(
         kind_of(&outcome, "Curso/Modulo 1/aula.srt"),
         MediaKind::Subtitle
@@ -90,34 +103,112 @@ fn nested_tree_is_classified() {
         MediaKind::Material
     );
     assert!(outcome.inaccessible.is_empty());
+
+    let video = outcome
+        .files
+        .iter()
+        .find(|file| file.relative_path == "Curso/Modulo 1/aula.mp4")
+        .unwrap();
+    assert_eq!(video.size, 5);
+    assert!(video.mtime > 1_600_000_000, "mtime não foi reportado");
 }
 
 #[test]
-fn small_typescript_like_file_is_material_and_large_one_is_media() {
+fn known_media_and_subtitle_extensions_are_classified() {
     let directory = tempfile::tempdir().unwrap();
     let root = directory.path();
-    write_file(root, "pequeno.ts", &[0_u8; 16]);
-    write_file(root, "grande.ts", &vec![0_u8; 2 * 1024 * 1024]);
+    let media = ["mp4", "webm", "mkv", "m3u8"];
+    let subtitles = ["srt", "vtt", "ass", "ssa"];
+
+    for extension in media {
+        write_file(root, &format!("media/arquivo.{extension}"), b"x");
+    }
+    for extension in subtitles {
+        write_file(root, &format!("legenda/arquivo.{extension}"), b"x");
+    }
+    // A extensão `.ts` exige tamanho mínimo e tem teste próprio.
+    write_file(root, "media/video.ts", &vec![0_u8; 2 * 1024 * 1024]);
 
     let outcome = scan(root).unwrap();
 
-    assert_eq!(kind_of(&outcome, "pequeno.ts"), MediaKind::Material);
-    assert_eq!(kind_of(&outcome, "grande.ts"), MediaKind::Media);
+    for extension in media {
+        assert_eq!(
+            kind_of(&outcome, &format!("media/arquivo.{extension}")),
+            MediaKind::Media,
+            "{extension} deveria ser mídia"
+        );
+    }
+    for extension in subtitles {
+        assert_eq!(
+            kind_of(&outcome, &format!("legenda/arquivo.{extension}")),
+            MediaKind::Subtitle,
+            "{extension} deveria ser legenda"
+        );
+    }
 }
 
 #[test]
-fn temporary_directories_are_not_walked() {
+fn uppercase_extensions_are_classified() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path();
+    write_file(root, "AULA.MP4", b"x");
+    write_file(root, "LEGENDA.SRT", b"x");
+
+    let outcome = scan(root).unwrap();
+
+    assert_eq!(kind_of(&outcome, "AULA.MP4"), MediaKind::Media);
+    assert_eq!(kind_of(&outcome, "LEGENDA.SRT"), MediaKind::Subtitle);
+}
+
+#[test]
+fn files_without_extension_or_with_trailing_dot_are_material() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path();
+    write_file(root, "README", b"x");
+    write_file(root, "aula.", b"x");
+    write_file(root, "aula.mp4.srt", b"x");
+
+    let outcome = scan(root).unwrap();
+
+    assert_eq!(kind_of(&outcome, "README"), MediaKind::Material);
+    assert_eq!(kind_of(&outcome, "aula."), MediaKind::Material);
+    assert_eq!(kind_of(&outcome, "aula.mp4.srt"), MediaKind::Subtitle);
+}
+
+#[test]
+fn typescript_like_files_are_media_only_at_one_megabyte() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path();
+    write_file(root, "abaixo.ts", &vec![0_u8; (1024 * 1024) - 1]);
+    write_file(root, "limite.ts", &vec![0_u8; 1024 * 1024]);
+
+    let outcome = scan(root).unwrap();
+
+    assert_eq!(kind_of(&outcome, "abaixo.ts"), MediaKind::Material);
+    assert_eq!(kind_of(&outcome, "limite.ts"), MediaKind::Media);
+}
+
+#[test]
+fn temporary_and_hidden_directories_are_not_walked() {
     let directory = tempfile::tempdir().unwrap();
     let root = directory.path();
     write_file(root, "temp/oculto.mp4", b"x");
+    write_file(root, "TEMP/oculto.mp4", b"x");
     write_file(root, "temp_download/oculto.mp4", b"x");
     write_file(root, "TEMP_EXTRA/oculto.mp4", b"x");
     write_file(root, "0____/oculto.mp4", b"x");
+    write_file(root, ".git/config", b"x");
+    write_file(root, ".obsidian/app.json", b"x");
     write_file(root, "Curso/aula.mp4", b"x");
+    // O filtro de diretórios ignorados não vale para arquivos com o mesmo nome.
+    write_file(root, "Curso/temp.mp4", b"x");
 
     let outcome = scan(root).unwrap();
 
-    assert_eq!(relative_paths(&outcome), vec!["Curso/aula.mp4".to_owned()]);
+    assert_eq!(
+        relative_paths(&outcome),
+        vec!["Curso/aula.mp4".to_owned(), "Curso/temp.mp4".to_owned()]
+    );
 }
 
 #[test]
@@ -180,7 +271,10 @@ fn unreadable_directory_is_recorded_and_the_scan_continues() {
     fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
 
     if fs::read_dir(&locked).is_ok() {
-        eprintln!("permissões ignoradas neste ambiente (execução privilegiada); caso não verificado");
+        eprintln!(
+            "AVISO: permissões ignoradas neste ambiente (execução privilegiada); \
+             o caso de diretório ilegível NÃO foi verificado nesta execução"
+        );
         return;
     }
 
@@ -188,6 +282,31 @@ fn unreadable_directory_is_recorded_and_the_scan_continues() {
 
     assert_eq!(relative_paths(&outcome), vec!["Curso/aula.mp4".to_owned()]);
     assert_eq!(outcome.inaccessible, vec!["Bloqueado".to_owned()]);
+}
+
+#[cfg(unix)]
+#[test]
+fn unreadable_root_returns_a_typed_error() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().join("biblioteca");
+    fs::create_dir_all(&root).unwrap();
+    fs::write(root.join("aula.mp4"), b"x").unwrap();
+    fs::set_permissions(&root, fs::Permissions::from_mode(0o000)).unwrap();
+
+    if fs::read_dir(&root).is_ok() {
+        eprintln!(
+            "AVISO: permissões ignoradas neste ambiente (execução privilegiada); \
+             o caso de raiz ilegível NÃO foi verificado nesta execução"
+        );
+        return;
+    }
+
+    match scan(&root) {
+        Err(Error::LibraryRootUnreadable { path, .. }) => assert_eq!(path, root),
+        other => panic!("erro inesperado: {other:?}"),
+    }
 }
 
 #[test]
@@ -208,6 +327,18 @@ fn files_are_sorted_by_relative_path() {
             "zebra/aula.mp4".to_owned(),
         ]
     );
+}
+
+#[test]
+fn an_empty_library_returns_no_files() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path();
+    write_file(root, "temp/ignorado.mp4", b"x");
+
+    let outcome = scan(root).unwrap();
+
+    assert!(outcome.files.is_empty());
+    assert!(outcome.inaccessible.is_empty());
 }
 
 #[test]
@@ -246,7 +377,10 @@ fn scanning_does_not_modify_the_library() {
     let after = manifest(root);
 
     assert!(!outcome.files.is_empty());
-    assert_eq!(before, after, "a varredura não pode modificar a biblioteca");
+    assert_eq!(
+        before, after,
+        "a varredura não pode modificar a biblioteca (caminho, tamanho ou mtime)"
+    );
 }
 
 #[test]
@@ -262,18 +396,17 @@ fn reported_paths_are_relative_to_the_root() {
     for file in &outcome.files {
         assert!(!file.relative_path.starts_with('/'));
         assert!(!file.relative_path.starts_with('\\'));
+        assert!(!file.relative_path.contains(".."));
         assert!(
             !file.relative_path.contains(&root_text),
             "caminho absoluto vazou: {}",
             file.relative_path
         );
-        let sensitive = file.relative_path_key.as_str() == file.relative_path.as_str();
-        let insensitive =
-            file.relative_path_key.as_str() == file.relative_path.to_ascii_lowercase().as_str();
-        assert!(
-            sensitive || insensitive,
-            "chave de caminho inesperada: {}",
-            file.relative_path_key
-        );
+
+        let expected = match KeyMode::for_host() {
+            KeyMode::Sensitive => file.relative_path.clone(),
+            KeyMode::Insensitive => file.relative_path.to_ascii_lowercase(),
+        };
+        assert_eq!(file.relative_path_key, expected);
     }
 }

@@ -3,6 +3,7 @@
 //! Todos os casos usam dados em memória ou diretórios temporários: nenhuma
 //! biblioteca real é acessada.
 
+use learnvault_core::Error;
 use learnvault_core::paths::{KeyMode, relative_path_key, resolve_within};
 
 #[test]
@@ -46,6 +47,17 @@ fn absolute_paths_are_rejected() {
 }
 
 #[test]
+fn drive_prefixed_components_are_rejected_even_in_the_middle() {
+    // No Windows, empilhar um componente com prefixo próprio descarta a raiz acumulada.
+    for path in ["curso/C:/Windows", "x/C:", "C:"] {
+        assert!(
+            relative_path_key(path, KeyMode::Sensitive).is_err(),
+            "componente com prefixo de unidade foi aceito: {path}"
+        );
+    }
+}
+
+#[test]
 fn parent_components_are_rejected() {
     for path in [
         "../segredo.txt",
@@ -61,12 +73,29 @@ fn parent_components_are_rejected() {
 }
 
 #[test]
-fn empty_and_malformed_paths_are_rejected() {
-    for path in ["", ".", "./curso", "curso//aula.mp4"] {
+fn empty_malformed_and_control_character_paths_are_rejected() {
+    for path in [
+        "",
+        ".",
+        "./curso",
+        "curso//aula.mp4",
+        "curso/",
+        "aula\0.mp4",
+    ] {
         assert!(
             relative_path_key(path, KeyMode::Sensitive).is_err(),
             "caminho inválido foi aceito: {path}"
         );
+    }
+}
+
+#[test]
+fn rejected_paths_report_the_invalid_relative_path_error() {
+    for path in ["../fora.txt", "/etc/passwd", "", "curso/C:"] {
+        match relative_path_key(path, KeyMode::Sensitive) {
+            Err(Error::InvalidRelativePath { path: reported }) => assert_eq!(reported, path),
+            other => panic!("erro inesperado para {path}: {other:?}"),
+        }
     }
 }
 
@@ -81,6 +110,20 @@ fn resolve_within_accepts_valid_relative_paths() {
 }
 
 #[test]
+fn resolve_within_always_stays_under_the_root() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path();
+
+    let resolved = resolve_within(root, "curso/modulo/aula.mp4").unwrap();
+
+    assert!(
+        resolved.starts_with(root),
+        "o caminho resolvido escapou da raiz: {}",
+        resolved.display()
+    );
+}
+
+#[test]
 fn resolve_within_refuses_escapes_and_absolute_paths() {
     let directory = tempfile::tempdir().unwrap();
     let root = directory.path();
@@ -89,12 +132,13 @@ fn resolve_within_refuses_escapes_and_absolute_paths() {
         "../fora.txt",
         "/etc/passwd",
         "C:/Users/aluno",
+        "curso/C:/Windows",
         "curso/../../fora.txt",
         "",
     ] {
-        assert!(
-            resolve_within(root, relative).is_err(),
-            "escape foi aceito: {relative}"
-        );
+        match resolve_within(root, relative) {
+            Err(Error::InvalidRelativePath { .. }) => {}
+            other => panic!("escape foi aceito para {relative}: {other:?}"),
+        }
     }
 }

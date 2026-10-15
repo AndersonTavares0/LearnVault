@@ -20,6 +20,13 @@ fn assert_uuid_v7(id: &str) {
     }
 
     assert_eq!(bytes[14], b'7', "versão 7 esperada em {id}");
+    // Bits de variante do RFC 9562: o primeiro nibble do quarto grupo precisa estar
+    // entre 8 e b.
+    let variant = bytes[19];
+    assert!(
+        (b'8'..=b'b').contains(&variant),
+        "bits de variante inválidos em {id}"
+    );
 }
 
 #[test]
@@ -39,11 +46,22 @@ fn ids_are_ordered_by_creation_time() {
 
 #[test]
 fn ids_are_unique_across_many_generations() {
-    let mut seen = HashSet::new();
+    let mut media_ids = HashSet::new();
+    let mut library_ids = HashSet::new();
 
     for _ in 0..1000 {
-        let id = new_media_id();
-        assert_uuid_v7(&id);
-        assert!(seen.insert(id), "identificador repetido");
+        let media_id = new_media_id();
+        assert_uuid_v7(&media_id);
+        assert!(
+            media_ids.insert(media_id),
+            "identificador de mídia repetido"
+        );
+
+        let library_id = new_library_id();
+        assert_uuid_v7(&library_id);
+        assert!(
+            library_ids.insert(library_id),
+            "identificador de biblioteca repetido"
+        );
     }
 }
