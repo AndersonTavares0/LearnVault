@@ -9,7 +9,12 @@ use learnvault_core::{Availability, Catalog, CatalogFile, CatalogNode, MediaKind
 use learnvault_desktop::{CatalogDto, DesktopState, IpcErrorCode, catalog, config_status};
 
 /// Arquivo de catálogo de teste, com localização fixa e verificável.
-fn file(media_id: &str, kind: MediaKind, availability: Availability, unverified: bool) -> CatalogFile {
+fn file(
+    media_id: &str,
+    kind: MediaKind,
+    availability: Availability,
+    unverified: bool,
+) -> CatalogFile {
     CatalogFile {
         media_id: media_id.to_owned(),
         name: "aula.mp4".to_owned(),
@@ -22,7 +27,13 @@ fn file(media_id: &str, kind: MediaKind, availability: Availability, unverified:
 }
 
 /// Nó de catálogo de teste com papel, arquivos e filhos explícitos.
-fn node(title: &str, path: &str, role: NodeRole, files: Vec<CatalogFile>, children: Vec<CatalogNode>) -> CatalogNode {
+fn node(
+    title: &str,
+    path: &str,
+    role: NodeRole,
+    files: Vec<CatalogFile>,
+    children: Vec<CatalogNode>,
+) -> CatalogNode {
     CatalogNode {
         title: title.to_owned(),
         path: path.to_owned(),
@@ -41,7 +52,7 @@ fn configuration_is_absent_until_a_source_exists() {
         "sem fonte canônica de configuração, o desktop não pode se declarar configurado"
     );
     assert_eq!(
-        serde_json::to_value(&status).unwrap(),
+        serde_json::to_value(status).unwrap(),
         serde_json::json!({ "configured": false })
     );
 }
@@ -60,7 +71,12 @@ fn empty_database_produces_a_complete_empty_catalog() {
 fn catalog_dto_uses_the_snake_case_spa_contract() {
     let source = Catalog {
         complete: false,
-        loose_files: vec![file("loose", MediaKind::Material, Availability::Missing, true)],
+        loose_files: vec![file(
+            "loose",
+            MediaKind::Material,
+            Availability::Missing,
+            true,
+        )],
         categories: vec![node(
             "Curso",
             "cat",
@@ -92,8 +108,14 @@ fn catalog_dto_uses_the_snake_case_spa_contract() {
     assert_eq!(json["categories"][0]["files"], serde_json::json!([]));
     assert_eq!(json["categories"][0]["loose_files"], serde_json::json!([]));
     assert_eq!(json["categories"][0]["children"][0]["role"], "lesson");
-    assert_eq!(json["categories"][0]["children"][0]["files"][0]["kind"], "media");
-    assert_eq!(json["categories"][0]["children"][0]["files"][0]["availability"], "available");
+    assert_eq!(
+        json["categories"][0]["children"][0]["files"][0]["kind"],
+        "media"
+    );
+    assert_eq!(
+        json["categories"][0]["children"][0]["files"][0]["availability"],
+        "available"
+    );
 }
 
 #[test]
@@ -111,7 +133,10 @@ fn every_core_enum_maps_to_a_stable_string() {
             categories: vec![node("N", "n", role, Vec::new(), Vec::new())],
         });
         let json = serde_json::to_value(dto).unwrap();
-        assert_eq!(json["categories"][0]["role"], expected, "papel {role:?} precisa ser estável");
+        assert_eq!(
+            json["categories"][0]["role"], expected,
+            "papel {role:?} precisa ser estável"
+        );
     }
 
     let kinds = [
@@ -126,7 +151,10 @@ fn every_core_enum_maps_to_a_stable_string() {
             categories: Vec::new(),
         });
         let json = serde_json::to_value(dto).unwrap();
-        assert_eq!(json["loose_files"][0]["kind"], expected, "tipo {kind:?} precisa ser estável");
+        assert_eq!(
+            json["loose_files"][0]["kind"], expected,
+            "tipo {kind:?} precisa ser estável"
+        );
     }
 }
 
@@ -158,8 +186,14 @@ fn catalog_failure_is_a_stable_sanitized_error() {
     assert_eq!(json["code"], "catalog_unavailable");
     let message = json["message"].as_str().unwrap();
     assert!(!message.is_empty(), "a mensagem precisa existir");
-    assert!(!message.contains("Cursos secretos"), "a mensagem não pode expor caminhos: {message}");
-    assert!(!message.contains("aula.mp4"), "a mensagem não pode expor nomes de arquivo: {message}");
+    assert!(
+        !message.contains("Cursos secretos"),
+        "a mensagem não pode expor caminhos: {message}"
+    );
+    assert!(
+        !message.contains("aula.mp4"),
+        "a mensagem não pode expor nomes de arquivo: {message}"
+    );
 }
 
 #[test]

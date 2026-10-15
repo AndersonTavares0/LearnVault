@@ -164,12 +164,26 @@ export class HttpTransport implements Transport {
 	mediaUrl(path: string) { return `/api/media?path=${encodeURIComponent(path)}`; }
 }
 
-/** Seam explícita para o build Tauri; IPC pertence à Fase 4. */
+// O Tauri só é importado quando o bundle é o do desktop: o `import()` dinâmico é eliminado
+// do bundle HTTP por dead-code elimination, de modo que `invoke` não entra na SPA web nem
+// um `fetch` entra no desktop.
+async function desktopInvoke<T>(command: string): Promise<T> {
+	const { invoke } = await import('@tauri-apps/api/core');
+	return invoke<T>(command);
+}
+
+// O comando devolve o erro como objeto serializado `{ code, message }`, não como `Error`.
+function desktopError(cause: unknown, fallback: string): Error {
+	const payload = cause as { message?: unknown } | null;
+	if (payload && typeof payload === 'object' && typeof payload.message === 'string' && payload.message.length > 0) return new Error(payload.message);
+	return new Error(fallback);
+}
+
 export class DesktopStub implements Transport {
 	me() { return Promise.resolve(null); }
 	login() { return Promise.reject(new Error('Transporte desktop ainda não implementado.')); }
 	logout() { return Promise.resolve(); }
-	catalog() { return Promise.reject(new Error('Transporte desktop ainda não implementado.')); }
+	async catalog() { try { return normalizeCatalog(await desktopInvoke('desktop_catalog')); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar o catálogo.'); } }
 	rescan() { return Promise.reject(new Error('Rescan desktop ainda não implementado.')); }
 	updateCredentials() { return Promise.reject(new Error('Transporte desktop ainda não implementado.')); }
 	mediaUrl(_path: string) { return null; }

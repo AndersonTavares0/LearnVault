@@ -202,17 +202,28 @@ fn capability_grants_only_the_core_default_and_the_two_app_commands() {
 #[test]
 fn invoke_handler_registers_only_the_desktop_commands() {
     let lib = read(&crate_root().join("src/lib.rs"));
+    let marker = "generate_handler![";
+    let start = lib
+        .find(marker)
+        .expect("o lib.rs precisa registrar um invoke_handler")
+        + marker.len();
+    let rest = &lib[start..];
+    let end = rest
+        .find(']')
+        .expect("o invoke_handler precisa fechar a lista de comandos");
+    let commands = &rest[..end];
+
     assert!(
-        lib.contains("desktop_config"),
-        "o handler precisa registrar desktop_config"
+        commands.contains("desktop_config"),
+        "o handler precisa registrar desktop_config: {commands}"
     );
     assert!(
-        lib.contains("desktop_catalog"),
-        "o handler precisa registrar desktop_catalog"
+        commands.contains("desktop_catalog"),
+        "o handler precisa registrar desktop_catalog: {commands}"
     );
     assert!(
-        !lib.contains("rescan"),
-        "rescan pertence a uma fatia posterior e não pode ser registrado agora"
+        !commands.contains("rescan"),
+        "rescan pertence a uma fatia posterior e não pode ser registrado agora: {commands}"
     );
 }
 
