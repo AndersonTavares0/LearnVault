@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"log"
@@ -24,8 +25,12 @@ import (
 
 //go:embed web/build/*
 var webBuild embed.FS
+var version = "dev"
 
 func main() {
+	if printVersion(os.Args, os.Stdout) {
+		return
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	cfg, err := config.Load()
@@ -35,6 +40,14 @@ func main() {
 	if err := run(ctx, cfg, net.Listen); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func printVersion(args []string, out io.Writer) bool {
+	if len(args) == 2 && args[1] == "--version" {
+		fmt.Fprintln(out, version)
+		return true
+	}
+	return false
 }
 
 func run(ctx context.Context, cfg config.Config, listen func(string, string) (net.Listener, error)) error {
@@ -71,7 +84,7 @@ func run(ctx context.Context, cfg config.Config, listen func(string, string) (ne
 	if err != nil {
 		return err
 	}
-	api := httpapi.NewWithLibrary(db, cfg.CookieSecure, root)
+	api := httpapi.NewWithLibraryVersion(db, cfg.CookieSecure, root, version)
 	mux := http.NewServeMux()
 	mux.Handle("/api/", api)
 	mux.HandleFunc("/", spaHandler(staticFiles))

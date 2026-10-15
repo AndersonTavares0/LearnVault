@@ -28,6 +28,24 @@ func TestHealthEndpoint(t *testing.T) {
 	}
 }
 
+func TestHealthEndpointIncludesVersion(t *testing.T) {
+	db, err := storage.Open(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	srv := NewWithVersion(db, false, "v0.1.0")
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/healthz", nil))
+	var response map[string]string
+	if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response["status"] != "ok" || response["version"] != "v0.1.0" {
+		t.Fatalf("health response = %#v; want status ok and version v0.1.0", response)
+	}
+}
+
 func TestAdminCanRescanAndReadCatalog(t *testing.T) {
 	root := t.TempDir()
 	lesson := filepath.Join(root, "Cat", "Curso", "Modulo", "Aula")

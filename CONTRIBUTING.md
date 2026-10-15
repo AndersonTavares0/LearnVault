@@ -53,6 +53,7 @@ organization that permits private forks or become public after a separate review
 ## Commit style
 
 Use short Conventional Commit-style messages: `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, or `chore:`.
+Release Please uses these messages to prepare version bumps and changelog entries.
 
 ## Clean-room policy
 

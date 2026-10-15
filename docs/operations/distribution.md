@@ -24,7 +24,8 @@ primary development model.
 - Container definitions belong under `deploy/container/`, `deploy/compose/`, and
   `deploy/quadlet/`; they must not define application behavior that the binary lacks.
 - CI should build a platform artifact independently before assembling installers.
-- Releases should publish checksums, version information, and platform labels.
+- Release Please owns the changelog and GitHub Release metadata. The published-release
+  workflow adds versioned binaries and a `SHA256SUMS` file to that existing release.
 
 ## Planned tooling
 
