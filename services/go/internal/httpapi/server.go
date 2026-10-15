@@ -37,6 +37,7 @@ type store interface {
 	CreateSession(context.Context, int64, time.Duration) (string, error)
 	UserForSession(context.Context, string) (storage.User, error)
 	DeleteSession(context.Context, string) error
+	UpdateCredentials(context.Context, int64, string, string) error
 	Catalog(context.Context) (catalog.Catalog, error)
 	ReplaceCatalog(context.Context, catalog.Catalog) error
 }
@@ -111,6 +112,9 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 		}
 		http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: s.cookieSecure, SameSite: http.SameSiteStrictMode})
 		w.WriteHeader(http.StatusNoContent)
+	case "/api/account/credentials":
+		if r.Method != http.MethodPost { methodNotAllowed(w); return }
+		s.credentials(w, r)
 	case "/api/me":
 		if r.Method != http.MethodGet {
 			methodNotAllowed(w)
@@ -127,9 +131,10 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 			methodNotAllowed(w)
 			return
 		}
-		if _, ok := s.currentUser(r); !ok {
+		if user, ok := s.currentUser(r); !ok {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 			return
+		} else if user.MustChangeCredentials { writeJSON(w, http.StatusForbidden, map[string]string{"error":"credentials_change_required"}); return
 		}
 		value, err := s.db.Catalog(r.Context())
 		if err != nil {
@@ -142,9 +147,10 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 			methodNotAllowed(w)
 			return
 		}
-		if _, ok := s.currentUser(r); !ok {
+		if user, ok := s.currentUser(r); !ok {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 			return
+		} else if user.MustChangeCredentials { writeJSON(w, http.StatusForbidden, map[string]string{"error":"credentials_change_required"}); return
 		}
 		if s.libraryRoot == nil {
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "library_unavailable"})
@@ -187,7 +193,8 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		user, ok := s.currentUser(r)
-		if !ok || user.Role != "admin" {
+		if !ok || user.Role != "admin" || user.MustChangeCredentials {
+			if ok && user.MustChangeCredentials { writeJSON(w, http.StatusForbidden, map[string]string{"error":"credentials_change_required"}); return }
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 			return
 		}
@@ -318,6 +325,15 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: token, Path: "/", Expires: time.Now().Add(sessionLifetime), MaxAge: int(sessionLifetime.Seconds()), HttpOnly: true, Secure: s.cookieSecure, SameSite: http.SameSiteStrictMode})
 	writeJSON(w, http.StatusOK, user)
+}
+
+func (s *Server) credentials(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.currentUser(r); if !ok { writeJSON(w, http.StatusUnauthorized, map[string]string{"error":"unauthorized"}); return }
+	r.Body = http.MaxBytesReader(w, r.Body, 8*1024); var input struct { Username string `json:"username"`; Password string `json:"password"` }
+	decoder := json.NewDecoder(r.Body); decoder.DisallowUnknownFields(); if err := decoder.Decode(&input); err != nil { writeJSON(w, http.StatusBadRequest, map[string]string{"error":"invalid_request"}); return }
+	if err := s.db.UpdateCredentials(r.Context(), user.ID, input.Username, input.Password); err != nil { writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error":"invalid_credentials_format"}); return }
+	token, err := s.db.CreateSession(r.Context(), user.ID, sessionLifetime); if err != nil { writeJSON(w, http.StatusInternalServerError, map[string]string{"error":"internal_error"}); return }
+	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: token, Path: "/", MaxAge: int(sessionLifetime.Seconds()), HttpOnly: true, Secure: s.cookieSecure, SameSite: http.SameSiteStrictMode}); user.Username = input.Username; user.MustChangeCredentials = false; writeJSON(w, http.StatusOK, user)
 }
 
 func (s *Server) currentUser(r *http.Request) (storage.User, bool) {

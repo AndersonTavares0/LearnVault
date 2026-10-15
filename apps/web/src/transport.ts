@@ -1,4 +1,4 @@
-export type User = { username: string; role: string };
+export type User = { userId: string; username: string; role: string; isAdmin: boolean; mustChangeCredentials: boolean };
 export type FileEntry = { name: string; path: string; size: number; mediaId?: string; kind?: string; availability?: string; unverified?: boolean };
 export type Lesson = { title: string; path: string; media: FileEntry[]; subtitles: FileEntry[]; materials: FileEntry[]; availability?: string; unverified?: boolean };
 export type CatalogNode = { title: string; path: string; role: string; files: FileEntry[]; looseFiles: FileEntry[]; children: CatalogNode[] };
@@ -13,6 +13,7 @@ export interface Transport {
 	logout(): Promise<void>;
 	catalog(): Promise<Catalog>;
 	rescan(): Promise<void>;
+	updateCredentials(username: string, password: string): Promise<User>;
 	mediaUrl(path: string): string | null;
 }
 
@@ -92,8 +93,8 @@ function normalizeRustCatalog(value: RustCatalog): Catalog {
 
 export function normalizeUser(value: unknown): User {
 	if (!value || typeof value !== 'object' || typeof (value as { username?: unknown }).username !== 'string') throw invalidPayload('usuário sem username.');
-	const user = value as { username: string; role?: unknown; is_admin?: unknown };
-	return { username: user.username, role: user.is_admin === true || user.role === 'admin' ? 'admin' : 'user' };
+	const user = value as { user_id?: unknown; username: string; role?: unknown; is_admin?: unknown; must_change_credentials?: unknown };
+	return { userId: typeof user.user_id === 'string' || typeof user.user_id === 'number' ? String(user.user_id) : '', username: user.username, isAdmin: user.is_admin === true || user.role === 'admin', role: user.is_admin === true || user.role === 'admin' ? 'admin' : 'user', mustChangeCredentials: user.must_change_credentials === true };
 }
 
 export function normalizeCatalog(value: unknown): Catalog {
@@ -142,6 +143,7 @@ export class HttpTransport implements Transport {
 	async logout() { await fetch('/api/logout', { method: 'POST' }); }
 	async catalog() { const response = await fetch('/api/catalog'); if (!response.ok) throw new Error('Não foi possível carregar o catálogo.'); return normalizeCatalog(await response.json()); }
 	async rescan() { const response = await fetch('/api/admin/catalog/rescan', { method: 'POST' }); if (!response.ok) throw new Error(response.status === 409 ? 'Já existe um rescan em andamento.' : 'Não foi possível indexar a biblioteca.'); }
+	async updateCredentials(username: string, password: string) { const response = await fetch('/api/account/credentials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) }); if (!response.ok) throw new Error(response.status === 422 ? 'Usuário ou senha inválidos.' : 'Não foi possível atualizar as credenciais.'); return normalizeUser(await response.json()); }
 	mediaUrl(path: string) { return `/api/media?path=${encodeURIComponent(path)}`; }
 }
 
@@ -152,6 +154,7 @@ export class DesktopStub implements Transport {
 	logout() { return Promise.resolve(); }
 	catalog() { return Promise.reject(new Error('Transporte desktop ainda não implementado.')); }
 	rescan() { return Promise.reject(new Error('Rescan desktop ainda não implementado.')); }
+	updateCredentials() { return Promise.reject(new Error('Transporte desktop ainda não implementado.')); }
 	mediaUrl(_path: string) { return null; }
 }
 

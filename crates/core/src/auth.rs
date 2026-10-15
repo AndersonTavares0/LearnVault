@@ -19,6 +19,7 @@ pub struct AuthUser {
     pub password_hash: String,
     /// Indica se o usuário pode executar ações administrativas.
     pub is_admin: bool,
+    pub must_change_credentials: bool,
 }
 
 /// Identidade derivada de uma sessão válida.
@@ -30,6 +31,7 @@ pub struct AuthSession {
     pub username: String,
     /// Indica se o usuário autenticado é administrador.
     pub is_admin: bool,
+    pub must_change_credentials: bool,
     /// Instante de expiração da sessão em segundos Unix.
     pub expires_at: i64,
 }
@@ -60,8 +62,8 @@ pub fn bootstrap_admin(
     }
 
     tx.execute(
-        "INSERT INTO user (user_id, username, password_hash, is_admin, created_at)
-         VALUES (?1, ?2, ?3, 1, ?4)",
+        "INSERT INTO user (user_id, username, password_hash, is_admin, created_at, must_change_credentials)
+          VALUES (?1, ?2, ?3, 1, ?4, 1)",
         rusqlite::params![user_id, username, password_hash, created_at],
     )?;
     tx.commit()?;
@@ -73,7 +75,7 @@ pub fn find_user_by_username(db: &Database, username: &str) -> Result<Option<Aut
     Ok(db
         .connection()
         .query_row(
-            "SELECT user_id, username, password_hash, is_admin
+            "SELECT user_id, username, password_hash, is_admin, must_change_credentials
                FROM user
               WHERE username = ?1",
             [username],
@@ -83,6 +85,7 @@ pub fn find_user_by_username(db: &Database, username: &str) -> Result<Option<Aut
                     username: row.get(1)?,
                     password_hash: row.get(2)?,
                     is_admin: row.get::<_, i64>(3)? != 0,
+                    must_change_credentials: row.get::<_, i64>(4)? != 0,
                 })
             },
         )
@@ -117,7 +120,7 @@ pub fn session_user(db: &Database, token_hash: &str, now: i64) -> Result<Option<
     Ok(db
         .connection()
         .query_row(
-            "SELECT s.user_id, u.username, u.is_admin, s.expires_at
+            "SELECT s.user_id, u.username, u.is_admin, u.must_change_credentials, s.expires_at
                FROM session s
                JOIN user u ON u.user_id = s.user_id
               WHERE s.token_hash = ?1
@@ -128,11 +131,25 @@ pub fn session_user(db: &Database, token_hash: &str, now: i64) -> Result<Option<
                     user_id: row.get(0)?,
                     username: row.get(1)?,
                     is_admin: row.get::<_, i64>(2)? != 0,
-                    expires_at: row.get(3)?,
+                    must_change_credentials: row.get::<_, i64>(3)? != 0,
+                    expires_at: row.get(4)?,
                 })
             },
         )
         .optional()?)
+}
+
+pub fn update_credentials(
+    db: &mut Database,
+    user_id: &str,
+    username: &str,
+    password_hash: &str,
+) -> Result<()> {
+    let tx = db.conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    tx.execute("UPDATE user SET username = ?1, password_hash = ?2, must_change_credentials = 0 WHERE user_id = ?3", rusqlite::params![username, password_hash, user_id])?;
+    tx.execute("DELETE FROM session WHERE user_id = ?1", [user_id])?;
+    tx.commit()?;
+    Ok(())
 }
 
 /// Invalida uma sessão pelo hash persistido do token.

@@ -232,7 +232,12 @@ func loginForTest(t *testing.T, srv http.Handler) *http.Cookie {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("login returned %d", rr.Code)
 	}
-	return rr.Result().Cookies()[0]
+	cookie := rr.Result().Cookies()[0]
+	change := httptest.NewRequest(http.MethodPost, "/api/account/credentials", strings.NewReader(`{"username":"owner2","password":"a sufficiently long replacement password"}`))
+	change.AddCookie(cookie)
+	changed := httptest.NewRecorder(); srv.ServeHTTP(changed, change)
+	if changed.Code != http.StatusOK { t.Fatalf("credential change returned %d: %s", changed.Code, changed.Body.String()) }
+	return changed.Result().Cookies()[0]
 }
 
 func TestUnauthenticatedMeIsRejected(t *testing.T) {
@@ -274,7 +279,7 @@ func TestLoginCreatesSessionAndMeReturnsCurrentUser(t *testing.T) {
 	me.AddCookie(cookies[0])
 	meResult := httptest.NewRecorder()
 	srv.ServeHTTP(meResult, me)
-	if meResult.Code != http.StatusOK || !strings.Contains(meResult.Body.String(), `"role":"admin"`) {
+	if meResult.Code != http.StatusOK || !strings.Contains(meResult.Body.String(), `"is_admin":true`) {
 		t.Fatalf("unexpected /api/me response: %d %s", meResult.Code, meResult.Body.String())
 	}
 }

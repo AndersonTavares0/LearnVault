@@ -35,7 +35,8 @@ pub(crate) async fn media(
         return error_private_no_store(StatusCode::UNAUTHORIZED);
     };
     match state.session_user(hash_session_token(&token)).await {
-        Ok(Some(_)) => {}
+        Ok(Some(user)) if !user.must_change_credentials => {}
+        Ok(Some(_)) => return error_credentials_required(),
         Err(StateError::Capacity) => return service_unavailable(),
         Ok(None) | Err(_) => return error_private_no_store(StatusCode::UNAUTHORIZED),
     }
@@ -136,6 +137,10 @@ pub(crate) async fn media(
         response_headers.insert(header::CONTENT_RANGE, content_range);
     }
     response
+}
+
+fn error_credentials_required() -> Response {
+    error_private_no_store((StatusCode::FORBIDDEN, axum::Json(serde_json::json!({"error":"credentials_change_required"}))).into_response())
 }
 
 fn media_error_response(error: &learnvault_core::Error) -> Response {

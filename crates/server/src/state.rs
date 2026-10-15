@@ -286,6 +286,15 @@ impl AppState {
         .map_err(StateError::Blocking)?
         .map_err(StateError::Database)
     }
+
+    pub(crate) async fn update_credentials(&self, user_id: String, username: String, password_hash: String) -> Result<(), StateError> {
+        let mut database = self.database.clone().lock_owned().await;
+        let permit = self.try_acquire_blocking_task().ok_or(StateError::Capacity)?;
+        tokio::task::spawn_blocking(move || {
+            let _permit = permit;
+            learnvault_core::update_credentials(&mut database, &user_id, &username, &password_hash)
+        }).await.map_err(StateError::Blocking)?.map_err(StateError::Database)
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
