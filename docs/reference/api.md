@@ -3,6 +3,12 @@
 A API é servida pelo executável Go. Todas as rotas abaixo usam JSON, salvo indicação
 contrária. A autenticação usa um cookie de sessão HttpOnly com SameSite=Strict.
 
+No servidor Rust, a raiz da biblioteca deve permanecer sob controle confiável do processo entre
+as operações administrativas. O rescan recanonicaliza a raiz e recusa mudanças detectáveis, mas
+trocas concorrentes de junctions, symlinks ou reparse points durante a abertura ainda dependem
+das garantias específicas do sistema operacional; essa limitação não deve ser tratada como
+isolamento absoluto contra um escritor local concorrente.
+
 Na implementação Rust, o cookie também recebe `Secure` por padrão e só é enviado pelo
 navegador em HTTPS. Para desenvolvimento local sem TLS, use explicitamente `--insecure-http`;
 esse modo não deve ser usado em uma instalação exposta na rede. Mutações de autenticação exigem

@@ -122,9 +122,8 @@ impl AppState {
     }
 
     pub(crate) async fn user(&self, username: String) -> Result<Option<AuthUser>, StateError> {
-        let database = self.database.clone();
+        let database = self.database.clone().lock_owned().await;
         tokio::task::spawn_blocking(move || {
-            let database = database.blocking_lock();
             learnvault_core::find_user_by_username(&database, &username)
         })
         .await
@@ -136,9 +135,8 @@ impl AppState {
         &self,
         token_hash: String,
     ) -> Result<Option<AuthSession>, StateError> {
-        let database = self.database.clone();
+        let database = self.database.clone().lock_owned().await;
         tokio::task::spawn_blocking(move || {
-            let database = database.blocking_lock();
             learnvault_core::session_user(&database, &token_hash, unix_now())
         })
         .await
@@ -151,9 +149,8 @@ impl AppState {
         token_hash: String,
         user_id: String,
     ) -> Result<(), StateError> {
-        let database = self.database.clone();
+        let mut database = self.database.clone().lock_owned().await;
         tokio::task::spawn_blocking(move || {
-            let mut database = database.blocking_lock();
             learnvault_core::create_session(
                 &mut database,
                 &token_hash,
@@ -167,9 +164,8 @@ impl AppState {
     }
 
     pub(crate) async fn delete_session(&self, token_hash: String) -> Result<(), StateError> {
-        let database = self.database.clone();
+        let mut database = self.database.clone().lock_owned().await;
         tokio::task::spawn_blocking(move || {
-            let mut database = database.blocking_lock();
             learnvault_core::delete_session(&mut database, &token_hash)
         })
         .await

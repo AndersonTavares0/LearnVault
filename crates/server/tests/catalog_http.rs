@@ -3,7 +3,8 @@ use axum::{
     http::{Request, StatusCode},
 };
 use http_body_util::BodyExt;
-use learnvault_server::{AppState, Config, build_router};
+use learnvault_core::Database;
+use learnvault_server::{AppState, Config, build_router, hash_password};
 use std::{
     fs::{self, OpenOptions},
     path::Path,
@@ -81,6 +82,87 @@ async fn rescan_requires_authentication() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn catalog_and_rescan_reject_invalid_sessions() {
+    let temp = tempfile::tempdir().unwrap();
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let cookie = "learnvault_session=invalid-token";
+
+    let catalog = app
+        .clone()
+        .oneshot(
+            Request::get("/api/catalog")
+                .header("cookie", cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(catalog.status(), StatusCode::UNAUTHORIZED);
+
+    let rescan = app
+        .oneshot(
+            Request::post("/api/admin/catalog/rescan")
+                .header("cookie", cookie)
+                .header("origin", "http://localhost")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rescan.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn non_admin_cannot_rescan() {
+    let temp = tempfile::tempdir().unwrap();
+    let database = Database::open(temp.path().join("catalog.sqlite")).unwrap();
+    let password_hash = hash_password("senha local longa para aluno").unwrap();
+    database
+        .connection()
+        .execute(
+            "INSERT INTO user (user_id, username, password_hash, is_admin, created_at)
+             VALUES ('usr-reader', 'reader', ?1, 0, 1)",
+            [&password_hash],
+        )
+        .unwrap();
+    drop(database);
+
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/api/login")
+                .header("origin", "http://localhost")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    r#"{"username":"reader","password":"senha local longa para aluno"}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let cookie = response.headers()["set-cookie"]
+        .to_str()
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap()
+        .to_owned();
+
+    let rescan = app
+        .oneshot(
+            Request::post("/api/admin/catalog/rescan")
+                .header("origin", "http://localhost")
+                .header("cookie", cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rescan.status(), StatusCode::FORBIDDEN);
 }
 
 #[tokio::test]

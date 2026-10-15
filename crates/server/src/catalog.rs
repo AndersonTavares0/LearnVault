@@ -26,6 +26,7 @@ const LIBRARY_ID: &str = "library-1";
 enum RescanFailure {
     Busy,
     Failed,
+    RootChanged,
 }
 
 #[derive(Serialize)]
@@ -77,12 +78,9 @@ pub(crate) async fn catalog(State(state): State<AppState>, headers: HeaderMap) -
         return StatusCode::UNAUTHORIZED.into_response();
     }
 
-    let database = state.database.clone();
-    match tokio::task::spawn_blocking(move || {
-        let database = database.blocking_lock();
-        learnvault_core::build_catalog(&database, LIBRARY_ID)
-    })
-    .await
+    let database = state.database.clone().lock_owned().await;
+    match tokio::task::spawn_blocking(move || learnvault_core::build_catalog(&database, LIBRARY_ID))
+        .await
     {
         Ok(Ok(catalog)) => private_no_store(Json(CatalogResponse::from(catalog)).into_response()),
         Ok(Err(_)) | Err(_) => internal_error("catalog unavailable"),
@@ -103,19 +101,23 @@ pub(crate) async fn rescan(State(state): State<AppState>, headers: HeaderMap) ->
     let database = state.database.clone();
     let root = state.config.library_root.clone();
     let lock_path = rescan_lock_path(&state.config.database_path);
+    let mut database = database.lock_owned().await;
     match tokio::task::spawn_blocking(move || {
         // Both guards deliberately belong to the blocking task. Tokio continues running a
         // blocking task after its JoinHandle is dropped, so a request timeout cannot release
         // either lock while the scan is still using the database.
         let _local_lock = local_lock;
         let _file_lock = try_rescan_file_lock(&lock_path)?;
-        let mut database = database.blocking_lock();
+        if root.canonicalize().ok().as_deref() != Some(root.as_path()) {
+            return Err(RescanFailure::RootChanged);
+        }
         learnvault_core::rescan(&mut database, LIBRARY_ID, &root).map_err(|_| RescanFailure::Failed)
     })
     .await
     {
         Ok(Ok(summary)) => Json(RescanResponse::from(summary)).into_response(),
         Ok(Err(RescanFailure::Busy)) => StatusCode::CONFLICT.into_response(),
+        Ok(Err(RescanFailure::RootChanged)) => internal_error("library root changed"),
         Ok(Err(RescanFailure::Failed)) | Err(_) => internal_error("rescan failed"),
     }
 }
