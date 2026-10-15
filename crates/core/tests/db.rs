@@ -200,14 +200,18 @@ fn a_version_one_database_is_upgraded_additively_preserving_rows() -> TestResult
 
     let db = Database::open(&path)?;
 
-    assert_eq!(db.schema_version()?, 2, "a cadeia deve aplicar a migração aditiva");
+    assert_eq!(
+        db.schema_version()?,
+        2,
+        "a cadeia deve aplicar a migração aditiva"
+    );
     assert!(table_exists(&db, "scan_inaccessible"));
 
-    let (status, complete): (String, i64) = db
-        .connection()
-        .query_row("SELECT status, complete FROM scan", [], |row| {
-            Ok((row.get(0)?, row.get(1)?))
-        })?;
+    let (status, complete): (String, i64) =
+        db.connection()
+            .query_row("SELECT status, complete FROM scan", [], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })?;
     assert_eq!(status, "completed", "a linha existente deve sobreviver");
     assert_eq!(
         complete, 1,

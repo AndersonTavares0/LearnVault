@@ -164,7 +164,10 @@ fn scan_complete_accepts_only_boolean_values() -> TestResult {
             rusqlite::params!["bib-1", 1_760_000_000_i64, complete],
         )
     };
-    assert!(insert(0).is_ok(), "uma varredura parcial é registrada como 0");
+    assert!(
+        insert(0).is_ok(),
+        "uma varredura parcial é registrada como 0"
+    );
     assert!(insert(1).is_ok());
     assert_constraint_violation(insert(2), "complete = 2");
     assert_constraint_violation(insert(-1), "complete = -1");
