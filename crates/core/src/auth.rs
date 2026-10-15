@@ -47,6 +47,14 @@ pub fn bootstrap_admin(
     password_hash: &str,
     created_at: i64,
 ) -> Result<bool> {
+    bootstrap_admin_with_change_required(db, user_id, username, password_hash, created_at, true)
+}
+
+/// Cria o administrador inicial, permitindo distinguir credencial temporária de configurada.
+pub fn bootstrap_admin_with_change_required(
+    db: &mut Database, user_id: &str, username: &str, password_hash: &str,
+    created_at: i64, must_change_credentials: bool,
+) -> Result<bool> {
     let tx = db
         .conn
         .transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -63,8 +71,8 @@ pub fn bootstrap_admin(
 
     tx.execute(
         "INSERT INTO user (user_id, username, password_hash, is_admin, created_at, must_change_credentials)
-          VALUES (?1, ?2, ?3, 1, ?4, 1)",
-        rusqlite::params![user_id, username, password_hash, created_at],
+          VALUES (?1, ?2, ?3, 1, ?4, ?5)",
+        rusqlite::params![user_id, username, password_hash, created_at, must_change_credentials as i64],
     )?;
     tx.commit()?;
     Ok(true)
@@ -137,6 +145,19 @@ pub fn session_user(db: &Database, token_hash: &str, now: i64) -> Result<Option<
             },
         )
         .optional()?)
+}
+
+/// Atualiza credenciais e cria a sessão substituta na mesma transação.
+pub fn update_credentials_and_session(
+    db: &mut Database, user_id: &str, username: &str, password_hash: &str,
+    token_hash: &str, expires_at: i64,
+) -> Result<()> {
+    let tx = db.conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    tx.execute("UPDATE user SET username = ?1, password_hash = ?2, must_change_credentials = 0 WHERE user_id = ?3", rusqlite::params![username, password_hash, user_id])?;
+    tx.execute("DELETE FROM session WHERE user_id = ?1", [user_id])?;
+    tx.execute("INSERT INTO session (token_hash, user_id, expires_at) VALUES (?1, ?2, ?3)", rusqlite::params![token_hash, user_id, expires_at])?;
+    tx.commit()?;
+    Ok(())
 }
 
 pub fn update_credentials(

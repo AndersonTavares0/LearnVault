@@ -135,7 +135,8 @@ CREATE TABLE media_removal (
 ";
 
 const V4: &str = "
-ALTER TABLE user ADD COLUMN must_change_credentials INTEGER NOT NULL DEFAULT 1 CHECK (must_change_credentials IN (0, 1));
+-- Usuários existentes já tinham credenciais; somente o bootstrap temporário define 1.
+ALTER TABLE user ADD COLUMN must_change_credentials INTEGER NOT NULL DEFAULT 0 CHECK (must_change_credentials IN (0, 1));
 ";
 
 const MIGRATIONS_SLICE: &[M<'static>] = &[M::up(V1), M::up(V2), M::up(V3), M::up(V4)];

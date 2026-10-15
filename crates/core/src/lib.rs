@@ -29,7 +29,8 @@ mod migrations;
 
 pub use auth::{
     AuthSession, AuthUser, bootstrap_admin, create_session, delete_session, find_user_by_username,
-    has_admin, session_user, update_credentials,
+    bootstrap_admin_with_change_required, has_admin, session_user, update_credentials,
+    update_credentials_and_session,
 };
 pub use catalog::{Availability, Catalog, CatalogFile, CatalogNode, NodeRole, build_catalog};
 pub use db::Database;

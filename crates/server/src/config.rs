@@ -58,6 +58,9 @@ pub enum ConfigError {
     /// O argumento contém texto que não pôde ser interpretado.
     #[error("invalid argument")]
     InvalidArgument,
+    /// Segredo não pode ser exposto na lista de processos.
+    #[error("admin password must be supplied through ADMIN_PASSWORD or a secret file")]
+    InsecureAdminPasswordArgument,
     /// `--version` não representa uma configuração de execução.
     #[error("version requested")]
     VersionRequested,
@@ -111,7 +114,7 @@ where
             "--library-root" => library_root = PathBuf::from(next_value(&mut args)?),
             "--web-root" => web_root = Some(PathBuf::from(next_value(&mut args)?)),
             "--admin-username" => admin_username = Some(next_value(&mut args)?),
-            "--admin-password" => admin_password = Some(next_value(&mut args)?),
+            "--admin-password" => { let _ = next_value(&mut args)?; return Err(ConfigError::InsecureAdminPasswordArgument); },
             "--insecure-http" => cookie_secure = false,
             _ => return Err(ConfigError::UnknownArgument),
         }

@@ -28,6 +28,24 @@ func TestHealthEndpoint(t *testing.T) {
 	}
 }
 
+func TestMutatingAuthEndpointsRequireSameOrigin(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+	if err := db.BootstrapAdmin(context.Background(), "owner", "a sufficiently long password"); err != nil { t.Fatal(err) }
+	srv := NewWithOptions(db, false)
+	for _, path := range []string{"/api/login", "/api/logout", "/api/account/credentials", "/api/admin/catalog/rescan"} {
+		for _, origin := range []string{"", "http://evil.example"} {
+			req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"username":"owner","password":"a sufficiently long password"}`))
+			if origin != "" { req.Header.Set("Origin", origin) }
+			result := httptest.NewRecorder(); srv.ServeHTTP(result, req)
+			if result.Code != http.StatusForbidden || !strings.Contains(result.Body.String(), `"error":"csrf_failed"`) { t.Fatalf("%s origin %q: %d %s", path, origin, result.Code, result.Body.String()) }
+		}
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/login", strings.NewReader(`{"username":"owner","password":"a sufficiently long password"}`)); req.Header.Set("Origin", "http://example.com")
+	result := httptest.NewRecorder(); srv.ServeHTTP(result, req)
+	if result.Code != http.StatusOK { t.Fatalf("allowed origin returned %d: %s", result.Code, result.Body.String()) }
+}
+
 func TestHealthEndpointIncludesVersion(t *testing.T) {
 	db, err := storage.Open(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
 	if err != nil {
@@ -73,6 +91,7 @@ func TestAdminCanRescanAndReadCatalog(t *testing.T) {
 	srv := NewWithLibrary(db, false, lib)
 	cookie := loginForTest(t, srv)
 	rescan := httptest.NewRequest(http.MethodPost, "/api/admin/catalog/rescan", nil)
+	rescan.Header.Set("Origin", "http://example.com")
 	rescan.AddCookie(cookie)
 	rescanResult := httptest.NewRecorder()
 	srv.ServeHTTP(rescanResult, rescan)
@@ -120,6 +139,7 @@ func TestAuthenticatedMediaSupportsRangeAndRejectsUnauthenticatedAccess(t *testi
 	}
 	cookie := loginForTest(t, srv)
 	rescan := httptest.NewRequest(http.MethodPost, "/api/admin/catalog/rescan", nil)
+	rescan.Header.Set("Origin", "http://example.com")
 	rescan.AddCookie(cookie)
 	rescanResult := httptest.NewRecorder()
 	srv.ServeHTTP(rescanResult, rescan)
@@ -182,6 +202,7 @@ func TestMediaMaterialsAreDownloadsButVTTRemainsPlayable(t *testing.T) {
 	srv := NewWithLibrary(db, false, lib)
 	cookie := loginForTest(t, srv)
 	rescan := httptest.NewRequest(http.MethodPost, "/api/admin/catalog/rescan", nil)
+	rescan.Header.Set("Origin", "http://example.com")
 	rescan.AddCookie(cookie)
 	rescanResult := httptest.NewRecorder()
 	srv.ServeHTTP(rescanResult, rescan)
@@ -227,6 +248,7 @@ func loginForTest(t *testing.T, srv http.Handler) *http.Cookie {
 	t.Helper()
 	body := `{"username":"owner","password":"a sufficiently long password"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/login", strings.NewReader(body))
+	req.Header.Set("Origin", "http://example.com")
 	rr := httptest.NewRecorder()
 	srv.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
@@ -266,6 +288,7 @@ func TestLoginCreatesSessionAndMeReturnsCurrentUser(t *testing.T) {
 	srv := NewWithOptions(db, true)
 	body, _ := json.Marshal(map[string]string{"username": "owner", "password": "a sufficiently long password"})
 	login := httptest.NewRequest(http.MethodPost, "/api/login", strings.NewReader(string(body)))
+	login.Header.Set("Origin", "http://example.com")
 	loginResult := httptest.NewRecorder()
 	srv.ServeHTTP(loginResult, login)
 	if loginResult.Code != http.StatusOK {

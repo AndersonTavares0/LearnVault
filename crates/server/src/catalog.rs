@@ -106,7 +106,10 @@ pub(crate) async fn rescan(State(state): State<AppState>, headers: HeaderMap) ->
         Err(StateError::Capacity) => return service_unavailable(),
         Ok(None) | Err(_) => return status_private_no_store(StatusCode::UNAUTHORIZED),
     };
-    if !user.is_admin || !same_origin(&headers) {
+    if !same_origin(&headers) {
+        return csrf_failed();
+    }
+    if !user.is_admin {
         return status_private_no_store(StatusCode::FORBIDDEN);
     }
     if user.must_change_credentials { return credentials_required(); }
@@ -192,6 +195,10 @@ fn status_private_no_store(status: StatusCode) -> Response {
 
 fn credentials_required() -> Response {
     private_no_store((StatusCode::FORBIDDEN, Json(ErrorResponse { error: "credentials_change_required" })).into_response())
+}
+
+fn csrf_failed() -> Response {
+    private_no_store((StatusCode::FORBIDDEN, Json(ErrorResponse { error: "csrf_failed" })).into_response())
 }
 
 fn rescan_lock_path(database_path: &Path) -> PathBuf {

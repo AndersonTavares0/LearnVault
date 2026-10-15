@@ -2,10 +2,13 @@ package httpapi
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"mime"
 	"net/http"
 	"path/filepath"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -37,7 +40,7 @@ type store interface {
 	CreateSession(context.Context, int64, time.Duration) (string, error)
 	UserForSession(context.Context, string) (storage.User, error)
 	DeleteSession(context.Context, string) error
-	UpdateCredentials(context.Context, int64, string, string) error
+	UpdateCredentialsAndSession(context.Context, int64, string, string, string, time.Duration) error
 	Catalog(context.Context) (catalog.Catalog, error)
 	ReplaceCatalog(context.Context, catalog.Catalog) error
 }
@@ -100,12 +103,14 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 			methodNotAllowed(w)
 			return
 		}
+		if !sameOrigin(r) { writeJSON(w, http.StatusForbidden, map[string]string{"error":"csrf_failed"}); return }
 		s.login(w, r)
 	case "/api/logout":
 		if r.Method != http.MethodPost {
 			methodNotAllowed(w)
 			return
 		}
+		if !sameOrigin(r) { writeJSON(w, http.StatusForbidden, map[string]string{"error":"csrf_failed"}); return }
 		token := sessionFromRequest(r)
 		if token != "" {
 			_ = s.db.DeleteSession(r.Context(), token)
@@ -114,6 +119,7 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	case "/api/account/credentials":
 		if r.Method != http.MethodPost { methodNotAllowed(w); return }
+		if !sameOrigin(r) { writeJSON(w, http.StatusForbidden, map[string]string{"error":"csrf_failed"}); return }
 		s.credentials(w, r)
 	case "/api/me":
 		if r.Method != http.MethodGet {
@@ -192,6 +198,7 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 			methodNotAllowed(w)
 			return
 		}
+		if !sameOrigin(r) { writeJSON(w, http.StatusForbidden, map[string]string{"error":"csrf_failed"}); return }
 		user, ok := s.currentUser(r)
 		if !ok || user.Role != "admin" || user.MustChangeCredentials {
 			if ok && user.MustChangeCredentials { writeJSON(w, http.StatusForbidden, map[string]string{"error":"credentials_change_required"}); return }
@@ -331,9 +338,21 @@ func (s *Server) credentials(w http.ResponseWriter, r *http.Request) {
 	user, ok := s.currentUser(r); if !ok { writeJSON(w, http.StatusUnauthorized, map[string]string{"error":"unauthorized"}); return }
 	r.Body = http.MaxBytesReader(w, r.Body, 8*1024); var input struct { Username string `json:"username"`; Password string `json:"password"` }
 	decoder := json.NewDecoder(r.Body); decoder.DisallowUnknownFields(); if err := decoder.Decode(&input); err != nil { writeJSON(w, http.StatusBadRequest, map[string]string{"error":"invalid_request"}); return }
-	if err := s.db.UpdateCredentials(r.Context(), user.ID, input.Username, input.Password); err != nil { writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error":"invalid_credentials_format"}); return }
-	token, err := s.db.CreateSession(r.Context(), user.ID, sessionLifetime); if err != nil { writeJSON(w, http.StatusInternalServerError, map[string]string{"error":"internal_error"}); return }
+	if len([]rune(input.Username)) < 2 || len([]rune(input.Username)) > 64 || strings.TrimSpace(input.Username) != input.Username || len([]rune(input.Password)) < 12 || len([]rune(input.Password)) > 1024 { writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error":"invalid_credentials_format"}); return }
+	var raw [32]byte; if _, err := rand.Read(raw[:]); err != nil { writeJSON(w, http.StatusInternalServerError, map[string]string{"error":"internal_error"}); return }; token := base64.RawURLEncoding.EncodeToString(raw[:])
+	if err := s.db.UpdateCredentialsAndSession(r.Context(), user.ID, input.Username, input.Password, token, sessionLifetime); err != nil { writeJSON(w, http.StatusInternalServerError, map[string]string{"error":"internal_error"}); return }
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: token, Path: "/", MaxAge: int(sessionLifetime.Seconds()), HttpOnly: true, Secure: s.cookieSecure, SameSite: http.SameSiteStrictMode}); user.Username = input.Username; user.MustChangeCredentials = false; writeJSON(w, http.StatusOK, user)
+}
+
+func sameOrigin(r *http.Request) bool {
+	host := r.Host; if host == "" { host = "localhost" }
+	expectedHTTP, expectedHTTPS := "http://"+host, "https://"+host
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		ref := r.Header.Get("Referer"); if ref == "" { return false }
+		u, err := url.Parse(ref); if err != nil || u.Host != host { return false }; origin = u.Scheme+"://"+u.Host
+	}
+	return origin == expectedHTTP || origin == expectedHTTPS
 }
 
 func (s *Server) currentUser(r *http.Request) (storage.User, bool) {

@@ -93,8 +93,21 @@ func (d *DB) BootstrapAdmin(ctx context.Context, username, password string) erro
 	if err != nil {
 		return err
 	}
-	_, err = d.sql.ExecContext(ctx, `INSERT OR IGNORE INTO users(username,password_hash,role) SELECT ?,?,'admin' WHERE NOT EXISTS (SELECT 1 FROM users WHERE role='admin')`, username, hash)
+	mustChange := 0
+	if username == "admin" && password == "admin" { mustChange = 1 }
+	_, err = d.sql.ExecContext(ctx, `INSERT OR IGNORE INTO users(username,password_hash,role,must_change_credentials) SELECT ?,?,'admin',? WHERE NOT EXISTS (SELECT 1 FROM users WHERE role='admin')`, username, hash, mustChange)
 	return err
+}
+
+func (d *DB) UpdateCredentialsAndSession(ctx context.Context, userID int64, username, password, token string, lifetime time.Duration) error {
+	if len([]rune(username)) < 2 || len([]rune(username)) > 64 || strings.TrimSpace(username) != username || len([]rune(password)) < 12 || len([]rune(password)) > 1024 { return errors.New("invalid credentials") }
+	hash, err := hashPassword(password); if err != nil { return err }
+	tx, err := d.sql.BeginTx(ctx, nil); if err != nil { return err }; defer tx.Rollback()
+	if _, err = tx.ExecContext(ctx, `UPDATE users SET username=?, password_hash=?, must_change_credentials=0 WHERE id=?`, username, hash, userID); err != nil { return err }
+	if _, err = tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id=?`, userID); err != nil { return err }
+	expires := time.Now().UTC().Add(lifetime).Format(time.RFC3339Nano)
+	if _, err = tx.ExecContext(ctx, `INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)`, tokenHash(token), userID, expires); err != nil { return err }
+	return tx.Commit()
 }
 
 func (d *DB) HasAdmin(ctx context.Context) (bool, error) {
