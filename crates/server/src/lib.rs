@@ -37,6 +37,7 @@ use tower::ServiceBuilder;
 
 /// Versão compilada do servidor, usada pelo executável e pelo endpoint de saúde.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+pub(crate) const LIBRARY_ID: &str = "library-1";
 
 /// Monta as rotas públicas mínimas do servidor.
 pub fn build_router(state: AppState) -> Router {
@@ -171,7 +172,9 @@ mod tests {
     use tokio::sync::oneshot;
     use tower::ServiceExt;
 
-    use super::{AppState, Command, Config, VERSION, build_router, parse_command, serve};
+    use super::{
+        AppState, Command, Config, LIBRARY_ID, VERSION, build_router, parse_command, serve,
+    };
 
     async fn media_app() -> (axum::Router, tempfile::TempDir, AppState) {
         let temp = tempfile::tempdir().unwrap();
@@ -435,6 +438,64 @@ mod tests {
         assert_eq!(
             partial.into_body().collect().await.unwrap().to_bytes(),
             "2345"
+        );
+    }
+
+    #[tokio::test]
+    async fn media_uses_the_configured_library_when_paths_collide() {
+        let temp = tempfile::tempdir().unwrap();
+        let configured_root = temp.path().join("configured");
+        let other_root = temp.path().join("other");
+        fs::create_dir_all(&configured_root).unwrap();
+        fs::create_dir_all(&other_root).unwrap();
+        fs::write(configured_root.join("lesson.mp4"), b"configured").unwrap();
+        fs::write(other_root.join("lesson.mp4"), b"other").unwrap();
+
+        let mut config = Config::from_args([
+            "learnvault-server",
+            "--database",
+            temp.path().join("media.sqlite").to_str().unwrap(),
+            "--library-root",
+            configured_root.to_str().unwrap(),
+        ])
+        .unwrap();
+        config.admin_username = Some("admin".to_owned());
+        config.admin_password = Some("uma senha local muito segura".to_owned());
+        config.cookie_secure = false;
+        let state = AppState::initialize(config).await.unwrap();
+        {
+            let mut database = state.database.try_lock().unwrap();
+            learnvault_core::apply_scan(
+                &mut database,
+                "library-2",
+                &learnvault_core::scan(&other_root).unwrap(),
+                learnvault_core::KeyMode::for_host(),
+            )
+            .unwrap();
+            learnvault_core::apply_scan(
+                &mut database,
+                LIBRARY_ID,
+                &learnvault_core::scan(&configured_root).unwrap(),
+                learnvault_core::KeyMode::for_host(),
+            )
+            .unwrap();
+        }
+        let app = build_router(state);
+        let cookie = media_cookie(&app).await;
+        let response = app
+            .oneshot(
+                Request::get("/api/media?path=lesson.mp4")
+                    .header("cookie", cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.into_body().collect().await.unwrap().to_bytes(),
+            "configured"
         );
     }
 

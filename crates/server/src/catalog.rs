@@ -17,11 +17,9 @@ use learnvault_core::{
 use serde::Serialize;
 
 use crate::{
-    AppState, StateError,
+    AppState, LIBRARY_ID, StateError,
     auth::{hash_session_token, request_token, same_origin},
 };
-
-const LIBRARY_ID: &str = "library-1";
 
 enum RescanFailure {
     Busy,
