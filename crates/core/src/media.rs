@@ -26,12 +26,15 @@
 //! Esta verificação **não elimina** a janela entre a validação e a abertura. No Unix, uma
 //! troca nesse intervalo é detectada pela comparação de identidade; no Windows, a troca do
 //! **componente final** é detectada pelo atributo de reparse do descritor aberto, mas o
-//! `std` estável não expõe `dev`/`ino` nem a identidade do diretório pai. Componentes
-//! **intermediários** que sejam links simbólicos, junctions ou outros reparse points
-//! dependem da canonicalização e do confinamento resultante, e uma troca desses
-//! componentes entre a validação e a abertura não é detectada no Windows. Uma troca do
-//! arquivo por um **hardlink** para fora também é indistinguível de um arquivo comum e
-//! permanece um limite conhecido.
+//! `std` estável não expõe `dev`/`ino` nem a identidade do diretório pai. A própria raiz
+//! substituída por link/junction é recusada. Componentes **intermediários** — inclusive
+//! ancestrais da própria raiz — que sejam links simbólicos, junctions ou outros reparse
+//! points dependem da canonicalização e do confinamento resultante; uma troca desses
+//! componentes entre a validação e a abertura **não** é detectada em nenhuma plataforma,
+//! porque a proteção completa exigiria resolução relativa a um descritor de diretório
+//! (`openat`/`RESOLVE_BENEATH` no Linux, handles relativos no Windows) e está fora desta
+//! fatia. Uma troca do arquivo por um **hardlink** para fora também é indistinguível de um
+//! arquivo comum. Esses dois limites são residuais e registrados aqui.
 //!
 //! A aplicação opera em modo somente leitura, mas **não** presume que a biblioteca esteja
 //! montada como somente leitura: outro processo pode alterar o diretório. Fechar essa
