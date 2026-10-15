@@ -25,12 +25,14 @@ const FORBIDDEN_SOURCE_TOKENS: [&str; 13] = [
     "tauri_plugin_fs",
 ];
 
-const FORBIDDEN_MANIFEST_DEPS: [&str; 8] = [
+const FORBIDDEN_MANIFEST_DEPS: [&str; 10] = [
     "tauri-plugin-http",
     "tauri-plugin-shell",
     "tauri-plugin-fs",
     "tauri-plugin-localhost",
     "tauri-plugin-updater",
+    "tauri-plugin-store",
+    "tauri-plugin-persisted-scope",
     "tokio",
     "reqwest",
     "axum",
@@ -169,7 +171,7 @@ fn build_registers_the_app_commands_in_the_acl_manifest() {
         build.contains("app_manifest"),
         "o build precisa declarar o AppManifest do ACL"
     );
-    for command in ["desktop_config", "desktop_catalog"] {
+    for command in ["desktop_config", "desktop_catalog", "desktop_select_library"] {
         assert!(
             build.contains(command),
             "o comando '{command}' precisa ser declarado no ACL app-defined"
@@ -178,7 +180,7 @@ fn build_registers_the_app_commands_in_the_acl_manifest() {
 }
 
 #[test]
-fn capability_grants_only_the_core_default_and_the_two_app_commands() {
+fn capability_grants_only_the_core_default_and_the_app_commands() {
     let raw = read(&crate_root().join("capabilities/default.json"));
     let capability: serde_json::Value =
         serde_json::from_str(&raw).expect("a capability precisa ser JSON válido");
@@ -192,10 +194,69 @@ fn capability_grants_only_the_core_default_and_the_two_app_commands() {
     assert!(permissions.contains(&"core:default"));
     assert!(permissions.contains(&"allow-desktop-config"));
     assert!(permissions.contains(&"allow-desktop-catalog"));
+    assert!(permissions.contains(&"allow-desktop-select-library"));
     assert_eq!(
         permissions.len(),
-        3,
-        "a capability não pode ampliar além do núcleo e dos dois comandos: {permissions:?}"
+        4,
+        "a capability não pode ampliar além do núcleo e dos comandos do app: {permissions:?}"
+    );
+}
+
+#[test]
+fn capability_exposes_no_dialog_or_filesystem_permission() {
+    let raw = read(&crate_root().join("capabilities/default.json"));
+    let capability: serde_json::Value =
+        serde_json::from_str(&raw).expect("a capability precisa ser JSON válido");
+    for permission in capability["permissions"]
+        .as_array()
+        .expect("a capability precisa listar permissões")
+    {
+        let identifier = permission.as_str().unwrap_or_default();
+        for forbidden in ["dialog", "fs", "store", "shell", "http", "persisted"] {
+            assert!(
+                !identifier.contains(forbidden),
+                "o seletor nativo é interno ao Rust e não pode ser concedido ao webview: '{identifier}'"
+            );
+        }
+    }
+}
+
+#[test]
+fn the_native_picker_is_registered_in_rust_only() {
+    let lib = read(&crate_root().join("src/lib.rs"));
+    assert!(
+        lib.contains("tauri_plugin_dialog::init()"),
+        "o seletor nativo precisa ser registrado pelo Rust, sem plugin de fs nem store"
+    );
+
+    let command = read(&crate_root().join("src/command.rs"));
+    let marker = "pub async fn desktop_select_library";
+    let start = command
+        .find(marker)
+        .expect("desktop_select_library precisa existir como comando assíncrono");
+    let rest = &command[start..];
+    let signature = &rest[..rest.find('{').expect("a assinatura do comando precisa fechar")];
+    for forbidden in ["String", "Path", "path"] {
+        assert!(
+            !signature.contains(forbidden),
+            "o webview não pode enviar caminho: {signature}"
+        );
+    }
+
+    let body = &rest[..rest.find("\n}").expect("o comando precisa fechar o corpo")];
+    assert!(
+        body.contains("state.select_library"),
+        "o comando delega a seleção ao estado: {body}"
+    );
+    for forbidden in ["rescan", "catalog", "database"] {
+        assert!(
+            !body.contains(forbidden),
+            "selecionar a raiz não pode disparar rescan nem tocar no banco: {body}"
+        );
+    }
+    assert!(
+        !command.contains("rescan"),
+        "não pode haver rescan automático no IPC do desktop"
     );
 }
 

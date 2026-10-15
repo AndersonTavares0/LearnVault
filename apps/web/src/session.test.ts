@@ -21,6 +21,16 @@ describe('initial view', () => {
 		expect(initialView(null, 'unknown')).not.toBe('login');
 		expect(initialView(null, 'unknown')).toBe('offline');
 	});
+
+	it('never routes the desktop to login, even after a library is configured', () => {
+		// Depois de escolher a pasta, o desktop continua sem autenticação nesta fatia:
+		// mostrar o login prenderia o usuário, então a tela offline permanece.
+		expect(initialView(null, 'configured', 'desktop')).toBe('offline');
+		expect(initialView(null, 'unconfigured', 'desktop')).toBe('offline');
+		expect(initialView(null, 'unknown', 'desktop')).toBe('offline');
+		// Uma sessão existente ainda abre o aplicativo.
+		expect(initialView(user, 'configured', 'desktop')).toBe('app');
+	});
 });
 
 describe('platform configuration read', () => {

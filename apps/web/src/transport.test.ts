@@ -9,8 +9,11 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 
 describe('transport contract', () => {
 	it('exposes the HTTP transport seam without routing assumptions', () => {
-		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'config', 'catalog', 'rescan', 'updateCredentials', 'mediaUrl'];
-		expect(methods).toHaveLength(8);
+		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'config', 'catalog', 'chooseLibrary', 'rescan', 'updateCredentials', 'mediaUrl'];
+		expect(methods).toHaveLength(9);
+	});
+	it('does not offer native library selection over HTTP', async () => {
+		await expect(new HttpTransport().chooseLibrary()).rejects.toThrow('definida no servidor');
 	});
 	it('troca credenciais temporárias pelo contrato autenticado', async () => {
 		const user = { user_id: 'u1', username: 'novo', is_admin: true, must_change_credentials: false };
@@ -150,6 +153,25 @@ describe('desktop transport over IPC', () => {
 		vi.mocked(invoke).mockResolvedValue({ configured: false });
 		await expect(new DesktopStub().config()).resolves.toEqual({ configured: false });
 		expect(invoke).toHaveBeenCalledWith('desktop_config');
+	});
+
+	it('selects the library through the desktop command without sending a path', async () => {
+		vi.mocked(invoke).mockResolvedValue({ configured: true });
+		await expect(new DesktopStub().chooseLibrary()).resolves.toEqual({ configured: true });
+		// O webview apenas dispara o seletor nativo; nenhum caminho cruza o IPC.
+		expect(invoke).toHaveBeenCalledWith('desktop_select_library');
+	});
+
+	it('keeps the previous state when the user cancels the native picker', async () => {
+		vi.mocked(invoke).mockResolvedValue({ configured: false });
+		await expect(new DesktopStub().chooseLibrary()).resolves.toEqual({ configured: false });
+	});
+
+	it('maps a library selection error to a sanitized message without the path', async () => {
+		vi.mocked(invoke).mockRejectedValue({ code: 'library_root_invalid', message: '/mnt/cursos não é válido' });
+		await expect(new DesktopStub().chooseLibrary()).rejects.toThrow('A pasta escolhida não é uma biblioteca válida.');
+		vi.mocked(invoke).mockRejectedValue({ code: 'library_config_unavailable', message: 'falha em C:\\segredo' });
+		await expect(new DesktopStub().chooseLibrary()).rejects.toThrow('Não foi possível salvar a configuração do aplicativo.');
 	});
 
 	it('maps a sanitized desktop configuration error to its message', async () => {
