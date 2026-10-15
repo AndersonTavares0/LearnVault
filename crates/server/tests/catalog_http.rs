@@ -9,7 +9,7 @@ use learnvault_server::{AppState, Config, build_router, hash_password};
 use std::{
     fs::{self, OpenOptions},
     path::Path,
-    process::Command,
+    process::{Command, Stdio},
     thread,
     time::{Duration, Instant},
 };
@@ -386,11 +386,10 @@ async fn rescan_returns_conflict_while_another_process_holds_its_lock() {
     let temp = tempfile::tempdir().unwrap();
     let lock_path = temp.path().join("catalog.sqlite.rescan.lock");
     let ready_path = temp.path().join("lock-ready");
-    let release_path = temp.path().join("lock-release");
 
     // Bootstrap (Argon2id do admin) e login (Argon2id) são deliberadamente lentos
     // e podem levar segundos num runner de CI carregado. Prepare-os antes de
-    // spawnar o filho para que a janela entre `lock-ready` e `lock-release` cubra
+    // spawnar o filho para que a janela entre `lock-ready` e o release cubra
     // apenas o request, e não o trabalho pesado de startup.
     let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
     let cookie = login(&app).await;
@@ -400,7 +399,10 @@ async fn rescan_returns_conflict_while_another_process_holds_its_lock() {
         .arg("rescan_lock_helper")
         .env("LEARNVAULT_RESCAN_LOCK_PATH", &lock_path)
         .env("LEARNVAULT_RESCAN_LOCK_READY", &ready_path)
-        .env("LEARNVAULT_RESCAN_LOCK_RELEASE", &release_path)
+        // O release é sinalizado pelo canal de stdin do filho, não por um arquivo
+        // com deadline: um canal real é determinístico e libera o processo no
+        // fechamento mesmo se o pai falhar, sem deixar auxiliar órfão preso.
+        .stdin(Stdio::piped())
         .spawn()
         .unwrap();
     wait_for_file(&ready_path);
@@ -416,7 +418,8 @@ async fn rescan_returns_conflict_while_another_process_holds_its_lock() {
         .await
         .unwrap();
 
-    fs::write(release_path, []).unwrap();
+    // Fechar o stdin do filho faz o `read_line` retornar EOF e o auxiliar encerrar.
+    drop(child.stdin.take());
     assert!(
         child.wait().unwrap().success(),
         "o processo auxiliar deve sair com sucesso depois do release"
@@ -431,7 +434,6 @@ fn rescan_lock_helper() {
         return;
     };
     let ready_path = std::env::var("LEARNVAULT_RESCAN_LOCK_READY").unwrap();
-    let release_path = std::env::var("LEARNVAULT_RESCAN_LOCK_RELEASE").unwrap();
     let _lock = OpenOptions::new()
         .read(true)
         .write(true)
@@ -441,12 +443,17 @@ fn rescan_lock_helper() {
         .unwrap();
     _lock.lock().unwrap();
     fs::write(ready_path, []).unwrap();
-    wait_for_file(Path::new(&release_path));
+
+    // Segura o lock até o pai sinalizar o release pelo canal de stdin. Um
+    // `read_line` bloqueante (ou EOF) substitui o polling com deadline: o filho
+    // nunca faz `sleep` e nunca fica preso além do fechamento do pai.
+    let mut release = String::new();
+    let _ = std::io::stdin().read_line(&mut release);
 }
 
 /// Espera por um arquivo de sincronização entre processos com um deadline
 /// generoso: em CI carregado, o processo auxiliar pode demorar bem mais que
-/// alguns segundos para ser spawnado e para reagir ao release.
+/// alguns segundos para ser spawnado e sinalizar `lock-ready`.
 fn wait_for_file(path: &Path) {
     let deadline = Instant::now() + RESCAN_LOCK_TIMEOUT;
     while !path.exists() {
