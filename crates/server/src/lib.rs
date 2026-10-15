@@ -68,6 +68,17 @@ pub fn build_router(state: AppState) -> Router {
         .with_state(state)
 }
 
+fn with_request_limits(router: Router, timeout: Duration) -> Router {
+    router.layer(
+        ServiceBuilder::new()
+            .layer(from_fn(api_cache_headers))
+            .layer(HandleErrorLayer::new(|_: BoxError| async {
+                (StatusCode::REQUEST_TIMEOUT, "request timeout")
+            }))
+            .timeout(timeout),
+    )
+}
+
 /// Garante que nenhuma resposta `/api` possa ser armazenada, incluindo as
 /// rejeições produzidas antes do handler (`Json` e `DefaultBodyLimit`) e as
 /// respostas do healthz ou de rotas desconhecidas. Um handler que já escolheu
@@ -141,13 +152,7 @@ where
     let state = AppState::initialize(config)
         .await
         .map_err(|error| ServeError::Startup(error.to_string()))?;
-    let app = build_router(state).layer(
-        ServiceBuilder::new()
-            .layer(HandleErrorLayer::new(|_: BoxError| async {
-                (StatusCode::REQUEST_TIMEOUT, "request timeout")
-            }))
-            .timeout(Duration::from_secs(30)),
-    );
+    let app = with_request_limits(build_router(state), Duration::from_secs(30));
 
     axum::serve(
         listener,
@@ -166,6 +171,7 @@ mod tests {
     use axum::{
         body::Body,
         http::{Request, StatusCode},
+        routing::get,
     };
     use http_body_util::BodyExt;
     use tempfile::TempDir;
@@ -174,6 +180,7 @@ mod tests {
 
     use super::{
         AppState, Command, Config, LIBRARY_ID, VERSION, build_router, parse_command, serve,
+        with_request_limits,
     };
 
     async fn media_app() -> (axum::Router, tempfile::TempDir, AppState) {
@@ -283,6 +290,22 @@ mod tests {
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["status"], "ok");
         assert_eq!(json["version"], VERSION);
+    }
+
+    #[tokio::test]
+    async fn api_timeout_rejection_gets_no_store_cache_header() {
+        let temp = tempfile::tempdir().unwrap();
+        let router = build_router(AppState::new(config_fixture(&temp))).route(
+            "/api/slow",
+            get(|| async { std::future::pending::<()>().await }),
+        );
+        let response = with_request_limits(router, Duration::from_millis(1))
+            .oneshot(Request::get("/api/slow").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::REQUEST_TIMEOUT);
+        assert_eq!(response.headers()["cache-control"], "no-store");
     }
 
     #[tokio::test]
