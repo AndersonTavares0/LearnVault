@@ -361,6 +361,56 @@ fn a_directory_symlink_that_escapes_the_library_is_refused() -> TestResult {
     Ok(())
 }
 
+#[cfg(unix)]
+#[test]
+fn a_root_replaced_by_a_symlink_does_not_authorize_outside_files() -> TestResult {
+    let directory = tempfile::tempdir()?;
+    let root = directory.path().join("biblioteca");
+    let outside = directory.path().join("fora");
+    std::fs::create_dir_all(&root)?;
+    std::fs::create_dir_all(&outside)?;
+    std::fs::write(outside.join("segredo.png"), b"fora da biblioteca")?;
+
+    let db = library_db()?;
+    insert_media(&db, LIB, "m1", "segredo.png", 18, 10, "available")?;
+
+    // A raiz é substituída por um link para a pasta externa depois de ter sido resolvida.
+    std::fs::remove_dir(&root)?;
+    std::os::unix::fs::symlink(&outside, &root)?;
+
+    match open_media(&db, LIB, "m1", &root) {
+        Err(Error::LibraryRootIsLink { .. }) => {}
+        other => panic!("a raiz substituída por link precisa ser recusada, obtive {other:?}"),
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
+#[test]
+fn a_root_replaced_by_a_directory_link_is_refused_on_windows() -> TestResult {
+    let directory = tempfile::tempdir()?;
+    let root = directory.path().join("biblioteca");
+    let outside = directory.path().join("fora");
+    std::fs::create_dir_all(&root)?;
+    std::fs::create_dir_all(&outside)?;
+    std::fs::write(outside.join("segredo.png"), b"fora da biblioteca")?;
+
+    let db = library_db()?;
+    insert_media(&db, LIB, "m1", "segredo.png", 18, 10, "available")?;
+
+    std::fs::remove_dir(&root)?;
+    if std::os::windows::fs::symlink_dir(&outside, &root).is_err() {
+        eprintln!("pulado: criar link de diretório exige privilégio no Windows");
+        return Ok(());
+    }
+
+    match open_media(&db, LIB, "m1", &root) {
+        Err(Error::LibraryRootIsLink { .. }) => {}
+        other => panic!("a raiz substituída por link precisa ser recusada, obtive {other:?}"),
+    }
+    Ok(())
+}
+
 #[test]
 fn a_file_changed_only_in_mtime_is_flagged() -> TestResult {
     let directory = tempfile::tempdir()?;

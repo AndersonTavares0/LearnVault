@@ -127,6 +127,17 @@ fn link_file(target: &Path, link: &Path) -> bool {
     std::os::windows::fs::symlink_file(target, link).is_ok()
 }
 
+/// Cria um symlink de diretório apontando para `target`.
+#[cfg(unix)]
+fn link_dir(target: &Path, link: &Path) -> bool {
+    std::os::unix::fs::symlink(target, link).is_ok()
+}
+
+#[cfg(windows)]
+fn link_dir(target: &Path, link: &Path) -> bool {
+    std::os::windows::fs::symlink_dir(target, link).is_ok()
+}
+
 // --- Parsing puro: nenhum acesso ao sistema de arquivos -------------------------------
 
 #[test]
@@ -477,6 +488,32 @@ fn a_final_component_replaced_by_a_symlink_is_refused() {
             .iter()
             .any(|(_, value)| value.contains("segredo")),
         "nenhum header pode expor o alvo do link"
+    );
+}
+
+#[test]
+fn a_root_replaced_by_a_directory_link_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let (state, library) = library(dir.path());
+    let id = media_id(dir.path(), "Curso/foto.png");
+
+    // A raiz persistida é trocada por um link para uma pasta externa com o mesmo caminho
+    // relativo: o alvo não pode ser seguido nem servido.
+    fs::remove_dir_all(&library).unwrap();
+    let outside = dir.path().join("fora");
+    fs::create_dir_all(outside.join("Curso")).unwrap();
+    fs::write(outside.join("Curso").join("foto.png"), b"conteudo de fora").unwrap();
+    if !link_dir(&outside, &library) {
+        eprintln!("pulado: criar symlink de diretório exige privilégio nesta plataforma");
+        return;
+    }
+
+    let response = serve(&state, &id, "GET", None);
+
+    assert_eq!(response.status, 500);
+    assert!(
+        response.body.is_empty(),
+        "o conteúdo fora da biblioteca nunca pode ser servido"
     );
 }
 

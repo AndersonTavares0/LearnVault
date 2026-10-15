@@ -44,6 +44,7 @@ use tauri::http::{Request, Response, StatusCode, header};
 use tauri::{Manager, Runtime};
 
 use crate::command::LIBRARY_ID;
+use crate::library::LibraryRoot;
 use crate::state::DesktopState;
 
 /// Esquema do protocolo customizado de mídia do desktop.
@@ -327,6 +328,12 @@ impl DesktopState {
     fn open_media_request(&self, request: &MediaRequest) -> MediaResponse {
         let Some(root) = self.library_root() else {
             return MediaResponse::empty(status::NOT_FOUND);
+        };
+        // A raiz persistida é revalidada imediatamente antes da abertura, preservando a
+        // semântica da seleção: uma raiz removida, inacessível ou substituída por
+        // link/junction é recusada, sem seguir o alvo.
+        let Ok(root) = LibraryRoot::resolve(root.as_path()) else {
+            return MediaResponse::empty(status::INTERNAL_SERVER_ERROR);
         };
         let Ok(database) = self.lock_database() else {
             return MediaResponse::empty(status::INTERNAL_SERVER_ERROR);
