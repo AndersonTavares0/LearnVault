@@ -52,6 +52,9 @@ func TestAdminCanRescanAndReadCatalog(t *testing.T) {
 	if err := os.MkdirAll(lesson, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(lesson, "lesson.mp4"), []byte("video"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(lesson, "aula.mp4"), []byte("video"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -94,6 +97,9 @@ func TestAuthenticatedMediaSupportsRangeAndRejectsUnauthenticatedAccess(t *testi
 	if err := os.WriteFile(filepath.Join(lesson, "aula.mp4"), []byte("0123456789"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(root, "not-cataloged.mp4"), []byte("secret"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	db, err := storage.Open(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
 	if err != nil {
 		t.Fatal(err)
@@ -113,6 +119,13 @@ func TestAuthenticatedMediaSupportsRangeAndRejectsUnauthenticatedAccess(t *testi
 		t.Fatalf("expected 401, got %d", unauthenticated.Code)
 	}
 	cookie := loginForTest(t, srv)
+	rescan := httptest.NewRequest(http.MethodPost, "/api/admin/catalog/rescan", nil)
+	rescan.AddCookie(cookie)
+	rescanResult := httptest.NewRecorder()
+	srv.ServeHTTP(rescanResult, rescan)
+	if rescanResult.Code != http.StatusOK {
+		t.Fatalf("rescan returned %d: %s", rescanResult.Code, rescanResult.Body.String())
+	}
 	request := httptest.NewRequest(http.MethodGet, "/api/media?path=Cat/Curso/Modulo/Aula/aula.mp4", nil)
 	request.AddCookie(cookie)
 	request.Header.Set("Range", "bytes=2-5")
@@ -127,17 +140,31 @@ func TestAuthenticatedMediaSupportsRangeAndRejectsUnauthenticatedAccess(t *testi
 	if result.Header().Get("Content-Type") != "video/mp4" {
 		t.Fatalf("video content type = %q; want video/mp4", result.Header().Get("Content-Type"))
 	}
+	notCataloged := httptest.NewRequest(http.MethodGet, "/api/media?path=not-cataloged.mp4", nil)
+	notCataloged.AddCookie(cookie)
+	blocked := httptest.NewRecorder()
+	srv.ServeHTTP(blocked, notCataloged)
+	if blocked.Code != http.StatusNotFound {
+		t.Fatalf("uncataloged media returned %d; want %d", blocked.Code, http.StatusNotFound)
+	}
 }
 
 func TestMediaMaterialsAreDownloadsButVTTRemainsPlayable(t *testing.T) {
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "unsafe.html"), []byte("<script>alert(1)</script>"), 0o644); err != nil {
+	lesson := filepath.Join(root, "Cat", "Curso", "Modulo", "Aula")
+	if err := os.MkdirAll(lesson, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "unsafe.svg"), []byte("<svg onload=alert(1) />"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(lesson, "lesson.mp4"), []byte("video"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "captions.vtt"), []byte("WEBVTT\n\n00:00.000 --> 00:01.000\nOlá"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(lesson, "unsafe.html"), []byte("<script>alert(1)</script>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(lesson, "unsafe.svg"), []byte("<svg onload=alert(1) />"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(lesson, "captions.vtt"), []byte("WEBVTT\n\n00:00.000 --> 00:01.000\nOlá"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	db, err := storage.Open(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
@@ -154,9 +181,16 @@ func TestMediaMaterialsAreDownloadsButVTTRemainsPlayable(t *testing.T) {
 	}
 	srv := NewWithLibrary(db, false, lib)
 	cookie := loginForTest(t, srv)
+	rescan := httptest.NewRequest(http.MethodPost, "/api/admin/catalog/rescan", nil)
+	rescan.AddCookie(cookie)
+	rescanResult := httptest.NewRecorder()
+	srv.ServeHTTP(rescanResult, rescan)
+	if rescanResult.Code != http.StatusOK {
+		t.Fatalf("rescan returned %d: %s", rescanResult.Code, rescanResult.Body.String())
+	}
 
 	for _, name := range []string{"unsafe.html", "unsafe.svg"} {
-		req := httptest.NewRequest(http.MethodGet, "/api/media?path="+name, nil)
+		req := httptest.NewRequest(http.MethodGet, "/api/media?path=Cat/Curso/Modulo/Aula/"+name, nil)
 		req.AddCookie(cookie)
 		result := httptest.NewRecorder()
 		srv.ServeHTTP(result, req)
@@ -174,7 +208,7 @@ func TestMediaMaterialsAreDownloadsButVTTRemainsPlayable(t *testing.T) {
 		}
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/media?path=captions.vtt", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/media?path=Cat/Curso/Modulo/Aula/captions.vtt", nil)
 	req.AddCookie(cookie)
 	result := httptest.NewRecorder()
 	srv.ServeHTTP(result, req)

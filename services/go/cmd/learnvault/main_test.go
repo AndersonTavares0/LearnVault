@@ -58,7 +58,7 @@ func TestSecurityHeadersWrapResponse(t *testing.T) {
 		"X-Content-Type-Options":  "nosniff",
 		"X-Frame-Options":         "DENY",
 		"Referrer-Policy":         "no-referrer",
-		"Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; media-src 'self' data:; object-src 'none'; frame-ancestors 'none'",
+		"Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; media-src 'self' data: blob:; object-src 'none'; frame-ancestors 'none'",
 	} {
 		if got := recorder.Header().Get(header); got != want {
 			t.Errorf("%s = %q; want %q", header, got, want)

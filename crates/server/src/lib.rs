@@ -86,7 +86,7 @@ async fn security_headers(
         csp.push_str(hash);
         csp.push('\'');
     }
-    csp.push_str("; media-src 'self' data:; frame-ancestors 'none'");
+    csp.push_str("; media-src 'self' data: blob:; frame-ancestors 'none'");
     // Os hashes são base64 por construção, então a conversão é infalível na
     // prática; ainda assim, prefira responder sem CSP a travar o worker.
     if let Ok(csp) = csp.parse() {

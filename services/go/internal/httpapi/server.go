@@ -155,6 +155,15 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_media_path"})
 			return
 		}
+		catalogValue, err := s.db.Catalog(r.Context())
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal_error"})
+			return
+		}
+		if !catalogAllowsPath(catalogValue, relative) {
+			http.NotFound(w, r)
+			return
+		}
 		file, err := s.libraryRoot.OpenFile(relative)
 		if err != nil {
 			http.NotFound(w, r)
@@ -204,6 +213,46 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
 	}
+}
+
+// catalogAllowsPath is the authorization boundary for media. The extension is
+// only used for response handling; a file must first be present in the
+// persisted scanner catalog (media, subtitles, or materials).
+func catalogAllowsPath(value catalog.Catalog, relative string) bool {
+	clean, ok := normalizeCatalogPath(relative)
+	if !ok {
+		return false
+	}
+	for _, category := range value.Categories {
+		for _, course := range category.Courses {
+			for _, module := range course.Modules {
+				for _, lesson := range module.Lessons {
+					for _, file := range append(append(lesson.Media, lesson.Subtitles...), lesson.Materials...) {
+						if path, valid := normalizeCatalogPath(file.Path); valid && path == clean {
+							return true
+						}
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
+func normalizeCatalogPath(value string) (string, bool) {
+	if value == "" || filepath.IsAbs(value) {
+		return "", false
+	}
+	for _, part := range strings.FieldsFunc(value, func(r rune) bool { return r == '/' || r == '\\' }) {
+		if part == ".." {
+			return "", false
+		}
+	}
+	clean := filepath.Clean(value)
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	return filepath.ToSlash(clean), true
 }
 
 // safeMediaType only permits formats consumed by the player. Everything else,
