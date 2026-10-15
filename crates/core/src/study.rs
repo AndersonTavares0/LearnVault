@@ -155,6 +155,7 @@ pub fn set_completed(
 ///
 /// O empate de instantes é desfeito pelo `media_id`, para que a ordem seja determinística.
 /// O limite é reduzido ao teto de [`MAX_RECENT_STUDY`]; um limite zero não consulta nada.
+/// Mídias removidas do catálogo não aparecem, mas o progresso delas continua gravado.
 pub fn recent_study(db: &Database, owner_id: &str, limit: usize) -> Result<Vec<StudyProgress>> {
     validate_owner(owner_id)?;
 
@@ -167,6 +168,9 @@ pub fn recent_study(db: &Database, owner_id: &str, limit: usize) -> Result<Vec<S
     let mut statement = conn.prepare(
         "SELECT media_id, position_seconds, completed, updated_at FROM study_state
          WHERE owner_id = ?1
+           AND NOT EXISTS (SELECT 1
+                             FROM media_removal r
+                            WHERE r.media_id = study_state.media_id)
          ORDER BY updated_at DESC, media_id ASC
          LIMIT ?2",
     )?;

@@ -68,11 +68,11 @@ pub struct OpenMedia {
 /// A mídia é identificada por `library_id` e `media_id`. A raiz vem da integração de
 /// plataforma, já resolvida; esta função apenas confirma que o arquivo está sob ela.
 ///
-/// Devolve erro tipado quando o identificador é desconhecido, quando a linha está marcada
-/// como ausente, quando o arquivo desapareceu do disco, quando o caminho armazenado é
-/// inválido ou escapa da biblioteca, quando o resultado não é um arquivo comum, quando o
-/// componente final é um link simbólico, quando a abertura falha ou quando o arquivo
-/// aberto não corresponde ao caminho validado.
+/// Devolve erro tipado quando o identificador é desconhecido, quando a mídia foi removida
+/// do catálogo, quando a linha está marcada como ausente, quando o arquivo desapareceu do
+/// disco, quando o caminho armazenado é inválido ou escapa da biblioteca, quando o
+/// resultado não é um arquivo comum, quando o componente final é um link simbólico, quando
+/// a abertura falha ou quando o arquivo aberto não corresponde ao caminho validado.
 pub fn open_media(
     db: &Database,
     library_id: &str,
@@ -81,6 +81,13 @@ pub fn open_media(
 ) -> Result<OpenMedia> {
     let canonical_root = canonical_root(root)?;
     let stored = media_row(db, library_id, media_id)?;
+
+    // Uma mídia removida saiu do catálogo por decisão explícita: ela não é entregue.
+    if is_removed(db, library_id, media_id)? {
+        return Err(Error::MediaRemoved {
+            media_id: media_id.to_owned(),
+        });
+    }
 
     if stored.availability != AVAILABLE {
         return Err(Error::MediaUnavailable {
@@ -164,6 +171,21 @@ pub fn open_media(
 
 /// Estado de disponibilidade registrado pela última varredura.
 const AVAILABLE: &str = "available";
+
+/// A mídia foi removida explicitamente do catálogo.
+///
+/// A remoção é lida da tabela própria, e não de `availability`: são fatos separados, e uma
+/// mídia removida continua com a disponibilidade que a última varredura registrou.
+fn is_removed(db: &Database, library_id: &str, media_id: &str) -> Result<bool> {
+    let mut statement = db.connection().prepare(
+        "SELECT 1
+           FROM media_removal
+          WHERE library_id = ?1 AND media_id = ?2",
+    )?;
+    let mut rows = statement.query(rusqlite::params![library_id, media_id])?;
+
+    Ok(rows.next()?.is_some())
+}
 
 /// Linha de mídia relevante para a resolução.
 struct StoredMedia {

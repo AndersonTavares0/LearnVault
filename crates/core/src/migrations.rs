@@ -11,7 +11,7 @@ use rusqlite_migration::{M, Migrations};
 /// A recusa de um schema mais novo não depende desta constante — ela vem de
 /// `SchemaVersion::Outside` —, mas ela deve acompanhar a cadeia de migrações porque
 /// aparece na mensagem de diagnóstico de [`crate::Error::SchemaTooNew`].
-pub(crate) const SCHEMA_VERSION: usize = 2;
+pub(crate) const SCHEMA_VERSION: usize = 3;
 
 /// Versão 1: bibliotecas, mídia, varreduras e estado de estudo.
 ///
@@ -106,7 +106,35 @@ CREATE TABLE scan_inaccessible (
 );
 ";
 
-const MIGRATIONS_SLICE: &[M<'static>] = &[M::up(V1), M::up(V2)];
+/// Versão 3: remoção explícita de mídia.
+///
+/// A migração é aditiva e não toca as versões anteriores. A presença do par
+/// `(library_id, media_id)` nesta tabela é o fato da remoção: a linha de `media` e o
+/// `study_state` associado permanecem intactos, porque remover do catálogo não é apagar
+/// dados. Por isso a tabela é separada em vez de ser um novo valor no `CHECK` de
+/// `media.availability`, que exigiria reconstruir `media` inteira para alterar a
+/// restrição.
+///
+/// A chave primária composta é a chave natural da operação: ela garante a idempotência
+/// (não existe remoção duplicada), delimita o escopo por biblioteca e serve de índice
+/// para a consulta do catálogo, que filtra por `library_id`.
+///
+/// As duas chaves estrangeiras garantem que a biblioteca e a mídia existem. O vínculo
+/// entre elas é garantido por quem escreve: a inserção seleciona o par direto de
+/// `media`, de modo que o `library_id` gravado é o da própria mídia. Uma chave
+/// estrangeira composta seria a alternativa, mas exigiria declarar
+/// `UNIQUE (library_id, media_id)` em `media`, o que obriga a reconstruir a tabela.
+const V3: &str = "
+-- Mídia removida explicitamente do catálogo. Nenhuma varredura cria ou apaga esta linha.
+CREATE TABLE media_removal (
+    library_id TEXT NOT NULL REFERENCES library (library_id) ON DELETE NO ACTION,
+    media_id TEXT NOT NULL REFERENCES media (media_id) ON DELETE NO ACTION,
+    removed_at INTEGER NOT NULL,
+    PRIMARY KEY (library_id, media_id)
+);
+";
+
+const MIGRATIONS_SLICE: &[M<'static>] = &[M::up(V1), M::up(V2), M::up(V3)];
 
 /// Cadeia de migrações aplicada por [`crate::db::Database`].
 pub(crate) const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATIONS_SLICE);
