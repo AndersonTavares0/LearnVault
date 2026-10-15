@@ -8,8 +8,9 @@ implementação pertencem às Issues e pull requests relacionadas.
 A arquitetura aprovada está no [ADR 0001](../architecture/adr/0001-reescrita-em-rust.md).
 A execução avança por fases, com um pull request por fase:
 
-- [ ] Fase 0 — ADR, arquitetura e roadmap atualizados
-- [ ] Fase 1 — `crates/core` com domínio, SQLite, catálogo, identidade e política de rescan
+- [x] Fase 0 — ADR, arquitetura e roadmap atualizados
+- [x] Fase 1 — `crates/core` com domínio, SQLite, catálogo, identidade e política de rescan
+- [x] Fase 1 (complemento) — remoção explícita de mídia no núcleo
 - [ ] Fase 2 — `crates/server` com Axum, autenticação, sessões e mídia com Range
 - [ ] Fase 3 — SPA Svelte 5 + TypeScript + Vite com dois builds
 - [ ] Fase 4 — `crates/desktop` com Tauri 2, offline e sem portas de rede

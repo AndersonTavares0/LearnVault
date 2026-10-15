@@ -60,6 +60,8 @@ Invariantes:
 - O SQLite guarda metadados e estado pessoal de estudo, nunca mídia de cursos.
 - O rescan nunca exclui registros automaticamente: arquivos ausentes são marcados como ausentes
   e podem reaparecer no mesmo caminho reutilizando a mesma identidade de mídia.
+- A remoção de uma mídia é sempre explícita e persistente: ela sai do catálogo sem apagar
+  registros nem progresso, e nenhuma varredura a desfaz.
 - A raiz da biblioteca é configuração da plataforma, não dado do catálogo.
 - Ações administrativas são explícitas; não há scan silencioso na inicialização.
 - Cache e mídia derivada são descartáveis e ficam em locais separados dos dados duráveis.

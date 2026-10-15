@@ -176,6 +176,30 @@ pub enum Error {
         /// Posição recusada, em segundos.
         position_seconds: i64,
     },
+
+    /// A mídia foi removida explicitamente do catálogo.
+    ///
+    /// A linha de `media` e o progresso continuam existindo: a remoção tira a mídia do
+    /// catálogo, mas não apaga dados. Uma mídia removida não é entregue nem listada.
+    #[error("a mídia foi removida do catálogo: {media_id}")]
+    MediaRemoved {
+        /// Identificador consultado.
+        media_id: String,
+    },
+
+    /// A remoção exige confirmação porque existe progresso associado.
+    ///
+    /// O progresso nunca é apagado por uma remoção; quando ele existe, quem chama precisa
+    /// confirmar explicitamente que quer retirar a mídia do catálogo mesmo assim.
+    #[error(
+        "a mídia tem progresso de {progress_owners} dono(s) e exige confirmação para ser removida: {media_id}"
+    )]
+    MediaRemovalNeedsConfirmation {
+        /// Identificador consultado.
+        media_id: String,
+        /// Quantidade de donos distintos com progresso na mídia.
+        progress_owners: usize,
+    },
 }
 
 /// Resultado das operações do domínio.

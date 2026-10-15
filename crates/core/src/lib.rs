@@ -7,7 +7,8 @@
 //!
 //! Estado atual: workspace e persistência SQLite com cadeia única de migrações (1.2),
 //! scanner da biblioteca e identidade de mídia (1.3), política de rescan (1.4), catálogo
-//! derivado (1.5), resolução segura de mídia (1.6) e progresso de estudo (1.7).
+//! derivado (1.5), resolução segura de mídia (1.6), progresso de estudo (1.7) e remoção
+//! explícita de mídia (1.8).
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -18,6 +19,7 @@ pub mod error;
 pub mod ids;
 pub mod media;
 pub mod paths;
+pub mod removal;
 pub mod rescan;
 pub mod scanner;
 pub mod study;
@@ -29,6 +31,7 @@ pub use db::Database;
 pub use error::{Error, Result};
 pub use media::{OpenMedia, open_media};
 pub use paths::KeyMode;
+pub use removal::{MediaRemovalImpact, MediaRemovalOutcome, media_removal_impact, remove_media};
 pub use rescan::{RescanSummary, apply_scan, rescan};
 pub use scanner::{MediaKind, ScanOutcome, ScannedFile, scan};
 pub use study::{

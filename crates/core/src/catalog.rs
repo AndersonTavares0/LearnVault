@@ -287,7 +287,9 @@ fn clean_title(name: &str) -> String {
 }
 
 /// Converte o estado gravado em `media.availability`.
-fn availability_of(stored: &str) -> Availability {
+///
+/// É compartilhada com a remoção explícita, que relata a disponibilidade no impacto.
+pub(crate) fn availability_of(stored: &str) -> Availability {
     if stored == "missing" {
         Availability::Missing
     } else {
@@ -363,11 +365,19 @@ fn last_scan(db: &Database, library_id: &str, mode: KeyMode) -> Result<LastScan>
 }
 
 /// Lê as linhas de mídia da biblioteca, já ordenadas por chave de caminho.
+///
+/// As mídias removidas explicitamente ficam de fora: a remoção tira o item do catálogo
+/// sem apagar a linha, e por isso é filtrada aqui, na leitura, em vez de ser um estado da
+/// própria linha.
 fn media_rows(db: &Database, library_id: &str) -> Result<Vec<MediaRow>> {
     let mut statement = db.connection().prepare(
         "SELECT media_id, relative_path, relative_path_key, size, availability
          FROM media
          WHERE library_id = ?1
+           AND NOT EXISTS (SELECT 1
+                             FROM media_removal r
+                            WHERE r.library_id = media.library_id
+                              AND r.media_id = media.media_id)
          ORDER BY relative_path_key",
     )?;
     let rows = statement.query_map([library_id], |row| {

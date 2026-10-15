@@ -77,6 +77,7 @@ fn all_domain_tables_are_created() -> TestResult {
     for table in [
         "library",
         "media",
+        "media_removal",
         "scan",
         "scan_inaccessible",
         "study_state",
@@ -431,5 +432,54 @@ fn usernames_are_unique_ignoring_ascii_case() -> TestResult {
         insert_user(&db, "usr-2", "ana", 0),
         "usuário duplicado apenas por diferença de caixa",
     );
+    Ok(())
+}
+
+fn insert_removal(
+    db: &Database,
+    library_id: &str,
+    media_id: &str,
+    removed_at: i64,
+) -> rusqlite::Result<usize> {
+    db.connection().execute(
+        "INSERT INTO media_removal (library_id, media_id, removed_at) VALUES (?1, ?2, ?3)",
+        rusqlite::params![library_id, media_id, removed_at],
+    )
+}
+
+#[test]
+fn media_removal_requires_an_existing_library() -> TestResult {
+    let db = database();
+    insert_library(&db, "bib-1", 1)?;
+    insert_media(&db, "mid-1", "bib-1", "curso/aula.mp4")?;
+    assert_constraint_violation(
+        insert_removal(&db, "bib-ausente", "mid-1", 1_760_000_000),
+        "remoção em biblioteca inexistente",
+    );
+    Ok(())
+}
+
+#[test]
+fn media_removal_requires_an_existing_media() -> TestResult {
+    let db = database();
+    insert_library(&db, "bib-1", 1)?;
+    assert_constraint_violation(
+        insert_removal(&db, "bib-1", "mid-ausente", 1_760_000_000),
+        "remoção de mídia inexistente",
+    );
+    Ok(())
+}
+
+#[test]
+fn media_removal_identity_is_the_pair_library_and_media() -> TestResult {
+    let db = database();
+    insert_library(&db, "bib-1", 1)?;
+    insert_media(&db, "mid-1", "bib-1", "curso/aula.mp4")?;
+    insert_removal(&db, "bib-1", "mid-1", 1_760_000_000)?;
+    assert_constraint_violation(
+        insert_removal(&db, "bib-1", "mid-1", 1_760_000_001),
+        "remoção repetida do mesmo par",
+    );
+    assert_eq!(count(&db, "media_removal"), 1);
     Ok(())
 }
