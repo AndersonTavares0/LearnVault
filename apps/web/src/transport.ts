@@ -8,10 +8,11 @@ export interface Transport {
 	login(username: string, password: string): Promise<User>;
 	logout(): Promise<void>;
 	catalog(): Promise<Catalog>;
+	rescan(): Promise<void>;
 	mediaUrl(path: string): string;
 }
 
-class HttpTransport implements Transport {
+export class HttpTransport implements Transport {
 	async me() { const response = await fetch('/api/me'); return response.ok ? response.json() : null; }
 	async login(username: string, password: string) {
 		const response = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
@@ -20,6 +21,10 @@ class HttpTransport implements Transport {
 	}
 	async logout() { await fetch('/api/logout', { method: 'POST' }); }
 	async catalog() { const response = await fetch('/api/catalog'); if (!response.ok) throw new Error('Não foi possível carregar o catálogo.'); return response.json(); }
+	async rescan() {
+		const response = await fetch('/api/admin/catalog/rescan', { method: 'POST' });
+		if (!response.ok) throw new Error(response.status === 409 ? 'Já existe um rescan em andamento.' : 'Não foi possível indexar a biblioteca.');
+	}
 	mediaUrl(path: string) { return `/api/media?path=${encodeURIComponent(path)}`; }
 }
 
@@ -29,6 +34,7 @@ class DesktopStub implements Transport {
 	login() { return Promise.reject(new Error('Transporte desktop ainda não implementado.')); }
 	logout() { return Promise.resolve(); }
 	catalog() { return Promise.reject(new Error('Transporte desktop ainda não implementado.')); }
+	rescan() { return Promise.reject(new Error('Rescan desktop ainda não implementado.')); }
 	mediaUrl(path: string) { return path; }
 }
 
