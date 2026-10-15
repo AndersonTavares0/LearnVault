@@ -1,15 +1,77 @@
 //! Servidor HTTP do LearnVault.
 
+#![forbid(unsafe_code)]
+
+mod config;
+mod health;
+mod state;
+
+pub use config::{Command, Config, ConfigError, parse_command};
+pub use state::AppState;
+
+use std::{future::Future, time::Duration};
+
+use axum::{BoxError, Router, error_handling::HandleErrorLayer, http::StatusCode, routing::get};
+use tokio::net::TcpListener;
+use tower::ServiceBuilder;
+
+/// Versão compilada do servidor, usada pelo executável e pelo endpoint de saúde.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// Monta as rotas públicas mínimas do servidor.
+pub fn build_router(state: AppState) -> Router {
+    Router::new()
+        .route("/api/healthz", get(health::healthz))
+        .with_state(state)
+}
+
+/// Erros públicos do ciclo de vida do servidor.
+#[derive(Debug, thiserror::Error)]
+pub enum ServeError {
+    /// O listener HTTP não pôde ser criado.
+    #[error("could not bind HTTP listener")]
+    Bind(#[source] std::io::Error),
+    /// O servidor HTTP terminou com erro.
+    #[error("HTTP server failed")]
+    Serve(#[source] std::io::Error),
+}
+
+/// Inicia o servidor e aguarda o futuro de encerramento fornecido pelo processo.
+pub async fn serve<F>(config: Config, shutdown: F) -> Result<(), ServeError>
+where
+    F: Future<Output = ()> + Send + 'static,
+{
+    let listener = TcpListener::bind(config.listen_addr)
+        .await
+        .map_err(ServeError::Bind)?;
+    let app = build_router(AppState::new(config)).layer(
+        ServiceBuilder::new()
+            .layer(HandleErrorLayer::new(|_: BoxError| async {
+                (StatusCode::REQUEST_TIMEOUT, "request timeout")
+            }))
+            .timeout(Duration::from_secs(30)),
+    );
+
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown)
+        .await
+        .map_err(ServeError::Serve)
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
 
-    use axum::{body::Body, http::{Request, StatusCode}};
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode},
+    };
     use http_body_util::BodyExt;
     use tempfile::TempDir;
+    use tokio::sync::oneshot;
     use tower::ServiceExt;
 
-    use super::{AppState, Command, Config, VERSION, build_router, parse_command};
+    use super::{AppState, Command, Config, VERSION, build_router, parse_command, serve};
 
     fn config_fixture(temp: &TempDir) -> Config {
         Config::from_args([
@@ -77,7 +139,10 @@ mod tests {
 
     #[test]
     fn version_flag_is_parsed_without_starting_the_server() {
-        assert_eq!(parse_command(["learnvault-server", "--version"]).unwrap(), Command::Version);
+        assert_eq!(
+            parse_command(["learnvault-server", "--version"]).unwrap(),
+            Command::Version
+        );
     }
 
     #[test]
@@ -86,5 +151,20 @@ mod tests {
 
         assert!(error.to_string().contains("unknown argument"));
         assert!(!error.to_string().contains("value"));
+    }
+
+    #[tokio::test]
+    async fn server_stops_after_the_shutdown_signal() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut config = config_fixture(&temp);
+        config.listen_addr = "127.0.0.1:0".parse().unwrap();
+        let (sender, receiver) = oneshot::channel();
+
+        let task = tokio::spawn(serve(config, async {
+            let _ = receiver.await;
+        }));
+        sender.send(()).unwrap();
+
+        assert!(task.await.unwrap().is_ok());
     }
 }
