@@ -1,112 +1,116 @@
 use std::{
     pin::Pin,
-    sync::{
-        Arc, Mutex,
-        atomic::{AtomicBool, Ordering},
-    },
+    sync::{Arc, Mutex},
     task::{Context, Poll},
     time::Duration,
 };
 
+use axum::body::Bytes;
 use tokio::{
-    io::{AsyncRead, ReadBuf},
+    io::{AsyncRead, AsyncReadExt},
     sync::{OwnedSemaphorePermit, mpsc},
+    time::{Instant, Sleep},
 };
+use tokio_stream::{Stream, wrappers::ReceiverStream};
 
-/// Encerra um stream sem progresso sem depender de o transporte continuar consultando o corpo.
-pub(crate) struct IdleTimeoutReader<R> {
+const CHUNK_SIZE: usize = 8 * 1024;
+
+/// Produz o corpo fora do `Body`, para que o prazo de ociosidade continue valendo mesmo quando o
+/// transporte deixa de consultar o stream. O produtor é dono do reader e do permit: ao expirar,
+/// ambos são descartados e o canal é fechado, encerrando o body após qualquer chunk já enfileirado.
+pub(crate) fn idle_timeout_stream<R>(
     reader: R,
-    permit: Arc<Mutex<Option<OwnedSemaphorePermit>>>,
-    activity: mpsc::Sender<()>,
-    timed_out: Arc<AtomicBool>,
-}
+    permit: OwnedSemaphorePermit,
+    timeout: Duration,
+) -> IdleTimeoutStream
+where
+    R: AsyncRead + Unpin + Send + 'static,
+{
+    let (sender, receiver) = mpsc::channel(1);
+    let permit = Arc::new(Mutex::new(Some(permit)));
+    let task_permit = permit.clone();
+    let task = tokio::spawn(async move {
+        let mut reader = reader;
+        let mut buffer = vec![0; CHUNK_SIZE];
+        let mut sent_chunk = false;
+        let mut deadline: std::pin::Pin<Box<Sleep>> = Box::pin(tokio::time::sleep(timeout));
 
-impl<R> IdleTimeoutReader<R> {
-    pub(crate) fn new(reader: R, permit: OwnedSemaphorePermit, timeout: Duration) -> Self {
-        let permit = Arc::new(Mutex::new(Some(permit)));
-        let timed_out = Arc::new(AtomicBool::new(false));
-        let (activity, mut activity_receiver) = mpsc::channel(1);
-        let timeout_permit = permit.clone();
-        let timeout_expired = timed_out.clone();
-        tokio::spawn(async move {
-            loop {
-                tokio::select! {
-                    _ = tokio::time::sleep(timeout) => {
-                        timeout_expired.store(true, Ordering::Release);
-                        drop(
-                            timeout_permit
-                                .lock()
-                                .expect("stream permit mutex is not poisoned")
-                                .take(),
-                        );
+        loop {
+            let read = tokio::select! {
+                _ = &mut deadline => {
+                    release_permit(&task_permit);
+                    return;
+                },
+                read = reader.read(&mut buffer) => match read {
+                    Ok(read) => read,
+                    Err(error) => {
+                        let _ = sender.send(Err(error)).await;
+                        release_permit(&task_permit);
                         return;
                     }
-                    activity = activity_receiver.recv() => {
-                        if activity.is_none() {
-                            drop(
-                                timeout_permit
-                                    .lock()
-                                    .expect("stream permit mutex is not poisoned")
-                                    .take(),
-                            );
-                            return;
-                        }
+                },
+            };
+            if read == 0 {
+                drop(reader);
+                drop(sender);
+                deadline.as_mut().await;
+                release_permit(&task_permit);
+                return;
+            }
+
+            let chunk = Bytes::copy_from_slice(&buffer[..read]);
+            tokio::select! {
+                _ = &mut deadline => {
+                    release_permit(&task_permit);
+                    return;
+                },
+                sent = sender.send(Ok(chunk)) => {
+                    if sent.is_err() {
+                        return;
                     }
+                    // O primeiro chunk apenas ocupa o buffer. Cada envio seguinte só completa
+                    // depois que o consumidor retirou o anterior, portanto é progresso real.
+                    if sent_chunk {
+                        deadline.as_mut().reset(Instant::now() + timeout);
+                    }
+                    sent_chunk = true;
                 }
             }
-        });
-        Self {
-            reader,
-            permit,
-            activity,
-            timed_out,
         }
-    }
-
-    fn release_permit(&self) {
-        drop(
-            self.permit
-                .lock()
-                .expect("stream permit mutex is not poisoned")
-                .take(),
-        );
+    });
+    IdleTimeoutStream {
+        receiver: ReceiverStream::new(receiver),
+        permit,
+        task: task.abort_handle(),
     }
 }
 
-impl<R> Drop for IdleTimeoutReader<R> {
+fn release_permit(permit: &Arc<Mutex<Option<OwnedSemaphorePermit>>>) {
+    drop(
+        permit
+            .lock()
+            .expect("stream permit mutex is not poisoned")
+            .take(),
+    );
+}
+
+pub(crate) struct IdleTimeoutStream {
+    receiver: ReceiverStream<std::io::Result<Bytes>>,
+    permit: Arc<Mutex<Option<OwnedSemaphorePermit>>>,
+    task: tokio::task::AbortHandle,
+}
+
+impl Stream for IdleTimeoutStream {
+    type Item = std::io::Result<Bytes>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        Pin::new(&mut self.get_mut().receiver).poll_next(cx)
+    }
+}
+
+impl Drop for IdleTimeoutStream {
     fn drop(&mut self) {
-        self.release_permit();
-    }
-}
-
-impl<R: AsyncRead + Unpin> AsyncRead for IdleTimeoutReader<R> {
-    fn poll_read(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut ReadBuf<'_>,
-    ) -> Poll<std::io::Result<()>> {
-        let this = self.get_mut();
-        if this.timed_out.load(Ordering::Acquire) {
-            return Poll::Ready(Err(std::io::Error::new(
-                std::io::ErrorKind::TimedOut,
-                "stream idle timeout",
-            )));
-        }
-        let filled = buf.filled().len();
-        match Pin::new(&mut this.reader).poll_read(cx, buf) {
-            Poll::Ready(Ok(())) if buf.filled().len() == filled => {
-                this.release_permit();
-                Poll::Ready(Ok(()))
-            }
-            Poll::Ready(Ok(())) => {
-                let _ = this.activity.try_send(());
-                Poll::Ready(Ok(()))
-            }
-            Poll::Ready(Err(error)) => {
-                this.release_permit();
-                Poll::Ready(Err(error))
-            }
-            Poll::Pending => Poll::Pending,
-        }
+        release_permit(&self.permit);
+        self.task.abort();
     }
 }

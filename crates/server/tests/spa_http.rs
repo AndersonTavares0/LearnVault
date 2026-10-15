@@ -393,6 +393,11 @@ async fn slow_spa_assets_cannot_exhaust_the_shell_stream_reservation() {
 async fn idle_spa_streams_release_asset_capacity_without_reading_the_body() {
     let temp = tempfile::tempdir().unwrap();
     let root = web_root(&temp);
+    fs::write(
+        root.join("_app/immutable/assets/app.css"),
+        vec![b'x'; 16 * 1024],
+    )
+    .unwrap();
     let app = app(&temp, &root).await;
     let mut idle_responses = Vec::new();
 
@@ -435,6 +440,9 @@ async fn idle_spa_streams_release_asset_capacity_without_reading_the_body() {
         .unwrap();
     assert_eq!(recovered.status(), StatusCode::OK);
 
+    let mut timed_out = idle_responses.pop().unwrap();
+    assert!(timed_out.body_mut().frame().await.unwrap().is_ok());
+    assert!(timed_out.body_mut().frame().await.is_none());
     drop(idle_responses);
 }
 

@@ -10,13 +10,12 @@ use axum::{
 };
 use serde::Deserialize;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
-use tokio_util::io::ReaderStream;
 
 use crate::{
     AppState, StateError,
     auth::{hash_session_token, request_token},
     catalog::service_unavailable,
-    stream::IdleTimeoutReader,
+    stream::idle_timeout_stream,
 };
 
 #[derive(Debug, Deserialize)]
@@ -55,20 +54,29 @@ pub(crate) async fn media(
     let Some(blocking_task) = state.try_acquire_blocking_task() else {
         return service_unavailable();
     };
-    let opened = tokio::task::spawn_blocking(move || {
+    let reference = tokio::task::spawn_blocking(move || {
         let _blocking_task = blocking_task;
-        let Some(reference) = learnvault_core::find_media_by_path(&database, &lookup_path)? else {
-            return Ok(None);
-        };
-        learnvault_core::open_media(&database, &reference.library_id, &reference.media_id, &root)
-            .map(Some)
+        learnvault_core::find_media_by_path(&database, &lookup_path)
     })
     .await;
-    let opened = match opened {
-        Ok(Ok(Some(opened))) => opened,
+    let reference = match reference {
+        Ok(Ok(Some(reference))) => reference,
         Ok(Ok(None)) => return StatusCode::NOT_FOUND.into_response(),
         Ok(Err(error)) => return media_error_response(&error),
         // A tarefa abortada é uma indisponibilidade operacional, não ausência de mídia.
+        Err(_) => return service_unavailable(),
+    };
+    let Some(blocking_task) = state.try_acquire_blocking_task() else {
+        return service_unavailable();
+    };
+    let opened = match tokio::task::spawn_blocking(move || {
+        let _blocking_task = blocking_task;
+        learnvault_core::open_media_reference(&reference, &root)
+    })
+    .await
+    {
+        Ok(Ok(opened)) => opened,
+        Ok(Err(error)) => return media_error_response(&error),
         Err(_) => return service_unavailable(),
     };
 
@@ -90,11 +98,7 @@ pub(crate) async fn media(
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
     let stream = stream_permit.map(|stream_permit| {
-        ReaderStream::new(IdleTimeoutReader::new(
-            file.take(length),
-            stream_permit,
-            MEDIA_STREAM_IDLE_TIMEOUT,
-        ))
+        idle_timeout_stream(file.take(length), stream_permit, MEDIA_STREAM_IDLE_TIMEOUT)
     });
     let mut response = Response::new(if method == Method::HEAD {
         Body::empty()

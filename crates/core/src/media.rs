@@ -58,6 +58,8 @@ pub struct MediaReference {
     pub media_id: String,
     /// Caminho relativo persistido, nunca um caminho absoluto.
     pub relative_path: String,
+    size: u64,
+    mtime: i64,
 }
 
 /// Resolve um caminho relativo indexado sem acessar o sistema de arquivos.
@@ -85,7 +87,7 @@ pub fn find_media_by_path(db: &Database, path: &str) -> Result<Option<MediaRefer
     Ok(db
         .connection()
         .query_row(
-            "SELECT library_id, media_id, relative_path
+            "SELECT library_id, media_id, relative_path, size, mtime
            FROM media
           WHERE relative_path_key = ?1 AND availability = 'available'
           LIMIT 1",
@@ -95,6 +97,8 @@ pub fn find_media_by_path(db: &Database, path: &str) -> Result<Option<MediaRefer
                     library_id: row.get(0)?,
                     media_id: row.get(1)?,
                     relative_path: row.get(2)?,
+                    size: u64::try_from(row.get::<_, i64>(3)?).unwrap_or(0),
+                    mtime: row.get(4)?,
                 })
             },
         )
@@ -221,6 +225,68 @@ pub fn open_media(
         mtime,
         kind,
         changed,
+    })
+}
+
+/// Abre uma referência recém-lida do catálogo sem manter o banco bloqueado durante I/O de disco.
+/// A referência é interna e não vem da requisição HTTP; a validação do caminho e do descritor é
+/// repetida integralmente. Uma remoção concorrente pode vencer após a consulta, como as demais
+/// janelas TOCTOU documentadas deste módulo.
+pub fn open_media_reference(reference: &MediaReference, root: &Path) -> Result<OpenMedia> {
+    let canonical_root = canonical_root(root)?;
+    let media_id = &reference.media_id;
+    let candidate = resolve_within(&canonical_root, &reference.relative_path)?;
+    let on_path = std::fs::symlink_metadata(&candidate).map_err(|source| match source.kind() {
+        io::ErrorKind::NotFound => Error::MediaMissingOnDisk {
+            media_id: media_id.to_owned(),
+        },
+        _ => Error::MediaUnreadable {
+            media_id: media_id.to_owned(),
+            source,
+        },
+    })?;
+    if on_path.file_type().is_symlink() {
+        return Err(Error::MediaIsSymlink {
+            media_id: media_id.to_owned(),
+        });
+    }
+    let resolved = std::fs::canonicalize(&candidate).map_err(|source| match source.kind() {
+        io::ErrorKind::NotFound => Error::MediaMissingOnDisk {
+            media_id: media_id.to_owned(),
+        },
+        _ => Error::MediaUnreadable {
+            media_id: media_id.to_owned(),
+            source,
+        },
+    })?;
+    if !is_inside(&resolved, &canonical_root) {
+        return Err(Error::MediaOutsideLibrary {
+            media_id: media_id.to_owned(),
+        });
+    }
+    let file = File::open(&resolved).map_err(|source| Error::MediaUnreadable {
+        media_id: media_id.to_owned(),
+        source,
+    })?;
+    let metadata = file.metadata().map_err(|source| Error::MediaUnreadable {
+        media_id: media_id.to_owned(),
+        source,
+    })?;
+    if !metadata.is_file() {
+        return Err(Error::MediaNotAFile {
+            media_id: media_id.to_owned(),
+        });
+    }
+    verify_identity(&resolved, &metadata, media_id)?;
+    let size = metadata.len();
+    let mtime = mtime_seconds(&metadata);
+    Ok(OpenMedia {
+        media_id: media_id.to_owned(),
+        file,
+        size,
+        mtime,
+        kind: classify(&file_name(&resolved), size),
+        changed: size != reference.size || mtime != reference.mtime,
     })
 }
 

@@ -11,9 +11,8 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use tokio::io::AsyncReadExt;
-use tokio_util::io::ReaderStream;
 
-use crate::{AppState, stream::IdleTimeoutReader};
+use crate::{AppState, stream::idle_timeout_stream};
 
 /// Arquivos estáticos permanecem pequenos para que uma raiz web mal configurada não esgote
 /// recursos. Após validar os metadados, o arquivo é transmitido sem carregá-lo em memória.
@@ -105,11 +104,11 @@ async fn open_file(
         return Err(FileError::Busy);
     };
 
-    let stream = ReaderStream::new(IdleTimeoutReader::new(
+    let stream = idle_timeout_stream(
         tokio::fs::File::from_std(opened.file).take(opened.size),
         stream_permit,
         SPA_STREAM_IDLE_TIMEOUT,
-    ));
+    );
     Ok(file_response(
         Body::from_stream(stream),
         &root,

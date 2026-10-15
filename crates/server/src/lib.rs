@@ -156,6 +156,7 @@ mod tests {
     async fn media_app() -> (axum::Router, tempfile::TempDir, AppState) {
         let temp = tempfile::tempdir().unwrap();
         fs::write(temp.path().join("lesson.mp4"), b"0123456789").unwrap();
+        fs::write(temp.path().join("slow.mp4"), vec![b'x'; 16 * 1024]).unwrap();
         let mut config = config_fixture(&temp);
         config.database_path = temp.path().join("media.sqlite");
         let state = AppState::initialize(config).await.unwrap();
@@ -444,7 +445,7 @@ mod tests {
             let response = app
                 .clone()
                 .oneshot(
-                    Request::get("/api/media?path=lesson.mp4")
+                    Request::get("/api/media?path=slow.mp4")
                         .header("cookie", &cookie)
                         .body(Body::empty())
                         .unwrap(),
@@ -458,7 +459,7 @@ mod tests {
         let saturated = app
             .clone()
             .oneshot(
-                Request::get("/api/media?path=lesson.mp4")
+                Request::get("/api/media?path=slow.mp4")
                     .header("cookie", &cookie)
                     .body(Body::empty())
                     .unwrap(),
@@ -470,7 +471,7 @@ mod tests {
         drop(slow_responses);
         let recovered = app
             .oneshot(
-                Request::get("/api/media?path=lesson.mp4")
+                Request::get("/api/media?path=slow.mp4")
                     .header("cookie", cookie)
                     .body(Body::empty())
                     .unwrap(),
@@ -490,7 +491,7 @@ mod tests {
             let response = app
                 .clone()
                 .oneshot(
-                    Request::get("/api/media?path=lesson.mp4")
+                    Request::get("/api/media?path=slow.mp4")
                         .header("cookie", &cookie)
                         .body(Body::empty())
                         .unwrap(),
@@ -504,7 +505,7 @@ mod tests {
         let saturated = app
             .clone()
             .oneshot(
-                Request::get("/api/media?path=lesson.mp4")
+                Request::get("/api/media?path=slow.mp4")
                     .header("cookie", &cookie)
                     .body(Body::empty())
                     .unwrap(),
@@ -519,7 +520,7 @@ mod tests {
 
         let recovered = app
             .oneshot(
-                Request::get("/api/media?path=lesson.mp4")
+                Request::get("/api/media?path=slow.mp4")
                     .header("cookie", cookie)
                     .body(Body::empty())
                     .unwrap(),
@@ -528,6 +529,9 @@ mod tests {
             .unwrap();
         assert_eq!(recovered.status(), StatusCode::OK);
 
+        let mut timed_out = idle_responses.pop().unwrap();
+        assert!(timed_out.body_mut().frame().await.unwrap().is_ok());
+        assert!(timed_out.body_mut().frame().await.is_none());
         drop(idle_responses);
     }
 }
