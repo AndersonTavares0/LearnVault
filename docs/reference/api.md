@@ -3,6 +3,11 @@
 A API é servida pelo executável Go. Todas as rotas abaixo usam JSON, salvo indicação
 contrária. A autenticação usa um cookie de sessão HttpOnly com SameSite=Strict.
 
+Na implementação Rust, o cookie também recebe `Secure` por padrão e só é enviado pelo
+navegador em HTTPS. Para desenvolvimento local sem TLS, use explicitamente `--insecure-http`;
+esse modo não deve ser usado em uma instalação exposta na rede. Mutações de autenticação exigem
+uma origem HTTP(S) compatível, além de SameSite=Strict.
+
 ## Saúde e sessão
 
 | Método | Rota | Autenticação | Finalidade |

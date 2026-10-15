@@ -2,16 +2,32 @@
 
 #![forbid(unsafe_code)]
 
+mod auth;
 mod config;
 mod health;
 mod state;
 
+pub use auth::{
+    AuthError, generate_session_token, hash_password, hash_session_token, validate_password,
+    validate_username, verify_password,
+};
 pub use config::{Command, Config, ConfigError, parse_command};
-pub use state::AppState;
+pub use state::{AppState, StateError};
 
 use std::{future::Future, time::Duration};
 
-use axum::{BoxError, Router, error_handling::HandleErrorLayer, http::StatusCode, routing::get};
+use axum::{
+    BoxError, Router,
+    error_handling::HandleErrorLayer,
+    extract::DefaultBodyLimit,
+    http::{
+        StatusCode,
+        header::{HeaderName, HeaderValue},
+    },
+    middleware::map_response,
+    response::Response,
+    routing::get,
+};
 use tokio::net::TcpListener;
 use tower::ServiceBuilder;
 
@@ -22,7 +38,27 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/api/healthz", get(health::healthz))
+        .route("/api/login", axum::routing::post(auth::login))
+        .route("/api/me", get(auth::me))
+        .route("/api/logout", axum::routing::post(auth::logout))
+        .layer(DefaultBodyLimit::max(8 * 1024))
+        .layer(map_response(security_headers))
         .with_state(state)
+}
+
+async fn security_headers(mut response: Response) -> Response {
+    let headers = response.headers_mut();
+    headers.insert(
+        "x-content-type-options",
+        HeaderValue::from_static("nosniff"),
+    );
+    headers.insert("x-frame-options", HeaderValue::from_static("DENY"));
+    headers.insert("referrer-policy", HeaderValue::from_static("no-referrer"));
+    headers.insert(
+        HeaderName::from_static("content-security-policy"),
+        HeaderValue::from_static("default-src 'none'; frame-ancestors 'none'"),
+    );
+    response
 }
 
 /// Erros públicos do ciclo de vida do servidor.
@@ -34,6 +70,9 @@ pub enum ServeError {
     /// O servidor HTTP terminou com erro.
     #[error("HTTP server failed")]
     Serve(#[source] std::io::Error),
+    /// A autenticação não pôde ser inicializada com segurança.
+    #[error("server startup failed: {0}")]
+    Startup(String),
 }
 
 /// Inicia o servidor e aguarda o futuro de encerramento fornecido pelo processo.
@@ -44,7 +83,10 @@ where
     let listener = TcpListener::bind(config.listen_addr)
         .await
         .map_err(ServeError::Bind)?;
-    let app = build_router(AppState::new(config)).layer(
+    let state = AppState::initialize(config)
+        .await
+        .map_err(|error| ServeError::Startup(error.to_string()))?;
+    let app = build_router(state).layer(
         ServiceBuilder::new()
             .layer(HandleErrorLayer::new(|_: BoxError| async {
                 (StatusCode::REQUEST_TIMEOUT, "request timeout")
@@ -52,10 +94,13 @@ where
             .timeout(Duration::from_secs(30)),
     );
 
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown)
-        .await
-        .map_err(ServeError::Serve)
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown)
+    .await
+    .map_err(ServeError::Serve)
 }
 
 #[cfg(test)]
@@ -74,7 +119,7 @@ mod tests {
     use super::{AppState, Command, Config, VERSION, build_router, parse_command, serve};
 
     fn config_fixture(temp: &TempDir) -> Config {
-        Config::from_args([
+        let mut config = Config::from_args([
             "learnvault-server",
             "--listen-addr",
             "127.0.0.1:18090",
@@ -83,7 +128,11 @@ mod tests {
             "--library-root",
             temp.path().to_str().unwrap(),
         ])
-        .expect("configuração de teste válida")
+        .expect("configuração de teste válida");
+        config.admin_username = Some("admin".to_owned());
+        config.admin_password = Some("uma senha local muito segura".to_owned());
+        config.cookie_secure = false;
+        config
     }
 
     #[tokio::test]

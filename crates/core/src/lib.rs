@@ -13,6 +13,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod auth;
 pub mod catalog;
 pub mod db;
 pub mod error;
@@ -26,6 +27,10 @@ pub mod study;
 
 mod migrations;
 
+pub use auth::{
+    AuthSession, AuthUser, bootstrap_admin, create_session, delete_session, find_user_by_username,
+    has_admin, session_user,
+};
 pub use catalog::{Availability, Catalog, CatalogFile, CatalogNode, NodeRole, build_catalog};
 pub use db::Database;
 pub use error::{Error, Result};
