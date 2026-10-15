@@ -77,7 +77,7 @@ pub(crate) async fn catalog(State(state): State<AppState>, headers: HeaderMap) -
     match authenticated(&state, &headers).await {
         Ok(true) => {}
         Err(StateError::Capacity) => return service_unavailable(),
-        Ok(false) | Err(_) => return StatusCode::UNAUTHORIZED.into_response(),
+        Ok(false) | Err(_) => return status_no_store(StatusCode::UNAUTHORIZED),
     }
 
     let database = state.database.clone().lock_owned().await;
@@ -99,13 +99,13 @@ pub(crate) async fn rescan(State(state): State<AppState>, headers: HeaderMap) ->
     let user = match authenticated_user(&state, &headers).await {
         Ok(Some(user)) => user,
         Err(StateError::Capacity) => return service_unavailable(),
-        Ok(None) | Err(_) => return StatusCode::UNAUTHORIZED.into_response(),
+        Ok(None) | Err(_) => return status_no_store(StatusCode::UNAUTHORIZED),
     };
     if !user.is_admin || !same_origin(&headers) {
-        return StatusCode::FORBIDDEN.into_response();
+        return status_no_store(StatusCode::FORBIDDEN);
     }
     let Ok(local_lock) = state.rescan_lock.clone().try_lock_owned() else {
-        return StatusCode::CONFLICT.into_response();
+        return status_no_store(StatusCode::CONFLICT);
     };
 
     let database = state.database.clone();
@@ -129,8 +129,8 @@ pub(crate) async fn rescan(State(state): State<AppState>, headers: HeaderMap) ->
     })
     .await
     {
-        Ok(Ok(summary)) => Json(RescanResponse::from(summary)).into_response(),
-        Ok(Err(RescanFailure::Busy)) => StatusCode::CONFLICT.into_response(),
+        Ok(Ok(summary)) => private_no_store(Json(RescanResponse::from(summary)).into_response()),
+        Ok(Err(RescanFailure::Busy)) => status_no_store(StatusCode::CONFLICT),
         Ok(Err(RescanFailure::RootChanged)) => internal_error("library root changed"),
         Ok(Err(RescanFailure::Failed)) | Err(_) => internal_error("rescan failed"),
     }
@@ -178,6 +178,10 @@ fn private_no_store(mut response: Response) -> Response {
         HeaderValue::from_static("private, no-store"),
     );
     response
+}
+
+fn status_no_store(status: StatusCode) -> Response {
+    private_no_store(status.into_response())
 }
 
 fn rescan_lock_path(database_path: &Path) -> PathBuf {

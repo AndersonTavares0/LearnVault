@@ -239,6 +239,10 @@ async fn admin_rescan_populates_the_authenticated_catalog() {
         .await
         .unwrap();
     assert_eq!(missing_origin.status(), StatusCode::FORBIDDEN);
+    assert_eq!(
+        missing_origin.headers()["cache-control"],
+        "private, no-store"
+    );
 
     let rescan = app
         .clone()
@@ -252,6 +256,7 @@ async fn admin_rescan_populates_the_authenticated_catalog() {
         .await
         .unwrap();
     assert_eq!(rescan.status(), StatusCode::OK);
+    assert_eq!(rescan.headers()["cache-control"], "private, no-store");
     let rescan_body = rescan.into_body().collect().await.unwrap().to_bytes();
     let rescan_json: serde_json::Value = serde_json::from_slice(&rescan_body).unwrap();
     assert_eq!(rescan_json["complete"], true);
@@ -355,6 +360,7 @@ async fn rescan_returns_conflict_while_another_process_holds_its_lock() {
     fs::write(release_path, []).unwrap();
     assert!(child.wait().unwrap().success());
     assert_eq!(response.status(), StatusCode::CONFLICT);
+    assert_eq!(response.headers()["cache-control"], "private, no-store");
 }
 
 #[test]
