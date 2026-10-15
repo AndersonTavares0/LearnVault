@@ -33,6 +33,11 @@ describe('transport contract', () => {
 		expect(catalog.categories[0].courses[0].modules[0].lessons[0].media[0].mediaId).toBe('m1');
 		expect(catalog.categories[0].courses[0].modules[0].lessons[0].subtitles).toHaveLength(1);
 	});
+	it('preserves root loose files when a Rust catalog has no categories', () => {
+		const catalog = normalizeCatalog({ complete: true, categories: [], loose_files: [{ name: 'nota.pdf', path: 'nota.pdf', size: 3, kind: 'material' }] });
+		expect(catalog.categories).toEqual([]);
+		expect(catalog.looseFiles[0].path).toBe('nota.pdf');
+	});
 	it('keeps the Go tree and material files compatible', () => {
 		const catalog = normalizeCatalog({ categories: [{ title: 'Categoria', courses: [{ title: 'Curso', modules: [{ title: 'Módulo', lessons: [{ title: 'Aula', path: 'aula', media: [], subtitles: [{ name: 'legenda.vtt', path: 'legenda.vtt', size: 1 }], materials: [{ name: 'slide.pdf', path: 'slide.pdf', size: 2 }] }] }] }] }] });
 		expect(catalog.categories[0].courses[0].modules[0].lessons[0].materials[0].path).toBe('slide.pdf');

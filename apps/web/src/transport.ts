@@ -18,7 +18,7 @@ export interface Transport {
 
 type RustFile = { media_id?: string; name?: string; path?: string; size?: number; kind?: string; availability?: string; unverified?: boolean };
 type RustNode = { title?: string; path?: string; role?: string; files?: RustFile[]; loose_files?: RustFile[]; children?: RustNode[] };
-type RustCatalog = { complete?: boolean; categories?: RustNode[]; loose_files?: RustFile[] };
+type RustCatalog = { complete?: boolean; categories?: RustNode[]; loose_files?: RustFile[]; looseFiles?: RustFile[] };
 type GoFile = { name?: string; path?: string; size?: number; media_id?: string; kind?: string; availability?: string; unverified?: boolean };
 
 function invalidPayload(message: string): Error { return new Error(`Resposta inválida do servidor: ${message}`); }
@@ -79,9 +79,10 @@ function projectRust(nodes: CatalogNode[]): Catalog['categories'] {
 
 function normalizeRustCatalog(value: RustCatalog): Catalog {
 	if (!Array.isArray(value.categories)) throw invalidPayload('catálogo Rust sem categories.');
-	if (!Array.isArray(value.loose_files)) throw invalidPayload('catálogo Rust sem loose_files.');
+	const looseFiles = value.loose_files ?? value.looseFiles;
+	if (!Array.isArray(looseFiles)) throw invalidPayload('catálogo Rust sem loose_files.');
 	const nodes = value.categories.map(normalizeRustNode);
-	return { complete: value.complete === true, looseFiles: value.loose_files.map(normalizeFile), nodes, categories: projectRust(nodes) };
+	return { complete: value.complete === true, looseFiles: looseFiles.map(normalizeFile), nodes, categories: projectRust(nodes) };
 }
 
 export function normalizeUser(value: unknown): User {
@@ -92,8 +93,7 @@ export function normalizeUser(value: unknown): User {
 
 export function normalizeCatalog(value: unknown): Catalog {
 	if (!value || typeof value !== 'object') throw invalidPayload('catálogo ausente.');
-	const payload = value as { categories?: unknown; loose_files?: unknown };
-	if (Array.isArray(payload.categories) && payload.categories.length === 0) return { complete: true, looseFiles: [], nodes: [], categories: [] };
+	const payload = value as { categories?: unknown; loose_files?: unknown; looseFiles?: unknown };
 	if (Array.isArray(payload.categories) && payload.categories.every((item) => item && typeof item === 'object' && ('courses' in item || 'children' in item))) {
 		if (payload.categories.some((item) => 'courses' in (item as object))) {
 			return { complete: true, looseFiles: [], nodes: [], categories: payload.categories.map((category) => {
