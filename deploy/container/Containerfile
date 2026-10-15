@@ -1,10 +1,10 @@
 FROM node:24-alpine AS web-build
 WORKDIR /src
-COPY package.json package-lock.json ./
-RUN npm ci
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN corepack enable && corepack install --global pnpm@11.28.5 && pnpm install --frozen-lockfile
 COPY svelte.config.js vite.config.ts tsconfig.json ./
 COPY web ./web
-RUN npm run build
+RUN pnpm run build
 
 FROM golang:1.25-alpine AS go-build
 WORKDIR /src

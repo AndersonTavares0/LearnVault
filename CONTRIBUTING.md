@@ -12,10 +12,10 @@ Thank you for helping improve LearnVault. Contributions should preserve the proj
 ## Development checks
 
 ```sh
-npm ci
-npm run check
-npm run build
-npm audit --audit-level=low
+pnpm install --frozen-lockfile
+pnpm run check
+pnpm run build
+pnpm audit --audit-level=low
 go test ./...
 go vet ./...
 ```

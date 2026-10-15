@@ -1,0 +1,6 @@
+# pnpm 11 denies dependency lifecycle scripts by default. esbuild is explicitly
+# allowed because Vite uses its platform binary during the frontend build.
+allowBuilds:
+  esbuild: true
+overrides:
+  cookie: ^0.7.2
