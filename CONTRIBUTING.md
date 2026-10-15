@@ -43,7 +43,7 @@ For collaborators such as `WesleyQDev`:
 3. Make the change and push the branch to this repository.
 4. Open a pull request and reference the Issue with `Closes #<number>` when appropriate.
 5. Wait for CI, address review comments, and keep the branch focused.
-6. The repository owner reviews and approves the PR as CODEOWNER.
+6. Obtain the required review, resolve conversations, and keep all required checks green.
 7. Merge through GitHub using squash merge; never push directly to `main`.
 
 This private, user-owned repository uses collaborator branches instead of private forks.

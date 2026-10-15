@@ -13,8 +13,8 @@ protection is configured on GitHub and this document records the project rule.
 
 The collaboration path is `Issue → branch → pull request → review → squash merge`.
 Private forks are unavailable for this user-owned private repository, so collaborators
-with Write access work on branches in the repository. The owner remains CODEOWNER and
-controls approval into `main`.
+with Write access work on branches in the repository. `.github/CODEOWNERS` documents
+ownership, but CODEOWNER approval is not required for merge.
 
 ## Template policy
 
@@ -59,7 +59,7 @@ only the pages declared in `wiki/mapping.md` are mirrored to GitHub Wiki.
 
 ## Ownership and releases
 
-`.github/CODEOWNERS` defines review ownership. Releases are tag-driven through the release
+`.github/CODEOWNERS` documents review ownership. Releases are tag-driven through the release
 workflow, with `CHANGELOG.md` and `docs/releases/process.md` updated as part of the change.
 
 ## Wiki synchronization
@@ -79,3 +79,19 @@ uses dependency/build caches, applies short timeouts, and retains the generated 
 artifact for one day. Container build remains an independent deployment smoke test with
 its own BuildKit cache. The non-required Wiki workflow uses path filters because it only
 updates derived documentation.
+
+## Dependency updates
+
+Dependabot groups compatible npm, Go-module, and GitHub Actions patch/minor updates;
+major updates remain individual so peer incompatibilities are visible. Updates are
+staggered weekly (Actions monthly), with a small open-PR cap and cooldown for routine
+updates. Security alerts remain eligible for immediate updates and require compatibility
+review and current required checks before merging.
+
+## Test efficiency
+
+Tests keep real Argon2id coverage in storage and end-to-end authentication tests.
+HTTP route tests use an in-memory store only when verifying response mapping, method
+handling, or unavailable dependencies. This avoids repeating password hashing and
+SQLite setup without weakening production authentication. Fixtures remain isolated
+and must not read the external course library.

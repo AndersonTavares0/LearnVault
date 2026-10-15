@@ -1,6 +1,6 @@
 ## Summary
 
-<!-- What problem does this solve? -->
+<!-- Explain the user/problem impact in a few sentences. Replace this comment; do not leave sections blank. -->
 
 ## Governance impact
 
@@ -11,20 +11,24 @@
 
 ## Changes
 
--
+- <!-- List the meaningful code, configuration, or documentation changes. -->
 
 ## Validation
 
+- <!-- List only commands actually run and their result. Do not check items that were not run. -->
 - [ ] `npm run check`
 - [ ] `npm run build`
-- [ ] `go test ./...`
+- [ ] `npm audit --audit-level=low`
+- [ ] `go test -race ./...`
 - [ ] `go vet ./...`
-- [ ] Other: <!-- describe -->
+- [ ] Container/Compose validation (include exact command)
 
 ## Safety checklist
 
 - [ ] No course files, credentials, personal data, or homelab secrets are included.
-- [ ] `/mnt/cursos` was not modified or accessed by tests.
+- [ ] Tests use isolated fixtures; `/mnt/cursos` was not accessed or modified.
 - [ ] Read-only library behavior is preserved.
 - [ ] Migrations and deployment documentation are updated if needed.
 - [ ] UI changes include screenshots or a short visual description.
+
+<!-- Remove non-applicable checklist items and state any known limitations. -->
