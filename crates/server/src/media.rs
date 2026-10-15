@@ -140,7 +140,13 @@ pub(crate) async fn media(
 }
 
 fn error_credentials_required() -> Response {
-    error_private_no_store((StatusCode::FORBIDDEN, axum::Json(serde_json::json!({"error":"credentials_change_required"}))).into_response())
+    error_private_no_store(
+        (
+            StatusCode::FORBIDDEN,
+            axum::Json(serde_json::json!({"error":"credentials_change_required"})),
+        )
+            .into_response(),
+    )
 }
 
 fn media_error_response(error: &learnvault_core::Error) -> Response {

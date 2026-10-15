@@ -105,7 +105,8 @@ impl AppState {
             if existing {
                 return Ok((database, shell, shell_too_large));
             }
-            let using_temporary_default = setup.admin_username.is_none() && setup.admin_password.is_none();
+            let using_temporary_default =
+                setup.admin_username.is_none() && setup.admin_password.is_none();
             let username = setup.admin_username.as_deref().unwrap_or("admin");
             let password = setup.admin_password.as_deref().unwrap_or("admin");
             crate::auth::validate_username(username)
@@ -114,7 +115,8 @@ impl AppState {
                 crate::auth::hash_password_unchecked(password)
             } else {
                 hash_password(password)
-            }.map_err(|_| StateError::InvalidAdministrator)?;
+            }
+            .map_err(|_| StateError::InvalidAdministrator)?;
             learnvault_core::bootstrap_admin_with_change_required(
                 &mut database,
                 "usr-admin",
@@ -286,13 +288,31 @@ impl AppState {
         .map_err(StateError::Database)
     }
 
-    pub(crate) async fn update_credentials_and_session(&self, user_id: String, username: String, password_hash: String, token_hash: String) -> Result<(), StateError> {
+    pub(crate) async fn update_credentials_and_session(
+        &self,
+        user_id: String,
+        username: String,
+        password_hash: String,
+        token_hash: String,
+    ) -> Result<(), StateError> {
         let mut database = self.database.clone().lock_owned().await;
-        let permit = self.try_acquire_blocking_task().ok_or(StateError::Capacity)?;
+        let permit = self
+            .try_acquire_blocking_task()
+            .ok_or(StateError::Capacity)?;
         tokio::task::spawn_blocking(move || {
             let _permit = permit;
-            learnvault_core::update_credentials_and_session(&mut database, &user_id, &username, &password_hash, &token_hash, unix_now() + SESSION_LIFETIME_SECONDS)
-        }).await.map_err(StateError::Blocking)?.map_err(StateError::Database)
+            learnvault_core::update_credentials_and_session(
+                &mut database,
+                &user_id,
+                &username,
+                &password_hash,
+                &token_hash,
+                unix_now() + SESSION_LIFETIME_SECONDS,
+            )
+        })
+        .await
+        .map_err(StateError::Blocking)?
+        .map_err(StateError::Database)
     }
 }
 

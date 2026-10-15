@@ -47,7 +47,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/login", axum::routing::post(auth::login))
         .route("/api/me", get(auth::me))
         .route("/api/logout", axum::routing::post(auth::logout))
-        .route("/api/account/credentials", axum::routing::post(auth::credentials))
+        .route(
+            "/api/account/credentials",
+            axum::routing::post(auth::credentials),
+        )
         .route("/api/catalog", get(catalog::catalog))
         .route("/api/admin/catalog/rescan", post(catalog::rescan))
         .route("/api/media", get(media::media).head(media::media))

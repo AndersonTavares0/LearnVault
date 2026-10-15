@@ -133,25 +133,79 @@ struct UserResponse {
 }
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct CredentialsRequest { username: String, password: String }
+pub(crate) struct CredentialsRequest {
+    username: String,
+    password: String,
+}
 
-pub(crate) async fn credentials(State(state): State<AppState>, headers: HeaderMap, Json(request): Json<CredentialsRequest>) -> Response {
-    if !same_origin(&headers) { return csrf_failed(); }
-    let Some(token) = request_token(&headers) else { return private_no_store(StatusCode::UNAUTHORIZED.into_response()); };
-    let user = match state.session_user(hash_session_token(&token)).await {
-        Ok(Some(user)) => user, Err(StateError::Capacity) => return private_no_store(service_unavailable()), Ok(None) | Err(_) => return private_no_store(StatusCode::UNAUTHORIZED.into_response()),
-    };
-    if validate_username(&request.username).is_err() || validate_password(&request.password).is_err() {
-        return private_no_store((StatusCode::UNPROCESSABLE_ENTITY, Json(ErrorResponse { error: "invalid_credentials_format" })).into_response());
+pub(crate) async fn credentials(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<CredentialsRequest>,
+) -> Response {
+    if !same_origin(&headers) {
+        return csrf_failed();
     }
-    let Some(permit) = state.try_acquire_blocking_task() else { return private_no_store(service_unavailable()); };
+    let Some(token) = request_token(&headers) else {
+        return private_no_store(StatusCode::UNAUTHORIZED.into_response());
+    };
+    let user = match state.session_user(hash_session_token(&token)).await {
+        Ok(Some(user)) => user,
+        Err(StateError::Capacity) => return private_no_store(service_unavailable()),
+        Ok(None) | Err(_) => return private_no_store(StatusCode::UNAUTHORIZED.into_response()),
+    };
+    if validate_username(&request.username).is_err()
+        || validate_password(&request.password).is_err()
+    {
+        return private_no_store(
+            (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(ErrorResponse {
+                    error: "invalid_credentials_format",
+                }),
+            )
+                .into_response(),
+        );
+    }
+    let Some(permit) = state.try_acquire_blocking_task() else {
+        return private_no_store(service_unavailable());
+    };
     let password = request.password;
-    let Ok(hash) = tokio::task::spawn_blocking(move || { let _permit = permit; hash_password(&password) }).await.unwrap_or(Err(AuthError::PasswordHashing)) else { return private_no_store(StatusCode::INTERNAL_SERVER_ERROR.into_response()); };
-    let Ok(new_token) = generate_session_token() else { return private_no_store(StatusCode::INTERNAL_SERVER_ERROR.into_response()); };
-    if state.update_credentials_and_session(user.user_id.clone(), request.username.clone(), hash, hash_session_token(&new_token)).await.is_err() { return private_no_store(StatusCode::INTERNAL_SERVER_ERROR.into_response()); }
-    let mut response = Json(UserResponse { user_id: user.user_id, username: request.username, is_admin: user.is_admin, must_change_credentials: false }).into_response();
-    let Some(cookie) = session_cookie(&state, &new_token, false) else { return private_no_store(StatusCode::INTERNAL_SERVER_ERROR.into_response()); };
-    response.headers_mut().insert("set-cookie", cookie); private_no_store(response)
+    let Ok(hash) = tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        hash_password(&password)
+    })
+    .await
+    .unwrap_or(Err(AuthError::PasswordHashing)) else {
+        return private_no_store(StatusCode::INTERNAL_SERVER_ERROR.into_response());
+    };
+    let Ok(new_token) = generate_session_token() else {
+        return private_no_store(StatusCode::INTERNAL_SERVER_ERROR.into_response());
+    };
+    if state
+        .update_credentials_and_session(
+            user.user_id.clone(),
+            request.username.clone(),
+            hash,
+            hash_session_token(&new_token),
+        )
+        .await
+        .is_err()
+    {
+        return private_no_store(StatusCode::INTERNAL_SERVER_ERROR.into_response());
+    }
+    let mut response = Json(UserResponse {
+        user_id: user.user_id,
+        username: request.username,
+        is_admin: user.is_admin,
+        must_change_credentials: false,
+    })
+    .into_response();
+    let Some(cookie) = session_cookie(&state, &new_token, false) else {
+        return private_no_store(StatusCode::INTERNAL_SERVER_ERROR.into_response());
+    };
+    response.headers_mut().insert("set-cookie", cookie);
+    private_no_store(response)
 }
 
 #[derive(Debug, Serialize)]
@@ -164,7 +218,9 @@ pub(crate) async fn login(
     headers: HeaderMap,
     Json(request): Json<LoginRequest>,
 ) -> Response {
-    if !same_origin(&headers) { return csrf_failed(); }
+    if !same_origin(&headers) {
+        return csrf_failed();
+    }
     if !state.allow_login_attempt(&request.username).await {
         return no_store(
             (
@@ -176,9 +232,7 @@ pub(crate) async fn login(
                 .into_response(),
         );
     }
-    if validate_username(&request.username).is_err()
-        || request.password.is_empty()
-    {
+    if validate_username(&request.username).is_err() || request.password.is_empty() {
         return no_store(
             (
                 StatusCode::UNAUTHORIZED,
@@ -342,19 +396,43 @@ fn session_cookie(state: &AppState, token: &str, clear: bool) -> Option<HeaderVa
 }
 
 pub(crate) fn same_origin(headers: &HeaderMap) -> bool {
-    let host = headers.get("host").and_then(|value| value.to_str().ok()).unwrap_or("localhost");
-    let candidate = headers.get("origin").and_then(|value| value.to_str().ok()).map(str::to_owned).or_else(|| {
-        let referer = headers.get("referer").and_then(|value| value.to_str().ok())?;
-        let (scheme, remainder) = if let Some(value) = referer.strip_prefix("http://") { ("http://", value) }
-            else if let Some(value) = referer.strip_prefix("https://") { ("https://", value) } else { return None };
-        Some(format!("{scheme}{}", remainder.split('/').next()?))
-    });
-    let Some(candidate) = candidate else { return false; };
+    let host = headers
+        .get("host")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("localhost");
+    let candidate = headers
+        .get("origin")
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned)
+        .or_else(|| {
+            let referer = headers
+                .get("referer")
+                .and_then(|value| value.to_str().ok())?;
+            let (scheme, remainder) = if let Some(value) = referer.strip_prefix("http://") {
+                ("http://", value)
+            } else if let Some(value) = referer.strip_prefix("https://") {
+                ("https://", value)
+            } else {
+                return None;
+            };
+            Some(format!("{scheme}{}", remainder.split('/').next()?))
+        });
+    let Some(candidate) = candidate else {
+        return false;
+    };
     candidate == format!("http://{host}") || candidate == format!("https://{host}")
 }
 
 fn csrf_failed() -> Response {
-    no_store((StatusCode::FORBIDDEN, Json(ErrorResponse { error: "csrf_failed" })).into_response())
+    no_store(
+        (
+            StatusCode::FORBIDDEN,
+            Json(ErrorResponse {
+                error: "csrf_failed",
+            }),
+        )
+            .into_response(),
+    )
 }
 
 #[cfg(test)]

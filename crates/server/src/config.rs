@@ -114,7 +114,10 @@ where
             "--library-root" => library_root = PathBuf::from(next_value(&mut args)?),
             "--web-root" => web_root = Some(PathBuf::from(next_value(&mut args)?)),
             "--admin-username" => admin_username = Some(next_value(&mut args)?),
-            "--admin-password" => { let _ = next_value(&mut args)?; return Err(ConfigError::InsecureAdminPasswordArgument); },
+            "--admin-password" => {
+                let _ = next_value(&mut args)?;
+                return Err(ConfigError::InsecureAdminPasswordArgument);
+            }
             "--insecure-http" => cookie_secure = false,
             _ => return Err(ConfigError::UnknownArgument),
         }
