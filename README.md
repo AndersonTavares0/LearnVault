@@ -27,7 +27,7 @@ Requisitos: Go 1.26, Node.js 24.x e pnpm 11.28.5. Docker é opcional.
 pnpm install --frozen-lockfile
 pnpm run check
 pnpm run build
-go test ./...
+go -C services/go test ./...
 go -C services/go run ./cmd/learnvault
 ```
 

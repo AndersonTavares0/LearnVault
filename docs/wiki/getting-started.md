@@ -7,7 +7,7 @@ são adaptadores opcionais de deploy.
 pnpm install --frozen-lockfile
 pnpm run check
 pnpm run build
-go test ./...
+go -C services/go test ./...
 go -C services/go run ./cmd/learnvault
 ```
 
