@@ -1,19 +1,20 @@
-# Release process
+# Processo de release
 
-LearnVault uses Semantic Versioning: `MAJOR.MINOR.PATCH`.
+O LearnVault usa Semantic Versioning: `MAJOR.MINOR.PATCH`.
 
-1. Merge approved Conventional Commit changes into `main`.
-2. Release Please opens or updates a release PR with the version and `CHANGELOG.md` entries.
-3. Merge the Release Please PR; it creates the semantic tag and GitHub Release.
-4. The published-release workflow builds Linux artifacts, injects the tag version, and uploads `SHA256SUMS`.
-5. Verify the release assets and checksums before distribution.
+1. Faça merge das mudanças aprovadas com Conventional Commits na `main`.
+2. O Release Please abre ou atualiza uma PR de release com a versão e as entradas do `CHANGELOG.md`.
+3. Faça merge da PR de release; ela cria a tag semântica e o GitHub Release.
+4. O workflow de release publicado constrói os artefatos Linux, injeta a versão da tag e envia `SHA256SUMS`.
+5. Verifique os assets e os checksums antes da distribuição.
 
-Release Please is the sole owner of `CHANGELOG.md` and release notes. Do not use
-GitHub's generated notes as a second source. Use Conventional Commit prefixes such as
-`feat:`, `fix:`, `docs:`, and `chore:` so release notes and version bumps remain predictable.
-The workflow requires the `RELEASE_PLEASE_TOKEN` repository secret; keep release
-automation credentials in GitHub Actions secrets, never in tracked files. The token
-must be allowed to open release PRs and publish tags/releases so the artifact workflow
-can react to the published release.
+O Release Please é o único responsável pelo `CHANGELOG.md` e pelas notas do release. Não use
+notas geradas pelo GitHub como uma segunda fonte. Use prefixos como `feat:`, `fix:`, `docs:` e
+`chore:` com descrições em inglês para manter as versões previsíveis e o changelog consistente.
 
-Database migrations must be documented in release notes. Releases must never contain the physical course library, local databases, credentials, or cache files.
+O workflow exige o secret `RELEASE_PLEASE_TOKEN`; credenciais de automação devem ficar nos
+secrets do GitHub Actions, nunca em arquivos versionados. O token precisa abrir PRs de release
+e publicar tags/releases para que o workflow de artefatos reaja ao release publicado.
+
+Migrações de banco devem ser documentadas nas notas de release. Releases nunca devem conter
+a biblioteca física, bancos locais, credenciais ou arquivos de cache.

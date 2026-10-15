@@ -1,0 +1,34 @@
+name: Dependências ou manutenção de CI
+description: Atualize dependências ou faça um ajuste simples de CI
+title: "chore: "
+labels:
+  - maintenance
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Área
+      options:
+        - Dependências
+        - GitHub Actions
+        - CI/CD
+        - Ferramentas de desenvolvimento
+    validations:
+      required: true
+  - type: textarea
+    id: change
+    attributes:
+      label: Mudança proposta
+      description: Explique o motivo e o impacto esperado.
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validação
+      description: Liste os checks que devem continuar passando.
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: Issue opcional para mudanças pequenas. Use uma issue de feature se houver mudança de comportamento.

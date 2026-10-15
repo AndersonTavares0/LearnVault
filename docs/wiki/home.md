@@ -1,11 +1,11 @@
-# LearnVault Wiki
+# Wiki do LearnVault
 
-LearnVault is a self-hosted study library built from a Go service, SQLite, and an
-embedded SvelteKit application. It indexes an existing course folder without modifying
-the physical library.
+LearnVault é uma biblioteca de estudos autocontida formada por um serviço Go, SQLite e uma
+aplicação SvelteKit embutida. Ela indexa uma pasta de cursos existente sem modificar a
+biblioteca física.
 
-Use this Wiki for a navigable overview. The repository documentation is canonical and
-reviewed through pull requests.
+Use esta Wiki para uma visão navegável do projeto. A documentação do repositório é canônica
+e revisada por pull requests.
 
 - [[Getting-Started]]
 - [[Architecture]]

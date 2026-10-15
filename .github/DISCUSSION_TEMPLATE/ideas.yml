@@ -1,0 +1,36 @@
+title: "[Ideia] "
+labels: ["discussion", "idea"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use esta categoria para propostas de produto, prioridades e decisões de escopo.
+        Para uma dúvida técnica sem proposta definida, use a categoria Q&A.
+  - type: textarea
+    id: context
+    attributes:
+      label: Contexto
+      description: Qual problema, oportunidade ou decisão precisa ser discutida?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposta ou alternativas
+      description: Descreva a proposta e as alternativas consideradas.
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impacto esperado
+      description: Explique o impacto para usuários, produto e manutenção.
+    validations:
+      required: true
+  - type: textarea
+    id: decision
+    attributes:
+      label: Decisão esperada
+      description: Qual decisão deve sair desta Discussion?
+    validations:
+      required: true

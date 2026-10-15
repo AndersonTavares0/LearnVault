@@ -1,21 +1,24 @@
-# Documentation guide
+# Guia de documentação
 
-The repository is the canonical source for reviewed documentation. Start here when
-you are unsure where a decision or procedure belongs.
+O repositório é a fonte canônica da documentação revisada. Comece aqui quando não souber
+onde uma decisão ou procedimento deve ficar.
 
-| Area | Use it for |
+| Área | Use para |
 | --- | --- |
-| [`architecture/`](architecture/) | System boundaries, data flow, and ADRs |
-| [`governance/`](governance/) | Repository rules, ownership, and CI policy |
-| [`operations/`](operations/) | Deployment and distribution targets |
-| [`product/`](product/) | Roadmap and product direction |
-| [`releases/`](releases/) | Versioning and release procedures |
-| [`reference/`](reference/) | API and stable technical reference |
-| [`wiki/`](wiki/) | Sources and mapping for managed Wiki pages |
+| [`architecture/`](architecture/) | Limites do sistema, fluxo de dados e ADRs |
+| [`governance/`](governance/) | Regras do repositório, ownership e política de CI |
+| [`operations/`](operations/) | Deploy e alvos de distribuição |
+| [`product/`](product/) | Roadmap e direção do produto |
+| [`releases/`](releases/) | Versionamento e procedimentos de release |
+| [`reference/`](reference/) | API e referências técnicas estáveis |
+| [`wiki/`](wiki/) | Fontes e mapeamento das páginas gerenciadas da Wiki |
 
-The GitHub Wiki is a derived reading surface. Only the six pages listed in
-[`wiki/mapping.md`](wiki/mapping.md) are synchronized automatically; edit their
-repository sources, not the Wiki directly.
+A Wiki do GitHub é uma superfície derivada de leitura. Somente as seis páginas listadas em
+[`wiki/mapping.md`](wiki/mapping.md) são sincronizadas automaticamente; edite as fontes do
+repositório, não a Wiki diretamente.
 
-For contribution workflow, read [`CONTRIBUTING.md`](../CONTRIBUTING.md) and
-[`governance/overview.md`](governance/overview.md).
+Para o fluxo de contribuição, leia [`CONTRIBUTING.md`](../CONTRIBUTING.md) e o
+[guia de governança](governance/overview.md).
+
+`README.md` e `CHANGELOG.md` permanecem em inglês. A documentação editorial deste diretório
+é mantida em pt-BR, preservando comandos, identificadores e nomes técnicos.

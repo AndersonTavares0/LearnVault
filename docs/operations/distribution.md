@@ -1,43 +1,41 @@
-# Distribution and release targets
+# Distribuição e alvos de release
 
-LearnVault is a portable Go application with an embedded SvelteKit SPA. Docker is one
-deployment adapter for homelabs and servers; it is not a runtime requirement or the
-primary development model.
+O LearnVault é uma aplicação Go portátil com uma SPA SvelteKit embutida. Docker é um
+adaptador de deploy para servidores, não um requisito de runtime nem o modelo principal
+de desenvolvimento.
 
-## Release matrix
+## Matriz de releases
 
-| Target | Artifact | Purpose | Status |
+| Alvo | Artefato | Uso | Status |
 | --- | --- | --- | --- |
-| Linux | native binary | Server, terminal, and lightweight installations | Foundation build |
-| Windows | `.exe` | Direct local execution | Planned |
-| Windows | `.msi` | Managed installation and upgrades | Planned |
-| Debian/Ubuntu | `.deb` | Native package management | Planned |
-| Fedora/RHEL | `.rpm` | Native package management | Planned |
-| Linux desktop | Flatpak | Sandboxed desktop distribution | Planned |
-| OCI | Docker/Podman image | Optional homelab/server deployment | Available |
+| Linux | binário nativo | Servidor, terminal e instalações leves | Fundação disponível |
+| Windows | `.exe` | Execução local direta | Planejado |
+| Windows | `.msi` | Instalação e atualização gerenciadas | Planejado |
+| Debian/Ubuntu | `.deb` | Gerenciamento nativo de pacotes | Planejado |
+| Fedora/RHEL | `.rpm` | Gerenciamento nativo de pacotes | Planejado |
+| Desktop Linux | Flatpak | Distribuição desktop isolada | Planejado |
+| OCI | Imagem Docker/Podman | Deploy opcional em servidor | Disponível |
 
-## Build boundaries
+## Limites de build
 
-- The Go command in `cmd/learnvault` is the source of truth for executable builds.
-- The SPA is built once and embedded into that executable.
-- Package recipes belong under `deploy/packages/` when implemented.
-- Container definitions belong under `deploy/container/`, `deploy/compose/`, and
-  `deploy/quadlet/`; they must not define application behavior that the binary lacks.
-- CI should build a platform artifact independently before assembling installers.
-- Release Please owns the changelog and GitHub Release metadata. The published-release
-  workflow adds versioned binaries and a `SHA256SUMS` file to that existing release.
+- O comando Go em `cmd/learnvault` é a fonte da verdade para builds executáveis.
+- A SPA é construída uma vez e embutida no executável.
+- Receitas de pacotes ficarão em `deploy/packages/` quando forem implementadas.
+- Definições de containers ficam em `deploy/container/`, `deploy/compose/` e `deploy/quadlet/`.
+- Containers não podem definir comportamento que o binário não possui.
+- O CI deve construir cada artefato de plataforma antes de montar instaladores.
+- Release Please controla changelog e metadados do GitHub Release.
+- O workflow de publicação adiciona binários versionados e `SHA256SUMS` ao release existente.
 
-## Planned tooling
+## Ferramentas planejadas
 
-The packaging tool will be selected after the first native binary milestone. It must
-support reproducible versioned builds without making Docker a hidden prerequisite.
-Candidate layers include Go cross-compilation, a Windows installer builder, Debian/RPM
-recipes, and Flatpak metadata. The final choice will be recorded in an ADR under
-`docs/architecture/adr/`.
+A ferramenta de empacotamento será escolhida após o primeiro marco de binário nativo. Ela deve
+suportar builds versionados reproduzíveis sem tornar Docker um requisito oculto. A decisão final
+será registrada em um ADR em `docs/architecture/adr/`.
 
-## Configuration model
+## Modelo de configuração
 
-Native installations use environment variables or an adjacent configuration file for
-`DATA_DIR`, `CACHE_DIR`, `LIBRARY_DIR`, `LISTEN_ADDR`, `PORT`, and authentication bootstrap.
-The physical course library remains external and read-only on every platform. Installers
-must never copy the library into an application directory or backup.
+Instalações nativas usam variáveis de ambiente ou arquivo de configuração adjacente para
+`DATA_DIR`, `CACHE_DIR`, `LIBRARY_DIR`, `LISTEN_ADDR`, `PORT` e o bootstrap de autenticação.
+A biblioteca física permanece externa e somente leitura em todas as plataformas. Instaladores
+nunca devem copiar a biblioteca para o diretório da aplicação ou para backups.
