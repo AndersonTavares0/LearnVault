@@ -54,15 +54,19 @@ pub(crate) async fn media(
     let database = state.database.clone().lock_owned().await;
     let opened = tokio::task::spawn_blocking(move || {
         let _blocking_task = blocking_task;
-        let reference = learnvault_core::find_media_by_path(&database, &lookup_path)
-            .ok()
-            .flatten()?;
+        let Some(reference) = learnvault_core::find_media_by_path(&database, &lookup_path)? else {
+            return Ok(None);
+        };
         learnvault_core::open_media(&database, &reference.library_id, &reference.media_id, &root)
-            .ok()
+            .map(Some)
     })
     .await;
-    let Ok(Some(opened)) = opened else {
-        return StatusCode::NOT_FOUND.into_response();
+    let opened = match opened {
+        Ok(Ok(Some(opened))) => opened,
+        Ok(Ok(None)) => return StatusCode::NOT_FOUND.into_response(),
+        Ok(Err(error)) => return media_error_response(&error),
+        // A tarefa abortada é uma indisponibilidade operacional, não ausência de mídia.
+        Err(_) => return service_unavailable(),
     };
 
     let Some((start, end)) = parse_range(headers.get(header::RANGE), opened.size) else {
@@ -100,6 +104,26 @@ pub(crate) async fn media(
         );
     }
     response
+}
+
+fn media_error_response(error: &learnvault_core::Error) -> Response {
+    media_error_status(error).into_response()
+}
+
+fn media_error_status(error: &learnvault_core::Error) -> StatusCode {
+    use learnvault_core::Error;
+
+    match error {
+        Error::InvalidRelativePath { .. }
+        | Error::MediaNotFound { .. }
+        | Error::MediaUnavailable { .. }
+        | Error::MediaMissingOnDisk { .. }
+        | Error::MediaOutsideLibrary { .. }
+        | Error::MediaIsSymlink { .. }
+        | Error::MediaNotAFile { .. }
+        | Error::MediaRemoved { .. } => StatusCode::NOT_FOUND,
+        _ => StatusCode::INTERNAL_SERVER_ERROR,
+    }
 }
 
 fn parse_range(value: Option<&HeaderValue>, size: u64) -> Option<(u64, u64)> {
@@ -162,8 +186,9 @@ fn content_type(path: &str) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_range;
+    use super::{media_error_status, parse_range};
     use axum::http::HeaderValue;
+    use learnvault_core::Error;
 
     #[test]
     fn empty_files_have_a_valid_full_response_but_ranges_do_not() {
@@ -171,6 +196,22 @@ mod tests {
         assert_eq!(
             parse_range(Some(&HeaderValue::from_static("bytes=0-")), 0),
             None
+        );
+    }
+
+    #[test]
+    fn media_errors_only_map_legitimate_absence_to_not_found() {
+        assert_eq!(
+            media_error_status(&Error::MediaMissingOnDisk {
+                media_id: "media-1".to_owned(),
+            }),
+            axum::http::StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            media_error_status(&Error::LibraryRootMissing {
+                path: "missing-library".into(),
+            }),
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR
         );
     }
 }
