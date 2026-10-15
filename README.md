@@ -28,7 +28,7 @@ pnpm install --frozen-lockfile
 pnpm run check
 pnpm run build
 go test ./...
-go run ./cmd/learnvault
+go -C services/go run ./cmd/learnvault
 ```
 
 A SPA é construída a partir de `web/src`, gravada em `cmd/learnvault/web/build` e embutida no

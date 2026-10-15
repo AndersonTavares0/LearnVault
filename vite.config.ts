@@ -11,8 +11,8 @@ export default defineConfig({
 			},
 			adapter: adapter({
 				fallback: '200.html',
-				pages: 'cmd/learnvault/web/build',
-				assets: 'cmd/learnvault/web/build'
+				pages: 'services/go/cmd/learnvault/web/build',
+				assets: 'services/go/cmd/learnvault/web/build'
 			})
 		})
 	]

@@ -320,7 +320,7 @@ async fn changed_shell_is_not_served_with_the_startup_csp() {
 
 #[tokio::test]
 async fn csp_hashes_the_downloaded_canonical_spa_shell_when_available() {
-    let canonical_root = std::path::Path::new("cmd/learnvault/web/build");
+    let canonical_root = std::path::Path::new("services/go/cmd/learnvault/web/build");
     let shell_path = canonical_root.join("200.html");
     if !shell_path.is_file() {
         return;

@@ -20,7 +20,7 @@ updates:
           - minor
           - patch
   - package-ecosystem: gomod
-    directory: /
+    directory: /services/go
     schedule:
       interval: weekly
       day: wednesday

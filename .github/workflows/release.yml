@@ -27,7 +27,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run check
       - run: pnpm run build
-      - run: go test ./...
+      - run: go -C services/go test ./...
       - name: Build Linux artifacts
         shell: bash
         run: |
@@ -35,7 +35,7 @@ jobs:
           mkdir -p dist
           tag="${{ github.event.release.tag_name }}"
           for arch in amd64 arm64; do
-             GOOS=linux GOARCH="$arch" CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=$tag" -o "dist/learnvault-linux-$arch" ./cmd/learnvault
+             GOOS=linux GOARCH="$arch" CGO_ENABLED=0 go -C services/go build -trimpath -ldflags="-s -w -X main.version=$tag" -o "../dist/learnvault-linux-$arch" ./cmd/learnvault
              tar -czf "dist/learnvault-linux-$arch.tar.gz" -C dist "learnvault-linux-$arch"
           done
           sha256sum dist/*.tar.gz > dist/SHA256SUMS

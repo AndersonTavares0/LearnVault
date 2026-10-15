@@ -24,15 +24,15 @@ jobs:
         with:
           go-version: '1.26.x'
           cache: true
-          cache-dependency-path: go.sum
+          cache-dependency-path: services/go/go.sum
       - uses: actions/download-artifact@v8
         with:
           name: spa-build
-          path: cmd/learnvault/web/build
+          path: services/go/cmd/learnvault/web/build
       - shell: bash
-        run: test -z "$(gofmt -l .)"
-      - run: go test -race ./...
-      - run: go vet ./...
+        run: test -z "$(gofmt -l services/go)"
+      - run: go -C services/go test -race ./...
+      - run: go -C services/go vet ./...
 
   web:
     name: SPA checks
@@ -52,7 +52,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: spa-build
-          path: cmd/learnvault/web/build
+          path: services/go/cmd/learnvault/web/build
           if-no-files-found: error
           retention-days: 1
           compression-level: 1
@@ -84,9 +84,9 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: spa-build
-          path: cmd/learnvault/web/build
+          path: services/go/cmd/learnvault/web/build
       - name: Verify the canonical SPA shell
-        run: test -f cmd/learnvault/web/build/200.html
+        run: test -f services/go/cmd/learnvault/web/build/200.html
       - name: Install Rust toolchain
         run: rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --component llvm-tools-preview
       - name: Cache Cargo registry and target
