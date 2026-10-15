@@ -3,7 +3,7 @@
 [![CI](https://github.com/AndersonTavares0/LearnVault/actions/workflows/ci.yml/badge.svg)](https://github.com/AndersonTavares0/LearnVault/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/AndersonTavares0/LearnVault?display_name=tag)](https://github.com/AndersonTavares0/LearnVault/releases)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)](https://go.dev/)
+[![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![Node.js](https://img.shields.io/badge/Node.js-24.x-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![pnpm](https://img.shields.io/badge/pnpm-11.28.5-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
 [![SvelteKit](https://img.shields.io/badge/SvelteKit-2-FF3E00?logo=svelte&logoColor=white)](https://svelte.dev/docs/kit)
@@ -65,7 +65,7 @@ Use the same toolchain across development, CI, container builds, and releases:
 
 | Area | Standard |
 | --- | --- |
-| Backend | Go 1.25; CI and release builds pin Go 1.25.14 |
+| Backend | Go 1.26; CI and release builds track the Go 1.26 line |
 | Frontend runtime | Node.js 24.x with pnpm 11.28.5 |
 | Frontend | SvelteKit 2, Svelte 5, Vite 7, TypeScript 5 |
 | Dependency installation | `pnpm-lock.yaml` is authoritative; use `pnpm install --frozen-lockfile` in CI |
@@ -79,7 +79,7 @@ toolchain versions aligned with this table and propose upgrades through a review
 
 ## Development
 
-Requires Go 1.25, Node.js 24.x, and pnpm 11.28.5 for local development. Docker is optional.
+Requires Go 1.26, Node.js 24.x, and pnpm 11.28.5 for local development. Docker is optional.
 
 ```sh
 pnpm install --frozen-lockfile

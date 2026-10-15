@@ -1,6 +1,6 @@
 # Getting started
 
-LearnVault requires Go 1.25+ and Node.js 24+ for native development. Docker and Podman
+LearnVault requires Go 1.26+ and Node.js 24+ for native development. Docker and Podman
 are optional deployment adapters.
 
 ```sh
