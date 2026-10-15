@@ -1,5 +1,5 @@
-name: Feature request
-description: Propose a focused improvement
+name: Solicitação de feature
+description: Proponha uma melhoria de comportamento ou produto
 title: "feat: "
 labels:
   - enhancement
@@ -7,17 +7,29 @@ body:
   - type: textarea
     id: problem
     attributes:
-      label: Problem to solve
-      description: What user need or limitation does this address?
+      label: Problema a resolver
+      description: Qual necessidade ou limitação do usuário será resolvida?
     validations:
       required: true
   - type: textarea
     id: proposal
     attributes:
-      label: Proposed behavior
+      label: Comportamento proposto
     validations:
       required: true
   - type: textarea
     id: alternatives
     attributes:
-      label: Alternatives considered
+      label: Alternativas consideradas
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Critérios de aceite
+      description: Como saberemos que a mudança está concluída?
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: Features exigem uma issue antes da implementação. Use Discussions para dúvidas de design ainda não resolvidas.

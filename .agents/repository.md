@@ -25,3 +25,10 @@ that area.
 ## GitHub governance
 
 - Follow `.agents/policies/governance.md` and `.agents/checklists/pull-request.md`.
+
+## Canonical documentation
+
+- Read `docs/README.md` for navigation and `docs/governance/overview.md` for repository rules.
+- Use GitHub Discussions for unresolved questions; use Issues for features and behavior changes.
+- `README.md` and `CHANGELOG.md` remain in English. Wiki and editorial documentation are in pt-BR.
+- Conventional Commit prefixes and descriptions remain in English for Release Please.

@@ -1,23 +1,27 @@
-# Architecture
+# Arquitetura
 
-LearnVault is a single portable service. It can run as a native executable or through
-an optional container adapter:
+O LearnVault é um serviço portátil único. Pode rodar como executável nativo ou por meio de
+um adaptador opcional de container:
 
 ```text
-Caddy (local HTTPS)
-       |
-       v
-Go HTTP service -- SQLite (/data)
-       |-- cache (/cache)
-       `-- course library (/library:ro)
+Proxy HTTPS local
+        |
+        v
+Serviço HTTP Go -- SQLite (/data)
+        |-- cache (/cache)
+        `-- biblioteca de cursos (/library:ro)
 ```
 
-The SvelteKit application is built as a static SPA and embedded into the Go binary. The Go service owns authentication, authorization, catalog persistence, and authenticated media delivery.
+A aplicação SvelteKit é construída como SPA estática e embutida no binário Go. O serviço Go
+é responsável por autenticação, autorização, persistência do catálogo e entrega autenticada
+de mídia.
 
-The physical library is external and read-only. SQLite contains metadata and personal study state, not course media. Cache and derived media are disposable. Admin actions are explicit; the application does not silently rescan at startup.
+A biblioteca física é externa e somente leitura. O SQLite contém metadados e estado pessoal
+de estudo, não mídia de cursos. Cache e mídia derivada são descartáveis. Ações administrativas
+são explícitas; a aplicação não faz novo scan silenciosamente na inicialização.
 
-Rootless Podman with Quadlet and Docker Compose are deployment adapters for the homelab,
-not application dependencies. Native desktop and server builds remain first-class.
-Durable application data and disposable cache use separate locations in every adapter.
+Podman rootless com Quadlet e Docker Compose são adaptadores de deploy, não dependências da
+aplicação. Builds nativos para desktop e servidor continuam sendo prioridades. Dados duráveis
+e cache descartável usam locais separados em todos os adaptadores.
 
-See [distribution](../operations/distribution.md) for executable and package targets.
+Consulte [distribuição](../operations/distribution.md) para executáveis e pacotes.

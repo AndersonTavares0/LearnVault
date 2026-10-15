@@ -1,98 +1,94 @@
-# Repository governance
+# Governança do repositório
 
-## Required workflow
+## Fluxo obrigatório
 
-1. Open an issue using the Bug Report or Feature Request form before non-trivial work.
-2. Create a focused branch from `main`.
-3. Open a pull request using the repository template.
-4. Pass the required CI checks and obtain the required review.
-5. Resolve all conversations and squash-merge through GitHub.
+1. Abra uma Discussion quando ainda houver dúvida ou alternativas de design.
+2. Abra uma issue para uma feature ou mudança de comportamento.
+3. Para typo, dependência ou ajuste simples de CI, a issue é opcional.
+4. Crie uma branch focada a partir de `main`.
+5. Abra uma pull request usando o template do repositório.
+6. Passe pelos checks obrigatórios e obtenha a revisão necessária.
+7. Resolva as conversas e faça squash merge pelo GitHub.
 
-Direct pushes, force-pushes, and branch deletion on `main` are not allowed. Branch
-protection is configured on GitHub and this document records the project rule.
+Push direto, force-push e exclusão de branch em `main` não são permitidos. A proteção da
+branch é configurada no GitHub; este documento registra a regra do projeto.
 
-The collaboration path is `Issue → branch → pull request → review → squash merge`.
-Private forks are unavailable for this user-owned private repository, so collaborators
-with Write access work on branches in the repository. `.github/CODEOWNERS` documents
-ownership, but CODEOWNER approval is not required for merge.
+O caminho de colaboração é:
 
-## Template policy
+```text
+Discussion (se necessário) → issue (quando necessário) → branch → PR → revisão → squash merge
+```
 
-- Blank issues are disabled.
-- Bugs use `.github/ISSUE_TEMPLATE/bug.yml`.
-- Features use `.github/ISSUE_TEMPLATE/feature.yml`.
-- Security reports use the private security policy, never a public issue.
-- Pull requests use `.github/pull_request_template.md`.
+Forks não fazem parte do fluxo atual. Colaboradores com permissão de escrita trabalham em
+branches dentro deste repositório. O `.github/CODEOWNERS` documenta ownership, mas não é
+uma aprovação obrigatória para merge.
 
-## Source organization
+Cada issue deve ter uma pessoa responsável, definida pelo `assignee`.
 
-Keep the root limited to tool configuration, project policy, and deployment entrypoints.
-Application code belongs in these directories:
+## Política de templates
 
-| Path | Responsibility |
+- Issues em branco estão desabilitadas.
+- Bugs usam `.github/ISSUE_TEMPLATE/bug.yml`.
+- Features usam `.github/ISSUE_TEMPLATE/feature.yml`.
+- Documentação e typos usam `.github/ISSUE_TEMPLATE/documentation.yml`.
+- Dependências e CI usam `.github/ISSUE_TEMPLATE/maintenance.yml`.
+- Vulnerabilidades usam a política privada de segurança, nunca uma issue pública.
+- Pull requests usam `.github/pull_request_template.md`.
+- Dúvidas e decisões abertas devem usar GitHub Discussions.
+
+## Organização do código
+
+Mantenha a raiz limitada a configurações de ferramentas, políticas do projeto e pontos de
+entrada de deploy. O código da aplicação pertence a estas pastas:
+
+| Caminho | Responsabilidade |
 | --- | --- |
-| `cmd/learnvault/` | Go executable, tests, and embedded SPA build output |
-| `internal/` | Private backend packages and migrations |
-| `web/src/` | SvelteKit source |
-| `testdata/` | Small synthetic fixtures only |
-| `deploy/container/` | OCI image definition |
-| `deploy/compose/` | Local Docker Compose stack and environment example |
-| `deploy/quadlet/` | Rootless Podman systemd unit |
-| `scripts/` | Local verification scripts |
-| `docs/` | Versioned architecture, governance, operations, product, release, and Wiki documentation |
+| `cmd/learnvault/` | Executável Go, testes e saída embutida da SPA |
+| `internal/` | Pacotes internos, backend e migrações |
+| `web/src/` | Código-fonte SvelteKit |
+| `testdata/` | Fixtures sintéticas pequenas |
+| `deploy/container/` | Definição da imagem OCI |
+| `deploy/compose/` | Stack Docker Compose e exemplo de ambiente |
+| `deploy/quadlet/` | Unidade systemd para Podman rootless |
+| `scripts/` | Scripts de verificação local |
+| `docs/` | Arquitetura, governança, operações, produto, releases e Wiki |
 
-Generated output (`cmd/learnvault/web/build`, `.svelte-kit`, `node_modules`, local
-data/cache) must stay ignored and must not be committed.
+Saída gerada (`cmd/learnvault/web/build`, `.svelte-kit`, `node_modules` e dados/cache
+locais) deve permanecer ignorada e não pode ser commitada.
 
-Documentation is grouped by responsibility: `architecture/`, `governance/`,
-`operations/`, `product/`, `releases/`, `reference/`, and `wiki/`. The index at
-`docs/README.md` explains where new material belongs. The repository is canonical;
-only the pages declared in `wiki/mapping.md` are mirrored to GitHub Wiki.
+## Limites do repositório
 
-## Repository boundaries
+- Nunca faça commit de mídia de cursos, credenciais, endereços privados, bancos de dados ou saída gerada.
+- Mudanças de segurança, armazenamento, deploy, migrações ou arquitetura de UX exigem revisão explícita.
+- Pesquisa clean-room pode orientar comportamento, mas não código, assets, marca, texto ou layout copiado.
+- Docker e Podman são adaptadores opcionais; o comportamento deve continuar testável sem runtime de container.
 
-- Never commit course media, credentials, private homelab details, databases, or generated output.
-- `/mnt/cursos` is external read-only data and must not be accessed by automated tests.
-- Changes affecting security, storage, deployment, migrations, or UX architecture require explicit review.
-- Clean-room research may inform product behavior, but not copied code, assets, branding, text, or layouts.
-- Docker and Podman are optional deployment adapters; application behavior must remain
-  testable and buildable without a container runtime.
+## Fontes documentais
 
-## Ownership and releases
+O repositório é a fonte canônica. O índice em [`docs/README.md`](../README.md) explica onde
+cada material deve ser colocado. A Wiki é uma superfície derivada; apenas as páginas em
+`docs/wiki/mapping.md` são sincronizadas automaticamente.
 
-`.github/CODEOWNERS` documents review ownership. Releases are tag-driven through the release
-workflow, with `CHANGELOG.md` and `docs/releases/process.md` updated as part of the change.
+`README.md` e `CHANGELOG.md` permanecem em inglês. Governança, templates, Wiki e documentação
+editorial permanecem em pt-BR. Prefixos e descrições de Conventional Commits permanecem em
+inglês para manter o Release Please consistente.
 
-## Wiki synchronization
+## Releases e CI
 
-`Wiki sync` runs only after mapped documentation reaches `main`, or by an explicit
-manual dispatch. It has independent path filters and is not a required CI check. The
-workflow writes only managed pages in the Wiki Git repository, commits only a real diff,
-and does not react to Wiki (`gollum`) events, preventing sync loops. Manual edits to a
-managed page are intentionally replaced by the next canonical documentation change.
+O Release Please controla versão, changelog, tags e metadados do GitHub Release. A publicação
+de artefatos acontece em workflow separado.
 
-## CI efficiency
+Os três nomes de jobs obrigatórios permanecem estáveis: `SPA checks`, `Go tests and vet` e
+`Container build`. O CI roda em pull requests, cancela execuções obsoletas, constrói a SPA uma
+vez para o embed do Go, usa cache e mantém timeouts curtos.
 
-The three required CI job names remain stable: `SPA checks`, `Go tests and vet`, and
-`Container build`. CI always runs for pull requests so a required check is never skipped.
-It cancels obsolete runs for the same branch, builds the SPA once for the Go embed step,
-uses dependency/build caches, applies short timeouts, and retains the generated SPA
-artifact for one day. Container build remains an independent deployment smoke test with
-its own BuildKit cache. The non-required Wiki workflow uses path filters because it only
-updates derived documentation.
+O Wiki sync não é check obrigatório: ele roda após mudanças mapeadas chegarem à `main` ou por
+execução manual, escreve somente páginas gerenciadas e não reage a eventos da própria Wiki.
 
-## Dependency updates
+## Dependências e testes
 
-Dependabot groups compatible pnpm-managed frontend, Go-module, and GitHub Actions patch/minor updates;
-major updates remain individual so peer incompatibilities are visible. Updates are
-staggered weekly (Actions monthly), with a small open-PR cap and cooldown for routine
-updates. Security alerts remain eligible for immediate updates and require compatibility
-review and current required checks before merging.
+O Dependabot agrupa atualizações compatíveis do frontend, módulos Go e Actions. Atualizações
+major permanecem individuais e exigem revisão de compatibilidade e checks atuais.
 
-## Test efficiency
-
-Tests keep real Argon2id coverage in storage and end-to-end authentication tests.
-HTTP route tests use an in-memory store only when verifying response mapping, method
-handling, or unavailable dependencies. This avoids repeating password hashing and
-SQLite setup without weakening production authentication. Fixtures remain isolated
-and must not read the external course library.
+Os testes mantêm cobertura real de Argon2id e autenticação. Fixtures são isoladas e não acessam
+dados externos.

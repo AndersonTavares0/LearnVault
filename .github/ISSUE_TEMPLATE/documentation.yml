@@ -1,0 +1,22 @@
+name: Documentação ou typo
+description: Corrija documentação, texto ou typo sem mudança de comportamento
+title: "docs: "
+labels:
+  - documentation
+body:
+  - type: textarea
+    id: location
+    attributes:
+      label: Local da documentação
+      description: Informe o arquivo, página ou seção afetada.
+    validations:
+      required: true
+  - type: textarea
+    id: change
+    attributes:
+      label: Correção proposta
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: Issue opcional. Para dúvidas ou alternativas, use Discussions.
