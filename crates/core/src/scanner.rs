@@ -209,7 +209,7 @@ fn is_ignored_directory(name: &str) -> bool {
     IGNORED_DIRECTORY_NAMES.contains(&name.as_str()) || name.starts_with(IGNORED_DIRECTORY_PREFIX)
 }
 
-fn mtime_seconds(metadata: &std::fs::Metadata) -> i64 {
+pub(crate) fn mtime_seconds(metadata: &std::fs::Metadata) -> i64 {
     metadata
         .modified()
         .ok()
