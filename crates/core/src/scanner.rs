@@ -182,7 +182,12 @@ pub fn scan(root: &Path) -> Result<ScanOutcome> {
     })
 }
 
-fn classify(name: &str, size: u64) -> MediaKind {
+/// Classifica um arquivo a partir do nome e do tamanho em bytes.
+///
+/// É a única fonte da verdade da classificação: o scanner usa durante a varredura e o
+/// catálogo reusa sobre os dados persistidos, para que o mesmo arquivo nunca apareça com
+/// tipos diferentes conforme a camada que o apresenta.
+pub fn classify(name: &str, size: u64) -> MediaKind {
     match extension(name).as_deref() {
         Some(extension) if SUBTITLE_EXTENSIONS.contains(&extension) => MediaKind::Subtitle,
         Some("ts") if size < MIN_TS_MEDIA_SIZE => MediaKind::Material,

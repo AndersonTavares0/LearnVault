@@ -63,6 +63,16 @@ pub fn relative_path_key(path: &str, mode: KeyMode) -> Result<String> {
     })
 }
 
+/// Indica se uma chave de caminho está na área indicada — a própria área ou algo dentro
+/// dela.
+///
+/// A comparação respeita a fronteira de componente: `A` cobre `A` e `A/x`, mas não `AB`.
+/// É usada pela política de rescan e pelo catálogo ao tratar áreas não verificadas.
+pub(crate) fn is_under_area(key: &str, area: &str) -> bool {
+    key == area
+        || (key.len() > area.len() && key.starts_with(area) && key.as_bytes()[area.len()] == b'/')
+}
+
 /// Resolve um caminho relativo dentro da raiz da biblioteca.
 ///
 /// A função confina o resultado por análise lexical e recusa caminhos absolutos, com
