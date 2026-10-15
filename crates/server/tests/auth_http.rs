@@ -55,12 +55,9 @@ async fn login_me_and_logout_use_an_expiring_secure_cookie() {
     assert_eq!(login.headers()["x-content-type-options"], "nosniff");
     assert_eq!(login.headers()["x-frame-options"], "DENY");
     assert_eq!(login.headers()["referrer-policy"], "no-referrer");
-    assert!(
-        login.headers()["content-security-policy"]
-            .to_str()
-            .unwrap()
-            .contains("frame-ancestors")
-    );
+    let csp = login.headers()["content-security-policy"].to_str().unwrap();
+    assert!(csp.contains("frame-ancestors"));
+    assert!(csp.contains("script-src 'self'; style-src"));
     let cookie = login.headers()["set-cookie"].to_str().unwrap().to_owned();
     assert!(cookie.starts_with("learnvault_session="));
     assert!(cookie.contains("HttpOnly"));

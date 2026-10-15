@@ -1,6 +1,8 @@
 use std::{
     fs::File,
     path::{Component, Path, PathBuf},
+    pin::Pin,
+    task::{Context, Poll},
 };
 
 use axum::{
@@ -9,7 +11,10 @@ use axum::{
     http::{StatusCode, Uri, header},
     response::{IntoResponse, Response},
 };
-use tokio::io::AsyncReadExt;
+use tokio::{
+    io::{AsyncRead, AsyncReadExt, ReadBuf},
+    sync::OwnedSemaphorePermit,
+};
 use tokio_util::io::ReaderStream;
 
 use crate::AppState;
@@ -71,8 +76,9 @@ fn requested_path(root: &Path, path: &str) -> Option<PathBuf> {
 
 /// Abre e valida o arquivo antes de transmitir *o mesmo handle*.
 ///
-/// A raiz web configurada é canonicalizada na inicialização e é um limite de deploy confiável e
-/// somente leitura. Cada requisição rejeita symlinks (e reparse points no Windows) no caminho,
+/// A raiz web configurada (`--web-root`) é canonicalizada na inicialização e deve permanecer um
+/// limite de deploy confiável e somente leitura. Cada requisição rejeita symlinks (e reparse
+/// points no Windows) no caminho,
 /// então valida o handle aberto. Isso impede escapes óbvios por links e não reabre o caminho após
 /// a validação. APIs seguras e portáveis de Rust não oferecem contenção atômica contra um processo
 /// hostil substituindo diretórios concorrentemente; portanto, o deploy não pode conceder escrita
@@ -83,6 +89,9 @@ async fn open_file(
     target: &Path,
     shell: bool,
 ) -> Result<Response, FileError> {
+    let Some(stream_permit) = state.try_acquire_spa_stream() else {
+        return Err(FileError::Busy);
+    };
     let Some(blocking_task) = state.try_acquire_blocking_task() else {
         return Err(FileError::Busy);
     };
@@ -96,7 +105,10 @@ async fn open_file(
     .await
     .map_err(|_| FileError::Busy)??;
 
-    let stream = ReaderStream::new(tokio::fs::File::from_std(opened.file).take(opened.size));
+    let stream = ReaderStream::new(PermitReader {
+        reader: tokio::fs::File::from_std(opened.file).take(opened.size),
+        _permit: stream_permit,
+    });
     Ok(file_response(
         Body::from_stream(stream),
         &root,
@@ -104,6 +116,22 @@ async fn open_file(
         shell,
         opened.size,
     ))
+}
+
+/// Mantém a reserva de streaming viva enquanto `ReaderStream` ainda puder ler o corpo.
+struct PermitReader<R> {
+    reader: R,
+    _permit: OwnedSemaphorePermit,
+}
+
+impl<R: AsyncRead + Unpin> AsyncRead for PermitReader<R> {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut self.get_mut().reader).poll_read(cx, buf)
+    }
 }
 
 struct OpenedFile {

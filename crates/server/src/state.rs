@@ -1,10 +1,14 @@
 use std::{
     collections::HashMap,
+    fs,
+    path::Path,
     sync::Arc,
     time::{Duration, Instant},
 };
 
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use learnvault_core::{AuthSession, AuthUser, Database, Error as CoreError};
+use sha2::{Digest, Sha256};
 use tokio::sync::{Mutex, OwnedSemaphorePermit, Semaphore};
 
 use crate::{Config, auth::hash_password};
@@ -13,6 +17,8 @@ const SESSION_LIFETIME_SECONDS: i64 = 12 * 60 * 60;
 const MAX_BLOCKING_TASKS: usize = 4;
 const LOGIN_ATTEMPT_WINDOW: Duration = Duration::from_secs(60);
 const MAX_LOGIN_ATTEMPT_BUCKETS: usize = 1024;
+const MAX_SPA_SHELL_SIZE: u64 = 16 * 1024 * 1024;
+const MAX_SPA_STREAMS: usize = 4;
 
 /// Estado compartilhado mínimo da aplicação HTTP.
 #[derive(Clone, Debug)]
@@ -22,7 +28,9 @@ pub struct AppState {
     pub(crate) database: Arc<Mutex<Database>>,
     pub(crate) login_attempts: Arc<Mutex<HashMap<String, (u32, Instant)>>>,
     pub(crate) rescan_lock: Arc<Mutex<()>>,
+    pub(crate) inline_script_hashes: Arc<[String]>,
     blocking_tasks: Arc<Semaphore>,
+    spa_streams: Arc<Semaphore>,
 }
 
 /// Erro de inicialização seguro para logs do servidor.
@@ -53,18 +61,21 @@ impl AppState {
     pub fn new(config: Config) -> Self {
         let database = Database::open_in_memory().expect("in-memory database must initialize");
         Self {
+            inline_script_hashes: shell_inline_script_hashes(config.web_root.as_deref()).into(),
             config,
             database: Arc::new(Mutex::new(database)),
             login_attempts: Arc::new(Mutex::new(HashMap::new())),
             rescan_lock: Arc::new(Mutex::new(())),
             blocking_tasks: Arc::new(Semaphore::new(MAX_BLOCKING_TASKS)),
+            spa_streams: Arc::new(Semaphore::new(MAX_SPA_STREAMS)),
         }
     }
 
     /// Abre o banco e executa o bootstrap administrativo fora das threads Tokio.
     pub async fn initialize(config: Config) -> Result<Self, StateError> {
         let setup = config.clone();
-        let (database, _) = tokio::task::spawn_blocking(move || {
+        let (database, inline_script_hashes) = tokio::task::spawn_blocking(move || {
+            let inline_script_hashes = shell_inline_script_hashes(setup.web_root.as_deref());
             if let Some(parent) = setup
                 .database_path
                 .parent()
@@ -76,7 +87,7 @@ impl AppState {
                 Database::open(&setup.database_path).map_err(StateError::Database)?;
             let existing = learnvault_core::has_admin(&database).map_err(StateError::Database)?;
             if existing {
-                return Ok((database, false));
+                return Ok((database, inline_script_hashes));
             }
             let (Some(username), Some(password)) = (
                 setup.admin_username.as_deref(),
@@ -90,7 +101,7 @@ impl AppState {
                 .map_err(|_| StateError::InvalidAdministrator)?;
             let password_hash =
                 hash_password(password).map_err(|_| StateError::InvalidAdministrator)?;
-            let created = learnvault_core::bootstrap_admin(
+            learnvault_core::bootstrap_admin(
                 &mut database,
                 "usr-admin",
                 username,
@@ -98,7 +109,7 @@ impl AppState {
                 unix_now(),
             )
             .map_err(StateError::Database)?;
-            Ok((database, created))
+            Ok((database, inline_script_hashes))
         })
         .await
         .map_err(StateError::Blocking)??;
@@ -107,7 +118,9 @@ impl AppState {
             database: Arc::new(Mutex::new(database)),
             login_attempts: Arc::new(Mutex::new(HashMap::new())),
             rescan_lock: Arc::new(Mutex::new(())),
+            inline_script_hashes: inline_script_hashes.into(),
             blocking_tasks: Arc::new(Semaphore::new(MAX_BLOCKING_TASKS)),
+            spa_streams: Arc::new(Semaphore::new(MAX_SPA_STREAMS)),
         })
     }
 
@@ -117,6 +130,11 @@ impl AppState {
     /// contabilizado até que o trabalho efetivamente termine.
     pub fn try_acquire_blocking_task(&self) -> Option<OwnedSemaphorePermit> {
         self.blocking_tasks.clone().try_acquire_owned().ok()
+    }
+
+    /// Reserva uma conexão de streaming da SPA até que o corpo HTTP seja consumido ou descartado.
+    pub(crate) fn try_acquire_spa_stream(&self) -> Option<OwnedSemaphorePermit> {
+        self.spa_streams.clone().try_acquire_owned().ok()
     }
 
     pub(crate) async fn allow_login_attempt(&self, username: &str) -> bool {
@@ -211,6 +229,110 @@ impl AppState {
         .map_err(StateError::Blocking)?
         .map_err(StateError::Database)
     }
+}
+
+/// Deriva hashes CSP apenas do shell que pode ser servido pela raiz configurada. Falhas de I/O
+/// ou um shell ausente deixam a política sem hashes, preservando o fallback HTTP sem revelar
+/// caminhos locais.
+fn shell_inline_script_hashes(web_root: Option<&Path>) -> Vec<String> {
+    let Some(root) = web_root else {
+        return Vec::new();
+    };
+    let shell = root.join("200.html");
+    let metadata = match fs::symlink_metadata(&shell) {
+        Ok(metadata) if metadata.is_file() && !metadata.file_type().is_symlink() => metadata,
+        _ => return Vec::new(),
+    };
+    if metadata.len() > MAX_SPA_SHELL_SIZE {
+        return Vec::new();
+    }
+    let source = match fs::read(shell) {
+        Ok(source) => source,
+        Err(_) => return Vec::new(),
+    };
+    inline_scripts(&source)
+        .into_iter()
+        .map(|script| format!("sha256-{}", STANDARD.encode(Sha256::digest(script))))
+        .collect()
+}
+
+fn inline_scripts(source: &[u8]) -> Vec<&[u8]> {
+    let mut scripts = Vec::new();
+    let mut offset = 0;
+    while let Some(start) = find_ascii_case_insensitive(source, b"<script", offset) {
+        let name_end = start + b"<script".len();
+        let valid_name_end = source
+            .get(name_end)
+            .is_some_and(|byte| *byte == b'>' || *byte == b'/' || byte.is_ascii_whitespace());
+        if !valid_name_end {
+            offset = name_end;
+            continue;
+        }
+        let Some(open_end) = tag_end(source, name_end) else {
+            break;
+        };
+        let Some(close_start) = find_ascii_case_insensitive(source, b"</script", open_end + 1)
+        else {
+            break;
+        };
+        let Some(close_end) = tag_end(source, close_start + b"</script".len()) else {
+            break;
+        };
+        if !has_src_attribute(&source[name_end..=open_end]) {
+            scripts.push(&source[open_end + 1..close_start]);
+        }
+        offset = close_end + 1;
+    }
+    scripts
+}
+
+fn find_ascii_case_insensitive(source: &[u8], needle: &[u8], offset: usize) -> Option<usize> {
+    source[offset..]
+        .windows(needle.len())
+        .position(|window| window.eq_ignore_ascii_case(needle))
+        .map(|index| offset + index)
+}
+
+fn tag_end(source: &[u8], mut offset: usize) -> Option<usize> {
+    let mut quote = None;
+    while let Some(&byte) = source.get(offset) {
+        match (quote, byte) {
+            (Some(delimiter), byte) if byte == delimiter => quote = None,
+            (None, b'\'' | b'\"') => quote = Some(byte),
+            (None, b'>') => return Some(offset),
+            _ => {}
+        }
+        offset += 1;
+    }
+    None
+}
+
+fn has_src_attribute(tag: &[u8]) -> bool {
+    let mut offset = 0;
+    while offset < tag.len() {
+        while matches!(tag.get(offset), Some(byte) if byte.is_ascii_whitespace() || *byte == b'/') {
+            offset += 1;
+        }
+        let start = offset;
+        while matches!(tag.get(offset), Some(byte) if byte.is_ascii_alphanumeric() || *byte == b'-' || *byte == b':')
+        {
+            offset += 1;
+        }
+        if start == offset {
+            offset += 1;
+            continue;
+        }
+        if tag[start..offset].eq_ignore_ascii_case(b"src") {
+            return true;
+        }
+        while tag
+            .get(offset)
+            .is_some_and(|byte| !byte.is_ascii_whitespace() && *byte != b'>')
+        {
+            offset += 1;
+        }
+    }
+    false
 }
 
 fn unix_now() -> i64 {

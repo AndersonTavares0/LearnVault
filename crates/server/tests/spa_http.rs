@@ -10,8 +10,7 @@ use std::fs;
 use tempfile::TempDir;
 use tower::ServiceExt;
 
-// Fixture copied from the inline bootstrap in cmd/learnvault/web/build/200.html. The asset
-// names and version are intentionally fixed so its CSP hash remains deterministic.
+// A representative SvelteKit bootstrap fixture.
 const SPA_BOOTSTRAP: &str = r#"
 				{
 					__sveltekit_w7zoc7 = {
@@ -29,6 +28,7 @@ const SPA_BOOTSTRAP: &str = r#"
 				}
 			"#;
 const CSS: &str = "body { color: rebeccapurple; }";
+const ALTERNATE_BOOTSTRAP: &str = "window.learnvaultAlternateShell = true;";
 const MAX_SPA_FILE_SIZE: u64 = 16 * 1024 * 1024;
 
 fn shell() -> String {
@@ -189,6 +189,63 @@ async fn extensionless_spa_routes_fall_back_to_the_shell_without_caching_it() {
 }
 
 #[tokio::test]
+async fn csp_hashes_the_inline_scripts_from_the_configured_shell() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = web_root(&temp);
+    fs::write(
+        root.join("200.html"),
+        format!(
+            "<html><body><script>{ALTERNATE_BOOTSTRAP}</script><script src=\"/app.js\"></script></body></html>"
+        ),
+    )
+    .unwrap();
+    let response = app(&temp, &root)
+        .await
+        .oneshot(Request::get("/catalog/rust").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    let csp = response.headers()["content-security-policy"]
+        .to_str()
+        .unwrap();
+    let alternate_hash = STANDARD.encode(Sha256::digest(ALTERNATE_BOOTSTRAP.as_bytes()));
+    let original_hash = STANDARD.encode(Sha256::digest(SPA_BOOTSTRAP.as_bytes()));
+    assert!(csp.contains(&format!("script-src 'self' 'sha256-{alternate_hash}'")));
+    assert!(!csp.contains(&original_hash));
+    assert!(!csp.contains("app.js"));
+    assert!(!csp.contains("'unsafe-inline'"));
+    assert!(!csp.contains("'unsafe-eval'"));
+}
+
+#[tokio::test]
+async fn csp_hashes_the_downloaded_canonical_spa_shell_when_available() {
+    let canonical_root = std::path::Path::new("cmd/learnvault/web/build");
+    let shell_path = canonical_root.join("200.html");
+    if !shell_path.is_file() {
+        return;
+    }
+    let shell = fs::read_to_string(&shell_path).unwrap();
+    let script_start = shell.find("<script").unwrap();
+    let content_start = shell[script_start..].find('>').unwrap() + script_start + 1;
+    let content_end = shell[content_start..].find("</script>").unwrap() + content_start;
+    let hash = STANDARD.encode(Sha256::digest(
+        &shell.as_bytes()[content_start..content_end],
+    ));
+
+    let temp = tempfile::tempdir().unwrap();
+    let response = app(&temp, canonical_root)
+        .await
+        .oneshot(Request::get("/catalog/rust").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    let csp = response.headers()["content-security-policy"]
+        .to_str()
+        .unwrap();
+    assert!(csp.contains(&format!("'sha256-{hash}'")));
+}
+
+#[tokio::test]
 async fn missing_assets_and_unknown_api_routes_remain_not_found() {
     let temp = tempfile::tempdir().unwrap();
     let root = web_root(&temp);
@@ -244,6 +301,50 @@ async fn spa_rejects_requests_when_blocking_capacity_is_saturated() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[tokio::test]
+async fn spa_stream_capacity_is_held_until_response_bodies_are_dropped() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = web_root(&temp);
+    let app = app(&temp, &root).await;
+    let mut slow_responses = Vec::new();
+
+    for _ in 0..4 {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::get("/_app/immutable/assets/app.css")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        slow_responses.push(response);
+    }
+
+    let saturated = app
+        .clone()
+        .oneshot(
+            Request::get("/_app/immutable/assets/app.css")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(saturated.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+    drop(slow_responses);
+    let recovered = app
+        .oneshot(
+            Request::get("/_app/immutable/assets/app.css")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(recovered.status(), StatusCode::OK);
 }
 
 #[tokio::test]

@@ -39,6 +39,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Monta as rotas públicas mínimas do servidor.
 pub fn build_router(state: AppState) -> Router {
+    let inline_script_hashes = state.inline_script_hashes.clone();
     Router::new()
         .route("/api/healthz", get(health::healthz))
         .route("/api/login", axum::routing::post(auth::login))
@@ -49,11 +50,16 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/media", get(media::media).head(media::media))
         .fallback(spa::serve)
         .layer(DefaultBodyLimit::max(8 * 1024))
-        .layer(map_response(security_headers))
+        .layer(map_response(move |response| {
+            security_headers(response, inline_script_hashes.clone())
+        }))
         .with_state(state)
 }
 
-async fn security_headers(mut response: Response) -> Response {
+async fn security_headers(
+    mut response: Response,
+    inline_script_hashes: std::sync::Arc<[String]>,
+) -> Response {
     let headers = response.headers_mut();
     headers.insert(
         "x-content-type-options",
@@ -61,11 +67,19 @@ async fn security_headers(mut response: Response) -> Response {
     );
     headers.insert("x-frame-options", HeaderValue::from_static("DENY"));
     headers.insert("referrer-policy", HeaderValue::from_static("no-referrer"));
+    let mut csp = "default-src 'self'; script-src 'self'".to_owned();
+    for hash in inline_script_hashes.iter() {
+        csp.push_str(" '");
+        csp.push_str(hash);
+        csp.push('\'');
+    }
+    csp.push_str(
+        "; style-src 'self' 'unsafe-hashes' 'sha256-tcbDxjMo+xKqM21aCGYbs/QAJqB7yUXC06oPWDapBgc='; media-src 'self' data:; frame-ancestors 'none'",
+    );
     headers.insert(
         HeaderName::from_static("content-security-policy"),
-        HeaderValue::from_static(
-            "default-src 'self'; script-src 'self' 'sha256-zE0Xas0rozQpvYDs+U8aQdgB8La/QMQ/mJBEy7atGaA='; style-src 'self' 'unsafe-hashes' 'sha256-tcbDxjMo+xKqM21aCGYbs/QAJqB7yUXC06oPWDapBgc='; media-src 'self' data:; frame-ancestors 'none'",
-        ),
+        csp.parse()
+            .expect("CSP generated from base64 hashes is valid"),
     );
     response
 }
