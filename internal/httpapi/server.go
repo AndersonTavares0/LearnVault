@@ -21,6 +21,7 @@ const sessionLifetime = 12 * time.Hour
 type Server struct {
 	db           store
 	cookieSecure bool
+	version      string
 	libraryPath  string
 	libraryRoot  *library.Root
 	rescanMu     sync.Mutex
@@ -45,15 +46,27 @@ func New(db *storage.DB) *Server {
 }
 
 func NewWithOptions(db *storage.DB, cookieSecure bool) *Server {
-	return newWithStore(db, cookieSecure)
+	return NewWithVersion(db, cookieSecure, "dev")
 }
 
 func newWithStore(db store, cookieSecure bool) *Server {
-	return &Server{db: db, cookieSecure: cookieSecure}
+	return newWithStoreVersion(db, cookieSecure, "dev")
+}
+
+func newWithStoreVersion(db store, cookieSecure bool, version string) *Server {
+	return &Server{db: db, cookieSecure: cookieSecure, version: version}
+}
+
+func NewWithVersion(db *storage.DB, cookieSecure bool, version string) *Server {
+	return newWithStoreVersion(db, cookieSecure, version)
 }
 
 func NewWithLibrary(db *storage.DB, cookieSecure bool, root *library.Root) *Server {
-	server := NewWithOptions(db, cookieSecure)
+	return NewWithLibraryVersion(db, cookieSecure, root, "dev")
+}
+
+func NewWithLibraryVersion(db *storage.DB, cookieSecure bool, root *library.Root, version string) *Server {
+	server := NewWithVersion(db, cookieSecure, version)
 	server.libraryPath = root.Path()
 	server.libraryRoot = root
 	return server
@@ -80,7 +93,7 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "unavailable"})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "version": s.version})
 	case "/api/login":
 		if r.Method != http.MethodPost {
 			methodNotAllowed(w)
