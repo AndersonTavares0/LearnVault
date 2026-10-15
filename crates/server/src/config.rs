@@ -93,7 +93,7 @@ where
     let mut library_root = PathBuf::from(DEFAULT_LIBRARY_ROOT);
     let mut web_root = None;
     let mut admin_username = std::env::var("ADMIN_USERNAME").ok();
-    let mut admin_password = std::env::var("ADMIN_PASSWORD").ok();
+    let admin_password = std::env::var("ADMIN_PASSWORD").ok();
     let mut cookie_secure = true;
     let mut version_requested = false;
 

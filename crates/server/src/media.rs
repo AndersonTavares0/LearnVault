@@ -140,7 +140,7 @@ pub(crate) async fn media(
 }
 
 fn error_credentials_required() -> Response {
-    error_private_no_store(
+    error_response_private_no_store(
         (
             StatusCode::FORBIDDEN,
             axum::Json(serde_json::json!({"error":"credentials_change_required"})),
@@ -155,7 +155,10 @@ fn media_error_response(error: &learnvault_core::Error) -> Response {
 
 /// Erros da superfície autenticada nunca devem ser armazenados por proxies.
 fn error_private_no_store(status: StatusCode) -> Response {
-    let mut response = status.into_response();
+    error_response_private_no_store(status.into_response())
+}
+
+fn error_response_private_no_store(mut response: Response) -> Response {
     response.headers_mut().insert(
         header::CACHE_CONTROL,
         HeaderValue::from_static("private, no-store"),

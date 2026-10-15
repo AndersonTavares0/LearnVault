@@ -78,7 +78,7 @@ pub(crate) async fn catalog(State(state): State<AppState>, headers: HeaderMap) -
         Ok(Some(user)) if !user.must_change_credentials => {}
         Ok(Some(_)) => return credentials_required(),
         Err(StateError::Capacity) => return service_unavailable(),
-        Ok(false) | Err(_) => return status_private_no_store(StatusCode::UNAUTHORIZED),
+        Ok(None) | Err(_) => return status_private_no_store(StatusCode::UNAUTHORIZED),
     }
 
     // Evita segurar o mutex do banco só para devolver 503 sob saturação.
