@@ -9,8 +9,8 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 
 describe('transport contract', () => {
 	it('exposes the HTTP transport seam without routing assumptions', () => {
-		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'rescan', 'updateCredentials', 'mediaUrl'];
-		expect(methods).toHaveLength(7);
+		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'config', 'catalog', 'rescan', 'updateCredentials', 'mediaUrl'];
+		expect(methods).toHaveLength(8);
 	});
 	it('troca credenciais temporárias pelo contrato autenticado', async () => {
 		const user = { user_id: 'u1', username: 'novo', is_admin: true, must_change_credentials: false };
@@ -27,6 +27,13 @@ describe('transport contract', () => {
 	});
 	it('does not expose arbitrary desktop paths as media URLs', () => {
 		expect(new DesktopStub().mediaUrl('private/video.mp4')).toBeNull();
+	});
+	it('reports the HTTP platform as configured without any request', async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+		await expect(new HttpTransport().config()).resolves.toEqual({ configured: true });
+		expect(fetchMock).not.toHaveBeenCalled();
+		vi.unstubAllGlobals();
 	});
 	it('posts the admin rescan endpoint and maps a conflict', async () => {
 		const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
@@ -135,5 +142,16 @@ describe('desktop transport over IPC', () => {
 		const desktop: Transport = new DesktopStub();
 		await expect(desktop.rescan()).rejects.toThrow('ainda não implementado');
 		await expect(desktop.updateCredentials('u', 'senha')).rejects.toThrow('ainda não implementado');
+	});
+
+	it('reports the desktop as unconfigured through the desktop_config command', async () => {
+		vi.mocked(invoke).mockResolvedValue({ configured: false });
+		await expect(new DesktopStub().config()).resolves.toEqual({ configured: false });
+		expect(invoke).toHaveBeenCalledWith('desktop_config');
+	});
+
+	it('maps a sanitized desktop configuration error to its message', async () => {
+		vi.mocked(invoke).mockRejectedValue({ code: 'database_unavailable', message: 'banco de dados local indisponível' });
+		await expect(new DesktopStub().config()).rejects.toThrow('banco de dados local indisponível');
 	});
 });
