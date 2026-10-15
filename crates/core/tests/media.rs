@@ -416,6 +416,29 @@ fn the_returned_descriptor_is_read_only() -> TestResult {
 }
 
 #[test]
+fn an_opened_file_exposes_only_its_name_for_content_type_decisions() -> TestResult {
+    let directory = tempfile::tempdir()?;
+    let root = directory.path();
+    write_file(root, "Curso/Aula/aula.png", b"conteudo")?;
+
+    let db = library_db()?;
+    insert_media(&db, LIB, "m1", "Curso/Aula/aula.png", 8, 10, "available")?;
+
+    let opened = open_media(&db, LIB, "m1", root)?;
+
+    assert_eq!(
+        opened.name, "aula.png",
+        "o adaptador precisa do nome do arquivo para decidir o tipo de conteúdo"
+    );
+    assert!(
+        !opened.name.contains('/') && !opened.name.contains('\\'),
+        "o nome exposto é o do arquivo, nunca um caminho: {}",
+        opened.name
+    );
+    Ok(())
+}
+
+#[test]
 fn opening_does_not_modify_the_library() -> TestResult {
     let directory = tempfile::tempdir()?;
     let root = directory.path();

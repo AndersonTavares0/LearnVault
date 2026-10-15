@@ -23,13 +23,22 @@ describe('transport contract', () => {
 		expect(fetchMock).toHaveBeenCalledWith('/api/account/credentials', expect.objectContaining({ method: 'POST' }));
 		vi.unstubAllGlobals();
 	});
-	it('builds media and caption URLs using the existing endpoint contract', () => {
+	it('builds media and caption URLs from the path on HTTP', () => {
 		const transport = new HttpTransport();
-		expect(transport.mediaUrl('módulo/aula.mp4')).toBe('/api/media?path=m%C3%B3dulo%2Faula.mp4');
-		expect(transport.mediaUrl('legendas/aula.vtt')).toBe('/api/media?path=legendas%2Faula.vtt');
+		expect(transport.mediaUrl({ name: 'aula.mp4', path: 'módulo/aula.mp4', size: 1, kind: 'media', mediaId: 'm1' })).toBe('/api/media?path=m%C3%B3dulo%2Faula.mp4');
+		expect(transport.mediaUrl({ name: 'aula.vtt', path: 'legendas/aula.vtt', size: 1, kind: 'subtitle', mediaId: 's1' })).toBe('/api/media?path=legendas%2Faula.vtt');
 	});
-	it('does not expose arbitrary desktop paths as media URLs', () => {
-		expect(new DesktopStub().mediaUrl('private/video.mp4')).toBeNull();
+	it('builds desktop media URLs from the authorized media id, never the raw path', () => {
+		const transport = new DesktopStub();
+		expect(transport.mediaUrl({ name: 'foto.png', path: 'Curso privado/foto.png', size: 1, kind: 'material', mediaId: 'méd-1' })).toBe('learnvault-media://localhost/m%C3%A9d-1');
+		// Vídeo/áudio e legendas ficam fora do protocolo nesta fatia.
+		expect(transport.mediaUrl({ name: 'aula.mp4', path: 'Curso privado/aula.mp4', size: 1, kind: 'media', mediaId: 'v1' })).toBeNull();
+		expect(transport.mediaUrl({ name: 'aula.vtt', path: 'Curso privado/aula.vtt', size: 1, kind: 'subtitle', mediaId: 's1' })).toBeNull();
+		// Um arquivo sem identidade autorizada não é endereçável.
+		expect(transport.mediaUrl({ name: 'x.pdf', path: 'Curso privado/x.pdf', size: 1, kind: 'material' })).toBeNull();
+		const url = transport.mediaUrl({ name: 'x.pdf', path: 'Curso privado/x.pdf', size: 1, kind: 'material', mediaId: 'm1' })!;
+		expect(url).toBe('learnvault-media://localhost/m1');
+		expect(url).not.toContain('Curso privado');
 	});
 	it('reports the HTTP platform as configured without any request', async () => {
 		const fetchMock = vi.fn();
