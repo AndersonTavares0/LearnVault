@@ -23,12 +23,12 @@ use std::{future::Future, time::Duration};
 use axum::{
     BoxError, Router,
     error_handling::HandleErrorLayer,
-    extract::DefaultBodyLimit,
+    extract::{DefaultBodyLimit, Request},
     http::{
         StatusCode,
-        header::{HeaderName, HeaderValue},
+        header::{CACHE_CONTROL, HeaderName, HeaderValue},
     },
-    middleware::map_response,
+    middleware::{Next, from_fn, map_response},
     response::Response,
     routing::{get, post},
 };
@@ -63,7 +63,23 @@ pub fn build_router(state: AppState) -> Router {
                 inline_style_hashes.clone(),
             )
         }))
+        .layer(from_fn(api_cache_headers))
         .with_state(state)
+}
+
+/// Garante que nenhuma resposta `/api` possa ser armazenada, incluindo as
+/// rejeições produzidas antes do handler (`Json` e `DefaultBodyLimit`) e as
+/// respostas do healthz ou de rotas desconhecidas. Um handler que já escolheu
+/// uma política mais restritiva (`private, no-store`) é preservado.
+async fn api_cache_headers(request: Request, next: Next) -> Response {
+    let is_api = request.uri().path() == "/api" || request.uri().path().starts_with("/api/");
+    let mut response = next.run(request).await;
+    if is_api && !response.headers().contains_key(CACHE_CONTROL) {
+        response
+            .headers_mut()
+            .insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    }
+    response
 }
 
 async fn security_headers(
@@ -259,6 +275,7 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(response.headers()["content-type"], "application/json");
+        assert_eq!(response.headers()["cache-control"], "no-store");
         let body = response.into_body().collect().await.unwrap().to_bytes();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["status"], "ok");

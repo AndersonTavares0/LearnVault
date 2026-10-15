@@ -79,16 +79,27 @@ func NewWithLibraryVersion(db *storage.DB, cookieSecure bool, root *library.Root
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Referrer-Policy", "no-referrer")
-	if noStoreAPIPath(r.URL.Path) {
-		// Session state, catalogs, and media must never be stored by an
-		// intermediary or remain available from a browser cache after logout.
-		w.Header().Set("Cache-Control", "private, no-store")
-	}
-	if strings.HasPrefix(r.URL.Path, "/api/") {
+	if isAPIPath(r.URL.Path) {
+		// Every API response is uncacheable. Session state, catalogs, and media must
+		// never be stored by an intermediary or remain available from a browser cache
+		// after logout, so those paths are additionally private. Health, unknown
+		// routes, and API errors still need a cache policy of their own: a stale 200
+		// or 503 must never mask a recovery.
+		if noStoreAPIPath(r.URL.Path) {
+			w.Header().Set("Cache-Control", "private, no-store")
+		} else {
+			w.Header().Set("Cache-Control", "no-store")
+		}
 		s.api(w, r)
 		return
 	}
 	http.NotFound(w, r)
+}
+
+// isAPIPath reports whether path belongs to the JSON API namespace, including
+// the bare /api root, so unknown routes and errors still receive a cache policy.
+func isAPIPath(path string) bool {
+	return path == "/api" || strings.HasPrefix(path, "/api/")
 }
 
 func noStoreAPIPath(path string) bool {

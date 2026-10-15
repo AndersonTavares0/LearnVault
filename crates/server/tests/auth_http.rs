@@ -448,3 +448,96 @@ async fn temporary_credentials_block_protected_endpoints_until_changed() {
         assert_eq!(body(response).await["error"], "credentials_change_required");
     }
 }
+
+#[tokio::test]
+async fn login_rejections_before_the_handler_are_never_cacheable() {
+    let temp = tempfile::tempdir().unwrap();
+    let app = build_router(AppState::initialize(config(&temp, true)).await.unwrap());
+
+    // JSON inválido: o extractor rejeita antes do handler (400).
+    let malformed = app
+        .clone()
+        .oneshot(
+            Request::post("/api/login")
+                .header("origin", "http://localhost")
+                .header("content-type", "application/json")
+                .body(Body::from("{"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(malformed.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(malformed.headers()["cache-control"], "no-store");
+
+    // Content-Type ausente: 415 do extractor `Json`.
+    let unsupported = app
+        .clone()
+        .oneshot(
+            Request::post("/api/login")
+                .header("origin", "http://localhost")
+                .body(Body::from(
+                    r#"{"username":"admin","password":"uma senha local muito segura"}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(unsupported.status(), StatusCode::UNSUPPORTED_MEDIA_TYPE);
+    assert_eq!(unsupported.headers()["cache-control"], "no-store");
+
+    // Payload acima de 8 KiB: 413 do `DefaultBodyLimit`, antes do handler.
+    let oversized = app
+        .oneshot(
+            Request::post("/api/login")
+                .header("origin", "http://localhost")
+                .header("content-type", "application/json")
+                .body(Body::from(format!(
+                    r#"{{"username":"admin","password":"{}"}}"#,
+                    "x".repeat(10_000)
+                )))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(oversized.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    assert_eq!(oversized.headers()["cache-control"], "no-store");
+}
+
+#[tokio::test]
+async fn credentials_rejections_before_the_handler_are_never_cacheable() {
+    let temp = tempfile::tempdir().unwrap();
+    let app = build_router(AppState::initialize(config(&temp, false)).await.unwrap());
+
+    // JSON inválido: o extractor rejeita antes do handler (400).
+    let malformed = app
+        .clone()
+        .oneshot(
+            Request::post("/api/account/credentials")
+                .header("origin", "http://localhost")
+                .header("content-type", "application/json")
+                .body(Body::from("{"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(malformed.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(malformed.headers()["cache-control"], "no-store");
+    assert_eq!(malformed.headers()["x-content-type-options"], "nosniff");
+
+    // Payload acima de 8 KiB: 413 do `DefaultBodyLimit`, antes do handler.
+    let oversized = app
+        .oneshot(
+            Request::post("/api/account/credentials")
+                .header("origin", "http://localhost")
+                .header("content-type", "application/json")
+                .body(Body::from(format!(
+                    r#"{{"current_password":"admin","username":"owner","password":"{}"}}"#,
+                    "x".repeat(10_000)
+                )))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(oversized.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    assert_eq!(oversized.headers()["cache-control"], "no-store");
+}

@@ -110,8 +110,14 @@ func TestAPIRejectsUnsupportedMethodsAndUnknownRoutes(t *testing.T) {
 			if recorder.Header().Get("X-Content-Type-Options") != "nosniff" || recorder.Header().Get("Referrer-Policy") != "no-referrer" {
 				t.Fatal("API security headers are missing")
 			}
-			if strings.HasPrefix(tc.path, "/api/") && tc.path != "/api/healthz" && tc.path != "/api/unknown" && recorder.Header().Get("Cache-Control") != "private, no-store" {
-				t.Fatalf("%s Cache-Control = %q; want private, no-store", tc.path, recorder.Header().Get("Cache-Control"))
+			if strings.HasPrefix(tc.path, "/api/") {
+				wantCache := "private, no-store"
+				if tc.path == "/api/healthz" || tc.path == "/api/unknown" {
+					wantCache = "no-store"
+				}
+				if recorder.Header().Get("Cache-Control") != wantCache {
+					t.Fatalf("%s Cache-Control = %q; want %q", tc.path, recorder.Header().Get("Cache-Control"), wantCache)
+				}
 			}
 		})
 	}
@@ -172,8 +178,12 @@ func TestUnavailableStorageAndLibraryReturnSafeErrors(t *testing.T) {
 			if recorder.Code != tc.want {
 				t.Fatalf("status = %d; want %d (body %s)", recorder.Code, tc.want, recorder.Body.String())
 			}
-			if tc.path != "/api/healthz" && recorder.Header().Get("Cache-Control") != "private, no-store" {
-				t.Fatalf("%s Cache-Control = %q; want private, no-store", tc.path, recorder.Header().Get("Cache-Control"))
+			wantCache := "private, no-store"
+			if tc.path == "/api/healthz" {
+				wantCache = "no-store"
+			}
+			if recorder.Header().Get("Cache-Control") != wantCache {
+				t.Fatalf("%s Cache-Control = %q; want %q", tc.path, recorder.Header().Get("Cache-Control"), wantCache)
 			}
 		})
 	}
@@ -220,4 +230,48 @@ func TestMediaAndRescanRejectInvalidOrUnavailableRequests(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestAPIHealthAndUnknownRoutesDisableCaching garante que o healthz público e
+// as rotas API desconhecidas nunca sejam armazenados, sem introduzir dados
+// sensíveis na resposta de saúde.
+func TestAPIHealthAndUnknownRoutesDisableCaching(t *testing.T) {
+	srv, _ := newFakeServer(t)
+
+	t.Run("health is public and uncacheable", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		srv.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/healthz", nil))
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("status = %d; want 200 (body %s)", recorder.Code, recorder.Body.String())
+		}
+		body := recorder.Body.String()
+		if !strings.Contains(body, `"status":"ok"`) {
+			t.Fatalf("health body missing status: %s", body)
+		}
+		// O healthz é público e não pode carregar dados sensíveis.
+		for _, forbidden := range []string{"password", "hash", "token", "secret", "owner"} {
+			if strings.Contains(strings.ToLower(body), forbidden) {
+				t.Fatalf("health body leaked %q: %s", forbidden, body)
+			}
+		}
+		if got := recorder.Header().Get("Cache-Control"); got != "no-store" {
+			t.Fatalf("health Cache-Control = %q; want no-store", got)
+		}
+		if recorder.Header().Get("X-Content-Type-Options") != "nosniff" || recorder.Header().Get("Referrer-Policy") != "no-referrer" {
+			t.Fatal("health security headers are missing")
+		}
+	})
+
+	t.Run("unknown api routes are uncacheable", func(t *testing.T) {
+		for _, path := range []string{"/api/unknown", "/api"} {
+			recorder := httptest.NewRecorder()
+			srv.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
+			if recorder.Code != http.StatusNotFound {
+				t.Fatalf("%s status = %d; want 404 (body %s)", path, recorder.Code, recorder.Body.String())
+			}
+			if got := recorder.Header().Get("Cache-Control"); got != "no-store" {
+				t.Fatalf("%s Cache-Control = %q; want no-store", path, got)
+			}
+		}
+	})
 }
