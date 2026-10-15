@@ -397,6 +397,7 @@ async fn rescan_returns_conflict_while_another_process_holds_its_lock() {
     let mut child = Command::new(std::env::current_exe().unwrap())
         .arg("--exact")
         .arg("rescan_lock_helper")
+        .env("LEARNVAULT_RESCAN_LOCK_HELPER", "1")
         .env("LEARNVAULT_RESCAN_LOCK_PATH", &lock_path)
         .env("LEARNVAULT_RESCAN_LOCK_READY", &ready_path)
         // O release é sinalizado pelo canal de stdin do filho, não por um arquivo
@@ -419,7 +420,13 @@ async fn rescan_returns_conflict_while_another_process_holds_its_lock() {
         .unwrap();
 
     // Fechar o stdin do filho faz o `read_line` retornar EOF e o auxiliar encerrar.
-    drop(child.stdin.take());
+    // `Stdio::piped()` é invariante do teste: se sumir, `wait()` travaria para
+    // sempre, então falhe alto em vez de pendurar a suíte.
+    let stdin = child
+        .stdin
+        .take()
+        .expect("o filho deve ter stdin encanado para o release");
+    drop(stdin);
     assert!(
         child.wait().unwrap().success(),
         "o processo auxiliar deve sair com sucesso depois do release"
@@ -430,9 +437,13 @@ async fn rescan_returns_conflict_while_another_process_holds_its_lock() {
 
 #[test]
 fn rescan_lock_helper() {
-    let Ok(lock_path) = std::env::var("LEARNVAULT_RESCAN_LOCK_PATH") else {
+    // Marcador dedicado: só o processo auxiliar spawnado por este arquivo o define.
+    // Sem ele, o teste nunca executa o corpo, evitando travar em `read_line` quando
+    // rodado dentro da suíte principal (regressão que o poll com deadline continha).
+    if std::env::var("LEARNVAULT_RESCAN_LOCK_HELPER").as_deref() != Ok("1") {
         return;
-    };
+    }
+    let lock_path = std::env::var("LEARNVAULT_RESCAN_LOCK_PATH").unwrap();
     let ready_path = std::env::var("LEARNVAULT_RESCAN_LOCK_READY").unwrap();
     let _lock = OpenOptions::new()
         .read(true)
