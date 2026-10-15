@@ -6,12 +6,19 @@
 //! persistência é versionada e nenhuma mensagem de erro carrega caminho do sistema.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use learnvault_desktop::{
     CONFIG_FILE_NAME, CONFIG_VERSION, LibraryError, LibraryRoot, load_library_root,
     store_library_root,
 };
+
+/// Primeiro nome de temporário que o escritor tenta: o formato histórico
+/// `.{CONFIG_FILE_NAME}.{pid}.tmp`. A suíte o usa para provar que um caminho pré-existente
+/// nunca é reaproveitado, sobrescrito nem seguido.
+fn first_temporary_path(config_dir: &Path) -> PathBuf {
+    config_dir.join(format!(".{CONFIG_FILE_NAME}.{}.tmp", std::process::id()))
+}
 
 /// Cria um diretório de biblioteca vazio e devolve a raiz já validada.
 fn library(dir: &Path) -> LibraryRoot {
@@ -274,5 +281,113 @@ fn errors_and_debug_never_expose_the_filesystem_path() {
     assert!(
         !debug.contains("Cursos secretos"),
         "o Debug da raiz não pode expor o caminho: {debug}"
+    );
+}
+
+#[test]
+fn storing_repeatedly_swaps_the_root_without_leftovers() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = dir.path().join("config");
+    let first = library(dir.path());
+    let second = dir.path().join("biblioteca-2");
+    fs::create_dir(&second).unwrap();
+    let second = LibraryRoot::resolve(&second).unwrap();
+
+    store_library_root(&config, &first).unwrap();
+    assert_eq!(load_library_root(&config).unwrap().as_path(), first.as_path());
+
+    store_library_root(&config, &second).unwrap();
+    assert_eq!(
+        load_library_root(&config).unwrap().as_path(),
+        second.as_path()
+    );
+
+    store_library_root(&config, &first).unwrap();
+    assert_eq!(load_library_root(&config).unwrap().as_path(), first.as_path());
+
+    assert_eq!(
+        fs::read_dir(&config).unwrap().count(),
+        1,
+        "a troca de raiz não pode deixar temporários"
+    );
+}
+
+#[test]
+fn a_pre_existing_temporary_file_is_never_reused() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = dir.path().join("config");
+    fs::create_dir_all(&config).unwrap();
+    let root = library(dir.path());
+    let squatter = first_temporary_path(&config);
+    fs::write(&squatter, b"lixo pre-existente").unwrap();
+
+    store_library_root(&config, &root).unwrap();
+
+    assert_eq!(
+        fs::read(&squatter).unwrap(),
+        b"lixo pre-existente",
+        "um temporário pré-existente não pode ser reaproveitado nem sobrescrito"
+    );
+    assert!(load_library_root(&config).is_some());
+    assert_eq!(
+        fs::read_dir(&config).unwrap().count(),
+        2,
+        "a configuração final coexiste com o arquivo pré-existente"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_pre_existing_temporary_symlink_is_not_followed() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = dir.path().join("config");
+    fs::create_dir_all(&config).unwrap();
+    let root = library(dir.path());
+    let victim = dir.path().join("vitima.txt");
+    fs::write(&victim, b"intacto").unwrap();
+    std::os::unix::fs::symlink(&victim, first_temporary_path(&config)).unwrap();
+
+    store_library_root(&config, &root).unwrap();
+
+    assert_eq!(
+        fs::read(&victim).unwrap(),
+        b"intacto",
+        "gravar o temporário não pode seguir um symlink pré-existente"
+    );
+    assert!(load_library_root(&config).is_some());
+}
+
+#[test]
+fn concurrent_stores_never_corrupt_the_configuration() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = dir.path().join("config");
+    let roots: Vec<LibraryRoot> = (0..4)
+        .map(|index| {
+            let path = dir.path().join(format!("lib{index}"));
+            fs::create_dir(&path).unwrap();
+            LibraryRoot::resolve(&path).unwrap()
+        })
+        .collect();
+
+    std::thread::scope(|scope| {
+        for root in &roots {
+            let config = config.clone();
+            scope.spawn(move || {
+                for _ in 0..10 {
+                    store_library_root(&config, root).unwrap();
+                }
+            });
+        }
+    });
+
+    let loaded = load_library_root(&config).expect("a configuração precisa permanecer válida");
+    assert!(
+        roots.iter().any(|root| root.as_path() == loaded.as_path()),
+        "a raiz final precisa ser uma das gravadas"
+    );
+    assert_eq!(
+        fs::read_dir(&config).unwrap().count(),
+        1,
+        "gravações concorrentes não podem deixar temporários"
     );
 }

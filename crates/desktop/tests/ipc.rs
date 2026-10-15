@@ -9,7 +9,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use learnvault_core::{Availability, Catalog, CatalogFile, CatalogNode, MediaKind, NodeRole};
-use learnvault_desktop::{CatalogDto, DesktopState, IpcErrorCode, catalog};
+use learnvault_desktop::{CatalogDto, DesktopState, IpcErrorCode, catalog, load_library_root};
 
 /// Estado desktop isolado em diretórios temporários, com dados e configuração separados.
 fn desktop(root: &Path) -> DesktopState {
@@ -381,5 +381,36 @@ fn restart_ignores_a_removed_library_root() {
     assert!(
         !restarted.config_status().configured,
         "uma raiz removida precisa rebaixar o estado para não configurado"
+    );
+}
+
+#[test]
+fn concurrent_selection_keeps_memory_and_disk_consistent() {
+    let dir = tempfile::tempdir().unwrap();
+    let state = desktop(dir.path());
+    let roots: Vec<PathBuf> = (0..4)
+        .map(|index| {
+            let path = dir.path().join(format!("lib{index}"));
+            fs::create_dir(&path).unwrap();
+            path
+        })
+        .collect();
+
+    std::thread::scope(|scope| {
+        for root in &roots {
+            let state = &state;
+            scope.spawn(move || {
+                let root = root.clone();
+                state.select_library(|| Some(root)).unwrap();
+            });
+        }
+    });
+
+    let memory = state.library_root().expect("a memória precisa estar configurada");
+    let disk = load_library_root(&dir.path().join("config")).expect("o disco precisa estar configurado");
+    assert_eq!(
+        memory.as_path(),
+        disk.as_path(),
+        "seleções concorrentes não podem divergir entre memória e disco"
     );
 }
