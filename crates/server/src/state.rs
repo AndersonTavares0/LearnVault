@@ -128,16 +128,10 @@ impl AppState {
         attempts.retain(|_, (_, started)| now.duration_since(*started) < LOGIN_ATTEMPT_WINDOW);
         let key = username.to_ascii_lowercase();
         if attempts.len() >= MAX_LOGIN_ATTEMPT_BUCKETS && !attempts.contains_key(&key) {
-            // Mantém o limite de memória mesmo durante uma enxurrada de nomes distintos.
-            // O bucket menos recente é descartado para que a limitação por usuário continue
-            // disponível para novos logins, em vez de bloquear todos eles até o TTL expirar.
-            if let Some(oldest) = attempts
-                .iter()
-                .min_by_key(|(_, (_, started))| *started)
-                .map(|(username, _)| username.clone())
-            {
-                attempts.remove(&oldest);
-            }
+            // Nunca descarte um bucket ainda ativo: uma enxurrada de usernames distintos
+            // não pode reiniciar o limite de um usuário já acompanhado. Negar novos
+            // usernames até o TTL expirar mantém o uso de memória limitado.
+            return false;
         }
         let entry = attempts.entry(key).or_insert((0, now));
         if now.duration_since(entry.1) >= LOGIN_ATTEMPT_WINDOW {
@@ -228,10 +222,7 @@ fn unix_now() -> i64 {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        path::PathBuf,
-        time::{Duration, Instant},
-    };
+    use std::{path::PathBuf, time::Instant};
 
     use super::{AppState, StateError};
     use crate::Config;
@@ -273,15 +264,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn login_attempt_buckets_evict_the_oldest_bucket_at_capacity() {
+    async fn distinct_usernames_do_not_evict_an_active_login_bucket() {
         let state = AppState::new(config());
         let now = Instant::now();
 
-        assert!(
-            state
-                .allow_login_attempt_at("oldest", now - Duration::from_secs(1))
-                .await
-        );
+        for _ in 0..5 {
+            assert!(state.allow_login_attempt_at("admin", now).await);
+        }
         for index in 0..1023 {
             assert!(
                 state
@@ -290,10 +279,11 @@ mod tests {
             );
         }
 
-        assert!(state.allow_login_attempt_at("new-user", now).await);
+        assert!(!state.allow_login_attempt_at("new-user", now).await);
+        assert!(!state.allow_login_attempt_at("admin", now).await);
         let attempts = state.login_attempts.lock().await;
         assert_eq!(attempts.len(), 1024);
-        assert!(!attempts.contains_key("oldest"));
-        assert!(attempts.contains_key("new-user"));
+        assert!(attempts.contains_key("admin"));
+        assert!(!attempts.contains_key("new-user"));
     }
 }

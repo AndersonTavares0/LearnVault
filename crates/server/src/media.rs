@@ -114,13 +114,9 @@ fn media_error_status(error: &learnvault_core::Error) -> StatusCode {
     use learnvault_core::Error;
 
     match error {
-        Error::InvalidRelativePath { .. }
-        | Error::MediaNotFound { .. }
+        Error::MediaNotFound { .. }
         | Error::MediaUnavailable { .. }
         | Error::MediaMissingOnDisk { .. }
-        | Error::MediaOutsideLibrary { .. }
-        | Error::MediaIsSymlink { .. }
-        | Error::MediaNotAFile { .. }
         | Error::MediaRemoved { .. } => StatusCode::NOT_FOUND,
         _ => StatusCode::INTERNAL_SERVER_ERROR,
     }
@@ -200,18 +196,58 @@ mod tests {
     }
 
     #[test]
-    fn media_errors_only_map_legitimate_absence_to_not_found() {
-        assert_eq!(
-            media_error_status(&Error::MediaMissingOnDisk {
+    fn media_errors_map_only_legitimate_absence_to_not_found() {
+        for error in [
+            Error::MediaNotFound {
                 media_id: "media-1".to_owned(),
-            }),
-            axum::http::StatusCode::NOT_FOUND
-        );
-        assert_eq!(
-            media_error_status(&Error::LibraryRootMissing {
+            },
+            Error::MediaUnavailable {
+                media_id: "media-1".to_owned(),
+            },
+            Error::MediaMissingOnDisk {
+                media_id: "media-1".to_owned(),
+            },
+            Error::MediaRemoved {
+                media_id: "media-1".to_owned(),
+            },
+        ] {
+            assert_eq!(
+                media_error_status(&error),
+                axum::http::StatusCode::NOT_FOUND
+            );
+        }
+    }
+
+    #[test]
+    fn media_integrity_and_operational_errors_map_to_internal_server_error() {
+        for error in [
+            Error::InvalidRelativePath {
+                path: "../outside".to_owned(),
+            },
+            Error::MediaOutsideLibrary {
+                media_id: "media-1".to_owned(),
+            },
+            Error::MediaIsSymlink {
+                media_id: "media-1".to_owned(),
+            },
+            Error::MediaNotAFile {
+                media_id: "media-1".to_owned(),
+            },
+            Error::MediaIdentityMismatch {
+                media_id: "media-1".to_owned(),
+            },
+            Error::MediaUnreadable {
+                media_id: "media-1".to_owned(),
+                source: std::io::Error::other("unreadable"),
+            },
+            Error::LibraryRootMissing {
                 path: "missing-library".into(),
-            }),
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR
-        );
+            },
+        ] {
+            assert_eq!(
+                media_error_status(&error),
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR
+            );
+        }
     }
 }
