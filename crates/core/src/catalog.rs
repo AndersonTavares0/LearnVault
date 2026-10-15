@@ -14,9 +14,24 @@
 //!
 //! Níveis que não existem na biblioteca são omitidos, em vez de sintetizar nós
 //! artificiais: em `Categoria/Curso/aula.mp4` não há módulo e a aula fica diretamente sob
-//! a categoria. Nenhum arquivo é descartado por estar em outra profundidade — o que não
-//! encontrar um nó correspondente é preservado em `Catalog::loose_files` (raiz da
-//! biblioteca) ou em `CatalogNode::loose_files` (arquivo direto na categoria).
+//! a categoria.
+//!
+//! O papel de cada nó é decidido pela estrutura final, nunca pela ordem em que os arquivos
+//! foram lidos: um nó que recebe arquivos é aula, o nó que organiza aulas é módulo e o que
+//! organiza módulos é curso. Assim o papel de um diretório não muda por causa do nome de um
+//! arquivo vizinho.
+//!
+//! Um diretório com mídia dentro de uma aula — por exemplo `Aula 1/extras/mais.mp4` — é
+//! outra aula, aninhada sob a primeira. Caminhos mais profundos que o modelo de quatro
+//! níveis não criam níveis extras: os segmentos entre a categoria e o curso ficam
+//! incorporados no caminho do nó de curso.
+//!
+//! Nenhum arquivo é descartado por estar em outra profundidade — o que não encontrar um nó
+//! correspondente é preservado em `Catalog::loose_files` (raiz da biblioteca) ou em
+//! `CatalogNode::loose_files` (arquivo direto na categoria).
+//!
+//! Quando a última tentativa de varredura falhou, nada pôde ser verificado: o catálogo é
+//! marcado como incompleto e todos os arquivos ficam sinalizados como não verificados.
 //!
 //! Cada nó é identificado pelo **caminho relativo completo**, nunca pelo título: dois
 //! cursos com o mesmo nome em caminhos diferentes continuam sendo nós distintos.
@@ -25,7 +40,7 @@ use std::collections::BTreeMap;
 
 use crate::db::Database;
 use crate::error::Result;
-use crate::paths::{KeyMode, relative_path_key};
+use crate::paths::{KeyMode, is_under_area, relative_path_key};
 use crate::scanner::{MediaKind, classify};
 
 /// Disponibilidade de um arquivo segundo a última varredura.
@@ -80,7 +95,7 @@ pub struct CatalogNode {
     pub path: String,
     /// Papel do nó na hierarquia.
     pub role: NodeRole,
-    /// Arquivos da aula. Só a aula preenche este campo.
+    /// Arquivos do diretório. Só os nós com papel `Lesson` preenchem este campo.
     pub files: Vec<CatalogFile>,
     /// Arquivos que estão diretamente neste nó sem pertencer a uma aula. Só a
     /// categoria preenche este campo.
@@ -93,7 +108,8 @@ pub struct CatalogNode {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Catalog {
     /// Verdadeiro quando a última varredura cobriu toda a biblioteca. Sem varredura
-    /// registrada, não há nada pendente e o valor é verdadeiro.
+    /// registrada, não há nada pendente e o valor é verdadeiro. Uma tentativa que falhou
+    /// deixa o valor falso.
     pub complete: bool,
     /// Arquivos na raiz da biblioteca, que não pertencem a nenhuma categoria.
     pub loose_files: Vec<CatalogFile>,
@@ -107,7 +123,7 @@ pub struct Catalog {
 /// ler o disco. Ela também não escreve no banco.
 pub fn build_catalog(db: &Database, library_id: &str) -> Result<Catalog> {
     let mode = KeyMode::for_host();
-    let (complete, unverified) = last_scan(db, library_id, mode)?;
+    let scan = last_scan(db, library_id, mode)?;
     let rows = media_rows(db, library_id)?;
 
     let mut loose_files = Vec::new();
@@ -128,7 +144,7 @@ pub fn build_catalog(db: &Database, library_id: &str) -> Result<Catalog> {
             path: row.relative_path.clone(),
             size,
             availability: availability_of(&row.availability),
-            unverified: is_under_unverified(&row.relative_path_key, &unverified),
+            unverified: scan.failed || is_under_unverified(&row.relative_path_key, &scan.areas),
         };
 
         let mut segments: Vec<&str> = row.relative_path.split('/').collect();
@@ -138,22 +154,18 @@ pub fn build_catalog(db: &Database, library_id: &str) -> Result<Catalog> {
         match segments.len() {
             0 => loose_files.push(file),
             1 => {
-                let category = ensure_node(&mut nodes, segments[0], NodeRole::Category);
+                let category = ensure_node(&mut nodes, segments[0]);
                 category.loose_files.push(file);
             }
             depth => {
-                let category_path = segments[0].to_owned();
                 if depth >= 4 {
-                    let course_path = segments[..depth - 2].join("/");
-                    ensure_node(&mut nodes, &course_path, NodeRole::Course);
+                    ensure_node(&mut nodes, &segments[..depth - 2].join("/"));
                 }
                 if depth >= 3 {
-                    let module_path = segments[..depth - 1].join("/");
-                    ensure_node(&mut nodes, &module_path, NodeRole::Module);
+                    ensure_node(&mut nodes, &segments[..depth - 1].join("/"));
                 }
-                ensure_node(&mut nodes, &category_path, NodeRole::Category);
-                let lesson_path = segments.join("/");
-                let lesson = ensure_node(&mut nodes, &lesson_path, NodeRole::Lesson);
+                ensure_node(&mut nodes, segments[0]);
+                let lesson = ensure_node(&mut nodes, &segments.join("/"));
                 lesson.files.push(file);
             }
         }
@@ -161,7 +173,7 @@ pub fn build_catalog(db: &Database, library_id: &str) -> Result<Catalog> {
 
     let categories = assemble(&mut nodes);
     Ok(Catalog {
-        complete,
+        complete: scan.complete,
         loose_files,
         categories,
     })
@@ -170,24 +182,20 @@ pub fn build_catalog(db: &Database, library_id: &str) -> Result<Catalog> {
 /// Nó em construção, antes de a árvore ser montada.
 struct PendingNode {
     title: String,
-    role: NodeRole,
     files: Vec<CatalogFile>,
     loose_files: Vec<CatalogFile>,
 }
 
-/// Devolve o nó do caminho indicado, criando-o com o papel dado se ainda não existir.
+/// Devolve o nó do caminho indicado, criando-o se ainda não existir.
 ///
-/// O primeiro nó a reivindicar um caminho define o papel: um diretório que contém
-/// arquivos diretamente é uma aula, e continua sendo mesmo que um arquivo mais profundo
-/// tente descrevê-lo como módulo ou curso.
+/// O papel do nó não é decidido aqui: ele depende da estrutura final e é calculado
+/// quando a árvore é montada, em [`role_of`].
 fn ensure_node<'a>(
     nodes: &'a mut BTreeMap<String, PendingNode>,
     path: &str,
-    role: NodeRole,
 ) -> &'a mut PendingNode {
     nodes.entry(path.to_owned()).or_insert_with(|| PendingNode {
         title: clean_title(last_segment(path)),
-        role,
         files: Vec::new(),
         loose_files: Vec::new(),
     })
@@ -217,7 +225,7 @@ fn take_node(
     children: &BTreeMap<String, Vec<String>>,
 ) -> Option<CatalogNode> {
     let pending = nodes.remove(path)?;
-    let nested = children
+    let nested: Vec<CatalogNode> = children
         .get(path)
         .map(|list| {
             list.iter()
@@ -228,11 +236,28 @@ fn take_node(
     Some(CatalogNode {
         title: pending.title,
         path: path.to_owned(),
-        role: pending.role,
+        role: role_of(path, &pending.files, &nested),
         files: pending.files,
         loose_files: pending.loose_files,
         children: nested,
     })
+}
+
+/// Papel de um nó, decidido pela estrutura final e nunca pela ordem de leitura.
+///
+/// O primeiro nível é sempre a categoria. Abaixo dele, um nó que recebeu arquivos é uma
+/// aula, o nó que organiza aulas é um módulo e o que organiza módulos é um curso.
+fn role_of(path: &str, files: &[CatalogFile], children: &[CatalogNode]) -> NodeRole {
+    if !path.contains('/') {
+        return NodeRole::Category;
+    }
+    if !files.is_empty() {
+        return NodeRole::Lesson;
+    }
+    if children.iter().any(|child| child.role == NodeRole::Module) {
+        return NodeRole::Course;
+    }
+    NodeRole::Module
 }
 
 /// Ancestral existente mais profundo de um caminho, se houver.
@@ -272,12 +297,7 @@ fn availability_of(stored: &str) -> Availability {
 
 /// Indica se uma chave de caminho está sob alguma área não verificada.
 fn is_under_unverified(key: &str, areas: &[String]) -> bool {
-    areas.iter().any(|area| {
-        key == area
-            || (key.len() > area.len()
-                && key.starts_with(area.as_str())
-                && key.as_bytes()[area.len()] == b'/')
-    })
+    areas.iter().any(|area| is_under_area(key, area))
 }
 
 /// Linha de `media` necessária para montar o catálogo.
@@ -289,17 +309,37 @@ struct MediaRow {
     availability: String,
 }
 
+/// Estado da última varredura registrada para a biblioteca.
+struct LastScan {
+    /// Verdadeiro quando a varredura cobriu toda a biblioteca.
+    complete: bool,
+    /// Verdadeiro quando a última tentativa falhou: nada pôde ser verificado.
+    failed: bool,
+    /// Áreas que a varredura não conseguiu verificar, já normalizadas.
+    areas: Vec<String>,
+}
+
 /// Lê a última varredura da biblioteca e as áreas que ela não conseguiu verificar.
-fn last_scan(db: &Database, library_id: &str, mode: KeyMode) -> Result<(bool, Vec<String>)> {
+fn last_scan(db: &Database, library_id: &str, mode: KeyMode) -> Result<LastScan> {
     let connection = db.connection();
-    let (scan_id, complete) = {
+    let (scan_id, complete, status) = {
         let mut statement = connection.prepare(
-            "SELECT scan_id, complete FROM scan WHERE library_id = ?1 ORDER BY scan_id DESC LIMIT 1",
+            "SELECT scan_id, complete, status FROM scan WHERE library_id = ?1 ORDER BY scan_id DESC LIMIT 1",
         )?;
         let mut rows = statement.query([library_id])?;
         match rows.next()? {
-            Some(row) => (row.get::<_, i64>(0)?, row.get::<_, i64>(1)?),
-            None => return Ok((true, Vec::new())),
+            Some(row) => (
+                row.get::<_, i64>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, String>(2)?,
+            ),
+            None => {
+                return Ok(LastScan {
+                    complete: true,
+                    failed: false,
+                    areas: Vec::new(),
+                });
+            }
         }
     };
 
@@ -309,13 +349,17 @@ fn last_scan(db: &Database, library_id: &str, mode: KeyMode) -> Result<(bool, Ve
     let stored = statement
         .query_map([scan_id], |row| row.get::<_, String>(0))?
         .collect::<rusqlite::Result<Vec<String>>>()?;
-    let mut unverified = Vec::new();
+    let mut areas = Vec::new();
     for path in stored {
         if let Ok(key) = relative_path_key(&path, mode) {
-            unverified.push(key);
+            areas.push(key);
         }
     }
-    Ok((complete != 0, unverified))
+    Ok(LastScan {
+        complete: complete != 0,
+        failed: status == "failed",
+        areas,
+    })
 }
 
 /// Lê as linhas de mídia da biblioteca, já ordenadas por chave de caminho.
