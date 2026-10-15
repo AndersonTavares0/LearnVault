@@ -462,6 +462,42 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn media_reports_a_corrupt_stored_size_as_a_sanitized_internal_error() {
+        let (app, _temp, state) = media_app().await;
+        let cookie = media_cookie(&app).await;
+        // Um tamanho negativo é corrupção de catálogo: a resolução precisa falhar
+        // alto (500) em vez de tratar a linha como arquivo vazio.
+        state
+            .database
+            .try_lock()
+            .unwrap()
+            .connection()
+            .execute("UPDATE media SET size = -1", [])
+            .unwrap();
+
+        let response = app
+            .oneshot(
+                Request::get("/api/media?path=lesson.mp4")
+                    .header("cookie", &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(
+            response
+                .headers()
+                .get("cache-control")
+                .and_then(|value| value.to_str().ok()),
+            Some("private, no-store")
+        );
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        assert!(body.is_empty(), "erros sanitizados não expõem detalhes");
+    }
+
+    #[tokio::test]
     async fn media_rejects_requests_when_blocking_capacity_is_saturated() {
         let (app, _temp, state) = media_app().await;
         let cookie = media_cookie(&app).await;

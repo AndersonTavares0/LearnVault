@@ -279,6 +279,11 @@ mod tests {
             Error::MediaIdentityMismatch {
                 media_id: "media-1".to_owned(),
             },
+            // Corrupção de catálogo nunca pode virar 404: isso confundiria ausência
+            // legítima com um banco corrompido e criaria um oráculo de existência.
+            Error::MediaCorruptSize {
+                media_id: "media-1".to_owned(),
+            },
             Error::MediaUnreadable {
                 media_id: "media-1".to_owned(),
                 source: std::io::Error::other("unreadable"),
