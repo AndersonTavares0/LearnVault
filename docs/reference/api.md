@@ -7,7 +7,7 @@ otherwise. Authentication uses an HttpOnly, SameSite=Strict session cookie.
 
 | Method | Route | Authentication | Purpose |
 | --- | --- | --- | --- |
-| `GET` | `/api/healthz` | No | Process and database health |
+| `GET` | `/api/healthz` | No | Process and database health, including the running version |
 | `POST` | `/api/login` | No | Accepts `{ "username": "...", "password": "..." }` |
 | `POST` | `/api/logout` | Session | Invalidates the current session |
 | `GET` | `/api/me` | Session | Returns the current account |
