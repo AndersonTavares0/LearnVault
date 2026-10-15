@@ -1,6 +1,6 @@
 //! Primitivas de autenticação do servidor.
 
-use crate::AppState;
+use crate::{AppState, StateError, catalog::service_unavailable};
 use argon2::{
     Algorithm, Argon2, Params, PasswordHash, PasswordHasher, PasswordVerifier, Version,
     password_hash::SaltString,
@@ -159,14 +159,18 @@ pub(crate) async fn login(
         )
             .into_response();
     }
-    let Ok(user) = state.user(request.username).await else {
-        return (
-            StatusCode::UNAUTHORIZED,
-            Json(ErrorResponse {
-                error: "invalid credentials",
-            }),
-        )
-            .into_response();
+    let user = match state.user(request.username).await {
+        Ok(user) => user,
+        Err(StateError::Capacity) => return service_unavailable(),
+        Err(_) => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(ErrorResponse {
+                    error: "invalid credentials",
+                }),
+            )
+                .into_response();
+        }
     };
     let Some(user) = user else {
         return (
@@ -179,10 +183,15 @@ pub(crate) async fn login(
     };
     let password = request.password;
     let hash = user.password_hash.clone();
-    let valid =
-        tokio::task::spawn_blocking(move || verify_password(&password, &hash).unwrap_or(false))
-            .await
-            .unwrap_or(false);
+    let Some(blocking_task) = state.try_acquire_blocking_task() else {
+        return service_unavailable();
+    };
+    let valid = tokio::task::spawn_blocking(move || {
+        let _blocking_task = blocking_task;
+        verify_password(&password, &hash).unwrap_or(false)
+    })
+    .await
+    .unwrap_or(false);
     if !valid {
         return (
             StatusCode::UNAUTHORIZED,
@@ -195,12 +204,13 @@ pub(crate) async fn login(
     let Ok(token) = generate_session_token() else {
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     };
-    if state
+    match state
         .create_session(hash_session_token(&token), user.user_id.clone())
         .await
-        .is_err()
     {
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        Ok(()) => {}
+        Err(StateError::Capacity) => return service_unavailable(),
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
     let mut response = Json(UserResponse {
         user_id: user.user_id,
@@ -218,8 +228,10 @@ pub(crate) async fn me(State(state): State<AppState>, headers: HeaderMap) -> imp
     let Some(token) = request_token(&headers) else {
         return StatusCode::UNAUTHORIZED.into_response();
     };
-    let Ok(Some(user)) = state.session_user(hash_session_token(&token)).await else {
-        return StatusCode::UNAUTHORIZED.into_response();
+    let user = match state.session_user(hash_session_token(&token)).await {
+        Ok(Some(user)) => user,
+        Err(StateError::Capacity) => return service_unavailable(),
+        Ok(None) | Err(_) => return StatusCode::UNAUTHORIZED.into_response(),
     };
     Json(UserResponse {
         user_id: user.user_id,
@@ -233,8 +245,13 @@ pub(crate) async fn logout(State(state): State<AppState>, headers: HeaderMap) ->
     if !same_origin(&headers) {
         return StatusCode::FORBIDDEN.into_response();
     }
-    if let Some(token) = request_token(&headers) {
-        let _ = state.delete_session(hash_session_token(&token)).await;
+    if let Some(token) = request_token(&headers)
+        && matches!(
+            state.delete_session(hash_session_token(&token)).await,
+            Err(StateError::Capacity)
+        )
+    {
+        return service_unavailable();
     }
     let mut response = StatusCode::NO_CONTENT.into_response();
     response
@@ -266,7 +283,7 @@ fn session_cookie(state: &AppState, token: &str, clear: bool) -> HeaderValue {
     HeaderValue::from_str(&value).expect("cookie attributes are valid ASCII")
 }
 
-fn same_origin(headers: &HeaderMap) -> bool {
+pub(crate) fn same_origin(headers: &HeaderMap) -> bool {
     let Some(origin) = headers.get("origin").and_then(|value| value.to_str().ok()) else {
         return false;
     };

@@ -13,8 +13,9 @@ use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio_util::io::ReaderStream;
 
 use crate::{
-    AppState,
+    AppState, StateError,
     auth::{hash_session_token, request_token},
+    catalog::service_unavailable,
 };
 
 #[derive(Debug, Deserialize)]
@@ -31,14 +32,10 @@ pub(crate) async fn media(
     let Some(token) = request_token(&headers) else {
         return StatusCode::UNAUTHORIZED.into_response();
     };
-    if state
-        .session_user(hash_session_token(&token))
-        .await
-        .ok()
-        .flatten()
-        .is_none()
-    {
-        return StatusCode::UNAUTHORIZED.into_response();
+    match state.session_user(hash_session_token(&token)).await {
+        Ok(Some(_)) => {}
+        Err(StateError::Capacity) => return service_unavailable(),
+        Ok(None) | Err(_) => return StatusCode::UNAUTHORIZED.into_response(),
     }
     let query = match raw_query.0.as_deref() {
         Some(raw) => match serde_urlencoded::from_str::<MediaQuery>(raw) {
@@ -51,18 +48,25 @@ pub(crate) async fn media(
     let root = state.config.library_root.clone();
     let path = query.path;
     let lookup_path = path.clone();
-    let database = state.database.clone();
+    let Some(blocking_task) = state.try_acquire_blocking_task() else {
+        return service_unavailable();
+    };
+    let database = state.database.clone().lock_owned().await;
     let opened = tokio::task::spawn_blocking(move || {
-        let database = database.blocking_lock();
-        let reference = learnvault_core::find_media_by_path(&database, &lookup_path)
-            .ok()
-            .flatten()?;
+        let _blocking_task = blocking_task;
+        let Some(reference) = learnvault_core::find_media_by_path(&database, &lookup_path)? else {
+            return Ok(None);
+        };
         learnvault_core::open_media(&database, &reference.library_id, &reference.media_id, &root)
-            .ok()
+            .map(Some)
     })
     .await;
-    let Ok(Some(opened)) = opened else {
-        return StatusCode::NOT_FOUND.into_response();
+    let opened = match opened {
+        Ok(Ok(Some(opened))) => opened,
+        Ok(Ok(None)) => return StatusCode::NOT_FOUND.into_response(),
+        Ok(Err(error)) => return media_error_response(&error),
+        // A tarefa abortada é uma indisponibilidade operacional, não ausência de mídia.
+        Err(_) => return service_unavailable(),
     };
 
     let Some((start, end)) = parse_range(headers.get(header::RANGE), opened.size) else {
@@ -100,6 +104,22 @@ pub(crate) async fn media(
         );
     }
     response
+}
+
+fn media_error_response(error: &learnvault_core::Error) -> Response {
+    media_error_status(error).into_response()
+}
+
+fn media_error_status(error: &learnvault_core::Error) -> StatusCode {
+    use learnvault_core::Error;
+
+    match error {
+        Error::MediaNotFound { .. }
+        | Error::MediaUnavailable { .. }
+        | Error::MediaMissingOnDisk { .. }
+        | Error::MediaRemoved { .. } => StatusCode::NOT_FOUND,
+        _ => StatusCode::INTERNAL_SERVER_ERROR,
+    }
 }
 
 fn parse_range(value: Option<&HeaderValue>, size: u64) -> Option<(u64, u64)> {
@@ -162,8 +182,9 @@ fn content_type(path: &str) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_range;
+    use super::{media_error_status, parse_range};
     use axum::http::HeaderValue;
+    use learnvault_core::Error;
 
     #[test]
     fn empty_files_have_a_valid_full_response_but_ranges_do_not() {
@@ -172,5 +193,61 @@ mod tests {
             parse_range(Some(&HeaderValue::from_static("bytes=0-")), 0),
             None
         );
+    }
+
+    #[test]
+    fn media_errors_map_only_legitimate_absence_to_not_found() {
+        for error in [
+            Error::MediaNotFound {
+                media_id: "media-1".to_owned(),
+            },
+            Error::MediaUnavailable {
+                media_id: "media-1".to_owned(),
+            },
+            Error::MediaMissingOnDisk {
+                media_id: "media-1".to_owned(),
+            },
+            Error::MediaRemoved {
+                media_id: "media-1".to_owned(),
+            },
+        ] {
+            assert_eq!(
+                media_error_status(&error),
+                axum::http::StatusCode::NOT_FOUND
+            );
+        }
+    }
+
+    #[test]
+    fn media_integrity_and_operational_errors_map_to_internal_server_error() {
+        for error in [
+            Error::InvalidRelativePath {
+                path: "../outside".to_owned(),
+            },
+            Error::MediaOutsideLibrary {
+                media_id: "media-1".to_owned(),
+            },
+            Error::MediaIsSymlink {
+                media_id: "media-1".to_owned(),
+            },
+            Error::MediaNotAFile {
+                media_id: "media-1".to_owned(),
+            },
+            Error::MediaIdentityMismatch {
+                media_id: "media-1".to_owned(),
+            },
+            Error::MediaUnreadable {
+                media_id: "media-1".to_owned(),
+                source: std::io::Error::other("unreadable"),
+            },
+            Error::LibraryRootMissing {
+                path: "missing-library".into(),
+            },
+        ] {
+            assert_eq!(
+                media_error_status(&error),
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR
+            );
+        }
     }
 }
