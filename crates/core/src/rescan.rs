@@ -15,9 +15,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
-use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::db::Database;
+use crate::db::{Database, now_unix_seconds};
 use crate::error::{Error, Result};
 use crate::ids::new_media_id;
 use crate::paths::{KeyMode, relative_path_key};
@@ -316,17 +315,6 @@ fn is_covered_by_unverified(key: &str, unverified: &[String]) -> bool {
 /// saturam no limite em vez de falhar ou entrar em pânico.
 fn size_as_integer(size: u64) -> i64 {
     i64::try_from(size).unwrap_or(i64::MAX)
-}
-
-/// Instante atual em segundos desde a época Unix.
-///
-/// Um relógio anterior à época Unix é registrado como `0`, que o domínio documenta como
-/// "momento desconhecido".
-fn now_unix_seconds() -> i64 {
-    match SystemTime::now().duration_since(UNIX_EPOCH) {
-        Ok(elapsed) => i64::try_from(elapsed.as_secs()).unwrap_or(i64::MAX),
-        Err(_) => 0,
-    }
 }
 
 /// Extensão local para transformar "nenhuma linha" em `None` sem `unwrap`.
