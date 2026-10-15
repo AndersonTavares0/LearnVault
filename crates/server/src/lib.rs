@@ -42,6 +42,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/login", axum::routing::post(auth::login))
         .route("/api/me", get(auth::me))
         .route("/api/logout", axum::routing::post(auth::logout))
+        .route("/api/media", get(media::media).head(media::media))
         .layer(DefaultBodyLimit::max(8 * 1024))
         .layer(map_response(security_headers))
         .with_state(state)
@@ -106,8 +107,8 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
     use std::fs;
+    use std::path::PathBuf;
 
     use axum::{
         body::Body,
@@ -128,7 +129,7 @@ mod tests {
         let state = AppState::initialize(config).await.unwrap();
         let outcome = learnvault_core::scan(temp.path()).unwrap();
         {
-            let mut database = state.database.blocking_lock();
+            let mut database = state.database.try_lock().unwrap();
             learnvault_core::apply_scan(
                 &mut database,
                 "library-1",
@@ -267,7 +268,11 @@ mod tests {
         let (app, _temp) = media_app().await;
         let unauthenticated = app
             .clone()
-            .oneshot(Request::get("/api/media?path=lesson.mp4").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::get("/api/media?path=lesson.mp4")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
         assert_eq!(unauthenticated.status(), StatusCode::UNAUTHORIZED);
@@ -286,7 +291,10 @@ mod tests {
         assert_eq!(full.status(), StatusCode::OK);
         assert_eq!(full.headers()["content-type"], "video/mp4");
         assert_eq!(full.headers()["accept-ranges"], "bytes");
-        assert_eq!(full.into_body().collect().await.unwrap().to_bytes(), "0123456789");
+        assert_eq!(
+            full.into_body().collect().await.unwrap().to_bytes(),
+            "0123456789"
+        );
 
         let head = app
             .clone()
@@ -300,7 +308,14 @@ mod tests {
             .unwrap();
         assert_eq!(head.status(), StatusCode::OK);
         assert_eq!(head.headers()["content-length"], "10");
-        assert!(head.into_body().collect().await.unwrap().to_bytes().is_empty());
+        assert!(
+            head.into_body()
+                .collect()
+                .await
+                .unwrap()
+                .to_bytes()
+                .is_empty()
+        );
 
         let partial = app
             .clone()
@@ -315,7 +330,10 @@ mod tests {
             .unwrap();
         assert_eq!(partial.status(), StatusCode::PARTIAL_CONTENT);
         assert_eq!(partial.headers()["content-range"], "bytes 2-5/10");
-        assert_eq!(partial.into_body().collect().await.unwrap().to_bytes(), "2345");
+        assert_eq!(
+            partial.into_body().collect().await.unwrap().to_bytes(),
+            "2345"
+        );
     }
 
     #[tokio::test]

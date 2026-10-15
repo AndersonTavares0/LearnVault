@@ -243,7 +243,7 @@ pub(crate) async fn logout(State(state): State<AppState>, headers: HeaderMap) ->
     response
 }
 
-fn request_token(headers: &HeaderMap) -> Option<String> {
+pub(crate) fn request_token(headers: &HeaderMap) -> Option<String> {
     headers
         .get("cookie")?
         .to_str()
