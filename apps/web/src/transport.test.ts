@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { findLesson } from './router';
 import { DesktopStub, HttpTransport, normalizeCatalog, normalizeUser, type Transport } from './transport';
 
 describe('transport contract', () => {
@@ -55,6 +56,41 @@ describe('transport contract', () => {
 		const catalog = normalizeCatalog({ categories: [{ title: 'Categoria', courses: [{ title: 'Curso', modules: [{ title: 'Módulo', lessons: [{ title: 'Aula', path: 'aula', media: [], subtitles: [{ name: 'legenda.vtt', path: 'legenda.vtt', size: 1 }], materials: [{ name: 'slide.pdf', path: 'slide.pdf', size: 2 }] }] }] }] }] });
 		expect(catalog.categories[0].courses[0].modules[0].lessons[0].materials[0].path).toBe('slide.pdf');
 		expect(catalog.categories[0].courses[0].modules[0].lessons[0].subtitles[0].path).toBe('legenda.vtt');
+	});
+	it('projects a realistic Go catalog into non-empty canonical nodes for the SPA', () => {
+		// Mirrors the Go /api/catalog payload: recursive category/course/module/lesson tree,
+		// files carry no `kind` (the server classifies by media/subtitles/materials arrays),
+		// root loose_files are present and `nodes` is omitted (json omitempty).
+		const catalog = normalizeCatalog({
+			categories: [{
+				title: 'Programação', path: 'programming',
+				courses: [{
+					title: 'Go', path: 'programming/go',
+					modules: [{
+						title: 'Básico', path: 'programming/go/basics',
+						lessons: [{
+							title: 'Primeiros passos', path: 'programming/go/basics/first',
+							media: [{ name: 'video.mp4', path: 'programming/go/basics/first/video.mp4', size: 42 }],
+							subtitles: [{ name: 'video.vtt', path: 'programming/go/basics/first/video.vtt', size: 7 }],
+							materials: [{ name: 'notes.pdf', path: 'programming/go/basics/first/notes.pdf', size: 99 }]
+						}]
+					}]
+				}]
+			}],
+			loose_files: [{ name: 'intro.pdf', path: 'intro.pdf', size: 5 }]
+		});
+		// App.svelte renders only `catalog.nodes`, so an empty projection was the P1 hole.
+		expect(catalog.nodes.length).toBeGreaterThan(0);
+		expect(catalog.nodes[0].role).toBe('category');
+		expect(catalog.nodes[0].children[0].children[0].children[0].path).toBe('programming/go/basics/first');
+		expect(catalog.looseFiles[0].path).toBe('intro.pdf');
+		// The player resolves the lesson from the canonical nodes collection via findLesson.
+		const lesson = findLesson(catalog, 'programming/go/basics/first');
+		expect(lesson?.media[0]).toMatchObject({ path: 'programming/go/basics/first/video.mp4', kind: 'media' });
+		expect(lesson?.subtitles[0]).toMatchObject({ path: 'programming/go/basics/first/video.vtt', kind: 'subtitle' });
+		expect(lesson?.materials[0]).toMatchObject({ path: 'programming/go/basics/first/notes.pdf', kind: 'material' });
+		// categories is a projection of nodes, not a second parallel tree.
+		expect(catalog.categories[0].courses[0].modules[0].lessons[0].path).toBe('programming/go/basics/first');
 	});
 	it('rejects an unknown catalog shape with a controlled error', () => expect(() => normalizeCatalog({ nope: true })).toThrow('Resposta inválida do servidor'));
 });

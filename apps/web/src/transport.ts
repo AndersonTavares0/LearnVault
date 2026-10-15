@@ -21,6 +21,7 @@ type RustFile = { media_id?: string; name?: string; path?: string; size?: number
 type RustNode = { title?: string; path?: string; role?: string; files?: RustFile[]; loose_files?: RustFile[]; children?: RustNode[] };
 type RustCatalog = { complete?: boolean; categories?: RustNode[]; nodes?: RustNode[]; loose_files?: RustFile[]; looseFiles?: RustFile[] };
 type GoFile = { name?: string; path?: string; size?: number; media_id?: string; kind?: string; availability?: string; unverified?: boolean };
+type GoCatalog = { categories?: unknown; loose_files?: unknown; looseFiles?: unknown };
 
 function invalidPayload(message: string): Error { return new Error(`Resposta inválida do servidor: ${message}`); }
 
@@ -91,6 +92,47 @@ function normalizeRustCatalog(value: RustCatalog): Catalog {
 	return { complete: value.complete === true, looseFiles: looseFiles.map(normalizeFile), nodes, categories: projectRust(nodes) };
 }
 
+function goTitle(value: unknown, fallback: string): string { return typeof value === 'string' ? value : fallback; }
+
+function tagKind(files: FileEntry[], kind: string): FileEntry[] { return files.map((file) => ({ ...file, kind: file.kind ?? kind })); }
+
+function goLessonNode(value: unknown): CatalogNode {
+	const item = goLesson(value);
+	const files = [...tagKind(item.media, 'media'), ...tagKind(item.subtitles, 'subtitle'), ...tagKind(item.materials, 'material')];
+	return { title: item.title, path: item.path, role: 'lesson', files, looseFiles: [], children: [] };
+}
+
+function goModuleNode(value: unknown): CatalogNode {
+	if (!value || typeof value !== 'object') throw invalidPayload('módulo Go inválido.');
+	const item = value as { title?: unknown; path?: unknown; lessons?: unknown };
+	if (!Array.isArray(item.lessons)) throw invalidPayload('módulo Go sem lessons.');
+	return { title: goTitle(item.title, 'Módulo'), path: goTitle(item.path, ''), role: 'module', files: [], looseFiles: [], children: item.lessons.map(goLessonNode) };
+}
+
+function goCourseNode(value: unknown): CatalogNode {
+	if (!value || typeof value !== 'object') throw invalidPayload('curso Go inválido.');
+	const item = value as { title?: unknown; path?: unknown; modules?: unknown };
+	if (!Array.isArray(item.modules)) throw invalidPayload('curso Go sem modules.');
+	return { title: goTitle(item.title, 'Curso'), path: goTitle(item.path, ''), role: 'course', files: [], looseFiles: [], children: item.modules.map(goModuleNode) };
+}
+
+function goCategoryNode(value: unknown): CatalogNode {
+	if (!value || typeof value !== 'object') throw invalidPayload('categoria Go inválida.');
+	const item = value as { title?: unknown; path?: unknown; courses?: unknown };
+	if (!Array.isArray(item.courses)) throw invalidPayload('categoria Go sem courses.');
+	return { title: goTitle(item.title, 'Categoria'), path: goTitle(item.path, ''), role: 'category', files: [], looseFiles: [], children: item.courses.map(goCourseNode) };
+}
+
+// Go serializes the projected category/course/module/lesson tree and omits root `kind`/`nodes`;
+// normalize it into the same canonical recursive `nodes` collection Rust already provides so the
+// SPA renders one shape, and derive `categories` from it to avoid a second parallel tree.
+function normalizeGoCatalog(value: GoCatalog): Catalog {
+	if (!Array.isArray(value.categories)) throw invalidPayload('catálogo Go sem categories.');
+	const looseFiles = goFiles(value.loose_files ?? value.looseFiles ?? []);
+	const nodes = value.categories.map(goCategoryNode);
+	return { complete: true, looseFiles, nodes, categories: projectRust(nodes) };
+}
+
 export function normalizeUser(value: unknown): User {
 	if (!value || typeof value !== 'object' || typeof (value as { username?: unknown }).username !== 'string') throw invalidPayload('usuário sem username.');
 	const user = value as { user_id?: unknown; username: string; role?: unknown; is_admin?: unknown; must_change_credentials?: unknown };
@@ -102,32 +144,7 @@ export function normalizeCatalog(value: unknown): Catalog {
 	const payload = value as { categories?: unknown; nodes?: unknown; loose_files?: unknown; looseFiles?: unknown };
 	if (Array.isArray(payload.nodes)) return normalizeRustCatalog(value as RustCatalog);
 	if (Array.isArray(payload.categories) && payload.categories.every((item) => item && typeof item === 'object' && ('courses' in item || 'children' in item))) {
-		if (payload.categories.some((item) => 'courses' in (item as object))) {
-			return { complete: true, looseFiles: [], nodes: [], categories: payload.categories.map((category) => {
-				if (!category || typeof category !== 'object') throw invalidPayload('categoria Go inválida.');
-				const currentCategory = category as { title?: unknown; courses?: unknown };
-				if (!Array.isArray(currentCategory.courses)) throw invalidPayload('categoria Go sem courses.');
-				return {
-					title: typeof currentCategory.title === 'string' ? currentCategory.title : 'Categoria',
-					looseFiles: [],
-					courses: currentCategory.courses.map((course) => {
-						if (!course || typeof course !== 'object') throw invalidPayload('curso Go inválido.');
-						const currentCourse = course as { title?: unknown; modules?: unknown };
-						if (!Array.isArray(currentCourse.modules)) throw invalidPayload('curso Go sem modules.');
-						return {
-							title: typeof currentCourse.title === 'string' ? currentCourse.title : 'Curso',
-							looseFiles: [],
-							modules: currentCourse.modules.map((module) => {
-								if (!module || typeof module !== 'object') throw invalidPayload('módulo Go inválido.');
-								const currentModule = module as { title?: unknown; lessons?: unknown };
-								if (!Array.isArray(currentModule.lessons)) throw invalidPayload('módulo Go sem lessons.');
-								return { title: typeof currentModule.title === 'string' ? currentModule.title : 'Módulo', looseFiles: [], lessons: currentModule.lessons.map(goLesson) };
-							})
-						};
-					})
-				};
-			}) };
-		}
+		if (payload.categories.some((item) => 'courses' in (item as object))) return normalizeGoCatalog(value as GoCatalog);
 		return normalizeRustCatalog(value as RustCatalog);
 	}
 	throw invalidPayload('formato de catálogo desconhecido.');
