@@ -9,7 +9,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use learnvault_desktop::{DesktopState, IpcErrorCode};
+use learnvault_desktop::{DesktopState, IpcErrorCode, RescanSummaryDto};
 
 /// Estado desktop isolado em diretórios temporários, com dados e configuração separados.
 fn desktop(root: &Path) -> DesktopState {
@@ -333,4 +333,83 @@ fn concurrent_rescans_do_not_run_together_and_return_a_stable_error() {
         summary.inserted, 1,
         "as tentativas concorrentes recusadas não podem ter varrido a biblioteca"
     );
+}
+
+#[test]
+fn a_real_rescan_error_releases_the_busy_state_for_the_next_attempt() {
+    let dir = tempfile::tempdir().unwrap();
+    let (state, library) = configured(dir.path());
+    fs::write(library.join("aula.mp4"), b"video").unwrap();
+    state.rescan().unwrap();
+    assert_eq!(media_rows(dir.path()), 1);
+
+    // Erro real: a raiz some depois da seleção e a varredura é recusada.
+    fs::remove_dir_all(&library).unwrap();
+    let first = state.rescan().unwrap_err();
+    assert_eq!(first.code, IpcErrorCode::RescanUnavailable);
+
+    // O guarda ocupado foi liberado: a segunda chamada entra na varredura e volta a falhar
+    // pela raiz, não por estar ocupada. Um guarda preso devolveria `rescan_in_progress`.
+    let second = state.rescan().unwrap_err();
+    assert_eq!(
+        second.code,
+        IpcErrorCode::RescanUnavailable,
+        "um erro real não pode deixar o estado ocupado preso"
+    );
+
+    // Restaurando a raiz, um novo rescan inicia e conclui normalmente.
+    fs::create_dir_all(&library).unwrap();
+    fs::write(library.join("aula-2.mp4"), b"video").unwrap();
+    let recovered = state.rescan().unwrap();
+    assert_eq!(recovered.inserted, 1);
+    assert_eq!(recovered.marked_missing, 1);
+    assert_eq!(media_rows(dir.path()), 2);
+}
+
+#[test]
+fn two_real_concurrent_rescans_stay_consistent_and_free_the_busy_state() {
+    let dir = tempfile::tempdir().unwrap();
+    let (state, library) = configured(dir.path());
+    for index in 0..50 {
+        fs::write(library.join(format!("aula-{index}.mp4")), b"video").unwrap();
+    }
+
+    // Concorrência real: as duas chamadas são `state.rescan()`, não um guarda manual.
+    let outcomes: Vec<Result<RescanSummaryDto, IpcErrorCode>> = std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..2)
+            .map(|_| {
+                let state = state.clone();
+                scope.spawn(move || state.rescan().map_err(|error| error.code))
+            })
+            .collect();
+        handles
+            .into_iter()
+            .map(|handle| handle.join().expect("a thread não pode entrar em pânico"))
+            .collect()
+    });
+
+    // Cada chamada real ou indexa, ou é recusada pelo estado ocupado — nunca por outra
+    // causa, e nunca em paralelo.
+    for outcome in &outcomes {
+        match outcome {
+            Ok(summary) => assert_eq!(
+                summary.inserted + summary.updated + summary.marked_missing,
+                50,
+                "a varredura vencedora precisa cobrir a biblioteca inteira"
+            ),
+            Err(code) => assert_eq!(*code, IpcErrorCode::RescanInProgress),
+        }
+    }
+    assert!(
+        outcomes.iter().any(|outcome| outcome.is_ok()),
+        "ao menos uma chamada real precisa indexar: {outcomes:?}"
+    );
+
+    // O catálogo ficou íntegro e o estado ocupado foi liberado: uma chamada posterior
+    // inicia e reafirma os 50 arquivos sem inserir duplicatas.
+    assert_eq!(media_rows(dir.path()), 50);
+    let final_summary = state.rescan().unwrap();
+    assert_eq!(final_summary.inserted, 0);
+    assert_eq!(final_summary.updated, 50);
+    assert_eq!(media_rows(dir.path()), 50);
 }
