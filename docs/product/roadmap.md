@@ -3,7 +3,22 @@
 Este roadmap é o resumo durável do produto e é orientado a resultados. Detalhes de
 implementação pertencem às Issues e pull requests relacionadas.
 
+## Corrente — reescrita em Rust
+
+A arquitetura aprovada está no [ADR 0001](../architecture/adr/0001-reescrita-em-rust.md).
+A execução avança por fases, com um pull request por fase:
+
+- [ ] Fase 0 — ADR, arquitetura e roadmap atualizados
+- [ ] Fase 1 — `crates/core` com domínio, SQLite, catálogo, identidade e política de rescan
+- [ ] Fase 2 — `crates/server` com Axum, autenticação, sessões e mídia com Range
+- [ ] Fase 3 — SPA Svelte 5 + TypeScript + Vite com dois builds
+- [ ] Fase 4 — `crates/desktop` com Tauri 2, offline e sem portas de rede
+- [ ] Fase 5 — distribuição por plataforma e remoção do serviço Go
+
 ## Atual — fundação e catálogo
+
+Esta seção descreve a implementação atual em Go, mantida como referência funcional e visual
+durante a reescrita.
 
 - [x] Serviço Go com SPA SvelteKit embutida
 - [x] Bootstrap do administrador e sessões seguras
@@ -28,7 +43,7 @@ implementação pertencem às Issues e pull requests relacionadas.
 - [ ] Construir o player como canvas principal de estudo com índice de aulas
 - [ ] Adicionar capas, estados vazios, carregamento e recuperação
 - [ ] Validar navegação por teclado, foco, contraste, movimento reduzido e labels para leitores de tela
-- [ ] Manter identidade visual original: azul-petróleo, tinta escura, papel frio e sinal lima
+- [ ] Manter a identidade visual original do projeto
 
 ## Depois — experiência de biblioteca ampliada
 
@@ -40,15 +55,18 @@ implementação pertencem às Issues e pull requests relacionadas.
 
 ## Distribuição — portabilidade primeiro
 
+A matriz aprovada está no [ADR 0001](../architecture/adr/0001-reescrita-em-rust.md).
+
 - [ ] Manter o núcleo compilável sem Docker ou Podman
-- [ ] Publicar artefatos Windows `.exe` versionados
-- [ ] Empacotar instaladores Windows `.msi`
-- [ ] Publicar pacotes Linux `.deb`
-- [ ] Publicar pacotes Linux `.rpm`
-- [ ] Publicar bundle e metadados Flatpak
+- [ ] Publicar instalador Windows `.exe` via NSIS
+- [ ] Publicar Flatpak como formato Linux preferencial do desktop
+- [ ] Publicar imagem OCI e binário nativo para instalação self-hosted
 - [ ] Assinar artefatos desktop quando houver credenciais de plataforma
 - [ ] Gerar checksums e metadados de proveniência para cada release
 - [ ] Manter Docker Compose e Podman rootless/Quadlet como adaptadores opcionais de servidor
+
+O Flatpak permanece sujeito à validação técnica de permissões, acesso persistente às bibliotecas
+e reprodução de mídia antes de ser tratado como formato definitivo.
 
 ## Mais tarde — inteligência e operações opcionais
 

@@ -11,7 +11,11 @@ that area.
 
 ## Product and architecture
 
-- LearnVault is a self-hosted study library: Go service, SQLite, and SvelteKit SPA.
+- LearnVault is a self-hosted study library. The approved target architecture is a Rust
+  workspace with a shared `core`, an Axum server, a Tauri 2 desktop app, and SQLite. The
+  current Go + SvelteKit implementation is the functional and visual reference and remains
+  in place until the Rust MVP covers the approved requirements.
+- Read `docs/architecture/adr/0001-reescrita-em-rust.md` before architectural work.
 - Preserve the clean-room product policy: do not copy another product's code,
   assets, brand, proprietary text, or pixel-level layout.
 - Keep Docker/Podman as optional deployment adapters; do not make them a runtime
