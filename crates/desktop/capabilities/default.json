@@ -1,0 +1,6 @@
+{
+  "identifier": "main-window",
+  "description": "Permissoes minimas do nucleo do Tauri para a janela principal do LearnVault desktop. Deny-by-default: nada alem do conjunto padrao do nucleo (app, event, window, webview, menu, tray, image, resources, path) e concedido. Sem shell, process, http, fs amplo, remote ou updater.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

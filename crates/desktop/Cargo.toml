@@ -1,0 +1,26 @@
+[package]
+name = "learnvault-desktop"
+description = "Aplicativo desktop do LearnVault: webview Tauri 2 offline, sem portas de rede."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+# O crate desktop existe para embutir a SPA e falar com o núcleo por IPC. Ele nunca
+# abre sockets de rede nem embute um servidor HTTP.
+#
+# `learnvault-core` só entra como dependência quando a integração de domínio chegar;
+# nesta fatia de fundação nenhum comando IPC é implementado.
+
+[dependencies]
+# Tauri 2.12.x. Os crates do Tauri não compartilham o número minor: `tauri` está em
+# 2.12.4 e `tauri-build` em 2.7.3, que é a versão de build mais recente da linha 2.
+# As versões resolvidas ficam travadas no `Cargo.lock` do workspace.
+tauri = "2.12.4"
+
+[build-dependencies]
+tauri-build = "2.7.3"
+
+[dev-dependencies]
+serde_json = "1"

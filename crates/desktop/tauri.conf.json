@@ -1,0 +1,24 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "LearnVault",
+  "identifier": "app.learnvault.desktop",
+  "build": {
+    "frontendDist": "frontend-dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "LearnVault",
+        "url": "200.html"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost data: blob:; media-src 'self' asset: http://asset.localhost blob:; object-src 'none'; base-uri 'self'"
+    }
+  },
+  "bundle": {
+    "active": false,
+    "icon": ["icons/icon.png"]
+  }
+}
