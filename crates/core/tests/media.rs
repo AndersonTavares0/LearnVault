@@ -4,7 +4,7 @@
 //! arquivo sob a raiz e devolve o arquivo já aberto em modo somente leitura, com os
 //! metadados lidos do próprio descritor.
 
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::Path;
 
 use learnvault_core::paths::relative_path_key;
@@ -15,10 +15,12 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 const LIB: &str = "bib-1";
 
 fn key(path: &str) -> String {
-    relative_path_key(path, KeyMode::for_host()).expect("caminho de teste válido")
+    // Caminhos que o domínio recusa são gravados como estão: os testes que precisam deles
+    // verificam justamente que a resolução revalida o que está no banco.
+    relative_path_key(path, KeyMode::for_host()).unwrap_or_else(|_| path.to_owned())
 }
 
-fn library_db() -> Result<Database, rusqlite::Error> {
+fn library_db() -> Result<Database, Box<dyn std::error::Error>> {
     let db = Database::open_in_memory()?;
     db.connection().execute(
         "INSERT INTO library (library_id, available) VALUES (?1, 1)",
@@ -244,7 +246,19 @@ fn another_library_does_not_see_the_media() -> TestResult {
     write_file(root, "Curso/Aula/aula.mp4", b"conteudo")?;
 
     let db = library_db()?;
-    insert_media(&db, "bib-2", "m1", "Curso/Aula/aula.mp4", 8, 10, "available")?;
+    db.connection().execute(
+        "INSERT INTO library (library_id, available) VALUES (?1, 1)",
+        ["bib-2"],
+    )?;
+    insert_media(
+        &db,
+        "bib-2",
+        "m1",
+        "Curso/Aula/aula.mp4",
+        8,
+        10,
+        "available",
+    )?;
 
     match open_media(&db, LIB, "m1", root) {
         Err(Error::MediaNotFound { .. }) => {}
@@ -346,6 +360,60 @@ fn a_directory_symlink_that_escapes_the_library_is_refused() -> TestResult {
 }
 
 #[test]
+fn a_file_changed_only_in_mtime_is_flagged() -> TestResult {
+    let directory = tempfile::tempdir()?;
+    let root = directory.path();
+    write_file(root, "Curso/Aula/aula.mp4", b"conteudo")?;
+
+    let db = library_db()?;
+    // Tamanho correto e mtime antigo: só o mtime diverge do que a varredura registrou.
+    insert_media(&db, LIB, "m1", "Curso/Aula/aula.mp4", 8, 1, "available")?;
+
+    let media = open_media(&db, LIB, "m1", root)?;
+
+    assert!(media.changed, "o mtime divergente deve ser sinalizado");
+    assert_eq!(media.size, 8, "o tamanho vem do arquivo aberto");
+    Ok(())
+}
+
+#[test]
+fn a_negative_stored_size_is_read_as_zero() -> TestResult {
+    let directory = tempfile::tempdir()?;
+    let root = directory.path();
+    write_file(root, "Curso/Aula/aula.mp4", b"conteudo")?;
+
+    let db = library_db()?;
+    insert_media(&db, LIB, "m1", "Curso/Aula/aula.mp4", -5, 10, "available")?;
+
+    let media = open_media(&db, LIB, "m1", root)?;
+
+    assert_eq!(media.size, 8, "o tamanho real do arquivo é usado");
+    assert!(
+        media.changed,
+        "um tamanho negativo na linha nunca coincide com o arquivo"
+    );
+    Ok(())
+}
+
+#[test]
+fn the_returned_descriptor_is_read_only() -> TestResult {
+    let directory = tempfile::tempdir()?;
+    let root = directory.path();
+    write_file(root, "Curso/Aula/aula.mp4", b"conteudo")?;
+
+    let db = library_db()?;
+    insert_media(&db, LIB, "m1", "Curso/Aula/aula.mp4", 8, 10, "available")?;
+
+    let mut media = open_media(&db, LIB, "m1", root)?;
+
+    assert!(
+        media.file.write_all(b"x").is_err(),
+        "o arquivo é aberto somente para leitura"
+    );
+    Ok(())
+}
+
+#[test]
 fn opening_does_not_modify_the_library() -> TestResult {
     let directory = tempfile::tempdir()?;
     let root = directory.path();
@@ -367,6 +435,10 @@ fn opening_does_not_modify_the_library() -> TestResult {
     let opened = open_media(&db, LIB, "m1", root)?;
     drop(opened);
 
-    assert_eq!(before, manifest(root), "a resolução não altera a biblioteca");
+    assert_eq!(
+        before,
+        manifest(root),
+        "a resolução não altera a biblioteca"
+    );
     Ok(())
 }
