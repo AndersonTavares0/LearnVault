@@ -23,6 +23,8 @@
 - [ ] `pnpm audit --audit-level=low`
 - [ ] `go test -race ./...`
 - [ ] `go vet ./...`
+- [ ] `cargo fmt --all -- --check` e `cargo clippy --all-targets -- -D warnings`
+- [ ] `cargo test --all` ou `cargo llvm-cov --package learnvault-core --all-targets --fail-under-lines 80`
 - [ ] Validação de Container/Compose, com o comando exato
 
 ## Segurança e idioma

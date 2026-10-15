@@ -91,6 +91,10 @@ Os três nomes de jobs obrigatórios permanecem estáveis: `SPA checks`, `Go tes
 `Container build`. O CI roda em pull requests, cancela execuções obsoletas, constrói a SPA uma
 vez para o embed do Go, usa cache e mantém timeouts curtos.
 
+O job `Rust tests and lints` roda junto e verifica formatação, lints, testes e a cobertura do
+núcleo em Rust. Ele ainda não é um check obrigatório; a promoção a obrigatório exige decisão
+explícita do mantenedor.
+
 O Wiki sync não é check obrigatório: ele roda após mudanças mapeadas chegarem à `main` ou por
 execução manual, escreve somente páginas gerenciadas e não reage a eventos da própria Wiki.
 
