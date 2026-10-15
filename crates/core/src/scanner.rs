@@ -6,10 +6,10 @@
 //! não a monta.
 //!
 //! A varredura é estritamente de leitura: nenhum arquivo ou diretório da biblioteca é
-//! criado, alterado ou removido. Links simbólicos internos não são seguidos — nem
-//! diretórios nem arquivos — para que a varredura não alcance nada fora da raiz. A raiz
-//! em si é confiada: ela é resolvida pela integração de plataforma e, se for um link, o
-//! próprio sistema operacional a resolve.
+//! criado, alterado ou removido. Links simbólicos não são seguidos — nem a raiz, nem
+//! diretórios ou arquivos internos — para que a varredura não alcance nada fora da raiz. A
+//! raiz é resolvida e validada pela integração de plataforma; se ainda assim for um link, a
+//! varredura não o segue (a raiz é confiada apenas quando é um diretório real).
 //!
 //! Diretórios ou arquivos ilegíveis são registrados em [`ScanOutcome::inaccessible`] e a
 //! varredura continua, sem interromper a biblioteca inteira por causa de um item. Se a
@@ -113,6 +113,9 @@ pub fn scan(root: &Path) -> Result<ScanOutcome> {
 
     let mut walker = WalkDir::new(root)
         .follow_links(false)
+        // A raiz não é seguida quando é um link: sem isto, `follow_links(false)` ainda
+        // seguiria um symlink/junction no topo e a varredura alcançaria outra árvore.
+        .follow_root_links(false)
         .min_depth(1)
         .into_iter();
 

@@ -16,10 +16,12 @@ A reescrita em Rust já entrega `crates/core`, `crates/server` e o `crates/deskt
 **fundação** (crate Tauri 2 que embute a SPA por `frontendDist`, capability em deny-by-default e
 sem portas de rede) e as **fatias de IPC**: os comandos `desktop_config` e `desktop_catalog`, com
 ACL app-defined mínima e o catálogo derivado do `learnvault-core` sobre um banco SQLite local, no
-diretório de dados do aplicativo, e o comando `desktop_select_library`, que aciona o seletor nativo
+diretório de dados do aplicativo; o comando `desktop_select_library`, que aciona o seletor nativo
 interno ao Rust e persiste a raiz canonicalizada de forma versionada, atômica e serializada no
-diretório de configuração do aplicativo, fora da biblioteca e do SQLite. Rescan, entrega de mídia,
-autenticação e janelas reais ainda não existem no desktop.
+diretório de configuração do aplicativo, fora da biblioteca e do SQLite; e o comando
+`desktop_rescan`, que indexa explicitamente a raiz persistida reutilizando o `learnvault-core`, com
+estado ocupado que serializa chamadas concorrentes e nunca dispara varredura automática. Entrega de
+mídia, autenticação e janelas reais ainda não existem no desktop.
 
 ```text
 Proxy HTTPS local
@@ -60,8 +62,9 @@ Responsabilidades:
   segurança e entrega da SPA.
 - `crates/desktop` integra com o sistema de arquivos e entrega a mídia ao webview, sem
   autenticação e sem portas de rede. Por enquanto expõe o IPC de configuração e catálogo sobre o
-  banco local e a seleção da raiz da biblioteca (seletor nativo interno ao Rust, com persistência
-  atômica fora da biblioteca); a entrega de mídia pertence a uma fatia posterior.
+  banco local, a seleção da raiz da biblioteca (seletor nativo interno ao Rust, com persistência
+  atômica fora da biblioteca) e o rescan explícito dessa raiz, reutilizando o núcleo com estado
+  ocupado e sem varredura automática; a entrega de mídia pertence a uma fatia posterior.
 - `apps/web/` é uma única SPA em Svelte 5 + TypeScript + Vite, com roteamento por hash e dois
   builds que escolhem o transporte em tempo de compilação.
 

@@ -13,11 +13,27 @@ use learnvault_desktop::{
     store_library_root,
 };
 
+/// Nome candidato de temporário usado pelo escritor na tentativa `attempt`.
+///
+/// Repete `temporary_candidate` do crate: a primeira tentativa usa o formato histórico
+/// `.{CONFIG_FILE_NAME}.{pid}.tmp` e as seguintes acrescentam o contador.
+fn temporary_path(config_dir: &Path, attempt: u32) -> PathBuf {
+    if attempt == 0 {
+        config_dir.join(format!(".{CONFIG_FILE_NAME}.{}.tmp", std::process::id()))
+    } else {
+        config_dir.join(format!(
+            ".{CONFIG_FILE_NAME}.{}.{}.tmp",
+            std::process::id(),
+            attempt
+        ))
+    }
+}
+
 /// Primeiro nome de temporário que o escritor tenta: o formato histórico
 /// `.{CONFIG_FILE_NAME}.{pid}.tmp`. A suíte o usa para provar que um caminho pré-existente
 /// nunca é reaproveitado, sobrescrito nem seguido.
 fn first_temporary_path(config_dir: &Path) -> PathBuf {
-    config_dir.join(format!(".{CONFIG_FILE_NAME}.{}.tmp", std::process::id()))
+    temporary_path(config_dir, 0)
 }
 
 /// Cria um diretório de biblioteca vazio e devolve a raiz já validada.
@@ -339,6 +355,48 @@ fn a_pre_existing_temporary_file_is_never_reused() {
         fs::read_dir(&config).unwrap().count(),
         2,
         "a configuração final coexiste com o arquivo pré-existente"
+    );
+}
+
+#[test]
+fn storing_gives_up_after_the_temporary_name_limit_without_reusing_a_squatter() {
+    // Espelha `MAX_TEMP_ATTEMPTS` do crate: 32 nomes candidatos (tentativas 0..32).
+    const MAX_TEMP_ATTEMPTS: u32 = 32;
+
+    let dir = tempfile::tempdir().unwrap();
+    let config = dir.path().join("config");
+    fs::create_dir_all(&config).unwrap();
+    let root = library(dir.path());
+
+    for attempt in 0..MAX_TEMP_ATTEMPTS {
+        fs::write(temporary_path(&config, attempt), b"lixo pre-existente").unwrap();
+    }
+
+    assert_eq!(
+        store_library_root(&config, &root),
+        Err(LibraryError::WriteFailed),
+        "esgotar os nomes de temporário precisa falhar"
+    );
+    assert!(
+        !config.join(CONFIG_FILE_NAME).exists(),
+        "uma gravação fracassada não pode produzir a configuração"
+    );
+    for attempt in 0..MAX_TEMP_ATTEMPTS {
+        assert_eq!(
+            fs::read(temporary_path(&config, attempt)).unwrap(),
+            b"lixo pre-existente",
+            "nenhum temporário pré-existente pode ser reaproveitado ou sobrescrito"
+        );
+    }
+
+    // Liberando exatamente um nome, a gravação volta a funcionar usando o slot livre.
+    fs::remove_file(temporary_path(&config, MAX_TEMP_ATTEMPTS - 1)).unwrap();
+    store_library_root(&config, &root).unwrap();
+    assert!(load_library_root(&config).is_some());
+    assert_eq!(
+        fs::read_dir(&config).unwrap().count(),
+        MAX_TEMP_ATTEMPTS as usize,
+        "a configuração final coexiste com os temporários remanescentes"
     );
 }
 

@@ -189,7 +189,10 @@ const DESKTOP_ERROR_MESSAGES: Record<string, string> = {
 	catalog_unavailable: 'catálogo indisponível',
 	database_unavailable: 'banco de dados local indisponível',
 	library_root_invalid: 'A pasta escolhida não é uma biblioteca válida.',
-	library_config_unavailable: 'Não foi possível salvar a configuração do aplicativo.'
+	library_config_unavailable: 'Não foi possível salvar a configuração do aplicativo.',
+	library_not_configured: 'Nenhuma biblioteca está configurada.',
+	rescan_in_progress: 'Já existe uma indexação em andamento.',
+	rescan_unavailable: 'Não foi possível indexar a biblioteca.'
 };
 
 // O comando devolve o erro como objeto serializado `{ code, message }`, não como `Error`.
@@ -211,7 +214,9 @@ export class DesktopStub implements Transport {
 	// devolvido. Cancelar preserva a configuração anterior.
 	async chooseLibrary() { try { return normalizeConfig(await invoke<unknown>('desktop_select_library')); } catch (cause) { throw desktopError(cause, 'Não foi possível configurar a biblioteca.'); } }
 	async catalog() { try { return normalizeCatalog(await invoke<unknown>('desktop_catalog')); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar o catálogo.'); } }
-	rescan() { return Promise.reject(new Error('Rescan desktop ainda não implementado.')); }
+	// O rescan desktop é sempre explícito: o webview só o dispara a pedido do usuário. A
+	// resposta é um resumo sanitizado que não interessa ao shell, que recarrega o catálogo.
+	async rescan() { try { await invoke<unknown>('desktop_rescan'); } catch (cause) { throw desktopError(cause, 'Não foi possível indexar a biblioteca.'); } }
 	updateCredentials() { return Promise.reject(new Error('Transporte desktop ainda não implementado.')); }
 	mediaUrl(_path: string) { return null; }
 }

@@ -1,10 +1,10 @@
 //! Aplicativo desktop do LearnVault (Tauri 2).
 //!
-//! Esta fatia expõe a fronteira IPC de configuração e catálogo: o webview consulta a
-//! configuração (`desktop_config`), dispara a seleção da raiz da biblioteca
-//! (`desktop_select_library`) e lê o catálogo (`desktop_catalog`). O catálogo é derivado
-//! pelo núcleo `learnvault-core` sobre um banco SQLite local, no diretório de dados do
-//! aplicativo.
+//! Esta fatia expõe a fronteira IPC de configuração, catálogo e rescan: o webview consulta
+//! a configuração (`desktop_config`), dispara a seleção da raiz da biblioteca
+//! (`desktop_select_library`), lê o catálogo (`desktop_catalog`) e aciona a indexação
+//! explícita (`desktop_rescan`). O catálogo e o resumo do rescan são derivados pelo núcleo
+//! `learnvault-core` sobre um banco SQLite local, no diretório de dados do aplicativo.
 //!
 //! A raiz da biblioteca é escolhida por um seletor nativo acionado pelo Rust
 //! (`tauri-plugin-dialog`, interno e não concedido ao webview) e persistida de forma
@@ -12,9 +12,13 @@
 //! biblioteca nem no SQLite. O webview nunca envia nem recebe um caminho: só o booleano
 //! `configured`.
 //!
+//! O rescan é sempre explícito: nem a inicialização nem a seleção da raiz o disparam, e
+//! chamadas concorrentes são recusadas com um erro estável enquanto uma varredura está em
+//! andamento. Não há worker, progresso nem cancelamento nesta fatia.
+//!
 //! Não há listener de rede, servidor HTTP, plugin de shell, filesystem, http ou updater,
-//! nem rescan, mídia ou autenticação nesta fatia. A biblioteca permanece externa e somente
-//! leitura: nenhuma varredura é disparada e nenhum caminho de biblioteca é escrito.
+//! nem entrega de mídia ou autenticação nesta fatia. A biblioteca permanece externa e
+//! somente leitura: o rescan apenas a lê e nenhum caminho de biblioteca é escrito.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -26,15 +30,17 @@ pub mod error;
 pub mod library;
 pub mod state;
 
-pub use command::{catalog, desktop_catalog, desktop_config, desktop_select_library};
+pub use command::{
+    catalog, desktop_catalog, desktop_config, desktop_rescan, desktop_select_library,
+};
 pub use config::{DATABASE_FILE_NAME, DesktopConfigDto, database_path};
-pub use dto::{CatalogDto, CatalogFileDto, CatalogNodeDto};
+pub use dto::{CatalogDto, CatalogFileDto, CatalogNodeDto, RescanSummaryDto};
 pub use error::{IpcError, IpcErrorCode};
 pub use library::{
     CONFIG_FILE_NAME, CONFIG_VERSION, LibraryError, LibraryRoot, load_library_root,
     store_library_root,
 };
-pub use state::DesktopState;
+pub use state::{DesktopState, RescanGuard};
 
 use tauri::Manager;
 
@@ -60,7 +66,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             command::desktop_config,
             command::desktop_catalog,
-            command::desktop_select_library
+            command::desktop_select_library,
+            command::desktop_rescan
         ])
         .run(tauri::generate_context!())
         .expect("falha ao executar o aplicativo desktop do LearnVault");

@@ -9,7 +9,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use learnvault_core::{Availability, Catalog, CatalogFile, CatalogNode, MediaKind, NodeRole};
-use learnvault_desktop::{CatalogDto, DesktopState, IpcErrorCode, catalog, load_library_root};
+use learnvault_desktop::{
+    CatalogDto, DesktopState, IpcErrorCode, RescanSummaryDto, catalog, load_library_root,
+};
 
 /// Estado desktop isolado em diretórios temporários, com dados e configuração separados.
 fn desktop(root: &Path) -> DesktopState {
@@ -215,6 +217,27 @@ fn catalog_failure_is_a_stable_sanitized_error() {
     assert!(
         !message.contains("aula.mp4"),
         "a mensagem não pode expor nomes de arquivo: {message}"
+    );
+}
+
+#[test]
+fn rescan_summary_dto_exposes_only_sanitized_counts() {
+    let summary = learnvault_core::RescanSummary {
+        ambiguous: vec!["Cursos secretos/aula.mp4".to_owned()],
+        ..learnvault_core::RescanSummary::default()
+    };
+
+    let json = serde_json::to_value(RescanSummaryDto::from(summary)).unwrap();
+
+    assert_eq!(json["ambiguous_count"], 1);
+    assert!(
+        json.get("ambiguous").is_none(),
+        "o resumo não pode expor a lista de chaves relativas: {json}"
+    );
+    let rendered = json.to_string();
+    assert!(
+        !rendered.contains("Cursos secretos") && !rendered.contains("aula.mp4"),
+        "nenhum caminho relativo pode cruzar o IPC: {rendered}"
     );
 }
 

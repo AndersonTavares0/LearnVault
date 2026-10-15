@@ -10,13 +10,14 @@
 //! banco nem na biblioteca.
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use learnvault_core::Database;
 
-use crate::command::catalog;
+use crate::command::{LIBRARY_ID, catalog};
 use crate::config::{DesktopConfigDto, database_path};
-use crate::dto::CatalogDto;
+use crate::dto::{CatalogDto, RescanSummaryDto};
 use crate::error::IpcError;
 use crate::library::{LibraryRoot, load_library_root, store_library_root};
 
@@ -26,6 +27,7 @@ pub struct DesktopState {
     database: Arc<Mutex<Database>>,
     config_dir: PathBuf,
     library_root: Arc<Mutex<Option<LibraryRoot>>>,
+    rescanning: Arc<AtomicBool>,
 }
 
 impl DesktopState {
@@ -44,6 +46,7 @@ impl DesktopState {
             database: Arc::new(Mutex::new(database)),
             config_dir: config_dir.to_path_buf(),
             library_root: Arc::new(Mutex::new(library_root)),
+            rescanning: Arc::new(AtomicBool::new(false)),
         })
     }
 
@@ -100,5 +103,71 @@ impl DesktopState {
         *guard = Some(root);
 
         Ok(DesktopConfigDto { configured: true })
+    }
+
+    /// Reserva o estado de rescan, devolvendo um guarda que o libera no `Drop`.
+    ///
+    /// A troca é atômica: a primeira chamada vence e as concorrentes recebem
+    /// [`IpcError::rescan_in_progress`], sem esperar nem entrar em paralelo. Enquanto o
+    /// guarda existe, nenhuma outra varredura pode começar — o estado não é cancelado nem
+    /// corrompido, apenas recusado. É o estado ocupado do rescan, nunca o cadeado do SQLite.
+    pub fn begin_rescan(&self) -> Result<RescanGuard, IpcError> {
+        self.rescanning
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .map_err(|_| IpcError::rescan_in_progress())?;
+        Ok(RescanGuard {
+            rescanning: Arc::clone(&self.rescanning),
+        })
+    }
+
+    /// Lê a biblioteca configurada e aplica a varredura ao catálogo local.
+    ///
+    /// Só é executado por ação explícita: nem a inicialização nem a seleção da raiz o
+    /// chamam. Sem raiz configurada devolve [`IpcError::library_not_configured`]; se a raiz
+    /// registrada sumiu, virou link/junction ou ficou inacessível, a revalidação imediata
+    /// devolve [`IpcError::rescan_unavailable`] e a política do núcleo cobre a raiz que já
+    /// não pode ser lida. A raiz é revalidada e copiada antes da varredura e nenhum cadeado
+    /// da configuração é mantido durante a leitura; o banco permanece fora da biblioteca e
+    /// a biblioteca permanece somente leitura. Chamadas concorrentes devolvem
+    /// [`IpcError::rescan_in_progress`] sem tocar o catálogo.
+    ///
+    /// Limitação conhecida desta fatia: o cadeado do banco SQLite é mantido durante toda a
+    /// varredura, então uma leitura de catálogo concorrente aguarda a indexação terminar.
+    /// O estado ocupado recusa um segundo rescan, mas não paraleliza a leitura do catálogo.
+    pub fn rescan(&self) -> Result<RescanSummaryDto, IpcError> {
+        let _guard = self.begin_rescan()?;
+
+        let root = self
+            .library_root()
+            .ok_or_else(IpcError::library_not_configured)?;
+
+        // Revalida a raiz imediatamente antes de varrer: se o diretório foi removido,
+        // substituído por um link/junction ou deixou de ser legível desde a seleção, a
+        // varredura é recusada sem seguir o alvo. A varredura usa a forma revalidada.
+        let root =
+            LibraryRoot::resolve(root.as_path()).map_err(|_| IpcError::rescan_unavailable())?;
+
+        let mut database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+
+        learnvault_core::rescan(&mut database, LIBRARY_ID, root.as_path())
+            .map(RescanSummaryDto::from)
+            .map_err(|_| IpcError::rescan_unavailable())
+    }
+}
+
+/// Guarda do estado ocupado do rescan.
+///
+/// Libera o estado ao ser descartado, inclusive em caso de erro ou pânico. Não expõe o
+/// caminho nem o banco: é apenas o ciclo de vida da exclusão mútua do rescan.
+pub struct RescanGuard {
+    rescanning: Arc<AtomicBool>,
+}
+
+impl Drop for RescanGuard {
+    fn drop(&mut self) {
+        self.rescanning.store(false, Ordering::Release);
     }
 }
