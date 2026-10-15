@@ -43,9 +43,10 @@ entrada de deploy. O código da aplicação pertence a estas pastas:
 
 | Caminho | Responsabilidade |
 | --- | --- |
-| `cmd/learnvault/` | Executável Go, testes e saída embutida da SPA |
-| `internal/` | Pacotes internos, backend e migrações |
-| `web/src/` | Código-fonte SvelteKit |
+| `crates/` | Espaço de trabalho Rust; `crates/core` concentra o domínio compartilhado (SQLite, catálogo, scanner, identidade de mídia e estado de estudo) |
+| `web/src/` | Código-fonte da SPA |
+| `cmd/learnvault/` | Implementação Go de referência (executável e saída embutida da SPA), em remoção gradual |
+| `internal/` | Implementação Go de referência (pacotes internos, backend e migrações), em remoção gradual |
 | `testdata/` | Fixtures sintéticas pequenas |
 | `deploy/container/` | Definição da imagem OCI |
 | `deploy/compose/` | Stack Docker Compose e exemplo de ambiente |
@@ -58,10 +59,12 @@ entrada de deploy. O código da aplicação pertence a estas pastas:
 Arquivos de comunidade (`CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`) ficam em
 `.github/`. O changelog fica em `docs/releases/CHANGELOG.md`. A configuração do Release Please
 fica em `.github/release-please/`. A raiz mantém apenas `AGENTS.md`, `README.md`, `LICENSE`,
-`.dockerignore`, `.gitignore`, `go.mod`, `go.sum`, `package.json`, `pnpm-lock.yaml`,
-`pnpm-workspace.yaml`, `tsconfig.json` e `vite.config.ts`.
+`.dockerignore`, `.gitignore`, `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, `go.mod`,
+`go.sum`, `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `tsconfig.json` e
+`vite.config.ts`. Os crates `server` e `desktop` surgem nas suas fases correspondentes; só
+existe `crates/core` até lá.
 
-Saída gerada (`cmd/learnvault/web/build`, `.svelte-kit`, `node_modules` e dados/cache
+Saída gerada (`cmd/learnvault/web/build`, `target`, `.svelte-kit`, `node_modules` e dados/cache
 locais) deve permanecer ignorada e não pode ser commitada.
 
 ## Limites do repositório
