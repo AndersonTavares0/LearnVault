@@ -64,7 +64,7 @@ async fn security_headers(mut response: Response) -> Response {
     headers.insert(
         HeaderName::from_static("content-security-policy"),
         HeaderValue::from_static(
-            "default-src 'self'; style-src 'self' 'unsafe-hashes' 'sha256-tcbDxjMo+xKqM21aCGYbs/QAJqB7yUXC06oPWDapBgc='; media-src 'self' data:; frame-ancestors 'none'",
+            "default-src 'self'; script-src 'self' 'sha256-zE0Xas0rozQpvYDs+U8aQdgB8La/QMQ/mJBEy7atGaA='; style-src 'self' 'unsafe-hashes' 'sha256-tcbDxjMo+xKqM21aCGYbs/QAJqB7yUXC06oPWDapBgc='; media-src 'self' data:; frame-ancestors 'none'",
         ),
     );
     response

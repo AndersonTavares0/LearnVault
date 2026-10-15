@@ -2,20 +2,45 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use http_body_util::BodyExt;
 use learnvault_server::{AppState, Config, build_router};
+use sha2::{Digest, Sha256};
 use std::fs;
 use tempfile::TempDir;
 use tower::ServiceExt;
 
-const SHELL: &str = "<!doctype html><html><body>LearnVault SPA</body></html>";
+// Fixture copied from the inline bootstrap in cmd/learnvault/web/build/200.html. The asset
+// names and version are intentionally fixed so its CSP hash remains deterministic.
+const SPA_BOOTSTRAP: &str = r#"
+				{
+					__sveltekit_w7zoc7 = {
+						base: "",
+						version: "1792074284471"
+					};
+
+					const element = document.currentScript.parentElement;
+
+					import("/_app/immutable/entry/start.VTHPxlLm.js").then(async (kit) => {
+						kit.init(__sveltekit_w7zoc7);
+						const app = await import("/_app/immutable/entry/app.-QDYKKom.js");
+						kit.start(app, element);
+					});
+				}
+			"#;
 const CSS: &str = "body { color: rebeccapurple; }";
 const MAX_SPA_FILE_SIZE: u64 = 16 * 1024 * 1024;
+
+fn shell() -> String {
+    format!(
+        "<!doctype html><html><body><div style=\"display: contents\"><script>{SPA_BOOTSTRAP}</script></div></body></html>"
+    )
+}
 
 fn web_root(temp: &TempDir) -> std::path::PathBuf {
     let root = temp.path().join("web");
     fs::create_dir_all(root.join("_app/immutable/assets")).unwrap();
-    fs::write(root.join("200.html"), SHELL).unwrap();
+    fs::write(root.join("200.html"), shell()).unwrap();
     fs::write(root.join("_app/immutable/assets/app.css"), CSS).unwrap();
     root
 }
@@ -117,6 +142,24 @@ async fn spa_serves_existing_assets_with_mime_security_and_immutable_cache_heade
 }
 
 #[tokio::test]
+async fn spa_does_not_mark_assets_immutable_based_on_the_web_root_absolute_path() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("_app/immutable/web");
+    fs::create_dir_all(root.join("assets")).unwrap();
+    fs::write(root.join("200.html"), shell()).unwrap();
+    fs::write(root.join("assets/app.css"), CSS).unwrap();
+
+    let response = app(&temp, &root)
+        .await
+        .oneshot(Request::get("/assets/app.css").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()["cache-control"], "no-cache");
+}
+
+#[tokio::test]
 async fn extensionless_spa_routes_fall_back_to_the_shell_without_caching_it() {
     let temp = tempfile::tempdir().unwrap();
     let root = web_root(&temp);
@@ -134,9 +177,14 @@ async fn extensionless_spa_routes_fall_back_to_the_shell_without_caching_it() {
             .starts_with("text/html")
     );
     assert_eq!(response.headers()["cache-control"], "no-cache");
+    let csp = response.headers()["content-security-policy"]
+        .to_str()
+        .unwrap();
+    let bootstrap_hash = STANDARD.encode(Sha256::digest(SPA_BOOTSTRAP.as_bytes()));
+    assert!(csp.contains(&format!("script-src 'self' 'sha256-{bootstrap_hash}'")));
     assert_eq!(
         response.into_body().collect().await.unwrap().to_bytes(),
-        SHELL
+        shell().as_bytes()
     );
 }
 

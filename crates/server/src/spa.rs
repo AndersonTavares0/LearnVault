@@ -87,10 +87,11 @@ async fn open_file(
         return Err(FileError::Busy);
     };
     let root = root.to_owned();
+    let open_root = root.clone();
     let target = target.to_owned();
     let opened = tokio::task::spawn_blocking(move || {
         let _blocking_task = blocking_task;
-        open_checked_file(&root, &target)
+        open_checked_file(&open_root, &target)
     })
     .await
     .map_err(|_| FileError::Busy)??;
@@ -98,6 +99,7 @@ async fn open_file(
     let stream = ReaderStream::new(tokio::fs::File::from_std(opened.file).take(opened.size));
     Ok(file_response(
         Body::from_stream(stream),
+        &root,
         &opened.path,
         shell,
         opened.size,
@@ -168,7 +170,7 @@ fn is_link(path: &Path) -> Result<bool, FileError> {
     }
 }
 
-fn file_response(body: Body, path: &Path, shell: bool, size: u64) -> Response {
+fn file_response(body: Body, root: &Path, path: &Path, shell: bool, size: u64) -> Response {
     let mut response = Response::new(body);
     let headers = response.headers_mut();
     headers.insert(header::CONTENT_LENGTH, header::HeaderValue::from(size));
@@ -177,7 +179,7 @@ fn file_response(body: Body, path: &Path, shell: bool, size: u64) -> Response {
         header::CACHE_CONTROL,
         if shell {
             header::HeaderValue::from_static("no-cache")
-        } else if is_immutable_asset(path) {
+        } else if is_immutable_asset(root, path) {
             header::HeaderValue::from_static("public, max-age=31536000, immutable")
         } else {
             header::HeaderValue::from_static("no-cache")
@@ -186,10 +188,9 @@ fn file_response(body: Body, path: &Path, shell: bool, size: u64) -> Response {
     response
 }
 
-fn is_immutable_asset(path: &Path) -> bool {
-    path.to_string_lossy()
-        .replace('\\', "/")
-        .contains("/_app/immutable/")
+fn is_immutable_asset(root: &Path, path: &Path) -> bool {
+    path.strip_prefix(root)
+        .is_ok_and(|relative| relative.starts_with(Path::new("_app").join("immutable")))
 }
 
 fn mime(path: &Path) -> header::HeaderValue {
