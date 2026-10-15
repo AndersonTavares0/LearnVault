@@ -28,9 +28,17 @@ pub fn catalog(database: &Database) -> Result<CatalogDto, IpcError> {
 }
 
 /// Comando IPC: devolve o catálogo do desktop.
+///
+/// O comando é `async` de propósito: um comando síncrono do Tauri roda na main thread do
+/// webview, e a leitura bloqueante do SQLite travaria a UI. O trabalho é deslocado para
+/// `spawn_blocking` do runtime do Tauri — sem adicionar `tokio` como dependência direta —
+/// mantendo o contrato, os erros, o estado e as funções livres testáveis.
 #[tauri::command]
-pub fn desktop_catalog(state: State<'_, DesktopState>) -> Result<CatalogDto, IpcError> {
-    state.catalog()
+pub async fn desktop_catalog(state: State<'_, DesktopState>) -> Result<CatalogDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.catalog())
+        .await
+        .map_err(|_| IpcError::database_unavailable())?
 }
 
 /// Comando IPC: devolve a situação de configuração do desktop.
