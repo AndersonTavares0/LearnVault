@@ -54,16 +54,18 @@ entrada de deploy. O código da aplicação pertence a estas pastas:
 | `docs/` | Arquitetura, governança, operações, produto, releases e Wiki |
 | `.github/` | Actions, configuração do Release Please e arquivos de comunidade |
 | `.agents/` | Políticas, playbooks, checklists e templates para agentes |
+| `.opencode/` | Perfis específicos do OpenCode (somente leitura) |
 
 Arquivos de comunidade (`CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`) ficam em
 `.github/`. O changelog fica em `docs/releases/CHANGELOG.md`. A configuração do Release Please
-fica em `.github/release-please/`. A raiz mantém apenas `AGENTS.md`, `README.md`, `LICENSE`,
-`.dockerignore`, `.gitignore`, `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, `package.json`,
-`pnpm-lock.yaml` e `pnpm-workspace.yaml`. Os crates `server` e `desktop` surgem nas suas fases correspondentes; só
+fica em `.github/release-please/`. Os perfis específicos do OpenCode ficam em `.opencode/`.
+A raiz mantém apenas `AGENTS.md`, `README.md`, `LICENSE`, `.dockerignore`, `.gitignore`,
+`Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, `package.json`, `pnpm-lock.yaml` e
+`pnpm-workspace.yaml`. Os crates `server` e `desktop` surgem nas suas fases correspondentes; só
 existe `crates/core` até lá.
 
-Saída gerada (`services/go/cmd/learnvault/web/build`, `apps/web/build`, `apps/web/.svelte-kit`, `target`,
-`.svelte-kit`, `node_modules` e dados/cache locais) deve permanecer ignorada e não pode ser commitada.
+Saída gerada (`services/go/cmd/learnvault/web/build`, `apps/web/.svelte-kit`, `target`, `node_modules`
+e dados/cache locais) deve permanecer ignorada e não pode ser commitada.
 
 ## Limites do repositório
 

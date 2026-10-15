@@ -16,7 +16,8 @@
   `scripts/`; fixtures in `testdata/`; and reviewed documentation in `docs/`. Community files
   (`CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`) live in `.github/`, the changelog
   lives in `docs/releases/CHANGELOG.md`, and Release Please configuration lives in
-  `.github/release-please/`.
+  `.github/release-please/`. OpenCode-specific profiles live in `.opencode/agents/` and are
+  read-only.
 - Do not move a file merely by extension. Root files such as `Cargo.toml`, `Cargo.lock`,
   `rust-toolchain.toml`, the workspace `package.json`, lockfiles, `.gitignore`, `LICENSE`, and
   tool-required entrypoints stay at the root when their tools require that location. The Go
