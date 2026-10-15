@@ -2,5 +2,5 @@
 # allowed because Vite uses its platform binary during the frontend build.
 allowBuilds:
   esbuild: true
-overrides:
-  cookie: ^0.7.2
+minimumReleaseAgeExclude:
+  - '@sveltejs/kit@3.1.0'
