@@ -13,7 +13,7 @@ export interface Transport {
 	logout(): Promise<void>;
 	catalog(): Promise<Catalog>;
 	rescan(): Promise<void>;
-	mediaUrl(path: string): string;
+	mediaUrl(path: string): string | null;
 }
 
 type RustFile = { media_id?: string; name?: string; path?: string; size?: number; kind?: string; availability?: string; unverified?: boolean };
@@ -140,13 +140,13 @@ export class HttpTransport implements Transport {
 }
 
 /** Seam explícita para o build Tauri; IPC pertence à Fase 4. */
-class DesktopStub implements Transport {
+export class DesktopStub implements Transport {
 	me() { return Promise.resolve(null); }
 	login() { return Promise.reject(new Error('Transporte desktop ainda não implementado.')); }
 	logout() { return Promise.resolve(); }
 	catalog() { return Promise.reject(new Error('Transporte desktop ainda não implementado.')); }
 	rescan() { return Promise.reject(new Error('Rescan desktop ainda não implementado.')); }
-	mediaUrl(path: string) { return path; }
+	mediaUrl(_path: string) { return null; }
 }
 
 export const transport: Transport = __LEARNVAULT_TRANSPORT__ === 'desktop' ? new DesktopStub() : new HttpTransport();

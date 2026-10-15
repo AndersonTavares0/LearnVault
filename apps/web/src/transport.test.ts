@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { HttpTransport, normalizeCatalog, normalizeUser, type Transport } from './transport';
+import { DesktopStub, HttpTransport, normalizeCatalog, normalizeUser, type Transport } from './transport';
 
 describe('transport contract', () => {
 	it('exposes the HTTP transport seam without routing assumptions', () => {
@@ -10,6 +10,9 @@ describe('transport contract', () => {
 		const transport = new HttpTransport();
 		expect(transport.mediaUrl('módulo/aula.mp4')).toBe('/api/media?path=m%C3%B3dulo%2Faula.mp4');
 		expect(transport.mediaUrl('legendas/aula.vtt')).toBe('/api/media?path=legendas%2Faula.vtt');
+	});
+	it('does not expose arbitrary desktop paths as media URLs', () => {
+		expect(new DesktopStub().mediaUrl('private/video.mp4')).toBeNull();
 	});
 	it('posts the admin rescan endpoint and maps a conflict', async () => {
 		const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));

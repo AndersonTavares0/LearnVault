@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findLesson, href, locationFromHash, routeFromHash } from './router';
+import { destinationAfterLogin, findLesson, href, locationFromHash, routeFromHash } from './router';
 
 describe('hash router', () => {
 	it('defaults unknown hashes to login and supports the core routes', () => {
@@ -13,6 +13,7 @@ describe('hash router', () => {
 		expect(href('home')).toBe('#/home');
 		expect(href('player', 'modules/lesson one')).toBe('#/player/modules%2Flesson%20one');
 	});
+	it('preserves a deep-link after login', () => expect(destinationAfterLogin('#/player/aula')).toBe('#/player/aula'));
 	it('resolves a deep-linked lesson after catalog loading', () => {
 		const lesson = { title: 'Aula', path: 'modules/lesson one', media: [], subtitles: [], materials: [] };
 		const catalog = { complete: true, looseFiles: [], nodes: [], categories: [{ title: 'Categoria', looseFiles: [], courses: [{ title: 'Curso', looseFiles: [], modules: [{ title: 'Módulo', looseFiles: [], lessons: [lesson] }] }] }] };

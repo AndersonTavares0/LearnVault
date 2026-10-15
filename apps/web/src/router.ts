@@ -23,6 +23,10 @@ export function href(route: Route, lessonPath?: string): string {
 	return lessonPath === undefined ? `#/${route}` : `#/${route}/${encodeURIComponent(lessonPath)}`;
 }
 
+export function destinationAfterLogin(hash: string): string {
+	return hash || href('home');
+}
+
 export function findLesson(catalog: Catalog | null, lessonPath: string | null): Lesson | null {
 	if (!catalog || !lessonPath) return null;
 	for (const category of catalog.categories) for (const course of category.courses) for (const module of course.modules) {

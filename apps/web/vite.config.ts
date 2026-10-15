@@ -1,7 +1,9 @@
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { defineConfig } from 'vite';
 
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+	const desktop = mode === 'desktop' || process.env.VITE_TRANSPORT === 'desktop';
+	return {
 	plugins: [svelte(), {
 		name: 'learnvault-server-entry',
 		enforce: 'post',
@@ -10,11 +12,12 @@ export default defineConfig({
 			if (shell?.type === 'asset' && typeof shell.source === 'string') this.emitFile({ type: 'asset', fileName: '200.html', source: shell.source });
 		}
 	}],
-	define: { __LEARNVAULT_TRANSPORT__: JSON.stringify(process.env.VITE_TRANSPORT === 'desktop' ? 'desktop' : 'http') },
+	define: { __LEARNVAULT_TRANSPORT__: JSON.stringify(desktop ? 'desktop' : 'http') },
 	build: {
-		outDir: '../../services/go/cmd/learnvault/web/build',
+		outDir: desktop ? '../../services/go/cmd/learnvault/web/desktop-build' : '../../services/go/cmd/learnvault/web/build',
 		assetsDir: '_app/immutable',
 		emptyOutDir: true,
 		rollupOptions: { input: { '200': 'src/app.html' } }
 	}
+	};
 });

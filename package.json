@@ -5,6 +5,7 @@
   "packageManager": "pnpm@11.28.5",
   "scripts": {
     "check": "pnpm -r check",
-    "build": "pnpm -r build"
+    "build": "pnpm -r build",
+    "build:desktop": "pnpm --filter learnvault-web build:desktop"
   }
 }
