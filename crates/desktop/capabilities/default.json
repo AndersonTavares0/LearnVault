@@ -1,6 +1,6 @@
 {
   "identifier": "main-window",
-  "description": "Permissoes minimas do nucleo do Tauri para a janela principal do LearnVault desktop. Deny-by-default: alem do conjunto padrao do nucleo (app, event, window, webview, menu, tray, image, resources, path) so os dois comandos IPC app-defined desta fatia (desktop_config e desktop_catalog) sao concedidos. Sem shell, process, http, fs amplo, remote ou updater.",
+  "description": "Permissoes minimas do nucleo do Tauri para a janela principal do LearnVault desktop. Deny-by-default: alem do conjunto padrao do nucleo (app, event, window, webview, menu, tray, image, resources, path) so os comandos IPC app-defined desta fatia (desktop_config, desktop_catalog e desktop_select_library) sao concedidos. O seletor nativo roda internamente no Rust via tauri-plugin-dialog e nao e concedido ao webview. Sem shell, process, http, fs amplo, dialog, store, remote ou updater.",
   "windows": ["main"],
-  "permissions": ["core:default", "allow-desktop-config", "allow-desktop-catalog"]
+  "permissions": ["core:default", "allow-desktop-config", "allow-desktop-catalog", "allow-desktop-select-library"]
 }

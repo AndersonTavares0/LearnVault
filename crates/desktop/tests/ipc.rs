@@ -326,7 +326,8 @@ fn a_configuration_write_failure_is_a_stable_sanitized_error() {
     assert_eq!(json["code"], "library_config_unavailable");
     let message = json["message"].as_str().unwrap();
     assert!(
-        !message.contains("nao sou diretorio") && !message.contains(&blocked.to_string_lossy().to_string()),
+        !message.contains("nao sou diretorio")
+            && !message.contains(&blocked.to_string_lossy().to_string()),
         "a mensagem não pode expor detalhes do sistema: {message}"
     );
     assert!(!state.config_status().configured);

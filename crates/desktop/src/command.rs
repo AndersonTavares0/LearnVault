@@ -2,11 +2,16 @@
 //!
 //! Cada wrapper `#[tauri::command]` é fino: delega para uma função livre que não conhece
 //! o Tauri. Os testes exercitam as funções livres; o runtime do webview fica fora delas.
+//!
+//! O comando de seleção da biblioteca não aceita argumentos: o webview apenas dispara o
+//! seletor nativo, que roda no Rust, e recebe de volta somente o booleano de configuração.
+
+use std::path::PathBuf;
 
 use learnvault_core::Database;
 use tauri::State;
 
-use crate::config::{DesktopConfigDto, config_status};
+use crate::config::DesktopConfigDto;
 use crate::dto::CatalogDto;
 use crate::error::IpcError;
 use crate::state::DesktopState;
@@ -42,7 +47,38 @@ pub async fn desktop_catalog(state: State<'_, DesktopState>) -> Result<CatalogDt
 }
 
 /// Comando IPC: devolve a situação de configuração do desktop.
+///
+/// Sempre responde com o booleano; o caminho da biblioteca nunca cruza o IPC.
 #[tauri::command]
-pub fn desktop_config() -> DesktopConfigDto {
-    config_status()
+pub fn desktop_config(state: State<'_, DesktopState>) -> DesktopConfigDto {
+    state.config_status()
+}
+
+/// Comando IPC: abre o seletor nativo e persiste a raiz da biblioteca escolhida.
+///
+/// Sem argumentos: o webview não envia caminho algum. O seletor e a gravação rodam em
+/// `spawn_blocking` para não prender a main thread, e o resultado é apenas o booleano de
+/// configuração. Cancelar preserva o estado anterior; uma falha vira erro sanitizado.
+#[tauri::command]
+pub async fn desktop_select_library(
+    app: tauri::AppHandle,
+    state: State<'_, DesktopState>,
+) -> Result<DesktopConfigDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.select_library(|| pick_folder(&app)))
+        .await
+        .map_err(|_| IpcError::library_config_unavailable())?
+}
+
+/// Abre o seletor nativo de diretórios e devolve o caminho escolhido, se houver.
+///
+/// O diálogo é interno ao Rust (`tauri-plugin-dialog`); ele não é exposto ao webview.
+/// Cancelar devolve `None`, sem caminho nem erro.
+fn pick_folder(app: &tauri::AppHandle) -> Option<PathBuf> {
+    use tauri_plugin_dialog::DialogExt;
+
+    app.dialog()
+        .file()
+        .blocking_pick_folder()
+        .and_then(|path| path.into_path().ok())
 }

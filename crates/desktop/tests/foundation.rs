@@ -171,7 +171,11 @@ fn build_registers_the_app_commands_in_the_acl_manifest() {
         build.contains("app_manifest"),
         "o build precisa declarar o AppManifest do ACL"
     );
-    for command in ["desktop_config", "desktop_catalog", "desktop_select_library"] {
+    for command in [
+        "desktop_config",
+        "desktop_catalog",
+        "desktop_select_library",
+    ] {
         assert!(
             build.contains(command),
             "o comando '{command}' precisa ser declarado no ACL app-defined"
@@ -235,7 +239,9 @@ fn the_native_picker_is_registered_in_rust_only() {
         .find(marker)
         .expect("desktop_select_library precisa existir como comando assíncrono");
     let rest = &command[start..];
-    let signature = &rest[..rest.find('{').expect("a assinatura do comando precisa fechar")];
+    let signature = &rest[..rest
+        .find('{')
+        .expect("a assinatura do comando precisa fechar")];
     for forbidden in ["String", "Path", "path"] {
         assert!(
             !signature.contains(forbidden),

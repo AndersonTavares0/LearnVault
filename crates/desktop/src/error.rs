@@ -15,6 +15,10 @@ pub enum IpcErrorCode {
     CatalogUnavailable,
     /// O banco de dados local não pôde ser aberto ou lido.
     DatabaseUnavailable,
+    /// A pasta escolhida como raiz da biblioteca é inválida.
+    LibraryRootInvalid,
+    /// A configuração do aplicativo não pôde ser gravada.
+    LibraryConfigUnavailable,
 }
 
 /// Erro IPC serializável devolvido ao webview.
@@ -40,6 +44,22 @@ impl IpcError {
         Self {
             code: IpcErrorCode::DatabaseUnavailable,
             message: "banco de dados local indisponível",
+        }
+    }
+
+    /// A pasta escolhida como raiz da biblioteca é inválida.
+    pub fn library_root_invalid() -> Self {
+        Self {
+            code: IpcErrorCode::LibraryRootInvalid,
+            message: "a pasta escolhida não é uma biblioteca válida",
+        }
+    }
+
+    /// A configuração do aplicativo não pôde ser gravada.
+    pub fn library_config_unavailable() -> Self {
+        Self {
+            code: IpcErrorCode::LibraryConfigUnavailable,
+            message: "não foi possível salvar a configuração do aplicativo",
         }
     }
 }

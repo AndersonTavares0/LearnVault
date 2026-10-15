@@ -12,6 +12,9 @@ export type ProjectedCourse = { title: string; modules: ProjectedModule[]; loose
 export type ProjectedCategory = { title: string; courses: ProjectedCourse[]; looseFiles: FileEntry[] };
 export type Catalog = { complete: boolean; looseFiles: FileEntry[]; nodes: CatalogNode[]; categories: ProjectedCategory[] };
 export type PlatformConfig = { configured: boolean };
+// A seleção nativa da raiz da biblioteca é específica do desktop: no HTTP o servidor já
+// conhece a própria biblioteca e nenhum caminho cruza o frontend.
+export type TransportKind = 'http' | 'desktop';
 
 export interface Transport {
 	me(): Promise<User | null>;
@@ -19,6 +22,7 @@ export interface Transport {
 	logout(): Promise<void>;
 	config(): Promise<PlatformConfig>;
 	catalog(): Promise<Catalog>;
+	chooseLibrary(): Promise<PlatformConfig>;
 	rescan(): Promise<void>;
 	updateCredentials(username: string, password: string, currentPassword?: string): Promise<User>;
 	mediaUrl(path: string): string | null;
@@ -171,6 +175,7 @@ export class HttpTransport implements Transport {
 	}
 	async logout() { await fetch('/api/logout', { method: 'POST' }); }
 	config() { return Promise.resolve({ configured: true }); }
+	chooseLibrary() { return Promise.reject(new Error('A biblioteca do servidor é definida no servidor.')); }
 	async catalog() { const response = await fetch('/api/catalog'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar o catálogo.'); return normalizeCatalog(await response.json()); }
 	async rescan() { const response = await fetch('/api/admin/catalog/rescan', { method: 'POST' }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 409 ? 'Já existe um rescan em andamento.' : 'Não foi possível indexar a biblioteca.'); }
 	async updateCredentials(username: string, password: string, currentPassword = password) { const response = await fetch('/api/account/credentials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ current_password: currentPassword, username, password }) }); if (!response.ok) throw new Error(response.status === 422 ? 'Usuário ou senha inválidos.' : response.status === 401 ? 'Senha atual incorreta.' : 'Não foi possível atualizar as credenciais.'); return normalizeUser(await response.json()); }
@@ -182,7 +187,9 @@ export class HttpTransport implements Transport {
 // para que nenhuma mensagem arbitrária (potencialmente com caminhos) chegue à interface.
 const DESKTOP_ERROR_MESSAGES: Record<string, string> = {
 	catalog_unavailable: 'catálogo indisponível',
-	database_unavailable: 'banco de dados local indisponível'
+	database_unavailable: 'banco de dados local indisponível',
+	library_root_invalid: 'A pasta escolhida não é uma biblioteca válida.',
+	library_config_unavailable: 'Não foi possível salvar a configuração do aplicativo.'
 };
 
 // O comando devolve o erro como objeto serializado `{ code, message }`, não como `Error`.
@@ -200,10 +207,14 @@ export class DesktopStub implements Transport {
 	login() { return Promise.reject(new Error('Transporte desktop ainda não implementado.')); }
 	logout() { return Promise.resolve(); }
 	async config() { try { return normalizeConfig(await invoke<unknown>('desktop_config')); } catch (cause) { throw desktopError(cause, 'Não foi possível ler a configuração do aplicativo.'); } }
+	// O webview apenas dispara o seletor nativo no Rust; nenhum caminho é enviado nem
+	// devolvido. Cancelar preserva a configuração anterior.
+	async chooseLibrary() { try { return normalizeConfig(await invoke<unknown>('desktop_select_library')); } catch (cause) { throw desktopError(cause, 'Não foi possível configurar a biblioteca.'); } }
 	async catalog() { try { return normalizeCatalog(await invoke<unknown>('desktop_catalog')); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar o catálogo.'); } }
 	rescan() { return Promise.reject(new Error('Rescan desktop ainda não implementado.')); }
 	updateCredentials() { return Promise.reject(new Error('Transporte desktop ainda não implementado.')); }
 	mediaUrl(_path: string) { return null; }
 }
 
-export const transport: Transport = __LEARNVAULT_TRANSPORT__ === 'desktop' ? new DesktopStub() : new HttpTransport();
+export const transportKind: TransportKind = __LEARNVAULT_TRANSPORT__ === 'desktop' ? 'desktop' : 'http';
+export const transport: Transport = transportKind === 'desktop' ? new DesktopStub() : new HttpTransport();

@@ -28,7 +28,10 @@ fn reject(path: &Path) -> LibraryError {
 #[test]
 fn a_missing_path_is_rejected() {
     let dir = tempfile::tempdir().unwrap();
-    assert_eq!(reject(&dir.path().join("inexistente")), LibraryError::Missing);
+    assert_eq!(
+        reject(&dir.path().join("inexistente")),
+        LibraryError::Missing
+    );
 }
 
 #[test]
