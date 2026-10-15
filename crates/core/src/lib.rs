@@ -35,6 +35,7 @@ pub use catalog::{Availability, Catalog, CatalogFile, CatalogNode, NodeRole, bui
 pub use db::Database;
 pub use error::{Error, Result};
 pub use media::{OpenMedia, open_media};
+pub use media::{MediaReference, find_media_by_path};
 pub use paths::KeyMode;
 pub use removal::{MediaRemovalImpact, MediaRemovalOutcome, media_removal_impact, remove_media};
 pub use rescan::{RescanSummary, apply_scan, rescan};
