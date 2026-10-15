@@ -1,19 +1,23 @@
-import adapter from '@sveltejs/adapter-static';
-import { sveltekit } from '@sveltejs/kit/vite';
+import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { defineConfig } from 'vite';
 
-export default defineConfig({
-	plugins: [
-		sveltekit({
-			files: {
-				routes: 'src/routes',
-				appTemplate: 'src/app.html'
-			},
-			adapter: adapter({
-				fallback: '200.html',
-				pages: '../../services/go/cmd/learnvault/web/build',
-				assets: '../../services/go/cmd/learnvault/web/build'
-			})
-		})
-	]
+export default defineConfig(({ mode }) => {
+	const desktop = mode === 'desktop' || process.env.VITE_TRANSPORT === 'desktop';
+	return {
+	plugins: [svelte(), {
+		name: 'learnvault-server-entry',
+		enforce: 'post',
+		generateBundle(_options, bundle) {
+			const shell = Object.values(bundle).find((entry) => entry.type === 'asset' && entry.fileName.endsWith('app.html'));
+			if (shell?.type === 'asset' && typeof shell.source === 'string') this.emitFile({ type: 'asset', fileName: '200.html', source: shell.source });
+		}
+	}],
+	define: { __LEARNVAULT_TRANSPORT__: JSON.stringify(desktop ? 'desktop' : 'http') },
+	build: {
+		outDir: desktop ? '../../services/go/cmd/learnvault/web/desktop-build' : '../../services/go/cmd/learnvault/web/build',
+		assetsDir: '_app/immutable',
+		emptyOutDir: true,
+		rollupOptions: { input: { '200': 'src/app.html' } }
+	}
+	};
 });

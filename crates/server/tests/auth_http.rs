@@ -31,6 +31,31 @@ async fn body(response: axum::response::Response) -> serde_json::Value {
     serde_json::from_slice(&bytes).unwrap()
 }
 
+async fn login(app: &axum::Router, username: &str, password: &str) -> (StatusCode, String) {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/api/login")
+                .header("content-type", "application/json")
+                .header("origin", "http://localhost")
+                .body(Body::from(
+                    serde_json::json!({"username": username, "password": password}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let cookie = response
+        .headers()
+        .get("set-cookie")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(';').next())
+        .unwrap_or_default()
+        .to_owned();
+    (status, cookie)
+}
+
 #[tokio::test]
 async fn login_me_and_logout_use_an_expiring_secure_cookie() {
     let temp = tempfile::tempdir().unwrap();
@@ -185,15 +210,23 @@ async fn login_rejects_when_blocking_capacity_is_saturated() {
 }
 
 #[tokio::test]
-async fn startup_fails_without_an_admin_or_valid_initial_credentials() {
+async fn startup_without_credentials_creates_temporary_admin() {
     let temp = tempfile::tempdir().unwrap();
 
-    let error = AppState::initialize(config(&temp, false))
+    let app = build_router(AppState::initialize(config(&temp, false)).await.unwrap());
+    let login = app
+        .oneshot(
+            Request::post("/api/login")
+                .header("content-type", "application/json")
+                .header("origin", "http://localhost")
+                .body(Body::from(r#"{"username":"admin","password":"admin"}"#))
+                .unwrap(),
+        )
         .await
-        .unwrap_err();
+        .unwrap();
 
-    assert!(error.to_string().contains("administrator"));
-    assert!(!error.to_string().contains(temp.path().to_str().unwrap()));
+    assert_eq!(login.status(), StatusCode::OK);
+    assert_eq!(body(login).await["must_change_credentials"], true);
 }
 
 #[tokio::test]
@@ -290,4 +323,301 @@ async fn startup_creates_missing_database_parent_and_rejects_oversized_login() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+}
+
+#[tokio::test]
+async fn credentials_change_is_transactional_and_invalidates_old_sessions() {
+    let temp = tempfile::tempdir().unwrap();
+    let app = build_router(AppState::initialize(config(&temp, false)).await.unwrap());
+    let (status, old_cookie) = login(&app, "admin", "admin").await;
+    assert_eq!(status, StatusCode::OK);
+
+    let invalid = app
+        .clone()
+        .oneshot(
+            Request::post("/api/account/credentials")
+                .header("content-type", "application/json")
+                .header("origin", "http://localhost")
+                .header("cookie", &old_cookie)
+                .body(Body::from(
+                    serde_json::json!({
+                        "current_password": "senha atual incorreta",
+                        "username": "owner",
+                        "password": "uma senha nova muito segura"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(body(invalid).await["error"], "invalid credentials");
+
+    let invalid_new = app
+        .clone()
+        .oneshot(
+            Request::post("/api/account/credentials")
+                .header("content-type", "application/json")
+                .header("origin", "http://localhost")
+                .header("cookie", &old_cookie)
+                .body(Body::from(
+                    serde_json::json!({
+                        "current_password": "admin",
+                        "username": "x",
+                        "password": "curta"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(invalid_new.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+    let changed = app
+        .clone()
+        .oneshot(
+            Request::post("/api/account/credentials")
+                .header("content-type", "application/json")
+                .header("origin", "http://localhost")
+                .header("cookie", &old_cookie)
+                .body(Body::from(
+                    serde_json::json!({
+                        "current_password": "admin",
+                        "username": "owner",
+                        "password": "uma senha nova muito segura"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(changed.status(), StatusCode::OK);
+    let new_cookie = changed.headers()["set-cookie"]
+        .to_str()
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap()
+        .to_owned();
+
+    let old_session = app
+        .clone()
+        .oneshot(
+            Request::get("/api/me")
+                .header("cookie", &old_cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(old_session.status(), StatusCode::UNAUTHORIZED);
+    let new_session = app
+        .oneshot(
+            Request::get("/api/me")
+                .header("cookie", new_cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(new_session.status(), StatusCode::OK);
+    assert_eq!(body(new_session).await["username"], "owner");
+}
+
+#[tokio::test]
+async fn credentials_current_password_matches_the_go_service_bounds() {
+    let temp = tempfile::tempdir().unwrap();
+    let app = build_router(AppState::initialize(config(&temp, false)).await.unwrap());
+    let (status, cookie) = login(&app, "admin", "admin").await;
+    assert_eq!(status, StatusCode::OK);
+
+    // Uma senha atual acima de 1024 caracteres é recusada antes do Argon2 e
+    // nunca aparece na resposta.
+    let oversized = "p".repeat(1025);
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/api/account/credentials")
+                .header("content-type", "application/json")
+                .header("origin", "http://localhost")
+                .header("cookie", &cookie)
+                .body(Body::from(
+                    serde_json::json!({
+                        "current_password": oversized,
+                        "username": "owner",
+                        "password": "uma senha nova muito segura"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(response.headers()["cache-control"], "private, no-store");
+    let payload = body(response).await;
+    assert_eq!(payload["error"], "invalid_credentials_format");
+    assert!(!payload.to_string().contains(&oversized));
+
+    // A senha atual vazia segue o mesmo limite inferior do serviço Go.
+    let empty = app
+        .clone()
+        .oneshot(
+            Request::post("/api/account/credentials")
+                .header("content-type", "application/json")
+                .header("origin", "http://localhost")
+                .header("cookie", &cookie)
+                .body(Body::from(
+                    serde_json::json!({
+                        "current_password": "",
+                        "username": "owner",
+                        "password": "uma senha nova muito segura"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(empty.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body(empty).await["error"], "invalid_credentials_format");
+
+    // A proteção CSRF continua obrigatória na troca de credenciais.
+    let csrf = app
+        .oneshot(
+            Request::post("/api/account/credentials")
+                .header("content-type", "application/json")
+                .header("cookie", &cookie)
+                .body(Body::from(
+                    serde_json::json!({
+                        "current_password": "admin",
+                        "username": "owner",
+                        "password": "uma senha nova muito segura"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(csrf.status(), StatusCode::FORBIDDEN);
+    assert_eq!(body(csrf).await["error"], "csrf_failed");
+}
+
+#[tokio::test]
+async fn temporary_credentials_block_protected_endpoints_until_changed() {
+    let temp = tempfile::tempdir().unwrap();
+    let app = build_router(AppState::initialize(config(&temp, false)).await.unwrap());
+    let (_, cookie) = login(&app, "admin", "admin").await;
+    for mut request in [
+        Request::get("/api/catalog").body(Body::empty()).unwrap(),
+        Request::get("/api/media").body(Body::empty()).unwrap(),
+        Request::post("/api/admin/catalog/rescan")
+            .header("origin", "http://localhost")
+            .body(Body::empty())
+            .unwrap(),
+    ] {
+        request
+            .headers_mut()
+            .insert("cookie", cookie.parse().unwrap());
+        let response = app.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        assert_eq!(body(response).await["error"], "credentials_change_required");
+    }
+}
+
+#[tokio::test]
+async fn login_rejections_before_the_handler_are_never_cacheable() {
+    let temp = tempfile::tempdir().unwrap();
+    let app = build_router(AppState::initialize(config(&temp, true)).await.unwrap());
+
+    // JSON inválido: o extractor rejeita antes do handler (400).
+    let malformed = app
+        .clone()
+        .oneshot(
+            Request::post("/api/login")
+                .header("origin", "http://localhost")
+                .header("content-type", "application/json")
+                .body(Body::from("{"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(malformed.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(malformed.headers()["cache-control"], "no-store");
+
+    // Content-Type ausente: 415 do extractor `Json`.
+    let unsupported = app
+        .clone()
+        .oneshot(
+            Request::post("/api/login")
+                .header("origin", "http://localhost")
+                .body(Body::from(
+                    r#"{"username":"admin","password":"uma senha local muito segura"}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(unsupported.status(), StatusCode::UNSUPPORTED_MEDIA_TYPE);
+    assert_eq!(unsupported.headers()["cache-control"], "no-store");
+
+    // Payload acima de 8 KiB: 413 do `DefaultBodyLimit`, antes do handler.
+    let oversized = app
+        .oneshot(
+            Request::post("/api/login")
+                .header("origin", "http://localhost")
+                .header("content-type", "application/json")
+                .body(Body::from(format!(
+                    r#"{{"username":"admin","password":"{}"}}"#,
+                    "x".repeat(10_000)
+                )))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(oversized.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    assert_eq!(oversized.headers()["cache-control"], "no-store");
+}
+
+#[tokio::test]
+async fn credentials_rejections_before_the_handler_are_never_cacheable() {
+    let temp = tempfile::tempdir().unwrap();
+    let app = build_router(AppState::initialize(config(&temp, false)).await.unwrap());
+
+    // JSON inválido: o extractor rejeita antes do handler (400).
+    let malformed = app
+        .clone()
+        .oneshot(
+            Request::post("/api/account/credentials")
+                .header("origin", "http://localhost")
+                .header("content-type", "application/json")
+                .body(Body::from("{"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(malformed.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(malformed.headers()["cache-control"], "no-store");
+    assert_eq!(malformed.headers()["x-content-type-options"], "nosniff");
+
+    // Payload acima de 8 KiB: 413 do `DefaultBodyLimit`, antes do handler.
+    let oversized = app
+        .oneshot(
+            Request::post("/api/account/credentials")
+                .header("origin", "http://localhost")
+                .header("content-type", "application/json")
+                .body(Body::from(format!(
+                    r#"{{"current_password":"admin","username":"owner","password":"{}"}}"#,
+                    "x".repeat(10_000)
+                )))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(oversized.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    assert_eq!(oversized.headers()["cache-control"], "no-store");
 }

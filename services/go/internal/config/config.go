@@ -26,8 +26,8 @@ func Load() (Config, error) {
 		DataDir:      env("DATA_DIR", "./data"),
 		CacheDir:     env("CACHE_DIR", "./cache"),
 		LibraryDir:   env("LIBRARY_DIR", "./library"),
-		AdminUser:    os.Getenv("ADMIN_USERNAME"),
-		AdminPass:    os.Getenv("ADMIN_PASSWORD"),
+		AdminUser:    firstEnv("ADMIN_USER", "ADMIN_USERNAME"),
+		AdminPass:    firstEnv("ADMIN_PASS", "ADMIN_PASSWORD"),
 		CookieSecure: env("COOKIE_SECURE", "true") != "false",
 	}
 	port, err := strconv.Atoi(cfg.Port)
@@ -43,4 +43,11 @@ func env(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func firstEnv(primary, alias string) string {
+	if value := os.Getenv(primary); value != "" {
+		return value
+	}
+	return os.Getenv(alias)
 }

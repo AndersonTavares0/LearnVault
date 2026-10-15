@@ -46,6 +46,38 @@ func TestScanIgnoresTemporaryDirectoriesAndUnsafeTypeScript(t *testing.T) {
 	}
 }
 
+func TestScanPreservesFilesAtLibraryRoot(t *testing.T) {
+	root := t.TempDir()
+	writeFixture(t, filepath.Join(root, "intro.mp4"), "video")
+	result, err := Scan(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.LooseFiles) != 1 || result.LooseFiles[0].Path != "intro.mp4" {
+		t.Fatalf("root files = %#v", result.LooseFiles)
+	}
+}
+
+func TestScanPreservesRecursiveShallowNodes(t *testing.T) {
+	root := t.TempDir()
+	writeFixture(t, filepath.Join(root, "Cat", "Aula", "aula.mp4"), "video")
+	writeFixture(t, filepath.Join(root, "Cat", "apoio.pdf"), "pdf")
+	result, err := Scan(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Nodes) != 1 || len(result.Nodes[0].Children) != 1 {
+		t.Fatalf("nodes = %#v", result.Nodes)
+	}
+	lesson := result.Nodes[0].Children[0]
+	if lesson.Path != "Cat/Aula" || lesson.Role != "lesson" || len(lesson.Files) != 1 || lesson.Files[0].Kind != "media" {
+		t.Fatalf("lesson = %#v", lesson)
+	}
+	if len(result.Nodes[0].LooseFiles) != 1 {
+		t.Fatalf("category loose files = %#v", result.Nodes[0].LooseFiles)
+	}
+}
+
 func writeFixture(t *testing.T, path, contents string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

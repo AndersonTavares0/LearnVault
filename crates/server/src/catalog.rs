@@ -17,11 +17,9 @@ use learnvault_core::{
 use serde::Serialize;
 
 use crate::{
-    AppState, StateError,
+    AppState, LIBRARY_ID, StateError,
     auth::{hash_session_token, request_token, same_origin},
 };
-
-const LIBRARY_ID: &str = "library-1";
 
 enum RescanFailure {
     Busy,
@@ -74,10 +72,11 @@ struct RescanResponse {
 }
 
 pub(crate) async fn catalog(State(state): State<AppState>, headers: HeaderMap) -> Response {
-    match authenticated(&state, &headers).await {
-        Ok(true) => {}
+    match authenticated_user(&state, &headers).await {
+        Ok(Some(user)) if !user.must_change_credentials => {}
+        Ok(Some(_)) => return credentials_required(),
         Err(StateError::Capacity) => return service_unavailable(),
-        Ok(false) | Err(_) => return status_private_no_store(StatusCode::UNAUTHORIZED),
+        Ok(None) | Err(_) => return status_private_no_store(StatusCode::UNAUTHORIZED),
     }
 
     // Evita segurar o mutex do banco só para devolver 503 sob saturação.
@@ -105,8 +104,14 @@ pub(crate) async fn rescan(State(state): State<AppState>, headers: HeaderMap) ->
         Err(StateError::Capacity) => return service_unavailable(),
         Ok(None) | Err(_) => return status_private_no_store(StatusCode::UNAUTHORIZED),
     };
-    if !user.is_admin || !same_origin(&headers) {
+    if !same_origin(&headers) {
+        return csrf_failed();
+    }
+    if !user.is_admin {
         return status_private_no_store(StatusCode::FORBIDDEN);
+    }
+    if user.must_change_credentials {
+        return credentials_required();
     }
     // Evita segurar locks só para devolver 503 sob saturação.
     if !state.has_blocking_capacity() {
@@ -142,10 +147,6 @@ pub(crate) async fn rescan(State(state): State<AppState>, headers: HeaderMap) ->
         Ok(Err(RescanFailure::RootChanged)) => internal_error("library root changed"),
         Ok(Err(RescanFailure::Failed)) | Err(_) => internal_error("rescan failed"),
     }
-}
-
-async fn authenticated(state: &AppState, headers: &HeaderMap) -> Result<bool, StateError> {
-    Ok(authenticated_user(state, headers).await?.is_some())
 }
 
 async fn authenticated_user(
@@ -190,6 +191,30 @@ fn private_no_store(mut response: Response) -> Response {
 
 fn status_private_no_store(status: StatusCode) -> Response {
     private_no_store(status.into_response())
+}
+
+fn credentials_required() -> Response {
+    private_no_store(
+        (
+            StatusCode::FORBIDDEN,
+            Json(ErrorResponse {
+                error: "credentials_change_required",
+            }),
+        )
+            .into_response(),
+    )
+}
+
+fn csrf_failed() -> Response {
+    private_no_store(
+        (
+            StatusCode::FORBIDDEN,
+            Json(ErrorResponse {
+                error: "csrf_failed",
+            }),
+        )
+            .into_response(),
+    )
 }
 
 fn rescan_lock_path(database_path: &Path) -> PathBuf {

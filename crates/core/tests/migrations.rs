@@ -60,7 +60,7 @@ fn insert_user(
 ) -> rusqlite::Result<usize> {
     db.connection().execute(
         "INSERT INTO user (user_id, username, password_hash, is_admin, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5)",
+          VALUES (?1, ?2, ?3, ?4, ?5)",
         rusqlite::params![
             user_id,
             username,

@@ -2,9 +2,12 @@ package httpapi
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"mime"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -37,6 +40,7 @@ type store interface {
 	CreateSession(context.Context, int64, time.Duration) (string, error)
 	UserForSession(context.Context, string) (storage.User, error)
 	DeleteSession(context.Context, string) error
+	UpdateCredentialsAndSession(context.Context, int64, string, string, string, time.Duration) error
 	Catalog(context.Context) (catalog.Catalog, error)
 	ReplaceCatalog(context.Context, catalog.Catalog) error
 }
@@ -75,11 +79,40 @@ func NewWithLibraryVersion(db *storage.DB, cookieSecure bool, root *library.Root
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Referrer-Policy", "no-referrer")
-	if strings.HasPrefix(r.URL.Path, "/api/") {
+	if isAPIPath(r.URL.Path) {
+		// Every API response is uncacheable. Session state, catalogs, and media must
+		// never be stored by an intermediary or remain available from a browser cache
+		// after logout, so those paths are additionally private. Health, unknown
+		// routes, and API errors still need a cache policy of their own: a stale 200
+		// or 503 must never mask a recovery.
+		if noStoreAPIPath(r.URL.Path) {
+			w.Header().Set("Cache-Control", "private, no-store")
+		} else {
+			w.Header().Set("Cache-Control", "no-store")
+		}
 		s.api(w, r)
 		return
 	}
+	// Unknown routes outside the API namespace are served by the SPA handler in
+	// production; when the server is mounted directly this branch still forbids
+	// storing the 404, so a stale error is never cached.
+	w.Header().Set("Cache-Control", "no-store")
 	http.NotFound(w, r)
+}
+
+// isAPIPath reports whether path belongs to the JSON API namespace, including
+// the bare /api root, so unknown routes and errors still receive a cache policy.
+func isAPIPath(path string) bool {
+	return path == "/api" || strings.HasPrefix(path, "/api/")
+}
+
+func noStoreAPIPath(path string) bool {
+	switch path {
+	case "/api/login", "/api/me", "/api/catalog", "/api/media", "/api/account/credentials", "/api/logout", "/api/admin/catalog/rescan":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Server) api(w http.ResponseWriter, r *http.Request) {
@@ -99,10 +132,18 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 			methodNotAllowed(w)
 			return
 		}
+		if !sameOrigin(r) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "csrf_failed"})
+			return
+		}
 		s.login(w, r)
 	case "/api/logout":
 		if r.Method != http.MethodPost {
 			methodNotAllowed(w)
+			return
+		}
+		if !sameOrigin(r) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "csrf_failed"})
 			return
 		}
 		token := sessionFromRequest(r)
@@ -111,6 +152,16 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 		}
 		http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: s.cookieSecure, SameSite: http.SameSiteStrictMode})
 		w.WriteHeader(http.StatusNoContent)
+	case "/api/account/credentials":
+		if r.Method != http.MethodPost {
+			methodNotAllowed(w)
+			return
+		}
+		if !sameOrigin(r) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "csrf_failed"})
+			return
+		}
+		s.credentials(w, r)
 	case "/api/me":
 		if r.Method != http.MethodGet {
 			methodNotAllowed(w)
@@ -127,8 +178,11 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 			methodNotAllowed(w)
 			return
 		}
-		if _, ok := s.currentUser(r); !ok {
+		if user, ok := s.currentUser(r); !ok {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+			return
+		} else if user.MustChangeCredentials {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "credentials_change_required"})
 			return
 		}
 		value, err := s.db.Catalog(r.Context())
@@ -142,8 +196,11 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 			methodNotAllowed(w)
 			return
 		}
-		if _, ok := s.currentUser(r); !ok {
+		if user, ok := s.currentUser(r); !ok {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+			return
+		} else if user.MustChangeCredentials {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "credentials_change_required"})
 			return
 		}
 		if s.libraryRoot == nil {
@@ -153,6 +210,15 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 		relative := r.URL.Query().Get("path")
 		if relative == "" || filepath.Ext(relative) == "" {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_media_path"})
+			return
+		}
+		catalogValue, err := s.db.Catalog(r.Context())
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal_error"})
+			return
+		}
+		if !catalogAllowsPath(catalogValue, relative) {
+			http.NotFound(w, r)
 			return
 		}
 		file, err := s.libraryRoot.OpenFile(relative)
@@ -166,19 +232,27 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
-		contentType := mime.TypeByExtension(filepath.Ext(relative))
-		if contentType == "" {
-			contentType = "application/octet-stream"
-		}
+		contentType, playable := safeMediaType(filepath.Ext(relative))
 		w.Header().Set("Content-Type", contentType)
+		if !playable {
+			w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": filepath.Base(relative)}))
+		}
 		http.ServeContent(w, r, filepath.Base(relative), info.ModTime(), file)
 	case "/api/admin/catalog/rescan":
 		if r.Method != http.MethodPost {
 			methodNotAllowed(w)
 			return
 		}
+		if !sameOrigin(r) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "csrf_failed"})
+			return
+		}
 		user, ok := s.currentUser(r)
-		if !ok || user.Role != "admin" {
+		if !ok || user.Role != "admin" || user.MustChangeCredentials {
+			if ok && user.MustChangeCredentials {
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "credentials_change_required"})
+				return
+			}
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 			return
 		}
@@ -203,6 +277,83 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]int{"categories": len(value.Categories)})
 	default:
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
+	}
+}
+
+// catalogAllowsPath is the single authorization boundary for media. It walks the
+// persisted canonical node tree (Catalog.Nodes) recursively, so a catalogued file is
+// authorized at any depth — including files loose in a category — exactly as the SPA
+// renders it. The categorical projection is derived from the same scan, so walking the
+// nodes never hides a file the UI shows. The extension is only used for response
+// handling; a file must first be present in the persisted scanner catalog (media,
+// subtitles, or materials) to be served, so an uncatalogued or removed path stays 404.
+func catalogAllowsPath(value catalog.Catalog, relative string) bool {
+	clean, ok := normalizeCatalogPath(relative)
+	if !ok {
+		return false
+	}
+	if catalogContainsFile(value.LooseFiles, clean) {
+		return true
+	}
+	return catalogNodesContain(value.Nodes, clean)
+}
+
+// catalogNodesContain is the one recursive walk over the persisted nodes. It descends
+// children at any depth and checks both a node's files and its loose files, so media,
+// subtitles and materials share a single identity rule.
+func catalogNodesContain(nodes []catalog.Node, clean string) bool {
+	for _, node := range nodes {
+		if catalogContainsFile(node.Files, clean) || catalogContainsFile(node.LooseFiles, clean) {
+			return true
+		}
+		if catalogNodesContain(node.Children, clean) {
+			return true
+		}
+	}
+	return false
+}
+
+// catalogContainsFile reports whether any persisted file normalizes to the requested
+// canonical path, so traversal, absolute paths and alternate spellings never authorize.
+func catalogContainsFile(files []catalog.File, clean string) bool {
+	for _, file := range files {
+		if path, valid := normalizeCatalogPath(file.Path); valid && path == clean {
+			return true
+		}
+	}
+	return false
+}
+
+// normalizeCatalogPath delegates to the shared catalog normalizer so the media
+// authorization boundary and the removal tombstone agree on one path identity.
+func normalizeCatalogPath(value string) (string, bool) {
+	return catalog.NormalizePath(value)
+}
+
+// safeMediaType only permits formats consumed by the player. Everything else,
+// including browser-active documents such as HTML and SVG, is downloaded.
+func safeMediaType(extension string) (string, bool) {
+	switch strings.ToLower(extension) {
+	case ".mp4":
+		return "video/mp4", true
+	case ".webm":
+		return "video/webm", true
+	case ".ogv":
+		return "video/ogg", true
+	case ".mp3":
+		return "audio/mpeg", true
+	case ".m4a":
+		return "audio/mp4", true
+	case ".ogg", ".oga":
+		return "audio/ogg", true
+	case ".wav":
+		return "audio/wav", true
+	case ".flac":
+		return "audio/flac", true
+	case ".vtt":
+		return "text/vtt", true
+	default:
+		return "application/octet-stream", false
 	}
 }
 
@@ -239,6 +390,76 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: token, Path: "/", Expires: time.Now().Add(sessionLifetime), MaxAge: int(sessionLifetime.Seconds()), HttpOnly: true, Secure: s.cookieSecure, SameSite: http.SameSiteStrictMode})
 	writeJSON(w, http.StatusOK, user)
+}
+
+func (s *Server) credentials(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.currentUser(r)
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 8*1024)
+	var input struct {
+		CurrentPassword string `json:"current_password"`
+		Username        string `json:"username"`
+		Password        string `json:"password"`
+	}
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&input); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_request"})
+		return
+	}
+	if len([]rune(input.CurrentPassword)) < 1 || len([]rune(input.CurrentPassword)) > 1024 || len([]rune(input.Username)) < 2 || len([]rune(input.Username)) > 64 || strings.TrimSpace(input.Username) != input.Username || len([]rune(input.Password)) < 12 || len([]rune(input.Password)) > 1024 {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid_credentials_format"})
+		return
+	}
+	// A senha atual é exigida para que uma sessão roubada não troque as credenciais. Ela é
+	// verificada antes de qualquer escrita e a troca continua transacional mais abaixo.
+	valid, err := s.db.VerifyPassword(r.Context(), user.Username, input.CurrentPassword)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal_error"})
+		return
+	}
+	if !valid {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_credentials"})
+		return
+	}
+	var raw [32]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal_error"})
+		return
+	}
+	token := base64.RawURLEncoding.EncodeToString(raw[:])
+	if err := s.db.UpdateCredentialsAndSession(r.Context(), user.ID, input.Username, input.Password, token, sessionLifetime); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal_error"})
+		return
+	}
+	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: token, Path: "/", MaxAge: int(sessionLifetime.Seconds()), HttpOnly: true, Secure: s.cookieSecure, SameSite: http.SameSiteStrictMode})
+	user.Username = input.Username
+	user.MustChangeCredentials = false
+	writeJSON(w, http.StatusOK, user)
+}
+
+func sameOrigin(r *http.Request) bool {
+	host := r.Host
+	if host == "" {
+		host = "localhost"
+	}
+	expectedHTTP, expectedHTTPS := "http://"+host, "https://"+host
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		ref := r.Header.Get("Referer")
+		if ref == "" {
+			return false
+		}
+		u, err := url.Parse(ref)
+		if err != nil || u.Host != host {
+			return false
+		}
+		origin = u.Scheme + "://" + u.Host
+	}
+	return origin == expectedHTTP || origin == expectedHTTPS
 }
 
 func (s *Server) currentUser(r *http.Request) (storage.User, bool) {

@@ -14,8 +14,10 @@ import (
 	"learnvault/internal/config"
 )
 
-func TestRunRejectsMissingInitialAdminCredentials(t *testing.T) {
+func TestRunRejectsInvalidInitialAdminCredentials(t *testing.T) {
 	cfg := testRunConfig(t)
+	cfg.AdminUser = "owner"
+	cfg.AdminPass = "short"
 	listenCalled := false
 	err := run(context.Background(), cfg, func(string, string) (net.Listener, error) {
 		listenCalled = true

@@ -42,6 +42,10 @@ pub enum AuthError {
 /// Gera um hash PHC Argon2id compatível com os dados legados do Go.
 pub fn hash_password(password: &str) -> Result<String, AuthError> {
     validate_password(password)?;
+    hash_password_unchecked(password)
+}
+
+pub(crate) fn hash_password_unchecked(password: &str) -> Result<String, AuthError> {
     let params = Params::new(
         ARGON_MEMORY_KIB,
         ARGON_ITERATIONS,
@@ -60,7 +64,6 @@ pub fn hash_password(password: &str) -> Result<String, AuthError> {
 
 /// Verifica uma senha sem diferenciar senha errada de hash persistido inválido.
 pub fn verify_password(password: &str, encoded_hash: &str) -> Result<bool, AuthError> {
-    validate_password(password)?;
     let Ok(parsed) = PasswordHash::new(encoded_hash) else {
         return Ok(false);
     };
@@ -85,6 +88,18 @@ pub fn validate_username(username: &str) -> Result<(), AuthError> {
 pub fn validate_password(password: &str) -> Result<(), AuthError> {
     let length = password.chars().count();
     if !(12..=1024).contains(&length) {
+        return Err(AuthError::InvalidPassword);
+    }
+    Ok(())
+}
+
+/// Valida o limite público da senha atual informada na troca de credenciais.
+///
+/// Espelha a checagem do serviço Go (`1..=1024` runas) para que uma senha
+/// vazia ou acima do limite seja recusada antes de chegar ao Argon2.
+pub fn validate_current_password(password: &str) -> Result<(), AuthError> {
+    let length = password.chars().count();
+    if !(1..=1024).contains(&length) {
         return Err(AuthError::InvalidPassword);
     }
     Ok(())
@@ -126,6 +141,108 @@ struct UserResponse {
     user_id: String,
     username: String,
     is_admin: bool,
+    must_change_credentials: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct CredentialsRequest {
+    /// Senha atualmente usada, exigida para impedir troca por uma sessão roubada.
+    current_password: String,
+    username: String,
+    password: String,
+}
+
+pub(crate) async fn credentials(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<CredentialsRequest>,
+) -> Response {
+    if !same_origin(&headers) {
+        return csrf_failed();
+    }
+    let Some(token) = request_token(&headers) else {
+        return private_no_store(StatusCode::UNAUTHORIZED.into_response());
+    };
+    let user = match state.session_user(hash_session_token(&token)).await {
+        Ok(Some(user)) => user,
+        Err(StateError::Capacity) => return private_no_store(service_unavailable()),
+        Ok(None) | Err(_) => return private_no_store(StatusCode::UNAUTHORIZED.into_response()),
+    };
+    if validate_current_password(&request.current_password).is_err()
+        || validate_username(&request.username).is_err()
+        || validate_password(&request.password).is_err()
+    {
+        return private_no_store(
+            (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(ErrorResponse {
+                    error: "invalid_credentials_format",
+                }),
+            )
+                .into_response(),
+        );
+    }
+    let current_password = request.current_password.clone();
+    let current_hash = user.password_hash.clone();
+    let Some(permit) = state.try_acquire_blocking_task() else {
+        return private_no_store(service_unavailable());
+    };
+    let current_valid = tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        verify_password(&current_password, &current_hash).unwrap_or(false)
+    })
+    .await
+    .unwrap_or(false);
+    if !current_valid {
+        return private_no_store(
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(ErrorResponse {
+                    error: "invalid credentials",
+                }),
+            )
+                .into_response(),
+        );
+    }
+    let Some(permit) = state.try_acquire_blocking_task() else {
+        return private_no_store(service_unavailable());
+    };
+    let password = request.password;
+    let Ok(hash) = tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        hash_password(&password)
+    })
+    .await
+    .unwrap_or(Err(AuthError::PasswordHashing)) else {
+        return private_no_store(StatusCode::INTERNAL_SERVER_ERROR.into_response());
+    };
+    let Ok(new_token) = generate_session_token() else {
+        return private_no_store(StatusCode::INTERNAL_SERVER_ERROR.into_response());
+    };
+    if state
+        .update_credentials_and_session(
+            user.user_id.clone(),
+            request.username.clone(),
+            hash,
+            hash_session_token(&new_token),
+        )
+        .await
+        .is_err()
+    {
+        return private_no_store(StatusCode::INTERNAL_SERVER_ERROR.into_response());
+    }
+    let mut response = Json(UserResponse {
+        user_id: user.user_id,
+        username: request.username,
+        is_admin: user.is_admin,
+        must_change_credentials: false,
+    })
+    .into_response();
+    let Some(cookie) = session_cookie(&state, &new_token, false) else {
+        return private_no_store(StatusCode::INTERNAL_SERVER_ERROR.into_response());
+    };
+    response.headers_mut().insert("set-cookie", cookie);
+    private_no_store(response)
 }
 
 #[derive(Debug, Serialize)]
@@ -138,6 +255,9 @@ pub(crate) async fn login(
     headers: HeaderMap,
     Json(request): Json<LoginRequest>,
 ) -> Response {
+    if !same_origin(&headers) {
+        return csrf_failed();
+    }
     if !state.allow_login_attempt(&request.username).await {
         return no_store(
             (
@@ -149,10 +269,7 @@ pub(crate) async fn login(
                 .into_response(),
         );
     }
-    if !same_origin(&headers)
-        || validate_username(&request.username).is_err()
-        || validate_password(&request.password).is_err()
-    {
+    if validate_username(&request.username).is_err() || request.password.is_empty() {
         return no_store(
             (
                 StatusCode::UNAUTHORIZED,
@@ -226,6 +343,7 @@ pub(crate) async fn login(
         user_id: user.user_id,
         username: user.username,
         is_admin: user.is_admin,
+        must_change_credentials: user.must_change_credentials,
     })
     .into_response();
     let Some(cookie) = session_cookie(&state, &token, false) else {
@@ -248,6 +366,7 @@ pub(crate) async fn me(State(state): State<AppState>, headers: HeaderMap) -> Res
         user_id: user.user_id,
         username: user.username,
         is_admin: user.is_admin,
+        must_change_credentials: user.must_change_credentials,
     })
     .into_response();
     private_no_store(response)
@@ -255,7 +374,7 @@ pub(crate) async fn me(State(state): State<AppState>, headers: HeaderMap) -> Res
 
 pub(crate) async fn logout(State(state): State<AppState>, headers: HeaderMap) -> Response {
     if !same_origin(&headers) {
-        return no_store(StatusCode::FORBIDDEN.into_response());
+        return csrf_failed();
     }
     if let Some(token) = request_token(&headers)
         && matches!(
@@ -314,20 +433,41 @@ fn session_cookie(state: &AppState, token: &str, clear: bool) -> Option<HeaderVa
 }
 
 pub(crate) fn same_origin(headers: &HeaderMap) -> bool {
-    let Some(origin) = headers.get("origin").and_then(|value| value.to_str().ok()) else {
+    let host = headers
+        .get("host")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("localhost");
+    let candidate = headers
+        .get("origin")
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned)
+        .or_else(|| {
+            let referer = headers
+                .get("referer")
+                .and_then(|value| value.to_str().ok())?;
+            let (scheme, remainder) = if let Some(value) = referer.strip_prefix("http://") {
+                ("http://", value)
+            } else {
+                ("https://", referer.strip_prefix("https://")?)
+            };
+            Some(format!("{scheme}{}", remainder.split('/').next()?))
+        });
+    let Some(candidate) = candidate else {
         return false;
     };
-    let Some(host) = headers.get("host").and_then(|value| value.to_str().ok()) else {
-        return origin == "http://localhost"
-            || origin == "https://localhost"
-            || origin
-                .strip_prefix("http://localhost:")
-                .is_some_and(|port| port.parse::<u16>().is_ok())
-            || origin
-                .strip_prefix("https://localhost:")
-                .is_some_and(|port| port.parse::<u16>().is_ok());
-    };
-    origin == format!("http://{host}") || origin == format!("https://{host}")
+    candidate == format!("http://{host}") || candidate == format!("https://{host}")
+}
+
+fn csrf_failed() -> Response {
+    no_store(
+        (
+            StatusCode::FORBIDDEN,
+            Json(ErrorResponse {
+                error: "csrf_failed",
+            }),
+        )
+            .into_response(),
+    )
 }
 
 #[cfg(test)]
@@ -336,8 +476,8 @@ mod tests {
     use base64::{Engine, engine::general_purpose::STANDARD_NO_PAD};
 
     use super::{
-        generate_session_token, hash_password, hash_session_token, validate_password,
-        validate_username, verify_password,
+        generate_session_token, hash_password, hash_session_token, validate_current_password,
+        validate_password, validate_username, verify_password,
     };
 
     #[test]
@@ -383,6 +523,14 @@ mod tests {
         assert!(validate_password(&"a".repeat(1024)).is_ok());
         assert!(validate_password(&"a".repeat(11)).is_err());
         assert!(validate_password(&"a".repeat(1025)).is_err());
+    }
+
+    #[test]
+    fn current_password_matches_the_go_service_bounds() {
+        assert!(validate_current_password("a").is_ok());
+        assert!(validate_current_password(&"a".repeat(1024)).is_ok());
+        assert!(validate_current_password("").is_err());
+        assert!(validate_current_password(&"a".repeat(1025)).is_err());
     }
 
     #[test]

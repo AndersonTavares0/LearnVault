@@ -67,7 +67,11 @@ pub struct MediaReference {
 /// A função só retorna mídias disponíveis e recusa componentes que poderiam transformar a
 /// entrada HTTP em um caminho fora da biblioteca. A abertura e a validação final ficam em
 /// [`open_media`].
-pub fn find_media_by_path(db: &Database, path: &str) -> Result<Option<MediaReference>> {
+pub fn find_media_by_path(
+    db: &Database,
+    library_id: &str,
+    path: &str,
+) -> Result<Option<MediaReference>> {
     let candidate = std::path::Path::new(path);
     if path.is_empty() || candidate.is_absolute() {
         return Ok(None);
@@ -87,10 +91,11 @@ pub fn find_media_by_path(db: &Database, path: &str) -> Result<Option<MediaRefer
     db.connection()
         .query_row(
             "SELECT library_id, media_id, relative_path, size, mtime
-           FROM media
-          WHERE relative_path_key = ?1 AND availability = 'available'
+             FROM media
+            WHERE media.library_id = ?1 AND media.relative_path_key = ?2 AND media.availability = 'available'
+              AND NOT EXISTS (SELECT 1 FROM media_removal r WHERE r.library_id = media.library_id AND r.media_id = media.media_id)
           LIMIT 1",
-            [key],
+            rusqlite::params![library_id, key],
             |row| {
                 Ok((
                     row.get::<_, String>(0)?,
@@ -239,13 +244,34 @@ pub fn open_media(
     })
 }
 
-/// Abre uma referência recém-lida do catálogo sem manter o banco bloqueado durante I/O de disco.
-/// A referência é interna e não vem da requisição HTTP; a validação do caminho e do descritor é
-/// repetida integralmente. Uma remoção concorrente pode vencer após a consulta, como as demais
-/// janelas TOCTOU documentadas deste módulo.
-pub fn open_media_reference(reference: &MediaReference, root: &Path) -> Result<OpenMedia> {
+/// Abre uma referência recém-lida do catálogo.
+///
+/// O estado do catálogo é revalidado usando a identidade da referência imediatamente antes da
+/// validação do caminho e da abertura. O adaptador deve manter o lock da conexão durante esta
+/// chamada para serializar a revalidação com remoções concorrentes.
+pub fn open_media_reference(
+    db: &Database,
+    reference: &MediaReference,
+    root: &Path,
+) -> Result<OpenMedia> {
     let canonical_root = canonical_root(root)?;
     let media_id = &reference.media_id;
+    let stored = media_row(db, &reference.library_id, media_id)?;
+    if stored.availability != AVAILABLE {
+        return Err(Error::MediaUnavailable {
+            media_id: media_id.to_owned(),
+        });
+    }
+    if is_removed(db, &reference.library_id, media_id)? {
+        return Err(Error::MediaRemoved {
+            media_id: media_id.to_owned(),
+        });
+    }
+    if stored.relative_path != reference.relative_path {
+        return Err(Error::MediaNotFound {
+            media_id: media_id.to_owned(),
+        });
+    }
     let candidate = resolve_within(&canonical_root, &reference.relative_path)?;
     let on_path = std::fs::symlink_metadata(&candidate).map_err(|source| match source.kind() {
         io::ErrorKind::NotFound => Error::MediaMissingOnDisk {

@@ -12,7 +12,7 @@ use serde::Deserialize;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
 use crate::{
-    AppState, StateError,
+    AppState, LIBRARY_ID, StateError,
     auth::{hash_session_token, request_token},
     catalog::service_unavailable,
     stream::idle_timeout_stream,
@@ -35,7 +35,8 @@ pub(crate) async fn media(
         return error_private_no_store(StatusCode::UNAUTHORIZED);
     };
     match state.session_user(hash_session_token(&token)).await {
-        Ok(Some(_)) => {}
+        Ok(Some(user)) if !user.must_change_credentials => {}
+        Ok(Some(_)) => return error_credentials_required(),
         Err(StateError::Capacity) => return service_unavailable(),
         Ok(None) | Err(_) => return error_private_no_store(StatusCode::UNAUTHORIZED),
     }
@@ -60,7 +61,7 @@ pub(crate) async fn media(
     };
     let reference = tokio::task::spawn_blocking(move || {
         let _blocking_task = blocking_task;
-        learnvault_core::find_media_by_path(&database, &lookup_path)
+        learnvault_core::find_media_by_path(&database, LIBRARY_ID, &lookup_path)
     })
     .await;
     let reference = match reference {
@@ -73,9 +74,10 @@ pub(crate) async fn media(
     let Some(blocking_task) = state.try_acquire_blocking_task() else {
         return service_unavailable();
     };
+    let database = state.database.clone().lock_owned().await;
     let opened = match tokio::task::spawn_blocking(move || {
         let _blocking_task = blocking_task;
-        learnvault_core::open_media_reference(&reference, &root)
+        learnvault_core::open_media_reference(&database, &reference, &root)
     })
     .await
     {
@@ -138,13 +140,26 @@ pub(crate) async fn media(
     response
 }
 
+fn error_credentials_required() -> Response {
+    error_response_private_no_store(
+        (
+            StatusCode::FORBIDDEN,
+            axum::Json(serde_json::json!({"error":"credentials_change_required"})),
+        )
+            .into_response(),
+    )
+}
+
 fn media_error_response(error: &learnvault_core::Error) -> Response {
     error_private_no_store(media_error_status(error))
 }
 
 /// Erros da superfície autenticada nunca devem ser armazenados por proxies.
 fn error_private_no_store(status: StatusCode) -> Response {
-    let mut response = status.into_response();
+    error_response_private_no_store(status.into_response())
+}
+
+fn error_response_private_no_store(mut response: Response) -> Response {
     response.headers_mut().insert(
         header::CACHE_CONTROL,
         HeaderValue::from_static("private, no-store"),

@@ -12,8 +12,8 @@ mod state;
 mod stream;
 
 pub use auth::{
-    AuthError, generate_session_token, hash_password, hash_session_token, validate_password,
-    validate_username, verify_password,
+    AuthError, generate_session_token, hash_password, hash_session_token,
+    validate_current_password, validate_password, validate_username, verify_password,
 };
 pub use config::{Command, Config, ConfigError, parse_command};
 pub use state::{AppState, StateError};
@@ -23,12 +23,12 @@ use std::{future::Future, time::Duration};
 use axum::{
     BoxError, Router,
     error_handling::HandleErrorLayer,
-    extract::DefaultBodyLimit,
+    extract::{DefaultBodyLimit, Request},
     http::{
         StatusCode,
-        header::{HeaderName, HeaderValue},
+        header::{CACHE_CONTROL, HeaderName, HeaderValue},
     },
-    middleware::map_response,
+    middleware::{Next, from_fn, map_response},
     response::Response,
     routing::{get, post},
 };
@@ -37,6 +37,7 @@ use tower::ServiceBuilder;
 
 /// Versão compilada do servidor, usada pelo executável e pelo endpoint de saúde.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+pub(crate) const LIBRARY_ID: &str = "library-1";
 
 /// Monta as rotas públicas mínimas do servidor.
 pub fn build_router(state: AppState) -> Router {
@@ -47,6 +48,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/login", axum::routing::post(auth::login))
         .route("/api/me", get(auth::me))
         .route("/api/logout", axum::routing::post(auth::logout))
+        .route(
+            "/api/account/credentials",
+            axum::routing::post(auth::credentials),
+        )
         .route("/api/catalog", get(catalog::catalog))
         .route("/api/admin/catalog/rescan", post(catalog::rescan))
         .route("/api/media", get(media::media).head(media::media))
@@ -59,7 +64,34 @@ pub fn build_router(state: AppState) -> Router {
                 inline_style_hashes.clone(),
             )
         }))
+        .layer(from_fn(api_cache_headers))
         .with_state(state)
+}
+
+fn with_request_limits(router: Router, timeout: Duration) -> Router {
+    router.layer(
+        ServiceBuilder::new()
+            .layer(from_fn(api_cache_headers))
+            .layer(HandleErrorLayer::new(|_: BoxError| async {
+                (StatusCode::REQUEST_TIMEOUT, "request timeout")
+            }))
+            .timeout(timeout),
+    )
+}
+
+/// Garante que nenhuma resposta `/api` possa ser armazenada, incluindo as
+/// rejeições produzidas antes do handler (`Json` e `DefaultBodyLimit`) e as
+/// respostas do healthz ou de rotas desconhecidas. Um handler que já escolheu
+/// uma política mais restritiva (`private, no-store`) é preservado.
+async fn api_cache_headers(request: Request, next: Next) -> Response {
+    let is_api = request.uri().path() == "/api" || request.uri().path().starts_with("/api/");
+    let mut response = next.run(request).await;
+    if is_api && !response.headers().contains_key(CACHE_CONTROL) {
+        response
+            .headers_mut()
+            .insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    }
+    response
 }
 
 async fn security_headers(
@@ -86,7 +118,7 @@ async fn security_headers(
         csp.push_str(hash);
         csp.push('\'');
     }
-    csp.push_str("; media-src 'self' data:; frame-ancestors 'none'");
+    csp.push_str("; media-src 'self' data: blob:; frame-ancestors 'none'");
     // Os hashes são base64 por construção, então a conversão é infalível na
     // prática; ainda assim, prefira responder sem CSP a travar o worker.
     if let Ok(csp) = csp.parse() {
@@ -120,13 +152,7 @@ where
     let state = AppState::initialize(config)
         .await
         .map_err(|error| ServeError::Startup(error.to_string()))?;
-    let app = build_router(state).layer(
-        ServiceBuilder::new()
-            .layer(HandleErrorLayer::new(|_: BoxError| async {
-                (StatusCode::REQUEST_TIMEOUT, "request timeout")
-            }))
-            .timeout(Duration::from_secs(30)),
-    );
+    let app = with_request_limits(build_router(state), Duration::from_secs(30));
 
     axum::serve(
         listener,
@@ -145,13 +171,17 @@ mod tests {
     use axum::{
         body::Body,
         http::{Request, StatusCode},
+        routing::get,
     };
     use http_body_util::BodyExt;
     use tempfile::TempDir;
     use tokio::sync::oneshot;
     use tower::ServiceExt;
 
-    use super::{AppState, Command, Config, VERSION, build_router, parse_command, serve};
+    use super::{
+        AppState, Command, Config, LIBRARY_ID, VERSION, build_router, parse_command, serve,
+        with_request_limits,
+    };
 
     async fn media_app() -> (axum::Router, tempfile::TempDir, AppState) {
         let temp = tempfile::tempdir().unwrap();
@@ -255,10 +285,27 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(response.headers()["content-type"], "application/json");
+        assert_eq!(response.headers()["cache-control"], "no-store");
         let body = response.into_body().collect().await.unwrap().to_bytes();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["status"], "ok");
         assert_eq!(json["version"], VERSION);
+    }
+
+    #[tokio::test]
+    async fn api_timeout_rejection_gets_no_store_cache_header() {
+        let temp = tempfile::tempdir().unwrap();
+        let router = build_router(AppState::new(config_fixture(&temp))).route(
+            "/api/slow",
+            get(|| async { std::future::pending::<()>().await }),
+        );
+        let response = with_request_limits(router, Duration::from_millis(1))
+            .oneshot(Request::get("/api/slow").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::REQUEST_TIMEOUT);
+        assert_eq!(response.headers()["cache-control"], "no-store");
     }
 
     #[tokio::test]
@@ -414,6 +461,64 @@ mod tests {
         assert_eq!(
             partial.into_body().collect().await.unwrap().to_bytes(),
             "2345"
+        );
+    }
+
+    #[tokio::test]
+    async fn media_uses_the_configured_library_when_paths_collide() {
+        let temp = tempfile::tempdir().unwrap();
+        let configured_root = temp.path().join("configured");
+        let other_root = temp.path().join("other");
+        fs::create_dir_all(&configured_root).unwrap();
+        fs::create_dir_all(&other_root).unwrap();
+        fs::write(configured_root.join("lesson.mp4"), b"configured").unwrap();
+        fs::write(other_root.join("lesson.mp4"), b"other").unwrap();
+
+        let mut config = Config::from_args([
+            "learnvault-server",
+            "--database",
+            temp.path().join("media.sqlite").to_str().unwrap(),
+            "--library-root",
+            configured_root.to_str().unwrap(),
+        ])
+        .unwrap();
+        config.admin_username = Some("admin".to_owned());
+        config.admin_password = Some("uma senha local muito segura".to_owned());
+        config.cookie_secure = false;
+        let state = AppState::initialize(config).await.unwrap();
+        {
+            let mut database = state.database.try_lock().unwrap();
+            learnvault_core::apply_scan(
+                &mut database,
+                "library-2",
+                &learnvault_core::scan(&other_root).unwrap(),
+                learnvault_core::KeyMode::for_host(),
+            )
+            .unwrap();
+            learnvault_core::apply_scan(
+                &mut database,
+                LIBRARY_ID,
+                &learnvault_core::scan(&configured_root).unwrap(),
+                learnvault_core::KeyMode::for_host(),
+            )
+            .unwrap();
+        }
+        let app = build_router(state);
+        let cookie = media_cookie(&app).await;
+        let response = app
+            .oneshot(
+                Request::get("/api/media?path=lesson.mp4")
+                    .header("cookie", cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.into_body().collect().await.unwrap().to_bytes(),
+            "configured"
         );
     }
 

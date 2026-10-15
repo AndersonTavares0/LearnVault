@@ -71,8 +71,11 @@ func run(ctx context.Context, cfg config.Config, listen func(string, string) (ne
 		return err
 	}
 	if !hasAdmin {
-		if cfg.AdminUser == "" || cfg.AdminPass == "" {
-			return errors.New("first run requires ADMIN_USERNAME and ADMIN_PASSWORD (minimum 12 characters)")
+		if cfg.AdminUser == "" {
+			cfg.AdminUser = "admin"
+		}
+		if cfg.AdminPass == "" {
+			cfg.AdminPass = "admin"
 		}
 		if err := db.BootstrapAdmin(ctx, cfg.AdminUser, cfg.AdminPass); err != nil {
 			return err
@@ -85,9 +88,7 @@ func run(ctx context.Context, cfg config.Config, listen func(string, string) (ne
 		return err
 	}
 	api := httpapi.NewWithLibraryVersion(db, cfg.CookieSecure, root, version)
-	mux := http.NewServeMux()
-	mux.Handle("/api/", api)
-	mux.HandleFunc("/", spaHandler(staticFiles))
+	mux := newMux(api, staticFiles)
 	address := cfg.ListenAddr + ":" + cfg.Port
 	listener, err := listen("tcp", address)
 	if err != nil {
@@ -110,11 +111,25 @@ func run(ctx context.Context, cfg config.Config, listen func(string, string) (ne
 	return nil
 }
 
+// newMux binds the JSON API and the embedded SPA. The bare `/api` is registered
+// explicitly: without that route it would fall through to the SPA fallback and answer
+// with HTML. The API handler owns the cache policy for the whole `/api` namespace,
+// including `/api` itself, which is always served with `no-store`.
+func newMux(api http.Handler, files fs.FS) *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.Handle("/api", api)
+	mux.Handle("/api/", api)
+	mux.HandleFunc("/", spaHandler(files))
+	return mux
+}
+
 func spaHandler(files fs.FS) http.HandlerFunc {
 	fileServer := http.FileServer(http.FS(files))
 	return func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/api/") {
-			http.NotFound(w, r)
+		// Defense in depth: even if the bare `/api` route is ever unmounted, the SPA
+		// fallback must never turn an API path into an HTML shell.
+		if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
+			notFoundUncacheable(w, r)
 			return
 		}
 		path := strings.TrimPrefix(filepath.ToSlash(filepath.Clean("/"+r.URL.Path)), "/")
@@ -128,25 +143,47 @@ func spaHandler(files fs.FS) http.HandlerFunc {
 				return
 			}
 			if strings.Contains(filepath.Base(path), ".") {
-				http.NotFound(w, r)
+				// An unknown asset outside the API namespace: a stale 404 must not be
+				// stored, matching the API namespace and the documented SPA error policy.
+				notFoundUncacheable(w, r)
 				return
 			}
 		}
 		fallback, err := files.Open("200.html")
 		if err != nil {
-			http.Error(w, "frontend assets unavailable", http.StatusServiceUnavailable)
+			errorUncacheable(w, "frontend assets unavailable", http.StatusServiceUnavailable)
 			return
 		}
 		defer fallback.Close()
 		contents, err := io.ReadAll(fallback)
 		if err != nil {
-			http.Error(w, "frontend assets unavailable", http.StatusInternalServerError)
+			errorUncacheable(w, "frontend assets unavailable", http.StatusInternalServerError)
 			return
 		}
+		// The shell fallback serves valid client routes and unknown extensionless routes.
+		// It must be revalidated instead of cached: a new shell only takes effect after a
+		// restart, so a cached HTML response could outlive the deploy (`no-cache`, not
+		// `no-store`, is the documented SPA shell policy).
+		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(contents)
 	}
+}
+
+// notFoundUncacheable answers an unknown route with 404 and forbids storing the response.
+// SPA and API error responses use `no-store`: a stale 404 would outlive the deploy that
+// fixed the route and mask it from browsers or intermediaries.
+func notFoundUncacheable(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	http.NotFound(w, r)
+}
+
+// errorUncacheable answers a missing or unreadable SPA artifact with an error status and
+// forbids storing it, mirroring the documented SPA error policy (`no-store`).
+func errorUncacheable(w http.ResponseWriter, message string, status int) {
+	w.Header().Set("Cache-Control", "no-store")
+	http.Error(w, message, status)
 }
 
 func securityHeaders(next http.Handler) http.Handler {
@@ -154,6 +191,7 @@ func securityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "no-referrer")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; media-src 'self' data: blob:; object-src 'none'; frame-ancestors 'none'")
 		next.ServeHTTP(w, r)
 	})
 }

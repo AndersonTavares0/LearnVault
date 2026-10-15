@@ -9,6 +9,7 @@ import (
 	"embed"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -27,9 +28,12 @@ var migrationFiles embed.FS
 type DB struct{ sql *sql.DB }
 
 type User struct {
-	ID       int64  `json:"id"`
-	Username string `json:"username"`
-	Role     string `json:"role"`
+	ID                    int64  `json:"-"`
+	UserID                int64  `json:"user_id"`
+	Username              string `json:"username"`
+	Role                  string `json:"-"`
+	IsAdmin               bool   `json:"is_admin"`
+	MustChangeCredentials bool   `json:"must_change_credentials"`
 }
 
 func Open(ctx context.Context, path string) (*DB, error) {
@@ -55,6 +59,19 @@ func Open(ctx context.Context, path string) (*DB, error) {
 		return nil, err
 	}
 	for _, entry := range entries {
+		var applied int
+		if _, err := fmt.Sscanf(entry.Name(), "%d_", &applied); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("invalid migration %s", entry.Name())
+		}
+		var exists int
+		if err := db.QueryRowContext(ctx, `SELECT count(*) FROM schema_migrations WHERE version=?`, applied).Scan(&exists); err != nil {
+			db.Close()
+			return nil, err
+		}
+		if exists > 0 {
+			continue
+		}
 		contents, err := migrationFiles.ReadFile("migrations/" + entry.Name())
 		if err != nil {
 			db.Close()
@@ -77,15 +94,45 @@ func (d *DB) Ping(ctx context.Context) error { return d.sql.PingContext(ctx) }
 
 func (d *DB) BootstrapAdmin(ctx context.Context, username, password string) error {
 	username = strings.TrimSpace(username)
-	if len(username) < 2 || len(username) > 64 || len(password) < 12 || len(password) > 1024 {
+	if !(username == "admin" && password == "admin") && (len(username) < 2 || len(username) > 64 || len(password) < 12 || len(password) > 1024) {
 		return errors.New("admin username must be 2-64 characters and password 12-1024 characters")
 	}
 	hash, err := hashPassword(password)
 	if err != nil {
 		return err
 	}
-	_, err = d.sql.ExecContext(ctx, `INSERT OR IGNORE INTO users(username,password_hash,role) SELECT ?,?,'admin' WHERE NOT EXISTS (SELECT 1 FROM users WHERE role='admin')`, username, hash)
+	mustChange := 0
+	if username == "admin" && password == "admin" {
+		mustChange = 1
+	}
+	_, err = d.sql.ExecContext(ctx, `INSERT OR IGNORE INTO users(username,password_hash,role,must_change_credentials) SELECT ?,?,'admin',? WHERE NOT EXISTS (SELECT 1 FROM users WHERE role='admin')`, username, hash, mustChange)
 	return err
+}
+
+func (d *DB) UpdateCredentialsAndSession(ctx context.Context, userID int64, username, password, token string, lifetime time.Duration) error {
+	if len([]rune(username)) < 2 || len([]rune(username)) > 64 || strings.TrimSpace(username) != username || len([]rune(password)) < 12 || len([]rune(password)) > 1024 {
+		return errors.New("invalid credentials")
+	}
+	hash, err := hashPassword(password)
+	if err != nil {
+		return err
+	}
+	tx, err := d.sql.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.ExecContext(ctx, `UPDATE users SET username=?, password_hash=?, must_change_credentials=0 WHERE id=?`, username, hash, userID); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id=?`, userID); err != nil {
+		return err
+	}
+	expires := time.Now().UTC().Add(lifetime).Format(time.RFC3339Nano)
+	if _, err = tx.ExecContext(ctx, `INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)`, tokenHash(token), userID, expires); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (d *DB) HasAdmin(ctx context.Context) (bool, error) {
@@ -107,7 +154,9 @@ func (d *DB) VerifyPassword(ctx context.Context, username, password string) (boo
 
 func (d *DB) UserByName(ctx context.Context, username string) (User, error) {
 	var u User
-	err := d.sql.QueryRowContext(ctx, `SELECT id,username,role FROM users WHERE username=? COLLATE NOCASE`, username).Scan(&u.ID, &u.Username, &u.Role)
+	err := d.sql.QueryRowContext(ctx, `SELECT id,username,role,must_change_credentials FROM users WHERE username=? COLLATE NOCASE`, username).Scan(&u.ID, &u.Username, &u.Role, &u.MustChangeCredentials)
+	u.UserID = u.ID
+	u.IsAdmin = u.Role == "admin"
 	return u, err
 }
 
@@ -124,13 +173,145 @@ func (d *DB) CreateSession(ctx context.Context, userID int64, lifetime time.Dura
 
 func (d *DB) UserForSession(ctx context.Context, token string) (User, error) {
 	var u User
-	err := d.sql.QueryRowContext(ctx, `SELECT u.id,u.username,u.role FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?`, tokenHash(token), time.Now().UTC().Format(time.RFC3339Nano)).Scan(&u.ID, &u.Username, &u.Role)
+	err := d.sql.QueryRowContext(ctx, `SELECT u.id,u.username,u.role,u.must_change_credentials FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?`, tokenHash(token), time.Now().UTC().Format(time.RFC3339Nano)).Scan(&u.ID, &u.Username, &u.Role, &u.MustChangeCredentials)
+	u.UserID = u.ID
+	u.IsAdmin = u.Role == "admin"
 	return u, err
+}
+
+func (d *DB) UpdateCredentials(ctx context.Context, userID int64, username, password string) error {
+	if len([]rune(username)) < 2 || len([]rune(username)) > 64 || strings.TrimSpace(username) != username || len([]rune(password)) < 12 || len([]rune(password)) > 1024 {
+		return errors.New("invalid credentials")
+	}
+	hash, err := hashPassword(password)
+	if err != nil {
+		return err
+	}
+	tx, err := d.sql.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.ExecContext(ctx, `UPDATE users SET username=?, password_hash=?, must_change_credentials=0 WHERE id=?`, username, hash, userID); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id=?`, userID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (d *DB) DeleteSession(ctx context.Context, token string) error {
 	_, err := d.sql.ExecContext(ctx, `DELETE FROM sessions WHERE token_hash=?`, tokenHash(token))
 	return err
+}
+
+// RemoveMedia records the explicit removal of a library-relative path from the catalog.
+// The identity is the canonical relative path, so the tombstone survives every rescan,
+// and repeated calls are idempotent: the first removal wins and `removed_at` is never
+// rewritten. Nothing stored in the catalog is deleted here — removing from the view is
+// not erasing data.
+func (d *DB) RemoveMedia(ctx context.Context, relativePath string) error {
+	clean, ok := catalog.NormalizePath(relativePath)
+	if !ok {
+		return errors.New("invalid media path")
+	}
+	_, err := d.sql.ExecContext(ctx, `INSERT OR IGNORE INTO media_removal(relative_path,removed_at) VALUES(?,?)`, clean, time.Now().UTC().Unix())
+	return err
+}
+
+// RemovedMedia returns the canonical paths explicitly removed from the catalog. The set
+// is only ever read, never rebuilt or pruned by a scan, so a rescan cannot add, drop or
+// rewrite a removal.
+func (d *DB) RemovedMedia(ctx context.Context) (map[string]struct{}, error) {
+	rows, err := d.sql.QueryContext(ctx, `SELECT relative_path FROM media_removal`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	removed := map[string]struct{}{}
+	for rows.Next() {
+		var path string
+		if err := rows.Scan(&path); err != nil {
+			return nil, err
+		}
+		removed[path] = struct{}{}
+	}
+	return removed, rows.Err()
+}
+
+// filterRemovedCatalog drops tombstoned paths at read time, mirroring the Rust
+// `media_rows` filter: an explicit removal takes the media out of the catalog without
+// deleting the stored record. Empty parents are pruned so a removed media cannot leave an
+// empty shell behind.
+func filterRemovedCatalog(value catalog.Catalog, removed map[string]struct{}) catalog.Catalog {
+	if len(removed) == 0 {
+		return value
+	}
+	isRemoved := func(path string) bool {
+		clean, ok := catalog.NormalizePath(path)
+		if !ok {
+			return false
+		}
+		_, gone := removed[clean]
+		return gone
+	}
+	keepFiles := func(files []catalog.File) []catalog.File {
+		var kept []catalog.File
+		for _, file := range files {
+			if !isRemoved(file.Path) {
+				kept = append(kept, file)
+			}
+		}
+		return kept
+	}
+	value.LooseFiles = keepFiles(value.LooseFiles)
+	var categories []catalog.Category
+	for _, category := range value.Categories {
+		var courses []catalog.Course
+		for _, course := range category.Courses {
+			var modules []catalog.Module
+			for _, module := range course.Modules {
+				var lessons []catalog.Lesson
+				for _, lesson := range module.Lessons {
+					lesson.Media = keepFiles(lesson.Media)
+					lesson.Subtitles = keepFiles(lesson.Subtitles)
+					lesson.Materials = keepFiles(lesson.Materials)
+					if len(lesson.Media) > 0 || len(lesson.Subtitles) > 0 || len(lesson.Materials) > 0 {
+						lessons = append(lessons, lesson)
+					}
+				}
+				if len(lessons) > 0 {
+					module.Lessons = lessons
+					modules = append(modules, module)
+				}
+			}
+			if len(modules) > 0 {
+				course.Modules = modules
+				courses = append(courses, course)
+			}
+		}
+		if len(courses) > 0 {
+			category.Courses = courses
+			categories = append(categories, category)
+		}
+	}
+	value.Categories = categories
+	value.Nodes = filterRemovedNodes(value.Nodes, keepFiles)
+	return value
+}
+
+func filterRemovedNodes(nodes []catalog.Node, keepFiles func([]catalog.File) []catalog.File) []catalog.Node {
+	var kept []catalog.Node
+	for _, node := range nodes {
+		node.Files = keepFiles(node.Files)
+		node.LooseFiles = keepFiles(node.LooseFiles)
+		node.Children = filterRemovedNodes(node.Children, keepFiles)
+		if len(node.Files) > 0 || len(node.LooseFiles) > 0 || len(node.Children) > 0 {
+			kept = append(kept, node)
+		}
+	}
+	return kept
 }
 
 func (d *DB) ReplaceCatalog(ctx context.Context, value catalog.Catalog) error {
@@ -141,6 +322,24 @@ func (d *DB) ReplaceCatalog(ctx context.Context, value catalog.Catalog) error {
 	defer tx.Rollback()
 	if _, err = tx.ExecContext(ctx, `DELETE FROM catalog_categories`); err != nil {
 		return err
+	}
+	encoded, err := json.Marshal(value.Nodes)
+	if err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM catalog_nodes_json`); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO catalog_nodes_json(id,value) VALUES(1,?)`, string(encoded)); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM catalog_root_files`); err != nil {
+		return err
+	}
+	for _, file := range value.LooseFiles {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO catalog_root_files(path,name,size) VALUES(?,?,?)`, file.Path, file.Name, file.Size); err != nil {
+			return err
+		}
 	}
 	for _, category := range value.Categories {
 		res, err := tx.ExecContext(ctx, `INSERT INTO catalog_categories(path,title) VALUES(?,?)`, category.Path, category.Title)
@@ -207,6 +406,31 @@ func insertCatalogFile(ctx context.Context, tx *sql.Tx, lessonID int64, file cat
 
 func (d *DB) Catalog(ctx context.Context) (catalog.Catalog, error) {
 	var result catalog.Catalog
+	var nodesJSON string
+	if err := d.sql.QueryRowContext(ctx, `SELECT value FROM catalog_nodes_json WHERE id=1`).Scan(&nodesJSON); err == nil {
+		if err := json.Unmarshal([]byte(nodesJSON), &result.Nodes); err != nil {
+			return result, err
+		}
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return result, err
+	}
+	rootRows, err := d.sql.QueryContext(ctx, `SELECT name,path,size FROM catalog_root_files ORDER BY path`)
+	if err != nil {
+		return result, err
+	}
+	for rootRows.Next() {
+		var file catalog.File
+		if err := rootRows.Scan(&file.Name, &file.Path, &file.Size); err != nil {
+			rootRows.Close()
+			return result, err
+		}
+		result.LooseFiles = append(result.LooseFiles, file)
+	}
+	if err := rootRows.Err(); err != nil {
+		rootRows.Close()
+		return result, err
+	}
+	rootRows.Close()
 	rows, err := d.sql.QueryContext(ctx, `SELECT c.id,c.path,c.title, co.id,co.path,co.title, m.id,m.path,m.title, l.id,l.path,l.title, f.name,f.path,f.kind,f.size FROM catalog_categories c LEFT JOIN catalog_courses co ON co.category_id=c.id LEFT JOIN catalog_modules m ON m.course_id=co.id LEFT JOIN catalog_lessons l ON l.module_id=m.id LEFT JOIN catalog_files f ON f.lesson_id=l.id ORDER BY c.path,co.path,m.path,l.path,f.path`)
 	if err != nil {
 		return result, err
@@ -272,7 +496,11 @@ func (d *DB) Catalog(ctx context.Context) (catalog.Catalog, error) {
 		return result, err
 	}
 	rows.Close()
-	return result, nil
+	removed, err := d.RemovedMedia(ctx)
+	if err != nil {
+		return result, err
+	}
+	return filterRemovedCatalog(result, removed), nil
 }
 
 func hashPassword(password string) (string, error) {

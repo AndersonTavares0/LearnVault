@@ -51,6 +51,15 @@ pub enum Error {
         known: usize,
     },
 
+    /// O arquivo pertence ao schema legado do serviço Go.
+    ///
+    /// A conversão não é automática: abrir esse arquivo como Rust poderia criar um segundo
+    /// administrador e deixar os dados legados invisíveis.
+    #[error(
+        "legacy_go_database_requires_migration: back up the database and migrate it before using the Rust server"
+    )]
+    LegacyGoDatabase,
+
     /// Falha de SQL que não se enquadra nas variantes anteriores.
     #[error("erro de banco de dados")]
     Database(#[from] rusqlite::Error),
