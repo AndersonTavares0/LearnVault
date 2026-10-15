@@ -86,7 +86,9 @@ fn recent_ids(db: &Database, owner_id: &str, limit: usize) -> Vec<String> {
 
 fn count(db: &Database, table: &str) -> i64 {
     db.connection()
-        .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| row.get(0))
+        .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+            row.get(0)
+        })
         .expect("contagem")
 }
 
@@ -121,7 +123,10 @@ fn recording_a_position_preserves_completion() -> TestResult {
 
     let state = record_position(&db, OWNER, "m1", 90)?;
 
-    assert!(state.completed, "concluir e depois avançar não desfaz a conclusão");
+    assert!(
+        state.completed,
+        "concluir e depois avançar não desfaz a conclusão"
+    );
     assert_eq!(state.position_seconds, 90);
     assert_eq!(row(&db, OWNER, "m1").map(|r| r.1), Some(1));
     Ok(())
@@ -198,7 +203,10 @@ fn a_real_change_moves_the_timestamp() -> TestResult {
     );
 
     let cleared = set_completed(&db, OWNER, "m1", false)?;
-    assert!(cleared.updated_at > SEEDED_AT, "desmarcar também é alteração");
+    assert!(
+        cleared.updated_at > SEEDED_AT,
+        "desmarcar também é alteração"
+    );
     Ok(())
 }
 
@@ -333,10 +341,13 @@ fn progress_is_isolated_between_media() -> TestResult {
     record_position(&db, OWNER, "m2", 22)?;
     set_completed(&db, OWNER, "m2", true)?;
 
-    assert_eq!(study_progress(&db, OWNER, "m1")?.map(|s| s.position_seconds), Some(11));
     assert_eq!(
-        study_progress(&db, OWNER, "m2").map(|state| state.map(|s| s.completed)),
-        Ok(Some(true))
+        study_progress(&db, OWNER, "m1")?.map(|s| s.position_seconds),
+        Some(11)
+    );
+    assert_eq!(
+        study_progress(&db, OWNER, "m2")?.map(|state| state.completed),
+        Some(true)
     );
     Ok(())
 }
