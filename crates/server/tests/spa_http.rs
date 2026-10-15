@@ -325,9 +325,10 @@ async fn csp_hashes_the_downloaded_canonical_spa_shell_when_available() {
         .join("..")
         .join("services/go/cmd/learnvault/web/build");
     let shell_path = canonical_root.join("200.html");
-    if !shell_path.is_file() {
-        return;
-    }
+    assert!(
+        shell_path.is_file(),
+        "o shell canônico da SPA deve existir antes do teste CSP"
+    );
     let shell = fs::read_to_string(&shell_path).unwrap();
     let script_start = shell.find("<script").unwrap();
     let content_start = shell[script_start..].find('>').unwrap() + script_start + 1;
