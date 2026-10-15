@@ -24,7 +24,10 @@ export function href(route: Route, lessonPath?: string): string {
 }
 
 export function destinationAfterLogin(hash: string): string {
-	return hash || href('home');
+	const location = locationFromHash(hash);
+	if (location.route === 'home' || location.route === 'catalog') return href(location.route);
+	if (location.route === 'player' && location.lessonPath) return href('player', location.lessonPath);
+	return href('home');
 }
 
 export function findLesson(catalog: Catalog | null, lessonPath: string | null): Lesson | null {

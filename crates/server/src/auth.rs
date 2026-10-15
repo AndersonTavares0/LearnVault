@@ -93,6 +93,18 @@ pub fn validate_password(password: &str) -> Result<(), AuthError> {
     Ok(())
 }
 
+/// Valida o limite público da senha atual informada na troca de credenciais.
+///
+/// Espelha a checagem do serviço Go (`1..=1024` runas) para que uma senha
+/// vazia ou acima do limite seja recusada antes de chegar ao Argon2.
+pub fn validate_current_password(password: &str) -> Result<(), AuthError> {
+    let length = password.chars().count();
+    if !(1..=1024).contains(&length) {
+        return Err(AuthError::InvalidPassword);
+    }
+    Ok(())
+}
+
 /// Gera um token de sessão opaco, codificado em hexadecimal.
 pub fn generate_session_token() -> Result<String, AuthError> {
     let mut token = [0u8; SESSION_TOKEN_BYTES];
@@ -156,7 +168,7 @@ pub(crate) async fn credentials(
         Err(StateError::Capacity) => return private_no_store(service_unavailable()),
         Ok(None) | Err(_) => return private_no_store(StatusCode::UNAUTHORIZED.into_response()),
     };
-    if request.current_password.is_empty()
+    if validate_current_password(&request.current_password).is_err()
         || validate_username(&request.username).is_err()
         || validate_password(&request.password).is_err()
     {
@@ -464,8 +476,8 @@ mod tests {
     use base64::{Engine, engine::general_purpose::STANDARD_NO_PAD};
 
     use super::{
-        generate_session_token, hash_password, hash_session_token, validate_password,
-        validate_username, verify_password,
+        generate_session_token, hash_password, hash_session_token, validate_current_password,
+        validate_password, validate_username, verify_password,
     };
 
     #[test]
@@ -511,6 +523,14 @@ mod tests {
         assert!(validate_password(&"a".repeat(1024)).is_ok());
         assert!(validate_password(&"a".repeat(11)).is_err());
         assert!(validate_password(&"a".repeat(1025)).is_err());
+    }
+
+    #[test]
+    fn current_password_matches_the_go_service_bounds() {
+        assert!(validate_current_password("a").is_ok());
+        assert!(validate_current_password(&"a".repeat(1024)).is_ok());
+        assert!(validate_current_password("").is_err());
+        assert!(validate_current_password(&"a".repeat(1025)).is_err());
     }
 
     #[test]

@@ -14,6 +14,8 @@ describe('hash router', () => {
 		expect(href('player', 'modules/lesson one')).toBe('#/player/modules%2Flesson%20one');
 	});
 	it('preserves a deep-link after login', () => expect(destinationAfterLogin('#/player/aula')).toBe('#/player/aula'));
+	it('drops an unknown hash to home after login', () => expect(destinationAfterLogin('#/desconhecido')).toBe('#/home'));
+	it('drops a malformed percent-encoding to home after login', () => expect(destinationAfterLogin('#/player/%E0%A4%A')).toBe('#/home'));
 	it('resolves a deep-linked lesson after catalog loading', () => {
 		const lesson = { title: 'Aula', path: 'modules/lesson one', media: [], subtitles: [], materials: [] };
 		const catalog = { complete: true, looseFiles: [], nodes: [], categories: [{ title: 'Categoria', looseFiles: [], courses: [{ title: 'Curso', looseFiles: [], modules: [{ title: 'Módulo', looseFiles: [], lessons: [lesson] }] }] }] };

@@ -428,6 +428,86 @@ async fn credentials_change_is_transactional_and_invalidates_old_sessions() {
 }
 
 #[tokio::test]
+async fn credentials_current_password_matches_the_go_service_bounds() {
+    let temp = tempfile::tempdir().unwrap();
+    let app = build_router(AppState::initialize(config(&temp, false)).await.unwrap());
+    let (status, cookie) = login(&app, "admin", "admin").await;
+    assert_eq!(status, StatusCode::OK);
+
+    // Uma senha atual acima de 1024 caracteres é recusada antes do Argon2 e
+    // nunca aparece na resposta.
+    let oversized = "p".repeat(1025);
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/api/account/credentials")
+                .header("content-type", "application/json")
+                .header("origin", "http://localhost")
+                .header("cookie", &cookie)
+                .body(Body::from(
+                    serde_json::json!({
+                        "current_password": oversized,
+                        "username": "owner",
+                        "password": "uma senha nova muito segura"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(response.headers()["cache-control"], "private, no-store");
+    let payload = body(response).await;
+    assert_eq!(payload["error"], "invalid_credentials_format");
+    assert!(!payload.to_string().contains(&oversized));
+
+    // A senha atual vazia segue o mesmo limite inferior do serviço Go.
+    let empty = app
+        .clone()
+        .oneshot(
+            Request::post("/api/account/credentials")
+                .header("content-type", "application/json")
+                .header("origin", "http://localhost")
+                .header("cookie", &cookie)
+                .body(Body::from(
+                    serde_json::json!({
+                        "current_password": "",
+                        "username": "owner",
+                        "password": "uma senha nova muito segura"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(empty.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body(empty).await["error"], "invalid_credentials_format");
+
+    // A proteção CSRF continua obrigatória na troca de credenciais.
+    let csrf = app
+        .oneshot(
+            Request::post("/api/account/credentials")
+                .header("content-type", "application/json")
+                .header("cookie", &cookie)
+                .body(Body::from(
+                    serde_json::json!({
+                        "current_password": "admin",
+                        "username": "owner",
+                        "password": "uma senha nova muito segura"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(csrf.status(), StatusCode::FORBIDDEN);
+    assert_eq!(body(csrf).await["error"], "csrf_failed");
+}
+
+#[tokio::test]
 async fn temporary_credentials_block_protected_endpoints_until_changed() {
     let temp = tempfile::tempdir().unwrap();
     let app = build_router(AppState::initialize(config(&temp, false)).await.unwrap());

@@ -12,8 +12,8 @@ mod state;
 mod stream;
 
 pub use auth::{
-    AuthError, generate_session_token, hash_password, hash_session_token, validate_password,
-    validate_username, verify_password,
+    AuthError, generate_session_token, hash_password, hash_session_token,
+    validate_current_password, validate_password, validate_username, verify_password,
 };
 pub use config::{Command, Config, ConfigError, parse_command};
 pub use state::{AppState, StateError};
