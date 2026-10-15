@@ -11,11 +11,13 @@ export type ProjectedModule = { title: string; lessons: Lesson[]; looseFiles: Fi
 export type ProjectedCourse = { title: string; modules: ProjectedModule[]; looseFiles: FileEntry[] };
 export type ProjectedCategory = { title: string; courses: ProjectedCourse[]; looseFiles: FileEntry[] };
 export type Catalog = { complete: boolean; looseFiles: FileEntry[]; nodes: CatalogNode[]; categories: ProjectedCategory[] };
+export type PlatformConfig = { configured: boolean };
 
 export interface Transport {
 	me(): Promise<User | null>;
 	login(username: string, password: string): Promise<User>;
 	logout(): Promise<void>;
+	config(): Promise<PlatformConfig>;
 	catalog(): Promise<Catalog>;
 	rescan(): Promise<void>;
 	updateCredentials(username: string, password: string, currentPassword?: string): Promise<User>;
@@ -144,6 +146,11 @@ export function normalizeUser(value: unknown): User {
 	return { userId: typeof user.user_id === 'string' || typeof user.user_id === 'number' ? String(user.user_id) : '', username: user.username, isAdmin: user.is_admin === true || user.role === 'admin', role: user.is_admin === true || user.role === 'admin' ? 'admin' : 'user', mustChangeCredentials: user.must_change_credentials === true };
 }
 
+export function normalizeConfig(value: unknown): PlatformConfig {
+	if (!value || typeof value !== 'object' || typeof (value as { configured?: unknown }).configured !== 'boolean') throw invalidPayload('configuração da plataforma inválida.');
+	return { configured: (value as { configured: boolean }).configured };
+}
+
 export function normalizeCatalog(value: unknown): Catalog {
 	if (!value || typeof value !== 'object') throw invalidPayload('catálogo ausente.');
 	const payload = value as { categories?: unknown; nodes?: unknown; loose_files?: unknown; looseFiles?: unknown };
@@ -163,6 +170,7 @@ export class HttpTransport implements Transport {
 		return normalizeUser(await response.json());
 	}
 	async logout() { await fetch('/api/logout', { method: 'POST' }); }
+	config() { return Promise.resolve({ configured: true }); }
 	async catalog() { const response = await fetch('/api/catalog'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar o catálogo.'); return normalizeCatalog(await response.json()); }
 	async rescan() { const response = await fetch('/api/admin/catalog/rescan', { method: 'POST' }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 409 ? 'Já existe um rescan em andamento.' : 'Não foi possível indexar a biblioteca.'); }
 	async updateCredentials(username: string, password: string, currentPassword = password) { const response = await fetch('/api/account/credentials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ current_password: currentPassword, username, password }) }); if (!response.ok) throw new Error(response.status === 422 ? 'Usuário ou senha inválidos.' : response.status === 401 ? 'Senha atual incorreta.' : 'Não foi possível atualizar as credenciais.'); return normalizeUser(await response.json()); }
@@ -180,6 +188,7 @@ export class DesktopStub implements Transport {
 	me() { return Promise.resolve(null); }
 	login() { return Promise.reject(new Error('Transporte desktop ainda não implementado.')); }
 	logout() { return Promise.resolve(); }
+	async config() { try { return normalizeConfig(await invoke<unknown>('desktop_config')); } catch (cause) { throw desktopError(cause, 'Não foi possível ler a configuração do aplicativo.'); } }
 	async catalog() { try { return normalizeCatalog(await invoke<unknown>('desktop_catalog')); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar o catálogo.'); } }
 	rescan() { return Promise.reject(new Error('Rescan desktop ainda não implementado.')); }
 	updateCredentials() { return Promise.reject(new Error('Transporte desktop ainda não implementado.')); }
