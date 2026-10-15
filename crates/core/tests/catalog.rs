@@ -72,7 +72,11 @@ fn node<'a>(nodes: &'a [CatalogNode], path: &str) -> &'a CatalogNode {
 #[test]
 fn a_four_level_tree_is_derived_bottom_up() -> TestResult {
     let db = library_db()?;
-    media(&db, "m1", "Programação/Go Essencial/Módulo 1/Aula 1/aula.mp4")?;
+    media(
+        &db,
+        "m1",
+        "Programação/Go Essencial/Módulo 1/Aula 1/aula.mp4",
+    )?;
 
     let catalog = build_catalog(&db, LIB)?;
 
@@ -251,7 +255,10 @@ fn files_under_an_unverified_area_are_flagged() -> TestResult {
     assert!(!catalog.complete, "a última varredura foi parcial");
     let cat = node(&catalog.categories, "Cat");
     let lesson = node(&node(&cat.children, "Cat/Curso").children, "Cat/Curso/Aula");
-    assert!(lesson.files[0].unverified, "arquivo sob área não verificada");
+    assert!(
+        lesson.files[0].unverified,
+        "arquivo sob área não verificada"
+    );
 
     let outra = node(&catalog.categories, "Outra");
     let outra_lesson = node(&outra.children, "Outra/Aula");
@@ -287,7 +294,13 @@ fn the_kind_is_derived_from_the_extension_including_the_typescript_rule() -> Tes
     insert_media(&db, "m2", "Cat/Aula/legenda.srt", 1024, "available")?;
     insert_media(&db, "m3", "Cat/Aula/apoio.pdf", 1024, "available")?;
     insert_media(&db, "m4", "Cat/Aula/pequeno.ts", 1024, "available")?;
-    insert_media(&db, "m5", "Cat/Aula/grande.ts", 2 * 1024 * 1024, "available")?;
+    insert_media(
+        &db,
+        "m5",
+        "Cat/Aula/grande.ts",
+        2 * 1024 * 1024,
+        "available",
+    )?;
 
     let catalog = build_catalog(&db, LIB)?;
     let lesson = node(&catalog.categories[0].children, "Cat/Aula");
@@ -375,7 +388,10 @@ fn an_empty_library_produces_an_empty_catalog() -> TestResult {
 
     assert!(catalog.categories.is_empty());
     assert!(catalog.loose_files.is_empty());
-    assert!(catalog.complete, "sem varredura registrada nada está pendente");
+    assert!(
+        catalog.complete,
+        "sem varredura registrada nada está pendente"
+    );
     Ok(())
 }
 
@@ -404,6 +420,9 @@ fn building_the_catalog_does_not_write() -> TestResult {
         .query_row("SELECT COUNT(*) FROM scan", [], |row| row.get(0))?;
 
     assert_eq!(media_before, media_after, "o catálogo não altera mídia");
-    assert_eq!(scans_before, scans_after, "o catálogo não registra varredura");
+    assert_eq!(
+        scans_before, scans_after,
+        "o catálogo não registra varredura"
+    );
     Ok(())
 }
