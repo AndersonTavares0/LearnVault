@@ -22,8 +22,12 @@ describe('transport contract', () => {
 	});
 	it('normalizes the Rust user and recursive catalog contract', () => {
 		expect(normalizeUser({ user_id: 'u1', username: 'admin', is_admin: true })).toEqual({ username: 'admin', role: 'admin' });
-		const catalog = normalizeCatalog({ categories: [{ title: 'Categoria', path: 'cat', role: 'category', files: [], loose_files: [], children: [{ title: 'Curso', path: 'cat/curso', role: 'course', files: [], loose_files: [], children: [{ title: 'Módulo', path: 'cat/curso/mod', role: 'module', files: [], loose_files: [], children: [{ title: 'Aula', path: 'cat/curso/mod/aula', role: 'lesson', files: [{ media_id: 'm1', name: 'aula.mp4', path: 'cat/curso/mod/aula.mp4', size: 10, kind: 'media', availability: 'available', unverified: false }, { media_id: 's1', name: 'aula.vtt', path: 'cat/curso/mod/aula.vtt', size: 2, kind: 'subtitle', availability: 'available', unverified: false }], loose_files: [], children: [] }] }] }] }] });
+		const catalog = normalizeCatalog({ complete: true, loose_files: [{ media_id: 'loose', name: 'nota.pdf', path: 'nota.pdf', size: 3, kind: 'material', availability: 'missing', unverified: true }], categories: [{ title: 'Categoria', path: 'cat', role: 'category', files: [], loose_files: [], children: [{ title: 'Curso', path: 'cat/curso', role: 'course', files: [], loose_files: [], children: [{ title: 'Módulo', path: 'cat/curso/mod', role: 'module', files: [], loose_files: [], children: [{ title: 'Aula', path: 'cat/curso/mod/aula', role: 'lesson', files: [{ media_id: 'm1', name: 'aula.mp4', path: 'cat/curso/mod/aula.mp4', size: 10, kind: 'media', availability: 'available', unverified: false }, { media_id: 's1', name: 'aula.vtt', path: 'cat/curso/mod/aula.vtt', size: 2, kind: 'subtitle', availability: 'available', unverified: false }], loose_files: [], children: [] }] }] }] }] });
+		expect(catalog.complete).toBe(true);
+		expect(catalog.looseFiles[0]).toMatchObject({ mediaId: 'loose', path: 'nota.pdf', availability: 'missing', unverified: true });
+		expect(catalog.nodes[0].children[0].path).toBe('cat/curso');
 		expect(catalog.categories[0].courses[0].modules[0].lessons[0].media[0].path).toBe('cat/curso/mod/aula.mp4');
+		expect(catalog.categories[0].courses[0].modules[0].lessons[0].media[0].mediaId).toBe('m1');
 		expect(catalog.categories[0].courses[0].modules[0].lessons[0].subtitles).toHaveLength(1);
 	});
 	it('keeps the Go tree and material files compatible', () => {

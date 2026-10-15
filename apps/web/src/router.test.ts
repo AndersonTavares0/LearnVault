@@ -15,7 +15,7 @@ describe('hash router', () => {
 	});
 	it('resolves a deep-linked lesson after catalog loading', () => {
 		const lesson = { title: 'Aula', path: 'modules/lesson one', media: [], subtitles: [], materials: [] };
-		const catalog = { categories: [{ title: 'Categoria', courses: [{ title: 'Curso', modules: [{ title: 'Módulo', lessons: [lesson] }] }] }] };
+		const catalog = { complete: true, looseFiles: [], nodes: [], categories: [{ title: 'Categoria', courses: [{ title: 'Curso', modules: [{ title: 'Módulo', lessons: [lesson] }] }] }] };
 		expect(findLesson(catalog, 'modules/lesson one')).toBe(lesson);
 		expect(findLesson(catalog, 'missing')).toBeNull();
 	});
