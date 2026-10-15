@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -209,6 +210,91 @@ func TestRescanTombstonesRemovedMedia(t *testing.T) {
 	if got := media.Header().Get("Cache-Control"); got != "private, no-store" { t.Fatalf("removed media Cache-Control = %q", got) }
 }
 
+// TestRescanKeepsExplicitRemovalAndCatalogIdentity cobre o tombstone explícito: depois
+// de uma remoção, um rescan com o arquivo ainda no disco não pode reaparecer a mídia nem
+// reautorizá-la, e a identidade da remoção (o caminho canônico) permanece.
+func TestRescanKeepsExplicitRemovalAndCatalogIdentity(t *testing.T) {
+	root := t.TempDir()
+	lesson := filepath.Join(root, "Cat", "Curso", "Modulo", "Aula")
+	if err := os.MkdirAll(lesson, 0o755); err != nil { t.Fatal(err) }
+	mediaPath := "Cat/Curso/Modulo/Aula/removed.mp4"
+	if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(mediaPath)), []byte("video"), 0o644); err != nil { t.Fatal(err) }
+	db := openTestDB(t)
+	if err := db.BootstrapAdmin(context.Background(), "owner", "a sufficiently long password"); err != nil { t.Fatal(err) }
+	lib, err := library.Open(root); if err != nil { t.Fatal(err) }
+	srv := NewWithLibrary(db, false, lib)
+	cookie := loginForTest(t, srv)
+
+	rescan := func() {
+		req := httptest.NewRequest(http.MethodPost, "/api/admin/catalog/rescan", nil)
+		req.Header.Set("Origin", "http://example.com"); req.AddCookie(cookie)
+		res := httptest.NewRecorder(); srv.ServeHTTP(res, req)
+		if res.Code != http.StatusOK { t.Fatalf("rescan returned %d: %s", res.Code, res.Body.String()) }
+	}
+	mediaStatus := func() int {
+		req := httptest.NewRequest(http.MethodGet, "/api/media?path="+url.QueryEscape(mediaPath), nil)
+		req.AddCookie(cookie)
+		res := httptest.NewRecorder(); srv.ServeHTTP(res, req)
+		return res.Code
+	}
+
+	rescan()
+	if code := mediaStatus(); code != http.StatusOK { t.Fatalf("media before removal = %d; want 200", code) }
+
+	if err := db.RemoveMedia(context.Background(), mediaPath); err != nil { t.Fatal(err) }
+	// O arquivo continua no disco; o rescan não pode desfazer a remoção.
+	rescan()
+	removed, err := db.RemovedMedia(context.Background()); if err != nil { t.Fatal(err) }
+	if len(removed) != 1 { t.Fatalf("removal rows after rescan = %d; want 1", len(removed)) }
+	if _, ok := removed[mediaPath]; !ok { t.Fatalf("removal identity lost after rescan: %v", removed) }
+
+	if code := mediaStatus(); code != http.StatusNotFound { t.Fatalf("removed media after rescan = %d; want 404", code) }
+	catalogReq := httptest.NewRequest(http.MethodGet, "/api/catalog", nil); catalogReq.AddCookie(cookie)
+	catalogRes := httptest.NewRecorder(); srv.ServeHTTP(catalogRes, catalogReq)
+	if catalogRes.Code != http.StatusOK { t.Fatalf("catalog returned %d", catalogRes.Code) }
+	if strings.Contains(catalogRes.Body.String(), "removed.mp4") { t.Fatalf("removed media still present in catalog: %s", catalogRes.Body.String()) }
+}
+
+// TestCredentialsChangeRequiresCurrentPassword garante que uma sessão válida não troca
+// credenciais sem a senha atual: senha errada é recusada com 401 e nada muda; ausência da
+// senha atual é um pedido malformado (422). A troca correta sucede e invalida a sessão.
+func TestCredentialsChangeRequiresCurrentPassword(t *testing.T) {
+	db := openTestDB(t)
+	if err := db.BootstrapAdmin(context.Background(), "owner", "a sufficiently long password"); err != nil { t.Fatal(err) }
+	srv := NewWithOptions(db, false)
+	login := httptest.NewRequest(http.MethodPost, "/api/login", strings.NewReader(`{"username":"owner","password":"a sufficiently long password"}`))
+	login.Header.Set("Origin", "http://example.com")
+	loginResult := httptest.NewRecorder(); srv.ServeHTTP(loginResult, login)
+	if loginResult.Code != http.StatusOK { t.Fatalf("login returned %d", loginResult.Code) }
+	cookie := loginResult.Result().Cookies()[0]
+
+	change := func(body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/api/account/credentials", strings.NewReader(body))
+		req.Header.Set("Origin", "http://example.com"); req.AddCookie(cookie)
+		res := httptest.NewRecorder(); srv.ServeHTTP(res, req)
+		return res
+	}
+	if res := change(`{"username":"owner2","password":"a sufficiently long replacement password"}`); res.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("missing current_password = %d; want 422", res.Code)
+	}
+	if res := change(`{"current_password":"wrong current password","username":"owner2","password":"a sufficiently long replacement password"}`); res.Code != http.StatusUnauthorized {
+		t.Fatalf("wrong current_password = %d; want 401: %s", res.Code, res.Body.String())
+	}
+	if ok, _ := db.VerifyPassword(context.Background(), "owner", "a sufficiently long password"); !ok {
+		t.Fatal("rejected change altered the stored credentials")
+	}
+
+	valid := change(`{"current_password":"a sufficiently long password","username":"owner2","password":"a sufficiently long replacement password"}`)
+	if valid.Code != http.StatusOK { t.Fatalf("valid change = %d: %s", valid.Code, valid.Body.String()) }
+	if ok, _ := db.VerifyPassword(context.Background(), "owner2", "a sufficiently long replacement password"); !ok {
+		t.Fatal("valid change did not update credentials")
+	}
+	// A troca invalida as sessões anteriores e emite uma sessão nova.
+	stillOld := httptest.NewRequest(http.MethodGet, "/api/me", nil); stillOld.AddCookie(cookie)
+	oldResult := httptest.NewRecorder(); srv.ServeHTTP(oldResult, stillOld)
+	if oldResult.Code != http.StatusUnauthorized { t.Fatalf("old session still valid after change: %d", oldResult.Code) }
+}
+
 func TestMediaMaterialsAreDownloadsButVTTRemainsPlayable(t *testing.T) {
 	root := t.TempDir()
 	lesson := filepath.Join(root, "Cat", "Curso", "Modulo", "Aula")
@@ -295,7 +381,7 @@ func loginForTest(t *testing.T, srv http.Handler) *http.Cookie {
 		t.Fatalf("login returned %d", rr.Code)
 	}
 	cookie := rr.Result().Cookies()[0]
-	change := httptest.NewRequest(http.MethodPost, "/api/account/credentials", strings.NewReader(`{"username":"owner2","password":"a sufficiently long replacement password"}`))
+	change := httptest.NewRequest(http.MethodPost, "/api/account/credentials", strings.NewReader(`{"current_password":"a sufficiently long password","username":"owner2","password":"a sufficiently long replacement password"}`))
 	change.Header.Set("Origin", "http://example.com")
 	change.AddCookie(cookie)
 	changed := httptest.NewRecorder(); srv.ServeHTTP(changed, change)

@@ -164,6 +164,114 @@ func (d *DB) DeleteSession(ctx context.Context, token string) error {
 	return err
 }
 
+// RemoveMedia records the explicit removal of a library-relative path from the catalog.
+// The identity is the canonical relative path, so the tombstone survives every rescan,
+// and repeated calls are idempotent: the first removal wins and `removed_at` is never
+// rewritten. Nothing stored in the catalog is deleted here — removing from the view is
+// not erasing data.
+func (d *DB) RemoveMedia(ctx context.Context, relativePath string) error {
+	clean, ok := catalog.NormalizePath(relativePath)
+	if !ok {
+		return errors.New("invalid media path")
+	}
+	_, err := d.sql.ExecContext(ctx, `INSERT OR IGNORE INTO media_removal(relative_path,removed_at) VALUES(?,?)`, clean, time.Now().UTC().Unix())
+	return err
+}
+
+// RemovedMedia returns the canonical paths explicitly removed from the catalog. The set
+// is only ever read, never rebuilt or pruned by a scan, so a rescan cannot add, drop or
+// rewrite a removal.
+func (d *DB) RemovedMedia(ctx context.Context) (map[string]struct{}, error) {
+	rows, err := d.sql.QueryContext(ctx, `SELECT relative_path FROM media_removal`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	removed := map[string]struct{}{}
+	for rows.Next() {
+		var path string
+		if err := rows.Scan(&path); err != nil {
+			return nil, err
+		}
+		removed[path] = struct{}{}
+	}
+	return removed, rows.Err()
+}
+
+// filterRemovedCatalog drops tombstoned paths at read time, mirroring the Rust
+// `media_rows` filter: an explicit removal takes the media out of the catalog without
+// deleting the stored record. Empty parents are pruned so a removed media cannot leave an
+// empty shell behind.
+func filterRemovedCatalog(value catalog.Catalog, removed map[string]struct{}) catalog.Catalog {
+	if len(removed) == 0 {
+		return value
+	}
+	isRemoved := func(path string) bool {
+		clean, ok := catalog.NormalizePath(path)
+		if !ok {
+			return false
+		}
+		_, gone := removed[clean]
+		return gone
+	}
+	keepFiles := func(files []catalog.File) []catalog.File {
+		var kept []catalog.File
+		for _, file := range files {
+			if !isRemoved(file.Path) {
+				kept = append(kept, file)
+			}
+		}
+		return kept
+	}
+	value.LooseFiles = keepFiles(value.LooseFiles)
+	var categories []catalog.Category
+	for _, category := range value.Categories {
+		var courses []catalog.Course
+		for _, course := range category.Courses {
+			var modules []catalog.Module
+			for _, module := range course.Modules {
+				var lessons []catalog.Lesson
+				for _, lesson := range module.Lessons {
+					lesson.Media = keepFiles(lesson.Media)
+					lesson.Subtitles = keepFiles(lesson.Subtitles)
+					lesson.Materials = keepFiles(lesson.Materials)
+					if len(lesson.Media) > 0 || len(lesson.Subtitles) > 0 || len(lesson.Materials) > 0 {
+						lessons = append(lessons, lesson)
+					}
+				}
+				if len(lessons) > 0 {
+					module.Lessons = lessons
+					modules = append(modules, module)
+				}
+			}
+			if len(modules) > 0 {
+				course.Modules = modules
+				courses = append(courses, course)
+			}
+		}
+		if len(courses) > 0 {
+			category.Courses = courses
+			categories = append(categories, category)
+		}
+	}
+	value.Categories = categories
+	value.Nodes = filterRemovedNodes(value.Nodes, keepFiles)
+	return value
+}
+
+func filterRemovedNodes(nodes []catalog.Node, keepFiles func([]catalog.File) []catalog.File) []catalog.Node {
+	var kept []catalog.Node
+	for _, node := range nodes {
+		node.Files = keepFiles(node.Files)
+		node.LooseFiles = keepFiles(node.LooseFiles)
+		node.Children = filterRemovedNodes(node.Children, keepFiles)
+		if len(node.Files) > 0 || len(node.LooseFiles) > 0 || len(node.Children) > 0 {
+			kept = append(kept, node)
+		}
+	}
+	return kept
+}
+
 func (d *DB) ReplaceCatalog(ctx context.Context, value catalog.Catalog) error {
 	tx, err := d.sql.BeginTx(ctx, nil)
 	if err != nil {
@@ -346,7 +454,11 @@ func (d *DB) Catalog(ctx context.Context) (catalog.Catalog, error) {
 		return result, err
 	}
 	rows.Close()
-	return result, nil
+	removed, err := d.RemovedMedia(ctx)
+	if err != nil {
+		return result, err
+	}
+	return filterRemovedCatalog(result, removed), nil
 }
 
 func hashPassword(password string) (string, error) {

@@ -157,3 +157,133 @@ func openTestDB(t *testing.T) *DB {
 	t.Cleanup(func() { _ = db.Close() })
 	return db
 }
+
+func catalogFiles(value catalog.Catalog) map[string]bool {
+	files := map[string]bool{}
+	for _, category := range value.Categories {
+		for _, course := range category.Courses {
+			for _, module := range course.Modules {
+				for _, lesson := range module.Lessons {
+					for _, file := range append(append(lesson.Media, lesson.Subtitles...), lesson.Materials...) {
+						files[file.Path] = true
+					}
+				}
+			}
+		}
+	}
+	for _, file := range value.LooseFiles {
+		files[file.Path] = true
+	}
+	return files
+}
+
+// TestRemoveMediaTombstoneSurvivesRescan cobre o tombstone persistente: a remoção não é
+// apagada nem reescrita por um rescan, a identidade (caminho canônico) é preservada, o
+// catálogo lido deixa de listar a mídia removida e os demais registros permanecem.
+func TestRemoveMediaTombstoneSurvivesRescan(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	removedPath := "cat/course/module/lesson/removed.mp4"
+	keptPath := "cat/course/module/lesson/kept.mp4"
+	value := catalog.Catalog{Categories: []catalog.Category{{
+		Title: "Cat", Path: "cat",
+		Courses: []catalog.Course{{Title: "Course", Path: "cat/course", Modules: []catalog.Module{{
+			Title: "Module", Path: "cat/course/module", Lessons: []catalog.Lesson{{
+				Title: "Lesson", Path: "cat/course/module/lesson",
+				Media: []catalog.File{{Name: "removed.mp4", Path: removedPath, Size: 1}, {Name: "kept.mp4", Path: keptPath, Size: 1}},
+			}},
+		}}}},
+	}}}
+	if err := db.ReplaceCatalog(ctx, value); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.RemoveMedia(ctx, removedPath); err != nil {
+		t.Fatal(err)
+	}
+	var firstRemovedAt int64
+	if err := db.sql.QueryRowContext(ctx, `SELECT removed_at FROM media_removal WHERE relative_path=?`, removedPath).Scan(&firstRemovedAt); err != nil {
+		t.Fatal(err)
+	}
+
+	// O rescan repete a substituição com o arquivo ainda presente no disco.
+	if err := db.ReplaceCatalog(ctx, value); err != nil {
+		t.Fatal(err)
+	}
+	var secondRemovedAt int64
+	if err := db.sql.QueryRowContext(ctx, `SELECT removed_at FROM media_removal WHERE relative_path=?`, removedPath).Scan(&secondRemovedAt); err != nil {
+		t.Fatal(err)
+	}
+	if firstRemovedAt != secondRemovedAt {
+		t.Fatalf("rescan rewrote removed_at: %d -> %d", firstRemovedAt, secondRemovedAt)
+	}
+
+	removed, err := db.RemovedMedia(ctx)
+	if err != nil || len(removed) != 1 {
+		t.Fatalf("RemovedMedia() = %v, %v; want exactly the removed path", removed, err)
+	}
+	if _, ok := removed[removedPath]; !ok {
+		t.Fatalf("removal identity not preserved: %v", removed)
+	}
+
+	got, err := db.Catalog(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := catalogFiles(got)
+	if files[removedPath] {
+		t.Fatal("removed media still listed by Catalog()")
+	}
+	if !files[keptPath] {
+		t.Fatal("rescan dropped an unrelated file")
+	}
+
+	// Repetir a remoção é idempotente e não reescreve o carimbo original.
+	if err := db.RemoveMedia(ctx, removedPath); err != nil {
+		t.Fatal(err)
+	}
+	var thirdRemovedAt int64
+	if err := db.sql.QueryRowContext(ctx, `SELECT removed_at FROM media_removal WHERE relative_path=?`, removedPath).Scan(&thirdRemovedAt); err != nil {
+		t.Fatal(err)
+	}
+	if thirdRemovedAt != firstRemovedAt {
+		t.Fatalf("repeat removal rewrote removed_at: %d -> %d", firstRemovedAt, thirdRemovedAt)
+	}
+}
+
+// TestOpenMigratesLegacyGoDatabaseAdditively simula um banco Go na versão 5, sem a tabela
+// de remoção, e confirma que abrir de novo aplica a migração incremental sem perder dados.
+func TestOpenMigratesLegacyGoDatabaseAdditively(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy.db")
+	db, err := Open(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.BootstrapAdmin(context.Background(), "owner", "correct horse battery staple"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.sql.Exec(`DELETE FROM schema_migrations WHERE version=6; DROP TABLE media_removal`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := Open(context.Background(), path)
+	if err != nil {
+		t.Fatalf("reopening legacy Go database failed: %v", err)
+	}
+	defer reopened.Close()
+	if ok, err := reopened.VerifyPassword(context.Background(), "owner", "correct horse battery staple"); err != nil || !ok {
+		t.Fatalf("legacy data lost after incremental migration: ok=%v err=%v", ok, err)
+	}
+	var exists int
+	if err := reopened.sql.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type='table' AND name='media_removal'`).Scan(&exists); err != nil {
+		t.Fatal(err)
+	}
+	if exists != 1 {
+		t.Fatal("incremental migration did not create media_removal")
+	}
+	if err := reopened.RemoveMedia(context.Background(), "cat/a.mp4"); err != nil {
+		t.Fatal(err)
+	}
+}

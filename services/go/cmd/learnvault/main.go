@@ -84,9 +84,7 @@ func run(ctx context.Context, cfg config.Config, listen func(string, string) (ne
 		return err
 	}
 	api := httpapi.NewWithLibraryVersion(db, cfg.CookieSecure, root, version)
-	mux := http.NewServeMux()
-	mux.Handle("/api/", api)
-	mux.HandleFunc("/", spaHandler(staticFiles))
+	mux := newMux(api, staticFiles)
 	address := cfg.ListenAddr + ":" + cfg.Port
 	listener, err := listen("tcp", address)
 	if err != nil {
@@ -109,10 +107,24 @@ func run(ctx context.Context, cfg config.Config, listen func(string, string) (ne
 	return nil
 }
 
+// newMux binds the JSON API and the embedded SPA. The bare `/api` is registered
+// explicitly: without that route it would fall through to the SPA fallback and answer
+// with HTML. The API handler owns the cache policy for the whole `/api` namespace,
+// including `/api` itself, which is always served with `no-store`.
+func newMux(api http.Handler, files fs.FS) *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.Handle("/api", api)
+	mux.Handle("/api/", api)
+	mux.HandleFunc("/", spaHandler(files))
+	return mux
+}
+
 func spaHandler(files fs.FS) http.HandlerFunc {
 	fileServer := http.FileServer(http.FS(files))
 	return func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/api/") {
+		// Defense in depth: even if the bare `/api` route is ever unmounted, the SPA
+		// fallback must never turn an API path into an HTML shell.
+		if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
 			http.NotFound(w, r)
 			return
 		}

@@ -1,11 +1,16 @@
 package main
 
 import (
+	"context"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"learnvault/internal/httpapi"
+	"learnvault/internal/storage"
 )
 
 func TestSPAFallbackServesEmbeddedShellAtRootAndClientRoutes(t *testing.T) {
@@ -33,11 +38,39 @@ func TestSPAFallbackDoesNotMaskMissingAssetsOrAPI(t *testing.T) {
 		t.Fatal(err)
 	}
 	handler := spaHandler(files)
-	for _, path := range []string{"/missing.js", "/api/healthz"} {
+	for _, path := range []string{"/missing.js", "/api/healthz", "/api"} {
 		recorder := httptest.NewRecorder()
 		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
 		if recorder.Code != http.StatusNotFound {
 			t.Fatalf("expected missing route %s to return 404, got %d", path, recorder.Code)
+		}
+	}
+}
+
+// TestBareAPIRouteReachesAPIAndIsUncacheable garante que `/api` sem barra não cai no
+// fallback da SPA: a rota é servida pelo handler JSON e recebe `no-store`.
+func TestBareAPIRouteReachesAPIAndIsUncacheable(t *testing.T) {
+	files, err := fs.Sub(webBuild, "web/build")
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := storage.Open(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	handler := newMux(httpapi.NewWithOptions(db, false), files)
+	for _, path := range []string{"/api", "/api/unknown"} {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
+		if recorder.Code != http.StatusNotFound {
+			t.Fatalf("%s status = %d; want 404 (body %s)", path, recorder.Code, recorder.Body.String())
+		}
+		if contentType := recorder.Header().Get("Content-Type"); !strings.HasPrefix(contentType, "application/json") {
+			t.Fatalf("%s Content-Type = %q; want JSON, not the SPA shell", path, contentType)
+		}
+		if got := recorder.Header().Get("Cache-Control"); got != "no-store" {
+			t.Fatalf("%s Cache-Control = %q; want no-store", path, got)
 		}
 	}
 }

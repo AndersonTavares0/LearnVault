@@ -65,9 +65,14 @@ download, classifica mídias, legendas e materiais reconhecidos, e trata `.ts` c
 somente quando é maior que 1 MiB para não confundir TypeScript com MPEG-TS. A biblioteca
 física é externa, montada como somente leitura e nunca é modificada.
 
-O catálogo Go adota uma política fail-closed para remoções: cada rescan substitui
-transacionalmente as entradas persistidas, e um arquivo que deixou de aparecer no scan deixa
-de ser autorizado por `/api/media`, mesmo que ainda exista uma resposta ou referência antiga.
-Não há tombstone convertido silenciosamente nem reautorização de caminho removido.
+O catálogo Go adota uma política fail-closed e persistente para remoções. Uma remoção
+explícita é gravada como tombstone em `media_removal`, chaveado pelo caminho relativo canônico
+completo — a identidade de mídia do serviço Go. Nenhum rescan cria, apaga ou reescreve esse
+registro, e o carimbo `removed_at` não é alterado por uma varredura. A leitura do catálogo
+filtra os caminhos removidos, então a mídia sai de `/api/catalog` e `/api/media` responde 404,
+mesmo que o arquivo reapareça no disco depois. A remoção não apaga a linha de catálogo nem
+qualquer dado associado, e repetir a remoção é idempotente. Um arquivo que deixou de aparecer
+no scan também deixa de ser autorizado por `/api/media`, ainda que exista uma resposta ou
+referência antiga em cache.
 
 Para limites de arquitetura e deploy, consulte a [visão de arquitetura](../architecture/overview.md).

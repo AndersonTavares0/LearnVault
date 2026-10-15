@@ -281,20 +281,10 @@ func catalogAllowsPath(value catalog.Catalog, relative string) bool {
 	return false
 }
 
+// normalizeCatalogPath delegates to the shared catalog normalizer so the media
+// authorization boundary and the removal tombstone agree on one path identity.
 func normalizeCatalogPath(value string) (string, bool) {
-	if value == "" || filepath.IsAbs(value) {
-		return "", false
-	}
-	for _, part := range strings.FieldsFunc(value, func(r rune) bool { return r == '/' || r == '\\' }) {
-		if part == ".." {
-			return "", false
-		}
-	}
-	clean := filepath.Clean(value)
-	if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
-		return "", false
-	}
-	return filepath.ToSlash(clean), true
+	return catalog.NormalizePath(value)
 }
 
 // safeMediaType only permits formats consumed by the player. Everything else,
@@ -361,9 +351,14 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) credentials(w http.ResponseWriter, r *http.Request) {
 	user, ok := s.currentUser(r); if !ok { writeJSON(w, http.StatusUnauthorized, map[string]string{"error":"unauthorized"}); return }
-	r.Body = http.MaxBytesReader(w, r.Body, 8*1024); var input struct { Username string `json:"username"`; Password string `json:"password"` }
+	r.Body = http.MaxBytesReader(w, r.Body, 8*1024); var input struct { CurrentPassword string `json:"current_password"`; Username string `json:"username"`; Password string `json:"password"` }
 	decoder := json.NewDecoder(r.Body); decoder.DisallowUnknownFields(); if err := decoder.Decode(&input); err != nil { writeJSON(w, http.StatusBadRequest, map[string]string{"error":"invalid_request"}); return }
-	if len([]rune(input.Username)) < 2 || len([]rune(input.Username)) > 64 || strings.TrimSpace(input.Username) != input.Username || len([]rune(input.Password)) < 12 || len([]rune(input.Password)) > 1024 { writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error":"invalid_credentials_format"}); return }
+	if len([]rune(input.CurrentPassword)) < 1 || len([]rune(input.CurrentPassword)) > 1024 || len([]rune(input.Username)) < 2 || len([]rune(input.Username)) > 64 || strings.TrimSpace(input.Username) != input.Username || len([]rune(input.Password)) < 12 || len([]rune(input.Password)) > 1024 { writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error":"invalid_credentials_format"}); return }
+	// A senha atual é exigida para que uma sessão roubada não troque as credenciais. Ela é
+	// verificada antes de qualquer escrita e a troca continua transacional mais abaixo.
+	valid, err := s.db.VerifyPassword(r.Context(), user.Username, input.CurrentPassword)
+	if err != nil { writeJSON(w, http.StatusInternalServerError, map[string]string{"error":"internal_error"}); return }
+	if !valid { writeJSON(w, http.StatusUnauthorized, map[string]string{"error":"invalid_credentials"}); return }
 	var raw [32]byte; if _, err := rand.Read(raw[:]); err != nil { writeJSON(w, http.StatusInternalServerError, map[string]string{"error":"internal_error"}); return }; token := base64.RawURLEncoding.EncodeToString(raw[:])
 	if err := s.db.UpdateCredentialsAndSession(r.Context(), user.ID, input.Username, input.Password, token, sessionLifetime); err != nil { writeJSON(w, http.StatusInternalServerError, map[string]string{"error":"internal_error"}); return }
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: token, Path: "/", MaxAge: int(sessionLifetime.Seconds()), HttpOnly: true, Secure: s.cookieSecure, SameSite: http.SameSiteStrictMode}); user.Username = input.Username; user.MustChangeCredentials = false; writeJSON(w, http.StatusOK, user)
