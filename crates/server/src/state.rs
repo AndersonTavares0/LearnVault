@@ -232,6 +232,7 @@ mod tests {
             listen_addr: "127.0.0.1:0".parse().unwrap(),
             database_path: PathBuf::from("learnvault.sqlite"),
             library_root: PathBuf::from("."),
+            web_root: None,
             admin_username: None,
             admin_password: None,
             cookie_secure: false,

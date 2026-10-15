@@ -7,6 +7,7 @@ mod catalog;
 mod config;
 mod health;
 mod media;
+mod spa;
 mod state;
 
 pub use auth::{
@@ -46,6 +47,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/catalog", get(catalog::catalog))
         .route("/api/admin/catalog/rescan", post(catalog::rescan))
         .route("/api/media", get(media::media).head(media::media))
+        .fallback(spa::serve)
         .layer(DefaultBodyLimit::max(8 * 1024))
         .layer(map_response(security_headers))
         .with_state(state)
@@ -61,7 +63,7 @@ async fn security_headers(mut response: Response) -> Response {
     headers.insert("referrer-policy", HeaderValue::from_static("no-referrer"));
     headers.insert(
         HeaderName::from_static("content-security-policy"),
-        HeaderValue::from_static("default-src 'none'; frame-ancestors 'none'"),
+        HeaderValue::from_static("default-src 'self'; frame-ancestors 'none'"),
     );
     response
 }
