@@ -73,3 +73,28 @@ jobs:
           tags: learnvault:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  rust:
+    name: Rust tests and lints
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Rust toolchain
+        run: rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy
+      - name: Cache Cargo registry and target
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-${{ runner.os }}-1.99.0-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            rust-${{ runner.os }}-1.99.0-
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Run clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Run tests
+        run: cargo test --all

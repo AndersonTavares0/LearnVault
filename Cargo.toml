@@ -1,0 +1,18 @@
+# Workspace Rust do LearnVault.
+#
+# O núcleo de domínio vive em `crates/core` e é compartilhado pelo servidor Axum
+# (`crates/server`) e pelo aplicativo desktop Tauri (`crates/desktop`), que serão
+# adicionados nas fases seguintes.
+#
+# A versão de release é de propriedade do Release Please, no nível do repositório.
+# Os crates Rust não são publicados, por isso a versão daqui não é fonte de verdade.
+
+[workspace]
+members = ["crates/core"]
+resolver = "3"
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+license = "Apache-2.0"
+rust-version = "1.99"
