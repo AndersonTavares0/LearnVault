@@ -22,7 +22,9 @@ gerado pelo build estático (`cmd/learnvault/web/build`), que contém o shell `2
 existentes são servidos diretamente; caminhos sem extensão usam `200.html` como fallback; assets
 ausentes com extensão retornam 404, e caminhos `/api/*` nunca são convertidos em HTML. Se o shell
 não existir, o servidor retorna 503. O shell usa `Cache-Control: no-cache`; assets sob
-`_app/immutable/` usam cache imutável. A validação do diretório não expõe caminhos em respostas.
+`_app/immutable/` usam cache imutável; respostas de erro da SPA usam `no-store`.
+A validação do diretório não expõe caminhos em respostas. O diretório web é um artefato
+de deploy confiável e somente leitura: publicar um shell novo exige reiniciar o processo.
 
 ## Saúde e sessão
 

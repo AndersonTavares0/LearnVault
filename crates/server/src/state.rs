@@ -154,6 +154,13 @@ impl AppState {
         self.blocking_tasks.clone().try_acquire_owned().ok()
     }
 
+    /// Peek barato de capacidade para evitar segurar mutexes quando o servidor
+    /// já está saturado. É apenas uma verificação (sujeita a corrida); a
+    /// aquisição real continua via `try_acquire_*` após os locks.
+    pub(crate) fn has_blocking_capacity(&self) -> bool {
+        self.blocking_tasks.available_permits() > 0
+    }
+
     /// Reserva uma conexão da SPA até que o corpo HTTP seja consumido, descartado ou fique ocioso.
     ///
     /// O shell recebe uma reserva própria para que clientes lentos baixando assets não o impeçam

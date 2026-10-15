@@ -163,6 +163,16 @@ pub enum Error {
         media_id: String,
     },
 
+    /// O tamanho registrado no banco é inválido (negativo ou fora do `u64`).
+    ///
+    /// Um valor assim indica corrupção do catálogo, não um arquivo vazio: saturar
+    /// para zero esconderia a falha e falsearia a detecção de alteração.
+    #[error("o tamanho registrado é inválido no banco: {media_id}")]
+    MediaCorruptSize {
+        /// Identificador consultado.
+        media_id: String,
+    },
+
     /// O dono do progresso de estudo não foi identificado.
     ///
     /// O identificador de dono é opaco para o domínio, mas precisa existir: o progresso é

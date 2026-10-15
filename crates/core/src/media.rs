@@ -84,8 +84,7 @@ pub fn find_media_by_path(db: &Database, path: &str) -> Result<Option<MediaRefer
     }
     let normalized = parts.join("/");
     let key = relative_path_key(&normalized, KeyMode::for_host())?;
-    Ok(db
-        .connection()
+    db.connection()
         .query_row(
             "SELECT library_id, media_id, relative_path, size, mtime
            FROM media
@@ -93,16 +92,28 @@ pub fn find_media_by_path(db: &Database, path: &str) -> Result<Option<MediaRefer
           LIMIT 1",
             [key],
             |row| {
-                Ok(MediaReference {
-                    library_id: row.get(0)?,
-                    media_id: row.get(1)?,
-                    relative_path: row.get(2)?,
-                    size: u64::try_from(row.get::<_, i64>(3)?).unwrap_or(0),
-                    mtime: row.get(4)?,
-                })
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, i64>(3)?,
+                    row.get::<_, i64>(4)?,
+                ))
             },
         )
-        .optional()?)
+        .optional()?
+        .map(|(library_id, media_id, relative_path, raw_size, mtime)| {
+            u64::try_from(raw_size)
+                .map(|size| MediaReference {
+                    library_id,
+                    relative_path,
+                    size,
+                    mtime,
+                    media_id: media_id.clone(),
+                })
+                .map_err(|_| Error::MediaCorruptSize { media_id })
+        })
+        .transpose()
 }
 
 /// Mídia resolvida e já aberta para leitura.
@@ -328,9 +339,12 @@ fn media_row(db: &Database, library_id: &str, media_id: &str) -> Result<StoredMe
     match rows.next()? {
         Some(row) => {
             let size: i64 = row.get(1)?;
+            let size = u64::try_from(size).map_err(|_| Error::MediaCorruptSize {
+                media_id: media_id.to_owned(),
+            })?;
             Ok(StoredMedia {
                 relative_path: row.get(0)?,
-                size: u64::try_from(size).unwrap_or(0),
+                size,
                 mtime: row.get(2)?,
                 availability: row.get(3)?,
             })

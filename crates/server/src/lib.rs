@@ -87,11 +87,11 @@ async fn security_headers(
         csp.push('\'');
     }
     csp.push_str("; media-src 'self' data:; frame-ancestors 'none'");
-    headers.insert(
-        HeaderName::from_static("content-security-policy"),
-        csp.parse()
-            .expect("CSP generated from base64 hashes is valid"),
-    );
+    // Os hashes são base64 por construção, então a conversão é infalível na
+    // prática; ainda assim, prefira responder sem CSP a travar o worker.
+    if let Ok(csp) = csp.parse() {
+        headers.insert(HeaderName::from_static("content-security-policy"), csp);
+    }
     response
 }
 
@@ -271,6 +271,13 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            response
+                .headers()
+                .get("cache-control")
+                .and_then(|value| value.to_str().ok()),
+            Some("private, no-store")
+        );
     }
 
     #[test]
@@ -427,6 +434,13 @@ mod tests {
             .unwrap();
         assert_eq!(range.status(), StatusCode::RANGE_NOT_SATISFIABLE);
         assert_eq!(range.headers()["content-range"], "bytes */10");
+        assert_eq!(
+            range
+                .headers()
+                .get("cache-control")
+                .and_then(|value| value.to_str().ok()),
+            Some("private, no-store")
+        );
 
         let traversal = app
             .oneshot(
@@ -438,6 +452,13 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(traversal.status(), StatusCode::NOT_FOUND);
+        assert_eq!(
+            traversal
+                .headers()
+                .get("cache-control")
+                .and_then(|value| value.to_str().ok()),
+            Some("private, no-store")
+        );
     }
 
     #[tokio::test]

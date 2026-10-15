@@ -228,9 +228,10 @@ pub(crate) async fn login(
         is_admin: user.is_admin,
     })
     .into_response();
-    response
-        .headers_mut()
-        .insert("set-cookie", session_cookie(&state, &token, false));
+    let Some(cookie) = session_cookie(&state, &token, false) else {
+        return no_store(StatusCode::INTERNAL_SERVER_ERROR.into_response());
+    };
+    response.headers_mut().insert("set-cookie", cookie);
     no_store(response)
 }
 
@@ -265,9 +266,10 @@ pub(crate) async fn logout(State(state): State<AppState>, headers: HeaderMap) ->
         return no_store(service_unavailable());
     }
     let mut response = StatusCode::NO_CONTENT.into_response();
-    response
-        .headers_mut()
-        .insert("set-cookie", session_cookie(&state, "", true));
+    let Some(cookie) = session_cookie(&state, "", true) else {
+        return no_store(StatusCode::INTERNAL_SERVER_ERROR.into_response());
+    };
+    response.headers_mut().insert("set-cookie", cookie);
     no_store(response)
 }
 
@@ -298,7 +300,7 @@ pub(crate) fn request_token(headers: &HeaderMap) -> Option<String> {
         })
 }
 
-fn session_cookie(state: &AppState, token: &str, clear: bool) -> HeaderValue {
+fn session_cookie(state: &AppState, token: &str, clear: bool) -> Option<HeaderValue> {
     let mut value = format!(
         "{COOKIE_NAME}={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={}",
         if clear { 0 } else { 43_200 }
@@ -306,7 +308,9 @@ fn session_cookie(state: &AppState, token: &str, clear: bool) -> HeaderValue {
     if state.config.cookie_secure {
         value.push_str("; Secure");
     }
-    HeaderValue::from_str(&value).expect("cookie attributes are valid ASCII")
+    // O token é hexadecimal por construção, então a conversão é infalível na
+    // prática; ainda assim, nunca faça `panic` num caminho de resposta.
+    HeaderValue::from_str(&value).ok()
 }
 
 pub(crate) fn same_origin(headers: &HeaderMap) -> bool {

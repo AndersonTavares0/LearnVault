@@ -377,7 +377,7 @@ fn a_file_changed_only_in_mtime_is_flagged() -> TestResult {
 }
 
 #[test]
-fn a_negative_stored_size_is_read_as_zero() -> TestResult {
+fn a_negative_stored_size_is_rejected_as_corrupt() -> TestResult {
     let directory = tempfile::tempdir()?;
     let root = directory.path();
     write_file(root, "Curso/Aula/aula.mp4", b"conteudo")?;
@@ -385,12 +385,12 @@ fn a_negative_stored_size_is_read_as_zero() -> TestResult {
     let db = library_db()?;
     insert_media(&db, LIB, "m1", "Curso/Aula/aula.mp4", -5, 10, "available")?;
 
-    let media = open_media(&db, LIB, "m1", root)?;
-
-    assert_eq!(media.size, 8, "o tamanho real do arquivo é usado");
     assert!(
-        media.changed,
-        "um tamanho negativo na linha nunca coincide com o arquivo"
+        matches!(
+            open_media(&db, LIB, "m1", root),
+            Err(Error::MediaCorruptSize { .. })
+        ),
+        "um tamanho negativo na linha indica corrupção, não um arquivo vazio"
     );
     Ok(())
 }

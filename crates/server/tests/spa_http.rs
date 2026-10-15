@@ -362,12 +362,26 @@ async fn missing_assets_and_unknown_api_routes_remain_not_found() {
         .await
         .unwrap();
     assert_eq!(missing_asset.status(), StatusCode::NOT_FOUND);
+    assert_eq!(
+        missing_asset
+            .headers()
+            .get("cache-control")
+            .and_then(|value| value.to_str().ok()),
+        Some("no-store")
+    );
 
     let unknown_api = app
         .oneshot(Request::get("/api/unknown").body(Body::empty()).unwrap())
         .await
         .unwrap();
     assert_eq!(unknown_api.status(), StatusCode::NOT_FOUND);
+    assert_eq!(
+        unknown_api
+            .headers()
+            .get("cache-control")
+            .and_then(|value| value.to_str().ok()),
+        Some("no-store")
+    );
 }
 
 #[tokio::test]
@@ -384,6 +398,13 @@ async fn missing_spa_shell_returns_service_unavailable() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(
+        response
+            .headers()
+            .get("cache-control")
+            .and_then(|value| value.to_str().ok()),
+        Some("no-store")
+    );
 }
 
 #[tokio::test]

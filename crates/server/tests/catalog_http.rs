@@ -328,6 +328,11 @@ async fn catalog_reports_database_errors_without_caching_or_leaking_paths() {
     let body = response.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(json["error"], "catalog unavailable");
+    assert!(
+        !body
+            .windows(temp.path().to_str().unwrap().len())
+            .any(|window| { window == temp.path().to_str().unwrap().as_bytes() })
+    );
 }
 
 #[tokio::test]

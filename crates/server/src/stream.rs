@@ -89,10 +89,13 @@ where
 }
 
 fn release_permit(permit: &Arc<Mutex<Option<OwnedSemaphorePermit>>>) {
+    // `Mutex` padrão nunca é envenenado por `panic` em outro executor aqui, mas um
+    // `expect` em `poll_next`/`Drop` transformaria veneno em `panic` por request:
+    // recupere o guarda e libere o permit de qualquer forma.
     drop(
         permit
             .lock()
-            .expect("stream permit mutex is not poisoned")
+            .unwrap_or_else(|error| error.into_inner())
             .take(),
     );
 }

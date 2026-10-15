@@ -80,6 +80,10 @@ pub(crate) async fn catalog(State(state): State<AppState>, headers: HeaderMap) -
         Ok(false) | Err(_) => return status_private_no_store(StatusCode::UNAUTHORIZED),
     }
 
+    // Evita segurar o mutex do banco só para devolver 503 sob saturação.
+    if !state.has_blocking_capacity() {
+        return service_unavailable();
+    }
     let database = state.database.clone().lock_owned().await;
     let Some(blocking_task) = state.try_acquire_blocking_task() else {
         return service_unavailable();
@@ -103,6 +107,10 @@ pub(crate) async fn rescan(State(state): State<AppState>, headers: HeaderMap) ->
     };
     if !user.is_admin || !same_origin(&headers) {
         return status_private_no_store(StatusCode::FORBIDDEN);
+    }
+    // Evita segurar locks só para devolver 503 sob saturação.
+    if !state.has_blocking_capacity() {
+        return service_unavailable();
     }
     let Ok(local_lock) = state.rescan_lock.clone().try_lock_owned() else {
         return status_private_no_store(StatusCode::CONFLICT);

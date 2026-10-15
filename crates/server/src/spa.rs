@@ -7,7 +7,7 @@ use std::{
 use axum::{
     body::{Body, Bytes},
     extract::State,
-    http::{StatusCode, Uri, header},
+    http::{HeaderValue, StatusCode, Uri, header},
     response::{IntoResponse, Response},
 };
 use tokio::io::AsyncReadExt;
@@ -23,25 +23,25 @@ const SPA_STREAM_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
 /// Entrega arquivos da SPA sem permitir que a requisição saia da raiz configurada.
 pub(crate) async fn serve(State(state): State<AppState>, uri: Uri) -> Response {
     let Some(root) = state.config.web_root.as_deref() else {
-        return StatusCode::NOT_FOUND.into_response();
+        return error_no_store(StatusCode::NOT_FOUND);
     };
     let path = uri.path().trim_start_matches('/');
     if path == "api" || path.starts_with("api/") {
-        return StatusCode::NOT_FOUND.into_response();
+        return error_no_store(StatusCode::NOT_FOUND);
     }
 
     let target = match requested_path(root, path) {
         Some(path) => path,
-        None => return StatusCode::NOT_FOUND.into_response(),
+        None => return error_no_store(StatusCode::NOT_FOUND),
     };
 
     if target == root.join("200.html") {
         return serve_shell(&state)
             .await
             .unwrap_or_else(|error| match error {
-                FileError::TooLarge => StatusCode::PAYLOAD_TOO_LARGE.into_response(),
+                FileError::TooLarge => error_no_store(StatusCode::PAYLOAD_TOO_LARGE),
                 FileError::Missing | FileError::Busy => {
-                    StatusCode::SERVICE_UNAVAILABLE.into_response()
+                    error_no_store(StatusCode::SERVICE_UNAVAILABLE)
                 }
             });
     }
@@ -50,26 +50,36 @@ pub(crate) async fn serve(State(state): State<AppState>, uri: Uri) -> Response {
     // de reservar capacidade para um possível asset, para não mascarar uma configuração inválida
     // (413) como saturação operacional (503).
     if Path::new(path).extension().is_none() && state.spa_shell_is_too_large() {
-        return StatusCode::PAYLOAD_TOO_LARGE.into_response();
+        return error_no_store(StatusCode::PAYLOAD_TOO_LARGE);
     }
 
     match open_file(&state, root, &target, false).await {
         Ok(response) => return response,
-        Err(FileError::TooLarge) => return StatusCode::PAYLOAD_TOO_LARGE.into_response(),
-        Err(FileError::Busy) => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+        Err(FileError::TooLarge) => return error_no_store(StatusCode::PAYLOAD_TOO_LARGE),
+        Err(FileError::Busy) => return error_no_store(StatusCode::SERVICE_UNAVAILABLE),
         Err(FileError::Missing) => {}
     }
     if Path::new(path).extension().is_some() {
-        return StatusCode::NOT_FOUND.into_response();
+        return error_no_store(StatusCode::NOT_FOUND);
     }
 
     match serve_shell(&state).await {
         Ok(response) => response,
-        Err(FileError::TooLarge) => StatusCode::PAYLOAD_TOO_LARGE.into_response(),
+        Err(FileError::TooLarge) => error_no_store(StatusCode::PAYLOAD_TOO_LARGE),
         Err(FileError::Missing | FileError::Busy) => {
-            StatusCode::SERVICE_UNAVAILABLE.into_response()
+            error_no_store(StatusCode::SERVICE_UNAVAILABLE)
         }
     }
+}
+
+/// Erros estáticos nunca devem ser armazenados por proxies: um 503 ou 404
+/// obsoleto prolongaria uma indisponibilidade já resolvida.
+fn error_no_store(status: StatusCode) -> Response {
+    let mut response = status.into_response();
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
 }
 
 async fn serve_shell(state: &AppState) -> Result<Response, FileError> {
@@ -97,17 +107,18 @@ async fn serve_shell(state: &AppState) -> Result<Response, FileError> {
     let reader = StreamReader::new(tokio_stream::once(Ok::<_, std::io::Error>(
         Bytes::copy_from_slice(&bytes),
     )));
+    let Some(web_root) = state.config.web_root.as_deref() else {
+        // `serve` só chama esta função com `web_root` configurado; a ausência aqui
+        // indica estado inconsistente, tratada como shell ausente, sem `panic`.
+        return Err(FileError::Missing);
+    };
     Ok(file_response(
         Body::from_stream(idle_timeout_stream(
             reader,
             stream_permit,
             SPA_STREAM_IDLE_TIMEOUT,
         )),
-        state
-            .config
-            .web_root
-            .as_deref()
-            .expect("shell has a web root"),
+        web_root,
         Path::new("200.html"),
         true,
         size,
