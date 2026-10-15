@@ -23,7 +23,10 @@ fn existing_auth_tables_are_available_without_a_new_migration() -> TestResult {
             [table],
             |row| row.get(0),
         )?;
-        assert_eq!(exists, 1, "a tabela {table} deve continuar sendo reutilizada");
+        assert_eq!(
+            exists, 1,
+            "a tabela {table} deve continuar sendo reutilizada"
+        );
     }
     Ok(())
 }
