@@ -30,7 +30,10 @@ fn scanned(path: &str, size: u64, mtime: i64, mode: KeyMode) -> ScannedFile {
 fn outcome(files: Vec<ScannedFile>, inaccessible: &[&str]) -> ScanOutcome {
     ScanOutcome {
         files,
-        inaccessible: inaccessible.iter().map(|entry| (*entry).to_owned()).collect(),
+        inaccessible: inaccessible
+            .iter()
+            .map(|entry| (*entry).to_owned())
+            .collect(),
     }
 }
 
@@ -202,7 +205,10 @@ fn changed_metadata_updates_the_existing_row() -> TestResult {
     apply_scan(
         &mut db,
         LIB,
-        &outcome(vec![scanned("Curso/aula.mp4", 1_024, 1_760_000_000, mode)], &[]),
+        &outcome(
+            vec![scanned("Curso/aula.mp4", 1_024, 1_760_000_000, mode)],
+            &[],
+        ),
         mode,
     )?;
     let (media_id, _, _, _) = media_row(&db, "Curso/aula.mp4").expect("mídia catalogada");
@@ -210,7 +216,10 @@ fn changed_metadata_updates_the_existing_row() -> TestResult {
     let summary = apply_scan(
         &mut db,
         LIB,
-        &outcome(vec![scanned("Curso/aula.mp4", 4_096, 1_760_000_500, mode)], &[]),
+        &outcome(
+            vec![scanned("Curso/aula.mp4", 4_096, 1_760_000_500, mode)],
+            &[],
+        ),
         mode,
     )?;
 
@@ -247,7 +256,10 @@ fn absence_in_a_complete_scan_marks_the_row_missing_and_keeps_its_identity() -> 
     let summary = apply_scan(
         &mut db,
         LIB,
-        &outcome(vec![scanned("Curso/outra.mp4", 2_048, 1_760_000_000, mode)], &[]),
+        &outcome(
+            vec![scanned("Curso/outra.mp4", 2_048, 1_760_000_000, mode)],
+            &[],
+        ),
         mode,
     )?;
 
@@ -273,7 +285,9 @@ fn a_file_reappearing_at_the_same_key_reuses_its_identity_and_progress() -> Test
 
     apply_scan(&mut db, LIB, &outcome(Vec::new(), &[]), mode)?;
     assert_eq!(
-        media_row(&db, "Curso/aula.mp4").expect("linha preservada").3,
+        media_row(&db, "Curso/aula.mp4")
+            .expect("linha preservada")
+            .3,
         "missing"
     );
 
@@ -288,7 +302,8 @@ fn a_file_reappearing_at_the_same_key_reuses_its_identity_and_progress() -> Test
 }
 
 #[test]
-fn media_under_an_unreadable_subtree_is_preserved_while_absence_elsewhere_is_recorded() -> TestResult {
+fn media_under_an_unreadable_subtree_is_preserved_while_absence_elsewhere_is_recorded() -> TestResult
+{
     let mut db = Database::open_in_memory()?;
     let mode = KeyMode::Sensitive;
 
@@ -317,7 +332,10 @@ fn media_under_an_unreadable_subtree_is_preserved_while_absence_elsewhere_is_rec
         mode,
     )?;
 
-    assert!(!summary.complete, "uma subárvore ilegível torna a varredura parcial");
+    assert!(
+        !summary.complete,
+        "uma subárvore ilegível torna a varredura parcial"
+    );
     assert_eq!(summary.preserved, 1);
     assert_eq!(summary.marked_missing, 1);
     assert_eq!(
@@ -474,7 +492,10 @@ fn no_scan_deletes_a_media_row() -> TestResult {
             vec![scanned("A.mp4", 10, 1_760_000_000, mode)]
         };
         apply_scan(&mut db, LIB, &outcome(files, &[]), mode)?;
-        assert!(count(&db, "media") >= 2, "nenhuma varredura exclui registros");
+        assert!(
+            count(&db, "media") >= 2,
+            "nenhuma varredura exclui registros"
+        );
     }
     assert_eq!(count(&db, "media"), 2);
     Ok(())
@@ -488,7 +509,10 @@ fn case_insensitive_mode_reuses_the_row_when_only_the_case_changes() -> TestResu
     apply_scan(
         &mut db,
         LIB,
-        &outcome(vec![scanned("Curso/Aula.mp4", 1_024, 1_760_000_000, mode)], &[]),
+        &outcome(
+            vec![scanned("Curso/Aula.mp4", 1_024, 1_760_000_000, mode)],
+            &[],
+        ),
         mode,
     )?;
     let (media_id, _, _, _) = media_row(&db, "curso/aula.mp4").expect("chave dobrada");
@@ -496,7 +520,10 @@ fn case_insensitive_mode_reuses_the_row_when_only_the_case_changes() -> TestResu
     let summary = apply_scan(
         &mut db,
         LIB,
-        &outcome(vec![scanned("curso/aula.mp4", 1_024, 1_760_000_000, mode)], &[]),
+        &outcome(
+            vec![scanned("curso/aula.mp4", 1_024, 1_760_000_000, mode)],
+            &[],
+        ),
         mode,
     )?;
 
@@ -530,7 +557,11 @@ fn applying_the_same_plan_twice_is_idempotent() -> TestResult {
     assert_eq!(second.inserted, 0);
     assert_eq!(second.updated, 2);
     assert_eq!(count(&db, "media"), 2);
-    assert_eq!(count(&db, "scan"), 2, "cada aplicação registra a sua varredura");
+    assert_eq!(
+        count(&db, "scan"),
+        2,
+        "cada aplicação registra a sua varredura"
+    );
     Ok(())
 }
 
@@ -567,7 +598,11 @@ fn a_failed_apply_rolls_the_whole_transaction_back() -> TestResult {
 
     assert!(result.is_err(), "a aplicação deve falhar com o gatilho");
     assert_eq!(count(&db, "media"), 0, "nada pode sobreviver ao rollback");
-    assert_eq!(count(&db, "scan"), 0, "a varredura não pode ficar registrada");
+    assert_eq!(
+        count(&db, "scan"),
+        0,
+        "a varredura não pode ficar registrada"
+    );
     assert_eq!(count(&db, "scan_inaccessible"), 0);
     assert_eq!(
         library_available(&db, LIB),
@@ -591,11 +626,14 @@ fn a_missing_root_records_a_failed_scan_without_touching_the_library() -> TestRe
     apply_scan(
         &mut db,
         LIB,
-        &outcome(vec![scanned("Curso/aula.mp4", 1_024, 1_760_000_000, mode)], &[]),
+        &outcome(
+            vec![scanned("Curso/aula.mp4", 1_024, 1_760_000_000, mode)],
+            &[],
+        ),
         mode,
     )?;
 
-    let result = rescan(&mut db, LIB, &missing, mode);
+    let result = rescan(&mut db, LIB, &missing);
 
     match result {
         Err(Error::LibraryRootMissing { .. }) => {}
@@ -612,19 +650,24 @@ fn a_missing_root_records_a_failed_scan_without_touching_the_library() -> TestRe
         "a falha não altera a disponibilidade registrada da biblioteca"
     );
     assert_eq!(count(&db, "media"), 1);
-    assert_eq!(media_row(&db, "Curso/aula.mp4").expect("linha").3, "available");
+    assert_eq!(
+        media_row(&db, "Curso/aula.mp4").expect("linha").3,
+        "available"
+    );
     Ok(())
 }
 
 #[test]
 fn a_failed_first_scan_creates_the_library_row_as_unavailable() -> TestResult {
     let mut db = Database::open_in_memory()?;
-    let mode = KeyMode::Sensitive;
     let dir = tempfile::tempdir()?;
 
-    let result = rescan(&mut db, LIB, &dir.path().join("ausente"), mode);
+    let result = rescan(&mut db, LIB, &dir.path().join("ausente"));
 
-    assert!(result.is_err());
+    match result {
+        Err(Error::LibraryRootMissing { .. }) => {}
+        other => panic!("esperava Error::LibraryRootMissing, obtive {other:?}"),
+    }
     assert_eq!(library_available(&db, LIB), Some(0));
     assert_eq!(scan_rows(&db), vec![("failed".to_owned(), 0)]);
     assert_eq!(count(&db, "media"), 0);
@@ -634,7 +677,6 @@ fn a_failed_first_scan_creates_the_library_row_as_unavailable() -> TestResult {
 #[test]
 fn rescanning_a_real_tree_is_read_only_and_complete() -> TestResult {
     let mut db = Database::open_in_memory()?;
-    let mode = KeyMode::Sensitive;
     let library = tempfile::tempdir()?;
     let root = library.path();
 
@@ -646,7 +688,7 @@ fn rescanning_a_real_tree_is_read_only_and_complete() -> TestResult {
 
     let before = manifest(root);
 
-    let summary = rescan(&mut db, LIB, &root.to_path_buf(), mode)?;
+    let summary = rescan(&mut db, LIB, root)?;
 
     assert!(summary.complete);
     assert_eq!(summary.inserted, 2, "o diretório oculto não é catalogado");
@@ -659,9 +701,257 @@ fn rescanning_a_real_tree_is_read_only_and_complete() -> TestResult {
     );
 
     // Segunda varredura sobre a mesma árvore: nada novo e nada marcado como ausente.
-    let second = rescan(&mut db, LIB, &root.to_path_buf(), mode)?;
+    let second = rescan(&mut db, LIB, root)?;
     assert_eq!(second.inserted, 0);
     assert_eq!(second.marked_missing, 0);
     assert_eq!(manifest(root), before);
+    Ok(())
+}
+
+#[test]
+fn a_partial_scan_records_the_unverified_areas_and_marks_complete_zero() -> TestResult {
+    let mut db = Database::open_in_memory()?;
+    let mode = KeyMode::Sensitive;
+
+    let summary = apply_scan(
+        &mut db,
+        LIB,
+        &outcome(
+            vec![scanned("Curso/aula.mp4", 1_024, 1_760_000_000, mode)],
+            &["A"],
+        ),
+        mode,
+    )?;
+
+    assert!(
+        !summary.complete,
+        "com área não verificada a varredura é parcial"
+    );
+    assert_eq!(scan_rows(&db), vec![("completed".to_owned(), 0)]);
+
+    let mut statement = db
+        .connection()
+        .prepare("SELECT relative_path FROM scan_inaccessible ORDER BY relative_path")?;
+    let recorded: Vec<String> = statement
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<String>>>()?;
+    assert_eq!(
+        recorded,
+        vec!["A".to_owned()],
+        "a área não verificada precisa ficar registrada na varredura"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_row_already_missing_is_not_counted_again() -> TestResult {
+    let mut db = Database::open_in_memory()?;
+    let mode = KeyMode::Sensitive;
+    let present = || vec![scanned("Curso/aula.mp4", 1_024, 1_760_000_000, mode)];
+
+    apply_scan(&mut db, LIB, &outcome(present(), &[]), mode)?;
+    let absent = apply_scan(&mut db, LIB, &outcome(Vec::new(), &[]), mode)?;
+    let again = apply_scan(&mut db, LIB, &outcome(Vec::new(), &[]), mode)?;
+
+    assert_eq!(absent.marked_missing, 1);
+    assert_eq!(again.marked_missing, 0, "a linha já está ausente");
+    assert_eq!(again.preserved, 0, "não havia área não verificada");
+    assert_eq!(
+        count(&db, "media"),
+        1,
+        "a linha ausente continua no catálogo"
+    );
+    Ok(())
+}
+
+#[test]
+fn progress_survives_a_marked_absence_and_a_failed_scan() -> TestResult {
+    let mut db = Database::open_in_memory()?;
+    let mode = KeyMode::Sensitive;
+    let dir = tempfile::tempdir()?;
+
+    apply_scan(
+        &mut db,
+        LIB,
+        &outcome(
+            vec![scanned("Curso/aula.mp4", 1_024, 1_760_000_000, mode)],
+            &[],
+        ),
+        mode,
+    )?;
+    let media_id = media_row(&db, "Curso/aula.mp4").expect("linha").0;
+    record_progress(&db, "dono-1", &media_id, 42)?;
+
+    apply_scan(&mut db, LIB, &outcome(Vec::new(), &[]), mode)?;
+    assert_eq!(
+        progress_position(&db, "dono-1", &media_id),
+        Some(42),
+        "marcar a mídia como ausente não pode apagar o progresso"
+    );
+
+    let failed = rescan(&mut db, LIB, &dir.path().join("ausente"));
+    match failed {
+        Err(Error::LibraryRootMissing { .. }) => {}
+        other => panic!("esperava Error::LibraryRootMissing, obtive {other:?}"),
+    }
+    assert_eq!(
+        progress_position(&db, "dono-1", &media_id),
+        Some(42),
+        "uma varredura com falha não pode apagar o progresso"
+    );
+    assert_eq!(
+        media_row(&db, "Curso/aula.mp4").expect("linha").3,
+        "missing",
+        "a falha não reverte a ausência já registrada"
+    );
+    Ok(())
+}
+
+#[test]
+fn an_unverified_prefix_does_not_cover_a_sibling_with_a_shared_prefix() -> TestResult {
+    let mut db = Database::open_in_memory()?;
+    let mode = KeyMode::Sensitive;
+
+    apply_scan(
+        &mut db,
+        LIB,
+        &outcome(
+            vec![
+                scanned("A/aula.mp4", 1_024, 1_760_000_000, mode),
+                scanned("AB/outro.mp4", 1_024, 1_760_000_000, mode),
+            ],
+            &[],
+        ),
+        mode,
+    )?;
+
+    let summary = apply_scan(&mut db, LIB, &outcome(Vec::new(), &["A"]), mode)?;
+
+    assert_eq!(
+        summary.preserved, 1,
+        "só a árvore realmente contida em A é preservada"
+    );
+    assert_eq!(summary.marked_missing, 1, "AB não está dentro de A");
+    assert_eq!(media_row(&db, "A/aula.mp4").expect("linha").3, "available");
+    assert_eq!(media_row(&db, "AB/outro.mp4").expect("linha").3, "missing");
+    Ok(())
+}
+
+#[test]
+fn libraries_are_isolated_when_deciding_absence() -> TestResult {
+    let mut db = Database::open_in_memory()?;
+    let mode = KeyMode::Sensitive;
+    let files = || vec![scanned("Curso/aula.mp4", 1_024, 1_760_000_000, mode)];
+
+    apply_scan(&mut db, LIB, &outcome(files(), &[]), mode)?;
+    apply_scan(&mut db, "bib-2", &outcome(files(), &[]), mode)?;
+
+    let summary = apply_scan(&mut db, LIB, &outcome(Vec::new(), &[]), mode)?;
+
+    let availability_of = |library: &str| -> String {
+        db.connection()
+            .query_row(
+                "SELECT availability FROM media WHERE library_id = ?1 AND relative_path_key = ?2",
+                rusqlite::params![library, "Curso/aula.mp4"],
+                |row| row.get(0),
+            )
+            .expect("a linha da biblioteca deve existir")
+    };
+
+    assert_eq!(
+        summary.marked_missing, 1,
+        "só a biblioteca varrida é decidida"
+    );
+    assert_eq!(count(&db, "media"), 2, "nenhuma linha foi removida");
+    assert_eq!(availability_of(LIB), "missing");
+    assert_eq!(availability_of("bib-2"), "available");
+    Ok(())
+}
+
+#[test]
+fn a_failed_scan_is_followed_by_a_scan_that_restores_availability() -> TestResult {
+    let mut db = Database::open_in_memory()?;
+    let mode = KeyMode::Sensitive;
+    let dir = tempfile::tempdir()?;
+
+    let failed = rescan(&mut db, LIB, &dir.path().join("ausente"));
+    assert!(
+        matches!(failed, Err(Error::LibraryRootMissing { .. })),
+        "a raiz ausente precisa ser reportada como tal"
+    );
+    assert_eq!(library_available(&db, LIB), Some(0));
+
+    apply_scan(
+        &mut db,
+        LIB,
+        &outcome(
+            vec![scanned("Curso/aula.mp4", 1_024, 1_760_000_000, mode)],
+            &[],
+        ),
+        mode,
+    )?;
+
+    assert_eq!(
+        library_available(&db, LIB),
+        Some(1),
+        "uma varredura bem-sucedida volta a marcar a raiz como alcançável"
+    );
+    Ok(())
+}
+
+#[test]
+fn an_oversized_file_saturates_the_stored_size() -> TestResult {
+    let mut db = Database::open_in_memory()?;
+    let mode = KeyMode::Sensitive;
+
+    apply_scan(
+        &mut db,
+        LIB,
+        &outcome(
+            vec![scanned("Curso/gigante.mp4", u64::MAX, 1_760_000_000, mode)],
+            &[],
+        ),
+        mode,
+    )?;
+
+    assert_eq!(
+        media_row(&db, "Curso/gigante.mp4").expect("linha").1,
+        i64::MAX,
+        "um tamanho acima do limite assinado satura em vez de falhar"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_failed_scan_history_write_preserves_the_original_failure() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("learnvault.sqlite");
+    let mut db = Database::open(&path)?;
+
+    // O histórico também pode falhar. O gatilho é criado por outra conexão ao mesmo
+    // arquivo, sem expor acesso interno do `Database`.
+    {
+        let injected = rusqlite::Connection::open(&path)?;
+        injected.execute_batch(
+            "CREATE TRIGGER falha_no_historico BEFORE INSERT ON scan
+             BEGIN SELECT RAISE(ABORT, 'falha injetada'); END;",
+        )?;
+    }
+
+    let result = rescan(&mut db, LIB, &dir.path().join("ausente"));
+
+    match result {
+        Err(Error::ScanHistoryNotRecorded { scan_error, .. }) => assert!(
+            matches!(*scan_error, Error::LibraryRootMissing { .. }),
+            "a razão original da falha precisa sobreviver ao erro de escrita"
+        ),
+        other => panic!("esperava Error::ScanHistoryNotRecorded, obtive {other:?}"),
+    }
+    assert_eq!(count(&db, "scan"), 0, "o histórico não foi gravado");
+    assert_eq!(
+        count(&db, "library"),
+        0,
+        "a transação do histórico também foi revertida"
+    );
     Ok(())
 }
