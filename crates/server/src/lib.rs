@@ -5,6 +5,7 @@
 mod auth;
 mod config;
 mod health;
+mod media;
 mod state;
 
 pub use auth::{
@@ -41,6 +42,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/login", axum::routing::post(auth::login))
         .route("/api/me", get(auth::me))
         .route("/api/logout", axum::routing::post(auth::logout))
+        .route("/api/media", get(media::media).head(media::media))
         .layer(DefaultBodyLimit::max(8 * 1024))
         .layer(map_response(security_headers))
         .with_state(state)
@@ -105,6 +107,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
     use std::path::PathBuf;
 
     use axum::{
@@ -117,6 +120,49 @@ mod tests {
     use tower::ServiceExt;
 
     use super::{AppState, Command, Config, VERSION, build_router, parse_command, serve};
+
+    async fn media_app() -> (axum::Router, tempfile::TempDir) {
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(temp.path().join("lesson.mp4"), b"0123456789").unwrap();
+        let mut config = config_fixture(&temp);
+        config.database_path = temp.path().join("media.sqlite");
+        let state = AppState::initialize(config).await.unwrap();
+        let outcome = learnvault_core::scan(temp.path()).unwrap();
+        {
+            let mut database = state.database.try_lock().unwrap();
+            learnvault_core::apply_scan(
+                &mut database,
+                "library-1",
+                &outcome,
+                learnvault_core::KeyMode::for_host(),
+            )
+            .unwrap();
+        }
+        (build_router(state), temp)
+    }
+
+    async fn media_cookie(app: &axum::Router) -> String {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post("/api/login")
+                    .header("origin", "http://localhost")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        r#"{"username":"admin","password":"uma senha local muito segura"}"#,
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        response.headers()["set-cookie"]
+            .to_str()
+            .unwrap()
+            .split(';')
+            .next()
+            .unwrap()
+            .to_owned()
+    }
 
     fn config_fixture(temp: &TempDir) -> Config {
         let mut config = Config::from_args([
@@ -151,6 +197,18 @@ mod tests {
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["status"], "ok");
         assert_eq!(json["version"], VERSION);
+    }
+
+    #[tokio::test]
+    async fn media_authenticates_before_validating_a_missing_query() {
+        let temp = tempfile::tempdir().unwrap();
+        let app = build_router(AppState::new(config_fixture(&temp)));
+        let response = app
+            .oneshot(Request::get("/api/media").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[test]
@@ -215,5 +273,108 @@ mod tests {
         sender.send(()).unwrap();
 
         assert!(task.await.unwrap().is_ok());
+    }
+
+    #[tokio::test]
+    async fn media_requires_authentication_and_supports_get_head_and_ranges() {
+        let (app, _temp) = media_app().await;
+        let unauthenticated = app
+            .clone()
+            .oneshot(
+                Request::get("/api/media?path=lesson.mp4")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(unauthenticated.status(), StatusCode::UNAUTHORIZED);
+
+        let cookie = media_cookie(&app).await;
+        let full = app
+            .clone()
+            .oneshot(
+                Request::get("/api/media?path=lesson.mp4")
+                    .header("cookie", &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(full.status(), StatusCode::OK);
+        assert_eq!(full.headers()["content-type"], "video/mp4");
+        assert_eq!(full.headers()["accept-ranges"], "bytes");
+        assert_eq!(
+            full.into_body().collect().await.unwrap().to_bytes(),
+            "0123456789"
+        );
+
+        let head = app
+            .clone()
+            .oneshot(
+                Request::head("/api/media?path=lesson.mp4")
+                    .header("cookie", &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(head.status(), StatusCode::OK);
+        assert_eq!(head.headers()["content-length"], "10");
+        assert!(
+            head.into_body()
+                .collect()
+                .await
+                .unwrap()
+                .to_bytes()
+                .is_empty()
+        );
+
+        let partial = app
+            .clone()
+            .oneshot(
+                Request::get("/api/media?path=lesson.mp4")
+                    .header("cookie", &cookie)
+                    .header("range", "bytes=2-5")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(partial.status(), StatusCode::PARTIAL_CONTENT);
+        assert_eq!(partial.headers()["content-range"], "bytes 2-5/10");
+        assert_eq!(
+            partial.into_body().collect().await.unwrap().to_bytes(),
+            "2345"
+        );
+    }
+
+    #[tokio::test]
+    async fn media_rejects_unsatisfiable_ranges_and_path_traversal() {
+        let (app, _temp) = media_app().await;
+        let cookie = media_cookie(&app).await;
+        let range = app
+            .clone()
+            .oneshot(
+                Request::get("/api/media?path=lesson.mp4")
+                    .header("cookie", &cookie)
+                    .header("range", "bytes=99-")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(range.status(), StatusCode::RANGE_NOT_SATISFIABLE);
+        assert_eq!(range.headers()["content-range"], "bytes */10");
+
+        let traversal = app
+            .oneshot(
+                Request::get("/api/media?path=../lesson.mp4")
+                    .header("cookie", &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(traversal.status(), StatusCode::NOT_FOUND);
     }
 }

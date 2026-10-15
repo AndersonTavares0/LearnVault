@@ -41,10 +41,65 @@ use std::fs::{File, Metadata};
 use std::io;
 use std::path::{Path, PathBuf};
 
+use rusqlite::OptionalExtension;
+
 use crate::db::Database;
 use crate::error::{Error, Result};
 use crate::paths::resolve_within;
+use crate::paths::{KeyMode, relative_path_key};
 use crate::scanner::{MediaKind, classify, mtime_seconds};
+
+/// Referência persistida usada pelo adaptador HTTP para abrir uma mídia.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MediaReference {
+    /// Biblioteca que contém o arquivo.
+    pub library_id: String,
+    /// Identidade estável do arquivo.
+    pub media_id: String,
+    /// Caminho relativo persistido, nunca um caminho absoluto.
+    pub relative_path: String,
+}
+
+/// Resolve um caminho relativo indexado sem acessar o sistema de arquivos.
+///
+/// A função só retorna mídias disponíveis e recusa componentes que poderiam transformar a
+/// entrada HTTP em um caminho fora da biblioteca. A abertura e a validação final ficam em
+/// [`open_media`].
+pub fn find_media_by_path(db: &Database, path: &str) -> Result<Option<MediaReference>> {
+    let candidate = std::path::Path::new(path);
+    if path.is_empty() || candidate.is_absolute() {
+        return Ok(None);
+    }
+    let mut parts = Vec::new();
+    for component in candidate.components() {
+        match component {
+            std::path::Component::Normal(value) => parts.push(value.to_string_lossy().into_owned()),
+            _ => return Ok(None),
+        }
+    }
+    if parts.is_empty() {
+        return Ok(None);
+    }
+    let normalized = parts.join("/");
+    let key = relative_path_key(&normalized, KeyMode::for_host())?;
+    Ok(db
+        .connection()
+        .query_row(
+            "SELECT library_id, media_id, relative_path
+           FROM media
+          WHERE relative_path_key = ?1 AND availability = 'available'
+          LIMIT 1",
+            [key],
+            |row| {
+                Ok(MediaReference {
+                    library_id: row.get(0)?,
+                    media_id: row.get(1)?,
+                    relative_path: row.get(2)?,
+                })
+            },
+        )
+        .optional()?)
+}
 
 /// Mídia resolvida e já aberta para leitura.
 #[derive(Debug)]

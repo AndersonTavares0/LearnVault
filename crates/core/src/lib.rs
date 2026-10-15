@@ -34,6 +34,7 @@ pub use auth::{
 pub use catalog::{Availability, Catalog, CatalogFile, CatalogNode, NodeRole, build_catalog};
 pub use db::Database;
 pub use error::{Error, Result};
+pub use media::{MediaReference, find_media_by_path};
 pub use media::{OpenMedia, open_media};
 pub use paths::KeyMode;
 pub use removal::{MediaRemovalImpact, MediaRemovalOutcome, media_removal_impact, remove_media};
