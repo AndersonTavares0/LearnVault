@@ -560,10 +560,20 @@ async fn idle_spa_streams_release_asset_capacity_without_reading_the_body() {
         .unwrap();
     assert_eq!(recovered.status(), StatusCode::OK);
 
-    let mut timed_out = idle_responses.pop().unwrap();
-    assert!(timed_out.body_mut().frame().await.unwrap().is_ok());
-    assert!(timed_out.body_mut().frame().await.is_none());
-    drop(idle_responses);
+    // Um stream encerrado pelo watchdog termina de forma limpa: nenhum chunk
+    // pode chegar como erro de I/O. A *quantidade* de chunks entregues antes do
+    // encerramento depende do agendamento do thread produtor e não é observável
+    // de forma determinística, então o teste trava o contrato observável — nunca
+    // um erro, e o body fecha — em vez de afirmar uma contagem que só existe por
+    // acaso (era a origem do flake que derrubava a CI sob carga).
+    for mut idle in idle_responses {
+        while let Some(frame) = idle.body_mut().frame().await {
+            assert!(
+                frame.is_ok(),
+                "o watchdog não pode converter ociosidade em erro de I/O"
+            );
+        }
+    }
 }
 
 #[tokio::test]
