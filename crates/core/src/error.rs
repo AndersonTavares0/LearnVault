@@ -19,6 +19,17 @@ pub enum Error {
         source: rusqlite::Error,
     },
 
+    /// A versão registrada no banco não pôde ser lida.
+    ///
+    /// É uma leitura, não uma migração: separar as duas variantes evita reportar uma
+    /// migração que nunca chegou a ser tentada.
+    #[error("não foi possível ler a versão do schema do banco de dados")]
+    ReadSchemaVersion {
+        /// Causa original reportada pelo SQLite.
+        #[source]
+        source: rusqlite_migration::Error,
+    },
+
     /// A cadeia de migrações não pôde ser aplicada.
     #[error("não foi possível aplicar as migrações do banco de dados")]
     Migrations(#[from] rusqlite_migration::Error),

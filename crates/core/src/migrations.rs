@@ -7,6 +7,10 @@
 use rusqlite_migration::{M, Migrations};
 
 /// Versão do schema conhecida por este programa.
+///
+/// A recusa de um schema mais novo não depende desta constante — ela vem de
+/// `SchemaVersion::Outside` —, mas ela deve acompanhar a cadeia de migrações porque
+/// aparece na mensagem de diagnóstico de [`crate::Error::SchemaTooNew`].
 pub(crate) const SCHEMA_VERSION: usize = 1;
 
 /// Versão 1: bibliotecas, mídia, varreduras e estado de estudo.
@@ -17,7 +21,11 @@ pub(crate) const SCHEMA_VERSION: usize = 1;
 ///
 /// Nenhuma chave estrangeira usa exclusão em cascata: remover bibliotecas ou mídia exige
 /// ação explícita e preserva os dados associados, então a exclusão física de linhas não
-/// faz parte da política do domínio e falha alto em vez de propagar remoções.
+/// faz parte da política do domínio e falha alto em vez de propagar remoções. O
+/// `ON DELETE NO ACTION` é o padrão do SQLite, mas é escrito para ficar auditável.
+///
+/// Todas as colunas de tempo (`mtime`, `completed_at`, `updated_at`, `expires_at`) são
+/// epoch Unix em segundos, em inteiros, sem fuso.
 const V1: &str = "
 -- Bibliotecas cadastradas. A raiz física é configuração da plataforma, não dado do domínio.
 CREATE TABLE library (
@@ -28,7 +36,7 @@ CREATE TABLE library (
 -- Mídia conhecida. A identidade é o media_id; o caminho é apenas a localização atual.
 CREATE TABLE media (
     media_id TEXT PRIMARY KEY NOT NULL,
-    library_id TEXT NOT NULL REFERENCES library (library_id),
+    library_id TEXT NOT NULL REFERENCES library (library_id) ON DELETE NO ACTION,
     relative_path TEXT NOT NULL,
     relative_path_key TEXT NOT NULL,
     size INTEGER NOT NULL,
@@ -40,7 +48,7 @@ CREATE TABLE media (
 -- Varreduras concluídas, usadas para distinguir arquivo ausente de biblioteca indisponível.
 CREATE TABLE scan (
     scan_id INTEGER PRIMARY KEY,
-    library_id TEXT NOT NULL REFERENCES library (library_id),
+    library_id TEXT NOT NULL REFERENCES library (library_id) ON DELETE NO ACTION,
     status TEXT NOT NULL CHECK (status IN ('completed', 'failed')),
     completed_at INTEGER NOT NULL
 );
@@ -48,17 +56,18 @@ CREATE TABLE scan (
 -- Estado de estudo por dono (owner_id opaco) e por mídia.
 CREATE TABLE study_state (
     owner_id TEXT NOT NULL,
-    media_id TEXT NOT NULL REFERENCES media (media_id),
+    media_id TEXT NOT NULL REFERENCES media (media_id) ON DELETE NO ACTION,
     position_seconds INTEGER NOT NULL DEFAULT 0,
     completed INTEGER NOT NULL CHECK (completed IN (0, 1)),
     updated_at INTEGER NOT NULL,
     PRIMARY KEY (owner_id, media_id)
 );
 
--- Contas locais. Usadas apenas pelo servidor.
+-- Contas locais. Usadas apenas pelo servidor. O nome de usuário é comparado sem
+-- diferenciar maiúsculas de minúsculas, como na implementação de referência.
 CREATE TABLE user (
     user_id TEXT PRIMARY KEY NOT NULL,
-    username TEXT NOT NULL UNIQUE,
+    username TEXT NOT NULL UNIQUE COLLATE NOCASE,
     password_hash TEXT NOT NULL,
     is_admin INTEGER NOT NULL CHECK (is_admin IN (0, 1)),
     created_at INTEGER NOT NULL
@@ -67,9 +76,12 @@ CREATE TABLE user (
 -- Sessões autenticadas. Usadas apenas pelo servidor.
 CREATE TABLE session (
     token_hash TEXT PRIMARY KEY NOT NULL,
-    user_id TEXT NOT NULL REFERENCES user (user_id),
+    user_id TEXT NOT NULL REFERENCES user (user_id) ON DELETE NO ACTION,
     expires_at INTEGER NOT NULL
 );
+
+-- O servidor descarta sessões vencidas; a consulta filtra por expiração.
+CREATE INDEX session_expires_at_idx ON session (expires_at);
 ";
 
 const MIGRATIONS_SLICE: &[M<'static>] = &[M::up(V1)];
