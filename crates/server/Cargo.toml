@@ -7,8 +7,12 @@ rust-version.workspace = true
 
 [dependencies]
 axum = "0.8"
+argon2 = "0.5"
+base64 = "0.22"
+getrandom = "0.3"
 learnvault-core = { path = "../core" }
 serde = { version = "1", features = ["derive"] }
+sha2 = "0.10"
 thiserror = "2"
 tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal"] }
 tower = { version = "0.5", features = ["timeout", "util"] }

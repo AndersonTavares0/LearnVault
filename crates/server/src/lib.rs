@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 
 mod config;
+mod auth;
 mod health;
 mod state;
 
