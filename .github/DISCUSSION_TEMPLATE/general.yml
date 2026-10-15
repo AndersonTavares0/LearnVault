@@ -1,0 +1,31 @@
+title: "[Discussão] "
+labels: ["discussion"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use a categoria General somente quando Ideas ou Q&A não forem adequadas.
+        Decisões de produto devem ficar em Ideas; dúvidas técnicas devem ficar em Q&A.
+  - type: dropdown
+    id: type
+    attributes:
+      label: Tipo de conversa
+      options:
+        - Comunicação
+        - Feedback
+        - Coordenação
+        - Outro
+    validations:
+      required: true
+  - type: textarea
+    id: topic
+    attributes:
+      label: Tópico
+      description: Explique o assunto da conversa.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Resultado esperado
+      description: Informe se a conversa deve gerar uma decisão, uma Issue ou apenas informação.
