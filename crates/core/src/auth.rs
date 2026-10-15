@@ -19,6 +19,7 @@ pub struct AuthUser {
     pub password_hash: String,
     /// Indica se o usuário pode executar ações administrativas.
     pub is_admin: bool,
+    /// Indica se o usuário precisa trocar as credenciais temporárias.
     pub must_change_credentials: bool,
 }
 
@@ -31,6 +32,7 @@ pub struct AuthSession {
     pub username: String,
     /// Indica se o usuário autenticado é administrador.
     pub is_admin: bool,
+    /// Indica se a sessão está limitada à troca das credenciais temporárias.
     pub must_change_credentials: bool,
     /// Instante de expiração da sessão em segundos Unix.
     pub expires_at: i64,
@@ -173,6 +175,7 @@ pub fn update_credentials_and_session(
     Ok(())
 }
 
+/// Atualiza as credenciais e invalida as sessões existentes do usuário.
 pub fn update_credentials(
     db: &mut Database,
     user_id: &str,
