@@ -14,7 +14,9 @@ export default defineConfig(({ mode }) => {
 	}],
 	define: { __LEARNVAULT_TRANSPORT__: JSON.stringify(desktop ? 'desktop' : 'http') },
 	build: {
-		outDir: desktop ? '../../services/go/cmd/learnvault/web/desktop-build' : '../../services/go/cmd/learnvault/web/build',
+		// O servidor HTTP e o serviço Go consomem `services/go/.../web/build`; o
+		// aplicativo Tauri embute o shell a partir de `crates/desktop/frontend-dist`.
+		outDir: desktop ? '../../crates/desktop/frontend-dist' : '../../services/go/cmd/learnvault/web/build',
 		assetsDir: '_app/immutable',
 		emptyOutDir: true,
 		rollupOptions: { input: { '200': 'src/app.html' } }

@@ -10,9 +10,9 @@ describe('production shell contract', () => {
 		expect(existsSync(shell)).toBe(true);
 		expect(readFileSync(shell, 'utf8')).toContain('/_app/immutable/');
 	});
-	it('runs the desktop build into a separate shell directory', () => {
+	it('runs the desktop build into the Tauri frontend directory', () => {
 		execFileSync('pnpm', ['run', 'build:desktop'], { cwd: process.cwd(), stdio: 'pipe', shell: true });
-		const shell = resolve(process.cwd(), '../../services/go/cmd/learnvault/web/desktop-build/200.html');
+		const shell = resolve(process.cwd(), '../../crates/desktop/frontend-dist/200.html');
 		expect(existsSync(shell)).toBe(true);
 		expect(readFileSync(shell, 'utf8')).toContain('/_app/immutable/');
 	});
