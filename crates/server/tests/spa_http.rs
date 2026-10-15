@@ -10,20 +10,20 @@ use std::{fs, time::Duration};
 use tempfile::TempDir;
 use tower::ServiceExt;
 
-// A representative SvelteKit bootstrap fixture.
+// A representative inline bootstrap fixture used to exercise CSP hashing.
 const SPA_BOOTSTRAP: &str = r#"
 				{
-					__sveltekit_w7zoc7 = {
+					learnvault_bootstrap = {
 						base: "",
 						version: "1792074284471"
 					};
 
 					const element = document.currentScript.parentElement;
 
-					import("/_app/immutable/entry/start.VTHPxlLm.js").then(async (kit) => {
-						kit.init(__sveltekit_w7zoc7);
-						const app = await import("/_app/immutable/entry/app.-QDYKKom.js");
-						kit.start(app, element);
+					import("/_app/immutable/entry/start.js").then(async (runtime) => {
+						runtime.init(learnvault_bootstrap);
+						const app = await import("/_app/immutable/entry/app.js");
+						runtime.start(app, element);
 					});
 				}
 			"#;
@@ -319,7 +319,7 @@ async fn changed_shell_is_not_served_with_the_startup_csp() {
 }
 
 #[tokio::test]
-async fn csp_hashes_the_downloaded_canonical_spa_shell_when_available() {
+async fn csp_allows_the_downloaded_canonical_vite_shell() {
     let canonical_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("..")
         .join("..")
@@ -330,12 +330,19 @@ async fn csp_hashes_the_downloaded_canonical_spa_shell_when_available() {
         "o shell canônico da SPA deve existir antes do teste CSP"
     );
     let shell = fs::read_to_string(&shell_path).unwrap();
-    let script_start = shell.find("<script").unwrap();
-    let content_start = shell[script_start..].find('>').unwrap() + script_start + 1;
-    let content_end = shell[content_start..].find("</script>").unwrap() + content_start;
-    let hash = STANDARD.encode(Sha256::digest(
-        &shell.as_bytes()[content_start..content_end],
-    ));
+    let mut inline_scripts = Vec::new();
+    let mut search_from = 0;
+    while let Some(relative_start) = shell[search_from..].find("<script") {
+        let script_start = search_from + relative_start;
+        let tag_end = shell[script_start..].find('>').unwrap() + script_start;
+        let attributes = &shell[script_start..tag_end];
+        let content_start = tag_end + 1;
+        let content_end = shell[content_start..].find("</script>").unwrap() + content_start;
+        if !attributes.contains(" src=") {
+            inline_scripts.push(&shell.as_bytes()[content_start..content_end]);
+        }
+        search_from = content_end + "</script>".len();
+    }
 
     let temp = tempfile::tempdir().unwrap();
     let response = app(&temp, &canonical_root)
@@ -347,7 +354,12 @@ async fn csp_hashes_the_downloaded_canonical_spa_shell_when_available() {
     let csp = response.headers()["content-security-policy"]
         .to_str()
         .unwrap();
-    assert!(csp.contains(&format!("'sha256-{hash}'")));
+    assert!(csp.contains("script-src 'self"));
+    assert!(!csp.contains("script-src https://"));
+    for script in inline_scripts {
+        let hash = STANDARD.encode(Sha256::digest(script));
+        assert!(csp.contains(&format!("'sha256-{hash}'")));
+    }
 }
 
 #[tokio::test]

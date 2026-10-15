@@ -17,7 +17,11 @@ func TestSPAFallbackServesEmbeddedShellAtRootAndClientRoutes(t *testing.T) {
 	for _, path := range []string{"/", "/courses/example-course"} {
 		recorder := httptest.NewRecorder()
 		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
-		if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "data-sveltekit-preload-data") {
+		body := recorder.Body.String()
+		if recorder.Code != http.StatusOK ||
+			!strings.Contains(body, `<div id="app"></div>`) ||
+			!strings.Contains(body, `<script type="module"`) ||
+			!strings.Contains(body, `/_app/immutable/`) {
 			t.Fatalf("SPA fallback for %s: status=%d, body=%q", path, recorder.Code, recorder.Body.String())
 		}
 	}
