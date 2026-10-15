@@ -13,6 +13,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod catalog;
 pub mod db;
 pub mod error;
 pub mod ids;
@@ -22,6 +23,7 @@ pub mod scanner;
 
 mod migrations;
 
+pub use catalog::{Availability, Catalog, CatalogFile, CatalogNode, NodeRole, build_catalog};
 pub use db::Database;
 pub use error::{Error, Result};
 pub use paths::KeyMode;
