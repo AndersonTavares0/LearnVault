@@ -63,7 +63,9 @@ async fn security_headers(mut response: Response) -> Response {
     headers.insert("referrer-policy", HeaderValue::from_static("no-referrer"));
     headers.insert(
         HeaderName::from_static("content-security-policy"),
-        HeaderValue::from_static("default-src 'self'; frame-ancestors 'none'"),
+        HeaderValue::from_static(
+            "default-src 'self'; style-src 'self' 'unsafe-hashes' 'sha256-tcbDxjMo+xKqM21aCGYbs/QAJqB7yUXC06oPWDapBgc='; media-src 'self' data:; frame-ancestors 'none'",
+        ),
     );
     response
 }
