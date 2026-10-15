@@ -71,6 +71,29 @@ fn missing_rows(root: &Path) -> i64 {
         .unwrap()
 }
 
+/// Conta todas as mídias persistidas no banco local.
+fn media_rows(root: &Path) -> i64 {
+    let database = learnvault_core::Database::open(database_path(root)).unwrap();
+    database
+        .connection()
+        .query_row("SELECT COUNT(*) FROM media", [], |row| row.get(0))
+        .unwrap()
+}
+
+/// Cria um link de diretório em `link` apontando para `target`.
+///
+/// No Windows criar um symlink/junction exige privilégio; quando a plataforma recusa, o
+/// teste é pulado com registro, como nos demais testes de link do repositório.
+#[cfg(unix)]
+fn link_dir(target: &Path, link: &Path) -> bool {
+    std::os::unix::fs::symlink(target, link).is_ok()
+}
+
+#[cfg(windows)]
+fn link_dir(target: &Path, link: &Path) -> bool {
+    std::os::windows::fs::symlink_dir(target, link).is_ok()
+}
+
 #[test]
 fn rescan_without_a_configured_root_is_a_stable_error_without_a_path() {
     let dir = tempfile::tempdir().unwrap();
@@ -115,6 +138,42 @@ fn rescan_with_a_removed_root_is_a_stable_error_without_a_path() {
 }
 
 #[test]
+fn a_root_replaced_by_a_link_is_refused_before_scanning() {
+    let dir = tempfile::tempdir().unwrap();
+    let (state, library) = configured(dir.path());
+    fs::write(library.join("aula.mp4"), b"video").unwrap();
+    state.rescan().unwrap();
+    assert_eq!(media_rows(dir.path()), 1);
+
+    // A raiz é trocada por um link para outra pasta depois da seleção: a revalidação
+    // imediata precisa recusar a varredura sem seguir o link.
+    fs::remove_dir_all(&library).unwrap();
+    let outside = dir.path().join("fora");
+    fs::create_dir_all(&outside).unwrap();
+    fs::write(outside.join("segredo.mp4"), b"x").unwrap();
+
+    if !link_dir(&outside, &library) {
+        eprintln!("pulado: criar symlink/junction exige privilégio nesta plataforma");
+        return;
+    }
+
+    let error = state.rescan().unwrap_err();
+
+    assert_eq!(error.code, IpcErrorCode::RescanUnavailable);
+    assert_eq!(
+        media_rows(dir.path()),
+        1,
+        "a varredura não pode ter seguido o link e indexado a pasta externa"
+    );
+    let json = serde_json::to_value(&error).unwrap();
+    let message = json["message"].as_str().unwrap();
+    assert!(
+        !message.contains(&outside.to_string_lossy().to_string()) && !message.contains("segredo"),
+        "a mensagem não pode expor o alvo do link: {message}"
+    );
+}
+
+#[test]
 fn rescan_of_an_empty_library_is_a_complete_empty_summary() {
     let dir = tempfile::tempdir().unwrap();
     let (state, _library) = configured(dir.path());
@@ -127,7 +186,7 @@ fn rescan_of_an_empty_library_is_a_complete_empty_summary() {
         summary.complete,
         "uma biblioteca vazia foi lida por completo"
     );
-    assert!(summary.ambiguous.is_empty());
+    assert_eq!(summary.ambiguous_count, 0);
 }
 
 #[test]
