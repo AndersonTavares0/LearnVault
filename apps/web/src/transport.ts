@@ -177,10 +177,21 @@ export class HttpTransport implements Transport {
 	mediaUrl(path: string) { return `/api/media?path=${encodeURIComponent(path)}`; }
 }
 
+// Códigos estáveis de erro IPC e a mensagem sanitizada correspondente. Um código
+// desconhecido ou ausente nunca repassa o texto recebido: cai no fallback da chamada,
+// para que nenhuma mensagem arbitrária (potencialmente com caminhos) chegue à interface.
+const DESKTOP_ERROR_MESSAGES: Record<string, string> = {
+	catalog_unavailable: 'catálogo indisponível',
+	database_unavailable: 'banco de dados local indisponível'
+};
+
 // O comando devolve o erro como objeto serializado `{ code, message }`, não como `Error`.
 function desktopError(cause: unknown, fallback: string): Error {
-	const payload = cause as { message?: unknown } | null;
-	if (payload && typeof payload === 'object' && typeof payload.message === 'string' && payload.message.length > 0) return new Error(payload.message);
+	const payload = cause as { code?: unknown } | null;
+	if (payload && typeof payload === 'object' && typeof payload.code === 'string') {
+		const known = DESKTOP_ERROR_MESSAGES[payload.code];
+		if (known) return new Error(known);
+	}
 	return new Error(fallback);
 }
 
