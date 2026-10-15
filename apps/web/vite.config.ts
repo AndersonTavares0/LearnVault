@@ -19,6 +19,9 @@ export default defineConfig(({ mode }) => {
 		outDir: desktop ? '../../crates/desktop/frontend-dist' : '../../services/go/cmd/learnvault/web/build',
 		assetsDir: '_app/immutable',
 		emptyOutDir: true,
+		// O webview do desktop é sempre atual e não precisa do polyfill de
+		// `modulepreload`, que injeta um `fetch` de rede no bundle offline.
+		modulePreload: desktop ? { polyfill: false } : {},
 		rollupOptions: { input: { '200': 'src/app.html' } }
 	}
 	};
