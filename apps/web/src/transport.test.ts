@@ -30,7 +30,10 @@ describe('transport contract', () => {
 	});
 	it('builds desktop media URLs from the authorized media id, never the raw path', () => {
 		const transport = new DesktopStub();
-		expect(transport.mediaUrl({ name: 'foto.png', path: 'Curso privado/foto.png', size: 1, kind: 'material', mediaId: 'méd-1' })).toBe('learnvault-media://localhost/m%C3%A9d-1');
+		// Os IDs são UUID v7 gerados pelo domínio: ASCII seguros, sem percent-encoding, o
+		// que preserva o contrato do parser estrito do Rust.
+		const uuid = '0192f0e0-1111-7abc-8def-0123456789ab';
+		expect(transport.mediaUrl({ name: 'foto.png', path: 'Curso privado/foto.png', size: 1, kind: 'material', mediaId: uuid })).toBe(`learnvault-media://localhost/${uuid}`);
 		// Vídeo/áudio e legendas ficam fora do protocolo nesta fatia.
 		expect(transport.mediaUrl({ name: 'aula.mp4', path: 'Curso privado/aula.mp4', size: 1, kind: 'media', mediaId: 'v1' })).toBeNull();
 		expect(transport.mediaUrl({ name: 'aula.vtt', path: 'Curso privado/aula.vtt', size: 1, kind: 'subtitle', mediaId: 's1' })).toBeNull();
