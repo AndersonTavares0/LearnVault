@@ -1,0 +1,27 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "go",
+  "packages": {
+    ".": {
+      "release-type": "go",
+      "changelog-path": "docs/releases/CHANGELOG.md",
+      "include-v-in-tag": true,
+      "include-v-in-release-name": true,
+      "pull-request-title-pattern": "chore: release ${version}",
+      "pull-request-header": "O Release Please gerou esta proposta de release a partir dos Conventional Commits.",
+      "changelog-sections": [
+        { "type": "feat", "section": "Funcionalidades" },
+        { "type": "fix", "section": "Correções" },
+        { "type": "perf", "section": "Melhorias de desempenho" },
+        { "type": "revert", "section": "Reversões" },
+        { "type": "docs", "section": "Documentação", "hidden": true },
+        { "type": "style", "section": "Estilo", "hidden": true },
+        { "type": "chore", "section": "Manutenção", "hidden": true },
+        { "type": "refactor", "section": "Refatoração", "hidden": true },
+        { "type": "test", "section": "Testes", "hidden": true },
+        { "type": "build", "section": "Build", "hidden": true },
+        { "type": "ci", "section": "Integração contínua", "hidden": true }
+      ]
+    }
+  }
+}

@@ -32,7 +32,7 @@
 - [ ] O comportamento de biblioteca somente leitura foi preservado.
 - [ ] Migrações e documentação de deploy foram atualizadas, quando necessário.
 - [ ] Mudanças de interface incluem screenshot ou descrição visual breve.
-- [ ] O idioma está consistente: README/CHANGELOG em inglês; Wiki e documentação editorial em pt-BR.
-- [ ] Prefixo e descrição do commit estão em inglês para o Release Please.
+- [ ] O idioma está consistente: arquivos de comunidade e documentação em pt-BR; apenas a LICENSE permanece em inglês.
+- [ ] O prefixo do commit está em inglês e a descrição em pt-BR para o Release Please.
 
 <!-- Remova itens não aplicáveis e registre limitações conhecidas. -->

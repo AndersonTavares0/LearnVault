@@ -8,20 +8,20 @@
 [![pnpm](https://img.shields.io/badge/pnpm-11.28.5-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
 [![SvelteKit](https://img.shields.io/badge/SvelteKit-2-FF3E00?logo=svelte&logoColor=white)](https://svelte.dev/docs/kit)
 
-LearnVault turns an existing course folder into a self-hosted study space. It combines
-a Go service, SQLite, and a SvelteKit SPA around a read-only library, local accounts,
-catalog indexing, and a focused study workflow.
+O LearnVault transforma uma pasta de cursos existente em um espaço de estudo auto-hospedado.
+Ele combina um serviço em Go, SQLite e uma SPA em SvelteKit em torno de uma biblioteca
+somente leitura, contas locais, indexação de catálogo e um fluxo de estudo focado.
 
 ## Status
 
-The foundation is in active development. Authentication, SQLite migrations, catalog
-indexing, the embedded SPA, and optional container adapters are available. Player
-navigation, progress, search, notes, favorites, thumbnails, and media processing are
-planned next.
+A base está em desenvolvimento ativo. Autenticação, migrações de SQLite, indexação de
+catálogo, a SPA embutida e adaptadores opcionais de contêiner já estão disponíveis. Player,
+progresso, busca, anotações, favoritos, thumbnails e processamento de mídia são os próximos
+passos previstos.
 
-## Start here
+## Comece aqui
 
-Requirements: Go 1.26, Node.js 24.x, and pnpm 11.28.5. Docker is optional.
+Requisitos: Go 1.26, Node.js 24.x e pnpm 11.28.5. Docker é opcional.
 
 ```sh
 pnpm install --frozen-lockfile
@@ -31,70 +31,73 @@ go test ./...
 go run ./cmd/learnvault
 ```
 
-The SPA is built from `web/src`, written to `cmd/learnvault/web/build`, and embedded
-into the Go executable. The first run requires `ADMIN_USERNAME` and
-`ADMIN_PASSWORD` with at least 12 characters. See `.env.example` for local settings.
+A SPA é construída a partir de `web/src`, gravada em `cmd/learnvault/web/build` e embutida no
+executável Go. A primeira execução exige `ADMIN_USERNAME` e `ADMIN_PASSWORD` com pelo menos
+12 caracteres. Veja `.env.example` para as configurações locais.
 
-## Repository map
+## Mapa do repositório
 
 ```text
-cmd/learnvault/   Go executable and embedded SPA output
-internal/         Backend packages, catalog, library, HTTP API, and SQLite
-web/src/           SvelteKit source
-deploy/            Container, Compose, and rootless Quadlet adapters
-docs/              Architecture, API, governance, operations, product, and releases
-.agents/           Policies, playbooks, checklists, and templates
-.github/           Actions, Release Please, Dependabot, and contribution forms
-scripts/           Local verification and release helpers
-testdata/          Synthetic fixtures used by tests
+cmd/learnvault/   Executável Go e saída embutida da SPA
+internal/         Pacotes de backend, catálogo, biblioteca, API HTTP e SQLite
+web/src/          Código-fonte SvelteKit
+deploy/           Adaptadores de contêiner, Compose e Quadlet rootless
+docs/             Arquitetura, API, governança, operações, produto e releases
+.agents/          Políticas, playbooks, checklists e templates para agentes
+.github/          Actions, configuração do Release Please, Dependabot e formulários
+scripts/          Automações auxiliares de verificação e release
+testdata/         Fixtures sintéticas usadas pelos testes
 ```
 
-Root files are limited to manifests, tool configuration, project policy, and common
-entrypoints required by Go, pnpm, SvelteKit, GitHub, or the documentation toolchain.
-Generated output and runtime data are ignored.
+A raiz fica limitada a manifestos, configuração de ferramentas, políticas do projeto e pontos
+de entrada exigidos por Go, pnpm, SvelteKit, GitHub ou pela documentação. Arquivos de
+comunidade como `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` e `SECURITY.md` ficam em `.github/`.
+Saída gerada e dados de runtime são ignorados.
 
-## Architecture
+## Arquitetura
 
-- One Go executable with the static SPA embedded.
-- SQLite through `modernc.org/sqlite`.
-- The physical library is read-only and remains outside the application data store.
-- Docker Compose and Podman/Quadlet are optional deployment adapters.
-- Native executable builds remain the source of truth for future installers.
+- Um único executável Go com a SPA estática embutida.
+- SQLite por meio de `modernc.org/sqlite`.
+- A biblioteca física é somente leitura e permanece fora do armazenamento da aplicação.
+- Docker Compose e Podman/Quadlet são adaptadores opcionais de deploy.
+- Builds nativos continuam sendo a fonte de verdade para instaladores futuros.
 
-See the [architecture overview](docs/architecture/overview.md) and the
-[API reference](docs/reference/api.md).
+Veja a [visão de arquitetura](docs/architecture/overview.md) e a
+[referência da API](docs/reference/api.md).
 
-## Deployment
+## Deploy
 
-For local containers, use the Compose adapter:
+Para contêineres locais, use o adaptador Compose:
 
 ```sh
 docker compose --env-file deploy/compose/.env.example \
   -f deploy/compose/compose.yaml up --build
 ```
 
-Container and Quadlet details are documented under [`deploy/`](deploy/) and in the
-[distribution guide](docs/operations/distribution.md).
+Detalhes de contêiner e Quadlet estão em [`deploy/`](deploy/) e no
+[guia de distribuição](docs/operations/distribution.md).
 
 ## Releases
 
-Release Please owns version calculation, release PRs, `CHANGELOG.md`, tags, and GitHub
-Release notes. Use Conventional Commits such as `feat:`, `fix:`, `docs:`, and `chore:`.
-Published releases receive versioned Linux binaries and `SHA256SUMS` automatically.
+O Release Please cuida do cálculo de versão, das PRs de release, do
+[`CHANGELOG.md`](docs/releases/CHANGELOG.md), das tags e das notas do GitHub Release. Use
+Conventional Commits como `feat:`, `fix:`, `docs:` e `chore:`. Releases publicados recebem
+automaticamente binários Linux versionados e `SHA256SUMS`.
 
-Read the [release process](docs/releases/process.md) before changing release files.
+Leia o [processo de release](docs/releases/process.md) antes de alterar arquivos de release.
 
-## Documentation and contribution
+## Documentação e contribuição
 
-The [documentation guide](docs/README.md) is the index for canonical project docs.
-The repository is the source of truth; the managed Wiki is a derived reading surface.
+O [guia de documentação](docs/README.md) é o índice da documentação canônica do projeto. O
+repositório é a fonte de verdade; a Wiki gerenciada é uma superfície derivada de leitura.
 
-Before contributing, read [CONTRIBUTING.md](CONTRIBUTING.md) and the
-[governance overview](docs/governance/overview.md). Changes to `main` go through a
-pull request and the required checks.
+Antes de contribuir, leia [CONTRIBUTING.md](.github/CONTRIBUTING.md) e a
+[visão de governança](docs/governance/overview.md). Mudanças na `main` passam por pull request
+e pelos checks obrigatórios.
 
-Security issues should be reported privately as described in [SECURITY.md](SECURITY.md).
+Questões de segurança devem ser reportadas de forma privada, conforme descrito em
+[SECURITY.md](.github/SECURITY.md).
 
-## License
+## Licença
 
-LearnVault is released under the [Apache License 2.0](LICENSE).
+O LearnVault é distribuído sob a [Apache License 2.0](LICENSE).

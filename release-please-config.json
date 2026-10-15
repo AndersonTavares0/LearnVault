@@ -1,8 +1,0 @@
-{
-  "release-type": "go",
-  "changelog-path": "CHANGELOG.md",
-  "include-v-in-tag": true,
-  "include-v-in-release-name": true,
-  "pull-request-title-pattern": "chore: release ${version}",
-  "pull-request-header": "Release Please generated this release proposal from Conventional Commits."
-}
