@@ -48,12 +48,20 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run check
       - run: pnpm run build
+      - run: pnpm run build:desktop
       - run: pnpm --filter learnvault-web test
       - run: pnpm audit --audit-level=low
       - uses: actions/upload-artifact@v7
         with:
           name: spa-build
           path: services/go/cmd/learnvault/web/build
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 1
+      - uses: actions/upload-artifact@v7
+        with:
+          name: spa-desktop-build
+          path: crates/desktop/frontend-dist
           if-no-files-found: error
           retention-days: 1
           compression-level: 1
@@ -113,8 +121,40 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Run clippy
-        run: cargo clippy --all-targets -- -D warnings
-      - name: Run all Rust tests
-        run: cargo test --all
+        run: cargo clippy --workspace --exclude learnvault-desktop --all-targets -- -D warnings
+      - name: Run Rust tests
+        run: cargo test --workspace --exclude learnvault-desktop
       - name: Run tests with coverage
         run: cargo llvm-cov --package learnvault-core --all-targets --fail-under-lines 80
+
+  desktop:
+    name: Desktop crate compile and guards
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [web]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: spa-desktop-build
+          path: crates/desktop/frontend-dist
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev
+      - name: Install Rust toolchain
+        run: rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy
+      - name: Cache Cargo registry and target
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-${{ runner.os }}-1.99.0-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            rust-${{ runner.os }}-1.99.0-
+      - name: Run clippy on the desktop crate
+        run: cargo clippy -p learnvault-desktop --all-targets -- -D warnings
+      - name: Run desktop tests
+        run: cargo test -p learnvault-desktop
