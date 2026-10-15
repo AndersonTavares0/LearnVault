@@ -14,6 +14,16 @@ import (
 	"learnvault/internal/storage"
 )
 
+func openTestDB(t *testing.T) *storage.DB {
+	t.Helper()
+	db, err := storage.Open(context.Background(), filepath.Join(t.TempDir(), "learnvault.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	return db
+}
+
 func TestHealthEndpoint(t *testing.T) {
 	db, err := storage.Open(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
 	if err != nil {
