@@ -406,8 +406,11 @@ fn concurrent_selection_keeps_memory_and_disk_consistent() {
         }
     });
 
-    let memory = state.library_root().expect("a memória precisa estar configurada");
-    let disk = load_library_root(&dir.path().join("config")).expect("o disco precisa estar configurado");
+    let memory = state
+        .library_root()
+        .expect("a memória precisa estar configurada");
+    let disk =
+        load_library_root(&dir.path().join("config")).expect("o disco precisa estar configurado");
     assert_eq!(
         memory.as_path(),
         disk.as_path(),

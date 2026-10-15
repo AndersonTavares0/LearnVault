@@ -294,7 +294,10 @@ fn storing_repeatedly_swaps_the_root_without_leftovers() {
     let second = LibraryRoot::resolve(&second).unwrap();
 
     store_library_root(&config, &first).unwrap();
-    assert_eq!(load_library_root(&config).unwrap().as_path(), first.as_path());
+    assert_eq!(
+        load_library_root(&config).unwrap().as_path(),
+        first.as_path()
+    );
 
     store_library_root(&config, &second).unwrap();
     assert_eq!(
@@ -303,7 +306,10 @@ fn storing_repeatedly_swaps_the_root_without_leftovers() {
     );
 
     store_library_root(&config, &first).unwrap();
-    assert_eq!(load_library_root(&config).unwrap().as_path(), first.as_path());
+    assert_eq!(
+        load_library_root(&config).unwrap().as_path(),
+        first.as_path()
+    );
 
     assert_eq!(
         fs::read_dir(&config).unwrap().count(),

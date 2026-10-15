@@ -87,12 +87,15 @@ impl DesktopState {
         };
 
         let root = LibraryRoot::resolve(&picked).map_err(|_| IpcError::library_root_invalid())?;
-        store_library_root(&self.config_dir, &root)
-            .map_err(|_| IpcError::library_config_unavailable())?;
 
+        // O cadeado da raiz cobre a gravação e a atualização em memória: duas seleções
+        // concorrentes não podem terminar com a memória apontando para uma raiz diferente
+        // da persistida em disco. É o cadeado da raiz, nunca o do SQLite.
         let mut guard = self
             .library_root
             .lock()
+            .map_err(|_| IpcError::library_config_unavailable())?;
+        store_library_root(&self.config_dir, &root)
             .map_err(|_| IpcError::library_config_unavailable())?;
         *guard = Some(root);
 

@@ -12,8 +12,9 @@
 //! - a biblioteca é externa e **somente leitura**: nada é criado, movido ou modificado
 //!   dentro dela, nem quando a seleção é recusada;
 //! - a configuração vive fora da raiz da biblioteca e fora do banco SQLite;
-//! - a gravação é atômica (arquivo temporário + `rename`), então uma interrupção nunca
-//!   deixa a configuração pela metade;
+//! - a gravação é atômica e serializada: o temporário é criado exclusivamente
+//!   (`create_new`, sem seguir link nem reaproveitar arquivo existente) e a troca usa
+//!   `rename`, que substitui o destino sem apagá-lo antes;
 //! - a leitura revalida a raiz no startup: configuração ausente, corrompida, em versão
 //!   desconhecida ou com raiz removida/inacessível resulta em "não configurado";
 //! - nenhuma mensagem de erro carrega caminho do sistema de arquivos.
@@ -22,8 +23,19 @@ use std::fmt;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
+
+/// Serializa as gravações da configuração no processo inteiro.
+///
+/// Sem o cadeado, duas gravações concorrentes competiriam pelo mesmo destino e poderiam
+/// intercalar temporários; com ele, a configuração em disco é sempre o resultado de uma
+/// gravação completa, na ordem de chegada. O cadeado é desta função, nunca do SQLite.
+static STORE_LOCK: Mutex<()> = Mutex::new(());
+
+/// Número máximo de nomes de temporário tentados antes de desistir da gravação.
+const MAX_TEMP_ATTEMPTS: u32 = 32;
 
 /// Versão do formato de configuração da raiz da biblioteca.
 pub const CONFIG_VERSION: u32 = 1;
@@ -174,26 +186,81 @@ fn config_dir_is_inside(config_dir: &Path, root: &LibraryRoot) -> bool {
     }
 }
 
-/// Escreve `bytes` em `dest` de forma atômica: temporário, `sync` e `rename`.
+/// Escreve `bytes` em `dest` de forma atômica e serializada.
+///
+/// O temporário é criado com `create_new` e depois trocado por `rename`. O cadeado
+/// [`STORE_LOCK`] garante que gravações concorrentes não se intercalem.
 fn write_atomically(dest: &Path, bytes: &[u8]) -> Result<(), LibraryError> {
     let directory = dest.parent().ok_or(LibraryError::WriteFailed)?;
-    let temporary = directory.join(format!(".{}.{}.tmp", CONFIG_FILE_NAME, std::process::id()));
+    let _guard = STORE_LOCK.lock().map_err(|_| LibraryError::WriteFailed)?;
 
-    let written = fs::File::create(&temporary).and_then(|mut file| {
-        file.write_all(bytes)?;
-        file.sync_all()
-    });
-    if written.is_err() {
-        let _ = fs::remove_file(&temporary);
-        return Err(LibraryError::WriteFailed);
-    }
-
-    if fs::rename(&temporary, dest).is_err() {
+    let temporary = create_temporary(directory, bytes)?;
+    if replace_file(&temporary, dest).is_err() {
         let _ = fs::remove_file(&temporary);
         return Err(LibraryError::WriteFailed);
     }
 
     Ok(())
+}
+
+/// Cria um temporário **novo** com o conteúdo, sem seguir link nem reaproveitar arquivo
+/// existente.
+///
+/// Cada tentativa abre com `create_new`, que recusa qualquer caminho já existente — um
+/// arquivo comum, um symlink ou uma junction. Assim um temporário pré-existente nunca é
+/// sobrescrito nem usado como destino da escrita; a gravação simplesmente tenta o próximo
+/// nome. O conteúdo é sincronizado antes da troca.
+fn create_temporary(directory: &Path, bytes: &[u8]) -> Result<PathBuf, LibraryError> {
+    for attempt in 0..MAX_TEMP_ATTEMPTS {
+        let candidate = temporary_candidate(directory, attempt);
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&candidate)
+        {
+            Ok(mut file) => {
+                if file
+                    .write_all(bytes)
+                    .and_then(|()| file.sync_all())
+                    .is_err()
+                {
+                    let _ = fs::remove_file(&candidate);
+                    return Err(LibraryError::WriteFailed);
+                }
+                return Ok(candidate);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(_) => return Err(LibraryError::WriteFailed),
+        }
+    }
+    Err(LibraryError::WriteFailed)
+}
+
+/// Nome candidato de temporário dentro do diretório de configuração.
+///
+/// O primeiro mantém o formato histórico `.{CONFIG_FILE_NAME}.{pid}.tmp`; as tentativas
+/// seguintes acrescentam um contador, para não colidir com um temporário deixado por uma
+/// execução anterior ou por outra gravação.
+fn temporary_candidate(directory: &Path, attempt: u32) -> PathBuf {
+    if attempt == 0 {
+        directory.join(format!(".{CONFIG_FILE_NAME}.{}.tmp", std::process::id()))
+    } else {
+        directory.join(format!(
+            ".{CONFIG_FILE_NAME}.{}.{}.tmp",
+            std::process::id(),
+            attempt
+        ))
+    }
+}
+
+/// Substitui o destino de forma atômica **sem apagar antes**.
+///
+/// `fs::rename` troca o nome no mesmo sistema de arquivos sem janela intermediária e, no
+/// Windows, usa `MoveFileExW(MOVEFILE_REPLACE_EXISTING)`: um `library.json` existente é
+/// substituído em vez de recusado. É a estratégia cross-platform segura, sem
+/// `remove_file` prévio, sem `unsafe` e sem novas dependências.
+fn replace_file(source: &Path, dest: &Path) -> Result<(), LibraryError> {
+    fs::rename(source, dest).map_err(|_| LibraryError::WriteFailed)
 }
 
 /// Verdadeiro quando o metadado marca um ponto de reparse (junction ou symlink) no Windows.
