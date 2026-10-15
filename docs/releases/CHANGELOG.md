@@ -20,7 +20,8 @@ O formato segue o Keep a Changelog e as versões usam Semantic Versioning.
 
 ### Adicionado
 
-- Fundação do aplicativo desktop em `crates/desktop` (Tauri 2.12.x): shell da SPA embutido por `frontendDist`, capability deny-by-default para a janela principal, CSP explícita e nenhum listener de rede ou plugin privilegiado. O IPC de domínio permanece pendente.
+- Fundação do aplicativo desktop em `crates/desktop` (Tauri 2.12.x): shell da SPA embutido por `frontendDist`, capability deny-by-default para a janela principal, CSP explícita e nenhum listener de rede ou plugin privilegiado.
+- IPC de catálogo e configuração no desktop: comandos `desktop_config` e `desktop_catalog` offline sobre o `learnvault-core`, com ACL app-defined mínima, DTOs snake_case do catálogo e estado offline determinístico ("biblioteca não configurada") que nunca oferece login no desktop. Entrega de mídia, rescan, autenticação e seleção da raiz da biblioteca continuam pendentes.
 
 ### Correções
 

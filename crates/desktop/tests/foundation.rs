@@ -163,6 +163,104 @@ fn capability_is_deny_by_default_without_remote_sources() {
 }
 
 #[test]
+fn build_registers_the_app_commands_in_the_acl_manifest() {
+    let build = read(&crate_root().join("build.rs"));
+    assert!(
+        build.contains("app_manifest"),
+        "o build precisa declarar o AppManifest do ACL"
+    );
+    for command in ["desktop_config", "desktop_catalog"] {
+        assert!(
+            build.contains(command),
+            "o comando '{command}' precisa ser declarado no ACL app-defined"
+        );
+    }
+}
+
+#[test]
+fn capability_grants_only_the_core_default_and_the_two_app_commands() {
+    let raw = read(&crate_root().join("capabilities/default.json"));
+    let capability: serde_json::Value =
+        serde_json::from_str(&raw).expect("a capability precisa ser JSON válido");
+    let permissions: Vec<&str> = capability["permissions"]
+        .as_array()
+        .expect("a capability precisa listar permissões")
+        .iter()
+        .map(|permission| permission.as_str().unwrap_or_default())
+        .collect();
+
+    assert!(permissions.contains(&"core:default"));
+    assert!(permissions.contains(&"allow-desktop-config"));
+    assert!(permissions.contains(&"allow-desktop-catalog"));
+    assert_eq!(
+        permissions.len(),
+        3,
+        "a capability não pode ampliar além do núcleo e dos dois comandos: {permissions:?}"
+    );
+}
+
+#[test]
+fn invoke_handler_registers_only_the_desktop_commands() {
+    let lib = read(&crate_root().join("src/lib.rs"));
+    let marker = "generate_handler![";
+    let start = lib
+        .find(marker)
+        .expect("o lib.rs precisa registrar um invoke_handler")
+        + marker.len();
+    let rest = &lib[start..];
+    let end = rest
+        .find(']')
+        .expect("o invoke_handler precisa fechar a lista de comandos");
+    let commands = &rest[..end];
+
+    assert!(
+        commands.contains("desktop_config"),
+        "o handler precisa registrar desktop_config: {commands}"
+    );
+    assert!(
+        commands.contains("desktop_catalog"),
+        "o handler precisa registrar desktop_catalog: {commands}"
+    );
+    assert!(
+        !commands.contains("rescan"),
+        "rescan pertence a uma fatia posterior e não pode ser registrado agora: {commands}"
+    );
+}
+
+#[test]
+fn catalog_command_offloads_blocking_sqlite_off_the_main_thread() {
+    let command = read(&crate_root().join("src/command.rs"));
+
+    // O catálogo lê o SQLite de forma bloqueante. Um `#[tauri::command]` síncrono roda na
+    // main thread do webview e travaria a UI; o comando precisa ser `async` e executar o
+    // trabalho bloqueante em `spawn_blocking` do runtime do Tauri, sem adicionar `tokio`
+    // como dependência direta.
+    assert!(
+        !command.contains("pub fn desktop_catalog"),
+        "desktop_catalog não pode continuar síncrono (executaria o SQLite na main thread)"
+    );
+
+    let marker = "pub async fn desktop_catalog";
+    let start = command
+        .find(marker)
+        .expect("desktop_catalog precisa ser um comando assíncrono (pub async fn)");
+    let rest = &command[start..];
+    let end = rest
+        .find("\n}")
+        .expect("o comando desktop_catalog precisa fechar o corpo");
+    let body = &rest[..end];
+
+    assert!(
+        body.contains("tauri::async_runtime::spawn_blocking"),
+        "o SQLite bloqueante precisa rodar em spawn_blocking do Tauri: {body}"
+    );
+    assert!(
+        body.contains("state.catalog()"),
+        "o trabalho bloqueante continua sendo o catálogo do estado: {body}"
+    );
+}
+
+#[test]
 fn desktop_source_has_no_network_listener_or_http_server() {
     for source in rust_sources() {
         let content = read(&source);

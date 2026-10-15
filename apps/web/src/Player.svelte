@@ -1,6 +1,6 @@
 <script lang="ts">
   import LooseFiles from './LooseFiles.svelte';
-  import { selectPlayableMedia, srtToWebVtt, subtitleFormat } from './player';
+  import { selectPlayableMedia, srtConversionSupported, srtToWebVtt, subtitleFormat } from './player';
   import { transport, type Lesson } from './transport';
   let { lesson, mediaError, onMediaError }: { lesson: Lesson; mediaError: string; onMediaError: () => void } = $props();
   let source = $derived(selectPlayableMedia(lesson.media) ? transport.mediaUrl(selectPlayableMedia(lesson.media)!.path) : null);
@@ -21,7 +21,7 @@
       captionSource = url;
     } else if (format === 'ass') {
       captionMessage = 'Legendas ASS/SSA não são compatíveis com <track>; baixe o arquivo para usar um conversor.';
-    } else if (format === 'srt') {
+    } else if (format === 'srt' && srtConversionSupported) {
       void fetch(url).then((response) => {
         if (!response.ok) throw new Error('Falha ao carregar legenda.');
         return response.text();
@@ -31,6 +31,9 @@
           captionSource = objectUrl;
         }
       }).catch(() => { if (active) captionMessage = 'Não foi possível converter a legenda SRT.'; });
+    } else if (format === 'srt') {
+      // O build desktop não faz rede: a conversão sob demanda só existe no build HTTP.
+      captionMessage = 'A conversão de legendas SRT exige o servidor HTTP; baixe o arquivo para uso externo.';
     } else {
       captionMessage = 'Formato de legenda não suportado; baixe o arquivo para uso externo.';
     }

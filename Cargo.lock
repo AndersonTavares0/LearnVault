@@ -1803,9 +1803,12 @@ dependencies = [
 name = "learnvault-desktop"
 version = "0.0.0"
 dependencies = [
+ "learnvault-core",
+ "serde",
  "serde_json",
  "tauri",
  "tauri-build",
+ "tempfile",
 ]
 
 [[package]]
