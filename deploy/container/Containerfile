@@ -2,7 +2,7 @@ FROM node:24-alpine AS web-build
 WORKDIR /src
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN corepack enable && corepack install --global pnpm@11.28.5 && pnpm install --frozen-lockfile
-COPY svelte.config.js vite.config.ts tsconfig.json ./
+COPY vite.config.ts tsconfig.json ./
 COPY web ./web
 RUN pnpm run build
 
