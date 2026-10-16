@@ -21,7 +21,9 @@ preferencial do desktop.
 
 - O comando Go em `services/go/cmd/learnvault` é a fonte da verdade para builds executáveis da
   implementação atual. Na reescrita, cada binário Rust passa a ser a fonte da verdade do seu alvo.
-- A SPA é construída uma vez e embutida no executável.
+- A SPA é construída uma vez no artefato canônico `crates/server/web/build`. O serviço Go copia
+  essa saída para o caminho que usa em seus testes e empacotamento; isso é um contrato preparatório
+  para a futura cutover coordenada, não a remoção do serviço Go.
 - Receitas de pacotes ficarão em `deploy/packages/` quando forem implementadas.
 - Definições de containers ficam em `deploy/container/`, `deploy/compose/` e `deploy/quadlet/`.
 - Containers não podem definir comportamento que o binário não possui.
@@ -57,10 +59,11 @@ COMPOSE="docker compose --env-file deploy/compose/.env.example -f deploy/compose
 ## Validação experimental da imagem Rust (OCI)
 
 Enquanto a reescrita em Rust avança, `deploy/container/Containerfile.rust` e
-`scripts/verify-rust-oci.sh` permitem validar localmente que o servidor Rust
-(`crates/server`) compila a partir do repositório e roda em um contêiner. Ambos são
-experimentais e não publicam nada: `deploy/container/Containerfile` (Go) continua sendo a
-imagem suportada por Compose, Quadlet, workflow de release e CI.
+`scripts/verify-rust-oci.sh` permitem validar localmente que o servidor Rust (`crates/server`)
+compila com a SPA canônica e roda em um contêiner. A receita Rust é explicitamente opt-in,
+experimental e não é publicada nem usada por Compose, Quadlet, CI ou release. O
+`deploy/container/Containerfile` continua sendo a imagem Go de produção estável/referência;
+o serviço Go permanece no repositório até a cutover coordenada final.
 
 ```sh
 ./scripts/verify-rust-oci.sh

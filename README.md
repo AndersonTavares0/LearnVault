@@ -43,13 +43,17 @@ da pull request, `pnpm verify` reproduz os checks de PR (use `--fast` para pular
 audit durante a iteração); os comandos individuais continuam em `.github/CONTRIBUTING.md`.
 
 A SPA é construída a partir de `apps/web/src` e gravada em
-`services/go/cmd/learnvault/web/build`, que o servidor Rust serve com `--web-root` e o
-executável Go de referência embute (`pnpm dev` dispensa esse build: o Vite serve a SPA e faz
+`crates/server/web/build`, que o servidor Rust serve com `--web-root` (`pnpm dev` dispensa esse
+build: o Vite serve a SPA e faz
 proxy de `/api`). Sem configuração, o primeiro acesso usa `admin`/`admin` e exige troca
 imediata; credenciais fornecidas usam `ADMIN_USERNAME` e `ADMIN_PASSWORD` com pelo menos 12
 caracteres. Veja `deploy/compose/.env.example` para as configurações locais.
 
-A implementação de referência em Go continua disponível:
+Esse caminho é o contrato canônico preparatório para a futura cutover coordenada: o CI também
+estagia a mesma saída para os testes Go. O serviço Go e a imagem Go padrão continuam sendo a
+produção/referência estável; a imagem Rust permanece opt-in e experimental.
+
+A implementação de referência e rollback em Go continua disponível:
 
 ```sh
 go -C services/go test ./...
