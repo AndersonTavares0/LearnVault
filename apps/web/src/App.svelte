@@ -5,7 +5,7 @@
 	import { filterCatalog } from './search';
 	import Player from './Player.svelte';
 	import { destinationAfterLogin, findLesson, findLessonByMediaId, href, locationFromHash, type Route } from './router';
-	import { transport, transportKind, type Catalog, type CatalogNode, type Lesson, type StudyProgress, type User } from './transport';
+	import { STUDY_NOT_AVAILABLE, transport, transportKind, type Catalog, type CatalogNode, type Lesson, type StudyProgress, type User } from './transport';
 	import { initialView, resolveSession, type ConfigState } from './session';
 	import { formatDuration, studySyncSupported } from './player';
 
@@ -30,6 +30,7 @@
 	let libraryError = '';
 	let recent: StudyProgress[] = [];
 	let recentLoading = false;
+	let studyEnabled = studySyncSupported;
 
 	onMount(() => {
 		const change = () => {
@@ -155,8 +156,11 @@
 		try {
 			const result = await transport.recentStudy(6);
 			recent = result.items;
-		} catch {
+		} catch (cause) {
 			recent = [];
+			if (cause && typeof cause === 'object' && (cause as { code?: string }).code === STUDY_NOT_AVAILABLE) {
+				studyEnabled = false;
+			}
 		} finally {
 			recentLoading = false;
 		}
@@ -174,4 +178,4 @@
 {:else}<div class="shell"><header><div class="brand"><span class="mark">LV</span> LEARNVAULT</div><button class="text-button" onclick={logout}>Sair</button></header><div class="layout"><aside aria-label="Navegação principal"><a class:active={route === 'home'} href={href('home')}>Início</a><a class:active={route === 'catalog'} href={href('catalog')}>Catálogo</a></aside><main><p class="eyebrow">BIBLIOTECA PESSOAL</p>{#if error}<p class="error" role="alert">{error}</p>{/if}{#if route === 'home'}<h1>Olá, {user.username}.</h1><p class="intro">Sua biblioteca está protegida e pronta para estudar.</p>
 {#if studySyncSupported && recent.length}<section class="recent-study" aria-labelledby="recent-heading"><h2 id="recent-heading">Continuar assistindo</h2><ul>{#each recent as item}{@const recentLesson = findLessonByMediaId(catalog, item.mediaId)}<li>{#if recentLesson}<a href={href('player', recentLesson.path)}>{recentLesson.title}</a><small>{item.completed ? 'Concluído' : `Parou em ${formatDuration(item.positionSeconds)}`}</small>{:else}<span>Mídia não disponível no catálogo</span>{/if}</li>{/each}</ul></section>{/if}
 <a class="primary" href={href('catalog')}>Abrir catálogo</a>
-{:else if route === 'catalog'}<h1>Seus cursos</h1>{#if user.role === 'admin'}<button class="primary" onclick={rescan} disabled={rescanning}>{rescanning ? 'Indexando…' : 'Indexar biblioteca'}</button><p class="catalog-message" aria-live="polite">{rescanMessage}</p>{/if}{#if catalog && catalog.nodes.length}<form class="catalog-search" role="search" onsubmit={(event) => event.preventDefault()}><label for="catalog-search-input">Buscar no catálogo</label><input id="catalog-search-input" type="search" placeholder="Curso, módulo ou aula" bind:value={catalogQuery} /></form>{/if}{#if catalog && catalog.looseFiles.length}<LooseFiles files={catalog.looseFiles} heading="Arquivos soltos" />{/if}{#if catalog && catalog.nodes.length}{#if filteredNodes.length}<CatalogTree nodes={filteredNodes} openLesson={(item) => { lesson = item; lessonPath = item.path; location.hash = href('player', item.path); }} />{:else}<p class="empty" role="status">Nenhum resultado para “{catalogQuery.trim()}”.</p>{/if}{:else if !catalog || !catalog.looseFiles.length}<p class="empty">O catálogo ainda está vazio.</p>{/if}{:else}<h1>{lesson?.title ?? 'Aula não encontrada'}</h1>{#if !lesson}<p class="empty" role="status">Não foi possível encontrar esta aula no catálogo atual.</p>{:else}<Player lesson={lesson} mediaError={mediaError} onMediaError={mediaFailed} />{/if}<a class="back" href={href('catalog')}>Voltar ao catálogo</a>{/if}</main></div></div>{/if}
+{:else if route === 'catalog'}<h1>Seus cursos</h1>{#if user.role === 'admin'}<button class="primary" onclick={rescan} disabled={rescanning}>{rescanning ? 'Indexando…' : 'Indexar biblioteca'}</button><p class="catalog-message" aria-live="polite">{rescanMessage}</p>{/if}{#if catalog && catalog.nodes.length}<form class="catalog-search" role="search" onsubmit={(event) => event.preventDefault()}><label for="catalog-search-input">Buscar no catálogo</label><input id="catalog-search-input" type="search" placeholder="Curso, módulo ou aula" bind:value={catalogQuery} /></form>{/if}{#if catalog && catalog.looseFiles.length}<LooseFiles files={catalog.looseFiles} heading="Arquivos soltos" />{/if}{#if catalog && catalog.nodes.length}{#if filteredNodes.length}<CatalogTree nodes={filteredNodes} openLesson={(item) => { lesson = item; lessonPath = item.path; location.hash = href('player', item.path); }} />{:else}<p class="empty" role="status">Nenhum resultado para “{catalogQuery.trim()}”.</p>{/if}{:else if !catalog || !catalog.looseFiles.length}<p class="empty">O catálogo ainda está vazio.</p>{/if}{:else}<h1>{lesson?.title ?? 'Aula não encontrada'}</h1>{#if !lesson}<p class="empty" role="status">Não foi possível encontrar esta aula no catálogo atual.</p>{:else}<Player lesson={lesson} mediaError={mediaError} onMediaError={mediaFailed} {studyEnabled} />{/if}<a class="back" href={href('catalog')}>Voltar ao catálogo</a>{/if}</main></div></div>{/if}

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { findLesson } from './router';
-import { DesktopStub, HttpTransport, normalizeCatalog, normalizeRecentStudy, normalizeStudyProgress, normalizeUser, type Transport } from './transport';
+import { DesktopStub, HttpTransport, normalizeCatalog, normalizeRecentStudy, normalizeStudyProgress, normalizeUser, STUDY_NOT_AVAILABLE, type Transport } from './transport';
 
 // O Tauri só é carregado no desktop: fora dele o módulo é substituído pelo mock, de modo
 // que a suíte nunca toca `window.__TAURI_INTERNALS__`.
@@ -142,6 +142,12 @@ describe('transport contract', () => {
 		const recent = await new HttpTransport().recentStudy(5);
 		expect(fetchMock).toHaveBeenCalledWith('/api/study/recent?limit=5');
 		expect(recent.items[0].mediaId).toBe('m1');
+		vi.unstubAllGlobals();
+	});
+	it('reports study endpoints as unavailable when the server returns 404', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(new Response('404 page not found', { status: 404 }));
+		vi.stubGlobal('fetch', fetchMock);
+		await expect(new HttpTransport().recentStudy()).rejects.toMatchObject({ message: 'Estudo não disponível neste servidor.', code: STUDY_NOT_AVAILABLE });
 		vi.unstubAllGlobals();
 	});
 });

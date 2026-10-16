@@ -1,13 +1,15 @@
 <script lang="ts">
 	import LooseFiles from './LooseFiles.svelte';
 	import { formatDuration, selectPlayableMedia, srtConversionSupported, srtToWebVtt, studySyncSupported, subtitleFormat } from './player';
+	import { createPositionSaver } from './study';
 	import { transport, type Lesson, type StudyProgress } from './transport';
 
-	let { lesson, mediaError, onMediaError }: { lesson: Lesson; mediaError: string; onMediaError: () => void } = $props();
+	let { lesson, mediaError, onMediaError, studyEnabled = true }: { lesson: Lesson; mediaError: string; onMediaError: () => void; studyEnabled?: boolean } = $props();
 
 	const playable = $derived(selectPlayableMedia(lesson.media));
 	const mediaId = $derived(playable?.mediaId ?? null);
 	const source = $derived(playable ? transport.mediaUrl(playable.path) : null);
+	const syncEnabled = $derived(studySyncSupported && studyEnabled && mediaId !== null);
 
 	let video: HTMLVideoElement | null = $state(null);
 	let currentTime = $state(0);
@@ -22,11 +24,13 @@
 	let captionDownload = $state<string | null>(null);
 	let captionMessage = $state('');
 
+	const saver = createPositionSaver((id, position) => transport.recordPosition(id, position));
+
 	function canResumeFrom(p: StudyProgress | null, total: number): boolean {
-		return studySyncSupported && p !== null && p.recorded && p.positionSeconds > 5 && total > p.positionSeconds;
+		return syncEnabled && p !== null && p.recorded && p.positionSeconds > 5 && total > p.positionSeconds;
 	}
 	function showCompletedFrom(p: StudyProgress | null): boolean {
-		return studySyncSupported && p !== null && p.recorded;
+		return syncEnabled && p !== null && p.recorded;
 	}
 	const canResume = $derived(canResumeFrom(progress, duration));
 	const showCompleted = $derived(showCompletedFrom(progress));
@@ -65,15 +69,17 @@
 	});
 
 	$effect(() => {
-		if (!studySyncSupported || !mediaId) { progress = null; return; }
+		if (!syncEnabled) { progress = null; progressError = ''; return; }
 		progressLoading = true;
 		progressError = '';
+		saver.reset();
 		let active = true;
-		transport.studyProgress(mediaId)
+		const currentId = mediaId!;
+		transport.studyProgress(currentId)
 			.then((value) => { if (active) progress = value; })
 			.catch((cause) => { if (active) progressError = cause instanceof Error ? cause.message : 'Erro ao ler progresso.'; })
 			.finally(() => { if (active) progressLoading = false; });
-		return () => { active = false; };
+		return () => { active = false; saver.reset(); };
 	});
 
 	function resume() {
@@ -82,11 +88,11 @@
 	}
 
 	async function toggleCompleted() {
-		if (!studySyncSupported || !mediaId || !progress?.recorded || saving) return;
+		if (!syncEnabled || !mediaId || !progress?.recorded || saving || saver.saving) return;
 		saving = true;
 		try {
 			const next = await transport.setCompleted(mediaId, !progress.completed);
-			progress = next;
+			if (mediaId === (playable?.mediaId ?? null)) progress = next;
 		} catch (cause) {
 			progressError = cause instanceof Error ? cause.message : 'Erro ao atualizar conclusão.';
 		} finally {
@@ -95,25 +101,21 @@
 	}
 
 	async function handleTimeUpdate() {
-		if (!studySyncSupported || !mediaId || !video || saving) return;
+		if (!syncEnabled || !mediaId || !video || saving || saver.saving) return;
 		const now = performance.now();
 		if (now - lastSavedAt < 5000) return;
 		const position = Math.floor(video.currentTime);
 		if (position <= 0) return;
 		lastSavedAt = now;
-		try {
-			const next = await transport.recordPosition(mediaId, position);
-			progress = next;
-		} catch {
-			// Falhas silenciosas no autosave não interrompem a reprodução.
-		}
+		const result = await saver.request(mediaId, position);
+		if (result.kind === 'saved' && result.progress.mediaId === mediaId) progress = result.progress;
 	}
 
 	async function handleEnded() {
-		if (!studySyncSupported || !mediaId) return;
+		if (!syncEnabled || !mediaId) return;
 		try {
 			const next = await transport.setCompleted(mediaId, true);
-			progress = next;
+			if (next.mediaId === mediaId) progress = next;
 		} catch {
 			// Ignora erros ao marcar conclusão automaticamente.
 		}
@@ -122,13 +124,13 @@
 {#if mediaError}<p class="error" role="alert">{mediaError}</p>
 {:else if source}<!-- svelte-ignore a11y_media_has_caption --><video controls preload="metadata" src={source} bind:this={video} bind:currentTime={currentTime} bind:duration={duration} ontimeupdate={handleTimeUpdate} onended={handleEnded} onerror={onMediaError}>{#if captionSource}<track kind="captions" src={captionSource} label="Legenda" default />{/if}</video>
 {:else}<p class="empty" role="status">Esta aula não possui mídia disponível.</p>{/if}
-{#if studySyncSupported && mediaId}
+{#if syncEnabled}
 	<div class="study-bar" role="group" aria-label="Progresso da aula">
 		{#if progressLoading}<span class="study-hint">Carregando progresso…</span>
 		{:else if progressError}<span class="study-hint error">{progressError}</span>
 		{:else if canResume}<button class="text-button" onclick={resume} type="button">Retomar de {formatDuration(progress?.positionSeconds ?? 0)}</button>
 		{:else if showCompleted}<span class="study-hint">{progress?.completed ? 'Concluído' : 'Não concluído'}</span>{/if}
-		{#if showCompleted}<button class="text-button" onclick={toggleCompleted} disabled={saving} type="button" aria-pressed={progress?.completed}>{progress?.completed ? 'Marcar como não concluído' : 'Marcar como concluído'}</button>{/if}
+		{#if showCompleted}<button class="text-button" onclick={toggleCompleted} disabled={saving || saver.saving} type="button" aria-pressed={progress?.completed}>{progress?.completed ? 'Marcar como não concluído' : 'Marcar como concluído'}</button>{/if}
 	</div>
 {/if}
 {#if captionMessage}<p class="empty" role="status">{captionMessage}{#if captionDownload} <a href={captionDownload} download>Baixar legenda</a>{/if}</p>{/if}
