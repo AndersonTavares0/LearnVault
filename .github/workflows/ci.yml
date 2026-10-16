@@ -70,6 +70,37 @@ jobs:
           retention-days: 1
           compression-level: 1
 
+  e2e-server:
+    name: Rust server browser E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [web]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v8
+        with:
+          name: spa-build
+          path: services/go/cmd/learnvault/web/build
+      - name: Install Rust toolchain
+        run: rustup toolchain install 1.99.0 --profile minimal
+      - run: cargo build -p learnvault-server
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm exec playwright test tests/e2e/server.spec.ts
+      - name: Upload E2E diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-server-diagnostics
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
   container:
     name: Container build
     runs-on: ubuntu-latest

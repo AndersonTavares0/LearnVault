@@ -2,6 +2,8 @@
 
 #![forbid(unsafe_code)]
 
+use std::io::Write;
+
 mod auth;
 mod catalog;
 mod config;
@@ -152,6 +154,7 @@ pub async fn serve<F>(config: Config, shutdown: F) -> Result<(), ServeError>
 where
     F: Future<Output = ()> + Send + 'static,
 {
+    let ephemeral_listener = config.listen_addr.port() == 0;
     let listener = TcpListener::bind(config.listen_addr)
         .await
         .map_err(ServeError::Bind)?;
@@ -159,6 +162,14 @@ where
         .await
         .map_err(|error| ServeError::Startup(error.to_string()))?;
     let app = with_request_limits(build_router(state), Duration::from_secs(30));
+    // Stable machine-readable handoff for process-level smoke tests. It is emitted only for
+    // an explicitly ephemeral listener, after the OS assigned the address and the application
+    // is ready to serve requests; normal fixed-port launches keep their existing output.
+    if ephemeral_listener {
+        let local_addr = listener.local_addr().map_err(ServeError::Bind)?;
+        println!("LEARNVAULT_READY {local_addr}");
+        let _ = std::io::stdout().flush();
+    }
 
     axum::serve(
         listener,
