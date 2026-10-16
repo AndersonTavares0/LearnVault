@@ -35,4 +35,15 @@ describe('desktop rescan is explicit and configured-only', () => {
 		expect(source).toContain('await transport.rescan()');
 		expect(source).not.toContain("invoke('desktop_rescan'");
 	});
+
+	it('invalidates the previous desktop library before rescanning the selected root', () => {
+		const start = source.indexOf('async function chooseLibrary');
+		const end = source.indexOf('\n\tasync function loadRecent', start);
+		const chooseLibrary = source.slice(start, end);
+		expect(chooseLibrary).toContain('catalog = null;');
+		expect(chooseLibrary).toContain('lesson = null;');
+		expect(chooseLibrary).toContain('recent = [];');
+		expect(chooseLibrary.indexOf('recent = [];')).toBeLessThan(chooseLibrary.indexOf('await transport.rescan()'));
+		expect(chooseLibrary.indexOf('await transport.rescan()')).toBeLessThan(chooseLibrary.indexOf('const nextCatalog = await transport.catalog()'));
+	});
 });

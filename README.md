@@ -21,10 +21,12 @@ identidade de mídia e estado de estudo) e `crates/server` (Axum, autenticação
 com `Range` e API de estudo) já estão implementados, junto da SPA Svelte 5 + Vite com dois
 builds. As entregas mescladas #86, #88, #90 e #91 alinham Study no servidor Rust, na SPA web e
 no serviço Go de referência, além de avançarem o desktop com configuração, seleção da raiz,
-catálogo e rescan explícito. O desktop Tauri e a distribuição por plataforma com a remoção do
-serviço Go (Fase 5) **ainda não estão concluídos**. A entrega parcial de mídia do desktop está
-em #76 (Draft) e não faz parte da `main`; autenticação desktop, janelas reais, streaming
-completo, migração do banco e distribuição continuam gates explícitos.
+ catálogo, rescan explícito e reprodução local de materiais, vídeo e áudio, além da entrega de
+ legendas por protocolo com faixas limitadas. No desktop, o player renderiza legendas VTT; SRT,
+ ASS e SSA ficam disponíveis para download, enquanto o build HTTP pode converter SRT sob demanda.
+ O desktop Tauri e a distribuição por plataforma com a remoção do serviço Go
+(Fase 5) **ainda não estão concluídos**; autenticação desktop, janelas reais, migração do banco e
+distribuição continuam gates explícitos.
 
 ## Comece aqui
 
@@ -114,8 +116,10 @@ Conventional Commits como `feat:`, `fix:`, `docs:` e `chore:`. Releases publicad
 automaticamente binários Linux versionados e `SHA256SUMS` a partir da implementação de
 referência em Go.
 
-Os alvos de distribuição do Rust, como o instalador Windows, o Flatpak e a publicação do
-servidor, ainda não são entregues: eles pertencem à Fase 5 da reescrita.
+O instalador Windows via NSIS já é construído e publicado automaticamente. O Flatpak permanece
+bloqueado e fora dos releases até substituir `--filesystem=home:ro` por seleção de diretório via
+portal; seus manifestos são preservados para esse trabalho futuro. A publicação do servidor ainda
+pertence à Fase 5 da reescrita.
 
 Leia o [processo de release](docs/releases/process.md) antes de alterar arquivos de release.
 

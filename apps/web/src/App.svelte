@@ -6,7 +6,7 @@
 	import Player from './Player.svelte';
 	import { destinationAfterLogin, findLesson, findLessonByMediaId, href, locationFromHash, type Route } from './router';
 	import { STUDY_NOT_AVAILABLE, transport, transportKind, type Catalog, type CatalogNode, type Lesson, type StudyProgress, type User } from './transport';
-	import { initialView, resolveSession, type ConfigState } from './session';
+	import { desktopLocalUser, initialView, resolveSession, type ConfigState } from './session';
 	import { formatDuration, studySyncSupported } from './player';
 
 	let route: Route = locationFromHash(location.hash).route;
@@ -47,7 +47,7 @@
 
 	async function initialize() {
 		try {
-			const session = await resolveSession(() => transport.me(), () => transport.config());
+			const session = await resolveSession(() => transport.me(), () => transport.config(), transportKind);
 			user = session.user;
 			config = session.config;
 			error = session.error;
@@ -143,6 +143,17 @@
 		try {
 			const status = await transport.chooseLibrary();
 			config = status.configured ? 'configured' : 'unconfigured';
+			if (transportKind === 'desktop' && config === 'configured') {
+				catalog = null;
+				lesson = null;
+				recent = [];
+				mediaError = '';
+				await transport.rescan();
+				const nextCatalog = await transport.catalog();
+				syncLesson(nextCatalog);
+				await loadRecent();
+				user = desktopLocalUser;
+			}
 		} catch (cause) {
 			libraryError = cause instanceof Error ? cause.message : 'Não foi possível configurar a biblioteca.';
 		} finally {

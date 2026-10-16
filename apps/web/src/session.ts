@@ -14,10 +14,9 @@ export type InitialView = 'app' | 'login' | 'offline';
 /**
  * Decide a tela inicial a partir da sessão, do estado de configuração e do transporte.
  *
- * Só a plataforma HTTP explicitamente configurada oferece login. O desktop nunca cai no
- * login: os comandos de autenticação do desktop rejeitam, então o usuário ficaria preso —
- * inclusive depois de escolher a pasta da biblioteca. Nesse caso ele permanece na tela de
- * configuração offline, que reflete se a biblioteca já está configurada.
+ * Só a plataforma HTTP explicitamente configurada oferece login. O desktop usa uma sessão
+ * local sintética apenas depois de confirmar a biblioteca; sem essa confirmação continua
+ * offline e nunca cai no formulário de login.
  */
 export function initialView(user: User | null, config: ConfigState, kind: TransportKind = 'http'): InitialView {
 	if (user) return 'app';
@@ -42,12 +41,21 @@ export async function readConfig(read: () => Promise<PlatformConfig>): Promise<C
 
 /** Estado inicial resolvido na montagem do aplicativo. */
 export type SessionBootstrap = {
-	/** Sessão atual, ou `null` quando não há login. */
+	/** Sessão atual; o desktop configurado recebe uma identidade local sem login. */
 	user: User | null;
 	/** Estado de configuração da plataforma. */
 	config: ConfigState;
 	/** Mensagem legível de falha na leitura da sessão, ou string vazia. */
 	error: string;
+};
+
+/** Identidade local, sem credenciais e sem dados do caminho da biblioteca. */
+export const desktopLocalUser: User = {
+	userId: 'local',
+	username: 'Biblioteca local',
+	role: 'admin',
+	isAdmin: true,
+	mustChangeCredentials: false
 };
 
 /**
@@ -56,12 +64,13 @@ export type SessionBootstrap = {
  * Uma falha ao ler a sessão (por exemplo, rede indisponível no HTTP) não pode ser
  * confundida com "biblioteca não configurada": a configuração da plataforma é lida sempre
  * que não há usuário, inclusive depois de uma falha de `me()`. Assim o HTTP mantém o login
- * disponível com um erro apropriado, enquanto o desktop continua sem oferecer login quando
- * a configuração é `unconfigured`/`unknown`.
+ * disponível com um erro apropriado. No desktop, uma configuração confirmada vira uma
+ * identidade local sem credenciais; estados `unconfigured`/`unknown` continuam offline.
  */
 export async function resolveSession(
 	readSession: () => Promise<User | null>,
-	readPlatformConfig: () => Promise<PlatformConfig>
+	readPlatformConfig: () => Promise<PlatformConfig>,
+	kind: TransportKind = 'http'
 ): Promise<SessionBootstrap> {
 	let user: User | null = null;
 	let error = '';
@@ -71,5 +80,6 @@ export async function resolveSession(
 		error = 'Não foi possível conectar ao serviço.';
 	}
 	const config = user ? 'unknown' : await readConfig(readPlatformConfig);
+	if (!user && kind === 'desktop' && config === 'configured') user = desktopLocalUser;
 	return { user, config, error };
 }

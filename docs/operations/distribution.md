@@ -11,23 +11,38 @@ desenvolvimento.
 | --- | --- | --- | --- |
 | Linux | binário nativo | Servidor, terminal e instalações leves | Disponível |
 | Self-hosted | imagem OCI Rust (Docker/Podman) | Deploy opcional em servidor | Em validação OCI/Compose |
-| Windows | instalador `.exe` via NSIS | Execução local e instalação gerenciada | Planejado |
-| Desktop Linux | Flatpak | Formato Linux preferencial do desktop | Planejado, sujeito a validação técnica |
+| Windows | instalador `.exe` via NSIS | Execução local e instalação gerenciada | Automatizado, não assinado |
+| Desktop Linux | Flatpak | Formato Linux preferencial do desktop | Bloqueado até substituir o acesso amplo por seleção via portal |
 
-Não há `.deb` nem `.rpm` como artefatos públicos nesta fase; o Flatpak é o formato Linux
-preferencial do desktop.
+Não há `.deb` nem `.rpm` como artefatos públicos nesta fase. O instalador Windows NSIS continua
+habilitado no release automático; o Flatpak não é construído nem publicado automaticamente.
 
 ## Limites de build
 
 - O comando Go em `services/go/cmd/learnvault` é a fonte da verdade para builds executáveis da
   implementação atual. Na reescrita, cada binário Rust passa a ser a fonte da verdade do seu alvo.
 - A SPA é construída uma vez e embutida no executável.
-- Receitas de pacotes ficarão em `deploy/packages/` quando forem implementadas.
+- As receitas de pacotes ficam em `deploy/packages/` e são consumidas pelo workflow de release.
 - Definições de containers ficam em `deploy/container/`, `deploy/compose/` e `deploy/quadlet/`.
 - Containers não podem definir comportamento que o binário não possui.
 - O CI deve construir cada artefato de plataforma antes de montar instaladores.
 - Release Please controla changelog e metadados do GitHub Release.
 - O workflow de publicação adiciona binários versionados e `SHA256SUMS` ao release existente.
+- O workflow `.github/workflows/release.yml` é acionado quando o GitHub Release é publicado. Ele
+  exige uma tag estrita `vX.Y.Z`, constrói os assets Go Linux existentes e o instalador NSIS nativo
+  do Windows, e só então publica esses artefatos no release. O Flatpak está deliberadamente fora
+  desse fluxo até que o bloqueio de permissões seja resolvido.
+- Os artefatos desktop são deliberadamente **não assinados**: nenhum certificado ou segredo de
+  assinatura é usado nesta etapa. Verifique `SHA256SUMS` antes de distribuir um download.
+
+### Bloqueio do Flatpak
+
+O build e a publicação do Flatpak estão bloqueados enquanto o desktop usar acesso somente leitura
+amplo à home (`--filesystem=home:ro`). Antes de reativar o alvo, a seleção de diretório deve usar
+um portal e conceder somente o acesso persistente escolhido pelo usuário. Os manifestos em
+`deploy/packages/` permanecem versionados para esse trabalho futuro, mas não representam um
+artefato de release atual. Não há acesso de rede nem permissão de escrita na biblioteca; ela
+permanece externa ao diretório da aplicação e nunca é copiada para dados ou backups.
 
 ## Runner self-hosted de validação
 
@@ -52,8 +67,8 @@ Para reativá-lo futuramente, com autorização operacional:
 O empacotamento segue o [ADR 0001](../architecture/adr/0001-reescrita-em-rust.md): NSIS no
 Windows, Flatpak como formato Linux preferencial e imagem OCI mais binário nativo para instalação
 self-hosted. Os builds devem ser versionados e reproduzíveis, sem tornar Docker um requisito
-oculto. O Flatpak permanece sujeito à validação técnica de permissões, acesso persistente às
-bibliotecas e reprodução de mídia.
+oculto. O Flatpak permanece bloqueado até a seleção via portal, a validação do acesso persistente
+às bibliotecas e a reprodução de mídia.
 
 ## Verificação manual de somente leitura
 

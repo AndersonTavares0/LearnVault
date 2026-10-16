@@ -1,10 +1,10 @@
-//! Testes do protocolo de mídia de arquivos pequenos do desktop.
+//! Testes do protocolo de mídia do desktop.
 //!
 //! Não sobem o webview: exercitam o parsing puro (sem sistema de arquivos) e a função
 //! livre `DesktopState::serve_media`, que o handler do protocolo apenas embrulha. O alvo é
 //! o contrato observável — somente `media_id` autorizado, sem caminho vindo do webview,
-//! somente arquivos pequenos/imagens/materiais, status/headers corretos (200/HEAD/206/416),
-//! limite explícito de resposta e nenhuma exposição de caminho ou erro de IO.
+//! imagens/materiais pequenos e mídia por faixa, status/headers corretos (200/HEAD/206/416),
+//! e nenhuma exposição de caminho ou erro de IO.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -33,7 +33,7 @@ fn configured(root: &Path) -> (DesktopState, PathBuf) {
     (state, library)
 }
 
-/// Biblioteca indexada com uma imagem pequena, um material pequeno e arquivos fora do escopo.
+/// Biblioteca indexada com uma imagem pequena, um material pequeno e mídia do curso.
 fn library(root: &Path) -> (DesktopState, PathBuf) {
     let (state, library) = configured(root);
     fs::create_dir_all(library.join("Curso")).unwrap();
@@ -41,6 +41,7 @@ fn library(root: &Path) -> (DesktopState, PathBuf) {
     fs::write(library.join("Curso").join("material.pdf"), b"pdf pequeno").unwrap();
     fs::write(library.join("Curso").join("aula.mp4"), b"video grande").unwrap();
     fs::write(library.join("Curso").join("legenda.vtt"), b"WEBVTT\n").unwrap();
+    fs::write(library.join("Curso").join("audio.mp3"), b"audio").unwrap();
     state.rescan().unwrap();
     (state, library)
 }
@@ -243,7 +244,7 @@ fn rejects_requests_from_another_webview() {
     );
 }
 
-// --- Entrega: 200/HEAD/206/416, limite, MIME e confinamento ---------------------------
+// --- Entrega: 200/HEAD/206/416, MIME e confinamento -----------------------------------
 
 #[test]
 fn serves_a_small_image_with_200_and_safe_headers() {
@@ -370,22 +371,26 @@ fn a_multi_range_request_is_refused() {
 }
 
 #[test]
-fn a_video_or_subtitle_is_never_served_by_the_protocol() {
+fn video_audio_and_subtitle_are_served_by_media_id() {
     let dir = tempfile::tempdir().unwrap();
     let (state, _library) = library(dir.path());
 
     let video = media_id(dir.path(), "Curso/aula.mp4");
-    assert_eq!(
-        serve(&state, &video, "GET", None).status,
-        415,
-        "vídeo/áudio não pertence a esta fatia"
-    );
+    let video_response = serve(&state, &video, "GET", Some("bytes=0-4"));
+    assert_eq!(video_response.status, 206);
+    assert_eq!(video_response.header("Content-Type"), Some("video/mp4"));
+    assert_eq!(video_response.body, b"video");
 
     let subtitle = media_id(dir.path(), "Curso/legenda.vtt");
+    let subtitle_response = serve(&state, &subtitle, "GET", None);
+    assert_eq!(subtitle_response.status, 200);
+    assert_eq!(subtitle_response.header("Content-Type"), Some("text/vtt"));
+
+    let audio = media_id(dir.path(), "Curso/audio.mp3");
+    assert_eq!(serve(&state, &audio, "GET", None).status, 200);
     assert_eq!(
-        serve(&state, &subtitle, "GET", None).status,
-        415,
-        "legendas continuam HTTP-only"
+        serve(&state, &audio, "GET", None).header("Content-Type"),
+        Some("audio/mpeg")
     );
 }
 
@@ -404,7 +409,7 @@ fn an_extension_outside_the_allowlist_is_refused() {
 }
 
 #[test]
-fn a_file_above_the_small_file_cap_is_refused() {
+fn a_material_above_the_small_file_cap_is_refused() {
     let dir = tempfile::tempdir().unwrap();
     let (state, library) = library(dir.path());
     let big = vec![b'a'; (MAX_SMALL_FILE_BYTES + 1) as usize];
@@ -419,6 +424,78 @@ fn a_file_above_the_small_file_cap_is_refused() {
         response.body.is_empty(),
         "um arquivo acima do cap nunca pode ser carregado"
     );
+}
+
+#[test]
+fn scanner_media_and_subtitle_extensions_have_safe_allowlisted_types() {
+    let dir = tempfile::tempdir().unwrap();
+    let (state, library) = library(dir.path());
+    for (extension, expected_type) in [
+        ("mkv", "video/x-matroska"),
+        ("m3u8", "application/vnd.apple.mpegurl"),
+        ("ts", "video/mp2t"),
+        ("srt", "application/x-subrip"),
+        ("ass", "text/x-ass"),
+        ("ssa", "text/x-ssa"),
+        ("aac", "audio/aac"),
+        ("opus", "audio/opus"),
+        ("weba", "audio/webm"),
+        ("wma", "audio/x-ms-wma"),
+    ] {
+        fs::write(
+            library.join("Curso").join(format!("extra.{extension}")),
+            b"media",
+        )
+        .unwrap();
+        state.rescan().unwrap();
+        let id = media_id(dir.path(), &format!("Curso/extra.{extension}"));
+        let response = serve(&state, &id, "GET", None);
+        assert_eq!(response.status, 200, "{extension}");
+        assert_eq!(
+            response.header("Content-Type"),
+            Some(expected_type),
+            "{extension}"
+        );
+    }
+}
+
+#[test]
+fn a_large_media_file_is_read_only_for_the_requested_range() {
+    let dir = tempfile::tempdir().unwrap();
+    let (state, library) = library(dir.path());
+    let big = vec![b'a'; (MAX_SMALL_FILE_BYTES + 1) as usize];
+    fs::write(library.join("Curso").join("grande.mp4"), &big).unwrap();
+    state.rescan().unwrap();
+    let id = media_id(dir.path(), "Curso/grande.mp4");
+
+    let response = serve(&state, &id, "GET", Some("bytes=10-19"));
+
+    assert_eq!(response.status, 206);
+    assert_eq!(response.header("Content-Length"), Some("10"));
+    assert_eq!(response.body, vec![b'a'; 10]);
+}
+
+#[test]
+fn oversized_media_bodies_return_413_without_allocating_them() {
+    let dir = tempfile::tempdir().unwrap();
+    let (state, library) = library(dir.path());
+    let big = vec![b'a'; (MAX_SMALL_FILE_BYTES + 1) as usize];
+    fs::write(library.join("Curso").join("grande.mp4"), &big).unwrap();
+    state.rescan().unwrap();
+    let id = media_id(dir.path(), "Curso/grande.mp4");
+
+    let full = serve(&state, &id, "GET", None);
+    assert_eq!(full.status, 413);
+    assert!(full.body.is_empty());
+
+    let oversized_range = serve(&state, &id, "GET", Some("bytes=0-"));
+    assert_eq!(oversized_range.status, 206);
+    assert_eq!(
+        oversized_range.header("Content-Range"),
+        Some("bytes 0-8388607/8388609")
+    );
+    assert_eq!(oversized_range.header("Content-Length"), Some("8388608"));
+    assert_eq!(oversized_range.body.len(), MAX_SMALL_FILE_BYTES as usize);
 }
 
 #[test]

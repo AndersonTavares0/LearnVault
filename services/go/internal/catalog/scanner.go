@@ -51,7 +51,12 @@ type File struct {
 	Kind string `json:"kind,omitempty"`
 }
 
-var mediaExt = map[string]bool{".mp4": true, ".webm": true, ".mkv": true, ".m3u8": true, ".ts": true}
+var mediaExt = map[string]bool{
+	".mp4": true, ".webm": true, ".mkv": true, ".m3u8": true, ".ts": true,
+	".ogv": true, ".mp3": true, ".wav": true, ".ogg": true, ".oga": true,
+	".m4a": true, ".flac": true, ".aac": true, ".opus": true, ".weba": true,
+	".wma": true,
+}
 var subtitleExt = map[string]bool{".srt": true, ".vtt": true, ".ass": true, ".ssa": true}
 
 // Scan only reads directory entries and file metadata. It never writes to root.

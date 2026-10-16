@@ -66,6 +66,8 @@ legendas e materiais reconhecidos, e trata `.ts` como vídeo somente quando é m
 não confundir TypeScript com MPEG-TS. A biblioteca física é externa, montada como somente leitura e
 nunca é modificada.
 
+No desktop, o protocolo `learnvault-media://localhost/<media-id>` entrega materiais, vídeo, áudio e arquivos de legenda para download usando somente o `media_id` opaco. `GET` e `HEAD` aceitam uma única faixa; respostas completas, parciais e recusadas usam, respectivamente, `200`, `206`, `413` (corpo acima do limite) ou `416` (faixa inválida ou múltipla), com `Content-Range` quando aplicável. No Windows, a SPA usa `http://learnvault-media.localhost/<media-id>` e o runtime reverte a origem antes do handler. O player desktop usa essa fonte local, renderiza legendas VTT e sincroniza posição e conclusão pelo IPC de Study; SRT, ASS e SSA ficam disponíveis para download, e o build HTTP pode converter SRT sob demanda.
+
 O rescan é uma atualização preservadora, não uma substituição: ele insere arquivos novos, atualiza
 os conhecidos no mesmo caminho (reutilizando o `media_id`, inclusive após um arquivo ausente
 reaparecer) e marca como ausentes os que deixaram de aparecer. Nenhum rescan exclui registros,
@@ -129,8 +131,6 @@ posição negativa vira `invalid_position` e as demais falhas viram `study_unava
 continua valendo. Os comandos não exigem raiz de biblioteca configurada e nunca gravam `media`,
 `scan`, `library` nem a biblioteca física.
 
-Limitação desta fatia: o desktop atende um único dono local, sem sessão nem seletor de contas, e
-ainda não entrega a mídia ao player — sem reprodução não há posição real, então a barra de estudo
-do player permanece fechada (a entrega parcial de mídia está em #76, Draft, não mesclada).
+Limitação desta fatia: o desktop atende um único dono local, sem sessão nem seletor de contas.
 
 Para limites de arquitetura e deploy, consulte a [visão de arquitetura](../architecture/overview.md).
