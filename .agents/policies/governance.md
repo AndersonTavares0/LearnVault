@@ -5,6 +5,10 @@
   documents ownership but is not a mandatory approval gate.
 - Dependabot upgrades need a compatibility review and current required checks; green checks
   on an outdated base are insufficient.
+- Automatic pull request labeling (`.github/labeler.yml` and the `Labeler` workflow) is
+  informational only: it is not a required check, does not gate merge, and does not classify
+  security or work type. Labels referenced by the configuration must already exist in the
+  repository.
 - Use `.github/pull_request_template.md` and replace every prompt with factual content.
 - The repository is canonical for policy and documentation. Managed Wiki pages are derived
   after merge and must not be edited manually.

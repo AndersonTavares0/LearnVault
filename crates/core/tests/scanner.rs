@@ -10,7 +10,7 @@ use std::time::UNIX_EPOCH;
 
 use learnvault_core::Error;
 use learnvault_core::paths::KeyMode;
-use learnvault_core::scanner::{MediaKind, ScanOutcome, scan};
+use learnvault_core::scanner::{MediaKind, ScanOutcome, classify, scan};
 
 fn write_file(root: &Path, relative: &str, bytes: &[u8]) -> PathBuf {
     let path = root.join(relative);
@@ -169,6 +169,18 @@ fn uppercase_extensions_are_classified() {
     assert_eq!(kind_of(&outcome, "LEGENDA.SRT"), MediaKind::Subtitle);
 }
 
+/// Um nome terminado em ponto tem extensão vazia e precisa ser material em
+/// qualquer sistema de arquivos. O NTFS não representa esse nome — normaliza
+/// `aula.` para `aula` — então a classificação é verificada diretamente no
+/// classificador, sem depender da representação do host. Regressão para a
+/// Issue #71: a checagem nunca é pulada por causa da plataforma.
+#[test]
+fn trailing_dot_names_are_material_regardless_of_filesystem() {
+    assert_eq!(classify("aula.", 1), MediaKind::Material);
+    assert_eq!(classify("AULA.", 1), MediaKind::Material);
+    assert_eq!(classify("aula.mp4.", 1), MediaKind::Material);
+}
+
 #[test]
 fn files_without_extension_or_with_trailing_dot_are_material() {
     let directory = tempfile::tempdir().unwrap();
@@ -176,17 +188,26 @@ fn files_without_extension_or_with_trailing_dot_are_material() {
     write_file(root, "README", b"x");
     write_file(root, "aula.mp4.srt", b"x");
     // O NTFS não representa nomes terminados em ponto: no Windows, "aula." é
-    // criado como "aula" e o caso não existe para a varredura do host.
-    if !cfg!(windows) {
-        write_file(root, "aula.", b"x");
-    }
+    // criado como "aula". Escrevemos a fixture de todo modo e verificamos o nome
+    // que o host realmente representa, em vez de pular a asserção.
+    write_file(root, "aula.", b"x");
+    let represents_trailing_dot = fs::read_dir(root)
+        .unwrap()
+        .any(|entry| entry.unwrap().file_name().to_string_lossy().eq("aula."));
+    let trailing_dot_fixture = if represents_trailing_dot {
+        "aula."
+    } else {
+        "aula"
+    };
 
     let outcome = scan(root).unwrap();
 
     assert_eq!(kind_of(&outcome, "README"), MediaKind::Material);
-    if !cfg!(windows) {
-        assert_eq!(kind_of(&outcome, "aula."), MediaKind::Material);
-    }
+    assert_eq!(
+        kind_of(&outcome, trailing_dot_fixture),
+        MediaKind::Material,
+        "o nome {trailing_dot_fixture:?} deveria ser material"
+    );
     assert_eq!(kind_of(&outcome, "aula.mp4.srt"), MediaKind::Subtitle);
 }
 
