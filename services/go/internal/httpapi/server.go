@@ -552,9 +552,10 @@ func (s *Server) knownStudyMedia(ctx context.Context, mediaPath string) (bool, e
 	if _, ok := removed[mediaPath]; !ok {
 		return false, nil
 	}
-	// A tombstoned path no longer carries catalog metadata, so playability is decided by
-	// extension alone; subtitles and materials still stay unknown.
-	return catalog.IsMediaExtension(mediaPath), nil
+	// A tombstoned path no longer carries catalog metadata, so `.ts` is ambiguous (a
+	// segment-sized `.ts` is a material). Only unambiguously playable extensions are
+	// accepted; subtitles, materials and tombstoned `.ts` stay unknown.
+	return catalog.IsUnambiguousMediaExtension(mediaPath), nil
 }
 
 // studyStateResponse is the client-facing progress of one media. updated_at is null when

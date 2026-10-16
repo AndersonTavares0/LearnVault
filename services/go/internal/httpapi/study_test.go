@@ -698,3 +698,58 @@ func TestStudyConcurrentSameKeyWritesAreSerialized(t *testing.T) {
 		t.Fatalf("final position = %v; want one of the concurrent writes", finalPosition)
 	}
 }
+
+// TestStudyTombstonedTsMaterialIsNotEligible cobre o P1: ao remover a mídia, o tombstone
+// não guarda o tamanho, então um `.ts` de segmento (material no catálogo) não pode virar
+// sujeito de estudo só pela extensão. Um `.ts` tombstonado é ambíguo e recusado; apenas
+// extensões inequivocamente reproduzíveis (aqui `.mp4`) continuam elegíveis após a remoção.
+func TestStudyTombstonedTsMaterialIsNotEligible(t *testing.T) {
+	db := openTestDB(t)
+	const lesson = "cat/curso/modulo/aula"
+	value := catalog.Catalog{Nodes: []catalog.Node{{
+		Title: "cat", Path: "cat", Role: "category",
+		Children: []catalog.Node{{
+			Title: "aula", Path: lesson, Role: "lesson",
+			Files: []catalog.File{
+				{Name: "video.mp4", Path: lesson + "/video.mp4", Size: 10},
+				{Name: "segment.ts", Path: lesson + "/segment.ts", Size: 512},
+				{Name: "movie.ts", Path: lesson + "/movie.ts", Size: 2 * 1024 * 1024},
+			},
+		}},
+	}}}
+	if err := db.ReplaceCatalog(context.Background(), value); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.BootstrapAdmin(context.Background(), "owner", "a sufficiently long password"); err != nil {
+		t.Fatal(err)
+	}
+	srv := NewWithOptions(db, false)
+	cookie := studySessionFor(t, db)
+	for _, media := range []string{"video.mp4", "segment.ts", "movie.ts"} {
+		if err := db.RemoveMedia(context.Background(), lesson+"/"+media); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// A small `.ts` was material in the catalog and a large `.ts` was media, but the
+	// tombstone cannot tell them apart, so both are conservatively rejected.
+	for _, excluded := range []string{"segment.ts", "movie.ts"} {
+		recorder := httptest.NewRecorder()
+		srv.ServeHTTP(recorder, studyRequest(http.MethodGet, "/api/study/progress?media_id="+lesson+"/"+excluded, cookie, "", false))
+		if recorder.Code != http.StatusNotFound {
+			t.Fatalf("tombstoned %s = %d; want 404 (body %s)", excluded, recorder.Code, recorder.Body.String())
+		}
+	}
+
+	eligible := lesson + "/video.mp4"
+	read := httptest.NewRecorder()
+	srv.ServeHTTP(read, studyRequest(http.MethodGet, "/api/study/progress?media_id="+eligible, cookie, "", false))
+	if read.Code != http.StatusOK {
+		t.Fatalf("tombstoned media = %d; want 200 (body %s)", read.Code, read.Body.String())
+	}
+	write := httptest.NewRecorder()
+	srv.ServeHTTP(write, studyRequest(http.MethodPost, "/api/study/position", cookie, `{"media_id":"`+eligible+`","position_seconds":42}`, true))
+	if write.Code != http.StatusOK {
+		t.Fatalf("tombstoned media write = %d; want 200 (body %s)", write.Code, write.Body.String())
+	}
+}

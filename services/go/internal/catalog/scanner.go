@@ -179,6 +179,15 @@ func IsMediaName(name string, size int64) bool {
 	return !strings.EqualFold(filepath.Ext(name), ".ts") || size >= 1024*1024
 }
 
+// IsUnambiguousMediaExtension reports whether a name's extension identifies playable media
+// without needing the `.ts` size rule. `.ts` is deliberately excluded: the scanner treats a
+// segment-sized `.ts` as material, so without size metadata (for example a removal
+// tombstone that no longer carries the catalog file) the classification is ambiguous and
+// must not be resolved in favor of media.
+func IsUnambiguousMediaExtension(name string) bool {
+	return IsMediaExtension(name) && !strings.EqualFold(filepath.Ext(name), ".ts")
+}
+
 // validateReadableTree is deliberately performed before building any result. A directory
 // walk that loses a subtree must never look like an empty subtree and replace a valid catalog.
 // The HTTP rescan persists only the value returned by Scan, so this is the fail-closed boundary.
