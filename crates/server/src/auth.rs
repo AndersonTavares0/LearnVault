@@ -1,17 +1,13 @@
 //! Primitivas de autenticação do servidor.
 
 use crate::{AppState, StateError, catalog::service_unavailable};
-use argon2::{
-    Algorithm, Argon2, Params, PasswordHash, PasswordHasher, PasswordVerifier, Version,
-    password_hash::SaltString,
-};
+use argon2::{Algorithm, Argon2, Params, PasswordHash, PasswordHasher, PasswordVerifier, Version};
 use axum::{
     Json,
     extract::State,
     http::{HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
-use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -54,10 +50,8 @@ pub(crate) fn hash_password_unchecked(password: &str) -> Result<String, AuthErro
     )
     .map_err(|_| AuthError::PasswordHashing)?;
     let argon = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
-    let mut rng = OsRng;
-    let salt = SaltString::generate(&mut rng);
     argon
-        .hash_password(password.as_bytes(), &salt)
+        .hash_password(password.as_bytes())
         .map(|hash| hash.to_string())
         .map_err(|_| AuthError::PasswordHashing)
 }
@@ -473,7 +467,6 @@ fn csrf_failed() -> Response {
 #[cfg(test)]
 mod tests {
     use argon2::{Argon2, PasswordHash, password_hash::PasswordVerifier};
-    use base64::{Engine, engine::general_purpose::STANDARD_NO_PAD};
 
     use super::{
         generate_session_token, hash_password, hash_session_token, validate_current_password,
@@ -489,13 +482,9 @@ mod tests {
         assert_eq!(parsed.params.get_decimal("m").unwrap(), 65_536);
         assert_eq!(parsed.params.get_decimal("t").unwrap(), 2);
         assert_eq!(parsed.params.get_decimal("p").unwrap(), 1);
-        assert_eq!(
-            STANDARD_NO_PAD
-                .decode(parsed.salt.unwrap().as_str())
-                .unwrap()
-                .len(),
-            16
-        );
+        // `Salt` agora armazena os bytes decodificados; 16 bytes é o tamanho do
+        // salt recomendado e o mesmo produzido pelo argon2 0.5.
+        assert_eq!(parsed.salt.unwrap().as_ref().len(), 16);
         assert_eq!(parsed.hash.unwrap().as_bytes().len(), 32);
         assert!(
             Argon2::default()
