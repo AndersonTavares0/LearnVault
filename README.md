@@ -23,8 +23,8 @@ com `Range` e API de estudo) já estão implementados, junto da SPA Svelte 5 + V
 builds. As entregas mescladas #86, #88, #90 e #91 alinham Study no servidor Rust, na SPA web e
 no serviço Go de referência, além de avançarem o desktop com configuração, seleção da raiz,
 catálogo e rescan explícito. O desktop Tauri e a distribuição por plataforma com a remoção do
-serviço Go (Fase 5) **ainda não estão concluídos**. A entrega parcial de mídia do desktop está
-em #76 (Draft) e não faz parte da `main`; autenticação desktop, janelas reais, streaming
+serviço Go (Fase 5) **ainda não estão concluídos**. A entrega de mídia de arquivos pequenos do
+desktop chegou na #76; vídeo/áudio, autenticação desktop, janelas reais, streaming
 completo, migração do banco e distribuição continuam gates explícitos.
 
 ## Comece aqui

@@ -131,6 +131,7 @@ continua valendo. Os comandos não exigem raiz de biblioteca configurada e nunca
 
 Limitação desta fatia: o desktop atende um único dono local, sem sessão nem seletor de contas, e
 ainda não entrega a mídia ao player — sem reprodução não há posição real, então a barra de estudo
-do player permanece fechada (a entrega parcial de mídia está em #76, Draft, não mesclada).
+do player permanece fechada (a entrega de arquivos pequenos está mesclada desde a #76; vídeo e
+áudio seguem fora do protocolo).
 
 Para limites de arquitetura e deploy, consulte a [visão de arquitetura](../architecture/overview.md).
