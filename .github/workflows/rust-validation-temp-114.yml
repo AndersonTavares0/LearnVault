@@ -28,6 +28,17 @@ jobs:
           fetch-depth: 1
       - name: Require non-root runner
         run: test "$(id -u)" -ne 0
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install SPA dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build SPA
+        run: pnpm --filter learnvault-web build
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Run Clippy
