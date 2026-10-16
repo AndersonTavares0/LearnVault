@@ -54,6 +54,33 @@ COMPOSE="docker compose --env-file deploy/compose/.env.example -f deploy/compose
   biblioteca real.
 - Não faz parte do CI; é uma verificação manual.
 
+## Validação experimental da imagem Rust (OCI)
+
+Enquanto a reescrita em Rust avança, `deploy/container/Containerfile.rust` e
+`scripts/verify-rust-oci.sh` permitem validar localmente que o servidor Rust
+(`crates/server`) compila a partir do repositório e roda em um contêiner. Ambos são
+experimentais e não publicam nada: `deploy/container/Containerfile` (Go) continua sendo a
+imagem suportada por Compose, Quadlet, workflow de release e CI.
+
+```sh
+./scripts/verify-rust-oci.sh
+CONTAINER_ENGINE=podman ./scripts/verify-rust-oci.sh
+```
+
+- Exige Docker ou Podman e acesso à rede para baixar as dependências Rust durante o build.
+  Sem um dos dois, o script encerra com erro explicando o pré-requisito.
+- Usa uma fixture sintética gerada em diretório temporário (removido ao final) e a monta
+  como `/library` somente leitura; nunca aponta para uma biblioteca real.
+- Verifica a versão do binário, `/api/healthz` (200 com `no-store`), o
+  `HEALTHCHECK` da imagem (`healthy`), a rejeição não autenticada de `/api/catalog` e
+  `/api/media` (401), a execução como usuário não-root (uid 10001) sem privilégios
+  adicionais e sem capabilities, a gravação em `/data`, a montagem somente leitura e o
+  bloqueio de escrita em `/library`, o bloqueio de escrita na raiz do contêiner, a
+  recuperação após reinício com persistência dos dados e a remoção do contêiner ao final.
+- O servidor Rust ainda não possui interface de cache (`CACHE_DIR`); não há diretório de
+  cache para validar nesta fase.
+- Não faz parte do CI e não substitui `cargo fmt`, `cargo clippy` e `cargo test`.
+
 ## Modelo de configuração
 
 Instalações nativas usam variáveis de ambiente ou arquivo de configuração adjacente para
