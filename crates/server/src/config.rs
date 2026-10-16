@@ -104,9 +104,8 @@ where
     let mut listen_addr = None;
     let data_dir = env("DATA_DIR").unwrap_or_else(|| "data".to_owned());
     let mut database_path = PathBuf::from(data_dir).join("learnvault.sqlite");
-    let mut library_root = PathBuf::from(
-        env("LIBRARY_DIR").unwrap_or_else(|| DEFAULT_LIBRARY_ROOT.to_owned()),
-    );
+    let mut library_root =
+        PathBuf::from(env("LIBRARY_DIR").unwrap_or_else(|| DEFAULT_LIBRARY_ROOT.to_owned()));
     let mut web_root = None;
     let mut admin_username = env("ADMIN_USERNAME").filter(|value| !value.is_empty());
     let admin_password = env("ADMIN_PASSWORD").filter(|value| !value.is_empty());
@@ -125,7 +124,7 @@ where
                 let value = next_value(&mut args)?;
                 listen_addr = Some(
                     value
-                        .parse()
+                        .parse::<SocketAddr>()
                         .map_err(|_| ConfigError::InvalidListenAddress)?,
                 );
             }
@@ -150,14 +149,18 @@ where
         return Err(ConfigError::InvalidDatabasePath);
     }
 
-    let listen_addr = listen_addr
-        .unwrap_or(listen_addr_from_env(&env_listen_addr, &env_port)?);
-    let cookie_secure = cookie_secure
-        .or(env_cookie_secure
+    let listen_addr = match listen_addr {
+        Some(address) => address,
+        None => listen_addr_from_env(&env_listen_addr, &env_port)?,
+    };
+    let cookie_secure = match cookie_secure {
+        Some(value) => value,
+        None => env_cookie_secure
             .as_deref()
             .map(parse_bool)
-            .transpose()?)
-        .unwrap_or(true);
+            .transpose()?
+            .unwrap_or(true),
+    };
 
     let library_root = library_root
         .canonicalize()
@@ -221,7 +224,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashMap, path::Path};
+    use std::{
+        collections::HashMap,
+        path::{Path, PathBuf},
+    };
 
     use super::{Command, ConfigError, parse_command_with_env};
 
@@ -240,10 +246,9 @@ mod tests {
             ("COOKIE_SECURE", "false"),
         ]);
 
-        let command = parse_command_with_env(
-            ["learnvault-server"],
-            |key| environment.get(key).copied().map(str::to_owned),
-        )
+        let command = parse_command_with_env(["learnvault-server"], |key| {
+            environment.get(key).copied().map(str::to_owned)
+        })
         .unwrap();
         let Command::Run(config) = command else {
             panic!("expected run command");
@@ -290,7 +295,7 @@ mod tests {
         };
 
         assert_eq!(config.listen_addr.to_string(), "127.0.0.1:9090");
-        assert_eq!(config.database_path, "custom.sqlite".into());
+        assert_eq!(config.database_path, PathBuf::from("custom.sqlite"));
         assert_eq!(config.library_root, canonical(&cli_library));
         assert!(!config.cookie_secure);
     }
@@ -305,10 +310,9 @@ mod tests {
             ("COOKIE_SECURE", "not-a-secret-value"),
         ]);
 
-        let error = parse_command_with_env(
-            ["learnvault-server"],
-            |key| environment.get(key).copied().map(str::to_owned),
-        )
+        let error = parse_command_with_env(["learnvault-server"], |key| {
+            environment.get(key).copied().map(str::to_owned)
+        })
         .unwrap_err();
 
         assert_eq!(error, ConfigError::InvalidArgument);
@@ -326,10 +330,9 @@ mod tests {
             ("ADMIN_PASSWORD", ""),
         ]);
 
-        let command = parse_command_with_env(
-            ["learnvault-server"],
-            |key| environment.get(key).copied().map(str::to_owned),
-        )
+        let command = parse_command_with_env(["learnvault-server"], |key| {
+            environment.get(key).copied().map(str::to_owned)
+        })
         .unwrap();
         let Command::Run(config) = command else {
             panic!("expected run command");

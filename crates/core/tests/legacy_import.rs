@@ -60,10 +60,13 @@ fn options(dir: &TempDir, input: &Path) -> LegacyImportOptions {
 fn imports_users_media_sessions_progress_and_removals_after_backup() {
     let dir = tempfile::tempdir().unwrap();
     let input = legacy_fixture(&dir);
-    Connection::open(&input).unwrap().execute(
-        "UPDATE sessions SET expires_at = '2030-01-01T00:00:00.123456789Z'",
-        [],
-    ).unwrap();
+    Connection::open(&input)
+        .unwrap()
+        .execute(
+            "UPDATE sessions SET expires_at = '2030-01-01T00:00:00.123456789Z'",
+            [],
+        )
+        .unwrap();
     let report = import_go_database(options(&dir, &input)).unwrap();
 
     assert_eq!(report.users, 1);
@@ -73,20 +76,59 @@ fn imports_users_media_sessions_progress_and_removals_after_backup() {
     assert_eq!(report.removals, 1);
     assert!(dir.path().join("go.sqlite.backup").is_file());
     let db = learnvault_core::Database::open(dir.path().join("rust.sqlite")).unwrap();
-    assert_eq!(db.connection().query_row("SELECT COUNT(*) FROM user", [], |r| r.get::<_, i64>(0)).unwrap(), 1);
-    assert_eq!(db.connection().query_row("SELECT expires_at FROM session", [], |r| r.get::<_, i64>(0)).unwrap(), 1893456000);
-    assert_eq!(db.connection().query_row("SELECT relative_path FROM media WHERE relative_path = 'Curso/Aula/video.mp4'", [], |r| r.get::<_, String>(0)).unwrap(), "Curso/Aula/video.mp4");
-    assert_eq!(db.connection().query_row("SELECT COUNT(*) FROM media WHERE relative_path = 'root.pdf' AND size = 7", [], |r| r.get::<_, i64>(0)).unwrap(), 1);
-    assert_eq!(db.connection().query_row("SELECT must_change_credentials FROM user", [], |r| r.get::<_, i64>(0)).unwrap(), 1);
+    assert_eq!(
+        db.connection()
+            .query_row("SELECT COUNT(*) FROM user", [], |r| r.get::<_, i64>(0))
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        db.connection()
+            .query_row("SELECT expires_at FROM session", [], |r| r.get::<_, i64>(0))
+            .unwrap(),
+        1893456000
+    );
+    assert_eq!(
+        db.connection()
+            .query_row(
+                "SELECT relative_path FROM media WHERE relative_path = 'Curso/Aula/video.mp4'",
+                [],
+                |r| r.get::<_, String>(0)
+            )
+            .unwrap(),
+        "Curso/Aula/video.mp4"
+    );
+    assert_eq!(
+        db.connection()
+            .query_row(
+                "SELECT COUNT(*) FROM media WHERE relative_path = 'root.pdf' AND size = 7",
+                [],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        db.connection()
+            .query_row("SELECT must_change_credentials FROM user", [], |r| r
+                .get::<_, i64>(0))
+            .unwrap(),
+        1
+    );
 }
 
 #[test]
 fn rejects_schema_other_than_go_v8_before_backup() {
     let dir = tempfile::tempdir().unwrap();
     let input = legacy_fixture(&dir);
-    Connection::open(&input).unwrap().execute("DELETE FROM schema_migrations WHERE version = 8", []).unwrap();
+    Connection::open(&input)
+        .unwrap()
+        .execute("DELETE FROM schema_migrations WHERE version = 8", [])
+        .unwrap();
     let result = import_go_database(options(&dir, &input));
-    assert!(matches!(result, Err(Error::LegacyImportInvalidValue { field, .. }) if field == "schema_migrations"));
+    assert!(
+        matches!(result, Err(Error::LegacyImportInvalidValue { field, .. }) if field == "schema_migrations")
+    );
     assert!(!dir.path().join("go.sqlite.backup").exists());
 }
 
@@ -97,7 +139,9 @@ fn refuses_existing_output_without_replacing_it() {
     let options = options(&dir, &input);
     std::fs::write(&options.output, b"sentinel").unwrap();
     let result = import_go_database(options.clone());
-    assert!(matches!(result, Err(Error::LegacyImportInvalidValue { field, .. }) if field == "output/backup"));
+    assert!(
+        matches!(result, Err(Error::LegacyImportInvalidValue { field, .. }) if field == "output/backup")
+    );
     assert_eq!(std::fs::read(options.output).unwrap(), b"sentinel");
 }
 
@@ -107,23 +151,34 @@ fn backup_includes_uncheckpointed_wal_data() {
     let input = legacy_fixture(&dir);
     let writer = Connection::open(&input).unwrap();
     writer.pragma_update(None, "journal_mode", "WAL").unwrap();
-    writer.execute("UPDATE users SET username = 'WalAlice'", []).unwrap();
+    writer
+        .execute("UPDATE users SET username = 'WalAlice'", [])
+        .unwrap();
 
     let report = import_go_database(options(&dir, &input)).unwrap();
     assert_eq!(report.users, 1);
     let backup = Connection::open(dir.path().join("go.sqlite.backup")).unwrap();
-    assert_eq!(backup.query_row("SELECT username FROM users", [], |r| r.get::<_, String>(0)).unwrap(), "WalAlice");
+    assert_eq!(
+        backup
+            .query_row("SELECT username FROM users", [], |r| r.get::<_, String>(0))
+            .unwrap(),
+        "WalAlice"
+    );
 }
 
 #[test]
 fn rejects_orphan_study_state_without_promoting_output() {
     let dir = tempfile::tempdir().unwrap();
     let input = legacy_fixture(&dir);
-    Connection::open(&input).unwrap().execute(
-        "UPDATE study_state SET media_path = 'missing.mp4'", [],
-    ).unwrap();
+    Connection::open(&input)
+        .unwrap()
+        .execute("UPDATE study_state SET media_path = 'missing.mp4'", [])
+        .unwrap();
     let output = options(&dir, &input).output.clone();
-    assert!(matches!(import_go_database(options(&dir, &input)), Err(Error::LegacyImportOrphan { .. })));
+    assert!(matches!(
+        import_go_database(options(&dir, &input)),
+        Err(Error::LegacyImportOrphan { .. })
+    ));
     assert!(!output.exists());
 }
 
@@ -131,9 +186,15 @@ fn rejects_orphan_study_state_without_promoting_output() {
 fn rejects_invalid_role_and_leaves_source_unchanged() {
     let dir = tempfile::tempdir().unwrap();
     let input = legacy_fixture(&dir);
-    Connection::open(&input).unwrap().execute("UPDATE users SET role = 'owner'", []).unwrap();
+    Connection::open(&input)
+        .unwrap()
+        .execute("UPDATE users SET role = 'owner'", [])
+        .unwrap();
     let before = std::fs::read(&input).unwrap();
-    assert!(matches!(import_go_database(options(&dir, &input)), Err(Error::LegacyImportInvalidValue { .. })));
+    assert!(matches!(
+        import_go_database(options(&dir, &input)),
+        Err(Error::LegacyImportInvalidValue { .. })
+    ));
     assert_eq!(std::fs::read(&input).unwrap(), before);
 }
 
@@ -144,36 +205,58 @@ fn rejects_normalized_path_collision() {
     Connection::open(&input).unwrap().execute(
         "INSERT INTO catalog_files VALUES (2, 2, 'Curso/Aula/video.mp4', 'video.mp4', 'media', 42)", [],
     ).unwrap();
-    assert!(matches!(import_go_database(options(&dir, &input)), Err(Error::LegacyImportCollision { .. })));
+    assert!(matches!(
+        import_go_database(options(&dir, &input)),
+        Err(Error::LegacyImportCollision { .. })
+    ));
 }
 
 #[test]
 fn rejects_case_folded_collision_on_case_insensitive_hosts() {
-    if !cfg!(windows) { return; }
+    if !cfg!(windows) {
+        return;
+    }
     let dir = tempfile::tempdir().unwrap();
     let input = legacy_fixture(&dir);
     Connection::open(&input).unwrap().execute(
         "INSERT INTO catalog_files VALUES (2, 2, 'curso/aula/VIDEO.mp4', 'video.mp4', 'media', 42)", [],
     ).unwrap();
-    assert!(matches!(import_go_database(options(&dir, &input)), Err(Error::LegacyImportCollision { .. })));
+    assert!(matches!(
+        import_go_database(options(&dir, &input)),
+        Err(Error::LegacyImportCollision { .. })
+    ));
 }
 
 #[test]
 fn path_policy_rejects_nul_and_only_rejects_colon_on_windows() {
     let dir = tempfile::tempdir().unwrap();
     let input = legacy_fixture(&dir);
-    Connection::open(&input).unwrap().execute(
-        "UPDATE catalog_files SET path = 'Curso/Aula/bad' || char(0) || '.mp4'", [],
-    ).unwrap();
-    assert!(matches!(import_go_database(options(&dir, &input)), Err(Error::LegacyImportInvalidPath { .. })));
+    Connection::open(&input)
+        .unwrap()
+        .execute(
+            "UPDATE catalog_files SET path = 'Curso/Aula/bad' || char(0) || '.mp4'",
+            [],
+        )
+        .unwrap();
+    assert!(matches!(
+        import_go_database(options(&dir, &input)),
+        Err(Error::LegacyImportInvalidPath { .. })
+    ));
 
     let dir = tempfile::tempdir().unwrap();
     let input = legacy_fixture(&dir);
-    Connection::open(&input).unwrap().execute(
-        "UPDATE catalog_files SET path = 'Curso/Aula/name:part.mp4'", [],
-    ).unwrap();
+    Connection::open(&input)
+        .unwrap()
+        .execute(
+            "UPDATE catalog_files SET path = 'Curso/Aula/name:part.mp4'",
+            [],
+        )
+        .unwrap();
     if cfg!(windows) {
-        assert!(matches!(import_go_database(options(&dir, &input)), Err(Error::LegacyImportInvalidPath { .. })));
+        assert!(matches!(
+            import_go_database(options(&dir, &input)),
+            Err(Error::LegacyImportInvalidPath { .. })
+        ));
     } else {
         assert!(import_go_database(options(&dir, &input)).is_ok());
     }
@@ -183,11 +266,17 @@ fn path_policy_rejects_nul_and_only_rejects_colon_on_windows() {
 fn orphan_tombstone_is_reported_instead_of_silently_dropped() {
     let dir = tempfile::tempdir().unwrap();
     let input = legacy_fixture(&dir);
-    Connection::open(&input).unwrap().execute(
-        "INSERT INTO media_removal VALUES ('missing.mp4', 1760000000, 1)", [],
-    ).unwrap();
+    Connection::open(&input)
+        .unwrap()
+        .execute(
+            "INSERT INTO media_removal VALUES ('missing.mp4', 1760000000, 1)",
+            [],
+        )
+        .unwrap();
     let result = import_go_database(options(&dir, &input));
-    assert!(matches!(result, Err(Error::LegacyImportOrphan { relation, .. }) if relation == "media_removal.relative_path"));
+    assert!(
+        matches!(result, Err(Error::LegacyImportOrphan { relation, .. }) if relation == "media_removal.relative_path")
+    );
     assert!(!dir.path().join("rust.sqlite").exists());
 }
 
@@ -195,8 +284,13 @@ fn orphan_tombstone_is_reported_instead_of_silently_dropped() {
 fn rejects_tombstone_with_unrepresentable_media_flag() {
     let dir = tempfile::tempdir().unwrap();
     let input = legacy_fixture(&dir);
-    Connection::open(&input).unwrap().execute("UPDATE media_removal SET is_media = 0", []).unwrap();
+    Connection::open(&input)
+        .unwrap()
+        .execute("UPDATE media_removal SET is_media = 0", [])
+        .unwrap();
     let result = import_go_database(options(&dir, &input));
-    assert!(matches!(result, Err(Error::LegacyImportInvalidValue { field, .. }) if field == "media_removal.is_media"));
+    assert!(
+        matches!(result, Err(Error::LegacyImportInvalidValue { field, .. }) if field == "media_removal.is_media")
+    );
     assert!(!dir.path().join("rust.sqlite").exists());
 }

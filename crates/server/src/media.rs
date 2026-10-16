@@ -260,9 +260,7 @@ fn content_disposition(path: &str) -> Option<HeaderValue> {
     let filename: String = basename
         .chars()
         .map(|character| {
-            if character.is_ascii_alphanumeric()
-                || matches!(character, '.' | '_' | '-')
-            {
+            if character.is_ascii_alphanumeric() || matches!(character, '.' | '_' | '-') {
                 character
             } else {
                 '_'
@@ -326,7 +324,10 @@ mod tests {
                 "attachment; filename=\"unsafe_name.svg\"",
             ),
         ] {
-            assert_eq!(content_disposition(path).unwrap().to_str().unwrap(), expected);
+            assert_eq!(
+                content_disposition(path).unwrap().to_str().unwrap(),
+                expected
+            );
         }
     }
 
