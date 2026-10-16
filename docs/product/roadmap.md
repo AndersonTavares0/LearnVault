@@ -77,18 +77,19 @@ A matriz aprovada está no [ADR 0001](../architecture/adr/0001-reescrita-em-rust
 
 - [ ] Manter o núcleo compilável sem Docker ou Podman
 - [x] Publicar instalador Windows `.exe` via NSIS (não assinado)
-- [ ] Publicar Flatpak como formato Linux preferencial do desktop — bloqueado até substituir
-  `--filesystem=home:ro` por seleção de diretório via portal, com acesso persistente somente ao
-  diretório escolhido; os manifestos permanecem preservados para esse trabalho
+- [ ] Publicar Flatpak como formato Linux preferencial do desktop — a seleção usa o backend
+  oficial `xdg-portal` no Linux e o manifesto não concede filesystem amplo; ainda faltam build e
+  smoke test reais no sandbox Flatpak, inclusive validação do acesso persistente ao diretório
+  escolhido
 - [ ] Publicar imagem OCI e binário nativo para instalação self-hosted
 - [ ] Assinar artefatos desktop quando houver credenciais de plataforma
 - [x] Gerar `SHA256SUMS` para cada release
 - [ ] Manter Docker Compose e Podman rootless/Quadlet como adaptadores opcionais de servidor
 
-O Flatpak está explicitamente bloqueado: o build e a publicação automática ficam desativados até
-que a seleção de diretório seja feita por portal, substituindo o acesso amplo
-`--filesystem=home:ro` por acesso persistente somente ao diretório escolhido. Os manifestos são
-preservados para a implementação futura, seguida da validação de permissões e reprodução de mídia.
+O Flatpak continua explicitamente bloqueado: o build e a publicação automática permanecem
+desativados. A seleção Linux usa o backend oficial `xdg-portal` e o manifesto não concede acesso
+amplo ao filesystem, mas o build Flatpak real e o smoke test no sandbox, incluindo acesso
+persistente ao diretório escolhido e reprodução de mídia, ainda estão pendentes.
 
 ## Mais tarde — inteligência e operações opcionais
 

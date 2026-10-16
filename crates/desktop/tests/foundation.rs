@@ -240,6 +240,38 @@ fn capability_exposes_no_dialog_or_filesystem_permission() {
 }
 
 #[test]
+fn dialog_uses_the_xdg_portal_backend_only_on_linux() {
+    let manifest = read(&crate_root().join("Cargo.toml"));
+
+    assert!(
+        manifest.contains("target.'cfg(target_os = \"linux\")'.dependencies"),
+        "o desktop precisa declarar uma configuração específica para Linux"
+    );
+    assert!(
+        manifest.contains("features = [\"xdg-portal\"]"),
+        "Linux precisa usar o backend oficial xdg-portal"
+    );
+    assert!(
+        manifest.contains(
+            "target.'cfg(any(target_os = \"windows\", target_os = \"macos\"))'.dependencies",
+        ),
+        "Windows e macOS precisam manter a dependência nativa"
+    );
+}
+
+#[test]
+fn flatpak_manifest_does_not_grant_broad_home_or_host_filesystem_access() {
+    let manifest = read(&crate_root().join("../../deploy/packages/app.learnvault.desktop.yml"));
+
+    for entry in manifest.lines().map(str::trim) {
+        assert!(
+            !entry.starts_with("- --filesystem=home") && !entry.starts_with("- --filesystem=host"),
+            "o manifesto não pode conceder filesystem amplo: {entry}"
+        );
+    }
+}
+
+#[test]
 fn the_native_picker_is_registered_in_rust_only() {
     let lib = read(&crate_root().join("src/lib.rs"));
     assert!(

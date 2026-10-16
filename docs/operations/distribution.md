@@ -12,7 +12,7 @@ desenvolvimento.
 | Linux | binário nativo | Servidor, terminal e instalações leves | Disponível |
 | Self-hosted | imagem OCI Rust (Docker/Podman) | Deploy opcional em servidor | Em validação OCI/Compose |
 | Windows | instalador `.exe` via NSIS | Execução local e instalação gerenciada | Automatizado, não assinado |
-| Desktop Linux | Flatpak | Formato Linux preferencial do desktop | Bloqueado até substituir o acesso amplo por seleção via portal |
+| Desktop Linux | Flatpak | Formato Linux preferencial do desktop | Backend `xdg-portal` configurado; build e smoke test no sandbox pendentes |
 
 Não há `.deb` nem `.rpm` como artefatos públicos nesta fase. O instalador Windows NSIS continua
 habilitado no release automático; o Flatpak não é construído nem publicado automaticamente.
@@ -37,12 +37,12 @@ habilitado no release automático; o Flatpak não é construído nem publicado a
 
 ### Bloqueio do Flatpak
 
-O build e a publicação do Flatpak estão bloqueados enquanto o desktop usar acesso somente leitura
-amplo à home (`--filesystem=home:ro`). Antes de reativar o alvo, a seleção de diretório deve usar
-um portal e conceder somente o acesso persistente escolhido pelo usuário. Os manifestos em
-`deploy/packages/` permanecem versionados para esse trabalho futuro, mas não representam um
-artefato de release atual. Não há acesso de rede nem permissão de escrita na biblioteca; ela
-permanece externa ao diretório da aplicação e nunca é copiada para dados ou backups.
+O build e a publicação do Flatpak continuam bloqueados. O desktop usa o backend oficial
+`xdg-portal` no Linux e o manifesto não concede acesso amplo à home ou ao host; ainda falta
+validar, com um build Flatpak real, o acesso persistente somente ao diretório escolhido e a
+reprodução de mídia no sandbox. O manifesto não representa um artefato de release atual. Não há
+acesso de rede nem permissão de escrita na biblioteca; ela permanece externa ao diretório da
+aplicação e nunca é copiada para dados ou backups.
 
 ## Runner self-hosted de validação
 
@@ -67,8 +67,8 @@ Para reativá-lo futuramente, com autorização operacional:
 O empacotamento segue o [ADR 0001](../architecture/adr/0001-reescrita-em-rust.md): NSIS no
 Windows, Flatpak como formato Linux preferencial e imagem OCI mais binário nativo para instalação
 self-hosted. Os builds devem ser versionados e reproduzíveis, sem tornar Docker um requisito
-oculto. O Flatpak permanece bloqueado até a seleção via portal, a validação do acesso persistente
-às bibliotecas e a reprodução de mídia.
+oculto. O Flatpak permanece bloqueado até a validação do build/sandbox real, do acesso persistente
+às bibliotecas e da reprodução de mídia.
 
 ## Verificação manual de somente leitura
 
