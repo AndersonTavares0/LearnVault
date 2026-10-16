@@ -445,7 +445,6 @@ type twoUserStudyStore struct {
 	fakeStore
 	users    map[string]storage.User
 	progress map[int64]map[string]storage.StudyProgress
-	removed  map[string]struct{}
 }
 
 func (s *twoUserStudyStore) UserForSession(_ context.Context, token string) (storage.User, error) {
@@ -460,8 +459,8 @@ func (s *twoUserStudyStore) Catalog(context.Context) (catalog.Catalog, error) {
 	return studyTestCatalog(), nil
 }
 
-func (s *twoUserStudyStore) RemovedMedia(context.Context) (map[string]struct{}, error) {
-	return s.removed, nil
+func (s *twoUserStudyStore) StudyRemovedMedia(context.Context, string) (bool, error) {
+	return false, nil
 }
 
 func (s *twoUserStudyStore) StudyProgress(_ context.Context, userID int64, mediaPath string) (storage.StudyProgress, bool, error) {
@@ -512,7 +511,6 @@ func TestStudyProgressIsIsolatedBetweenSessions(t *testing.T) {
 			"token-b": {ID: 2, Username: "b", Role: "user"},
 		},
 		progress: map[int64]map[string]storage.StudyProgress{},
-		removed:  map[string]struct{}{},
 	}
 	srv := newWithStore(store, false)
 	cookieA := &http.Cookie{Name: sessionCookie, Value: "token-a"}
@@ -699,11 +697,12 @@ func TestStudyConcurrentSameKeyWritesAreSerialized(t *testing.T) {
 	}
 }
 
-// TestStudyTombstonedTsMaterialIsNotEligible cobre o P1: ao remover a mídia, o tombstone
-// não guarda o tamanho, então um `.ts` de segmento (material no catálogo) não pode virar
-// sujeito de estudo só pela extensão. Um `.ts` tombstonado é ambíguo e recusado; apenas
-// extensões inequivocamente reproduzíveis (aqui `.mp4`) continuam elegíveis após a remoção.
-func TestStudyTombstonedTsMaterialIsNotEligible(t *testing.T) {
+// TestStudyTombstonedMediaEligibilityPreservesCatalogClassification prova que a
+// elegibilidade do tombstone é decidida no momento da remoção, enquanto o arquivo ainda
+// está no catálogo: um `.mp4` e um `.ts` grande (mídia) continuam aceitando leitura e
+// escrita de progresso após a remoção, enquanto um `.ts` de segmento (material) e uma
+// legenda permanecem recusados. Assim o `is_media` gravado distingue os dois `.ts`.
+func TestStudyTombstonedMediaEligibilityPreservesCatalogClassification(t *testing.T) {
 	db := openTestDB(t)
 	const lesson = "cat/curso/modulo/aula"
 	value := catalog.Catalog{Nodes: []catalog.Node{{
@@ -714,6 +713,7 @@ func TestStudyTombstonedTsMaterialIsNotEligible(t *testing.T) {
 				{Name: "video.mp4", Path: lesson + "/video.mp4", Size: 10},
 				{Name: "segment.ts", Path: lesson + "/segment.ts", Size: 512},
 				{Name: "movie.ts", Path: lesson + "/movie.ts", Size: 2 * 1024 * 1024},
+				{Name: "captions.srt", Path: lesson + "/captions.srt", Size: 10},
 			},
 		}},
 	}}}
@@ -725,31 +725,39 @@ func TestStudyTombstonedTsMaterialIsNotEligible(t *testing.T) {
 	}
 	srv := NewWithOptions(db, false)
 	cookie := studySessionFor(t, db)
-	for _, media := range []string{"video.mp4", "segment.ts", "movie.ts"} {
+	for _, media := range []string{"video.mp4", "segment.ts", "movie.ts", "captions.srt"} {
 		if err := db.RemoveMedia(context.Background(), lesson+"/"+media); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	// A small `.ts` was material in the catalog and a large `.ts` was media, but the
-	// tombstone cannot tell them apart, so both are conservatively rejected.
-	for _, excluded := range []string{"segment.ts", "movie.ts"} {
-		recorder := httptest.NewRecorder()
-		srv.ServeHTTP(recorder, studyRequest(http.MethodGet, "/api/study/progress?media_id="+lesson+"/"+excluded, cookie, "", false))
-		if recorder.Code != http.StatusNotFound {
-			t.Fatalf("tombstoned %s = %d; want 404 (body %s)", excluded, recorder.Code, recorder.Body.String())
+	// Media tombstones (the `.mp4` and the large `.ts`) keep progress read and write.
+	for _, media := range []string{"video.mp4", "movie.ts"} {
+		path := lesson + "/" + media
+		read := httptest.NewRecorder()
+		srv.ServeHTTP(read, studyRequest(http.MethodGet, "/api/study/progress?media_id="+path, cookie, "", false))
+		if read.Code != http.StatusOK {
+			t.Fatalf("tombstoned media %s = %d; want 200 (body %s)", media, read.Code, read.Body.String())
+		}
+		write := httptest.NewRecorder()
+		srv.ServeHTTP(write, studyRequest(http.MethodPost, "/api/study/position", cookie, `{"media_id":"`+path+`","position_seconds":42}`, true))
+		if write.Code != http.StatusOK {
+			t.Fatalf("tombstoned media write %s = %d; want 200 (body %s)", media, write.Code, write.Body.String())
 		}
 	}
 
-	eligible := lesson + "/video.mp4"
-	read := httptest.NewRecorder()
-	srv.ServeHTTP(read, studyRequest(http.MethodGet, "/api/study/progress?media_id="+eligible, cookie, "", false))
-	if read.Code != http.StatusOK {
-		t.Fatalf("tombstoned media = %d; want 200 (body %s)", read.Code, read.Body.String())
-	}
-	write := httptest.NewRecorder()
-	srv.ServeHTTP(write, studyRequest(http.MethodPost, "/api/study/position", cookie, `{"media_id":"`+eligible+`","position_seconds":42}`, true))
-	if write.Code != http.StatusOK {
-		t.Fatalf("tombstoned media write = %d; want 200 (body %s)", write.Code, write.Body.String())
+	// A segment-sized `.ts` (material) and a subtitle stay excluded.
+	for _, excluded := range []string{"segment.ts", "captions.srt"} {
+		path := lesson + "/" + excluded
+		read := httptest.NewRecorder()
+		srv.ServeHTTP(read, studyRequest(http.MethodGet, "/api/study/progress?media_id="+path, cookie, "", false))
+		if read.Code != http.StatusNotFound {
+			t.Fatalf("tombstoned non-media %s = %d; want 404 (body %s)", excluded, read.Code, read.Body.String())
+		}
+		write := httptest.NewRecorder()
+		srv.ServeHTTP(write, studyRequest(http.MethodPost, "/api/study/position", cookie, `{"media_id":"`+path+`","position_seconds":5}`, true))
+		if write.Code != http.StatusNotFound {
+			t.Fatalf("tombstoned non-media write %s = %d; want 404", excluded, write.Code)
+		}
 	}
 }

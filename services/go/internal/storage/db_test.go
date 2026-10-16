@@ -262,7 +262,8 @@ func TestRemoveMediaTombstoneSurvivesRescan(t *testing.T) {
 }
 
 // TestOpenMigratesLegacyGoDatabaseAdditively simula um banco Go na versão 5, sem a tabela
-// de remoção, e confirma que abrir de novo aplica a migração incremental sem perder dados.
+// de remoção nem as migrações de estudo, e confirma que abrir de novo aplica a cadeia
+// incremental (006, 007, 008) sem perder dados.
 func TestOpenMigratesLegacyGoDatabaseAdditively(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "legacy.db")
 	db, err := Open(context.Background(), path)
@@ -272,7 +273,7 @@ func TestOpenMigratesLegacyGoDatabaseAdditively(t *testing.T) {
 	if err := db.BootstrapAdmin(context.Background(), "owner", "correct horse battery staple"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.sql.Exec(`DELETE FROM schema_migrations WHERE version=6; DROP TABLE media_removal`); err != nil {
+	if _, err := db.sql.Exec(`DELETE FROM schema_migrations WHERE version IN (6,7,8); DROP TABLE media_removal; DROP TABLE study_state`); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Close(); err != nil {
@@ -535,5 +536,125 @@ func TestStudyStateForeignKeyPreservesProgressOnUserDelete(t *testing.T) {
 	}
 	if _, found, err := db.StudyProgress(ctx, user, "cat/a.mp4"); err != nil || !found {
 		t.Fatalf("study progress not preserved after blocked user delete: found=%v err=%v", found, err)
+	}
+}
+
+// TestRemoveMediaRecordsMediaClassification prova que a classificação do scanner é
+// capturada no tombstone no momento da remoção: mídia vira is_media 1, material/legenda
+// vira 0, e os dois `.ts` (grande/mídia e pequeno/material) são distinguidos pelo tamanho.
+func TestRemoveMediaRecordsMediaClassification(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	value := catalog.Catalog{Nodes: []catalog.Node{{
+		Title: "cat", Path: "cat", Role: "category",
+		Children: []catalog.Node{{
+			Title: "aula", Path: "cat/lesson", Role: "lesson",
+			Files: []catalog.File{
+				{Name: "video.mp4", Path: "cat/lesson/video.mp4", Size: 10},
+				{Name: "movie.ts", Path: "cat/lesson/movie.ts", Size: 2 * 1024 * 1024},
+				{Name: "segment.ts", Path: "cat/lesson/segment.ts", Size: 512},
+				{Name: "notes.pdf", Path: "cat/lesson/notes.pdf", Size: 10},
+			},
+		}},
+	}}}
+	if err := db.ReplaceCatalog(ctx, value); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"cat/lesson/video.mp4", "cat/lesson/movie.ts", "cat/lesson/segment.ts", "cat/lesson/notes.pdf"} {
+		if err := db.RemoveMedia(ctx, path); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := map[string]int64{
+		"cat/lesson/video.mp4":  1,
+		"cat/lesson/movie.ts":   1,
+		"cat/lesson/segment.ts": 0,
+		"cat/lesson/notes.pdf":  0,
+	}
+	for path, expected := range want {
+		var isMedia sql.NullInt64
+		if err := db.sql.QueryRow(`SELECT is_media FROM media_removal WHERE relative_path=?`, path).Scan(&isMedia); err != nil {
+			t.Fatal(err)
+		}
+		if !isMedia.Valid || isMedia.Int64 != expected {
+			t.Fatalf("is_media for %s = %+v; want %d", path, isMedia, expected)
+		}
+	}
+}
+
+// TestStudyRemovedMediaLegacyRowsAreConservative prova a compatibilidade com linhas de
+// remoção antigas, sem classificação (`NULL`): extensões inequivocamente de mídia são
+// aceitas e `.ts` (ambíguo sem tamanho) e legendas são recusados; um caminho sem tombstone
+// nunca é elegível.
+func TestStudyRemovedMediaLegacyRowsAreConservative(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	for _, path := range []string{"cat/legacy.mp4", "cat/legacy.ts", "cat/subtitle.srt"} {
+		if _, err := db.sql.Exec(`INSERT INTO media_removal(relative_path,removed_at) VALUES(?,?)`, path, 1); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for path, want := range map[string]bool{
+		"cat/legacy.mp4":   true,
+		"cat/legacy.ts":    false,
+		"cat/subtitle.srt": false,
+		"cat/absent.mp4":   false,
+	} {
+		got, err := db.StudyRemovedMedia(ctx, path)
+		if err != nil || got != want {
+			t.Fatalf("StudyRemovedMedia(%s) = %v, %v; want %v", path, got, err, want)
+		}
+	}
+}
+
+// TestOpenAddsRemovalMediaMetadataAdditively simula um banco lançado na versão 6, sem
+// `media_removal.is_media` nem `study_state`, e confirma que reabrir aplica as migrações
+// 007 e 008 aditivamente, sem perder a tabela de remoção.
+func TestOpenAddsRemovalMediaMetadataAdditively(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy-removal.db")
+	ctx := context.Background()
+	db, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.sql.Exec(`DELETE FROM schema_migrations WHERE version IN (6,7,8); DROP TABLE study_state; DROP TABLE media_removal`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := Open(ctx, path)
+	if err != nil {
+		t.Fatalf("reopening legacy v6 database failed: %v", err)
+	}
+	defer reopened.Close()
+
+	var hasColumn bool
+	rows, err := reopened.sql.Query(`PRAGMA table_info(media_removal)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var cid, notNull, pk int
+		var name, columnType string
+		var defaultValue sql.NullString
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &pk); err != nil {
+			rows.Close()
+			t.Fatal(err)
+		}
+		if name == "is_media" {
+			hasColumn = true
+		}
+	}
+	rows.Close()
+	if !hasColumn {
+		t.Fatal("incremental migration did not add media_removal.is_media")
+	}
+	if eligible, err := reopened.StudyRemovedMedia(ctx, "cat/absent.mp4"); err != nil || eligible {
+		t.Fatalf("path without tombstone = %v, %v; want not eligible", eligible, err)
+	}
+	if err := reopened.RemoveMedia(ctx, "cat/a.mp4"); err != nil {
+		t.Fatal(err)
 	}
 }

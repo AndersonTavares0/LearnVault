@@ -188,6 +188,42 @@ func IsUnambiguousMediaExtension(name string) bool {
 	return IsMediaExtension(name) && !strings.EqualFold(filepath.Ext(name), ".ts")
 }
 
+// LookupFile returns the persisted catalog file whose canonical relative path equals
+// clean, which must already be canonical (as produced by NormalizePath). It walks the
+// loose files and the full node tree at any depth, so a file loose in a category or nested
+// under a lesson is found. The scanner's file name and size travel with the result, which
+// is what the study boundary needs to classify playable media.
+func LookupFile(value Catalog, clean string) (File, bool) {
+	if file, ok := lookupFile(value.LooseFiles, clean); ok {
+		return file, true
+	}
+	return lookupFileInNodes(value.Nodes, clean)
+}
+
+func lookupFile(files []File, clean string) (File, bool) {
+	for _, file := range files {
+		if path, ok := NormalizePath(file.Path); ok && path == clean {
+			return file, true
+		}
+	}
+	return File{}, false
+}
+
+func lookupFileInNodes(nodes []Node, clean string) (File, bool) {
+	for _, node := range nodes {
+		if file, ok := lookupFile(node.Files, clean); ok {
+			return file, true
+		}
+		if file, ok := lookupFile(node.LooseFiles, clean); ok {
+			return file, true
+		}
+		if file, ok := lookupFileInNodes(node.Children, clean); ok {
+			return file, true
+		}
+	}
+	return File{}, false
+}
+
 // validateReadableTree is deliberately performed before building any result. A directory
 // walk that loses a subtree must never look like an empty subtree and replace a valid catalog.
 // The HTTP rescan persists only the value returned by Scan, so this is the fail-closed boundary.

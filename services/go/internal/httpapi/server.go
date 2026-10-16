@@ -50,7 +50,7 @@ type store interface {
 	UpdateCredentialsAndSession(context.Context, int64, string, string, string, time.Duration) error
 	Catalog(context.Context) (catalog.Catalog, error)
 	ReplaceCatalog(context.Context, catalog.Catalog) error
-	RemovedMedia(context.Context) (map[string]struct{}, error)
+	StudyRemovedMedia(context.Context, string) (bool, error)
 	StudyProgress(context.Context, int64, string) (storage.StudyProgress, bool, error)
 	RecordStudyPosition(context.Context, int64, string, int64) (storage.StudyProgress, error)
 	SetStudyCompleted(context.Context, int64, string, bool) (storage.StudyProgress, error)
@@ -366,38 +366,6 @@ func catalogContainsFile(files []catalog.File, clean string) bool {
 	return false
 }
 
-// catalogStudyMedia reports whether a canonical path is a study-eligible playable media
-// file in the persisted catalog. It walks the same canonical node tree as
-// catalogAllowsPath, but applies the scanner's media rule so subtitles and materials such
-// as PDFs are not accepted as study subjects.
-func catalogStudyMedia(value catalog.Catalog, clean string) bool {
-	if studyMediaFile(value.LooseFiles, clean) {
-		return true
-	}
-	return studyMediaNodes(value.Nodes, clean)
-}
-
-func studyMediaNodes(nodes []catalog.Node, clean string) bool {
-	for _, node := range nodes {
-		if studyMediaFile(node.Files, clean) || studyMediaFile(node.LooseFiles, clean) {
-			return true
-		}
-		if studyMediaNodes(node.Children, clean) {
-			return true
-		}
-	}
-	return false
-}
-
-func studyMediaFile(files []catalog.File, clean string) bool {
-	for _, file := range files {
-		if path, valid := normalizeCatalogPath(file.Path); valid && path == clean {
-			return catalog.IsMediaName(file.Name, file.Size)
-		}
-	}
-	return false
-}
-
 // normalizeCatalogPath delegates to the shared catalog normalizer so the media
 // authorization boundary and the removal tombstone agree on one path identity.
 func normalizeCatalogPath(value string) (string, bool) {
@@ -532,30 +500,20 @@ func (s *Server) studyUser(w http.ResponseWriter, r *http.Request) (storage.User
 }
 
 // knownStudyMedia reports whether a canonical library-relative path is a study-eligible
-// media identity. It reuses the canonical catalog node walk, but only accepts playable
-// media (the same scanner rule as `/api/media`'s classification), so subtitles and
-// materials such as PDFs are not valid study subjects. A path kept by an explicit removal
-// tombstone is also accepted, mirroring the Rust core: removal hides media from the
-// catalog but the identity survives, so progress stays readable and writable.
+// media identity. A catalogued path is eligible only when the scanner classifies it as
+// playable media, so subtitles and materials such as PDFs are not valid study subjects. A
+// path kept by an explicit removal tombstone is eligible when the tombstone recorded it as
+// media at removal time, mirroring the Rust core: removal hides media from the catalog but
+// the identity survives, so progress stays readable and writable.
 func (s *Server) knownStudyMedia(ctx context.Context, mediaPath string) (bool, error) {
 	value, err := s.db.Catalog(ctx)
 	if err != nil {
 		return false, err
 	}
-	if catalogStudyMedia(value, mediaPath) {
-		return true, nil
+	if file, found := catalog.LookupFile(value, mediaPath); found {
+		return catalog.IsMediaName(file.Name, file.Size), nil
 	}
-	removed, err := s.db.RemovedMedia(ctx)
-	if err != nil {
-		return false, err
-	}
-	if _, ok := removed[mediaPath]; !ok {
-		return false, nil
-	}
-	// A tombstoned path no longer carries catalog metadata, so `.ts` is ambiguous (a
-	// segment-sized `.ts` is a material). Only unambiguously playable extensions are
-	// accepted; subtitles, materials and tombstoned `.ts` stay unknown.
-	return catalog.IsUnambiguousMediaExtension(mediaPath), nil
+	return s.db.StudyRemovedMedia(ctx, mediaPath)
 }
 
 // studyStateResponse is the client-facing progress of one media. updated_at is null when

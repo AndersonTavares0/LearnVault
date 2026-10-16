@@ -208,15 +208,32 @@ func (d *DB) DeleteSession(ctx context.Context, token string) error {
 
 // RemoveMedia records the explicit removal of a library-relative path from the catalog.
 // The identity is the canonical relative path, so the tombstone survives every rescan,
-// and repeated calls are idempotent: the first removal wins and `removed_at` is never
-// rewritten. Nothing stored in the catalog is deleted here — removing from the view is
-// not erasing data.
+// and repeated calls are idempotent: the first removal wins and neither `removed_at` nor
+// `is_media` is rewritten. Nothing stored in the catalog is deleted here — removing from
+// the view is not erasing data.
+//
+// While the file is still catalogued, its scanner classification is captured in
+// `is_media` (1 media, 0 subtitle/material, NULL unknown) so a later study read can decide
+// eligibility even after the catalog no longer lists the path (for example a `.ts`, which
+// the scanner treats as media only above a size threshold).
 func (d *DB) RemoveMedia(ctx context.Context, relativePath string) error {
 	clean, ok := catalog.NormalizePath(relativePath)
 	if !ok {
 		return errors.New("invalid media path")
 	}
-	_, err := d.sql.ExecContext(ctx, `INSERT OR IGNORE INTO media_removal(relative_path,removed_at) VALUES(?,?)`, clean, time.Now().UTC().Unix())
+	value, err := d.Catalog(ctx)
+	if err != nil {
+		return err
+	}
+	var isMedia any
+	if file, found := catalog.LookupFile(value, clean); found {
+		if catalog.IsMediaName(file.Name, file.Size) {
+			isMedia = 1
+		} else {
+			isMedia = 0
+		}
+	}
+	_, err = d.sql.ExecContext(ctx, `INSERT OR IGNORE INTO media_removal(relative_path,removed_at,is_media) VALUES(?,?,?)`, clean, time.Now().UTC().Unix(), isMedia)
 	return err
 }
 
@@ -238,6 +255,27 @@ func (d *DB) RemovedMedia(ctx context.Context) (map[string]struct{}, error) {
 		removed[path] = struct{}{}
 	}
 	return removed, rows.Err()
+}
+
+// StudyRemovedMedia reports whether a canonical path is a study-eligible media through its
+// removal tombstone. It uses the classification captured at removal time: media is
+// eligible, a recorded subtitle/material is not, and an unknown legacy row falls back to
+// extensions that are unambiguously media (so a tombstoned `.ts` with no recorded
+// classification is refused rather than guessed). A path without a tombstone is not
+// eligible here.
+func (d *DB) StudyRemovedMedia(ctx context.Context, mediaPath string) (bool, error) {
+	var isMedia sql.NullInt64
+	err := d.sql.QueryRowContext(ctx, `SELECT is_media FROM media_removal WHERE relative_path=?`, mediaPath).Scan(&isMedia)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if isMedia.Valid {
+		return isMedia.Int64 == 1, nil
+	}
+	return catalog.IsUnambiguousMediaExtension(mediaPath), nil
 }
 
 // filterRemovedCatalog drops tombstoned paths at read time, mirroring the Rust

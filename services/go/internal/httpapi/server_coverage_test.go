@@ -70,8 +70,8 @@ func (s fakeStore) Catalog(context.Context) (catalog.Catalog, error) {
 }
 func (s fakeStore) ReplaceCatalog(context.Context, catalog.Catalog) error { return s.healthErr }
 func (s fakeStore) RemoveMedia(context.Context, string) error             { return s.healthErr }
-func (s fakeStore) RemovedMedia(context.Context) (map[string]struct{}, error) {
-	return nil, s.healthErr
+func (s fakeStore) StudyRemovedMedia(context.Context, string) (bool, error) {
+	return false, s.healthErr
 }
 func (s fakeStore) StudyProgress(context.Context, int64, string) (storage.StudyProgress, bool, error) {
 	return storage.StudyProgress{}, false, s.healthErr
