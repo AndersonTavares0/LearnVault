@@ -25,6 +25,7 @@ pub struct Database {
 
 /// Versão do schema que este binário consegue servir.
 pub const CURRENT_SCHEMA_VERSION: usize = SCHEMA_VERSION;
+const MAX_SCHEMA_SQL_BYTES: i64 = 64 * 1024;
 
 impl Database {
     /// Abre (ou cria) o banco em `path` e aplica a cadeia de migrações.
@@ -86,9 +87,12 @@ impl Database {
             }
         }
         let table_count: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM pragma_table_list
-             WHERE schema = 'main' AND type = 'table' AND name NOT LIKE 'sqlite_%'",
-            [], |row| row.get(0),
+            "SELECT COUNT(*) FROM (
+                 SELECT 1 FROM pragma_table_list
+                 WHERE schema = 'main' AND type = 'table' AND name NOT LIKE 'sqlite_%'
+                 LIMIT ?1
+             )",
+            [REQUIRED_TABLES.len() as i64 + 1], |row| row.get(0),
         )?;
         if table_count != REQUIRED_TABLES.len() as i64 || !index_matches(
             &self.conn, "session", Some("session_expires_at_idx"), false,
