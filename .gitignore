@@ -38,6 +38,11 @@ tmp/
 *.sqlite-shm
 *.sqlite-wal
 
+# OpenCode local plugin dependencies
+.opencode/bun.lock
+.opencode/bun.lockb
+.opencode/package-lock.json
+
 # Local tooling, IDEs and OS metadata
 .playwright-mcp/
 .vscode/
