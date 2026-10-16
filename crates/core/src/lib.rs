@@ -18,6 +18,7 @@ pub mod catalog;
 pub mod db;
 pub mod error;
 pub mod ids;
+pub mod legacy_import;
 pub mod media;
 pub mod paths;
 pub mod removal;
@@ -35,6 +36,7 @@ pub use auth::{
 pub use catalog::{Availability, Catalog, CatalogFile, CatalogNode, NodeRole, build_catalog};
 pub use db::Database;
 pub use error::{Error, Result};
+pub use legacy_import::{LegacyImportOptions, LegacyImportReport, import_go_database};
 pub use media::{MediaReference, OpenMedia, find_media_by_path, open_media, open_media_reference};
 pub use paths::KeyMode;
 pub use removal::{MediaRemovalImpact, MediaRemovalOutcome, media_removal_impact, remove_media};

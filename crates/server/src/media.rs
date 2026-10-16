@@ -128,6 +128,9 @@ pub(crate) async fn media(
         header::CONTENT_TYPE,
         HeaderValue::from_static(content_type(&path)),
     );
+    if let Some(disposition) = content_disposition(&path) {
+        response_headers.insert(header::CONTENT_DISPOSITION, disposition);
+    }
     response_headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     if partial {
         let Ok(content_range) =
@@ -220,29 +223,113 @@ fn range_not_satisfiable(size: u64) -> Response {
 }
 
 fn content_type(path: &str) -> &'static str {
-    match path
+    let extension = path
         .rsplit('.')
         .next()
         .unwrap_or_default()
-        .to_ascii_lowercase()
-        .as_str()
-    {
+        .to_ascii_lowercase();
+    playable_media_type(&extension).unwrap_or("application/octet-stream")
+}
+
+fn playable_media_type(extension: &str) -> Option<&'static str> {
+    Some(match extension {
         "mp4" => "video/mp4",
         "webm" => "video/webm",
-        "mkv" => "video/x-matroska",
-        "m3u8" => "application/vnd.apple.mpegurl",
-        "ts" => "video/mp2t",
+        "ogv" => "video/ogg",
+        "mp3" => "audio/mpeg",
+        "m4a" => "audio/mp4",
+        "ogg" | "oga" => "audio/ogg",
+        "wav" => "audio/wav",
+        "flac" => "audio/flac",
         "vtt" => "text/vtt",
-        "srt" => "application/x-subrip",
-        _ => "application/octet-stream",
+        _ => return None,
+    })
+}
+
+fn content_disposition(path: &str) -> Option<HeaderValue> {
+    let extension = path
+        .rsplit('.')
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    if playable_media_type(&extension).is_some() {
+        return None;
     }
+
+    let basename = path.rsplit(['/', '\\']).next().unwrap_or_default();
+    let filename: String = basename
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || matches!(character, '.' | '_' | '-') {
+                character
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let filename = if filename.is_empty() || filename == "." || filename == ".." {
+        "download"
+    } else {
+        &filename
+    };
+    HeaderValue::from_str(&format!("attachment; filename=\"{filename}\"")).ok()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{media_error_status, parse_range};
+    use super::{content_disposition, content_type, media_error_status, parse_range};
     use axum::http::HeaderValue;
     use learnvault_core::Error;
+
+    #[test]
+    fn go_playable_media_types_keep_their_mime_type_and_are_inline() {
+        for (path, expected_type) in [
+            ("lesson.mp4", "video/mp4"),
+            ("lesson.webm", "video/webm"),
+            ("lesson.ogv", "video/ogg"),
+            ("lesson.mp3", "audio/mpeg"),
+            ("lesson.m4a", "audio/mp4"),
+            ("lesson.ogg", "audio/ogg"),
+            ("lesson.oga", "audio/ogg"),
+            ("lesson.wav", "audio/wav"),
+            ("lesson.flac", "audio/flac"),
+            ("subtitles.vtt", "text/vtt"),
+        ] {
+            assert_eq!(content_type(path), expected_type, "{path}");
+            assert_eq!(content_disposition(path), None, "{path}");
+        }
+    }
+
+    #[test]
+    fn non_playable_extensions_use_octet_stream_and_safe_attachment_basenames() {
+        for path in [
+            "lesson.mkv",
+            "lesson.m3u8",
+            "lesson.ts",
+            "subtitles.srt",
+            "lesson.html",
+            "lesson.svg",
+        ] {
+            assert_eq!(content_type(path), "application/octet-stream", "{path}");
+            assert!(content_disposition(path).is_some(), "{path}");
+        }
+
+        for (path, expected) in [
+            (
+                "lessons/unsafe\"name.html",
+                "attachment; filename=\"unsafe_name.html\"",
+            ),
+            (
+                "lessons\\unsafe name.svg",
+                "attachment; filename=\"unsafe_name.svg\"",
+            ),
+        ] {
+            assert_eq!(
+                content_disposition(path).unwrap().to_str().unwrap(),
+                expected
+            );
+        }
+    }
 
     #[test]
     fn empty_files_have_a_valid_full_response_but_ranges_do_not() {

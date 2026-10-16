@@ -48,6 +48,10 @@ Serviço HTTP Rust -- SQLite (/data)
 O serviço HTTP Go permanece disponível separadamente como implementação legada/de referência;
 ele não é o servidor atual descrito pelo fluxo acima.
 
+O núcleo também possui uma API de importação explícita do SQLite Go (`legacy_import`): a origem
+é somente leitura, recebe backup antes da operação e a saída é promovida somente após transação,
+integridade, chaves estrangeiras e contagens. A biblioteca física não participa da migração.
+
 ## Arquitetura aprovada
 
 O alvo é um workspace Rust com um núcleo de domínio compartilhado. A decisão e as alternativas

@@ -10,7 +10,7 @@ desenvolvimento.
 | Alvo | Artefato | Uso | Status |
 | --- | --- | --- | --- |
 | Linux | binário nativo | Servidor, terminal e instalações leves | Disponível |
-| Self-hosted | imagem OCI (Docker/Podman) | Deploy opcional em servidor | Disponível |
+| Self-hosted | imagem OCI Rust (Docker/Podman) | Deploy opcional em servidor | Em validação OCI/Compose |
 | Windows | instalador `.exe` via NSIS | Execução local e instalação gerenciada | Planejado |
 | Desktop Linux | Flatpak | Formato Linux preferencial do desktop | Planejado, sujeito a validação técnica |
 
@@ -72,13 +72,13 @@ COMPOSE="docker compose --env-file deploy/compose/.env.example -f deploy/compose
   biblioteca real.
 - Não faz parte do CI; é uma verificação manual.
 
-## Validação experimental da imagem Rust (OCI)
+## Validação da imagem Rust (OCI/Compose)
 
-Enquanto a reescrita em Rust avança, `deploy/container/Containerfile.rust` e
-`scripts/verify-rust-oci.sh` permitem validar localmente que o servidor Rust
-(`crates/server`) compila a partir do repositório e roda em um contêiner. Ambos são
-experimentais e não publicam nada: `deploy/container/Containerfile` (Go) continua sendo a
-imagem suportada por Compose, Quadlet, workflow de release e CI.
+Enquanto a reescrita em Rust avança, `deploy/container/Containerfile.rust`, Compose e
+`scripts/verify-rust-oci.sh` permitem validar localmente que o servidor Rust (`crates/server`)
+compila com a SPA e roda em um contêiner. A imagem Rust ainda está em validação e não é
+publicada; o serviço Go, seus serviços auxiliares e suas definições de CI/release permanecem
+no repositório para a transição.
 
 ```sh
 ./scripts/verify-rust-oci.sh
@@ -97,7 +97,8 @@ CONTAINER_ENGINE=podman ./scripts/verify-rust-oci.sh
   recuperação após reinício com persistência dos dados e a remoção do contêiner ao final.
 - O servidor Rust ainda não possui interface de cache (`CACHE_DIR`); não há diretório de
   cache para validar nesta fase.
-- Não faz parte do CI e não substitui `cargo fmt`, `cargo clippy` e `cargo test`.
+- A validação OCI/Compose não faz parte do CI e não substitui `cargo fmt`, `cargo clippy` e
+  `cargo test`.
 
 ## Modelo de configuração
 
