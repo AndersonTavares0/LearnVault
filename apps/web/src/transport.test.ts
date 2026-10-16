@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { findLesson } from './router';
-import { DesktopStub, HttpTransport, normalizeCatalog, normalizeUser, type Transport } from './transport';
+import { DesktopStub, HttpTransport, normalizeCatalog, normalizeRecentStudy, normalizeStudyProgress, normalizeUser, STUDY_NOT_AVAILABLE, type Transport } from './transport';
 
 // O Tauri só é carregado no desktop: fora dele o módulo é substituído pelo mock, de modo
 // que a suíte nunca toca `window.__TAURI_INTERNALS__`.
@@ -9,8 +9,8 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 
 describe('transport contract', () => {
 	it('exposes the HTTP transport seam without routing assumptions', () => {
-		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'config', 'catalog', 'chooseLibrary', 'rescan', 'updateCredentials', 'mediaUrl'];
-		expect(methods).toHaveLength(9);
+		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'config', 'catalog', 'chooseLibrary', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'mediaUrl'];
+		expect(methods).toHaveLength(13);
 	});
 	it('does not offer native library selection over HTTP', async () => {
 		await expect(new HttpTransport().chooseLibrary()).rejects.toThrow('definida no servidor');
@@ -108,6 +108,48 @@ describe('transport contract', () => {
 		expect(catalog.categories[0].courses[0].modules[0].lessons[0].path).toBe('programming/go/basics/first');
 	});
 	it('rejects an unknown catalog shape with a controlled error', () => expect(() => normalizeCatalog({ nope: true })).toThrow('Resposta inválida do servidor'));
+	it('normalizes a study progress record with optional timestamp', () => {
+		expect(normalizeStudyProgress({ media_id: 'm1', position_seconds: 42, completed: false, updated_at: 1234567890, recorded: true })).toEqual({ mediaId: 'm1', positionSeconds: 42, completed: false, updatedAt: 1234567890, recorded: true });
+		expect(normalizeStudyProgress({ media_id: 'm2', position_seconds: 0, completed: true, recorded: true })).toEqual({ mediaId: 'm2', positionSeconds: 0, completed: true, updatedAt: null, recorded: true });
+		expect(() => normalizeStudyProgress({ media_id: 'm3', position_seconds: 'zero', completed: true, recorded: true })).toThrow('Resposta inválida do servidor');
+	});
+	it('normalizes a recent study list', () => {
+		const recent = normalizeRecentStudy({ items: [{ media_id: 'm1', position_seconds: 10, completed: false, recorded: true }] });
+		expect(recent.items).toHaveLength(1);
+		expect(recent.items[0].mediaId).toBe('m1');
+	});
+	it('reads study progress from the HTTP endpoint', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ media_id: 'm1', position_seconds: 42, completed: false, recorded: true }), { status: 200 }));
+		vi.stubGlobal('fetch', fetchMock);
+		const progress = await new HttpTransport().studyProgress('m1');
+		expect(fetchMock).toHaveBeenCalledWith('/api/study/progress?media_id=m1');
+		expect(progress).toMatchObject({ mediaId: 'm1', positionSeconds: 42, completed: false, recorded: true });
+		vi.unstubAllGlobals();
+	});
+	it('records position and completion through the HTTP endpoints', async () => {
+		const fetchMock = vi.fn().mockImplementation(() => new Response(JSON.stringify({ media_id: 'm1', position_seconds: 90, completed: true, recorded: true }), { status: 200 }));
+		vi.stubGlobal('fetch', fetchMock);
+		await expect(new HttpTransport().recordPosition('m1', 90)).resolves.toMatchObject({ positionSeconds: 90, completed: true });
+		expect(fetchMock).toHaveBeenCalledWith('/api/study/position', expect.objectContaining({ method: 'POST', body: JSON.stringify({ media_id: 'm1', position_seconds: 90 }) }));
+		fetchMock.mockClear();
+		await expect(new HttpTransport().setCompleted('m1', false)).resolves.toMatchObject({ mediaId: 'm1', recorded: true });
+		expect(fetchMock).toHaveBeenCalledWith('/api/study/completed', expect.objectContaining({ method: 'POST', body: JSON.stringify({ media_id: 'm1', completed: false }) }));
+		vi.unstubAllGlobals();
+	});
+	it('loads recent study history from the HTTP endpoint', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [{ media_id: 'm1', position_seconds: 7, completed: false, recorded: true }] }), { status: 200 }));
+		vi.stubGlobal('fetch', fetchMock);
+		const recent = await new HttpTransport().recentStudy(5);
+		expect(fetchMock).toHaveBeenCalledWith('/api/study/recent?limit=5');
+		expect(recent.items[0].mediaId).toBe('m1');
+		vi.unstubAllGlobals();
+	});
+	it('reports study endpoints as unavailable when the server returns 404', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(new Response('404 page not found', { status: 404 }));
+		vi.stubGlobal('fetch', fetchMock);
+		await expect(new HttpTransport().recentStudy()).rejects.toMatchObject({ message: 'Estudo não disponível neste servidor.', code: STUDY_NOT_AVAILABLE });
+		vi.unstubAllGlobals();
+	});
 });
 
 describe('desktop transport over IPC', () => {
@@ -174,6 +216,14 @@ describe('desktop transport over IPC', () => {
 		await expect(new DesktopStub().rescan()).rejects.toThrow('Não foi possível indexar a biblioteca.');
 		vi.mocked(invoke).mockRejectedValue({ message: 'sem código /etc/shadow' });
 		await expect(new DesktopStub().rescan()).rejects.toThrow('Não foi possível indexar a biblioteca.');
+	});
+
+	it('keeps study progress and history unimplemented on the desktop', async () => {
+		const desktop: Transport = new DesktopStub();
+		await expect(desktop.studyProgress('m1')).rejects.toThrow('ainda não implementado');
+		await expect(desktop.recordPosition('m1', 5)).rejects.toThrow('ainda não implementado');
+		await expect(desktop.setCompleted('m1', true)).rejects.toThrow('ainda não implementado');
+		await expect(desktop.recentStudy()).rejects.toThrow('ainda não implementado');
 	});
 
 	it('reports the desktop as unconfigured through the desktop_config command', async () => {

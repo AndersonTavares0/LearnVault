@@ -10,6 +10,17 @@ import type { FileEntry } from './transport';
  * minificador não consegue dobrar.
  */
 export const srtConversionSupported: boolean = __LEARNVAULT_TRANSPORT__ === 'http';
+export const studySyncSupported: boolean = __LEARNVAULT_TRANSPORT__ === 'http';
+
+export function formatDuration(totalSeconds: number): string {
+	if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return '0:00';
+	const seconds = Math.floor(totalSeconds % 60);
+	const minutes = Math.floor((totalSeconds / 60) % 60);
+	const hours = Math.floor(totalSeconds / 3600);
+	const paddedSeconds = String(seconds).padStart(2, '0');
+	if (hours > 0) return `${hours}:${String(minutes).padStart(2, '0')}:${paddedSeconds}`;
+	return `${minutes}:${paddedSeconds}`;
+}
 
 export function selectPlayableMedia(media: FileEntry[]): FileEntry | null {
 	return media.find((file) => file.availability?.trim().toLowerCase() !== 'missing') ?? null;
