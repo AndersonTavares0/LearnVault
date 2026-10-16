@@ -92,3 +92,35 @@ updates:
         update-types:
           - minor
           - patch
+  - package-ecosystem: docker
+    directory: /deploy/container
+    schedule:
+      interval: weekly
+      day: wednesday
+      time: "07:20"
+      timezone: America/Sao_Paulo
+    open-pull-requests-limit: 2
+    cooldown:
+      default-days: 14
+    groups:
+      docker-non-major:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+  - package-ecosystem: docker-compose
+    directory: /deploy/compose
+    schedule:
+      interval: monthly
+      day: wednesday
+      time: "07:40"
+      timezone: America/Sao_Paulo
+    open-pull-requests-limit: 2
+    cooldown:
+      default-days: 14
+    groups:
+      docker-compose-non-major:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
