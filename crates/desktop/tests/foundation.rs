@@ -106,6 +106,10 @@ fn config_embeds_frontend_for_production_without_dev_server() {
         csp.contains("blob:"),
         "a CSP precisa liberar blob: para mídia: {csp}"
     );
+    assert!(
+        csp.contains("learnvault-media: http://learnvault-media.localhost"),
+        "a CSP precisa liberar o protocolo de mídia de arquivos pequenos: {csp}"
+    );
 
     let window = &config["app"]["windows"][0];
     assert_eq!(
@@ -487,6 +491,34 @@ fn rescan_is_never_triggered_at_startup_or_after_selection() {
     assert!(
         !body.contains("rescan"),
         "selecionar a raiz nunca pode disparar um rescan automático: {body}"
+    );
+}
+
+#[test]
+fn media_protocol_is_registered_without_a_new_capability() {
+    // O protocolo de mídia é registrado no builder do Tauri, restrito à janela principal
+    // por rótulo. Ele não é uma capability: o ACL continua deny-by-default e nenhuma
+    // permissão é ampliada.
+    let lib = read(&crate_root().join("src/lib.rs"));
+    assert!(
+        lib.contains("media::register"),
+        "o protocolo de mídia precisa ser registrado no builder: {lib}"
+    );
+
+    let media = read(&crate_root().join("src/media.rs"));
+    assert!(
+        media.contains("register_uri_scheme_protocol"),
+        "o protocolo precisa ser registrado pela API oficial do Tauri"
+    );
+    assert!(
+        media.contains("MAIN_WEBVIEW_LABEL"),
+        "o protocolo precisa restringir a janela principal"
+    );
+
+    let raw = read(&crate_root().join("capabilities/default.json"));
+    assert!(
+        !raw.contains("learnvault-media"),
+        "o protocolo de mídia não pode ampliar a capability do webview"
     );
 }
 
