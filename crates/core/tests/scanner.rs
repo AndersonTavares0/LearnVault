@@ -126,7 +126,10 @@ fn nested_tree_is_classified() {
 fn known_media_and_subtitle_extensions_are_classified() {
     let directory = tempfile::tempdir().unwrap();
     let root = directory.path();
-    let media = ["mp4", "webm", "mkv", "m3u8"];
+    let media = [
+        "mp4", "webm", "mkv", "m3u8", "ogv", "mp3", "wav", "ogg", "oga", "m4a", "flac", "aac",
+        "opus", "weba", "wma",
+    ];
     let subtitles = ["srt", "vtt", "ass", "ssa"];
 
     for extension in media {
@@ -161,11 +164,13 @@ fn uppercase_extensions_are_classified() {
     let directory = tempfile::tempdir().unwrap();
     let root = directory.path();
     write_file(root, "AULA.MP4", b"x");
+    write_file(root, "AUDIO.FLAC", b"x");
     write_file(root, "LEGENDA.SRT", b"x");
 
     let outcome = scan(root).unwrap();
 
     assert_eq!(kind_of(&outcome, "AULA.MP4"), MediaKind::Media);
+    assert_eq!(kind_of(&outcome, "AUDIO.FLAC"), MediaKind::Media);
     assert_eq!(kind_of(&outcome, "LEGENDA.SRT"), MediaKind::Subtitle);
 }
 

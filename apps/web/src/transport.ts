@@ -19,7 +19,7 @@ export type StudyProgress = { mediaId: string; positionSeconds: number; complete
 export type RecentStudy = { items: StudyProgress[] };
 export const STUDY_NOT_AVAILABLE = 'study_not_available';
 
-// Protocolo customizado do desktop para arquivos pequenos. O webview aponta somente pelo
+// Protocolo customizado do desktop para mídia local. O webview aponta somente pelo
 // `mediaId` autorizado; nenhum caminho cruza a fronteira do webview.
 export const DESKTOP_MEDIA_SCHEME = 'learnvault-media';
 export const DESKTOP_MEDIA_HOST = 'localhost';
@@ -29,7 +29,7 @@ export const DESKTOP_MEDIA_HOST = 'localhost';
 // prefixo por requisição antes de chamar o handler, que continua vendo
 // `learnvault-media://localhost/...`. No Linux (WebKitGTK) e no macOS (WKWebView) o esquema
 // é resolvido direto. Sem o prefixo correto o Chromium não resolve `learnvault-media://` e a
-// mídia pequena não carrega. A detecção usa apenas o `userAgent` do webview atual, sem
+// mídia não carrega. A detecção usa apenas o `userAgent` do webview atual, sem
 // dependência nova.
 export function desktopMediaUrl(mediaId: string, userAgent: string): string {
 	const base = /Windows|Android/i.test(userAgent) ? `http://${DESKTOP_MEDIA_SCHEME}.localhost` : `${DESKTOP_MEDIA_SCHEME}://${DESKTOP_MEDIA_HOST}`;
@@ -271,11 +271,10 @@ export class DesktopStub implements Transport {
 	// Sem limite informado, o comando usa o padrão do contrato; por isso o argumento é
 	// omitido em vez de enviado como `undefined`.
 	async recentStudy(limit?: number) { try { return normalizeRecentStudy(await invoke<unknown>('desktop_recent_study', limit === undefined ? {} : { limit })); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar o histórico de estudo.'); } }
-	// Somente materiais pequenos (imagens/thumbnails e materiais) com identidade autorizada
-	// usam o protocolo. Vídeo/áudio e legendas ficam fora desta fatia; um arquivo sem
-	// `mediaId` não é endereçável e o caminho cru nunca é usado.
+	// Toda mídia entregue ao player usa a identidade autorizada. O caminho catalogado é
+	// deliberadamente ignorado, inclusive no desktop, para que ele nunca atravesse o webview.
 	mediaUrl(file: FileEntry) {
-		if (file.kind !== 'material' || !file.mediaId) return null;
+		if (!file.mediaId || !['media', 'subtitle', 'material'].includes(file.kind ?? '')) return null;
 		return desktopMediaUrl(file.mediaId, navigator.userAgent);
 	}
 }

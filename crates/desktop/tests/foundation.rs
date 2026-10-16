@@ -108,7 +108,7 @@ fn config_embeds_frontend_for_production_without_dev_server() {
     );
     assert!(
         csp.contains("learnvault-media: http://learnvault-media.localhost"),
-        "a CSP precisa liberar o protocolo de mídia de arquivos pequenos: {csp}"
+        "a CSP precisa liberar o protocolo de mídia local: {csp}"
     );
 
     let window = &config["app"]["windows"][0];

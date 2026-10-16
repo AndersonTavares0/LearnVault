@@ -1,0 +1,30 @@
+app-id: app.learnvault.desktop
+runtime: org.gnome.Platform
+runtime-version: '48'
+sdk: org.gnome.Sdk
+command: learnvault-desktop
+finish-args:
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  # The native directory picker currently returns a filesystem path. Keep access
+  # read-only and limited to the user's home until a portal-backed picker is used.
+  - --filesystem=home:ro
+modules:
+  - name: learnvault-desktop
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 learnvault-desktop /app/bin/learnvault-desktop
+      - install -Dm644 app.learnvault.desktop.desktop /app/share/applications/app.learnvault.desktop.desktop
+      - install -Dm644 app.learnvault.desktop.metainfo.xml /app/share/metainfo/app.learnvault.desktop.metainfo.xml
+      - install -Dm644 icon.png /app/share/icons/hicolor/512x512/apps/app.learnvault.desktop.png
+    sources:
+      - type: file
+        path: ../../target/release/learnvault-desktop
+      - type: file
+        path: app.learnvault.desktop.desktop
+      - type: file
+        path: app.learnvault.desktop.metainfo.xml
+      - type: file
+        path: ../../crates/desktop/icons/icon.png

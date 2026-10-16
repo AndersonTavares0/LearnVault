@@ -1,14 +1,9 @@
-//! Entrega de arquivos pequenos pelo protocolo customizado do webview.
+//! Entrega de materiais e mídia do curso pelo protocolo customizado do webview.
 //!
-//! Esta fatia entrega, no desktop, **somente arquivos pequenos** — imagens/thumbnails e
-//! materiais pequenos — por um protocolo `URI scheme` próprio do Tauri 2,
-//! `learnvault-media://localhost/<media-id>`. A entrega de vídeo e áudio permanece fora
-//! deste protocolo por causa da incompatibilidade de reprodução parcial documentada no
-//! webview do Linux (`WebKitGTK`): o streaming de vídeo depende de `Range` contínuo com
-//! resposta progressiva, que esta fatia não implementa, e o `Player` mantém vídeo/áudio do
-//! desktop explicitamente indisponíveis. Legendas continuam no caminho HTTP (a conversão
-//! de SRT sob demanda é `fetch` e só existe no build HTTP). Materiais e downloads grandes
-//! ficam fora do limite de resposta.
+//! A entrega usa um protocolo `URI scheme` próprio do Tauri 2,
+//! `learnvault-media://localhost/<media-id>`. Materiais continuam limitados a respostas
+//! pequenas; vídeo, áudio e legendas usam a mesma resolução segura por identificador opaco e
+//! suportam faixas únicas, como requerem elementos HTML de mídia.
 //!
 //! # Contrato de segurança
 //!
@@ -20,11 +15,10 @@
 //!   exatamente uma vez por [`learnvault_core::open_media`], que revalida a raiz, a
 //!   disponibilidade, o confinamento sob a raiz, o componente final (link simbólico) e a
 //!   identidade do descritor aberto. O [`std::fs::File`] já aberto é o que é lido;
-//! - a resposta é **bufferizada** pela API do Tauri, então há um limite explícito de
-//!   [`MAX_SMALL_FILE_BYTES`]: um arquivo ou uma faixa acima do limite é recusado sem ser
-//!   lido por inteiro, e a leitura nunca excede o limite;
-//! - só um **tipo de conteúdo em allowlist** (imagens e materiais pequenos) é servido;
-//!   vídeo, áudio e legendas são recusados com erro estável;
+//! - materiais têm o limite explícito de [`MAX_SMALL_FILE_BYTES`]; mídia de curso é entregue
+//!   por faixas, com cada resposta limitada por [`MAX_MEDIA_RESPONSE_BYTES`];
+//! - só extensões e tipos de conteúdo em allowlist (materiais, vídeo, áudio e legendas) são
+//!   servidos;
 //! - nenhum corpo ou header carrega caminho do sistema de arquivos nem mensagem de erro de
 //!   IO: as falhas viram apenas o status, com `Cache-Control: no-store`;
 //! - a entrega é **somente leitura**: a única operação sobre a biblioteca é abrir e ler o
@@ -32,9 +26,9 @@
 //!
 //! # Escopo da resposta
 //!
-//! `200`/`HEAD`/`206`/`416` são suportados para arquivos pequenos, com `Range` de faixa
-//! única. Um pedido multi-faixa ou insatisfazível vira `416` com `Content-Range: bytes
-//! */<tamanho>`. O `Content-Range` de sucesso é `bytes <início>-<fim>/<tamanho>`.
+//! `200`/`HEAD`/`206`/`416` são suportados com `Range` de faixa única. Um pedido multi-faixa
+//! ou insatisfazível vira `416` com `Content-Range: bytes */<tamanho>`. O `Content-Range` de
+//! sucesso é `bytes <início>-<fim>/<tamanho>`.
 
 use std::borrow::Cow;
 use std::io::{Read, Seek, SeekFrom};
@@ -60,12 +54,18 @@ pub const MEDIA_HOST: &str = "localhost";
 /// Rótulo da única janela que pode requisitar o protocolo.
 pub const MAIN_WEBVIEW_LABEL: &str = "main";
 
-/// Limite explícito de resposta para arquivos pequenos.
+/// Limite explícito de resposta para materiais pequenos.
 ///
 /// A resposta é bufferizada em memória pela API do Tauri; arquivos acima deste limite
-/// (ou uma faixa que o exceda) são recusados sem serem lidos por inteiro. Materiais e
-/// downloads grandes ficam fora desta fatia.
+/// (ou uma faixa que o exceda) são recusados sem serem lidos por inteiro. Mídia de curso
+/// (vídeo, áudio e legendas) usa o limite de resposta [`MAX_MEDIA_RESPONSE_BYTES`].
 pub const MAX_SMALL_FILE_BYTES: u64 = 8 * 1024 * 1024;
+
+/// Limite de bytes materializados em uma única resposta de mídia.
+///
+/// O protocolo do Tauri recebe o corpo como `Vec<u8>`, portanto tanto uma resposta completa
+/// quanto uma faixa explícita precisam ser limitadas antes da alocação.
+pub const MAX_MEDIA_RESPONSE_BYTES: u64 = 8 * 1024 * 1024;
 
 /// Comprimento máximo aceito para o identificador opaco de mídia.
 const MAX_MEDIA_ID_LEN: usize = 128;
@@ -198,9 +198,6 @@ mod status {
 }
 
 /// Allowlist de extensões e seus tipos de conteúdo.
-///
-/// Somente imagens e materiais pequenos. Vídeo, áudio, legendas e qualquer outra extensão
-/// ficam de fora: o protocolo não é uma superfície genérica de leitura da biblioteca.
 const ALLOWED_TYPES: &[(&str, &str)] = &[
     ("png", "image/png"),
     ("jpg", "image/jpeg"),
@@ -211,6 +208,26 @@ const ALLOWED_TYPES: &[(&str, &str)] = &[
     ("pdf", "application/pdf"),
     ("txt", "text/plain; charset=utf-8"),
     ("md", "text/markdown; charset=utf-8"),
+    ("mp4", "video/mp4"),
+    ("webm", "video/webm"),
+    ("ogv", "video/ogg"),
+    ("mkv", "video/x-matroska"),
+    ("m3u8", "application/vnd.apple.mpegurl"),
+    ("ts", "video/mp2t"),
+    ("mp3", "audio/mpeg"),
+    ("wav", "audio/wav"),
+    ("ogg", "audio/ogg"),
+    ("oga", "audio/ogg"),
+    ("m4a", "audio/mp4"),
+    ("flac", "audio/flac"),
+    ("aac", "audio/aac"),
+    ("opus", "audio/opus"),
+    ("weba", "audio/webm"),
+    ("wma", "audio/x-ms-wma"),
+    ("vtt", "text/vtt"),
+    ("srt", "application/x-subrip"),
+    ("ass", "text/x-ass"),
+    ("ssa", "text/x-ssa"),
 ];
 
 /// Valida e normaliza a requisição crua, sem tocar o sistema de arquivos.
@@ -312,7 +329,7 @@ fn fallback_response() -> Response<Cow<'static, [u8]>> {
 }
 
 impl DesktopState {
-    /// Entrega uma mídia de arquivo pequeno pelo protocolo customizado.
+    /// Entrega uma mídia autorizada pelo protocolo customizado.
     ///
     /// O parsing é puro e prefere a recusa estável; só depois de validada a requisição a
     /// raiz configurada e o catálogo são consultados. Sem raiz configurada, a resposta é
@@ -351,14 +368,10 @@ impl DesktopState {
             Err(error) => return MediaResponse::empty(media_error_status(&error)),
         };
 
-        // O protocolo não é uma superfície genérica: vídeo/áudio e legendas não entram.
-        if opened.kind != MediaKind::Material {
-            return MediaResponse::empty(status::UNSUPPORTED_MEDIA_TYPE);
-        }
         let Some(content_type) = content_type(&opened.name) else {
             return MediaResponse::empty(status::UNSUPPORTED_MEDIA_TYPE);
         };
-        if opened.size > MAX_SMALL_FILE_BYTES {
+        if opened.kind == MediaKind::Material && opened.size > MAX_SMALL_FILE_BYTES {
             return MediaResponse::empty(status::PAYLOAD_TOO_LARGE);
         }
 
@@ -378,8 +391,15 @@ fn build_response(
         Err(()) => return range_not_satisfiable(size),
     };
     let partial = range.is_some();
-    let (start, end) = range.unwrap_or((0, size.saturating_sub(1)));
-    let length = if size == 0 { 0 } else { end - start + 1 };
+    let (start, mut end) = range.unwrap_or((0, size.saturating_sub(1)));
+    let mut length = if size == 0 { 0 } else { end - start + 1 };
+
+    if partial && length > MAX_MEDIA_RESPONSE_BYTES {
+        end = start.saturating_add(MAX_MEDIA_RESPONSE_BYTES - 1);
+        length = MAX_MEDIA_RESPONSE_BYTES;
+    } else if !partial && request.method == MediaMethod::Get && length > MAX_MEDIA_RESPONSE_BYTES {
+        return MediaResponse::empty(status::PAYLOAD_TOO_LARGE);
+    }
 
     let mut body = Vec::new();
     if request.method == MediaMethod::Get && length > 0 {
@@ -387,7 +407,10 @@ fn build_response(
         if file.seek(SeekFrom::Start(start)).is_err() {
             return MediaResponse::empty(status::INTERNAL_SERVER_ERROR);
         }
-        let mut buffer = vec![0u8; length as usize];
+        let Ok(buffer_length) = usize::try_from(length) else {
+            return MediaResponse::empty(status::INTERNAL_SERVER_ERROR);
+        };
+        let mut buffer = vec![0u8; buffer_length];
         if file.read_exact(&mut buffer).is_err() {
             return MediaResponse::empty(status::INTERNAL_SERVER_ERROR);
         }
