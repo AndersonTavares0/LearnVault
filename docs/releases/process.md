@@ -8,6 +8,10 @@ O LearnVault usa Semantic Versioning: `MAJOR.MINOR.PATCH`.
 4. O workflow de release publicado constrói os artefatos Linux, injeta a versão da tag e envia `SHA256SUMS`.
 5. Verifique os assets e os checksums antes da distribuição.
 
+O workflow de release recebe a tag publicada por variável de ambiente e valida que ela segue
+o formato `vMAJOR.MINOR.PATCH` antes de usá-la. A tag nunca é interpolada diretamente em
+comandos de shell.
+
 O Release Please é o único responsável pelo `docs/releases/CHANGELOG.md` e pelas notas do
 release. Não use notas geradas pelo GitHub como uma segunda fonte. Use prefixos como `feat:`,
 `fix:`, `docs:` e `chore:` com descrições em pt-BR para manter as versões previsíveis e o

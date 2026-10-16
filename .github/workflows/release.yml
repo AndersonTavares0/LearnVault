@@ -28,13 +28,26 @@ jobs:
       - run: pnpm run check
       - run: pnpm run build
       - run: go -C services/go test ./...
+      - name: Validate release tag
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          # Release Please publishes Go semantic tags with a leading "v"
+          # (include-v-in-tag: true), e.g. v1.2.3.
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Unexpected release tag format: $RELEASE_TAG" >&2
+            exit 1
+          fi
+          echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
       - name: Build Linux artifacts
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p dist
           cp LICENSE dist/LICENSE
-          tag="${{ github.event.release.tag_name }}"
+          tag="$RELEASE_TAG"
           for arch in amd64 arm64; do
              GOOS=linux GOARCH="$arch" CGO_ENABLED=0 go -C services/go build -trimpath -ldflags="-s -w -X main.version=$tag" -o "../dist/learnvault-linux-$arch" ./cmd/learnvault
              tar -czf "dist/learnvault-linux-$arch.tar.gz" -C dist "learnvault-linux-$arch" LICENSE
@@ -43,4 +56,4 @@ jobs:
       - name: Upload release assets
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" dist/*.tar.gz dist/SHA256SUMS --clobber
+        run: gh release upload "$RELEASE_TAG" dist/*.tar.gz dist/SHA256SUMS --clobber
