@@ -39,14 +39,21 @@ fn kind_of(outcome: &ScanOutcome, relative: &str) -> MediaKind {
 }
 
 /// Manifesto recursivo da árvore: par (caminho relativo, tamanho, instante de
-/// modificação) em ordem estável.
-fn manifest(root: &Path) -> BTreeSet<(String, u64, u128)> {
+/// modificação) em ordem estável. No Windows, o NTFS atualiza o mtime de
+/// diretórios de forma preguiçosa, então `include_directories` é falso lá e a
+/// comparação fica restrita aos arquivos.
+fn manifest(root: &Path, include_directories: bool) -> BTreeSet<(String, u64, u128)> {
     let mut entries = BTreeSet::new();
-    collect_manifest(root, root, &mut entries);
+    collect_manifest(root, root, include_directories, &mut entries);
     entries
 }
 
-fn collect_manifest(root: &Path, current: &Path, entries: &mut BTreeSet<(String, u64, u128)>) {
+fn collect_manifest(
+    root: &Path,
+    current: &Path,
+    include_directories: bool,
+    entries: &mut BTreeSet<(String, u64, u128)>,
+) {
     for entry in fs::read_dir(current).unwrap() {
         let entry = entry.unwrap();
         let path = entry.path();
@@ -64,8 +71,10 @@ fn collect_manifest(root: &Path, current: &Path, entries: &mut BTreeSet<(String,
             .as_nanos();
 
         if entry.file_type().unwrap().is_dir() {
-            entries.insert((format!("{relative}/"), 0, modified));
-            collect_manifest(root, &path, entries);
+            if include_directories {
+                entries.insert((format!("{relative}/"), 0, modified));
+            }
+            collect_manifest(root, &path, include_directories, entries);
         } else {
             entries.insert((relative, metadata.len(), modified));
         }
@@ -165,13 +174,19 @@ fn files_without_extension_or_with_trailing_dot_are_material() {
     let directory = tempfile::tempdir().unwrap();
     let root = directory.path();
     write_file(root, "README", b"x");
-    write_file(root, "aula.", b"x");
     write_file(root, "aula.mp4.srt", b"x");
+    // O NTFS não representa nomes terminados em ponto: no Windows, "aula." é
+    // criado como "aula" e o caso não existe para a varredura do host.
+    if !cfg!(windows) {
+        write_file(root, "aula.", b"x");
+    }
 
     let outcome = scan(root).unwrap();
 
     assert_eq!(kind_of(&outcome, "README"), MediaKind::Material);
-    assert_eq!(kind_of(&outcome, "aula."), MediaKind::Material);
+    if !cfg!(windows) {
+        assert_eq!(kind_of(&outcome, "aula."), MediaKind::Material);
+    }
     assert_eq!(kind_of(&outcome, "aula.mp4.srt"), MediaKind::Subtitle);
 }
 
@@ -392,9 +407,9 @@ fn scanning_does_not_modify_the_library() {
     write_file(root, "Curso/Modulo 1/apoio.pdf", b"material");
     write_file(root, "temp_ignorado/rascunho.mp4", b"x");
 
-    let before = manifest(root);
+    let before = manifest(root, !cfg!(windows));
     let outcome = scan(root).unwrap();
-    let after = manifest(root);
+    let after = manifest(root, !cfg!(windows));
 
     assert!(!outcome.files.is_empty());
     assert_eq!(

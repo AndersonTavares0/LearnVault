@@ -30,20 +30,22 @@ Requisitos: Rust 1.99 (definido em `rust-toolchain.toml`), Node.js 24.x e pnpm 1
 é necessário apenas para a implementação de referência. Docker é opcional.
 
 ```sh
-pnpm install --frozen-lockfile
-pnpm run check
-pnpm run build
-cargo fmt --all -- --check
-cargo clippy --all-targets -- -D warnings
-cargo test --all
-cargo run -p learnvault-server -- --library-root testdata/library
+pnpm install --frozen-lockfile   # uma vez por checkout
+pnpm dev                         # API Rust + SPA com recarga automática
+pnpm verify                      # todos os checks de PR antes de enviar
 ```
+
+`pnpm dev` sobe a API em `http://127.0.0.1:8090` e a SPA em `http://localhost:5173`, com
+proxy de `/api` para o servidor. Para o desktop Tauri (Fase 4), use `pnpm dev:tauri`. Antes
+da pull request, `pnpm verify` reproduz os checks de PR (use `--fast` para pular builds e
+audit durante a iteração); os comandos individuais continuam em `.github/CONTRIBUTING.md`.
 
 A SPA é construída a partir de `apps/web/src` e gravada em
 `services/go/cmd/learnvault/web/build`, que o servidor Rust serve com `--web-root` e o
-executável Go de referência embute. A primeira execução exige `ADMIN_USERNAME` e
-`ADMIN_PASSWORD` com pelo menos 12 caracteres. Veja `deploy/compose/.env.example` para as
-configurações locais.
+executável Go de referência embute (`pnpm dev` dispensa esse build: o Vite serve a SPA e faz
+proxy de `/api`). Sem configuração, o primeiro acesso usa `admin`/`admin` e exige troca
+imediata; credenciais fornecidas usam `ADMIN_USERNAME` e `ADMIN_PASSWORD` com pelo menos 12
+caracteres. Veja `deploy/compose/.env.example` para as configurações locais.
 
 A implementação de referência em Go continua disponível:
 

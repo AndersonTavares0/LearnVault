@@ -7,6 +7,13 @@
   "scripts": {
     "check": "pnpm -r check",
     "build": "pnpm -r build",
-    "build:desktop": "pnpm --filter learnvault-web build:desktop"
+    "build:desktop": "pnpm --filter learnvault-web build:desktop",
+    "dev": "node scripts/dev.mjs localhost",
+    "dev:localhost": "node scripts/dev.mjs localhost",
+    "dev:tauri": "node scripts/dev.mjs tauri",
+    "verify": "node scripts/verify.mjs"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.3"
   }
 }

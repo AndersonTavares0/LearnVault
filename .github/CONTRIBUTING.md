@@ -15,25 +15,33 @@ a biblioteca de cursos de origem.
 
 ## Checks de desenvolvimento
 
+Instale as dependências uma vez e use os atalhos:
+
 ```sh
-pnpm install --frozen-lockfile
-pnpm run check
-pnpm run build
-pnpm audit --audit-level=low
-cargo fmt --all -- --check
-cargo clippy --all-targets -- -D warnings
-cargo test --all
+pnpm install --frozen-lockfile   # uma vez por checkout
+pnpm dev                         # API Rust + SPA com recarga automática
+pnpm verify                      # todos os checks de PR (--fast pula builds e audit)
 ```
 
-A implementação de referência em Go continua verificada com:
+`pnpm dev` sobe a API em `http://127.0.0.1:8090` e a SPA em `http://localhost:5173`. Se a
+porta estiver ocupada, defina `LEARNVAULT_LISTEN_ADDR`; o proxy da SPA acompanha.
+
+`pnpm verify` roda, nesta ordem: `pnpm run check`, `pnpm run build`,
+`pnpm run build:desktop`, `pnpm --filter learnvault-web test`, `pnpm audit --audit-level=low`,
+`cargo fmt --all -- --check`, `cargo clippy --all-targets -- -D warnings` e `cargo test`
+(núcleo e servidor). O crate desktop fica fora dos membros padrão do workspace; use
+`cargo test -p learnvault-desktop` ou `pnpm dev:tauri` quando for o caso.
+
+O desenvolvimento do desktop Tauri usa `pnpm dev:tauri` (frontend em watch e `tauri dev`,
+sem portas de rede). A implementação de referência em Go continua verificada com:
 
 ```sh
 go -C services/go test ./...
 go -C services/go vet ./...
 ```
 
-O desktop Tauri (Fase 4) e a distribuição por plataforma (Fase 5) ainda não estão concluídos;
-por isso não há checks de desktop ou de empacotamento no repositório.
+A distribuição por plataforma e o empacotamento (Fase 5) ainda não estão concluídos; por
+isso não há checks de pacote no repositório.
 
 Os testes devem usar fixtures e diretórios temporários; não devem acessar dados externos.
 
