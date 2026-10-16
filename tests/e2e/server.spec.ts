@@ -163,10 +163,10 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	await expect(page.getByRole('heading', { name: 'Seus cursos' })).toBeVisible();
 	await page.getByRole('button', { name: 'Indexar biblioteca' }).click();
 	await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
-	await expect(page.getByRole('button', { name: /Aula/ })).toBeVisible();
+	await expect(page.getByRole('button', { name: /Curso/ })).toBeVisible();
 
-	await page.getByRole('button', { name: /Aula/ }).click();
-	await expect(page.getByRole('heading', { name: 'Aula' })).toBeVisible();
+	await page.getByRole('button', { name: /Curso/ }).click();
+	await expect(page.getByRole('heading', { name: 'Curso' })).toBeVisible();
 	const videoSource = await page.locator('video').getAttribute('src');
 	expect(videoSource).toMatch(/\/api\/media\?/);
 	const videoResponse = await page.request.get(new URL(videoSource as string, server.baseURL).toString());
