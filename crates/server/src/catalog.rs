@@ -106,7 +106,10 @@ struct RescanResponse {
     updated: usize,
     marked_missing: usize,
     preserved: usize,
-    ambiguous: Vec<String>,
+    /// Quantidade de chaves relativas ambíguas recusadas nesta varredura.
+    ///
+    /// É apenas a contagem: as chaves em si são caminhos relativos e nunca cruzam a API.
+    ambiguous_count: usize,
 }
 
 pub(crate) async fn catalog(State(state): State<AppState>, headers: HeaderMap) -> Response {
@@ -418,7 +421,8 @@ impl From<RescanSummary> for RescanResponse {
             updated: summary.updated,
             marked_missing: summary.marked_missing,
             preserved: summary.preserved,
-            ambiguous: summary.ambiguous,
+            // Nunca serializa as chaves: a resposta expõe só a contagem, como o desktop.
+            ambiguous_count: summary.ambiguous.len(),
         }
     }
 }
@@ -444,5 +448,33 @@ const fn availability(value: Availability) -> &'static str {
     match value {
         Availability::Available => "available",
         Availability::Missing => "missing",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rescan_response_exposes_only_the_ambiguous_count() {
+        // O resumo carrega caminhos relativos nas chaves ambíguas; a resposta nunca pode
+        // serializá-los, expondo apenas a contagem (como o DTO do desktop).
+        let summary = RescanSummary {
+            ambiguous: vec!["Cursos secretos/aula.mp4".to_owned()],
+            ..RescanSummary::default()
+        };
+
+        let json = serde_json::to_value(RescanResponse::from(summary)).unwrap();
+
+        assert_eq!(json["ambiguous_count"], 1);
+        assert!(
+            json.get("ambiguous").is_none(),
+            "a resposta não pode expor a lista de caminhos: {json}"
+        );
+        let rendered = json.to_string();
+        assert!(
+            !rendered.contains("Cursos secretos") && !rendered.contains("aula.mp4"),
+            "nenhum caminho relativo pode cruzar a API: {rendered}"
+        );
     }
 }

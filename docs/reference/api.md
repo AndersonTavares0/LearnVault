@@ -69,7 +69,9 @@ nunca é modificada.
 O rescan é uma atualização preservadora, não uma substituição: ele insere arquivos novos, atualiza
 os conhecidos no mesmo caminho (reutilizando o `media_id`, inclusive após um arquivo ausente
 reaparecer) e marca como ausentes os que deixaram de aparecer. Nenhum rescan exclui registros,
-reescreve a identidade de mídia ou apaga o estado associado.
+reescreve a identidade de mídia ou apaga o estado associado. A resposta `200` devolve apenas o
+resumo sanitizado do núcleo — contagens, incluindo `ambiguous_count` — e nunca os caminhos
+relativos das chaves ambíguas, que exporiam a estrutura da biblioteca.
 
 O catálogo Go adota uma política fail-closed e persistente para remoções. Uma remoção
 explícita é gravada como tombstone em `media_removal`, chaveado pelo caminho relativo canônico

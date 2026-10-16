@@ -284,6 +284,25 @@ async fn admin_rescan_populates_the_authenticated_catalog() {
     assert_eq!(rescan_json["complete"], true);
     assert_eq!(rescan_json["inserted"], 2);
     assert!(rescan_json["scan_id"].as_i64().unwrap() > 0);
+    // Resposta sanitizada: expõe apenas a contagem de chaves ambíguas, nunca os caminhos
+    // relativos que as compõem. Produzir ambiguidade real por HTTP não é portável (depende
+    // da normalização de separadores por plataforma); o caso com caminho é coberto de forma
+    // determinística pelo teste unitário de `RescanResponse::from` em `catalog.rs`.
+    assert!(
+        rescan_json["ambiguous_count"].is_u64(),
+        "ambiguous_count precisa ser uma contagem numérica: {rescan_json}"
+    );
+    assert!(
+        rescan_json.get("ambiguous").is_none(),
+        "a lista de caminhos ambíguos não pode cruzar a API: {rescan_json}"
+    );
+    let rescan_text = String::from_utf8_lossy(&rescan_body);
+    assert!(
+        !rescan_text.contains("Categoria")
+            && !rescan_text.contains("lesson.mp4")
+            && !rescan_text.contains("nota.pdf"),
+        "a resposta do rescan não pode vazar caminhos relativos: {rescan_text}"
+    );
 
     let catalog = app
         .oneshot(
