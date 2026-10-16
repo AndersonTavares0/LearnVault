@@ -208,15 +208,32 @@ func (d *DB) DeleteSession(ctx context.Context, token string) error {
 
 // RemoveMedia records the explicit removal of a library-relative path from the catalog.
 // The identity is the canonical relative path, so the tombstone survives every rescan,
-// and repeated calls are idempotent: the first removal wins and `removed_at` is never
-// rewritten. Nothing stored in the catalog is deleted here — removing from the view is
-// not erasing data.
+// and repeated calls are idempotent: the first removal wins and neither `removed_at` nor
+// `is_media` is rewritten. Nothing stored in the catalog is deleted here — removing from
+// the view is not erasing data.
+//
+// While the file is still catalogued, its scanner classification is captured in
+// `is_media` (1 media, 0 subtitle/material, NULL unknown) so a later study read can decide
+// eligibility even after the catalog no longer lists the path (for example a `.ts`, which
+// the scanner treats as media only above a size threshold).
 func (d *DB) RemoveMedia(ctx context.Context, relativePath string) error {
 	clean, ok := catalog.NormalizePath(relativePath)
 	if !ok {
 		return errors.New("invalid media path")
 	}
-	_, err := d.sql.ExecContext(ctx, `INSERT OR IGNORE INTO media_removal(relative_path,removed_at) VALUES(?,?)`, clean, time.Now().UTC().Unix())
+	value, err := d.Catalog(ctx)
+	if err != nil {
+		return err
+	}
+	var isMedia any
+	if file, found := catalog.LookupFile(value, clean); found {
+		if catalog.IsMediaName(file.Name, file.Size) {
+			isMedia = 1
+		} else {
+			isMedia = 0
+		}
+	}
+	_, err = d.sql.ExecContext(ctx, `INSERT OR IGNORE INTO media_removal(relative_path,removed_at,is_media) VALUES(?,?,?)`, clean, time.Now().UTC().Unix(), isMedia)
 	return err
 }
 
@@ -238,6 +255,27 @@ func (d *DB) RemovedMedia(ctx context.Context) (map[string]struct{}, error) {
 		removed[path] = struct{}{}
 	}
 	return removed, rows.Err()
+}
+
+// StudyRemovedMedia reports whether a canonical path is a study-eligible media through its
+// removal tombstone. It uses the classification captured at removal time: media is
+// eligible, a recorded subtitle/material is not, and an unknown legacy row falls back to
+// extensions that are unambiguously media (so a tombstoned `.ts` with no recorded
+// classification is refused rather than guessed). A path without a tombstone is not
+// eligible here.
+func (d *DB) StudyRemovedMedia(ctx context.Context, mediaPath string) (bool, error) {
+	var isMedia sql.NullInt64
+	err := d.sql.QueryRowContext(ctx, `SELECT is_media FROM media_removal WHERE relative_path=?`, mediaPath).Scan(&isMedia)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if isMedia.Valid {
+		return isMedia.Int64 == 1, nil
+	}
+	return catalog.IsUnambiguousMediaExtension(mediaPath), nil
 }
 
 // filterRemovedCatalog drops tombstoned paths at read time, mirroring the Rust
@@ -312,6 +350,129 @@ func filterRemovedNodes(nodes []catalog.Node, keepFiles func([]catalog.File) []c
 		}
 	}
 	return kept
+}
+
+// MaxRecentStudy is the fixed ceiling of RecentStudy results. It is a protection
+// against unbounded queries, not a setting: the value ships with the code.
+const MaxRecentStudy = 100
+
+// ErrInvalidStudyPosition reports a negative resume position rejected before any write.
+var ErrInvalidStudyPosition = errors.New("invalid study position")
+
+// StudyProgress is the persisted study state of one owner for one media identity.
+//
+// The Go service has no stable media identifier, so MediaPath is the canonical
+// library-relative path — the same identity used by `/api/media` and by the removal
+// tombstone. Position and completion are independent: advancing never clears completion
+// and completing never moves the resume point. UpdatedAt is the instant of the last real
+// change, in seconds since the Unix epoch, and never moves when the same value is resent.
+type StudyProgress struct {
+	MediaPath       string
+	PositionSeconds int64
+	Completed       bool
+	UpdatedAt       int64
+}
+
+// StudyProgress reads the recorded state of one owner for one media path. The boolean
+// reports whether a row exists: absence is not an error, it means the path was never
+// studied by this owner. Media existence is enforced at the HTTP boundary, so this method
+// only reads the persisted row.
+func (d *DB) StudyProgress(ctx context.Context, userID int64, mediaPath string) (StudyProgress, bool, error) {
+	state, err := scanStudyState(d.sql.QueryRowContext(ctx, `SELECT media_path, position_seconds, completed, updated_at FROM study_state WHERE user_id=? AND media_path=?`, userID, mediaPath))
+	if errors.Is(err, sql.ErrNoRows) {
+		return StudyProgress{}, false, nil
+	}
+	if err != nil {
+		return StudyProgress{}, false, err
+	}
+	return state, true, nil
+}
+
+// RecordStudyPosition writes the resume point, preserving any recorded completion. A
+// negative position is rejected before touching the database. The upsert is a single
+// statement, so the read-back is the exact row the write produced even under concurrency.
+func (d *DB) RecordStudyPosition(ctx context.Context, userID int64, mediaPath string, positionSeconds int64) (StudyProgress, error) {
+	if positionSeconds < 0 {
+		return StudyProgress{}, ErrInvalidStudyPosition
+	}
+	return d.upsertStudyState(ctx,
+		`INSERT INTO study_state (user_id, media_path, position_seconds, completed, updated_at)
+		 VALUES (?, ?, ?, 0, ?)
+		 ON CONFLICT (user_id, media_path) DO UPDATE SET
+		     position_seconds = excluded.position_seconds,
+		     updated_at = CASE
+		         WHEN study_state.position_seconds <> excluded.position_seconds
+		         THEN excluded.updated_at
+		         ELSE study_state.updated_at
+		     END
+		 RETURNING media_path, position_seconds, completed, updated_at`,
+		userID, mediaPath, positionSeconds)
+}
+
+// SetStudyCompleted marks or clears completion, preserving the resume point. The instant
+// only advances when completion actually changes, mirroring RecordStudyPosition.
+func (d *DB) SetStudyCompleted(ctx context.Context, userID int64, mediaPath string, completed bool) (StudyProgress, error) {
+	value := 0
+	if completed {
+		value = 1
+	}
+	return d.upsertStudyState(ctx,
+		`INSERT INTO study_state (user_id, media_path, position_seconds, completed, updated_at)
+		 VALUES (?, ?, 0, ?, ?)
+		 ON CONFLICT (user_id, media_path) DO UPDATE SET
+		     completed = excluded.completed,
+		     updated_at = CASE
+		         WHEN study_state.completed <> excluded.completed
+		         THEN excluded.updated_at
+		         ELSE study_state.updated_at
+		     END
+		 RETURNING media_path, position_seconds, completed, updated_at`,
+		userID, mediaPath, value)
+}
+
+// RecentStudy lists the owner's progress from the most recently changed to the oldest,
+// breaking ties by media path so the order is deterministic. The limit is clamped to
+// MaxRecentStudy and a non-positive limit returns nothing. Media recorded by an explicit
+// removal tombstone is hidden, but its progress row is never erased.
+func (d *DB) RecentStudy(ctx context.Context, userID int64, limit int) ([]StudyProgress, error) {
+	if limit > MaxRecentStudy {
+		limit = MaxRecentStudy
+	}
+	if limit <= 0 {
+		return []StudyProgress{}, nil
+	}
+	rows, err := d.sql.QueryContext(ctx, `SELECT s.media_path, s.position_seconds, s.completed, s.updated_at
+		FROM study_state s
+		WHERE s.user_id = ?
+		  AND NOT EXISTS (SELECT 1 FROM media_removal r WHERE r.relative_path = s.media_path)
+		ORDER BY s.updated_at DESC, s.media_path ASC
+		LIMIT ?`, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	states := []StudyProgress{}
+	for rows.Next() {
+		var state StudyProgress
+		if err := rows.Scan(&state.MediaPath, &state.PositionSeconds, &state.Completed, &state.UpdatedAt); err != nil {
+			return nil, err
+		}
+		states = append(states, state)
+	}
+	return states, rows.Err()
+}
+
+// upsertStudyState appends the current instant to a single-statement upsert and decodes
+// the RETURNING row, so the caller observes exactly what was persisted.
+func (d *DB) upsertStudyState(ctx context.Context, statement string, args ...any) (StudyProgress, error) {
+	args = append(args, time.Now().UTC().Unix())
+	return scanStudyState(d.sql.QueryRowContext(ctx, statement, args...))
+}
+
+func scanStudyState(row *sql.Row) (StudyProgress, error) {
+	var state StudyProgress
+	err := row.Scan(&state.MediaPath, &state.PositionSeconds, &state.Completed, &state.UpdatedAt)
+	return state, err
 }
 
 func (d *DB) ReplaceCatalog(ctx context.Context, value catalog.Catalog) error {
