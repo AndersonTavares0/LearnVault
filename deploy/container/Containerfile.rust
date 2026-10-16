@@ -28,7 +28,7 @@ COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
 RUN cargo build --release --locked --package learnvault-server
 
-FROM alpine:3.22
+FROM alpine:3.24
 RUN apk add --no-cache ca-certificates \
     && addgroup -S -g 10001 learnvault \
     && adduser -S -D -H -u 10001 -G learnvault learnvault
