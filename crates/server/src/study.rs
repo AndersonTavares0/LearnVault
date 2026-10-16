@@ -76,6 +76,27 @@ struct RecentResponse {
     items: Vec<ProgressResponse>,
 }
 
+/// Documento de capacidades do Study, o contrato explícito de detecção de recursos.
+///
+/// O shape espelha o serviço Go de referência para que a SPA detecte recursos nos dois
+/// transportes, mas os valores relatam o comportamento real deste servidor. A identidade
+/// de mídia do Rust é o `media_id` opaco gerado pelo domínio, que sobrevive a renomeações
+/// — é o `relative_path` do Go de referência que não é estável. É exatamente por isso que
+/// o endpoint existe: para o cliente não presumir paridade onde ela não existe.
+#[derive(Serialize)]
+struct CapabilitiesResponse {
+    study: bool,
+    media_identity: &'static str,
+    stable_media_identity: bool,
+    recent_default_limit: usize,
+    recent_max_limit: usize,
+    removal_keeps_progress: bool,
+}
+
+/// Valor de `media_identity` deste servidor: a identidade é o `media_id` opaco, não o
+/// caminho relativo do arquivo.
+const MEDIA_IDENTITY: &str = "media_id";
+
 impl ProgressResponse {
     fn recorded(progress: StudyProgress) -> Self {
         Self {
@@ -215,6 +236,30 @@ pub(crate) async fn set_completed(
         }
         Err(failure) => study_failure_response(failure),
     }
+}
+
+/// Responde o contrato de capacidades do Study.
+///
+/// Exige a mesma sessão autenticada (e a mesma recusa à sessão temporária) das demais
+/// rotas de leitura do Study, sem ler nem gravar catálogo, estado de estudo ou biblioteca
+/// física. A resposta é sempre `private, no-store`. A leitura da sessão ocupa a capacidade
+/// *blocking* como as outras rotas, então sob saturação responde `503` em vez de segurar o
+/// mutex do banco.
+pub(crate) async fn capabilities(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    if let Err(failure) = user_or_response(&state, &headers).await {
+        return failure.into_response();
+    }
+    private_no_store(
+        Json(CapabilitiesResponse {
+            study: true,
+            media_identity: MEDIA_IDENTITY,
+            stable_media_identity: true,
+            recent_default_limit: DEFAULT_RECENT_LIMIT,
+            recent_max_limit: learnvault_core::MAX_RECENT_STUDY,
+            removal_keeps_progress: true,
+        })
+        .into_response(),
+    )
 }
 
 /// Falha da camada de estudo, antes da tradução para HTTP.

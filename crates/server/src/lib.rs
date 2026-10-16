@@ -60,6 +60,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/study/progress", get(study::progress))
         .route("/api/study/position", post(study::record_position))
         .route("/api/study/completed", post(study::set_completed))
+        .route("/api/study/capabilities", get(study::capabilities))
         .fallback(spa::serve)
         .layer(DefaultBodyLimit::max(8 * 1024))
         .layer(map_response(move |response| {
