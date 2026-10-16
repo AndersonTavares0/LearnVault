@@ -8,9 +8,11 @@ duas formas:
 
 ## Estado atual
 
-O repositório ainda contém a implementação em **Go com SQLite e SPA SvelteKit embutida**. Ela é
-a implementação atual, a **referência funcional e visual** da reescrita, e será removida em pull
-request próprio quando o MVP em Rust cobrir os requisitos aprovados.
+O estado atual combina o workspace Rust — `crates/server` para o servidor Axum, `crates/desktop`
+para a fundação Tauri offline e `apps/web` para a SPA Svelte 5 + Vite — com o núcleo compartilhado
+em `crates/core`. `services/go` é a implementação legada e a referência funcional/visual durante
+a transição; sua remoção ocorrerá em pull request próprio somente quando o MVP Rust cobrir os
+requisitos aprovados.
 
 A reescrita em Rust já entrega `crates/core`, `crates/server` e o `crates/desktop` com a
 **fundação** (crate Tauri 2 que embute a SPA por `frontendDist`, capability em deny-by-default e
@@ -28,10 +30,13 @@ entre servidor Rust, SPA web e serviço Go de referência; o desktop ainda não 
 Proxy HTTPS local
         |
         v
-Serviço HTTP Go -- SQLite (/data)
+Serviço HTTP Rust -- SQLite (/data)
         |-- cache (/cache)
         `-- biblioteca de cursos (/library:ro)
 ```
+
+O serviço HTTP Go permanece disponível separadamente como implementação legada/de referência;
+ele não é o servidor atual descrito pelo fluxo acima.
 
 ## Arquitetura aprovada
 

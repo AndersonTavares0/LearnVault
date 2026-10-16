@@ -30,9 +30,12 @@ Use secret file ou mecanismo equivalente do ambiente para valores configurados; 
 valores reais em documentação, compose ou logs. Use a fixture sintética em `testdata/`. Nunca aponte a
 automação para dados externos; a biblioteca deve permanecer somente leitura.
 
-O aplicativo desktop Tauri (`crates/desktop`, Fase 4) e a distribuição por plataforma (Fase 5)
-ainda não estão concluídos; o atalho `pnpm dev:tauri` cobre apenas a fatia atual do desktop
-(configuração da biblioteca, catálogo e rescan). A entrega parcial de mídia está em #76 (Draft,
-não mesclada); não trate-a como suporte de mídia ou distribuição concluídos.
+O aplicativo desktop Tauri (`crates/desktop`, Fase 4) ainda não está concluído; a fatia atual
+inclui a fundação, IPC de catálogo/configuração, seleção da raiz, rescan explícito e entrega de
+arquivos pequenos. A entrega de vídeo/áudio, autenticação, janelas reais e os limites do
+protocolo de mídia permanecem pendentes. A entrega parcial de mídia está em #76 (Draft, não
+mesclada), e a distribuição por plataforma (Fase 5) também não está concluída. O atalho
+`pnpm dev:tauri` cobre somente o que já foi implementado; não implica runtime ou distribuição
+completos.
 
 Consulte o README do repositório para configuração e deploy opcional com Compose/Quadlet.
