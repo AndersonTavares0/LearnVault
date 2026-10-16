@@ -103,6 +103,27 @@ explícita do mantenedor.
 O Wiki sync não é check obrigatório: ele roda após mudanças mapeadas chegarem à `main` ou por
 execução manual, escreve somente páginas gerenciadas e não reage a eventos da própria Wiki.
 
+## Labels automáticas
+
+`.github/labeler.yml` e o workflow `Labeler` classificam pull requests por arquivos
+alterados: `area:web`, `area:rust`, `area:desktop`, `area:go`, `area:docs`, `area:ci` e
+`area:deploy`, além de `tests` e `dependencies`. O workflow usa `actions/labeler` fixado em
+SHA completo, roda em `pull_request_target`, não faz checkout, não usa segredos e não executa
+código da pull request; a configuração é lida da base confiável e execuções vindas de forks
+são ignoradas.
+
+Limites explícitos:
+
+- A classificação é informacional. Não é check obrigatório, não aprova e não bloqueia merge.
+- Tipo de trabalho (`bug`, `enhancement`, `documentation`) e segurança continuam decisões
+  humanas; a automação não infere essas categorias por nome de arquivo ou de branch.
+- `sync-labels: false`: nenhuma label é removida automaticamente e correções manuais seguem
+  permitidas, inclusive para labels antigas que deixarem de corresponder aos arquivos atuais.
+- As labels referenciadas precisam existir no repositório. O workflow tem apenas
+  `pull-requests: write`, não cria labels e falha ao tentar aplicar uma label inexistente.
+- Testes unitários inline em Rust (`#[cfg(test)]` dentro de `src/`) não são detectáveis por
+  caminho e podem não receber `tests`.
+
 ## Dependências e testes
 
 O Dependabot agrupa atualizações compatíveis do frontend, módulos Go e Actions. Atualizações
