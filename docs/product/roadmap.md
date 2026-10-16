@@ -9,9 +9,11 @@ não funcionais consolidados ficam em [requirements.md](requirements.md).
 O MVP é o conjunto mínimo que permite aposentar o serviço Go de referência (Fase 5) e publicar o
 desktop:
 
-- **Inclui:** RF-01 a RF-10 completos e RNF-01 a RNF-09 atendidos; RF-11 coberto por instalador
-  Windows NSIS e imagem OCI ou binário nativo do servidor; estratégia para bancos Go legados
-  resolvida ou suporte explicitamente delimitado, conforme o milestone
+- **Inclui:** RF-01 a RF-10 completos; RNF-01 a RNF-07 atendidos (segurança, privacidade,
+  desempenho de mídia, operação, portabilidade e qualidade); RNF-08 e RNF-09 seguem como metas
+  contínuas. RF-11 coberto por instalador Windows NSIS e imagem OCI ou binário nativo do
+  servidor; estratégia para bancos Go legados resolvida ou suporte explicitamente delimitado,
+  conforme o milestone
   [Migração Go → Rust](https://github.com/AndersonTavares0/LearnVault/milestone/3).
 - **Não inclui:** Whisper e transcrições, notas, favoritos, busca avançada e cliente mobile
   nativo (seção "Mais tarde"); `.msi` e versão portátil para Windows (discussion
@@ -60,7 +62,8 @@ As entregas mescladas #86, #88, #90 e #91 alinham o contrato de Study entre o se
 a SPA web e o serviço Go de referência: progresso, posição de retomada, conclusão e histórico
 recente usam o mesmo contrato e os mesmos limites públicos. O desktop passou a expor esse
 contrato por IPC, com o dono local fixo resolvido no Rust, e a entrega de mídia de arquivos
-pequenos chegou na #76; o player continua sem reprodução de vídeo/áudio, que segue pendente.
+pequenos (imagens e materiais) chegou na #76; a reprodução de vídeo/áudio no player desktop
+continua pendente.
 
 ## Próximo — ciclo de estudo utilizável
 

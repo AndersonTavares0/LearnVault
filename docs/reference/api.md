@@ -129,9 +129,9 @@ posição negativa vira `invalid_position` e as demais falhas viram `study_unava
 continua valendo. Os comandos não exigem raiz de biblioteca configurada e nunca gravam `media`,
 `scan`, `library` nem a biblioteca física.
 
-Limitação desta fatia: o desktop atende um único dono local, sem sessão nem seletor de contas, e
-ainda não entrega a mídia ao player — sem reprodução não há posição real, então a barra de estudo
-do player permanece fechada (a entrega de arquivos pequenos está mesclada desde a #76; vídeo e
-áudio seguem fora do protocolo).
+Limitação desta fatia: o desktop atende um único dono local, sem sessão nem seletor de contas.
+Arquivos pequenos (imagens e materiais) já são entregues pelo protocolo desde a #76, mas o player
+ainda não recebe vídeo/áudio — sem reprodução não há posição real, então a barra de estudo do
+player permanece fechada.
 
 Para limites de arquitetura e deploy, consulte a [visão de arquitetura](../architecture/overview.md).

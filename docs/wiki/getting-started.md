@@ -33,8 +33,9 @@ automação para dados externos; a biblioteca deve permanecer somente leitura.
 O aplicativo desktop Tauri (`crates/desktop`, Fase 4) ainda não está concluído; a fatia atual
 inclui a fundação, IPC de catálogo/configuração, seleção da raiz, rescan explícito e entrega de
 arquivos pequenos. A entrega de vídeo/áudio, autenticação, janelas reais e os limites do
-protocolo de mídia permanecem pendentes. A entrega de mídia de arquivos pequenos está mesclada
-desde a #76, e a distribuição por plataforma (Fase 5) também não está concluída. O atalho
+protocolo de mídia permanecem pendentes. A entrega de arquivos pequenos (imagens e materiais)
+está mesclada desde a #76; a reprodução de vídeo/áudio no player desktop continua pendente, e a
+distribuição por plataforma (Fase 5) também não está concluída. O atalho
 `pnpm dev:tauri` cobre somente o que já foi implementado; não implica runtime ou distribuição
 completos.
 

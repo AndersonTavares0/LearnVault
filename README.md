@@ -23,8 +23,9 @@ builds. As entregas mescladas #86, #88, #90 e #91 alinham Study no servidor Rust
 no serviço Go de referência, além de avançarem o desktop com configuração, seleção da raiz,
 catálogo e rescan explícito. O desktop Tauri e a distribuição por plataforma com a remoção do
 serviço Go (Fase 5) **ainda não estão concluídos**. A entrega de mídia de arquivos pequenos do
-desktop chegou na #76; vídeo/áudio, autenticação desktop, janelas reais, streaming
-completo, migração do banco e distribuição continuam gates explícitos.
+desktop (imagens e materiais) chegou na #76; a reprodução de vídeo/áudio no player, autenticação
+desktop, janelas reais, streaming completo, migração do banco e distribuição continuam gates
+explícitos.
 
 ## Comece aqui
 

@@ -60,9 +60,10 @@ RF-11 também na [distribuição](../operations/distribution.md).
   restrito ao desenvolvimento local.
 - **RNF-04 — Desempenho de mídia.** Reprodução com streaming parcial e seek, sem carregar
   arquivos inteiros em memória; mudanças sensíveis a desempenho incluem medições.
-- **RNF-05 — Operação.** O servidor expõe saúde do processo e do banco em `/api/healthz`; deploys
-  expostos usam proxy HTTPS com limites de conexão; dados e cache ficam em diretórios separados;
-  o rollback permanece possível enquanto o serviço Go de referência existir.
+- **RNF-05 — Operação.** O servidor expõe a saúde do processo e a prontidão do banco em
+  `/api/healthz`; deploys expostos usam proxy HTTPS com limites de conexão; dados e cache ficam
+  em diretórios separados; o rollback permanece possível enquanto o serviço Go de referência
+  existir.
 - **RNF-06 — Portabilidade.** O núcleo compila sem Docker ou Podman; containers são adaptadores
   opcionais; o CI constrói cada artefato de plataforma antes de montar instaladores.
 - **RNF-07 — Qualidade.** Cobertura de testes Rust de pelo menos 80% medida com `cargo-llvm-cov`,
