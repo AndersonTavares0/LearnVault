@@ -1,35 +1,12 @@
 # Requisitos do produto
 
-Este documento consolida os requisitos funcionais (RF) e não funcionais (RNF) do LearnVault nos
-dois modos de uso aprovados no [ADR 0001](../architecture/adr/0001-reescrita-em-rust.md): o
-**servidor self-hosted** com WebUI e o **desktop offline**. Ele define o alvo do produto; o
-status de entrega continua no [roadmap](roadmap.md), e funcionalidades pendentes não aparecem
-aqui como concluídas.
+Este documento define os requisitos funcionais (RF) e não funcionais (RNF) do LearnVault nos dois
+modos de uso aprovados no [ADR 0001](../architecture/adr/0001-reescrita-em-rust.md): o **servidor
+self-hosted** com WebUI e o **desktop offline**.
 
-Cada requisito cita a fonte de onde veio. Os identificadores são estáveis e podem ser citados em
-issues e pull requests. Decisões ainda abertas aparecem em "Decisões abertas", nunca como
-requisito fechado.
-
-O **checklist de implementação** abaixo mostra o que já está entregue e o que falta; ele orienta
-a abertura de novas issues para as lacunas sem acompanhamento. O roadmap continua sendo a visão
-por fases; este documento define o alvo e o estado de cada requisito.
-
-## Escopo do MVP (proposta)
-
-O MVP é o conjunto mínimo que permite aposentar o serviço Go de referência (Fase 5 do
-[roadmap](roadmap.md)) e publicar o desktop. Proposta:
-
-- **Inclui:** RF-01 a RF-10 completos e RNF-01 a RNF-09 atendidos; RF-11 coberto por instalador
-  Windows NSIS e imagem OCI ou binário nativo do servidor; estratégia para bancos Go legados
-  resolvida ou suporte explicitamente delimitado, conforme o milestone
-  [Migração Go → Rust](https://github.com/AndersonTavares0/LearnVault/milestone/3).
-- **Não inclui:** Whisper e transcrições, notas, favoritos, busca avançada e cliente mobile
-  nativo (seção "Mais tarde" do roadmap); `.msi` e versão portátil para Windows (discussion
-  [#131](https://github.com/AndersonTavares0/LearnVault/discussions/131)); e Flatpak como
-  bloqueio de release, já que a validação técnica pode seguir em paralelo.
-
-Esta delimitação é uma proposta para revisão do mantenedor. O MVP só muda com atualização deste
-documento.
+Cada requisito cita a fonte canônica de onde veio, e os identificadores são estáveis para citação
+em issues e pull requests. O escopo do MVP e o estado de entrega ficam no
+[roadmap](roadmap.md); o acompanhamento das pendências de implementação fica nas issues.
 
 ## Modos de uso e atores
 
@@ -101,78 +78,3 @@ visão de arquitetura; RNF-04 nas regras de entrega do [roadmap](roadmap.md) e n
 RNF-06 na [distribuição](../operations/distribution.md) e no roadmap; RNF-07 no ADR 0001 e no
 [playbook de testes](../../.agents/playbooks/testing.md); RNF-08 no roadmap; RNF-09 em
 [`.agents/policies/governance.md`](../../.agents/policies/governance.md).
-
-## Checklist de implementação
-
-Status por requisito: **Implementado**, **Parcial** ou **Faltante**. A coluna de lacuna aponta
-onde o trabalho pendente já é acompanhado; lacunas sem acompanhamento aparecem na seção
-seguinte como candidatas a nova issue.
-
-| Requisito | Status | Lacuna | Acompanhamento |
-| --- | --- | --- | --- |
-| RF-01 | Implementado | — | — |
-| RF-02 | Implementado | Shape canônico recursivo em revisão | PR #121 |
-| RF-03 | Implementado | — | — |
-| RF-04 | Implementado | — | — |
-| RF-05 | Parcial | Remoção explícita existe no núcleo e no Go, mas não é exposta no servidor Rust nem no desktop | Candidata a issue |
-| RF-06 | Implementado | — | — |
-| RF-07 | Implementado | — | — |
-| RF-08 | Implementado | Capacidades de estudo documentadas na API | PR #125, issue #124 |
-| RF-09 | Parcial | Sem reprodução de vídeo/áudio no desktop; mídia pequena já é entregue | Issue #69 (F4.5) |
-| RF-10 | Parcial | Detalhes do curso, player com legendas/materiais e navegação de aulas pendentes | Roadmap (Interface) |
-| RF-11 | Parcial | OCI do Go disponível, OCI Rust experimental; instaladores desktop faltantes | Discussion #131, issue #69 (C2) |
-| RNF-01 | Implementado | — | — |
-| RNF-02 | Implementado | Novas fatias de mídia devem manter a fronteira | Issue #69 (riscos) |
-| RNF-03 | Implementado | — | — |
-| RNF-04 | Parcial | Seek no desktop pendente; medições de recursos ainda não registradas | Issue #69 (F4.5) |
-| RNF-05 | Parcial | Readiness do healthz em revisão; publicação do servidor Rust não validada | PR #128, issue #69 (P0.4) |
-| RNF-06 | Parcial | CI ainda não constrói artefatos desktop por plataforma | Issue #69 (C2) |
-| RNF-07 | Implementado | Gate de cobertura no núcleo ativo no CI | — |
-| RNF-08 | Parcial | Itens de acessibilidade do roadmap pendentes | Roadmap (Interface) |
-| RNF-09 | Implementado | — | — |
-
-## Lacunas para novas issues
-
-Itens sem issue própria hoje; cada um referencia o requisito que o origina. Devem virar issues
-somente com a aprovação do mantenedor, uma por unidade de trabalho:
-
-1. **Remoção explícita no servidor Rust e no desktop** (RF-05): expor a ação já implementada no
-   núcleo, com tombstone e testes, mantendo a biblioteca somente leitura.
-2. **Publicação do servidor Rust** (RNF-05, P0.4 da #69): exercitar binário Axum e imagem OCI
-   Rust com healthz, persistência, volume somente leitura e rollback.
-3. **Artefatos desktop por plataforma no CI/release** (RNF-06, RF-11): construir o instalador
-   NSIS no runner Windows e anexar com checksums, depois da decisão da discussion #131.
-
-As lacunas de mídia (RF-09, RNF-04), interface (RF-10, RNF-08), catálogo (RF-02) e healthz
-(RNF-05) já têm acompanhamento aberto nas referências da tabela.
-
-## Decisões abertas
-
-Estas decisões ainda não fechadas afetam a distribuição e a migração; nenhuma delas é um
-requisito fechado:
-
-- **Artefatos Windows além do instalador padrão** (`.msi`, versão portátil): em discussão na
-  [discussion #131](https://github.com/AndersonTavares0/LearnVault/discussions/131).
-- **Estratégia para bancos legados do serviço Go**: item P0.2 da
-  [issue #69](https://github.com/AndersonTavares0/LearnVault/issues/69). Até existir migração
-  testada, a conversão automática está fora de escopo e o servidor Rust recusa o banco antigo
-  com mensagem estável.
-- **Flatpak como formato definitivo do desktop Linux**: preferencial no ADR, sujeito a
-  validação de permissões, acesso persistente às bibliotecas e reprodução de mídia.
-
-## Fora de escopo por ora
-
-- Whisper e transcrições pesquisáveis, busca avançada, notas, favoritos e cliente mobile nativo,
-  listados como trabalhos posteriores no [roadmap](roadmap.md).
-- Conversão automática de bancos Go legados, conforme a [referência da API](../reference/api.md)
-  e a decisão aberta acima.
-
-## Rastreabilidade
-
-| Grupo | Fonte principal |
-| --- | --- |
-| RF-01, RF-03, RF-04, RF-05, RF-06, RF-09, RF-11 e RNF-01, RNF-02, RNF-05 | [ADR 0001](../architecture/adr/0001-reescrita-em-rust.md) e [visão de arquitetura](../architecture/overview.md) |
-| RF-02, RF-07, RF-08 e RNF-03 | [Referência da API](../reference/api.md) |
-| RF-10, RNF-04, RNF-06, RNF-08 | [Roadmap](roadmap.md) |
-| RF-11 e RNF-06 | [Distribuição](../operations/distribution.md) |
-| RNF-07 e RNF-09 | [Playbook de testes](../../.agents/playbooks/testing.md) e [política de governança](../../.agents/policies/governance.md) |

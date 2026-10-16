@@ -4,6 +4,23 @@ Este roadmap é o resumo durável do produto e é orientado a resultados. Detalh
 implementação pertencem às Issues e pull requests relacionadas. Os requisitos funcionais e
 não funcionais consolidados ficam em [requirements.md](requirements.md).
 
+## Escopo do MVP (proposta)
+
+O MVP é o conjunto mínimo que permite aposentar o serviço Go de referência (Fase 5) e publicar o
+desktop:
+
+- **Inclui:** RF-01 a RF-10 completos e RNF-01 a RNF-09 atendidos; RF-11 coberto por instalador
+  Windows NSIS e imagem OCI ou binário nativo do servidor; estratégia para bancos Go legados
+  resolvida ou suporte explicitamente delimitado, conforme o milestone
+  [Migração Go → Rust](https://github.com/AndersonTavares0/LearnVault/milestone/3).
+- **Não inclui:** Whisper e transcrições, notas, favoritos, busca avançada e cliente mobile
+  nativo (seção "Mais tarde"); `.msi` e versão portátil para Windows (discussion
+  [#131](https://github.com/AndersonTavares0/LearnVault/discussions/131)); Flatpak como bloqueio
+  de release, já que a validação técnica pode seguir em paralelo.
+
+Esta delimitação é uma proposta para revisão do mantenedor; mudanças de escopo atualizam esta
+seção.
+
 ## Corrente — reescrita em Rust
 
 A arquitetura aprovada está no [ADR 0001](../architecture/adr/0001-reescrita-em-rust.md).
@@ -42,8 +59,8 @@ durante a reescrita.
 As entregas mescladas #86, #88, #90 e #91 alinham o contrato de Study entre o servidor Rust,
 a SPA web e o serviço Go de referência: progresso, posição de retomada, conclusão e histórico
 recente usam o mesmo contrato e os mesmos limites públicos. O desktop passou a expor esse
-contrato por IPC, com o dono local fixo resolvido no Rust, mas o player do desktop continua sem
-reprodução enquanto a entrega de mídia estiver em #76 (Draft, não mesclada).
+contrato por IPC, com o dono local fixo resolvido no Rust, e a entrega de mídia de arquivos
+pequenos chegou na #76; o player continua sem reprodução de vídeo/áudio, que segue pendente.
 
 ## Próximo — ciclo de estudo utilizável
 
@@ -105,3 +122,4 @@ e reprodução de mídia antes de ser tratado como formato definitivo.
 
 - [Escopo e prioridades das próximas versões](https://github.com/AndersonTavares0/LearnVault/discussions/32)
 - [Camada de análise e dados](https://github.com/AndersonTavares0/LearnVault/discussions/33)
+- [Artefatos Windows além do instalador padrão (`.msi`, portátil)](https://github.com/AndersonTavares0/LearnVault/discussions/131)
