@@ -15,6 +15,8 @@ export type PlatformConfig = { configured: boolean };
 // A seleção nativa da raiz da biblioteca é específica do desktop: no HTTP o servidor já
 // conhece a própria biblioteca e nenhum caminho cruza o frontend.
 export type TransportKind = 'http' | 'desktop';
+export type StudyProgress = { mediaId: string; positionSeconds: number; completed: boolean; updatedAt: number | null; recorded: boolean };
+export type RecentStudy = { items: StudyProgress[] };
 
 export interface Transport {
 	me(): Promise<User | null>;
@@ -25,6 +27,10 @@ export interface Transport {
 	chooseLibrary(): Promise<PlatformConfig>;
 	rescan(): Promise<void>;
 	updateCredentials(username: string, password: string, currentPassword?: string): Promise<User>;
+	studyProgress(mediaId: string): Promise<StudyProgress>;
+	recordPosition(mediaId: string, positionSeconds: number): Promise<StudyProgress>;
+	setCompleted(mediaId: string, completed: boolean): Promise<StudyProgress>;
+	recentStudy(limit?: number): Promise<RecentStudy>;
 	mediaUrl(path: string): string | null;
 }
 
@@ -155,6 +161,18 @@ export function normalizeConfig(value: unknown): PlatformConfig {
 	return { configured: (value as { configured: boolean }).configured };
 }
 
+export function normalizeStudyProgress(value: unknown): StudyProgress {
+	if (!value || typeof value !== 'object') throw invalidPayload('progresso de estudo ausente.');
+	const progress = value as { media_id?: unknown; position_seconds?: unknown; completed?: unknown; updated_at?: unknown; recorded?: unknown };
+	if (typeof progress.media_id !== 'string' || typeof progress.position_seconds !== 'number' || typeof progress.completed !== 'boolean' || typeof progress.recorded !== 'boolean') throw invalidPayload('progresso de estudo incompleto.');
+	return { mediaId: progress.media_id, positionSeconds: progress.position_seconds, completed: progress.completed, updatedAt: typeof progress.updated_at === 'number' ? progress.updated_at : null, recorded: progress.recorded };
+}
+
+export function normalizeRecentStudy(value: unknown): RecentStudy {
+	if (!value || typeof value !== 'object' || !Array.isArray((value as { items?: unknown }).items)) throw invalidPayload('histórico de estudo inválido.');
+	return { items: (value as { items: unknown[] }).items.map(normalizeStudyProgress) };
+}
+
 export function normalizeCatalog(value: unknown): Catalog {
 	if (!value || typeof value !== 'object') throw invalidPayload('catálogo ausente.');
 	const payload = value as { categories?: unknown; nodes?: unknown; loose_files?: unknown; looseFiles?: unknown };
@@ -179,6 +197,10 @@ export class HttpTransport implements Transport {
 	async catalog() { const response = await fetch('/api/catalog'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar o catálogo.'); return normalizeCatalog(await response.json()); }
 	async rescan() { const response = await fetch('/api/admin/catalog/rescan', { method: 'POST' }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 409 ? 'Já existe um rescan em andamento.' : 'Não foi possível indexar a biblioteca.'); }
 	async updateCredentials(username: string, password: string, currentPassword = password) { const response = await fetch('/api/account/credentials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ current_password: currentPassword, username, password }) }); if (!response.ok) throw new Error(response.status === 422 ? 'Usuário ou senha inválidos.' : response.status === 401 ? 'Senha atual incorreta.' : 'Não foi possível atualizar as credenciais.'); return normalizeUser(await response.json()); }
+	async studyProgress(mediaId: string) { const response = await fetch(`/api/study/progress?media_id=${encodeURIComponent(mediaId)}`); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? 'Mídia não encontrada.' : 'Não foi possível ler o progresso.'); return normalizeStudyProgress(await response.json()); }
+	async recordPosition(mediaId: string, positionSeconds: number) { const response = await fetch('/api/study/position', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: mediaId, position_seconds: positionSeconds }) }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? 'Mídia não encontrada.' : response.status === 422 ? 'Posição inválida.' : 'Não foi possível salvar o progresso.'); return normalizeStudyProgress(await response.json()); }
+	async setCompleted(mediaId: string, completed: boolean) { const response = await fetch('/api/study/completed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: mediaId, completed }) }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? 'Mídia não encontrada.' : 'Não foi possível atualizar a conclusão.'); return normalizeStudyProgress(await response.json()); }
+	async recentStudy(limit?: number) { const url = limit === undefined ? '/api/study/recent' : `/api/study/recent?limit=${limit}`; const response = await fetch(url); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar o histórico.'); return normalizeRecentStudy(await response.json()); }
 	mediaUrl(path: string) { return `/api/media?path=${encodeURIComponent(path)}`; }
 }
 
@@ -218,6 +240,10 @@ export class DesktopStub implements Transport {
 	// resposta é um resumo sanitizado que não interessa ao shell, que recarrega o catálogo.
 	async rescan() { try { await invoke<unknown>('desktop_rescan'); } catch (cause) { throw desktopError(cause, 'Não foi possível indexar a biblioteca.'); } }
 	updateCredentials() { return Promise.reject(new Error('Transporte desktop ainda não implementado.')); }
+	studyProgress() { return Promise.reject(new Error('Transporte desktop ainda não implementado.')); }
+	recordPosition() { return Promise.reject(new Error('Transporte desktop ainda não implementado.')); }
+	setCompleted() { return Promise.reject(new Error('Transporte desktop ainda não implementado.')); }
+	recentStudy() { return Promise.reject(new Error('Transporte desktop ainda não implementado.')); }
 	mediaUrl(_path: string) { return null; }
 }
 
