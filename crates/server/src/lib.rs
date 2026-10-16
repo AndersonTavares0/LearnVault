@@ -17,6 +17,7 @@ pub use auth::{
     validate_current_password, validate_password, validate_username, verify_password,
 };
 pub use config::{Command, Config, ConfigError, parse_command};
+pub use learnvault_core::{LegacyImportOptions, LegacyImportReport, import_go_database};
 pub use state::{AppState, StateError};
 
 use std::{future::Future, time::Duration};

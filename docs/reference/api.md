@@ -47,10 +47,10 @@ credenciais nem sessões.
 O servidor Rust detecta a assinatura do banco legado Go (`users`, `sessions` e
 `schema_migrations`) antes de aplicar qualquer bootstrap ou migração e encerra com a mensagem
 estável `legacy_go_database_requires_migration: back up the database and migrate it before using the Rust server`.
-Ele não cria `admin/admin` nem sobrescreve dados. A API de núcleo `legacy_import` faz a conversão
-explícita com backup-first, origem somente leitura e saída temporária validada; ainda não há
-comando no servidor. Um banco novo vazio e um banco Rust existente continuam sendo abertos
-normalmente.
+Ele não cria `admin/admin` nem sobrescreve dados. A API de núcleo `legacy_import` e o comando
+`learnvault-server migrate-go` fazem a conversão explícita com backup-first, origem somente leitura
+e saída temporária validada; o subcomando não inicia o listener HTTP. Um banco novo vazio e um
+banco Rust existente continuam sendo abertos normalmente.
 
 ## Catálogo e mídia
 

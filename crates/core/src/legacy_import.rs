@@ -28,7 +28,7 @@ use crate::{
 };
 
 /// Entradas explícitas da conversão de um banco Go para um banco Rust.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LegacyImportOptions {
     /// Banco SQLite Go, aberto somente para leitura.
     pub input: PathBuf,

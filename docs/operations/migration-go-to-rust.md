@@ -15,6 +15,13 @@ remoção órfã, com `is_media` nulo ou com `is_media = 0` faz a operação fal
 não é descartada nem convertida em uma mídia fictícia. Colisões, papéis desconhecidos, timestamps
 inválidos e valores fora dos limites também falham sem promover a saída.
 
-O servidor CLI ainda não expõe um comando: a configuração atual não possui uma superfície
-administrativa limpa para essa operação. A invocação deve ser feita por um adaptador que chame a
-API do núcleo. Conserve o backup e confirme a saída com `Database::open` antes de usá-la.
+Execute a migração pelo CLI, informando explicitamente os quatro destinos:
+
+```text
+learnvault-server migrate-go --input <go.sqlite> --output <rust.sqlite> --backup <go.sqlite.backup> --library-id <id>
+```
+
+Esse comando não inicia o listener HTTP e não exige configuração de biblioteca, endereço,
+interface web ou credenciais administrativas. Para obter um snapshot estável, execute-o com o
+escritor Go parado ou em estado quiescente. Conserve o backup e confirme a saída com
+`Database::open` antes de usá-la.
