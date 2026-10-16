@@ -10,6 +10,7 @@ mod media;
 mod spa;
 mod state;
 mod stream;
+mod study;
 
 pub use auth::{
     AuthError, generate_session_token, hash_password, hash_session_token,
@@ -55,6 +56,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/catalog", get(catalog::catalog))
         .route("/api/admin/catalog/rescan", post(catalog::rescan))
         .route("/api/media", get(media::media).head(media::media))
+        .route("/api/study/recent", get(study::recent))
+        .route("/api/study/progress", get(study::progress))
+        .route("/api/study/position", post(study::record_position))
+        .route("/api/study/completed", post(study::set_completed))
         .fallback(spa::serve)
         .layer(DefaultBodyLimit::max(8 * 1024))
         .layer(map_response(move |response| {
