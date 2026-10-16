@@ -92,6 +92,41 @@ as descrições ficam em pt-BR para manter o Release Please consistente.
 O Release Please controla versão, changelog, tags e metadados do GitHub Release. A publicação
 de artefatos acontece em workflow separado.
 
+### Automação segura do Dependabot
+
+O workflow `Dependabot safe auto-merge` usa a configuração confiável da base por
+`pull_request_target`, sem checkout, instalação de dependências ou execução de código da pull
+request. Ele só considera PRs do `dependabot[bot]` para `main`, no mesmo repositório, com uma
+atualização individual patch/minor não relacionada a alerta de segurança, com o head atual
+confirmado pela API. Atualizações major, de segurança, agrupadas, desconhecidas, conflitantes ou
+desatualizadas permanecem para análise humana; o auto-merge nativo aguarda ou recusa qualquer
+estado que não satisfaça a proteção da branch.
+
+Quando elegível, o workflow apenas solicita o auto-merge nativo do GitHub com squash. Ele não
+aprova PRs, não usa `--admin`, não faz force-push, rebase ou fechamento automático. A proteção da
+branch continua sendo a autoridade para reviews e checks; a solicitação também é reavaliada pelo
+GitHub quando o head ou os checks mudam. Os checks protegidos atualmente são `SPA checks`,
+`Go tests and vet` e `Container build`; este último inclui a varredura Trivy de vulnerabilidades
+HIGH/CRITICAL. Os jobs Rust e Desktop continuam executando no CI, mas ainda não são checks
+protegidos e portanto não são anunciados como gates da automação.
+
+O workflow não concede permissões ao `GITHUB_TOKEN` (`permissions: {}`). Para consultar alertas do
+Dependabot com `alert-lookup`, ele exige o segredo
+`DEPENDABOT_AUTOMERGE_TOKEN`, configurado como um fine-grained PAT ou token de GitHub App com
+apenas `Dependabot alerts: read`, `Contents: write` e `Pull requests: write`. Sem esse segredo,
+o job falha fechado e nenhum auto-merge é solicitado. Workflows disparados diretamente por PRs do
+Dependabot recebem normalmente um `GITHUB_TOKEN` somente leitura e não devem receber segredos; por
+isso esta automação usa a base confiável, o token dedicado e uma chamada de API sem executar o
+conteúdo da PR. Se a proteção de branch for alterada,
+ou uma merge queue for adotada, os gates devem ser reavaliados antes de manter a automação ativa.
+Como defesa adicional, a automação só considera alterações nos manifests e lockfiles aprovados
+(`package.json`, `apps/web/package.json`, `pnpm-lock.yaml`, `Cargo.toml`, manifests de crates,
+`Cargo.lock`, `services/go/go.mod` e `services/go/go.sum`); workflows, scripts, Containerfiles,
+Compose e outros caminhos permanecem manuais. Ela confirma o SHA da base e do head e rejeita PRs
+que ficaram atrás da base, sem fazer polling, rebase ou checkout.
+Para rollback, desabilite o workflow e cancele auto-merges pendentes; não há mutação automática de
+branches ou lockfiles.
+
 Os três nomes de jobs obrigatórios permanecem estáveis: `SPA checks`, `Go tests and vet` e
 `Container build`. O CI roda em pull requests, cancela execuções obsoletas, constrói a SPA uma
 vez para o embed do Go, usa cache e mantém timeouts curtos.
