@@ -34,4 +34,17 @@ describe('hash router', () => {
 		expect(findLessonByMediaId(catalog, 'missing')).toBeNull();
 		expect(findLessonByMediaId(null, 'm1')).toBeNull();
 	});
+	it('keeps an unknown-kind file reachable through open/deep-link and media id', () => {
+		// Um `kind` desconhecido vira material (balde catch-all) também no roteador: abrir a aula
+		// por deep-link ou pelo `media_id` do arquivo não pode descartá-lo.
+		const files = [
+			{ name: 'video.mp4', path: 'cat/curso/mod/aula.mp4', size: 10, mediaId: 'm1', kind: 'media' },
+			{ name: 'extra.bin', path: 'cat/curso/mod/extra.bin', size: 2, mediaId: 'bonus-1', kind: 'bonus' }
+		];
+		const catalog = { complete: true, looseFiles: [], nodes: [{ title: 'Categoria', path: 'cat', role: 'category', files: [], looseFiles: [], children: [{ title: 'Curso', path: 'cat/curso', role: 'course', files: [], looseFiles: [], children: [{ title: 'Módulo', path: 'cat/curso/mod', role: 'module', files: [], looseFiles: [], children: [{ title: 'Aula', path: 'cat/curso/mod/aula', role: 'lesson', files, looseFiles: [], children: [] }] }] }] }], categories: [] };
+		const opened = findLesson(catalog, 'cat/curso/mod/aula');
+		expect(opened?.media.map((file) => file.path)).toEqual(['cat/curso/mod/aula.mp4']);
+		expect(opened?.materials.map((file) => file.path)).toEqual(['cat/curso/mod/extra.bin']);
+		expect(findLessonByMediaId(catalog, 'bonus-1')?.path).toBe('cat/curso/mod/aula');
+	});
 });

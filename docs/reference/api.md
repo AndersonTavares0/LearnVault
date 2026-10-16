@@ -101,10 +101,14 @@ ela vence o `nodes` aditivo (papel `group`) quando os dois coexistem, para não 
 que o serviço projetou; os `nodes` então ignorados passam por uma travessia limitada (sem
 normalização recursiva) para não contornarem o orçamento com profundidade ou volume.
 
-Ao normalizar, a SPA exige `media_id` não vazio nos arquivos dos nós canônicos Rust/desktop (o
-payload aditivo e o fallback legado do Go não emitem identidade e seguem sem ela) e recusa de
-forma determinística um payload que ultrapasse os limites explícitos de profundidade, número de
-nós ou de arquivos — nunca truncando a árvore: o payload inteiro é rejeitado como inválido.
+Ao normalizar, a SPA exige `media_id` não vazio nos arquivos dos nós canônicos Rust/desktop,
+incluindo os arquivos soltos da raiz (o payload aditivo e o fallback legado do Go não emitem
+identidade e seguem sem ela para os nós e para os arquivos soltos), e recusa de forma
+determinística um payload que ultrapasse os limites explícitos de profundidade, número de nós ou
+de arquivos — nunca truncando a árvore: o payload inteiro é rejeitado como inválido. Um `kind`
+que a SPA ainda não conhece é preservado como material (balde catch-all) na normalização, no
+roteador e na UI, de modo que abrir uma aula por deep-link ou pelo `media_id` nunca descarta o
+arquivo.
 
 ## Estudo
 

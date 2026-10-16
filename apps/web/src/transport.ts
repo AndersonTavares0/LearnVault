@@ -190,7 +190,10 @@ function goLesson(value: unknown, budget: CatalogBudget): Lesson {
 	return { title: item.title, path: item.path, media: goFiles(item.media, budget), subtitles: goFiles(item.subtitles, budget), materials: goFiles(item.materials, budget) };
 }
 
-function rustLesson(node: CatalogNode): Lesson {
+// Aula de um nó canônico. `materials` é o balde catch-all (ver `lesson`), então um `kind`
+// desconhecido continua acessível: esta é a rotina única usada pela projeção, pelo roteador e
+// pela UI, para que abrir ou rotear uma aula nunca descarte um arquivo.
+export function lessonFromNode(node: CatalogNode): Lesson {
 	const files = nodeFiles(node);
 	return { ...lesson(node.title, node.path, files), availability: files.find((file) => file.availability)?.availability, unverified: files.some((file) => file.unverified) };
 }
@@ -211,7 +214,7 @@ function normalizeRustNode(value: unknown, depth: number, budget: CatalogBudget,
 }
 
 function projectedLessonModule(node: CatalogNode): ProjectedModule {
-	return { title: node.title, looseFiles: [], lessons: [rustLesson(node)] };
+	return { title: node.title, looseFiles: [], lessons: [lessonFromNode(node)] };
 }
 
 // Aulas de toda a subárvore, descendo por qualquer nó intermediário (módulo, grupo ou papel
@@ -219,7 +222,7 @@ function projectedLessonModule(node: CatalogNode): ProjectedModule {
 // projeção existe só para consumidores legados; a árvore canônica em `nodes` mantém os
 // níveis originais.
 function lessonsIn(node: CatalogNode): Lesson[] {
-	return node.role === 'lesson' ? [rustLesson(node)] : node.children.flatMap(lessonsIn);
+	return node.role === 'lesson' ? [lessonFromNode(node)] : node.children.flatMap(lessonsIn);
 }
 
 function projectedModule(node: CatalogNode): ProjectedModule {
@@ -262,9 +265,10 @@ function normalizeRustCatalog(value: RustCatalog, requireMediaId: boolean): Cata
 	const rawNodes = canonicalNodeList(value);
 	if (!Array.isArray(rawNodes)) throw invalidPayload('catálogo Rust sem nodes.');
 	const budget = newCatalogBudget();
-	// Os arquivos soltos da raiz são compartilhados com o fallback Go, então seguem com
-	// `media_id` opcional — mas contam no orçamento de arquivos.
-	const looseFiles = mirroredArray(value, 'loose_files', 'looseFiles').map((file) => { countFile(budget); return normalizeFile(file); });
+	// Os arquivos soltos da raiz seguem a mesma regra dos nós: no contrato canônico exigem
+	// `media_id`; no fallback Go (que não emite identidade) permanecem opcionais. Contam no
+	// orçamento de arquivos.
+	const looseFiles = mirroredArray(value, 'loose_files', 'looseFiles').map((file) => { countFile(budget); return normalizeFile(file, requireMediaId); });
 	const nodes = rawNodes.map((node) => normalizeRustNode(node, 1, budget, requireMediaId));
 	return { complete: value.complete === true, looseFiles, nodes, categories: projectRust(nodes) };
 }

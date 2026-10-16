@@ -1,4 +1,4 @@
-import type { Catalog, Lesson } from './transport';
+import { lessonFromNode, type Catalog, type Lesson } from './transport';
 
 export type Route = 'login' | 'home' | 'catalog' | 'player';
 export type HashLocation = { route: Route; lessonPath: string | null };
@@ -34,10 +34,7 @@ export function findLesson(catalog: Catalog | null, lessonPath: string | null): 
 	if (!catalog || !lessonPath) return null;
 	function visit(nodes: Catalog['nodes']): Lesson | null {
 		for (const node of nodes) {
-			if (node.role === 'lesson' && node.path === lessonPath) {
-				const files = [...node.files, ...node.looseFiles];
-				return { title: node.title, path: node.path, media: files.filter((file) => file.kind === 'media'), subtitles: files.filter((file) => file.kind === 'subtitle'), materials: files.filter((file) => file.kind === 'material') };
-			}
+			if (node.role === 'lesson' && node.path === lessonPath) return lessonFromNode(node);
 			const found = visit(node.children);
 			if (found) return found;
 		}
@@ -56,12 +53,7 @@ export function findLessonByMediaId(catalog: Catalog | null, mediaId: string | n
 	if (!catalog || !mediaId) return null;
 	function visit(nodes: Catalog['nodes']): Lesson | null {
 		for (const node of nodes) {
-			if (node.role === 'lesson') {
-				const files = [...node.files, ...node.looseFiles];
-				if (files.some((file) => file.mediaId === mediaId)) {
-					return { title: node.title, path: node.path, media: files.filter((file) => file.kind === 'media'), subtitles: files.filter((file) => file.kind === 'subtitle'), materials: files.filter((file) => file.kind === 'material') };
-				}
-			}
+			if (node.role === 'lesson' && [...node.files, ...node.looseFiles].some((file) => file.mediaId === mediaId)) return lessonFromNode(node);
 			const found = visit(node.children);
 			if (found) return found;
 		}

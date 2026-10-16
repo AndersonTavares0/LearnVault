@@ -107,10 +107,13 @@ describe('transport contract', () => {
 		expect(catalog.categories[0].courses[0].modules[0].lessons[0].media[0].mediaId).toBe('m1');
 		expect(catalog.categories[0].courses[0].modules[0].lessons[0].subtitles).toHaveLength(1);
 	});
-	it('preserves root loose files when a Rust catalog has no categories', () => {
-		const catalog = normalizeCatalog({ complete: true, categories: [], loose_files: [{ name: 'nota.pdf', path: 'nota.pdf', size: 3, kind: 'material' }] });
+	it('requires media_id on canonical root loose files and preserves them when present', () => {
+		// Um arquivo solto de raiz em payload canônico segue a mesma regra dos nós: identidade
+		// obrigatória. Sem `media_id`, o payload é recusado em vez de aceitar um arquivo órfão.
+		expect(() => normalizeCatalog({ complete: true, categories: [], loose_files: [{ name: 'nota.pdf', path: 'nota.pdf', size: 3, kind: 'material' }] })).toThrow('Resposta inválida do servidor');
+		const catalog = normalizeCatalog({ complete: true, categories: [], loose_files: [{ media_id: 'loose-1', name: 'nota.pdf', path: 'nota.pdf', size: 3, kind: 'material' }] });
 		expect(catalog.categories).toEqual([]);
-		expect(catalog.looseFiles[0].path).toBe('nota.pdf');
+		expect(catalog.looseFiles[0]).toMatchObject({ mediaId: 'loose-1', path: 'nota.pdf' });
 	});
 	it('keeps shallow recursive lessons and files addressable by path', () => {
 		const catalog = normalizeCatalog({ complete: true, loose_files: [], nodes: [{ title: 'Categoria', path: 'cat', role: 'category', files: [{ media_id: 'cat-pdf', name: 'cat.pdf', path: 'cat/cat.pdf', size: 1, kind: 'material' }], loose_files: [], children: [{ title: 'Aula', path: 'cat/aula', role: 'lesson', files: [{ media_id: 'aula-mp4', name: 'aula.mp4', path: 'cat/aula.mp4', size: 4, kind: 'media' }], loose_files: [], children: [] }] }] });
@@ -432,8 +435,9 @@ describe('transport contract', () => {
 		const catalog = normalizeCatalog({ categories: [{ title: 'Cat', courses: [{ title: 'Curso', modules: [{ title: 'Mod', lessons: [{ title: 'Aula', path: 'a', media: [{ name: 'v.mp4', path: 'a/v.mp4', size: 1 }], subtitles: [], materials: [] }] }] }] }] });
 		expect(catalog.nodes[0].children[0].children[0].children[0].files[0].mediaId).toBeUndefined();
 	});
-	it('keeps root loose files without media_id for the shared Go fallback', () => {
-		const catalog = normalizeCatalog({ complete: true, categories: [], loose_files: [{ name: 'nota.pdf', path: 'nota.pdf', size: 3 }] });
+	it('keeps root loose files without media_id for the Go fallback', () => {
+		// Sem o marcador canônico `complete`, o payload é do Go, que não emite identidade.
+		const catalog = normalizeCatalog({ categories: [], loose_files: [{ name: 'nota.pdf', path: 'nota.pdf', size: 3 }] });
 		expect(catalog.looseFiles[0].mediaId).toBeUndefined();
 	});
 	it('rejects a catalog deeper than the depth limit instead of overflowing the stack', () => {
