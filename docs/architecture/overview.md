@@ -8,9 +8,11 @@ duas formas:
 
 ## Estado atual
 
-O repositório ainda contém a implementação em **Go com SQLite e SPA SvelteKit embutida**. Ela é
-a implementação atual, a **referência funcional e visual** da reescrita, e será removida em pull
-request próprio quando o MVP em Rust cobrir os requisitos aprovados.
+O estado atual combina o workspace Rust — `crates/server` para o servidor Axum, `crates/desktop`
+para a fundação Tauri offline e `apps/web` para a SPA Svelte 5 + Vite — com o núcleo compartilhado
+em `crates/core`. `services/go` é a implementação legada e a referência funcional/visual durante
+a transição; sua remoção ocorrerá em pull request próprio somente quando o MVP Rust cobrir os
+requisitos aprovados.
 
 A reescrita em Rust já entrega `crates/core`, `crates/server` e o `crates/desktop` com a
 **fundação** (crate Tauri 2 que embute a SPA por `frontendDist`, capability em deny-by-default e
@@ -20,24 +22,31 @@ diretório de dados do aplicativo; o comando `desktop_select_library`, que acion
 interno ao Rust e persiste a raiz canonicalizada de forma versionada, atômica e serializada no
 diretório de configuração do aplicativo, fora da biblioteca e do SQLite; o comando
 `desktop_rescan`, que indexa explicitamente a raiz persistida reutilizando o `learnvault-core`, com
-estado ocupado que serializa chamadas concorrentes e nunca dispara varredura automática; e o
-**protocolo de mídia de arquivos pequenos**, que entrega somente imagens/thumbnails e materiais
-pequenos por `learnvault-media://localhost/<media-id>` — no Windows (WebView2) o webview pede
-`http://learnvault-media.localhost/<media-id>`, que o runtime reverte para esse esquema antes do
-handler —, com o webview apontando pelo `media_id`
-opaco (nunca por um caminho), allowlist de tipo de conteúdo, limite explícito de resposta e
-revalidação pelo `learnvault-core`. **Vídeo e áudio ficam fora deste protocolo** nesta fatia por
-causa da reprodução parcial incompatível no webview do Linux (`WebKitGTK`); legendas continuam no
-caminho HTTP. Autenticação e janelas reais ainda não existem no desktop.
+estado ocupado que serializa chamadas concorrentes e nunca dispara varredura automática; os
+comandos de estudo `desktop_study_progress`, `desktop_record_position`, `desktop_set_completed` e
+`desktop_recent_study`, que reutilizam `learnvault-core::study` com o dono local fixo resolvido no
+Rust; e o **protocolo de mídia de arquivos pequenos**, que entrega somente imagens/thumbnails e
+materiais pequenos por `learnvault-media://localhost/<media-id>` — no Windows (WebView2) o webview
+pede `http://learnvault-media.localhost/<media-id>`, que o runtime reverte para esse esquema antes
+do handler —, com o webview apontando pelo `media_id` opaco (nunca por um caminho), allowlist de
+tipo de conteúdo, limite explícito de resposta e revalidação pelo `learnvault-core`. **Vídeo e
+áudio ficam fora deste protocolo** nesta fatia por causa da reprodução parcial incompatível no
+webview do Linux (`WebKitGTK`); legendas continuam no caminho HTTP. A API de Study já tem paridade
+entre servidor Rust, SPA web e serviço Go de referência, e o desktop a expõe por IPC, mas o player
+segue sem reprodução de vídeo/áudio no desktop. Autenticação e janelas reais ainda não existem no
+desktop.
 
 ```text
 Proxy HTTPS local
         |
         v
-Serviço HTTP Go -- SQLite (/data)
+Serviço HTTP Rust -- SQLite (/data)
         |-- cache (/cache)
         `-- biblioteca de cursos (/library:ro)
 ```
+
+O serviço HTTP Go permanece disponível separadamente como implementação legada/de referência;
+ele não é o servidor atual descrito pelo fluxo acima.
 
 ## Arquitetura aprovada
 
@@ -67,7 +76,7 @@ Responsabilidades:
   recebe a raiz da biblioteca já resolvida.
 - `crates/server` traduz o domínio para HTTP: autenticação, sessões, `Range`, cabeçalhos de
   segurança e entrega da SPA.
-- `crates/desktop` integra com o sistema de arquivos e entrega mídia ao webview, sem autenticação e sem portas de rede. Expõe o IPC de configuração e catálogo sobre o banco local, a seleção da raiz da biblioteca (seletor nativo interno ao Rust, com persistência atômica fora da biblioteca), o rescan explícito dessa raiz, reutilizando o núcleo com estado ocupado e sem varredura automática, e um protocolo customizado que entrega somente **arquivos pequenos** (imagens/thumbnails e materiais pequenos) pelo `media_id` opaco. Vídeo/áudio e autenticação pertencem a fatias posteriores: a reprodução parcial de vídeo e áudio é incompatível no webview do Linux (`WebKitGTK`) e permanece pendente.
+- `crates/desktop` integra com o sistema de arquivos e entrega mídia ao webview, sem autenticação e sem portas de rede. Expõe o IPC de configuração e catálogo sobre o banco local, a seleção da raiz da biblioteca (seletor nativo interno ao Rust, com persistência atômica fora da biblioteca), o rescan explícito dessa raiz e o progresso de estudo do dono local fixo, reutilizando o núcleo com estado ocupado e sem varredura automática, e um protocolo customizado que entrega somente **arquivos pequenos** (imagens/thumbnails e materiais pequenos) pelo `media_id` opaco. Vídeo/áudio e autenticação pertencem a fatias posteriores: a reprodução parcial de vídeo e áudio é incompatível no webview do Linux (`WebKitGTK`) e permanece pendente.
 - `apps/web/` é uma única SPA em Svelte 5 + TypeScript + Vite, com roteamento por hash e dois
   builds que escolhem o transporte em tempo de compilação.
 

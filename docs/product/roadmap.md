@@ -20,6 +20,7 @@ A execução avança por fases, com um pull request por fase:
   - [x] Fase 4 (seleção da raiz) — comando `desktop_select_library` sem argumentos aciona o seletor nativo no Rust e persiste a raiz canonicalizada de forma versionada e atômica no diretório de configuração do aplicativo, com revalidação no startup e biblioteca somente leitura; mídia, autenticação e janelas reais continuam pendentes
   - [x] Fase 4 (rescan da biblioteca) — comando `desktop_rescan` sem argumentos e assíncrono (`spawn_blocking`) indexa explicitamente a raiz persistida reutilizando `learnvault-core` (`rescan`/`RescanSummary`), com estado ocupado que serializa chamadas concorrentes por um erro estável (`rescan_in_progress`), raiz não configurada (`library_not_configured`) e raiz inacessível (`rescan_unavailable`) sanitizados; o rescan nunca é automático e a biblioteca permanece somente leitura. Mídia, autenticação e janelas reais continuam pendentes
   - [x] Fase 4 (mídia de arquivos pequenos) — protocolo customizado `learnvault-media://localhost/<media-id>` entrega somente imagens/thumbnails e materiais pequenos pelo `media_id` opaco, com parsing estrito, allowlist de tipo de conteúdo, limite explícito de resposta (`200`/`HEAD`/`206`/`416`) e revalidação pelo `learnvault-core` (`open_media`); no Windows (WebView2) a SPA pede `http://learnvault-media.localhost/<media-id>` e o runtime reverte para o esquema antes do handler (Linux/macOS usam o esquema direto); nenhuma capability nova. **Vídeo e áudio ficam fora do protocolo** por causa da reprodução parcial incompatível no webview do Linux (`WebKitGTK`) e legendas seguem no caminho HTTP. A Fase 4 **não** está concluída: vídeo/áudio, autenticação e janelas reais continuam pendentes
+  - [x] Fase 4 (Study desktop) — comandos `desktop_study_progress`, `desktop_record_position`, `desktop_set_completed` e `desktop_recent_study`, assíncronos (`spawn_blocking`) e com ACL mínima, reutilizam `learnvault-core::study` com o dono local fixo resolvido no Rust — o webview nunca envia `owner_id` — e devolvem o mesmo contrato snake_case do HTTP (`recorded`, `updated_at`) com erros estáveis (`media_not_found`, `invalid_position`, `study_unavailable`). A SPA ativa Study nos dois transportes por `invoke`, sem `fetch`, mas mantém a barra do player fechada enquanto o transporte não entregar a mídia: sem reprodução não há posição real. A entrega de mídia de arquivos pequenos está incluída nesta fatia; vídeo/áudio, autenticação e janelas reais continuam pendentes
 - [ ] Fase 5 — distribuição por plataforma e remoção do serviço Go
 
 ## Atual — fundação e catálogo
@@ -35,12 +36,20 @@ durante a reescrita.
 - [x] Base reproduzível de deploy com Docker/Podman
 - [x] CI, automação de releases e governança do repositório
 
+## Entregue — ciclo de estudo compatível
+
+As entregas mescladas #86, #88, #90 e #91 alinham o contrato de Study entre o servidor Rust,
+a SPA web e o serviço Go de referência: progresso, posição de retomada, conclusão e histórico
+recente usam o mesmo contrato e os mesmos limites públicos. O desktop passou a expor esse
+contrato por IPC, com o dono local fixo resolvido no Rust, mas o player do desktop continua sem
+reprodução enquanto a entrega de mídia estiver em #76 (Draft, não mesclada).
+
 ## Próximo — ciclo de estudo utilizável
 
 - [ ] Detalhes do curso e navegação de aulas
 - [ ] Player direto com links de legendas e materiais
-- [ ] Progresso individual e posição de retomada
-- [ ] Marcar aula como concluída e painel de histórico recente
+- [x] Progresso individual e posição de retomada
+- [x] Marcar aula como concluída e painel de histórico recente
 - [ ] Permissões de acesso a cursos para múltiplos usuários locais
 
 ## Interface — mesa de estudo

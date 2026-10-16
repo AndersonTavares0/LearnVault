@@ -1,6 +1,6 @@
 <script lang="ts">
 	import LooseFiles from './LooseFiles.svelte';
-	import { desktopPlaybackUnavailable, formatDuration, selectPlayableMedia, srtConversionSupported, srtToWebVtt, studySyncSupported, subtitleFormat } from './player';
+	import { desktopPlaybackUnavailable, formatDuration, selectPlayableMedia, srtConversionSupported, srtToWebVtt, studySyncEnabled, subtitleFormat } from './player';
 	import { createPositionSaver } from './study';
 	import { transport, type Lesson, type StudyProgress } from './transport';
 
@@ -9,7 +9,7 @@
 	const playable = $derived(selectPlayableMedia(lesson.media));
 	const mediaId = $derived(playable?.mediaId ?? null);
 	const source = $derived(playable ? transport.mediaUrl(playable) : null);
-	const syncEnabled = $derived(studySyncSupported && studyEnabled && mediaId !== null);
+	const syncEnabled = $derived(studySyncEnabled(studyEnabled, mediaId, source));
 
 	let video: HTMLVideoElement | null = $state(null);
 	let currentTime = $state(0);

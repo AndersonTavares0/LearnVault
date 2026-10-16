@@ -231,7 +231,10 @@ const DESKTOP_ERROR_MESSAGES: Record<string, string> = {
 	library_config_unavailable: 'Não foi possível salvar a configuração do aplicativo.',
 	library_not_configured: 'Nenhuma biblioteca está configurada.',
 	rescan_in_progress: 'Já existe uma indexação em andamento.',
-	rescan_unavailable: 'Não foi possível indexar a biblioteca.'
+	rescan_unavailable: 'Não foi possível indexar a biblioteca.',
+	study_unavailable: 'Não foi possível sincronizar o progresso de estudo.',
+	media_not_found: 'Mídia não encontrada.',
+	invalid_position: 'Posição inválida.'
 };
 
 // O comando devolve o erro como objeto serializado `{ code, message }`, não como `Error`.
@@ -257,10 +260,16 @@ export class DesktopStub implements Transport {
 	// resposta é um resumo sanitizado que não interessa ao shell, que recarrega o catálogo.
 	async rescan() { try { await invoke<unknown>('desktop_rescan'); } catch (cause) { throw desktopError(cause, 'Não foi possível indexar a biblioteca.'); } }
 	updateCredentials() { return Promise.reject(new Error('Transporte desktop ainda não implementado.')); }
-	studyProgress() { return Promise.reject(new Error('Transporte desktop ainda não implementado.')); }
-	recordPosition() { return Promise.reject(new Error('Transporte desktop ainda não implementado.')); }
-	setCompleted() { return Promise.reject(new Error('Transporte desktop ainda não implementado.')); }
-	recentStudy() { return Promise.reject(new Error('Transporte desktop ainda não implementado.')); }
+	// O progresso de estudo do desktop é o do dono local fixo, escolhido no Rust: o webview
+	// envia apenas o `mediaId`, a posição, a conclusão e o limite, e nunca um `owner_id` nem
+	// qualquer caminho. Os comandos devolvem o mesmo contrato snake_case do HTTP, então a
+	// normalização é a mesma e nenhum `fetch` entra no bundle desktop.
+	async studyProgress(mediaId: string) { try { return normalizeStudyProgress(await invoke<unknown>('desktop_study_progress', { mediaId })); } catch (cause) { throw desktopError(cause, 'Não foi possível ler o progresso.'); } }
+	async recordPosition(mediaId: string, positionSeconds: number) { try { return normalizeStudyProgress(await invoke<unknown>('desktop_record_position', { mediaId, positionSeconds })); } catch (cause) { throw desktopError(cause, 'Não foi possível salvar o progresso.'); } }
+	async setCompleted(mediaId: string, completed: boolean) { try { return normalizeStudyProgress(await invoke<unknown>('desktop_set_completed', { mediaId, completed })); } catch (cause) { throw desktopError(cause, 'Não foi possível atualizar a conclusão.'); } }
+	// Sem limite informado, o comando usa o padrão do contrato; por isso o argumento é
+	// omitido em vez de enviado como `undefined`.
+	async recentStudy(limit?: number) { try { return normalizeRecentStudy(await invoke<unknown>('desktop_recent_study', limit === undefined ? {} : { limit })); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar o histórico de estudo.'); } }
 	// Somente materiais pequenos (imagens/thumbnails e materiais) com identidade autorizada
 	// usam o protocolo. Vídeo/áudio e legendas ficam fora desta fatia; um arquivo sem
 	// `mediaId` não é endereçável e o caminho cru nunca é usado.

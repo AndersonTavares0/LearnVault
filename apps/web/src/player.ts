@@ -10,7 +10,30 @@ import type { FileEntry } from './transport';
  * minificador não consegue dobrar.
  */
 export const srtConversionSupported: boolean = __LEARNVAULT_TRANSPORT__ === 'http';
-export const studySyncSupported: boolean = __LEARNVAULT_TRANSPORT__ === 'http';
+
+/**
+ * Indica se o transporte implementa o progresso de estudo.
+ *
+ * Os dois transportes implementam: o HTTP pelas rotas autenticadas e o desktop pelos
+ * comandos IPC (`desktop_study_progress`, `desktop_record_position`,
+ * `desktop_set_completed`, `desktop_recent_study`), sem `fetch`. A constante fala apenas da
+ * capacidade do transporte — quem decide se há progresso a sincronizar é
+ * [`studySyncEnabled`], que também exige uma fonte de mídia entregue pelo transporte.
+ */
+export const studySyncSupported: boolean = true;
+
+/**
+ * Decide se o player pode ler e gravar progresso de estudo na mídia atual.
+ *
+ * Exige três coisas: o transporte implementa Study, o estudo está habilitado na sessão e o
+ * transporte entregou uma fonte para a mídia (`source`). A última condição é o gating
+ * honesto do desktop: sem entrega de mídia não existe reprodução nem posição real, então a
+ * barra de estudo permanece fechada em vez de prometer retomada e conclusão que não podem
+ * acontecer. No HTTP a fonte acompanha a mídia, então o comportamento é o mesmo de antes.
+ */
+export function studySyncEnabled(studyEnabled: boolean, mediaId: string | null, source: string | null): boolean {
+	return studySyncSupported && studyEnabled && mediaId !== null && source !== null;
+}
 
 export function formatDuration(totalSeconds: number): string {
 	if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return '0:00';

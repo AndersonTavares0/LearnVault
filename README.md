@@ -18,11 +18,14 @@ como implementação de referência até a Fase 5 da reescrita.
 ## Status
 
 A reescrita em Rust está em andamento. `crates/core` (domínio, SQLite, catálogo, scanner,
-identidade de mídia e estado de estudo) e `crates/server` (Axum, autenticação, sessões e mídia
-com `Range`) já estão implementados, junto da SPA Svelte 5 + Vite com dois builds. O aplicativo
-desktop Tauri (`crates/desktop`, Fase 4) e a distribuição por plataforma com a remoção do
-serviço Go (Fase 5) **ainda não estão concluídos**. Player, progresso, busca, anotações,
-favoritos, thumbnails e processamento de mídia continuam previstos.
+identidade de mídia e estado de estudo) e `crates/server` (Axum, autenticação, sessões, mídia
+com `Range` e API de estudo) já estão implementados, junto da SPA Svelte 5 + Vite com dois
+builds. As entregas mescladas #86, #88, #90 e #91 alinham Study no servidor Rust, na SPA web e
+no serviço Go de referência, além de avançarem o desktop com configuração, seleção da raiz,
+catálogo e rescan explícito. O desktop Tauri e a distribuição por plataforma com a remoção do
+serviço Go (Fase 5) **ainda não estão concluídos**. A entrega parcial de mídia do desktop está
+em #76 (Draft) e não faz parte da `main`; autenticação desktop, janelas reais, streaming
+completo, migração do banco e distribuição continuam gates explícitos.
 
 ## Comece aqui
 
@@ -77,8 +80,10 @@ documentação. Arquivos de comunidade como `CONTRIBUTING.md`, `CODE_OF_CONDUCT.
 
 - Workspace Rust com um núcleo de domínio compartilhado em `crates/core` e um servidor Axum
   em `crates/server`.
-- O servidor Rust expõe autenticação, sessões, catálogo e mídia com `Range`; o desktop Tauri
-  (`crates/desktop`, Fase 4) ainda não existe.
+- O servidor Rust expõe autenticação, sessões, catálogo, mídia com `Range` e Study; o desktop
+  Tauri (`crates/desktop`, Fase 4) já tem fundação, configuração, catálogo, seleção de raiz,
+  rescan explícito e Study por IPC com dono local fixo, mas ainda não é um produto desktop
+  completo.
 - SQLite no núcleo, com cadeia única de migrações.
 - A SPA em Svelte 5 + TypeScript + Vite tem roteamento por hash e dois builds que escolhem o
   transporte em tempo de compilação.

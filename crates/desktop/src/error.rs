@@ -25,6 +25,12 @@ pub enum IpcErrorCode {
     RescanInProgress,
     /// A varredura da biblioteca não pôde ser concluída.
     RescanUnavailable,
+    /// O progresso de estudo do dono local não pôde ser lido nem gravado.
+    StudyUnavailable,
+    /// A mídia consultada não existe no catálogo local.
+    MediaNotFound,
+    /// A posição de retomada enviada é inválida.
+    InvalidPosition,
 }
 
 /// Erro IPC serializável devolvido ao webview.
@@ -90,6 +96,30 @@ impl IpcError {
         Self {
             code: IpcErrorCode::RescanUnavailable,
             message: "não foi possível indexar a biblioteca",
+        }
+    }
+
+    /// O progresso de estudo do dono local não pôde ser lido nem gravado.
+    pub fn study_unavailable() -> Self {
+        Self {
+            code: IpcErrorCode::StudyUnavailable,
+            message: "não foi possível sincronizar o progresso de estudo",
+        }
+    }
+
+    /// A mídia consultada não existe no catálogo local.
+    pub fn media_not_found() -> Self {
+        Self {
+            code: IpcErrorCode::MediaNotFound,
+            message: "mídia não encontrada no catálogo",
+        }
+    }
+
+    /// A posição de retomada enviada é inválida.
+    pub fn invalid_position() -> Self {
+        Self {
+            code: IpcErrorCode::InvalidPosition,
+            message: "posição de retomada inválida",
         }
     }
 }
