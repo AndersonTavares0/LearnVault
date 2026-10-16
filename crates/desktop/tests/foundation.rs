@@ -176,6 +176,10 @@ fn build_registers_the_app_commands_in_the_acl_manifest() {
         "desktop_catalog",
         "desktop_select_library",
         "desktop_rescan",
+        "desktop_study_progress",
+        "desktop_record_position",
+        "desktop_set_completed",
+        "desktop_recent_study",
     ] {
         assert!(
             build.contains(command),
@@ -201,9 +205,13 @@ fn capability_grants_only_the_core_default_and_the_app_commands() {
     assert!(permissions.contains(&"allow-desktop-catalog"));
     assert!(permissions.contains(&"allow-desktop-select-library"));
     assert!(permissions.contains(&"allow-desktop-rescan"));
+    assert!(permissions.contains(&"allow-desktop-study-progress"));
+    assert!(permissions.contains(&"allow-desktop-record-position"));
+    assert!(permissions.contains(&"allow-desktop-set-completed"));
+    assert!(permissions.contains(&"allow-desktop-recent-study"));
     assert_eq!(
         permissions.len(),
-        5,
+        9,
         "a capability não pode ampliar além do núcleo e dos comandos do app: {permissions:?}"
     );
 }
@@ -309,6 +317,81 @@ fn invoke_handler_registers_only_the_desktop_commands() {
     assert!(
         commands.contains("desktop_rescan"),
         "o handler precisa registrar o comando de rescan explícito: {commands}"
+    );
+    for command in [
+        "desktop_study_progress",
+        "desktop_record_position",
+        "desktop_set_completed",
+        "desktop_recent_study",
+    ] {
+        assert!(
+            commands.contains(command),
+            "o handler precisa registrar o comando de estudo '{command}': {commands}"
+        );
+    }
+}
+
+#[test]
+fn study_commands_are_async_blocking_and_never_accept_an_owner() {
+    let command = read(&crate_root().join("src/command.rs"));
+
+    let expected = [
+        ("desktop_study_progress", "state.study_progress("),
+        ("desktop_record_position", "state.record_position("),
+        ("desktop_set_completed", "state.set_completed("),
+        ("desktop_recent_study", "state.recent_study("),
+    ];
+    for (name, delegation) in expected {
+        assert!(
+            !command.contains(&format!("pub fn {name}")),
+            "{name} não pode ser síncrono (executaria o SQLite na main thread)"
+        );
+        let marker = format!("pub async fn {name}");
+        let start = command
+            .find(&marker)
+            .unwrap_or_else(|| panic!("{name} precisa ser um comando assíncrono"));
+        let rest = &command[start..];
+        let signature = &rest[..rest
+            .find('{')
+            .unwrap_or_else(|| panic!("{name} precisa fechar a assinatura"))];
+        // O dono do progresso é fixo no Rust: nenhum comando de estudo aceita `owner_id`,
+        // nem alterna o dono por parâmetro, nem recebe caminho.
+        for forbidden in ["owner", "owner_id", "Path", "path"] {
+            assert!(
+                !signature.contains(forbidden),
+                "{name} não pode receber '{forbidden}': {signature}"
+            );
+        }
+        let body = &rest[..rest
+            .find("\n}")
+            .unwrap_or_else(|| panic!("{name} precisa fechar o corpo"))];
+        assert!(
+            body.contains("tauri::async_runtime::spawn_blocking"),
+            "o SQLite bloqueante de {name} precisa rodar em spawn_blocking do Tauri: {body}"
+        );
+        assert!(
+            body.contains(delegation),
+            "{name} precisa delegar ao estado: {body}"
+        );
+        // O dono é resolvido no adaptador: o comando não nomeia nem repassa o dono local.
+        assert!(
+            !body.contains("LOCAL_OWNER_ID"),
+            "{name} não pode passar o dono local ao estado: {body}"
+        );
+    }
+
+    // O comando de histórico recebe apenas um limite opcional: nada de caminho, dono ou
+    // parâmetro que permita escolher outra biblioteca.
+    let start = command
+        .find("pub async fn desktop_recent_study")
+        .expect("desktop_recent_study precisa existir");
+    let rest = &command[start..];
+    let signature = &rest[..rest
+        .find('{')
+        .expect("a assinatura do comando precisa fechar")];
+    assert!(
+        signature.contains("limit: Option<usize>"),
+        "o limite do histórico precisa ser opcional: {signature}"
     );
 }
 

@@ -1,11 +1,13 @@
-//! DTOs serializáveis do catálogo do desktop.
+//! DTOs serializáveis do catálogo e do progresso de estudo do desktop.
 //!
 //! Os tipos do núcleo não são serializados diretamente: cada enum vira uma string estável
 //! e o shape snake_case (`loose_files`, `media_id`, ...) é idêntico ao do adaptador HTTP,
-//! de modo que o `normalizeCatalog` da SPA aceita o payload do desktop sem alteração.
+//! de modo que o `normalizeCatalog` e o `normalizeStudyProgress` da SPA aceitam o payload do
+//! desktop sem alteração.
 
 use learnvault_core::{
     Availability, Catalog, CatalogFile, CatalogNode, MediaKind, NodeRole, RescanSummary,
+    StudyProgress,
 };
 use serde::Serialize;
 
@@ -169,4 +171,59 @@ impl From<RescanSummary> for RescanSummaryDto {
             ambiguous_count: summary.ambiguous.len(),
         }
     }
+}
+
+/// Progresso de estudo do dono local do desktop em uma mídia.
+///
+/// O shape é o mesmo contrato snake_case do adaptador HTTP, então o
+/// `normalizeStudyProgress` da SPA aceita o payload do desktop sem alteração. `recorded`
+/// distingue "nunca estudada" de "estudada na posição zero": a ausência de progresso não é
+/// um erro do domínio, e o campo evita que a interface confunda as duas situações.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct StudyProgressDto {
+    /// Identidade estável da mídia, nunca o caminho do arquivo.
+    pub media_id: String,
+    /// Ponto de retomada em segundos.
+    pub position_seconds: i64,
+    /// Indica que a aula foi concluída.
+    pub completed: bool,
+    /// Instante da última alteração real, ou `None` quando nada foi gravado.
+    pub updated_at: Option<i64>,
+    /// Verdadeiro quando existe estado persistido para a mídia.
+    pub recorded: bool,
+}
+
+impl From<StudyProgress> for StudyProgressDto {
+    fn from(progress: StudyProgress) -> Self {
+        Self {
+            media_id: progress.media_id,
+            position_seconds: progress.position_seconds,
+            completed: progress.completed,
+            updated_at: Some(progress.updated_at),
+            recorded: true,
+        }
+    }
+}
+
+impl StudyProgressDto {
+    /// Estado neutro de uma mídia conhecida sem progresso: nada foi gravado ainda.
+    pub fn absent(media_id: &str) -> Self {
+        Self {
+            media_id: media_id.to_owned(),
+            position_seconds: 0,
+            completed: false,
+            updated_at: None,
+            recorded: false,
+        }
+    }
+}
+
+/// Histórico recente de estudo do dono local do desktop.
+///
+/// É a projeção serializável do mesmo contrato `{ items: [...] }` do adaptador HTTP, do
+/// mais recente ao mais antigo. Só mídias presentes no catálogo local aparecem.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct RecentStudyDto {
+    /// Itens de progresso, já ordenados pelo núcleo.
+    pub items: Vec<StudyProgressDto>,
 }

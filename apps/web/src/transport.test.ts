@@ -190,6 +190,110 @@ describe('desktop transport over IPC', () => {
 		await expect(desktop.updateCredentials('u', 'senha')).rejects.toThrow('ainda não implementado');
 	});
 
+	it('reads study progress through the desktop IPC command without touching fetch', async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+		vi.mocked(invoke).mockResolvedValue({ media_id: 'm1', position_seconds: 42, completed: true, updated_at: 1234567890, recorded: true });
+
+		const progress = await new DesktopStub().studyProgress('m1');
+
+		expect(invoke).toHaveBeenCalledWith('desktop_study_progress', { mediaId: 'm1' });
+		expect(fetchMock).not.toHaveBeenCalled();
+		expect(progress).toEqual({ mediaId: 'm1', positionSeconds: 42, completed: true, updatedAt: 1234567890, recorded: true });
+		vi.unstubAllGlobals();
+	});
+
+	it('normalizes an absent desktop progress record as not recorded', async () => {
+		// Uma mídia conhecida sem progresso responde com o estado neutro, sem erro.
+		vi.mocked(invoke).mockResolvedValue({ media_id: 'm1', position_seconds: 0, completed: false, updated_at: null, recorded: false });
+
+		await expect(new DesktopStub().studyProgress('m1')).resolves.toEqual({ mediaId: 'm1', positionSeconds: 0, completed: false, updatedAt: null, recorded: false });
+	});
+
+	it('records position and completion through the desktop IPC commands', async () => {
+		vi.mocked(invoke).mockResolvedValue({ media_id: 'm1', position_seconds: 90, completed: false, updated_at: 10, recorded: true });
+
+		await expect(new DesktopStub().recordPosition('m1', 90)).resolves.toMatchObject({ mediaId: 'm1', positionSeconds: 90 });
+		expect(invoke).toHaveBeenCalledWith('desktop_record_position', { mediaId: 'm1', positionSeconds: 90 });
+
+		vi.mocked(invoke).mockResolvedValue({ media_id: 'm1', position_seconds: 90, completed: true, updated_at: 11, recorded: true });
+		await expect(new DesktopStub().setCompleted('m1', true)).resolves.toMatchObject({ mediaId: 'm1', completed: true });
+		expect(invoke).toHaveBeenCalledWith('desktop_set_completed', { mediaId: 'm1', completed: true });
+	});
+
+	it('never sends an owner or a path to the study commands', async () => {
+		// O dono é fixo no Rust: o webview só envia dados da mídia. Nenhum argumento pode
+		// carregar `owner`/`ownerId`, um caminho ou uma biblioteca.
+		vi.mocked(invoke).mockResolvedValue({ media_id: 'm1', position_seconds: 1, completed: false, updated_at: 2, recorded: true });
+		const desktop = new DesktopStub();
+
+		await desktop.studyProgress('m1');
+		await desktop.recordPosition('m1', 1);
+		await desktop.setCompleted('m1', false);
+		vi.mocked(invoke).mockResolvedValue({ items: [] });
+		await desktop.recentStudy(3);
+
+		const calls = vi.mocked(invoke).mock.calls;
+		expect(calls.map((call) => call[0])).toEqual(['desktop_study_progress', 'desktop_record_position', 'desktop_set_completed', 'desktop_recent_study']);
+		const allowedKeys = [['mediaId'], ['mediaId', 'positionSeconds'], ['completed', 'mediaId'], ['limit']];
+		calls.forEach(([, args], index) => {
+			expect(Object.keys(args as object).sort()).toEqual([...allowedKeys[index]].sort());
+			expect(JSON.stringify(args)).not.toContain('/');
+		});
+	});
+
+	it('loads the recent history through the desktop IPC command with and without a limit', async () => {
+		vi.mocked(invoke).mockResolvedValue({ items: [{ media_id: 'm1', position_seconds: 7, completed: false, updated_at: 9, recorded: true }] });
+
+		const recent = await new DesktopStub().recentStudy(6);
+
+		expect(invoke).toHaveBeenCalledWith('desktop_recent_study', { limit: 6 });
+		expect(recent.items[0]).toMatchObject({ mediaId: 'm1', positionSeconds: 7, recorded: true });
+
+		vi.mocked(invoke).mockResolvedValue({ items: [] });
+		await expect(new DesktopStub().recentStudy()).resolves.toEqual({ items: [] });
+		expect(invoke).toHaveBeenLastCalledWith('desktop_recent_study', {});
+	});
+
+	it('maps each stable desktop study error code to a sanitized message', async () => {
+		const desktop: Transport = new DesktopStub();
+
+		vi.mocked(invoke).mockRejectedValue({ code: 'media_not_found', message: '/mnt/cursos secretos/aula.mp4' });
+		await expect(desktop.studyProgress('m1')).rejects.toThrow('Mídia não encontrada.');
+		await expect(desktop.recordPosition('m1', 1)).rejects.toThrow('Mídia não encontrada.');
+		await expect(desktop.setCompleted('m1', true)).rejects.toThrow('Mídia não encontrada.');
+
+		vi.mocked(invoke).mockRejectedValue({ code: 'invalid_position', message: 'posição -1 em /mnt/cursos' });
+		await expect(desktop.recordPosition('m1', -1)).rejects.toThrow('Posição inválida.');
+
+		vi.mocked(invoke).mockRejectedValue({ code: 'study_unavailable', message: 'falha em C:\\segredo\\cursos' });
+		await expect(desktop.studyProgress('m1')).rejects.toThrow('Não foi possível sincronizar o progresso de estudo.');
+		await expect(desktop.recentStudy(2)).rejects.toThrow('Não foi possível sincronizar o progresso de estudo.');
+
+		vi.mocked(invoke).mockRejectedValue({ code: 'database_unavailable', message: 'banco em C:\\segredo' });
+		await expect(desktop.recordPosition('m1', 1)).rejects.toThrow('banco de dados local indisponível');
+	});
+
+	it('falls back to a stable message for an unknown desktop study error', async () => {
+		const desktop: Transport = new DesktopStub();
+
+		vi.mocked(invoke).mockRejectedValue({ code: 'algo_desconhecido', message: 'CAMINHO privado /mnt/cursos' });
+		await expect(desktop.studyProgress('m1')).rejects.toThrow('Não foi possível ler o progresso.');
+		await expect(desktop.recordPosition('m1', 1)).rejects.toThrow('Não foi possível salvar o progresso.');
+		await expect(desktop.setCompleted('m1', true)).rejects.toThrow('Não foi possível atualizar a conclusão.');
+		await expect(desktop.recentStudy()).rejects.toThrow('Não foi possível carregar o histórico de estudo.');
+
+		vi.mocked(invoke).mockRejectedValue({ message: 'sem código /etc/shadow' });
+		await expect(desktop.studyProgress('m1')).rejects.toThrow('Não foi possível ler o progresso.');
+	});
+
+	it('does not trust a malformed desktop study payload', async () => {
+		// Como no catálogo, um payload fora do contrato cai na mensagem sanitizada da
+		// chamada: nada do conteúdo recebido chega à interface.
+		vi.mocked(invoke).mockResolvedValue({ media_id: 'm1', position_seconds: 'zero', completed: false, recorded: true });
+		await expect(new DesktopStub().studyProgress('m1')).rejects.toThrow('Não foi possível ler o progresso.');
+	});
+
 	it('triggers an explicit desktop rescan through the command without touching fetch', async () => {
 		const fetchMock = vi.fn();
 		vi.stubGlobal('fetch', fetchMock);
@@ -216,14 +320,6 @@ describe('desktop transport over IPC', () => {
 		await expect(new DesktopStub().rescan()).rejects.toThrow('Não foi possível indexar a biblioteca.');
 		vi.mocked(invoke).mockRejectedValue({ message: 'sem código /etc/shadow' });
 		await expect(new DesktopStub().rescan()).rejects.toThrow('Não foi possível indexar a biblioteca.');
-	});
-
-	it('keeps study progress and history unimplemented on the desktop', async () => {
-		const desktop: Transport = new DesktopStub();
-		await expect(desktop.studyProgress('m1')).rejects.toThrow('ainda não implementado');
-		await expect(desktop.recordPosition('m1', 5)).rejects.toThrow('ainda não implementado');
-		await expect(desktop.setCompleted('m1', true)).rejects.toThrow('ainda não implementado');
-		await expect(desktop.recentStudy()).rejects.toThrow('ainda não implementado');
 	});
 
 	it('reports the desktop as unconfigured through the desktop_config command', async () => {

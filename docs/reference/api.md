@@ -89,7 +89,8 @@ conclusão são independentes — avançar não desfaz a conclusão e concluir n
 retomada — e reenviar um valor idêntico não altera o instante da última mudança.
 
 Este contrato está implementado no servidor Rust, na SPA web e no serviço Go de referência
-(paridade das entregas #86, #88, #90 e #91). O transporte desktop ainda não expõe Study.
+(paridade das entregas #86, #88, #90 e #91). O transporte desktop expõe o mesmo contrato por IPC,
+descrito ao final desta seção; ele não usa rotas HTTP.
 
 | Método | Rota | Autenticação | Finalidade |
 | --- | --- | --- | --- |
@@ -107,5 +108,29 @@ temporárias recebe `403 credentials_change_required`. Nenhuma rota grava `media
 escrita de progresso. Uma mídia removida do catálogo também mantém a leitura e a escrita de
 progresso — a identidade sobrevive à remoção —, mas deixa de aparecer em
 `/api/study/recent`, como no núcleo de remoção.
+
+### Study no desktop (IPC)
+
+O desktop não tem rotas: a SPA chama comandos Tauri por `invoke`, sem `fetch`, e recebe o mesmo
+shape snake_case (`media_id`, `position_seconds`, `completed`, `updated_at`, `recorded`).
+
+| Comando | Argumentos | Finalidade |
+| --- | --- | --- |
+| `desktop_study_progress` | `mediaId` | Lê a posição e a conclusão do dono local em uma mídia conhecida |
+| `desktop_record_position` | `mediaId`, `positionSeconds` | Grava o ponto de retomada, preservando a conclusão |
+| `desktop_set_completed` | `mediaId`, `completed` | Marca ou desmarca a conclusão, preservando a posição |
+| `desktop_recent_study` | `limit` (opcional) | Lista o progresso do dono local, do mais recente ao mais antigo |
+
+O dono é um identificador local fixo resolvido no Rust: nenhum comando aceita `owner_id` como
+argumento, então o webview não escolhe nem conhece o dono. Uma mídia conhecida sem progresso
+responde com `recorded: false`; uma mídia desconhecida vira o erro estável `media_not_found`, uma
+posição negativa vira `invalid_position` e as demais falhas viram `study_unavailable` ou
+`database_unavailable`. Sem `limit`, o histórico usa o padrão do contrato e o teto do núcleo
+continua valendo. Os comandos não exigem raiz de biblioteca configurada e nunca gravam `media`,
+`scan`, `library` nem a biblioteca física.
+
+Limitação desta fatia: o desktop atende um único dono local, sem sessão nem seletor de contas, e
+ainda não entrega a mídia ao player — sem reprodução não há posição real, então a barra de estudo
+do player permanece fechada (a entrega parcial de mídia está em #76, Draft, não mesclada).
 
 Para limites de arquitetura e deploy, consulte a [visão de arquitetura](../architecture/overview.md).
