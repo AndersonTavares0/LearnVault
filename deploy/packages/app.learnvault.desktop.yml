@@ -8,9 +8,6 @@ finish-args:
   - --socket=wayland
   - --socket=fallback-x11
   - --device=dri
-  # The native directory picker currently returns a filesystem path. Keep access
-  # read-only and limited to the user's home until a portal-backed picker is used.
-  - --filesystem=home:ro
 modules:
   - name: learnvault-desktop
     buildsystem: simple

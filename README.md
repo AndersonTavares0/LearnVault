@@ -117,9 +117,9 @@ automaticamente binários Linux versionados e `SHA256SUMS` a partir da implement
 referência em Go.
 
 O instalador Windows via NSIS já é construído e publicado automaticamente. O Flatpak permanece
-bloqueado e fora dos releases até substituir `--filesystem=home:ro` por seleção de diretório via
-portal; seus manifestos são preservados para esse trabalho futuro. A publicação do servidor ainda
-pertence à Fase 5 da reescrita.
+bloqueado e fora dos releases: a seleção Linux já usa o backend oficial `xdg-portal`, mas ainda
+faltam o build e o smoke test reais no sandbox, incluindo acesso persistente e reprodução de
+mídia. A publicação do servidor ainda pertence à Fase 5 da reescrita.
 
 Leia o [processo de release](docs/releases/process.md) antes de alterar arquivos de release.
 

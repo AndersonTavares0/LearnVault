@@ -20,6 +20,11 @@ O formato segue o Keep a Changelog e as versões usam Semantic Versioning.
 
 ### Adicionado
 
+- Seleção de biblioteca no Linux configurada com o backend oficial `xdg-portal` do
+  `tauri-plugin-dialog`; o manifesto Flatpak removeu o acesso amplo ao filesystem. O build e o
+  smoke test reais no sandbox Flatpak, incluindo acesso persistente e reprodução de mídia,
+  continuam pendentes, e a automação de release permanece desativada.
+
 - Estado das fatias de mídia desktop: rescan explícito e entrega de materiais, vídeo, áudio e
   arquivos de legenda estão implementados pelo protocolo customizado, com faixas únicas e limite
   explícito por resposta. O player desktop renderiza VTT; SRT, ASS e SSA são baixáveis, e o build
