@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { findLesson } from './router';
-import { desktopMediaUrl, DesktopStub, HttpTransport, normalizeCatalog, normalizeRecentStudy, normalizeStudyProgress, normalizeUser, STUDY_NOT_AVAILABLE, type Transport } from './transport';
+import { desktopMediaUrl, DesktopStub, HttpTransport, normalizeCatalog, normalizeRecentStudy, normalizeStudyProgress, normalizeUser, STUDY_NOT_AVAILABLE, CATALOG_LIMITS, type Transport } from './transport';
 
 // O Tauri só é carregado no desktop: fora dele o módulo é substituído pelo mock, de modo
 // que a suíte nunca toca `window.__TAURI_INTERNALS__`.
@@ -113,7 +113,7 @@ describe('transport contract', () => {
 		expect(catalog.looseFiles[0].path).toBe('nota.pdf');
 	});
 	it('keeps shallow recursive lessons and files addressable by path', () => {
-		const catalog = normalizeCatalog({ complete: true, loose_files: [], nodes: [{ title: 'Categoria', path: 'cat', role: 'category', files: [{ name: 'cat.pdf', path: 'cat/cat.pdf', size: 1, kind: 'material' }], loose_files: [], children: [{ title: 'Aula', path: 'cat/aula', role: 'lesson', files: [{ name: 'aula.mp4', path: 'cat/aula.mp4', size: 4, kind: 'media' }], loose_files: [], children: [] }] }] });
+		const catalog = normalizeCatalog({ complete: true, loose_files: [], nodes: [{ title: 'Categoria', path: 'cat', role: 'category', files: [{ media_id: 'cat-pdf', name: 'cat.pdf', path: 'cat/cat.pdf', size: 1, kind: 'material' }], loose_files: [], children: [{ title: 'Aula', path: 'cat/aula', role: 'lesson', files: [{ media_id: 'aula-mp4', name: 'aula.mp4', path: 'cat/aula.mp4', size: 4, kind: 'media' }], loose_files: [], children: [] }] }] });
 		expect(catalog.nodes[0].children[0].path).toBe('cat/aula');
 		expect(catalog.nodes[0].children[0].files[0].path).toBe('cat/aula.mp4');
 	});
@@ -181,7 +181,7 @@ describe('transport contract', () => {
 					title: 'Go', path: 'programming/go', role: 'group', files: [], loose_files: [],
 					children: [{
 						title: 'Primeiros passos', path: 'programming/go/first', role: 'lesson',
-						files: [{ name: 'video.mp4', path: 'programming/go/first/video.mp4', size: 42, kind: 'media' }],
+						files: [{ media_id: 'video-mp4', name: 'video.mp4', path: 'programming/go/first/video.mp4', size: 42, kind: 'media' }],
 						loose_files: [], children: []
 					}]
 				}]
@@ -204,7 +204,7 @@ describe('transport contract', () => {
 			complete: true,
 			nodes: [],
 			loose_files: [],
-			categories: [{ title: 'Legado', path: 'cat', role: 'category', files: [], loose_files: [], children: [{ title: 'Aula', path: 'cat/aula', role: 'lesson', files: [{ name: 'a.mp4', path: 'cat/aula.mp4', size: 4, kind: 'media' }], loose_files: [], children: [] }] }]
+			categories: [{ title: 'Legado', path: 'cat', role: 'category', files: [], loose_files: [], children: [{ title: 'Aula', path: 'cat/aula', role: 'lesson', files: [{ media_id: 'a-mp4', name: 'a.mp4', path: 'cat/aula.mp4', size: 4, kind: 'media' }], loose_files: [], children: [] }] }]
 		});
 		expect(catalog.nodes[0].title).toBe('Legado');
 		expect(catalog.nodes[0].children[0].path).toBe('cat/aula');
@@ -239,7 +239,7 @@ describe('transport contract', () => {
 					title: 'Go', path: 'programming/go', role: 'group', files: [], loose_files: [],
 					children: [{
 						title: 'Básico', path: 'programming/go/basics', role: 'group', files: [], loose_files: [],
-						children: [{ title: 'Aula', path: 'programming/go/basics/first', role: 'lesson', files: [{ name: 'v.mp4', path: 'programming/go/basics/first/v.mp4', size: 9, kind: 'media' }], loose_files: [], children: [] }]
+						children: [{ title: 'Aula', path: 'programming/go/basics/first', role: 'lesson', files: [{ media_id: 'v-mp4', name: 'v.mp4', path: 'programming/go/basics/first/v.mp4', size: 9, kind: 'media' }], loose_files: [], children: [] }]
 					}]
 				}]
 			}]
@@ -250,7 +250,7 @@ describe('transport contract', () => {
 		const catalog = normalizeCatalog({
 			complete: true,
 			loose_files: [],
-			nodes: [{ title: 'Cat', path: 'Cat', role: 'category', files: [], loose_files: [], children: [{ title: 'Curso', path: 'Cat/Curso', role: 'module', files: [], loose_files: [], children: [{ title: 'Aula', path: 'Cat/Curso/Aula', role: 'lesson', files: [{ name: 'a.mp4', path: 'Cat/Curso/Aula/a.mp4', size: 1, kind: 'media' }], loose_files: [], children: [] }] }] }]
+			nodes: [{ title: 'Cat', path: 'Cat', role: 'category', files: [], loose_files: [], children: [{ title: 'Curso', path: 'Cat/Curso', role: 'module', files: [], loose_files: [], children: [{ title: 'Aula', path: 'Cat/Curso/Aula', role: 'lesson', files: [{ media_id: 'a-mp4', name: 'a.mp4', path: 'Cat/Curso/Aula/a.mp4', size: 1, kind: 'media' }], loose_files: [], children: [] }] }] }]
 		});
 		expect(catalog.categories[0].courses[0].modules[0].lessons[0].path).toBe('Cat/Curso/Aula');
 	});
@@ -276,7 +276,7 @@ describe('transport contract', () => {
 				title: 'Cat', path: 'cat', role: 'category', files: [], loose_files: [],
 				children: [{
 					title: 'Grupo', path: 'cat/grupo', role: 'group',
-					files: [{ name: 'guia.pdf', path: 'cat/grupo/guia.pdf', size: 2, kind: 'material' }],
+					files: [{ media_id: 'guia-pdf', name: 'guia.pdf', path: 'cat/grupo/guia.pdf', size: 2, kind: 'material' }],
 					loose_files: [], children: []
 				}]
 			}]
@@ -294,7 +294,7 @@ describe('transport contract', () => {
 				title: 'Cat', path: 'cat', role: 'category', files: [], loose_files: [],
 				children: [{
 					title: 'Aula', path: 'cat/aula', role: 'lesson',
-					files: [{ name: 'extra.bin', path: 'cat/aula/extra.bin', size: 1, kind: 'bonus' }],
+					files: [{ media_id: 'extra-bin', name: 'extra.bin', path: 'cat/aula/extra.bin', size: 1, kind: 'bonus' }],
 					loose_files: [], children: []
 				}]
 			}]
@@ -304,6 +304,44 @@ describe('transport contract', () => {
 		expect(projected.media).toEqual([]);
 		expect(projected.subtitles).toEqual([]);
 		expect(projected.materials.map((file) => file.path)).toEqual(['cat/aula/extra.bin']);
+	});
+	it('requires a non-empty media_id for canonical Rust node files', () => {
+		// A árvore canônica Rust declara `media_id` obrigatório: um arquivo sem identidade não
+		// é endereçável e não pode ser aceito em `nodes` nem na `categories` recursiva.
+		const bare = { name: 'aula.mp4', path: 'cat/aula.mp4', size: 1, kind: 'media' };
+		expect(() => normalizeCatalog({ nodes: [{ title: 'Cat', path: 'cat', role: 'category', files: [bare], loose_files: [], children: [] }] })).toThrow('Resposta inválida do servidor');
+		const empty = { ...bare, media_id: '' };
+		expect(() => normalizeCatalog({ nodes: [{ title: 'Cat', path: 'cat', role: 'category', files: [], loose_files: [empty], children: [] }] })).toThrow('Resposta inválida do servidor');
+		// A `categories` recursiva (fallback Rust quando `nodes` está vazio) também é canônica.
+		expect(() => normalizeCatalog({ nodes: [], categories: [{ title: 'Cat', path: 'cat', role: 'category', files: [bare], loose_files: [], children: [] }] })).toThrow('Resposta inválida do servidor');
+	});
+	it('keeps media_id optional for the legacy Go fallback', () => {
+		// O serviço Go não emite `media_id`: o fallback por `categories` com `courses` continua
+		// aceito sem identidade de mídia.
+		const catalog = normalizeCatalog({ categories: [{ title: 'Cat', courses: [{ title: 'Curso', modules: [{ title: 'Mod', lessons: [{ title: 'Aula', path: 'a', media: [{ name: 'v.mp4', path: 'a/v.mp4', size: 1 }], subtitles: [], materials: [] }] }] }] }] });
+		expect(catalog.nodes[0].children[0].children[0].children[0].files[0].mediaId).toBeUndefined();
+	});
+	it('keeps root loose files without media_id for the shared Go fallback', () => {
+		const catalog = normalizeCatalog({ complete: true, categories: [], loose_files: [{ name: 'nota.pdf', path: 'nota.pdf', size: 3 }] });
+		expect(catalog.looseFiles[0].mediaId).toBeUndefined();
+	});
+	it('rejects a catalog deeper than the depth limit instead of overflowing the stack', () => {
+		let deep: Record<string, unknown> = { title: 'Aula', path: 'aula', role: 'lesson', files: [], loose_files: [], children: [] };
+		for (let level = 0; level <= CATALOG_LIMITS.depth; level++) {
+			deep = { title: 'Nó', path: `n${level}`, role: 'module', files: [], loose_files: [], children: [deep] };
+		}
+		expect(() => normalizeCatalog({ nodes: [deep] })).toThrow('Resposta inválida do servidor');
+	});
+	it('rejects a catalog with more nodes than the limit without truncating', () => {
+		const leaf = { title: 'Aula', path: 'aula', role: 'lesson', files: [], loose_files: [], children: [] };
+		const children = Array.from({ length: CATALOG_LIMITS.nodes }, () => leaf);
+		// Uma categoria mais o limite de filhos ultrapassa o orçamento total de nós.
+		expect(() => normalizeCatalog({ nodes: [{ title: 'Cat', path: 'cat', role: 'category', files: [], loose_files: [], children }] })).toThrow('Resposta inválida do servidor');
+	});
+	it('rejects a catalog with more files than the limit without truncating', () => {
+		const file = { media_id: 'm', name: 'f', path: 'f', size: 1 };
+		const files = Array.from({ length: CATALOG_LIMITS.files + 1 }, () => file);
+		expect(() => normalizeCatalog({ nodes: [{ title: 'Cat', path: 'cat', role: 'category', files, loose_files: [], children: [] }] })).toThrow('Resposta inválida do servidor');
 	});
 	it('rejects an explicit null root loose_files instead of treating it as absent', () => {
 		expect(() => normalizeCatalog({ nodes: [], categories: [], loose_files: null })).toThrow('Resposta inválida do servidor');

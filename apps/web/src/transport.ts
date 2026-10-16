@@ -58,7 +58,30 @@ type RustCatalog = { complete?: boolean; categories?: RustNode[]; nodes?: RustNo
 type GoFile = { name?: string; path?: string; size?: number; media_id?: string; kind?: string; availability?: string; unverified?: boolean };
 type GoCatalog = { categories?: unknown; loose_files?: unknown; looseFiles?: unknown };
 
+// Limites explícitos da normalização do catálogo. Um payload hostil não pode esgotar a pilha
+// (profundidade) nem a memória (nós e arquivos): o payload que ultrapassa um limite é recusado
+// inteiro, nunca truncado. São generosos para uma biblioteca real e valem para os dois
+// transportes, já que ambos passam por `normalizeCatalog`.
+export const CATALOG_LIMITS = { depth: 32, nodes: 50_000, files: 200_000 } as const;
+
 function invalidPayload(message: string): Error { return new Error(`Resposta inválida do servidor: ${message}`); }
+
+// Orçamento compartilhado pela normalização de um catálogo: conta nós e arquivos de forma
+// determinística para recusar payloads grandes demais antes de amplificá-los.
+type CatalogBudget = { nodes: number; files: number };
+
+function newCatalogBudget(): CatalogBudget { return { nodes: 0, files: 0 }; }
+
+function countNode(budget: CatalogBudget, depth: number): void {
+	if (depth > CATALOG_LIMITS.depth) throw invalidPayload('catálogo profundo demais.');
+	budget.nodes += 1;
+	if (budget.nodes > CATALOG_LIMITS.nodes) throw invalidPayload('catálogo com nós demais.');
+}
+
+function countFile(budget: CatalogBudget): void {
+	budget.files += 1;
+	if (budget.files > CATALOG_LIMITS.files) throw invalidPayload('catálogo com arquivos demais.');
+}
 
 export function fileStatus(file: FileEntry): string {
 	return [file.availability === 'missing' ? 'ausente' : '', file.unverified ? 'não verificado' : ''].filter(Boolean).join(' · ');
@@ -87,21 +110,33 @@ function fileSize(value: unknown): number {
 	return value;
 }
 
-function normalizeFile(value: unknown): FileEntry {
+// `requireMediaId` distingue a árvore canônica Rust (identidade obrigatória) do fallback
+// legado do Go (que não emite `media_id`).
+function normalizeFile(value: unknown, requireMediaId = false): FileEntry {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('arquivo inválido.');
 	const file = value as RustFile | GoFile;
 	const name = file.name;
 	const path = file.path;
 	if (typeof name !== 'string' || typeof path !== 'string') throw invalidPayload('arquivo sem nome ou caminho.');
+	const mediaId = optionalFileString(file.media_id, 'media_id');
+	// A árvore canônica Rust exige identidade não vazia: sem `media_id` o arquivo não é
+	// endereçável. O fallback legado do Go não emite o campo, então lá ele segue opcional.
+	if (requireMediaId && !mediaId) throw invalidPayload('arquivo sem media_id.');
 	return {
 		name,
 		path,
 		size: fileSize(file.size),
-		mediaId: optionalFileString(file.media_id, 'media_id'),
+		mediaId,
 		kind: optionalFileString(file.kind, 'kind'),
 		availability: optionalFileString(file.availability, 'availability'),
 		unverified: optionalFileBoolean(file.unverified, 'unverified')
 	};
+}
+
+// Arquivo de um nó canônico Rust: consome o orçamento de arquivos e exige `media_id`.
+function normalizeRustFile(value: unknown, budget: CatalogBudget): FileEntry {
+	countFile(budget);
+	return normalizeFile(value, true);
 }
 
 function lesson(title: string, path: string, files: FileEntry[]): Lesson {
@@ -142,16 +177,16 @@ function optionalArray(source: object, key: string): unknown[] {
 	return raw;
 }
 
-function goFiles(value: unknown): FileEntry[] {
+function goFiles(value: unknown, budget: CatalogBudget): FileEntry[] {
 	if (!Array.isArray(value)) throw invalidPayload('lista de arquivos Go inválida.');
-	return value.map((file) => normalizeFile(file as GoFile));
+	return value.map((file) => { countFile(budget); return normalizeFile(file as GoFile); });
 }
 
-function goLesson(value: unknown): Lesson {
+function goLesson(value: unknown, budget: CatalogBudget): Lesson {
 	if (!value || typeof value !== 'object') throw invalidPayload('aula Go inválida.');
 	const item = value as { title?: unknown; path?: unknown; media?: unknown; subtitles?: unknown; materials?: unknown };
 	if (typeof item.title !== 'string' || typeof item.path !== 'string') throw invalidPayload('aula Go sem título ou caminho.');
-	return { title: item.title, path: item.path, media: goFiles(item.media), subtitles: goFiles(item.subtitles), materials: goFiles(item.materials) };
+	return { title: item.title, path: item.path, media: goFiles(item.media, budget), subtitles: goFiles(item.subtitles, budget), materials: goFiles(item.materials, budget) };
 }
 
 function rustLesson(node: CatalogNode): Lesson {
@@ -159,7 +194,8 @@ function rustLesson(node: CatalogNode): Lesson {
 	return { ...lesson(node.title, node.path, files), availability: files.find((file) => file.availability)?.availability, unverified: files.some((file) => file.unverified) };
 }
 
-function normalizeRustNode(value: unknown): CatalogNode {
+function normalizeRustNode(value: unknown, depth: number, budget: CatalogBudget): CatalogNode {
+	countNode(budget, depth);
 	if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('node Rust inválido.');
 	const node = value as RustNode;
 	if (typeof node.title !== 'string' || typeof node.path !== 'string' || typeof node.role !== 'string') throw invalidPayload('node Rust incompleto.');
@@ -167,9 +203,9 @@ function normalizeRustNode(value: unknown): CatalogNode {
 		title: node.title,
 		path: node.path,
 		role: node.role,
-		files: optionalArray(value, 'files').map(normalizeFile),
-		looseFiles: optionalArray(value, 'loose_files').map(normalizeFile),
-		children: optionalArray(value, 'children').map(normalizeRustNode)
+		files: optionalArray(value, 'files').map((file) => normalizeRustFile(file, budget)),
+		looseFiles: optionalArray(value, 'loose_files').map((file) => normalizeRustFile(file, budget)),
+		children: optionalArray(value, 'children').map((child) => normalizeRustNode(child, depth + 1, budget))
 	};
 }
 
@@ -224,8 +260,11 @@ function canonicalNodeList(value: RustCatalog): unknown {
 function normalizeRustCatalog(value: RustCatalog): Catalog {
 	const rawNodes = canonicalNodeList(value);
 	if (!Array.isArray(rawNodes)) throw invalidPayload('catálogo Rust sem nodes.');
-	const looseFiles = mirroredArray(value, 'loose_files', 'looseFiles').map(normalizeFile);
-	const nodes = rawNodes.map(normalizeRustNode);
+	const budget = newCatalogBudget();
+	// Os arquivos soltos da raiz são compartilhados com o fallback Go, então seguem com
+	// `media_id` opcional — mas contam no orçamento de arquivos.
+	const looseFiles = mirroredArray(value, 'loose_files', 'looseFiles').map((file) => { countFile(budget); return normalizeFile(file); });
+	const nodes = rawNodes.map((node) => normalizeRustNode(node, 1, budget));
 	return { complete: value.complete === true, looseFiles, nodes, categories: projectRust(nodes) };
 }
 
@@ -233,31 +272,35 @@ function goTitle(value: unknown, fallback: string): string { return typeof value
 
 function tagKind(files: FileEntry[], kind: string): FileEntry[] { return files.map((file) => ({ ...file, kind: file.kind ?? kind })); }
 
-function goLessonNode(value: unknown): CatalogNode {
-	const item = goLesson(value);
+function goLessonNode(value: unknown, budget: CatalogBudget): CatalogNode {
+	countNode(budget, 4);
+	const item = goLesson(value, budget);
 	const files = [...tagKind(item.media, 'media'), ...tagKind(item.subtitles, 'subtitle'), ...tagKind(item.materials, 'material')];
 	return { title: item.title, path: item.path, role: 'lesson', files, looseFiles: [], children: [] };
 }
 
-function goModuleNode(value: unknown): CatalogNode {
+function goModuleNode(value: unknown, budget: CatalogBudget): CatalogNode {
+	countNode(budget, 3);
 	if (!value || typeof value !== 'object') throw invalidPayload('módulo Go inválido.');
 	const item = value as { title?: unknown; path?: unknown; lessons?: unknown };
 	if (!Array.isArray(item.lessons)) throw invalidPayload('módulo Go sem lessons.');
-	return { title: goTitle(item.title, 'Módulo'), path: goTitle(item.path, ''), role: 'module', files: [], looseFiles: [], children: item.lessons.map(goLessonNode) };
+	return { title: goTitle(item.title, 'Módulo'), path: goTitle(item.path, ''), role: 'module', files: [], looseFiles: [], children: item.lessons.map((lesson) => goLessonNode(lesson, budget)) };
 }
 
-function goCourseNode(value: unknown): CatalogNode {
+function goCourseNode(value: unknown, budget: CatalogBudget): CatalogNode {
+	countNode(budget, 2);
 	if (!value || typeof value !== 'object') throw invalidPayload('curso Go inválido.');
 	const item = value as { title?: unknown; path?: unknown; modules?: unknown };
 	if (!Array.isArray(item.modules)) throw invalidPayload('curso Go sem modules.');
-	return { title: goTitle(item.title, 'Curso'), path: goTitle(item.path, ''), role: 'course', files: [], looseFiles: [], children: item.modules.map(goModuleNode) };
+	return { title: goTitle(item.title, 'Curso'), path: goTitle(item.path, ''), role: 'course', files: [], looseFiles: [], children: item.modules.map((module) => goModuleNode(module, budget)) };
 }
 
-function goCategoryNode(value: unknown): CatalogNode {
+function goCategoryNode(value: unknown, budget: CatalogBudget): CatalogNode {
+	countNode(budget, 1);
 	if (!value || typeof value !== 'object') throw invalidPayload('categoria Go inválida.');
 	const item = value as { title?: unknown; path?: unknown; courses?: unknown };
 	if (!Array.isArray(item.courses)) throw invalidPayload('categoria Go sem courses.');
-	return { title: goTitle(item.title, 'Categoria'), path: goTitle(item.path, ''), role: 'category', files: [], looseFiles: [], children: item.courses.map(goCourseNode) };
+	return { title: goTitle(item.title, 'Categoria'), path: goTitle(item.path, ''), role: 'category', files: [], looseFiles: [], children: item.courses.map((course) => goCourseNode(course, budget)) };
 }
 
 // Go serializes the projected category/course/module/lesson tree and omits root `kind`/`nodes`;
@@ -265,8 +308,9 @@ function goCategoryNode(value: unknown): CatalogNode {
 // SPA renders one shape, and derive `categories` from it to avoid a second parallel tree.
 function normalizeGoCatalog(value: GoCatalog): Catalog {
 	if (!Array.isArray(value.categories)) throw invalidPayload('catálogo Go sem categories.');
-	const looseFiles = mirroredArray(value, 'loose_files', 'looseFiles').map((file) => normalizeFile(file as GoFile));
-	const nodes = value.categories.map(goCategoryNode);
+	const budget = newCatalogBudget();
+	const looseFiles = mirroredArray(value, 'loose_files', 'looseFiles').map((file) => { countFile(budget); return normalizeFile(file as GoFile); });
+	const nodes = value.categories.map((category) => goCategoryNode(category, budget));
 	return { complete: true, looseFiles, nodes, categories: projectRust(nodes) };
 }
 

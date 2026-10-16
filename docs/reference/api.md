@@ -93,6 +93,11 @@ categoria, curso ou módulo e nós de topo que não são categoria — permanece
 O `desktop_catalog` expõe o mesmo par por IPC, e a SPA continua aceitando um payload apenas com
 `categories` no formato legado do serviço Go como fallback durante a transição.
 
+Ao normalizar, a SPA exige `media_id` não vazio nos arquivos dos nós canônicos Rust (o fallback
+legado do Go segue sem identidade) e recusa de forma determinística um payload que ultrapasse os
+limites explícitos de profundidade, número de nós ou de arquivos — nunca truncando a árvore: o
+payload inteiro é rejeitado como inválido.
+
 ## Estudo
 
 O progresso é sempre do usuário autenticado: nenhuma rota aceita um `owner_id` vindo do
