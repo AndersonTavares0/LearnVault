@@ -73,6 +73,14 @@ describe('transport contract', () => {
 		expect(desktopMediaUrl(uuid, 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)')).toBe(`learnvault-media://localhost/${uuid}`);
 		expect(desktopMediaUrl(uuid, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0')).toBe(`http://learnvault-media.localhost/${uuid}`);
 	});
+	it('addresses the desktop protocol through the http.localhost prefix on Android, like Windows', () => {
+		// O workaround do wry é o mesmo no WebView2 (Windows) e no webview do Android (ambos
+		// Chromium): `http://<esquema>.localhost` é revertido para o esquema antes do handler.
+		// Sem isso o Android cairia no esquema direto, que não é resolvido no Chromium.
+		const uuid = '0192f0e0-4444-7abc-8def-0123456789ab';
+		const android = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36';
+		expect(desktopMediaUrl(uuid, android)).toBe(`http://learnvault-media.localhost/${uuid}`);
+	});
 	it('reports the HTTP platform as configured without any request', async () => {
 		const fetchMock = vi.fn();
 		vi.stubGlobal('fetch', fetchMock);
