@@ -69,6 +69,22 @@ func (s fakeStore) Catalog(context.Context) (catalog.Catalog, error) {
 	return catalog.Catalog{}, s.healthErr
 }
 func (s fakeStore) ReplaceCatalog(context.Context, catalog.Catalog) error { return s.healthErr }
+func (s fakeStore) RemoveMedia(context.Context, string) error             { return s.healthErr }
+func (s fakeStore) RemovedMedia(context.Context) (map[string]struct{}, error) {
+	return nil, s.healthErr
+}
+func (s fakeStore) StudyProgress(context.Context, int64, string) (storage.StudyProgress, bool, error) {
+	return storage.StudyProgress{}, false, s.healthErr
+}
+func (s fakeStore) RecordStudyPosition(context.Context, int64, string, int64) (storage.StudyProgress, error) {
+	return storage.StudyProgress{}, s.healthErr
+}
+func (s fakeStore) SetStudyCompleted(context.Context, int64, string, bool) (storage.StudyProgress, error) {
+	return storage.StudyProgress{}, s.healthErr
+}
+func (s fakeStore) RecentStudy(context.Context, int64, int) ([]storage.StudyProgress, error) {
+	return nil, s.healthErr
+}
 
 func newFakeServer(t *testing.T) (*Server, *http.Cookie) {
 	t.Helper()

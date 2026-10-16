@@ -5,10 +5,12 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"mime"
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -20,6 +22,10 @@ import (
 
 const sessionCookie = "learnvault_session"
 const sessionLifetime = 12 * time.Hour
+
+// defaultRecentStudyLimit mirrors the Rust server default for `/api/study/recent` when
+// the query omits `limit`. The real ceiling stays storage.MaxRecentStudy.
+const defaultRecentStudyLimit = 20
 
 type Server struct {
 	db           store
@@ -43,6 +49,11 @@ type store interface {
 	UpdateCredentialsAndSession(context.Context, int64, string, string, string, time.Duration) error
 	Catalog(context.Context) (catalog.Catalog, error)
 	ReplaceCatalog(context.Context, catalog.Catalog) error
+	RemovedMedia(context.Context) (map[string]struct{}, error)
+	StudyProgress(context.Context, int64, string) (storage.StudyProgress, bool, error)
+	RecordStudyPosition(context.Context, int64, string, int64) (storage.StudyProgress, error)
+	SetStudyCompleted(context.Context, int64, string, bool) (storage.StudyProgress, error)
+	RecentStudy(context.Context, int64, int) ([]storage.StudyProgress, error)
 }
 
 func New(db *storage.DB) *Server {
@@ -108,7 +119,7 @@ func isAPIPath(path string) bool {
 
 func noStoreAPIPath(path string) bool {
 	switch path {
-	case "/api/login", "/api/me", "/api/catalog", "/api/media", "/api/account/credentials", "/api/logout", "/api/admin/catalog/rescan":
+	case "/api/login", "/api/me", "/api/catalog", "/api/media", "/api/account/credentials", "/api/logout", "/api/admin/catalog/rescan", "/api/study/recent", "/api/study/progress", "/api/study/position", "/api/study/completed", "/api/study/capabilities":
 		return true
 	default:
 		return false
@@ -275,6 +286,36 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]int{"categories": len(value.Categories)})
+	case "/api/study/recent":
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w)
+			return
+		}
+		s.studyRecent(w, r)
+	case "/api/study/progress":
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w)
+			return
+		}
+		s.studyProgress(w, r)
+	case "/api/study/position":
+		if r.Method != http.MethodPost {
+			methodNotAllowed(w)
+			return
+		}
+		s.studyPosition(w, r)
+	case "/api/study/completed":
+		if r.Method != http.MethodPost {
+			methodNotAllowed(w)
+			return
+		}
+		s.studyCompleted(w, r)
+	case "/api/study/capabilities":
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w)
+			return
+		}
+		s.studyCapabilities(w, r)
 	default:
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
 	}
@@ -439,6 +480,253 @@ func (s *Server) credentials(w http.ResponseWriter, r *http.Request) {
 	user.Username = input.Username
 	user.MustChangeCredentials = false
 	writeJSON(w, http.StatusOK, user)
+}
+
+// studyUser resolves the authenticated owner of study progress. The owner is always the
+// session user: no route accepts an owner from the client, and a temporary session that
+// still has to change credentials is refused before any read or write.
+func (s *Server) studyUser(w http.ResponseWriter, r *http.Request) (storage.User, bool) {
+	user, ok := s.currentUser(r)
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return storage.User{}, false
+	}
+	if user.MustChangeCredentials {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "credentials_change_required"})
+		return storage.User{}, false
+	}
+	return user, true
+}
+
+// knownStudyMedia reports whether a canonical library-relative path is a media identity
+// the Go service can attach progress to. It reuses the single media authorization
+// boundary (the canonical catalog walk used by `/api/media`) and also accepts a path kept
+// by an explicit removal tombstone, mirroring the Rust core: removal hides media from the
+// catalog but the identity survives, so progress stays readable and writable.
+func (s *Server) knownStudyMedia(ctx context.Context, mediaPath string) (bool, error) {
+	value, err := s.db.Catalog(ctx)
+	if err != nil {
+		return false, err
+	}
+	if catalogAllowsPath(value, mediaPath) {
+		return true, nil
+	}
+	removed, err := s.db.RemovedMedia(ctx)
+	if err != nil {
+		return false, err
+	}
+	_, ok := removed[mediaPath]
+	return ok, nil
+}
+
+// studyStateResponse is the client-facing progress of one media. updated_at is null when
+// there is no recorded state, so "never studied" is distinct from "studied at zero".
+type studyStateResponse struct {
+	MediaID         string `json:"media_id"`
+	PositionSeconds int64  `json:"position_seconds"`
+	Completed       bool   `json:"completed"`
+	UpdatedAt       *int64 `json:"updated_at"`
+	Recorded        bool   `json:"recorded"`
+}
+
+func recordedStudyResponse(state storage.StudyProgress) studyStateResponse {
+	updatedAt := state.UpdatedAt
+	return studyStateResponse{
+		MediaID:         state.MediaPath,
+		PositionSeconds: state.PositionSeconds,
+		Completed:       state.Completed,
+		UpdatedAt:       &updatedAt,
+		Recorded:        true,
+	}
+}
+
+func absentStudyResponse(mediaPath string) studyStateResponse {
+	return studyStateResponse{MediaID: mediaPath, Recorded: false}
+}
+
+func (s *Server) studyRecent(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.studyUser(w, r)
+	if !ok {
+		return
+	}
+	limit, valid := parseRecentStudyLimit(r.URL.Query())
+	if !valid {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_query"})
+		return
+	}
+	states, err := s.db.RecentStudy(r.Context(), user.ID, limit)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal_error"})
+		return
+	}
+	items := make([]studyStateResponse, 0, len(states))
+	for _, state := range states {
+		items = append(items, recordedStudyResponse(state))
+	}
+	writeJSON(w, http.StatusOK, struct {
+		Items []studyStateResponse `json:"items"`
+	}{Items: items})
+}
+
+func (s *Server) studyProgress(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.studyUser(w, r)
+	if !ok {
+		return
+	}
+	query := r.URL.Query()
+	if !query.Has("media_id") {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_query"})
+		return
+	}
+	mediaPath, ok := s.requireStudyMedia(w, r, query.Get("media_id"))
+	if !ok {
+		return
+	}
+	state, recorded, err := s.db.StudyProgress(r.Context(), user.ID, mediaPath)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal_error"})
+		return
+	}
+	if !recorded {
+		writeJSON(w, http.StatusOK, absentStudyResponse(mediaPath))
+		return
+	}
+	writeJSON(w, http.StatusOK, recordedStudyResponse(state))
+}
+
+func (s *Server) studyPosition(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.studyMutationUser(w, r)
+	if !ok {
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 8*1024)
+	var input struct {
+		MediaID         string `json:"media_id"`
+		PositionSeconds *int64 `json:"position_seconds"`
+	}
+	if !decodeStrictJSON(w, r, &input) || input.PositionSeconds == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_request"})
+		return
+	}
+	mediaPath, ok := s.requireStudyMedia(w, r, input.MediaID)
+	if !ok {
+		return
+	}
+	state, err := s.db.RecordStudyPosition(r.Context(), user.ID, mediaPath, *input.PositionSeconds)
+	if errors.Is(err, storage.ErrInvalidStudyPosition) {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid_position"})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal_error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, recordedStudyResponse(state))
+}
+
+func (s *Server) studyCompleted(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.studyMutationUser(w, r)
+	if !ok {
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 8*1024)
+	var input struct {
+		MediaID   string `json:"media_id"`
+		Completed *bool  `json:"completed"`
+	}
+	if !decodeStrictJSON(w, r, &input) || input.Completed == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_request"})
+		return
+	}
+	mediaPath, ok := s.requireStudyMedia(w, r, input.MediaID)
+	if !ok {
+		return
+	}
+	state, err := s.db.SetStudyCompleted(r.Context(), user.ID, mediaPath, *input.Completed)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal_error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, recordedStudyResponse(state))
+}
+
+// studyCapabilities is the explicit capability/feature-detection contract for the Study
+// UI. The Go service persists progress but its media identity is the canonical relative
+// path, which does not survive a rename the way the Rust `media_id` does; this endpoint
+// states that instead of letting a client assume full parity.
+func (s *Server) studyCapabilities(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.studyUser(w, r); !ok {
+		return
+	}
+	writeJSON(w, http.StatusOK, struct {
+		Study                bool   `json:"study"`
+		MediaIdentity        string `json:"media_identity"`
+		StableMediaIdentity  bool   `json:"stable_media_identity"`
+		RecentDefaultLimit   int    `json:"recent_default_limit"`
+		RecentMaxLimit       int    `json:"recent_max_limit"`
+		RemovalKeepsProgress bool   `json:"removal_keeps_progress"`
+	}{
+		Study:                true,
+		MediaIdentity:        "relative_path",
+		StableMediaIdentity:  false,
+		RecentDefaultLimit:   defaultRecentStudyLimit,
+		RecentMaxLimit:       storage.MaxRecentStudy,
+		RemovalKeepsProgress: true,
+	})
+}
+
+// studyMutationUser applies the shared mutation preconditions: same-origin (CSRF) first,
+// then the authenticated owner. It writes the error response and reports false on failure.
+func (s *Server) studyMutationUser(w http.ResponseWriter, r *http.Request) (storage.User, bool) {
+	if !sameOrigin(r) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "csrf_failed"})
+		return storage.User{}, false
+	}
+	return s.studyUser(w, r)
+}
+
+// requireStudyMedia normalizes the media identity and rejects an unknown path, returning
+// the canonical path on success. It writes the 404 response and reports false when the
+// path is not a media the server knows (invalid, uncatalogued or never recorded).
+func (s *Server) requireStudyMedia(w http.ResponseWriter, r *http.Request, mediaID string) (string, bool) {
+	mediaPath, valid := normalizeCatalogPath(mediaID)
+	if !valid {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "media_not_found"})
+		return "", false
+	}
+	known, err := s.knownStudyMedia(r.Context(), mediaPath)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal_error"})
+		return "", false
+	}
+	if !known {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "media_not_found"})
+		return "", false
+	}
+	return mediaPath, true
+}
+
+// parseRecentStudyLimit mirrors the Rust query contract: a missing limit uses the default,
+// and any present value that is not a non-negative integer is a malformed query. Values
+// above the ceiling are clamped by the store, not here.
+func parseRecentStudyLimit(query url.Values) (int, bool) {
+	if !query.Has("limit") {
+		return defaultRecentStudyLimit, true
+	}
+	parsed, err := strconv.Atoi(query.Get("limit"))
+	if err != nil || parsed < 0 {
+		return 0, false
+	}
+	return parsed, true
+}
+
+// decodeStrictJSON rejects unknown fields and malformed bodies, matching the other API
+// handlers. A missing required field is rejected by the caller through a pointer field, so
+// a malformed mutation is never silently treated as a neutral value.
+func decodeStrictJSON(w http.ResponseWriter, r *http.Request, target any) bool {
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	return decoder.Decode(target) == nil
 }
 
 func sameOrigin(r *http.Request) bool {

@@ -314,6 +314,129 @@ func filterRemovedNodes(nodes []catalog.Node, keepFiles func([]catalog.File) []c
 	return kept
 }
 
+// MaxRecentStudy is the fixed ceiling of RecentStudy results. It is a protection
+// against unbounded queries, not a setting: the value ships with the code.
+const MaxRecentStudy = 100
+
+// ErrInvalidStudyPosition reports a negative resume position rejected before any write.
+var ErrInvalidStudyPosition = errors.New("invalid study position")
+
+// StudyProgress is the persisted study state of one owner for one media identity.
+//
+// The Go service has no stable media identifier, so MediaPath is the canonical
+// library-relative path — the same identity used by `/api/media` and by the removal
+// tombstone. Position and completion are independent: advancing never clears completion
+// and completing never moves the resume point. UpdatedAt is the instant of the last real
+// change, in seconds since the Unix epoch, and never moves when the same value is resent.
+type StudyProgress struct {
+	MediaPath       string
+	PositionSeconds int64
+	Completed       bool
+	UpdatedAt       int64
+}
+
+// StudyProgress reads the recorded state of one owner for one media path. The boolean
+// reports whether a row exists: absence is not an error, it means the path was never
+// studied by this owner. Media existence is enforced at the HTTP boundary, so this method
+// only reads the persisted row.
+func (d *DB) StudyProgress(ctx context.Context, userID int64, mediaPath string) (StudyProgress, bool, error) {
+	state, err := scanStudyState(d.sql.QueryRowContext(ctx, `SELECT media_path, position_seconds, completed, updated_at FROM study_state WHERE user_id=? AND media_path=?`, userID, mediaPath))
+	if errors.Is(err, sql.ErrNoRows) {
+		return StudyProgress{}, false, nil
+	}
+	if err != nil {
+		return StudyProgress{}, false, err
+	}
+	return state, true, nil
+}
+
+// RecordStudyPosition writes the resume point, preserving any recorded completion. A
+// negative position is rejected before touching the database. The upsert is a single
+// statement, so the read-back is the exact row the write produced even under concurrency.
+func (d *DB) RecordStudyPosition(ctx context.Context, userID int64, mediaPath string, positionSeconds int64) (StudyProgress, error) {
+	if positionSeconds < 0 {
+		return StudyProgress{}, ErrInvalidStudyPosition
+	}
+	return d.upsertStudyState(ctx,
+		`INSERT INTO study_state (user_id, media_path, position_seconds, completed, updated_at)
+		 VALUES (?, ?, ?, 0, ?)
+		 ON CONFLICT (user_id, media_path) DO UPDATE SET
+		     position_seconds = excluded.position_seconds,
+		     updated_at = CASE
+		         WHEN study_state.position_seconds <> excluded.position_seconds
+		         THEN excluded.updated_at
+		         ELSE study_state.updated_at
+		     END
+		 RETURNING media_path, position_seconds, completed, updated_at`,
+		userID, mediaPath, positionSeconds)
+}
+
+// SetStudyCompleted marks or clears completion, preserving the resume point. The instant
+// only advances when completion actually changes, mirroring RecordStudyPosition.
+func (d *DB) SetStudyCompleted(ctx context.Context, userID int64, mediaPath string, completed bool) (StudyProgress, error) {
+	value := 0
+	if completed {
+		value = 1
+	}
+	return d.upsertStudyState(ctx,
+		`INSERT INTO study_state (user_id, media_path, position_seconds, completed, updated_at)
+		 VALUES (?, ?, 0, ?, ?)
+		 ON CONFLICT (user_id, media_path) DO UPDATE SET
+		     completed = excluded.completed,
+		     updated_at = CASE
+		         WHEN study_state.completed <> excluded.completed
+		         THEN excluded.updated_at
+		         ELSE study_state.updated_at
+		     END
+		 RETURNING media_path, position_seconds, completed, updated_at`,
+		userID, mediaPath, value)
+}
+
+// RecentStudy lists the owner's progress from the most recently changed to the oldest,
+// breaking ties by media path so the order is deterministic. The limit is clamped to
+// MaxRecentStudy and a non-positive limit returns nothing. Media recorded by an explicit
+// removal tombstone is hidden, but its progress row is never erased.
+func (d *DB) RecentStudy(ctx context.Context, userID int64, limit int) ([]StudyProgress, error) {
+	if limit > MaxRecentStudy {
+		limit = MaxRecentStudy
+	}
+	if limit <= 0 {
+		return []StudyProgress{}, nil
+	}
+	rows, err := d.sql.QueryContext(ctx, `SELECT s.media_path, s.position_seconds, s.completed, s.updated_at
+		FROM study_state s
+		WHERE s.user_id = ?
+		  AND NOT EXISTS (SELECT 1 FROM media_removal r WHERE r.relative_path = s.media_path)
+		ORDER BY s.updated_at DESC, s.media_path ASC
+		LIMIT ?`, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	states := []StudyProgress{}
+	for rows.Next() {
+		var state StudyProgress
+		if err := rows.Scan(&state.MediaPath, &state.PositionSeconds, &state.Completed, &state.UpdatedAt); err != nil {
+			return nil, err
+		}
+		states = append(states, state)
+	}
+	return states, rows.Err()
+}
+
+// upsertStudyState appends the current instant to a single-statement upsert and decodes
+// the RETURNING row, so the caller observes exactly what was persisted.
+func (d *DB) upsertStudyState(ctx context.Context, statement string, args ...any) (StudyProgress, error) {
+	args = append(args, time.Now().UTC().Unix())
+	return scanStudyState(d.sql.QueryRowContext(ctx, statement, args...))
+}
+
+func scanStudyState(row *sql.Row) (StudyProgress, error) {
+	var state StudyProgress
+	err := row.Scan(&state.MediaPath, &state.PositionSeconds, &state.Completed, &state.UpdatedAt)
+	return state, err
+}
+
 func (d *DB) ReplaceCatalog(ctx context.Context, value catalog.Catalog) error {
 	tx, err := d.sql.BeginTx(ctx, nil)
 	if err != nil {

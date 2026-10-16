@@ -298,3 +298,192 @@ func TestOpenMigratesLegacyGoDatabaseAdditively(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func insertTestUser(t *testing.T, db *DB, username string) int64 {
+	t.Helper()
+	res, err := db.sql.Exec(`INSERT INTO users(username,password_hash,role) VALUES(?,?,?)`, username, "hash", "user")
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+// TestStudyStatePersistsIsolatesAndOrders prova a persistência real: o progresso é por
+// dono, a ordem é do mais recente ao mais antigo com desempate pelo caminho e o teto é
+// aplicado. Nenhuma linha cruza donos.
+func TestStudyStatePersistsIsolatesAndOrders(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	userA := insertTestUser(t, db, "a")
+	userB := insertTestUser(t, db, "b")
+
+	for _, row := range []struct {
+		user     int64
+		path     string
+		position int64
+		done     int
+		updated  int64
+	}{
+		{userA, "m1", 30, 0, 300},
+		{userA, "m2", 20, 1, 200},
+		{userA, "m0", 0, 0, 200},
+		{userB, "m9", 5, 0, 999},
+	} {
+		if _, err := db.sql.Exec(`INSERT INTO study_state(user_id,media_path,position_seconds,completed,updated_at) VALUES(?,?,?,?,?)`,
+			row.user, row.path, row.position, row.done, row.updated); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	states, err := db.RecentStudy(ctx, userA, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	order := make([]string, 0, len(states))
+	for _, state := range states {
+		order = append(order, state.MediaPath)
+	}
+	if len(order) != 3 || order[0] != "m1" || order[1] != "m0" || order[2] != "m2" {
+		t.Fatalf("RecentStudy order = %v; want [m1 m0 m2]", order)
+	}
+	if states[1].PositionSeconds != 0 || states[1].Completed {
+		t.Fatalf("recorded zero-position row lost: %#v", states[1])
+	}
+
+	other, err := db.RecentStudy(ctx, userB, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(other) != 1 || other[0].MediaPath != "m9" {
+		t.Fatalf("owner isolation broken: %#v", other)
+	}
+
+	if clamped, err := db.RecentStudy(ctx, userA, 1000); err != nil || len(clamped) != 3 {
+		t.Fatalf("RecentStudy ceiling = %v, %v; want 3 rows", clamped, err)
+	}
+	if none, err := db.RecentStudy(ctx, userA, 0); err != nil || len(none) != 0 {
+		t.Fatalf("RecentStudy limit 0 = %v, %v; want empty", none, err)
+	}
+}
+
+// TestStudyMutationsAreIdempotentAndIndependent prova que reenviar um valor idêntico não
+// move updated_at, que posição e conclusão são independentes e que uma posição negativa é
+// recusada sem gravar nada.
+func TestStudyMutationsAreIdempotentAndIndependent(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	user := insertTestUser(t, db, "a")
+	if _, err := db.sql.Exec(`INSERT INTO study_state(user_id,media_path,position_seconds,completed,updated_at) VALUES(?,?,?,?,?)`,
+		user, "m1", 5, 0, 1000); err != nil {
+		t.Fatal(err)
+	}
+
+	same, err := db.RecordStudyPosition(ctx, user, "m1", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if same.UpdatedAt != 1000 || same.Completed {
+		t.Fatalf("same position changed state: %#v", same)
+	}
+
+	moved, err := db.RecordStudyPosition(ctx, user, "m1", 6)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if moved.UpdatedAt <= 1000 || moved.PositionSeconds != 6 {
+		t.Fatalf("real change not recorded: %#v", moved)
+	}
+
+	completed, err := db.SetStudyCompleted(ctx, user, "m1", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !completed.Completed || completed.PositionSeconds != 6 {
+		t.Fatalf("completion moved position: %#v", completed)
+	}
+	repeated, err := db.SetStudyCompleted(ctx, user, "m1", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repeated.UpdatedAt != completed.UpdatedAt {
+		t.Fatalf("same completion moved updated_at: %d -> %d", completed.UpdatedAt, repeated.UpdatedAt)
+	}
+
+	if _, err := db.RecordStudyPosition(ctx, user, "m-new", -1); !errors.Is(err, ErrInvalidStudyPosition) {
+		t.Fatalf("negative position error = %v; want ErrInvalidStudyPosition", err)
+	}
+	if _, found, err := db.StudyProgress(ctx, user, "m-new"); err != nil || found {
+		t.Fatalf("negative position persisted: found=%v err=%v", found, err)
+	}
+}
+
+// TestStudyStateConstraints prova as restrições do schema persistido: conclusão booleana,
+// posição não negativa, chave primária por dono/mídia e chave estrangeira para o usuário.
+func TestStudyStateConstraints(t *testing.T) {
+	db := openTestDB(t)
+	user := insertTestUser(t, db, "a")
+
+	if _, err := db.sql.Exec(`INSERT INTO study_state(user_id,media_path,position_seconds,completed,updated_at) VALUES(?,?,0,2,1)`, user); err == nil {
+		t.Fatal("completed accepted a value other than 0/1")
+	}
+	if _, err := db.sql.Exec(`INSERT INTO study_state(user_id,media_path,position_seconds,completed,updated_at) VALUES(?,?,-1,0,1)`, user, "neg"); err == nil {
+		t.Fatal("position accepted a negative value")
+	}
+	if _, err := db.sql.Exec(`INSERT INTO study_state(user_id,media_path,position_seconds,completed,updated_at) VALUES(?,?,0,0,1)`, user, "m1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.sql.Exec(`INSERT INTO study_state(user_id,media_path,position_seconds,completed,updated_at) VALUES(?,?,0,0,2)`, user, "m1"); err == nil {
+		t.Fatal("duplicate owner/media pair accepted")
+	}
+	if _, err := db.sql.Exec(`INSERT INTO study_state(user_id,media_path,position_seconds,completed,updated_at) VALUES(?,?,0,0,1)`, int64(99999), "m2"); err == nil {
+		t.Fatal("unknown user accepted by foreign key")
+	}
+}
+
+// TestOpenMigratesLegacyGoDatabaseWithStudyProgressAdditively simula um banco Go na
+// versão 6, sem a tabela de progresso, e confirma que reabrir aplica a migração aditiva
+// sem perder dados já existentes.
+func TestOpenMigratesLegacyGoDatabaseWithStudyProgressAdditively(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy-study.db")
+	ctx := context.Background()
+	db, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.BootstrapAdmin(ctx, "owner", "correct horse battery staple"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.sql.Exec(`DELETE FROM schema_migrations WHERE version=7; DROP TABLE study_state`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := Open(ctx, path)
+	if err != nil {
+		t.Fatalf("reopening legacy Go database failed: %v", err)
+	}
+	defer reopened.Close()
+	if ok, err := reopened.VerifyPassword(ctx, "owner", "correct horse battery staple"); err != nil || !ok {
+		t.Fatalf("legacy data lost after incremental study migration: ok=%v err=%v", ok, err)
+	}
+	var exists int
+	if err := reopened.sql.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type='table' AND name='study_state'`).Scan(&exists); err != nil {
+		t.Fatal(err)
+	}
+	if exists != 1 {
+		t.Fatal("incremental migration did not create study_state")
+	}
+	user, err := reopened.UserByName(ctx, "owner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reopened.RecordStudyPosition(ctx, user.ID, "cat/a.mp4", 12); err != nil {
+		t.Fatal(err)
+	}
+}
