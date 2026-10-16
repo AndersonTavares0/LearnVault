@@ -159,7 +159,7 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	await page.getByRole('button', { name: 'Entrar' }).click();
 	await expect(page.getByRole('heading', { name: 'Olá, admin.' })).toBeVisible();
 
-	await page.getByRole('link', { name: 'Catálogo' }).click();
+	await page.getByRole('link', { name: 'Catálogo', exact: true }).click();
 	await expect(page.getByRole('heading', { name: 'Seus cursos' })).toBeVisible();
 	await page.getByRole('button', { name: 'Indexar biblioteca' }).click();
 	await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
