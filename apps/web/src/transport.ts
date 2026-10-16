@@ -338,26 +338,43 @@ export function normalizeRecentStudy(value: unknown): RecentStudy {
 	return { items: (value as { items: unknown[] }).items.map(normalizeStudyProgress) };
 }
 
+// Envelope de categoria do payload legado/Go: `{ courses }` (Go) ou `{ children }` (Rust).
+function isCategoryEnvelope(item: unknown): boolean {
+	return item !== null && typeof item === 'object' && !Array.isArray(item) && ('courses' in item || 'children' in item);
+}
+
+// `categories[].courses` é a forma legada canônica do serviço Go.
+function hasLegacyCourses(categories: unknown): boolean {
+	return Array.isArray(categories)
+		&& categories.length > 0
+		&& categories.every(isCategoryEnvelope)
+		&& categories.some((item) => 'courses' in (item as object));
+}
+
 export function normalizeCatalog(value: unknown): Catalog {
 	if (!value || typeof value !== 'object') throw invalidPayload('catálogo ausente.');
 	const record = value as Record<string, unknown>;
 	// O servidor Rust e o desktop sempre serializam `complete: bool`; o serviço Go não tem esse
-	// campo. Ele é o marcador do contrato canônico, onde `media_id` é obrigatório. O payload
-	// aditivo do Go usa o papel `group` e não emite identidade, então lá ela segue opcional.
-	const requireMediaId = typeof record.complete === 'boolean';
+	// campo. Ele é o marcador do contrato canônico, onde `media_id` é obrigatório e `nodes` é a
+	// fonte preferida. Sem esse marcador, o payload é o do Go.
+	const canonical = typeof record.complete === 'boolean';
 	// `nodes` é o contrato canônico preferido. Quando a chave está presente, o valor precisa
 	// ser uma lista: um `null`, string ou tipo inválido é um payload malformado e nunca pode
-	// ser escondido por um fallback silencioso para `categories`. O fallback legado para
-	// `categories` só vale quando `nodes` está ausente ou vazio.
+	// ser escondido por um fallback silencioso para `categories`.
 	const hasNodes = Object.prototype.hasOwnProperty.call(record, 'nodes') && record.nodes !== undefined;
 	if (hasNodes && !Array.isArray(record.nodes)) throw invalidPayload('campo nodes inválido.');
-	if (Array.isArray(record.nodes) && record.nodes.length > 0) return normalizeRustCatalog(value as RustCatalog, requireMediaId);
 	const payload = value as { categories?: unknown };
-	if (Array.isArray(payload.categories) && payload.categories.every((item) => item !== null && typeof item === 'object' && !Array.isArray(item) && ('courses' in item || 'children' in item))) {
+	// No payload Go, `categories[].courses` é a projeção autoritativa do serviço: quando ela
+	// coexistir com `nodes` (papel `group`), ela vence, porque reconstruir a árvore a partir de
+	// `nodes` pode divergir da legada. O contrato canônico Rust/desktop (`complete: bool`) não
+	// entra neste atalho e continua preferindo `nodes`.
+	if (!canonical && hasLegacyCourses(payload.categories)) return normalizeGoCatalog(value as GoCatalog);
+	if (Array.isArray(record.nodes) && record.nodes.length > 0) return normalizeRustCatalog(value as RustCatalog, canonical);
+	if (Array.isArray(payload.categories) && payload.categories.every(isCategoryEnvelope)) {
 		if (payload.categories.some((item) => 'courses' in (item as object))) return normalizeGoCatalog(value as GoCatalog);
-		return normalizeRustCatalog(value as RustCatalog, requireMediaId);
+		return normalizeRustCatalog(value as RustCatalog, canonical);
 	}
-	if (Array.isArray(record.nodes)) return normalizeRustCatalog(value as RustCatalog, requireMediaId);
+	if (Array.isArray(record.nodes)) return normalizeRustCatalog(value as RustCatalog, canonical);
 	throw invalidPayload('formato de catálogo desconhecido.');
 }
 

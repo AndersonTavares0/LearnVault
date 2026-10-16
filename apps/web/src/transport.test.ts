@@ -219,9 +219,9 @@ describe('transport contract', () => {
 	});
 	it('preserves displayable Go content when a payload carries both additive nodes and legacy categories', () => {
 		// Payload real do serviço Go: `nodes` canônico com papel `group` nos níveis
-		// intermediários e arquivos sem `media_id`, mais a `categories` legada equivalente. A
-		// SPA prefere `nodes`, mas a normalização não pode rejeitar a identidade opcional do Go
-		// nem apagar o conteúdo legado que o usuário veria.
+		// intermediários e arquivos sem `media_id`, mais a `categories` legada equivalente. Sem
+		// o marcador canônico `complete`, a `categories[].courses` é a fonte autoritativa: ela
+		// vence `nodes` para não perder a árvore legada que o serviço projetou.
 		const catalog = normalizeCatalog({
 			nodes: [{
 				title: 'Programação', path: 'programming', role: 'category', loose_files: [],
@@ -244,6 +244,9 @@ describe('transport contract', () => {
 		});
 		expect(catalog.nodes.length).toBeGreaterThan(0);
 		expect(catalog.categories.length).toBeGreaterThan(0);
+		// A árvore legada do Go (curso/módulo/aula) venceu os `group` aditivos.
+		expect(catalog.nodes[0].children[0].role).toBe('course');
+		expect(catalog.categories[0].courses[0].modules[0].lessons[0].path).toBe('programming/go/basics/first');
 		expect(findLesson(catalog, 'programming/go/basics/first')?.media[0].path).toBe('programming/go/basics/first/video.mp4');
 	});
 	it('rejects an explicitly malformed nodes field instead of falling back to categories', () => {
