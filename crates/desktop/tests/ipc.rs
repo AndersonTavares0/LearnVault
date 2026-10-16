@@ -140,6 +140,21 @@ fn catalog_dto_uses_the_snake_case_spa_contract() {
         json["categories"][0]["children"][0]["files"][0]["availability"],
         "available"
     );
+    // O contrato canônico recursivo também é exposto em `nodes`, idêntico a `categories`,
+    // preservando a identidade de mídia, os caminhos relativos, a disponibilidade e a
+    // verificação dos arquivos. A SPA prefere `nodes`; `categories` continua legível.
+    assert_eq!(json["nodes"], json["categories"]);
+    let node = &json["nodes"][0];
+    assert_eq!(node["title"], "Curso");
+    assert_eq!(node["path"], "cat");
+    assert_eq!(node["role"], "category");
+    assert_eq!(node["children"][0]["role"], "lesson");
+    let node_file = &node["children"][0]["files"][0];
+    assert_eq!(node_file["media_id"], "m1");
+    assert_eq!(node_file["path"], "cat/aula.mp4");
+    assert_eq!(node_file["kind"], "media");
+    assert_eq!(node_file["availability"], "available");
+    assert_eq!(node_file["unverified"], false);
 }
 
 #[test]

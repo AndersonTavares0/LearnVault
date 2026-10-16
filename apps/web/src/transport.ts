@@ -121,10 +121,13 @@ function projectRust(nodes: CatalogNode[]): Catalog['categories'] {
 function normalizeRustCatalog(value: RustCatalog): Catalog {
 	const rawNodes = value.nodes ?? value.categories;
 	if (!Array.isArray(rawNodes)) throw invalidPayload('catálogo Rust sem nodes.');
-	const looseFiles = value.loose_files ?? value.looseFiles;
-	if (!Array.isArray(looseFiles)) throw invalidPayload('catálogo Rust sem loose_files.');
+	// O serviço Go omite `loose_files` na raiz quando não há arquivos soltos (omitempty),
+	// então a ausência é válida e normaliza para uma lista vazia. Um valor presente que
+	// não seja lista continua sendo um payload inválido.
+	const rawLoose = value.loose_files ?? value.looseFiles;
+	if (rawLoose !== undefined && !Array.isArray(rawLoose)) throw invalidPayload('catálogo Rust com loose_files inválido.');
 	const nodes = rawNodes.map(normalizeRustNode);
-	return { complete: value.complete === true, looseFiles: looseFiles.map(normalizeFile), nodes, categories: projectRust(nodes) };
+	return { complete: value.complete === true, looseFiles: (rawLoose ?? []).map(normalizeFile), nodes, categories: projectRust(nodes) };
 }
 
 function goTitle(value: unknown, fallback: string): string { return typeof value === 'string' ? value : fallback; }

@@ -304,6 +304,24 @@ async fn admin_rescan_populates_the_authenticated_catalog() {
     assert_eq!(file["kind"], "media");
     assert_eq!(file["availability"], "available");
     assert_eq!(file["unverified"], false);
+
+    // O mesmo payload expõe a árvore recursiva canônica em `nodes`, o campo preferido pela
+    // SPA: identidade de mídia, caminhos relativos, disponibilidade e verificação são
+    // preservados, e `categories` permanece idêntico para os consumidores legados.
+    assert_eq!(json["nodes"], json["categories"]);
+    assert_eq!(json["nodes"][0]["title"], "Categoria");
+    assert_eq!(json["nodes"][0]["path"], "Categoria");
+    assert_eq!(json["nodes"][0]["role"], "category");
+    let node_file = find_file(&json["nodes"][0]).expect("lesson file in nodes");
+    assert_eq!(node_file["name"], "lesson.mp4");
+    assert_eq!(node_file["path"], "Categoria/Curso/lesson.mp4");
+    assert_eq!(node_file["kind"], "media");
+    assert_eq!(node_file["availability"], "available");
+    assert_eq!(node_file["unverified"], false);
+    assert!(
+        node_file["media_id"].is_string(),
+        "a identidade de mídia precisa sobreviver em nodes"
+    );
 }
 
 #[tokio::test]

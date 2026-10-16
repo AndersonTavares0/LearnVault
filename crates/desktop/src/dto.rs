@@ -18,7 +18,9 @@ pub struct CatalogDto {
     pub complete: bool,
     /// Arquivos na raiz da biblioteca, que não pertencem a nenhuma categoria.
     pub loose_files: Vec<CatalogFileDto>,
-    /// Categorias, ordenadas por caminho.
+    /// Árvore recursiva canônica, o contrato preferido pela SPA.
+    pub nodes: Vec<CatalogNodeDto>,
+    /// Mesma árvore de `nodes`, mantida para os consumidores legados durante a transição.
     pub categories: Vec<CatalogNodeDto>,
 }
 
@@ -60,6 +62,15 @@ pub struct CatalogFileDto {
 
 impl From<Catalog> for CatalogDto {
     fn from(catalog: Catalog) -> Self {
+        // `nodes` e `categories` carregam a mesma árvore recursiva canônica produzida pelo
+        // núcleo: `nodes` é o contrato preferido pela SPA e `categories` permanece para os
+        // consumidores legados. A duplicação é deliberada e some quando o payload legado sair.
+        let nodes: Vec<CatalogNodeDto> = catalog
+            .categories
+            .iter()
+            .cloned()
+            .map(CatalogNodeDto::from)
+            .collect();
         Self {
             complete: catalog.complete,
             loose_files: catalog
@@ -67,6 +78,7 @@ impl From<Catalog> for CatalogDto {
                 .into_iter()
                 .map(CatalogFileDto::from)
                 .collect(),
+            nodes,
             categories: catalog
                 .categories
                 .into_iter()

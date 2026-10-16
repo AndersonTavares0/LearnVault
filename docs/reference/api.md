@@ -81,6 +81,13 @@ qualquer dado associado, e repetir a remoção é idempotente. Um arquivo que de
 no scan também deixa de ser autorizado por `/api/media`, ainda que exista uma resposta ou
 referência antiga em cache.
 
+O `GET /api/catalog` do servidor Rust expõe a mesma árvore recursiva canônica em dois campos:
+`nodes`, preferido pela SPA, e `categories`, mantido para os consumidores legados. Os dois
+carregam os mesmos nós e arquivos — `media_id`, caminho relativo completo, disponibilidade e
+verificação —, e o `desktop_catalog` expõe o mesmo par por IPC. A árvore projetada de
+categorias, cursos, módulos e aulas do serviço Go continua aceita como fallback durante a
+transição. O campo `nodes` é aditivo: revertê-lo não altera `categories` nem o serviço Go.
+
 ## Estudo
 
 O progresso é sempre do usuário autenticado: nenhuma rota aceita um `owner_id` vindo do

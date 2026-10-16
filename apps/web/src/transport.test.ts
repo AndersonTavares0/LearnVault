@@ -157,6 +157,47 @@ describe('transport contract', () => {
 		// categories is a projection of nodes, not a second parallel tree.
 		expect(catalog.categories[0].courses[0].modules[0].lessons[0].path).toBe('programming/go/basics/first');
 	});
+	it('prefers canonical nodes over the legacy categories field when both are present', () => {
+		// O contrato Rust passa a expor `nodes` e `categories` com a mesma árvore recursiva
+		// canônica. Quando os dois vêm no payload, a SPA prefere `nodes` e nunca cai na
+		// projeção de categorias para montar a árvore.
+		const catalog = normalizeCatalog({
+			complete: true,
+			loose_files: [],
+			nodes: [{ title: 'DaNodes', path: 'cat', role: 'category', files: [], loose_files: [], children: [] }],
+			categories: [{ title: 'DaCategories', path: 'cat', role: 'category', files: [], loose_files: [], children: [] }]
+		});
+		expect(catalog.nodes[0].title).toBe('DaNodes');
+		expect(catalog.categories[0].title).toBe('DaNodes');
+	});
+	it('normalizes a Go payload that carries canonical nodes and omits root loose files', () => {
+		// O serviço Go serializa a árvore canônica em `nodes` e omite `loose_files` na raiz
+		// quando não há arquivos soltos (omitempty). A preferência por `nodes` precisa
+		// aceitar essa ausência em vez de recusar o catálogo Go.
+		const catalog = normalizeCatalog({
+			nodes: [{
+				title: 'Programação', path: 'programming', role: 'category', files: [], loose_files: [],
+				children: [{
+					title: 'Go', path: 'programming/go', role: 'group', files: [], loose_files: [],
+					children: [{
+						title: 'Primeiros passos', path: 'programming/go/first', role: 'lesson',
+						files: [{ name: 'video.mp4', path: 'programming/go/first/video.mp4', size: 42, kind: 'media' }],
+						loose_files: [], children: []
+					}]
+				}]
+			}],
+			categories: [{
+				title: 'Programação', path: 'programming',
+				courses: [{
+					title: 'Go', path: 'programming/go',
+					modules: [{ title: 'Primeiros passos', path: 'programming/go/first', lessons: [{ title: 'Primeiros passos', path: 'programming/go/first', media: [{ name: 'video.mp4', path: 'programming/go/first/video.mp4', size: 42 }], subtitles: [], materials: [] }] }]
+				}]
+			}]
+		});
+		expect(catalog.looseFiles).toEqual([]);
+		expect(catalog.nodes[0].path).toBe('programming');
+		expect(findLesson(catalog, 'programming/go/first')?.media[0].path).toBe('programming/go/first/video.mp4');
+	});
 	it('rejects an unknown catalog shape with a controlled error', () => expect(() => normalizeCatalog({ nope: true })).toThrow('Resposta inválida do servidor'));
 	it('normalizes a study progress record with optional timestamp', () => {
 		expect(normalizeStudyProgress({ media_id: 'm1', position_seconds: 42, completed: false, updated_at: 1234567890, recorded: true })).toEqual({ mediaId: 'm1', positionSeconds: 42, completed: false, updatedAt: 1234567890, recorded: true });

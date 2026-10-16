@@ -36,6 +36,9 @@ struct ErrorResponse {
 struct CatalogResponse {
     complete: bool,
     loose_files: Vec<CatalogFileResponse>,
+    /// Árvore recursiva canônica, o contrato preferido pela SPA.
+    nodes: Vec<CatalogNodeResponse>,
+    /// Mesma árvore de `nodes`, mantida para os consumidores legados durante a transição.
     categories: Vec<CatalogNodeResponse>,
 }
 
@@ -240,9 +243,19 @@ fn try_rescan_file_lock(path: &Path) -> Result<File, RescanFailure> {
 
 impl From<Catalog> for CatalogResponse {
     fn from(catalog: Catalog) -> Self {
+        // `nodes` e `categories` carregam a mesma árvore recursiva canônica produzida pelo
+        // núcleo: `nodes` é o contrato preferido pela SPA e `categories` permanece para os
+        // consumidores legados. A duplicação é deliberada e some quando o payload legado sair.
+        let nodes: Vec<CatalogNodeResponse> = catalog
+            .categories
+            .iter()
+            .cloned()
+            .map(Into::into)
+            .collect();
         Self {
             complete: catalog.complete,
             loose_files: catalog.loose_files.into_iter().map(Into::into).collect(),
+            nodes,
             categories: catalog.categories.into_iter().map(Into::into).collect(),
         }
     }
