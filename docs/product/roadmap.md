@@ -1,7 +1,8 @@
 # Roadmap do LearnVault
 
 Este roadmap é o resumo durável do produto e é orientado a resultados. Detalhes de
-implementação pertencem às Issues e pull requests relacionadas.
+implementação pertencem às Issues e pull requests relacionadas. Os requisitos funcionais e
+não funcionais consolidados ficam em [requirements.md](requirements.md).
 
 ## Corrente — reescrita em Rust
 
