@@ -692,3 +692,231 @@ async fn a_temporary_session_cannot_reach_study_before_changing_credentials() {
         "credentials_change_required"
     );
 }
+
+/// Uma base persistida já sai da cadeia de migrações na versão 4 e **já contém**
+/// `study_state`: a tabela nasce na migração V1 (a primeira da cadeia), então nenhuma
+/// migração nova é necessária para bancos existentes. Este teste prova isso no arquivo
+/// real (não em memória) e verifica as restrições que o adaptador HTTP depende.
+#[tokio::test]
+async fn an_existing_v4_database_already_carries_study_state_and_its_constraints() {
+    let temp = tempfile::tempdir().unwrap();
+    seed(&temp, &["m1"], &[]);
+
+    let db = Database::open(database_path(&temp)).unwrap();
+    let version: i64 = db
+        .connection()
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(version, 4, "o formato persistido permanece na versão 4");
+    let present: i64 = db
+        .connection()
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'study_state'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        present, 1,
+        "a versão 4 já contém study_state; nenhuma migração nova é necessária"
+    );
+
+    // Chave estrangeira: uma mídia inexistente é recusada e nada é gravado.
+    assert!(
+        db.connection()
+            .execute(
+                "INSERT INTO study_state (owner_id, media_id, position_seconds, completed, updated_at)
+                 VALUES ('usr-admin', 'mid-inexistente', 0, 0, 1)",
+                [],
+            )
+            .is_err(),
+        "a chave estrangeira para media deve recusar mídia inexistente"
+    );
+    // Chave primária composta (owner_id, media_id): o par duplicado é recusado.
+    db.connection()
+        .execute_batch(
+            "INSERT INTO study_state (owner_id, media_id, position_seconds, completed, updated_at)
+             VALUES ('usr-admin', 'm1', 0, 0, 1);",
+        )
+        .unwrap();
+    assert!(
+        db.connection()
+            .execute(
+                "INSERT INTO study_state (owner_id, media_id, position_seconds, completed, updated_at)
+                 VALUES ('usr-admin', 'm1', 0, 0, 2)",
+                [],
+            )
+            .is_err(),
+        "o par dono/mídia deve ser único"
+    );
+    // CHECK: `completed` só aceita 0 ou 1.
+    assert!(
+        db.connection()
+            .execute(
+                "INSERT INTO study_state (owner_id, media_id, position_seconds, completed, updated_at)
+                 VALUES ('usr-outro', 'm1', 0, 2, 1)",
+                [],
+            )
+            .is_err(),
+        "completed só aceita 0 ou 1"
+    );
+    let rows: i64 = db
+        .connection()
+        .query_row("SELECT COUNT(*) FROM study_state", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(rows, 1, "apenas a linha válida persiste");
+    drop(db);
+
+    // O servidor sobre uma base v4 existente lê e grava progresso pela API.
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let cookie = login(&app, ADMIN, ADMIN_PASSWORD).await;
+    let written = app
+        .clone()
+        .oneshot(post_json(
+            "/api/study/position",
+            &cookie,
+            r#"{"media_id":"m1","position_seconds":7}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(written.status(), StatusCode::OK);
+    let read = app
+        .oneshot(get_with_cookie("/api/study/progress?media_id=m1", &cookie))
+        .await
+        .unwrap();
+    assert_eq!(read.status(), StatusCode::OK);
+    assert_eq!(json_body(read).await["position_seconds"], 7);
+}
+
+/// Várias escritas concorrentes para o mesmo par dono/mídia precisam ser serializadas
+/// sem duplicar a linha nem falhar. O servidor mantém uma única conexão SQLite atrás de
+/// um `Mutex`, então a concorrência é resolvida antes do banco; o teste prova a
+/// invariante observável (upsert único e respostas íntegras).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn concurrent_progress_writes_are_serialized_without_corruption() {
+    let temp = tempfile::tempdir().unwrap();
+    seed(&temp, &["m1"], &[]);
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let cookie = login(&app, ADMIN, ADMIN_PASSWORD).await;
+
+    let mut tasks = Vec::new();
+    for position in 1..=8 {
+        let app = app.clone();
+        let cookie = cookie.clone();
+        tasks.push(tokio::spawn(async move {
+            app.oneshot(post_json(
+                "/api/study/position",
+                &cookie,
+                &format!(r#"{{"media_id":"m1","position_seconds":{position}}}"#),
+            ))
+            .await
+            .unwrap()
+            .status()
+        }));
+    }
+    for completed in [true, false, true, false] {
+        let app = app.clone();
+        let cookie = cookie.clone();
+        tasks.push(tokio::spawn(async move {
+            app.oneshot(post_json(
+                "/api/study/completed",
+                &cookie,
+                &format!(r#"{{"media_id":"m1","completed":{completed}}}"#),
+            ))
+            .await
+            .unwrap()
+            .status()
+        }));
+    }
+    for task in tasks {
+        assert_eq!(task.await.unwrap(), StatusCode::OK);
+    }
+
+    let recent = app
+        .oneshot(get_with_cookie("/api/study/recent", &cookie))
+        .await
+        .unwrap();
+    let recent = json_body(recent).await;
+    let items = recent["items"].as_array().unwrap();
+    assert_eq!(
+        items.len(),
+        1,
+        "o upsert não pode duplicar a linha dono/mídia"
+    );
+    let position = items[0]["position_seconds"].as_i64().unwrap();
+    assert!(
+        (1..=8).contains(&position),
+        "a posição final precisa ser uma das escritas concorrentes"
+    );
+}
+
+/// Decisão explícita do adaptador: uma mídia removida do catálogo continua aceitando
+/// leitura e escrita de progresso — a identidade sobrevive à remoção —, mas deixa de
+/// aparecer em `/api/study/recent`, como no núcleo de remoção. Nenhuma política nova é
+/// introduzida: o servidor apenas espelha a semântica existente.
+#[tokio::test]
+async fn removed_catalog_media_keeps_progress_but_leaves_recent() {
+    let temp = tempfile::tempdir().unwrap();
+    seed(&temp, &["m1"], &[]);
+    Database::open(database_path(&temp))
+        .unwrap()
+        .connection()
+        .execute_batch(
+            "INSERT INTO media_removal (library_id, media_id, removed_at)
+             VALUES ('library-1', 'm1', 1760000000);",
+        )
+        .unwrap();
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let cookie = login(&app, ADMIN, ADMIN_PASSWORD).await;
+
+    let absent = app
+        .clone()
+        .oneshot(get_with_cookie("/api/study/progress?media_id=m1", &cookie))
+        .await
+        .unwrap();
+    assert_eq!(absent.status(), StatusCode::OK);
+    assert_eq!(json_body(absent).await["recorded"], false);
+
+    let written = app
+        .clone()
+        .oneshot(post_json(
+            "/api/study/position",
+            &cookie,
+            r#"{"media_id":"m1","position_seconds":42}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(written.status(), StatusCode::OK);
+    let completed = app
+        .clone()
+        .oneshot(post_json(
+            "/api/study/completed",
+            &cookie,
+            r#"{"media_id":"m1","completed":true}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(completed.status(), StatusCode::OK);
+
+    let read = app
+        .clone()
+        .oneshot(get_with_cookie("/api/study/progress?media_id=m1", &cookie))
+        .await
+        .unwrap();
+    let read = json_body(read).await;
+    assert_eq!(read["recorded"], true);
+    assert_eq!(read["position_seconds"], 42);
+    assert_eq!(read["completed"], true);
+
+    let recent = app
+        .oneshot(get_with_cookie("/api/study/recent", &cookie))
+        .await
+        .unwrap();
+    assert!(
+        json_body(recent).await["items"]
+            .as_array()
+            .unwrap()
+            .is_empty(),
+        "uma mídia removida sai dos recentes sem apagar o progresso"
+    );
+}

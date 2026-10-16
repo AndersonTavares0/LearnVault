@@ -95,6 +95,8 @@ responde `422 invalid_position` e uma consulta malformada responde `400 invalid_
 mutações exigem a mesma origem (CSRF) e uma sessão que ainda precise trocar as credenciais
 temporárias recebe `403 credentials_change_required`. Nenhuma rota grava `media`, `scan`,
 `library` ou a biblioteca física; a mídia marcada como ausente continua aceitando leitura e
-escrita de progresso.
+escrita de progresso. Uma mídia removida do catálogo também mantém a leitura e a escrita de
+progresso — a identidade sobrevive à remoção —, mas deixa de aparecer em
+`/api/study/recent`, como no núcleo de remoção.
 
 Para limites de arquitetura e deploy, consulte a [visão de arquitetura](../architecture/overview.md).
