@@ -217,6 +217,18 @@ describe('transport contract', () => {
 		expect(catalog.nodes[0].role).toBe('category');
 		expect(findLesson(catalog, 'programming/go/basics/first')?.media[0].path).toBe('programming/go/basics/first/v.mp4');
 	});
+	it('rejects an explicitly malformed nodes field instead of falling back to categories', () => {
+		// Um `nodes` presente com tipo inválido é payload malformado: cair para `categories`
+		// esconderia o erro em vez de recusá-lo, e a árvore canônica ficaria ambígua.
+		const categories = [{ title: 'Legado', path: 'cat', role: 'category', files: [], loose_files: [], children: [] }];
+		for (const nodes of [null, 'nodes', 42, true, {}]) {
+			expect(() => normalizeCatalog({ nodes, categories })).toThrow('Resposta inválida do servidor');
+		}
+	});
+	it('falls back to categories only when nodes is absent', () => {
+		const catalog = normalizeCatalog({ categories: [{ title: 'Legado', path: 'cat', role: 'category', files: [], loose_files: [], children: [] }] });
+		expect(catalog.nodes[0].title).toBe('Legado');
+	});
 	it('preserves lessons through unknown group descendants in the compatibility projection', () => {
 		// O serviço Go usa o papel `group` nos níveis intermediários. A projeção de
 		// compatibilidade precisa descer por eles em vez de descartar as aulas.
@@ -257,6 +269,33 @@ describe('transport contract', () => {
 		const file = { name: 'a.pdf', path: 'a.pdf', size: 1, kind: 'material' };
 		const catalog = normalizeCatalog({ nodes: [], loose_files: [file], looseFiles: [file] });
 		expect(catalog.looseFiles[0].path).toBe('a.pdf');
+	});
+	it('rejects a present optional file field with the wrong type', () => {
+		// O serviço Go não emite esses campos, então a ausência é aceita; um valor presente
+		// com tipo incorreto não pode vazar para a interface.
+		const base = { name: 'a.pdf', path: 'a.pdf', size: 1 };
+		const malformed = [
+			{ ...base, media_id: 42 },
+			{ ...base, media_id: null },
+			{ ...base, kind: 7 },
+			{ ...base, availability: false },
+			{ ...base, unverified: 'sim' }
+		];
+		for (const file of malformed) {
+			expect(() => normalizeCatalog({ nodes: [], loose_files: [file] })).toThrow('Resposta inválida do servidor');
+		}
+		// O mesmo vale para um arquivo aninhado em um nó canônico.
+		expect(() => normalizeCatalog({ nodes: [{ title: 'C', path: 'c', role: 'category', files: [{ ...base, media_id: 1 }], loose_files: [], children: [] }] })).toThrow('Resposta inválida do servidor');
+	});
+	it('keeps a file whose optional fields are present and valid', () => {
+		const catalog = normalizeCatalog({ nodes: [], loose_files: [{ name: 'a.pdf', path: 'a.pdf', size: 5, media_id: 'm1', kind: 'material', availability: 'missing', unverified: true }] });
+		expect(catalog.looseFiles[0]).toEqual({ name: 'a.pdf', path: 'a.pdf', size: 5, mediaId: 'm1', kind: 'material', availability: 'missing', unverified: true });
+	});
+	it('rejects a fractional, negative or unsafe file size', () => {
+		const base = { name: 'a.pdf', path: 'a.pdf' };
+		for (const size of [1.5, -1, Number.MAX_SAFE_INTEGER + 1, Number.NaN]) {
+			expect(() => normalizeCatalog({ nodes: [], loose_files: [{ ...base, size }] })).toThrow('Resposta inválida do servidor');
+		}
 	});
 	it('rejects an unknown catalog shape with a controlled error', () => expect(() => normalizeCatalog({ nope: true })).toThrow('Resposta inválida do servidor'));
 	it('normalizes a study progress record with optional timestamp', () => {

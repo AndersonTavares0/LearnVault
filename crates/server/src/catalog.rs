@@ -246,12 +246,8 @@ impl From<Catalog> for CatalogResponse {
         // `nodes` e `categories` carregam a mesma árvore recursiva canônica produzida pelo
         // núcleo: `nodes` é o contrato preferido pela SPA e `categories` permanece para os
         // consumidores legados. A duplicação é deliberada e some quando o payload legado sair.
-        let nodes: Vec<CatalogNodeResponse> = catalog
-            .categories
-            .iter()
-            .cloned()
-            .map(Into::into)
-            .collect();
+        let nodes: Vec<CatalogNodeResponse> =
+            catalog.categories.iter().cloned().map(Into::into).collect();
         Self {
             complete: catalog.complete,
             loose_files: catalog.loose_files.into_iter().map(Into::into).collect(),

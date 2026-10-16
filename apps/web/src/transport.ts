@@ -64,11 +64,44 @@ export function fileStatus(file: FileEntry): string {
 	return [file.availability === 'missing' ? 'ausente' : '', file.unverified ? 'não verificado' : ''].filter(Boolean).join(' · ');
 }
 
+// Campo opcional presente de um arquivo: o serviço Go não emite `media_id`, `kind`,
+// `availability` nem `unverified`, então a ausência é aceita, mas um valor presente com tipo
+// incorreto (por exemplo `media_id: 42`) é recusado em vez de vazar para a interface.
+function optionalFileString(value: unknown, key: string): string | undefined {
+	if (value === undefined) return undefined;
+	if (typeof value !== 'string') throw invalidPayload(`campo ${key} do arquivo inválido.`);
+	return value;
+}
+
+function optionalFileBoolean(value: unknown, key: string): boolean | undefined {
+	if (value === undefined) return undefined;
+	if (typeof value !== 'boolean') throw invalidPayload(`campo ${key} do arquivo inválido.`);
+	return value;
+}
+
+// O contrato declara o tamanho como `u64` no Rust e `int64` no Go: precisa ser um inteiro
+// seguro e não negativo. Um valor fracionário, negativo ou além do inteiro seguro do
+// JavaScript é recusado em vez de renderizar um tamanho impossível.
+function fileSize(value: unknown): number {
+	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw invalidPayload('arquivo com tamanho inválido.');
+	return value;
+}
+
 function normalizeFile(value: unknown): FileEntry {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('arquivo inválido.');
 	const file = value as RustFile | GoFile;
-	if (typeof file.name !== 'string' || typeof file.path !== 'string' || typeof file.size !== 'number') throw invalidPayload('arquivo sem nome, caminho ou tamanho.');
-	return { name: file.name, path: file.path, size: file.size, mediaId: file.media_id, kind: file.kind, availability: file.availability, unverified: file.unverified };
+	const name = file.name;
+	const path = file.path;
+	if (typeof name !== 'string' || typeof path !== 'string') throw invalidPayload('arquivo sem nome ou caminho.');
+	return {
+		name,
+		path,
+		size: fileSize(file.size),
+		mediaId: optionalFileString(file.media_id, 'media_id'),
+		kind: optionalFileString(file.kind, 'kind'),
+		availability: optionalFileString(file.availability, 'availability'),
+		unverified: optionalFileBoolean(file.unverified, 'unverified')
+	};
 }
 
 function lesson(title: string, path: string, files: FileEntry[]): Lesson {
@@ -169,11 +202,21 @@ function projectRust(nodes: CatalogNode[]): Catalog['categories'] {
 	}));
 }
 
-// Árvore canônica de um payload Rust: `nodes` é preferido, mas um `nodes` vazio cai de volta
-// para `categories` para não esconder uma árvore legada.
+// Árvore canônica de um payload Rust: `nodes` é preferido. Quando a chave `nodes` está
+// presente, o valor precisa ser uma lista — um `null`, string ou qualquer tipo que não seja
+// lista é recusado em vez de mascarado por `categories`. Um `nodes` vazio cai de volta para
+// `categories` (compatibilidade legada) e, sem `categories`, vale como lista vazia.
 function canonicalNodeList(value: RustCatalog): unknown {
-	if (Array.isArray(value.nodes) && value.nodes.length > 0) return value.nodes;
-	return value.categories ?? value.nodes;
+	const record = value as Record<string, unknown>;
+	const hasNodes = Object.prototype.hasOwnProperty.call(record, 'nodes') && record.nodes !== undefined;
+	if (hasNodes) {
+		if (!Array.isArray(record.nodes)) throw invalidPayload('campo nodes inválido.');
+		if (record.nodes.length > 0) return record.nodes;
+	}
+	const rawCategories = record.categories;
+	if (rawCategories === undefined) return [];
+	if (!Array.isArray(rawCategories)) throw invalidPayload('campo categories inválido.');
+	return rawCategories;
 }
 
 function normalizeRustCatalog(value: RustCatalog): Catalog {
@@ -250,15 +293,20 @@ export function normalizeRecentStudy(value: unknown): RecentStudy {
 
 export function normalizeCatalog(value: unknown): Catalog {
 	if (!value || typeof value !== 'object') throw invalidPayload('catálogo ausente.');
-	const payload = value as { categories?: unknown; nodes?: unknown };
-	// `nodes` é o contrato canônico preferido, mas um `nodes` vazio não pode esconder uma
-	// árvore legada presente em `categories`: nesse caso caímos para `categories`.
-	if (Array.isArray(payload.nodes) && payload.nodes.length > 0) return normalizeRustCatalog(value as RustCatalog);
+	const record = value as Record<string, unknown>;
+	// `nodes` é o contrato canônico preferido. Quando a chave está presente, o valor precisa
+	// ser uma lista: um `null`, string ou tipo inválido é um payload malformado e nunca pode
+	// ser escondido por um fallback silencioso para `categories`. O fallback legado para
+	// `categories` só vale quando `nodes` está ausente ou vazio.
+	const hasNodes = Object.prototype.hasOwnProperty.call(record, 'nodes') && record.nodes !== undefined;
+	if (hasNodes && !Array.isArray(record.nodes)) throw invalidPayload('campo nodes inválido.');
+	if (Array.isArray(record.nodes) && record.nodes.length > 0) return normalizeRustCatalog(value as RustCatalog);
+	const payload = value as { categories?: unknown };
 	if (Array.isArray(payload.categories) && payload.categories.every((item) => item !== null && typeof item === 'object' && !Array.isArray(item) && ('courses' in item || 'children' in item))) {
 		if (payload.categories.some((item) => 'courses' in (item as object))) return normalizeGoCatalog(value as GoCatalog);
 		return normalizeRustCatalog(value as RustCatalog);
 	}
-	if (Array.isArray(payload.nodes)) return normalizeRustCatalog(value as RustCatalog);
+	if (Array.isArray(record.nodes)) return normalizeRustCatalog(value as RustCatalog);
 	throw invalidPayload('formato de catálogo desconhecido.');
 }
 
