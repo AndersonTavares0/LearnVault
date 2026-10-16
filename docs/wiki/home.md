@@ -15,5 +15,6 @@ e revisada por pull requests.
 - [[Getting-Started]]
 - [[Architecture]]
 - [[Roadmap]]
+- [[Requirements]]
 - [[Development-and-Governance]]
 - [[Operations]]

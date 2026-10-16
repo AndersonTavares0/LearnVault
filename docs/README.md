@@ -13,7 +13,7 @@ onde uma decisão ou procedimento deve ficar.
 | [`reference/`](reference/) | API e referências técnicas estáveis |
 | [`wiki/`](wiki/) | Fontes e mapeamento das páginas gerenciadas da Wiki |
 
-A Wiki do GitHub é uma superfície derivada de leitura. Somente as seis páginas listadas em
+A Wiki do GitHub é uma superfície derivada de leitura. Somente as sete páginas listadas em
 [`wiki/mapping.md`](wiki/mapping.md) são sincronizadas automaticamente; edite as fontes do
 repositório, não a Wiki diretamente.
 
