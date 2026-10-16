@@ -45,6 +45,16 @@ export function formatDuration(totalSeconds: number): string {
 	return `${minutes}:${paddedSeconds}`;
 }
 
+/**
+ * Indica que a reprodução de vídeo/áudio está indisponível no desktop nesta fatia.
+ *
+ * O protocolo de mídia do desktop entrega apenas arquivos pequenos; vídeo e áudio ficam
+ * fora por causa da reprodução parcial incompatível no webview do Linux (WebKitGTK). A
+ * constante é resolvida em tempo de compilação para que o HTTP mantenha a mensagem
+ * original e o desktop apresente um estado explícito e sanitizado.
+ */
+export const desktopPlaybackUnavailable: boolean = __LEARNVAULT_TRANSPORT__ === 'desktop';
+
 export function selectPlayableMedia(media: FileEntry[]): FileEntry | null {
 	return media.find((file) => file.availability?.trim().toLowerCase() !== 'missing') ?? null;
 }
