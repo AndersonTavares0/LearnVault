@@ -35,8 +35,9 @@ jobs:
         run: |
           set -euo pipefail
           # Release Please publishes Go semantic tags with a leading "v"
-          # (include-v-in-tag: true), e.g. v1.2.3.
-          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          # (include-v-in-tag: true), e.g. v1.2.3. Each numeric component is
+          # strict SemVer: no leading zeros.
+          if [[ ! "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
             echo "::error::Unexpected release tag format: $RELEASE_TAG" >&2
             exit 1
           fi
