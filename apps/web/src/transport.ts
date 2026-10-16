@@ -351,6 +351,32 @@ function hasLegacyCourses(categories: unknown): boolean {
 		&& categories.some((item) => 'courses' in (item as object));
 }
 
+// Guarda defensiva para os `nodes` ignorados quando a `categories` legada é a fonte: uma
+// travessia iterativa limitada (sem recursão nem normalização) recusa profundidade ou volume
+// acima dos limites, para que uma árvore ignorada não contorne o orçamento de recursos.
+function assertIgnoredNodesBounded(nodes: unknown): void {
+	let count = 0;
+	const stack: Array<[unknown, number]> = [];
+	const pushAll = (list: unknown[], depth: number): void => {
+		for (const item of list) {
+			count += 1;
+			if (count > CATALOG_LIMITS.nodes) throw invalidPayload('catálogo com nós demais.');
+			if (depth > CATALOG_LIMITS.depth) throw invalidPayload('catálogo profundo demais.');
+			stack.push([item, depth]);
+		}
+	};
+	if (Array.isArray(nodes)) pushAll(nodes, 1);
+	while (stack.length > 0) {
+		const frame = stack.pop();
+		if (!frame) break;
+		const [item, depth] = frame;
+		if (item !== null && typeof item === 'object' && !Array.isArray(item)) {
+			const children = (item as { children?: unknown }).children;
+			if (Array.isArray(children)) pushAll(children, depth + 1);
+		}
+	}
+}
+
 export function normalizeCatalog(value: unknown): Catalog {
 	if (!value || typeof value !== 'object') throw invalidPayload('catálogo ausente.');
 	const record = value as Record<string, unknown>;
@@ -366,18 +392,24 @@ export function normalizeCatalog(value: unknown): Catalog {
 	const payload = value as { categories?: unknown };
 
 	// Contrato canônico Rust/desktop: `nodes` (ou a `categories` recursiva legada) é a fonte.
-	// Nunca cai para a forma legada do Go, mesmo que a `categories` pareça `courses`; a forma
-	// do Go não é um nó canônico e por isso é recusada.
+	// Nunca cai para a forma legada do Go, mesmo que a `categories` pareça `courses`.
 	if (hasComplete) {
+		// Com nós canônicos, `categories` (mesmo em forma Go) é a projeção legada e é ignorada.
+		if (Array.isArray(record.nodes) && record.nodes.length > 0) return normalizeRustCatalog(value as RustCatalog, true);
+		// Sem nós canônicos, campos só-do-Go (`categories[].courses`) não podem ser consumidos
+		// como nós nem virar conteúdo vazio: falha fechada. A `categories` recursiva (Rust
+		// legada) segue aceita como fallback.
+		if (hasLegacyCourses(payload.categories)) throw invalidPayload('catálogo canônico com campos legados do Go.');
+		if (Array.isArray(payload.categories) && payload.categories.every(isCategoryEnvelope)) return normalizeRustCatalog(value as RustCatalog, true);
 		if (hasNodes || Array.isArray(payload.categories)) return normalizeRustCatalog(value as RustCatalog, true);
 		throw invalidPayload('formato de catálogo desconhecido.');
 	}
 
 	// Fallback do Go (sem `complete`): a `categories[].courses` legada é autoritativa e vence o
-	// `nodes` aditivo (papel `group`) quando os dois coexistem. Os `nodes` ignorados não podem
-	// trafegar uma árvore ilimitada: um array absurdo é recusado de forma barata.
+	// `nodes` aditivo (papel `group`) quando os dois coexistem. Os `nodes` ignorados passam por
+	// uma travessia limitada para não contornarem o orçamento com profundidade ou volume.
 	if (hasLegacyCourses(payload.categories)) {
-		if (Array.isArray(record.nodes) && record.nodes.length > CATALOG_LIMITS.nodes) throw invalidPayload('catálogo com nós demais.');
+		assertIgnoredNodesBounded(record.nodes);
 		return normalizeGoCatalog(value as GoCatalog);
 	}
 	if (Array.isArray(record.nodes) && record.nodes.length > 0) return normalizeRustCatalog(value as RustCatalog, false);

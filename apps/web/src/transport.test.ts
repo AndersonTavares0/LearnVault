@@ -284,6 +284,31 @@ describe('transport contract', () => {
 		const nodes = Array.from({ length: CATALOG_LIMITS.nodes + 1 }, () => null);
 		expect(() => normalizeCatalog({ nodes, categories: [{ title: 'Cat', path: 'cat', courses: [] }] })).toThrow('Resposta inválida do servidor');
 	});
+	it('rejects Go-only courses fields in a canonical payload instead of yielding empty content', () => {
+		// Mesmo com `role` presente (o que faria o nó "parsear"), um `courses` só-do-Go em um
+		// payload canônico sem nós seria descartado silenciosamente, virando conteúdo vazio.
+		expect(() => normalizeCatalog({
+			complete: true,
+			nodes: [],
+			categories: [{ title: 'Legado', path: 'cat', role: 'category', courses: [{ title: 'C', path: 'c', modules: [] }] }]
+		})).toThrow('Resposta inválida do servidor');
+		// Um `categories` recursivo (Rust legado) sem `courses` continua aceito.
+		const legacy = normalizeCatalog({ complete: true, categories: [{ title: 'Legado', path: 'cat', role: 'category', files: [], loose_files: [], children: [] }] });
+		expect(legacy.nodes[0].title).toBe('Legado');
+	});
+	it('rejects a deeply nested ignored nodes payload on the Go categories path', () => {
+		// A `categories` legada é autoritativa, mas os `nodes` ignorados não podem contornar o
+		// orçamento com uma árvore profunda: o limite de profundidade precisa valer mesmo para a
+		// árvore que não é processada.
+		let deep: Record<string, unknown> = { title: 'Aula', path: 'aula', role: 'group', children: [] };
+		for (let level = 0; level <= CATALOG_LIMITS.depth; level++) {
+			deep = { title: 'N', path: `n${level}`, role: 'group', children: [deep] };
+		}
+		expect(() => normalizeCatalog({
+			nodes: [deep],
+			categories: [{ title: 'Cat', path: 'cat', courses: [] }]
+		})).toThrow('Resposta inválida do servidor');
+	});
 	it('rejects an explicitly malformed nodes field instead of falling back to categories', () => {
 		// Um `nodes` presente com tipo inválido é payload malformado: cair para `categories`
 		// esconderia o erro em vez de recusá-lo, e a árvore canônica ficaria ambígua.
