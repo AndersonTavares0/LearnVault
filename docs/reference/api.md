@@ -75,4 +75,26 @@ qualquer dado associado, e repetir a remoção é idempotente. Um arquivo que de
 no scan também deixa de ser autorizado por `/api/media`, ainda que exista uma resposta ou
 referência antiga em cache.
 
+## Estudo
+
+O progresso é sempre do usuário autenticado: nenhuma rota aceita um `owner_id` vindo do
+cliente, então uma sessão só lê e escreve o próprio progresso. Posição de retomada e
+conclusão são independentes — avançar não desfaz a conclusão e concluir não move o ponto de
+retomada — e reenviar um valor idêntico não altera o instante da última mudança.
+
+| Método | Rota | Autenticação | Finalidade |
+| --- | --- | --- | --- |
+| `GET` | `/api/study/recent?limit=N` | Sessão | Lista o progresso do usuário, do mais recente ao mais antigo (padrão 20, teto fixo de 100) |
+| `GET` | `/api/study/progress?media_id=...` | Sessão | Lê a posição e a conclusão do usuário em uma mídia conhecida |
+| `POST` | `/api/study/position` | Sessão | Aceita `{ "media_id": "...", "position_seconds": 0 }` e grava o ponto de retomada |
+| `POST` | `/api/study/completed` | Sessão | Aceita `{ "media_id": "...", "completed": true }` e marca ou desmarca a conclusão |
+
+Uma mídia conhecida sem progresso responde `200` com `recorded: false`; a ausência não é um
+erro. Uma mídia desconhecida no catálogo responde `404 media_not_found`, uma posição negativa
+responde `422 invalid_position` e uma consulta malformada responde `400 invalid_query`. As
+mutações exigem a mesma origem (CSRF) e uma sessão que ainda precise trocar as credenciais
+temporárias recebe `403 credentials_change_required`. Nenhuma rota grava `media`, `scan`,
+`library` ou a biblioteca física; a mídia marcada como ausente continua aceitando leitura e
+escrita de progresso.
+
 Para limites de arquitetura e deploy, consulte a [visão de arquitetura](../architecture/overview.md).
