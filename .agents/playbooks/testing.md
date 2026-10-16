@@ -10,7 +10,8 @@
    `pnpm audit --audit-level=low` for SPA changes. `pnpm verify` runs the SPA and Rust
    checks of steps 3 and 4 (core and server) together, plus `pnpm run build:desktop` and the
    SPA tests; `pnpm verify --fast` skips builds and audit during iteration. For the desktop
-   crate, use `cargo test -p learnvault-desktop` or `pnpm dev:tauri`.
+   crate, use `cargo test -p learnvault-desktop` or `pnpm dev:tauri`. Run `pnpm test:scripts`
+   when changing `scripts/verify.mjs`; it pins the `pnpm verify` wiring and failure propagation.
 5. Validate the affected Compose, Containerfile, or Quadlet configuration for deployment changes.
 6. For substantial changes, measure coverage: `go -C services/go test -cover ./...` for Go and
    `cargo llvm-cov --package learnvault-core --all-targets --fail-under-lines 80` for Rust.

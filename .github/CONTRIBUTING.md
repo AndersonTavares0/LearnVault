@@ -32,6 +32,11 @@ porta estiver ocupada, defina `LEARNVAULT_LISTEN_ADDR`; o proxy da SPA acompanha
 (núcleo e servidor). O crate desktop fica fora dos membros padrão do workspace; use
 `cargo test -p learnvault-desktop` ou `pnpm dev:tauri` quando for o caso.
 
+`pnpm verify --list` mostra os comandos sem executá-los. `pnpm test:scripts` cobre o próprio
+atalho: garante que `pnpm verify` resolve para `scripts/verify.mjs` (e não para o builtin
+`verify` do `cmd.exe`, que sai com código 0 sem verificar nada) e que uma falha propaga código
+de saída não zero.
+
 O desenvolvimento do desktop Tauri usa `pnpm dev:tauri` (frontend em watch e `tauri dev`,
 sem portas de rede). A implementação de referência em Go continua verificada com:
 
