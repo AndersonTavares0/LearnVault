@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { selectPlayableMedia, srtToWebVtt, subtitleFormat } from './player';
+import { formatDuration, selectPlayableMedia, srtToWebVtt, studySyncSupported, subtitleFormat } from './player';
 
 describe('player media and subtitles', () => {
 	it('selects the first media that is not missing', () => {
@@ -15,5 +15,14 @@ describe('player media and subtitles', () => {
 		expect(subtitleFormat('legenda.srt')).toBe('srt');
 		expect(subtitleFormat('legenda.ass')).toBe('ass');
 		expect(subtitleFormat('legenda.ssa')).toBe('ass');
+	});
+	it('formats durations for resume labels', () => {
+		expect(formatDuration(0)).toBe('0:00');
+		expect(formatDuration(65)).toBe('1:05');
+		expect(formatDuration(3661)).toBe('1:01:01');
+		expect(formatDuration(-1)).toBe('0:00');
+	});
+	it('advertises study sync only on the HTTP transport build', () => {
+		expect(studySyncSupported).toBe(__LEARNVAULT_TRANSPORT__ === 'http');
 	});
 });

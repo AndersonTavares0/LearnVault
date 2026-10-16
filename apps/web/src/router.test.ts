@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { destinationAfterLogin, findLesson, href, locationFromHash, routeFromHash } from './router';
+import { destinationAfterLogin, findLesson, findLessonByMediaId, href, locationFromHash, routeFromHash } from './router';
 
 describe('hash router', () => {
 	it('defaults unknown hashes to login and supports the core routes', () => {
@@ -26,5 +26,12 @@ describe('hash router', () => {
 		const oldLesson = { title: 'Antiga', path: 'aula', media: [], subtitles: [], materials: [] };
 		const current = { complete: true, looseFiles: [], nodes: [], categories: [{ title: 'Categoria', looseFiles: [], courses: [{ title: 'Curso', looseFiles: [], modules: [{ title: 'Módulo', looseFiles: [], lessons: [] }] }] }] };
 		expect(findLesson(current, oldLesson.path)).toBeNull();
+	});
+	it('resolves a lesson from a media id in both canonical and projected trees', () => {
+		const lesson = { title: 'Aula', path: 'cat/curso/mod/aula', media: [{ name: 'video.mp4', path: 'cat/curso/mod/aula.mp4', size: 10, mediaId: 'm1', kind: 'media' }], subtitles: [], materials: [] };
+		const catalog = { complete: true, looseFiles: [], nodes: [{ title: 'Categoria', path: 'cat', role: 'category', files: [], looseFiles: [], children: [{ title: 'Curso', path: 'cat/curso', role: 'course', files: [], looseFiles: [], children: [{ title: 'Módulo', path: 'cat/curso/mod', role: 'module', files: [], looseFiles: [], children: [{ title: 'Aula', path: 'cat/curso/mod/aula', role: 'lesson', files: lesson.media, looseFiles: [], children: [] }] }] }] }], categories: [{ title: 'Categoria', looseFiles: [], courses: [{ title: 'Curso', looseFiles: [], modules: [{ title: 'Módulo', looseFiles: [], lessons: [lesson] }] }] }] };
+		expect(findLessonByMediaId(catalog, 'm1')?.path).toBe('cat/curso/mod/aula');
+		expect(findLessonByMediaId(catalog, 'missing')).toBeNull();
+		expect(findLessonByMediaId(null, 'm1')).toBeNull();
 	});
 });
