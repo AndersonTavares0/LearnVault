@@ -1,4 +1,4 @@
-import type { PlatformConfig, User } from './transport';
+import type { PlatformConfig, TransportKind, User } from './transport';
 
 /**
  * Estado de configuração da plataforma observado na inicialização.
@@ -12,14 +12,16 @@ export type ConfigState = 'configured' | 'unconfigured' | 'unknown';
 export type InitialView = 'app' | 'login' | 'offline';
 
 /**
- * Decide a tela inicial a partir da sessão e do estado de configuração.
+ * Decide a tela inicial a partir da sessão, do estado de configuração e do transporte.
  *
- * Só a plataforma explicitamente configurada (o servidor HTTP) oferece login. Um desktop
- * sem biblioteca configurada ou cuja configuração não pôde ser lida nunca cai no login:
- * os comandos de autenticação do desktop rejeitam, então o usuário ficaria preso.
+ * Só a plataforma HTTP explicitamente configurada oferece login. O desktop nunca cai no
+ * login: os comandos de autenticação do desktop rejeitam, então o usuário ficaria preso —
+ * inclusive depois de escolher a pasta da biblioteca. Nesse caso ele permanece na tela de
+ * configuração offline, que reflete se a biblioteca já está configurada.
  */
-export function initialView(user: User | null, config: ConfigState): InitialView {
+export function initialView(user: User | null, config: ConfigState, kind: TransportKind = 'http'): InitialView {
 	if (user) return 'app';
+	if (kind === 'desktop') return 'offline';
 	return config === 'configured' ? 'login' : 'offline';
 }
 

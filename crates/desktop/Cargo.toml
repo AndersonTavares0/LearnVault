@@ -10,18 +10,27 @@ publish = false
 # O crate desktop existe para embutir a SPA e falar com o núcleo por IPC. Ele nunca
 # abre sockets de rede nem embute um servidor HTTP.
 #
-# `learnvault-core` entrou com a integração de domínio: o desktop deriva o catálogo do
-# mesmo núcleo usado pelo servidor, sem duplicar regras. Nesta fatia o IPC expõe apenas
-# a configuração e o catálogo; rescan, mídia e autenticação pertencem a fatias posteriores.
+# `learnvault-core` entrou com a integração de domínio: o desktop deriva o catálogo e o
+# resumo do rescan do mesmo núcleo usado pelo servidor, sem duplicar regras. O IPC expõe a
+# configuração, a seleção da raiz da biblioteca, o catálogo e o rescan explícito; mídia e
+# autenticação pertencem a fatias posteriores.
+#
+# `tauri-plugin-dialog` fornece o seletor nativo de diretórios usado **internamente no
+# Rust**. Ele não é concedido ao webview em `capabilities/`, então não expõe diálogo nem
+# filesystem à SPA. Nenhum plugin de fs, store, shell, http, localhost ou updater entra.
 
 [dependencies]
 # Tauri 2.12.x. Os crates do Tauri não compartilham o número minor: `tauri` está em
 # 2.12.4 e `tauri-build` em 2.7.3, que é a versão de build mais recente da linha 2.
 # As versões resolvidas ficam travadas no `Cargo.lock` do workspace.
 tauri = "2.12.4"
+# Seletor nativo de diretórios, usado somente pelo Rust (não concedido ao webview).
+tauri-plugin-dialog = "2"
 # Núcleo compartilhado: catálogo e banco SQLite do domínio.
 learnvault-core = { path = "../core" }
 serde = { version = "1", features = ["derive"] }
+# Serialização da configuração versionada da raiz da biblioteca.
+serde_json = "1"
 
 [build-dependencies]
 tauri-build = "2.7.3"
@@ -29,5 +38,4 @@ tauri-build = "2.7.3"
 [dev-dependencies]
 # Os testes de integração constroem bancos em memória e temporários via o núcleo.
 learnvault-core = { path = "../core" }
-serde_json = "1"
 tempfile = "3"

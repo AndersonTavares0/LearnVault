@@ -57,13 +57,19 @@ abertos normalmente.
 | Método | Rota | Autenticação | Finalidade |
 | --- | --- | --- | --- |
 | `GET` | `/api/catalog` | Sessão | Retorna a árvore persistida de categorias, cursos, módulos e aulas |
-| `POST` | `/api/admin/catalog/rescan` | Sessão admin | Faz scan explícito de `LIBRARY_DIR` e substitui o catálogo |
+| `POST` | `/api/admin/catalog/rescan` | Sessão admin | Faz scan explícito de `LIBRARY_DIR` e atualiza o catálogo de forma preservadora: insere arquivos novos, reafirma os conhecidos e marca ausentes os que sumiram, sem excluir nenhum registro |
 | `GET`, `HEAD` | `/api/media?path=...` | Sessão | Transmite um arquivo aprovado da biblioteca com suporte a HTTP Range |
 
-O scanner lê somente entradas e metadados de diretórios. Ignora diretórios temporários de
-download, classifica mídias, legendas e materiais reconhecidos, e trata `.ts` como vídeo
-somente quando é maior que 1 MiB para não confundir TypeScript com MPEG-TS. A biblioteca
-física é externa, montada como somente leitura e nunca é modificada.
+O scanner lê somente entradas e metadados de diretórios. Links simbólicos não são seguidos — nem
+a raiz, nem entradas internas. Ignora diretórios temporários de download, classifica mídias,
+legendas e materiais reconhecidos, e trata `.ts` como vídeo somente quando é maior que 1 MiB para
+não confundir TypeScript com MPEG-TS. A biblioteca física é externa, montada como somente leitura e
+nunca é modificada.
+
+O rescan é uma atualização preservadora, não uma substituição: ele insere arquivos novos, atualiza
+os conhecidos no mesmo caminho (reutilizando o `media_id`, inclusive após um arquivo ausente
+reaparecer) e marca como ausentes os que deixaram de aparecer. Nenhum rescan exclui registros,
+reescreve a identidade de mídia ou apaga o estado associado.
 
 O catálogo Go adota uma política fail-closed e persistente para remoções. Uma remoção
 explícita é gravada como tombstone em `media_removal`, chaveado pelo caminho relativo canônico
