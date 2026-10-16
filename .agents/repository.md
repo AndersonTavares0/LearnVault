@@ -40,6 +40,16 @@ that area.
 - For pull requests, replace every template prompt with factual content and record only
   validations that actually ran.
 
+### GitHub Discussions
+
+- Consulte Discussions relevantes quando a tarefa envolver decisões arquiteturais, mudanças
+  de produto ou funcionalidades previamente debatidas; priorize as diretamente relacionadas
+  ao escopo atual.
+- Trate Discussions como contexto, não como requisitos aprovados. Registre decisões
+  consolidadas no ADR, roadmap ou Issue correspondente.
+- Evite duplicar Issues ou implementar propostas sem confirmar que foram aprovadas.
+- Não encerre nem modifique Discussions sem autorização do mantenedor.
+
 ## Canonical documentation
 
 - Read `docs/README.md` for navigation and `docs/governance/overview.md` for repository rules.
