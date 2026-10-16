@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { findLesson } from './router';
-import { DesktopStub, HttpTransport, normalizeCatalog, normalizeRecentStudy, normalizeStudyProgress, normalizeUser, STUDY_NOT_AVAILABLE, type Transport } from './transport';
+import { desktopMediaUrl, DesktopStub, HttpTransport, normalizeCatalog, normalizeRecentStudy, normalizeStudyProgress, normalizeUser, STUDY_NOT_AVAILABLE, type Transport } from './transport';
 
 // O Tauri só é carregado no desktop: fora dele o módulo é substituído pelo mock, de modo
 // que a suíte nunca toca `window.__TAURI_INTERNALS__`.
@@ -23,13 +23,63 @@ describe('transport contract', () => {
 		expect(fetchMock).toHaveBeenCalledWith('/api/account/credentials', expect.objectContaining({ method: 'POST' }));
 		vi.unstubAllGlobals();
 	});
-	it('builds media and caption URLs using the existing endpoint contract', () => {
+	it('builds media and caption URLs from the path on HTTP', () => {
 		const transport = new HttpTransport();
-		expect(transport.mediaUrl('módulo/aula.mp4')).toBe('/api/media?path=m%C3%B3dulo%2Faula.mp4');
-		expect(transport.mediaUrl('legendas/aula.vtt')).toBe('/api/media?path=legendas%2Faula.vtt');
+		expect(transport.mediaUrl({ name: 'aula.mp4', path: 'módulo/aula.mp4', size: 1, kind: 'media', mediaId: 'm1' })).toBe('/api/media?path=m%C3%B3dulo%2Faula.mp4');
+		expect(transport.mediaUrl({ name: 'aula.vtt', path: 'legendas/aula.vtt', size: 1, kind: 'subtitle', mediaId: 's1' })).toBe('/api/media?path=legendas%2Faula.vtt');
 	});
-	it('does not expose arbitrary desktop paths as media URLs', () => {
-		expect(new DesktopStub().mediaUrl('private/video.mp4')).toBeNull();
+	it('builds desktop media URLs from the authorized media id, never the raw path', () => {
+		const transport = new DesktopStub();
+		// Os IDs são UUID v7 gerados pelo domínio: ASCII seguros, sem percent-encoding, o
+		// que preserva o contrato do parser estrito do Rust.
+		const uuid = '0192f0e0-1111-7abc-8def-0123456789ab';
+		// Fixar o `userAgent` de Linux isola a forma do esquema da plataforma que executa a
+		// suíte: o bundle desktop é o mesmo e só a base da URL muda por plataforma.
+		vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko)' });
+		try {
+			expect(transport.mediaUrl({ name: 'foto.png', path: 'Curso privado/foto.png', size: 1, kind: 'material', mediaId: uuid })).toBe(`learnvault-media://localhost/${uuid}`);
+			// Vídeo/áudio e legendas ficam fora do protocolo nesta fatia.
+			expect(transport.mediaUrl({ name: 'aula.mp4', path: 'Curso privado/aula.mp4', size: 1, kind: 'media', mediaId: 'v1' })).toBeNull();
+			expect(transport.mediaUrl({ name: 'aula.vtt', path: 'Curso privado/aula.vtt', size: 1, kind: 'subtitle', mediaId: 's1' })).toBeNull();
+			// Um arquivo sem identidade autorizada não é endereçável.
+			expect(transport.mediaUrl({ name: 'x.pdf', path: 'Curso privado/x.pdf', size: 1, kind: 'material' })).toBeNull();
+			const url = transport.mediaUrl({ name: 'x.pdf', path: 'Curso privado/x.pdf', size: 1, kind: 'material', mediaId: 'm1' })!;
+			expect(url).toBe('learnvault-media://localhost/m1');
+			expect(url).not.toContain('Curso privado');
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+	it('addresses the desktop protocol through the WebView2 http.localhost prefix on Windows', () => {
+		// Regressão da causa-raiz: no Windows o WebView2 não resolve `learnvault-media://`.
+		// O runtime só entrega o esquema quando o webview pede
+		// `http://learnvault-media.localhost/<id>` e depois reverte para o handler.
+		const windows = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0';
+		const uuid = '0192f0e0-2222-7abc-8def-0123456789ab';
+		const transport = new DesktopStub();
+		vi.stubGlobal('navigator', { userAgent: windows });
+		try {
+			const url = transport.mediaUrl({ name: 'foto.png', path: 'Curso privado/foto.png', size: 1, kind: 'material', mediaId: uuid })!;
+			expect(url).toBe(`http://learnvault-media.localhost/${uuid}`);
+			expect(url).not.toContain('Curso privado');
+			expect(transport.mediaUrl({ name: 'aula.mp4', path: 'Curso privado/aula.mp4', size: 1, kind: 'media', mediaId: 'v1' })).toBeNull();
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+	it('keeps the direct scheme on Linux and macOS and only changes the base per platform', () => {
+		const uuid = '0192f0e0-3333-7abc-8def-0123456789ab';
+		expect(desktopMediaUrl(uuid, 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko)')).toBe(`learnvault-media://localhost/${uuid}`);
+		expect(desktopMediaUrl(uuid, 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)')).toBe(`learnvault-media://localhost/${uuid}`);
+		expect(desktopMediaUrl(uuid, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0')).toBe(`http://learnvault-media.localhost/${uuid}`);
+	});
+	it('addresses the desktop protocol through the http.localhost prefix on Android, like Windows', () => {
+		// O workaround do wry é o mesmo no WebView2 (Windows) e no webview do Android (ambos
+		// Chromium): `http://<esquema>.localhost` é revertido para o esquema antes do handler.
+		// Sem isso o Android cairia no esquema direto, que não é resolvido no Chromium.
+		const uuid = '0192f0e0-4444-7abc-8def-0123456789ab';
+		const android = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36';
+		expect(desktopMediaUrl(uuid, android)).toBe(`http://learnvault-media.localhost/${uuid}`);
 	});
 	it('reports the HTTP platform as configured without any request', async () => {
 		const fetchMock = vi.fn();
