@@ -6,6 +6,8 @@ use std::{
 
 use thiserror::Error;
 
+use learnvault_core::LegacyImportOptions;
+
 const DEFAULT_LIBRARY_ROOT: &str = "library";
 
 /// Configuração validada necessária para iniciar o servidor.
@@ -32,6 +34,8 @@ pub struct Config {
 pub enum Command {
     /// Imprime a versão compilada e encerra.
     Version,
+    /// Importa um banco Go sem iniciar o servidor HTTP.
+    MigrateGo(LegacyImportOptions),
     /// Inicia o servidor com a configuração validada.
     Run(Config),
 }
@@ -78,6 +82,7 @@ impl Config {
         match parse_command(args)? {
             Command::Run(config) => Ok(config),
             Command::Version => Err(ConfigError::VersionRequested),
+            Command::MigrateGo(_) => Err(ConfigError::InvalidArgument),
         }
     }
 }
@@ -99,6 +104,15 @@ where
 {
     let mut args = args.into_iter();
     let _program = args.next();
+    let first_argument = args.next();
+    if first_argument
+        .as_ref()
+        .and_then(|argument| argument.as_ref().to_str())
+        == Some("migrate-go")
+    {
+        return parse_migrate_go(args);
+    }
+    let mut args = first_argument.into_iter().chain(args);
     let env_listen_addr = env("LISTEN_ADDR").unwrap_or_else(|| "127.0.0.1".to_owned());
     let env_port = env("PORT").unwrap_or_else(|| "8090".to_owned());
     let mut listen_addr = None;
@@ -184,6 +198,56 @@ where
         admin_username,
         admin_password,
         cookie_secure,
+    }))
+}
+
+fn parse_migrate_go<I, S>(args: I) -> Result<Command, ConfigError>
+where
+    I: Iterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    let mut input = None;
+    let mut output = None;
+    let mut backup = None;
+    let mut library_id = None;
+
+    let mut args = args;
+    while let Some(argument) = args.next() {
+        let argument = argument
+            .as_ref()
+            .to_str()
+            .ok_or(ConfigError::InvalidArgument)?;
+        let slot = match argument {
+            "--input" => &mut input,
+            "--output" => &mut output,
+            "--backup" => &mut backup,
+            "--library-id" => &mut library_id,
+            _ => return Err(ConfigError::UnknownArgument),
+        };
+        if slot.is_some() {
+            return Err(ConfigError::InvalidArgument);
+        }
+        let value = next_value(&mut args)?;
+        if value.is_empty() {
+            return Err(ConfigError::InvalidArgument);
+        }
+        *slot = Some(value);
+    }
+
+    let (Some(input), Some(output), Some(backup), Some(library_id)) =
+        (input, output, backup, library_id)
+    else {
+        return Err(ConfigError::InvalidArgument);
+    };
+    if library_id.trim().is_empty() {
+        return Err(ConfigError::InvalidArgument);
+    }
+
+    Ok(Command::MigrateGo(LegacyImportOptions {
+        input: PathBuf::from(input),
+        output: PathBuf::from(output),
+        backup: PathBuf::from(backup),
+        library_id,
     }))
 }
 
@@ -340,6 +404,89 @@ mod tests {
 
         assert_eq!(config.admin_username, None);
         assert_eq!(config.admin_password, None);
+    }
+
+    #[test]
+    fn parses_migrate_go_without_server_environment() {
+        let command = parse_command_with_env(
+            [
+                "learnvault-server",
+                "migrate-go",
+                "--input",
+                "go.sqlite",
+                "--output",
+                "rust.sqlite",
+                "--backup",
+                "go.sqlite.backup",
+                "--library-id",
+                "library-42",
+            ],
+            |_| None,
+        )
+        .unwrap();
+
+        assert_eq!(
+            command,
+            Command::MigrateGo(learnvault_core::LegacyImportOptions {
+                input: "go.sqlite".into(),
+                output: "rust.sqlite".into(),
+                backup: "go.sqlite.backup".into(),
+                library_id: "library-42".into(),
+            })
+        );
+    }
+
+    #[test]
+    fn migrate_go_requires_all_explicit_options() {
+        let error = parse_command_with_env(
+            ["learnvault-server", "migrate-go", "--input", "go.sqlite"],
+            |_| None,
+        )
+        .unwrap_err();
+
+        assert_eq!(error, ConfigError::InvalidArgument);
+    }
+
+    #[test]
+    fn migrate_go_rejects_duplicate_and_unknown_options() {
+        let duplicate = parse_command_with_env(
+            [
+                "learnvault-server",
+                "migrate-go",
+                "--input",
+                "one.sqlite",
+                "--input",
+                "two.sqlite",
+                "--output",
+                "rust.sqlite",
+                "--backup",
+                "backup.sqlite",
+                "--library-id",
+                "library-1",
+            ],
+            |_| None,
+        )
+        .unwrap_err();
+        assert_eq!(duplicate, ConfigError::InvalidArgument);
+
+        let unknown = parse_command_with_env(
+            [
+                "learnvault-server",
+                "migrate-go",
+                "--input",
+                "go.sqlite",
+                "--output",
+                "rust.sqlite",
+                "--backup",
+                "backup.sqlite",
+                "--library-id",
+                "library-1",
+                "--listen-addr",
+            ],
+            |_| None,
+        )
+        .unwrap_err();
+        assert_eq!(unknown, ConfigError::UnknownArgument);
     }
 
     fn canonical(path: &Path) -> std::path::PathBuf {
