@@ -133,10 +133,11 @@ function normalizeFile(value: unknown, requireMediaId = false): FileEntry {
 	};
 }
 
-// Arquivo de um nó canônico Rust: consome o orçamento de arquivos e exige `media_id`.
-function normalizeRustFile(value: unknown, budget: CatalogBudget): FileEntry {
+// Arquivo de um nó canônico Rust: consome o orçamento de arquivos. `requireMediaId` só vale
+// para o contrato canônico (Rust/desktop); no payload aditivo do Go a identidade é opcional.
+function normalizeRustFile(value: unknown, budget: CatalogBudget, requireMediaId: boolean): FileEntry {
 	countFile(budget);
-	return normalizeFile(value, true);
+	return normalizeFile(value, requireMediaId);
 }
 
 function lesson(title: string, path: string, files: FileEntry[]): Lesson {
@@ -194,7 +195,7 @@ function rustLesson(node: CatalogNode): Lesson {
 	return { ...lesson(node.title, node.path, files), availability: files.find((file) => file.availability)?.availability, unverified: files.some((file) => file.unverified) };
 }
 
-function normalizeRustNode(value: unknown, depth: number, budget: CatalogBudget): CatalogNode {
+function normalizeRustNode(value: unknown, depth: number, budget: CatalogBudget, requireMediaId: boolean): CatalogNode {
 	countNode(budget, depth);
 	if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('node Rust inválido.');
 	const node = value as RustNode;
@@ -203,9 +204,9 @@ function normalizeRustNode(value: unknown, depth: number, budget: CatalogBudget)
 		title: node.title,
 		path: node.path,
 		role: node.role,
-		files: optionalArray(value, 'files').map((file) => normalizeRustFile(file, budget)),
-		looseFiles: optionalArray(value, 'loose_files').map((file) => normalizeRustFile(file, budget)),
-		children: optionalArray(value, 'children').map((child) => normalizeRustNode(child, depth + 1, budget))
+		files: optionalArray(value, 'files').map((file) => normalizeRustFile(file, budget, requireMediaId)),
+		looseFiles: optionalArray(value, 'loose_files').map((file) => normalizeRustFile(file, budget, requireMediaId)),
+		children: optionalArray(value, 'children').map((child) => normalizeRustNode(child, depth + 1, budget, requireMediaId))
 	};
 }
 
@@ -257,14 +258,14 @@ function canonicalNodeList(value: RustCatalog): unknown {
 	return rawCategories;
 }
 
-function normalizeRustCatalog(value: RustCatalog): Catalog {
+function normalizeRustCatalog(value: RustCatalog, requireMediaId: boolean): Catalog {
 	const rawNodes = canonicalNodeList(value);
 	if (!Array.isArray(rawNodes)) throw invalidPayload('catálogo Rust sem nodes.');
 	const budget = newCatalogBudget();
 	// Os arquivos soltos da raiz são compartilhados com o fallback Go, então seguem com
 	// `media_id` opcional — mas contam no orçamento de arquivos.
 	const looseFiles = mirroredArray(value, 'loose_files', 'looseFiles').map((file) => { countFile(budget); return normalizeFile(file); });
-	const nodes = rawNodes.map((node) => normalizeRustNode(node, 1, budget));
+	const nodes = rawNodes.map((node) => normalizeRustNode(node, 1, budget, requireMediaId));
 	return { complete: value.complete === true, looseFiles, nodes, categories: projectRust(nodes) };
 }
 
@@ -340,19 +341,23 @@ export function normalizeRecentStudy(value: unknown): RecentStudy {
 export function normalizeCatalog(value: unknown): Catalog {
 	if (!value || typeof value !== 'object') throw invalidPayload('catálogo ausente.');
 	const record = value as Record<string, unknown>;
+	// O servidor Rust e o desktop sempre serializam `complete: bool`; o serviço Go não tem esse
+	// campo. Ele é o marcador do contrato canônico, onde `media_id` é obrigatório. O payload
+	// aditivo do Go usa o papel `group` e não emite identidade, então lá ela segue opcional.
+	const requireMediaId = typeof record.complete === 'boolean';
 	// `nodes` é o contrato canônico preferido. Quando a chave está presente, o valor precisa
 	// ser uma lista: um `null`, string ou tipo inválido é um payload malformado e nunca pode
 	// ser escondido por um fallback silencioso para `categories`. O fallback legado para
 	// `categories` só vale quando `nodes` está ausente ou vazio.
 	const hasNodes = Object.prototype.hasOwnProperty.call(record, 'nodes') && record.nodes !== undefined;
 	if (hasNodes && !Array.isArray(record.nodes)) throw invalidPayload('campo nodes inválido.');
-	if (Array.isArray(record.nodes) && record.nodes.length > 0) return normalizeRustCatalog(value as RustCatalog);
+	if (Array.isArray(record.nodes) && record.nodes.length > 0) return normalizeRustCatalog(value as RustCatalog, requireMediaId);
 	const payload = value as { categories?: unknown };
 	if (Array.isArray(payload.categories) && payload.categories.every((item) => item !== null && typeof item === 'object' && !Array.isArray(item) && ('courses' in item || 'children' in item))) {
 		if (payload.categories.some((item) => 'courses' in (item as object))) return normalizeGoCatalog(value as GoCatalog);
-		return normalizeRustCatalog(value as RustCatalog);
+		return normalizeRustCatalog(value as RustCatalog, requireMediaId);
 	}
-	if (Array.isArray(record.nodes)) return normalizeRustCatalog(value as RustCatalog);
+	if (Array.isArray(record.nodes)) return normalizeRustCatalog(value as RustCatalog, requireMediaId);
 	throw invalidPayload('formato de catálogo desconhecido.');
 }
 
