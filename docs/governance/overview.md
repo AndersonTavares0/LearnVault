@@ -110,8 +110,8 @@ GitHub quando o head ou os checks mudam. Os checks protegidos atualmente são `S
 HIGH/CRITICAL. Os jobs Rust e Desktop continuam executando no CI, mas ainda não são checks
 protegidos e portanto não são anunciados como gates da automação.
 
-O workflow usa somente `contents: write` e `pull-requests: write` no `GITHUB_TOKEN` do workflow.
-Para consultar alertas do Dependabot com `alert-lookup`, ele exige o segredo
+O workflow não concede permissões ao `GITHUB_TOKEN` (`permissions: {}`). Para consultar alertas do
+Dependabot com `alert-lookup`, ele exige o segredo
 `DEPENDABOT_AUTOMERGE_TOKEN`, configurado como um fine-grained PAT ou token de GitHub App com
 apenas `Dependabot alerts: read`, `Contents: write` e `Pull requests: write`. Sem esse segredo,
 o job falha fechado e nenhum auto-merge é solicitado. Workflows disparados diretamente por PRs do
