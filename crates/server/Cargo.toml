@@ -7,11 +7,10 @@ rust-version.workspace = true
 
 [dependencies]
 axum = "0.8"
-argon2 = "0.5"
-base64 = "0.22"
+argon2 = "0.6"
+base64 = "0.23"
 getrandom = "0.4"
 learnvault-core = { path = "../core" }
-rand_core = { version = "0.6", features = ["getrandom"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_urlencoded = "0.7"
