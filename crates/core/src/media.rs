@@ -9,21 +9,32 @@
 //! # O que esta resolução garante
 //!
 //! - o caminho persistido é revalidado a cada chamada; nada é confiado ao banco;
+//! - a raiz precisa estar estritamente sob a forma canônica já validada: um componente
+//!   final que virou link simbólico, junction ou ponto de reparse é recusado, nunca seguido;
 //! - o caminho resolvido precisa estar estritamente sob a raiz da biblioteca;
-//! - o componente final não pode ser um link simbólico;
+//! - o componente final não pode ser um link simbólico nem, no Windows, um ponto de reparse;
 //! - o resultado precisa ser um arquivo comum;
 //! - no Unix, o arquivo aberto é comparado com o caminho validado pela identidade do
 //!   descritor (`dev` e `ino`), de modo que uma troca nesse intervalo é detectada;
+//! - no Windows, o componente final é aberto **sem seguir** um ponto de reparse, e o
+//!   descritor resultante é recusado se for um link/junction, de modo que uma troca do
+//!   componente final nesse intervalo é detectada no próprio descritor;
 //! - a biblioteca nunca é escrita: a única operação sobre ela é abrir para leitura.
 //!
 //! # Limitações conhecidas
 //!
 //! Esta verificação **não elimina** a janela entre a validação e a abertura. No Unix, uma
-//! troca nesse intervalo é detectada pela comparação de identidade; no Windows, o `std`
-//! estável não expõe a identidade do descritor aberto, então a proteção fica restrita ao
-//! componente final. Componentes **intermediários** que sejam links simbólicos, junctions
-//! ou outros reparse points dependem da canonicalização e do confinamento resultante, e
-//! uma troca desses componentes entre a validação e a abertura não é detectada no Windows.
+//! troca nesse intervalo é detectada pela comparação de identidade; no Windows, a troca do
+//! **componente final** é detectada pelo atributo de reparse do descritor aberto, mas o
+//! `std` estável não expõe `dev`/`ino` nem a identidade do diretório pai. A própria raiz
+//! substituída por link/junction é recusada. Componentes **intermediários** — inclusive
+//! ancestrais da própria raiz — que sejam links simbólicos, junctions ou outros reparse
+//! points dependem da canonicalização e do confinamento resultante; uma troca desses
+//! componentes entre a validação e a abertura **não** é detectada em nenhuma plataforma,
+//! porque a proteção completa exigiria resolução relativa a um descritor de diretório
+//! (`openat`/`RESOLVE_BENEATH` no Linux, handles relativos no Windows) e está fora desta
+//! fatia. Uma troca do arquivo por um **hardlink** para fora também é indistinguível de um
+//! arquivo comum. Esses dois limites são residuais e registrados aqui.
 //!
 //! A aplicação opera em modo somente leitura, mas **não** presume que a biblioteca esteja
 //! montada como somente leitura: outro processo pode alterar o diretório. Fechar essa
@@ -134,6 +145,12 @@ pub struct OpenMedia {
     pub mtime: i64,
     /// Classificação derivada do nome do arquivo.
     pub kind: MediaKind,
+    /// Nome do arquivo (apenas o componente final, nunca um caminho).
+    ///
+    /// É a única informação de localização exposta a um adaptador, e serve para decisões
+    /// de tipo de conteúdo (por exemplo a allowlist de MIME do protocolo de mídia do
+    /// desktop). O caminho completo nunca cruza a fronteira do núcleo.
+    pub name: String,
     /// Verdadeiro quando o arquivo difere do que a última varredura registrou.
     pub changed: bool,
 }
@@ -146,8 +163,9 @@ pub struct OpenMedia {
 /// Devolve erro tipado quando o identificador é desconhecido, quando a mídia foi removida
 /// do catálogo, quando a linha está marcada como ausente, quando o arquivo desapareceu do
 /// disco, quando o caminho armazenado é inválido ou escapa da biblioteca, quando o
-/// resultado não é um arquivo comum, quando o componente final é um link simbólico, quando
-/// a abertura falha ou quando o arquivo aberto não corresponde ao caminho validado.
+/// resultado não é um arquivo comum, quando o componente final é um link simbólico ou
+/// ponto de reparse, quando a abertura falha ou quando o arquivo aberto não corresponde ao
+/// caminho validado.
 pub fn open_media(
     db: &Database,
     library_id: &str,
@@ -186,7 +204,7 @@ pub fn open_media(
 
     // `symlink_metadata` não segue o link, então o tipo do próprio componente final é
     // observável. Links não são seguidos na indexação, portanto não são mídia conhecida.
-    if on_path.file_type().is_symlink() {
+    if on_path.file_type().is_symlink() || is_reparse_point(&on_path) {
         return Err(Error::MediaIsSymlink {
             media_id: media_id.to_owned(),
         });
@@ -221,10 +239,7 @@ pub fn open_media(
         });
     }
 
-    let file = File::open(&resolved).map_err(|source| Error::MediaUnreadable {
-        media_id: media_id.to_owned(),
-        source,
-    })?;
+    let file = open_readonly(&resolved, media_id)?;
 
     // Os metadados e a classificação vêm do descritor aberto, nunca do caminho.
     let metadata = file.metadata().map_err(|source| Error::MediaUnreadable {
@@ -243,7 +258,8 @@ pub fn open_media(
     let size = metadata.len();
     let mtime = mtime_seconds(&metadata);
     let changed = size != stored.size || mtime != stored.mtime;
-    let kind = classify(&file_name(&resolved), size);
+    let name = file_name(&resolved);
+    let kind = classify(&name, size);
 
     Ok(OpenMedia {
         media_id: media_id.to_owned(),
@@ -251,6 +267,7 @@ pub fn open_media(
         size,
         mtime,
         kind,
+        name,
         changed,
     })
 }
@@ -293,7 +310,7 @@ pub fn open_media_reference(
             source,
         },
     })?;
-    if on_path.file_type().is_symlink() {
+    if on_path.file_type().is_symlink() || is_reparse_point(&on_path) {
         return Err(Error::MediaIsSymlink {
             media_id: media_id.to_owned(),
         });
@@ -322,10 +339,7 @@ pub fn open_media_reference(
             media_id: media_id.to_owned(),
         });
     }
-    let file = File::open(&resolved).map_err(|source| Error::MediaUnreadable {
-        media_id: media_id.to_owned(),
-        source,
-    })?;
+    let file = open_readonly(&resolved, media_id)?;
     let metadata = file.metadata().map_err(|source| Error::MediaUnreadable {
         media_id: media_id.to_owned(),
         source,
@@ -338,12 +352,14 @@ pub fn open_media_reference(
     verify_identity(&resolved, &metadata, media_id)?;
     let size = metadata.len();
     let mtime = mtime_seconds(&metadata);
+    let name = file_name(&resolved);
     Ok(OpenMedia {
         media_id: media_id.to_owned(),
         file,
         size,
         mtime,
-        kind: classify(&file_name(&resolved), size),
+        kind: classify(&name, size),
+        name,
         changed: size != reference.size || mtime != reference.mtime,
     })
 }
@@ -403,15 +419,25 @@ fn media_row(db: &Database, library_id: &str, media_id: &str) -> Result<StoredMe
 }
 
 /// Valida a raiz e devolve o caminho canônico dela.
+///
+/// A raiz já chega canonicalizada pela integração de plataforma. Se o componente final
+/// virou um link simbólico, junction ou ponto de reparse, seguir o alvo autorizaria
+/// arquivos fora da biblioteca: a substituição é recusada, nunca resolvida.
 fn canonical_root(root: &Path) -> Result<PathBuf> {
     let path = root.to_path_buf();
-    let metadata = std::fs::metadata(&path).map_err(|source| match source.kind() {
+    // `symlink_metadata` não segue o link, então o tipo do próprio componente final da raiz
+    // é observável antes de qualquer canonicalização que o seguiria.
+    let metadata = std::fs::symlink_metadata(&path).map_err(|source| match source.kind() {
         io::ErrorKind::NotFound => Error::LibraryRootMissing { path: path.clone() },
         _ => Error::LibraryRootUnreadable {
             path: path.clone(),
             source,
         },
     })?;
+
+    if metadata.file_type().is_symlink() || is_reparse_point(&metadata) {
+        return Err(Error::LibraryRootIsLink { path });
+    }
 
     if !metadata.is_dir() {
         return Err(Error::LibraryRootNotDirectory { path });
@@ -443,11 +469,65 @@ fn verify_identity(resolved: &Path, opened: &Metadata, media_id: &str) -> Result
     Ok(())
 }
 
-/// No Windows o `std` estável não expõe a identidade do descritor aberto.
+/// Fora do Unix o `std` estável não expõe `dev`/`ino` do descritor aberto.
+///
+/// No Windows a defesa vem da abertura: o componente final é aberto **sem seguir** um
+/// ponto de reparse ([`open_readonly`]). Se o caminho foi trocado por um link, junction ou
+/// outro reparse point entre a canonicalização e a abertura, o descritor carrega o atributo
+/// de reparse e é recusado. Uma troca de componente **intermediário** por um reparse point
+/// nessa janela permanece um limite conhecido: o `std` estável não compara a identidade do
+/// diretório pai aberto.
 #[cfg(not(unix))]
-fn verify_identity(_resolved: &Path, _opened: &Metadata, _media_id: &str) -> Result<()> {
+fn verify_identity(_resolved: &Path, opened: &Metadata, media_id: &str) -> Result<()> {
+    if is_reparse_point(opened) {
+        return Err(Error::MediaIsSymlink {
+            media_id: media_id.to_owned(),
+        });
+    }
     Ok(())
 }
+
+/// Abre o arquivo validado somente para leitura.
+///
+/// No Windows o componente final é aberto sem seguir um ponto de reparse
+/// (`FILE_FLAG_OPEN_REPARSE_POINT`), de modo que uma troca por link/junction entre a
+/// canonicalização e a abertura é observável no próprio descritor e recusada em
+/// [`verify_identity`]. A flag é ignorada para arquivos comuns.
+fn open_readonly(path: &Path, media_id: &str) -> Result<File> {
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        options.custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
+    }
+    options.open(path).map_err(|source| Error::MediaUnreadable {
+        media_id: media_id.to_owned(),
+        source,
+    })
+}
+
+/// Verdadeiro quando o metadado marca um ponto de reparse (symlink ou junction) no Windows.
+#[cfg(windows)]
+fn is_reparse_point(metadata: &Metadata) -> bool {
+    use std::os::windows::fs::MetadataExt;
+
+    metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+}
+
+/// Fora do Windows apenas links simbólicos existem, e já são detectados por `is_symlink`.
+#[cfg(not(windows))]
+fn is_reparse_point(_metadata: &Metadata) -> bool {
+    false
+}
+
+/// Atributo de arquivo que marca um ponto de reparse no Windows.
+#[cfg(windows)]
+const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
+
+/// Flag de abertura que não segue o componente final de reparse no Windows.
+#[cfg(windows)]
+const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
 
 /// Nome do arquivo no fim do caminho, para a classificação por extensão.
 fn file_name(path: &Path) -> String {

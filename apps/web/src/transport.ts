@@ -19,6 +19,23 @@ export type StudyProgress = { mediaId: string; positionSeconds: number; complete
 export type RecentStudy = { items: StudyProgress[] };
 export const STUDY_NOT_AVAILABLE = 'study_not_available';
 
+// Protocolo customizado do desktop para arquivos pequenos. O webview aponta somente pelo
+// `mediaId` autorizado; nenhum caminho cruza a fronteira do webview.
+export const DESKTOP_MEDIA_SCHEME = 'learnvault-media';
+export const DESKTOP_MEDIA_HOST = 'localhost';
+
+// No Chromium embutido (WebView2 no Windows e o webview do Android) um esquema customizado
+// do Tauri só é resolvido na forma `http://<esquema>.localhost`; o runtime reverte esse
+// prefixo por requisição antes de chamar o handler, que continua vendo
+// `learnvault-media://localhost/...`. No Linux (WebKitGTK) e no macOS (WKWebView) o esquema
+// é resolvido direto. Sem o prefixo correto o Chromium não resolve `learnvault-media://` e a
+// mídia pequena não carrega. A detecção usa apenas o `userAgent` do webview atual, sem
+// dependência nova.
+export function desktopMediaUrl(mediaId: string, userAgent: string): string {
+	const base = /Windows|Android/i.test(userAgent) ? `http://${DESKTOP_MEDIA_SCHEME}.localhost` : `${DESKTOP_MEDIA_SCHEME}://${DESKTOP_MEDIA_HOST}`;
+	return `${base}/${encodeURIComponent(mediaId)}`;
+}
+
 export interface Transport {
 	me(): Promise<User | null>;
 	login(username: string, password: string): Promise<User>;
@@ -32,7 +49,7 @@ export interface Transport {
 	recordPosition(mediaId: string, positionSeconds: number): Promise<StudyProgress>;
 	setCompleted(mediaId: string, completed: boolean): Promise<StudyProgress>;
 	recentStudy(limit?: number): Promise<RecentStudy>;
-	mediaUrl(path: string): string | null;
+	mediaUrl(file: FileEntry): string | null;
 }
 
 type RustFile = { media_id?: string; name?: string; path?: string; size?: number; kind?: string; availability?: string; unverified?: boolean };
@@ -202,7 +219,7 @@ export class HttpTransport implements Transport {
 	async recordPosition(mediaId: string, positionSeconds: number) { const response = await fetch('/api/study/position', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: mediaId, position_seconds: positionSeconds }) }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? 'Mídia não encontrada.' : response.status === 422 ? 'Posição inválida.' : 'Não foi possível salvar o progresso.'); return normalizeStudyProgress(await response.json()); }
 	async setCompleted(mediaId: string, completed: boolean) { const response = await fetch('/api/study/completed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: mediaId, completed }) }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? 'Mídia não encontrada.' : 'Não foi possível atualizar a conclusão.'); return normalizeStudyProgress(await response.json()); }
 	async recentStudy(limit?: number) { const url = limit === undefined ? '/api/study/recent' : `/api/study/recent?limit=${limit}`; const response = await fetch(url); if (!response.ok) throw response.status === 404 ? Object.assign(new Error('Estudo não disponível neste servidor.'), { code: STUDY_NOT_AVAILABLE }) : new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar o histórico.'); return normalizeRecentStudy(await response.json()); }
-	mediaUrl(path: string) { return `/api/media?path=${encodeURIComponent(path)}`; }
+	mediaUrl(file: FileEntry) { return `/api/media?path=${encodeURIComponent(file.path)}`; }
 }
 
 // Códigos estáveis de erro IPC e a mensagem sanitizada correspondente. Um código
@@ -254,9 +271,13 @@ export class DesktopStub implements Transport {
 	// Sem limite informado, o comando usa o padrão do contrato; por isso o argumento é
 	// omitido em vez de enviado como `undefined`.
 	async recentStudy(limit?: number) { try { return normalizeRecentStudy(await invoke<unknown>('desktop_recent_study', limit === undefined ? {} : { limit })); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar o histórico de estudo.'); } }
-	// O desktop ainda não entrega a mídia da biblioteca: sem fonte não há reprodução, e o
-	// player mantém a barra de estudo fechada (ver `studySyncEnabled`).
-	mediaUrl(_path: string) { return null; }
+	// Somente materiais pequenos (imagens/thumbnails e materiais) com identidade autorizada
+	// usam o protocolo. Vídeo/áudio e legendas ficam fora desta fatia; um arquivo sem
+	// `mediaId` não é endereçável e o caminho cru nunca é usado.
+	mediaUrl(file: FileEntry) {
+		if (file.kind !== 'material' || !file.mediaId) return null;
+		return desktopMediaUrl(file.mediaId, navigator.userAgent);
+	}
 }
 
 export const transportKind: TransportKind = __LEARNVAULT_TRANSPORT__ === 'desktop' ? 'desktop' : 'http';

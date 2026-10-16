@@ -20,15 +20,21 @@ sem portas de rede) e as **fatias de IPC**: os comandos `desktop_config` e `desk
 ACL app-defined mínima e o catálogo derivado do `learnvault-core` sobre um banco SQLite local, no
 diretório de dados do aplicativo; o comando `desktop_select_library`, que aciona o seletor nativo
 interno ao Rust e persiste a raiz canonicalizada de forma versionada, atômica e serializada no
-diretório de configuração do aplicativo, fora da biblioteca e do SQLite; e o comando
+diretório de configuração do aplicativo, fora da biblioteca e do SQLite; o comando
 `desktop_rescan`, que indexa explicitamente a raiz persistida reutilizando o `learnvault-core`, com
-estado ocupado que serializa chamadas concorrentes e nunca dispara varredura automática; e os
+estado ocupado que serializa chamadas concorrentes e nunca dispara varredura automática; os
 comandos de estudo `desktop_study_progress`, `desktop_record_position`, `desktop_set_completed` e
 `desktop_recent_study`, que reutilizam `learnvault-core::study` com o dono local fixo resolvido no
-Rust. Entrega de mídia, autenticação e janelas reais ainda não existem no desktop. A API de Study
-já tem paridade entre servidor Rust, SPA web e serviço Go de referência, e o desktop a expõe por
-IPC; sem entrega de mídia, porém, o player do desktop não tem reprodução e permanece sem
-retomada.
+Rust; e o **protocolo de mídia de arquivos pequenos**, que entrega somente imagens/thumbnails e
+materiais pequenos por `learnvault-media://localhost/<media-id>` — no Windows (WebView2) o webview
+pede `http://learnvault-media.localhost/<media-id>`, que o runtime reverte para esse esquema antes
+do handler —, com o webview apontando pelo `media_id` opaco (nunca por um caminho), allowlist de
+tipo de conteúdo, limite explícito de resposta e revalidação pelo `learnvault-core`. **Vídeo e
+áudio ficam fora deste protocolo** nesta fatia por causa da reprodução parcial incompatível no
+webview do Linux (`WebKitGTK`); legendas continuam no caminho HTTP. A API de Study já tem paridade
+entre servidor Rust, SPA web e serviço Go de referência, e o desktop a expõe por IPC, mas o player
+segue sem reprodução de vídeo/áudio no desktop. Autenticação e janelas reais ainda não existem no
+desktop.
 
 ```text
 Proxy HTTPS local
@@ -70,13 +76,7 @@ Responsabilidades:
   recebe a raiz da biblioteca já resolvida.
 - `crates/server` traduz o domínio para HTTP: autenticação, sessões, `Range`, cabeçalhos de
   segurança e entrega da SPA.
-- `crates/desktop` integra com o sistema de arquivos e prepara a entrega futura ao webview, sem
-  autenticação e sem portas de rede. Por enquanto expõe o IPC de configuração e catálogo sobre o
-  banco local, a seleção da raiz da biblioteca (seletor nativo interno ao Rust, com persistência
-  atômica fora da biblioteca), o rescan explícito dessa raiz e o progresso de estudo do dono local
-  fixo, reutilizando o núcleo com estado ocupado e sem varredura automática; a entrega parcial de
-  mídia está somente em #76 (Draft, não mesclada), e a entrega completa de mídia pertence a uma
-  fatia posterior.
+- `crates/desktop` integra com o sistema de arquivos e entrega mídia ao webview, sem autenticação e sem portas de rede. Expõe o IPC de configuração e catálogo sobre o banco local, a seleção da raiz da biblioteca (seletor nativo interno ao Rust, com persistência atômica fora da biblioteca), o rescan explícito dessa raiz e o progresso de estudo do dono local fixo, reutilizando o núcleo com estado ocupado e sem varredura automática, e um protocolo customizado que entrega somente **arquivos pequenos** (imagens/thumbnails e materiais pequenos) pelo `media_id` opaco. Vídeo/áudio e autenticação pertencem a fatias posteriores: a reprodução parcial de vídeo e áudio é incompatível no webview do Linux (`WebKitGTK`) e permanece pendente.
 - `apps/web/` é uma única SPA em Svelte 5 + TypeScript + Vite, com roteamento por hash e dois
   builds que escolhem o transporte em tempo de compilação.
 
