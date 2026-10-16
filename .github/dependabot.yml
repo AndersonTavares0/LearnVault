@@ -19,25 +19,6 @@ updates:
         update-types:
           - minor
           - patch
-  - package-ecosystem: npm
-    directory: /apps/web
-    schedule:
-      interval: weekly
-      day: wednesday
-      time: "06:10"
-      timezone: America/Sao_Paulo
-    open-pull-requests-limit: 3
-    cooldown:
-      default-days: 7
-      semver-major-days: 21
-      semver-minor-days: 7
-      semver-patch-days: 3
-    groups:
-      web-non-major:
-        applies-to: version-updates
-        update-types:
-          - minor
-          - patch
   - package-ecosystem: gomod
     directory: /services/go
     schedule:
