@@ -252,6 +252,12 @@ fn path_policy_rejects_nul_and_only_rejects_colon_on_windows() {
             [],
         )
         .unwrap();
+    Connection::open(&input)
+        .unwrap()
+        .execute_batch(
+            "UPDATE media_removal SET relative_path = 'Curso/Aula/name:part.mp4'; UPDATE study_state SET media_path = 'Curso/Aula/name:part.mp4'",
+        )
+        .unwrap();
     if cfg!(windows) {
         assert!(matches!(
             import_go_database(options(&dir, &input)),
