@@ -249,6 +249,41 @@ describe('transport contract', () => {
 		expect(catalog.categories[0].courses[0].modules[0].lessons[0].path).toBe('programming/go/basics/first');
 		expect(findLesson(catalog, 'programming/go/basics/first')?.media[0].path).toBe('programming/go/basics/first/video.mp4');
 	});
+	it('rejects an explicit non-boolean complete marker instead of treating it as Go', () => {
+		// `complete` presente precisa ser booleano: um `null`/string/objeto não pode ser lido
+		// como "sem marcador" e cair no fallback do Go.
+		const categories = [{ title: 'Legado', path: 'cat', courses: [{ title: 'C', path: 'c', modules: [] }] }];
+		const nodes = [{ title: 'Cat', path: 'cat', role: 'category', files: [], loose_files: [], children: [] }];
+		for (const complete of [null, 'true', 'false', 1, {}, []]) {
+			expect(() => normalizeCatalog({ complete, nodes, categories })).toThrow('Resposta inválida do servidor');
+		}
+	});
+	it('routes a canonical payload strictly through Rust even when categories look like Go courses', () => {
+		// `complete: true` + `nodes` vazio + `categories` em forma Go: o payload é canônico, então
+		// a forma legada do Go não pode servir de fallback. As `courses` não são nós canônicos e o
+		// payload é recusado em vez de virar um catálogo Go.
+		expect(() => normalizeCatalog({ complete: true, nodes: [], categories: [{ title: 'Legado', path: 'cat', courses: [{ title: 'C', path: 'c', modules: [] }] }] })).toThrow('Resposta inválida do servidor');
+		// Um `nodes` canônico vazio, sem categorias, continua sendo um catálogo vazio válido.
+		const empty = normalizeCatalog({ complete: true, nodes: [] });
+		expect(empty.nodes).toEqual([]);
+		expect(empty.categories).toEqual([]);
+	});
+	it('uses the Go legacy categories and ignores non-canonical additive nodes when both are present', () => {
+		// Sem `complete`, o payload é do Go: a `categories[].courses` vence e os `nodes` aditivos
+		// são ignorados — não são parseados como nós canônicos nem consomem o orçamento.
+		const catalog = normalizeCatalog({
+			nodes: [null, 'x', { role: 'group' }],
+			categories: [{ title: 'Cat', path: 'cat', courses: [{ title: 'C', path: 'c', modules: [{ title: 'M', path: 'm', lessons: [{ title: 'A', path: 'm/a', media: [{ name: 'v.mp4', path: 'm/a/v.mp4', size: 1 }], subtitles: [], materials: [] }] }] }] }]
+		});
+		expect(catalog.nodes[0].path).toBe('cat');
+		expect(findLesson(catalog, 'm/a')?.media[0].path).toBe('m/a/v.mp4');
+	});
+	it('rejects an oversized additive nodes array even on the Go categories path', () => {
+		// Os `nodes` ignorados não podem trafegar uma árvore ilimitada: um array absurdo é
+		// recusado de forma barata (apenas o comprimento de topo) mesmo sem ser processado.
+		const nodes = Array.from({ length: CATALOG_LIMITS.nodes + 1 }, () => null);
+		expect(() => normalizeCatalog({ nodes, categories: [{ title: 'Cat', path: 'cat', courses: [] }] })).toThrow('Resposta inválida do servidor');
+	});
 	it('rejects an explicitly malformed nodes field instead of falling back to categories', () => {
 		// Um `nodes` presente com tipo inválido é payload malformado: cair para `categories`
 		// esconderia o erro em vez de recusá-lo, e a árvore canônica ficaria ambígua.

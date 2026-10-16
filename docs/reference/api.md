@@ -92,9 +92,12 @@ as aulas e seus arquivos, enquanto o que não cabe na gramática legada — arqu
 categoria, curso ou módulo e nós de topo que não são categoria — permanece apenas em `nodes`.
 O `desktop_catalog` expõe o mesmo par por IPC, e a SPA continua aceitando um payload apenas com
 `categories` no formato legado do serviço Go como fallback durante a transição. O `complete:
-bool` do servidor Rust/desktop marca o contrato canônico: sem esse campo, o payload é do Go e a
-`categories[].courses` legada é a fonte autoritativa — ela vence o `nodes` aditivo (papel
-`group`) quando os dois coexistem, para não perder a árvore que o serviço projetou.
+bool` do servidor Rust/desktop marca o contrato canônico: presente, precisa ser booleano — um
+`null`/string é recusado — e o payload é normalizado estritamente pelo contrato Rust/desktop,
+nunca caindo para a forma legada do Go mesmo que a `categories` pareça `courses`. Sem esse
+campo, o payload é do Go e a `categories[].courses` legada é a fonte autoritativa — ela vence o
+`nodes` aditivo (papel `group`) quando os dois coexistem, para não perder a árvore que o serviço
+projetou.
 
 Ao normalizar, a SPA exige `media_id` não vazio nos arquivos dos nós canônicos Rust/desktop (o
 payload aditivo e o fallback legado do Go não emitem identidade e seguem sem ela) e recusa de
