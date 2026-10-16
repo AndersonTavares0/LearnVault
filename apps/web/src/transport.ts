@@ -64,9 +64,11 @@ export function fileStatus(file: FileEntry): string {
 	return [file.availability === 'missing' ? 'ausente' : '', file.unverified ? 'não verificado' : ''].filter(Boolean).join(' · ');
 }
 
-function normalizeFile(value: RustFile | GoFile): FileEntry {
-	if (typeof value.name !== 'string' || typeof value.path !== 'string' || typeof value.size !== 'number') throw invalidPayload('arquivo sem nome, caminho ou tamanho.');
-	return { name: value.name, path: value.path, size: value.size, mediaId: value.media_id, kind: value.kind, availability: value.availability, unverified: value.unverified };
+function normalizeFile(value: unknown): FileEntry {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('arquivo inválido.');
+	const file = value as RustFile | GoFile;
+	if (typeof file.name !== 'string' || typeof file.path !== 'string' || typeof file.size !== 'number') throw invalidPayload('arquivo sem nome, caminho ou tamanho.');
+	return { name: file.name, path: file.path, size: file.size, mediaId: file.media_id, kind: file.kind, availability: file.availability, unverified: file.unverified };
 }
 
 function lesson(title: string, path: string, files: FileEntry[]): Lesson {
@@ -79,6 +81,31 @@ function lesson(title: string, path: string, files: FileEntry[]): Lesson {
 }
 
 function nodeFiles(node: CatalogNode): FileEntry[] { return [...node.files, ...node.looseFiles]; }
+
+// Resolve um par espelhado snake_case/camelCase de forma determinística. A ausência dos dois
+// campos vale como lista vazia; um `null` explícito ou um tipo que não seja lista é recusado
+// (nunca tratado como ausente). Quando os dois vêm preenchidos, o snake_case é o contrato
+// canônico; valores divergentes são recusados como payload ambíguo em vez de escolher um lado.
+function mirroredArray(source: object, snake: string, camel: string): unknown[] {
+	const record = source as Record<string, unknown>;
+	const hasSnake = Object.prototype.hasOwnProperty.call(record, snake);
+	const hasCamel = Object.prototype.hasOwnProperty.call(record, camel);
+	if (hasSnake && hasCamel && JSON.stringify(record[snake]) !== JSON.stringify(record[camel])) throw invalidPayload(`campos ${snake} e ${camel} conflitantes.`);
+	if (!hasSnake && !hasCamel) return [];
+	const raw = hasSnake ? record[snake] : record[camel];
+	if (raw === null || !Array.isArray(raw)) throw invalidPayload(`campo ${snake} inválido.`);
+	return raw;
+}
+
+// Campo de nós opcional: ausente vale como lista vazia (omitempty do Go); `null` explícito ou
+// tipo incorreto é recusado em vez de descartado silenciosamente.
+function optionalArray(source: object, key: string): unknown[] {
+	const record = source as Record<string, unknown>;
+	if (!Object.prototype.hasOwnProperty.call(record, key) || record[key] === undefined) return [];
+	const raw = record[key];
+	if (raw === null || !Array.isArray(raw)) throw invalidPayload(`campo ${key} inválido.`);
+	return raw;
+}
 
 function goFiles(value: unknown): FileEntry[] {
 	if (!Array.isArray(value)) throw invalidPayload('lista de arquivos Go inválida.');
@@ -97,37 +124,64 @@ function rustLesson(node: CatalogNode): Lesson {
 	return { ...lesson(node.title, node.path, files), availability: files.find((file) => file.availability)?.availability, unverified: files.some((file) => file.unverified) };
 }
 
-function normalizeRustNode(node: RustNode): CatalogNode {
-	if (typeof node.title !== 'string' || typeof node.path !== 'string' || typeof node.role !== 'string' || !Array.isArray(node.files ?? []) || !Array.isArray(node.loose_files ?? []) || !Array.isArray(node.children ?? [])) throw invalidPayload('node Rust incompleto.');
-	return { title: node.title, path: node.path, role: node.role, files: (node.files ?? []).map(normalizeFile), looseFiles: (node.loose_files ?? []).map(normalizeFile), children: (node.children ?? []).map(normalizeRustNode) };
+function normalizeRustNode(value: unknown): CatalogNode {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('node Rust inválido.');
+	const node = value as RustNode;
+	if (typeof node.title !== 'string' || typeof node.path !== 'string' || typeof node.role !== 'string') throw invalidPayload('node Rust incompleto.');
+	return {
+		title: node.title,
+		path: node.path,
+		role: node.role,
+		files: optionalArray(value, 'files').map(normalizeFile),
+		looseFiles: optionalArray(value, 'loose_files').map(normalizeFile),
+		children: optionalArray(value, 'children').map(normalizeRustNode)
+	};
+}
+
+function projectedLessonModule(node: CatalogNode): ProjectedModule {
+	return { title: node.title, looseFiles: [], lessons: [rustLesson(node)] };
+}
+
+// Aulas de toda a subárvore, descendo por qualquer nó intermediário (módulo, grupo ou papel
+// desconhecido) para que a projeção de compatibilidade nunca descarte uma aula. Essa
+// projeção existe só para consumidores legados; a árvore canônica em `nodes` mantém os
+// níveis originais.
+function lessonsIn(node: CatalogNode): Lesson[] {
+	return node.role === 'lesson' ? [rustLesson(node)] : node.children.flatMap(lessonsIn);
 }
 
 function projectedModule(node: CatalogNode): ProjectedModule {
-	return { title: node.title, looseFiles: node.role === 'lesson' ? [] : [...node.files, ...node.looseFiles], lessons: node.role === 'lesson' ? [rustLesson(node)] : node.children.filter((child) => child.role === 'lesson').map(rustLesson) };
+	if (node.role === 'lesson') return projectedLessonModule(node);
+	return { title: node.title, looseFiles: nodeFiles(node), lessons: lessonsIn(node) };
+}
+
+function projectedCourse(node: CatalogNode): ProjectedCourse {
+	return { title: node.title, looseFiles: nodeFiles(node), modules: node.children.map(projectedModule) };
 }
 
 function projectRust(nodes: CatalogNode[]): Catalog['categories'] {
 	return nodes.filter((node) => node.role === 'category').map((category) => ({
 		title: category.title,
-		looseFiles: [...category.files, ...category.looseFiles],
-		courses: category.children.filter((node) => node.role === 'course').map((course) => ({
-			title: course.title,
-			looseFiles: [...course.files, ...course.looseFiles],
-			modules: course.children.filter((node) => node.role === 'module' || node.role === 'lesson').map(projectedModule)
-		})).concat(category.children.filter((node) => node.role === 'lesson').map((node) => ({ title: category.title, looseFiles: [], modules: [projectedModule(node)] })))
+		looseFiles: nodeFiles(category),
+		courses: category.children.map((child) => child.role === 'lesson'
+			? { title: category.title, looseFiles: [], modules: [projectedModule(child)] }
+			: projectedCourse(child))
 	}));
 }
 
+// Árvore canônica de um payload Rust: `nodes` é preferido, mas um `nodes` vazio cai de volta
+// para `categories` para não esconder uma árvore legada.
+function canonicalNodeList(value: RustCatalog): unknown {
+	if (Array.isArray(value.nodes) && value.nodes.length > 0) return value.nodes;
+	return value.categories ?? value.nodes;
+}
+
 function normalizeRustCatalog(value: RustCatalog): Catalog {
-	const rawNodes = value.nodes ?? value.categories;
+	const rawNodes = canonicalNodeList(value);
 	if (!Array.isArray(rawNodes)) throw invalidPayload('catálogo Rust sem nodes.');
-	// O serviço Go omite `loose_files` na raiz quando não há arquivos soltos (omitempty),
-	// então a ausência é válida e normaliza para uma lista vazia. Um valor presente que
-	// não seja lista continua sendo um payload inválido.
-	const rawLoose = value.loose_files ?? value.looseFiles;
-	if (rawLoose !== undefined && !Array.isArray(rawLoose)) throw invalidPayload('catálogo Rust com loose_files inválido.');
+	const looseFiles = mirroredArray(value, 'loose_files', 'looseFiles').map(normalizeFile);
 	const nodes = rawNodes.map(normalizeRustNode);
-	return { complete: value.complete === true, looseFiles: (rawLoose ?? []).map(normalizeFile), nodes, categories: projectRust(nodes) };
+	return { complete: value.complete === true, looseFiles, nodes, categories: projectRust(nodes) };
 }
 
 function goTitle(value: unknown, fallback: string): string { return typeof value === 'string' ? value : fallback; }
@@ -166,7 +220,7 @@ function goCategoryNode(value: unknown): CatalogNode {
 // SPA renders one shape, and derive `categories` from it to avoid a second parallel tree.
 function normalizeGoCatalog(value: GoCatalog): Catalog {
 	if (!Array.isArray(value.categories)) throw invalidPayload('catálogo Go sem categories.');
-	const looseFiles = goFiles(value.loose_files ?? value.looseFiles ?? []);
+	const looseFiles = mirroredArray(value, 'loose_files', 'looseFiles').map((file) => normalizeFile(file as GoFile));
 	const nodes = value.categories.map(goCategoryNode);
 	return { complete: true, looseFiles, nodes, categories: projectRust(nodes) };
 }
@@ -196,12 +250,15 @@ export function normalizeRecentStudy(value: unknown): RecentStudy {
 
 export function normalizeCatalog(value: unknown): Catalog {
 	if (!value || typeof value !== 'object') throw invalidPayload('catálogo ausente.');
-	const payload = value as { categories?: unknown; nodes?: unknown; loose_files?: unknown; looseFiles?: unknown };
-	if (Array.isArray(payload.nodes)) return normalizeRustCatalog(value as RustCatalog);
-	if (Array.isArray(payload.categories) && payload.categories.every((item) => item && typeof item === 'object' && ('courses' in item || 'children' in item))) {
+	const payload = value as { categories?: unknown; nodes?: unknown };
+	// `nodes` é o contrato canônico preferido, mas um `nodes` vazio não pode esconder uma
+	// árvore legada presente em `categories`: nesse caso caímos para `categories`.
+	if (Array.isArray(payload.nodes) && payload.nodes.length > 0) return normalizeRustCatalog(value as RustCatalog);
+	if (Array.isArray(payload.categories) && payload.categories.every((item) => item !== null && typeof item === 'object' && !Array.isArray(item) && ('courses' in item || 'children' in item))) {
 		if (payload.categories.some((item) => 'courses' in (item as object))) return normalizeGoCatalog(value as GoCatalog);
 		return normalizeRustCatalog(value as RustCatalog);
 	}
+	if (Array.isArray(payload.nodes)) return normalizeRustCatalog(value as RustCatalog);
 	throw invalidPayload('formato de catálogo desconhecido.');
 }
 

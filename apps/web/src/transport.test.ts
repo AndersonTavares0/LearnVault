@@ -198,6 +198,66 @@ describe('transport contract', () => {
 		expect(catalog.nodes[0].path).toBe('programming');
 		expect(findLesson(catalog, 'programming/go/first')?.media[0].path).toBe('programming/go/first/video.mp4');
 	});
+	it('falls back to populated legacy categories when nodes is empty', () => {
+		// Um `nodes` vazio não pode esconder a árvore legada entregue em `categories`.
+		const catalog = normalizeCatalog({
+			complete: true,
+			nodes: [],
+			loose_files: [],
+			categories: [{ title: 'Legado', path: 'cat', role: 'category', files: [], loose_files: [], children: [{ title: 'Aula', path: 'cat/aula', role: 'lesson', files: [{ name: 'a.mp4', path: 'cat/aula.mp4', size: 4, kind: 'media' }], loose_files: [], children: [] }] }]
+		});
+		expect(catalog.nodes[0].title).toBe('Legado');
+		expect(catalog.nodes[0].children[0].path).toBe('cat/aula');
+	});
+	it('falls back to a Go catalog when nodes is empty but categories is populated', () => {
+		const catalog = normalizeCatalog({
+			nodes: [],
+			categories: [{ title: 'Programação', path: 'programming', courses: [{ title: 'Go', path: 'programming/go', modules: [{ title: 'Básico', path: 'programming/go/basics', lessons: [{ title: 'Aula', path: 'programming/go/basics/first', media: [{ name: 'v.mp4', path: 'programming/go/basics/first/v.mp4', size: 9 }], subtitles: [], materials: [] }] }] }] }]
+		});
+		expect(catalog.nodes[0].role).toBe('category');
+		expect(findLesson(catalog, 'programming/go/basics/first')?.media[0].path).toBe('programming/go/basics/first/v.mp4');
+	});
+	it('preserves lessons through unknown group descendants in the compatibility projection', () => {
+		// O serviço Go usa o papel `group` nos níveis intermediários. A projeção de
+		// compatibilidade precisa descer por eles em vez de descartar as aulas.
+		const catalog = normalizeCatalog({
+			nodes: [{
+				title: 'Programação', path: 'programming', role: 'category', files: [], loose_files: [],
+				children: [{
+					title: 'Go', path: 'programming/go', role: 'group', files: [], loose_files: [],
+					children: [{
+						title: 'Básico', path: 'programming/go/basics', role: 'group', files: [], loose_files: [],
+						children: [{ title: 'Aula', path: 'programming/go/basics/first', role: 'lesson', files: [{ name: 'v.mp4', path: 'programming/go/basics/first/v.mp4', size: 9, kind: 'media' }], loose_files: [], children: [] }]
+					}]
+				}]
+			}]
+		});
+		expect(catalog.categories[0].courses[0].modules[0].lessons.map((item) => item.path)).toEqual(['programming/go/basics/first']);
+	});
+	it('preserves lessons when a module sits directly under a category without a course level', () => {
+		const catalog = normalizeCatalog({
+			complete: true,
+			loose_files: [],
+			nodes: [{ title: 'Cat', path: 'Cat', role: 'category', files: [], loose_files: [], children: [{ title: 'Curso', path: 'Cat/Curso', role: 'module', files: [], loose_files: [], children: [{ title: 'Aula', path: 'Cat/Curso/Aula', role: 'lesson', files: [{ name: 'a.mp4', path: 'Cat/Curso/Aula/a.mp4', size: 1, kind: 'media' }], loose_files: [], children: [] }] }] }]
+		});
+		expect(catalog.categories[0].courses[0].modules[0].lessons[0].path).toBe('Cat/Curso/Aula');
+	});
+	it('rejects an explicit null root loose_files instead of treating it as absent', () => {
+		expect(() => normalizeCatalog({ nodes: [], categories: [], loose_files: null })).toThrow('Resposta inválida do servidor');
+		expect(() => normalizeCatalog({ nodes: [], looseFiles: null })).toThrow('Resposta inválida do servidor');
+	});
+	it('rejects a wrong-type or nested-array root loose_files', () => {
+		expect(() => normalizeCatalog({ nodes: [], loose_files: 'nao-lista' })).toThrow('Resposta inválida do servidor');
+		expect(() => normalizeCatalog({ nodes: [], loose_files: [[{ name: 'a.pdf', path: 'a.pdf', size: 1 }]] })).toThrow('Resposta inválida do servidor');
+	});
+	it('rejects conflicting snake_case and camelCase loose files', () => {
+		expect(() => normalizeCatalog({ nodes: [], loose_files: [], looseFiles: [{ name: 'a.pdf', path: 'a.pdf', size: 1 }] })).toThrow('conflitantes');
+	});
+	it('accepts equal snake_case and camelCase loose files deterministically', () => {
+		const file = { name: 'a.pdf', path: 'a.pdf', size: 1, kind: 'material' };
+		const catalog = normalizeCatalog({ nodes: [], loose_files: [file], looseFiles: [file] });
+		expect(catalog.looseFiles[0].path).toBe('a.pdf');
+	});
 	it('rejects an unknown catalog shape with a controlled error', () => expect(() => normalizeCatalog({ nope: true })).toThrow('Resposta inválida do servidor'));
 	it('normalizes a study progress record with optional timestamp', () => {
 		expect(normalizeStudyProgress({ media_id: 'm1', position_seconds: 42, completed: false, updated_at: 1234567890, recorded: true })).toEqual({ mediaId: 'm1', positionSeconds: 42, completed: false, updatedAt: 1234567890, recorded: true });
@@ -262,6 +322,22 @@ describe('desktop transport over IPC', () => {
 		expect(catalog.nodes[0].role).toBe('category');
 		expect(catalog.categories[0].title).toBe('Curso');
 		vi.unstubAllGlobals();
+	});
+
+	it('prefers canonical nodes over the legacy categories field in the desktop payload', async () => {
+		// O `desktop_catalog` também passa a devolver `nodes` e `categories`; a SPA usa
+		// `nodes` e ignora a árvore legada quando ela está presente.
+		vi.mocked(invoke).mockResolvedValue({
+			complete: true,
+			loose_files: [],
+			nodes: [{ title: 'Nós', path: 'cat', role: 'category', files: [], loose_files: [], children: [] }],
+			categories: [{ title: 'Categorias', path: 'cat', role: 'category', files: [], loose_files: [], children: [] }]
+		});
+
+		const catalog = await new DesktopStub().catalog();
+
+		expect(catalog.nodes[0].title).toBe('Nós');
+		expect(catalog.categories[0].title).toBe('Nós');
 	});
 
 	it('maps a known IPC code to its stable sanitized message, ignoring arbitrary text', async () => {
