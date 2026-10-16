@@ -50,8 +50,8 @@ jobs:
               echo "Not an unattended patch/minor update: $UPDATE_TYPE"
               ;;
           esac
-          if [ -n "$ALERT_STATE" ] && [ "$ALERT_STATE" != "null" ]; then
-            echo "Security alert state is not eligible: $ALERT_STATE"
+          if [ "$ALERT_STATE" != "null" ]; then
+            echo "Security alert state is not the explicit non-security value 'null': '${ALERT_STATE}'"
             eligible=false
           fi
           if ! jq -e 'type == "array" and length == 1' <<<"$UPDATED_DEPENDENCIES" >/dev/null; then

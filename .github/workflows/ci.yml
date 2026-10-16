@@ -52,6 +52,8 @@ jobs:
       - run: pnpm --filter learnvault-web test
       - name: Plugin guard tests
         run: node --test .opencode/plugins/main-branch-guard.test.mjs
+      - name: Dependabot auto-merge gate tests
+        run: node --test scripts/dependabot-automerge.test.mjs
       - run: pnpm audit --audit-level=low
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
