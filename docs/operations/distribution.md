@@ -81,6 +81,22 @@ CONTAINER_ENGINE=podman ./scripts/verify-rust-oci.sh
   cache para validar nesta fase.
 - Não faz parte do CI e não substitui `cargo fmt`, `cargo clippy` e `cargo test`.
 
+## Validação Rust na VM 114
+
+A validação Rust na VM 114 é iniciada manualmente. Use o mecanismo já disponível para iniciar a
+VM e o runner, conforme administrado no ambiente; não há um comando Proxmox específico documentado
+neste repositório. Antes de disparar a execução, confirme que o runner com as labels
+`self-hosted`, `linux`, `x64` e `rust-validation` está online.
+
+Com o runner online, dispare manualmente o workflow a partir da `main` confiável:
+
+```sh
+gh workflow run "Rust validation on trusted main" --ref main
+```
+
+Um mecanismo equivalente de execução manual também pode ser usado. O workflow faz checkout
+explícito de `main` e não é disparado automaticamente por `push`.
+
 ## Modelo de configuração
 
 Instalações nativas usam variáveis de ambiente ou arquivo de configuração adjacente para
