@@ -8,9 +8,11 @@ duas formas:
 
 ## Estado atual
 
-O repositório ainda contém a implementação em **Go com SQLite e SPA SvelteKit embutida**. Ela é
-a implementação atual, a **referência funcional e visual** da reescrita, e será removida em pull
-request próprio quando o MVP em Rust cobrir os requisitos aprovados.
+O estado atual combina o workspace Rust — `crates/server` para o servidor Axum, `crates/desktop`
+para a fundação Tauri offline e `apps/web` para a SPA Svelte 5 + Vite — com o núcleo compartilhado
+em `crates/core`. `services/go` é a implementação legada e a referência funcional/visual durante
+a transição; sua remoção ocorrerá em pull request próprio somente quando o MVP Rust cobrir os
+requisitos aprovados.
 
 A reescrita em Rust já entrega `crates/core`, `crates/server` e o `crates/desktop` com a
 **fundação** (crate Tauri 2 que embute a SPA por `frontendDist`, capability em deny-by-default e
@@ -21,16 +23,20 @@ interno ao Rust e persiste a raiz canonicalizada de forma versionada, atômica e
 diretório de configuração do aplicativo, fora da biblioteca e do SQLite; e o comando
 `desktop_rescan`, que indexa explicitamente a raiz persistida reutilizando o `learnvault-core`, com
 estado ocupado que serializa chamadas concorrentes e nunca dispara varredura automática. Entrega de
-mídia, autenticação e janelas reais ainda não existem no desktop.
+mídia, autenticação e janelas reais ainda não existem no desktop. A API de Study já tem paridade
+entre servidor Rust, SPA web e serviço Go de referência; o desktop ainda não participa desse fluxo.
 
 ```text
 Proxy HTTPS local
         |
         v
-Serviço HTTP Go -- SQLite (/data)
+Serviço HTTP Rust -- SQLite (/data)
         |-- cache (/cache)
         `-- biblioteca de cursos (/library:ro)
 ```
+
+O serviço HTTP Go permanece disponível separadamente como implementação legada/de referência;
+ele não é o servidor atual descrito pelo fluxo acima.
 
 ## Arquitetura aprovada
 
@@ -60,11 +66,12 @@ Responsabilidades:
   recebe a raiz da biblioteca já resolvida.
 - `crates/server` traduz o domínio para HTTP: autenticação, sessões, `Range`, cabeçalhos de
   segurança e entrega da SPA.
-- `crates/desktop` integra com o sistema de arquivos e entrega a mídia ao webview, sem
+- `crates/desktop` integra com o sistema de arquivos e prepara a entrega futura ao webview, sem
   autenticação e sem portas de rede. Por enquanto expõe o IPC de configuração e catálogo sobre o
   banco local, a seleção da raiz da biblioteca (seletor nativo interno ao Rust, com persistência
   atômica fora da biblioteca) e o rescan explícito dessa raiz, reutilizando o núcleo com estado
-  ocupado e sem varredura automática; a entrega de mídia pertence a uma fatia posterior.
+  ocupado e sem varredura automática; a entrega parcial de mídia está somente em #76 (Draft, não
+  mesclada), e a entrega completa de mídia pertence a uma fatia posterior.
 - `apps/web/` é uma única SPA em Svelte 5 + TypeScript + Vite, com roteamento por hash e dois
   builds que escolhem o transporte em tempo de compilação.
 
