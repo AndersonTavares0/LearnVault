@@ -9,6 +9,7 @@ const ADMIN_PASSWORD = 'uma senha local muito segura';
 
 type ServerFixture = {
 	baseURL: string;
+	outsidePath: string;
 	stop: () => Promise<void>;
 };
 
@@ -98,6 +99,8 @@ async function waitForHealth(url: string, process: ChildProcess) {
 async function startServer(): Promise<ServerFixture> {
 	const root = await mkdtemp(join(tmpdir(), 'learnvault-e2e-'));
 	const library = join(root, 'library');
+	const outsidePath = join(root, 'outside.mp4');
+	await writeFile(outsidePath, Buffer.from('outside-sentinel'));
 	await mkdir(join(library, 'Categoria', 'Curso'), { recursive: true });
 	await writeFile(join(library, 'Categoria', 'Curso', 'Aula.mp4'), Buffer.from('video-fixture'));
 	await writeFile(join(library, 'Categoria', 'Curso', 'Aula.vtt'), 'WEBVTT\n');
@@ -132,6 +135,7 @@ async function startServer(): Promise<ServerFixture> {
 
 	return {
 		baseURL,
+		outsidePath,
 		stop: async () => {
 			try {
 				await stopProcess(server, closed);
@@ -186,8 +190,11 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	await expect(materialResponse).toBeOK();
 	await expect(materialResponse.body()).resolves.toEqual(Buffer.from('material-fixture'));
 
-	const traversal = await page.request.get(`${server.baseURL}/api/media?path=${encodeURIComponent('../outside.mp4')}`);
-	expect(traversal.status()).toBe(404);
+	for (const path of ['../outside.mp4', '..\\outside.mp4', server.outsidePath]) {
+		const traversal = await page.request.get(`${server.baseURL}/api/media?path=${encodeURIComponent(path)}`);
+		expect(traversal.status()).toBe(404);
+		expect(await traversal.body()).not.toEqual(Buffer.from('outside-sentinel'));
+	}
 
 	await page.getByRole('link', { name: 'Voltar ao catálogo' }).click();
 	await page.getByRole('button', { name: 'Sair' }).click();
