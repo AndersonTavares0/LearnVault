@@ -166,6 +166,9 @@ async fn study_requires_authentication() {
             .header("content-type", "application/json")
             .body(Body::from(r#"{"media_id":"m1","completed":true}"#))
             .unwrap(),
+        Request::get("/api/study/capabilities")
+            .body(Body::empty())
+            .unwrap(),
     ];
 
     for request in requests {
@@ -173,6 +176,56 @@ async fn study_requires_authentication() {
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         assert_private_no_store(&response);
     }
+}
+
+/// O endpoint de capacidades é o contrato explícito de detecção de recursos do Study. Ele
+/// tem o mesmo shape do serviço Go de referência, mas relata os valores reais deste
+/// servidor: a identidade de mídia do Rust é o `media_id` opaco, que sobrevive a
+/// renomeações, então `stable_media_identity` é `true` (o Go de referência relata o
+/// `relative_path`, não estável). A resposta exige sessão e não é armazenável.
+#[tokio::test]
+async fn study_capabilities_reports_the_feature_contract() {
+    let temp = tempfile::tempdir().unwrap();
+    seed(&temp, &["m1"], &[]);
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let cookie = login(&app, ADMIN, ADMIN_PASSWORD).await;
+
+    let response = app
+        .oneshot(get_with_cookie("/api/study/capabilities", &cookie))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_private_no_store(&response);
+    let body = json_body(response).await;
+    assert_eq!(body["study"], true);
+    assert_eq!(body["media_identity"], "media_id");
+    assert_eq!(body["stable_media_identity"], true);
+    assert_eq!(body["recent_default_limit"].as_u64(), Some(20));
+    assert_eq!(
+        body["recent_max_limit"].as_u64(),
+        Some(learnvault_core::MAX_RECENT_STUDY as u64)
+    );
+    assert_eq!(body["removal_keeps_progress"], true);
+    // O contrato é fechado: nada além dos campos acordados é exposto.
+    assert_eq!(body.as_object().unwrap().len(), 6);
+}
+
+#[tokio::test]
+async fn study_capabilities_rejects_unsupported_methods() {
+    let temp = tempfile::tempdir().unwrap();
+    seed(&temp, &["m1"], &[]);
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+
+    let response = app
+        .oneshot(
+            Request::post("/api/study/capabilities")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
 }
 
 #[tokio::test]
@@ -682,6 +735,7 @@ async fn a_temporary_session_cannot_reach_study_before_changing_credentials() {
     assert_eq!(json_body(me).await["must_change_credentials"], true);
 
     let read = app
+        .clone()
         .oneshot(get_with_cookie("/api/study/recent", &cookie))
         .await
         .unwrap();
@@ -689,6 +743,20 @@ async fn a_temporary_session_cannot_reach_study_before_changing_credentials() {
     assert_private_no_store(&read);
     assert_eq!(
         json_body(read).await["error"],
+        "credentials_change_required"
+    );
+
+    // O endpoint de capacidades segue a mesma fronteira de sessão: a sessão temporária
+    // precisa trocar as credenciais antes de qualquer leitura do Study.
+    let capabilities = app
+        .clone()
+        .oneshot(get_with_cookie("/api/study/capabilities", &cookie))
+        .await
+        .unwrap();
+    assert_eq!(capabilities.status(), StatusCode::FORBIDDEN);
+    assert_private_no_store(&capabilities);
+    assert_eq!(
+        json_body(capabilities).await["error"],
         "credentials_change_required"
     );
 }

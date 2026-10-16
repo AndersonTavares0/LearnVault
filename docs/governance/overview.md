@@ -97,10 +97,12 @@ de artefatos acontece em workflow separado.
 O workflow `Dependabot safe auto-merge` usa a configuração confiável da base por
 `pull_request_target`, sem checkout, instalação de dependências ou execução de código da pull
 request. Ele só considera PRs do `dependabot[bot]` para `main`, no mesmo repositório, com uma
-atualização individual patch/minor não relacionada a alerta de segurança, com o head atual
-confirmado pela API. Atualizações major, de segurança, agrupadas, desconhecidas, conflitantes ou
-desatualizadas permanecem para análise humana; o auto-merge nativo aguarda ou recusa qualquer
-estado que não satisfaça a proteção da branch.
+atualização individual patch/minor cujo estado de alerta de segurança seja explicitamente `null`,
+com o head atual confirmado pela API. O gate de alerta falha fechado: qualquer estado de alerta
+ausente, vazio ou desconhecido desqualifica a PR em vez de ser tratado como não relacionado a
+segurança. Atualizações major, de segurança, com estado de alerta não explicitamente `null`,
+agrupadas, desconhecidas, conflitantes ou desatualizadas permanecem para análise humana; o
+auto-merge nativo aguarda ou recusa qualquer estado que não satisfaça a proteção da branch.
 
 Quando elegível, o workflow apenas solicita o auto-merge nativo do GitHub com squash. Ele não
 aprova PRs, não usa `--admin`, não faz force-push, rebase ou fechamento automático. A proteção da
