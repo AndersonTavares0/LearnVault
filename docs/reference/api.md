@@ -1,8 +1,8 @@
 # Referência da API
 
-A implementação Go permanece a referência funcional. O servidor Rust expõe as mesmas APIs
-abaixo e pode servir a SPA estática quando configurado. Todas as rotas usam JSON, salvo indicação
-contrária. A autenticação usa um cookie de sessão HttpOnly com SameSite=Strict.
+A implementação Go permanece a referência funcional. O servidor Rust expõe as mesmas APIs abaixo
+e a SPA web usa o mesmo contrato de Study nos dois transportes. Todas as rotas usam JSON, salvo
+indicação contrária. A autenticação usa um cookie de sessão HttpOnly com SameSite=Strict.
 
 No servidor Rust, a raiz da biblioteca deve permanecer sob controle confiável do processo entre
 as operações administrativas. O rescan recanonicaliza a raiz e recusa mudanças detectáveis, mas
@@ -87,6 +87,9 @@ O progresso é sempre do usuário autenticado: nenhuma rota aceita um `owner_id`
 cliente, então uma sessão só lê e escreve o próprio progresso. Posição de retomada e
 conclusão são independentes — avançar não desfaz a conclusão e concluir não move o ponto de
 retomada — e reenviar um valor idêntico não altera o instante da última mudança.
+
+Este contrato está implementado no servidor Rust, na SPA web e no serviço Go de referência
+(paridade das entregas #86, #88, #90 e #91). O transporte desktop ainda não expõe Study.
 
 | Método | Rota | Autenticação | Finalidade |
 | --- | --- | --- | --- |

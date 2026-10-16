@@ -32,6 +32,7 @@ automação para dados externos; a biblioteca deve permanecer somente leitura.
 
 O aplicativo desktop Tauri (`crates/desktop`, Fase 4) e a distribuição por plataforma (Fase 5)
 ainda não estão concluídos; o atalho `pnpm dev:tauri` cobre apenas a fatia atual do desktop
-(configuração da biblioteca, catálogo e rescan).
+(configuração da biblioteca, catálogo e rescan). A entrega parcial de mídia está em #76 (Draft,
+não mesclada); não trate-a como suporte de mídia ou distribuição concluídos.
 
 Consulte o README do repositório para configuração e deploy opcional com Compose/Quadlet.

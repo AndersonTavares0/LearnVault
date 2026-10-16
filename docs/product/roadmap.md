@@ -18,7 +18,7 @@ A execução avança por fases, com um pull request por fase:
   - [x] Fase 4 (fundação) — crate `crates/desktop` no workspace, `frontendDist` embutido, capability deny-by-default e CSP explícita; IPC de domínio, mídia e janelas reais ainda pendentes
   - [x] Fase 4 (IPC de catálogo) — comandos `desktop_config` e `desktop_catalog` offline com ACL app-defined mínima, DTOs snake_case do catálogo e erros IPC sanitizados; mídia, autenticação, seleção da raiz da biblioteca e janelas reais continuam pendentes
   - [x] Fase 4 (seleção da raiz) — comando `desktop_select_library` sem argumentos aciona o seletor nativo no Rust e persiste a raiz canonicalizada de forma versionada e atômica no diretório de configuração do aplicativo, com revalidação no startup e biblioteca somente leitura; mídia, autenticação e janelas reais continuam pendentes
-  - [x] Fase 4 (rescan da biblioteca) — comando `desktop_rescan` sem argumentos e assíncrono (`spawn_blocking`) indexa explicitamente a raiz persistida reutilizando `learnvault-core` (`rescan`/`RescanSummary`), com estado ocupado que serializa chamadas concorrentes por um erro estável (`rescan_in_progress`), raiz não configurada (`library_not_configured`) e raiz inacessível (`rescan_unavailable`) sanitizados; o rescan nunca é automático e a biblioteca permanece somente leitura. Mídia, autenticação e janelas reais continuam pendentes
+  - [x] Fase 4 (rescan da biblioteca) — comando `desktop_rescan` sem argumentos e assíncrono (`spawn_blocking`) indexa explicitamente a raiz persistida reutilizando `learnvault-core` (`rescan`/`RescanSummary`), com estado ocupado que serializa chamadas concorrentes por um erro estável (`rescan_in_progress`), raiz não configurada (`library_not_configured`) e raiz inacessível (`rescan_unavailable`) sanitizados; o rescan nunca é automático e a biblioteca permanece somente leitura. A entrega parcial de mídia está em #76 (Draft, não mesclada); mídia completa, autenticação e janelas reais continuam pendentes
 - [ ] Fase 5 — distribuição por plataforma e remoção do serviço Go
 
 ## Atual — fundação e catálogo
@@ -34,12 +34,19 @@ durante a reescrita.
 - [x] Base reproduzível de deploy com Docker/Podman
 - [x] CI, automação de releases e governança do repositório
 
+## Entregue — ciclo de estudo compatível
+
+As entregas mescladas #86, #88, #90 e #91 alinham o contrato de Study entre o servidor Rust,
+a SPA web e o serviço Go de referência: progresso, posição de retomada, conclusão e histórico
+recente usam o mesmo contrato e os mesmos limites públicos. O desktop ainda não oferece esse
+fluxo.
+
 ## Próximo — ciclo de estudo utilizável
 
 - [ ] Detalhes do curso e navegação de aulas
 - [ ] Player direto com links de legendas e materiais
-- [ ] Progresso individual e posição de retomada
-- [ ] Marcar aula como concluída e painel de histórico recente
+- [x] Progresso individual e posição de retomada
+- [x] Marcar aula como concluída e painel de histórico recente
 - [ ] Permissões de acesso a cursos para múltiplos usuários locais
 
 ## Interface — mesa de estudo
