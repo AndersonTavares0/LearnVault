@@ -29,6 +29,24 @@ preferencial do desktop.
 - Release Please controla changelog e metadados do GitHub Release.
 - O workflow de publicação adiciona binários versionados e `SHA256SUMS` ao release existente.
 
+## Runner self-hosted de validação
+
+O runner persistente `rust-validation-114` da VM 114 do Proxmox não faz parte da CI cotidiana.
+A validação Rust oficial permanece no job `Rust tests and lints` do workflow `CI`, executado em
+`ubuntu-latest`. O runner Proxmox pode permanecer desligado para preservar recursos e evitar que
+um job fique aguardando um executor offline.
+
+Para reativá-lo futuramente, com autorização operacional:
+
+1. Ligue a VM 114 no Proxmox, sem recriar ou reprovisionar seus discos e configurações.
+2. Inicie o serviço do Actions Runner com o usuário não-root originalmente configurado.
+3. Gere uma credencial de registro temporária no GitHub e registre novamente o runner com o label
+   `rust-validation`, seguindo a documentação oficial do repositório.
+4. Verifique no GitHub que o runner está `online` antes de adicionar qualquer workflow que use
+   `runs-on: [self-hosted, linux, x64, rust-validation]`.
+5. Para desativá-lo novamente, remova primeiro o registro no GitHub com a credencial temporária,
+   depois pare o serviço e desligue a VM. Não apague arquivos, discos ou configurações da VM.
+
 ## Ferramentas de empacotamento
 
 O empacotamento segue o [ADR 0001](../architecture/adr/0001-reescrita-em-rust.md): NSIS no
