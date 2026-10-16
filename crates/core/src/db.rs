@@ -23,6 +23,9 @@ pub struct Database {
     pub(crate) conn: Connection,
 }
 
+/// Versão do schema que este binário consegue servir.
+pub const CURRENT_SCHEMA_VERSION: usize = SCHEMA_VERSION;
+
 impl Database {
     /// Abre (ou cria) o banco em `path` e aplica a cadeia de migrações.
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
@@ -59,6 +62,33 @@ impl Database {
                 SchemaVersion::Inside(version) | SchemaVersion::Outside(version) => version.get(),
             },
         )
+    }
+
+    /// Verifica se o banco está exatamente no schema suportado e mantém as tabelas essenciais.
+    ///
+    /// A distinção entre `NoneSet`, versões anteriores e versões posteriores é intencional:
+    /// nenhuma delas é uma dependência pronta para o servidor HTTP, mesmo quando a leitura da
+    /// versão não produz erro.
+    pub fn has_current_schema(&self) -> Result<bool> {
+        let version = MIGRATIONS
+            .current_version(&self.conn)
+            .map_err(read_schema_version)?;
+        let SchemaVersion::Inside(version) = version else {
+            return Ok(false);
+        };
+        if version.get() != CURRENT_SCHEMA_VERSION {
+            return Ok(false);
+        }
+
+        let required_tables: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM sqlite_master
+             WHERE type = 'table' AND name IN
+             ('library', 'media', 'scan', 'study_state', 'user', 'session',
+              'scan_inaccessible', 'media_removal')",
+            [],
+            |row| row.get(0),
+        )?;
+        Ok(required_tables == 8)
     }
 
     fn from_connection(conn: Connection, persistent: bool) -> Result<Self> {

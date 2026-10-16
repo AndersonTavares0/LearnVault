@@ -178,7 +178,7 @@ impl AppState {
         };
         tokio::task::spawn_blocking(move || {
             let _blocking_task = blocking_task;
-            database.schema_version().is_ok()
+            database.has_current_schema().unwrap_or(false)
         })
         .await
         .unwrap_or(false)

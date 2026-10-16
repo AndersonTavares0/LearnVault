@@ -318,6 +318,52 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn healthz_reports_unavailable_when_database_check_capacity_is_busy() {
+        let temp = tempfile::tempdir().unwrap();
+        let state = AppState::new(config_fixture(&temp));
+        let app = build_router(state.clone());
+        let _permits: Vec<_> =
+            std::iter::from_fn(|| state.try_acquire_blocking_task()).collect();
+
+        let response = app
+            .oneshot(Request::get("/api/healthz").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(response.headers()["cache-control"], "no-store");
+    }
+
+    #[tokio::test]
+    async fn healthz_rejects_missing_old_newer_and_incompatible_schemas() {
+        for (name, setup) in [
+            ("missing", "PRAGMA user_version = 0"),
+            ("older", "PRAGMA user_version = 3"),
+            ("newer", "PRAGMA user_version = 5"),
+            ("incompatible", "PRAGMA user_version = 4; DROP TABLE user"),
+        ] {
+            let temp = tempfile::tempdir().unwrap();
+            let state = AppState::new(config_fixture(&temp));
+            {
+                let database = state.database.lock().await;
+                database.connection().execute_batch(setup).unwrap();
+            }
+            let app = build_router(state);
+
+            let response = app
+                .oneshot(Request::get("/api/healthz").body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+
+            assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE, "{name}");
+            assert_eq!(response.headers()["cache-control"], "no-store", "{name}");
+            let body = response.into_body().collect().await.unwrap().to_bytes();
+            let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(json, serde_json::json!({"status": "unavailable"}), "{name}");
+        }
+    }
+
+    #[tokio::test]
     async fn api_timeout_rejection_gets_no_store_cache_header() {
         let temp = tempfile::tempdir().unwrap();
         let router = build_router(AppState::new(config_fixture(&temp))).route(
