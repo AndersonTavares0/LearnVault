@@ -1,3 +1,8 @@
+// O `invoke` do Tauri entra apenas no bundle desktop: no bundle HTTP o `DesktopStub` é
+// eliminado por dead-code elimination junto com este import, de modo que nem o Tauri entra
+// na SPA web nem um `fetch` entra no desktop.
+import { invoke } from '@tauri-apps/api/core';
+
 export type User = { userId: string; username: string; role: string; isAdmin: boolean; mustChangeCredentials: boolean };
 export type FileEntry = { name: string; path: string; size: number; mediaId?: string; kind?: string; availability?: string; unverified?: boolean };
 export type Lesson = { title: string; path: string; media: FileEntry[]; subtitles: FileEntry[]; materials: FileEntry[]; availability?: string; unverified?: boolean };
@@ -6,12 +11,18 @@ export type ProjectedModule = { title: string; lessons: Lesson[]; looseFiles: Fi
 export type ProjectedCourse = { title: string; modules: ProjectedModule[]; looseFiles: FileEntry[] };
 export type ProjectedCategory = { title: string; courses: ProjectedCourse[]; looseFiles: FileEntry[] };
 export type Catalog = { complete: boolean; looseFiles: FileEntry[]; nodes: CatalogNode[]; categories: ProjectedCategory[] };
+export type PlatformConfig = { configured: boolean };
+// A seleção nativa da raiz da biblioteca é específica do desktop: no HTTP o servidor já
+// conhece a própria biblioteca e nenhum caminho cruza o frontend.
+export type TransportKind = 'http' | 'desktop';
 
 export interface Transport {
 	me(): Promise<User | null>;
 	login(username: string, password: string): Promise<User>;
 	logout(): Promise<void>;
+	config(): Promise<PlatformConfig>;
 	catalog(): Promise<Catalog>;
+	chooseLibrary(): Promise<PlatformConfig>;
 	rescan(): Promise<void>;
 	updateCredentials(username: string, password: string, currentPassword?: string): Promise<User>;
 	mediaUrl(path: string): string | null;
@@ -139,6 +150,11 @@ export function normalizeUser(value: unknown): User {
 	return { userId: typeof user.user_id === 'string' || typeof user.user_id === 'number' ? String(user.user_id) : '', username: user.username, isAdmin: user.is_admin === true || user.role === 'admin', role: user.is_admin === true || user.role === 'admin' ? 'admin' : 'user', mustChangeCredentials: user.must_change_credentials === true };
 }
 
+export function normalizeConfig(value: unknown): PlatformConfig {
+	if (!value || typeof value !== 'object' || typeof (value as { configured?: unknown }).configured !== 'boolean') throw invalidPayload('configuração da plataforma inválida.');
+	return { configured: (value as { configured: boolean }).configured };
+}
+
 export function normalizeCatalog(value: unknown): Catalog {
 	if (!value || typeof value !== 'object') throw invalidPayload('catálogo ausente.');
 	const payload = value as { categories?: unknown; nodes?: unknown; loose_files?: unknown; looseFiles?: unknown };
@@ -158,21 +174,52 @@ export class HttpTransport implements Transport {
 		return normalizeUser(await response.json());
 	}
 	async logout() { await fetch('/api/logout', { method: 'POST' }); }
+	config() { return Promise.resolve({ configured: true }); }
+	chooseLibrary() { return Promise.reject(new Error('A biblioteca do servidor é definida no servidor.')); }
 	async catalog() { const response = await fetch('/api/catalog'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar o catálogo.'); return normalizeCatalog(await response.json()); }
 	async rescan() { const response = await fetch('/api/admin/catalog/rescan', { method: 'POST' }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 409 ? 'Já existe um rescan em andamento.' : 'Não foi possível indexar a biblioteca.'); }
 	async updateCredentials(username: string, password: string, currentPassword = password) { const response = await fetch('/api/account/credentials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ current_password: currentPassword, username, password }) }); if (!response.ok) throw new Error(response.status === 422 ? 'Usuário ou senha inválidos.' : response.status === 401 ? 'Senha atual incorreta.' : 'Não foi possível atualizar as credenciais.'); return normalizeUser(await response.json()); }
 	mediaUrl(path: string) { return `/api/media?path=${encodeURIComponent(path)}`; }
 }
 
-/** Seam explícita para o build Tauri; IPC pertence à Fase 4. */
+// Códigos estáveis de erro IPC e a mensagem sanitizada correspondente. Um código
+// desconhecido ou ausente nunca repassa o texto recebido: cai no fallback da chamada,
+// para que nenhuma mensagem arbitrária (potencialmente com caminhos) chegue à interface.
+const DESKTOP_ERROR_MESSAGES: Record<string, string> = {
+	catalog_unavailable: 'catálogo indisponível',
+	database_unavailable: 'banco de dados local indisponível',
+	library_root_invalid: 'A pasta escolhida não é uma biblioteca válida.',
+	library_config_unavailable: 'Não foi possível salvar a configuração do aplicativo.',
+	library_not_configured: 'Nenhuma biblioteca está configurada.',
+	rescan_in_progress: 'Já existe uma indexação em andamento.',
+	rescan_unavailable: 'Não foi possível indexar a biblioteca.'
+};
+
+// O comando devolve o erro como objeto serializado `{ code, message }`, não como `Error`.
+function desktopError(cause: unknown, fallback: string): Error {
+	const payload = cause as { code?: unknown } | null;
+	if (payload && typeof payload === 'object' && typeof payload.code === 'string') {
+		const known = DESKTOP_ERROR_MESSAGES[payload.code];
+		if (known) return new Error(known);
+	}
+	return new Error(fallback);
+}
+
 export class DesktopStub implements Transport {
 	me() { return Promise.resolve(null); }
 	login() { return Promise.reject(new Error('Transporte desktop ainda não implementado.')); }
 	logout() { return Promise.resolve(); }
-	catalog() { return Promise.reject(new Error('Transporte desktop ainda não implementado.')); }
-	rescan() { return Promise.reject(new Error('Rescan desktop ainda não implementado.')); }
+	async config() { try { return normalizeConfig(await invoke<unknown>('desktop_config')); } catch (cause) { throw desktopError(cause, 'Não foi possível ler a configuração do aplicativo.'); } }
+	// O webview apenas dispara o seletor nativo no Rust; nenhum caminho é enviado nem
+	// devolvido. Cancelar preserva a configuração anterior.
+	async chooseLibrary() { try { return normalizeConfig(await invoke<unknown>('desktop_select_library')); } catch (cause) { throw desktopError(cause, 'Não foi possível configurar a biblioteca.'); } }
+	async catalog() { try { return normalizeCatalog(await invoke<unknown>('desktop_catalog')); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar o catálogo.'); } }
+	// O rescan desktop é sempre explícito: o webview só o dispara a pedido do usuário. A
+	// resposta é um resumo sanitizado que não interessa ao shell, que recarrega o catálogo.
+	async rescan() { try { await invoke<unknown>('desktop_rescan'); } catch (cause) { throw desktopError(cause, 'Não foi possível indexar a biblioteca.'); } }
 	updateCredentials() { return Promise.reject(new Error('Transporte desktop ainda não implementado.')); }
 	mediaUrl(_path: string) { return null; }
 }
 
-export const transport: Transport = __LEARNVAULT_TRANSPORT__ === 'desktop' ? new DesktopStub() : new HttpTransport();
+export const transportKind: TransportKind = __LEARNVAULT_TRANSPORT__ === 'desktop' ? 'desktop' : 'http';
+export const transport: Transport = transportKind === 'desktop' ? new DesktopStub() : new HttpTransport();

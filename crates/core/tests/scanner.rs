@@ -259,6 +259,26 @@ fn file_symlink_is_not_reported() {
 
 #[cfg(unix)]
 #[test]
+fn a_symlinked_root_is_not_traversed() {
+    let directory = tempfile::tempdir().unwrap();
+    let real = directory.path().join("real");
+    fs::create_dir_all(&real).unwrap();
+    fs::write(real.join("aula.mp4"), b"x").unwrap();
+    let link = directory.path().join("atalho");
+    std::os::unix::fs::symlink(&real, &link).unwrap();
+
+    let outcome = scan(&link).unwrap();
+
+    assert!(
+        outcome.files.is_empty(),
+        "um link no topo da raiz não pode ser seguido: {:?}",
+        relative_paths(&outcome)
+    );
+    assert!(outcome.inaccessible.is_empty());
+}
+
+#[cfg(unix)]
+#[test]
 fn unreadable_directory_is_recorded_and_the_scan_continues() {
     use std::os::unix::fs::PermissionsExt;
 

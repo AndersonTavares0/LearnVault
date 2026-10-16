@@ -192,6 +192,17 @@ pub fn open_media(
         });
     }
 
+    // Classifica o tipo antes de abrir: no Windows, abrir um diretório falha com
+    // PermissionDenied e seria reportado como `MediaUnreadable`, enquanto no Unix a
+    // abertura funciona e a recusa viria só do `metadata.is_file()` pós-abertura. Usar o
+    // tipo já observado no caminho mantém `MediaNotAFile` idêntico nas duas plataformas e
+    // preserva `MediaUnreadable` para falhas reais de abertura de um arquivo comum.
+    if !on_path.is_file() {
+        return Err(Error::MediaNotAFile {
+            media_id: media_id.to_owned(),
+        });
+    }
+
     let resolved = std::fs::canonicalize(&candidate).map_err(|source| match source.kind() {
         io::ErrorKind::NotFound => Error::MediaMissingOnDisk {
             media_id: media_id.to_owned(),
@@ -284,6 +295,16 @@ pub fn open_media_reference(
     })?;
     if on_path.file_type().is_symlink() {
         return Err(Error::MediaIsSymlink {
+            media_id: media_id.to_owned(),
+        });
+    }
+    // Classifica o tipo antes de abrir: no Windows, abrir um diretório falha com
+    // PermissionDenied e seria reportado como `MediaUnreadable`, enquanto no Unix a
+    // abertura funciona e a recusa viria só do `metadata.is_file()` pós-abertura. Usar o
+    // tipo já observado no caminho mantém `MediaNotAFile` idêntico nas duas plataformas e
+    // preserva `MediaUnreadable` para falhas reais de abertura de um arquivo comum.
+    if !on_path.is_file() {
+        return Err(Error::MediaNotAFile {
             media_id: media_id.to_owned(),
         });
     }

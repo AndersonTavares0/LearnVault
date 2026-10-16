@@ -57,13 +57,19 @@ abertos normalmente.
 | Método | Rota | Autenticação | Finalidade |
 | --- | --- | --- | --- |
 | `GET` | `/api/catalog` | Sessão | Retorna a árvore persistida de categorias, cursos, módulos e aulas |
-| `POST` | `/api/admin/catalog/rescan` | Sessão admin | Faz scan explícito de `LIBRARY_DIR` e substitui o catálogo |
+| `POST` | `/api/admin/catalog/rescan` | Sessão admin | Faz scan explícito de `LIBRARY_DIR` e atualiza o catálogo de forma preservadora: insere arquivos novos, reafirma os conhecidos e marca ausentes os que sumiram, sem excluir nenhum registro |
 | `GET`, `HEAD` | `/api/media?path=...` | Sessão | Transmite um arquivo aprovado da biblioteca com suporte a HTTP Range |
 
-O scanner lê somente entradas e metadados de diretórios. Ignora diretórios temporários de
-download, classifica mídias, legendas e materiais reconhecidos, e trata `.ts` como vídeo
-somente quando é maior que 1 MiB para não confundir TypeScript com MPEG-TS. A biblioteca
-física é externa, montada como somente leitura e nunca é modificada.
+O scanner lê somente entradas e metadados de diretórios. Links simbólicos não são seguidos — nem
+a raiz, nem entradas internas. Ignora diretórios temporários de download, classifica mídias,
+legendas e materiais reconhecidos, e trata `.ts` como vídeo somente quando é maior que 1 MiB para
+não confundir TypeScript com MPEG-TS. A biblioteca física é externa, montada como somente leitura e
+nunca é modificada.
+
+O rescan é uma atualização preservadora, não uma substituição: ele insere arquivos novos, atualiza
+os conhecidos no mesmo caminho (reutilizando o `media_id`, inclusive após um arquivo ausente
+reaparecer) e marca como ausentes os que deixaram de aparecer. Nenhum rescan exclui registros,
+reescreve a identidade de mídia ou apaga o estado associado.
 
 O catálogo Go adota uma política fail-closed e persistente para remoções. Uma remoção
 explícita é gravada como tombstone em `media_removal`, chaveado pelo caminho relativo canônico
@@ -74,5 +80,29 @@ mesmo que o arquivo reapareça no disco depois. A remoção não apaga a linha d
 qualquer dado associado, e repetir a remoção é idempotente. Um arquivo que deixou de aparecer
 no scan também deixa de ser autorizado por `/api/media`, ainda que exista uma resposta ou
 referência antiga em cache.
+
+## Estudo
+
+O progresso é sempre do usuário autenticado: nenhuma rota aceita um `owner_id` vindo do
+cliente, então uma sessão só lê e escreve o próprio progresso. Posição de retomada e
+conclusão são independentes — avançar não desfaz a conclusão e concluir não move o ponto de
+retomada — e reenviar um valor idêntico não altera o instante da última mudança.
+
+| Método | Rota | Autenticação | Finalidade |
+| --- | --- | --- | --- |
+| `GET` | `/api/study/recent?limit=N` | Sessão | Lista o progresso do usuário, do mais recente ao mais antigo (padrão 20, teto fixo de 100) |
+| `GET` | `/api/study/progress?media_id=...` | Sessão | Lê a posição e a conclusão do usuário em uma mídia conhecida |
+| `POST` | `/api/study/position` | Sessão | Aceita `{ "media_id": "...", "position_seconds": 0 }` e grava o ponto de retomada |
+| `POST` | `/api/study/completed` | Sessão | Aceita `{ "media_id": "...", "completed": true }` e marca ou desmarca a conclusão |
+
+Uma mídia conhecida sem progresso responde `200` com `recorded: false`; a ausência não é um
+erro. Uma mídia desconhecida no catálogo responde `404 media_not_found`, uma posição negativa
+responde `422 invalid_position` e uma consulta malformada responde `400 invalid_query`. As
+mutações exigem a mesma origem (CSRF) e uma sessão que ainda precise trocar as credenciais
+temporárias recebe `403 credentials_change_required`. Nenhuma rota grava `media`, `scan`,
+`library` ou a biblioteca física; a mídia marcada como ausente continua aceitando leitura e
+escrita de progresso. Uma mídia removida do catálogo também mantém a leitura e a escrita de
+progresso — a identidade sobrevive à remoção —, mas deixa de aparecer em
+`/api/study/recent`, como no núcleo de remoção.
 
 Para limites de arquitetura e deploy, consulte a [visão de arquitetura](../architecture/overview.md).

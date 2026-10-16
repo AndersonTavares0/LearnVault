@@ -1,11 +1,19 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { invoke } from '@tauri-apps/api/core';
 import { findLesson } from './router';
 import { DesktopStub, HttpTransport, normalizeCatalog, normalizeUser, type Transport } from './transport';
 
+// O Tauri só é carregado no desktop: fora dele o módulo é substituído pelo mock, de modo
+// que a suíte nunca toca `window.__TAURI_INTERNALS__`.
+vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
+
 describe('transport contract', () => {
 	it('exposes the HTTP transport seam without routing assumptions', () => {
-		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'rescan', 'updateCredentials', 'mediaUrl'];
-		expect(methods).toHaveLength(7);
+		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'config', 'catalog', 'chooseLibrary', 'rescan', 'updateCredentials', 'mediaUrl'];
+		expect(methods).toHaveLength(9);
+	});
+	it('does not offer native library selection over HTTP', async () => {
+		await expect(new HttpTransport().chooseLibrary()).rejects.toThrow('definida no servidor');
 	});
 	it('troca credenciais temporárias pelo contrato autenticado', async () => {
 		const user = { user_id: 'u1', username: 'novo', is_admin: true, must_change_credentials: false };
@@ -22,6 +30,13 @@ describe('transport contract', () => {
 	});
 	it('does not expose arbitrary desktop paths as media URLs', () => {
 		expect(new DesktopStub().mediaUrl('private/video.mp4')).toBeNull();
+	});
+	it('reports the HTTP platform as configured without any request', async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+		await expect(new HttpTransport().config()).resolves.toEqual({ configured: true });
+		expect(fetchMock).not.toHaveBeenCalled();
+		vi.unstubAllGlobals();
 	});
 	it('posts the admin rescan endpoint and maps a conflict', async () => {
 		const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
@@ -93,4 +108,101 @@ describe('transport contract', () => {
 		expect(catalog.categories[0].courses[0].modules[0].lessons[0].path).toBe('programming/go/basics/first');
 	});
 	it('rejects an unknown catalog shape with a controlled error', () => expect(() => normalizeCatalog({ nope: true })).toThrow('Resposta inválida do servidor'));
+});
+
+describe('desktop transport over IPC', () => {
+	beforeEach(() => { vi.mocked(invoke).mockReset(); });
+
+	it('loads the catalog through the desktop_catalog command without touching fetch', async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+		vi.mocked(invoke).mockResolvedValue({
+			complete: true,
+			loose_files: [],
+			categories: [{ title: 'Curso', path: 'cat', role: 'category', files: [], loose_files: [], children: [] }]
+		});
+
+		const catalog = await new DesktopStub().catalog();
+
+		expect(invoke).toHaveBeenCalledWith('desktop_catalog');
+		expect(fetchMock).not.toHaveBeenCalled();
+		expect(catalog.nodes[0].role).toBe('category');
+		expect(catalog.categories[0].title).toBe('Curso');
+		vi.unstubAllGlobals();
+	});
+
+	it('maps a known IPC code to its stable sanitized message, ignoring arbitrary text', async () => {
+		vi.mocked(invoke).mockRejectedValue({ code: 'catalog_unavailable', message: 'mensagem arbitrária em /mnt/cursos' });
+		await expect(new DesktopStub().catalog()).rejects.toThrow('catálogo indisponível');
+	});
+
+	it('falls back to a stable message for an unknown or missing IPC code', async () => {
+		vi.mocked(invoke).mockRejectedValue({ code: 'algo_desconhecido', message: 'CAMINHO privado /mnt/cursos' });
+		await expect(new DesktopStub().catalog()).rejects.toThrow('Não foi possível carregar o catálogo.');
+		vi.mocked(invoke).mockRejectedValue({ message: 'sem código /etc/shadow' });
+		await expect(new DesktopStub().catalog()).rejects.toThrow('Não foi possível carregar o catálogo.');
+	});
+
+	it('keeps credential changes unimplemented on the desktop', async () => {
+		const desktop: Transport = new DesktopStub();
+		await expect(desktop.updateCredentials('u', 'senha')).rejects.toThrow('ainda não implementado');
+	});
+
+	it('triggers an explicit desktop rescan through the command without touching fetch', async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+		vi.mocked(invoke).mockResolvedValue({ complete: true, inserted: 1 });
+
+		await expect(new DesktopStub().rescan()).resolves.toBeUndefined();
+
+		expect(invoke).toHaveBeenCalledWith('desktop_rescan');
+		expect(fetchMock).not.toHaveBeenCalled();
+		vi.unstubAllGlobals();
+	});
+
+	it('maps each stable desktop rescan error code to a sanitized message', async () => {
+		vi.mocked(invoke).mockRejectedValue({ code: 'rescan_in_progress', message: '/mnt/cursos em uso' });
+		await expect(new DesktopStub().rescan()).rejects.toThrow('Já existe uma indexação em andamento.');
+		vi.mocked(invoke).mockRejectedValue({ code: 'library_not_configured', message: '/mnt/cursos não configurada' });
+		await expect(new DesktopStub().rescan()).rejects.toThrow('Nenhuma biblioteca está configurada.');
+		vi.mocked(invoke).mockRejectedValue({ code: 'rescan_unavailable', message: 'falha em C:\\segredo\\cursos' });
+		await expect(new DesktopStub().rescan()).rejects.toThrow('Não foi possível indexar a biblioteca.');
+	});
+
+	it('falls back to a stable message for an unknown desktop rescan error code', async () => {
+		vi.mocked(invoke).mockRejectedValue({ code: 'algo_desconhecido', message: 'CAMINHO privado /mnt/cursos' });
+		await expect(new DesktopStub().rescan()).rejects.toThrow('Não foi possível indexar a biblioteca.');
+		vi.mocked(invoke).mockRejectedValue({ message: 'sem código /etc/shadow' });
+		await expect(new DesktopStub().rescan()).rejects.toThrow('Não foi possível indexar a biblioteca.');
+	});
+
+	it('reports the desktop as unconfigured through the desktop_config command', async () => {
+		vi.mocked(invoke).mockResolvedValue({ configured: false });
+		await expect(new DesktopStub().config()).resolves.toEqual({ configured: false });
+		expect(invoke).toHaveBeenCalledWith('desktop_config');
+	});
+
+	it('selects the library through the desktop command without sending a path', async () => {
+		vi.mocked(invoke).mockResolvedValue({ configured: true });
+		await expect(new DesktopStub().chooseLibrary()).resolves.toEqual({ configured: true });
+		// O webview apenas dispara o seletor nativo; nenhum caminho cruza o IPC.
+		expect(invoke).toHaveBeenCalledWith('desktop_select_library');
+	});
+
+	it('keeps the previous state when the user cancels the native picker', async () => {
+		vi.mocked(invoke).mockResolvedValue({ configured: false });
+		await expect(new DesktopStub().chooseLibrary()).resolves.toEqual({ configured: false });
+	});
+
+	it('maps a library selection error to a sanitized message without the path', async () => {
+		vi.mocked(invoke).mockRejectedValue({ code: 'library_root_invalid', message: '/mnt/cursos não é válido' });
+		await expect(new DesktopStub().chooseLibrary()).rejects.toThrow('A pasta escolhida não é uma biblioteca válida.');
+		vi.mocked(invoke).mockRejectedValue({ code: 'library_config_unavailable', message: 'falha em C:\\segredo' });
+		await expect(new DesktopStub().chooseLibrary()).rejects.toThrow('Não foi possível salvar a configuração do aplicativo.');
+	});
+
+	it('maps a sanitized desktop configuration error to its message', async () => {
+		vi.mocked(invoke).mockRejectedValue({ code: 'database_unavailable', message: 'banco de dados local indisponível' });
+		await expect(new DesktopStub().config()).rejects.toThrow('banco de dados local indisponível');
+	});
 });
