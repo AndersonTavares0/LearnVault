@@ -60,6 +60,50 @@ pub enum Error {
     )]
     LegacyGoDatabase,
 
+    /// Falha de entrada/saída durante a importação legada.
+    #[error("falha de {operation} no arquivo de importação {path}")]
+    LegacyImportIo {
+        /// Operação que falhou.
+        operation: String,
+        /// Caminho envolvido.
+        path: PathBuf,
+        /// Causa do sistema operacional.
+        #[source]
+        source: std::io::Error,
+    },
+
+    /// Um valor do banco Go não satisfaz o contrato de migração.
+    #[error("valor inválido na importação legada: {field} = {value}")]
+    LegacyImportInvalidValue {
+        /// Campo inválido.
+        field: String,
+        /// Valor recusado.
+        value: String,
+    },
+
+    /// Dois registros diferentes representam a mesma chave Rust.
+    #[error("colisão na importação legada para o caminho {path}")]
+    LegacyImportCollision {
+        /// Caminho normalizado em colisão.
+        path: String,
+    },
+
+    /// Uma linha legada aponta para uma entidade que não existe.
+    #[error("referência órfã na importação legada: {relation} = {key}")]
+    LegacyImportOrphan {
+        /// Relação que contém a referência.
+        relation: String,
+        /// Chave apontada.
+        key: String,
+    },
+
+    /// A importação seria ambígua porque um caminho é usado como mais de uma chave.
+    #[error("caminho inválido na importação legada: {path}")]
+    LegacyImportInvalidPath {
+        /// Caminho recusado.
+        path: String,
+    },
+
     /// Falha de SQL que não se enquadra nas variantes anteriores.
     #[error("erro de banco de dados")]
     Database(#[from] rusqlite::Error),
