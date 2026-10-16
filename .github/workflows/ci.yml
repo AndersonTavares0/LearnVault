@@ -118,9 +118,9 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: rust-${{ runner.os }}-1.99.0-${{ hashFiles('Cargo.lock') }}
+          key: rust-${{ runner.os }}-1.99.0-workspace-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
-            rust-${{ runner.os }}-1.99.0-
+            rust-${{ runner.os }}-1.99.0-workspace-
       - name: Cache cargo-llvm-cov
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -164,9 +164,9 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: rust-${{ runner.os }}-1.99.0-${{ hashFiles('Cargo.lock') }}
+          key: rust-${{ runner.os }}-1.99.0-desktop-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
-            rust-${{ runner.os }}-1.99.0-
+            rust-${{ runner.os }}-1.99.0-desktop-
       - name: Run clippy on the desktop crate
         run: cargo clippy -p learnvault-desktop --all-targets -- -D warnings
       - name: Run desktop tests
