@@ -1,0 +1,105 @@
+name: Dependabot safe auto-merge
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions: {}
+
+concurrency:
+  group: dependabot-automerge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  enable:
+    name: Enable safe auto-merge
+    if: >-
+      github.actor == 'dependabot[bot]' &&
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.base.repo.full_name == github.repository &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require dedicated Dependabot token
+        env:
+          DEPENDABOT_TOKEN: ${{ secrets.DEPENDABOT_AUTOMERGE_TOKEN }}
+        run: test -n "$DEPENDABOT_TOKEN"
+
+      - name: Read Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+        with:
+          github-token: ${{ secrets.DEPENDABOT_AUTOMERGE_TOKEN }}
+          alert-lookup: true
+
+      - name: Check patch/minor non-security single-dependency update
+        id: eligibility
+        env:
+          ALERT_STATE: ${{ steps.metadata.outputs.alert-state }}
+          UPDATED_DEPENDENCIES: ${{ steps.metadata.outputs.updated-dependencies-json }}
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+        run: |
+          set -euo pipefail
+          eligible=false
+          case "$UPDATE_TYPE" in
+            version-update:semver-patch|version-update:semver-minor) eligible=true ;;
+            *)
+              echo "Not an unattended patch/minor update: $UPDATE_TYPE"
+              ;;
+          esac
+          if [ -n "$ALERT_STATE" ] && [ "$ALERT_STATE" != "null" ]; then
+            echo "Security alert state is not eligible: $ALERT_STATE"
+            eligible=false
+          fi
+          if ! jq -e 'type == "array" and length == 1' <<<"$UPDATED_DEPENDENCIES" >/dev/null; then
+            echo "Grouped updates are not eligible: $UPDATED_DEPENDENCIES"
+            eligible=false
+          fi
+          echo "eligible=$eligible" >>"$GITHUB_OUTPUT"
+
+      - name: Confirm clean current pull request
+        if: steps.eligibility.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.DEPENDABOT_AUTOMERGE_TOKEN }}
+          EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          pr_json="$(gh api "repos/$REPOSITORY/pulls/$PR_NUMBER")"
+          test "$(jq -r '.base.ref' <<<"$pr_json")" = main
+          test "$(jq -r '.base.repo.full_name' <<<"$pr_json")" = "$REPOSITORY"
+          test "$(jq -r '.head.repo.full_name' <<<"$pr_json")" = "$REPOSITORY"
+          test "$(jq -r '.user.login' <<<"$pr_json")" = 'dependabot[bot]'
+          test "$(jq -r '.head.sha' <<<"$pr_json")" = "$EVENT_HEAD_SHA"
+          test "$(jq -r '.base.sha' <<<"$pr_json")" = "$EVENT_BASE_SHA"
+          files_json="$(gh api --paginate --slurp "repos/$REPOSITORY/pulls/$PR_NUMBER/files?per_page=100")"
+          disallowed_files="$(jq -r '
+            .[][] | .filename |
+            select(
+              . != "Cargo.lock" and
+              . != "Cargo.toml" and
+              . != "pnpm-lock.yaml" and
+              . != "package.json" and
+              . != "apps/web/package.json" and
+              . != "services/go/go.mod" and
+              . != "services/go/go.sum" and
+              (startswith("crates/") and endswith("/Cargo.toml") | not)
+            )
+          ' <<<"$files_json")"
+          test -z "$disallowed_files"
+          compare_json="$(gh api "repos/$REPOSITORY/compare/main...$EVENT_HEAD_SHA")"
+          test "$(jq -r '.status' <<<"$compare_json")" = ahead
+          test "$(jq -r '.behind_by' <<<"$compare_json")" = 0
+
+      - name: Queue native squash auto-merge
+        if: steps.eligibility.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.DEPENDABOT_AUTOMERGE_TOKEN }}
+          EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr merge "$PR_URL" --auto --squash --match-head-commit "$EVENT_HEAD_SHA"

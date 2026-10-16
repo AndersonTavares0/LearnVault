@@ -1871,7 +1871,7 @@ version = "0.0.0"
 dependencies = [
  "argon2",
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "getrandom 0.4.3",
  "http-body-util",
  "learnvault-core",
