@@ -17,6 +17,7 @@
 ## Validação
 
 - <!-- Liste somente comandos executados e seus resultados. -->
+- [ ] `pnpm verify` (ou os comandos individuais abaixo)
 - [ ] `pnpm install --frozen-lockfile`
 - [ ] `pnpm run check`
 - [ ] `pnpm run build`

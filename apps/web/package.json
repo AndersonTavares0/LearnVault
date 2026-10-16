@@ -13,6 +13,8 @@
   },
   "scripts": {
 		"check": "svelte-check --tsconfig ./tsconfig.json",
+		"dev": "vite",
+		"dev:tauri": "vite build --mode desktop --watch",
 		"build": "vite build",
 		"build:desktop": "vite build --mode desktop",
 		"test": "vitest run"

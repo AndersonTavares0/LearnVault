@@ -22,8 +22,10 @@ publish = false
 [dependencies]
 # Tauri 2.12.x. Os crates do Tauri não compartilham o número minor: `tauri` está em
 # 2.12.4 e `tauri-build` em 2.7.3, que é a versão de build mais recente da linha 2.
-# As versões resolvidas ficam travadas no `Cargo.lock` do workspace.
-tauri = "2.12.4"
+# As versões resolvidas ficam travadas no `Cargo.lock` do workspace. O CLI do Tauri
+# gerencia a lista `features` conforme o `tauri.conf.json` a cada `tauri dev`/`tauri build`;
+# mantê-la explícita evita que o manifesto seja reescrito no primeiro `pnpm dev:tauri`.
+tauri = { version = "2.12.4", features = [] }
 # Seletor nativo de diretórios, usado somente pelo Rust (não concedido ao webview).
 tauri-plugin-dialog = "2"
 # Núcleo compartilhado: catálogo e banco SQLite do domínio.
@@ -33,7 +35,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 [build-dependencies]
-tauri-build = "2.7.3"
+tauri-build = { version = "2.7.3", features = [] }
 
 [dev-dependencies]
 # Os testes de integração constroem bancos em memória e temporários via o núcleo.
