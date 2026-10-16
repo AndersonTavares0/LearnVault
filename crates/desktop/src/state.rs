@@ -17,9 +17,10 @@ use learnvault_core::Database;
 
 use crate::command::{LIBRARY_ID, catalog};
 use crate::config::{DesktopConfigDto, database_path};
-use crate::dto::{CatalogDto, RescanSummaryDto};
+use crate::dto::{CatalogDto, RecentStudyDto, RescanSummaryDto, StudyProgressDto};
 use crate::error::IpcError;
 use crate::library::{LibraryRoot, load_library_root, store_library_root};
+use crate::study;
 
 /// Estado Tauri do desktop: banco local e raiz da biblioteca.
 #[derive(Clone)]
@@ -103,6 +104,60 @@ impl DesktopState {
         *guard = Some(root);
 
         Ok(DesktopConfigDto { configured: true })
+    }
+
+    /// Lê o progresso de estudo do dono local em uma mídia conhecida.
+    ///
+    /// O dono é o identificador local fixo do desktop: o webview nunca o envia. A leitura
+    /// bloqueante do SQLite é serializada pelo cadeado do banco, como as demais operações
+    /// do estado, e não consulta nem altera o catálogo.
+    pub fn study_progress(&self, media_id: &str) -> Result<StudyProgressDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::progress(&database, media_id)
+    }
+
+    /// Registra a posição de retomada do dono local, preservando a conclusão.
+    ///
+    /// A regra de posição e conclusão independentes pertence ao núcleo; o estado apenas
+    /// delega com o dono fixo sob o cadeado do banco.
+    pub fn record_position(
+        &self,
+        media_id: &str,
+        position_seconds: i64,
+    ) -> Result<StudyProgressDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::record_position(&database, media_id, position_seconds)
+    }
+
+    /// Marca ou desmarca a conclusão do dono local, preservando a posição de retomada.
+    pub fn set_completed(
+        &self,
+        media_id: &str,
+        completed: bool,
+    ) -> Result<StudyProgressDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::set_completed(&database, media_id, completed)
+    }
+
+    /// Lista o progresso de estudo do dono local, do mais recente ao mais antigo.
+    ///
+    /// O limite é opcional: sem ele, o adaptador aplica o padrão do contrato e o teto do
+    /// núcleo continua valendo para qualquer valor recebido.
+    pub fn recent_study(&self, limit: Option<usize>) -> Result<RecentStudyDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::recent(&database, limit)
     }
 
     /// Reserva o estado de rescan, devolvendo um guarda que o libera no `Drop`.

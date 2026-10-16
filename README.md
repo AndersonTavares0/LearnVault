@@ -81,8 +81,9 @@ documentação. Arquivos de comunidade como `CONTRIBUTING.md`, `CODE_OF_CONDUCT.
 - Workspace Rust com um núcleo de domínio compartilhado em `crates/core` e um servidor Axum
   em `crates/server`.
 - O servidor Rust expõe autenticação, sessões, catálogo, mídia com `Range` e Study; o desktop
-  Tauri (`crates/desktop`, Fase 4) já tem fundação, configuração, catálogo, seleção de raiz e
-  rescan explícito, mas ainda não é um produto desktop completo.
+  Tauri (`crates/desktop`, Fase 4) já tem fundação, configuração, catálogo, seleção de raiz,
+  rescan explícito e Study por IPC com dono local fixo, mas ainda não é um produto desktop
+  completo.
 - SQLite no núcleo, com cadeia única de migrações.
 - A SPA em Svelte 5 + TypeScript + Vite tem roteamento por hash e dois builds que escolhem o
   transporte em tempo de compilação.

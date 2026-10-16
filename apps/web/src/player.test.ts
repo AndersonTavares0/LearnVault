@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDuration, selectPlayableMedia, srtToWebVtt, studySyncSupported, subtitleFormat } from './player';
+import { formatDuration, selectPlayableMedia, srtConversionSupported, srtToWebVtt, studySyncEnabled, studySyncSupported, subtitleFormat } from './player';
 
 describe('player media and subtitles', () => {
 	it('selects the first media that is not missing', () => {
@@ -22,7 +22,20 @@ describe('player media and subtitles', () => {
 		expect(formatDuration(3661)).toBe('1:01:01');
 		expect(formatDuration(-1)).toBe('0:00');
 	});
-	it('advertises study sync only on the HTTP transport build', () => {
-		expect(studySyncSupported).toBe(__LEARNVAULT_TRANSPORT__ === 'http');
+	it('advertises study sync on both transports and keeps SRT conversion on HTTP', () => {
+		// Os dois transportes implementam Study: o HTTP pelas rotas e o desktop pelos
+		// comandos IPC. A conversão de SRT sob demanda continua dependendo de `fetch`.
+		expect(studySyncSupported).toBe(true);
+		expect(srtConversionSupported).toBe(__LEARNVAULT_TRANSPORT__ === 'http');
+	});
+	it('only syncs study when the transport delivers a media source', () => {
+		// HTTP: a fonte acompanha a mídia, então o player sincroniza como antes.
+		expect(studySyncEnabled(true, 'm1', '/api/media?path=aula.mp4')).toBe(true);
+		// Desktop: a mídia existe no catálogo, mas o transporte não entrega fonte — sem
+		// reprodução não há posição real, então a barra de estudo permanece fechada.
+		expect(studySyncEnabled(true, 'm1', null)).toBe(false);
+		// Sem mídia conhecida ou com o estudo desabilitado, nada é sincronizado.
+		expect(studySyncEnabled(true, null, '/api/media?path=aula.mp4')).toBe(false);
+		expect(studySyncEnabled(false, 'm1', '/api/media?path=aula.mp4')).toBe(false);
 	});
 });

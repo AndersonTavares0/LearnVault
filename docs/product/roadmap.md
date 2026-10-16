@@ -19,6 +19,7 @@ A execução avança por fases, com um pull request por fase:
   - [x] Fase 4 (IPC de catálogo) — comandos `desktop_config` e `desktop_catalog` offline com ACL app-defined mínima, DTOs snake_case do catálogo e erros IPC sanitizados; mídia, autenticação, seleção da raiz da biblioteca e janelas reais continuam pendentes
   - [x] Fase 4 (seleção da raiz) — comando `desktop_select_library` sem argumentos aciona o seletor nativo no Rust e persiste a raiz canonicalizada de forma versionada e atômica no diretório de configuração do aplicativo, com revalidação no startup e biblioteca somente leitura; mídia, autenticação e janelas reais continuam pendentes
   - [x] Fase 4 (rescan da biblioteca) — comando `desktop_rescan` sem argumentos e assíncrono (`spawn_blocking`) indexa explicitamente a raiz persistida reutilizando `learnvault-core` (`rescan`/`RescanSummary`), com estado ocupado que serializa chamadas concorrentes por um erro estável (`rescan_in_progress`), raiz não configurada (`library_not_configured`) e raiz inacessível (`rescan_unavailable`) sanitizados; o rescan nunca é automático e a biblioteca permanece somente leitura. A entrega parcial de mídia está em #76 (Draft, não mesclada); mídia completa, autenticação e janelas reais continuam pendentes
+  - [x] Fase 4 (Study desktop) — comandos `desktop_study_progress`, `desktop_record_position`, `desktop_set_completed` e `desktop_recent_study`, assíncronos (`spawn_blocking`) e com ACL mínima, reutilizam `learnvault-core::study` com o dono local fixo resolvido no Rust — o webview nunca envia `owner_id` — e devolvem o mesmo contrato snake_case do HTTP (`recorded`, `updated_at`) com erros estáveis (`media_not_found`, `invalid_position`, `study_unavailable`). A SPA ativa Study nos dois transportes por `invoke`, sem `fetch`, mas mantém a barra do player fechada enquanto o transporte não entregar a mídia: sem reprodução não há posição real. A entrega parcial de mídia continua em #76 (Draft, não mesclada); mídia completa, autenticação e janelas reais continuam pendentes
 - [ ] Fase 5 — distribuição por plataforma e remoção do serviço Go
 
 ## Atual — fundação e catálogo
@@ -38,8 +39,9 @@ durante a reescrita.
 
 As entregas mescladas #86, #88, #90 e #91 alinham o contrato de Study entre o servidor Rust,
 a SPA web e o serviço Go de referência: progresso, posição de retomada, conclusão e histórico
-recente usam o mesmo contrato e os mesmos limites públicos. O desktop ainda não oferece esse
-fluxo.
+recente usam o mesmo contrato e os mesmos limites públicos. O desktop passou a expor esse
+contrato por IPC, com o dono local fixo resolvido no Rust, mas o player do desktop continua sem
+reprodução enquanto a entrega de mídia estiver em #76 (Draft, não mesclada).
 
 ## Próximo — ciclo de estudo utilizável
 

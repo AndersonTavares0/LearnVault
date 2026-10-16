@@ -5,6 +5,9 @@
 //!
 //! O comando de seleção da biblioteca não aceita argumentos: o webview apenas dispara o
 //! seletor nativo, que roda no Rust, e recebe de volta somente o booleano de configuração.
+//!
+//! Os comandos de estudo aceitam apenas dados do catálogo (`media_id`, posição, conclusão e
+//! limite). O dono do progresso é fixo no Rust: nenhum comando aceita `owner_id`.
 
 use std::path::PathBuf;
 
@@ -12,7 +15,7 @@ use learnvault_core::Database;
 use tauri::State;
 
 use crate::config::DesktopConfigDto;
-use crate::dto::{CatalogDto, RescanSummaryDto};
+use crate::dto::{CatalogDto, RecentStudyDto, RescanSummaryDto, StudyProgressDto};
 use crate::error::IpcError;
 use crate::state::DesktopState;
 
@@ -84,6 +87,73 @@ pub async fn desktop_rescan(state: State<'_, DesktopState>) -> Result<RescanSumm
     tauri::async_runtime::spawn_blocking(move || state.rescan())
         .await
         .map_err(|_| IpcError::rescan_unavailable())?
+}
+
+/// Comando IPC: lê o progresso de estudo do dono local em uma mídia conhecida.
+///
+/// O único argumento é o `media_id` vindo do catálogo: o dono é o identificador local fixo
+/// resolvido no Rust ([`crate::study::LOCAL_OWNER_ID`]) e nunca cruza o IPC. Como o
+/// catálogo, a leitura bloqueante do SQLite roda em `spawn_blocking` para não prender a
+/// main thread. Uma mídia conhecida sem progresso responde com `recorded: false`; uma
+/// mídia desconhecida vira o erro estável `media_not_found`.
+#[tauri::command]
+pub async fn desktop_study_progress(
+    state: State<'_, DesktopState>,
+    media_id: String,
+) -> Result<StudyProgressDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.study_progress(&media_id))
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// Comando IPC: registra a posição de retomada do dono local, preservando a conclusão.
+///
+/// O webview envia apenas `media_id` e `position_seconds` — nunca o dono. A regra de
+/// independência entre posição e conclusão, a validação da posição negativa e a
+/// idempotência de um valor repetido pertencem ao núcleo; o comando apenas delega em
+/// `spawn_blocking`.
+#[tauri::command]
+pub async fn desktop_record_position(
+    state: State<'_, DesktopState>,
+    media_id: String,
+    position_seconds: i64,
+) -> Result<StudyProgressDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.record_position(&media_id, position_seconds))
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// Comando IPC: marca ou desmarca a conclusão do dono local, preservando a posição.
+///
+/// O webview envia apenas `media_id` e `completed`; o dono permanece no Rust. Uma mídia
+/// desconhecida vira o erro estável `media_not_found` e nada é gravado.
+#[tauri::command]
+pub async fn desktop_set_completed(
+    state: State<'_, DesktopState>,
+    media_id: String,
+    completed: bool,
+) -> Result<StudyProgressDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.set_completed(&media_id, completed))
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// Comando IPC: lista o progresso de estudo do dono local, do mais recente ao mais antigo.
+///
+/// O limite é opcional; sem ele o adaptador aplica o padrão do contrato e o teto do núcleo
+/// continua valendo. O histórico é sempre do dono local: o webview não envia `owner_id`.
+#[tauri::command]
+pub async fn desktop_recent_study(
+    state: State<'_, DesktopState>,
+    limit: Option<usize>,
+) -> Result<RecentStudyDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.recent_study(limit))
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
 }
 
 /// Abre o seletor nativo de diretórios e devolve o caminho escolhido, se houver.

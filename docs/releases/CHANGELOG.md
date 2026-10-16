@@ -26,7 +26,20 @@ O formato segue o Keep a Changelog e as versões usam Semantic Versioning.
   de serem tratados como completos.
 - Paridade do ciclo de Study entre o servidor Rust, a SPA web e o serviço Go de referência:
   progresso, retomada, conclusão e histórico recente compartilham o mesmo contrato. O desktop
-  ainda não expõe Study.
+  expõe o mesmo contrato por IPC com o dono local fixo, sem entregar mídia ao player.
+- Progresso de estudo no desktop por IPC: os comandos `desktop_study_progress`,
+  `desktop_record_position`, `desktop_set_completed` e `desktop_recent_study`, assíncronos
+  (`spawn_blocking`) e com ACL app-defined mínima, reutilizam `learnvault-core::study` sem
+  duplicar regras. O dono do progresso é um identificador local fixo escolhido pelo Rust: nenhum
+  comando aceita `owner_id`, então o webview só lê e grava o progresso do dono local. Os
+  comandos recebem apenas `media_id`, posição, conclusão e limite, devolvem o mesmo contrato
+  snake_case do adaptador HTTP (`recorded`, `updated_at`) e traduzem as falhas para códigos
+  estáveis (`media_not_found`, `invalid_position`, `study_unavailable`, `database_unavailable`)
+  sem ecoar identificadores nem caminhos. Na SPA, o transporte desktop implementa Study por
+  `invoke` — sem `fetch` — e a barra de estudo do player só é habilitada quando o transporte
+  entrega uma fonte para a mídia; como o desktop ainda não entrega mídia, o player permanece sem
+  reprodução e sem prometer retomada. Limitação conhecida desta fatia: apenas um dono local, sem
+  sessão nem seletor de contas, e nenhuma entrega de mídia (fatia #76, Draft, não mesclada).
 - Fundação do aplicativo desktop em `crates/desktop` (Tauri 2.12.x): shell da SPA embutido por `frontendDist`, capability deny-by-default para a janela principal, CSP explícita e nenhum listener de rede ou plugin privilegiado.
 - IPC de catálogo e configuração no desktop: comandos `desktop_config` e `desktop_catalog` offline sobre o `learnvault-core`, com ACL app-defined mínima, DTOs snake_case do catálogo e estado offline determinístico ("biblioteca não configurada") que nunca oferece login no desktop. Autenticação e janelas reais continuam pendentes.
 - Seleção e persistência segura da raiz da biblioteca no desktop: o comando `desktop_select_library`, sem argumentos, aciona o seletor nativo via `tauri-plugin-dialog` interno ao Rust (não concedido ao webview) e devolve apenas `{ configured }`. A raiz é validada (existência, diretório, canonicalização, recusa de link/junction e leitura) e gravada de forma versionada, atômica e serializada (temporário exclusivo com `create_new` e substituição por `rename`, sem apagar antes) no diretório de configuração do aplicativo, fora da biblioteca e do SQLite; a biblioteca permanece somente leitura e revalidada no startup. O webview nunca envia nem recebe caminho. Autenticação e janelas reais continuam pendentes.
