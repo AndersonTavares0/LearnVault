@@ -379,6 +379,10 @@ mod tests {
                 "DROP TABLE library; CREATE TABLE library (library_id TEXT PRIMARY KEY NOT NULL, available INTEGER NOT NULL /* CHECK (available IN (0, 1)) */)",
             ),
             (
+                "case-altered check literal",
+                "DROP TABLE media; CREATE TABLE media (media_id TEXT PRIMARY KEY NOT NULL, library_id TEXT NOT NULL REFERENCES library (library_id) ON DELETE NO ACTION, relative_path TEXT NOT NULL, relative_path_key TEXT NOT NULL, size INTEGER NOT NULL, mtime INTEGER NOT NULL, availability TEXT NOT NULL CHECK (availability IN ('AVAILABLE', 'missing')), UNIQUE (library_id, relative_path_key))",
+            ),
+            (
                 "wrong foreign key action",
                 "DROP TABLE media; CREATE TABLE media (media_id TEXT PRIMARY KEY NOT NULL, library_id TEXT NOT NULL REFERENCES library (library_id) ON DELETE CASCADE, relative_path TEXT NOT NULL, relative_path_key TEXT NOT NULL, size INTEGER NOT NULL, mtime INTEGER NOT NULL, availability TEXT NOT NULL CHECK (availability IN ('available', 'missing')), UNIQUE (library_id, relative_path_key))",
             ),
@@ -421,6 +425,28 @@ mod tests {
             assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE, "{name}");
             assert_eq!(response.headers()["cache-control"], "no-store", "{name}");
         }
+    }
+
+    #[tokio::test]
+    async fn healthz_rejects_schema_sql_over_byte_bound() {
+        let temp = tempfile::tempdir().unwrap();
+        let state = AppState::new(config_fixture(&temp));
+        let comment = "é".repeat(40_000);
+        let setup = format!(
+            "DROP TABLE library; CREATE TABLE library (library_id TEXT PRIMARY KEY NOT NULL, available INTEGER NOT NULL CHECK (available IN (0, 1)) /*{comment}*/)",
+        );
+        {
+            let database = state.database.lock().await;
+            database.connection().execute_batch(&setup).unwrap();
+        }
+
+        let response = build_router(state)
+            .oneshot(Request::get("/api/healthz").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(response.headers()["cache-control"], "no-store");
     }
 
     #[tokio::test]

@@ -232,7 +232,7 @@ fn definition_matches(conn: &Connection, definition: &TableDefinition) -> Result
     // bounded definition instead of using substring matching, so comments and
     // quoted spoof text cannot satisfy the contract.
     let sql: Option<String> = conn.query_row(
-        "SELECT CASE WHEN length(sql) <= ?2 THEN sql ELSE NULL END
+        "SELECT CASE WHEN length(CAST(sql AS BLOB)) <= ?2 THEN sql ELSE NULL END
          FROM sqlite_master WHERE type = 'table' AND name = ?1",
         params![definition.name, MAX_SCHEMA_SQL_BYTES],
         |row| row.get(0),
@@ -435,7 +435,13 @@ fn tokenize_sql(sql: &str) -> Option<Vec<String>> {
                 { index += 1; }
             }
         }
-        let token = String::from_utf8_lossy(&bytes[start..index]).to_ascii_lowercase();
+        let token = if bytes[start] == b'\'' {
+            // SQL string literals are case-sensitive values, unlike keywords
+            // and identifiers. Preserve their exact UTF-8 bytes for CHECKs.
+            String::from_utf8_lossy(&bytes[start..index]).into_owned()
+        } else {
+            String::from_utf8_lossy(&bytes[start..index]).to_ascii_lowercase()
+        };
         tokens.push(token);
     }
     Some(tokens)
