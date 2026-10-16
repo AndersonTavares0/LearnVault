@@ -81,12 +81,15 @@ qualquer dado associado, e repetir a remoção é idempotente. Um arquivo que de
 no scan também deixa de ser autorizado por `/api/media`, ainda que exista uma resposta ou
 referência antiga em cache.
 
-O `GET /api/catalog` do servidor Rust expõe a mesma árvore recursiva canônica em dois campos:
-`nodes`, preferido pela SPA, e `categories`, mantido para os consumidores legados. Os dois
-carregam os mesmos nós e arquivos — `media_id`, caminho relativo completo, disponibilidade e
-verificação —, e o `desktop_catalog` expõe o mesmo par por IPC. A árvore projetada de
-categorias, cursos, módulos e aulas do serviço Go continua aceita como fallback durante a
-transição. O campo `nodes` é aditivo: revertê-lo não altera `categories` nem o serviço Go.
+O `GET /api/catalog` do servidor Rust expõe a árvore recursiva canônica em `nodes` — o
+contrato preferido pela SPA, com `media_id`, caminho relativo completo, disponibilidade e
+verificação em cada arquivo — e mantém `categories` na forma legada do serviço Go
+(`categories[].courses[].modules[].lessons[]`), para os consumidores antigos. Os dois campos
+são shapes diferentes de propósito: a projeção legada desce por nós intermediários e preserva
+as aulas e seus arquivos, enquanto o que não cabe na gramática legada — arquivos soltos de
+categoria, curso ou módulo e nós de topo que não são categoria — permanece apenas em `nodes`.
+O `desktop_catalog` expõe o mesmo par por IPC, e a SPA continua aceitando um payload apenas com
+`categories` no formato legado do serviço Go como fallback durante a transição.
 
 ## Estudo
 

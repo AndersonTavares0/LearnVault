@@ -38,8 +38,9 @@ struct CatalogResponse {
     loose_files: Vec<CatalogFileResponse>,
     /// Árvore recursiva canônica, o contrato preferido pela SPA.
     nodes: Vec<CatalogNodeResponse>,
-    /// Mesma árvore de `nodes`, mantida para os consumidores legados durante a transição.
-    categories: Vec<CatalogNodeResponse>,
+    /// Projeção legada do serviço Go (`categories[].courses[].modules[].lessons[]`),
+    /// mantida para os consumidores antigos durante a transição.
+    categories: Vec<LegacyCategoryResponse>,
 }
 
 #[derive(Serialize)]
@@ -50,6 +51,40 @@ struct CatalogNodeResponse {
     files: Vec<CatalogFileResponse>,
     loose_files: Vec<CatalogFileResponse>,
     children: Vec<CatalogNodeResponse>,
+}
+
+/// Categoria da projeção legada, na forma do serviço Go (só `courses`, sem `children`).
+#[derive(Serialize)]
+struct LegacyCategoryResponse {
+    title: String,
+    path: String,
+    courses: Vec<LegacyCourseResponse>,
+}
+
+/// Curso da projeção legada do serviço Go.
+#[derive(Serialize)]
+struct LegacyCourseResponse {
+    title: String,
+    path: String,
+    modules: Vec<LegacyModuleResponse>,
+}
+
+/// Módulo da projeção legada do serviço Go.
+#[derive(Serialize)]
+struct LegacyModuleResponse {
+    title: String,
+    path: String,
+    lessons: Vec<LegacyLessonResponse>,
+}
+
+/// Aula da projeção legada do serviço Go; os arquivos são classificados por tipo.
+#[derive(Serialize)]
+struct LegacyLessonResponse {
+    title: String,
+    path: String,
+    media: Vec<CatalogFileResponse>,
+    subtitles: Vec<CatalogFileResponse>,
+    materials: Vec<CatalogFileResponse>,
 }
 
 #[derive(Serialize)]
@@ -243,17 +278,107 @@ fn try_rescan_file_lock(path: &Path) -> Result<File, RescanFailure> {
 
 impl From<Catalog> for CatalogResponse {
     fn from(catalog: Catalog) -> Self {
-        // `nodes` e `categories` carregam a mesma árvore recursiva canônica produzida pelo
-        // núcleo: `nodes` é o contrato preferido pela SPA e `categories` permanece para os
-        // consumidores legados. A duplicação é deliberada e some quando o payload legado sair.
+        // `nodes` carrega a árvore recursiva canônica produzida pelo núcleo; `categories`
+        // mantém a projeção legada (categorias, cursos, módulos e aulas) do serviço Go para
+        // os consumidores antigos. São shapes diferentes de propósito: `nodes` é o contrato
+        // preferido e `categories` preserva a compatibilidade da transição.
         let nodes: Vec<CatalogNodeResponse> =
             catalog.categories.iter().cloned().map(Into::into).collect();
+        let categories = legacy_categories(&catalog.categories);
         Self {
             complete: catalog.complete,
             loose_files: catalog.loose_files.into_iter().map(Into::into).collect(),
             nodes,
-            categories: catalog.categories.into_iter().map(Into::into).collect(),
+            categories,
         }
+    }
+}
+
+/// Projeta a árvore canônica na forma legada do serviço Go
+/// (`categories[].courses[].modules[].lessons[]`).
+///
+/// A projeção desce por nós intermediários de papel desconhecido e por módulos direto sob a
+/// categoria para que nenhuma aula seja descartada. O que não cabe na gramática legada
+/// (arquivos soltos de categoria/curso/módulo e nós de topo que não são categoria) continua
+/// disponível, sem perda, na árvore canônica `nodes`.
+fn legacy_categories(nodes: &[CatalogNode]) -> Vec<LegacyCategoryResponse> {
+    nodes
+        .iter()
+        .filter(|node| node.role == NodeRole::Category)
+        .map(legacy_category)
+        .collect()
+}
+
+fn legacy_category(node: &CatalogNode) -> LegacyCategoryResponse {
+    LegacyCategoryResponse {
+        title: node.title.clone(),
+        path: node.path.clone(),
+        courses: node
+            .children
+            .iter()
+            .map(|child| legacy_course_entry(node, child))
+            .collect(),
+    }
+}
+
+/// Uma aula direto sob a categoria não tem curso físico: sintetiza o curso com o título da
+/// categoria, como a projeção da SPA, para não perder a aula.
+fn legacy_course_entry(category: &CatalogNode, child: &CatalogNode) -> LegacyCourseResponse {
+    if child.role == NodeRole::Lesson {
+        LegacyCourseResponse {
+            title: category.title.clone(),
+            path: category.path.clone(),
+            modules: vec![legacy_module(child)],
+        }
+    } else {
+        legacy_course(child)
+    }
+}
+
+fn legacy_course(node: &CatalogNode) -> LegacyCourseResponse {
+    LegacyCourseResponse {
+        title: node.title.clone(),
+        path: node.path.clone(),
+        modules: node.children.iter().map(legacy_module).collect(),
+    }
+}
+
+fn legacy_module(node: &CatalogNode) -> LegacyModuleResponse {
+    LegacyModuleResponse {
+        title: node.title.clone(),
+        path: node.path.clone(),
+        lessons: legacy_lessons(node),
+    }
+}
+
+/// Aulas de um módulo: desce por qualquer nó intermediário (grupo ou papel desconhecido)
+/// para que a gramática legada nunca descarte uma aula da subárvore.
+fn legacy_lessons(node: &CatalogNode) -> Vec<LegacyLessonResponse> {
+    if node.role == NodeRole::Lesson {
+        vec![legacy_lesson(node)]
+    } else {
+        node.children.iter().flat_map(legacy_lessons).collect()
+    }
+}
+
+fn legacy_lesson(node: &CatalogNode) -> LegacyLessonResponse {
+    let mut media = Vec::new();
+    let mut subtitles = Vec::new();
+    let mut materials = Vec::new();
+    for file in node.files.iter().chain(node.loose_files.iter()) {
+        let dto = CatalogFileResponse::from(file.clone());
+        match file.kind {
+            MediaKind::Media => media.push(dto),
+            MediaKind::Subtitle => subtitles.push(dto),
+            MediaKind::Material => materials.push(dto),
+        }
+    }
+    LegacyLessonResponse {
+        title: node.title.clone(),
+        path: node.path.clone(),
+        media,
+        subtitles,
+        materials,
     }
 }
 

@@ -126,24 +126,35 @@ fn catalog_dto_uses_the_snake_case_spa_contract() {
     assert_eq!(json["loose_files"][0]["kind"], "material");
     assert_eq!(json["loose_files"][0]["availability"], "missing");
     assert_eq!(json["loose_files"][0]["unverified"], true);
+
+    // `categories` mantém a projeção legada do serviço Go
+    // (`categories[].courses[].modules[].lessons[]`), não a árvore recursiva: um consumidor
+    // antigo lê `courses`/`modules`/`lessons` e nunca `children`/`role`.
     assert_eq!(json["categories"][0]["title"], "Curso");
     assert_eq!(json["categories"][0]["path"], "cat");
-    assert_eq!(json["categories"][0]["role"], "category");
-    assert_eq!(json["categories"][0]["files"], serde_json::json!([]));
-    assert_eq!(json["categories"][0]["loose_files"], serde_json::json!([]));
-    assert_eq!(json["categories"][0]["children"][0]["role"], "lesson");
-    assert_eq!(
-        json["categories"][0]["children"][0]["files"][0]["kind"],
-        "media"
+    assert!(
+        json["categories"][0].get("courses").is_some(),
+        "categories precisa da lista legada de cursos"
     );
-    assert_eq!(
-        json["categories"][0]["children"][0]["files"][0]["availability"],
-        "available"
+    assert!(
+        json["categories"][0].get("children").is_none(),
+        "categories não pode expor a árvore recursiva: {json}"
     );
-    // O contrato canônico recursivo também é exposto em `nodes`, idêntico a `categories`,
-    // preservando a identidade de mídia, os caminhos relativos, a disponibilidade e a
-    // verificação dos arquivos. A SPA prefere `nodes`; `categories` continua legível.
-    assert_eq!(json["nodes"], json["categories"]);
+    assert!(json["categories"][0].get("role").is_none());
+    let legacy_lesson = &json["categories"][0]["courses"][0]["modules"][0]["lessons"][0];
+    assert_eq!(legacy_lesson["path"], "cat/aula");
+    assert_eq!(legacy_lesson["media"][0]["media_id"], "m1");
+    assert_eq!(legacy_lesson["media"][0]["kind"], "media");
+    assert_eq!(legacy_lesson["media"][0]["availability"], "available");
+    assert_eq!(legacy_lesson["subtitles"], serde_json::json!([]));
+    assert_eq!(legacy_lesson["materials"], serde_json::json!([]));
+
+    // A árvore canônica recursiva continua em `nodes`, preservando a identidade de mídia, os
+    // caminhos relativos, a disponibilidade e a verificação dos arquivos.
+    assert_ne!(
+        json["nodes"], json["categories"],
+        "os shapes canônico e legado não podem ser idênticos"
+    );
     let node = &json["nodes"][0];
     assert_eq!(node["title"], "Curso");
     assert_eq!(node["path"], "cat");
@@ -173,7 +184,7 @@ fn every_core_enum_maps_to_a_stable_string() {
         });
         let json = serde_json::to_value(dto).unwrap();
         assert_eq!(
-            json["categories"][0]["role"], expected,
+            json["nodes"][0]["role"], expected,
             "papel {role:?} precisa ser estável"
         );
     }

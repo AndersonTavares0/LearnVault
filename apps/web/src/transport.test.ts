@@ -254,6 +254,57 @@ describe('transport contract', () => {
 		});
 		expect(catalog.categories[0].courses[0].modules[0].lessons[0].path).toBe('Cat/Curso/Aula');
 	});
+	it('prefers canonical nodes when the legacy categories carry Go-shaped courses', () => {
+		// O servidor Rust passou a enviar `nodes` recursivo e `categories` na forma legada do
+		// serviço Go (`courses`/`modules`/`lessons`). A SPA usa `nodes` para montar a árvore e
+		// reprojeta as categorias, sem confundir os dois shapes.
+		const catalog = normalizeCatalog({
+			complete: true,
+			loose_files: [],
+			nodes: [{ title: 'DaNodes', path: 'cat', role: 'category', files: [], loose_files: [], children: [] }],
+			categories: [{ title: 'DaCategories', path: 'cat', courses: [{ title: 'Curso', path: 'cat/curso', modules: [{ title: 'Mod', path: 'cat/curso/mod', lessons: [{ title: 'Aula', path: 'cat/curso/mod/aula', media: [{ name: 'v.mp4', path: 'cat/curso/mod/aula/v.mp4', size: 1 }], subtitles: [], materials: [] }] }] }] }]
+		});
+		expect(catalog.nodes[0].title).toBe('DaNodes');
+		// categories é reprojetada a partir de nodes, não copiada do payload legado.
+		expect(catalog.categories[0].title).toBe('DaNodes');
+	});
+	it('keeps a node of an unknown role in the canonical tree instead of dropping it', () => {
+		// Um papel desconhecido (por exemplo um `group` futuro) não pode sumir: a árvore
+		// canônica o preserva com seus arquivos, e a projeção legada desce por ele.
+		const catalog = normalizeCatalog({
+			nodes: [{
+				title: 'Cat', path: 'cat', role: 'category', files: [], loose_files: [],
+				children: [{
+					title: 'Grupo', path: 'cat/grupo', role: 'group',
+					files: [{ name: 'guia.pdf', path: 'cat/grupo/guia.pdf', size: 2, kind: 'material' }],
+					loose_files: [], children: []
+				}]
+			}]
+		});
+		expect(catalog.nodes[0].children[0].role).toBe('group');
+		expect(catalog.nodes[0].children[0].files[0].path).toBe('cat/grupo/guia.pdf');
+		// A projeção mantém o arquivo do nó desconhecido em vez de descartá-lo.
+		expect(catalog.categories[0].courses[0].looseFiles.map((file) => file.path)).toEqual(['cat/grupo/guia.pdf']);
+	});
+	it('keeps an unknown file kind instead of dropping it from the lesson projection', () => {
+		// Um `kind` que a SPA ainda não conhece não pode fazer o arquivo desaparecer: a árvore
+		// canônica preserva o valor original e a projeção o trata como material (catch-all).
+		const catalog = normalizeCatalog({
+			nodes: [{
+				title: 'Cat', path: 'cat', role: 'category', files: [], loose_files: [],
+				children: [{
+					title: 'Aula', path: 'cat/aula', role: 'lesson',
+					files: [{ name: 'extra.bin', path: 'cat/aula/extra.bin', size: 1, kind: 'bonus' }],
+					loose_files: [], children: []
+				}]
+			}]
+		});
+		expect(catalog.nodes[0].children[0].files[0].kind).toBe('bonus');
+		const projected = catalog.categories[0].courses[0].modules[0].lessons[0];
+		expect(projected.media).toEqual([]);
+		expect(projected.subtitles).toEqual([]);
+		expect(projected.materials.map((file) => file.path)).toEqual(['cat/aula/extra.bin']);
+	});
 	it('rejects an explicit null root loose_files instead of treating it as absent', () => {
 		expect(() => normalizeCatalog({ nodes: [], categories: [], loose_files: null })).toThrow('Resposta inválida do servidor');
 		expect(() => normalizeCatalog({ nodes: [], looseFiles: null })).toThrow('Resposta inválida do servidor');

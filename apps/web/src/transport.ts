@@ -109,7 +109,9 @@ function lesson(title: string, path: string, files: FileEntry[]): Lesson {
 		title, path,
 		media: files.filter((file) => file.kind === 'media'),
 		subtitles: files.filter((file) => file.kind === 'subtitle'),
-		materials: files.filter((file) => file.kind === 'material')
+		// `materials` é o balde catch-all da gramática legada: um `kind` desconhecido (ou
+		// ausente) não pode fazer um arquivo útil sumir da aula.
+		materials: files.filter((file) => file.kind !== 'media' && file.kind !== 'subtitle')
 	};
 }
 

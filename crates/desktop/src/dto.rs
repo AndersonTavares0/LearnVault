@@ -20,8 +20,9 @@ pub struct CatalogDto {
     pub loose_files: Vec<CatalogFileDto>,
     /// Árvore recursiva canônica, o contrato preferido pela SPA.
     pub nodes: Vec<CatalogNodeDto>,
-    /// Mesma árvore de `nodes`, mantida para os consumidores legados durante a transição.
-    pub categories: Vec<CatalogNodeDto>,
+    /// Projeção legada do serviço Go (`categories[].courses[].modules[].lessons[]`),
+    /// mantida para os consumidores antigos durante a transição.
+    pub categories: Vec<LegacyCategoryDto>,
 }
 
 /// Nó da árvore do catálogo.
@@ -39,6 +40,54 @@ pub struct CatalogNodeDto {
     pub loose_files: Vec<CatalogFileDto>,
     /// Nós filhos, ordenados por caminho.
     pub children: Vec<CatalogNodeDto>,
+}
+
+/// Categoria da projeção legada, na forma do serviço Go (só `courses`, sem `children`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct LegacyCategoryDto {
+    /// Título apresentado.
+    pub title: String,
+    /// Caminho relativo completo que identifica o nó.
+    pub path: String,
+    /// Cursos da categoria, na gramática legada.
+    pub courses: Vec<LegacyCourseDto>,
+}
+
+/// Curso da projeção legada do serviço Go.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct LegacyCourseDto {
+    /// Título apresentado.
+    pub title: String,
+    /// Caminho relativo completo que identifica o nó.
+    pub path: String,
+    /// Módulos do curso, na gramática legada.
+    pub modules: Vec<LegacyModuleDto>,
+}
+
+/// Módulo da projeção legada do serviço Go.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct LegacyModuleDto {
+    /// Título apresentado.
+    pub title: String,
+    /// Caminho relativo completo que identifica o nó.
+    pub path: String,
+    /// Aulas do módulo, na gramática legada.
+    pub lessons: Vec<LegacyLessonDto>,
+}
+
+/// Aula da projeção legada do serviço Go; os arquivos são classificados por tipo.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct LegacyLessonDto {
+    /// Título apresentado.
+    pub title: String,
+    /// Caminho relativo completo que identifica o nó.
+    pub path: String,
+    /// Arquivos de mídia da aula.
+    pub media: Vec<CatalogFileDto>,
+    /// Arquivos de legenda da aula.
+    pub subtitles: Vec<CatalogFileDto>,
+    /// Materiais da aula.
+    pub materials: Vec<CatalogFileDto>,
 }
 
 /// Arquivo do catálogo.
@@ -62,15 +111,17 @@ pub struct CatalogFileDto {
 
 impl From<Catalog> for CatalogDto {
     fn from(catalog: Catalog) -> Self {
-        // `nodes` e `categories` carregam a mesma árvore recursiva canônica produzida pelo
-        // núcleo: `nodes` é o contrato preferido pela SPA e `categories` permanece para os
-        // consumidores legados. A duplicação é deliberada e some quando o payload legado sair.
+        // `nodes` carrega a árvore recursiva canônica produzida pelo núcleo; `categories`
+        // mantém a projeção legada (categorias, cursos, módulos e aulas) do serviço Go para
+        // os consumidores antigos. São shapes diferentes de propósito: `nodes` é o contrato
+        // preferido e `categories` preserva a compatibilidade da transição.
         let nodes: Vec<CatalogNodeDto> = catalog
             .categories
             .iter()
             .cloned()
             .map(CatalogNodeDto::from)
             .collect();
+        let categories = legacy_categories(&catalog.categories);
         Self {
             complete: catalog.complete,
             loose_files: catalog
@@ -79,12 +130,96 @@ impl From<Catalog> for CatalogDto {
                 .map(CatalogFileDto::from)
                 .collect(),
             nodes,
-            categories: catalog
-                .categories
-                .into_iter()
-                .map(CatalogNodeDto::from)
-                .collect(),
+            categories,
         }
+    }
+}
+
+/// Projeta a árvore canônica na forma legada do serviço Go
+/// (`categories[].courses[].modules[].lessons[]`), usada pelos consumidores antigos.
+///
+/// A projeção desce por nós intermediários de papel desconhecido e por módulos direto sob a
+/// categoria para que nenhuma aula seja descartada. O que não cabe na gramática legada
+/// (arquivos soltos de categoria/curso/módulo e nós de topo que não são categoria) continua
+/// disponível, sem perda, na árvore canônica `nodes`.
+fn legacy_categories(nodes: &[CatalogNode]) -> Vec<LegacyCategoryDto> {
+    nodes
+        .iter()
+        .filter(|node| node.role == NodeRole::Category)
+        .map(legacy_category)
+        .collect()
+}
+
+fn legacy_category(node: &CatalogNode) -> LegacyCategoryDto {
+    LegacyCategoryDto {
+        title: node.title.clone(),
+        path: node.path.clone(),
+        courses: node
+            .children
+            .iter()
+            .map(|child| legacy_course_entry(node, child))
+            .collect(),
+    }
+}
+
+/// Uma aula direto sob a categoria não tem curso físico: sintetiza o curso com o título da
+/// categoria, como a projeção da SPA, para não perder a aula.
+fn legacy_course_entry(category: &CatalogNode, child: &CatalogNode) -> LegacyCourseDto {
+    if child.role == NodeRole::Lesson {
+        LegacyCourseDto {
+            title: category.title.clone(),
+            path: category.path.clone(),
+            modules: vec![legacy_module(child)],
+        }
+    } else {
+        legacy_course(child)
+    }
+}
+
+fn legacy_course(node: &CatalogNode) -> LegacyCourseDto {
+    LegacyCourseDto {
+        title: node.title.clone(),
+        path: node.path.clone(),
+        modules: node.children.iter().map(legacy_module).collect(),
+    }
+}
+
+fn legacy_module(node: &CatalogNode) -> LegacyModuleDto {
+    LegacyModuleDto {
+        title: node.title.clone(),
+        path: node.path.clone(),
+        lessons: legacy_lessons(node),
+    }
+}
+
+/// Aulas de um módulo: desce por qualquer nó intermediário (grupo ou papel desconhecido)
+/// para que a gramática legada nunca descarte uma aula da subárvore.
+fn legacy_lessons(node: &CatalogNode) -> Vec<LegacyLessonDto> {
+    if node.role == NodeRole::Lesson {
+        vec![legacy_lesson(node)]
+    } else {
+        node.children.iter().flat_map(legacy_lessons).collect()
+    }
+}
+
+fn legacy_lesson(node: &CatalogNode) -> LegacyLessonDto {
+    let mut media = Vec::new();
+    let mut subtitles = Vec::new();
+    let mut materials = Vec::new();
+    for file in node.files.iter().chain(node.loose_files.iter()) {
+        let dto = CatalogFileDto::from(file.clone());
+        match file.kind {
+            MediaKind::Media => media.push(dto),
+            MediaKind::Subtitle => subtitles.push(dto),
+            MediaKind::Material => materials.push(dto),
+        }
+    }
+    LegacyLessonDto {
+        title: node.title.clone(),
+        path: node.path.clone(),
+        media,
+        subtitles,
+        materials,
     }
 }
 
