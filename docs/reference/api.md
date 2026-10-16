@@ -1,6 +1,6 @@
 # Referência da API
 
-A implementação Go permanece a referência funcional. O servidor Rust expõe as mesmas APIs abaixo
+A implementação Go permanece a referência funcional e de rollback. O servidor Rust expõe as mesmas APIs abaixo
 e a SPA web usa o mesmo contrato de Study nos dois transportes. Todas as rotas usam JSON, salvo
 indicação contrária. A autenticação usa um cookie de sessão HttpOnly com SameSite=Strict.
 
@@ -18,7 +18,7 @@ uma origem HTTP(S) compatível, além de SameSite=Strict.
 ## Entrega da SPA no servidor Rust
 
 A entrega é opcional e fica desabilitada por padrão. Use `--web-root` apontando para o diretório
-gerado pelo build estático (`services/go/cmd/learnvault/web/build`), que contém o shell `200.html`. Arquivos
+gerado pelo build estático (`crates/server/web/build`), que contém o shell `200.html`. Arquivos
 existentes são servidos diretamente; caminhos sem extensão usam `200.html` como fallback; assets
 ausentes com extensão retornam 404, e caminhos `/api/*` nunca são convertidos em HTML. Se o shell
 não existir, o servidor retorna 503. O shell usa `Cache-Control: no-cache`; assets sob

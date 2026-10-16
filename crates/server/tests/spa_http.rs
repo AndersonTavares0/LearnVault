@@ -325,7 +325,7 @@ async fn csp_allows_the_downloaded_canonical_vite_shell() {
     let canonical_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("..")
         .join("..")
-        .join("services/go/cmd/learnvault/web/build");
+        .join("crates/server/web/build");
     let shell_path = canonical_root.join("200.html");
     assert!(
         shell_path.is_file(),

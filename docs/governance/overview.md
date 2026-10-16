@@ -65,8 +65,8 @@ A raiz mantém apenas `AGENTS.md`, `README.md`, `LICENSE`, `.dockerignore`, `.gi
 permanece incompleta: mídia, autenticação e janelas reais ainda são gates. A distribuição por
 plataforma e a remoção do serviço Go pertencem à Fase 5 e permanecem incompletas.
 
-Saída gerada (`services/go/cmd/learnvault/web/build`,
-`services/go/cmd/learnvault/web/desktop-build`, `target`, `node_modules` e dados/cache locais)
+Saída gerada (`crates/server/web/build`, `crates/desktop/frontend-dist`, `target`, `node_modules`
+e dados/cache locais)
 deve permanecer ignorada e não pode ser commitada.
 
 ## Limites do repositório
