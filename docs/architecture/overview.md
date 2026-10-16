@@ -22,7 +22,9 @@ diretório de configuração do aplicativo, fora da biblioteca e do SQLite; o co
 `desktop_rescan`, que indexa explicitamente a raiz persistida reutilizando o `learnvault-core`, com
 estado ocupado que serializa chamadas concorrentes e nunca dispara varredura automática; e o
 **protocolo de mídia de arquivos pequenos**, que entrega somente imagens/thumbnails e materiais
-pequenos por `learnvault-media://localhost/<media-id>`, com o webview apontando pelo `media_id`
+pequenos por `learnvault-media://localhost/<media-id>` — no Windows (WebView2) o webview pede
+`http://learnvault-media.localhost/<media-id>`, que o runtime reverte para esse esquema antes do
+handler —, com o webview apontando pelo `media_id`
 opaco (nunca por um caminho), allowlist de tipo de conteúdo, limite explícito de resposta e
 revalidação pelo `learnvault-core`. **Vídeo e áudio ficam fora deste protocolo** nesta fatia por
 causa da reprodução parcial incompatível no webview do Linux (`WebKitGTK`); legendas continuam no

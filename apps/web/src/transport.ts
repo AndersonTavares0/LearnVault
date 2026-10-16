@@ -24,6 +24,17 @@ export const STUDY_NOT_AVAILABLE = 'study_not_available';
 export const DESKTOP_MEDIA_SCHEME = 'learnvault-media';
 export const DESKTOP_MEDIA_HOST = 'localhost';
 
+// No Windows (WebView2, Chromium) um esquema customizado do Tauri só é resolvido na forma
+// `http://<esquema>.localhost`; o runtime reverte esse prefixo por requisição antes de
+// chamar o handler, que continua vendo `learnvault-media://localhost/...` (mesma reversão
+// no Android). No Linux (WebKitGTK) e no macOS (WKWebView) o esquema é resolvido direto.
+// Sem o prefixo correto o WebView2 não resolve `learnvault-media://` e a mídia pequena não
+// carrega. A detecção usa apenas o `userAgent` do webview atual, sem dependência nova.
+export function desktopMediaUrl(mediaId: string, userAgent: string): string {
+	const base = /Windows/i.test(userAgent) ? `http://${DESKTOP_MEDIA_SCHEME}.localhost` : `${DESKTOP_MEDIA_SCHEME}://${DESKTOP_MEDIA_HOST}`;
+	return `${base}/${encodeURIComponent(mediaId)}`;
+}
+
 export interface Transport {
 	me(): Promise<User | null>;
 	login(username: string, password: string): Promise<User>;
@@ -255,7 +266,7 @@ export class DesktopStub implements Transport {
 	// `mediaId` não é endereçável e o caminho cru nunca é usado.
 	mediaUrl(file: FileEntry) {
 		if (file.kind !== 'material' || !file.mediaId) return null;
-		return `${DESKTOP_MEDIA_SCHEME}://${DESKTOP_MEDIA_HOST}/${encodeURIComponent(file.mediaId)}`;
+		return desktopMediaUrl(file.mediaId, navigator.userAgent);
 	}
 }
 

@@ -29,6 +29,7 @@ O formato segue o Keep a Changelog e as versões usam Semantic Versioning.
 ### Correções
 
 - Catálogo recursivo preserva aulas e arquivos em qualquer profundidade, com rescan seguro contra resultados parciais.
+- Protocolo de mídia de arquivos pequenos no desktop: a SPA passa a endereçar `http://learnvault-media.localhost/<media-id>` no Windows (WebView2), a única forma que o WebView2 resolve para um esquema customizado; o runtime reverte para `learnvault-media://localhost/<media-id>` antes do handler, e Linux (WebKitGTK) e macOS (WKWebView) seguem com o esquema direto. Sem mudança de contrato, capability, CSP nem de transporte HTTP.
 
 ### Planejado
 
