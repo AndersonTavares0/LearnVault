@@ -340,7 +340,15 @@ mod tests {
             ("missing", "PRAGMA user_version = 0"),
             ("older", "PRAGMA user_version = 3"),
             ("newer", "PRAGMA user_version = 5"),
-            ("incompatible", "PRAGMA user_version = 4; DROP TABLE user"),
+            (
+                "missing required column",
+                "ALTER TABLE user RENAME COLUMN must_change_credentials TO changed",
+            ),
+            ("missing required table", "DROP TABLE session"),
+            (
+                "schema mismatch",
+                "DROP TABLE library; CREATE TABLE library (library_id TEXT PRIMARY KEY, available INTEGER NOT NULL)",
+            ),
         ] {
             let temp = tempfile::tempdir().unwrap();
             let state = AppState::new(config_fixture(&temp));

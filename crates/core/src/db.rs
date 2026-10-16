@@ -5,7 +5,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use rusqlite::Connection;
+use rusqlite::{Connection, params};
 use rusqlite::config::DbConfig;
 use rusqlite_migration::SchemaVersion;
 
@@ -80,15 +80,22 @@ impl Database {
             return Ok(false);
         }
 
-        let required_tables: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM sqlite_master
-             WHERE type = 'table' AND name IN
-             ('library', 'media', 'scan', 'study_state', 'user', 'session',
-              'scan_inaccessible', 'media_removal')",
+        for definition in REQUIRED_TABLES {
+            if !definition_matches(&self.conn, definition)? {
+                return Ok(false);
+            }
+        }
+        let index_sql: Option<String> = self.conn.query_row(
+            "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'session_expires_at_idx'",
             [],
             |row| row.get(0),
         )?;
-        Ok(required_tables == 8)
+        Ok(index_sql.is_some_and(|sql| {
+            sql.to_ascii_lowercase()
+                .split_whitespace()
+                .collect::<String>()
+                == "createindexsession_expires_at_idxonsession(expires_at)"
+        }))
     }
 
     fn from_connection(conn: Connection, persistent: bool) -> Result<Self> {
@@ -124,6 +131,152 @@ impl Database {
 
         Ok(Self { conn })
     }
+}
+
+struct TableDefinition {
+    name: &'static str,
+    columns: &'static [(&'static str, &'static str, bool, Option<&'static str>, i64)],
+    fragments: &'static [&'static str],
+}
+
+const REQUIRED_TABLES: &[TableDefinition] = &[
+    TableDefinition {
+        name: "library",
+        columns: &[("library_id", "TEXT", true, None, 1), ("available", "INTEGER", true, None, 0)],
+        fragments: &["check (available in (0, 1))"],
+    },
+    TableDefinition {
+        name: "media",
+        columns: &[
+            ("media_id", "TEXT", true, None, 1),
+            ("library_id", "TEXT", true, None, 0),
+            ("relative_path", "TEXT", true, None, 0),
+            ("relative_path_key", "TEXT", true, None, 0),
+            ("size", "INTEGER", true, None, 0),
+            ("mtime", "INTEGER", true, None, 0),
+            ("availability", "TEXT", true, None, 0),
+        ],
+        fragments: &[
+            "references library (library_id) on delete no action",
+            "check (availability in ('available', 'missing'))",
+            "unique (library_id, relative_path_key)",
+        ],
+    },
+    TableDefinition {
+        name: "scan",
+        columns: &[
+            ("scan_id", "INTEGER", false, None, 1),
+            ("library_id", "TEXT", true, None, 0),
+            ("status", "TEXT", true, None, 0),
+            ("completed_at", "INTEGER", true, None, 0),
+            ("complete", "INTEGER", true, Some("1"), 0),
+        ],
+        fragments: &[
+            "references library (library_id) on delete no action",
+            "check (status in ('completed', 'failed'))",
+            "check (complete in (0, 1))",
+        ],
+    },
+    TableDefinition {
+        name: "study_state",
+        columns: &[
+            ("owner_id", "TEXT", true, None, 1),
+            ("media_id", "TEXT", true, None, 0),
+            ("position_seconds", "INTEGER", true, Some("0"), 0),
+            ("completed", "INTEGER", true, None, 0),
+            ("updated_at", "INTEGER", true, None, 0),
+        ],
+        fragments: &[
+            "references media (media_id) on delete no action",
+            "check (completed in (0, 1))",
+            "primary key (owner_id, media_id)",
+        ],
+    },
+    TableDefinition {
+        name: "user",
+        columns: &[
+            ("user_id", "TEXT", true, None, 1),
+            ("username", "TEXT", true, None, 0),
+            ("password_hash", "TEXT", true, None, 0),
+            ("is_admin", "INTEGER", true, None, 0),
+            ("created_at", "INTEGER", true, None, 0),
+            ("must_change_credentials", "INTEGER", true, Some("0"), 0),
+        ],
+        fragments: &[
+            "unique collate nocase",
+            "check (is_admin in (0, 1))",
+            "check (must_change_credentials in (0, 1))",
+        ],
+    },
+    TableDefinition {
+        name: "session",
+        columns: &[
+            ("token_hash", "TEXT", true, None, 1),
+            ("user_id", "TEXT", true, None, 0),
+            ("expires_at", "INTEGER", true, None, 0),
+        ],
+        fragments: &["references user (user_id) on delete no action"],
+    },
+    TableDefinition {
+        name: "scan_inaccessible",
+        columns: &[
+            ("scan_id", "INTEGER", true, None, 1),
+            ("relative_path", "TEXT", true, None, 2),
+        ],
+        fragments: &["references scan (scan_id) on delete no action"],
+    },
+    TableDefinition {
+        name: "media_removal",
+        columns: &[
+            ("library_id", "TEXT", true, None, 1),
+            ("media_id", "TEXT", true, None, 2),
+            ("removed_at", "INTEGER", true, None, 0),
+        ],
+        fragments: &[
+            "references library (library_id) on delete no action",
+            "references media (media_id) on delete no action",
+        ],
+    },
+];
+
+fn definition_matches(conn: &Connection, definition: &TableDefinition) -> Result<bool> {
+    let sql: Option<String> = conn.query_row(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?1",
+        [definition.name],
+        |row| row.get(0),
+    )?;
+    let Some(sql) = sql else { return Ok(false) };
+    let sql = sql.to_ascii_lowercase().split_whitespace().collect::<String>();
+    if definition
+        .fragments
+        .iter()
+        .any(|fragment| !sql.contains(&fragment.replace(' ', "")))
+    {
+        return Ok(false);
+    }
+    let mut statement = conn.prepare(
+        "SELECT name, type, notnull, dflt_value, pk
+         FROM pragma_table_info(?1) ORDER BY cid",
+    )?;
+    let columns = statement
+        .query_map(params![definition.name], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i64>(2)? != 0,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, i64>(4)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(columns.len() == definition.columns.len()
+        && columns.iter().zip(definition.columns).all(|(actual, expected)| {
+            actual.0 == expected.0
+                && actual.1.eq_ignore_ascii_case(expected.1)
+                && actual.2 == expected.2
+                && actual.3.as_deref().map(str::trim) == expected.3.map(str::trim)
+                && actual.4 == expected.4
+        }))
 }
 
 /// Reconhece a assinatura do banco Go sem criar schema, alterar pragmas persistentes ou
