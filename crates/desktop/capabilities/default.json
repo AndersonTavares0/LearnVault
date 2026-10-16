@@ -1,0 +1,6 @@
+{
+  "identifier": "main-window",
+  "description": "Permissoes minimas do nucleo do Tauri para a janela principal do LearnVault desktop. Deny-by-default: alem do conjunto padrao do nucleo (app, event, window, webview, menu, tray, image, resources, path) so os dois comandos IPC app-defined desta fatia (desktop_config e desktop_catalog) sao concedidos. Sem shell, process, http, fs amplo, remote ou updater.",
+  "windows": ["main"],
+  "permissions": ["core:default", "allow-desktop-config", "allow-desktop-catalog"]
+}

@@ -1,5 +1,16 @@
 import type { FileEntry } from './transport';
 
+/**
+ * Indica se a conversão de legendas SRT sob demanda está disponível.
+ *
+ * O desktop é offline: o caminho que baixa o SRT com `fetch` só existe no build HTTP.
+ * A constante é resolvida em tempo de compilação por `__LEARNVAULT_TRANSPORT__`, para
+ * que o código do `fetch` saia do bundle desktop por dead-code elimination. A decisão
+ * fica fora do componente Svelte porque ali `===` vira uma chamada de runtime que o
+ * minificador não consegue dobrar.
+ */
+export const srtConversionSupported: boolean = __LEARNVAULT_TRANSPORT__ === 'http';
+
 export function selectPlayableMedia(media: FileEntry[]): FileEntry | null {
 	return media.find((file) => file.availability?.trim().toLowerCase() !== 'missing') ?? null;
 }

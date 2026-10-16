@@ -12,6 +12,13 @@ O repositório ainda contém a implementação em **Go com SQLite e SPA SvelteKi
 a implementação atual, a **referência funcional e visual** da reescrita, e será removida em pull
 request próprio quando o MVP em Rust cobrir os requisitos aprovados.
 
+A reescrita em Rust já entrega `crates/core`, `crates/server` e o `crates/desktop` com a
+**fundação** (crate Tauri 2 que embute a SPA por `frontendDist`, capability em deny-by-default e
+sem portas de rede) e a primeira **fatia de IPC**: os comandos `desktop_config` e
+`desktop_catalog`, com ACL app-defined mínima e o catálogo derivado do `learnvault-core` sobre um
+banco SQLite local, no diretório de dados do aplicativo. Rescan, entrega de mídia, autenticação,
+seleção da raiz da biblioteca e janelas reais ainda não existem no desktop.
+
 ```text
 Proxy HTTPS local
         |
@@ -50,7 +57,8 @@ Responsabilidades:
 - `crates/server` traduz o domínio para HTTP: autenticação, sessões, `Range`, cabeçalhos de
   segurança e entrega da SPA.
 - `crates/desktop` integra com o sistema de arquivos e entrega a mídia ao webview, sem
-  autenticação e sem portas de rede.
+  autenticação e sem portas de rede. Por enquanto expõe apenas o IPC de configuração e catálogo
+  sobre o banco local; a entrega de mídia pertence a uma fatia posterior.
 - `apps/web/` é uma única SPA em Svelte 5 + TypeScript + Vite, com roteamento por hash e dois
   builds que escolhem o transporte em tempo de compilação.
 
