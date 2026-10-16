@@ -7,7 +7,7 @@ rust-version.workspace = true
 
 [dependencies]
 axum = "0.8"
-argon2 = "0.5"
+argon2 = "0.6"
 base64 = "0.23"
 getrandom = "0.4"
 learnvault-core = { path = "../core" }
