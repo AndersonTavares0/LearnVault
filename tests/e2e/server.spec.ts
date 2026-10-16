@@ -15,6 +15,7 @@ type ServerFixture = {
 // A bounded grace period is only the escalation boundary; cleanup otherwise waits on
 // the child's close event rather than sleeping or abandoning a live server.
 const SHUTDOWN_GRACE_MS = 5_000;
+const HEALTH_REQUEST_TIMEOUT_MS = 1_000;
 
 function childClosed(process: ChildProcess) {
 	process.once('error', () => undefined);
@@ -82,7 +83,9 @@ async function waitForHealth(url: string, process: ChildProcess) {
 	while (Date.now() < deadline) {
 		if (process.exitCode !== null) throw new Error(`server exited before readiness (${process.exitCode})`);
 		try {
-			const response = await fetch(`${url}/api/healthz`);
+			const response = await fetch(`${url}/api/healthz`, {
+				signal: AbortSignal.timeout(HEALTH_REQUEST_TIMEOUT_MS)
+			});
 			if (response.ok) return;
 		} catch {
 			// The listener may still be starting.
