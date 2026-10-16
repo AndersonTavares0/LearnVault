@@ -168,9 +168,13 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
 	await expect(page.getByRole('button', { name: /Curso/ })).toBeVisible();
 
+	const videoRequest = page.waitForRequest((request) => {
+		const url = new URL(request.url());
+		return url.pathname === '/api/media' && url.searchParams.get('path') === 'Categoria/Curso/Aula.mp4';
+	});
 	await page.getByRole('button', { name: /Curso/ }).click();
 	await expect(page.getByRole('heading', { name: 'Curso' })).toBeVisible();
-	const videoSource = await page.locator('video').getAttribute('src');
+	const videoSource = (await videoRequest).url();
 	expect(videoSource).toMatch(/\/api\/media\?/);
 	const videoResponse = await page.request.get(new URL(videoSource as string, server.baseURL).toString());
 	await expect(videoResponse).toBeOK();
@@ -183,13 +187,13 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	await expect(materialResponse.body()).resolves.toEqual(Buffer.from('material-fixture'));
 
 	const traversal = await page.request.get(`${server.baseURL}/api/media?path=${encodeURIComponent('../outside.mp4')}`);
-	await expect(traversal).toHaveStatus(404);
+	expect(traversal.status()).toBe(404);
 
 	await page.getByRole('link', { name: 'Voltar ao catálogo' }).click();
 	await page.getByRole('button', { name: 'Sair' }).click();
 	await expect(page.getByRole('button', { name: 'Entrar' })).toBeVisible();
 	const afterLogoutMedia = await page.request.get(new URL(videoSource as string, server.baseURL).toString());
-	await expect(afterLogoutMedia).toHaveStatus(401);
+	expect(afterLogoutMedia.status()).toBe(401);
 	const afterLogoutCatalog = await page.request.get(`${server.baseURL}/api/catalog`);
-	await expect(afterLogoutCatalog).toHaveStatus(401);
+	expect(afterLogoutCatalog.status()).toBe(401);
 });
