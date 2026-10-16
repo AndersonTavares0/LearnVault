@@ -29,6 +29,24 @@ preferencial do desktop.
 - Release Please controla changelog e metadados do GitHub Release.
 - O workflow de publicação adiciona binários versionados e `SHA256SUMS` ao release existente.
 
+## Runner self-hosted de validação
+
+O runner persistente `rust-validation-114` da VM 114 do Proxmox não faz parte da CI cotidiana.
+A validação Rust oficial permanece no job `Rust tests and lints` do workflow `CI`, executado em
+`ubuntu-latest`. O runner Proxmox pode permanecer desligado para preservar recursos e evitar que
+um job fique aguardando um executor offline.
+
+Para reativá-lo futuramente, com autorização operacional:
+
+1. Ligue a VM 114 no Proxmox, sem recriar ou reprovisionar seus discos e configurações.
+2. Inicie o serviço do Actions Runner com o usuário não-root originalmente configurado.
+3. Gere uma credencial de registro temporária no GitHub e registre novamente o runner com o label
+   `rust-validation`, seguindo a documentação oficial do repositório.
+4. Verifique no GitHub que o runner está `online` antes de adicionar qualquer workflow que use
+   `runs-on: [self-hosted, linux, x64, rust-validation]`.
+5. Para desativá-lo novamente, remova primeiro o registro no GitHub com a credencial temporária,
+   depois pare o serviço e desligue a VM. Não apague arquivos, discos ou configurações da VM.
+
 ## Ferramentas de empacotamento
 
 O empacotamento segue o [ADR 0001](../architecture/adr/0001-reescrita-em-rust.md): NSIS no
@@ -80,22 +98,6 @@ CONTAINER_ENGINE=podman ./scripts/verify-rust-oci.sh
 - O servidor Rust ainda não possui interface de cache (`CACHE_DIR`); não há diretório de
   cache para validar nesta fase.
 - Não faz parte do CI e não substitui `cargo fmt`, `cargo clippy` e `cargo test`.
-
-## Validação Rust na VM 114
-
-A validação Rust na VM 114 é iniciada manualmente. Use o mecanismo já disponível para iniciar a
-VM e o runner, conforme administrado no ambiente; não há um comando Proxmox específico documentado
-neste repositório. Antes de disparar a execução, confirme que o runner com as labels
-`self-hosted`, `linux`, `x64` e `rust-validation` está online.
-
-Com o runner online, dispare manualmente o workflow a partir da `main` confiável:
-
-```sh
-gh workflow run "Rust validation on trusted main" --ref main
-```
-
-Um mecanismo equivalente de execução manual também pode ser usado. O workflow faz checkout
-explícito de `main` e não é disparado automaticamente por `push`.
 
 ## Modelo de configuração
 
