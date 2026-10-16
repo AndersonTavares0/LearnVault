@@ -479,11 +479,61 @@ func TestOpenMigratesLegacyGoDatabaseWithStudyProgressAdditively(t *testing.T) {
 	if exists != 1 {
 		t.Fatal("incremental migration did not create study_state")
 	}
+	if action := foreignKeyOnDelete(t, reopened, "study_state", "users"); action != "NO ACTION" {
+		t.Fatalf("study_state user FK on_delete = %q; want NO ACTION", action)
+	}
 	user, err := reopened.UserByName(ctx, "owner")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := reopened.RecordStudyPosition(ctx, user.ID, "cat/a.mp4", 12); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// foreignKeyOnDelete reads the declared ON DELETE action of the foreign key that `table`
+// holds toward `ref`, so a schema assertion does not depend on parsing DDL text.
+func foreignKeyOnDelete(t *testing.T, db *DB, table, ref string) string {
+	t.Helper()
+	rows, err := db.sql.Query(`PRAGMA foreign_key_list(` + table + `)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, seq int
+		var refTable, from, to, onUpdate, onDelete, match string
+		if err := rows.Scan(&id, &seq, &refTable, &from, &to, &onUpdate, &onDelete, &match); err != nil {
+			t.Fatal(err)
+		}
+		if refTable == ref {
+			return onDelete
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	t.Fatalf("no foreign key from %s to %s", table, ref)
+	return ""
+}
+
+// TestStudyStateForeignKeyPreservesProgressOnUserDelete prova a semântica de preservação:
+// a chave estrangeira para o usuário é `NO ACTION`, então excluir o usuário falha alto em
+// vez de apagar o progresso silenciosamente (não há rota de exclusão de usuário).
+func TestStudyStateForeignKeyPreservesProgressOnUserDelete(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	user := insertTestUser(t, db, "a")
+	if _, err := db.RecordStudyPosition(ctx, user, "cat/a.mp4", 12); err != nil {
+		t.Fatal(err)
+	}
+	if action := foreignKeyOnDelete(t, db, "study_state", "users"); action != "NO ACTION" {
+		t.Fatalf("study_state user FK on_delete = %q; want NO ACTION", action)
+	}
+	if _, err := db.sql.Exec(`DELETE FROM users WHERE id=?`, user); err == nil {
+		t.Fatal("deleting a user cascaded study progress; want NO ACTION preservation")
+	}
+	if _, found, err := db.StudyProgress(ctx, user, "cat/a.mp4"); err != nil || !found {
+		t.Fatalf("study progress not preserved after blocked user delete: found=%v err=%v", found, err)
 	}
 }

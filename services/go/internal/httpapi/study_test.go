@@ -3,10 +3,12 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -545,5 +547,154 @@ func TestStudyProgressIsIsolatedBetweenSessions(t *testing.T) {
 	}
 	if got := readBody(cookieB); got["position_seconds"] != float64(7) {
 		t.Fatalf("owner B read = %#v", got)
+	}
+}
+
+// TestStudyAbsentProgressMatchesContractJSON fixa o contrato da mídia conhecida sem
+// progresso: exatamente media_id, position_seconds 0, completed false, updated_at null e
+// recorded false, como na resposta ausente do servidor Rust.
+func TestStudyAbsentProgressMatchesContractJSON(t *testing.T) {
+	db, srv := openStudyServer(t)
+	cookie := studySessionFor(t, db)
+
+	recorder := httptest.NewRecorder()
+	srv.ServeHTTP(recorder, studyRequest(http.MethodGet, "/api/study/progress?media_id="+studyTestMedia, cookie, "", false))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d; want 200 (body %s)", recorder.Code, recorder.Body.String())
+	}
+	var got map[string]json.RawMessage
+	if err := json.Unmarshal(recorder.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{
+		"media_id":         `"` + studyTestMedia + `"`,
+		"position_seconds": "0",
+		"completed":        "false",
+		"updated_at":       "null",
+		"recorded":         "false",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("absent fields = %v; want exactly %v", got, want)
+	}
+	for key, value := range want {
+		if string(got[key]) != value {
+			t.Fatalf("absent %s = %s; want %s", key, got[key], value)
+		}
+	}
+}
+
+// TestStudyRejectsTrailingJSONData exige um único valor JSON no corpo, como o serde_json
+// do servidor Rust: dados após o objeto são um pedido malformado e nada é gravado.
+func TestStudyRejectsTrailingJSONData(t *testing.T) {
+	db, srv := openStudyServer(t)
+	cookie := studySessionFor(t, db)
+
+	for _, body := range []string{
+		`{"media_id":"` + studyTestMedia + `","position_seconds":5}{"media_id":"x"}`,
+		`{"media_id":"` + studyTestMedia + `","position_seconds":5} trailing`,
+	} {
+		recorder := httptest.NewRecorder()
+		srv.ServeHTTP(recorder, studyRequest(http.MethodPost, "/api/study/position", cookie, body, true))
+		if recorder.Code != http.StatusBadRequest {
+			t.Fatalf("trailing body %q = %d; want 400", body, recorder.Code)
+		}
+		if got := studyJSON(t, recorder)["error"]; got != "invalid_request" {
+			t.Fatalf("trailing body error = %#v; want invalid_request", got)
+		}
+	}
+
+	recent := httptest.NewRecorder()
+	srv.ServeHTTP(recent, studyRequest(http.MethodGet, "/api/study/recent", cookie, "", false))
+	items, ok := studyJSON(t, recent)["items"].([]any)
+	if !ok || len(items) != 0 {
+		t.Fatalf("trailing-data request persisted state: %#v", studyJSON(t, recent)["items"])
+	}
+}
+
+// TestStudyRejectsNonMediaCatalogFiles limita o progresso a mídia reproduzível: um arquivo
+// catalogado que é legenda ou material (PDF) não é um sujeito de estudo, e um `.ts`
+// pequeno é classificado como material pelo scanner. Nada disso é gravado.
+func TestStudyRejectsNonMediaCatalogFiles(t *testing.T) {
+	db := openTestDB(t)
+	const lesson = "cat/curso/modulo/aula"
+	value := catalog.Catalog{Nodes: []catalog.Node{{
+		Title: "cat", Path: "cat", Role: "category",
+		Children: []catalog.Node{{
+			Title: "aula", Path: lesson, Role: "lesson",
+			Files: []catalog.File{
+				{Name: "video.mp4", Path: lesson + "/video.mp4", Size: 10},
+				{Name: "movie.ts", Path: lesson + "/movie.ts", Size: 2 * 1024 * 1024},
+				{Name: "segment.ts", Path: lesson + "/segment.ts", Size: 512},
+				{Name: "captions.srt", Path: lesson + "/captions.srt", Size: 10},
+				{Name: "notes.pdf", Path: lesson + "/notes.pdf", Size: 10},
+			},
+		}},
+	}}}
+	if err := db.ReplaceCatalog(context.Background(), value); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.BootstrapAdmin(context.Background(), "owner", "a sufficiently long password"); err != nil {
+		t.Fatal(err)
+	}
+	srv := NewWithOptions(db, false)
+	cookie := studySessionFor(t, db)
+
+	for _, media := range []string{lesson + "/video.mp4", lesson + "/movie.ts"} {
+		recorder := httptest.NewRecorder()
+		srv.ServeHTTP(recorder, studyRequest(http.MethodPost, "/api/study/position", cookie, `{"media_id":"`+media+`","position_seconds":5}`, true))
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("media %s = %d; want 200 (body %s)", media, recorder.Code, recorder.Body.String())
+		}
+	}
+	for _, excluded := range []string{lesson + "/segment.ts", lesson + "/captions.srt", lesson + "/notes.pdf"} {
+		read := httptest.NewRecorder()
+		srv.ServeHTTP(read, studyRequest(http.MethodGet, "/api/study/progress?media_id="+excluded, cookie, "", false))
+		if read.Code != http.StatusNotFound {
+			t.Fatalf("non-media %s = %d; want 404 (body %s)", excluded, read.Code, read.Body.String())
+		}
+		write := httptest.NewRecorder()
+		srv.ServeHTTP(write, studyRequest(http.MethodPost, "/api/study/position", cookie, `{"media_id":"`+excluded+`","position_seconds":5}`, true))
+		if write.Code != http.StatusNotFound {
+			t.Fatalf("non-media write %s = %d; want 404", excluded, write.Code)
+		}
+	}
+}
+
+// TestStudyConcurrentSameKeyWritesAreSerialized prova a invariante do upsert sob
+// concorrência: várias escritas para o mesmo par dono/mídia terminam 200 sem duplicar a
+// linha, e a posição final é uma das escritas.
+func TestStudyConcurrentSameKeyWritesAreSerialized(t *testing.T) {
+	db, srv := openStudyServer(t)
+	cookie := studySessionFor(t, db)
+
+	const workers = 8
+	codes := make([]int, workers)
+	var waitGroup sync.WaitGroup
+	for position := 1; position <= workers; position++ {
+		waitGroup.Add(1)
+		go func(position int) {
+			defer waitGroup.Done()
+			body := fmt.Sprintf(`{"media_id":%q,"position_seconds":%d}`, studyTestMedia, position)
+			recorder := httptest.NewRecorder()
+			srv.ServeHTTP(recorder, studyRequest(http.MethodPost, "/api/study/position", cookie, body, true))
+			codes[position-1] = recorder.Code
+		}(position)
+	}
+	waitGroup.Wait()
+	for position, code := range codes {
+		if code != http.StatusOK {
+			t.Fatalf("concurrent write %d = %d; want 200", position+1, code)
+		}
+	}
+
+	recent := httptest.NewRecorder()
+	srv.ServeHTTP(recent, studyRequest(http.MethodGet, "/api/study/recent", cookie, "", false))
+	items, ok := studyJSON(t, recent)["items"].([]any)
+	if !ok || len(items) != 1 {
+		t.Fatalf("concurrent writes duplicated the row: %#v", studyJSON(t, recent)["items"])
+	}
+	finalPosition := items[0].(map[string]any)["position_seconds"].(float64)
+	if finalPosition < 1 || finalPosition > workers {
+		t.Fatalf("final position = %v; want one of the concurrent writes", finalPosition)
 	}
 }

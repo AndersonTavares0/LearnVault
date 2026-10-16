@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"io"
 	"mime"
 	"net/http"
 	"net/url"
@@ -365,6 +366,38 @@ func catalogContainsFile(files []catalog.File, clean string) bool {
 	return false
 }
 
+// catalogStudyMedia reports whether a canonical path is a study-eligible playable media
+// file in the persisted catalog. It walks the same canonical node tree as
+// catalogAllowsPath, but applies the scanner's media rule so subtitles and materials such
+// as PDFs are not accepted as study subjects.
+func catalogStudyMedia(value catalog.Catalog, clean string) bool {
+	if studyMediaFile(value.LooseFiles, clean) {
+		return true
+	}
+	return studyMediaNodes(value.Nodes, clean)
+}
+
+func studyMediaNodes(nodes []catalog.Node, clean string) bool {
+	for _, node := range nodes {
+		if studyMediaFile(node.Files, clean) || studyMediaFile(node.LooseFiles, clean) {
+			return true
+		}
+		if studyMediaNodes(node.Children, clean) {
+			return true
+		}
+	}
+	return false
+}
+
+func studyMediaFile(files []catalog.File, clean string) bool {
+	for _, file := range files {
+		if path, valid := normalizeCatalogPath(file.Path); valid && path == clean {
+			return catalog.IsMediaName(file.Name, file.Size)
+		}
+	}
+	return false
+}
+
 // normalizeCatalogPath delegates to the shared catalog normalizer so the media
 // authorization boundary and the removal tombstone agree on one path identity.
 func normalizeCatalogPath(value string) (string, bool) {
@@ -498,25 +531,30 @@ func (s *Server) studyUser(w http.ResponseWriter, r *http.Request) (storage.User
 	return user, true
 }
 
-// knownStudyMedia reports whether a canonical library-relative path is a media identity
-// the Go service can attach progress to. It reuses the single media authorization
-// boundary (the canonical catalog walk used by `/api/media`) and also accepts a path kept
-// by an explicit removal tombstone, mirroring the Rust core: removal hides media from the
+// knownStudyMedia reports whether a canonical library-relative path is a study-eligible
+// media identity. It reuses the canonical catalog node walk, but only accepts playable
+// media (the same scanner rule as `/api/media`'s classification), so subtitles and
+// materials such as PDFs are not valid study subjects. A path kept by an explicit removal
+// tombstone is also accepted, mirroring the Rust core: removal hides media from the
 // catalog but the identity survives, so progress stays readable and writable.
 func (s *Server) knownStudyMedia(ctx context.Context, mediaPath string) (bool, error) {
 	value, err := s.db.Catalog(ctx)
 	if err != nil {
 		return false, err
 	}
-	if catalogAllowsPath(value, mediaPath) {
+	if catalogStudyMedia(value, mediaPath) {
 		return true, nil
 	}
 	removed, err := s.db.RemovedMedia(ctx)
 	if err != nil {
 		return false, err
 	}
-	_, ok := removed[mediaPath]
-	return ok, nil
+	if _, ok := removed[mediaPath]; !ok {
+		return false, nil
+	}
+	// A tombstoned path no longer carries catalog metadata, so playability is decided by
+	// extension alone; subtitles and materials still stay unknown.
+	return catalog.IsMediaExtension(mediaPath), nil
 }
 
 // studyStateResponse is the client-facing progress of one media. updated_at is null when
@@ -540,8 +578,17 @@ func recordedStudyResponse(state storage.StudyProgress) studyStateResponse {
 	}
 }
 
+// absentStudyResponse mirrors the Rust absent-progress contract exactly: a known media
+// that was never studied answers 200 with position 0, completed false, a null updated_at
+// and recorded false, so "never studied" is distinguishable from "studied at zero".
 func absentStudyResponse(mediaPath string) studyStateResponse {
-	return studyStateResponse{MediaID: mediaPath, Recorded: false}
+	return studyStateResponse{
+		MediaID:         mediaPath,
+		PositionSeconds: 0,
+		Completed:       false,
+		UpdatedAt:       nil,
+		Recorded:        false,
+	}
 }
 
 func (s *Server) studyRecent(w http.ResponseWriter, r *http.Request) {
@@ -721,12 +768,17 @@ func parseRecentStudyLimit(query url.Values) (int, bool) {
 }
 
 // decodeStrictJSON rejects unknown fields and malformed bodies, matching the other API
-// handlers. A missing required field is rejected by the caller through a pointer field, so
-// a malformed mutation is never silently treated as a neutral value.
+// handlers, and requires the body to contain exactly one JSON value: trailing data is
+// rejected as serde_json does for the Rust API. A missing required field is rejected by the
+// caller through a pointer field, so a malformed mutation is never silently treated as a
+// neutral value.
 func decodeStrictJSON(w http.ResponseWriter, r *http.Request, target any) bool {
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
-	return decoder.Decode(target) == nil
+	if err := decoder.Decode(target); err != nil {
+		return false
+	}
+	return errors.Is(decoder.Decode(&struct{}{}), io.EOF)
 }
 
 func sameOrigin(r *http.Request) bool {

@@ -156,10 +156,27 @@ func fileKind(name string, size int64) string {
 	if subtitleExt[ext] {
 		return "subtitle"
 	}
-	if mediaExt[ext] && (ext != ".ts" || size >= 1024*1024) {
+	if IsMediaName(name, size) {
 		return "media"
 	}
 	return "material"
+}
+
+// IsMediaExtension reports whether a name has a playable media extension, ignoring the
+// `.ts` size rule (which needs file metadata). It is the extension-only half of the
+// scanner's media classification, used where a size is unavailable.
+func IsMediaExtension(name string) bool {
+	return mediaExt[strings.ToLower(filepath.Ext(name))]
+}
+
+// IsMediaName reports whether a file name is playable media — not a subtitle and not a
+// material such as a PDF — using the same extension and `.ts` size rule as the scanner.
+// The study boundary uses it so progress is only attached to playable media.
+func IsMediaName(name string, size int64) bool {
+	if !IsMediaExtension(name) {
+		return false
+	}
+	return !strings.EqualFold(filepath.Ext(name), ".ts") || size >= 1024*1024
 }
 
 // validateReadableTree is deliberately performed before building any result. A directory
