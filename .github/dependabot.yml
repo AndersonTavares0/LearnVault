@@ -57,3 +57,22 @@ updates:
         update-types:
           - minor
           - patch
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+      day: wednesday
+      time: "07:00"
+      timezone: America/Sao_Paulo
+    open-pull-requests-limit: 3
+    cooldown:
+      default-days: 7
+      semver-major-days: 21
+      semver-minor-days: 7
+      semver-patch-days: 3
+    groups:
+      rust-non-major:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
