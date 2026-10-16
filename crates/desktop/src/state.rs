@@ -75,6 +75,18 @@ impl DesktopState {
             .and_then(|guard| guard.clone())
     }
 
+    /// Toma o cadeado do banco local para uma leitura. Uso interno da entrega de mídia.
+    ///
+    /// O cadeado serializa a revalidação do catálogo com remoções concorrentes durante a
+    /// abertura da mídia, exatamente como no adaptador HTTP.
+    pub(crate) fn lock_database(
+        &self,
+    ) -> Result<std::sync::MutexGuard<'_, learnvault_core::Database>, IpcError> {
+        self.database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())
+    }
+
     /// Executa o seletor nativo e persiste a raiz escolhida com segurança.
     ///
     /// `pick` devolve o caminho bruto escolhido pelo usuário ou `None` quando o seletor é

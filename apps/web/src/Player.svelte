@@ -1,6 +1,6 @@
 <script lang="ts">
 	import LooseFiles from './LooseFiles.svelte';
-	import { formatDuration, selectPlayableMedia, srtConversionSupported, srtToWebVtt, studySyncEnabled, subtitleFormat } from './player';
+	import { desktopPlaybackUnavailable, formatDuration, selectPlayableMedia, srtConversionSupported, srtToWebVtt, studySyncEnabled, subtitleFormat } from './player';
 	import { createPositionSaver } from './study';
 	import { transport, type Lesson, type StudyProgress } from './transport';
 
@@ -8,7 +8,7 @@
 
 	const playable = $derived(selectPlayableMedia(lesson.media));
 	const mediaId = $derived(playable?.mediaId ?? null);
-	const source = $derived(playable ? transport.mediaUrl(playable.path) : null);
+	const source = $derived(playable ? transport.mediaUrl(playable) : null);
 	const syncEnabled = $derived(studySyncEnabled(studyEnabled, mediaId, source));
 
 	let video: HTMLVideoElement | null = $state(null);
@@ -37,7 +37,7 @@
 
 	$effect(() => {
 		const subtitle = lesson.subtitles[0];
-		const url = subtitle ? transport.mediaUrl(subtitle.path) : null;
+		const url = subtitle ? transport.mediaUrl(subtitle) : null;
 		let active = true;
 		let objectUrl: string | null = null;
 		captionSource = null;
@@ -123,6 +123,7 @@
 </script>
 {#if mediaError}<p class="error" role="alert">{mediaError}</p>
 {:else if source}<!-- svelte-ignore a11y_media_has_caption --><video controls preload="metadata" src={source} bind:this={video} bind:currentTime={currentTime} bind:duration={duration} ontimeupdate={handleTimeUpdate} onended={handleEnded} onerror={onMediaError}>{#if captionSource}<track kind="captions" src={captionSource} label="Legenda" default />{/if}</video>
+{:else if playable && desktopPlaybackUnavailable}<p class="empty" role="status">A reprodução de vídeo e áudio no desktop estará disponível em uma próxima versão; use o servidor para assistir.</p>
 {:else}<p class="empty" role="status">Esta aula não possui mídia disponível.</p>{/if}
 {#if syncEnabled}
 	<div class="study-bar" role="group" aria-label="Progresso da aula">
