@@ -50,6 +50,8 @@ jobs:
       - run: pnpm run build
       - run: pnpm run build:desktop
       - run: pnpm --filter learnvault-web test
+      - name: Plugin guard tests
+        run: node --test .opencode/plugins/main-branch-guard.test.mjs
       - run: pnpm audit --audit-level=low
       - uses: actions/upload-artifact@v7
         with:
