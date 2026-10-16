@@ -8,7 +8,7 @@
 .svelte-kit/
 node_modules/
 build/
-services/go/cmd/learnvault/web/build/
+crates/server/web/build/
 crates/desktop/frontend-dist/
 crates/desktop/gen/
 # Permissões de comando geradas por `tauri-build::AppManifest` a cada build.

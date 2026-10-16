@@ -10,7 +10,7 @@ desenvolvimento.
 | Alvo | Artefato | Uso | Status |
 | --- | --- | --- | --- |
 | Linux | binário nativo | Servidor, terminal e instalações leves | Disponível |
-| Self-hosted | imagem OCI Rust (Docker/Podman) | Deploy opcional em servidor | Em validação OCI/Compose |
+| Self-hosted | imagem OCI Go (Docker/Podman) | Deploy opcional em servidor | Disponível |
 | Windows | instalador `.exe` via NSIS | Execução local e instalação gerenciada | Automatizado, não assinado |
 | Desktop Linux | Flatpak | Formato Linux preferencial do desktop | Backend `xdg-portal` configurado; build e smoke test no sandbox pendentes |
 
@@ -21,8 +21,9 @@ habilitado no release automático; o Flatpak não é construído nem publicado a
 
 - O comando Go em `services/go/cmd/learnvault` é a fonte da verdade para builds executáveis da
   implementação atual. Na reescrita, cada binário Rust passa a ser a fonte da verdade do seu alvo.
-- A SPA é construída uma vez e embutida no executável.
-- As receitas de pacotes ficam em `deploy/packages/` e são consumidas pelo workflow de release.
+- A SPA é construída uma vez no artefato canônico `crates/server/web/build`. O serviço Go copia
+  essa saída para o caminho que usa em seus testes e empacotamento; isso é um contrato preparatório
+  para a futura cutover coordenada, não a remoção do serviço Go.
 - Definições de containers ficam em `deploy/container/`, `deploy/compose/` e `deploy/quadlet/`.
 - Containers não podem definir comportamento que o binário não possui.
 - O CI deve construir cada artefato de plataforma antes de montar instaladores.
@@ -87,13 +88,14 @@ COMPOSE="docker compose --env-file deploy/compose/.env.example -f deploy/compose
   biblioteca real.
 - Não faz parte do CI; é uma verificação manual.
 
-## Validação da imagem Rust (OCI/Compose)
+## Validação experimental da imagem Rust (OCI)
 
-Enquanto a reescrita em Rust avança, `deploy/container/Containerfile.rust`, Compose e
+Enquanto a reescrita em Rust avança, `deploy/container/Containerfile.rust` e
 `scripts/verify-rust-oci.sh` permitem validar localmente que o servidor Rust (`crates/server`)
-compila com a SPA e roda em um contêiner. A imagem Rust ainda está em validação e não é
-publicada; o serviço Go, seus serviços auxiliares e suas definições de CI/release permanecem
-no repositório para a transição.
+compila com a SPA canônica e roda em um contêiner. A receita Rust é explicitamente opt-in,
+experimental e não é publicada nem usada por Compose, Quadlet, CI ou release. O
+`deploy/container/Containerfile` continua sendo a imagem Go de produção estável/referência;
+o serviço Go permanece no repositório até a cutover coordenada final.
 
 ```sh
 ./scripts/verify-rust-oci.sh
@@ -112,8 +114,7 @@ CONTAINER_ENGINE=podman ./scripts/verify-rust-oci.sh
   recuperação após reinício com persistência dos dados e a remoção do contêiner ao final.
 - O servidor Rust ainda não possui interface de cache (`CACHE_DIR`); não há diretório de
   cache para validar nesta fase.
-- A validação OCI/Compose não faz parte do CI e não substitui `cargo fmt`, `cargo clippy` e
-  `cargo test`.
+- Não faz parte do CI e não substitui `cargo fmt`, `cargo clippy` e `cargo test`.
 
 ## Modelo de configuração
 
