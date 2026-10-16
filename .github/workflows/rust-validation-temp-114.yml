@@ -1,0 +1,36 @@
+name: Rust validation on trusted main
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trusted-main-rust-validation
+  cancel-in-progress: true
+
+jobs:
+  rust-validation:
+    name: Rust validation (self-hosted)
+    runs-on: [self-hosted, linux, x64, rust-validation]
+    timeout-minutes: 30
+    env:
+      CARGO_BUILD_JOBS: 1
+      CARGO_INCREMENTAL: 0
+      RUSTUP_TOOLCHAIN: 1.99.0
+    steps:
+      - name: Checkout trusted main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 1
+      - name: Require non-root runner
+        run: test "$(id -u)" -ne 0
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Run Clippy
+        run: cargo clippy --workspace --exclude learnvault-desktop --all-targets -- -D warnings
+      - name: Run Rust tests
+        run: cargo test --workspace --exclude learnvault-desktop
