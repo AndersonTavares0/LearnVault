@@ -299,6 +299,25 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn healthz_reports_unavailable_without_database_details() {
+        let temp = tempfile::tempdir().unwrap();
+        let state = AppState::new(config_fixture(&temp));
+        let app = build_router(state.clone());
+        let _database = state.database.clone().lock_owned().await;
+
+        let response = app
+            .oneshot(Request::get("/api/healthz").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(response.headers()["cache-control"], "no-store");
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json, serde_json::json!({"status": "unavailable"}));
+    }
+
+    #[tokio::test]
     async fn api_timeout_rejection_gets_no_store_cache_header() {
         let temp = tempfile::tempdir().unwrap();
         let router = build_router(AppState::new(config_fixture(&temp))).route(
