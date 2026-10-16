@@ -5,7 +5,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension, params};
 use rusqlite::config::DbConfig;
 use rusqlite_migration::SchemaVersion;
 
@@ -85,17 +85,19 @@ impl Database {
                 return Ok(false);
             }
         }
-        let index_sql: Option<String> = self.conn.query_row(
-            "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'session_expires_at_idx'",
-            [],
-            |row| row.get(0),
+        let table_count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM pragma_table_list
+             WHERE schema = 'main' AND type = 'table' AND name NOT LIKE 'sqlite_%'",
+            [], |row| row.get(0),
         )?;
-        Ok(index_sql.is_some_and(|sql| {
-            sql.to_ascii_lowercase()
-                .split_whitespace()
-                .collect::<String>()
-                == "createindexsession_expires_at_idxonsession(expires_at)"
-        }))
+        if table_count != REQUIRED_TABLES.len() as i64 || !index_matches(
+            &self.conn, "session", Some("session_expires_at_idx"), false,
+            &[("expires_at", "BINARY")],
+        )? {
+            return Ok(false);
+        }
+        Ok(unique_index_matches(&self.conn, "user", &[("username", "NOCASE")])?
+            && unique_index_matches(&self.conn, "media", &[("library_id", "BINARY"), ("relative_path_key", "BINARY")])?)
     }
 
     fn from_connection(conn: Connection, persistent: bool) -> Result<Self> {
@@ -136,14 +138,12 @@ impl Database {
 struct TableDefinition {
     name: &'static str,
     columns: &'static [(&'static str, &'static str, bool, Option<&'static str>, i64)],
-    fragments: &'static [&'static str],
 }
 
 const REQUIRED_TABLES: &[TableDefinition] = &[
     TableDefinition {
         name: "library",
-        columns: &[("library_id", "TEXT", true, None, 1), ("available", "INTEGER", true, None, 0)],
-        fragments: &["check (available in (0, 1))"],
+        columns: &[("library_id", "TEXT", true, None, 1), ("available", "INTEGER", true, None, 0)]
     },
     TableDefinition {
         name: "media",
@@ -155,12 +155,7 @@ const REQUIRED_TABLES: &[TableDefinition] = &[
             ("size", "INTEGER", true, None, 0),
             ("mtime", "INTEGER", true, None, 0),
             ("availability", "TEXT", true, None, 0),
-        ],
-        fragments: &[
-            "references library (library_id) on delete no action",
-            "check (availability in ('available', 'missing'))",
-            "unique (library_id, relative_path_key)",
-        ],
+        ]
     },
     TableDefinition {
         name: "scan",
@@ -170,12 +165,7 @@ const REQUIRED_TABLES: &[TableDefinition] = &[
             ("status", "TEXT", true, None, 0),
             ("completed_at", "INTEGER", true, None, 0),
             ("complete", "INTEGER", true, Some("1"), 0),
-        ],
-        fragments: &[
-            "references library (library_id) on delete no action",
-            "check (status in ('completed', 'failed'))",
-            "check (complete in (0, 1))",
-        ],
+        ]
     },
     TableDefinition {
         name: "study_state",
@@ -185,12 +175,7 @@ const REQUIRED_TABLES: &[TableDefinition] = &[
             ("position_seconds", "INTEGER", true, Some("0"), 0),
             ("completed", "INTEGER", true, None, 0),
             ("updated_at", "INTEGER", true, None, 0),
-        ],
-        fragments: &[
-            "references media (media_id) on delete no action",
-            "check (completed in (0, 1))",
-            "primary key (owner_id, media_id)",
-        ],
+        ]
     },
     TableDefinition {
         name: "user",
@@ -201,12 +186,7 @@ const REQUIRED_TABLES: &[TableDefinition] = &[
             ("is_admin", "INTEGER", true, None, 0),
             ("created_at", "INTEGER", true, None, 0),
             ("must_change_credentials", "INTEGER", true, Some("0"), 0),
-        ],
-        fragments: &[
-            "unique collate nocase",
-            "check (is_admin in (0, 1))",
-            "check (must_change_credentials in (0, 1))",
-        ],
+        ]
     },
     TableDefinition {
         name: "session",
@@ -214,16 +194,14 @@ const REQUIRED_TABLES: &[TableDefinition] = &[
             ("token_hash", "TEXT", true, None, 1),
             ("user_id", "TEXT", true, None, 0),
             ("expires_at", "INTEGER", true, None, 0),
-        ],
-        fragments: &["references user (user_id) on delete no action"],
+        ]
     },
     TableDefinition {
         name: "scan_inaccessible",
         columns: &[
             ("scan_id", "INTEGER", true, None, 1),
             ("relative_path", "TEXT", true, None, 2),
-        ],
-        fragments: &["references scan (scan_id) on delete no action"],
+        ]
     },
     TableDefinition {
         name: "media_removal",
@@ -231,52 +209,232 @@ const REQUIRED_TABLES: &[TableDefinition] = &[
             ("library_id", "TEXT", true, None, 1),
             ("media_id", "TEXT", true, None, 2),
             ("removed_at", "INTEGER", true, None, 0),
-        ],
-        fragments: &[
-            "references library (library_id) on delete no action",
-            "references media (media_id) on delete no action",
-        ],
+        ]
     },
 ];
 
 fn definition_matches(conn: &Connection, definition: &TableDefinition) -> Result<bool> {
-    let sql: Option<String> = conn.query_row(
-        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?1",
+    let shape: Option<(String, i64, i64, i64)> = conn.query_row(
+        "SELECT type, ncol, wr, strict FROM pragma_table_list
+         WHERE schema = 'main' AND name = ?1",
         [definition.name],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+    ).optional()?;
+    if shape != Some(("table".to_owned(), definition.columns.len() as i64, 0, 0)) {
+        return Ok(false);
+    }
+
+    // SQLite exposes CHECK expressions only through sqlite_master. Tokenize the
+    // bounded definition instead of using substring matching, so comments and
+    // quoted spoof text cannot satisfy the contract.
+    let sql: Option<String> = conn.query_row(
+        "SELECT CASE WHEN length(sql) <= ?2 THEN sql ELSE NULL END
+         FROM sqlite_master WHERE type = 'table' AND name = ?1",
+        params![definition.name, MAX_SCHEMA_SQL_BYTES],
         |row| row.get(0),
     )?;
     let Some(sql) = sql else { return Ok(false) };
-    let sql = sql.to_ascii_lowercase().split_whitespace().collect::<String>();
-    if definition
-        .fragments
-        .iter()
-        .any(|fragment| !sql.contains(&fragment.replace(' ', "")))
-    {
+    let expected_checks = expected_checks(definition.name)
+        .iter().map(|check| tokenize_sql(check)).collect::<Option<Vec<_>>>();
+    if check_expressions(&sql) != expected_checks {
+        return Ok(false);
+    }
+
+    let column_limit = definition.columns.len() as i64 + 1;
+    let mut statement = conn.prepare(
+        "SELECT cid, name, type, notnull, dflt_value, pk, hidden
+         FROM pragma_table_xinfo(?1) ORDER BY cid LIMIT ?2",
+    )?;
+    let columns = statement
+        .query_map(params![definition.name, column_limit], |row| Ok((
+            row.get::<_, i64>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?,
+            row.get::<_, i64>(3)? != 0, row.get::<_, Option<String>>(4)?,
+            row.get::<_, i64>(5)?, row.get::<_, i64>(6)?,
+        )))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    if columns.len() != definition.columns.len() || columns.iter().any(|column| column.6 != 0) {
+        return Ok(false);
+    }
+    if !columns.iter().zip(definition.columns).enumerate().all(|(cid, (actual, expected))| {
+        actual.0 == cid as i64 && actual.1 == expected.0
+            && actual.2.eq_ignore_ascii_case(expected.1) && actual.3 == expected.2
+            && actual.4.as_deref().map(str::trim) == expected.3.map(str::trim)
+            && actual.5 == expected.4
+    }) {
+        return Ok(false);
+    }
+
+    let expected_foreign_keys = expected_foreign_keys(definition.name);
+    let mut statement = conn.prepare(
+        "SELECT \"from\", \"table\", \"to\", on_update, on_delete
+         FROM pragma_foreign_key_list(?1) ORDER BY id, seq LIMIT ?2",
+    )?;
+    let foreign_keys = statement.query_map(
+        params![definition.name, expected_foreign_keys.len() as i64 + 1],
+        |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?, row.get::<_, String>(3)?, row.get::<_, String>(4)?)),
+    )?.collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(foreign_keys.len() == expected_foreign_keys.len()
+        && foreign_keys.iter().zip(expected_foreign_keys).all(|(actual, expected)| {
+            actual.0 == expected.0 && actual.1 == expected.1
+                && actual.2 == expected.2 && actual.3.eq_ignore_ascii_case("NO ACTION")
+                && actual.4.eq_ignore_ascii_case(expected.3)
+        }))
+}
+
+fn expected_checks(table: &str) -> &'static [&'static str] {
+    match table {
+        "library" => &["available in (0, 1)"],
+        "media" => &["availability in ('available', 'missing')"],
+        "scan" => &["status in ('completed', 'failed')", "complete in (0, 1)"],
+        "study_state" => &["completed in (0, 1)"],
+        "user" => &["is_admin in (0, 1)", "must_change_credentials in (0, 1)"],
+        _ => &[],
+    }
+}
+
+fn expected_foreign_keys(table: &str) -> &'static [(&'static str, &'static str, &'static str, &'static str)] {
+    match table {
+        "media" => &[("library_id", "library", "library_id", "NO ACTION")],
+        "scan" => &[("library_id", "library", "library_id", "NO ACTION")],
+        "study_state" => &[("media_id", "media", "media_id", "NO ACTION")],
+        "session" => &[("user_id", "user", "user_id", "NO ACTION")],
+        "scan_inaccessible" => &[("scan_id", "scan", "scan_id", "NO ACTION")],
+        "media_removal" => &[
+            ("library_id", "library", "library_id", "NO ACTION"),
+            ("media_id", "media", "media_id", "NO ACTION"),
+        ],
+        _ => &[],
+    }
+}
+
+fn index_matches(
+    conn: &Connection, table: &str, name: Option<&str>, unique: bool,
+    expected_columns: &[(&str, &str)],
+) -> Result<bool> {
+    let Some(name) = name else { return Ok(false) };
+    let index: Option<(i64, String, i64)> = conn.query_row(
+        "SELECT \"unique\", origin, partial FROM pragma_index_list(?1) WHERE name = ?2",
+        params![table, name], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    ).optional()?;
+    let Some((is_unique, origin, partial)) = index else { return Ok(false) };
+    if (is_unique != i64::from(unique)) || origin != "c" || partial != 0 {
         return Ok(false);
     }
     let mut statement = conn.prepare(
-        "SELECT name, type, notnull, dflt_value, pk
-         FROM pragma_table_info(?1) ORDER BY cid",
+        "SELECT name, collation FROM pragma_index_xinfo(?1)
+         WHERE key = 1 ORDER BY seqno LIMIT ?2",
     )?;
-    let columns = statement
-        .query_map(params![definition.name], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, i64>(2)? != 0,
-                row.get::<_, Option<String>>(3)?,
-                row.get::<_, i64>(4)?,
-            ))
-        })?
+    let columns = statement.query_map(params![name, expected_columns.len() as i64 + 1], |row| Ok((
+        row.get::<_, Option<String>>(0)?, row.get::<_, String>(1)?,
+    )))?.collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(columns.len() == expected_columns.len() && columns.iter().zip(expected_columns).all(|(actual, expected)|
+        actual.0.as_deref() == Some(expected.0) && actual.1.eq_ignore_ascii_case(expected.1)
+    ))
+}
+
+fn unique_index_matches(conn: &Connection, table: &str, expected_columns: &[(&str, &str)]) -> Result<bool> {
+    let mut statement = conn.prepare(
+        "SELECT name FROM pragma_index_list(?1)
+         WHERE \"unique\" = 1 AND origin = 'u' AND partial = 0 LIMIT 2",
+    )?;
+    let names = statement.query_map([table], |row| row.get::<_, String>(0))?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    Ok(columns.len() == definition.columns.len()
-        && columns.iter().zip(definition.columns).all(|(actual, expected)| {
-            actual.0 == expected.0
-                && actual.1.eq_ignore_ascii_case(expected.1)
-                && actual.2 == expected.2
-                && actual.3.as_deref().map(str::trim) == expected.3.map(str::trim)
-                && actual.4 == expected.4
-        }))
+    if names.len() != 1 { return Ok(false); }
+    let mut statement = conn.prepare(
+        "SELECT name, collation FROM pragma_index_xinfo(?1)
+         WHERE key = 1 ORDER BY seqno LIMIT ?2",
+    )?;
+    let columns = statement.query_map(params![names[0], expected_columns.len() as i64 + 1], |row| Ok((
+        row.get::<_, Option<String>>(0)?, row.get::<_, String>(1)?,
+    )))?.collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(columns.len() == expected_columns.len() && columns.iter().zip(expected_columns).all(|(actual, expected)|
+        actual.0.as_deref() == Some(expected.0) && actual.1.eq_ignore_ascii_case(expected.1)
+    ))
+}
+
+fn check_expressions(sql: &str) -> Option<Vec<Vec<String>>> {
+    let tokens = tokenize_sql(sql)?;
+    let mut checks = Vec::new();
+    let mut index = 0;
+    while index < tokens.len() {
+        if tokens[index] == "check" {
+            if tokens.get(index + 1).map(String::as_str) != Some("(") { return None; }
+            let start = index + 2;
+            let mut depth = 1;
+            let mut end = start;
+            while end < tokens.len() {
+                match tokens[end].as_str() {
+                    "(" => depth += 1,
+                    ")" => {
+                        depth -= 1;
+                        if depth == 0 { break; }
+                    }
+                    _ => {}
+                }
+                end += 1;
+            }
+            if depth != 0 { return None; }
+            checks.push(tokens[start..end].to_vec());
+            index = end;
+        }
+        index += 1;
+    }
+    Some(checks)
+}
+
+/// Tokenizes only the bounded schema definition. Comments are discarded and
+/// quoted literals remain one token, preventing comment/text spoofing.
+fn tokenize_sql(sql: &str) -> Option<Vec<String>> {
+    let bytes = sql.as_bytes();
+    let mut tokens = Vec::new();
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index].is_ascii_whitespace() { index += 1; continue; }
+        if bytes[index] == b'-' && bytes.get(index + 1) == Some(&b'-') {
+            index += 2;
+            while bytes.get(index).is_some_and(|byte| *byte != b'\n') { index += 1; }
+            continue;
+        }
+        if bytes[index] == b'/' && bytes.get(index + 1) == Some(&b'*') {
+            index += 2;
+            while index + 1 < bytes.len() && !(bytes[index] == b'*' && bytes[index + 1] == b'/') { index += 1; }
+            if index + 1 >= bytes.len() { return None; }
+            index += 2;
+            continue;
+        }
+        let start = index;
+        match bytes[index] {
+            b'\'' | b'"' | b'`' => {
+                let quote = bytes[index]; index += 1;
+                while index < bytes.len() {
+                    if bytes[index] == quote {
+                        if bytes.get(index + 1) == Some(&quote) { index += 2; continue; }
+                        index += 1; break;
+                    }
+                    index += 1;
+                }
+                if index > bytes.len() || bytes.get(index.saturating_sub(1)) != Some(&quote) { return None; }
+            }
+            b'[' => {
+                index += 1;
+                while index < bytes.len() && bytes[index] != b']' { index += 1; }
+                if index == bytes.len() { return None; }
+                index += 1;
+            }
+            b'(' | b')' | b',' | b';' => index += 1,
+            _ => {
+                while index < bytes.len() && !bytes[index].is_ascii_whitespace()
+                    && !matches!(bytes[index], b'(' | b')' | b',' | b';')
+                    && !(bytes[index] == b'/' && bytes.get(index + 1) == Some(&b'*'))
+                    && !(bytes[index] == b'-' && bytes.get(index + 1) == Some(&b'-'))
+                { index += 1; }
+            }
+        }
+        let token = String::from_utf8_lossy(&bytes[start..index]).to_ascii_lowercase();
+        tokens.push(token);
+    }
+    Some(tokens)
 }
 
 /// Reconhece a assinatura do banco Go sem criar schema, alterar pragmas persistentes ou
