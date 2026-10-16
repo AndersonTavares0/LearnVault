@@ -17,6 +17,9 @@
 		"build:desktop": "vite build --mode desktop",
 		"test": "vitest run"
   },
+  "dependencies": {
+		"@tauri-apps/api": "2.12.4"
+  },
   "devDependencies": {
 		"@sveltejs/vite-plugin-svelte": "^7.3.1",
 		"@types/node": "^24.0.0",

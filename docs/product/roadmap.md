@@ -15,6 +15,8 @@ A execução avança por fases, com um pull request por fase:
 - [x] Fase 3 — SPA Svelte 5 + TypeScript + Vite com dois builds
 - [x] Fase 3a — recusa segura de bancos Go legados; conversão automática permanece fora do escopo
 - [ ] Fase 4 — `crates/desktop` com Tauri 2, offline e sem portas de rede
+  - [x] Fase 4 (fundação) — crate `crates/desktop` no workspace, `frontendDist` embutido, capability deny-by-default e CSP explícita; IPC de domínio, mídia e janelas reais ainda pendentes
+  - [x] Fase 4 (IPC de catálogo) — comandos `desktop_config` e `desktop_catalog` offline com ACL app-defined mínima, DTOs snake_case do catálogo e erros IPC sanitizados; rescan, mídia, autenticação, seleção da raiz da biblioteca e janelas reais continuam pendentes
 - [ ] Fase 5 — distribuição por plataforma e remoção do serviço Go
 
 ## Atual — fundação e catálogo
