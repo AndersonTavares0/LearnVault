@@ -1,12 +1,21 @@
 # Primeiros passos
 
-O LearnVault exige Go 1.26+ e Node.js 24+ para desenvolvimento nativo. Docker e Podman
-são adaptadores opcionais de deploy.
+O LearnVault exige Rust 1.99 (definido em `rust-toolchain.toml`), Node.js 24+ e pnpm 11.28.5
+para o desenvolvimento atual. Go 1.26+ é necessário apenas para a implementação de referência
+em `services/go`. Docker e Podman são adaptadores opcionais de deploy.
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm run check
 pnpm run build
+cargo fmt --all -- --check
+cargo clippy --all-targets -- -D warnings
+cargo test --all
+```
+
+A implementação de referência em Go continua disponível:
+
+```sh
 go -C services/go test ./...
 go -C services/go run ./cmd/learnvault
 ```
@@ -19,5 +28,8 @@ legados `ADMIN_USERNAME`/`ADMIN_PASSWORD` são aceitos apenas como aliases de co
 Use secret file ou mecanismo equivalente do ambiente para valores configurados; nunca publique
 valores reais em documentação, compose ou logs. Use a fixture sintética em `testdata/`. Nunca aponte a
 automação para dados externos; a biblioteca deve permanecer somente leitura.
+
+O aplicativo desktop Tauri (`crates/desktop`, Fase 4) e a distribuição por plataforma (Fase 5)
+ainda não estão concluídos; este guia cobre apenas o núcleo Rust, o servidor e a SPA.
 
 Consulte o README do repositório para configuração e deploy opcional com Compose/Quadlet.

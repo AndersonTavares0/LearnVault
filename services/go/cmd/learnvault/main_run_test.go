@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -32,27 +33,36 @@ func TestRunStartsServerAndShutsDownOnContextCancellation(t *testing.T) {
 	cfg := testRunConfig(t)
 	cfg.AdminUser = "owner"
 	cfg.AdminPass = "a sufficiently long password"
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	finished := make(chan error, 1)
+	listenerReady := make(chan net.Listener, 1)
+	serveReady := make(chan struct{})
 	go func() {
-		finished <- run(ctx, cfg, func(string, string) (net.Listener, error) { return listener, nil })
+		finished <- run(ctx, cfg, func(network, address string) (net.Listener, error) {
+			listener, err := net.Listen(network, address)
+			if err != nil {
+				return nil, err
+			}
+			ready := &serveReadyListener{Listener: listener, ready: serveReady}
+			listenerReady <- ready
+			return ready, nil
+		})
 	}()
 
-	client := &http.Client{Timeout: 3 * time.Second}
-	var response *http.Response
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		response, err = client.Get("http://" + listener.Addr().String() + "/api/healthz")
-		if err == nil {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
+	var listener net.Listener
+	select {
+	case listener = <-listenerReady:
+	case err := <-finished:
+		t.Fatalf("run() before server became ready = %v", err)
 	}
+	select {
+	case <-serveReady:
+	case err := <-finished:
+		t.Fatalf("server stopped before accepting connections: %v", err)
+	}
+	client := &http.Client{Timeout: 3 * time.Second}
+	response, err := client.Get("http://" + listener.Addr().String() + "/api/healthz")
 	if err != nil {
 		t.Fatalf("server did not start: %v", err)
 	}
@@ -70,6 +80,17 @@ func TestRunStartsServerAndShutsDownOnContextCancellation(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("server did not stop after context cancellation")
 	}
+}
+
+type serveReadyListener struct {
+	net.Listener
+	ready chan<- struct{}
+	once  sync.Once
+}
+
+func (l *serveReadyListener) Accept() (net.Conn, error) {
+	l.once.Do(func() { close(l.ready) })
+	return l.Listener.Accept()
 }
 
 func TestRunReturnsListenErrors(t *testing.T) {

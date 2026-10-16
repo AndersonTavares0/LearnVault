@@ -43,8 +43,8 @@ entrada de deploy. O código da aplicação pertence a estas pastas:
 
 | Caminho | Responsabilidade |
 | --- | --- |
-| `crates/` | Espaço de trabalho Rust; `crates/core` concentra o domínio compartilhado (SQLite, catálogo, scanner, identidade de mídia e estado de estudo) |
-| `apps/web/` | Código-fonte e configuração da SPA SvelteKit (`src/`, `vite.config.ts`, `tsconfig.json`, `package.json`) |
+| `crates/` | Espaço de trabalho Rust; `crates/core` concentra o domínio compartilhado (SQLite, catálogo, scanner, identidade de mídia e estado de estudo) e `crates/server` concentra o servidor Axum |
+| `apps/web/` | Código-fonte e configuração da SPA Svelte 5 + Vite (`src/`, `vite.config.ts`, `tsconfig.json`, `package.json`) |
 | `services/go/` | Módulo Go de referência (executável, pacotes internos, migrações e saída embutida da SPA), em remoção gradual |
 | `testdata/` | Fixtures sintéticas pequenas |
 | `deploy/container/` | Definição da imagem OCI |
@@ -61,11 +61,13 @@ Arquivos de comunidade (`CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`) 
 fica em `.github/release-please/`. Os perfis específicos do OpenCode ficam em `.opencode/`.
 A raiz mantém apenas `AGENTS.md`, `README.md`, `LICENSE`, `.dockerignore`, `.gitignore`,
 `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, `package.json`, `pnpm-lock.yaml` e
-`pnpm-workspace.yaml`. Os crates `server` e `desktop` surgem nas suas fases correspondentes; só
-existe `crates/core` até lá.
+`pnpm-workspace.yaml`. O crate `desktop` (Tauri) pertence à Fase 4 e ainda não existe; a
+distribuição por plataforma e a remoção do serviço Go pertencem à Fase 5 e permanecem
+incompletas. `crates/core` e `crates/server` já existem.
 
-Saída gerada (`services/go/cmd/learnvault/web/build`, `apps/web/.svelte-kit`, `target`, `node_modules`
-e dados/cache locais) deve permanecer ignorada e não pode ser commitada.
+Saída gerada (`services/go/cmd/learnvault/web/build`,
+`services/go/cmd/learnvault/web/desktop-build`, `target`, `node_modules` e dados/cache locais)
+deve permanecer ignorada e não pode ser commitada.
 
 ## Limites do repositório
 

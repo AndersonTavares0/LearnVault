@@ -33,10 +33,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
+          cp LICENSE dist/LICENSE
           tag="${{ github.event.release.tag_name }}"
           for arch in amd64 arm64; do
              GOOS=linux GOARCH="$arch" CGO_ENABLED=0 go -C services/go build -trimpath -ldflags="-s -w -X main.version=$tag" -o "../dist/learnvault-linux-$arch" ./cmd/learnvault
-             tar -czf "dist/learnvault-linux-$arch.tar.gz" -C dist "learnvault-linux-$arch"
+             tar -czf "dist/learnvault-linux-$arch.tar.gz" -C dist "learnvault-linux-$arch" LICENSE
           done
           sha256sum dist/*.tar.gz > dist/SHA256SUMS
       - name: Upload release assets
