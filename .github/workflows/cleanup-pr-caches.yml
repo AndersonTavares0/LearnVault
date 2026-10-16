@@ -1,0 +1,46 @@
+# Limpa os caches de GitHub Actions de uma pull request quando ela é fechada,
+# liberando a cota de armazenamento de caches do repositório.
+# Rastreado pela Issue #71 (eficiência e custo da CI).
+# Sem checkout de código-fonte e sem segredos: usa apenas o GITHUB_TOKEN com o
+# privilégio mínimo necessário (`actions: write`).
+name: Cleanup PR caches
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  actions: write
+
+concurrency:
+  group: cleanup-pr-caches-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    name: Delete caches for the closed pull request
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Delete caches scoped to the pull request merge ref
+        env:
+          # Token automático do workflow; nenhum segredo é necessário.
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          # O número da PR chega por variável de ambiente (nunca interpolado no
+          # script) e é validado como dígitos antes de compor a ref.
+          if [[ ! "${PR_NUMBER}" =~ ^[0-9]+$ ]]; then
+            echo "::error::Unexpected pull request number: '${PR_NUMBER}'"
+            exit 1
+          fi
+
+          ref="refs/pull/${PR_NUMBER}/merge"
+          echo "Caches currently stored under ${ref}:"
+          gh cache list --ref "${ref}" --limit 100
+
+          # `--succeed-on-no-caches` evita falha quando a PR não gerou cache.
+          gh cache delete --all --ref "${ref}" --succeed-on-no-caches

@@ -88,6 +88,18 @@ pub enum Error {
         source: std::io::Error,
     },
 
+    /// A raiz configurada da biblioteca foi substituída por um link, junction ou ponto de
+    /// reparse depois de ter sido resolvida.
+    ///
+    /// A raiz já é entregue canonicalizada pela integração de plataforma. Se o componente
+    /// final virou um link, segui-lo autorizaria arquivos fora da biblioteca, então a
+    /// substituição é recusada em vez de resolvida.
+    #[error("a raiz da biblioteca é um link e não é seguida em {path}")]
+    LibraryRootIsLink {
+        /// Caminho informado como raiz da biblioteca.
+        path: PathBuf,
+    },
+
     /// Um caminho relativo da biblioteca é inválido ou tentaria escapar da raiz.
     #[error("caminho relativo inválido na biblioteca: {path}")]
     InvalidRelativePath {
