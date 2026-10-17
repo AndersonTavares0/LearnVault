@@ -61,18 +61,15 @@ Nenhum instalador copia a biblioteca física para os dados da aplicação ou par
 
 ## Limites de build
 
-- O comando Go em `services/go/cmd/learnvault` é a fonte da verdade para builds executáveis da
-  implementação atual. Na reescrita, cada binário Rust passa a ser a fonte da verdade do seu alvo.
-- A SPA é construída uma vez no artefato canônico `crates/server/web/build`. O serviço Go copia
-  essa saída para o caminho que usa em seus testes e empacotamento; isso é um contrato preparatório
-  para a futura cutover coordenada, não a remoção do serviço Go.
+- Cada binário Rust (`crates/server`, `crates/desktop`) é a fonte da verdade do seu alvo.
+- A SPA é construída uma vez no artefato canônico `crates/server/web/build` e `crates/desktop/frontend-dist`.
 - Definições de containers ficam em `deploy/container/`, `deploy/compose/` e `deploy/quadlet/`.
 - Containers não podem definir comportamento que o binário não possui.
 - O CI deve construir cada artefato de plataforma antes de montar instaladores.
 - Release Please controla changelog e metadados do GitHub Release.
 - O workflow de publicação adiciona binários versionados e `SHA256SUMS` ao release existente.
 - O workflow `.github/workflows/release.yml` é acionado quando o GitHub Release é publicado. Ele
-  exige uma tag estrita `vX.Y.Z`, constrói os assets Go Linux existentes e o instalador NSIS nativo
+  exige uma tag estrita `vX.Y.Z`, constrói os tarballs Linux do servidor Rust e o instalador NSIS nativo
   do Windows, e só então publica esses artefatos no release. O Flatpak está deliberadamente fora
   desse fluxo até que o bloqueio de permissões seja resolvido.
 - Os artefatos desktop são deliberadamente **não assinados**: nenhum certificado ou segredo de

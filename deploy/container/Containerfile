@@ -1,3 +1,12 @@
+# LearnVault Server OCI container definition (Rust).
+#
+# Build from the repository root:
+#   docker build -f deploy/container/Containerfile -t learnvault:latest .
+#
+# The build stages need network access for Rust and Node dependencies. The alpine
+# variant targets x86_64-unknown-linux-musl, and build-base supplies the C toolchain
+# required by rusqlite's bundled SQLite.
+
 FROM node:24-alpine AS web-build
 WORKDIR /src
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -6,20 +15,23 @@ RUN corepack enable && corepack install --global pnpm@11.28.5 && pnpm install --
 COPY apps/web ./apps/web
 RUN pnpm --filter learnvault-web run build
 
-FROM golang:1.26-alpine AS go-build
-WORKDIR /src/services/go
-COPY services/go/go.mod services/go/go.sum ./
-RUN go mod download
-COPY services/go ./
-COPY --from=web-build /src/crates/server/web/build ./cmd/learnvault/web/build
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/learnvault ./cmd/learnvault
+FROM rust:1.99-alpine AS rust-build
+RUN apk add --no-cache build-base
+WORKDIR /src
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+COPY --from=web-build /src/crates/server/web/build ./crates/server/web/build
+RUN cargo build --release --locked --package learnvault-server
 
 FROM alpine:3.24
-RUN apk add --no-cache ca-certificates wget && addgroup -S -g 10001 learnvault && adduser -S -D -H -u 10001 -G learnvault learnvault
+RUN apk add --no-cache ca-certificates wget \
+    && addgroup -S -g 10001 learnvault \
+    && adduser -S -D -H -u 10001 -G learnvault learnvault
 WORKDIR /app
-COPY --from=go-build --chown=10001:10001 /out/learnvault /app/learnvault
-ENV LISTEN_ADDR=0.0.0.0 PORT=8090 DATA_DIR=/data CACHE_DIR=/cache LIBRARY_DIR=/library COOKIE_SECURE=true
+COPY --from=rust-build --chown=10001:10001 /src/target/release/learnvault-server /app/learnvault-server
+COPY --from=rust-build --chown=10001:10001 /src/crates/server/web/build /app/web
 USER 10001:10001
 EXPOSE 8090
-HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 CMD wget -q -O - http://127.0.0.1:${PORT}/api/healthz >/dev/null || exit 1
-ENTRYPOINT ["/app/learnvault"]
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD wget -q -O - "http://127.0.0.1:${PORT:-8090}/api/healthz" >/dev/null || exit 1
+ENTRYPOINT ["/app/learnvault-server", "--web-root", "/app/web"]

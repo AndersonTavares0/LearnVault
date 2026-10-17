@@ -8,11 +8,10 @@ duas formas:
 
 ## Estado atual
 
-O estado atual combina o workspace Rust — `crates/server` para o servidor Axum, `crates/desktop`
-para a fundação Tauri offline e `apps/web` para a SPA Svelte 5 + Vite — com o núcleo compartilhado
-em `crates/core`. `services/go` é a implementação legada e a referência funcional/visual durante
-a transição; sua remoção ocorrerá em pull request próprio somente quando o MVP Rust cobrir os
-requisitos aprovados.
+O LearnVault é implementado no workspace Rust — `crates/server` para o servidor Axum, `crates/desktop`
+para a aplicação Tauri offline e `apps/web` para a SPA Svelte 5 + Vite — com o núcleo compartilhado
+em `crates/core`. O backend legado em Go foi integralmente removido na Fase 5, consolidando Rust como
+stack backend exclusiva do projeto.
 
 A reescrita em Rust já entrega `crates/core`, `crates/server` e o `crates/desktop` com a
 **fundação** (crate Tauri 2 que embute a SPA por `frontendDist`, capability em deny-by-default e

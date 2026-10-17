@@ -11,12 +11,9 @@ that area.
 
 ## Product and architecture
 
-- LearnVault is a self-hosted study library. The approved target architecture is a Rust
-  workspace with a shared `core`, an Axum server, a Tauri 2 desktop app, and SQLite. The
-  current Go + SvelteKit implementation is the functional and visual reference and remains
-  in place until the Rust MVP covers the approved requirements.
-- The repository is a typed monorepo: Rust code in `crates/`, the legacy Go module as a
-  self-contained unit in `services/go/` (use `go -C services/go ...`), and the SPA in
+- LearnVault is a self-hosted study library. The approved architecture is a Rust
+  workspace with a shared `core`, an Axum server, a Tauri 2 desktop app, and SQLite.
+- The repository is a typed monorepo: Rust code in `crates/`, and the SPA in
   `apps/web/` as a pnpm workspace member.
 - Read `docs/architecture/adr/0001-reescrita-em-rust.md` before architectural work.
 - Preserve the clean-room product policy: do not copy another product's code,
