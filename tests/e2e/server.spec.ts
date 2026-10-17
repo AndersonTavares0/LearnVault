@@ -1,0 +1,232 @@
+import { expect, test as base } from '@playwright/test';
+import { once } from 'node:events';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { spawn, type ChildProcess } from 'node:child_process';
+
+const ADMIN_PASSWORD = 'uma senha local muito segura';
+
+type ServerFixture = {
+	baseURL: string;
+	outsidePath: string;
+	stop: () => Promise<void>;
+};
+
+// A bounded grace period is only the escalation boundary; cleanup otherwise waits on
+// the child's close event rather than sleeping or abandoning a live server.
+const SHUTDOWN_GRACE_MS = 5_000;
+const HEALTH_REQUEST_TIMEOUT_MS = 1_000;
+
+function childClosed(process: ChildProcess) {
+	process.once('error', () => undefined);
+	return once(process, 'close').then(() => undefined);
+}
+
+async function waitForServerAddress(process: ChildProcess) {
+	const prefix = 'LEARNVAULT_READY ';
+	if (!process.stdout) throw new Error('server stdout is not available for readiness handoff');
+	let output = '';
+	return new Promise<string>((resolve, reject) => {
+		const cleanup = () => {
+			process.stdout?.off('data', onData);
+			process.off('close', onClose);
+			process.off('error', onError);
+		};
+		const onData = (chunk: Buffer | string) => {
+			output += chunk.toString();
+			for (const line of output.split(/\r?\n/).slice(0, -1)) {
+				if (line.startsWith(prefix)) {
+					cleanup();
+					resolve(line.slice(prefix.length).trim());
+					return;
+				}
+			}
+			output = output.split(/\r?\n/).at(-1) ?? '';
+		};
+		const onClose = () => {
+			cleanup();
+			reject(new Error(`server exited before readiness: ${output.trim()}`));
+		};
+		const onError = (error: Error) => {
+			cleanup();
+			reject(error);
+		};
+		process.stdout.on('data', onData);
+		process.once('close', onClose);
+		process.once('error', onError);
+	});
+}
+
+async function stopProcess(process: ChildProcess, closed: Promise<void>) {
+	if (process.exitCode !== null || process.signalCode !== null) {
+		await closed;
+		return;
+	}
+
+	process.kill('SIGTERM');
+	let timeout: NodeJS.Timeout | undefined;
+	const exited = await Promise.race([
+		closed.then(() => true),
+		new Promise<boolean>((resolve) => {
+			timeout = setTimeout(() => resolve(false), SHUTDOWN_GRACE_MS);
+		})
+	]);
+	if (timeout) clearTimeout(timeout);
+	if (!exited) {
+		process.kill('SIGKILL');
+		await closed;
+	}
+}
+
+async function waitForHealth(url: string, process: ChildProcess) {
+	const deadline = Date.now() + 30_000;
+	while (Date.now() < deadline) {
+		if (process.exitCode !== null) throw new Error(`server exited before readiness (${process.exitCode})`);
+		try {
+			const response = await fetch(`${url}/api/healthz`, {
+				signal: AbortSignal.timeout(HEALTH_REQUEST_TIMEOUT_MS)
+			});
+			if (response.ok) return;
+		} catch {
+			// The listener may still be starting.
+		}
+		await new Promise((resolve) => setTimeout(resolve, 100));
+	}
+	throw new Error('server did not become ready within 30 seconds');
+}
+
+async function startServer(): Promise<ServerFixture> {
+	const root = await mkdtemp(join(tmpdir(), 'learnvault-e2e-'));
+	const library = join(root, 'library');
+	const outsidePath = join(root, 'outside.mp4');
+	await writeFile(outsidePath, Buffer.from('outside-sentinel'));
+	await mkdir(join(library, 'Categoria', 'Curso'), { recursive: true });
+	await writeFile(join(library, 'Categoria', 'Curso', 'Aula.mp4'), Buffer.from('video-fixture'));
+	await writeFile(join(library, 'Categoria', 'Curso', 'Aula.vtt'), 'WEBVTT\n');
+	await writeFile(join(library, 'Categoria', 'Curso', 'Material.pdf'), Buffer.from('material-fixture'));
+
+	const webRoot = resolve(process.cwd(), 'services/go/cmd/learnvault/web/build');
+	const defaultBinary = process.platform === 'win32' ? 'target/debug/learnvault-server.exe' : 'target/debug/learnvault-server';
+	const binary = process.env.LEARNVAULT_SERVER_BIN ?? resolve(defaultBinary);
+	const server = spawn(binary, [
+		'--listen-addr', '127.0.0.1:0',
+		'--database', join(root, 'learnvault.sqlite'),
+		'--library-root', library,
+		'--web-root', webRoot,
+		'--insecure-http'
+	], {
+		env: { ...process.env, ADMIN_USERNAME: 'admin', ADMIN_PASSWORD },
+		stdio: ['ignore', 'pipe', 'ignore']
+	});
+	const closed = childClosed(server);
+	let baseURL = '';
+	try {
+		const address = await waitForServerAddress(server);
+		baseURL = `http://${address}`;
+		await waitForHealth(baseURL, server);
+	} catch (error) {
+		await Promise.allSettled([
+			stopProcess(server, closed),
+			rm(root, { recursive: true, force: true })
+		]);
+		throw error;
+	}
+
+	return {
+		baseURL,
+		outsidePath,
+		stop: async () => {
+			try {
+				await stopProcess(server, closed);
+			} finally {
+				await rm(root, { recursive: true, force: true });
+			}
+		}
+	};
+}
+
+const test = base.extend<{ server: ServerFixture }>({
+	server: [async ({}, use) => {
+		const server = await startServer();
+		try {
+			await use(server);
+		} finally {
+			await server.stop();
+		}
+	}, { scope: 'worker' }]
+});
+
+test('serves the built SPA through the Rust server for a complete study-library journey', async ({ page, server }) => {
+	await page.goto(`${server.baseURL}/#/login`);
+	await expect(page.getByRole('heading', { name: /Conhecimento/ })).toBeVisible();
+
+	await page.getByLabel('Usuário').fill('admin');
+	// O botão "Mostrar Senha" compartilha o rótulo parcial; exigir o campo exato evita
+	// que o locator resolva tanto o input quanto o alternador de visibilidade.
+	await page.getByLabel('Senha', { exact: true }).fill(ADMIN_PASSWORD);
+	await page.getByRole('button', { name: 'Entrar' }).click();
+	await expect(page.getByRole('heading', { name: 'Olá, admin.' })).toBeVisible();
+
+	await page.getByRole('button', { name: 'Indexar cursos' }).click();
+	await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
+
+	// A home lista cada curso registrado como card; o card abre a página do curso.
+	const courseCard = page.getByRole('link', { name: /library/ });
+	await expect(courseCard).toBeVisible();
+	await courseCard.click();
+	await expect(page.getByRole('heading', { name: 'library', exact: true })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Categoria' })).toBeVisible();
+
+	const videoRequest = page.waitForRequest((request) => {
+		const url = new URL(request.url());
+		return url.pathname === '/api/media' && url.searchParams.get('path') === 'Categoria/Curso/Aula.mp4';
+	});
+	await page.getByRole('link', { name: /Curso/ }).click();
+	await expect(page.getByRole('heading', { name: 'Curso', exact: true })).toBeVisible();
+	const videoSource = (await videoRequest).url();
+	const videoURL = new URL(videoSource, server.baseURL);
+	expect(videoURL.pathname).toBe('/api/media');
+	expect(videoURL.searchParams.get('path')).toBe('Categoria/Curso/Aula.mp4');
+	// Toda mídia é resolvida dentro de um curso registrado, nunca por caminho global.
+	expect(videoURL.searchParams.get('course')).toBeTruthy();
+	const videoResponse = await page.request.get(videoURL.toString());
+	await expect(videoResponse).toBeOK();
+	await expect(videoResponse.body()).resolves.toEqual(Buffer.from('video-fixture'));
+
+	const materialHref = await page.getByRole('link', { name: 'Material.pdf' }).getAttribute('href');
+	expect(materialHref).toBeTruthy();
+	const materialURL = new URL(materialHref as string, server.baseURL);
+	expect(materialURL.pathname).toBe('/api/media');
+	expect(materialURL.searchParams.get('path')).toBe('Categoria/Curso/Material.pdf');
+	const materialResponse = await page.request.get(materialURL.toString());
+	await expect(materialResponse).toBeOK();
+	await expect(materialResponse.body()).resolves.toEqual(Buffer.from('material-fixture'));
+
+	const catalog = await (await page.request.get(`${server.baseURL}/api/catalog`)).json();
+	const courseId = catalog.categories?.[0]?.course_id ?? catalog.nodes?.[0]?.course_id;
+	expect(courseId).toBeTruthy();
+	for (const path of ['../outside.mp4', '..\\outside.mp4', server.outsidePath]) {
+		const traversal = await page.request.get(
+			`${server.baseURL}/api/media?course=${encodeURIComponent(courseId)}&path=${encodeURIComponent(path)}`
+		);
+		// Caminhos fora do catálogo são ausência de mídia (404), nunca uma leitura fora da raiz.
+		expect(traversal.status()).toBe(404);
+		expect(await traversal.body()).not.toEqual(Buffer.from('outside-sentinel'));
+	}
+	// Sem o curso, a rota não entrega mídia alguma, mesmo para um caminho indexado.
+	const unscoped = await page.request.get(
+		`${server.baseURL}/api/media?path=${encodeURIComponent('Categoria/Curso/Aula.mp4')}`
+	);
+	expect(unscoped.status()).toBe(400);
+
+	// O link de voltar no player retorna à página do curso.
+	await page.getByRole('link', { name: /library/ }).click();
+	await expect(page.getByRole('heading', { name: 'library', exact: true })).toBeVisible();
+	await page.getByRole('button', { name: 'Sair' }).click();
+	await expect(page.getByRole('button', { name: 'Entrar' })).toBeVisible();
+	const afterLogoutMedia = await page.request.get(new URL(videoSource as string, server.baseURL).toString());
+	expect(afterLogoutMedia.status()).toBe(401);
+	const afterLogoutCatalog = await page.request.get(`${server.baseURL}/api/catalog`);
+	expect(afterLogoutCatalog.status()).toBe(401);
+});
