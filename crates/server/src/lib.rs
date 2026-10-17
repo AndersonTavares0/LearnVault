@@ -318,6 +318,156 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn healthz_reports_unavailable_without_database_details() {
+        let temp = tempfile::tempdir().unwrap();
+        let state = AppState::new(config_fixture(&temp));
+        let app = build_router(state.clone());
+        let _database = state.database.clone().lock_owned().await;
+
+        let response = app
+            .oneshot(Request::get("/api/healthz").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(response.headers()["cache-control"], "no-store");
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json, serde_json::json!({"status": "unavailable"}));
+    }
+
+    #[tokio::test]
+    async fn healthz_reports_unavailable_when_database_check_capacity_is_busy() {
+        let temp = tempfile::tempdir().unwrap();
+        let state = AppState::new(config_fixture(&temp));
+        let app = build_router(state.clone());
+        let _permits: Vec<_> = std::iter::from_fn(|| state.try_acquire_blocking_task()).collect();
+
+        let response = app
+            .oneshot(Request::get("/api/healthz").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(response.headers()["cache-control"], "no-store");
+    }
+
+    #[tokio::test]
+    async fn healthz_rejects_missing_old_newer_and_incompatible_schemas() {
+        for (name, setup) in [
+            ("missing", "PRAGMA user_version = 0"),
+            ("older", "PRAGMA user_version = 3"),
+            ("newer", "PRAGMA user_version = 5"),
+            (
+                "missing required column",
+                "ALTER TABLE user RENAME COLUMN must_change_credentials TO changed",
+            ),
+            ("missing required table", "DROP TABLE session"),
+            (
+                "schema mismatch",
+                "DROP TABLE library; CREATE TABLE library (library_id TEXT PRIMARY KEY, available INTEGER NOT NULL)",
+            ),
+        ] {
+            let temp = tempfile::tempdir().unwrap();
+            let state = AppState::new(config_fixture(&temp));
+            {
+                let database = state.database.lock().await;
+                database.connection().execute_batch(setup).unwrap();
+            }
+            let app = build_router(state);
+
+            let response = app
+                .oneshot(Request::get("/api/healthz").body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+
+            assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE, "{name}");
+            assert_eq!(response.headers()["cache-control"], "no-store", "{name}");
+            let body = response.into_body().collect().await.unwrap().to_bytes();
+            let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(json, serde_json::json!({"status": "unavailable"}), "{name}");
+        }
+    }
+
+    #[tokio::test]
+    async fn healthz_rejects_adversarial_schema_definitions() {
+        let cases = [
+            (
+                "comment spoof",
+                "DROP TABLE library; CREATE TABLE library (library_id TEXT PRIMARY KEY NOT NULL, available INTEGER NOT NULL /* CHECK (available IN (0, 1)) */)",
+            ),
+            (
+                "case-altered check literal",
+                "DROP TABLE media; CREATE TABLE media (media_id TEXT PRIMARY KEY NOT NULL, library_id TEXT NOT NULL REFERENCES library (library_id) ON DELETE NO ACTION, relative_path TEXT NOT NULL, relative_path_key TEXT NOT NULL, size INTEGER NOT NULL, mtime INTEGER NOT NULL, availability TEXT NOT NULL CHECK (availability IN ('AVAILABLE', 'missing')), UNIQUE (library_id, relative_path_key))",
+            ),
+            (
+                "wrong foreign key action",
+                "DROP TABLE media; CREATE TABLE media (media_id TEXT PRIMARY KEY NOT NULL, library_id TEXT NOT NULL REFERENCES library (library_id) ON DELETE CASCADE, relative_path TEXT NOT NULL, relative_path_key TEXT NOT NULL, size INTEGER NOT NULL, mtime INTEGER NOT NULL, availability TEXT NOT NULL CHECK (availability IN ('available', 'missing')), UNIQUE (library_id, relative_path_key))",
+            ),
+            (
+                "wrong username unique columns",
+                "DROP TABLE user; CREATE TABLE user (user_id TEXT PRIMARY KEY NOT NULL, username TEXT NOT NULL, password_hash TEXT NOT NULL UNIQUE, is_admin INTEGER NOT NULL CHECK (is_admin IN (0, 1)), created_at INTEGER NOT NULL, must_change_credentials INTEGER NOT NULL DEFAULT 0 CHECK (must_change_credentials IN (0, 1)))",
+            ),
+            (
+                "wrong session index columns",
+                "DROP INDEX session_expires_at_idx; CREATE INDEX session_expires_at_idx ON session (user_id)",
+            ),
+            (
+                "wrong primary key order",
+                "DROP TABLE study_state; CREATE TABLE study_state (owner_id TEXT NOT NULL, media_id TEXT NOT NULL REFERENCES media (media_id) ON DELETE NO ACTION, position_seconds INTEGER NOT NULL DEFAULT 0, completed INTEGER NOT NULL CHECK (completed IN (0, 1)), updated_at INTEGER NOT NULL, PRIMARY KEY (media_id, owner_id))",
+            ),
+            (
+                "generated column",
+                "ALTER TABLE user ADD COLUMN generated TEXT GENERATED ALWAYS AS (username) VIRTUAL",
+            ),
+            (
+                "without rowid",
+                "DROP TABLE library; CREATE TABLE library (library_id TEXT PRIMARY KEY NOT NULL, available INTEGER NOT NULL CHECK (available IN (0, 1))) WITHOUT ROWID",
+            ),
+            (
+                "strict table",
+                "DROP TABLE library; CREATE TABLE library (library_id TEXT PRIMARY KEY NOT NULL, available INTEGER NOT NULL CHECK (available IN (0, 1))) STRICT",
+            ),
+        ];
+        for (name, setup) in cases {
+            let temp = tempfile::tempdir().unwrap();
+            let state = AppState::new(config_fixture(&temp));
+            {
+                let database = state.database.lock().await;
+                database.connection().execute_batch(setup).unwrap();
+            }
+            let response = build_router(state)
+                .oneshot(Request::get("/api/healthz").body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE, "{name}");
+            assert_eq!(response.headers()["cache-control"], "no-store", "{name}");
+        }
+    }
+
+    #[tokio::test]
+    async fn healthz_rejects_schema_sql_over_byte_bound() {
+        let temp = tempfile::tempdir().unwrap();
+        let state = AppState::new(config_fixture(&temp));
+        let comment = "é".repeat(40_000);
+        let setup = format!(
+            "DROP TABLE library; CREATE TABLE library (library_id TEXT PRIMARY KEY NOT NULL, available INTEGER NOT NULL CHECK (available IN (0, 1)) /*{comment}*/)",
+        );
+        {
+            let database = state.database.lock().await;
+            database.connection().execute_batch(&setup).unwrap();
+        }
+
+        let response = build_router(state)
+            .oneshot(Request::get("/api/healthz").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(response.headers()["cache-control"], "no-store");
+    }
+
+    #[tokio::test]
     async fn api_timeout_rejection_gets_no_store_cache_header() {
         let temp = tempfile::tempdir().unwrap();
         let router = build_router(AppState::new(config_fixture(&temp))).route(

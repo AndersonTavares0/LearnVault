@@ -200,6 +200,28 @@ impl AppState {
         self.blocking_tasks.available_permits() > 0
     }
 
+    /// Verifica a prontidão do banco sem expor o erro de persistência ao cliente.
+    ///
+    /// O health check não espera por uma operação que já esteja usando o banco:
+    /// nesse caso o processo ainda está vivo, mas a dependência não está pronta
+    /// para responder de forma determinística.
+    pub(crate) async fn database_ready(&self) -> bool {
+        let database = match self.database.clone().try_lock_owned() {
+            Ok(database) => database,
+            Err(_) => return false,
+        };
+        let blocking_task = match self.try_acquire_blocking_task() {
+            Some(blocking_task) => blocking_task,
+            None => return false,
+        };
+        tokio::task::spawn_blocking(move || {
+            let _blocking_task = blocking_task;
+            database.has_current_schema().unwrap_or(false)
+        })
+        .await
+        .unwrap_or(false)
+    }
+
     /// Reserva uma conexão da SPA até que o corpo HTTP seja consumido, descartado ou fique ocioso.
     ///
     /// O shell recebe uma reserva própria para que clientes lentos baixando assets não o impeçam
