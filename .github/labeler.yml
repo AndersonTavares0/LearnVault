@@ -35,10 +35,6 @@
   - changed-files:
       - any-glob-to-any-file: 'crates/desktop/**'
 
-# Módulo Go de referência, em remoção gradual.
-"area:go":
-  - changed-files:
-      - any-glob-to-any-file: 'services/go/**'
 
 # Documentação e política do repositório. Sem `**/*.md` genérico: só caminhos explícitos.
 "area:docs":
@@ -81,7 +77,6 @@ tests:
   - changed-files:
       - any-glob-to-any-file:
           - 'crates/**/tests/**'
-          - 'services/go/**/*_test.go'
           - 'apps/web/src/**/*.test.ts'
           - 'testdata/**'
 
@@ -95,5 +90,3 @@ dependencies:
           - 'pnpm-lock.yaml'
           - 'pnpm-workspace.yaml'
           - 'apps/web/package.json'
-          - 'services/go/go.mod'
-          - 'services/go/go.sum'

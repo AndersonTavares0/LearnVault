@@ -38,12 +38,7 @@ atalho: garante que `pnpm verify` resolve para `scripts/verify.mjs` (e não para
 de saída não zero.
 
 O desenvolvimento do desktop Tauri usa `pnpm dev:tauri` (frontend em watch e `tauri dev`,
-sem portas de rede). A implementação de referência em Go continua verificada com:
-
-```sh
-go -C services/go test ./...
-go -C services/go vet ./...
-```
+sem portas de rede).
 
 A distribuição por plataforma e o empacotamento (Fase 5) ainda não estão concluídos; por
 isso não há checks de pacote no repositório.

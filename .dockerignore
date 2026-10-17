@@ -12,5 +12,3 @@
 **/frontend-dist
 .env*
 **/library
-!services/go/internal/library
-!services/go/internal/library/**

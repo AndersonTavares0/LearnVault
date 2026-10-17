@@ -14,14 +14,10 @@ usá-la. A tag nunca é interpolada diretamente em comandos de shell.
 
 ## Staging da SPA canônica
 
-O binário Linux do Go embute a interface web com `//go:embed web/build/*`, um caminho relativo a
-`services/go/cmd/learnvault/`, enquanto o Vite escreve em `crates/server/web/build`. Por isso o job `linux` do
-workflow de release copia `crates/server/web/build/.` para `services/go/cmd/learnvault/web/build/` antes de
-testar e compilar o Go.
-
-Sem esse passo o embed falha com `pattern web/build/*: no matching files found`, o job Linux morre e a
-publicação fica ausente, porque o job de assets depende dele. Foi exatamente a causa da `v0.4.0` publicada sem
-assets em 2026-10-17. Ao mexer no job `linux` do workflow de release, mantenha esse staging junto do build Go.
+O binário Linux do servidor Rust (`crates/server`) embute os assets web estáticos diretamente
+a partir do diretório canônico `crates/server/web/build`, gerado pelo build da SPA (`apps/web`).
+O job `linux` do workflow de release compila `crates/server` para alvos Linux (`x86_64` e `aarch64`)
+com a SPA embutida nativamente, sem necessidade de cópias intermediárias.
 
 ## Reparo de assets
 

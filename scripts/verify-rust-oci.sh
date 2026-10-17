@@ -111,7 +111,7 @@ chmod 0755 "$workdir" 2>/dev/null || true
 
 printf 'Building %s ...\n' "$IMAGE"
 "$engine" build \
-	-f "$(host_path "$repo_root/deploy/container/Containerfile.rust")" \
+	-f "$(host_path "$repo_root/deploy/container/Containerfile")" \
 	-t "$IMAGE" \
 	"$(host_path "$repo_root")"
 

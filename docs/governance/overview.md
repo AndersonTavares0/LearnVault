@@ -45,7 +45,6 @@ entrada de deploy. O código da aplicação pertence a estas pastas:
 | --- | --- |
 | `crates/` | Espaço de trabalho Rust; `crates/core` concentra o domínio compartilhado (SQLite, catálogo, scanner, identidade de mídia e estado de estudo) e `crates/server` concentra o servidor Axum |
 | `apps/web/` | Código-fonte e configuração da SPA Svelte 5 + Vite (`src/`, `vite.config.ts`, `tsconfig.json`, `package.json`) |
-| `services/go/` | Módulo Go de referência (executável, pacotes internos, migrações e saída embutida da SPA), em remoção gradual |
 | `testdata/` | Fixtures sintéticas pequenas |
 | `deploy/container/` | Definição da imagem OCI |
 | `deploy/compose/` | Stack Docker Compose e exemplo de ambiente |
@@ -127,18 +126,17 @@ A alteração de 2026-10-17 foi reavaliada: a automação apenas solicita o auto
 squash e não referencia nomes de checks, então os três checks promovidos passam a ser exigidos sem
 mudança no workflow, e a lista de manifests elegíveis permanece a mesma.
 Como defesa adicional, a automação só considera alterações nos manifests e lockfiles aprovados
-(`package.json`, `apps/web/package.json`, `pnpm-lock.yaml`, `Cargo.toml`, manifests de crates,
-`Cargo.lock`, `services/go/go.mod` e `services/go/go.sum`); workflows, scripts, Containerfiles,
+(`package.json`, `apps/web/package.json`, `pnpm-lock.yaml`, `Cargo.toml`, manifests de crates e
+`Cargo.lock`); workflows, scripts, Containerfiles,
 Compose e outros caminhos permanecem manuais. Ela confirma o SHA da base e do head e rejeita PRs
 que ficaram atrás da base, sem fazer polling, rebase ou checkout.
 Para rollback, desabilite o workflow e cancele auto-merges pendentes; não há mutação automática de
 branches ou lockfiles.
 
-Os nomes dos jobs obrigatórios são estáveis: na fase atual `SPA checks`, `Go tests and vet` e
-`Container build`, com `Rust tests and lints`, `Desktop crate compile and guards` e
-`Container build (Rust)` promovidos a obrigatórios em 2026-10-17. O CI roda em pull requests,
-cancela execuções obsoletas, constrói a SPA uma vez — consumida tanto pelo embed do Go quanto pela
-imagem Rust — usa cache e mantém timeouts curtos.
+Os nomes dos jobs obrigatórios são estáveis: `SPA checks`, `Rust tests and lints`,
+`Desktop crate compile and guards` e `Container build (Rust)`. O CI roda em pull requests,
+cancela execuções obsoletas, constrói a SPA uma vez — consumida pela imagem Rust e pelo desktop —
+usa cache e mantém timeouts curtos.
 
 O job `Rust tests and lints` verifica formatação, lints, testes e a cobertura do núcleo em Rust; o
 job `Desktop crate compile and guards` compila o crate desktop e roda seus testes; e o job

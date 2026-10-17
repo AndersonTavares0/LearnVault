@@ -6,32 +6,24 @@
 [![Node.js](https://img.shields.io/badge/Node.js-24.x-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![pnpm](https://img.shields.io/badge/pnpm-11.28.5-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
 [![Svelte](https://img.shields.io/badge/Svelte-5-FF3E00?logo=svelte&logoColor=white)](https://svelte.dev/)
-[![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 
 O LearnVault transforma suas pastas de cursos em um espaço de estudo auto-hospedado.
 Ele combina um núcleo de domínio em Rust (`crates/core`) e um servidor Axum (`crates/server`)
 com uma SPA em Svelte 5 + Vite em torno de cursos somente leitura, registrados individualmente,
-contas locais, indexação de catálogo e um fluxo de estudo focado. O serviço Go em `services/go`
-permanece como implementação de referência até a Fase 5 da reescrita.
+contas locais, indexação de catálogo e um fluxo de estudo focado.
 
 ## Status
 
-A reescrita em Rust está em andamento. `crates/core` (domínio, SQLite, catálogo, scanner,
+A migração para a stack Rust foi consolidada (ADR 0001). `crates/core` (domínio, SQLite, catálogo, scanner,
 identidade de mídia e estado de estudo) e `crates/server` (Axum, autenticação, sessões, mídia
-com `Range`, registro de cursos e API de estudo) já estão implementados, junto da SPA Svelte 5 + Vite com dois
-builds. As entregas mescladas #86, #88, #90 e #91 alinham Study no servidor Rust, na SPA web e
-no serviço Go de referência, além de avançarem o desktop com catálogo, importação e remoção de
+com `Range`, registro de cursos e API de estudo) são a stack backend oficial, junto da SPA Svelte 5 + Vite com dois
+builds. O desktop Tauri (`crates/desktop`) possui catálogo, importação e remoção de
 cursos pelo seletor nativo, rescan explícito e reprodução local de materiais, vídeo e áudio, além
-da entrega de legendas por protocolo com faixas limitadas. No desktop, o player renderiza
-legendas VTT; SRT, ASS e SSA ficam disponíveis para download, enquanto o build HTTP pode
-converter SRT sob demanda. O desktop Tauri e a distribuição por plataforma com a remoção do
-serviço Go (Fase 5) **ainda não estão concluídos**; autenticação desktop, janelas reais, migração
-do banco e distribuição continuam gates explícitos.
+da entrega de legendas por protocolo customizado com faixas parciais. O serviço legado em Go foi descontinuado.
 
 ## Comece aqui
 
-Requisitos: Rust 1.99 (definido em `rust-toolchain.toml`), Node.js 24.x e pnpm 11.28.5. Go 1.26
-é necessário apenas para a implementação de referência. Docker é opcional.
+Requisitos: Rust 1.99 (definido em `rust-toolchain.toml`), Node.js 24.x e pnpm 11.28.5. Docker é opcional.
 
 ```sh
 pnpm install --frozen-lockfile   # uma vez por checkout
@@ -40,7 +32,7 @@ pnpm verify                      # todos os checks de PR antes de enviar
 ```
 
 `pnpm dev` sobe a API em `http://127.0.0.1:8090` e a SPA em `http://localhost:5173`, com
-proxy de `/api` para o servidor. Para o desktop Tauri (Fase 4), use `pnpm dev:tauri`. Antes
+proxy de `/api` para o servidor. Para o desktop Tauri, use `pnpm dev:tauri`. Antes
 da pull request, `pnpm verify` reproduz os checks de PR (use `--fast` para pular builds e
 audit durante a iteração); os comandos individuais continuam em `.github/CONTRIBUTING.md`.
 
@@ -58,17 +50,6 @@ as senhas começam ocultas e continuam compatíveis com gerenciadores de senha. 
 exige ao menos 12 caracteres. Durante o envio, o formulário permanece visível e bloqueia
 reenvios; falhas de login não revelam se o usuário existe.
 
-Esse caminho é o contrato canônico preparatório para a futura cutover coordenada: o CI também
-estagia a mesma saída para os testes Go. O serviço Go e a imagem Go padrão continuam sendo a
-produção/referência estável; a imagem Rust permanece opt-in e experimental.
-
-A implementação de referência e rollback em Go continua disponível:
-
-```sh
-go -C services/go test ./...
-go -C services/go run ./cmd/learnvault
-```
-
 No catálogo, **Reproduzir** abre vídeos e áudios no player do LearnVault, inclusive arquivos
 soltos. **Baixar** identifica materiais e legendas como downloads; arquivos marcados como
 ausentes não oferecem ação de abertura. Essas ações preservam a navegação da aplicação.
@@ -76,9 +57,8 @@ ausentes não oferecem ação de abertura. Essas ações preservam a navegação
 ## Mapa do repositório
 
 ```text
-crates/           Workspace Rust: `core` (domínio, SQLite, catálogo e identidade de mídia) e `server` (Axum)
+crates/           Workspace Rust: `core` (domínio, SQLite, catálogo e identidade de mídia), `server` (Axum) e `desktop` (Tauri)
 apps/web/         SPA Svelte 5 + Vite (fonte, configuração e scripts)
-services/go/      Módulo Go de referência (executável, pacotes internos, migrações e saída embutida da SPA)
 deploy/           Adaptadores de contêiner, Compose e Quadlet rootless
 docs/             Arquitetura, API, governança, operações, produto e releases
 .agents/          Políticas, playbooks, checklists e templates para agentes
@@ -105,8 +85,6 @@ documentação. Arquivos de comunidade como `CONTRIBUTING.md`, `CODE_OF_CONDUCT.
   transporte em tempo de compilação.
 - Cada pasta de curso é somente leitura e permanece fora do armazenamento da aplicação; a página
   inicial mostra os cursos em cards com capa gerada.
-- O serviço Go em `services/go` permanece como referência funcional até a Fase 5.
-- Docker Compose e Podman/Quadlet são adaptadores opcionais de deploy.
 - Builds nativos continuam sendo a fonte de verdade para instaladores futuros.
 
 Veja a [visão de arquitetura](docs/architecture/overview.md) e a
@@ -129,8 +107,8 @@ Detalhes de contêiner e Quadlet estão em [`deploy/`](deploy/) e no
 O Release Please cuida do cálculo de versão, das PRs de release, do
 [`CHANGELOG.md`](docs/releases/CHANGELOG.md), das tags e das notas do GitHub Release. Use
 Conventional Commits como `feat:`, `fix:`, `docs:` e `chore:`. Releases publicados recebem
-automaticamente binários Linux versionados e `SHA256SUMS` a partir da implementação de
-referência em Go.
+automaticamente binários Linux versionados e `SHA256SUMS` a partir da implementação
+oficial em Rust.
 
 O instalador Windows via NSIS já é construído e publicado automaticamente: instala por usuário,
 sem exigir administrador, com textos em português e inglês. O
