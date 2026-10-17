@@ -2,8 +2,10 @@
 
 LearnVault é uma biblioteca de estudos autocontida formada por um núcleo de domínio em Rust
 (`crates/core`), um servidor Axum (`crates/server`) e uma SPA em Svelte 5 + Vite. Ela indexa
-uma pasta de cursos existente sem modificar a biblioteca física. O desktop Tauri (Fase 4) já
-tem fundação, IPC de catálogo/configuração, seleção de raiz, rescan explícito e entrega de
+pastas de curso existentes, registradas individualmente, sem modificar a biblioteca física. O
+desktop Tauri (Fase 4) já
+tem fundação, IPC de cursos/catálogo, importação e remoção de cursos, rescan explícito de todos e
+entrega de
  materiais, vídeo, áudio e arquivos de legenda pelo protocolo de mídia com faixas limitadas. O player
  desktop renderiza VTT; SRT, ASS e SSA são baixáveis, e o build HTTP pode converter SRT sob demanda.
  Autenticação,

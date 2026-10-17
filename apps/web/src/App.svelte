@@ -2,29 +2,33 @@
 	import { onMount } from 'svelte';
 	import LooseFiles from './LooseFiles.svelte';
 	import CatalogTree from './CatalogTree.svelte';
-	import { filterCatalog } from './search';
+	import CourseCard from './CourseCard.svelte';
 	import Player from './Player.svelte';
+	import { filterCatalog } from './search';
+	import { countCatalogNode, formatCourseMeta } from './catalog';
 	import { lessonSections, neighboringLessons, type LessonSection } from './navigation';
-	import { destinationAfterLogin, findLesson, findLessonByMediaId, href, locationFromHash, type Route } from './router';
-	import { STUDY_NOT_AVAILABLE, transport, transportKind, type Catalog, type CatalogNode, type Lesson, type StudyProgress, type User } from './transport';
-	import { desktopLocalUser, initialView, resolveSession, type ConfigState } from './session';
+	import { destinationAfterLogin, findCourse, findLesson, findLessonLocation, href, locationFromHash, type Route } from './router';
+	import { transport, transportKind, STUDY_NOT_AVAILABLE, type Catalog, type CatalogNode, type Lesson, type StudyProgress, type User } from './transport';
+	import { resolveSession } from './session';
 	import { formatDuration, studySyncSupported } from './player';
 
 	let route: Route = locationFromHash(location.hash).route;
+	let courseId: string | null = locationFromHash(location.hash).courseId;
 	let lessonPath: string | null = locationFromHash(location.hash).lessonPath;
 	let user: User | null = null;
 	let catalog: Catalog | null = null;
 	let lesson: Lesson | null = null;
-	let config: ConfigState = 'unknown';
 	let catalogQuery = '';
 	let filteredNodes: CatalogNode[] = [];
 	let sections: LessonSection[] = [];
+	$: course = findCourse(catalog, courseId);
+	$: courseMeta = course ? formatCourseMeta(countCatalogNode(course)) : '';
 	$: filteredNodes = catalog ? filterCatalog(catalog.nodes, catalogQuery) : [];
-	// Navegação e índice saem da árvore canônica do catálogo. Quando uma reindexação
-	// remove a aula aberta, `neighboringLessons` devolve os dois lados nulos e os
-	// controles somem em vez de apontar para uma aula que não existe mais.
-	$: neighbors = neighboringLessons(catalog?.nodes ?? [], lessonPath);
-	$: sections = lessonSections(catalog?.nodes ?? []);
+	// Navegação e índice saem da subárvore do curso aberto. Quando uma reindexação remove
+	// a aula aberta, `neighboringLessons` devolve os dois lados nulos e os controles somem
+	// em vez de apontar para uma aula que não existe mais.
+	$: neighbors = course ? neighboringLessons([course], lessonPath) : { previous: null, next: null };
+	$: sections = course ? lessonSections([course]) : [];
 	$: lessonCount = sections.reduce((total, section) => total + section.lessons.length, 0);
 	let loading = true;
 	let error = '';
@@ -33,19 +37,31 @@
 	let currentPassword = '';
 	let rescanning = false;
 	let rescanMessage = '';
+	let importing = false;
+	let importFormOpen = false;
+	let importPath = '';
+	let importError = '';
+	let removing = false;
+	let removeConfirm = false;
+	let removeError = '';
 	let mediaError = '';
-	let choosing = false;
-	let libraryError = '';
 	let recent: StudyProgress[] = [];
 	let recentLoading = false;
 	let studyEnabled = studySyncSupported;
+
+	// Só o admin importa e indexa: no servidor isso evita que um usuário comum aponte o
+	// servidor para pastas arbitrárias; no desktop a identidade local é admin.
+	$: canManage = user !== null && user.role === 'admin';
 
 	onMount(() => {
 		const change = () => {
 			const next = locationFromHash(location.hash);
 			route = next.route;
+			courseId = next.courseId;
 			lessonPath = next.lessonPath;
-			lesson = findLesson(catalog, lessonPath);
+			lesson = findLesson(catalog, courseId, lessonPath);
+			removeConfirm = false;
+			removeError = '';
 			mediaError = '';
 		};
 		window.addEventListener('hashchange', change);
@@ -55,13 +71,12 @@
 
 	async function initialize() {
 		try {
-			const session = await resolveSession(() => transport.me(), () => transport.config(), transportKind);
+			const session = await resolveSession(() => transport.me(), transportKind);
 			user = session.user;
-			config = session.config;
 			error = session.error;
 			if (user && !user.mustChangeCredentials) {
 				catalog = await transport.catalog();
-				lesson = findLesson(catalog, lessonPath);
+				lesson = findLesson(catalog, courseId, lessonPath);
 				await loadRecent();
 				if (route === 'login') route = 'home';
 			}
@@ -82,7 +97,7 @@
 			password = '';
 			if (!user.mustChangeCredentials) {
 				catalog = await transport.catalog();
-				lesson = findLesson(catalog, lessonPath);
+				lesson = findLesson(catalog, courseId, lessonPath);
 				await loadRecent();
 				location.hash = destinationAfterLogin(destination);
 			}
@@ -103,7 +118,7 @@
 			password = '';
 			currentPassword = '';
 			catalog = await transport.catalog();
-			lesson = findLesson(catalog, lessonPath);
+			lesson = findLesson(catalog, courseId, lessonPath);
 			await loadRecent();
 			location.hash = destinationAfterLogin(location.hash);
 		} catch (cause) {
@@ -122,18 +137,18 @@
 		location.hash = href('login');
 	}
 
-	function syncLesson(nextCatalog: Catalog) {
+	function syncCatalog(nextCatalog: Catalog) {
 		catalog = nextCatalog;
-		lesson = findLesson(nextCatalog, lessonPath);
+		lesson = findLesson(nextCatalog, courseId, lessonPath);
 		mediaError = '';
 	}
 
 	async function rescan() {
 		rescanning = true;
-		rescanMessage = 'Lendo a biblioteca…';
+		rescanMessage = 'Lendo os cursos…';
 		try {
 			await transport.rescan();
-			syncLesson(await transport.catalog());
+			syncCatalog(await transport.catalog());
 			await loadRecent();
 			rescanMessage = 'Catálogo atualizado.';
 		} catch (cause) {
@@ -144,28 +159,59 @@
 	}
 
 	// O webview só dispara o seletor nativo; nenhum caminho cruza o IPC. Cancelar preserva
-	// a configuração anterior, e uma falha é recuperável — o botão volta a ficar ativo.
-	async function chooseLibrary() {
-		choosing = true;
-		libraryError = '';
+	// a lista anterior, e uma falha é recuperável — o botão volta a ficar ativo. Importar
+	// já indexa o curso novo, como a antiga seleção de pasta fazia.
+	async function importCourse() {
+		importing = true;
+		importError = '';
 		try {
-			const status = await transport.chooseLibrary();
-			config = status.configured ? 'configured' : 'unconfigured';
-			if (transportKind === 'desktop' && config === 'configured') {
-				catalog = null;
-				lesson = null;
-				recent = [];
-				mediaError = '';
-				await transport.rescan();
-				const nextCatalog = await transport.catalog();
-				syncLesson(nextCatalog);
-				await loadRecent();
-				user = desktopLocalUser;
-			}
+			await transport.importCourse();
+			await transport.rescan();
+			syncCatalog(await transport.catalog());
+			await loadRecent();
 		} catch (cause) {
-			libraryError = cause instanceof Error ? cause.message : 'Não foi possível configurar a biblioteca.';
+			importError = cause instanceof Error ? cause.message : 'Não foi possível importar o curso.';
 		} finally {
-			choosing = false;
+			importing = false;
+		}
+	}
+
+	// No servidor o navegador não enxerga o disco: o admin informa o caminho da pasta e o
+	// servidor valida e registra; a indexação roda em seguida, como no desktop.
+	async function submitImport(event: SubmitEvent) {
+		event.preventDefault();
+		importing = true;
+		importError = '';
+		try {
+			await transport.importCoursePath(importPath.trim());
+			importPath = '';
+			importFormOpen = false;
+			await transport.rescan();
+			syncCatalog(await transport.catalog());
+			await loadRecent();
+		} catch (cause) {
+			importError = cause instanceof Error ? cause.message : 'Não foi possível importar o curso.';
+		} finally {
+			importing = false;
+		}
+	}
+
+	async function removeCourse() {
+		if (!course) return;
+		removing = true;
+		removeError = '';
+		try {
+			await transport.removeCourse(course.courseId ?? course.path);
+			courseId = null;
+			lessonPath = null;
+			lesson = null;
+			removeConfirm = false;
+			location.hash = href('home');
+			syncCatalog(await transport.catalog());
+		} catch (cause) {
+			removeError = cause instanceof Error ? cause.message : 'Não foi possível remover o curso.';
+		} finally {
+			removing = false;
 		}
 	}
 
@@ -211,11 +257,52 @@
 	}
 </script>
 <svelte:head><title>LearnVault — sua biblioteca de estudos</title><meta name="description" content="Sua biblioteca pessoal de cursos." /></svelte:head>
-{#if loading}<div class="loading" aria-live="polite">Carregando sua biblioteca…</div>
-{:else if initialView(user, config, transportKind) === 'offline'}<main class="login-page"><div class="brand"><span class="mark">LV</span> LEARNVAULT</div><section><p class="eyebrow">{config === 'configured' ? 'BIBLIOTECA CONFIGURADA' : 'MODO OFFLINE'}</p><h1>{config === 'configured' ? 'Biblioteca pronta' : 'Biblioteca não configurada'}</h1>{#if config === 'configured'}<p class="intro">A pasta da biblioteca foi salva. Indexe quando quiser para montar o catálogo — nada na pasta é movido, alterado ou apagado.</p>{:else}<p class="intro">Escolha a pasta que contém seus cursos. Nada é movido, alterado ou apagado — a biblioteca permanece somente leitura.</p>{/if}{#if transportKind === 'desktop'}{#if config === 'configured'}<button class="primary" onclick={rescan} disabled={rescanning} aria-busy={rescanning}>{rescanning ? 'Indexando…' : 'Indexar biblioteca'}</button><p class="catalog-message" aria-live="polite">{rescanMessage}</p>{/if}<button class="primary" onclick={chooseLibrary} disabled={choosing} aria-busy={choosing}>{choosing ? 'Abrindo o seletor…' : config === 'configured' ? 'Trocar pasta da biblioteca' : 'Escolher pasta da biblioteca'}</button>{#if libraryError}<p class="error" role="alert">{libraryError}</p>{/if}{:else}<p class="intro">A configuração da biblioteca é feita no servidor.</p>{/if}</section></main>
+{#if loading}<div class="loading" aria-live="polite">Carregando seus cursos…</div>
 {:else if !user}<main class="login-page"><div class="brand"><span class="mark">LV</span> LEARNVAULT</div><section><p class="eyebrow">SEU ESPAÇO DE APRENDIZAGEM</p><h1>Conhecimento,<br /><em>no seu ritmo.</em></h1><p class="intro">Uma casa tranquila para seus cursos, ideias e próximos passos.</p><form onsubmit={login}><label>Usuário<input autocomplete="username" bind:value={username} required /></label><label>Senha<input type="password" autocomplete="current-password" bind:value={password} required /></label>{#if error}<p class="error" role="alert">{error}</p>{/if}<button disabled={loading}>Entrar</button></form></section></main>
 {:else if user.mustChangeCredentials}<main class="login-page"><section><h1>Configure sua conta</h1><p>Defina seu usuário e sua senha para continuar.</p><form onsubmit={credentials}><label>Senha atual<input type="password" autocomplete="current-password" bind:value={currentPassword} required /></label><label>Novo usuário<input autocomplete="username" bind:value={username} required /></label><label>Nova senha<input type="password" autocomplete="new-password" bind:value={password} required /></label>{#if error}<p class="error" role="alert">{error}</p>{/if}<button disabled={loading}>Continuar</button></form></section></main>
-{:else}<div class="shell"><header><div class="brand"><span class="mark">LV</span> LEARNVAULT</div><button class="text-button" onclick={logout}>Sair</button></header><div class="layout"><aside aria-label="Navegação principal"><a class:active={route === 'home'} href={href('home')}>Início</a><a class:active={route === 'catalog'} href={href('catalog')}>Catálogo</a></aside><main><p class="eyebrow">BIBLIOTECA PESSOAL</p>{#if error}<p class="error" role="alert">{error}</p>{/if}{#if route === 'home'}<h1>Olá, {user.username}.</h1><p class="intro">Sua biblioteca está protegida e pronta para estudar.</p>
-{#if studySyncSupported && recent.length}<section class="recent-study" aria-labelledby="recent-heading"><h2 id="recent-heading">Continuar assistindo</h2><ul>{#each recent as item}{@const recentLesson = findLessonByMediaId(catalog, item.mediaId)}<li>{#if recentLesson}<a href={href('player', recentLesson.path)}>{recentLesson.title}</a><small>{item.completed ? 'Concluído' : `Parou em ${formatDuration(item.positionSeconds)}`}</small>{:else}<span>Mídia não disponível no catálogo</span>{/if}</li>{/each}</ul></section>{/if}
-<a class="primary" href={href('catalog')}>Abrir catálogo</a>
-{:else if route === 'catalog'}<h1>Seus cursos</h1>{#if (catalog && catalog.nodes.length) || user.role === 'admin'}<div class="catalog-toolbar">{#if catalog && catalog.nodes.length}<form class="catalog-search" role="search" onsubmit={(event) => event.preventDefault()}><label for="catalog-search-input">Buscar no catálogo</label><input id="catalog-search-input" type="search" placeholder="Curso, módulo ou aula" bind:value={catalogQuery} /></form>{/if}{#if user.role === 'admin'}<button class="primary" onclick={rescan} disabled={rescanning}>{rescanning ? 'Indexando…' : 'Indexar biblioteca'}</button>{/if}</div>{/if}{#if user.role === 'admin'}<p class="catalog-message" aria-live="polite">{rescanMessage}</p>{/if}{#if catalog && catalog.looseFiles.length}<LooseFiles files={catalog.looseFiles} heading="Arquivos soltos" />{/if}{#if catalog && catalog.nodes.length}{#if filteredNodes.length}<CatalogTree nodes={filteredNodes} expandAll={catalogQuery.trim().length > 0} />{:else}<p class="empty" role="status">Nenhum resultado para “{catalogQuery.trim()}”.</p>{/if}{:else if !catalog || !catalog.looseFiles.length}<p class="empty">O catálogo ainda está vazio.</p>{/if}{:else}<h1>{lesson?.title ?? 'Aula não encontrada'}</h1>{#if !lesson}<p class="empty" role="status">Não foi possível encontrar esta aula no catálogo atual.</p>{:else}<Player lesson={lesson} mediaError={mediaError} onMediaError={mediaFailed} {studyEnabled} />{#if lessonCount > 1}<nav class="lesson-index" aria-label="Índice de aulas"><h2>Índice de aulas</h2><div class="lesson-index-body">{#each sections as section}{#if section.title}<h3>{section.title}</h3>{/if}<ol>{#each section.lessons as lessonItem}<li><a class:active={lessonItem.path === lesson.path} href={href('player', lessonItem.path)} aria-current={lessonItem.path === lesson.path ? 'page' : undefined} use:revealActive={lessonItem.path === lesson.path}>{lessonItem.title}</a></li>{/each}</ol>{/each}</div></nav>{/if}{#if neighbors.previous || neighbors.next}<nav class="lesson-nav" aria-label="Navegação entre aulas">{#if neighbors.previous}<a href={href('player', neighbors.previous.path)} rel="prev">← {neighbors.previous.title}</a>{/if}{#if neighbors.next}<a href={href('player', neighbors.next.path)} rel="next">{neighbors.next.title} →</a>{/if}</nav>{/if}{/if}<a class="back" href={href('catalog')}>Voltar ao catálogo</a>{/if}</main></div></div>{/if}
+{:else}<div class="shell"><header><div class="brand"><span class="mark">LV</span> LEARNVAULT</div><button class="text-button" onclick={logout}>Sair</button></header><div class="layout"><aside aria-label="Navegação principal"><a class:active={route === 'home'} href={href('home')}>Início</a></aside><main><p class="eyebrow">BIBLIOTECA PESSOAL</p>{#if error}<p class="error" role="alert">{error}</p>{/if}
+{#if route === 'home'}
+	<h1>Olá, {user.username}.</h1>
+	<p class="intro">{catalog && catalog.nodes.length ? 'Escolha um curso para continuar estudando.' : 'Importe seu primeiro curso para montar sua biblioteca.'}</p>
+	{#if studySyncSupported && recent.length}<section class="recent-study" aria-labelledby="recent-heading"><h2 id="recent-heading">Continuar assistindo</h2><ul>{#each recent as item}{@const location = findLessonLocation(catalog, item.mediaId)}<li>{#if location}<a href={href('player', location.courseId, location.lesson.path)}>{location.lesson.title}</a><small>{item.completed ? 'Concluído' : `Parou em ${formatDuration(item.positionSeconds)}`}</small>{:else}<span>Mídia não disponível no catálogo</span>{/if}</li>{/each}</ul></section>{/if}
+	{#if canManage || (catalog && catalog.nodes.length)}
+		<div class="home-toolbar">
+			{#if catalog && catalog.nodes.length}<form class="catalog-search" role="search" onsubmit={(event) => event.preventDefault()}><label for="catalog-search-input">Buscar nos cursos</label><input id="catalog-search-input" type="search" placeholder="Nome do curso" bind:value={catalogQuery} /></form>{/if}
+			{#if canManage}
+				<div class="home-actions">
+					{#if transportKind === 'desktop'}<button class="primary" onclick={importCourse} disabled={importing} aria-busy={importing}>{importing ? 'Importando…' : 'Importar curso'}</button>{:else}<button class="primary" onclick={() => (importFormOpen = !importFormOpen)} aria-expanded={importFormOpen}>Importar curso</button>{/if}
+					<button class="text-button" onclick={rescan} disabled={rescanning || !catalog || !catalog.nodes.length}>{rescanning ? 'Indexando…' : 'Indexar cursos'}</button>
+				</div>
+			{/if}
+		</div>
+	{/if}
+	{#if !canManage && catalog && catalog.nodes.length === 0}<p class="empty" role="status">Nenhum curso disponível. Peça ao administrador para importar um curso.</p>{/if}
+	{#if user.role === 'admin' && importFormOpen}<form class="import-form" onsubmit={submitImport}><label for="import-path">Caminho da pasta do curso no servidor</label><input id="import-path" bind:value={importPath} placeholder="C:\cursos\Meu curso" required /><div class="import-form-actions"><button class="primary" disabled={importing} aria-busy={importing}>{importing ? 'Importando…' : 'Importar'}</button><button type="button" class="text-button" onclick={() => (importFormOpen = false)}>Cancelar</button></div></form>{/if}
+	{#if importError}<p class="error" role="alert">{importError}</p>{/if}
+	{#if user.role === 'admin' && rescanMessage}<p class="catalog-message" aria-live="polite">{rescanMessage}</p>{/if}
+	{#if catalog && catalog.nodes.length}
+		{#if filteredNodes.length}<ul class="course-grid">{#each filteredNodes as courseItem (courseItem.courseId ?? courseItem.path)}<li><CourseCard course={courseItem} /></li>{/each}</ul>
+		{:else}<p class="empty" role="status">Nenhum curso corresponde a “{catalogQuery.trim()}”.</p>{/if}
+	{:else if canManage}<div class="empty-state"><p class="empty">Nenhum curso por aqui ainda.</p><p class="intro">Clique em “Importar curso” e escolha a pasta de um curso. Nada é movido, alterado ou apagado — a pasta permanece somente leitura.</p></div>{/if}
+	{#if catalog && catalog.looseFiles.length}<LooseFiles files={catalog.looseFiles} heading="Arquivos soltos" />{/if}
+{:else if route === 'course'}
+	<a class="back" href={href('home')}>← Início</a>
+	{#if !course}<h1>Curso não encontrado</h1><p class="empty" role="status">Não foi possível encontrar este curso no catálogo atual. Ele pode ter sido removido.</p>
+	{:else}
+		<header class="course-page-header"><h1>{course.title}</h1>{#if courseMeta}<p class="course-meta">{courseMeta}</p>{/if}</header>
+		{#if canManage}<div class="course-actions">{#if removeConfirm}<span class="remove-question" role="alert">Remover “{course.title}” da biblioteca? Os arquivos não serão apagados.</span><button class="text-button danger" onclick={removeCourse} disabled={removing} aria-busy={removing}>{removing ? 'Removendo…' : 'Remover curso'}</button><button class="text-button" onclick={() => (removeConfirm = false)} disabled={removing}>Cancelar</button>{:else}<button class="text-button" onclick={() => (removeConfirm = true)}>Remover curso</button><button class="text-button" onclick={rescan} disabled={rescanning}>{rescanning ? 'Indexando…' : 'Indexar cursos'}</button>{/if}</div>{/if}
+		{#if removeError}<p class="error" role="alert">{removeError}</p>{/if}
+		{#if rescanMessage}<p class="catalog-message" aria-live="polite">{rescanMessage}</p>{/if}
+		{#if course.looseFiles.length}<LooseFiles files={course.looseFiles} heading="Arquivos soltos" courseId={course.courseId ?? course.path} />{/if}
+		{#if course.children.length}<CatalogTree nodes={course.children} courseId={course.courseId ?? course.path} />{:else}<p class="empty" role="status">Este curso ainda não foi indexado. Use “Indexar cursos” para montar o catálogo.</p>{/if}
+	{/if}
+{:else}
+	{#if !lesson}<h1>Aula não encontrada</h1><p class="empty" role="status">Não foi possível encontrar esta aula no catálogo atual.</p>{:else}
+		<a class="back" href={course ? href('course', course.courseId ?? course.path) : href('home')}>← {course ? course.title : 'Início'}</a>
+		<h1>{lesson.title}</h1>
+		<Player {lesson} courseId={courseId ?? ''} {mediaError} onMediaError={mediaFailed} {studyEnabled} />
+		{#if lessonCount > 1}<nav class="lesson-index" aria-label="Índice de aulas"><h2>Índice de aulas</h2><div class="lesson-index-body">{#each sections as section}{#if section.title}<h3>{section.title}</h3>{/if}<ol>{#each section.lessons as lessonItem}<li><a class:active={lessonItem.path === lesson.path} href={href('player', courseId ?? '', lessonItem.path)} aria-current={lessonItem.path === lesson.path ? 'page' : undefined} use:revealActive={lessonItem.path === lesson.path}>{lessonItem.title}</a></li>{/each}</ol>{/each}</div></nav>{/if}
+		{#if neighbors.previous || neighbors.next}<nav class="lesson-nav" aria-label="Aulas vizinhas">{#if neighbors.previous}<a href={href('player', courseId ?? '', neighbors.previous.path)}>← {neighbors.previous.title}</a>{/if}{#if neighbors.next}<a href={href('player', courseId ?? '', neighbors.next.path)}>{neighbors.next.title} →</a>{/if}</nav>{/if}
+	{/if}
+{/if}
+</main></div></div>{/if}

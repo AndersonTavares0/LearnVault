@@ -16,16 +16,16 @@ fn desktop(root: &Path) -> DesktopState {
     DesktopState::open(&root.join("data"), &root.join("config")).unwrap()
 }
 
-/// Estado desktop com uma biblioteca externa escolhida e persistida.
+/// Estado desktop com um curso externo importado e persistido.
 ///
 /// O diretório tem um nome que não existe em nenhuma mensagem do contrato, para que os
 /// testes possam provar que nenhum caminho vaza pelo IPC.
 fn configured(root: &Path) -> (DesktopState, PathBuf) {
     let state = desktop(root);
-    let library = root.join("Acervo privado");
-    fs::create_dir_all(&library).unwrap();
-    state.select_library(|| Some(library.clone())).unwrap();
-    (state, library)
+    let course = root.join("Acervo privado");
+    fs::create_dir_all(&course).unwrap();
+    state.import_course(|| Some(course.clone())).unwrap();
+    (state, course)
 }
 
 /// Caminho do banco local usado pelo estado.
@@ -95,15 +95,15 @@ fn link_dir(target: &Path, link: &Path) -> bool {
 }
 
 #[test]
-fn rescan_without_a_configured_root_is_a_stable_error_without_a_path() {
+fn rescan_without_courses_is_a_stable_error_without_a_path() {
     let dir = tempfile::tempdir().unwrap();
     let state = desktop(dir.path());
 
     let error = state.rescan().unwrap_err();
 
-    assert_eq!(error.code, IpcErrorCode::LibraryNotConfigured);
+    assert_eq!(error.code, IpcErrorCode::NoCoursesRegistered);
     let json = serde_json::to_value(&error).unwrap();
-    assert_eq!(json["code"], "library_not_configured");
+    assert_eq!(json["code"], "no_courses_registered");
     let message = json["message"].as_str().unwrap();
     assert!(!message.is_empty(), "a mensagem precisa existir");
     assert!(
@@ -113,63 +113,58 @@ fn rescan_without_a_configured_root_is_a_stable_error_without_a_path() {
     assert!(
         !dir.path().join("data").join("learnvault.sqlite").exists()
             || missing_rows(dir.path()) == 0,
-        "um rescan não configurado não pode registrar histórico"
+        "um rescan sem cursos não pode registrar histórico"
     );
 }
 
 #[test]
-fn rescan_with_a_removed_root_is_a_stable_error_without_a_path() {
+fn rescan_with_a_removed_course_root_reports_a_failure_without_a_path() {
     let dir = tempfile::tempdir().unwrap();
-    let (state, library) = configured(dir.path());
-    fs::remove_dir_all(&library).unwrap();
+    let (state, course) = configured(dir.path());
+    fs::remove_dir_all(&course).unwrap();
 
-    let error = state.rescan().unwrap_err();
+    let summary = state.rescan().unwrap();
 
-    assert_eq!(error.code, IpcErrorCode::RescanUnavailable);
-    let json = serde_json::to_value(&error).unwrap();
-    assert_eq!(json["code"], "rescan_unavailable");
-    let message = json["message"].as_str().unwrap();
-    assert!(!message.is_empty(), "a mensagem precisa existir");
+    assert_eq!(summary.courses, 1);
+    assert_eq!(summary.failed, 1, "a pasta removida conta como falha");
+    assert!(!summary.complete, "uma falha deixa a agregação incompleta");
+    let json = serde_json::to_value(&summary).unwrap();
+    let rendered = json.to_string();
     assert!(
-        !message.contains(&library.to_string_lossy().to_string())
-            && !message.contains("Acervo privado"),
-        "a mensagem não pode expor a raiz: {message}"
+        !rendered.contains(&course.to_string_lossy().to_string())
+            && !rendered.contains("Acervo privado"),
+        "a resposta não pode expor a raiz: {rendered}"
     );
 }
 
 #[test]
 fn a_root_replaced_by_a_link_is_refused_before_scanning() {
     let dir = tempfile::tempdir().unwrap();
-    let (state, library) = configured(dir.path());
-    fs::write(library.join("aula.mp4"), b"video").unwrap();
+    let (state, course) = configured(dir.path());
+    fs::write(course.join("aula.mp4"), b"video").unwrap();
     state.rescan().unwrap();
     assert_eq!(media_rows(dir.path()), 1);
 
-    // A raiz é trocada por um link para outra pasta depois da seleção: a revalidação
+    // A raiz é trocada por um link para outra pasta depois da importação: a revalidação
     // imediata precisa recusar a varredura sem seguir o link.
-    fs::remove_dir_all(&library).unwrap();
+    fs::remove_dir_all(&course).unwrap();
     let outside = dir.path().join("fora");
     fs::create_dir_all(&outside).unwrap();
     fs::write(outside.join("segredo.mp4"), b"x").unwrap();
 
-    if !link_dir(&outside, &library) {
+    if !link_dir(&outside, &course) {
         eprintln!("pulado: criar symlink/junction exige privilégio nesta plataforma");
         return;
     }
 
-    let error = state.rescan().unwrap_err();
+    let summary = state.rescan().unwrap();
 
-    assert_eq!(error.code, IpcErrorCode::RescanUnavailable);
+    assert_eq!(summary.failed, 1, "o link precisa ser recusado como falha");
+    assert!(!summary.complete);
     assert_eq!(
         media_rows(dir.path()),
         1,
         "a varredura não pode ter seguido o link e indexado a pasta externa"
-    );
-    let json = serde_json::to_value(&error).unwrap();
-    let message = json["message"].as_str().unwrap();
-    assert!(
-        !message.contains(&outside.to_string_lossy().to_string()) && !message.contains("segredo"),
-        "a mensagem não pode expor o alvo do link: {message}"
     );
 }
 
@@ -180,6 +175,8 @@ fn rescan_of_an_empty_library_is_a_complete_empty_summary() {
 
     let summary = state.rescan().unwrap();
 
+    assert_eq!(summary.courses, 1);
+    assert_eq!(summary.failed, 0);
     assert_eq!(summary.inserted, 0);
     assert_eq!(summary.marked_missing, 0);
     assert!(
@@ -336,31 +333,29 @@ fn concurrent_rescans_do_not_run_together_and_return_a_stable_error() {
 }
 
 #[test]
-fn a_real_rescan_error_releases_the_busy_state_for_the_next_attempt() {
+fn a_failed_course_releases_the_busy_state_and_recovers_when_restored() {
     let dir = tempfile::tempdir().unwrap();
     let (state, library) = configured(dir.path());
     fs::write(library.join("aula.mp4"), b"video").unwrap();
     state.rescan().unwrap();
     assert_eq!(media_rows(dir.path()), 1);
 
-    // Erro real: a raiz some depois da seleção e a varredura é recusada.
+    // A raiz some depois da importação: a agregação reporta a falha sem prender o estado.
     fs::remove_dir_all(&library).unwrap();
-    let first = state.rescan().unwrap_err();
-    assert_eq!(first.code, IpcErrorCode::RescanUnavailable);
+    let first = state.rescan().unwrap();
+    assert_eq!(first.failed, 1);
+    assert!(!first.complete);
 
-    // O guarda ocupado foi liberado: a segunda chamada entra na varredura e volta a falhar
-    // pela raiz, não por estar ocupada. Um guarda preso devolveria `rescan_in_progress`.
-    let second = state.rescan().unwrap_err();
-    assert_eq!(
-        second.code,
-        IpcErrorCode::RescanUnavailable,
-        "um erro real não pode deixar o estado ocupado preso"
-    );
+    // O guarda ocupado foi liberado: a segunda chamada agrega de novo, sem devolver
+    // `rescan_in_progress`.
+    let second = state.rescan().unwrap();
+    assert_eq!(second.failed, 1);
 
     // Restaurando a raiz, um novo rescan inicia e conclui normalmente.
     fs::create_dir_all(&library).unwrap();
     fs::write(library.join("aula-2.mp4"), b"video").unwrap();
     let recovered = state.rescan().unwrap();
+    assert_eq!(recovered.failed, 0);
     assert_eq!(recovered.inserted, 1);
     assert_eq!(recovered.marked_missing, 1);
     assert_eq!(media_rows(dir.path()), 2);

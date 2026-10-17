@@ -10,7 +10,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use learnvault_desktop::DesktopState;
-use learnvault_desktop::command::LIBRARY_ID;
 use learnvault_desktop::media::{
     MAIN_WEBVIEW_LABEL, MAX_SMALL_FILE_BYTES, MEDIA_HOST, MEDIA_SCHEME, MediaMethod,
     MediaRejection, MediaResponse, RawMediaRequest, parse_media_request,
@@ -24,12 +23,12 @@ fn desktop(root: &Path) -> DesktopState {
     DesktopState::open(&root.join("data"), &root.join("config")).unwrap()
 }
 
-/// Estado desktop com uma biblioteca externa escolhida e persistida.
+/// Estado desktop com um curso externo importado e persistido.
 fn configured(root: &Path) -> (DesktopState, PathBuf) {
     let state = desktop(root);
     let library = root.join("Acervo privado");
     fs::create_dir_all(&library).unwrap();
-    state.select_library(|| Some(library.clone())).unwrap();
+    state.import_course(|| Some(library.clone())).unwrap();
     (state, library)
 }
 
@@ -51,10 +50,15 @@ fn database_path(root: &Path) -> PathBuf {
     root.join("data").join("learnvault.sqlite")
 }
 
+/// Identidade do curso indexado nas fixtures, derivada do caminho canônico.
+fn course_id(root: &Path) -> String {
+    learnvault_core::course_id_from_path(&fs::canonicalize(root.join("Acervo privado")).unwrap())
+}
+
 /// Identidade autorizada de um arquivo indexado.
 fn media_id(root: &Path, relative_path: &str) -> String {
     let database = learnvault_core::Database::open(database_path(root)).unwrap();
-    learnvault_core::find_media_by_path(&database, LIBRARY_ID, relative_path)
+    learnvault_core::find_media_by_path(&database, &course_id(root), relative_path)
         .unwrap()
         .unwrap_or_else(|| panic!("mídia não indexada: {relative_path}"))
         .media_id
@@ -515,7 +519,7 @@ fn a_removed_media_is_no_longer_served() {
     let (state, _library) = library(dir.path());
     let id = media_id(dir.path(), "Curso/material.pdf");
     let mut database = learnvault_core::Database::open(database_path(dir.path())).unwrap();
-    learnvault_core::remove_media(&mut database, LIBRARY_ID, &id, false).unwrap();
+    learnvault_core::remove_media(&mut database, &course_id(dir.path()), &id, false).unwrap();
 
     let response = serve(&state, &id, "GET", None);
 

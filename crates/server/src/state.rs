@@ -1,8 +1,8 @@
 use std::{
     collections::HashMap,
     fs,
-    path::Path,
-    sync::Arc,
+    path::{Path, PathBuf},
+    sync::{Arc, RwLock},
     time::{Duration, Instant},
 };
 
@@ -11,7 +11,11 @@ use learnvault_core::{AuthSession, AuthUser, Database, Error as CoreError};
 use sha2::{Digest, Sha256};
 use tokio::sync::{Mutex, OwnedSemaphorePermit, Semaphore};
 
-use crate::{Config, auth::hash_password};
+use crate::{
+    Config,
+    auth::hash_password,
+    courses::{RegisteredCourse, legacy_seed, load_registry, registry_path},
+};
 
 const SESSION_LIFETIME_SECONDS: i64 = 12 * 60 * 60;
 const MAX_BLOCKING_TASKS: usize = 4;
@@ -27,6 +31,11 @@ const MAX_MEDIA_STREAMS: usize = 4;
 pub struct AppState {
     /// Configuração validada usada pelo servidor.
     pub config: Config,
+    /// Cursos registrados, na ordem de importação. A leitura é rápida (snapshot) e a
+    /// escrita acontece apenas na importação/remoção, fora das threads Tokio.
+    pub(crate) courses: Arc<RwLock<Vec<RegisteredCourse>>>,
+    /// Arquivo versionado do registro de cursos, ao lado do banco.
+    pub(crate) courses_file: PathBuf,
     pub(crate) database: Arc<Mutex<Database>>,
     pub(crate) login_attempts: Arc<Mutex<HashMap<String, (u32, Instant)>>>,
     pub(crate) rescan_lock: Arc<Mutex<()>>,
@@ -70,11 +79,14 @@ impl AppState {
         let spa_shell_too_large = shell_too_large(config.web_root.as_deref());
         let spa_shell = load_spa_shell(config.web_root.as_deref()).map(Arc::new);
         let (inline_script_hashes, inline_style_hashes) = shell_hashes(spa_shell.as_deref());
+        let courses_file = registry_path(&config.database_path);
         Self {
             inline_script_hashes: inline_script_hashes.into(),
             inline_style_hashes: inline_style_hashes.into(),
             spa_shell,
             spa_shell_too_large,
+            courses: Arc::new(RwLock::new(Vec::new())),
+            courses_file,
             config,
             database: Arc::new(Mutex::new(database)),
             login_attempts: Arc::new(Mutex::new(HashMap::new())),
@@ -86,53 +98,68 @@ impl AppState {
         }
     }
 
-    /// Abre o banco e executa o bootstrap administrativo fora das threads Tokio.
+    /// Abre o banco, carrega o registro de cursos e executa o bootstrap administrativo
+    /// fora das threads Tokio.
     pub async fn initialize(config: Config) -> Result<Self, StateError> {
         let setup = config.clone();
-        let (database, spa_shell, spa_shell_too_large) = tokio::task::spawn_blocking(move || {
-            let shell_too_large = shell_too_large(setup.web_root.as_deref());
-            let shell = load_spa_shell(setup.web_root.as_deref()).map(Arc::new);
-            if let Some(parent) = setup
-                .database_path
-                .parent()
-                .filter(|parent| !parent.as_os_str().is_empty())
-            {
-                std::fs::create_dir_all(parent).map_err(|_| StateError::DatabaseDirectory)?;
-            }
-            let mut database =
-                Database::open(&setup.database_path).map_err(StateError::Database)?;
-            let existing = learnvault_core::has_admin(&database).map_err(StateError::Database)?;
-            if existing {
-                return Ok((database, shell, shell_too_large));
-            }
-            let using_temporary_default =
-                setup.admin_username.is_none() && setup.admin_password.is_none();
-            let username = setup.admin_username.as_deref().unwrap_or("admin");
-            let password = setup.admin_password.as_deref().unwrap_or("admin");
-            crate::auth::validate_username(username)
+        let (database, spa_shell, spa_shell_too_large, courses, courses_file) =
+            tokio::task::spawn_blocking(move || {
+                let shell_too_large = shell_too_large(setup.web_root.as_deref());
+                let shell = load_spa_shell(setup.web_root.as_deref()).map(Arc::new);
+                if let Some(parent) = setup
+                    .database_path
+                    .parent()
+                    .filter(|parent| !parent.as_os_str().is_empty())
+                {
+                    std::fs::create_dir_all(parent).map_err(|_| StateError::DatabaseDirectory)?;
+                }
+                // O registro é carregado ao lado do banco; a raiz semeada só entra em cena
+                // quando nenhum registro foi persistido ainda, e nunca é regravada aqui:
+                // uma remoção explícita do curso semente não volta no próximo start.
+                let courses_file = registry_path(&setup.database_path);
+                let mut courses = load_registry(&courses_file);
+                if !courses_file.exists()
+                    && let Some(seed) = setup.library_root.as_deref().and_then(legacy_seed)
+                {
+                    courses.push(seed);
+                }
+                let mut database =
+                    Database::open(&setup.database_path).map_err(StateError::Database)?;
+                let existing =
+                    learnvault_core::has_admin(&database).map_err(StateError::Database)?;
+                if existing {
+                    return Ok((database, shell, shell_too_large, courses, courses_file));
+                }
+                let using_temporary_default =
+                    setup.admin_username.is_none() && setup.admin_password.is_none();
+                let username = setup.admin_username.as_deref().unwrap_or("admin");
+                let password = setup.admin_password.as_deref().unwrap_or("admin");
+                crate::auth::validate_username(username)
+                    .map_err(|_| StateError::InvalidAdministrator)?;
+                let password_hash = if using_temporary_default {
+                    crate::auth::hash_password_unchecked(password)
+                } else {
+                    hash_password(password)
+                }
                 .map_err(|_| StateError::InvalidAdministrator)?;
-            let password_hash = if using_temporary_default {
-                crate::auth::hash_password_unchecked(password)
-            } else {
-                hash_password(password)
-            }
-            .map_err(|_| StateError::InvalidAdministrator)?;
-            learnvault_core::bootstrap_admin_with_change_required(
-                &mut database,
-                "usr-admin",
-                username,
-                &password_hash,
-                unix_now(),
-                using_temporary_default,
-            )
-            .map_err(StateError::Database)?;
-            Ok((database, shell, shell_too_large))
-        })
-        .await
-        .map_err(StateError::Blocking)??;
+                learnvault_core::bootstrap_admin_with_change_required(
+                    &mut database,
+                    "usr-admin",
+                    username,
+                    &password_hash,
+                    unix_now(),
+                    using_temporary_default,
+                )
+                .map_err(StateError::Database)?;
+                Ok((database, shell, shell_too_large, courses, courses_file))
+            })
+            .await
+            .map_err(StateError::Blocking)??;
         let (inline_script_hashes, inline_style_hashes) = shell_hashes(spa_shell.as_deref());
         Ok(Self {
             config,
+            courses: Arc::new(RwLock::new(courses)),
+            courses_file,
             database: Arc::new(Mutex::new(database)),
             login_attempts: Arc::new(Mutex::new(HashMap::new())),
             rescan_lock: Arc::new(Mutex::new(())),
@@ -145,6 +172,17 @@ impl AppState {
             spa_shell_streams: Arc::new(Semaphore::new(MAX_SPA_SHELL_STREAMS)),
             media_streams: Arc::new(Semaphore::new(MAX_MEDIA_STREAMS)),
         })
+    }
+
+    /// Fotografia imutável dos cursos registrados.
+    ///
+    /// Uma leitura de catálogo, rescan ou mídia usa a fotografia e nunca segura o cadeado
+    /// de escrita enquanto lê arquivos ou o banco.
+    pub(crate) fn courses_snapshot(&self) -> Vec<RegisteredCourse> {
+        self.courses
+            .read()
+            .map(|courses| courses.clone())
+            .unwrap_or_default()
     }
 
     /// Reserva capacidade para uma tarefa que pode sobreviver ao timeout HTTP.
@@ -637,7 +675,7 @@ mod tests {
         Config {
             listen_addr: "127.0.0.1:0".parse().unwrap(),
             database_path: PathBuf::from("learnvault.sqlite"),
-            library_root: PathBuf::from("."),
+            library_root: None,
             web_root: None,
             admin_username: None,
             admin_password: None,

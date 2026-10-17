@@ -46,6 +46,11 @@ recente usam o mesmo contrato e os mesmos limites públicos. O desktop expõe es
 com o dono local fixo resolvido no Rust, e o player reproduz mídia local pelo protocolo customizado,
 mantendo retomada e conclusão no mesmo fluxo de estudo.
 
+A entrega #182 reorganiza a biblioteca por **cursos importados individualmente** — no desktop pelo
+seletor nativo, no servidor por caminho validado — com a página inicial em cards de capa gerada,
+navegação por curso e remoção sem apagar arquivos. A biblioteca deixa de ser uma raiz única: cada
+pasta é um curso, registrado com identidade estável, e a interface não conhece caminhos.
+
 ## Próximo — ciclo de estudo utilizável
 
 - [ ] Detalhes do curso e navegação de aulas
@@ -61,13 +66,14 @@ mantendo retomada e conclusão no mesmo fluxo de estudo.
 - [ ] Estabelecer sidebar persistente no desktop e navegação mobile
 - [ ] Priorizar “Continuar estudando” na tela inicial
 - [ ] Construir o player como canvas principal de estudo com índice de aulas
-- [ ] Adicionar capas, estados vazios, carregamento e recuperação
+- [ ] Adicionar capas manuais, estados vazios, carregamento e recuperação
+  - [x] Capas geradas a partir do título e estados vazios da página inicial
 - [ ] Validar navegação por teclado, foco, contraste, movimento reduzido e labels para leitores de tela
 - [ ] Manter a identidade visual original do projeto
 
 ## Depois — experiência de biblioteca ampliada
 
-- [ ] Capas de cursos geradas e manuais
+- [ ] Capas de cursos manuais (por imagem da pasta)
 - [ ] Cache de remux sob demanda para mídias incompatíveis
 - [ ] Busca no catálogo, materiais e notas
 - [ ] Favoritos e notas com timestamp

@@ -191,6 +191,11 @@ publicado e inicie o servidor a partir do diretório extraído:
   --web-root ./web
 ```
 
+No modelo atual, `--library-root` é uma **semente de implantação**: quando o registro de cursos
+ainda não existe, a pasta informada é registrada como o primeiro curso com a identidade histórica
+`library-1`; cursos adicionais entram pela interface, um por pasta. Uma remoção explícita do curso
+semente não o traz de volta no próximo start.
+
 Quando aplicável, migre primeiro um banco Go v8 existente, com o escritor Go parado e os caminhos
 distintos:
 
