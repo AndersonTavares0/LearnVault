@@ -61,5 +61,5 @@ status HTTP), sem incluir segredos ou dados privados:
 ## Limites
 
 Este relatório não prova produção. O artefato é não assinado e não é o release Linux
-suportado; os tarballs Go continuam sendo o release suportado. O registro também não
+estável suportado; os tarballs Rust são o release suportado. O registro também não
 substitui a revisão das demais evidências e gates da Fase 5.

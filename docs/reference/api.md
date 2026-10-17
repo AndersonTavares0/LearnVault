@@ -1,7 +1,7 @@
 # Referência da API
 
-A implementação Go permanece a referência funcional e de rollback. O servidor Rust expõe as mesmas APIs abaixo
-e a SPA web usa o mesmo contrato de Study nos dois transportes. Todas as rotas usam JSON, salvo
+A implementação atual é o servidor Rust, que expõe as APIs abaixo, e a SPA web usa o mesmo contrato
+de Study nos dois transportes. Todas as rotas usam JSON, salvo
 indicação contrária. A autenticação usa um cookie de sessão HttpOnly com SameSite=Strict.
 
 No servidor Rust, cada pasta de curso registrada deve permanecer sob controle confiável do
@@ -118,9 +118,8 @@ reaparecer) e marca como ausentes os que deixaram de aparecer. Nenhum rescan exc
 reescreve a identidade de mídia ou apaga o estado associado. A resposta `200` devolve apenas o
 resumo sanitizado do núcleo — contagens, incluindo `ambiguous_count` — e nunca os caminhos
 relativos das chaves ambíguas, que exporiam a estrutura da biblioteca.
-Tanto no servidor Rust quanto no desktop e no serviço Go de referência, a remoção explícita de
-mídia é gravada como tombstone em `media_removal` (chaveado pela identidade de mídia `media_id` no
-Rust/desktop e pelo caminho relativo canônico no Go). Nenhum rescan cria, apaga ou reescreve esse
+No servidor Rust e no desktop, a remoção explícita de mídia é gravada como tombstone em
+`media_removal`, chaveado pela identidade de mídia `media_id`. Nenhum rescan cria, apaga ou reescreve esse
 registro, e o carimbo `removed_at` não é alterado por uma varredura. A leitura do catálogo
 filtra os itens removidos, então a mídia sai de `/api/catalog` (e do `desktop_catalog`) e
 `/api/media` responde 404, mesmo que o arquivo reapareça no disco depois. A remoção não apaga a
@@ -157,7 +156,7 @@ cliente, então uma sessão só lê e escreve o próprio progresso. Posição de
 conclusão são independentes — avançar não desfaz a conclusão e concluir não move o ponto de
 retomada — e reenviar um valor idêntico não altera o instante da última mudança.
 
-Este contrato está implementado no servidor Rust, na SPA web e no serviço Go de referência
+Este contrato está implementado no servidor Rust e na SPA web
 (paridade das entregas #86, #88, #90 e #91). O transporte desktop expõe o mesmo contrato por IPC,
 descrito ao final desta seção; ele não usa rotas HTTP.
 

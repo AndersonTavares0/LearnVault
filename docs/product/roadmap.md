@@ -6,7 +6,7 @@ não funcionais consolidados ficam em [requirements.md](requirements.md).
 
 ## Escopo do MVP (proposta)
 
-O MVP é o conjunto mínimo que permite aposentar o serviço Go de referência (Fase 5) e publicar o
+O MVP é o conjunto mínimo que permitiu concluir a remoção do serviço Go de referência na Fase 5 e publicar o
 desktop:
 
 - **Inclui:** RF-01 a RF-10 completos; RNF-01 a RNF-07 atendidos (segurança, privacidade,
@@ -34,7 +34,7 @@ A execução avança por fases, com um pull request por fase:
 - [x] Fase 2 — `crates/server` com Axum, autenticação, sessões e mídia com Range
 - [x] Fase 3 — SPA Svelte 5 + TypeScript + Vite com dois builds
 - [x] Fase 3a — recusa segura de bancos Go legados e API explícita, limitada e backup-first para
-  importar usuários, catálogo e estado; comando `learnvault-server migrate-go` executa a operação
+  importar usuários, catálogo e estado; o comando legado `learnvault-server migrate-go` continua executando a operação
   sem iniciar o listener HTTP
 - [ ] Fase 4 — `crates/desktop` com Tauri 2, offline e sem portas de rede
   - [x] Fase 4 (fundação) — crate `crates/desktop` no workspace, `frontendDist` embutido, capability deny-by-default e CSP explícita; IPC de domínio, mídia e janelas reais ainda pendentes
@@ -60,8 +60,8 @@ como referência funcional e integralmente substituído pelo ecossistema Rust:
 
 ## Entregue — ciclo de estudo compatível
 
-As entregas mescladas #86, #88, #90 e #91 alinham o contrato de Study entre o servidor Rust,
-a SPA web e o serviço Go de referência: progresso, posição de retomada, conclusão e histórico
+As entregas mescladas #86, #88, #90 e #91 alinharam o contrato de Study entre o servidor Rust,
+a SPA web e o serviço Go de referência, então removido: progresso, posição de retomada, conclusão e histórico
 recente usam o mesmo contrato e os mesmos limites públicos. O desktop expõe esse contrato por IPC,
 com o dono local fixo resolvido no Rust, e o player reproduz mídia local pelo protocolo customizado,
 mantendo retomada e conclusão no mesmo fluxo de estudo.

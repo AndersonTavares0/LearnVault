@@ -34,8 +34,8 @@ biblioteca pelo próprio identificador, allowlist de tipo de conteúdo, faixas H
 limite explícito de resposta e revalidação pelo `learnvault-core`. No servidor self-hosted, o
 registro de cursos vive em `courses.json` ao lado do banco, com endpoints administrativos de
 importação e remoção, e `LIBRARY_DIR`/`--library-root` continua aceito apenas como semente do
-primeiro curso. A API de Study já tem paridade entre servidor Rust, SPA web e serviço Go de
-referência, e o desktop a expõe por IPC; o player desktop reproduz mídia local e sincroniza
+primeiro curso. A API de Study tem paridade entre o servidor Rust e a SPA web,
+e o desktop a expõe por IPC; o player desktop reproduz mídia local e sincroniza
 posição/conclusão. O player desktop renderiza legendas VTT; SRT, ASS e SSA são baixáveis, e o build
 HTTP pode converter SRT sob demanda. Autenticação e janelas reais ainda não existem no desktop.
 
@@ -48,11 +48,11 @@ Serviço HTTP Rust -- SQLite + registro de cursos (/data)
         `-- pastas de curso (/courses/*:ro)
 ```
 
-O serviço HTTP Go permanece disponível separadamente como implementação legada/de referência;
-ele não é o servidor atual descrito pelo fluxo acima.
+O serviço HTTP Go foi removido na Fase 5 (PR #206); o servidor atual é a implementação Rust
+descrita pelo fluxo acima.
 
-O núcleo também possui uma API de importação explícita do SQLite Go (`legacy_import`): a origem
-é somente leitura, recebe backup antes da operação e a saída é promovida somente após transação,
+O núcleo também possui uma API de importação explícita do formato legado de SQLite (`legacy_import`):
+a origem é somente leitura, recebe backup antes da operação e a saída é promovida somente após transação,
 integridade, chaves estrangeiras e contagens. A biblioteca física não participa da migração.
 
 ## Arquitetura aprovada

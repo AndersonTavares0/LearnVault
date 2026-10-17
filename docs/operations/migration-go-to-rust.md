@@ -63,7 +63,7 @@ removidos. O procedimento abaixo é preservado como documentação de referênci
 
 Escopo estrito:
 
-- constrói o `Containerfile` Go de referência e o `Containerfile.rust` experimental;
+- construía o `Containerfile` Go de referência e o `Containerfile` Rust experimental;
 - gera um banco Go v8 real subindo o runtime Go contra uma biblioteca sintética somente
   leitura e catalogando a fixture; nunca constrói nem empacota um banco binário;
 - **quiescência**: para o escritor Go (`stop`) e confirma que ele não está mais rodando
@@ -123,13 +123,13 @@ recuperação sob falha. Ele também não comprova migração de dados reais de 
 Qualquer cutover real exige uma janela de manutenção planejada com quiescência do escritor,
 backup verificado e ensaio em uma cópia dos volumes reais antes de promover o Rust.
 
-## Gate de elegibilidade para a remoção do serviço Go
+## Registro da remoção do serviço Go
 
 ### Autoridade e propósito
 
-Este é o gate terminal da Fase 5. O ADR determina a remoção do serviço Go em um pull request
-próprio e preserva a possibilidade de retomar a implementação anterior enquanto a reescrita não
-estiver concluída (`docs/architecture/adr/0001-reescrita-em-rust.md:54`,
+Este foi o gate terminal da Fase 5. A remoção do serviço Go foi concluída na PR #206 em
+2026-10-17, preservando no histórico a possibilidade de retomar a implementação anterior enquanto a reescrita não
+estava concluída (`docs/architecture/adr/0001-reescrita-em-rust.md:54`,
 `docs/architecture/adr/0001-reescrita-em-rust.md:109`). O roadmap registra essa entrega como
 “Fase 5 — distribuição por plataforma e remoção do serviço Go” (`docs/product/roadmap.md:26`).
 Este documento consolida a evidência necessária; não substitui a revisão do pull request nem a
@@ -141,27 +141,26 @@ configuração de proteção da branch.
 | --- | --- | --- | --- | --- |
 | G1 identidade de versão do servidor Rust | Um run de `rust-server-rc.yml` demonstra que o binário reporta a versão injetada. | Injetar a versão no run, executar o smoke test e conservar o artefato e sua saída de `--version`. O binário prefere `LEARNVAULT_BUILD_VERSION` e cai para `CARGO_PKG_VERSION` (`crates/server/src/lib.rs:42`); o dispatch `gh workflow run rust-server-rc.yml --ref main -f ref=main -f version=<v>` falha fechado se a versão vier vazia. | agente prepara o workflow e a evidência; operador confere o artefato | **VERDE** — run 38993897882 sobre `d499881` com `0.4.0-rc.1`: smoke aprovado (`--version` = `learnvault-server 0.4.0-rc.1`, healthz com `"version":"0.4.0-rc.1"` e `no-store`) e artefato verificado (`learnvault-server-linux-x86_64.tar.gz`, SHA-256 `6afef8e010c9c2feae5fff3096699a1ff9c8b89deecdc102a435961dfd7802aa`) |
 | G2 artefato Rust publicado e em soak | Artefato Rust publicado no canal suportado e relatório de soak concluído. | Criar o caminho de publicação e executar o soak contra o artefato. O caminho existe em `.github/workflows/rust-server-rc-publish.yml` como draft prerelease `rust-rc-*`, não assinado; o soak ainda não foi executado nem aceito. | agente implementa o caminho; operador executa e aceita o soak | **VERMELHO** — o soak ainda não foi executado nem aceito |
-| G3 container/Compose Rust suportado ou explicitamente opt-in | Decisão publicada sobre suporte: caminho Rust validado ou opt-in explícito, com instruções e limites. | Validar o Containerfile/Compose Rust em uma instalação suportada e registrar o resultado, ou documentar o opt-in sem alegar suporte geral. | agente documenta e valida; operador executa o cenário | **VERDE** — opt-in explícito publicado em 2026-10-17 na seção "Container Rust no Compose (opt-in explícito)" de `docs/operations/distribution.md`, com instruções, contrato aplicado e limites declarados, sem alegar suporte geral; evidências executadas: `docker compose --env-file deploy/compose/.env.example -f deploy/compose/compose.yaml config` (2026-10-17) renderiza o contrato com `/library` somente leitura, e o job `Container build (Rust)` da CI está verde na run 39002977974 sobre a `main`, construindo o mesmo `deploy/container/Containerfile.rust`, rodando `scripts/verify-rust-oci.sh` e aplicando Trivy HIGH/CRITICAL; o cenário em servidor real continua pendente do operador |
+| G3 container/Compose Rust suportado ou explicitamente opt-in | Decisão publicada sobre suporte: caminho Rust validado ou opt-in explícito, com instruções e limites. | Validar o Containerfile/Compose Rust em uma instalação suportada e registrar o resultado, ou documentar o opt-in sem alegar suporte geral. | agente documenta e valida; operador executa o cenário | **VERDE** — opt-in explícito publicado em 2026-10-17 na seção "Container Rust no Compose (opt-in explícito)" de `docs/operations/distribution.md`, com instruções, contrato aplicado e limites declarados, sem alegar suporte geral; evidências executadas: `docker compose --env-file deploy/compose/.env.example -f deploy/compose/compose.yaml config` (2026-10-17) renderiza o contrato com `/library` somente leitura, e o job `Container build (Rust)` da CI está verde na run 39002977974 sobre a `main`, construindo o mesmo `deploy/container/Containerfile`, rodando `scripts/verify-rust-oci.sh` e aplicando Trivy HIGH/CRITICAL; o cenário em servidor real continua pendente do operador |
 | G4 required checks sem Go | Proteção de branch exige os checks Rust, desktop e container Rust pertinentes e não exige `Go tests and vet`; `Container build (Rust)` não depende da imagem Go, e nenhum dos dois checks acoplados ao Go (`Go tests and vet` e `Container build`) pode continuar required. | O CI prepara `Container build (Rust)`, que constrói/valida `deploy/container/Containerfile` e aplica o scan Trivy HIGH/CRITICAL sem depender de Go. Sequência executada em 2026-10-17: a branch protection da `main` foi atualizada via GitHub API exigindo exclusivamente `SPA checks`, `Rust tests and lints`, `Desktop crate compile and guards` e `Container build (Rust)`, removendo `Go tests and vet` e `Container build`. | agente prepara o workflow; mantenedor/API altera a configuração de branch protection | **VERDE** — checks obrigatórios atualizados na branch `main`: `SPA checks`, `Rust tests and lints`, `Desktop crate compile and guards`, `Container build (Rust)`. `Go tests and vet` e `Container build` removidos de required checks. |
 | G5 ensaio aceito em volumes reais pareados | Relatório de ensaio com uma cópia dos volumes reais, quiescência, checksum, backup e saída Rust distintos, e aceite operacional. | Executar o procedimento da seção [Gate de cutover do Compose self-hosted](#gate-de-cutover-do-compose-self-hosted) em volumes reais pareados. `scripts/verify-go-to-rust-cutover.sh` é fixture-only e não vale como evidência de volume real. | operador executa; agente conserva o relatório | **VERMELHO** — não comprovado |
 | G6 aceite do MVP desktop | Aceite explícito do MVP desktop conforme os requisitos da Fase 4 e da distribuição aprovada. | Executar os fluxos desktop e os checks de distribuição aplicáveis, registrar falhas e aceite. | operador aceita após evidência; agente fornece os artefatos | **NÃO COMPROVADO** |
 | G7 rollback por volumes pareados com RPO explícito | Ensaio de rollback que preserve o volume Go, descarte o volume Rust e declare o RPO. | Seguir o procedimento desta página e `.agents/policies/data-safety.md`, incluindo backup verificado antes da promoção e retorno somente ao volume Go. | operador executa e aceita; agente documenta | **NÃO COMPROVADO** — o procedimento está documentado, mas não foi executado como evidência |
 | G8 contrato de API/DB que sobrevive à remoção | Verificação do contrato em `docs/reference/api.md`, da detecção/recusa de banco Go e de `PRAGMA user_version = 4` no caminho suportado. | Executar testes e smoke tests contra o contrato Rust, incluindo banco Go recusado e schema esperado, antes de remover a referência. | agente produz testes; operador executa e aceita | **VERDE** — aceite executado em 2026-10-16: SPA construída; `cargo test -p learnvault-core` (206 testes) e `cargo test -p learnvault-server` (100 testes) aprovados; fmt e clippy sem falhas |
 
-### Checklist de remoção do Go no CI (G4)
+### Registro da remoção do Go no CI (G4)
 
-Os dois checks obrigatórios acoplados ao Go saem juntos. Enquanto `Container build` for required, o
-job `go` continua bloqueando merges de forma indireta, porque `container` declara `needs: [go, web]`
-(`.github/workflows/ci.yml:83`). Remover apenas `Go tests and vet` não produz "required checks sem
-Go" e não fecha o G4.
+Os dois checks obrigatórios acoplados ao Go foram removidos juntos na PR #206. O histórico abaixo
+registra por que a remoção precisava ser coordenada: enquanto `Container build` era required, o job
+`go` bloqueava merges de forma indireta, porque `container` declarava `needs: [go, web]`
+(`.github/workflows/ci.yml:83`). Remover apenas `Go tests and vet` não produziria "required checks sem
+Go" e não fecharia o G4.
 
-Sequência aprovada em 2026-10-17 (issue #164): primeiro o mantenedor promove `Rust tests and lints`,
-`Desktop crate compile and guards` e `Container build (Rust)` a required, mantendo `Go tests and
-vet` e `Container build`, de modo que a cobertura só cresce; a remoção dos dois checks Go fica
-acoplada à pull request dedicada de remoção do Go, porque só nessa janela os caminhos Go deixam de
-existir e a saída não custa cobertura. Até lá, `Go tests and vet` segue como o único gate do módulo
-Go e `Container build` como o único gate da imagem OCI suportada
-(`deploy/container/Containerfile`), enquanto `release.yml` continua publicando os tarballs Linux Go.
+Sequência aprovada em 2026-10-17 (issue #164) e executada na PR #206: o mantenedor promoveu
+`Rust tests and lints`, `Desktop crate compile and guards` e `Container build (Rust)` a required e
+removeu `Go tests and vet` e `Container build`. Atualmente, os quatro checks protegidos são
+`SPA checks`, `Rust tests and lints`, `Desktop crate compile and guards` e `Container build (Rust)`,
+e o release suportado publica os tarballs Linux Rust.
 
 Nunca exclua um job antes de remover o check correspondente da proteção: um required check cujo job
 deixou de existir nunca reporta, o GitHub marca "Expected — Waiting for status to be reported" e
@@ -169,15 +168,14 @@ todas as pull requests ficam bloqueadas, inclusive com `strict: true`. Nos dois 
 de branch protection é maintainer-only, não fica versionada no repositório e nenhum agente pode
 executá-la.
 
-Na sequência, o agente exclui o job `go` e o staging da SPA que ele exige, exclui o job Go
-`Container build`, exclui `deploy/container/Containerfile`, exclui o workflow de release Go e
-aposenta `services/go`.
+Na PR #206, foram removidos o job `go`, o staging da SPA que ele exigia, o job Go
+`Container build` e `services/go`; o caminho de imagem suportado foi mantido em
+`deploy/container/Containerfile` e os workflows passaram a publicar artefatos Rust.
 
-O G4 só pode ser marcado VERDE depois que a configuração efetiva for conferida: o conjunto required
-contém os checks Rust, desktop e container Rust; não contém `Go tests and vet` nem `Container build`;
-e cada check novo reporta em pull requests. Enquanto `services/go` e o workflow de release Go
-existirem, registre no status que o código Go permanece no repositório e deixou de ser gateado —
-remover os checks não remove o serviço.
+O G4 foi marcado VERDE após a conferência da configuração efetiva: o conjunto required contém os
+checks Rust, desktop e container Rust; não contém `Go tests and vet` nem `Container build`; e cada
+check reporta em pull requests. A PR #206 também removeu `services/go` e o workflow de release Go;
+permanecem apenas o importador e as referências históricas documentadas abaixo.
 
 ### Registro de aceite do contrato (G8)
 
@@ -191,7 +189,7 @@ O contrato verificado diretamente no código é:
 - Importer: `migrate-go` exige `--input`, `--output`, `--backup` e `--library-id` (`crates/server/src/config.rs:204-251`), coberto por `parses_migrate_go_without_server_environment`, `migrate_go_requires_all_explicit_options` e `migrate_go_rejects_duplicate_and_unknown_options` (`crates/server/src/config.rs:409-490`). O fluxo backup-first e a importação são cobertos por `imports_users_media_sessions_progress_and_removals_after_backup` e `backup_includes_uncheckpointed_wal_data` (`crates/core/tests/legacy_import.rs:60-166`); recusas antes do backup por `rejects_schema_other_than_go_v8_before_backup`.
 - Credenciais/Argon2id: `hash_password` usa Argon2id PHC compatível (`crates/server/src/auth.rs:38-65`), coberto por `password_hash_uses_the_legacy_compatible_argon2id_parameters` e `password_verification_is_boolean_and_does_not_leak_hash_details` (`crates/server/src/auth.rs:477-503`); o contrato HTTP é exercitado por `login_me_and_logout_use_an_expiring_secure_cookie`, `invalid_credentials_have_a_uniform_unauthorized_response` e `credentials_change_is_transactional_and_invalidates_old_sessions` (`crates/server/tests/auth_http.rs:60-411`).
 
-Permanece **NÃO provado**: nenhum banco Go real foi usado (somente fixtures sintéticas temporárias), não houve aceite operacional por operador, nem execução em produção, nem prova de remoção do runtime Go. O resultado não altera o G2, que continua **VERMELHO**.
+Permanece **NÃO provado**: nenhum banco Go real foi usado (somente fixtures sintéticas temporárias), não houve aceite operacional por operador nem execução em produção. A remoção do runtime Go foi concluída na Fase 5/PR #206. O resultado não altera o G2, que continua **VERMELHO**.
 
 
 ### Runbook de soak do artefato Rust (G2)
@@ -199,7 +197,7 @@ Permanece **NÃO provado**: nenhum banco Go real foi usado (somente fixtures sin
 O operador deve despachar `.github/workflows/rust-server-rc.yml`, conferir o artefato e então
 usar `.github/workflows/rust-server-rc-publish.yml` com a `version` do artefato, o `run_id` do
 primeiro workflow e uma tag `rust-rc-*`. O resultado é uma draft prerelease não assinada e
-pré-soak; ela não é o release Linux suportado (os tarballs Go continuam sendo esse release).
+pré-soak; ela não é o release Linux estável suportado (os tarballs Rust são esse release).
 
 Extraia `learnvault-server-linux-x86_64.tar.gz` em um diretório de trabalho, preserve o SHA-256
 publicado e inicie o servidor a partir do diretório extraído:

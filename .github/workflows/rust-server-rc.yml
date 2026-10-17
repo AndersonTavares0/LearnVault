@@ -16,7 +16,7 @@
 #     `release-` as an extra clarity safeguard against any future broadening of
 #     `.github/workflows/release.yml`'s `download-artifact pattern: release-*`.
 #
-# The Go Linux tarballs remain the only supported Linux release. The stable
+# The Rust Linux tarballs are the supported Linux release. The stable
 # `vX.Y.Z` tag namespace belongs to `.github/workflows/release.yml`; this
 # workflow fails closed if asked to build a ref that matches it.
 name: Rust server release candidate
