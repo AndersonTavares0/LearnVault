@@ -33,12 +33,10 @@
 use std::borrow::Cow;
 use std::io::{Read, Seek, SeekFrom};
 
-use learnvault_core::{Error, MediaKind, OpenMedia};
+use learnvault_core::{CourseRoot, Error, MediaKind, OpenMedia};
 use tauri::http::{Request, Response, StatusCode, header};
 use tauri::{Manager, Runtime};
 
-use crate::command::LIBRARY_ID;
-use crate::library::LibraryRoot;
 use crate::state::DesktopState;
 
 /// Esquema do protocolo customizado de mídia do desktop.
@@ -343,16 +341,26 @@ impl DesktopState {
 
     /// Abre a mídia autorizada uma única vez e monta a resposta.
     fn open_media_request(&self, request: &MediaRequest) -> MediaResponse {
-        let Some(root) = self.library_root() else {
+        let Ok(database) = self.lock_database() else {
+            return MediaResponse::empty(status::INTERNAL_SERVER_ERROR);
+        };
+        // A identidade opaca liga a mídia à biblioteca do curso registrado; sem curso
+        // correspondente, a resposta é `404`, sem expor estado algum.
+        let Some(library_id) =
+            (match learnvault_core::find_media_library_id(&database, &request.media_id) {
+                Ok(library_id) => library_id,
+                Err(_) => return MediaResponse::empty(status::INTERNAL_SERVER_ERROR),
+            })
+        else {
+            return MediaResponse::empty(status::NOT_FOUND);
+        };
+        let Some(course) = self.course(&library_id) else {
             return MediaResponse::empty(status::NOT_FOUND);
         };
         // A raiz persistida é revalidada imediatamente antes da abertura, preservando a
-        // semântica da seleção: uma raiz removida, inacessível ou substituída por
+        // semântica da importação: uma pasta removida, inacessível ou substituída por
         // link/junction é recusada, sem seguir o alvo.
-        let Ok(root) = LibraryRoot::resolve(root.as_path()) else {
-            return MediaResponse::empty(status::INTERNAL_SERVER_ERROR);
-        };
-        let Ok(database) = self.lock_database() else {
+        let Ok(root) = CourseRoot::resolve(course.root.as_path()) else {
             return MediaResponse::empty(status::INTERNAL_SERVER_ERROR);
         };
 
@@ -360,7 +368,7 @@ impl DesktopState {
         // identidade do descritor. O `File` já aberto é o que será lido.
         let opened = match learnvault_core::open_media(
             &database,
-            LIBRARY_ID,
+            &library_id,
             &request.media_id,
             root.as_path(),
         ) {

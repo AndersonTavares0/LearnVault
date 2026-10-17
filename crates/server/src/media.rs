@@ -12,7 +12,7 @@ use serde::Deserialize;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
 use crate::{
-    AppState, LIBRARY_ID, StateError,
+    AppState, StateError,
     auth::{hash_session_token, request_token},
     catalog::service_unavailable,
     stream::idle_timeout_stream,
@@ -20,6 +20,9 @@ use crate::{
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct MediaQuery {
+    /// Identidade do curso registrado que contém a mídia.
+    course: String,
+    /// Caminho relativo dentro da pasta do curso.
     path: String,
 }
 
@@ -48,9 +51,17 @@ pub(crate) async fn media(
         None => return error_private_no_store(StatusCode::BAD_REQUEST),
     };
 
-    let root = state.config.library_root.clone();
+    let Some(course) = state
+        .courses_snapshot()
+        .into_iter()
+        .find(|course| course.id == query.course)
+    else {
+        return error_private_no_store(StatusCode::NOT_FOUND);
+    };
+    let root = course.root;
     let path = query.path;
     let lookup_path = path.clone();
+    let library_id = course.id.clone();
     // Evita segurar o mutex do banco só para devolver 503 sob saturação.
     if !state.has_blocking_capacity() {
         return service_unavailable();
@@ -61,7 +72,7 @@ pub(crate) async fn media(
     };
     let reference = tokio::task::spawn_blocking(move || {
         let _blocking_task = blocking_task;
-        learnvault_core::find_media_by_path(&database, LIBRARY_ID, &lookup_path)
+        learnvault_core::find_media_by_path(&database, &library_id, &lookup_path)
     })
     .await;
     let reference = match reference {
@@ -77,7 +88,7 @@ pub(crate) async fn media(
     let database = state.database.clone().lock_owned().await;
     let opened = match tokio::task::spawn_blocking(move || {
         let _blocking_task = blocking_task;
-        learnvault_core::open_media_reference(&database, &reference, &root)
+        learnvault_core::open_media_reference(&database, &reference, root.as_path())
     })
     .await
     {

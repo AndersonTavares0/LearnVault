@@ -8,8 +8,6 @@ use thiserror::Error;
 
 use learnvault_core::LegacyImportOptions;
 
-const DEFAULT_LIBRARY_ROOT: &str = "library";
-
 /// Configuração validada necessária para iniciar o servidor.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Config {
@@ -17,8 +15,10 @@ pub struct Config {
     pub listen_addr: SocketAddr,
     /// Caminho do banco SQLite.
     pub database_path: PathBuf,
-    /// Raiz autorizada da biblioteca física.
-    pub library_root: PathBuf,
+    /// Raiz opcional usada para semear o primeiro curso quando o registro ainda não
+    /// existe. É apenas uma conveniência de implantação: a gestão normal acontece pela
+    /// interface, que registra cursos individualmente em um arquivo ao lado do banco.
+    pub library_root: Option<PathBuf>,
     /// Raiz opcional dos arquivos estáticos da interface web.
     pub web_root: Option<PathBuf>,
     /// Usuário inicial usado somente quando o banco ainda não possui administrador.
@@ -118,8 +118,9 @@ where
     let mut listen_addr = None;
     let data_dir = env("DATA_DIR").unwrap_or_else(|| "data".to_owned());
     let mut database_path = PathBuf::from(data_dir).join("learnvault.sqlite");
-    let mut library_root =
-        PathBuf::from(env("LIBRARY_DIR").unwrap_or_else(|| DEFAULT_LIBRARY_ROOT.to_owned()));
+    let mut library_root = env("LIBRARY_DIR")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from);
     let mut web_root = None;
     let mut admin_username = env("ADMIN_USERNAME").filter(|value| !value.is_empty());
     let admin_password = env("ADMIN_PASSWORD").filter(|value| !value.is_empty());
@@ -143,7 +144,7 @@ where
                 );
             }
             "--database" => database_path = PathBuf::from(next_value(&mut args)?),
-            "--library-root" => library_root = PathBuf::from(next_value(&mut args)?),
+            "--library-root" => library_root = Some(PathBuf::from(next_value(&mut args)?)),
             "--web-root" => web_root = Some(PathBuf::from(next_value(&mut args)?)),
             "--admin-username" => admin_username = Some(next_value(&mut args)?),
             "--admin-password" => {
@@ -177,10 +178,13 @@ where
     };
 
     let library_root = library_root
-        .canonicalize()
-        .ok()
-        .filter(|path| path.is_dir())
-        .ok_or(ConfigError::InvalidLibraryRoot)?;
+        .map(|path| {
+            path.canonicalize()
+                .ok()
+                .filter(|path| path.is_dir())
+                .ok_or(ConfigError::InvalidLibraryRoot)
+        })
+        .transpose()?;
     let web_root = web_root
         .map(|path| {
             path.canonicalize()
@@ -320,7 +324,7 @@ mod tests {
 
         assert_eq!(config.listen_addr.to_string(), "0.0.0.0:8181");
         assert_eq!(config.database_path, data.join("learnvault.sqlite"));
-        assert_eq!(config.library_root, canonical(&library));
+        assert_eq!(config.library_root, Some(canonical(&library)));
         assert!(!config.cookie_secure);
     }
 
@@ -360,7 +364,7 @@ mod tests {
 
         assert_eq!(config.listen_addr.to_string(), "127.0.0.1:9090");
         assert_eq!(config.database_path, PathBuf::from("custom.sqlite"));
-        assert_eq!(config.library_root, canonical(&cli_library));
+        assert_eq!(config.library_root, Some(canonical(&cli_library)));
         assert!(!config.cookie_secure);
     }
 

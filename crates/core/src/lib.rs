@@ -15,6 +15,7 @@
 
 pub mod auth;
 pub mod catalog;
+pub mod courses;
 pub mod db;
 pub mod error;
 pub mod ids;
@@ -34,10 +35,16 @@ pub use auth::{
     update_credentials_and_session,
 };
 pub use catalog::{Availability, Catalog, CatalogFile, CatalogNode, NodeRole, build_catalog};
+pub use courses::{
+    CourseRoot, CourseRootError, LEGACY_LIBRARY_ID, course_id_from_path, course_title,
+};
 pub use db::Database;
 pub use error::{Error, Result};
 pub use legacy_import::{LegacyImportOptions, LegacyImportReport, import_go_database};
-pub use media::{MediaReference, OpenMedia, find_media_by_path, open_media, open_media_reference};
+pub use media::{
+    MediaReference, OpenMedia, find_media_by_path, find_media_library_id, open_media,
+    open_media_reference,
+};
 pub use paths::KeyMode;
 pub use removal::{MediaRemovalImpact, MediaRemovalOutcome, media_removal_impact, remove_media};
 pub use rescan::{RescanSummary, apply_scan, rescan};

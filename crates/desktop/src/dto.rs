@@ -14,11 +14,12 @@ use serde::Serialize;
 /// Catálogo do desktop derivado do banco local.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct CatalogDto {
-    /// Verdadeiro quando a última varredura cobriu toda a biblioteca.
+    /// Verdadeiro quando a última varredura cobriu todos os cursos.
     pub complete: bool,
-    /// Arquivos na raiz da biblioteca, que não pertencem a nenhuma categoria.
+    /// Arquivos soltos de uma biblioteca global. O desktop agrega cursos e mantém esta
+    /// lista vazia: arquivos soltos pertencem ao nó do curso correspondente.
     pub loose_files: Vec<CatalogFileDto>,
-    /// Categorias, ordenadas por caminho.
+    /// Cursos, na ordem de importação. Cada nó de topo tem papel `course`.
     pub categories: Vec<CatalogNodeDto>,
 }
 
@@ -27,10 +28,13 @@ pub struct CatalogDto {
 pub struct CatalogNodeDto {
     /// Título apresentado, sem prefixos numéricos nem separadores de ordenação.
     pub title: String,
-    /// Caminho relativo completo que identifica o nó.
+    /// Caminho relativo completo que identifica o nó. Vazio no nó de topo do curso.
     pub path: String,
     /// Papel do nó: `category`, `course`, `module` ou `lesson`.
     pub role: &'static str,
+    /// Identidade do curso que contém o nó, presente apenas no nó de topo.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub course_id: Option<String>,
     /// Arquivos da aula; vazio fora de nós `lesson`.
     pub files: Vec<CatalogFileDto>,
     /// Arquivos diretamente no nó, sem pertencer a uma aula.
@@ -58,30 +62,13 @@ pub struct CatalogFileDto {
     pub unverified: bool,
 }
 
-impl From<Catalog> for CatalogDto {
-    fn from(catalog: Catalog) -> Self {
-        Self {
-            complete: catalog.complete,
-            loose_files: catalog
-                .loose_files
-                .into_iter()
-                .map(CatalogFileDto::from)
-                .collect(),
-            categories: catalog
-                .categories
-                .into_iter()
-                .map(CatalogNodeDto::from)
-                .collect(),
-        }
-    }
-}
-
 impl From<CatalogNode> for CatalogNodeDto {
     fn from(node: CatalogNode) -> Self {
         Self {
             title: node.title,
             path: node.path,
             role: node_role(node.role),
+            course_id: None,
             files: node.files.into_iter().map(CatalogFileDto::from).collect(),
             loose_files: node
                 .loose_files
@@ -90,6 +77,30 @@ impl From<CatalogNode> for CatalogNodeDto {
                 .collect(),
             children: node
                 .children
+                .into_iter()
+                .map(CatalogNodeDto::from)
+                .collect(),
+        }
+    }
+}
+
+impl CatalogNodeDto {
+    /// Nó de topo de um curso registrado: identidade opaca, título da pasta e a
+    /// subárvore derivada dos dados persistidos.
+    pub fn course(course_id: &str, title: &str, catalog: Catalog) -> Self {
+        Self {
+            title: title.to_owned(),
+            path: String::new(),
+            role: "course",
+            course_id: Some(course_id.to_owned()),
+            files: Vec::new(),
+            loose_files: catalog
+                .loose_files
+                .into_iter()
+                .map(CatalogFileDto::from)
+                .collect(),
+            children: catalog
+                .categories
                 .into_iter()
                 .map(CatalogNodeDto::from)
                 .collect(),
@@ -138,14 +149,19 @@ fn availability(value: Availability) -> &'static str {
     }
 }
 
-/// Resumo de um rescan explícito da biblioteca, sem caminho do sistema de arquivos.
+/// Resumo de um rescan explícito dos cursos, sem caminho do sistema de arquivos.
 ///
-/// É a projeção serializável de [`learnvault_core::RescanSummary`]: só as contagens do
-/// contrato, sem o identificador interno do histórico. Nenhum campo carrega localização.
+/// É a projeção serializável agregada de [`learnvault_core::RescanSummary`]: só as
+/// contagens do contrato, sem o identificador interno do histórico. Nenhum campo carrega
+/// localização.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct RescanSummaryDto {
-    /// Verdadeiro quando a varredura cobriu toda a biblioteca.
+    /// Verdadeiro quando todas as varreduras cobriram os cursos inteiros.
     pub complete: bool,
+    /// Quantidade de cursos considerados na agregação.
+    pub courses: usize,
+    /// Quantidade de cursos cuja pasta não pôde ser varrida.
+    pub failed: usize,
     /// Arquivos novos inseridos no catálogo.
     pub inserted: usize,
     /// Registros já conhecidos que a varredura reafirmou.
@@ -164,6 +180,8 @@ impl From<RescanSummary> for RescanSummaryDto {
     fn from(summary: RescanSummary) -> Self {
         Self {
             complete: summary.complete,
+            courses: 1,
+            failed: 0,
             inserted: summary.inserted,
             updated: summary.updated,
             marked_missing: summary.marked_missing,
