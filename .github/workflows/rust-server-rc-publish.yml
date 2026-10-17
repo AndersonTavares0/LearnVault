@@ -107,5 +107,9 @@ jobs:
 
           This is a pre-soak draft prerelease for version $VERSION, produced from run $RUN_ID.
           EOF
-          release_url="$(gh release create "$TAG" --draft --prerelease --title "Rust server RC $VERSION" --notes "$(cat "$notes")" --target "$GITHUB_SHA" dist/learnvault-server-linux-x86_64.tar.gz dist/SHA256SUMS.rust-rc)"
+          # `-R "$GITHUB_REPOSITORY"` is required: this job never checks out the
+          # repository, so there is no `.git` directory and `gh` cannot infer the
+          # repository from a git remote. Run 38994990424 failed exactly because of
+          # that ("failed to run git: fatal: not a git repository").
+          release_url="$(gh release create "$TAG" -R "$GITHUB_REPOSITORY" --draft --prerelease --title "Rust server RC $VERSION" --notes "$(cat "$notes")" --target "$GITHUB_SHA" dist/learnvault-server-linux-x86_64.tar.gz dist/SHA256SUMS.rust-rc)"
           printf 'Draft release URL: %s\n' "$release_url"
