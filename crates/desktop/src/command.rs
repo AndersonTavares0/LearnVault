@@ -36,8 +36,17 @@ pub fn catalog(database: &Database, courses: &[CourseEntry]) -> Result<CatalogDt
     for course in courses {
         let inner = learnvault_core::build_catalog(database, &course.id)
             .map_err(|_| IpcError::catalog_unavailable())?;
-        complete = complete && inner.complete;
-        nodes.push(CatalogNodeDto::course(&course.id, &course.title(), inner));
+        let shaped = learnvault_core::Catalog {
+            complete: inner.complete,
+            loose_files: inner.loose_files,
+            categories: inner
+                .categories
+                .into_iter()
+                .map(learnvault_core::course_file_lessons)
+                .collect(),
+        };
+        complete = complete && shaped.complete;
+        nodes.push(CatalogNodeDto::course(&course.id, &course.title(), shaped));
     }
     Ok(CatalogDto {
         complete,

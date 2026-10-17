@@ -29,6 +29,16 @@ describe('catalog tree rendering', () => {
 		expect(open.body).toMatch(/course-section"[^>]* open/);
 	});
 
+	it('keeps module materials downloadable inside its disclosure without creating player lessons', () => {
+		const module = node('module', 'Conceitos', 'modulo', [node('lesson', 'Introdução', 'modulo/intro.mp4', [], [file('intro.mp4', 'media')])]);
+		module.looseFiles = [file('exercicios.pdf', 'material')];
+		const { body } = render(CatalogTree, { props: { nodes: [module], courseId: 'course-1' } });
+		expect(body).toContain('aria-label="Materiais complementares"');
+		expect(body).toContain('download="exercicios.pdf"');
+		expect(body).not.toContain('#/player/course-1/exercicios.pdf');
+		expect(body.indexOf('download="exercicios.pdf"')).toBeLessThan(body.indexOf('</details>'));
+	});
+
 	it('keeps nested lessons of a lesson visible and unannotated from the parent meta', () => {
 		const parent = node('lesson', 'Aula 01', 'curso/aula-01', [node('lesson', 'Bônus', 'curso/aula-01/bonus', [], [file('b.pdf', 'material')])], [file('a.mp4', 'media')]);
 		const { body } = render(CatalogTree, { props: { nodes: [parent], courseId: 'course-1' } });

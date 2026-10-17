@@ -5,7 +5,8 @@
 
 use learnvault_core::paths::relative_path_key;
 use learnvault_core::{
-    Availability, CatalogNode, Database, Error, KeyMode, MediaKind, NodeRole, build_catalog,
+    Availability, CatalogFile, CatalogNode, Database, Error, KeyMode, MediaKind, NodeRole,
+    build_catalog, course_file_lessons,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -541,4 +542,247 @@ fn a_negative_size_fails_the_catalog_as_corrupt() -> TestResult {
         "tamanho negativo indica corrupção do catálogo, não arquivo vazio"
     );
     Ok(())
+}
+
+/// A ordenação deve ser natural em todos os níveis: "2" antes de "10", tanto em
+/// módulos quanto em aulas e materiais. A ordem é função do caminho registrado,
+/// nunca da ordem retornada pelo banco.
+#[test]
+fn catalog_ordering_is_natural_for_numbered_names() -> TestResult {
+    let db = library_db()?;
+    for (media_id, path) in [
+        ("m1", "Curso/Modulo 10/Aula 2/aula.mp4"),
+        ("m2", "Curso/Modulo 10/Aula 10/aula.mp4"),
+        ("m3", "Curso/Modulo 2/Aula 1/aula.mp4"),
+        ("m4", "Curso/Modulo 2/Aula 1/material.pdf"),
+        ("m5", "Material 2.pdf"),
+        ("m6", "Material 10.pdf"),
+    ] {
+        media(&db, media_id, path)?;
+    }
+
+    let catalog = build_catalog(&db, LIB)?;
+    let category = &catalog.categories[0];
+
+    let module_paths: Vec<&str> = category
+        .children
+        .iter()
+        .map(|child| child.path.as_str())
+        .collect();
+    assert_eq!(
+        module_paths,
+        ["Curso/Modulo 2", "Curso/Modulo 10"],
+        "módulos em ordem natural"
+    );
+
+    let module_ten = node(&category.children, "Curso/Modulo 10");
+    let lesson_paths: Vec<&str> = module_ten
+        .children
+        .iter()
+        .map(|child| child.path.as_str())
+        .collect();
+    assert_eq!(
+        lesson_paths,
+        ["Curso/Modulo 10/Aula 2", "Curso/Modulo 10/Aula 10"],
+        "aulas em ordem natural"
+    );
+
+    let lesson = node(&module_ten.children, "Curso/Modulo 10/Aula 2");
+    assert!(lesson.files.iter().any(|file| file.name == "aula.mp4"));
+
+    let loose_names: Vec<&str> = catalog
+        .loose_files
+        .iter()
+        .map(|file| file.name.as_str())
+        .collect();
+    assert_eq!(loose_names, ["Material 2.pdf", "Material 10.pdf"]);
+    Ok(())
+}
+
+/// Sem numeração, a ordem volta a ser alfabética: previsível e determinística.
+#[test]
+fn ordering_falls_back_to_alphabetical_without_numbers() -> TestResult {
+    let db = library_db()?;
+    for (media_id, name) in [("m1", "Bravo"), ("m2", "alfa"), ("m3", "Zulu")] {
+        media(&db, media_id, &format!("Curso/{name}/aula.mp4"))?;
+    }
+    let catalog = build_catalog(&db, LIB)?;
+    let course = node(&catalog.categories, "Curso");
+    let modules: Vec<String> = course
+        .children
+        .iter()
+        .map(|child| child.title.clone())
+        .collect();
+    assert_eq!(modules, vec!["Bravo", "Zulu", "alfa"]);
+    Ok(())
+}
+
+/// Reindexar não muda a sequência: a ordem é função estável dos caminhos e a
+/// identidade (media_id) sobrevive à nova leitura.
+#[test]
+fn reindexing_keeps_the_same_natural_order_and_identity() -> TestResult {
+    let db = library_db()?;
+    for (media_id, path) in [
+        ("m1", "Curso/Modulo 1/Aula 2/aula.mp4"),
+        ("m2", "Curso/Modulo 1/Aula 10/aula.mp4"),
+    ] {
+        media(&db, media_id, path)?;
+    }
+    let first = build_catalog(&db, LIB)?;
+    let second = build_catalog(&db, LIB)?;
+    assert_eq!(first, second, "catálogo determinístico entre leituras");
+    let lesson = node(
+        &node(&node(&first.categories, "Curso").children, "Curso/Modulo 1").children,
+        "Curso/Modulo 1/Aula 2",
+    );
+    assert_eq!(lesson.files[0].media_id, "m1");
+    Ok(())
+}
+
+fn catalog_file(media_id: &str, path: &str, kind: MediaKind) -> CatalogFile {
+    CatalogFile {
+        media_id: media_id.to_owned(),
+        name: path.rsplit('/').next().unwrap_or(path).to_owned(),
+        path: path.to_owned(),
+        size: 1024,
+        kind,
+        availability: Availability::Available,
+        unverified: false,
+    }
+}
+
+fn grouping_node(
+    path: &str,
+    children: Vec<CatalogNode>,
+    loose_files: Vec<CatalogFile>,
+) -> CatalogNode {
+    CatalogNode {
+        title: path.rsplit('/').next().unwrap_or(path).to_owned(),
+        path: path.to_owned(),
+        role: NodeRole::Course,
+        files: Vec::new(),
+        loose_files,
+        children,
+    }
+}
+
+#[test]
+fn course_grouping_keeps_material_and_attaches_matching_subtitles() {
+    let module = grouping_node(
+        "Curso/Modulo",
+        Vec::new(),
+        vec![
+            catalog_file("video", "Curso/Modulo/Lección 1.mp4", MediaKind::Media),
+            catalog_file(
+                "subtitle",
+                "Curso/Modulo/Lección 1.srt",
+                MediaKind::Subtitle,
+            ),
+            catalog_file("material", "Curso/Modulo/Notas.pdf", MediaKind::Material),
+            catalog_file(
+                "orphan-subtitle",
+                "Curso/Modulo/Otra.srt",
+                MediaKind::Subtitle,
+            ),
+        ],
+    );
+
+    let grouped = course_file_lessons(module);
+
+    assert_eq!(grouped.role, NodeRole::Module);
+    assert_eq!(
+        grouped
+            .loose_files
+            .iter()
+            .map(|file| file.media_id.as_str())
+            .collect::<Vec<_>>(),
+        ["material", "orphan-subtitle"]
+    );
+    assert_eq!(grouped.children.len(), 1);
+    let lesson = &grouped.children[0];
+    assert_eq!(lesson.title, "Lección 1");
+    assert_eq!(lesson.path, "Curso/Modulo/Lección 1.mp4");
+    assert_eq!(
+        lesson
+            .files
+            .iter()
+            .map(|file| file.media_id.as_str())
+            .collect::<Vec<_>>(),
+        ["video", "subtitle"]
+    );
+}
+
+#[test]
+fn course_grouping_recurses_without_flattening_directory_lessons() {
+    let directory_lesson = CatalogNode {
+        title: "Lección 2".to_owned(),
+        path: "Curso/Modulo/Lección 2".to_owned(),
+        role: NodeRole::Lesson,
+        files: vec![catalog_file(
+            "directory-video",
+            "Curso/Modulo/Lección 2/video.mp4",
+            MediaKind::Media,
+        )],
+        loose_files: Vec::new(),
+        children: Vec::new(),
+    };
+    let module = grouping_node(
+        "Curso/Modulo",
+        vec![directory_lesson],
+        vec![
+            catalog_file(
+                "direct-video",
+                "Curso/Modulo/Lección 1.mp4",
+                MediaKind::Media,
+            ),
+            catalog_file("material", "Curso/Modulo/Handout.pdf", MediaKind::Material),
+        ],
+    );
+    let course = grouping_node("Curso", vec![module], Vec::new());
+
+    let grouped = course_file_lessons(course);
+    let grouped_module = &grouped.children[0];
+
+    assert_eq!(grouped_module.children.len(), 2);
+    assert_eq!(
+        grouped_module.children[0].path,
+        "Curso/Modulo/Lección 1.mp4"
+    );
+    assert_eq!(grouped_module.children[0].files[0].media_id, "direct-video");
+    assert_eq!(grouped_module.children[1].path, "Curso/Modulo/Lección 2");
+    assert_eq!(
+        grouped_module.children[1].files[0].media_id,
+        "directory-video"
+    );
+    assert_eq!(grouped_module.loose_files[0].media_id, "material");
+}
+
+#[test]
+fn course_grouping_preserves_nested_modules_and_file_identities() {
+    let nested_module = grouping_node(
+        "Curso/Modulo 2",
+        Vec::new(),
+        vec![catalog_file(
+            "nested",
+            "Curso/Modulo 2/Intro.mp4",
+            MediaKind::Media,
+        )],
+    );
+    let course = grouping_node(
+        "Curso",
+        vec![nested_module],
+        vec![catalog_file(
+            "course-media",
+            "Curso/Intro.mp4",
+            MediaKind::Media,
+        )],
+    );
+
+    let grouped = course_file_lessons(course);
+
+    assert_eq!(grouped.role, NodeRole::Module);
+    assert_eq!(grouped.children.len(), 2);
+    assert_eq!(grouped.children[0].files[0].media_id, "course-media");
+    assert_eq!(grouped.children[1].path, "Curso/Modulo 2");
+    assert_eq!(grouped.children[1].children[0].files[0].media_id, "nested");
 }

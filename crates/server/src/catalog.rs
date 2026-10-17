@@ -134,7 +134,12 @@ fn build_course_catalog(
             course_id: Some(course.id.clone()),
             files: Vec::new(),
             loose_files: catalog.loose_files.into_iter().map(Into::into).collect(),
-            children: catalog.categories.into_iter().map(Into::into).collect(),
+            children: catalog
+                .categories
+                .into_iter()
+                .map(learnvault_core::course_file_lessons)
+                .map(Into::into)
+                .collect(),
         });
     }
     Ok(CatalogResponse {

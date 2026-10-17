@@ -22,6 +22,7 @@
 			<ul class="lesson-list">
 				{#each node.children as child (child.path)}<li><CatalogTree nodes={[child]} {courseId} {expandAll} /></li>{/each}
 			</ul>
+			{#if node.files.length || node.looseFiles.length}<LooseFiles files={[...node.files, ...node.looseFiles]} heading="Materiais complementares" {courseId} />{/if}
 		</details>
 	{:else if node.role === 'lesson'}
 		{@const counts = countCatalogFiles(node)}
