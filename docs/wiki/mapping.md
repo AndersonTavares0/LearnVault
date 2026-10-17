@@ -9,9 +9,10 @@ na Wiki do GitHub depois que uma mudança chega à `main`.
 | `Getting-Started` | `docs/wiki/getting-started.md` |
 | `Architecture` | `docs/architecture/overview.md` |
 | `Roadmap` | `docs/product/roadmap.md` |
+| `Requirements` | `docs/product/requirements.md` |
 | `Development-and-Governance` | `docs/governance/overview.md` |
 | `Operations` | `docs/operations/distribution.md` |
 
-O workflow gerencia somente estas seis páginas. Outras páginas da Wiki podem ser mantidas
+O workflow gerencia somente estas sete páginas. Outras páginas da Wiki podem ser mantidas
 manualmente. Não edite uma página gerenciada diretamente na Wiki: a próxima sincronização
 a substituirá por esta fonte.
