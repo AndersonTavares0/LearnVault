@@ -67,6 +67,10 @@ go -C services/go test ./...
 go -C services/go run ./cmd/learnvault
 ```
 
+No catálogo, **Reproduzir** abre vídeos e áudios no player do LearnVault, inclusive arquivos
+soltos. **Baixar** identifica materiais e legendas como downloads; arquivos marcados como
+ausentes não oferecem ação de abertura. Essas ações preservam a navegação da aplicação.
+
 ## Mapa do repositório
 
 ```text
