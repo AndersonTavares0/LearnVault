@@ -34,7 +34,10 @@ pub use auth::{
     delete_session, find_user_by_username, has_admin, session_user, update_credentials,
     update_credentials_and_session,
 };
-pub use catalog::{Availability, Catalog, CatalogFile, CatalogNode, NodeRole, build_catalog};
+pub use catalog::{
+    Availability, Catalog, CatalogFile, CatalogNode, NodeRole, build_catalog, course_file_lessons,
+    natural_cmp,
+};
 pub use courses::{
     CourseRoot, CourseRootError, LEGACY_LIBRARY_ID, course_id_from_path, course_title,
 };

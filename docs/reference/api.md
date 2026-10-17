@@ -66,6 +66,19 @@ banco Rust existente continuam sendo abertos normalmente.
 | `GET` | `/api/admin/media/{id}/impact` | Sessão admin | Consulta o impacto da remoção de uma mídia: retorna `{ media_id, relative_path, availability, progress_owners, already_removed }` |
 | `DELETE` | `/api/admin/media/{id}` | Sessão admin | Remove explicitamente a mídia do catálogo (tombstone persistente). Aceita `{ "confirm_progress": bool }`. Se houver progresso e `confirm_progress` for falso, responde `409 media_removal_needs_confirmation`. Repetir é idempotente |
 
+
+### Organização dos cursos registrados
+
+Pastas de módulo contendo vídeos diretamente são apresentadas como módulos recolhíveis,
+com uma aula por vídeo, sem alterar caminhos, arquivos ou identidades de mídia.
+Materiais complementares continuam disponíveis no módulo e legendas correspondentes
+permanecem associadas à mídia. A árvore de diretórios já existente é preservada.
+
+A sequência do catálogo usa ordenação natural dos caminhos originais: `2` precede `10`,
+inclusive em módulos, aulas e materiais. Os prefixos são usados na ordenação mesmo quando
+omitidos no título exibido. Essa organização é derivada na leitura: não renomeia arquivos
+nem modifica o progresso salvo.
+
 Sem nenhum curso registrado o catálogo responde vazio. `LIBRARY_DIR`/`--library-root` continua
 aceito como semente de implantação: quando o registro ainda não existe, a pasta informada é
 registrada como o primeiro curso com a identidade histórica `library-1`, preservando mídias,

@@ -97,8 +97,8 @@ pub struct CatalogNode {
     pub role: NodeRole,
     /// Arquivos do diretório. Só os nós com papel `Lesson` preenchem este campo.
     pub files: Vec<CatalogFile>,
-    /// Arquivos que estão diretamente neste nó sem pertencer a uma aula. Só a
-    /// categoria preenche este campo.
+    /// Arquivos sem aula própria, como materiais e legendas sem mídia correspondente.
+    /// Categorias e módulos podem preenchê-lo.
     pub loose_files: Vec<CatalogFile>,
     /// Nós filhos, ordenados por caminho.
     pub children: Vec<CatalogNode>,
@@ -173,6 +173,7 @@ pub fn build_catalog(db: &Database, library_id: &str) -> Result<Catalog> {
         }
     }
 
+    loose_files.sort_by(|a, b| natural_cmp(a.path.as_str(), b.path.as_str()));
     let categories = assemble(&mut nodes);
     Ok(Catalog {
         complete: scan.complete,
@@ -206,14 +207,33 @@ fn ensure_node<'a>(
 /// Monta a árvore a partir dos nós pendentes, ligando cada nó ao ancestral existente
 /// mais profundo.
 fn assemble(nodes: &mut BTreeMap<String, PendingNode>) -> Vec<CatalogNode> {
-    let mut children: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    let mut roots = Vec::new();
-    for path in nodes.keys() {
-        match deepest_existing_ancestor(path, nodes) {
-            Some(parent) => children.entry(parent).or_default().push(path.clone()),
-            None => roots.push(path.clone()),
+    let children: BTreeMap<String, Vec<String>> = {
+        let keys: Vec<&str> = nodes.keys().map(String::as_str).collect();
+        let mut children: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        for path in &keys {
+            if let Some(parent) = deepest_existing_ancestor(path, nodes) {
+                children
+                    .entry(parent.to_owned())
+                    .or_default()
+                    .push((*path).to_owned());
+            }
         }
-    }
+        for list in children.values_mut() {
+            list.sort_by(|a, b| natural_cmp(a, b));
+        }
+        children
+    };
+    let mut roots: Vec<String> = nodes
+        .keys()
+        .filter_map(|path| {
+            if deepest_existing_ancestor(path, nodes).is_none() {
+                Some(path.clone())
+            } else {
+                None
+            }
+        })
+        .collect();
+    roots.sort_by(|a, b| natural_cmp(a, b));
     roots
         .iter()
         .filter_map(|path| take_node(path, nodes, &children))
@@ -227,6 +247,12 @@ fn take_node(
     children: &BTreeMap<String, Vec<String>>,
 ) -> Option<CatalogNode> {
     let pending = nodes.remove(path)?;
+    let natural: fn(&CatalogFile, &CatalogFile) -> std::cmp::Ordering =
+        |file_a, file_b| natural_cmp(file_a.path.as_str(), file_b.path.as_str());
+    let mut files = pending.files;
+    files.sort_by(natural);
+    let mut loose_files = pending.loose_files;
+    loose_files.sort_by(natural);
     let nested: Vec<CatalogNode> = children
         .get(path)
         .map(|list| {
@@ -238,9 +264,9 @@ fn take_node(
     Some(CatalogNode {
         title: pending.title,
         path: path.to_owned(),
-        role: role_of(path, &pending.files, &nested),
-        files: pending.files,
-        loose_files: pending.loose_files,
+        role: role_of(path, &files, &nested),
+        files,
+        loose_files,
         children: nested,
     })
 }
@@ -260,6 +286,56 @@ fn role_of(path: &str, files: &[CatalogFile], children: &[CatalogNode]) -> NodeR
         return NodeRole::Course;
     }
     NodeRole::Module
+}
+
+/// Compara textos com ordenação natural: sequências de dígitos são lidas como número
+/// (com desempate pela notação, para total determinismo) e o restante é comparado
+/// caractere a caractere. "2" vem antes de "10" em qualquer nível da árvore.
+pub fn natural_cmp(left: &str, right: &str) -> std::cmp::Ordering {
+    let (mut a, mut b) = (left, right);
+    loop {
+        match (natural_segment(a), natural_segment(b)) {
+            (None, None) => return std::cmp::Ordering::Equal,
+            (None, Some(_)) => return std::cmp::Ordering::Less,
+            (Some(_), None) => return std::cmp::Ordering::Greater,
+            (Some((segment_a, rest_a)), Some((segment_b, rest_b))) => {
+                let ordering = compare_natural_segment(segment_a, segment_b);
+                if ordering != std::cmp::Ordering::Equal {
+                    return ordering;
+                }
+                a = rest_a;
+                b = rest_b;
+            }
+        }
+    }
+}
+
+/// Primeira sequência homogênea da string (só dígitos ou nenhum dígito) e o restante.
+fn natural_segment(input: &str) -> Option<(&str, &str)> {
+    if input.is_empty() {
+        return None;
+    }
+    let digit_run = input.as_bytes()[0].is_ascii_digit();
+    let end = input
+        .char_indices()
+        .find(|(_, character)| character.is_ascii_digit() != digit_run)
+        .map(|(index, _)| index)
+        .unwrap_or(input.len());
+    Some((&input[..end], &input[end..]))
+}
+
+/// Compara duas sequências homogêneas, lendo pares de dígitos como número.
+fn compare_natural_segment(a: &str, b: &str) -> std::cmp::Ordering {
+    if a.as_bytes()[0].is_ascii_digit() && b.as_bytes()[0].is_ascii_digit() {
+        let number_a = a.trim_start_matches('0');
+        let number_b = b.trim_start_matches('0');
+        return number_a
+            .len()
+            .cmp(&number_b.len())
+            .then_with(|| number_a.cmp(number_b))
+            .then_with(|| a.cmp(b));
+    }
+    a.cmp(b)
 }
 
 /// Ancestral existente mais profundo de um caminho, se houver.
@@ -283,11 +359,95 @@ fn last_segment(path: &str) -> &str {
 
 /// Título apresentado de um nó: sem prefixos numéricos nem separadores de ordenação.
 ///
-/// Compartilhada com o registro de cursos, que deriva o título do card do nome da pasta.
-pub(crate) fn clean_title(name: &str) -> String {
+/// Compartilhada com o registro de cursos, que deriva o título do card do nome da pasta,
+/// e com a aula de arquivo, que limpa o nome do arquivo antes de estripar a extensão.
+pub fn clean_title(name: &str) -> String {
     name.trim_start_matches(|character: char| "0123456789._- •\t".contains(character))
         .trim()
         .to_owned()
+}
+
+/// Título de aula derivado de um arquivo: sem extensão e sem prefixo de ordenação.
+fn file_lesson_title(name: &str) -> String {
+    let stem = match name.rfind('.') {
+        Some(index) if index > 0 => &name[..index],
+        _ => name,
+    };
+    clean_title(stem)
+}
+
+/// Recompõe cursos e módulos: arquivos de mídia diretamente no diretório viram aulas,
+/// acompanhados por legendas com o mesmo nome-base. Materiais e legendas sem mídia
+/// correspondente continuam disponíveis em `loose_files`.
+///
+/// A transformação é recursiva e não altera aulas que o indexador já derivou de
+/// diretórios, inclusive quando o módulo também contém arquivos diretamente.
+pub fn course_file_lessons(node: CatalogNode) -> CatalogNode {
+    let CatalogNode {
+        title,
+        path,
+        role,
+        files,
+        loose_files,
+        children,
+    } = node;
+    let mut children: Vec<_> = children.into_iter().map(course_file_lessons).collect();
+    let mut media = Vec::new();
+    let mut loose = Vec::new();
+    for file in loose_files {
+        if file.kind == MediaKind::Media {
+            media.push(file);
+        } else {
+            loose.push(file);
+        }
+    }
+
+    if media.is_empty() {
+        return CatalogNode {
+            title,
+            path,
+            role,
+            files,
+            loose_files: loose,
+            children,
+        };
+    }
+
+    for file in media {
+        let stem = file_stem(&file.name);
+        let mut lesson_files = Vec::new();
+        let mut index = 0;
+        while index < loose.len() {
+            if loose[index].kind == MediaKind::Subtitle && file_stem(&loose[index].name) == stem {
+                lesson_files.push(loose.remove(index));
+            } else {
+                index += 1;
+            }
+        }
+        lesson_files.insert(0, file);
+        let media_file = &lesson_files[0];
+        children.push(CatalogNode {
+            title: file_lesson_title(&media_file.name),
+            path: media_file.path.clone(),
+            role: NodeRole::Lesson,
+            files: lesson_files,
+            loose_files: Vec::new(),
+            children: Vec::new(),
+        });
+    }
+    children.sort_by(|left, right| natural_cmp(&left.path, &right.path));
+    CatalogNode {
+        title,
+        path,
+        role: NodeRole::Module,
+        files,
+        loose_files: loose,
+        children,
+    }
+}
+
+fn file_stem(name: &str) -> &str {
+    name.rsplit_once('.').map_or(name, |(stem, _)| stem)
 }
 
 /// Converte o estado gravado em `media.availability`.

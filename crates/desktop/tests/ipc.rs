@@ -620,7 +620,7 @@ fn media_removal_impact_and_removal_flow_in_desktop() {
 
     let cat = state.catalog().unwrap();
     assert_eq!(cat.categories.len(), 1);
-    let media_id = cat.categories[0].children[0].loose_files[0]
+    let media_id = cat.categories[0].children[0].children[0].files[0]
         .media_id
         .clone();
 

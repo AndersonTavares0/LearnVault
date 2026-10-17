@@ -208,10 +208,14 @@ async fn course_import_rescan_and_removal_flow() {
     assert_eq!(course_node["title"], "Física");
     assert_eq!(course_node["role"], "course");
     assert_eq!(course_node["course_id"], course_id);
-    // Dentro do curso a hierarquia se reancora: o primeiro nível vira o conteúdo do
-    // curso e os arquivos diretos nele ficam como soltos do próprio curso.
+    // Dentro do curso a hierarquia se reancora: uma pasta de topo que contém apenas
+    // arquivos vira módulo, e cada arquivo vira uma aula própria (apresentação
+    // recolhível da interface), em vez de uma lista plana de soltos.
+    let module_node = &course_node["children"][0];
+    assert_eq!(module_node["role"], "module");
+    assert_eq!(module_node["children"][0]["role"], "lesson");
     assert_eq!(
-        course_node["children"][0]["loose_files"][0]["path"],
+        module_node["children"][0]["files"][0]["path"],
         "Aula 1/video.mp4"
     );
 
@@ -403,7 +407,7 @@ async fn media_removal_impact_and_removal_flow() {
         .await
         .unwrap();
     let json = json_body(catalog).await;
-    let media_id = json["categories"][0]["children"][0]["loose_files"][0]["media_id"]
+    let media_id = json["categories"][0]["children"][0]["children"][0]["files"][0]["media_id"]
         .as_str()
         .unwrap()
         .to_owned();
