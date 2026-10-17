@@ -11,7 +11,7 @@ use axum::{
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
-use learnvault_core::{Availability, CatalogFile, CatalogNode, MediaKind, NodeRole};
+use learnvault_core::{Availability, CatalogFile, CatalogNode, MediaKind, NodeRole, RescanSummary};
 use serde::Serialize;
 
 use crate::{
@@ -35,10 +35,14 @@ struct ErrorResponse {
 struct CatalogResponse {
     complete: bool,
     loose_files: Vec<CatalogFileResponse>,
+    /// Árvore recursiva canônica, o contrato preferido pela SPA.
+    nodes: Vec<CatalogNodeResponse>,
+    /// Cursos, na ordem de importação. Cada nó de topo tem papel `course` e a
+    /// identidade opaca do curso em `course_id`.
     categories: Vec<CatalogNodeResponse>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 struct CatalogNodeResponse {
     title: String,
     path: String,
@@ -50,7 +54,7 @@ struct CatalogNodeResponse {
     children: Vec<CatalogNodeResponse>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 struct CatalogFileResponse {
     media_id: String,
     name: String,
@@ -71,7 +75,10 @@ struct RescanResponse {
     updated: usize,
     marked_missing: usize,
     preserved: usize,
-    ambiguous: Vec<String>,
+    /// Quantidade de chaves relativas ambíguas recusadas nesta varredura.
+    ///
+    /// É apenas a contagem: as chaves em si são caminhos relativos e nunca cruzam a API.
+    ambiguous_count: usize,
 }
 
 pub(crate) async fn catalog(State(state): State<AppState>, headers: HeaderMap) -> Response {
@@ -108,6 +115,9 @@ pub(crate) async fn catalog(State(state): State<AppState>, headers: HeaderMap) -
 /// derivada dos dados persistidos. Os arquivos soltos da pasta do curso ficam no próprio
 /// nó; não existe mais uma raiz global de arquivos soltos. Um curso sem varredura aparece
 /// vazio, e a resposta é marcada como incompleta se qualquer curso estiver incompleto.
+///
+/// A mesma lista de nós de topo alimenta `nodes` (árvore recursiva canônica) e `categories`
+/// (lista de cursos de topo): nenhum dos dois contratos perde aula, arquivo ou identidade.
 fn build_course_catalog(
     database: &learnvault_core::Database,
     courses: &[RegisteredCourse],
@@ -130,6 +140,9 @@ fn build_course_catalog(
     Ok(CatalogResponse {
         complete,
         loose_files: Vec::new(),
+        // O mesmo nó de topo de curso alimenta os dois contratos: `nodes` é a árvore
+        // canônica e `categories` é a lista de cursos de topo do contrato HTTP.
+        nodes: nodes.clone(),
         categories: nodes,
     })
 }
@@ -174,22 +187,16 @@ pub(crate) async fn rescan(State(state): State<AppState>, headers: HeaderMap) ->
         if courses.is_empty() {
             return Err(RescanFailure::NoCourses);
         }
-        let mut aggregate = RescanResponse {
-            scan_id: 0,
+        let mut aggregate = RescanSummary {
             complete: true,
-            courses: courses.len(),
-            failed_courses: 0,
-            inserted: 0,
-            updated: 0,
-            marked_missing: 0,
-            preserved: 0,
-            ambiguous: Vec::new(),
+            ..RescanSummary::default()
         };
+        let mut failed_courses = 0usize;
         for course in &courses {
             // A raiz é revalidada antes de cada varredura: um curso removido, inacessível
             // ou substituído por link/junction conta como falha sem seguir o alvo.
             let Ok(root) = learnvault_core::CourseRoot::resolve(course.root.as_path()) else {
-                aggregate.failed_courses += 1;
+                failed_courses += 1;
                 aggregate.complete = false;
                 continue;
             };
@@ -204,12 +211,17 @@ pub(crate) async fn rescan(State(state): State<AppState>, headers: HeaderMap) ->
                     aggregate.ambiguous.extend(summary.ambiguous);
                 }
                 Err(_) => {
-                    aggregate.failed_courses += 1;
+                    failed_courses += 1;
                     aggregate.complete = false;
                 }
             }
         }
-        Ok(aggregate)
+        // A resposta é a projeção sanitizada do resumo agregado: só as contagens cruzam a
+        // API, inclusive a quantidade de chaves ambíguas, nunca as chaves em si.
+        let mut response = RescanResponse::from(aggregate);
+        response.courses = courses.len();
+        response.failed_courses = failed_courses;
+        Ok(response)
     })
     .await
     {
@@ -345,6 +357,25 @@ impl From<CatalogFile> for CatalogFileResponse {
     }
 }
 
+impl From<RescanSummary> for RescanResponse {
+    fn from(summary: RescanSummary) -> Self {
+        Self {
+            scan_id: summary.scan_id,
+            complete: summary.complete,
+            // Um resumo descreve um único curso; a agregação de vários cursos substitui as
+            // duas contagens depois da conversão, como o DTO do desktop.
+            courses: 1,
+            failed_courses: 0,
+            inserted: summary.inserted,
+            updated: summary.updated,
+            marked_missing: summary.marked_missing,
+            preserved: summary.preserved,
+            // Nunca serializa as chaves: a resposta expõe só a contagem, como o desktop.
+            ambiguous_count: summary.ambiguous.len(),
+        }
+    }
+}
+
 const fn node_role(role: NodeRole) -> &'static str {
     match role {
         NodeRole::Category => "category",
@@ -366,5 +397,33 @@ const fn availability(value: Availability) -> &'static str {
     match value {
         Availability::Available => "available",
         Availability::Missing => "missing",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rescan_response_exposes_only_the_ambiguous_count() {
+        // O resumo carrega caminhos relativos nas chaves ambíguas; a resposta nunca pode
+        // serializá-los, expondo apenas a contagem (como o DTO do desktop).
+        let summary = RescanSummary {
+            ambiguous: vec!["Cursos secretos/aula.mp4".to_owned()],
+            ..RescanSummary::default()
+        };
+
+        let json = serde_json::to_value(RescanResponse::from(summary)).unwrap();
+
+        assert_eq!(json["ambiguous_count"], 1);
+        assert!(
+            json.get("ambiguous").is_none(),
+            "a resposta não pode expor a lista de caminhos: {json}"
+        );
+        let rendered = json.to_string();
+        assert!(
+            !rendered.contains("Cursos secretos") && !rendered.contains("aula.mp4"),
+            "nenhum caminho relativo pode cruzar a API: {rendered}"
+        );
     }
 }
