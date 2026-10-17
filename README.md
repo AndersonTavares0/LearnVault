@@ -120,7 +120,10 @@ Conventional Commits como `feat:`, `fix:`, `docs:` e `chore:`. Releases publicad
 automaticamente binários Linux versionados e `SHA256SUMS` a partir da implementação de
 referência em Go.
 
-O instalador Windows via NSIS já é construído e publicado automaticamente. O Flatpak permanece
+O instalador Windows via NSIS já é construído e publicado automaticamente: instala por usuário,
+sem exigir administrador, com textos em português e inglês. O
+[guia de distribuição](docs/operations/distribution.md) documenta os dados do usuário, o build
+local e os avisos do SmartScreen, já que o binário ainda não é assinado. O Flatpak permanece
 bloqueado e fora dos releases: a seleção Linux já usa o backend oficial `xdg-portal`, mas ainda
 faltam o build e o smoke test reais no sandbox, incluindo acesso persistente e reprodução de
 mídia. A publicação do servidor ainda pertence à Fase 5 da reescrita.
