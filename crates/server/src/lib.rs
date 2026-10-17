@@ -37,8 +37,12 @@ use axum::{
 use tokio::net::TcpListener;
 use tower::ServiceBuilder;
 
-/// Versão compilada do servidor, usada pelo executável e pelo endpoint de saúde.
-pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+/// Identidade de versão do servidor: o Release Please é o dono da versão de release;
+/// o `0.0.0` do manifesto nunca deve ser publicado, e builds empacotados injetam a versão.
+pub const VERSION: &str = match option_env!("LEARNVAULT_BUILD_VERSION") {
+    Some(version) if !version.is_empty() => version,
+    _ => env!("CARGO_PKG_VERSION"),
+};
 pub(crate) const LIBRARY_ID: &str = "library-1";
 
 /// Monta as rotas públicas mínimas do servidor.
@@ -249,6 +253,16 @@ mod tests {
         config.admin_password = Some("uma senha local muito segura".to_owned());
         config.cookie_secure = false;
         config
+    }
+
+    #[test]
+    fn version_identity_uses_injected_value_or_manifest_version() {
+        assert!(!VERSION.is_empty());
+        let expected = match option_env!("LEARNVAULT_BUILD_VERSION") {
+            Some(version) if !version.is_empty() => version,
+            _ => env!("CARGO_PKG_VERSION"),
+        };
+        assert_eq!(VERSION, expected);
     }
 
     #[tokio::test]
