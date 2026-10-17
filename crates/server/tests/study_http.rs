@@ -729,7 +729,7 @@ async fn credentials_pending_flag_blocks_study_until_changed() {
     // O bootstrap não marca mais a troca pendente; o gate segue valendo para
     // usuários legados importados com `must_change_credentials = 1`.
     {
-        let mut database = learnvault_core::Database::open(database_path(&temp)).unwrap();
+        let database = learnvault_core::Database::open(database_path(&temp)).unwrap();
         database
             .connection()
             .execute("UPDATE user SET must_change_credentials = 1", [])

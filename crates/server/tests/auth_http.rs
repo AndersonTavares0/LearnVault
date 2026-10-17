@@ -520,7 +520,7 @@ async fn credentials_pending_flag_blocks_protected_endpoints_until_changed() {
         AppState::initialize(setup).await.unwrap();
     }
     {
-        let mut database = learnvault_core::Database::open(&db_path).unwrap();
+        let database = learnvault_core::Database::open(&db_path).unwrap();
         database
             .connection()
             .execute("UPDATE user SET must_change_credentials = 1", [])
