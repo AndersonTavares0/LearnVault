@@ -180,6 +180,103 @@ duração; health `200` com `no-store`; login; catálogo; reprodução de mídia
 após reinício; e todas as falhas. O G2 só fecha quando o operador registrar e aceitar esse soak;
 um agente não pode executar essa aceitação operacional.
 
+#### Kit operacional reproduzível
+
+Execute os passos na ordem abaixo, substituindo somente os valores de versão, run e caminhos
+locais. Não registre credenciais, cookies, bancos ou mídia no relatório.
+
+```sh
+# 1. Despache a construção do candidato.
+gh workflow run rust-server-rc.yml --ref main -f ref=main -f version=<v>
+
+# 2. Identifique o run recém-criado e aguarde sua conclusão.
+gh run list --workflow rust-server-rc.yml -L 1
+gh run watch <run-id> --exit-status
+run_id=<run-id>
+
+# 3. Baixe do run enquanto o artefato ainda estiver retido (7 dias).
+mkdir -p dist
+gh run download "$run_id" -n rust-server-rc -D dist
+
+# 4. Confira o SHA-256 declarado no pacote.
+(cd dist && sha256sum -c SHA256SUMS.rust-rc)
+
+# 5. Se a draft ainda não existir, publique-a; caso contrário, pule este comando.
+gh release view rust-rc-<v> >/dev/null 2>&1 || gh workflow run "Rust server RC publish (draft)" --ref main -f version=<v> -f run_id="$run_id" -f tag=rust-rc-<v>
+
+# 6. Para um soak durável, prefira baixar a draft (o artefato do run expira após 7 dias).
+gh release download rust-rc-<v> -D dist
+(cd dist && sha256sum -c SHA256SUMS.rust-rc)
+
+# 7. Extraia o servidor e entre no diretório da aplicação.
+mkdir -p app
+tar -xzf dist/learnvault-server-linux-x86_64.tar.gz -C app
+cd app
+file learnvault-server
+./learnvault-server --version
+
+# 8. Inicie o servidor com uma base e uma biblioteca separadas.
+mkdir -p <data-dir>
+./learnvault-server --listen-addr 127.0.0.1:8090 \
+  --database <data-dir>/learnvault.sqlite \
+  --library-root <library> \
+  --web-root ./web \
+  --insecure-http &
+server_pid=$!
+
+# 9. Health: observe status 200, cache-control no-store e a versão do artefato.
+curl -fsS -D - -o /dev/null http://127.0.0.1:8090/api/healthz
+curl -fsS http://127.0.0.1:8090/api/healthz
+
+# 10. Login: use um arquivo local cujo conteúdo seja {"username":"...","password":"..."};
+#     não coloque credenciais no shell nem no relatório.
+curl -fsS -c cookies.txt -b cookies.txt \
+  -H 'Origin: http://127.0.0.1:8090' \
+  -H 'Content-Type: application/json' \
+  --data-binary @login.json \
+  http://127.0.0.1:8090/api/login
+
+# 11. Catálogo autenticado. Com um banco Rust novo (sem migração) o catálogo começa vazio,
+#     então atualize-o a partir da biblioteca montada antes de ler.
+curl -fsS -X POST -b cookies.txt -H 'Origin: http://127.0.0.1:8090' \
+  http://127.0.0.1:8090/api/admin/catalog/rescan >/dev/null
+curl -fsS -b cookies.txt http://127.0.0.1:8090/api/catalog
+
+# 12. Mídia: use um caminho retornado pelo catálogo e observe HTTP 206.
+curl -r 0-1023 -b cookies.txt -o /dev/null -w '%{http_code}\n' \
+  'http://127.0.0.1:8090/api/media?path=<path-from-catalog>'
+
+# 13. Reinicie e repita health e catálogo para verificar persistência.
+kill "$server_pid"
+wait "$server_pid" || true
+./learnvault-server --listen-addr 127.0.0.1:8090 \
+  --database <data-dir>/learnvault.sqlite \
+  --library-root <library> \
+  --web-root ./web \
+  --insecure-http &
+server_pid=$!
+curl -fsS -D - http://127.0.0.1:8090/api/healthz
+curl -fsS -b cookies.txt http://127.0.0.1:8090/api/catalog
+```
+
+Resultado esperado por verificação:
+
+- `file` identifica um executável Linux; `--version` informa a versão selecionada.
+- O health retorna `200`, `cache-control: no-store` e essa mesma versão no JSON.
+- O login retorna sucesso e deixa uma sessão em `cookies.txt` para as chamadas seguintes.
+- O catálogo retorna sucesso e os dados esperados para a biblioteca usada (após um rescan
+  quando o banco Rust ainda estiver vazio).
+- A leitura com `Range` retorna `206`.
+- Após o reinício, health e catálogo continuam disponíveis e os dados esperados permanecem.
+- Não há 4xx/5xx inesperado; registre qualquer status fora do esperado, saída anômala,
+  consumo aproximado de CPU/RSS e reinício no relatório.
+
+Se a migração for aplicável, execute antes do boot o comando existente acima, com input,
+backup e output distintos, e registre seus caminhos no relatório sem copiar os arquivos.
+Copie [`../../.agents/templates/soak-report.md`](../../.agents/templates/soak-report.md),
+preencha-o por execução e anexe o relatório preenchido. O agente não pode executar nem
+aceitar este soak; este kit não fecha o G2 por si só.
+
 ### Regra de decisão
 
 O pull request dedicado de remoção só pode ser aberto quando **todos os gates G1–G8 estiverem
