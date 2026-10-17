@@ -1,0 +1,217 @@
+# Opt-in, manual-only release candidate for the Rust server (`crates/server`).
+#
+# This workflow is STRICTLY ADDITIVE. It is dispatched by hand and is NOT the
+# production or default Linux artifact:
+#   - unsigned (no signing certificate or secret is used here);
+#   - no soak / no staged rollout: a dispatch only proves the build ran;
+#   - the binary self-reports version `0.0.0` (workspace version), so version
+#     identity is unproven - it is not a versioned release artifact;
+#   - linux/amd64 musl only: arm64 is not produced;
+#   - nothing is published: there is no upload-to-release, no `gh release`, and
+#     no `--clobber` in this slice. The artifact is uploaded to the Actions run
+#     under the name `rust-server-rc`. Uploaded and downloaded workflow artifacts
+#     are run-scoped: `actions/upload-artifact`/`download-artifact` only see
+#     artifacts produced by the same run, so a `.github/workflows/release.yml`
+#     run can never download this one. The name is deliberately NOT prefixed
+#     `release-` as an extra clarity safeguard against any future broadening of
+#     `.github/workflows/release.yml`'s `download-artifact pattern: release-*`.
+#
+# The Go Linux tarballs remain the only supported Linux release. The stable
+# `vX.Y.Z` tag namespace belongs to `.github/workflows/release.yml`; this
+# workflow fails closed if asked to build a ref that matches it.
+name: Rust server release candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch or commit SHA to build
+        required: true
+        default: main
+        type: string
+      target:
+        description: Rust target triple (pinned)
+        required: true
+        default: x86_64-unknown-linux-musl
+        type: choice
+        options:
+          - x86_64-unknown-linux-musl
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-server-rc-${{ inputs.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build unsigned Rust RC tarball
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+    env:
+      TARGET: ${{ inputs.target }}
+    steps:
+      - name: Guard against the stable release tag namespace
+        shell: bash
+        env:
+          REF_INPUT: ${{ inputs.ref }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" != "workflow_dispatch" ]]; then
+            echo "::error::rust-server-rc only runs via workflow_dispatch (got: $EVENT_NAME)" >&2
+            exit 1
+          fi
+          if [[ "$REF_INPUT" =~ ^refs/tags/ ]] || [[ "$REF_INPUT" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Refusing to build stable release tag '$REF_INPUT'; that namespace belongs to .github/workflows/release.yml" >&2
+            exit 1
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Reject an exact release tag after checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          if tag="$(git describe --tags --exact-match HEAD 2>/dev/null)"; then
+            if [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::HEAD is the stable release tag '$tag'; that namespace belongs to .github/workflows/release.yml" >&2
+              exit 1
+            fi
+          fi
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - name: Verify the canonical SPA shell
+        run: test -f crates/server/web/build/200.html
+
+      - name: Install Rust toolchain
+        run: rustup toolchain install 1.99.0 --profile minimal
+      - name: Add the musl target and toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup target add "$TARGET" --toolchain 1.99.0
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+
+      - name: Build the statically linked server binary
+        shell: bash
+        env:
+          # `crates/core` uses `rusqlite` with the `bundled` feature, which compiles
+          # C sources, so the musl target needs an explicit C compiler and linker.
+          CC_x86_64_unknown_linux_musl: musl-gcc
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
+        run: cargo build --release --locked --package learnvault-server --target "$TARGET"
+
+      - name: Stage the release candidate layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="dist/stage"
+          rm -rf dist
+          mkdir -p "$stage/web"
+          cp "target/$TARGET/release/learnvault-server" "$stage/learnvault-server"
+          cp -R crates/server/web/build/. "$stage/web/"
+          cp LICENSE "$stage/LICENSE"
+          test -f "$stage/web/200.html"
+
+      - name: Package and checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -czf dist/learnvault-server-linux-x86_64.tar.gz -C dist/stage .
+          (cd dist && sha256sum learnvault-server-linux-x86_64.tar.gz > SHA256SUMS.rust-rc)
+
+      - name: Assert the archive inventory and checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          listing="$(tar -tzf dist/learnvault-server-linux-x86_64.tar.gz)"
+          for entry in ./learnvault-server ./web/200.html ./LICENSE; do
+            if ! printf '%s\n' "$listing" | grep -qxF "$entry"; then
+              echo "::error::Archive is missing $entry" >&2
+              exit 1
+            fi
+          done
+          (cd dist && sha256sum -c SHA256SUMS.rust-rc)
+
+      - name: Smoke test the built binary without Docker
+        shell: bash
+        run: |
+          set -euo pipefail
+          bin="dist/stage/learnvault-server"
+          file "$bin"
+          if ! file "$bin" | grep -q 'statically linked'; then
+            echo "::error::the built binary is not statically linked" >&2
+            file "$bin" >&2
+            exit 1
+          fi
+          "$bin" --version
+
+          # Synthetic temp dirs only: never `/mnt/cursos` or any real library.
+          workdir="$(mktemp -d)"
+          library="$workdir/library"
+          data="$workdir/data"
+          mkdir -p "$library" "$data"
+          port=8090
+
+          "$bin" \
+            --listen-addr "127.0.0.1:$port" \
+            --database "$data/learnvault.sqlite" \
+            --library-root "$library" \
+            --web-root "$PWD/dist/stage/web" \
+            >"$workdir/server.log" 2>&1 &
+          server_pid=$!
+
+          cleanup() {
+            kill "$server_pid" 2>/dev/null || true
+            wait "$server_pid" 2>/dev/null || true
+            rm -rf "$workdir"
+          }
+          trap cleanup EXIT
+
+          healthy=0
+          for _ in $(seq 1 30); do
+            if curl -fsS "http://127.0.0.1:$port/api/healthz" >"$workdir/health.json"; then
+              healthy=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$healthy" != 1 ]; then
+            echo "::error::server did not answer /api/healthz within 30s" >&2
+            cat "$workdir/server.log" >&2
+            exit 1
+          fi
+
+          grep -q '"status":"ok"' "$workdir/health.json"
+          headers="$(curl -fsS -D - -o /dev/null "http://127.0.0.1:$port/api/healthz")"
+          printf '%s' "$headers" | grep -qi 'cache-control: no-store'
+
+          # The SPA fallback serves the canonical shell bytes for `/`.
+          curl -fsS "http://127.0.0.1:$port/" -o "$workdir/shell.html"
+          cmp "$workdir/shell.html" "dist/stage/web/200.html"
+
+          echo "Smoke test passed: version, /api/healthz (200 + no-store) and SPA shell."
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rust-server-rc
+          path: |
+            dist/learnvault-server-linux-x86_64.tar.gz
+            dist/SHA256SUMS.rust-rc
+          if-no-files-found: error
+          retention-days: 7
