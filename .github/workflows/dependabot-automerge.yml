@@ -86,8 +86,6 @@ jobs:
               . != "pnpm-lock.yaml" and
               . != "package.json" and
               . != "apps/web/package.json" and
-              . != "services/go/go.mod" and
-              . != "services/go/go.sum" and
               (startswith("crates/") and endswith("/Cargo.toml") | not)
             )
           ' <<<"$files_json")"

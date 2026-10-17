@@ -12,9 +12,6 @@
 //
 // O crate desktop fica fora dos membros padrão do workspace; use `pnpm dev:tauri`
 // ou `cargo test -p learnvault-desktop` quando a mudança tocar o desktop.
-//
-// Checks de Go não entram aqui; use `go -C services/go test ./...` e
-// `go -C services/go vet ./...` quando a mudança tocar o módulo de referência.
 
 import { spawn } from 'node:child_process';
 import path from 'node:path';
