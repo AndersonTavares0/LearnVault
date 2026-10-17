@@ -25,16 +25,15 @@ diretório de configuração do aplicativo, fora da biblioteca e do SQLite; o co
 estado ocupado que serializa chamadas concorrentes e nunca dispara varredura automática; os
 comandos de estudo `desktop_study_progress`, `desktop_record_position`, `desktop_set_completed` e
 `desktop_recent_study`, que reutilizam `learnvault-core::study` com o dono local fixo resolvido no
-Rust; e o **protocolo de mídia de arquivos pequenos**, que entrega somente imagens/thumbnails e
-materiais pequenos por `learnvault-media://localhost/<media-id>` — no Windows (WebView2) o webview
-pede `http://learnvault-media.localhost/<media-id>`, que o runtime reverte para esse esquema antes
-do handler —, com o webview apontando pelo `media_id` opaco (nunca por um caminho), allowlist de
-tipo de conteúdo, limite explícito de resposta e revalidação pelo `learnvault-core`. **Vídeo e
-áudio ficam fora deste protocolo** nesta fatia por causa da reprodução parcial incompatível no
-webview do Linux (`WebKitGTK`); legendas continuam no caminho HTTP. A API de Study já tem paridade
-entre servidor Rust, SPA web e serviço Go de referência, e o desktop a expõe por IPC, mas o player
-segue sem reprodução de vídeo/áudio no desktop. Autenticação e janelas reais ainda não existem no
-desktop.
+Rust; e o **protocolo de mídia**, que entrega imagens/thumbnails, materiais pequenos, vídeo, áudio
+e arquivos de legenda por `learnvault-media://localhost/<media-id>` — no Windows (WebView2) o webview pede
+`http://learnvault-media.localhost/<media-id>`, que o runtime reverte para esse esquema antes do
+handler —, com o webview apontando pelo `media_id` opaco (nunca por um caminho), allowlist de tipo
+de conteúdo, faixas HTTP limitadas, limite explícito de resposta e revalidação pelo
+`learnvault-core`. A API de Study já tem paridade entre servidor Rust, SPA web e serviço Go de
+referência, e o desktop a expõe por IPC; o player desktop reproduz mídia local e sincroniza
+posição/conclusão. O player desktop renderiza legendas VTT; SRT, ASS e SSA são baixáveis, e o build
+HTTP pode converter SRT sob demanda. Autenticação e janelas reais ainda não existem no desktop.
 
 ```text
 Proxy HTTPS local
@@ -47,6 +46,10 @@ Serviço HTTP Rust -- SQLite (/data)
 
 O serviço HTTP Go permanece disponível separadamente como implementação legada/de referência;
 ele não é o servidor atual descrito pelo fluxo acima.
+
+O núcleo também possui uma API de importação explícita do SQLite Go (`legacy_import`): a origem
+é somente leitura, recebe backup antes da operação e a saída é promovida somente após transação,
+integridade, chaves estrangeiras e contagens. A biblioteca física não participa da migração.
 
 ## Arquitetura aprovada
 
@@ -76,7 +79,7 @@ Responsabilidades:
   recebe a raiz da biblioteca já resolvida.
 - `crates/server` traduz o domínio para HTTP: autenticação, sessões, `Range`, cabeçalhos de
   segurança e entrega da SPA.
-- `crates/desktop` integra com o sistema de arquivos e entrega mídia ao webview, sem autenticação e sem portas de rede. Expõe o IPC de configuração e catálogo sobre o banco local, a seleção da raiz da biblioteca (seletor nativo interno ao Rust, com persistência atômica fora da biblioteca), o rescan explícito dessa raiz e o progresso de estudo do dono local fixo, reutilizando o núcleo com estado ocupado e sem varredura automática, e um protocolo customizado que entrega somente **arquivos pequenos** (imagens/thumbnails e materiais pequenos) pelo `media_id` opaco. Vídeo/áudio e autenticação pertencem a fatias posteriores: a reprodução parcial de vídeo e áudio é incompatível no webview do Linux (`WebKitGTK`) e permanece pendente.
+ - `crates/desktop` integra com o sistema de arquivos e entrega mídia ao webview, sem autenticação e sem portas de rede. Expõe o IPC de configuração e catálogo sobre o banco local, a seleção da raiz da biblioteca (seletor nativo interno ao Rust, com persistência atômica fora da biblioteca), o rescan explícito dessa raiz e o progresso de estudo do dono local fixo, reutilizando o núcleo com estado ocupado e sem varredura automática, e um protocolo customizado que entrega materiais, vídeo, áudio e arquivos de legenda pelo `media_id` opaco, com faixas limitadas e allowlist. O player renderiza VTT; SRT, ASS e SSA são baixáveis.
 - `apps/web/` é uma única SPA em Svelte 5 + TypeScript + Vite, com roteamento por hash e dois
   builds que escolhem o transporte em tempo de compilação.
 

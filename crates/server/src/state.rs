@@ -197,6 +197,25 @@ impl AppState {
         streams.clone().try_acquire_owned().ok()
     }
 
+    /// Aguarda (sem bloquear o executor) até uma reserva de stream de asset da SPA
+    /// ficar disponível, devolvendo o permit.
+    ///
+    /// É o irmão *aguardável* de [`Self::try_acquire_spa_stream`]: em vez de falhar
+    /// de imediato, registra no semáforo e resolve exatamente quando o watchdog
+    /// ocioso devolve a reserva. Exposto para que o teste de integração observe de
+    /// forma determinística a liberação de capacidade pelo watchdog, em vez de
+    /// assumir que um avanço fixo do relógio virtual basta para o produtor alcançar
+    /// o deadline depois do IO de leitura real (issue #154). A admissão de `serve`
+    /// continua usando `try_acquire_spa_stream`; nenhuma lógica de backpressure muda.
+    #[doc(hidden)]
+    pub async fn acquire_spa_asset_stream_permit(&self) -> OwnedSemaphorePermit {
+        self.spa_asset_streams
+            .clone()
+            .acquire_owned()
+            .await
+            .expect("o semáforo de streams de asset da SPA nunca é fechado")
+    }
+
     /// Reserva um stream autenticado de mídia até que o corpo seja consumido ou descartado.
     pub(crate) fn try_acquire_media_stream(&self) -> Option<OwnedSemaphorePermit> {
         self.media_streams.clone().try_acquire_owned().ok()

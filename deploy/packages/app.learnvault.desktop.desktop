@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=LearnVault
+Comment=Biblioteca de estudos local
+Exec=learnvault-desktop
+Icon=app.learnvault.desktop
+Terminal=false
+Type=Application
+Categories=Education;
+StartupWMClass=LearnVault

@@ -9,25 +9,83 @@ desenvolvimento.
 
 | Alvo | Artefato | Uso | Status |
 | --- | --- | --- | --- |
-| Linux | binário nativo | Servidor, terminal e instalações leves | Disponível |
-| Self-hosted | imagem OCI (Docker/Podman) | Deploy opcional em servidor | Disponível |
-| Windows | instalador `.exe` via NSIS | Execução local e instalação gerenciada | Planejado |
-| Desktop Linux | Flatpak | Formato Linux preferencial do desktop | Planejado, sujeito a validação técnica |
+| Linux | tarballs Linux Go | Único release Linux suportado | Disponível |
+| Self-hosted | imagem OCI Rust via Compose (Docker/Podman) | Deploy opcional em servidor | Experimental; imagem local, não publicada |
+| Windows | instalador `.exe` via NSIS | Execução local; instalação por usuário, sem administrador | Automatizado, não assinado |
+| Desktop Linux | Flatpak | Formato Linux preferencial do desktop | Backend `xdg-portal` configurado; build e smoke test no sandbox pendentes |
 
-Não há `.deb` nem `.rpm` como artefatos públicos nesta fase; o Flatpak é o formato Linux
-preferencial do desktop.
+Não há `.deb` nem `.rpm` como artefatos públicos nesta fase. O instalador Windows NSIS continua
+habilitado no release automático; o Flatpak não é construído nem publicado automaticamente.
+
+### Instalador Windows (NSIS)
+
+O instalador do desktop é um `.exe` NSIS construído no workflow de release e publicado com os
+demais artefatos, conforme a matriz do [ADR 0001](../architecture/adr/0001-reescrita-em-rust.md).
+Ele instala somente para o usuário atual (`currentUser`), em
+`%LOCALAPPDATA%\LearnVault`, sem exigir senha de administrador. Os textos do instalador estão em
+português (Brasil) e inglês, com seletor de idioma, e o WebView2 ausente é baixado pelo próprio
+instalador (`downloadBootstrapper`) — a internet só é necessária nesse caso.
+
+Para gerar o instalador localmente no Windows, usando o mesmo comando do workflow de release (sem
+o override de versão):
+
+```sh
+pnpm install --frozen-lockfile
+pnpm run build:desktop
+pnpm exec tauri build --bundles nsis --config crates/desktop/tauri.conf.json
+```
+
+O artefato fica em `target/release/bundle/nsis/` (`LearnVault_<versão>_x64-setup.exe`) e é
+publicado no release como `learnvault-windows-<tag>.exe`. Sem o override de release, a versão vem
+do workspace (`0.0.0`); no release, a tag `vX.Y.Z` define a versão publicada. O instalador não é
+assinado: o Windows pode exibir o aviso do SmartScreen ("O Windows protegeu o PC"). Em "Mais
+informações", a opção "Executar assim mesmo" prossegue com a instalação; confira o `SHA256SUMS` do
+release antes de distribuir um download.
+
+#### Dados do usuário no Windows
+
+O desktop guarda os dados no perfil do usuário, fora da biblioteca, que permanece externa e
+somente leitura e nunca é copiada.
+
+| Caminho | Conteúdo |
+| --- | --- |
+| `%APPDATA%\app.learnvault.desktop\library.json` | raiz da biblioteca escolhida (configuração versionada, gravação atômica) |
+| `%APPDATA%\app.learnvault.desktop\learnvault.sqlite` | catálogo indexado e progresso de estudo (SQLite local) |
+| `%LOCALAPPDATA%\app.learnvault.desktop\` | dados internos do WebView2, mantidos pelo próprio Windows |
+
+Atualizar o aplicativo por cima preserva esses dados. Na desinstalação, o desinstalador exibe uma
+caixa de seleção desmarcada por padrão — "Remover dados do programa" no idioma português e "Delete
+the application data" no inglês: sem marcá-la, os dados permanecem; marcada, os diretórios
+`%APPDATA%\app.learnvault.desktop` e `%LOCALAPPDATA%\app.learnvault.desktop` são removidos.
+Nenhum instalador copia a biblioteca física para os dados da aplicação ou para backups.
 
 ## Limites de build
 
 - O comando Go em `services/go/cmd/learnvault` é a fonte da verdade para builds executáveis da
   implementação atual. Na reescrita, cada binário Rust passa a ser a fonte da verdade do seu alvo.
-- A SPA é construída uma vez e embutida no executável.
-- Receitas de pacotes ficarão em `deploy/packages/` quando forem implementadas.
+- A SPA é construída uma vez no artefato canônico `crates/server/web/build`. O serviço Go copia
+  essa saída para o caminho que usa em seus testes e empacotamento; isso é um contrato preparatório
+  para a futura cutover coordenada, não a remoção do serviço Go.
 - Definições de containers ficam em `deploy/container/`, `deploy/compose/` e `deploy/quadlet/`.
 - Containers não podem definir comportamento que o binário não possui.
 - O CI deve construir cada artefato de plataforma antes de montar instaladores.
 - Release Please controla changelog e metadados do GitHub Release.
 - O workflow de publicação adiciona binários versionados e `SHA256SUMS` ao release existente.
+- O workflow `.github/workflows/release.yml` é acionado quando o GitHub Release é publicado. Ele
+  exige uma tag estrita `vX.Y.Z`, constrói os assets Go Linux existentes e o instalador NSIS nativo
+  do Windows, e só então publica esses artefatos no release. O Flatpak está deliberadamente fora
+  desse fluxo até que o bloqueio de permissões seja resolvido.
+- Os artefatos desktop são deliberadamente **não assinados**: nenhum certificado ou segredo de
+  assinatura é usado nesta etapa. Verifique `SHA256SUMS` antes de distribuir um download.
+
+### Bloqueio do Flatpak
+
+O build e a publicação do Flatpak continuam bloqueados. O desktop usa o backend oficial
+`xdg-portal` no Linux e o manifesto não concede acesso amplo à home ou ao host; ainda falta
+validar, com um build Flatpak real, o acesso persistente somente ao diretório escolhido e a
+reprodução de mídia no sandbox. O manifesto não representa um artefato de release atual. Não há
+acesso de rede nem permissão de escrita na biblioteca; ela permanece externa ao diretório da
+aplicação e nunca é copiada para dados ou backups.
 
 ## Runner self-hosted de validação
 
@@ -52,8 +110,8 @@ Para reativá-lo futuramente, com autorização operacional:
 O empacotamento segue o [ADR 0001](../architecture/adr/0001-reescrita-em-rust.md): NSIS no
 Windows, Flatpak como formato Linux preferencial e imagem OCI mais binário nativo para instalação
 self-hosted. Os builds devem ser versionados e reproduzíveis, sem tornar Docker um requisito
-oculto. O Flatpak permanece sujeito à validação técnica de permissões, acesso persistente às
-bibliotecas e reprodução de mídia.
+oculto. O Flatpak permanece bloqueado até a validação do build/sandbox real, do acesso persistente
+às bibliotecas e da reprodução de mídia.
 
 ## Verificação manual de somente leitura
 
@@ -66,7 +124,8 @@ COMPOSE="docker compose --env-file deploy/compose/.env.example -f deploy/compose
   ./scripts/verify-readonly.sh
 ```
 
-- Exige uma imagem `learnvault` construída localmente e o Docker disponível.
+- Exige a imagem do serviço `learnvault` construída localmente pelo Compose
+  (`learnvault-rust:local`, a partir de `Containerfile.rust`) e o Docker disponível.
 - Use sempre uma biblioteca de teste. Com o ambiente de exemplo, `LIBRARY_DIR` aponta para
   `testdata/library`. A sonda **tenta escrever** em `/library`; nunca aponte o script para uma
   biblioteca real.
@@ -75,10 +134,11 @@ COMPOSE="docker compose --env-file deploy/compose/.env.example -f deploy/compose
 ## Validação experimental da imagem Rust (OCI)
 
 Enquanto a reescrita em Rust avança, `deploy/container/Containerfile.rust` e
-`scripts/verify-rust-oci.sh` permitem validar localmente que o servidor Rust
-(`crates/server`) compila a partir do repositório e roda em um contêiner. Ambos são
-experimentais e não publicam nada: `deploy/container/Containerfile` (Go) continua sendo a
-imagem suportada por Compose, Quadlet, workflow de release e CI.
+`scripts/verify-rust-oci.sh` permitem validar localmente que o servidor Rust (`crates/server`)
+compila com a SPA canônica e roda em um contêiner. O caminho self-hosted do Compose constrói
+essa imagem Rust localmente; ela continua experimental, não publicada nem assinada e não é um
+artefato de release. O CI e o workflow de release ainda constroem e usam a imagem e os
+artefatos Go; o serviço Go permanece no repositório até a cutover coordenada final.
 
 ```sh
 ./scripts/verify-rust-oci.sh
@@ -98,6 +158,8 @@ CONTAINER_ENGINE=podman ./scripts/verify-rust-oci.sh
 - O servidor Rust ainda não possui interface de cache (`CACHE_DIR`); não há diretório de
   cache para validar nesta fase.
 - Não faz parte do CI e não substitui `cargo fmt`, `cargo clippy` e `cargo test`.
+- A referência de imagem do Quadlet (`localhost/learnvault:latest`) continua sem origem
+  resolvida até a Fase 5.
 
 ## Modelo de configuração
 
@@ -114,3 +176,57 @@ Em deploys expostos à rede, coloque o serviço atrás de um proxy HTTPS que imp
 de cabeçalhos, limite de conexões por origem e limites de tamanho de cabeçalho. Esses controles são
 responsabilidade do proxy ou da infraestrutura de implantação: esta documentação não afirma que o
 servidor, sozinho, elimina slowloris ou outros limites de rede externos.
+
+## Release candidate Rust (opt-in)
+
+Esta subseção é **aditiva** e não altera a matriz de releases acima. O workflow
+`.github/workflows/rust-server-rc.yml` produz um artefato experimental do servidor
+Rust (`crates/server`) para Linux amd64 musl, como candidato de release candidate
+(opt-in). Ele é acionado **apenas manualmente**; não roda em `release`, em tags, em
+`push` nem por agendamento.
+
+```sh
+gh workflow run rust-server-rc.yml --ref main -f ref=main -f version=0.4.0-rc.1
+```
+
+- Entradas do dispatch: `ref` (branch ou SHA a construir, padrão `main`), `version`
+  (versão injetada no binário; obrigatória, e o workflow falha de forma fechada se ela
+  vier vazia) e `target` (fixo em `x86_64-unknown-linux-musl`). O workflow falha de forma fechada contra o
+  namespace de tags estáveis: a guarda pré-checkout rejeita tanto um `vX.Y.Z` puro
+  quanto qualquer `refs/tags/*` e, como defesa em profundidade, uma etapa
+  pós-checkout falha se o HEAD for exatamente uma tag `vX.Y.Z`. Esse namespace
+  pertence a `.github/workflows/release.yml`.
+- O artefato contém `learnvault-server-linux-x86_64.tar.gz` (binário estático
+  `learnvault-server`, a SPA canônica em `web/` com `web/200.html` e `LICENSE`) e
+  `SHA256SUMS.rust-rc`. A verificação de checksum e de inventário do tar ocorre no
+  próprio job.
+- O job faz um smoke sem Docker: confere que `--version` reporta exatamente a versão do
+  dispatch, sobe o binário contra diretórios temporários sintéticos (nunca `/mnt/cursos`
+  ou biblioteca real) e confirma `/api/healthz` (200 com `no-store`, com a mesma versão)
+  e a entrega do shell da SPA.
+- É **deliberadamente não publicado**: não há upload para release, `gh release` nem
+  `--clobber` nesta etapa. O artefato sobe apenas no run do Actions com o nome
+  `rust-server-rc` (sem o prefixo `release-`), portanto o workflow de release não o
+  captura.
+- **Não é o artefato Linux padrão**, não é publicado nem assinado e não é usado por Quadlet,
+  CI ou release. O Compose o constrói localmente; os tarballs Go continuam sendo o único
+  release Linux suportado.
+
+Permanece **não comprovado** por esta etapa:
+
+- Identidade de versão: a versão vem da entrada `version` do dispatch; o workflow não
+  comprova a seleção da versão de release além desse valor fornecido.
+- Assinatura: o artefato não é assinado.
+- Soak/rollout: nenhum teste de duração ou implantação em produção é executado.
+- arm64 não é produzido; também não há validação de runtime fora do smoke do próprio job.
+
+## Publicação experimental do RC Rust
+
+O workflow manual **Rust server RC publish (draft)** publica uma draft prerelease com tag
+`rust-rc-*`. O artefato é não assinado e não é o release Linux suportado; os tarballs Go continuam
+sendo o release suportado. Despache-o informando a versão, o run do build e a tag:
+
+```sh
+gh workflow run "Rust server RC publish (draft)" --ref main \
+  -f version=<v> -f run_id=<rust-server-rc-run-id> -f tag=rust-rc-<v>
+```

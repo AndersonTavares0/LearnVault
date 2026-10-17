@@ -108,7 +108,7 @@ fn config_embeds_frontend_for_production_without_dev_server() {
     );
     assert!(
         csp.contains("learnvault-media: http://learnvault-media.localhost"),
-        "a CSP precisa liberar o protocolo de mídia de arquivos pequenos: {csp}"
+        "a CSP precisa liberar o protocolo de mídia local: {csp}"
     );
 
     let window = &config["app"]["windows"][0];
@@ -121,6 +121,67 @@ fn config_embeds_frontend_for_production_without_dev_server() {
         window["url"].as_str(),
         Some("200.html"),
         "a janela precisa carregar o shell embutido"
+    );
+}
+
+#[test]
+fn windows_bundle_is_nsis_per_user_with_pt_br_and_english() {
+    let raw = read(&crate_root().join("tauri.conf.json"));
+    let config: serde_json::Value =
+        serde_json::from_str(&raw).expect("tauri.conf.json precisa ser JSON válido");
+
+    assert_eq!(
+        config["bundle"]["active"].as_bool(),
+        Some(true),
+        "o bundle precisa estar ativo para gerar o instalador"
+    );
+    let targets = config["bundle"]["targets"]
+        .as_array()
+        .expect("o bundle precisa declarar targets");
+    assert!(
+        targets.iter().any(|target| target == "nsis"),
+        "o alvo Windows é o instalador NSIS: {targets:?}"
+    );
+    let icons = config["bundle"]["icon"]
+        .as_array()
+        .expect("o bundle precisa listar ícones");
+    assert!(
+        icons.iter().any(|icon| icon == "icons/icon.ico"),
+        "o instalador Windows precisa do ícone .ico: {icons:?}"
+    );
+
+    let nsis = &config["bundle"]["windows"]["nsis"];
+    assert_eq!(
+        nsis["installMode"].as_str(),
+        Some("currentUser"),
+        "a instalação é por usuário, sem senha de administrador"
+    );
+    assert_eq!(
+        nsis["displayLanguageSelector"].as_bool(),
+        Some(true),
+        "o instalador precisa oferecer a escolha de idioma"
+    );
+    let languages = nsis["languages"]
+        .as_array()
+        .expect("o instalador precisa listar idiomas");
+    for language in ["PortugueseBR", "English"] {
+        assert!(
+            languages.iter().any(|candidate| candidate == language),
+            "o idioma '{language}' precisa estar no instalador: {languages:?}"
+        );
+    }
+    for key in ["installerIcon", "uninstallerIcon"] {
+        assert_eq!(
+            nsis[key].as_str(),
+            Some("icons/icon.ico"),
+            "o instalador e o desinstalador precisam usar o ícone do aplicativo: {key}"
+        );
+    }
+
+    assert_eq!(
+        config["bundle"]["windows"]["webviewInstallMode"]["type"].as_str(),
+        Some("downloadBootstrapper"),
+        "o WebView2 ausente é baixado pelo próprio instalador"
     );
 }
 
@@ -236,6 +297,38 @@ fn capability_exposes_no_dialog_or_filesystem_permission() {
                 "o seletor nativo é interno ao Rust e não pode ser concedido ao webview: '{identifier}'"
             );
         }
+    }
+}
+
+#[test]
+fn dialog_uses_the_xdg_portal_backend_only_on_linux() {
+    let manifest = read(&crate_root().join("Cargo.toml"));
+
+    assert!(
+        manifest.contains("target.'cfg(target_os = \"linux\")'.dependencies"),
+        "o desktop precisa declarar uma configuração específica para Linux"
+    );
+    assert!(
+        manifest.contains("features = [\"xdg-portal\"]"),
+        "Linux precisa usar o backend oficial xdg-portal"
+    );
+    assert!(
+        manifest.contains(
+            "target.'cfg(any(target_os = \"windows\", target_os = \"macos\"))'.dependencies",
+        ),
+        "Windows e macOS precisam manter a dependência nativa"
+    );
+}
+
+#[test]
+fn flatpak_manifest_does_not_grant_broad_home_or_host_filesystem_access() {
+    let manifest = read(&crate_root().join("../../deploy/packages/app.learnvault.desktop.yml"));
+
+    for entry in manifest.lines().map(str::trim) {
+        assert!(
+            !entry.starts_with("- --filesystem=home") && !entry.starts_with("- --filesystem=host"),
+            "o manifesto não pode conceder filesystem amplo: {entry}"
+        );
     }
 }
 

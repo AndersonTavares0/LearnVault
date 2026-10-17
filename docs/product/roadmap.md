@@ -13,15 +13,17 @@ A execução avança por fases, com um pull request por fase:
 - [x] Fase 1 (complemento) — remoção explícita de mídia no núcleo
 - [x] Fase 2 — `crates/server` com Axum, autenticação, sessões e mídia com Range
 - [x] Fase 3 — SPA Svelte 5 + TypeScript + Vite com dois builds
-- [x] Fase 3a — recusa segura de bancos Go legados; conversão automática permanece fora do escopo
+- [x] Fase 3a — recusa segura de bancos Go legados e API explícita, limitada e backup-first para
+  importar usuários, catálogo e estado; comando `learnvault-server migrate-go` executa a operação
+  sem iniciar o listener HTTP
 - [ ] Fase 4 — `crates/desktop` com Tauri 2, offline e sem portas de rede
   - [x] Fase 4 (fundação) — crate `crates/desktop` no workspace, `frontendDist` embutido, capability deny-by-default e CSP explícita; IPC de domínio, mídia e janelas reais ainda pendentes
   - [x] Fase 4 (IPC de catálogo) — comandos `desktop_config` e `desktop_catalog` offline com ACL app-defined mínima, DTOs snake_case do catálogo e erros IPC sanitizados; mídia, autenticação, seleção da raiz da biblioteca e janelas reais continuam pendentes
   - [x] Fase 4 (seleção da raiz) — comando `desktop_select_library` sem argumentos aciona o seletor nativo no Rust e persiste a raiz canonicalizada de forma versionada e atômica no diretório de configuração do aplicativo, com revalidação no startup e biblioteca somente leitura; mídia, autenticação e janelas reais continuam pendentes
   - [x] Fase 4 (rescan da biblioteca) — comando `desktop_rescan` sem argumentos e assíncrono (`spawn_blocking`) indexa explicitamente a raiz persistida reutilizando `learnvault-core` (`rescan`/`RescanSummary`), com estado ocupado que serializa chamadas concorrentes por um erro estável (`rescan_in_progress`), raiz não configurada (`library_not_configured`) e raiz inacessível (`rescan_unavailable`) sanitizados; o rescan nunca é automático e a biblioteca permanece somente leitura. Mídia, autenticação e janelas reais continuam pendentes
-  - [x] Fase 4 (mídia de arquivos pequenos) — protocolo customizado `learnvault-media://localhost/<media-id>` entrega somente imagens/thumbnails e materiais pequenos pelo `media_id` opaco, com parsing estrito, allowlist de tipo de conteúdo, limite explícito de resposta (`200`/`HEAD`/`206`/`416`) e revalidação pelo `learnvault-core` (`open_media`); no Windows (WebView2) a SPA pede `http://learnvault-media.localhost/<media-id>` e o runtime reverte para o esquema antes do handler (Linux/macOS usam o esquema direto); nenhuma capability nova. **Vídeo e áudio ficam fora do protocolo** por causa da reprodução parcial incompatível no webview do Linux (`WebKitGTK`) e legendas seguem no caminho HTTP. A Fase 4 **não** está concluída: vídeo/áudio, autenticação e janelas reais continuam pendentes
-  - [x] Fase 4 (Study desktop) — comandos `desktop_study_progress`, `desktop_record_position`, `desktop_set_completed` e `desktop_recent_study`, assíncronos (`spawn_blocking`) e com ACL mínima, reutilizam `learnvault-core::study` com o dono local fixo resolvido no Rust — o webview nunca envia `owner_id` — e devolvem o mesmo contrato snake_case do HTTP (`recorded`, `updated_at`) com erros estáveis (`media_not_found`, `invalid_position`, `study_unavailable`). A SPA ativa Study nos dois transportes por `invoke`, sem `fetch`, mas mantém a barra do player fechada enquanto o transporte não entregar a mídia: sem reprodução não há posição real. A entrega de mídia de arquivos pequenos está incluída nesta fatia; vídeo/áudio, autenticação e janelas reais continuam pendentes
-- [ ] Fase 5 — distribuição por plataforma e remoção do serviço Go
+  - [x] Fase 4 (mídia local) — protocolo customizado `learnvault-media://localhost/<media-id>` entrega imagens/thumbnails, materiais pequenos, vídeo, áudio e legendas pelo `media_id` opaco, com parsing estrito, allowlist de tipo de conteúdo, faixas HTTP limitadas, limite explícito por resposta (`200`/`HEAD`/`206`/`413`/`416`) e revalidação pelo `learnvault-core` (`open_media`); no Windows (WebView2) a SPA pede `http://learnvault-media.localhost/<media-id>` e o runtime reverte para o esquema antes do handler (Linux/macOS usam o esquema direto); nenhuma capability nova
+  - [x] Fase 4 (Study desktop) — comandos `desktop_study_progress`, `desktop_record_position`, `desktop_set_completed` e `desktop_recent_study`, assíncronos (`spawn_blocking`) e com ACL mínima, reutilizam `learnvault-core::study` com o dono local fixo resolvido no Rust — o webview nunca envia `owner_id` — e devolvem o mesmo contrato snake_case do HTTP (`recorded`, `updated_at`) com erros estáveis (`media_not_found`, `invalid_position`, `study_unavailable`). A SPA ativa Study nos dois transportes por `invoke`, sem `fetch`, e sincroniza posição real da reprodução local; autenticação e janelas reais continuam pendentes
+- [ ] Fase 5 — distribuição por plataforma e remoção do serviço Go — ver o [Gate de elegibilidade para a remoção do serviço Go](../operations/migration-go-to-rust.md#gate-de-elegibilidade-para-a-remoção-do-serviço-go)
 
 ## Atual — fundação e catálogo
 
@@ -40,13 +42,15 @@ durante a reescrita.
 
 As entregas mescladas #86, #88, #90 e #91 alinham o contrato de Study entre o servidor Rust,
 a SPA web e o serviço Go de referência: progresso, posição de retomada, conclusão e histórico
-recente usam o mesmo contrato e os mesmos limites públicos. O desktop passou a expor esse
-contrato por IPC, com o dono local fixo resolvido no Rust, mas o player do desktop continua sem
-reprodução enquanto a entrega de mídia estiver em #76 (Draft, não mesclada).
+recente usam o mesmo contrato e os mesmos limites públicos. O desktop expõe esse contrato por IPC,
+com o dono local fixo resolvido no Rust, e o player reproduz mídia local pelo protocolo customizado,
+mantendo retomada e conclusão no mesmo fluxo de estudo.
 
 ## Próximo — ciclo de estudo utilizável
 
 - [ ] Detalhes do curso e navegação de aulas
+  - [x] Navegação anterior/próxima entre aulas e índice de aulas do curso no player (`apps/web`)
+  - [ ] Página de detalhes do curso
 - [ ] Player direto com links de legendas e materiais
 - [x] Progresso individual e posição de retomada
 - [x] Marcar aula como concluída e painel de histórico recente
@@ -74,15 +78,20 @@ reprodução enquanto a entrega de mídia estiver em #76 (Draft, não mesclada).
 A matriz aprovada está no [ADR 0001](../architecture/adr/0001-reescrita-em-rust.md).
 
 - [ ] Manter o núcleo compilável sem Docker ou Podman
-- [ ] Publicar instalador Windows `.exe` via NSIS
-- [ ] Publicar Flatpak como formato Linux preferencial do desktop
+- [x] Publicar instalador Windows `.exe` via NSIS (por usuário, pt-BR/en, não assinado)
+- [ ] Publicar Flatpak como formato Linux preferencial do desktop — a seleção usa o backend
+  oficial `xdg-portal` no Linux e o manifesto não concede filesystem amplo; ainda faltam build e
+  smoke test reais no sandbox Flatpak, inclusive validação do acesso persistente ao diretório
+  escolhido
 - [ ] Publicar imagem OCI e binário nativo para instalação self-hosted
 - [ ] Assinar artefatos desktop quando houver credenciais de plataforma
-- [ ] Gerar checksums e metadados de proveniência para cada release
+- [x] Gerar `SHA256SUMS` para cada release
 - [ ] Manter Docker Compose e Podman rootless/Quadlet como adaptadores opcionais de servidor
 
-O Flatpak permanece sujeito à validação técnica de permissões, acesso persistente às bibliotecas
-e reprodução de mídia antes de ser tratado como formato definitivo.
+O Flatpak continua explicitamente bloqueado: o build e a publicação automática permanecem
+desativados. A seleção Linux usa o backend oficial `xdg-portal` e o manifesto não concede acesso
+amplo ao filesystem, mas o build Flatpak real e o smoke test no sandbox, incluindo acesso
+persistente ao diretório escolhido e reprodução de mídia, ainda estão pendentes.
 
 ## Mais tarde — inteligência e operações opcionais
 
