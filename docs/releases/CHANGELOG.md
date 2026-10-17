@@ -4,6 +4,13 @@ Todas as mudanças relevantes do LearnVault são documentadas neste arquivo.
 
 O formato segue o Keep a Changelog e as versões usam Semantic Versioning.
 
+## [0.6.1](https://github.com/AndersonTavares0/LearnVault/compare/v0.6.0...v0.6.1) (2026-10-17)
+
+
+### Correções
+
+* **web:** centralizar login e refinar tema escuro ([#203](https://github.com/AndersonTavares0/LearnVault/issues/203)) ([568d168](https://github.com/AndersonTavares0/LearnVault/commit/568d16804103437844f39c0d7ad5938131e18730))
+
 ## [0.6.0](https://github.com/AndersonTavares0/LearnVault/compare/v0.5.0...v0.6.0) (2026-10-17)
 
 
