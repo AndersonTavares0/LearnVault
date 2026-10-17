@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { destinationAfterLogin, findCourse, findLesson, findLessonLocation, href, locationFromHash, routeFromHash } from './router';
-import type { Catalog, CatalogNode } from './transport';
+import type { Catalog, CatalogNode, FileEntry } from './transport';
 
 function course(id: string, children: CatalogNode[] = []): CatalogNode {
 	return { title: `Curso ${id}`, path: '', role: 'course', courseId: id, files: [], looseFiles: [], children };
@@ -17,8 +17,8 @@ function lessonNode(path: string, mediaId?: string): CatalogNode {
 	};
 }
 
-function catalog(nodes: CatalogNode[]): Catalog {
-	return { complete: true, looseFiles: [], nodes };
+function catalog(nodes: CatalogNode[], looseFiles: FileEntry[] = []): Catalog {
+	return { complete: true, looseFiles, nodes };
 }
 
 describe('hash router', () => {
@@ -81,5 +81,20 @@ describe('hash router', () => {
 		expect(findLessonLocation(data, 'missing')).toBeNull();
 		expect(findLessonLocation(null, 'm1')).toBeNull();
 		expect(findLessonLocation(data, null)).toBeNull();
+	});
+	it('opens standalone root media in the player', () => {
+		const root: FileEntry = { name: 'Áudio inicial.mp3', path: 'Áudio inicial.mp3', size: 10, kind: 'media', mediaId: 'root' };
+		const data = catalog([], [root]);
+		expect(locationFromHash(href('player', root.path)).lessonPath).toBe(root.path);
+		expect(findLesson(data, null, root.path)).toMatchObject({ title: root.name, path: root.path, media: [root] });
+	});
+	it('does not resolve materials, missing files or removed paths as playable standalone media', () => {
+		const data = catalog([], [
+			{ name: 'aviso.pdf', path: 'aviso.pdf', size: 10, kind: 'material', mediaId: 'pdf' },
+			{ name: 'ausente.mp4', path: 'ausente.mp4', size: 10, kind: 'media', mediaId: 'missing', availability: 'missing' }
+		]);
+		expect(findLesson(data, null, 'aviso.pdf')).toBeNull();
+		expect(findLesson(data, null, 'ausente.mp4')).toBeNull();
+		expect(findLesson(data, null, 'removido.mp4')).toBeNull();
 	});
 });
