@@ -12,7 +12,12 @@
 	import { transport, transportKind, STUDY_NOT_AVAILABLE, type Catalog, type CatalogNode, type Lesson, type StudyProgress, type User } from './transport';
 	import { resolveSession } from './session';
 	import { formatDuration, studySyncSupported } from './player';
+	import Brand from './Brand.svelte';
+	import { applyTheme, persistThemeMode, readThemeMode, resolveTheme, type ThemeMode } from './theme';
 
+	let themeMode: ThemeMode = readThemeMode(safeLocalStorage());
+	let systemDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
+	let resolvedTheme = resolveTheme(themeMode, systemDark);
 	let route: Route = locationFromHash(location.hash).route;
 	let courseId: string | null = locationFromHash(location.hash).courseId;
 	let lessonPath: string | null = locationFromHash(location.hash).lessonPath;
@@ -55,6 +60,19 @@
 	// servidor para pastas arbitrárias; no desktop a identidade local é admin.
 	$: canManage = user !== null && user.role === 'admin';
 
+	applyTheme(document.documentElement, resolvedTheme);
+	const scheme = window.matchMedia?.('(prefers-color-scheme: dark)');
+	const updateSystemTheme = (event: MediaQueryListEvent) => {
+		systemDark = event.matches;
+		if (themeMode === 'system') {
+			resolvedTheme = resolveTheme(themeMode, systemDark);
+			applyTheme(document.documentElement, resolvedTheme);
+			const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+			if (themeColor) themeColor.content = resolvedTheme === 'dark' ? '#171c19' : '#f7f6f1';
+		}
+	};
+	scheme?.addEventListener('change', updateSystemTheme);
+
 	onMount(() => {
 		const change = () => {
 			const next = locationFromHash(location.hash);
@@ -68,9 +86,27 @@
 		};
 		window.addEventListener('hashchange', change);
 		void initialize();
-		return () => window.removeEventListener('hashchange', change);
+		return () => {
+			window.removeEventListener('hashchange', change);
+			scheme?.removeEventListener('change', updateSystemTheme);
+		};
 	});
 
+	function safeLocalStorage(): Storage | null {
+		try {
+			return window.localStorage;
+		} catch {
+			return null;
+		}
+	}
+	function changeTheme(mode: ThemeMode) {
+		themeMode = mode;
+		resolvedTheme = resolveTheme(mode, systemDark);
+		applyTheme(document.documentElement, resolvedTheme);
+		const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+		if (themeColor) themeColor.content = resolvedTheme === 'dark' ? '#171c19' : '#f7f6f1';
+		persistThemeMode(safeLocalStorage(), mode);
+	}
 	async function initialize() {
 		try {
 			const session = await resolveSession(() => transport.me(), transportKind);
@@ -265,9 +301,9 @@
 </script>
 <svelte:head><title>LearnVault — sua biblioteca de estudos</title><meta name="description" content="Sua biblioteca pessoal de cursos." /></svelte:head>
 {#if loading}<div class="loading" aria-live="polite">Carregando seus cursos…</div>
-{:else if !user}<main class="login-page"><div class="brand"><span class="mark">LV</span> LEARNVAULT</div><section><p class="eyebrow">SEU ESPAÇO DE APRENDIZAGEM</p><h1>Conhecimento,<br /><em>no seu ritmo.</em></h1><p class="intro">Uma casa tranquila para seus cursos, ideias e próximos passos.</p><form onsubmit={login}><fieldset class="auth-fields" disabled={authBusy}><label class="form-field" for="login-username">Usuário<input id="login-username" autocomplete="username" bind:value={username} required /></label><PasswordField id="login-password" label="Senha" autocomplete="current-password" bind:value={password} />{#if error}<p class="error" role="alert">{error}</p>{/if}<button type="submit" disabled={authBusy} aria-busy={authBusy}>{authBusy ? 'Entrando…' : 'Entrar'}</button></fieldset></form></section></main>
+{:else if !user}<main class="login-page"><div class="brand"><Brand /> LEARNVAULT</div><section><p class="eyebrow">SEU ESPAÇO DE APRENDIZAGEM</p><h1>Conhecimento,<br /><em>no seu ritmo.</em></h1><p class="intro">Uma casa tranquila para seus cursos, ideias e próximos passos.</p><form onsubmit={login}><fieldset class="auth-fields" disabled={authBusy}><label class="form-field" for="login-username">Usuário<input id="login-username" autocomplete="username" bind:value={username} required /></label><PasswordField id="login-password" label="Senha" autocomplete="current-password" bind:value={password} />{#if error}<p class="error" role="alert">{error}</p>{/if}<button type="submit" disabled={authBusy} aria-busy={authBusy}>{authBusy ? 'Entrando…' : 'Entrar'}</button></fieldset></form></section></main>
 {:else if user.mustChangeCredentials}<main class="login-page"><section><h1>Configure sua conta</h1><p>Defina seu usuário e sua senha para continuar.</p><form onsubmit={credentials}><fieldset class="auth-fields" disabled={authBusy}><PasswordField id="current-password" label="Senha atual" autocomplete="current-password" bind:value={currentPassword} /><label class="form-field" for="new-username">Novo usuário<input id="new-username" autocomplete="username" bind:value={username} required /></label><PasswordField id="new-password" label="Nova senha" autocomplete="new-password" bind:value={password} minLength={12} hint="Use ao menos 12 caracteres." />{#if error}<p class="error" role="alert">{error}</p>{/if}<button type="submit" disabled={authBusy} aria-busy={authBusy}>{authBusy ? 'Salvando…' : 'Continuar'}</button></fieldset></form></section></main>
-{:else}<div class="shell"><header><div class="brand"><span class="mark">LV</span> LEARNVAULT</div><button class="text-button" onclick={logout}>Sair</button></header><div class="layout"><aside aria-label="Navegação principal"><a class:active={route === 'home'} href={href('home')}>Início</a></aside><main><p class="eyebrow">BIBLIOTECA PESSOAL</p>{#if error}<p class="error" role="alert">{error}</p>{/if}
+{:else}<div class="shell"><header><div class="brand"><Brand /> LEARNVAULT</div><button class="text-button" onclick={logout}>Sair</button></header><div class="layout"><aside aria-label="Navegação principal"><a class:active={route === 'home'} href={href('home')}>Início</a><a class:active={route === 'settings'} href={href('settings')}>Configurações</a></aside><main><p class="eyebrow">BIBLIOTECA PESSOAL</p>{#if error}<p class="error" role="alert">{error}</p>{/if}
 {#if route === 'home'}
 	<h1>Olá, {user.username}.</h1>
 	<p class="intro">{catalog && catalog.nodes.length ? 'Escolha um curso para continuar estudando.' : 'Importe seu primeiro curso para montar sua biblioteca.'}</p>
@@ -292,6 +328,7 @@
 		{:else}<p class="empty" role="status">Nenhum curso corresponde a “{catalogQuery.trim()}”.</p>{/if}
 	{:else if canManage}<div class="empty-state"><p class="empty">Nenhum curso por aqui ainda.</p><p class="intro">Clique em “Importar curso” e escolha a pasta de um curso. Nada é movido, alterado ou apagado — a pasta permanece somente leitura.</p></div>{/if}
 	{#if catalog && catalog.looseFiles.length}<LooseFiles files={catalog.looseFiles} heading="Arquivos soltos" />{/if}
+{:else if route === 'settings'}<h1>Preferências</h1><p class="intro">Escolha como o LearnVault aparece neste dispositivo.</p><fieldset class="theme-options"><legend>Tema</legend><label><input type="radio" name="theme" value="system" checked={themeMode === 'system'} onchange={() => changeTheme('system')} />Sistema <span>Acompanha a preferência do sistema.</span></label><label><input type="radio" name="theme" value="light" checked={themeMode === 'light'} onchange={() => changeTheme('light')} />Claro <span>Usa sempre o tema claro.</span></label><label><input type="radio" name="theme" value="dark" checked={themeMode === 'dark'} onchange={() => changeTheme('dark')} />Escuro <span>Usa sempre o tema escuro.</span></label></fieldset><p class="theme-status" aria-live="polite">Tema atual: {resolvedTheme === 'dark' ? 'escuro' : 'claro'}{themeMode === 'system' ? ' (sistema)' : ''}</p><section class="account-settings" aria-labelledby="account-heading"><h2 id="account-heading">Conta</h2><p><strong>{user.username}</strong> · {user.isAdmin ? 'Administrador' : 'Estudante'}</p>{#if transportKind === 'http'}<button class="text-button" onclick={logout}>Encerrar sessão</button>{:else}<p class="catalog-message">Biblioteca local neste dispositivo.</p>{/if}</section>
 {:else if route === 'course'}
 	<a class="back" href={href('home')}>← Início</a>
 	{#if !course}<h1>Curso não encontrado</h1><p class="empty" role="status">Não foi possível encontrar este curso no catálogo atual. Ele pode ter sido removido.</p>
