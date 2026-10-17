@@ -62,7 +62,7 @@ A raiz mantém apenas `AGENTS.md`, `README.md`, `LICENSE`, `.dockerignore`, `.gi
 `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, `package.json`, `pnpm-lock.yaml` e
 `pnpm-workspace.yaml`. O crate `desktop` (Tauri) pertence à Fase 4 e já existe, mas a fase
 permanece incompleta: mídia, autenticação e janelas reais ainda são gates. A distribuição por
-plataforma e a remoção do serviço Go pertencem à Fase 5 e permanecem incompletas.
+plataforma e a remoção do serviço Go foram concluídas na Fase 5 (PR #206).
 
 Saída gerada (`crates/server/web/build`, `crates/desktop/frontend-dist`, `target`, `node_modules`
 e dados/cache locais)
@@ -106,12 +106,10 @@ auto-merge nativo aguarda ou recusa qualquer estado que não satisfaça a prote�
 Quando elegível, o workflow apenas solicita o auto-merge nativo do GitHub com squash. Ele não
 aprova PRs, não usa `--admin`, não faz force-push, rebase ou fechamento automático. A proteção da
 branch continua sendo a autoridade para reviews e checks; a solicitação também é reavaliada pelo
-GitHub quando o head ou os checks mudam. Os checks protegidos são `SPA checks`, `Go tests and vet`,
-`Container build`, `Rust tests and lints`, `Desktop crate compile and guards` e
-`Container build (Rust)`; `Container build` e `Container build (Rust)` incluem a varredura Trivy de
-vulnerabilidades HIGH/CRITICAL das imagens Go e Rust. A promoção dos três checks Rust a
-obrigatórios foi decidida pelo mantenedor em 2026-10-17 e a remoção dos dois checks acoplados ao Go
-fica acoplada à pull request dedicada de remoção do serviço Go.
+GitHub quando o head ou os checks mudam. Os checks protegidos são `SPA checks`, `Rust tests and lints`, `Desktop crate compile and guards` e
+`Container build (Rust)`; este último inclui a varredura Trivy de vulnerabilidades HIGH/CRITICAL da
+imagem Rust. A promoção dos três checks Rust a obrigatórios e a remoção dos checks acoplados ao Go
+foram concluídas pelo mantenedor em 2026-10-17.
 
 O workflow não concede permissões ao `GITHUB_TOKEN` (`permissions: {}`). Para consultar alertas do
 Dependabot com `alert-lookup`, ele exige o segredo
@@ -140,9 +138,8 @@ usa cache e mantém timeouts curtos.
 
 O job `Rust tests and lints` verifica formatação, lints, testes e a cobertura do núcleo em Rust; o
 job `Desktop crate compile and guards` compila o crate desktop e roda seus testes; e o job
-`Container build (Rust)` constrói e valida a imagem OCI Rust. Toda promoção a obrigatório exige
-decisão explícita do mantenedor, e a remoção dos checks acoplados ao Go acompanha a pull request
-dedicada de remoção do serviço.
+`Container build (Rust)` constrói e valida a imagem OCI Rust. Toda promoção a obrigatório exige decisão explícita do mantenedor; os checks acoplados ao Go foram
+removidos na Fase 5 (PR #206).
 
 O Wiki sync não é check obrigatório: ele roda após mudanças mapeadas chegarem à `main` ou por
 execução manual, escreve somente páginas gerenciadas e não reage a eventos da própria Wiki.

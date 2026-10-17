@@ -2,7 +2,7 @@
 # contents: write only to create the authorized draft prerelease, and actions:
 # read only to fetch the artifact from the other workflow run. This never
 # touches the stable vX.Y.Z namespace owned by release.yml/Release Please.
-# Its asset names are disjoint from the Go release assets. It is intentionally
+# Its asset names are distinct from the stable Rust release assets. It is intentionally
 # a separate workflow so release.yml remains untouched.
 name: Rust server RC publish (draft)
 
@@ -103,7 +103,7 @@ jobs:
           notes="$(mktemp)"
           trap 'rm -f "$notes"' EXIT
           cat >"$notes" <<EOF
-          Unsigned Rust server release candidate; this is not the supported Linux release (Go tarballs remain that).
+          Unsigned Rust server release candidate; this is not the supported stable Linux release (Rust tarballs are).
 
           This is a pre-soak draft prerelease for version $VERSION, produced from run $RUN_ID.
           EOF

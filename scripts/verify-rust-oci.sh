@@ -3,7 +3,7 @@
 # Experimental OCI validation for the opt-in Rust server (`crates/server`).
 #
 # This is a manual, non-publishing validation. It builds
-# `deploy/container/Containerfile.rust`, runs the image against a synthetic library
+# `deploy/container/Containerfile`, runs the image against a synthetic library
 # fixture and checks that:
 #   - the packaged binary runs and reports its version;
 #   - `GET /api/healthz` answers 200 with the expected payload and `no-store`;
