@@ -12,6 +12,17 @@ O workflow de release recebe a tag publicada por variável de ambiente e valida 
 o formato `vMAJOR.MINOR.PATCH`, com componentes numéricos sem zeros à esquerda, antes de
 usá-la. A tag nunca é interpolada diretamente em comandos de shell.
 
+## Staging da SPA canônica
+
+O binário Linux do Go embute a interface web com `//go:embed web/build/*`, um caminho relativo a
+`services/go/cmd/learnvault/`, enquanto o Vite escreve em `crates/server/web/build`. Por isso o job `linux` do
+workflow de release copia `crates/server/web/build/.` para `services/go/cmd/learnvault/web/build/` antes de
+testar e compilar o Go.
+
+Sem esse passo o embed falha com `pattern web/build/*: no matching files found`, o job Linux morre e a
+publicação fica ausente, porque o job de assets depende dele. Foi exatamente a causa da `v0.4.0` publicada sem
+assets em 2026-10-17. Ao mexer no job `linux` do workflow de release, mantenha esse staging junto do build Go.
+
 ## Reparo de assets
 
 Em evento `release`, o GitHub executa o arquivo de workflow **do commit da tag**, não o da `main`. Uma release
@@ -27,6 +38,11 @@ no repositório:
 
 O caminho de reparo nunca recria tag nem release: ele apenas reenvia assets para a mesma tag. A seção Contribuidores
 é idempotente pelo marcador `<!-- learnvault:contributors -->`, então repetir o disparo não duplica a lista.
+
+Evidência executada em 2026-10-17: o reparo foi usado nas releases `v0.3.0` e `v0.4.0` (runs `39006767838` e
+`39004818355`) e as releases `v0.5.0` e `v0.6.0` saíram pelo caminho normal do evento `release` (runs `39005054542`
+e `39006844672`). Nas quatro, o workflow anexou os quatro assets, o `SHA256SUMS` conferiu com o arquivo baixado e
+a seção **Contribuidores** apareceu uma única vez.
 
 ## Convenção de nomes de assets
 
