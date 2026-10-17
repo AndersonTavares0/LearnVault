@@ -717,15 +717,26 @@ async fn progress_persists_across_a_server_restart() {
 }
 
 #[tokio::test]
-async fn a_temporary_session_cannot_reach_study_before_changing_credentials() {
+async fn credentials_pending_flag_blocks_study_until_changed() {
     let temp = tempfile::tempdir().unwrap();
     seed(&temp, &["m1"], &[]);
-    let mut config = config(&temp);
-    config.admin_username = None;
-    config.admin_password = None;
-    let app = build_router(AppState::initialize(config).await.unwrap());
+    let mut setup = config(&temp);
+    setup.admin_username = None;
+    setup.admin_password = None;
+    {
+        AppState::initialize(setup).await.unwrap();
+    }
+    // O bootstrap não marca mais a troca pendente; o gate segue valendo para
+    // usuários legados importados com `must_change_credentials = 1`.
+    {
+        let mut database = learnvault_core::Database::open(database_path(&temp)).unwrap();
+        database
+            .connection()
+            .execute("UPDATE user SET must_change_credentials = 1", [])
+            .unwrap();
+    }
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
 
-    // O bootstrap temporário marca a sessão como pendente de troca de credenciais.
     let cookie = login(&app, "admin", "admin").await;
     let me = app
         .clone()

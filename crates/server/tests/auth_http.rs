@@ -226,7 +226,8 @@ async fn startup_without_credentials_creates_temporary_admin() {
         .unwrap();
 
     assert_eq!(login.status(), StatusCode::OK);
-    assert_eq!(body(login).await["must_change_credentials"], true);
+    // A senha temporária entra direto, sem forçar troca de credenciais.
+    assert_eq!(body(login).await["must_change_credentials"], false);
 }
 
 #[tokio::test]
@@ -508,10 +509,25 @@ async fn credentials_current_password_matches_the_go_service_bounds() {
 }
 
 #[tokio::test]
-async fn temporary_credentials_block_protected_endpoints_until_changed() {
+async fn credentials_pending_flag_blocks_protected_endpoints_until_changed() {
     let temp = tempfile::tempdir().unwrap();
-    let app = build_router(AppState::initialize(config(&temp, false)).await.unwrap());
-    let (_, cookie) = login(&app, "admin", "admin").await;
+    // O bootstrap não cria mais a troca pendente; o gate continua valendo para
+    // usuários legados importados com `must_change_credentials = 1`.
+    let db_path = temp.path().join("learnvault.sqlite");
+    {
+        let mut setup = config(&temp, true);
+        setup.database_path = db_path.clone();
+        AppState::initialize(setup).await.unwrap();
+    }
+    {
+        let mut database = learnvault_core::Database::open(&db_path).unwrap();
+        database
+            .connection()
+            .execute("UPDATE user SET must_change_credentials = 1", [])
+            .unwrap();
+    }
+    let app = build_router(AppState::initialize(config(&temp, true)).await.unwrap());
+    let (_, cookie) = login(&app, "admin", "uma senha local muito segura").await;
     for mut request in [
         Request::get("/api/catalog").body(Body::empty()).unwrap(),
         Request::get("/api/media").body(Body::empty()).unwrap(),
