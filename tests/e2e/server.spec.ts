@@ -106,7 +106,7 @@ async function startServer(): Promise<ServerFixture> {
 	await writeFile(join(library, 'Categoria', 'Curso', 'Aula.vtt'), 'WEBVTT\n');
 	await writeFile(join(library, 'Categoria', 'Curso', 'Material.pdf'), Buffer.from('material-fixture'));
 
-	const webRoot = resolve(process.cwd(), 'services/go/cmd/learnvault/web/build');
+	const webRoot = resolve(process.cwd(), 'crates/server/web/build');
 	const defaultBinary = process.platform === 'win32' ? 'target/debug/learnvault-server.exe' : 'target/debug/learnvault-server';
 	const binary = process.env.LEARNVAULT_SERVER_BIN ?? resolve(defaultBinary);
 	const server = spawn(binary, [
