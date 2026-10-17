@@ -140,13 +140,45 @@ configuração de proteção da branch.
 | gate | evidência exigida | como é produzida | responsável (agente / operador / configuração de branch protection) | status atual |
 | --- | --- | --- | --- | --- |
 | G1 identidade de versão do servidor Rust | Um run de `rust-server-rc.yml` demonstra que o binário reporta a versão injetada. | Injetar a versão no run, executar o smoke test e conservar o artefato e sua saída de `--version`. O binário prefere `LEARNVAULT_BUILD_VERSION` e cai para `CARGO_PKG_VERSION` (`crates/server/src/lib.rs:42`); o dispatch `gh workflow run rust-server-rc.yml --ref main -f ref=main -f version=<v>` falha fechado se a versão vier vazia. | agente prepara o workflow e a evidência; operador confere o artefato | **VERDE** — run 38993897882 sobre `d499881` com `0.4.0-rc.1`: smoke aprovado (`--version` = `learnvault-server 0.4.0-rc.1`, healthz com `"version":"0.4.0-rc.1"` e `no-store`) e artefato verificado (`learnvault-server-linux-x86_64.tar.gz`, SHA-256 `6afef8e010c9c2feae5fff3096699a1ff9c8b89deecdc102a435961dfd7802aa`) |
-| G2 artefato Rust publicado e em soak | Artefato Rust publicado no canal suportado e relatório de soak concluído. | Criar o caminho de publicação e executar o soak contra o artefato. Hoje `.github/workflows/release.yml` constrói apenas Go para Linux e o instalador NSIS para Windows. | agente implementa o caminho; operador executa e aceita o soak | **VERMELHO** — não existe caminho de publicação Rust |
+| G2 artefato Rust publicado e em soak | Artefato Rust publicado no canal suportado e relatório de soak concluído. | Criar o caminho de publicação e executar o soak contra o artefato. O caminho existe em `.github/workflows/rust-server-rc-publish.yml` como draft prerelease `rust-rc-*`, não assinado; o soak ainda não foi executado nem aceito. | agente implementa o caminho; operador executa e aceita o soak | **VERMELHO** — o soak ainda não foi executado nem aceito |
 | G3 container/Compose Rust suportado ou explicitamente opt-in | Decisão publicada sobre suporte: caminho Rust validado ou opt-in explícito, com instruções e limites. | Validar o Containerfile/Compose Rust em uma instalação suportada e registrar o resultado, ou documentar o opt-in sem alegar suporte geral. | agente documenta e valida; operador executa o cenário | **NÃO COMPROVADO** |
 | G4 required checks sem Go | Proteção de branch exige os checks Rust e desktop pertinentes e não exige `Go tests and vet`; `Container build` não depende da imagem Go. | Atualizar workflows e a proteção da branch. Hoje `Go tests and vet` é required; `Container build` é required e depende de Go (`.github/workflows/ci.yml:17`, `:83`, `:91`); `Rust tests and lints` e `Desktop crate compile and guards` rodam, mas não são required (`.github/workflows/ci.yml:108`, `:152`). | agente altera workflow; usuário altera a configuração de branch protection | **VERMELHO** — os required checks atuais ainda incluem Go; o usuário deve alterar a proteção |
 | G5 ensaio aceito em volumes reais pareados | Relatório de ensaio com uma cópia dos volumes reais, quiescência, checksum, backup e saída Rust distintos, e aceite operacional. | Executar o procedimento da seção [Gate de cutover do Compose self-hosted](#gate-de-cutover-do-compose-self-hosted) em volumes reais pareados. `scripts/verify-go-to-rust-cutover.sh` é fixture-only e não vale como evidência de volume real. | operador executa; agente conserva o relatório | **VERMELHO** — não comprovado |
 | G6 aceite do MVP desktop | Aceite explícito do MVP desktop conforme os requisitos da Fase 4 e da distribuição aprovada. | Executar os fluxos desktop e os checks de distribuição aplicáveis, registrar falhas e aceite. | operador aceita após evidência; agente fornece os artefatos | **NÃO COMPROVADO** |
 | G7 rollback por volumes pareados com RPO explícito | Ensaio de rollback que preserve o volume Go, descarte o volume Rust e declare o RPO. | Seguir o procedimento desta página e `.agents/policies/data-safety.md`, incluindo backup verificado antes da promoção e retorno somente ao volume Go. | operador executa e aceita; agente documenta | **NÃO COMPROVADO** — o procedimento está documentado, mas não foi executado como evidência |
 | G8 contrato de API/DB que sobrevive à remoção | Verificação do contrato em `docs/reference/api.md`, da detecção/recusa de banco Go e de `PRAGMA user_version = 4` no caminho suportado. | Executar testes e smoke tests contra o contrato Rust, incluindo banco Go recusado e schema esperado, antes de remover a referência. | agente produz testes; operador executa e aceita | **NÃO COMPROVADO** — a documentação e os guardas existem, mas não há execução de aceite registrada |
+
+
+### Runbook de soak do artefato Rust (G2)
+
+O operador deve despachar `.github/workflows/rust-server-rc.yml`, conferir o artefato e então
+usar `.github/workflows/rust-server-rc-publish.yml` com a `version` do artefato, o `run_id` do
+primeiro workflow e uma tag `rust-rc-*`. O resultado é uma draft prerelease não assinada e
+pré-soak; ela não é o release Linux suportado (os tarballs Go continuam sendo esse release).
+
+Extraia `learnvault-server-linux-x86_64.tar.gz` em um diretório de trabalho, preserve o SHA-256
+publicado e inicie o servidor a partir do diretório extraído:
+
+```sh
+./learnvault-server --listen-addr 0.0.0.0:<port> \
+  --database <dir>/learnvault.sqlite \
+  --library-root <library> \
+  --web-root ./web
+```
+
+Quando aplicável, migre primeiro um banco Go v8 existente, com o escritor Go parado e os caminhos
+distintos:
+
+```sh
+learnvault-server migrate-go \
+  --input <go.sqlite> --backup <go.sqlite.backup> \
+  --output <dir>/learnvault.sqlite --library-id <id>
+```
+
+O relatório do soak deve registrar: versão reportada; SHA-256 do artefato; host; data de início;
+duração; health `200` com `no-store`; login; catálogo; reprodução de mídia com `Range`; persistência
+após reinício; e todas as falhas. O G2 só fecha quando o operador registrar e aceitar esse soak;
+um agente não pode executar essa aceitação operacional.
 
 ### Regra de decisão
 
