@@ -131,3 +131,43 @@ Em deploys expostos à rede, coloque o serviço atrás de um proxy HTTPS que imp
 de cabeçalhos, limite de conexões por origem e limites de tamanho de cabeçalho. Esses controles são
 responsabilidade do proxy ou da infraestrutura de implantação: esta documentação não afirma que o
 servidor, sozinho, elimina slowloris ou outros limites de rede externos.
+
+## Release candidate Rust (opt-in)
+
+Esta subseção é **aditiva** e não altera a matriz de releases acima. O workflow
+`.github/workflows/rust-server-rc.yml` produz um artefato experimental do servidor
+Rust (`crates/server`) para Linux amd64 musl, como candidato de release candidate
+(opt-in). Ele é acionado **apenas manualmente**; não roda em `release`, em tags, em
+`push` nem por agendamento.
+
+```sh
+gh workflow run rust-server-rc.yml --ref main -f ref=main
+```
+
+- Entradas do dispatch: `ref` (branch ou SHA a construir, padrão `main`) e `target`
+  (fixo em `x86_64-unknown-linux-musl`). O workflow falha de forma fechada contra o
+  namespace de tags estáveis: a guarda pré-checkout rejeita tanto um `vX.Y.Z` puro
+  quanto qualquer `refs/tags/*` e, como defesa em profundidade, uma etapa
+  pós-checkout falha se o HEAD for exatamente uma tag `vX.Y.Z`. Esse namespace
+  pertence a `.github/workflows/release.yml`.
+- O artefato contém `learnvault-server-linux-x86_64.tar.gz` (binário estático
+  `learnvault-server`, a SPA canônica em `web/` com `web/200.html` e `LICENSE`) e
+  `SHA256SUMS.rust-rc`. A verificação de checksum e de inventário do tar ocorre no
+  próprio job.
+- O job faz um smoke sem Docker: imprime `--version`, sobe o binário contra
+  diretórios temporários sintéticos (nunca `/mnt/cursos` ou biblioteca real) e
+  confirma `/api/healthz` (200 com `no-store`) e a entrega do shell da SPA.
+- É **deliberadamente não publicado**: não há upload para release, `gh release` nem
+  `--clobber` nesta etapa. O artefato sobe apenas no run do Actions com o nome
+  `rust-server-rc` (sem o prefixo `release-`), portanto o workflow de release não o
+  captura.
+- **Não é o artefato Linux padrão** e não é usado por Compose, Quadlet, CI ou release.
+  Os tarballs Go continuam sendo o único release Linux suportado.
+
+Permanece **não comprovado** por esta etapa:
+
+- Identidade de versão: o binário se auto-reporta como `0.0.0` (versão do workspace);
+  não é um artefato versionado.
+- Assinatura: o artefato não é assinado.
+- Soak/rollout: nenhum teste de duração ou implantação em produção é executado.
+- arm64 não é produzido; também não há validação de runtime fora do smoke do próprio job.
