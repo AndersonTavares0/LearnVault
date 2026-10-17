@@ -337,8 +337,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let state = AppState::new(config_fixture(&temp));
         let app = build_router(state.clone());
-        let _permits: Vec<_> =
-            std::iter::from_fn(|| state.try_acquire_blocking_task()).collect();
+        let _permits: Vec<_> = std::iter::from_fn(|| state.try_acquire_blocking_task()).collect();
 
         let response = app
             .oneshot(Request::get("/api/healthz").body(Body::empty()).unwrap())
