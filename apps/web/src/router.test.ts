@@ -9,6 +9,10 @@ describe('hash router', () => {
 		expect(locationFromHash('#/player/modules/lesson%20one')).toEqual({ route: 'player', lessonPath: 'modules/lesson one' });
 		expect(locationFromHash('#/player/%E0%A4%A')).toEqual({ route: 'player', lessonPath: null });
 	});
+	it('supports settings as an authenticated destination', () => {
+		expect(locationFromHash('#/settings')).toEqual({ route: 'settings', lessonPath: null });
+		expect(destinationAfterLogin('#/settings')).toBe('#/settings');
+	});
 	it('creates server-independent links and preserves the lesson path', () => {
 		expect(href('home')).toBe('#/home');
 		expect(href('player', 'modules/lesson one')).toBe('#/player/modules%2Flesson%20one');

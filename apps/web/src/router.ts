@@ -1,12 +1,12 @@
 import type { Catalog, Lesson } from './transport';
 
-export type Route = 'login' | 'home' | 'catalog' | 'player';
+export type Route = 'login' | 'home' | 'catalog' | 'player' | 'settings';
 export type HashLocation = { route: Route; lessonPath: string | null };
 
 export function locationFromHash(hash: string): HashLocation {
 	const value = hash.replace(/^#\/?/, '');
 	const [name, ...parts] = value.split('/');
-	const route = name === 'home' || name === 'catalog' || name === 'player' ? name : 'login';
+	const route = name === 'home' || name === 'catalog' || name === 'player' || name === 'settings' ? name : 'login';
 	if (route !== 'player' || parts.length === 0) return { route, lessonPath: null };
 	try {
 		return { route, lessonPath: decodeURIComponent(parts.join('/')) };
@@ -25,7 +25,7 @@ export function href(route: Route, lessonPath?: string): string {
 
 export function destinationAfterLogin(hash: string): string {
 	const location = locationFromHash(hash);
-	if (location.route === 'home' || location.route === 'catalog') return href(location.route);
+	if (location.route === 'home' || location.route === 'catalog' || location.route === 'settings') return href(location.route);
 	if (location.route === 'player' && location.lessonPath) return href('player', location.lessonPath);
 	return href('home');
 }

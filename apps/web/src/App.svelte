@@ -9,7 +9,12 @@
 	import { STUDY_NOT_AVAILABLE, transport, transportKind, type Catalog, type CatalogNode, type Lesson, type StudyProgress, type User } from './transport';
 	import { desktopLocalUser, initialView, resolveSession, type ConfigState } from './session';
 	import { formatDuration, studySyncSupported } from './player';
+	import Brand from './Brand.svelte';
+	import { applyTheme, persistThemeMode, readThemeMode, resolveTheme, type ThemeMode } from './theme';
 
+	let themeMode: ThemeMode = readThemeMode(safeLocalStorage());
+	let systemDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
+	let resolvedTheme = resolveTheme(themeMode, systemDark);
 	let route: Route = locationFromHash(location.hash).route;
 	let lessonPath: string | null = locationFromHash(location.hash).lessonPath;
 	let user: User | null = null;
@@ -40,6 +45,18 @@
 	let recentLoading = false;
 	let studyEnabled = studySyncSupported;
 
+	applyTheme(document.documentElement, resolvedTheme);
+	const scheme = window.matchMedia?.('(prefers-color-scheme: dark)');
+	const updateSystemTheme = (event: MediaQueryListEvent) => {
+		systemDark = event.matches;
+		if (themeMode === 'system') {
+			resolvedTheme = resolveTheme(themeMode, systemDark);
+			applyTheme(document.documentElement, resolvedTheme);
+			const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+			if (themeColor) themeColor.content = resolvedTheme === 'dark' ? '#171c19' : '#f7f6f1';
+		}
+	};
+	scheme?.addEventListener('change', updateSystemTheme);
 	onMount(() => {
 		const change = () => {
 			const next = locationFromHash(location.hash);
@@ -50,9 +67,27 @@
 		};
 		window.addEventListener('hashchange', change);
 		void initialize();
-		return () => window.removeEventListener('hashchange', change);
+		return () => {
+			window.removeEventListener('hashchange', change);
+			scheme?.removeEventListener('change', updateSystemTheme);
+		};
 	});
 
+	function safeLocalStorage(): Storage | null {
+		try {
+			return window.localStorage;
+		} catch {
+			return null;
+		}
+	}
+	function changeTheme(mode: ThemeMode) {
+		themeMode = mode;
+		resolvedTheme = resolveTheme(mode, systemDark);
+		applyTheme(document.documentElement, resolvedTheme);
+		const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+		if (themeColor) themeColor.content = resolvedTheme === 'dark' ? '#171c19' : '#f7f6f1';
+		persistThemeMode(safeLocalStorage(), mode);
+	}
 	async function initialize() {
 		try {
 			const session = await resolveSession(() => transport.me(), () => transport.config(), transportKind);
@@ -212,10 +247,11 @@
 </script>
 <svelte:head><title>LearnVault — sua biblioteca de estudos</title><meta name="description" content="Sua biblioteca pessoal de cursos." /></svelte:head>
 {#if loading}<div class="loading" aria-live="polite">Carregando sua biblioteca…</div>
-{:else if initialView(user, config, transportKind) === 'offline'}<main class="login-page"><div class="brand"><span class="mark">LV</span> LEARNVAULT</div><section><p class="eyebrow">{config === 'configured' ? 'BIBLIOTECA CONFIGURADA' : 'MODO OFFLINE'}</p><h1>{config === 'configured' ? 'Biblioteca pronta' : 'Biblioteca não configurada'}</h1>{#if config === 'configured'}<p class="intro">A pasta da biblioteca foi salva. Indexe quando quiser para montar o catálogo — nada na pasta é movido, alterado ou apagado.</p>{:else}<p class="intro">Escolha a pasta que contém seus cursos. Nada é movido, alterado ou apagado — a biblioteca permanece somente leitura.</p>{/if}{#if transportKind === 'desktop'}{#if config === 'configured'}<button class="primary" onclick={rescan} disabled={rescanning} aria-busy={rescanning}>{rescanning ? 'Indexando…' : 'Indexar biblioteca'}</button><p class="catalog-message" aria-live="polite">{rescanMessage}</p>{/if}<button class="primary" onclick={chooseLibrary} disabled={choosing} aria-busy={choosing}>{choosing ? 'Abrindo o seletor…' : config === 'configured' ? 'Trocar pasta da biblioteca' : 'Escolher pasta da biblioteca'}</button>{#if libraryError}<p class="error" role="alert">{libraryError}</p>{/if}{:else}<p class="intro">A configuração da biblioteca é feita no servidor.</p>{/if}</section></main>
-{:else if !user}<main class="login-page"><div class="brand"><span class="mark">LV</span> LEARNVAULT</div><section><p class="eyebrow">SEU ESPAÇO DE APRENDIZAGEM</p><h1>Conhecimento,<br /><em>no seu ritmo.</em></h1><p class="intro">Uma casa tranquila para seus cursos, ideias e próximos passos.</p><form onsubmit={login}><label>Usuário<input autocomplete="username" bind:value={username} required /></label><label>Senha<input type="password" autocomplete="current-password" bind:value={password} required /></label>{#if error}<p class="error" role="alert">{error}</p>{/if}<button disabled={loading}>Entrar</button></form></section></main>
-{:else if user.mustChangeCredentials}<main class="login-page"><section><h1>Configure sua conta</h1><p>Defina seu usuário e sua senha para continuar.</p><form onsubmit={credentials}><label>Senha atual<input type="password" autocomplete="current-password" bind:value={currentPassword} required /></label><label>Novo usuário<input autocomplete="username" bind:value={username} required /></label><label>Nova senha<input type="password" autocomplete="new-password" bind:value={password} required /></label>{#if error}<p class="error" role="alert">{error}</p>{/if}<button disabled={loading}>Continuar</button></form></section></main>
-{:else}<div class="shell"><header><div class="brand"><span class="mark">LV</span> LEARNVAULT</div><button class="text-button" onclick={logout}>Sair</button></header><div class="layout"><aside aria-label="Navegação principal"><a class:active={route === 'home'} href={href('home')}>Início</a><a class:active={route === 'catalog'} href={href('catalog')}>Catálogo</a></aside><main><p class="eyebrow">BIBLIOTECA PESSOAL</p>{#if error}<p class="error" role="alert">{error}</p>{/if}{#if route === 'home'}<h1>Olá, {user.username}.</h1><p class="intro">Sua biblioteca está protegida e pronta para estudar.</p>
+{:else if initialView(user, config, transportKind) === 'offline'}<main class="login-page"><div class="brand"><Brand /> LEARNVAULT</div><section><p class="eyebrow">{config === 'configured' ? 'BIBLIOTECA CONFIGURADA' : 'MODO OFFLINE'}</p><h1>{config === 'configured' ? 'Biblioteca pronta' : 'Biblioteca não configurada'}</h1>{#if config === 'configured'}<p class="intro">A pasta da biblioteca foi salva. Indexe quando quiser para montar o catálogo — nada na pasta é movido, alterado ou apagado.</p>{:else}<p class="intro">Escolha a pasta que contém seus cursos. Nada é movido, alterado ou apagado — a biblioteca permanece somente leitura.</p>{/if}{#if transportKind === 'desktop'}{#if config === 'configured'}<button class="primary" onclick={rescan} disabled={rescanning} aria-busy={rescanning}>{rescanning ? 'Indexando…' : 'Indexar biblioteca'}</button><p class="catalog-message" aria-live="polite">{rescanMessage}</p>{/if}<button class="primary" onclick={chooseLibrary} disabled={choosing} aria-busy={choosing}>{choosing ? 'Abrindo o seletor…' : config === 'configured' ? 'Trocar pasta da biblioteca' : 'Escolher pasta da biblioteca'}</button>{#if libraryError}<p class="error" role="alert">{libraryError}</p>{/if}{:else}<p class="intro">A configuração da biblioteca é feita no servidor.</p>{/if}</section></main>
+{:else if !user}<main class="login-page"><div class="brand"><Brand /> LEARNVAULT</div><section><p class="eyebrow">SEU ESPAÇO DE APRENDIZAGEM</p><h1>Conhecimento,<br /><em>no seu ritmo.</em></h1><p class="intro">Uma casa tranquila para seus cursos, ideias e próximos passos.</p><form onsubmit={login}><label>Usuário<input autocomplete="username" bind:value={username} required /></label><label>Senha<input type="password" autocomplete="current-password" bind:value={password} required /></label>{#if error}<p class="error" role="alert">{error}</p>{/if}<button disabled={loading}>Entrar</button></form></section></main>
+{:else if user.mustChangeCredentials}<main class="login-page"><div class="brand"><Brand /> LEARNVAULT</div><section><h1>Configure sua conta</h1><p>Defina seu usuário e sua senha para continuar.</p><form onsubmit={credentials}><label>Senha atual<input type="password" autocomplete="current-password" bind:value={currentPassword} required /></label><label>Novo usuário<input autocomplete="username" bind:value={username} required /></label><label>Nova senha<input type="password" autocomplete="new-password" bind:value={password} required /></label>{#if error}<p class="error" role="alert">{error}</p>{/if}<button disabled={loading}>Continuar</button></form></section></main>
+{:else}<div class="shell"><header><div class="brand"><Brand /> LEARNVAULT</div><button class="text-button" onclick={logout}>Sair</button></header><div class="layout"><aside aria-label="Navegação principal"><a class:active={route === 'home'} href={href('home')}>Início</a><a class:active={route === 'catalog'} href={href('catalog')}>Catálogo</a><a class:active={route === 'settings'} href={href('settings')}>Configurações</a></aside><main><p class="eyebrow">BIBLIOTECA PESSOAL</p>{#if error}<p class="error" role="alert">{error}</p>{/if}{#if route === 'home'}<h1>Olá, {user.username}.</h1><p class="intro">Sua biblioteca está protegida e pronta para estudar.</p>
 {#if studySyncSupported && recent.length}<section class="recent-study" aria-labelledby="recent-heading"><h2 id="recent-heading">Continuar assistindo</h2><ul>{#each recent as item}{@const recentLesson = findLessonByMediaId(catalog, item.mediaId)}<li>{#if recentLesson}<a href={href('player', recentLesson.path)}>{recentLesson.title}</a><small>{item.completed ? 'Concluído' : `Parou em ${formatDuration(item.positionSeconds)}`}</small>{:else}<span>Mídia não disponível no catálogo</span>{/if}</li>{/each}</ul></section>{/if}
 <a class="primary" href={href('catalog')}>Abrir catálogo</a>
+{:else if route === 'settings'}<h1>Preferências</h1><p class="intro">Escolha como o LearnVault aparece neste dispositivo.</p><fieldset class="theme-options"><legend>Tema</legend><label><input type="radio" name="theme" value="system" checked={themeMode === 'system'} onchange={() => changeTheme('system')} />Sistema <span>Acompanha a preferência do sistema.</span></label><label><input type="radio" name="theme" value="light" checked={themeMode === 'light'} onchange={() => changeTheme('light')} />Claro <span>Usa sempre o tema claro.</span></label><label><input type="radio" name="theme" value="dark" checked={themeMode === 'dark'} onchange={() => changeTheme('dark')} />Escuro <span>Usa sempre o tema escuro.</span></label></fieldset><p class="theme-status" aria-live="polite">Tema atual: {resolvedTheme === 'dark' ? 'escuro' : 'claro'}{themeMode === 'system' ? ' (sistema)' : ''}</p><section class="account-settings" aria-labelledby="account-heading"><h2 id="account-heading">Conta</h2><p><strong>{user.username}</strong> · {user.isAdmin ? 'Administrador' : 'Estudante'}</p>{#if transportKind === 'http'}<button class="text-button" onclick={logout}>Encerrar sessão</button>{:else}<p class="catalog-message">Biblioteca local neste dispositivo.</p><button class="text-button" onclick={chooseLibrary} disabled={choosing}>{choosing ? 'Abrindo o seletor…' : 'Trocar pasta da biblioteca'}</button>{#if libraryError}<p class="error" role="alert">{libraryError}</p>{/if}{/if}</section>
 {:else if route === 'catalog'}<h1>Seus cursos</h1>{#if (catalog && catalog.nodes.length) || user.role === 'admin'}<div class="catalog-toolbar">{#if catalog && catalog.nodes.length}<form class="catalog-search" role="search" onsubmit={(event) => event.preventDefault()}><label for="catalog-search-input">Buscar no catálogo</label><input id="catalog-search-input" type="search" placeholder="Curso, módulo ou aula" bind:value={catalogQuery} /></form>{/if}{#if user.role === 'admin'}<button class="primary" onclick={rescan} disabled={rescanning}>{rescanning ? 'Indexando…' : 'Indexar biblioteca'}</button>{/if}</div>{/if}{#if user.role === 'admin'}<p class="catalog-message" aria-live="polite">{rescanMessage}</p>{/if}{#if catalog && catalog.looseFiles.length}<LooseFiles files={catalog.looseFiles} heading="Arquivos soltos" />{/if}{#if catalog && catalog.nodes.length}{#if filteredNodes.length}<CatalogTree nodes={filteredNodes} expandAll={catalogQuery.trim().length > 0} />{:else}<p class="empty" role="status">Nenhum resultado para “{catalogQuery.trim()}”.</p>{/if}{:else if !catalog || !catalog.looseFiles.length}<p class="empty">O catálogo ainda está vazio.</p>{/if}{:else}<h1>{lesson?.title ?? 'Aula não encontrada'}</h1>{#if !lesson}<p class="empty" role="status">Não foi possível encontrar esta aula no catálogo atual.</p>{:else}<Player lesson={lesson} mediaError={mediaError} onMediaError={mediaFailed} {studyEnabled} />{#if lessonCount > 1}<nav class="lesson-index" aria-label="Índice de aulas"><h2>Índice de aulas</h2><div class="lesson-index-body">{#each sections as section}{#if section.title}<h3>{section.title}</h3>{/if}<ol>{#each section.lessons as lessonItem}<li><a class:active={lessonItem.path === lesson.path} href={href('player', lessonItem.path)} aria-current={lessonItem.path === lesson.path ? 'page' : undefined} use:revealActive={lessonItem.path === lesson.path}>{lessonItem.title}</a></li>{/each}</ol>{/each}</div></nav>{/if}{#if neighbors.previous || neighbors.next}<nav class="lesson-nav" aria-label="Navegação entre aulas">{#if neighbors.previous}<a href={href('player', neighbors.previous.path)} rel="prev">← {neighbors.previous.title}</a>{/if}{#if neighbors.next}<a href={href('player', neighbors.next.path)} rel="next">{neighbors.next.title} →</a>{/if}</nav>{/if}{/if}<a class="back" href={href('catalog')}>Voltar ao catálogo</a>{/if}</main></div></div>{/if}
