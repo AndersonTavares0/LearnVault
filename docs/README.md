@@ -8,12 +8,12 @@ onde uma decisão ou procedimento deve ficar.
 | [`architecture/`](architecture/) | Limites do sistema, fluxo de dados e ADRs |
 | [`governance/`](governance/) | Regras do repositório, ownership e política de CI |
 | [`operations/`](operations/) | Deploy e alvos de distribuição |
-| [`product/`](product/) | Roadmap e direção do produto |
+| [`product/`](product/) | Roadmap, requisitos e direção do produto |
 | [`releases/`](releases/) | Versionamento e procedimentos de release |
 | [`reference/`](reference/) | API e referências técnicas estáveis |
 | [`wiki/`](wiki/) | Fontes e mapeamento das páginas gerenciadas da Wiki |
 
-A Wiki do GitHub é uma superfície derivada de leitura. Somente as seis páginas listadas em
+A Wiki do GitHub é uma superfície derivada de leitura. Somente as sete páginas listadas em
 [`wiki/mapping.md`](wiki/mapping.md) são sincronizadas automaticamente; edite as fontes do
 repositório, não a Wiki diretamente.
 
