@@ -162,7 +162,9 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	await expect(page.getByRole('heading', { name: /Conhecimento/ })).toBeVisible();
 
 	await page.getByLabel('Usuário').fill('admin');
-	await page.getByLabel('Senha').fill(ADMIN_PASSWORD);
+	// O botão "Mostrar Senha" compartilha o rótulo parcial; exigir o campo exato evita
+	// que o locator resolva tanto o input quanto o alternador de visibilidade.
+	await page.getByLabel('Senha', { exact: true }).fill(ADMIN_PASSWORD);
 	await page.getByRole('button', { name: 'Entrar' }).click();
 	await expect(page.getByRole('heading', { name: 'Olá, admin.' })).toBeVisible();
 
@@ -170,13 +172,14 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	await expect(page.getByRole('heading', { name: 'Seus cursos' })).toBeVisible();
 	await page.getByRole('button', { name: 'Indexar biblioteca' }).click();
 	await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
-	await expect(page.getByRole('button', { name: /Curso/ })).toBeVisible();
+	// O catálogo reorganizado expõe aulas como links de navegação para o player.
+	await expect(page.getByRole('link', { name: /Curso/ })).toBeVisible();
 
 	const videoRequest = page.waitForRequest((request) => {
 		const url = new URL(request.url());
 		return url.pathname === '/api/media' && url.searchParams.get('path') === 'Categoria/Curso/Aula.mp4';
 	});
-	await page.getByRole('button', { name: /Curso/ }).click();
+	await page.getByRole('link', { name: /Curso/ }).click();
 	await expect(page.getByRole('heading', { name: 'Curso', exact: true })).toBeVisible();
 	const videoSource = (await videoRequest).url();
 	expect(videoSource).toMatch(/\/api\/media\?/);
@@ -192,8 +195,8 @@ test('serves the built SPA through the Rust server for a complete study-library 
 
 	for (const path of ['../outside.mp4', '..\\outside.mp4', server.outsidePath]) {
 		const traversal = await page.request.get(`${server.baseURL}/api/media?path=${encodeURIComponent(path)}`);
-		// O servidor trata caminhos inválidos como erro de integridade, não como mídia ausente.
-		expect(traversal.status()).toBe(500);
+		// Caminhos fora do catálogo são ausência de mídia (404), nunca uma leitura fora da raiz.
+		expect(traversal.status()).toBe(404);
 		expect(await traversal.body()).not.toEqual(Buffer.from('outside-sentinel'));
 	}
 
