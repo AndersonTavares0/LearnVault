@@ -4,6 +4,15 @@ Todas as mudanças relevantes do LearnVault são documentadas neste arquivo.
 
 O formato segue o Keep a Changelog e as versões usam Semantic Versioning.
 
+## [0.6.0](https://github.com/AndersonTavares0/LearnVault/compare/v0.5.0...v0.6.0) (2026-10-17)
+
+
+### Funcionalidades
+
+* **catalog:** expose canonical recursive nodes ([#121](https://github.com/AndersonTavares0/LearnVault/issues/121)) ([32fa2ce](https://github.com/AndersonTavares0/LearnVault/commit/32fa2ce19a041cceaa01dc78838d0d4763537e81))
+* **media:** expor remocao explicita no servidor Rust e no desktop ([#201](https://github.com/AndersonTavares0/LearnVault/issues/201)) ([1e88716](https://github.com/AndersonTavares0/LearnVault/commit/1e887161fa8e82f273e1dcfabc1db999bfa5dae1))
+* **web:** adicionar configurações de tema e identidade visual ([#186](https://github.com/AndersonTavares0/LearnVault/issues/186)) ([2c7034e](https://github.com/AndersonTavares0/LearnVault/commit/2c7034ec4209caa03e83a33e0fe26ce7332ed8b5))
+
 ## [0.5.0](https://github.com/AndersonTavares0/LearnVault/compare/v0.4.0...v0.5.0) (2026-10-17)
 
 
