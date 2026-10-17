@@ -219,3 +219,14 @@ Permanece **não comprovado** por esta etapa:
 - Assinatura: o artefato não é assinado.
 - Soak/rollout: nenhum teste de duração ou implantação em produção é executado.
 - arm64 não é produzido; também não há validação de runtime fora do smoke do próprio job.
+
+## Publicação experimental do RC Rust
+
+O workflow manual **Rust server RC publish (draft)** publica uma draft prerelease com tag
+`rust-rc-*`. O artefato é não assinado e não é o release Linux suportado; os tarballs Go continuam
+sendo o release suportado. Despache-o informando a versão, o run do build e a tag:
+
+```sh
+gh workflow run "Rust server RC publish (draft)" --ref main \
+  -f version=<v> -f run_id=<rust-server-rc-run-id> -f tag=rust-rc-<v>
+```
