@@ -33,6 +33,13 @@ export function studySyncEnabled(studyEnabled: boolean, mediaId: string | null, 
 	return studySyncSupported && studyEnabled && mediaId !== null && source !== null;
 }
 
+export const PLAYBACK_SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2] as const;
+export type PlaybackSpeed = (typeof PLAYBACK_SPEEDS)[number];
+
+export function clampSpeed(speed: number): PlaybackSpeed {
+	return (PLAYBACK_SPEEDS as readonly number[]).includes(speed) ? (speed as PlaybackSpeed) : 1;
+}
+
 export function formatDuration(totalSeconds: number): string {
 	if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return '0:00';
 	const seconds = Math.floor(totalSeconds % 60);

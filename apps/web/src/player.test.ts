@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDuration, mediaPlaybackKind, selectPlayableMedia, selectPlayableSubtitle, srtConversionSupported, srtToWebVtt, studySyncEnabled, studySyncSupported, subtitleFormat } from './player';
+import { clampSpeed, formatDuration, mediaPlaybackKind, PLAYBACK_SPEEDS, selectPlayableMedia, selectPlayableSubtitle, srtConversionSupported, srtToWebVtt, studySyncEnabled, studySyncSupported, subtitleFormat } from './player';
 
 describe('player media and subtitles', () => {
 	it('selects the first media that is not missing', () => {
@@ -44,5 +44,13 @@ describe('player media and subtitles', () => {
 		// Sem mídia conhecida ou com o estudo desabilitado, nada é sincronizado.
 		expect(studySyncEnabled(true, null, '/api/media?path=aula.mp4')).toBe(false);
 		expect(studySyncEnabled(false, 'm1', '/api/media?path=aula.mp4')).toBe(false);
+	});
+	it('defines supported playback speeds and sanitizes speed choices', () => {
+		expect(PLAYBACK_SPEEDS).toEqual([0.75, 1, 1.25, 1.5, 1.75, 2]);
+		expect(clampSpeed(1)).toBe(1);
+		expect(clampSpeed(1.5)).toBe(1.5);
+		expect(clampSpeed(0.5)).toBe(1);
+		expect(clampSpeed(3)).toBe(1);
+		expect(clampSpeed(Number.NaN)).toBe(1);
 	});
 });
