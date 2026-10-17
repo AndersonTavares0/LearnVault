@@ -56,10 +56,10 @@ ao runtime Go.
 
 ## Ensaio de cutover self-hosted (fixture sintética)
 
-`scripts/verify-go-to-rust-cutover.sh` é um **ensaio manual, não publicante e apenas com
-fixtures sintéticas**. Ele não roda na CI, não publica imagens e **não é um cutover de
-produção nem evidência para volumes reais**. O objetivo é exercitar, de ponta a ponta, a
-sequência operacional abaixo.
+Durante as Fases 3a a 5 da transição, `scripts/verify-go-to-rust-cutover.sh` foi utilizado como
+ensaio manual e fixture sintética para exercitar a migração de banco e o corte para o OCI Rust.
+Com a conclusão da Fase 5 e a remoção de `services/go`, o script e suas fixtures associadas foram
+removidos. O procedimento abaixo é preservado como documentação de referência histórica:
 
 Escopo estrito:
 
