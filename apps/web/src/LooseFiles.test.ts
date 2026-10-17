@@ -16,7 +16,7 @@ describe('loose files rendering', () => {
 		expect(body).toContain('<strong>Arquivos soltos</strong>');
 		expect(body.match(/<li>/g)).toHaveLength(3);
 		expect(body).toContain('href="#/player/course-1/aula.mp4"');
-		expect(body).not.toContain('/api/media');
+		expect(body).toContain('/api/media?course=course-1&amp;path=apostila.pdf');
 		expect(body).toContain('download="apostila.pdf"');
 		expect(body).toContain('target="_blank"');
 		expect(body).toContain('rel="noopener noreferrer"');

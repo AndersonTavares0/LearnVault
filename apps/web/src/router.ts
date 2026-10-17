@@ -53,7 +53,14 @@ export function href(route: Route, courseId?: string, lessonPath?: string): stri
 export function destinationAfterLogin(hash: string): string {
 	const location = locationFromHash(hash);
 	if (location.route === 'home' || location.route === 'course') return href(location.route, location.courseId ?? undefined);
-	if (location.route === 'player' && location.lessonPath) return href('player', location.courseId ?? undefined, location.lessonPath);
+	if (location.route === 'player') {
+		const parts = hash.replace(/^#\/?/, '').split('/');
+		if (parts.length === 1) {
+			const path = decodeSegment(parts[0]);
+			return path ? href('player', path) : href('home');
+		}
+		if (location.courseId && location.lessonPath) return href('player', location.courseId, location.lessonPath);
+	}
 	return href('home');
 }
 
