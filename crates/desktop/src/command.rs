@@ -33,6 +33,22 @@ use crate::state::DesktopState;
 pub fn catalog(database: &Database, courses: &[CourseEntry]) -> Result<CatalogDto, IpcError> {
     let mut complete = true;
     let mut nodes = Vec::with_capacity(courses.len());
+    let mut courses: Vec<_> = courses.iter().collect();
+    courses.sort_by(|a, b| {
+        let a_name = a
+            .root
+            .as_path()
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("");
+        let b_name = b
+            .root
+            .as_path()
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("");
+        learnvault_core::natural_cmp(a_name, b_name).then_with(|| a.id.cmp(&b.id))
+    });
     for course in courses {
         let inner = learnvault_core::build_catalog(database, &course.id)
             .map_err(|_| IpcError::catalog_unavailable())?;

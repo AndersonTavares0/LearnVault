@@ -291,7 +291,7 @@ fn role_of(path: &str, files: &[CatalogFile], children: &[CatalogNode]) -> NodeR
 /// Compara textos com ordenação natural: sequências de dígitos são lidas como número
 /// (com desempate pela notação, para total determinismo) e o restante é comparado
 /// caractere a caractere. "2" vem antes de "10" em qualquer nível da árvore.
-pub(crate) fn natural_cmp(left: &str, right: &str) -> std::cmp::Ordering {
+pub fn natural_cmp(left: &str, right: &str) -> std::cmp::Ordering {
     let (mut a, mut b) = (left, right);
     loop {
         match (natural_segment(a), natural_segment(b)) {

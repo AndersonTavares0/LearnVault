@@ -36,6 +36,7 @@ pub use auth::{
 };
 pub use catalog::{
     Availability, Catalog, CatalogFile, CatalogNode, NodeRole, build_catalog, course_file_lessons,
+    natural_cmp,
 };
 pub use courses::{
     CourseRoot, CourseRootError, LEGACY_LIBRARY_ID, course_id_from_path, course_title,
