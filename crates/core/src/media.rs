@@ -132,6 +132,22 @@ pub fn find_media_by_path(
         .transpose()
 }
 
+/// Descobre a biblioteca que contém uma mídia pelo identificador estável.
+///
+/// O desktop entrega mídia por `media_id` opaco sem conhecer a raiz: esta consulta liga a
+/// identidade à biblioteca registrada, e a abertura em [`open_media`] revalida a raiz
+/// correspondente. Não acessa o sistema de arquivos.
+pub fn find_media_library_id(db: &Database, media_id: &str) -> Result<Option<String>> {
+    Ok(db
+        .connection()
+        .query_row(
+            "SELECT library_id FROM media WHERE media_id = ?1",
+            [media_id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?)
+}
+
 /// Mídia resolvida e já aberta para leitura.
 #[derive(Debug)]
 pub struct OpenMedia {

@@ -1,72 +1,128 @@
 import { describe, expect, it } from 'vitest';
-import { destinationAfterLogin, findLesson, findLessonByMediaId, href, locationFromHash, routeFromHash } from './router';
-import type { Catalog, FileEntry } from './transport';
+import { destinationAfterLogin, findCourse, findLesson, findLessonLocation, href, locationFromHash, routeFromHash } from './router';
+import type { Catalog, CatalogNode, FileEntry } from './transport';
+
+function course(id: string, children: CatalogNode[] = []): CatalogNode {
+	return { title: `Curso ${id}`, path: '', role: 'course', courseId: id, files: [], looseFiles: [], children };
+}
+
+function lessonNode(path: string, mediaId?: string): CatalogNode {
+	return {
+		title: 'Aula',
+		path,
+		role: 'lesson',
+		files: mediaId ? [{ name: 'video.mp4', path: `${path}.mp4`, size: 10, mediaId, kind: 'media' }] : [],
+		looseFiles: [],
+		children: []
+	};
+}
+
+function catalog(nodes: CatalogNode[], looseFiles: FileEntry[] = []): Catalog {
+	return { complete: true, looseFiles, nodes };
+}
 
 describe('hash router', () => {
 	it('defaults unknown hashes to login and supports the core routes', () => {
 		expect(routeFromHash('')).toBe('login');
-		expect(routeFromHash('#/catalog')).toBe('catalog');
-		expect(routeFromHash('#/player/lesson')).toBe('player');
-		expect(locationFromHash('#/player/modules/lesson%20one')).toEqual({ route: 'player', lessonPath: 'modules/lesson one' });
-		expect(locationFromHash('#/player/%E0%A4%A')).toEqual({ route: 'player', lessonPath: null });
+		expect(routeFromHash('#/home')).toBe('home');
+		expect(routeFromHash('#/course/course-1')).toBe('course');
+		expect(routeFromHash('#/player/course-1/aula')).toBe('player');
+		expect(locationFromHash('#/course/course%20one')).toEqual({ route: 'course', courseId: 'course one', lessonPath: null });
+		expect(locationFromHash('#/player/course-1/modules/aula%20one')).toEqual({ route: 'player', courseId: 'course-1', lessonPath: 'modules/aula one' });
+		expect(locationFromHash('#/player/%E0%A4%A/aula')).toEqual({ route: 'player', courseId: null, lessonPath: 'aula' });
 	});
-	it('creates server-independent links and preserves the lesson path', () => {
+
+	it('creates server-independent links with the course identity', () => {
 		expect(href('home')).toBe('#/home');
-		expect(href('player', 'modules/lesson one')).toBe('#/player/modules%2Flesson%20one');
+		expect(href('course', 'course one')).toBe('#/course/course%20one');
+		expect(href('player', 'course-1', 'modules/aula one')).toBe('#/player/course-1/modules%2Faula%20one');
 	});
-	it('preserves a deep-link after login', () => expect(destinationAfterLogin('#/player/aula')).toBe('#/player/aula'));
+
+	it('preserves a deep-link after login', () => {
+		expect(destinationAfterLogin('#/course/course-1')).toBe('#/course/course-1');
+		expect(destinationAfterLogin('#/player/course-1/aula')).toBe('#/player/course-1/aula');
+	});
+
 	it('drops an unknown hash to home after login', () => expect(destinationAfterLogin('#/desconhecido')).toBe('#/home'));
-	it('drops a malformed percent-encoding to home after login', () => expect(destinationAfterLogin('#/player/%E0%A4%A')).toBe('#/home'));
-	it('resolves a deep-linked lesson after catalog loading', () => {
-		const lesson = { title: 'Aula', path: 'modules/lesson one', media: [], subtitles: [], materials: [] };
-		const catalog = { complete: true, looseFiles: [], nodes: [], categories: [{ title: 'Categoria', looseFiles: [], courses: [{ title: 'Curso', looseFiles: [], modules: [{ title: 'Módulo', looseFiles: [], lessons: [lesson] }] }] }] };
-		expect(findLesson(catalog, 'modules/lesson one')).toBe(lesson);
-		expect(findLesson(catalog, 'missing')).toBeNull();
+	it('drops a malformed percent-encoding to home after login', () => expect(destinationAfterLogin('#/player/%E0%A4%A/aula')).toBe('#/home'));
+
+	it('resolves a deep-linked lesson inside the right course', () => {
+		const data = catalog([course('course-1', [lessonNode('aula')]), course('course-2', [lessonNode('aula')])]);
+
+		expect(findLesson(data, 'course-2', 'aula')?.path).toBe('aula');
+		// O caminho relativo é o mesmo nos dois cursos: a identidade desempata.
+		expect(findLesson(data, 'course-2', 'missing')).toBeNull();
+		expect(findLesson(data, 'unknown', 'aula')).toBeNull();
 	});
+
 	it('clears a player lookup when a rescan removes the lesson', () => {
-		const oldLesson = { title: 'Antiga', path: 'aula', media: [], subtitles: [], materials: [] };
-		const current = { complete: true, looseFiles: [], nodes: [], categories: [{ title: 'Categoria', looseFiles: [], courses: [{ title: 'Curso', looseFiles: [], modules: [{ title: 'Módulo', looseFiles: [], lessons: [] }] }] }] };
-		expect(findLesson(current, oldLesson.path)).toBeNull();
+		const current = catalog([course('course-1')]);
+
+		expect(findLesson(current, 'course-1', 'aula')).toBeNull();
 	});
-	it('resolves a lesson from a media id in both canonical and projected trees', () => {
-		const lesson = { title: 'Aula', path: 'cat/curso/mod/aula', media: [{ name: 'video.mp4', path: 'cat/curso/mod/aula.mp4', size: 10, mediaId: 'm1', kind: 'media' }], subtitles: [], materials: [] };
-		const catalog = { complete: true, looseFiles: [], nodes: [{ title: 'Categoria', path: 'cat', role: 'category', files: [], looseFiles: [], children: [{ title: 'Curso', path: 'cat/curso', role: 'course', files: [], looseFiles: [], children: [{ title: 'Módulo', path: 'cat/curso/mod', role: 'module', files: [], looseFiles: [], children: [{ title: 'Aula', path: 'cat/curso/mod/aula', role: 'lesson', files: lesson.media, looseFiles: [], children: [] }] }] }] }], categories: [{ title: 'Categoria', looseFiles: [], courses: [{ title: 'Curso', looseFiles: [], modules: [{ title: 'Módulo', looseFiles: [], lessons: [lesson] }] }] }] };
-		expect(findLessonByMediaId(catalog, 'm1')?.path).toBe('cat/curso/mod/aula');
-		expect(findLessonByMediaId(catalog, 'missing')).toBeNull();
-		expect(findLessonByMediaId(null, 'm1')).toBeNull();
+
+	it('finds the course node by identity, falling back to the legacy path', () => {
+		const legacy: CatalogNode = { title: 'Curso legado', path: 'programming/go', role: 'category', files: [], looseFiles: [], children: [] };
+		const data = catalog([course('course-1'), legacy]);
+
+		expect(findCourse(data, 'course-1')).toBe(data.nodes[0]);
+		expect(findCourse(data, 'programming/go')).toBe(legacy);
+		expect(findCourse(data, 'missing')).toBeNull();
+		expect(findCourse(null, 'course-1')).toBeNull();
 	});
-	it('keeps an unknown-kind file reachable through open/deep-link and media id', () => {
-		// Um `kind` desconhecido vira material (balde catch-all) também no roteador: abrir a aula
-		// por deep-link ou pelo `media_id` do arquivo não pode descartá-lo.
-		const files = [
-			{ name: 'video.mp4', path: 'cat/curso/mod/aula.mp4', size: 10, mediaId: 'm1', kind: 'media' },
-			{ name: 'extra.bin', path: 'cat/curso/mod/extra.bin', size: 2, mediaId: 'bonus-1', kind: 'bonus' }
-		];
-		const catalog = { complete: true, looseFiles: [], nodes: [{ title: 'Categoria', path: 'cat', role: 'category', files: [], looseFiles: [], children: [{ title: 'Curso', path: 'cat/curso', role: 'course', files: [], looseFiles: [], children: [{ title: 'Módulo', path: 'cat/curso/mod', role: 'module', files: [], looseFiles: [], children: [{ title: 'Aula', path: 'cat/curso/mod/aula', role: 'lesson', files, looseFiles: [], children: [] }] }] }] }], categories: [] };
-		const opened = findLesson(catalog, 'cat/curso/mod/aula');
-		expect(opened?.media.map((file) => file.path)).toEqual(['cat/curso/mod/aula.mp4']);
-		expect(opened?.materials.map((file) => file.path)).toEqual(['cat/curso/mod/extra.bin']);
-		expect(findLessonByMediaId(catalog, 'bonus-1')?.path).toBe('cat/curso/mod/aula');
+
+	it('resolves a lesson location from a media id across courses', () => {
+		const data = catalog([
+			course('course-1', [lessonNode('aula', 'm1')]),
+			course('course-2', [lessonNode('aula', 'm2')])
+		]);
+
+		expect(findLessonLocation(data, 'm2')).toMatchObject({ courseId: 'course-2', lesson: { path: 'aula' } });
+		expect(findLessonLocation(data, 'missing')).toBeNull();
+		expect(findLessonLocation(null, 'm1')).toBeNull();
+		expect(findLessonLocation(data, null)).toBeNull();
 	});
-	it('opens standalone root and nested media in the player and restores recent media by id', () => {
+	it('opens standalone root media in the player', () => {
 		const root: FileEntry = { name: 'Áudio inicial.mp3', path: 'Áudio inicial.mp3', size: 10, kind: 'media', mediaId: 'root' };
-		const nested: FileEntry = { name: 'extra.mp4', path: 'curso/extra.mp4', size: 10, kind: 'media', mediaId: 'nested' };
-		const catalog: Catalog = { complete: true, categories: [], looseFiles: [root], nodes: [{ title: 'Curso', role: 'course', path: 'curso', files: [], looseFiles: [nested], children: [] }] };
-		for (const file of [root, nested]) {
-			const link = href('player', file.path);
-			const lesson = findLesson(catalog, locationFromHash(link).lessonPath);
-			expect(lesson).toMatchObject({ title: file.name, path: file.path, media: [file] });
-			expect(findLessonByMediaId(catalog, file.mediaId!)?.path).toBe(file.path);
-		}
+		const data = catalog([], [root]);
+		expect(locationFromHash(href('player', root.path)).lessonPath).toBe(root.path);
+		expect(findLesson(data, null, root.path)).toMatchObject({ title: root.name, path: root.path, media: [root] });
 	});
 	it('does not resolve materials, missing files or removed paths as playable standalone media', () => {
-		const catalog: Catalog = { complete: true, categories: [], nodes: [], looseFiles: [
+		const data = catalog([], [
 			{ name: 'aviso.pdf', path: 'aviso.pdf', size: 10, kind: 'material', mediaId: 'pdf' },
 			{ name: 'ausente.mp4', path: 'ausente.mp4', size: 10, kind: 'media', mediaId: 'missing', availability: 'missing' }
-		] };
-		expect(findLesson(catalog, 'aviso.pdf')).toBeNull();
-		expect(findLesson(catalog, 'ausente.mp4')).toBeNull();
-		expect(findLesson(catalog, 'removido.mp4')).toBeNull();
-		expect(findLessonByMediaId(catalog, 'missing')).toBeNull();
+		]);
+		expect(findLesson(data, null, 'aviso.pdf')).toBeNull();
+		expect(findLesson(data, null, 'ausente.mp4')).toBeNull();
+		expect(findLesson(data, null, 'removido.mp4')).toBeNull();
+	});
+
+	// Portado do PR 121 (nós canônicos recursivos): o roteador é a única porta de entrada de
+	// uma aula, então um `kind` desconhecido não pode ficar inalcançável. A estrutura tem
+	// níveis aninhados (módulo dentro do curso) como na árvore canônica.
+	it('keeps an unknown-kind file reachable through open/deep-link and media id', () => {
+		const files: FileEntry[] = [
+			{ name: 'video.mp4', path: 'curso/mod/aula.mp4', size: 10, mediaId: 'm1', kind: 'media' },
+			{ name: 'extra.bin', path: 'curso/mod/extra.bin', size: 2, mediaId: 'bonus-1', kind: 'bonus' }
+		];
+		const module: CatalogNode = { title: 'Módulo', path: 'curso/mod', role: 'module', files: [], looseFiles: [], children: [{ title: 'Aula', path: 'curso/mod/aula', role: 'lesson', files, looseFiles: [], children: [] }] };
+		const data = catalog([course('course-1', [module])]);
+
+		const location = locationFromHash(href('player', 'course-1', 'curso/mod/aula'));
+		const opened = findLesson(data, location.courseId, location.lessonPath);
+		expect(location).toEqual({ route: 'player', courseId: 'course-1', lessonPath: 'curso/mod/aula' });
+		expect(opened?.media.map((file) => file.path)).toEqual(['curso/mod/aula.mp4']);
+		expect(opened?.materials.map((file) => file.path)).toEqual(['curso/mod/extra.bin']);
+		expect(findLessonLocation(data, 'bonus-1')).toMatchObject({ courseId: 'course-1', lesson: { path: 'curso/mod/aula' } });
+	});
+
+	it('opens a nested loose media in the player and restores it by id without a course', () => {
+		const nested: FileEntry = { name: 'extra.mp4', path: 'curso/extra.mp4', size: 10, kind: 'media', mediaId: 'nested' };
+		const data = catalog([{ title: 'Curso course-1', path: '', role: 'course', courseId: 'course-1', files: [], looseFiles: [nested], children: [] }]);
+
+		expect(locationFromHash(href('player', nested.path)).lessonPath).toBe(nested.path);
+		expect(findLesson(data, null, nested.path)).toMatchObject({ title: nested.name, path: nested.path, media: [nested] });
+		expect(findLessonLocation(data, 'nested')).toMatchObject({ courseId: 'course-1', lesson: { path: nested.path } });
 	});
 });

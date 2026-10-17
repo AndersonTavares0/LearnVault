@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { findLesson } from './router';
-import { desktopMediaUrl, DesktopStub, HttpTransport, normalizeCatalog, normalizeRecentStudy, normalizeStudyProgress, normalizeUser, STUDY_NOT_AVAILABLE, CATALOG_LIMITS, type Transport } from './transport';
+import { desktopMediaUrl, DesktopStub, HttpTransport, lessonFromNode, normalizeCatalog, normalizeRecentStudy, normalizeStudyProgress, normalizeUser, STUDY_NOT_AVAILABLE, CATALOG_LIMITS, type Transport } from './transport';
 
 // O Tauri só é carregado no desktop: fora dele o módulo é substituído pelo mock, de modo
 // que a suíte nunca toca `window.__TAURI_INTERNALS__`.
@@ -9,11 +9,34 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 
 describe('transport contract', () => {
 	it('exposes the HTTP transport seam without routing assumptions', () => {
-		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'config', 'catalog', 'chooseLibrary', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'mediaUrl'];
-		expect(methods).toHaveLength(13);
+		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'mediaUrl'];
+		expect(methods).toHaveLength(14);
 	});
-	it('does not offer native library selection over HTTP', async () => {
-		await expect(new HttpTransport().chooseLibrary()).rejects.toThrow('definida no servidor');
+	it('does not offer native folder selection over HTTP', async () => {
+		await expect(new HttpTransport().importCourse()).rejects.toThrow('desktop é quem escolhe pastas');
+	});
+	it('registers and removes a server course through the admin endpoints', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+		vi.stubGlobal('fetch', fetchMock);
+
+		await new HttpTransport().importCoursePath('C:\\cursos\\Física');
+		expect(fetchMock).toHaveBeenCalledWith('/api/admin/courses', expect.objectContaining({ method: 'POST', body: JSON.stringify({ path: 'C:\\cursos\\Física' }) }));
+
+		await new HttpTransport().removeCourse('course one');
+		expect(fetchMock).toHaveBeenLastCalledWith('/api/admin/courses/course%20one', { method: 'DELETE' });
+		vi.unstubAllGlobals();
+	});
+	it('maps the stable server import errors to actionable messages', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: 'course_already_registered' }), { status: 400 }));
+		vi.stubGlobal('fetch', fetchMock);
+		await expect(new HttpTransport().importCoursePath('C:\\cursos')).rejects.toThrow('Este curso já está importado.');
+
+		fetchMock.mockResolvedValue(new Response(JSON.stringify({ error: 'invalid_course_path' }), { status: 400 }));
+		await expect(new HttpTransport().importCoursePath('C:\\nao-existe')).rejects.toThrow('A pasta informada não existe ou não pode ser lida no servidor.');
+
+		fetchMock.mockResolvedValue(new Response(null, { status: 503 }));
+		await expect(new HttpTransport().importCoursePath('C:\\cursos')).rejects.toThrow('O servidor está ocupado; tente de novo em instantes.');
+		vi.unstubAllGlobals();
 	});
 	it('troca credenciais temporárias pelo contrato autenticado', async () => {
 		const user = { user_id: 'u1', username: 'novo', is_admin: true, must_change_credentials: false };
@@ -23,10 +46,10 @@ describe('transport contract', () => {
 		expect(fetchMock).toHaveBeenCalledWith('/api/account/credentials', expect.objectContaining({ method: 'POST' }));
 		vi.unstubAllGlobals();
 	});
-	it('builds media and caption URLs from the path on HTTP', () => {
+	it('builds media and caption URLs from the course identity and the path on HTTP', () => {
 		const transport = new HttpTransport();
-		expect(transport.mediaUrl({ name: 'aula.mp4', path: 'módulo/aula.mp4', size: 1, kind: 'media', mediaId: 'm1' })).toBe('/api/media?path=m%C3%B3dulo%2Faula.mp4');
-		expect(transport.mediaUrl({ name: 'aula.vtt', path: 'legendas/aula.vtt', size: 1, kind: 'subtitle', mediaId: 's1' })).toBe('/api/media?path=legendas%2Faula.vtt');
+		expect(transport.mediaUrl({ name: 'aula.mp4', path: 'módulo/aula.mp4', size: 1, kind: 'media', mediaId: 'm1' }, 'course-1')).toBe('/api/media?course=course-1&path=m%C3%B3dulo%2Faula.mp4');
+		expect(transport.mediaUrl({ name: 'aula.vtt', path: 'legendas/aula.vtt', size: 1, kind: 'subtitle', mediaId: 's1' }, 'course one')).toBe('/api/media?course=course%20one&path=legendas%2Faula.vtt');
 	});
 	it('builds desktop media URLs from the authorized media id, never the raw path', () => {
 		const transport = new DesktopStub();
@@ -80,39 +103,45 @@ describe('transport contract', () => {
 		const android = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36';
 		expect(desktopMediaUrl(uuid, android)).toBe(`http://learnvault-media.localhost/${uuid}`);
 	});
-	it('reports the HTTP platform as configured without any request', async () => {
-		const fetchMock = vi.fn();
-		vi.stubGlobal('fetch', fetchMock);
-		await expect(new HttpTransport().config()).resolves.toEqual({ configured: true });
-		expect(fetchMock).not.toHaveBeenCalled();
-		vi.unstubAllGlobals();
-	});
-	it('posts the admin rescan endpoint and maps a conflict', async () => {
+	it('posts the admin rescan endpoint and maps a conflict and an empty registry', async () => {
 		const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
 		vi.stubGlobal('fetch', fetchMock);
 		await new HttpTransport().rescan();
 		expect(fetchMock).toHaveBeenCalledWith('/api/admin/catalog/rescan', { method: 'POST' });
 		fetchMock.mockResolvedValue(new Response(null, { status: 409 }));
 		await expect(new HttpTransport().rescan()).rejects.toThrow('Já existe um rescan em andamento.');
+		fetchMock.mockResolvedValue(new Response(null, { status: 400 }));
+		await expect(new HttpTransport().rescan()).rejects.toThrow('Nenhum curso foi importado ainda.');
 		vi.unstubAllGlobals();
 	});
 	it('normalizes the Rust user and recursive catalog contract', () => {
 		expect(normalizeUser({ user_id: 'u1', username: 'admin', is_admin: true, must_change_credentials: true })).toEqual({ userId: 'u1', username: 'admin', role: 'admin', isAdmin: true, mustChangeCredentials: true });
-		const catalog = normalizeCatalog({ complete: true, loose_files: [{ media_id: 'loose', name: 'nota.pdf', path: 'nota.pdf', size: 3, kind: 'material', availability: 'missing', unverified: true }], categories: [{ title: 'Categoria', path: 'cat', role: 'category', files: [], loose_files: [], children: [{ title: 'Curso', path: 'cat/curso', role: 'course', files: [], loose_files: [], children: [{ title: 'Módulo', path: 'cat/curso/mod', role: 'module', files: [], loose_files: [], children: [{ title: 'Aula', path: 'cat/curso/mod/aula', role: 'lesson', files: [{ media_id: 'm1', name: 'aula.mp4', path: 'cat/curso/mod/aula.mp4', size: 10, kind: 'media', availability: 'available', unverified: false }, { media_id: 's1', name: 'aula.vtt', path: 'cat/curso/mod/aula.vtt', size: 2, kind: 'subtitle', availability: 'available', unverified: false }], loose_files: [], children: [] }] }] }] }] });
+		const catalog = normalizeCatalog({ complete: true, loose_files: [], categories: [{ title: 'Física', path: '', role: 'course', course_id: 'course-1', files: [], loose_files: [{ media_id: 'loose', name: 'nota.pdf', path: 'nota.pdf', size: 3, kind: 'material', availability: 'missing', unverified: true }], children: [{ title: 'Módulo', path: 'mod', role: 'module', files: [], loose_files: [], children: [{ title: 'Aula', path: 'mod/aula', role: 'lesson', files: [{ media_id: 'm1', name: 'aula.mp4', path: 'mod/aula.mp4', size: 10, kind: 'media', availability: 'available', unverified: false }, { media_id: 's1', name: 'aula.vtt', path: 'mod/aula.vtt', size: 2, kind: 'subtitle', availability: 'available', unverified: false }], loose_files: [], children: [] }] }] }] });
 		expect(catalog.complete).toBe(true);
-		expect(catalog.looseFiles[0]).toMatchObject({ mediaId: 'loose', path: 'nota.pdf', availability: 'missing', unverified: true });
-		expect(catalog.nodes[0].children[0].path).toBe('cat/curso');
-		expect(catalog.categories[0].courses[0].modules[0].lessons[0].media[0].path).toBe('cat/curso/mod/aula.mp4');
-		expect(catalog.categories[0].courses[0].modules[0].lessons[0].media[0].mediaId).toBe('m1');
-		expect(catalog.categories[0].courses[0].modules[0].lessons[0].subtitles).toHaveLength(1);
+		expect(catalog.nodes[0]).toMatchObject({ title: 'Física', role: 'course', courseId: 'course-1' });
+		expect(catalog.nodes[0].looseFiles[0]).toMatchObject({ mediaId: 'loose', path: 'nota.pdf', availability: 'missing', unverified: true });
+		expect(catalog.nodes[0].children[0].children[0].files[0].path).toBe('mod/aula.mp4');
+		expect(catalog.nodes[0].children[0].children[0].files[0].mediaId).toBe('m1');
+		expect(catalog.nodes[0].children[0].children[0].files[1].kind).toBe('subtitle');
+		// Nós internos não carregam identidade de curso: ela vive apenas no topo.
+		expect(catalog.nodes[0].children[0].courseId).toBeUndefined();
 	});
 	it('requires media_id on canonical root loose files and preserves them when present', () => {
 		// Um arquivo solto de raiz em payload canônico segue a mesma regra dos nós: identidade
 		// obrigatória. Sem `media_id`, o payload é recusado em vez de aceitar um arquivo órfão.
 		expect(() => normalizeCatalog({ complete: true, categories: [], loose_files: [{ name: 'nota.pdf', path: 'nota.pdf', size: 3, kind: 'material' }] })).toThrow('Resposta inválida do servidor');
 		const catalog = normalizeCatalog({ complete: true, categories: [], loose_files: [{ media_id: 'loose-1', name: 'nota.pdf', path: 'nota.pdf', size: 3, kind: 'material' }] });
-		expect(catalog.categories).toEqual([]);
 		expect(catalog.looseFiles[0]).toMatchObject({ mediaId: 'loose-1', path: 'nota.pdf' });
+	});
+	it('accepts an empty Rust catalog without course wrappers', () => {
+		// O contrato canônico não usa envelope de categoria: `categories: []` vale como árvore
+		// vazia, sem criar nós de curso artificiais. O arquivo solto canônico carrega identidade.
+		const catalog = normalizeCatalog({ complete: true, categories: [], loose_files: [{ media_id: 'loose-1', name: 'nota.pdf', path: 'nota.pdf', size: 3, kind: 'material' }] });
+		expect(catalog.nodes).toEqual([]);
+		expect(catalog.looseFiles[0].path).toBe('nota.pdf');
+	});
+	it('rejects a node with a non-string course identity', () => {
+		expect(() => normalizeCatalog({ complete: true, loose_files: [], categories: [{ title: 'Curso', path: '', role: 'course', course_id: 42, files: [], loose_files: [], children: [] }] })).toThrow('Resposta inválida do servidor');
 	});
 	it('keeps shallow recursive lessons and files addressable by path', () => {
 		const catalog = normalizeCatalog({ complete: true, loose_files: [], nodes: [{ title: 'Categoria', path: 'cat', role: 'category', files: [{ media_id: 'cat-pdf', name: 'cat.pdf', path: 'cat/cat.pdf', size: 1, kind: 'material' }], loose_files: [], children: [{ title: 'Aula', path: 'cat/aula', role: 'lesson', files: [{ media_id: 'aula-mp4', name: 'aula.mp4', path: 'cat/aula.mp4', size: 4, kind: 'media' }], loose_files: [], children: [] }] }] });
@@ -120,11 +149,13 @@ describe('transport contract', () => {
 		expect(catalog.nodes[0].children[0].files[0].path).toBe('cat/aula.mp4');
 	});
 	it('keeps the Go tree and material files compatible', () => {
-		const catalog = normalizeCatalog({ categories: [{ title: 'Categoria', courses: [{ title: 'Curso', modules: [{ title: 'Módulo', lessons: [{ title: 'Aula', path: 'aula', media: [], subtitles: [{ name: 'legenda.vtt', path: 'legenda.vtt', size: 1 }], materials: [{ name: 'slide.pdf', path: 'slide.pdf', size: 2 }] }] }] }] }] });
-		expect(catalog.categories[0].courses[0].modules[0].lessons[0].materials[0].path).toBe('slide.pdf');
-		expect(catalog.categories[0].courses[0].modules[0].lessons[0].subtitles[0].path).toBe('legenda.vtt');
+		const catalog = normalizeCatalog({ categories: [{ title: 'Categoria', courses: [{ title: 'Curso', path: 'cat/curso', modules: [{ title: 'Módulo', lessons: [{ title: 'Aula', path: 'aula', media: [], subtitles: [{ name: 'legenda.vtt', path: 'legenda.vtt', size: 1 }], materials: [{ name: 'slide.pdf', path: 'slide.pdf', size: 2 }] }] }] }] }] });
+		const course = catalog.nodes[0];
+		expect(course.role).toBe('course');
+		expect(course.courseId).toBe('cat/curso');
+		expect(course.children[0].children[0].files.map((file) => file.path)).toEqual(['legenda.vtt', 'slide.pdf']);
 	});
-	it('projects a realistic Go catalog into non-empty canonical nodes for the SPA', () => {
+	it('projects a realistic Go catalog into course nodes addressable by the SPA', () => {
 		// Mirrors the Go /api/catalog payload: recursive category/course/module/lesson tree,
 		// files carry no `kind` (the server classifies by media/subtitles/materials arrays),
 		// root loose_files are present and `nodes` is omitted (json omitempty).
@@ -146,18 +177,18 @@ describe('transport contract', () => {
 			}],
 			loose_files: [{ name: 'intro.pdf', path: 'intro.pdf', size: 5 }]
 		});
-		// App.svelte renders only `catalog.nodes`, so an empty projection was the P1 hole.
+		// A interface organiza por cursos: cada curso do formato Go vira um nó de topo.
 		expect(catalog.nodes.length).toBeGreaterThan(0);
-		expect(catalog.nodes[0].role).toBe('category');
-		expect(catalog.nodes[0].children[0].children[0].children[0].path).toBe('programming/go/basics/first');
+		const course = catalog.nodes[0];
+		expect(course.role).toBe('course');
+		expect(course.courseId).toBe('programming/go');
+		expect(course.children[0].children[0].path).toBe('programming/go/basics/first');
 		expect(catalog.looseFiles[0].path).toBe('intro.pdf');
 		// The player resolves the lesson from the canonical nodes collection via findLesson.
-		const lesson = findLesson(catalog, 'programming/go/basics/first');
+		const lesson = findLesson(catalog, 'programming/go', 'programming/go/basics/first');
 		expect(lesson?.media[0]).toMatchObject({ path: 'programming/go/basics/first/video.mp4', kind: 'media' });
 		expect(lesson?.subtitles[0]).toMatchObject({ path: 'programming/go/basics/first/video.vtt', kind: 'subtitle' });
 		expect(lesson?.materials[0]).toMatchObject({ path: 'programming/go/basics/first/notes.pdf', kind: 'material' });
-		// categories is a projection of nodes, not a second parallel tree.
-		expect(catalog.categories[0].courses[0].modules[0].lessons[0].path).toBe('programming/go/basics/first');
 	});
 	it('prefers canonical nodes over the legacy categories field when both are present', () => {
 		// O contrato Rust passa a expor `nodes` e `categories` com a mesma árvore recursiva
@@ -169,21 +200,21 @@ describe('transport contract', () => {
 			nodes: [{ title: 'DaNodes', path: 'cat', role: 'category', files: [], loose_files: [], children: [] }],
 			categories: [{ title: 'DaCategories', path: 'cat', role: 'category', files: [], loose_files: [], children: [] }]
 		});
-		expect(catalog.nodes[0].title).toBe('DaNodes');
-		expect(catalog.categories[0].title).toBe('DaNodes');
+		expect(catalog.nodes.map((node) => node.title)).toEqual(['DaNodes']);
 	});
-	it('normalizes a Go payload that carries canonical nodes and omits root loose files', () => {
-		// O serviço Go serializa a árvore canônica em `nodes` e omite `loose_files` na raiz
-		// quando não há arquivos soltos (omitempty). A preferência por `nodes` precisa
-		// aceitar essa ausência em vez de recusar o catálogo Go.
+	it('accepts a canonical payload that omits root loose files and prefers nodes over the legacy categories', () => {
+		// O contrato canônico serializa a árvore em `nodes` e omite `loose_files` na raiz quando
+		// não há arquivos soltos (omitempty): a ausência vale como lista vazia. Com o marcador
+		// `complete` a árvore canônica vence a `categories` legada, que é ignorada.
 		const catalog = normalizeCatalog({
+			complete: true,
 			nodes: [{
 				title: 'Programação', path: 'programming', role: 'category', files: [], loose_files: [],
 				children: [{
 					title: 'Go', path: 'programming/go', role: 'group', files: [], loose_files: [],
 					children: [{
 						title: 'Primeiros passos', path: 'programming/go/first', role: 'lesson',
-						files: [{ name: 'video.mp4', path: 'programming/go/first/video.mp4', size: 42, kind: 'media' }],
+						files: [{ media_id: 'first-mp4', name: 'video.mp4', path: 'programming/go/first/video.mp4', size: 42, kind: 'media' }],
 						loose_files: [], children: []
 					}]
 				}]
@@ -198,7 +229,7 @@ describe('transport contract', () => {
 		});
 		expect(catalog.looseFiles).toEqual([]);
 		expect(catalog.nodes[0].path).toBe('programming');
-		expect(findLesson(catalog, 'programming/go/first')?.media[0].path).toBe('programming/go/first/video.mp4');
+		expect(findLesson(catalog, 'programming', 'programming/go/first')?.media[0].path).toBe('programming/go/first/video.mp4');
 	});
 	it('falls back to populated legacy categories when nodes is empty', () => {
 		// Um `nodes` vazio não pode esconder a árvore legada entregue em `categories`.
@@ -216,8 +247,8 @@ describe('transport contract', () => {
 			nodes: [],
 			categories: [{ title: 'Programação', path: 'programming', courses: [{ title: 'Go', path: 'programming/go', modules: [{ title: 'Básico', path: 'programming/go/basics', lessons: [{ title: 'Aula', path: 'programming/go/basics/first', media: [{ name: 'v.mp4', path: 'programming/go/basics/first/v.mp4', size: 9 }], subtitles: [], materials: [] }] }] }] }]
 		});
-		expect(catalog.nodes[0].role).toBe('category');
-		expect(findLesson(catalog, 'programming/go/basics/first')?.media[0].path).toBe('programming/go/basics/first/v.mp4');
+		expect(catalog.nodes[0].role).toBe('course');
+		expect(findLesson(catalog, 'programming/go', 'programming/go/basics/first')?.media[0].path).toBe('programming/go/basics/first/v.mp4');
 	});
 	it('preserves displayable Go content when a payload carries both additive nodes and legacy categories', () => {
 		// Payload real do serviço Go: `nodes` canônico com papel `group` nos níveis
@@ -245,11 +276,12 @@ describe('transport contract', () => {
 			}]
 		});
 		expect(catalog.nodes.length).toBeGreaterThan(0);
-		expect(catalog.categories.length).toBeGreaterThan(0);
-		// A árvore legada do Go (curso/módulo/aula) venceu os `group` aditivos.
-		expect(catalog.nodes[0].children[0].role).toBe('course');
-		expect(catalog.categories[0].courses[0].modules[0].lessons[0].path).toBe('programming/go/basics/first');
-		expect(findLesson(catalog, 'programming/go/basics/first')?.media[0].path).toBe('programming/go/basics/first/video.mp4');
+		// A árvore legada do Go (curso/módulo/aula) venceu os `group` aditivos: cada curso vira
+		// um nó de topo endereçável pela identidade derivada do caminho.
+		expect(catalog.nodes[0].role).toBe('course');
+		expect(catalog.nodes[0].courseId).toBe('programming/go');
+		expect(catalog.nodes[0].children[0].children[0].path).toBe('programming/go/basics/first');
+		expect(findLesson(catalog, 'programming/go', 'programming/go/basics/first')?.media[0].path).toBe('programming/go/basics/first/video.mp4');
 	});
 	it('rejects an explicit non-boolean complete marker instead of treating it as Go', () => {
 		// `complete` presente precisa ser booleano: um `null`/string/objeto não pode ser lido
@@ -268,7 +300,7 @@ describe('transport contract', () => {
 		// Um `nodes` canônico vazio, sem categorias, continua sendo um catálogo vazio válido.
 		const empty = normalizeCatalog({ complete: true, nodes: [] });
 		expect(empty.nodes).toEqual([]);
-		expect(empty.categories).toEqual([]);
+		expect(empty.looseFiles).toEqual([]);
 	});
 	it('uses the Go legacy categories and ignores non-canonical additive nodes when both are present', () => {
 		// Sem `complete`, o payload é do Go: a `categories[].courses` vence e os `nodes` aditivos
@@ -277,8 +309,8 @@ describe('transport contract', () => {
 			nodes: [null, 'x', { role: 'group' }],
 			categories: [{ title: 'Cat', path: 'cat', courses: [{ title: 'C', path: 'c', modules: [{ title: 'M', path: 'm', lessons: [{ title: 'A', path: 'm/a', media: [{ name: 'v.mp4', path: 'm/a/v.mp4', size: 1 }], subtitles: [], materials: [] }] }] }] }]
 		});
-		expect(catalog.nodes[0].path).toBe('cat');
-		expect(findLesson(catalog, 'm/a')?.media[0].path).toBe('m/a/v.mp4');
+		expect(catalog.nodes[0].courseId).toBe('c');
+		expect(findLesson(catalog, 'c', 'm/a')?.media[0].path).toBe('m/a/v.mp4');
 	});
 	it('rejects an oversized additive nodes array even on the Go categories path', () => {
 		// Os `nodes` ignorados não podem trafegar uma árvore ilimitada: um array absurdo é
@@ -323,9 +355,9 @@ describe('transport contract', () => {
 		const catalog = normalizeCatalog({ categories: [{ title: 'Legado', path: 'cat', role: 'category', files: [], loose_files: [], children: [] }] });
 		expect(catalog.nodes[0].title).toBe('Legado');
 	});
-	it('preserves lessons through unknown group descendants in the compatibility projection', () => {
-		// O serviço Go usa o papel `group` nos níveis intermediários. A projeção de
-		// compatibilidade precisa descer por eles em vez de descartar as aulas.
+	it('preserves lessons through unknown group descendants in the canonical tree', () => {
+		// O serviço Go usa o papel `group` nos níveis intermediários. A busca pela aula precisa
+		// descer por eles em vez de descartar as aulas.
 		const catalog = normalizeCatalog({
 			nodes: [{
 				title: 'Programação', path: 'programming', role: 'category', files: [], loose_files: [],
@@ -338,7 +370,8 @@ describe('transport contract', () => {
 				}]
 			}]
 		});
-		expect(catalog.categories[0].courses[0].modules[0].lessons.map((item) => item.path)).toEqual(['programming/go/basics/first']);
+		expect(catalog.nodes[0].children[0].children[0].children[0].path).toBe('programming/go/basics/first');
+		expect(lessonFromNode(catalog.nodes[0].children[0].children[0].children[0]).media.map((file) => file.path)).toEqual(['programming/go/basics/first/v.mp4']);
 	});
 	it('preserves lessons when a module sits directly under a category without a course level', () => {
 		const catalog = normalizeCatalog({
@@ -346,7 +379,8 @@ describe('transport contract', () => {
 			loose_files: [],
 			nodes: [{ title: 'Cat', path: 'Cat', role: 'category', files: [], loose_files: [], children: [{ title: 'Curso', path: 'Cat/Curso', role: 'module', files: [], loose_files: [], children: [{ title: 'Aula', path: 'Cat/Curso/Aula', role: 'lesson', files: [{ media_id: 'a-mp4', name: 'a.mp4', path: 'Cat/Curso/Aula/a.mp4', size: 1, kind: 'media' }], loose_files: [], children: [] }] }] }]
 		});
-		expect(catalog.categories[0].courses[0].modules[0].lessons[0].path).toBe('Cat/Curso/Aula');
+		expect(catalog.nodes[0].children[0].children[0].path).toBe('Cat/Curso/Aula');
+		expect(findLesson(catalog, 'Cat', 'Cat/Curso/Aula')?.media[0].path).toBe('Cat/Curso/Aula/a.mp4');
 	});
 	it('prefers canonical nodes when the legacy categories carry Go-shaped courses', () => {
 		// O servidor Rust passou a enviar `nodes` recursivo e `categories` na forma legada do
@@ -359,8 +393,8 @@ describe('transport contract', () => {
 			categories: [{ title: 'DaCategories', path: 'cat', courses: [{ title: 'Curso', path: 'cat/curso', modules: [{ title: 'Mod', path: 'cat/curso/mod', lessons: [{ title: 'Aula', path: 'cat/curso/mod/aula', media: [{ name: 'v.mp4', path: 'cat/curso/mod/aula/v.mp4', size: 1 }], subtitles: [], materials: [] }] }] }] }]
 		});
 		expect(catalog.nodes[0].title).toBe('DaNodes');
-		// categories é reprojetada a partir de nodes, não copiada do payload legado.
-		expect(catalog.categories[0].title).toBe('DaNodes');
+		// A árvore canônica vem de `nodes`; a `categories` legada do payload não é copiada.
+		expect(catalog.nodes.map((node) => node.title)).toEqual(['DaNodes']);
 	});
 	it('keeps a node of an unknown role in the canonical tree instead of dropping it', () => {
 		// Um papel desconhecido (por exemplo um `group` futuro) não pode sumir: a árvore
@@ -377,12 +411,13 @@ describe('transport contract', () => {
 		});
 		expect(catalog.nodes[0].children[0].role).toBe('group');
 		expect(catalog.nodes[0].children[0].files[0].path).toBe('cat/grupo/guia.pdf');
-		// A projeção mantém o arquivo do nó desconhecido em vez de descartá-lo.
-		expect(catalog.categories[0].courses[0].looseFiles.map((file) => file.path)).toEqual(['cat/grupo/guia.pdf']);
+		// O arquivo do nó de papel desconhecido continua acessível: `lessonFromNode` o trata
+		// como material (catch-all) em vez de descartá-lo.
+		expect(lessonFromNode(catalog.nodes[0].children[0]).materials.map((file) => file.path)).toEqual(['cat/grupo/guia.pdf']);
 	});
 	it('keeps an unknown file kind instead of dropping it from the lesson projection', () => {
 		// Um `kind` que a SPA ainda não conhece não pode fazer o arquivo desaparecer: a árvore
-		// canônica preserva o valor original e a projeção o trata como material (catch-all).
+		// canônica preserva o valor original e a aula o trata como material (catch-all).
 		const catalog = normalizeCatalog({
 			nodes: [{
 				title: 'Cat', path: 'cat', role: 'category', files: [], loose_files: [],
@@ -394,10 +429,10 @@ describe('transport contract', () => {
 			}]
 		});
 		expect(catalog.nodes[0].children[0].files[0].kind).toBe('bonus');
-		const projected = catalog.categories[0].courses[0].modules[0].lessons[0];
-		expect(projected.media).toEqual([]);
-		expect(projected.subtitles).toEqual([]);
-		expect(projected.materials.map((file) => file.path)).toEqual(['cat/aula/extra.bin']);
+		const lesson = lessonFromNode(catalog.nodes[0].children[0]);
+		expect(lesson.media).toEqual([]);
+		expect(lesson.subtitles).toEqual([]);
+		expect(lesson.materials.map((file) => file.path)).toEqual(['cat/aula/extra.bin']);
 	});
 	it('keeps a top-level node of an unknown role searchable instead of dropping it', () => {
 		// Um papel de topo desconhecido não some do payload: a árvore canônica o mantém e a
@@ -413,10 +448,9 @@ describe('transport contract', () => {
 			}]
 		});
 		expect(catalog.nodes[0].role).toBe('collection');
-		expect(findLesson(catalog, 'colecao/aula')?.media[0].path).toBe('colecao/aula/v.mp4');
-		// A projeção legada só representa categoria/curso/módulo/aula, então o nó de topo
-		// desconhecido não vira categoria — mas nada se perde: ele vive em `nodes`.
-		expect(catalog.categories).toEqual([]);
+		expect(findLesson(catalog, 'colecao', 'colecao/aula')?.media[0].path).toBe('colecao/aula/v.mp4');
+		// Nada se perde com o papel desconhecido: a aula continua na árvore canônica.
+		expect(catalog.nodes[0].children.map((child) => child.path)).toEqual(['colecao/aula']);
 	});
 	it('requires a non-empty media_id for canonical Rust node files', () => {
 		// A árvore canônica Rust declara `media_id` obrigatório: um arquivo sem identidade não
@@ -432,7 +466,7 @@ describe('transport contract', () => {
 		// O serviço Go não emite `media_id`: o fallback por `categories` com `courses` continua
 		// aceito sem identidade de mídia.
 		const catalog = normalizeCatalog({ categories: [{ title: 'Cat', courses: [{ title: 'Curso', modules: [{ title: 'Mod', lessons: [{ title: 'Aula', path: 'a', media: [{ name: 'v.mp4', path: 'a/v.mp4', size: 1 }], subtitles: [], materials: [] }] }] }] }] });
-		expect(catalog.nodes[0].children[0].children[0].children[0].files[0].mediaId).toBeUndefined();
+		expect(catalog.nodes[0].children[0].children[0].files[0].mediaId).toBeUndefined();
 	});
 	it('keeps root loose files without media_id for the Go fallback', () => {
 		// Sem o marcador canônico `complete`, o payload é do Go, que não emite identidade.
@@ -562,7 +596,7 @@ describe('desktop transport over IPC', () => {
 		expect(invoke).toHaveBeenCalledWith('desktop_catalog');
 		expect(fetchMock).not.toHaveBeenCalled();
 		expect(catalog.nodes[0].role).toBe('category');
-		expect(catalog.categories[0].title).toBe('Curso');
+		expect(catalog.nodes[0].title).toBe('Curso');
 		vi.unstubAllGlobals();
 	});
 
@@ -578,8 +612,7 @@ describe('desktop transport over IPC', () => {
 
 		const catalog = await new DesktopStub().catalog();
 
-		expect(catalog.nodes[0].title).toBe('Nós');
-		expect(catalog.categories[0].title).toBe('Nós');
+		expect(catalog.nodes.map((node) => node.title)).toEqual(['Nós']);
 	});
 
 	it('maps a known IPC code to its stable sanitized message, ignoring arbitrary text', async () => {
@@ -718,46 +751,43 @@ describe('desktop transport over IPC', () => {
 	it('maps each stable desktop rescan error code to a sanitized message', async () => {
 		vi.mocked(invoke).mockRejectedValue({ code: 'rescan_in_progress', message: '/mnt/cursos em uso' });
 		await expect(new DesktopStub().rescan()).rejects.toThrow('Já existe uma indexação em andamento.');
-		vi.mocked(invoke).mockRejectedValue({ code: 'library_not_configured', message: '/mnt/cursos não configurada' });
-		await expect(new DesktopStub().rescan()).rejects.toThrow('Nenhuma biblioteca está configurada.');
+		vi.mocked(invoke).mockRejectedValue({ code: 'no_courses_registered', message: '/mnt/cursos sem cursos' });
+		await expect(new DesktopStub().rescan()).rejects.toThrow('Nenhum curso foi importado ainda.');
 		vi.mocked(invoke).mockRejectedValue({ code: 'rescan_unavailable', message: 'falha em C:\\segredo\\cursos' });
-		await expect(new DesktopStub().rescan()).rejects.toThrow('Não foi possível indexar a biblioteca.');
+		await expect(new DesktopStub().rescan()).rejects.toThrow('Não foi possível indexar os cursos.');
 	});
 
 	it('falls back to a stable message for an unknown desktop rescan error code', async () => {
 		vi.mocked(invoke).mockRejectedValue({ code: 'algo_desconhecido', message: 'CAMINHO privado /mnt/cursos' });
-		await expect(new DesktopStub().rescan()).rejects.toThrow('Não foi possível indexar a biblioteca.');
+		await expect(new DesktopStub().rescan()).rejects.toThrow('Não foi possível indexar os cursos.');
 		vi.mocked(invoke).mockRejectedValue({ message: 'sem código /etc/shadow' });
-		await expect(new DesktopStub().rescan()).rejects.toThrow('Não foi possível indexar a biblioteca.');
+		await expect(new DesktopStub().rescan()).rejects.toThrow('Não foi possível indexar os cursos.');
 	});
 
-	it('reports the desktop as unconfigured through the desktop_config command', async () => {
-		vi.mocked(invoke).mockResolvedValue({ configured: false });
-		await expect(new DesktopStub().config()).resolves.toEqual({ configured: false });
-		expect(invoke).toHaveBeenCalledWith('desktop_config');
-	});
-
-	it('selects the library through the desktop command without sending a path', async () => {
+	it('imports a course through the native picker command without sending a path', async () => {
 		vi.mocked(invoke).mockResolvedValue({ configured: true });
-		await expect(new DesktopStub().chooseLibrary()).resolves.toEqual({ configured: true });
+		await expect(new DesktopStub().importCourse()).resolves.toBeUndefined();
 		// O webview apenas dispara o seletor nativo; nenhum caminho cruza o IPC.
-		expect(invoke).toHaveBeenCalledWith('desktop_select_library');
+		expect(invoke).toHaveBeenCalledWith('desktop_import_course');
 	});
 
-	it('keeps the previous state when the user cancels the native picker', async () => {
-		vi.mocked(invoke).mockResolvedValue({ configured: false });
-		await expect(new DesktopStub().chooseLibrary()).resolves.toEqual({ configured: false });
+	it('never offers server path import on the desktop', async () => {
+		await expect(new DesktopStub().importCoursePath('C:\\cursos')).rejects.toThrow('seletor nativo');
 	});
 
-	it('maps a library selection error to a sanitized message without the path', async () => {
-		vi.mocked(invoke).mockRejectedValue({ code: 'library_root_invalid', message: '/mnt/cursos não é válido' });
-		await expect(new DesktopStub().chooseLibrary()).rejects.toThrow('A pasta escolhida não é uma biblioteca válida.');
-		vi.mocked(invoke).mockRejectedValue({ code: 'library_config_unavailable', message: 'falha em C:\\segredo' });
-		await expect(new DesktopStub().chooseLibrary()).rejects.toThrow('Não foi possível salvar a configuração do aplicativo.');
+	it('maps course import errors to sanitized messages without the path', async () => {
+		vi.mocked(invoke).mockRejectedValue({ code: 'course_path_invalid', message: '/mnt/cursos não é válido' });
+		await expect(new DesktopStub().importCourse()).rejects.toThrow('A pasta escolhida não é um curso válido.');
+		vi.mocked(invoke).mockRejectedValue({ code: 'courses_config_unavailable', message: 'falha em C:\\segredo' });
+		await expect(new DesktopStub().importCourse()).rejects.toThrow('Não foi possível salvar a configuração do aplicativo.');
 	});
 
-	it('maps a sanitized desktop configuration error to its message', async () => {
-		vi.mocked(invoke).mockRejectedValue({ code: 'database_unavailable', message: 'banco de dados local indisponível' });
-		await expect(new DesktopStub().config()).rejects.toThrow('banco de dados local indisponível');
+	it('removes a course through the IPC command sending only the opaque identity', async () => {
+		vi.mocked(invoke).mockResolvedValue({ configured: true });
+		await expect(new DesktopStub().removeCourse('course-1')).resolves.toBeUndefined();
+		expect(invoke).toHaveBeenCalledWith('desktop_remove_course', { courseId: 'course-1' });
+
+		vi.mocked(invoke).mockRejectedValue({ code: 'courses_config_unavailable', message: 'falha em C:\\segredo' });
+		await expect(new DesktopStub().removeCourse('course-1')).rejects.toThrow('Não foi possível salvar a configuração do aplicativo.');
 	});
 });

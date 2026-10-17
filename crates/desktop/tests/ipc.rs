@@ -8,9 +8,12 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use learnvault_core::{Availability, Catalog, CatalogFile, CatalogNode, MediaKind, NodeRole};
+use learnvault_core::{
+    Availability, Catalog, CatalogFile, CatalogNode, CourseRoot, MediaKind, NodeRole,
+};
 use learnvault_desktop::{
-    CatalogDto, DesktopState, IpcErrorCode, RescanSummaryDto, catalog, load_library_root,
+    CatalogDto, CatalogNodeDto, CourseEntry, DesktopState, IpcErrorCode, RescanSummaryDto, catalog,
+    load_courses,
 };
 
 /// Estado desktop isolado em diretórios temporários, com dados e configuração separados.
@@ -18,16 +21,24 @@ fn desktop(root: &Path) -> DesktopState {
     DesktopState::open(&root.join("data"), &root.join("config")).unwrap()
 }
 
-/// Cria um diretório de biblioteca válido e devolve o caminho escolhido.
-fn make_library(root: &Path) -> PathBuf {
-    let library = root.join("biblioteca");
-    fs::create_dir_all(&library).unwrap();
-    library
+/// Cria um diretório de curso válido e devolve o caminho escolhido.
+fn make_course(root: &Path) -> PathBuf {
+    let course = root.join("curso");
+    fs::create_dir_all(&course).unwrap();
+    course
 }
 
 /// Forma canônica de um caminho para comparação.
 fn canonical(path: &Path) -> PathBuf {
     fs::canonicalize(path).unwrap()
+}
+
+/// Curso registrado de teste, com identidade explícita.
+fn entry(id: &str, path: &Path) -> CourseEntry {
+    CourseEntry {
+        id: id.to_owned(),
+        root: CourseRoot::resolve(path).unwrap(),
+    }
 }
 
 /// Arquivo de catálogo de teste, com localização fixa e verificável.
@@ -73,7 +84,7 @@ fn configuration_starts_unconfigured_without_exposing_a_path() {
 
     assert!(
         !state.config_status().configured,
-        "sem raiz persistida, o desktop não pode se declarar configurado"
+        "sem cursos persistidos, o desktop não pode se declarar configurado"
     );
     assert_eq!(
         serde_json::to_value(state.config_status()).unwrap(),
@@ -84,10 +95,11 @@ fn configuration_starts_unconfigured_without_exposing_a_path() {
 #[test]
 fn empty_database_produces_a_complete_empty_catalog() {
     let database = learnvault_core::Database::open_in_memory().unwrap();
-    let catalog = catalog(&database).unwrap();
+    let catalog = catalog(&database, &[]).unwrap();
 
     assert!(catalog.complete);
     assert!(catalog.loose_files.is_empty());
+    assert!(catalog.nodes.is_empty());
     assert!(catalog.categories.is_empty());
 }
 
@@ -102,70 +114,97 @@ fn catalog_dto_uses_the_snake_case_spa_contract() {
             true,
         )],
         categories: vec![node(
-            "Curso",
-            "cat",
-            NodeRole::Category,
+            "Aula",
+            "aula",
+            NodeRole::Lesson,
+            vec![file("m1", MediaKind::Media, Availability::Available, false)],
             Vec::new(),
-            vec![node(
-                "Aula",
-                "cat/aula",
-                NodeRole::Lesson,
-                vec![file("m1", MediaKind::Media, Availability::Available, false)],
-                Vec::new(),
-            )],
         )],
     };
+    let complete = source.complete;
+    let nodes = vec![CatalogNodeDto::course("course-42", "Curso", source)];
+    let dto = CatalogDto {
+        complete,
+        loose_files: Vec::new(),
+        nodes: nodes.clone(),
+        categories: nodes,
+    };
 
-    let json = serde_json::to_value(CatalogDto::from(source)).unwrap();
+    let json = serde_json::to_value(dto).unwrap();
 
     assert_eq!(json["complete"], serde_json::json!(false));
-    assert_eq!(json["loose_files"][0]["media_id"], "loose");
-    assert_eq!(json["loose_files"][0]["name"], "aula.mp4");
-    assert_eq!(json["loose_files"][0]["path"], "cat/aula.mp4");
-    assert_eq!(json["loose_files"][0]["size"], 10);
-    assert_eq!(json["loose_files"][0]["kind"], "material");
-    assert_eq!(json["loose_files"][0]["availability"], "missing");
-    assert_eq!(json["loose_files"][0]["unverified"], true);
-
-    // `categories` mantém a projeção legada do serviço Go
-    // (`categories[].courses[].modules[].lessons[]`), não a árvore recursiva: um consumidor
-    // antigo lê `courses`/`modules`/`lessons` e nunca `children`/`role`.
     assert_eq!(json["categories"][0]["title"], "Curso");
-    assert_eq!(json["categories"][0]["path"], "cat");
-    assert!(
-        json["categories"][0].get("courses").is_some(),
-        "categories precisa da lista legada de cursos"
+    assert_eq!(json["categories"][0]["path"], "");
+    assert_eq!(json["categories"][0]["role"], "course");
+    assert_eq!(json["categories"][0]["course_id"], "course-42");
+    assert_eq!(json["categories"][0]["files"], serde_json::json!([]));
+    assert_eq!(json["categories"][0]["loose_files"][0]["media_id"], "loose");
+    assert_eq!(json["categories"][0]["loose_files"][0]["name"], "aula.mp4");
+    assert_eq!(
+        json["categories"][0]["loose_files"][0]["path"],
+        "cat/aula.mp4"
     );
-    assert!(
-        json["categories"][0].get("children").is_none(),
-        "categories não pode expor a árvore recursiva: {json}"
+    assert_eq!(json["categories"][0]["loose_files"][0]["size"], 10);
+    assert_eq!(json["categories"][0]["loose_files"][0]["kind"], "material");
+    assert_eq!(
+        json["categories"][0]["loose_files"][0]["availability"],
+        "missing"
     );
-    assert!(json["categories"][0].get("role").is_none());
-    let legacy_lesson = &json["categories"][0]["courses"][0]["modules"][0]["lessons"][0];
-    assert_eq!(legacy_lesson["path"], "cat/aula");
-    assert_eq!(legacy_lesson["media"][0]["media_id"], "m1");
-    assert_eq!(legacy_lesson["media"][0]["kind"], "media");
-    assert_eq!(legacy_lesson["media"][0]["availability"], "available");
-    assert_eq!(legacy_lesson["subtitles"], serde_json::json!([]));
-    assert_eq!(legacy_lesson["materials"], serde_json::json!([]));
+    assert_eq!(json["categories"][0]["loose_files"][0]["unverified"], true);
+    assert_eq!(json["categories"][0]["children"][0]["role"], "lesson");
+    assert_eq!(
+        json["categories"][0]["children"][0]["files"][0]["kind"],
+        "media"
+    );
+    // O desktop agrega cursos: a lista solta de topo fica vazia e os arquivos soltos vivem
+    // no nó do curso.
+    assert_eq!(json["loose_files"], serde_json::json!([]));
 
-    // A árvore canônica recursiva continua em `nodes`, preservando a identidade de mídia, os
-    // caminhos relativos, a disponibilidade e a verificação dos arquivos.
-    assert_ne!(
-        json["nodes"], json["categories"],
-        "os shapes canônico e legado não podem ser idênticos"
-    );
+    // `nodes` é a árvore recursiva canônica, o contrato preferido pela SPA, e carrega o
+    // mesmo nó de topo de curso: identidade opaca, identidade de mídia, caminhos relativos,
+    // disponibilidade e verificação dos arquivos seguem preservados, e a aula continua
+    // alcançável sob o curso sem depender de nenhuma projeção legada.
+    assert_eq!(json["nodes"], json["categories"]);
     let node = &json["nodes"][0];
     assert_eq!(node["title"], "Curso");
-    assert_eq!(node["path"], "cat");
-    assert_eq!(node["role"], "category");
+    assert_eq!(node["path"], "");
+    assert_eq!(node["role"], "course");
+    assert_eq!(node["course_id"], "course-42");
+    assert_eq!(node["loose_files"][0]["media_id"], "loose");
+    assert_eq!(node["loose_files"][0]["name"], "aula.mp4");
+    assert_eq!(node["loose_files"][0]["path"], "cat/aula.mp4");
+    assert_eq!(node["loose_files"][0]["size"], 10);
+    assert_eq!(node["loose_files"][0]["kind"], "material");
+    assert_eq!(node["loose_files"][0]["availability"], "missing");
+    assert_eq!(node["loose_files"][0]["unverified"], true);
     assert_eq!(node["children"][0]["role"], "lesson");
+    assert_eq!(node["children"][0]["path"], "aula");
     let node_file = &node["children"][0]["files"][0];
     assert_eq!(node_file["media_id"], "m1");
+    assert_eq!(node_file["name"], "aula.mp4");
     assert_eq!(node_file["path"], "cat/aula.mp4");
+    assert_eq!(node_file["size"], 10);
     assert_eq!(node_file["kind"], "media");
     assert_eq!(node_file["availability"], "available");
     assert_eq!(node_file["unverified"], false);
+}
+
+#[test]
+fn internal_nodes_omit_the_course_id_field() {
+    let internal = CatalogNodeDto::from(node(
+        "Módulo",
+        "mod",
+        NodeRole::Module,
+        Vec::new(),
+        Vec::new(),
+    ));
+
+    let json = serde_json::to_value(internal).unwrap();
+
+    assert!(
+        json.get("course_id").is_none(),
+        "apenas o nó de topo carrega a identidade do curso: {json}"
+    );
 }
 
 #[test]
@@ -177,16 +216,9 @@ fn every_core_enum_maps_to_a_stable_string() {
         (NodeRole::Lesson, "lesson"),
     ];
     for (role, expected) in roles {
-        let dto = CatalogDto::from(Catalog {
-            complete: true,
-            loose_files: Vec::new(),
-            categories: vec![node("N", "n", role, Vec::new(), Vec::new())],
-        });
+        let dto = CatalogNodeDto::from(node("N", "n", role, Vec::new(), Vec::new()));
         let json = serde_json::to_value(dto).unwrap();
-        assert_eq!(
-            json["nodes"][0]["role"], expected,
-            "papel {role:?} precisa ser estável"
-        );
+        assert_eq!(json["role"], expected, "papel {role:?} precisa ser estável");
     }
 
     let kinds = [
@@ -195,14 +227,28 @@ fn every_core_enum_maps_to_a_stable_string() {
         (MediaKind::Material, "material"),
     ];
     for (kind, expected) in kinds {
-        let dto = CatalogDto::from(Catalog {
+        let course = CatalogNodeDto::course(
+            "course-1",
+            "Curso",
+            Catalog {
+                complete: true,
+                loose_files: vec![file("f", kind, Availability::Available, false)],
+                categories: Vec::new(),
+            },
+        );
+        let dto = CatalogDto {
             complete: true,
-            loose_files: vec![file("f", kind, Availability::Available, false)],
-            categories: Vec::new(),
-        });
+            loose_files: Vec::new(),
+            nodes: vec![course.clone()],
+            categories: vec![course],
+        };
         let json = serde_json::to_value(dto).unwrap();
         assert_eq!(
-            json["loose_files"][0]["kind"], expected,
+            json["nodes"][0]["loose_files"][0]["kind"], expected,
+            "tipo {kind:?} precisa ser estável na árvore canônica"
+        );
+        assert_eq!(
+            json["categories"][0]["loose_files"][0]["kind"], expected,
             "tipo {kind:?} precisa ser estável"
         );
     }
@@ -210,6 +256,7 @@ fn every_core_enum_maps_to_a_stable_string() {
 
 #[test]
 fn catalog_failure_is_a_stable_sanitized_error() {
+    let dir = tempfile::tempdir().unwrap();
     let database = learnvault_core::Database::open_in_memory().unwrap();
     database
         .connection()
@@ -229,7 +276,8 @@ fn catalog_failure_is_a_stable_sanitized_error() {
         )
         .unwrap();
 
-    let error = catalog(&database).unwrap_err();
+    let courses = [entry("library-1", dir.path())];
+    let error = catalog(&database, &courses).unwrap_err();
     assert_eq!(error.code, IpcErrorCode::CatalogUnavailable);
 
     let json = serde_json::to_value(&error).unwrap();
@@ -287,67 +335,89 @@ fn desktop_state_keeps_the_database_in_the_data_directory() {
 }
 
 #[test]
-fn selecting_a_library_persists_it_and_reports_configured() {
+fn importing_a_course_persists_it_and_reports_configured() {
     let dir = tempfile::tempdir().unwrap();
     let state = desktop(dir.path());
-    let library = make_library(dir.path());
+    let course = make_course(dir.path());
 
-    let status = state.select_library(|| Some(library.clone())).unwrap();
+    let status = state.import_course(|| Some(course.clone())).unwrap();
 
     assert!(status.configured);
     assert_eq!(
         serde_json::to_value(status).unwrap(),
         serde_json::json!({ "configured": true })
     );
-    assert_eq!(
-        state.library_root().unwrap().as_path(),
-        canonical(&library).as_path()
+    let courses = state.courses();
+    assert_eq!(courses.len(), 1);
+    assert_eq!(courses[0].root.as_path(), canonical(&course).as_path());
+    assert!(
+        courses[0].id.starts_with("course-"),
+        "a identidade é opaca e estável: {}",
+        courses[0].id
     );
     assert!(
         dir.path().join("config").join("library.json").exists(),
-        "a configuração precisa ser persistida fora da biblioteca"
+        "a configuração precisa ser persistida fora do curso"
     );
-    let entries = fs::read_dir(&library)
+    let entries = fs::read_dir(&course)
         .unwrap()
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
     assert!(
         entries.is_empty(),
-        "a seleção não pode criar nem modificar nada dentro da biblioteca: {entries:?}"
+        "a importação não pode criar nem modificar nada dentro do curso: {entries:?}"
     );
 }
 
 #[test]
-fn cancelling_the_selection_preserves_the_previous_state() {
+fn importing_the_same_folder_twice_is_idempotent() {
     let dir = tempfile::tempdir().unwrap();
     let state = desktop(dir.path());
-    let library = make_library(dir.path());
-    state.select_library(|| Some(library.clone())).unwrap();
+    let course = make_course(dir.path());
+    state.import_course(|| Some(course.clone())).unwrap();
 
-    let cancelled = state.select_library(|| None).unwrap();
+    let status = state.import_course(|| Some(course.clone())).unwrap();
+
+    assert!(status.configured);
+    assert_eq!(
+        state.courses().len(),
+        1,
+        "a mesma pasta não pode virar dois cursos"
+    );
+}
+
+#[test]
+fn cancelling_the_import_preserves_the_previous_state() {
+    let dir = tempfile::tempdir().unwrap();
+    let state = desktop(dir.path());
+    let course = make_course(dir.path());
+    state.import_course(|| Some(course.clone())).unwrap();
+
+    let cancelled = state.import_course(|| None).unwrap();
 
     assert!(
         cancelled.configured,
         "cancelar o seletor preserva a configuração anterior e devolve o estado atual"
     );
+    assert_eq!(state.courses().len(), 1);
     assert_eq!(
-        state.library_root().unwrap().as_path(),
-        canonical(&library).as_path()
+        state.courses()[0].root.as_path(),
+        canonical(&course).as_path()
     );
 }
 
 #[test]
-fn an_invalid_selection_preserves_state_and_hides_the_path() {
+fn an_invalid_import_preserves_state_and_hides_the_path() {
     let dir = tempfile::tempdir().unwrap();
     let state = desktop(dir.path());
     let secret = dir.path().join("Cursos secretos.mp4");
     fs::write(&secret, b"nao sou pasta").unwrap();
 
-    let error = state.select_library(|| Some(secret.clone())).unwrap_err();
+    let error = state.import_course(|| Some(secret.clone())).unwrap_err();
 
-    assert_eq!(error.code, IpcErrorCode::LibraryRootInvalid);
+    assert_eq!(error.code, IpcErrorCode::CoursePathInvalid);
     let json = serde_json::to_value(&error).unwrap();
-    assert_eq!(json["code"], "library_root_invalid");
+    assert_eq!(json["code"], "course_path_invalid");
     let message = json["message"].as_str().unwrap();
     assert!(!message.is_empty(), "a mensagem precisa existir");
     assert!(
@@ -366,13 +436,13 @@ fn a_configuration_write_failure_is_a_stable_sanitized_error() {
     let blocked = dir.path().join("config");
     fs::write(&blocked, b"nao sou diretorio").unwrap();
     let state = DesktopState::open(&dir.path().join("data"), &blocked).unwrap();
-    let library = make_library(dir.path());
+    let course = make_course(dir.path());
 
-    let error = state.select_library(|| Some(library)).unwrap_err();
+    let error = state.import_course(|| Some(course)).unwrap_err();
 
-    assert_eq!(error.code, IpcErrorCode::LibraryConfigUnavailable);
+    assert_eq!(error.code, IpcErrorCode::CoursesConfigUnavailable);
     let json = serde_json::to_value(&error).unwrap();
-    assert_eq!(json["code"], "library_config_unavailable");
+    assert_eq!(json["code"], "courses_config_unavailable");
     let message = json["message"].as_str().unwrap();
     assert!(
         !message.contains("nao sou diretorio")
@@ -383,21 +453,44 @@ fn a_configuration_write_failure_is_a_stable_sanitized_error() {
 }
 
 #[test]
-fn restart_reloads_the_persisted_library_root() {
+fn restart_reloads_the_persisted_courses() {
     let dir = tempfile::tempdir().unwrap();
-    let library = make_library(dir.path());
+    let course = make_course(dir.path());
     {
         let state = desktop(dir.path());
-        state.select_library(|| Some(library.clone())).unwrap();
+        state.import_course(|| Some(course.clone())).unwrap();
     }
 
     let restarted = desktop(dir.path());
 
     assert!(restarted.config_status().configured);
+    assert_eq!(restarted.courses().len(), 1);
     assert_eq!(
-        restarted.library_root().unwrap().as_path(),
-        canonical(&library).as_path()
+        restarted.courses()[0].root.as_path(),
+        canonical(&course).as_path()
     );
+}
+
+#[test]
+fn a_legacy_single_root_configuration_migrates_to_one_course() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = dir.path().join("config");
+    fs::create_dir_all(&config).unwrap();
+    let course = make_course(dir.path());
+    let legacy = serde_json::json!({
+        "version": 1,
+        "library_root": canonical(&course)
+    });
+    fs::write(config.join("library.json"), legacy.to_string()).unwrap();
+
+    let courses = load_courses(&config);
+
+    assert_eq!(courses.len(), 1);
+    assert_eq!(
+        courses[0].id, "library-1",
+        "a raiz antiga preserva a identidade histórica para não perder o progresso"
+    );
+    assert_eq!(courses[0].root.as_path(), canonical(&course).as_path());
 }
 
 #[test]
@@ -411,37 +504,62 @@ fn restart_ignores_a_corrupt_configuration() {
 
     assert!(
         !state.config_status().configured,
-        "configuração corrompida resulta em estado não configurado, sem erro fatais"
+        "configuração corrompida resulta em estado não configurado, sem erros fatais"
     );
 }
 
 #[test]
-fn restart_ignores_a_removed_library_root() {
+fn restart_ignores_a_removed_course_folder() {
     let dir = tempfile::tempdir().unwrap();
-    let library = make_library(dir.path());
+    let course = make_course(dir.path());
     {
         let state = desktop(dir.path());
-        state.select_library(|| Some(library.clone())).unwrap();
+        state.import_course(|| Some(course.clone())).unwrap();
     }
-    fs::remove_dir_all(&library).unwrap();
+    fs::remove_dir_all(&course).unwrap();
 
     let restarted = desktop(dir.path());
 
     assert!(
         !restarted.config_status().configured,
-        "uma raiz removida precisa rebaixar o estado para não configurado"
+        "um curso cuja pasta sumiu precisa ser descartado no carregamento"
     );
+    assert!(restarted.courses().is_empty());
 }
 
 #[test]
-fn runtime_configuration_revalidates_a_revoked_library_root() {
+fn removing_a_course_updates_memory_disk_and_status() {
     let dir = tempfile::tempdir().unwrap();
     let state = desktop(dir.path());
-    let library = make_library(dir.path());
-    state.select_library(|| Some(library.clone())).unwrap();
+    let course = make_course(dir.path());
+    state.import_course(|| Some(course.clone())).unwrap();
+    let id = state.courses()[0].id.clone();
+
+    let status = state.remove_course(&id).unwrap();
+
+    assert!(!status.configured);
+    assert!(state.courses().is_empty());
+    let persisted = load_courses(&dir.path().join("config"));
+    assert!(persisted.is_empty(), "a remoção precisa ser persistida");
+    assert!(
+        course.exists(),
+        "remover um curso nunca pode apagar arquivos"
+    );
+
+    // Remover de novo é idempotente.
+    let again = state.remove_course(&id).unwrap();
+    assert!(!again.configured);
+}
+
+#[test]
+fn runtime_configuration_revalidates_a_revoked_course() {
+    let dir = tempfile::tempdir().unwrap();
+    let state = desktop(dir.path());
+    let course = make_course(dir.path());
+    state.import_course(|| Some(course.clone())).unwrap();
     assert!(state.config_status().configured);
 
-    fs::remove_dir_all(&library).unwrap();
+    fs::remove_dir_all(&course).unwrap();
 
     assert_eq!(
         serde_json::to_value(state.config_status()).unwrap(),
@@ -450,12 +568,12 @@ fn runtime_configuration_revalidates_a_revoked_library_root() {
 }
 
 #[test]
-fn concurrent_selection_keeps_memory_and_disk_consistent() {
+fn concurrent_imports_keep_memory_and_disk_consistent() {
     let dir = tempfile::tempdir().unwrap();
     let state = desktop(dir.path());
     let roots: Vec<PathBuf> = (0..4)
         .map(|index| {
-            let path = dir.path().join(format!("lib{index}"));
+            let path = dir.path().join(format!("curso{index}"));
             fs::create_dir(&path).unwrap();
             path
         })
@@ -466,19 +584,24 @@ fn concurrent_selection_keeps_memory_and_disk_consistent() {
             let state = &state;
             scope.spawn(move || {
                 let root = root.clone();
-                state.select_library(|| Some(root)).unwrap();
+                state.import_course(|| Some(root)).unwrap();
             });
         }
     });
 
-    let memory = state
-        .library_root()
-        .expect("a memória precisa estar configurada");
-    let disk =
-        load_library_root(&dir.path().join("config")).expect("o disco precisa estar configurado");
+    let mut memory: Vec<PathBuf> = state
+        .courses()
+        .into_iter()
+        .map(|course| course.root.as_path().to_path_buf())
+        .collect();
+    memory.sort();
+    let mut disk: Vec<PathBuf> = load_courses(&dir.path().join("config"))
+        .into_iter()
+        .map(|course| course.root.as_path().to_path_buf())
+        .collect();
+    disk.sort();
     assert_eq!(
-        memory.as_path(),
-        disk.as_path(),
-        "seleções concorrentes não podem divergir entre memória e disco"
+        memory, disk,
+        "importações concorrentes não podem divergir entre memória e disco"
     );
 }

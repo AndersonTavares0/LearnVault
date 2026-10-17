@@ -282,6 +282,8 @@ async fn admin_rescan_populates_the_authenticated_catalog() {
     let rescan_body = rescan.into_body().collect().await.unwrap().to_bytes();
     let rescan_json: serde_json::Value = serde_json::from_slice(&rescan_body).unwrap();
     assert_eq!(rescan_json["complete"], true);
+    assert_eq!(rescan_json["courses"], 1);
+    assert_eq!(rescan_json["failed_courses"], 0);
     assert_eq!(rescan_json["inserted"], 2);
     assert!(rescan_json["scan_id"].as_i64().unwrap() > 0);
     // Resposta sanitizada: expõe apenas a contagem de chaves ambíguas, nunca os caminhos
@@ -319,13 +321,25 @@ async fn admin_rescan_populates_the_authenticated_catalog() {
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(json["complete"], true);
 
-    // `nodes` é a árvore recursiva canônica, o contrato preferido pela SPA: identidade de
-    // mídia, caminhos relativos, disponibilidade e verificação são preservados.
-    assert_eq!(json["nodes"][0]["title"], "Categoria");
-    assert_eq!(json["nodes"][0]["path"], "Categoria");
-    assert_eq!(json["nodes"][0]["role"], "category");
-    assert_eq!(json["nodes"][0]["children"][0]["role"], "lesson");
-    let node_file = find_file(&json["nodes"][0]).expect("lesson file in nodes");
+    // O nó de topo é o curso registrado a partir da raiz semeada: identidade opaca
+    // (`library-1`, a identidade histórica da raiz) e título derivado da pasta.
+    let course = &json["nodes"][0];
+    assert_eq!(course["title"], "library");
+    assert_eq!(course["path"], "");
+    assert_eq!(course["role"], "course");
+    assert_eq!(course["course_id"], "library-1");
+    // `nodes` é a árvore recursiva canônica, o contrato preferido pela SPA: a categoria e a
+    // subárvore de aulas ficam sob o nó do curso, com identidade de mídia, caminhos
+    // relativos, disponibilidade e verificação preservados.
+    let category = &course["children"][0];
+    assert_eq!(category["title"], "Categoria");
+    assert_eq!(category["path"], "Categoria");
+    assert_eq!(category["role"], "category");
+    let lesson = &category["children"][0];
+    assert_eq!(lesson["title"], "Curso");
+    assert_eq!(lesson["path"], "Categoria/Curso");
+    assert_eq!(lesson["role"], "lesson");
+    let node_file = &lesson["files"][0];
     assert_eq!(node_file["name"], "lesson.mp4");
     assert_eq!(node_file["path"], "Categoria/Curso/lesson.mp4");
     assert_eq!(node_file["size"], 5);
@@ -336,42 +350,28 @@ async fn admin_rescan_populates_the_authenticated_catalog() {
         node_file["media_id"].is_string(),
         "a identidade de mídia precisa sobreviver em nodes"
     );
-    // O arquivo solto da categoria não cabe na gramática legada: ele só existe na árvore
-    // canônica, e por isso nada é perdido do payload.
-    assert_eq!(
-        json["nodes"][0]["loose_files"][0]["path"],
-        "Categoria/nota.pdf"
+    // O arquivo solto da categoria não pertence a nenhuma aula: ele continua acessível, sem
+    // perda, nos arquivos soltos do próprio nó da categoria.
+    let loose = &category["loose_files"][0];
+    assert_eq!(loose["name"], "nota.pdf");
+    assert_eq!(loose["path"], "Categoria/nota.pdf");
+    assert!(
+        loose["media_id"].is_string(),
+        "o arquivo solto também carrega identidade de mídia em nodes"
     );
 
-    // `categories` mantém a projeção legada do serviço Go
-    // (`categories[].courses[].modules[].lessons[]`), não a árvore recursiva: um consumidor
-    // antigo lê `courses`/`modules`/`lessons` e nunca `children`/`role`.
-    assert_eq!(json["categories"][0]["title"], "Categoria");
-    assert_eq!(json["categories"][0]["path"], "Categoria");
-    assert!(
-        json["categories"][0].get("courses").is_some(),
-        "categories precisa da lista legada de cursos"
-    );
-    assert!(
-        json["categories"][0].get("children").is_none(),
-        "categories não pode expor a árvore recursiva: {json}"
-    );
-    assert!(json["categories"][0].get("role").is_none());
-    assert!(json["categories"][0].get("loose_files").is_none());
-    let legacy_lesson = &json["categories"][0]["courses"][0]["modules"][0]["lessons"][0];
-    assert_eq!(legacy_lesson["path"], "Categoria/Curso");
-    assert_eq!(legacy_lesson["media"][0]["name"], "lesson.mp4");
-    assert_eq!(
-        legacy_lesson["media"][0]["path"],
-        "Categoria/Curso/lesson.mp4"
-    );
-    assert_eq!(legacy_lesson["media"][0]["kind"], "media");
-    assert_eq!(legacy_lesson["subtitles"], serde_json::json!([]));
-    assert_eq!(legacy_lesson["materials"], serde_json::json!([]));
-    assert_ne!(
-        json["nodes"], json["categories"],
-        "os shapes canônico e legado não podem ser idênticos"
-    );
+    // `categories` expõe a mesma lista de cursos de topo: cada nó tem papel `course`,
+    // `course_id` opaco e a subárvore escaneada sob ele.
+    assert_eq!(json["categories"], json["nodes"]);
+    assert_eq!(json["categories"][0]["role"], "course");
+    assert_eq!(json["categories"][0]["course_id"], "library-1");
+    let file = find_file(&json["categories"][0]).expect("lesson file in catalog");
+    assert_eq!(file["name"], "lesson.mp4");
+    assert_eq!(file["path"], "Categoria/Curso/lesson.mp4");
+    assert_eq!(file["size"], 5);
+    assert_eq!(file["kind"], "media");
+    assert_eq!(file["availability"], "available");
+    assert_eq!(file["unverified"], false);
 }
 
 #[tokio::test]
@@ -408,7 +408,7 @@ async fn catalog_reports_database_errors_without_caching_or_leaking_paths() {
 }
 
 #[tokio::test]
-async fn rescan_sanitizes_a_missing_library_root_error() {
+async fn rescan_reports_a_missing_course_root_as_failed_without_exposing_paths() {
     let temp = tempfile::tempdir().unwrap();
     let library = temp.path().join("library");
     fs::create_dir(&library).unwrap();
@@ -437,11 +437,15 @@ async fn rescan_sanitizes_a_missing_library_root_error() {
         )
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    // Uma raiz removida não derruba os demais cursos: a resposta agrega a falha sem
+    // seguir o alvo e sem expor o caminho.
+    assert_eq!(response.status(), StatusCode::OK);
     assert_private_no_store(&response);
     let body = response.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(json["error"], "library root changed");
+    assert_eq!(json["complete"], false);
+    assert_eq!(json["courses"], 1);
+    assert_eq!(json["failed_courses"], 1);
     assert!(
         !body
             .windows(library.to_str().unwrap().len())

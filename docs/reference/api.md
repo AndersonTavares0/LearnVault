@@ -4,10 +4,12 @@ A implementação Go permanece a referência funcional e de rollback. O servidor
 e a SPA web usa o mesmo contrato de Study nos dois transportes. Todas as rotas usam JSON, salvo
 indicação contrária. A autenticação usa um cookie de sessão HttpOnly com SameSite=Strict.
 
-No servidor Rust, a raiz da biblioteca deve permanecer sob controle confiável do processo entre
-as operações administrativas. O rescan recanonicaliza a raiz e recusa mudanças detectáveis, mas
-trocas concorrentes de junctions, symlinks ou reparse points durante a abertura ainda dependem
-das garantias específicas do sistema operacional; essa limitação não deve ser tratada como
+No servidor Rust, cada pasta de curso registrada deve permanecer sob controle confiável do
+processo entre as operações administrativas. O registro vive em `courses.json`, ao lado do
+banco, e os caminhos nunca cruzam a API: a interface conhece apenas a identidade opaca e o
+título de cada curso. O rescan revalida cada raiz e recusa mudanças detectáveis, mas trocas
+concorrentes de junctions, symlinks ou reparse points durante a abertura ainda dependem das
+garantias específicas do sistema operacional; essa limitação não deve ser tratada como
 isolamento absoluto contra um escritor local concorrente.
 
 Na implementação Rust, o cookie também recebe `Secure` por padrão e só é enviado pelo
@@ -52,21 +54,46 @@ Ele não cria `admin/admin` nem sobrescreve dados. A API de núcleo `legacy_impo
 e saída temporária validada; o subcomando não inicia o listener HTTP. Um banco novo vazio e um
 banco Rust existente continuam sendo abertos normalmente.
 
-## Catálogo e mídia
+## Catálogo, cursos e mídia
 
 | Método | Rota | Autenticação | Finalidade |
 | --- | --- | --- | --- |
-| `GET` | `/api/catalog` | Sessão | Retorna a árvore persistida de categorias, cursos, módulos e aulas |
-| `POST` | `/api/admin/catalog/rescan` | Sessão admin | Faz scan explícito de `LIBRARY_DIR` e atualiza o catálogo de forma preservadora: insere arquivos novos, reafirma os conhecidos e marca ausentes os que sumiram, sem excluir nenhum registro |
-| `GET`, `HEAD` | `/api/media?path=...` | Sessão | Transmite um arquivo aprovado da biblioteca com suporte a HTTP Range |
+| `GET` | `/api/catalog` | Sessão | Retorna um nó de topo por curso registrado (`role: course`, com `course_id` opaco e `title`), com a subárvore de módulos e aulas derivada dos dados persistidos, tanto na árvore canônica `nodes` quanto na lista de cursos de topo `categories` |
+| `POST` | `/api/admin/courses` | Sessão admin | Aceita `{ "path": "..." }` e registra a pasta como um curso; a pasta precisa existir, ser um diretório legível e não ser link/junction. Importar não indexa: a indexação é o `rescan` |
+| `DELETE` | `/api/admin/courses/{id}` | Sessão admin | Remove o curso do registro, sem apagar arquivos nem dados; remover um curso desconhecido responde `removed: false` |
+| `POST` | `/api/admin/catalog/rescan` | Sessão admin | Faz scan explícito de todos os cursos registrados e atualiza cada catálogo de forma preservadora: insere arquivos novos, reafirma os conhecidos e marca ausentes os que sumiram, sem excluir nenhum registro. Sem cursos registrados responde `400 no_courses_registered`; a resposta agrega `courses` e `failed_courses` |
+| `GET`, `HEAD` | `/api/media?course=...&path=...` | Sessão | Transmite um arquivo aprovado do curso indicado com suporte a HTTP Range; caminho relativo é interpretado dentro da pasta daquele curso |
+
+Sem nenhum curso registrado o catálogo responde vazio. `LIBRARY_DIR`/`--library-root` continua
+aceito como semente de implantação: quando o registro ainda não existe, a pasta informada é
+registrada como o primeiro curso com a identidade histórica `library-1`, preservando mídias,
+varreduras e progresso de estudo já gravados; uma remoção explícita do curso semente não o
+traz de volta no próximo start.
 
 O scanner lê somente entradas e metadados de diretórios. Links simbólicos não são seguidos — nem
-a raiz, nem entradas internas. Ignora diretórios temporários de download, classifica mídias,
-legendas e materiais reconhecidos, e trata `.ts` como vídeo somente quando é maior que 1 MiB para
-não confundir TypeScript com MPEG-TS. A biblioteca física é externa, montada como somente leitura e
-nunca é modificada.
+as raízes dos cursos, nem entradas internas. Ignora diretórios temporários de download, classifica
+mídias, legendas e materiais reconhecidos, e trata `.ts` como vídeo somente quando é maior que
+1 MiB para não confundir TypeScript com MPEG-TS. As pastas de curso são externas, montadas como
+somente leitura e nunca são modificadas.
 
 No desktop, o protocolo `learnvault-media://localhost/<media-id>` entrega materiais, vídeo, áudio e arquivos de legenda para download usando somente o `media_id` opaco. `GET` e `HEAD` aceitam uma única faixa; respostas completas, parciais e recusadas usam, respectivamente, `200`, `206`, `413` (corpo acima do limite) ou `416` (faixa inválida ou múltipla), com `Content-Range` quando aplicável. No Windows, a SPA usa `http://learnvault-media.localhost/<media-id>` e o runtime reverte a origem antes do handler. O player desktop usa essa fonte local, renderiza legendas VTT e sincroniza posição e conclusão pelo IPC de Study; SRT, ASS e SSA ficam disponíveis para download, e o build HTTP pode converter SRT sob demanda.
+
+### Cursos no desktop (IPC)
+
+O desktop não tem rotas para catálogo e cursos: a SPA chama comandos Tauri por `invoke`, sem
+`fetch`. O webview nunca envia nem recebe um caminho — só identidades opacas e o booleano
+`configured`.
+
+| Comando | Argumentos | Finalidade |
+| --- | --- | --- |
+| `desktop_catalog` | — | Catálogo agregado dos cursos registrados, um nó de topo por curso em `nodes` (árvore canônica) e em `categories` |
+| `desktop_import_course` | — | Abre o seletor nativo e registra a pasta escolhida como um curso; importar uma pasta já registrada é idempotente |
+| `desktop_remove_course` | `courseId` | Remove o curso do registro, sem tocar nos arquivos nem nos dados |
+| `desktop_rescan` | — | Indexa explicitamente todos os cursos registrados; raízes removidas contam como falha agregada |
+
+O registro fica em `library.json` (versão 2), no diretório de configuração do aplicativo, com
+caminhos canonicalizados e revalidados a cada carregamento. O formato anterior (versão 1, com uma
+única raiz de biblioteca) é migrado para um curso com a identidade histórica `library-1`.
 
 O rescan é uma atualização preservadora, não uma substituição: ele insere arquivos novos, atualiza
 os conhecidos no mesmo caminho (reutilizando o `media_id`, inclusive após um arquivo ausente
@@ -74,7 +101,6 @@ reaparecer) e marca como ausentes os que deixaram de aparecer. Nenhum rescan exc
 reescreve a identidade de mídia ou apaga o estado associado. A resposta `200` devolve apenas o
 resumo sanitizado do núcleo — contagens, incluindo `ambiguous_count` — e nunca os caminhos
 relativos das chaves ambíguas, que exporiam a estrutura da biblioteca.
-
 O catálogo Go adota uma política fail-closed e persistente para remoções. Uma remoção
 explícita é gravada como tombstone em `media_removal`, chaveado pelo caminho relativo canônico
 completo — a identidade de mídia do serviço Go. Nenhum rescan cria, apaga ou reescreve esse
@@ -86,15 +112,15 @@ no scan também deixa de ser autorizado por `/api/media`, ainda que exista uma r
 referência antiga em cache.
 
 O `GET /api/catalog` do servidor Rust expõe a árvore recursiva canônica em `nodes` — o
-contrato preferido pela SPA, com `media_id`, caminho relativo completo, disponibilidade e
-verificação em cada arquivo — e mantém `categories` na forma legada do serviço Go
-(`categories[].courses[].modules[].lessons[]`), para os consumidores antigos. Os dois campos
-são shapes diferentes de propósito: a projeção legada desce por nós intermediários e preserva
-as aulas e seus arquivos, enquanto o que não cabe na gramática legada — arquivos soltos de
-categoria, curso ou módulo e nós de topo que não são categoria — permanece apenas em `nodes`.
-O `desktop_catalog` expõe o mesmo par por IPC, e a SPA continua aceitando um payload apenas com
-`categories` no formato legado do serviço Go como fallback durante a transição. O `complete:
-bool` do servidor Rust/desktop marca o contrato canônico: presente, precisa ser booleano — um
+contrato preferido pela SPA, com `media_id` obrigatório em cada arquivo, caminho relativo
+completo, disponibilidade e verificação. Cada nó de topo é um curso registrado: papel `course`,
+`path` vazio e a identidade opaca em `course_id`, com a subárvore de categorias, módulos e aulas
+sob ele. Nenhuma aula e nenhum arquivo deixa de ser alcançável por `nodes`, inclusive os
+arquivos soltos diretamente numa categoria, num curso ou num módulo. `categories` traz a mesma
+lista de cursos de topo (`role: course`, `course_id` opaco e as mesmas subárvores), então um
+consumidor que só lê `categories` também encontra todos os cursos.
+O `desktop_catalog` expõe o mesmo par por IPC. O `complete: bool` do servidor Rust/desktop marca
+o contrato canônico: presente, precisa ser booleano — um
 `null`/string é recusado — e o payload é normalizado estritamente pelo contrato Rust/desktop,
 nunca caindo para a forma legada do Go mesmo que a `categories` pareça `courses`. Sem nós
 canônicos, um `categories[].courses` só-do-Go é recusado em vez de virar conteúdo vazio. Sem o
@@ -157,8 +183,8 @@ argumento, então o webview não escolhe nem conhece o dono. Uma mídia conhecid
 responde com `recorded: false`; uma mídia desconhecida vira o erro estável `media_not_found`, uma
 posição negativa vira `invalid_position` e as demais falhas viram `study_unavailable` ou
 `database_unavailable`. Sem `limit`, o histórico usa o padrão do contrato e o teto do núcleo
-continua valendo. Os comandos não exigem raiz de biblioteca configurada e nunca gravam `media`,
-`scan`, `library` nem a biblioteca física.
+continua valendo. Os comandos não exigem nenhum curso registrado e nunca gravam `media`,
+`scan`, `library` nem as pastas de curso.
 
 Limitação desta fatia: o desktop atende um único dono local, sem sessão nem seletor de contas.
 

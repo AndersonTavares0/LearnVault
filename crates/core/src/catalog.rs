@@ -282,7 +282,9 @@ fn last_segment(path: &str) -> &str {
 }
 
 /// Título apresentado de um nó: sem prefixos numéricos nem separadores de ordenação.
-fn clean_title(name: &str) -> String {
+///
+/// Compartilhada com o registro de cursos, que deriva o título do card do nome da pasta.
+pub(crate) fn clean_title(name: &str) -> String {
     name.trim_start_matches(|character: char| "0123456789._- •\t".contains(character))
         .trim()
         .to_owned()

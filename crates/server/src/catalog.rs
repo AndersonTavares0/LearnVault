@@ -1,4 +1,4 @@
-//! Endpoints HTTP do catálogo e do rescan administrativo.
+//! Endpoints HTTP do catálogo, do rescan administrativo e do registro de cursos.
 
 use std::{
     fs::{File, OpenOptions},
@@ -11,20 +11,19 @@ use axum::{
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
-use learnvault_core::{
-    Availability, Catalog, CatalogFile, CatalogNode, MediaKind, NodeRole, RescanSummary,
-};
+use learnvault_core::{Availability, CatalogFile, CatalogNode, MediaKind, NodeRole, RescanSummary};
 use serde::Serialize;
 
 use crate::{
-    AppState, LIBRARY_ID, StateError,
+    AppState, StateError,
     auth::{hash_session_token, request_token, same_origin},
+    courses::RegisteredCourse,
 };
 
 enum RescanFailure {
     Busy,
     Failed,
-    RootChanged,
+    NoCourses,
 }
 
 #[derive(Serialize)]
@@ -38,56 +37,24 @@ struct CatalogResponse {
     loose_files: Vec<CatalogFileResponse>,
     /// Árvore recursiva canônica, o contrato preferido pela SPA.
     nodes: Vec<CatalogNodeResponse>,
-    /// Projeção legada do serviço Go (`categories[].courses[].modules[].lessons[]`),
-    /// mantida para os consumidores antigos durante a transição.
-    categories: Vec<LegacyCategoryResponse>,
+    /// Cursos, na ordem de importação. Cada nó de topo tem papel `course` e a
+    /// identidade opaca do curso em `course_id`.
+    categories: Vec<CatalogNodeResponse>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 struct CatalogNodeResponse {
     title: String,
     path: String,
     role: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    course_id: Option<String>,
     files: Vec<CatalogFileResponse>,
     loose_files: Vec<CatalogFileResponse>,
     children: Vec<CatalogNodeResponse>,
 }
 
-/// Categoria da projeção legada, na forma do serviço Go (só `courses`, sem `children`).
-#[derive(Serialize)]
-struct LegacyCategoryResponse {
-    title: String,
-    path: String,
-    courses: Vec<LegacyCourseResponse>,
-}
-
-/// Curso da projeção legada do serviço Go.
-#[derive(Serialize)]
-struct LegacyCourseResponse {
-    title: String,
-    path: String,
-    modules: Vec<LegacyModuleResponse>,
-}
-
-/// Módulo da projeção legada do serviço Go.
-#[derive(Serialize)]
-struct LegacyModuleResponse {
-    title: String,
-    path: String,
-    lessons: Vec<LegacyLessonResponse>,
-}
-
-/// Aula da projeção legada do serviço Go; os arquivos são classificados por tipo.
-#[derive(Serialize)]
-struct LegacyLessonResponse {
-    title: String,
-    path: String,
-    media: Vec<CatalogFileResponse>,
-    subtitles: Vec<CatalogFileResponse>,
-    materials: Vec<CatalogFileResponse>,
-}
-
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 struct CatalogFileResponse {
     media_id: String,
     name: String,
@@ -102,6 +69,8 @@ struct CatalogFileResponse {
 struct RescanResponse {
     scan_id: i64,
     complete: bool,
+    courses: usize,
+    failed_courses: usize,
     inserted: usize,
     updated: usize,
     marked_missing: usize,
@@ -124,19 +93,58 @@ pub(crate) async fn catalog(State(state): State<AppState>, headers: HeaderMap) -
     if !state.has_blocking_capacity() {
         return service_unavailable();
     }
+    let courses = state.courses_snapshot();
     let database = state.database.clone().lock_owned().await;
     let Some(blocking_task) = state.try_acquire_blocking_task() else {
         return service_unavailable();
     };
     match tokio::task::spawn_blocking(move || {
         let _blocking_task = blocking_task;
-        learnvault_core::build_catalog(&database, LIBRARY_ID)
+        build_course_catalog(&database, &courses)
     })
     .await
     {
-        Ok(Ok(catalog)) => private_no_store(Json(CatalogResponse::from(catalog)).into_response()),
+        Ok(Ok(catalog)) => private_no_store(Json(catalog).into_response()),
         Ok(Err(_)) | Err(_) => internal_error("catalog unavailable"),
     }
+}
+
+/// Agrega o catálogo dos cursos registrados.
+///
+/// Cada curso vira um nó de topo com papel `course`, identidade própria e a subárvore
+/// derivada dos dados persistidos. Os arquivos soltos da pasta do curso ficam no próprio
+/// nó; não existe mais uma raiz global de arquivos soltos. Um curso sem varredura aparece
+/// vazio, e a resposta é marcada como incompleta se qualquer curso estiver incompleto.
+///
+/// A mesma lista de nós de topo alimenta `nodes` (árvore recursiva canônica) e `categories`
+/// (lista de cursos de topo): nenhum dos dois contratos perde aula, arquivo ou identidade.
+fn build_course_catalog(
+    database: &learnvault_core::Database,
+    courses: &[RegisteredCourse],
+) -> Result<CatalogResponse, learnvault_core::Error> {
+    let mut complete = true;
+    let mut nodes = Vec::with_capacity(courses.len());
+    for course in courses {
+        let catalog = learnvault_core::build_catalog(database, &course.id)?;
+        complete = complete && catalog.complete;
+        nodes.push(CatalogNodeResponse {
+            title: course.title.clone(),
+            path: String::new(),
+            role: "course",
+            course_id: Some(course.id.clone()),
+            files: Vec::new(),
+            loose_files: catalog.loose_files.into_iter().map(Into::into).collect(),
+            children: catalog.categories.into_iter().map(Into::into).collect(),
+        });
+    }
+    Ok(CatalogResponse {
+        complete,
+        loose_files: Vec::new(),
+        // O mesmo nó de topo de curso alimenta os dois contratos: `nodes` é a árvore
+        // canônica e `categories` é a lista de cursos de topo do contrato HTTP.
+        nodes: nodes.clone(),
+        categories: nodes,
+    })
 }
 
 pub(crate) async fn rescan(State(state): State<AppState>, headers: HeaderMap) -> Response {
@@ -163,7 +171,7 @@ pub(crate) async fn rescan(State(state): State<AppState>, headers: HeaderMap) ->
     };
 
     let database = state.database.clone();
-    let root = state.config.library_root.clone();
+    let courses = state.courses_snapshot();
     let lock_path = rescan_lock_path(&state.config.database_path);
     let mut database = database.lock_owned().await;
     let Some(blocking_task) = state.try_acquire_blocking_task() else {
@@ -176,21 +184,63 @@ pub(crate) async fn rescan(State(state): State<AppState>, headers: HeaderMap) ->
         let _blocking_task = blocking_task;
         let _local_lock = local_lock;
         let _file_lock = try_rescan_file_lock(&lock_path)?;
-        if root.canonicalize().ok().as_deref() != Some(root.as_path()) {
-            return Err(RescanFailure::RootChanged);
+        if courses.is_empty() {
+            return Err(RescanFailure::NoCourses);
         }
-        learnvault_core::rescan(&mut database, LIBRARY_ID, &root).map_err(|_| RescanFailure::Failed)
+        let mut aggregate = RescanSummary {
+            complete: true,
+            ..RescanSummary::default()
+        };
+        let mut failed_courses = 0usize;
+        for course in &courses {
+            // A raiz é revalidada antes de cada varredura: um curso removido, inacessível
+            // ou substituído por link/junction conta como falha sem seguir o alvo.
+            let Ok(root) = learnvault_core::CourseRoot::resolve(course.root.as_path()) else {
+                failed_courses += 1;
+                aggregate.complete = false;
+                continue;
+            };
+            match learnvault_core::rescan(&mut database, &course.id, root.as_path()) {
+                Ok(summary) => {
+                    aggregate.scan_id = aggregate.scan_id.max(summary.scan_id);
+                    aggregate.complete = aggregate.complete && summary.complete;
+                    aggregate.inserted += summary.inserted;
+                    aggregate.updated += summary.updated;
+                    aggregate.marked_missing += summary.marked_missing;
+                    aggregate.preserved += summary.preserved;
+                    aggregate.ambiguous.extend(summary.ambiguous);
+                }
+                Err(_) => {
+                    failed_courses += 1;
+                    aggregate.complete = false;
+                }
+            }
+        }
+        // A resposta é a projeção sanitizada do resumo agregado: só as contagens cruzam a
+        // API, inclusive a quantidade de chaves ambíguas, nunca as chaves em si.
+        let mut response = RescanResponse::from(aggregate);
+        response.courses = courses.len();
+        response.failed_courses = failed_courses;
+        Ok(response)
     })
     .await
     {
-        Ok(Ok(summary)) => private_no_store(Json(RescanResponse::from(summary)).into_response()),
+        Ok(Ok(summary)) => private_no_store(Json(summary).into_response()),
         Ok(Err(RescanFailure::Busy)) => status_private_no_store(StatusCode::CONFLICT),
-        Ok(Err(RescanFailure::RootChanged)) => internal_error("library root changed"),
+        Ok(Err(RescanFailure::NoCourses)) => private_no_store(
+            (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: "no_courses_registered",
+                }),
+            )
+                .into_response(),
+        ),
         Ok(Err(RescanFailure::Failed)) | Err(_) => internal_error("rescan failed"),
     }
 }
 
-async fn authenticated_user(
+pub(crate) async fn authenticated_user(
     state: &AppState,
     headers: &HeaderMap,
 ) -> Result<Option<learnvault_core::AuthSession>, StateError> {
@@ -200,7 +250,7 @@ async fn authenticated_user(
     state.session_user(hash_session_token(&token)).await
 }
 
-fn internal_error(message: &'static str) -> Response {
+pub(crate) fn internal_error(message: &'static str) -> Response {
     private_no_store(
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -222,7 +272,7 @@ pub(crate) fn service_unavailable() -> Response {
     )
 }
 
-fn private_no_store(mut response: Response) -> Response {
+pub(crate) fn private_no_store(mut response: Response) -> Response {
     response.headers_mut().insert(
         header::CACHE_CONTROL,
         HeaderValue::from_static("private, no-store"),
@@ -230,11 +280,11 @@ fn private_no_store(mut response: Response) -> Response {
     response
 }
 
-fn status_private_no_store(status: StatusCode) -> Response {
+pub(crate) fn status_private_no_store(status: StatusCode) -> Response {
     private_no_store(status.into_response())
 }
 
-fn credentials_required() -> Response {
+pub(crate) fn credentials_required() -> Response {
     private_no_store(
         (
             StatusCode::FORBIDDEN,
@@ -246,7 +296,7 @@ fn credentials_required() -> Response {
     )
 }
 
-fn csrf_failed() -> Response {
+pub(crate) fn csrf_failed() -> Response {
     private_no_store(
         (
             StatusCode::FORBIDDEN,
@@ -279,118 +329,13 @@ fn try_rescan_file_lock(path: &Path) -> Result<File, RescanFailure> {
     Ok(file)
 }
 
-impl From<Catalog> for CatalogResponse {
-    fn from(catalog: Catalog) -> Self {
-        // `nodes` carrega a árvore recursiva canônica produzida pelo núcleo; `categories`
-        // mantém a projeção legada (categorias, cursos, módulos e aulas) do serviço Go para
-        // os consumidores antigos. São shapes diferentes de propósito: `nodes` é o contrato
-        // preferido e `categories` preserva a compatibilidade da transição.
-        let nodes: Vec<CatalogNodeResponse> =
-            catalog.categories.iter().cloned().map(Into::into).collect();
-        let categories = legacy_categories(&catalog.categories);
-        Self {
-            complete: catalog.complete,
-            loose_files: catalog.loose_files.into_iter().map(Into::into).collect(),
-            nodes,
-            categories,
-        }
-    }
-}
-
-/// Projeta a árvore canônica na forma legada do serviço Go
-/// (`categories[].courses[].modules[].lessons[]`).
-///
-/// A projeção desce por nós intermediários de papel desconhecido e por módulos direto sob a
-/// categoria para que nenhuma aula seja descartada. O que não cabe na gramática legada
-/// (arquivos soltos de categoria/curso/módulo e nós de topo que não são categoria) continua
-/// disponível, sem perda, na árvore canônica `nodes`.
-fn legacy_categories(nodes: &[CatalogNode]) -> Vec<LegacyCategoryResponse> {
-    nodes
-        .iter()
-        .filter(|node| node.role == NodeRole::Category)
-        .map(legacy_category)
-        .collect()
-}
-
-fn legacy_category(node: &CatalogNode) -> LegacyCategoryResponse {
-    LegacyCategoryResponse {
-        title: node.title.clone(),
-        path: node.path.clone(),
-        courses: node
-            .children
-            .iter()
-            .map(|child| legacy_course_entry(node, child))
-            .collect(),
-    }
-}
-
-/// Uma aula direto sob a categoria não tem curso físico: sintetiza o curso com o título da
-/// categoria, como a projeção da SPA, para não perder a aula.
-fn legacy_course_entry(category: &CatalogNode, child: &CatalogNode) -> LegacyCourseResponse {
-    if child.role == NodeRole::Lesson {
-        LegacyCourseResponse {
-            title: category.title.clone(),
-            path: category.path.clone(),
-            modules: vec![legacy_module(child)],
-        }
-    } else {
-        legacy_course(child)
-    }
-}
-
-fn legacy_course(node: &CatalogNode) -> LegacyCourseResponse {
-    LegacyCourseResponse {
-        title: node.title.clone(),
-        path: node.path.clone(),
-        modules: node.children.iter().map(legacy_module).collect(),
-    }
-}
-
-fn legacy_module(node: &CatalogNode) -> LegacyModuleResponse {
-    LegacyModuleResponse {
-        title: node.title.clone(),
-        path: node.path.clone(),
-        lessons: legacy_lessons(node),
-    }
-}
-
-/// Aulas de um módulo: desce por qualquer nó intermediário (grupo ou papel desconhecido)
-/// para que a gramática legada nunca descarte uma aula da subárvore.
-fn legacy_lessons(node: &CatalogNode) -> Vec<LegacyLessonResponse> {
-    if node.role == NodeRole::Lesson {
-        vec![legacy_lesson(node)]
-    } else {
-        node.children.iter().flat_map(legacy_lessons).collect()
-    }
-}
-
-fn legacy_lesson(node: &CatalogNode) -> LegacyLessonResponse {
-    let mut media = Vec::new();
-    let mut subtitles = Vec::new();
-    let mut materials = Vec::new();
-    for file in node.files.iter().chain(node.loose_files.iter()) {
-        let dto = CatalogFileResponse::from(file.clone());
-        match file.kind {
-            MediaKind::Media => media.push(dto),
-            MediaKind::Subtitle => subtitles.push(dto),
-            MediaKind::Material => materials.push(dto),
-        }
-    }
-    LegacyLessonResponse {
-        title: node.title.clone(),
-        path: node.path.clone(),
-        media,
-        subtitles,
-        materials,
-    }
-}
-
 impl From<CatalogNode> for CatalogNodeResponse {
     fn from(node: CatalogNode) -> Self {
         Self {
             title: node.title,
             path: node.path,
             role: node_role(node.role),
+            course_id: None,
             files: node.files.into_iter().map(Into::into).collect(),
             loose_files: node.loose_files.into_iter().map(Into::into).collect(),
             children: node.children.into_iter().map(Into::into).collect(),
@@ -417,6 +362,10 @@ impl From<RescanSummary> for RescanResponse {
         Self {
             scan_id: summary.scan_id,
             complete: summary.complete,
+            // Um resumo descreve um único curso; a agregação de vários cursos substitui as
+            // duas contagens depois da conversão, como o DTO do desktop.
+            courses: 1,
+            failed_courses: 0,
             inserted: summary.inserted,
             updated: summary.updated,
             marked_missing: summary.marked_missing,
