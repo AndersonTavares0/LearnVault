@@ -67,6 +67,11 @@ pub fn build_router(state: AppState) -> Router {
             "/api/admin/courses/{id}",
             axum::routing::delete(courses::remove),
         )
+        .route("/api/admin/media/{id}/impact", get(media::impact))
+        .route(
+            "/api/admin/media/{id}",
+            axum::routing::delete(media::remove_media),
+        )
         .route("/api/media", get(media::media).head(media::media))
         .route("/api/study/recent", get(study::recent))
         .route("/api/study/progress", get(study::progress))

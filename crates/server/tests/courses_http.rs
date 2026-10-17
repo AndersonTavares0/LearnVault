@@ -361,3 +361,248 @@ async fn course_import_requires_authentication() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     assert_private_no_store(&response);
 }
+
+#[tokio::test]
+async fn media_removal_impact_and_removal_flow() {
+    let temp = tempfile::tempdir().unwrap();
+    let course = temp.path().join("01 - Física");
+    std::fs::create_dir_all(course.join("Aula 1")).unwrap();
+    std::fs::write(course.join("Aula 1/video.mp4"), b"video").unwrap();
+
+    let server_config = config(&temp);
+    let state = AppState::initialize(server_config).await.unwrap();
+    let app = build_router(state);
+    let cookie = login(&app).await;
+
+    let imported = import(&app, &cookie, &course).await;
+    assert_eq!(imported.status(), StatusCode::OK);
+    let json = json_body(imported).await;
+    let course_id = json["course"]["id"].as_str().unwrap().to_owned();
+
+    let rescan = app
+        .clone()
+        .oneshot(
+            Request::post("/api/admin/catalog/rescan")
+                .header("origin", "http://localhost")
+                .header("cookie", &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rescan.status(), StatusCode::OK);
+
+    let catalog = app
+        .clone()
+        .oneshot(
+            Request::get("/api/catalog")
+                .header("cookie", &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let json = json_body(catalog).await;
+    let media_id = json["categories"][0]["children"][0]["loose_files"][0]["media_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+
+    // 1. Consultar impacto sem progresso
+    let impact = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/admin/media/{media_id}/impact"))
+                .header("cookie", &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(impact.status(), StatusCode::OK);
+    assert_private_no_store(&impact);
+    let impact_json = json_body(impact).await;
+    assert_eq!(impact_json["media_id"], media_id);
+    assert_eq!(impact_json["progress_owners"], 0);
+    assert_eq!(impact_json["already_removed"], false);
+
+    // 2. Grava progresso na mídia para exigir confirmação
+    let record = app
+        .clone()
+        .oneshot(
+            Request::post("/api/study/position")
+                .header("origin", "http://localhost")
+                .header("cookie", &cookie)
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "media_id": &media_id,
+                        "position_seconds": 30
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(record.status(), StatusCode::OK);
+
+    // 3. Consultar impacto com progresso
+    let impact = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/admin/media/{media_id}/impact"))
+                .header("cookie", &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(impact.status(), StatusCode::OK);
+    let impact_json = json_body(impact).await;
+    assert_eq!(impact_json["progress_owners"], 1);
+
+    // 4. Tentar remover sem confirmação deve falhar com 409 Conflict
+    let unconfirmed_remove = app
+        .clone()
+        .oneshot(
+            Request::delete(format!("/api/admin/media/{media_id}"))
+                .header("origin", "http://localhost")
+                .header("cookie", &cookie)
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({ "confirm_progress": false }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(unconfirmed_remove.status(), StatusCode::CONFLICT);
+    let err_json = json_body(unconfirmed_remove).await;
+    assert_eq!(err_json["error"], "media_removal_needs_confirmation");
+    assert_eq!(err_json["progress_owners"], 1);
+
+    // 5. Remover com confirm_progress: true tem sucesso
+    let confirmed_remove = app
+        .clone()
+        .oneshot(
+            Request::delete(format!("/api/admin/media/{media_id}"))
+                .header("origin", "http://localhost")
+                .header("cookie", &cookie)
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({ "confirm_progress": true }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(confirmed_remove.status(), StatusCode::OK);
+    let outcome_json = json_body(confirmed_remove).await;
+    assert_eq!(outcome_json["media_id"], media_id);
+    assert_eq!(outcome_json["removed_now"], true);
+    assert_eq!(outcome_json["preserved_owners"], 1);
+
+    // 6. Repetir remoção é idempotente (removed_now: false)
+    let repeat_remove = app
+        .clone()
+        .oneshot(
+            Request::delete(format!("/api/admin/media/{media_id}"))
+                .header("origin", "http://localhost")
+                .header("cookie", &cookie)
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({ "confirm_progress": true }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(repeat_remove.status(), StatusCode::OK);
+    let repeat_json = json_body(repeat_remove).await;
+    assert_eq!(repeat_json["removed_now"], false);
+
+    // 7. Catálogo passa a omitir a mídia removida
+    let catalog = app
+        .clone()
+        .oneshot(
+            Request::get("/api/catalog")
+                .header("cookie", &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let json = json_body(catalog).await;
+    assert!(
+        json["categories"][0]["children"]
+            .as_array()
+            .unwrap()
+            .is_empty(),
+        "o nó de aula sem arquivos não é gerado, deixando children vazio"
+    );
+
+    // 8. /api/media passa a responder 404 para a mídia removida
+    let media = app
+        .clone()
+        .oneshot(
+            Request::get(format!(
+                "/api/media?course={course_id}&path=Aula%201/video.mp4"
+            ))
+            .header("cookie", &cookie)
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(media.status(), StatusCode::NOT_FOUND);
+
+    // 9. Rescan não recria nem desfaz a remoção
+    let rescan = app
+        .clone()
+        .oneshot(
+            Request::post("/api/admin/catalog/rescan")
+                .header("origin", "http://localhost")
+                .header("cookie", &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rescan.status(), StatusCode::OK);
+
+    let catalog_after_rescan = app
+        .clone()
+        .oneshot(
+            Request::get("/api/catalog")
+                .header("cookie", &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let json = json_body(catalog_after_rescan).await;
+    assert!(
+        json["categories"][0]["children"]
+            .as_array()
+            .unwrap()
+            .is_empty(),
+        "a mídia removida continua fora do catálogo após rescan"
+    );
+
+    // 10. Progresso continua preservado na leitura de Study
+    let progress = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/study/progress?media_id={media_id}"))
+                .header("cookie", &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(progress.status(), StatusCode::OK);
+    let progress_json = json_body(progress).await;
+    assert_eq!(progress_json["recorded"], true);
+    assert_eq!(progress_json["position_seconds"], 30);
+}

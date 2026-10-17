@@ -63,6 +63,8 @@ banco Rust existente continuam sendo abertos normalmente.
 | `DELETE` | `/api/admin/courses/{id}` | Sessão admin | Remove o curso do registro, sem apagar arquivos nem dados; remover um curso desconhecido responde `removed: false` |
 | `POST` | `/api/admin/catalog/rescan` | Sessão admin | Faz scan explícito de todos os cursos registrados e atualiza cada catálogo de forma preservadora: insere arquivos novos, reafirma os conhecidos e marca ausentes os que sumiram, sem excluir nenhum registro. Sem cursos registrados responde `400 no_courses_registered`; a resposta agrega `courses` e `failed_courses` |
 | `GET`, `HEAD` | `/api/media?course=...&path=...` | Sessão | Transmite um arquivo aprovado do curso indicado com suporte a HTTP Range; caminho relativo é interpretado dentro da pasta daquele curso |
+| `GET` | `/api/admin/media/{id}/impact` | Sessão admin | Consulta o impacto da remoção de uma mídia: retorna `{ media_id, relative_path, availability, progress_owners, already_removed }` |
+| `DELETE` | `/api/admin/media/{id}` | Sessão admin | Remove explicitamente a mídia do catálogo (tombstone persistente). Aceita `{ "confirm_progress": bool }`. Se houver progresso e `confirm_progress` for falso, responde `409 media_removal_needs_confirmation`. Repetir é idempotente |
 
 Sem nenhum curso registrado o catálogo responde vazio. `LIBRARY_DIR`/`--library-root` continua
 aceito como semente de implantação: quando o registro ainda não existe, a pasta informada é
@@ -78,9 +80,9 @@ somente leitura e nunca são modificadas.
 
 No desktop, o protocolo `learnvault-media://localhost/<media-id>` entrega materiais, vídeo, áudio e arquivos de legenda para download usando somente o `media_id` opaco. `GET` e `HEAD` aceitam uma única faixa; respostas completas, parciais e recusadas usam, respectivamente, `200`, `206`, `413` (corpo acima do limite) ou `416` (faixa inválida ou múltipla), com `Content-Range` quando aplicável. No Windows, a SPA usa `http://learnvault-media.localhost/<media-id>` e o runtime reverte a origem antes do handler. O player desktop usa essa fonte local, renderiza legendas VTT e sincroniza posição e conclusão pelo IPC de Study; SRT, ASS e SSA ficam disponíveis para download, e o build HTTP pode converter SRT sob demanda.
 
-### Cursos no desktop (IPC)
+### Cursos e mídia no desktop (IPC)
 
-O desktop não tem rotas para catálogo e cursos: a SPA chama comandos Tauri por `invoke`, sem
+O desktop não tem rotas para catálogo, cursos e remoção: a SPA chama comandos Tauri por `invoke`, sem
 `fetch`. O webview nunca envia nem recebe um caminho — só identidades opacas e o booleano
 `configured`.
 
@@ -90,6 +92,8 @@ O desktop não tem rotas para catálogo e cursos: a SPA chama comandos Tauri por
 | `desktop_import_course` | — | Abre o seletor nativo e registra a pasta escolhida como um curso; importar uma pasta já registrada é idempotente |
 | `desktop_remove_course` | `courseId` | Remove o curso do registro, sem tocar nos arquivos nem nos dados |
 | `desktop_rescan` | — | Indexa explicitamente todos os cursos registrados; raízes removidas contam como falha agregada |
+| `desktop_media_removal_impact` | `mediaId` | Consulta o impacto da remoção de uma mídia (identidade, caminho, donos com progresso) |
+| `desktop_remove_media` | `mediaId`, `confirmProgress` | Remove explicitamente a mídia do catálogo local com confirmação de progresso |
 
 O registro fica em `library.json` (versão 2), no diretório de configuração do aplicativo, com
 caminhos canonicalizados e revalidados a cada carregamento. O formato anterior (versão 1, com uma
@@ -101,15 +105,15 @@ reaparecer) e marca como ausentes os que deixaram de aparecer. Nenhum rescan exc
 reescreve a identidade de mídia ou apaga o estado associado. A resposta `200` devolve apenas o
 resumo sanitizado do núcleo — contagens, incluindo `ambiguous_count` — e nunca os caminhos
 relativos das chaves ambíguas, que exporiam a estrutura da biblioteca.
-O catálogo Go adota uma política fail-closed e persistente para remoções. Uma remoção
-explícita é gravada como tombstone em `media_removal`, chaveado pelo caminho relativo canônico
-completo — a identidade de mídia do serviço Go. Nenhum rescan cria, apaga ou reescreve esse
+Tanto no servidor Rust quanto no desktop e no serviço Go de referência, a remoção explícita de
+mídia é gravada como tombstone em `media_removal` (chaveado pela identidade de mídia `media_id` no
+Rust/desktop e pelo caminho relativo canônico no Go). Nenhum rescan cria, apaga ou reescreve esse
 registro, e o carimbo `removed_at` não é alterado por uma varredura. A leitura do catálogo
-filtra os caminhos removidos, então a mídia sai de `/api/catalog` e `/api/media` responde 404,
-mesmo que o arquivo reapareça no disco depois. A remoção não apaga a linha de catálogo nem
-qualquer dado associado, e repetir a remoção é idempotente. Um arquivo que deixou de aparecer
-no scan também deixa de ser autorizado por `/api/media`, ainda que exista uma resposta ou
-referência antiga em cache.
+filtra os itens removidos, então a mídia sai de `/api/catalog` (e do `desktop_catalog`) e
+`/api/media` responde 404, mesmo que o arquivo reapareça no disco depois. A remoção não apaga a
+linha de catálogo nem o progresso de estudo associado, e repetir a remoção é idempotente. Um arquivo
+que deixou de aparecer no scan também deixa de ser autorizado por `/api/media`, ainda que exista
+uma resposta ou referência antiga em cache.
 
 O `GET /api/catalog` do servidor Rust expõe a árvore recursiva canônica em `nodes` — o
 contrato preferido pela SPA, com `media_id` obrigatório em cada arquivo, caminho relativo

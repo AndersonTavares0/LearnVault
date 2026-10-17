@@ -46,15 +46,17 @@ pub mod state;
 pub mod study;
 
 pub use command::{
-    catalog, desktop_catalog, desktop_import_course, desktop_recent_study, desktop_record_position,
-    desktop_remove_course, desktop_rescan, desktop_set_completed, desktop_study_progress,
+    catalog, desktop_catalog, desktop_import_course, desktop_media_removal_impact,
+    desktop_recent_study, desktop_record_position, desktop_remove_course, desktop_remove_media,
+    desktop_rescan, desktop_set_completed, desktop_study_progress,
 };
 pub use config::{DATABASE_FILE_NAME, DesktopConfigDto, database_path};
 pub use courses::{
     CONFIG_FILE_NAME, CONFIG_VERSION, CourseEntry, LibraryError, load_courses, store_courses,
 };
 pub use dto::{
-    CatalogDto, CatalogFileDto, CatalogNodeDto, RecentStudyDto, RescanSummaryDto, StudyProgressDto,
+    CatalogDto, CatalogFileDto, CatalogNodeDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto,
+    RecentStudyDto, RescanSummaryDto, StudyProgressDto,
 };
 pub use error::{IpcError, IpcErrorCode};
 pub use state::{DesktopState, RescanGuard};
@@ -90,7 +92,9 @@ pub fn run() {
             command::desktop_study_progress,
             command::desktop_record_position,
             command::desktop_set_completed,
-            command::desktop_recent_study
+            command::desktop_recent_study,
+            command::desktop_media_removal_impact,
+            command::desktop_remove_media
         ])
         .run(tauri::generate_context!())
         .expect("falha ao executar o aplicativo desktop do LearnVault");

@@ -4,17 +4,20 @@ use std::{io::SeekFrom, time::Duration};
 
 use axum::{
     body::Body,
-    extract::{RawQuery, State},
+    extract::{Json, Path as AxumPath, RawQuery, State},
     http::{HeaderMap, HeaderValue, Method, StatusCode, header},
     response::{IntoResponse, Response},
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
 use crate::{
     AppState, StateError,
-    auth::{hash_session_token, request_token},
-    catalog::service_unavailable,
+    auth::{hash_session_token, request_token, same_origin},
+    catalog::{
+        authenticated_user, credentials_required, csrf_failed, internal_error, private_no_store,
+        service_unavailable, status_private_no_store,
+    },
     stream::idle_timeout_stream,
 };
 
@@ -284,6 +287,170 @@ fn content_disposition(path: &str) -> Option<HeaderValue> {
         &filename
     };
     HeaderValue::from_str(&format!("attachment; filename=\"{filename}\"")).ok()
+}
+
+#[derive(Serialize)]
+pub(crate) struct MediaImpactResponse {
+    pub(crate) media_id: String,
+    pub(crate) relative_path: String,
+    pub(crate) availability: &'static str,
+    pub(crate) progress_owners: usize,
+    pub(crate) already_removed: bool,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct RemoveMediaRequest {
+    #[serde(default)]
+    pub(crate) confirm_progress: bool,
+}
+
+#[derive(Serialize)]
+pub(crate) struct RemoveMediaOutcomeResponse {
+    pub(crate) media_id: String,
+    pub(crate) removed_now: bool,
+    pub(crate) preserved_owners: usize,
+}
+
+#[derive(Serialize)]
+struct RemovalNeedsConfirmationResponse {
+    error: &'static str,
+    media_id: String,
+    progress_owners: usize,
+}
+
+/// `GET /api/admin/media/{id}/impact` — consulta o impacto da remoção de uma mídia.
+pub(crate) async fn impact(
+    State(state): State<AppState>,
+    AxumPath(media_id): AxumPath<String>,
+    headers: HeaderMap,
+) -> Response {
+    let user = match authenticated_user(&state, &headers).await {
+        Ok(Some(user)) => user,
+        Err(StateError::Capacity) => return service_unavailable(),
+        Ok(None) | Err(_) => return status_private_no_store(StatusCode::UNAUTHORIZED),
+    };
+    if !user.is_admin {
+        return status_private_no_store(StatusCode::FORBIDDEN);
+    }
+    if user.must_change_credentials {
+        return credentials_required();
+    }
+    if !state.has_blocking_capacity() {
+        return service_unavailable();
+    }
+
+    let database = state.database.clone().lock_owned().await;
+    let Some(blocking_task) = state.try_acquire_blocking_task() else {
+        return service_unavailable();
+    };
+    let lookup_id = media_id.clone();
+    let outcome = tokio::task::spawn_blocking(move || {
+        let _blocking_task = blocking_task;
+        let library_id = learnvault_core::find_media_library_id(&database, &lookup_id)?;
+        let Some(library_id) = library_id else {
+            return Err(learnvault_core::Error::MediaNotFound {
+                media_id: lookup_id,
+            });
+        };
+        learnvault_core::media_removal_impact(&database, &library_id, &lookup_id)
+    })
+    .await;
+
+    match outcome {
+        Ok(Ok(impact)) => {
+            let availability_str = match impact.availability {
+                learnvault_core::Availability::Available => "available",
+                learnvault_core::Availability::Missing => "missing",
+            };
+            private_no_store(
+                Json(MediaImpactResponse {
+                    media_id: impact.media_id,
+                    relative_path: impact.relative_path,
+                    availability: availability_str,
+                    progress_owners: impact.progress_owners,
+                    already_removed: impact.already_removed,
+                })
+                .into_response(),
+            )
+        }
+        Ok(Err(learnvault_core::Error::MediaNotFound { .. })) => {
+            status_private_no_store(StatusCode::NOT_FOUND)
+        }
+        Ok(Err(_)) | Err(_) => internal_error("media_impact_unavailable"),
+    }
+}
+
+/// `DELETE /api/admin/media/{id}` — remove uma mídia do catálogo (tombstone persistente).
+pub(crate) async fn remove_media(
+    State(state): State<AppState>,
+    AxumPath(media_id): AxumPath<String>,
+    headers: HeaderMap,
+    Json(request): Json<RemoveMediaRequest>,
+) -> Response {
+    let user = match authenticated_user(&state, &headers).await {
+        Ok(Some(user)) => user,
+        Err(StateError::Capacity) => return service_unavailable(),
+        Ok(None) | Err(_) => return status_private_no_store(StatusCode::UNAUTHORIZED),
+    };
+    if !same_origin(&headers) {
+        return csrf_failed();
+    }
+    if !user.is_admin {
+        return status_private_no_store(StatusCode::FORBIDDEN);
+    }
+    if user.must_change_credentials {
+        return credentials_required();
+    }
+    if !state.has_blocking_capacity() {
+        return service_unavailable();
+    }
+
+    let mut database = state.database.clone().lock_owned().await;
+    let Some(blocking_task) = state.try_acquire_blocking_task() else {
+        return service_unavailable();
+    };
+    let lookup_id = media_id.clone();
+    let confirm_progress = request.confirm_progress;
+    let outcome = tokio::task::spawn_blocking(move || {
+        let _blocking_task = blocking_task;
+        let library_id = learnvault_core::find_media_library_id(&database, &lookup_id)?;
+        let Some(library_id) = library_id else {
+            return Err(learnvault_core::Error::MediaNotFound {
+                media_id: lookup_id,
+            });
+        };
+        learnvault_core::remove_media(&mut database, &library_id, &lookup_id, confirm_progress)
+    })
+    .await;
+
+    match outcome {
+        Ok(Ok(outcome)) => private_no_store(
+            Json(RemoveMediaOutcomeResponse {
+                media_id: outcome.media_id,
+                removed_now: outcome.removed_now,
+                preserved_owners: outcome.preserved_owners,
+            })
+            .into_response(),
+        ),
+        Ok(Err(learnvault_core::Error::MediaRemovalNeedsConfirmation {
+            media_id,
+            progress_owners,
+        })) => private_no_store(
+            (
+                StatusCode::CONFLICT,
+                Json(RemovalNeedsConfirmationResponse {
+                    error: "media_removal_needs_confirmation",
+                    media_id,
+                    progress_owners,
+                }),
+            )
+                .into_response(),
+        ),
+        Ok(Err(learnvault_core::Error::MediaNotFound { .. })) => {
+            status_private_no_store(StatusCode::NOT_FOUND)
+        }
+        Ok(Err(_)) | Err(_) => internal_error("media_removal_unavailable"),
+    }
 }
 
 #[cfg(test)]

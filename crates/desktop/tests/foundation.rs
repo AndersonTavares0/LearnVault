@@ -245,6 +245,8 @@ fn build_registers_the_app_commands_in_the_acl_manifest() {
         "desktop_record_position",
         "desktop_set_completed",
         "desktop_recent_study",
+        "desktop_media_removal_impact",
+        "desktop_remove_media",
     ] {
         assert!(
             build.contains(command),
@@ -274,9 +276,11 @@ fn capability_grants_only_the_core_default_and_the_app_commands() {
     assert!(permissions.contains(&"allow-desktop-record-position"));
     assert!(permissions.contains(&"allow-desktop-set-completed"));
     assert!(permissions.contains(&"allow-desktop-recent-study"));
+    assert!(permissions.contains(&"allow-desktop-media-removal-impact"));
+    assert!(permissions.contains(&"allow-desktop-remove-media"));
     assert_eq!(
         permissions.len(),
-        9,
+        11,
         "a capability não pode ampliar além do núcleo e dos comandos do app: {permissions:?}"
     );
 }
@@ -424,10 +428,12 @@ fn invoke_handler_registers_only_the_desktop_commands() {
         "desktop_record_position",
         "desktop_set_completed",
         "desktop_recent_study",
+        "desktop_media_removal_impact",
+        "desktop_remove_media",
     ] {
         assert!(
             commands.contains(command),
-            "o handler precisa registrar o comando de estudo '{command}': {commands}"
+            "o handler precisa registrar o comando '{command}': {commands}"
         );
     }
 }
