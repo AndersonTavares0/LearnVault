@@ -9,8 +9,8 @@ desenvolvimento.
 
 | Alvo | Artefato | Uso | Status |
 | --- | --- | --- | --- |
-| Linux | binário nativo | Servidor, terminal e instalações leves | Disponível |
-| Self-hosted | imagem OCI Go (Docker/Podman) | Deploy opcional em servidor | Disponível |
+| Linux | tarballs Linux Go | Único release Linux suportado | Disponível |
+| Self-hosted | imagem OCI Rust via Compose (Docker/Podman) | Deploy opcional em servidor | Experimental; imagem local, não publicada |
 | Windows | instalador `.exe` via NSIS | Execução local e instalação gerenciada | Automatizado, não assinado |
 | Desktop Linux | Flatpak | Formato Linux preferencial do desktop | Backend `xdg-portal` configurado; build e smoke test no sandbox pendentes |
 
@@ -82,7 +82,8 @@ COMPOSE="docker compose --env-file deploy/compose/.env.example -f deploy/compose
   ./scripts/verify-readonly.sh
 ```
 
-- Exige uma imagem `learnvault` construída localmente e o Docker disponível.
+- Exige a imagem do serviço `learnvault` construída localmente pelo Compose
+  (`learnvault-rust:local`, a partir de `Containerfile.rust`) e o Docker disponível.
 - Use sempre uma biblioteca de teste. Com o ambiente de exemplo, `LIBRARY_DIR` aponta para
   `testdata/library`. A sonda **tenta escrever** em `/library`; nunca aponte o script para uma
   biblioteca real.
@@ -92,10 +93,10 @@ COMPOSE="docker compose --env-file deploy/compose/.env.example -f deploy/compose
 
 Enquanto a reescrita em Rust avança, `deploy/container/Containerfile.rust` e
 `scripts/verify-rust-oci.sh` permitem validar localmente que o servidor Rust (`crates/server`)
-compila com a SPA canônica e roda em um contêiner. A receita Rust é explicitamente opt-in,
-experimental e não é publicada nem usada por Compose, Quadlet, CI ou release. O
-`deploy/container/Containerfile` continua sendo a imagem Go de produção estável/referência;
-o serviço Go permanece no repositório até a cutover coordenada final.
+compila com a SPA canônica e roda em um contêiner. O caminho self-hosted do Compose constrói
+essa imagem Rust localmente; ela continua experimental, não publicada nem assinada e não é um
+artefato de release. O CI e o workflow de release ainda constroem e usam a imagem e os
+artefatos Go; o serviço Go permanece no repositório até a cutover coordenada final.
 
 ```sh
 ./scripts/verify-rust-oci.sh
@@ -115,6 +116,8 @@ CONTAINER_ENGINE=podman ./scripts/verify-rust-oci.sh
 - O servidor Rust ainda não possui interface de cache (`CACHE_DIR`); não há diretório de
   cache para validar nesta fase.
 - Não faz parte do CI e não substitui `cargo fmt`, `cargo clippy` e `cargo test`.
+- A referência de imagem do Quadlet (`localhost/learnvault:latest`) continua sem origem
+  resolvida até a Fase 5.
 
 ## Modelo de configuração
 
@@ -131,3 +134,44 @@ Em deploys expostos à rede, coloque o serviço atrás de um proxy HTTPS que imp
 de cabeçalhos, limite de conexões por origem e limites de tamanho de cabeçalho. Esses controles são
 responsabilidade do proxy ou da infraestrutura de implantação: esta documentação não afirma que o
 servidor, sozinho, elimina slowloris ou outros limites de rede externos.
+
+## Release candidate Rust (opt-in)
+
+Esta subseção é **aditiva** e não altera a matriz de releases acima. O workflow
+`.github/workflows/rust-server-rc.yml` produz um artefato experimental do servidor
+Rust (`crates/server`) para Linux amd64 musl, como candidato de release candidate
+(opt-in). Ele é acionado **apenas manualmente**; não roda em `release`, em tags, em
+`push` nem por agendamento.
+
+```sh
+gh workflow run rust-server-rc.yml --ref main -f ref=main
+```
+
+- Entradas do dispatch: `ref` (branch ou SHA a construir, padrão `main`) e `target`
+  (fixo em `x86_64-unknown-linux-musl`). O workflow falha de forma fechada contra o
+  namespace de tags estáveis: a guarda pré-checkout rejeita tanto um `vX.Y.Z` puro
+  quanto qualquer `refs/tags/*` e, como defesa em profundidade, uma etapa
+  pós-checkout falha se o HEAD for exatamente uma tag `vX.Y.Z`. Esse namespace
+  pertence a `.github/workflows/release.yml`.
+- O artefato contém `learnvault-server-linux-x86_64.tar.gz` (binário estático
+  `learnvault-server`, a SPA canônica em `web/` com `web/200.html` e `LICENSE`) e
+  `SHA256SUMS.rust-rc`. A verificação de checksum e de inventário do tar ocorre no
+  próprio job.
+- O job faz um smoke sem Docker: imprime `--version`, sobe o binário contra
+  diretórios temporários sintéticos (nunca `/mnt/cursos` ou biblioteca real) e
+  confirma `/api/healthz` (200 com `no-store`) e a entrega do shell da SPA.
+- É **deliberadamente não publicado**: não há upload para release, `gh release` nem
+  `--clobber` nesta etapa. O artefato sobe apenas no run do Actions com o nome
+  `rust-server-rc` (sem o prefixo `release-`), portanto o workflow de release não o
+  captura.
+- **Não é o artefato Linux padrão**, não é publicado nem assinado e não é usado por Quadlet,
+  CI ou release. O Compose o constrói localmente; os tarballs Go continuam sendo o único
+  release Linux suportado.
+
+Permanece **não comprovado** por esta etapa:
+
+- Identidade de versão: o binário se auto-reporta como `0.0.0` (versão do workspace);
+  não é um artefato versionado.
+- Assinatura: o artefato não é assinado.
+- Soak/rollout: nenhum teste de duração ou implantação em produção é executado.
+- arm64 não é produzido; também não há validação de runtime fora do smoke do próprio job.
