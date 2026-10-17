@@ -1,6 +1,6 @@
 <script lang="ts">
 	import LooseFiles from './LooseFiles.svelte';
-	import { desktopPlaybackUnavailable, formatDuration, selectPlayableMedia, srtConversionSupported, srtToWebVtt, studySyncEnabled, subtitleFormat } from './player';
+	import { formatDuration, mediaPlaybackKind, selectPlayableMedia, selectPlayableSubtitle, srtConversionSupported, srtToWebVtt, studySyncEnabled, subtitleFormat } from './player';
 	import { createPositionSaver } from './study';
 	import { transport, type Lesson, type StudyProgress } from './transport';
 
@@ -9,9 +9,10 @@
 	const playable = $derived(selectPlayableMedia(lesson.media));
 	const mediaId = $derived(playable?.mediaId ?? null);
 	const source = $derived(playable ? transport.mediaUrl(playable) : null);
+	const playbackKind = $derived(playable ? mediaPlaybackKind(playable) : 'video');
 	const syncEnabled = $derived(studySyncEnabled(studyEnabled, mediaId, source));
 
-	let video: HTMLVideoElement | null = $state(null);
+	let media: HTMLMediaElement | null = $state(null);
 	let currentTime = $state(0);
 	let duration = $state(0);
 	let progress: StudyProgress | null = $state(null);
@@ -36,7 +37,7 @@
 	const showCompleted = $derived(showCompletedFrom(progress));
 
 	$effect(() => {
-		const subtitle = lesson.subtitles[0];
+		const subtitle = selectPlayableSubtitle(lesson.subtitles);
 		const url = subtitle ? transport.mediaUrl(subtitle) : null;
 		let active = true;
 		let objectUrl: string | null = null;
@@ -83,8 +84,8 @@
 	});
 
 	function resume() {
-		if (!video || !progress?.recorded) return;
-		video.currentTime = progress.positionSeconds;
+		if (!media || !progress?.recorded) return;
+		media.currentTime = progress.positionSeconds;
 	}
 
 	async function toggleCompleted() {
@@ -101,10 +102,10 @@
 	}
 
 	async function handleTimeUpdate() {
-		if (!syncEnabled || !mediaId || !video || saving || saver.saving) return;
+		if (!syncEnabled || !mediaId || !media || saving || saver.saving) return;
 		const now = performance.now();
 		if (now - lastSavedAt < 5000) return;
-		const position = Math.floor(video.currentTime);
+		const position = Math.floor(media.currentTime);
 		if (position <= 0) return;
 		lastSavedAt = now;
 		const result = await saver.request(mediaId, position);
@@ -122,8 +123,7 @@
 	}
 </script>
 {#if mediaError}<p class="error" role="alert">{mediaError}</p>
-{:else if source}<!-- svelte-ignore a11y_media_has_caption --><video controls preload="metadata" src={source} bind:this={video} bind:currentTime={currentTime} bind:duration={duration} ontimeupdate={handleTimeUpdate} onended={handleEnded} onerror={onMediaError}>{#if captionSource}<track kind="captions" src={captionSource} label="Legenda" default />{/if}</video>
-{:else if playable && desktopPlaybackUnavailable}<p class="empty" role="status">A reprodução de vídeo e áudio no desktop estará disponível em uma próxima versão; use o servidor para assistir.</p>
+{:else if source}{#if playbackKind === 'audio'}<!-- svelte-ignore a11y_media_has_caption --><audio class="player-media player-audio" controls preload="metadata" src={source} bind:this={media} bind:currentTime={currentTime} bind:duration={duration} ontimeupdate={handleTimeUpdate} onended={handleEnded} onerror={onMediaError}>{#if captionSource}<track kind="captions" src={captionSource} label="Legenda" default />{/if}</audio>{:else}<!-- svelte-ignore a11y_media_has_caption --><video class="player-media" controls preload="metadata" src={source} bind:this={media} bind:currentTime={currentTime} bind:duration={duration} ontimeupdate={handleTimeUpdate} onended={handleEnded} onerror={onMediaError}>{#if captionSource}<track kind="captions" src={captionSource} label="Legenda" default />{/if}</video>{/if}
 {:else}<p class="empty" role="status">Esta aula não possui mídia disponível.</p>{/if}
 {#if syncEnabled}
 	<div class="study-bar" role="group" aria-label="Progresso da aula">

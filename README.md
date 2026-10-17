@@ -21,10 +21,12 @@ identidade de mídia e estado de estudo) e `crates/server` (Axum, autenticação
 com `Range` e API de estudo) já estão implementados, junto da SPA Svelte 5 + Vite com dois
 builds. As entregas mescladas #86, #88, #90 e #91 alinham Study no servidor Rust, na SPA web e
 no serviço Go de referência, além de avançarem o desktop com configuração, seleção da raiz,
-catálogo e rescan explícito. O desktop Tauri e a distribuição por plataforma com a remoção do
-serviço Go (Fase 5) **ainda não estão concluídos**. A entrega parcial de mídia do desktop está
-em #76 (Draft) e não faz parte da `main`; autenticação desktop, janelas reais, streaming
-completo, migração do banco e distribuição continuam gates explícitos.
+ catálogo, rescan explícito e reprodução local de materiais, vídeo e áudio, além da entrega de
+ legendas por protocolo com faixas limitadas. No desktop, o player renderiza legendas VTT; SRT,
+ ASS e SSA ficam disponíveis para download, enquanto o build HTTP pode converter SRT sob demanda.
+ O desktop Tauri e a distribuição por plataforma com a remoção do serviço Go
+(Fase 5) **ainda não estão concluídos**; autenticação desktop, janelas reais, migração do banco e
+distribuição continuam gates explícitos.
 
 ## Comece aqui
 
@@ -43,18 +45,31 @@ da pull request, `pnpm verify` reproduz os checks de PR (use `--fast` para pular
 audit durante a iteração); os comandos individuais continuam em `.github/CONTRIBUTING.md`.
 
 A SPA é construída a partir de `apps/web/src` e gravada em
-`services/go/cmd/learnvault/web/build`, que o servidor Rust serve com `--web-root` e o
-executável Go de referência embute (`pnpm dev` dispensa esse build: o Vite serve a SPA e faz
+`crates/server/web/build`, que o servidor Rust serve com `--web-root` (`pnpm dev` dispensa esse
+build: o Vite serve a SPA e faz
 proxy de `/api`). Sem configuração, o primeiro acesso usa `admin`/`admin` e exige troca
 imediata; credenciais fornecidas usam `ADMIN_USERNAME` e `ADMIN_PASSWORD` com pelo menos 12
 caracteres. Veja `deploy/compose/.env.example` para as configurações locais.
 
-A implementação de referência em Go continua disponível:
+Na tela de acesso e na troca inicial, **Mostrar/Ocultar** revela somente o campo escolhido;
+as senhas começam ocultas e continuam compatíveis com gerenciadores de senha. A nova senha
+exige ao menos 12 caracteres. Durante o envio, o formulário permanece visível e bloqueia
+reenvios; falhas de login não revelam se o usuário existe.
+
+Esse caminho é o contrato canônico preparatório para a futura cutover coordenada: o CI também
+estagia a mesma saída para os testes Go. O serviço Go e a imagem Go padrão continuam sendo a
+produção/referência estável; a imagem Rust permanece opt-in e experimental.
+
+A implementação de referência e rollback em Go continua disponível:
 
 ```sh
 go -C services/go test ./...
 go -C services/go run ./cmd/learnvault
 ```
+
+No catálogo, **Reproduzir** abre vídeos e áudios no player do LearnVault, inclusive arquivos
+soltos. **Baixar** identifica materiais e legendas como downloads; arquivos marcados como
+ausentes não oferecem ação de abertura. Essas ações preservam a navegação da aplicação.
 
 ## Mapa do repositório
 
@@ -114,8 +129,13 @@ Conventional Commits como `feat:`, `fix:`, `docs:` e `chore:`. Releases publicad
 automaticamente binários Linux versionados e `SHA256SUMS` a partir da implementação de
 referência em Go.
 
-Os alvos de distribuição do Rust, como o instalador Windows, o Flatpak e a publicação do
-servidor, ainda não são entregues: eles pertencem à Fase 5 da reescrita.
+O instalador Windows via NSIS já é construído e publicado automaticamente: instala por usuário,
+sem exigir administrador, com textos em português e inglês. O
+[guia de distribuição](docs/operations/distribution.md) documenta os dados do usuário, o build
+local e os avisos do SmartScreen, já que o binário ainda não é assinado. O Flatpak permanece
+bloqueado e fora dos releases: a seleção Linux já usa o backend oficial `xdg-portal`, mas ainda
+faltam o build e o smoke test reais no sandbox, incluindo acesso persistente e reprodução de
+mídia. A publicação do servidor ainda pertence à Fase 5 da reescrita.
 
 Leia o [processo de release](docs/releases/process.md) antes de alterar arquivos de release.
 

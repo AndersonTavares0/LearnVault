@@ -27,8 +27,6 @@ publish = false
 # gerencia a lista `features` conforme o `tauri.conf.json` a cada `tauri dev`/`tauri build`;
 # mantê-la explícita evita que o manifesto seja reescrito no primeiro `pnpm dev:tauri`.
 tauri = { version = "2.12.4", features = [] }
-# Seletor nativo de diretórios, usado somente pelo Rust (não concedido ao webview).
-tauri-plugin-dialog = "2"
 # Núcleo compartilhado: catálogo e banco SQLite do domínio.
 learnvault-core = { path = "../core" }
 serde = { version = "1", features = ["derive"] }
@@ -42,3 +40,11 @@ tauri-build = { version = "2.7.3", features = [] }
 # Os testes de integração constroem bancos em memória e temporários via o núcleo.
 learnvault-core = { path = "../core" }
 tempfile = "3"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# No Linux, o seletor usa o portal oficial e não requer acesso amplo ao filesystem do sandbox.
+tauri-plugin-dialog = { version = "2", default-features = false, features = ["xdg-portal"] }
+
+[target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
+# Windows e macOS mantêm o backend nativo atual (o recurso GTK não tem efeito neles).
+tauri-plugin-dialog = "2"

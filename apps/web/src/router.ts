@@ -1,4 +1,4 @@
-import { lessonFromNode, type Catalog, type Lesson } from './transport';
+import { lessonFromNode, type Catalog, type FileEntry, type Lesson } from './transport';
 
 export type Route = 'login' | 'home' | 'catalog' | 'player';
 export type HashLocation = { route: Route; lessonPath: string | null };
@@ -46,7 +46,7 @@ export function findLesson(catalog: Catalog | null, lessonPath: string | null): 
 		const lesson = module.lessons.find((candidate) => candidate.path === lessonPath);
 		if (lesson) return lesson;
 	}
-	return null;
+	return standaloneMedia(catalog, (file) => file.path === lessonPath);
 }
 
 export function findLessonByMediaId(catalog: Catalog | null, mediaId: string | null): Lesson | null {
@@ -65,5 +65,21 @@ export function findLessonByMediaId(catalog: Catalog | null, mediaId: string | n
 		const lesson = module.lessons.find((item) => item.media.some((file) => file.mediaId === mediaId));
 		if (lesson) return lesson;
 	}
-	return null;
+	return standaloneMedia(catalog, (file) => file.mediaId === mediaId);
+}
+
+// Arquivos de mídia fora de uma aula usam o mesmo player, sem navegar para a URL crua.
+function standaloneMedia(catalog: Catalog, matches: (file: FileEntry) => boolean): Lesson | null {
+	function fromFiles(files: FileEntry[]): Lesson | null {
+		const file = files.find((entry) => entry.kind === 'media' && entry.availability?.trim().toLowerCase() !== 'missing' && matches(entry));
+		return file ? { title: file.name, path: file.path, media: [file], subtitles: [], materials: [] } : null;
+	}
+	function visit(nodes: Catalog['nodes']): Lesson | null {
+		for (const node of nodes) {
+			const found = fromFiles(node.files) ?? fromFiles(node.looseFiles) ?? visit(node.children);
+			if (found) return found;
+		}
+		return null;
+	}
+	return fromFiles(catalog.looseFiles) ?? visit(catalog.nodes);
 }

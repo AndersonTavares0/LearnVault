@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDuration, selectPlayableMedia, srtConversionSupported, srtToWebVtt, studySyncEnabled, studySyncSupported, subtitleFormat } from './player';
+import { formatDuration, mediaPlaybackKind, selectPlayableMedia, selectPlayableSubtitle, srtConversionSupported, srtToWebVtt, studySyncEnabled, studySyncSupported, subtitleFormat } from './player';
 
 describe('player media and subtitles', () => {
 	it('selects the first media that is not missing', () => {
@@ -8,6 +8,14 @@ describe('player media and subtitles', () => {
 			{ name: 'b.mp4', path: 'b.mp4', size: 2, kind: 'media', availability: 'available' }
 		])?.path).toBe('b.mp4');
 		expect(selectPlayableMedia([{ name: 'a.mp4', path: 'a.mp4', size: 1, availability: 'MISSING' }])).toBeNull();
+	});
+	it('selects available captions and distinguishes video from audio', () => {
+		expect(selectPlayableSubtitle([
+			{ name: 'aula.srt', path: 'aula.srt', size: 1, kind: 'subtitle', availability: 'missing' },
+			{ name: 'aula.vtt', path: 'aula.vtt', size: 2, kind: 'subtitle', availability: 'available' }
+		])?.path).toBe('aula.vtt');
+		expect(mediaPlaybackKind({ name: 'aula.mp4', path: 'aula.mp4', size: 1, kind: 'media' })).toBe('video');
+		expect(mediaPlaybackKind({ name: 'aula.m4a', path: 'aula.m4a', size: 1, kind: 'media' })).toBe('audio');
 	});
 	it('converts SRT deterministically and classifies formats', () => {
 		expect(srtToWebVtt('1\r\n00:00:01,500 --> 00:00:02,500\r\nOlá\r\n')).toBe('WEBVTT\n\n00:00:01.500 --> 00:00:02.500\nOlá\n');
@@ -31,9 +39,8 @@ describe('player media and subtitles', () => {
 	it('only syncs study when the transport delivers a media source', () => {
 		// HTTP: a fonte acompanha a mídia, então o player sincroniza como antes.
 		expect(studySyncEnabled(true, 'm1', '/api/media?path=aula.mp4')).toBe(true);
-		// Desktop: a mídia existe no catálogo, mas o transporte não entrega fonte — sem
-		// reprodução não há posição real, então a barra de estudo permanece fechada.
-		expect(studySyncEnabled(true, 'm1', null)).toBe(false);
+		// Desktop também entrega fonte por media_id, então a barra de estudo permanece ativa.
+		expect(studySyncEnabled(true, 'm1', 'learnvault-media://localhost/m1')).toBe(true);
 		// Sem mídia conhecida ou com o estudo desabilitado, nada é sincronizado.
 		expect(studySyncEnabled(true, null, '/api/media?path=aula.mp4')).toBe(false);
 		expect(studySyncEnabled(false, 'm1', '/api/media?path=aula.mp4')).toBe(false);

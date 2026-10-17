@@ -434,6 +434,22 @@ fn restart_ignores_a_removed_library_root() {
 }
 
 #[test]
+fn runtime_configuration_revalidates_a_revoked_library_root() {
+    let dir = tempfile::tempdir().unwrap();
+    let state = desktop(dir.path());
+    let library = make_library(dir.path());
+    state.select_library(|| Some(library.clone())).unwrap();
+    assert!(state.config_status().configured);
+
+    fs::remove_dir_all(&library).unwrap();
+
+    assert_eq!(
+        serde_json::to_value(state.config_status()).unwrap(),
+        serde_json::json!({ "configured": false })
+    );
+}
+
+#[test]
 fn concurrent_selection_keeps_memory_and_disk_consistent() {
     let dir = tempfile::tempdir().unwrap();
     let state = desktop(dir.path());

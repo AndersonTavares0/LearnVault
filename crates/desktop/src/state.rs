@@ -61,10 +61,17 @@ impl DesktopState {
     }
 
     /// Situação de configuração exposta ao webview: só o booleano, nunca o caminho.
+    ///
+    /// A raiz é revalidada em cada consulta para que uma biblioteca removida, inacessível ou
+    /// revogada pelo sandbox não continue sendo anunciada como configurada durante a vida do
+    /// processo. A configuração persistida e a raiz em memória não são apagadas aqui: uma
+    /// falha transitória ou um cancelamento continuam preservando o estado anterior, enquanto
+    /// operações que usam a raiz fazem sua própria revalidação antes de prosseguir.
     pub fn config_status(&self) -> DesktopConfigDto {
-        DesktopConfigDto {
-            configured: self.library_root().is_some(),
-        }
+        let configured = self
+            .library_root()
+            .is_some_and(|root| LibraryRoot::resolve(root.as_path()).is_ok());
+        DesktopConfigDto { configured }
     }
 
     /// Raiz da biblioteca validada, se houver uma configurada. Uso interno do Rust.

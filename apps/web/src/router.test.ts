@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { destinationAfterLogin, findLesson, findLessonByMediaId, href, locationFromHash, routeFromHash } from './router';
+import type { Catalog, FileEntry } from './transport';
 
 describe('hash router', () => {
 	it('defaults unknown hashes to login and supports the core routes', () => {
@@ -46,5 +47,26 @@ describe('hash router', () => {
 		expect(opened?.media.map((file) => file.path)).toEqual(['cat/curso/mod/aula.mp4']);
 		expect(opened?.materials.map((file) => file.path)).toEqual(['cat/curso/mod/extra.bin']);
 		expect(findLessonByMediaId(catalog, 'bonus-1')?.path).toBe('cat/curso/mod/aula');
+	});
+	it('opens standalone root and nested media in the player and restores recent media by id', () => {
+		const root: FileEntry = { name: 'Áudio inicial.mp3', path: 'Áudio inicial.mp3', size: 10, kind: 'media', mediaId: 'root' };
+		const nested: FileEntry = { name: 'extra.mp4', path: 'curso/extra.mp4', size: 10, kind: 'media', mediaId: 'nested' };
+		const catalog: Catalog = { complete: true, categories: [], looseFiles: [root], nodes: [{ title: 'Curso', role: 'course', path: 'curso', files: [], looseFiles: [nested], children: [] }] };
+		for (const file of [root, nested]) {
+			const link = href('player', file.path);
+			const lesson = findLesson(catalog, locationFromHash(link).lessonPath);
+			expect(lesson).toMatchObject({ title: file.name, path: file.path, media: [file] });
+			expect(findLessonByMediaId(catalog, file.mediaId!)?.path).toBe(file.path);
+		}
+	});
+	it('does not resolve materials, missing files or removed paths as playable standalone media', () => {
+		const catalog: Catalog = { complete: true, categories: [], nodes: [], looseFiles: [
+			{ name: 'aviso.pdf', path: 'aviso.pdf', size: 10, kind: 'material', mediaId: 'pdf' },
+			{ name: 'ausente.mp4', path: 'ausente.mp4', size: 10, kind: 'media', mediaId: 'missing', availability: 'missing' }
+		] };
+		expect(findLesson(catalog, 'aviso.pdf')).toBeNull();
+		expect(findLesson(catalog, 'ausente.mp4')).toBeNull();
+		expect(findLesson(catalog, 'removido.mp4')).toBeNull();
+		expect(findLessonByMediaId(catalog, 'missing')).toBeNull();
 	});
 });
