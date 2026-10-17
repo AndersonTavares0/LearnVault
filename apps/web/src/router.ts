@@ -1,4 +1,4 @@
-import { courseIdOf, type Catalog, type CatalogNode, type FileEntry, type Lesson } from './transport';
+import { courseIdOf, lessonFromNode, type Catalog, type CatalogNode, type FileEntry, type Lesson } from './transport';
 
 export type Route = 'login' | 'home' | 'course' | 'player' | 'settings';
 export type HashLocation = { route: Route; courseId: string | null; lessonPath: string | null };
@@ -69,11 +69,6 @@ export function destinationAfterLogin(hash: string): string {
 export function findCourse(catalog: Catalog | null, courseId: string | null): CatalogNode | null {
 	if (!catalog || !courseId) return null;
 	return catalog.nodes.find((node) => courseIdOf(node) === courseId) ?? null;
-}
-
-function lessonFromNode(node: CatalogNode): Lesson {
-	const files = [...node.files, ...node.looseFiles];
-	return { title: node.title, path: node.path, media: files.filter((file) => file.kind === 'media'), subtitles: files.filter((file) => file.kind === 'subtitle'), materials: files.filter((file) => file.kind === 'material') };
 }
 
 /**
