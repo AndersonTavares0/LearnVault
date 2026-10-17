@@ -32,6 +32,10 @@ describe('hash router', () => {
 		expect(locationFromHash('#/player/%E0%A4%A/aula')).toEqual({ route: 'player', courseId: null, lessonPath: 'aula' });
 	});
 
+	it('supports settings as an authenticated destination', () => {
+		expect(locationFromHash('#/settings')).toEqual({ route: 'settings', courseId: null, lessonPath: null });
+		expect(destinationAfterLogin('#/settings')).toBe('#/settings');
+	});
 	it('creates server-independent links with the course identity', () => {
 		expect(href('home')).toBe('#/home');
 		expect(href('course', 'course one')).toBe('#/course/course%20one');
