@@ -26,6 +26,34 @@ interface web ou credenciais administrativas. Para obter um snapshot estável, e
 escritor Go parado ou em estado quiescente. Conserve o backup e confirme a saída com
 `Database::open` antes de usá-la.
 
+## Gate de cutover do Compose self-hosted
+
+Antes de trocar o serviço, identifique se o `${DATA_DIR}` alvo contém um banco Go v8 ou um banco
+Rust. Os formatos são incompatíveis e nunca podem compartilhar o mesmo volume. Em uma instalação
+in-place, o `../../data` existente pode conter um banco Go; o servidor Rust falhará fechado nesse
+caso. O inverso também é obrigatório: um volume anteriormente usado pelo Compose Rust contém um
+banco Rust e não pode ser entregue ao runtime Go.
+
+O gate operacional é:
+
+1. Preserve o volume Go e pare o serviço Go; bloqueie novos escritores e confirme a quiescência
+   antes de construir ou iniciar o novo serviço. Construa a imagem com o Compose (`up --build`),
+   mas não a promova ainda.
+2. Execute o comando `learnvault-server migrate-go` documentado acima, informando
+   explicitamente `--input`, `--backup`, `--output` e `--library-id`. Use caminhos novos e
+   distintos para entrada, backup e saída; a saída deve ser preparada em um volume Rust separado.
+3. Capture como evidência o checksum inalterado da origem, os contadores do relatório e a
+   existência de saída e backup, confirmando que os dois últimos são distintos.
+4. Mantenha os volumes pareados: conserve o volume Go e o backup da importação; para rollback,
+   pare o Rust e descarte o volume de dados Rust, nunca reutilize seu banco no Go.
+
+O RPO do rollback é exatamente o instante do backup da importação. Toda escrita Rust posterior
+será perdida; não existe replicação nem reconciliação automática. Promova o Rust somente após a
+importação validada, a origem preservada e um smoke test bem-sucedido com a biblioteca somente
+leitura. Demova-o se o healthcheck, a abertura do banco, a autenticação, o catálogo ou a
+persistência falharem; pare o Rust e retorne ao volume Go preservado, sem entregar o volume Rust
+ao runtime Go.
+
 ## Ensaio de cutover self-hosted (fixture sintética)
 
 `scripts/verify-go-to-rust-cutover.sh` é um **ensaio manual, não publicante e apenas com

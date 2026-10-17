@@ -9,8 +9,8 @@ desenvolvimento.
 
 | Alvo | Artefato | Uso | Status |
 | --- | --- | --- | --- |
-| Linux | binário nativo | Servidor, terminal e instalações leves | Disponível |
-| Self-hosted | imagem OCI Go (Docker/Podman) | Deploy opcional em servidor | Disponível |
+| Linux | tarballs Linux Go | Único release Linux suportado | Disponível |
+| Self-hosted | imagem OCI Rust via Compose (Docker/Podman) | Deploy opcional em servidor | Experimental; imagem local, não publicada |
 | Windows | instalador `.exe` via NSIS | Execução local; instalação por usuário, sem administrador | Automatizado, não assinado |
 | Desktop Linux | Flatpak | Formato Linux preferencial do desktop | Backend `xdg-portal` configurado; build e smoke test no sandbox pendentes |
 
@@ -124,7 +124,8 @@ COMPOSE="docker compose --env-file deploy/compose/.env.example -f deploy/compose
   ./scripts/verify-readonly.sh
 ```
 
-- Exige uma imagem `learnvault` construída localmente e o Docker disponível.
+- Exige a imagem do serviço `learnvault` construída localmente pelo Compose
+  (`learnvault-rust:local`, a partir de `Containerfile.rust`) e o Docker disponível.
 - Use sempre uma biblioteca de teste. Com o ambiente de exemplo, `LIBRARY_DIR` aponta para
   `testdata/library`. A sonda **tenta escrever** em `/library`; nunca aponte o script para uma
   biblioteca real.
@@ -134,10 +135,10 @@ COMPOSE="docker compose --env-file deploy/compose/.env.example -f deploy/compose
 
 Enquanto a reescrita em Rust avança, `deploy/container/Containerfile.rust` e
 `scripts/verify-rust-oci.sh` permitem validar localmente que o servidor Rust (`crates/server`)
-compila com a SPA canônica e roda em um contêiner. A receita Rust é explicitamente opt-in,
-experimental e não é publicada nem usada por Compose, Quadlet, CI ou release. O
-`deploy/container/Containerfile` continua sendo a imagem Go de produção estável/referência;
-o serviço Go permanece no repositório até a cutover coordenada final.
+compila com a SPA canônica e roda em um contêiner. O caminho self-hosted do Compose constrói
+essa imagem Rust localmente; ela continua experimental, não publicada nem assinada e não é um
+artefato de release. O CI e o workflow de release ainda constroem e usam a imagem e os
+artefatos Go; o serviço Go permanece no repositório até a cutover coordenada final.
 
 ```sh
 ./scripts/verify-rust-oci.sh
@@ -157,6 +158,8 @@ CONTAINER_ENGINE=podman ./scripts/verify-rust-oci.sh
 - O servidor Rust ainda não possui interface de cache (`CACHE_DIR`); não há diretório de
   cache para validar nesta fase.
 - Não faz parte do CI e não substitui `cargo fmt`, `cargo clippy` e `cargo test`.
+- A referência de imagem do Quadlet (`localhost/learnvault:latest`) continua sem origem
+  resolvida até a Fase 5.
 
 ## Modelo de configuração
 
@@ -203,8 +206,9 @@ gh workflow run rust-server-rc.yml --ref main -f ref=main
   `--clobber` nesta etapa. O artefato sobe apenas no run do Actions com o nome
   `rust-server-rc` (sem o prefixo `release-`), portanto o workflow de release não o
   captura.
-- **Não é o artefato Linux padrão** e não é usado por Compose, Quadlet, CI ou release.
-  Os tarballs Go continuam sendo o único release Linux suportado.
+- **Não é o artefato Linux padrão**, não é publicado nem assinado e não é usado por Quadlet,
+  CI ou release. O Compose o constrói localmente; os tarballs Go continuam sendo o único
+  release Linux suportado.
 
 Permanece **não comprovado** por esta etapa:
 
