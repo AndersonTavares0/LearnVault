@@ -154,7 +154,15 @@ jobs:
           set -euo pipefail
           bin="dist/stage/learnvault-server"
           file "$bin"
-          if ! file "$bin" | grep -q 'statically linked'; then
+          # Rust's musl target emits a static-PIE binary, which `file` reports as
+          # "static-pie linked" rather than "statically linked". Accept either form,
+          # and fail closed if the binary is actually dynamically linked.
+          if file "$bin" | grep -q 'dynamically linked'; then
+            echo "::error::the built binary is dynamically linked, not static" >&2
+            file "$bin" >&2
+            exit 1
+          fi
+          if ! file "$bin" | grep -qE 'statically linked|static-pie linked'; then
             echo "::error::the built binary is not statically linked" >&2
             file "$bin" >&2
             exit 1
