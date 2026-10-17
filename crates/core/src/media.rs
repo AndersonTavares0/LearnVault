@@ -98,7 +98,15 @@ pub fn find_media_by_path(
         return Ok(None);
     }
     let normalized = parts.join("/");
-    let key = relative_path_key(&normalized, KeyMode::for_host())?;
+    let key = match relative_path_key(&normalized, KeyMode::for_host()) {
+        Ok(key) => key,
+        // A chave lexical pode recusar um caminho que a varredura de componentes do host
+        // não reconheceu como travessia (por exemplo `..\x` no Unix, onde `\` é um
+        // caractere comum). Para o cliente isso continua sendo ausência de mídia, nunca
+        // corrupção do servidor — e o resultado não pode depender da plataforma.
+        Err(Error::InvalidRelativePath { .. }) => return Ok(None),
+        Err(error) => return Err(error),
+    };
     db.connection()
         .query_row(
             "SELECT library_id, media_id, relative_path, size, mtime
