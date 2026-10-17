@@ -9,6 +9,7 @@ on:
       - docs/governance/overview.md
       - docs/operations/distribution.md
       - docs/product/roadmap.md
+      - docs/product/requirements.md
       - docs/wiki/**
       - scripts/sync-wiki.sh
       - .github/workflows/wiki-sync.yml
@@ -43,6 +44,6 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Home.md Getting-Started.md Architecture.md Roadmap.md Development-and-Governance.md Operations.md
+          git add Home.md Getting-Started.md Architecture.md Roadmap.md Requirements.md Development-and-Governance.md Operations.md
           git commit -m "docs: sync managed Wiki pages"
           git push
