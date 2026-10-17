@@ -168,12 +168,15 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	await page.getByRole('button', { name: 'Entrar' }).click();
 	await expect(page.getByRole('heading', { name: 'Olá, admin.' })).toBeVisible();
 
-	await page.getByRole('link', { name: 'Catálogo', exact: true }).click();
-	await expect(page.getByRole('heading', { name: 'Seus cursos' })).toBeVisible();
-	await page.getByRole('button', { name: 'Indexar biblioteca' }).click();
+	await page.getByRole('button', { name: 'Indexar cursos' }).click();
 	await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
-	// O catálogo reorganizado expõe aulas como links de navegação para o player.
-	await expect(page.getByRole('link', { name: /Curso/ })).toBeVisible();
+
+	// A home lista cada curso registrado como card; o card abre a página do curso.
+	const courseCard = page.getByRole('link', { name: /library/ });
+	await expect(courseCard).toBeVisible();
+	await courseCard.click();
+	await expect(page.getByRole('heading', { name: 'library', exact: true })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Categoria' })).toBeVisible();
 
 	const videoRequest = page.waitForRequest((request) => {
 		const url = new URL(request.url());
@@ -182,25 +185,44 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	await page.getByRole('link', { name: /Curso/ }).click();
 	await expect(page.getByRole('heading', { name: 'Curso', exact: true })).toBeVisible();
 	const videoSource = (await videoRequest).url();
-	expect(videoSource).toMatch(/\/api\/media\?/);
-	const videoResponse = await page.request.get(new URL(videoSource as string, server.baseURL).toString());
+	const videoURL = new URL(videoSource, server.baseURL);
+	expect(videoURL.pathname).toBe('/api/media');
+	expect(videoURL.searchParams.get('path')).toBe('Categoria/Curso/Aula.mp4');
+	// Toda mídia é resolvida dentro de um curso registrado, nunca por caminho global.
+	expect(videoURL.searchParams.get('course')).toBeTruthy();
+	const videoResponse = await page.request.get(videoURL.toString());
 	await expect(videoResponse).toBeOK();
 	await expect(videoResponse.body()).resolves.toEqual(Buffer.from('video-fixture'));
 
-	const material = page.getByRole('link', { name: 'Material.pdf' });
-	await expect(material).toHaveAttribute('href', /\/api\/media\?path=/);
-	const materialResponse = await page.request.get(new URL(await material.getAttribute('href') as string, server.baseURL).toString());
+	const materialHref = await page.getByRole('link', { name: 'Material.pdf' }).getAttribute('href');
+	expect(materialHref).toBeTruthy();
+	const materialURL = new URL(materialHref as string, server.baseURL);
+	expect(materialURL.pathname).toBe('/api/media');
+	expect(materialURL.searchParams.get('path')).toBe('Categoria/Curso/Material.pdf');
+	const materialResponse = await page.request.get(materialURL.toString());
 	await expect(materialResponse).toBeOK();
 	await expect(materialResponse.body()).resolves.toEqual(Buffer.from('material-fixture'));
 
+	const catalog = await (await page.request.get(`${server.baseURL}/api/catalog`)).json();
+	const courseId = catalog.categories?.[0]?.course_id ?? catalog.nodes?.[0]?.course_id;
+	expect(courseId).toBeTruthy();
 	for (const path of ['../outside.mp4', '..\\outside.mp4', server.outsidePath]) {
-		const traversal = await page.request.get(`${server.baseURL}/api/media?path=${encodeURIComponent(path)}`);
+		const traversal = await page.request.get(
+			`${server.baseURL}/api/media?course=${encodeURIComponent(courseId)}&path=${encodeURIComponent(path)}`
+		);
 		// Caminhos fora do catálogo são ausência de mídia (404), nunca uma leitura fora da raiz.
 		expect(traversal.status()).toBe(404);
 		expect(await traversal.body()).not.toEqual(Buffer.from('outside-sentinel'));
 	}
+	// Sem o curso, a rota não entrega mídia alguma, mesmo para um caminho indexado.
+	const unscoped = await page.request.get(
+		`${server.baseURL}/api/media?path=${encodeURIComponent('Categoria/Curso/Aula.mp4')}`
+	);
+	expect(unscoped.status()).toBe(400);
 
-	await page.getByRole('link', { name: 'Voltar ao catálogo' }).click();
+	// O link de voltar no player retorna à página do curso.
+	await page.getByRole('link', { name: /library/ }).click();
+	await expect(page.getByRole('heading', { name: 'library', exact: true })).toBeVisible();
 	await page.getByRole('button', { name: 'Sair' }).click();
 	await expect(page.getByRole('button', { name: 'Entrar' })).toBeVisible();
 	const afterLogoutMedia = await page.request.get(new URL(videoSource as string, server.baseURL).toString());
