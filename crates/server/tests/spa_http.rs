@@ -6,7 +6,7 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use http_body_util::BodyExt;
 use learnvault_server::{AppState, Config, build_router};
 use sha2::{Digest, Sha256};
-use std::{fs, time::Duration};
+use std::fs;
 use tempfile::TempDir;
 use tower::ServiceExt;
 
@@ -531,7 +531,8 @@ async fn idle_spa_streams_release_asset_capacity_without_reading_the_body() {
         vec![b'x'; 16 * 1024],
     )
     .unwrap();
-    let app = app(&temp, &root).await;
+    let state = AppState::initialize(config(&temp, &root)).await.unwrap();
+    let app = build_router(state.clone());
     let mut idle_responses = Vec::new();
 
     for _ in 0..3 {
@@ -559,14 +560,22 @@ async fn idle_spa_streams_release_asset_capacity_without_reading_the_body() {
         .unwrap();
     assert_eq!(saturated.status(), StatusCode::SERVICE_UNAVAILABLE);
 
-    // Avança em passos de 1s para que os produtores sejam escalonados e enfileirem
-    // o primeiro chunk antes do deadline de 30s; um único yield + advance(30s)
-    // é racy sob carga (os produtores podem expirar sem nunca escrever).
-    for _ in 0..30 {
-        tokio::task::yield_now().await;
-        tokio::time::advance(Duration::from_secs(1)).await;
-    }
-    tokio::task::yield_now().await;
+    // O deadline ocioso de 30s só é observado pelo produtor depois que o IO de
+    // leitura real termina; avançar o relógio virtual e afirmar logo em seguida
+    // era racy sob carga (issue #154: `left: 503, right: 200`, os produtores
+    // podiam não ter alcançado o `select` de envio a tempo). Em vez de apenas
+    // avançar o tempo, aguardamos o *evento de liberação*: cada `acquire` resolve
+    // exatamente quando o watchdog devolve uma reserva — com o relógio virtual
+    // avançando sozinho até o deadline enquanto o executor fica ocioso — sem que
+    // ninguém leia os bodies. Aguardar as três reservas torna a saturação e a
+    // recuperação determinísticas; uma saturação genuína (sem watchdog) jamais
+    // resolveria o `acquire`.
+    let released = [
+        state.acquire_spa_asset_stream_permit().await,
+        state.acquire_spa_asset_stream_permit().await,
+        state.acquire_spa_asset_stream_permit().await,
+    ];
+    drop(released);
 
     let recovered = app
         .oneshot(
