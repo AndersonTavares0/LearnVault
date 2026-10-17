@@ -4,6 +4,33 @@ Todas as mudanças relevantes do LearnVault são documentadas neste arquivo.
 
 O formato segue o Keep a Changelog e as versões usam Semantic Versioning.
 
+## [0.4.0](https://github.com/AndersonTavares0/LearnVault/compare/v0.3.0...v0.4.0) (2026-10-17)
+
+
+### Funcionalidades
+
+* instalador Windows NSIS por usuário em pt-BR/en ([#152](https://github.com/AndersonTavares0/LearnVault/issues/152)) ([9b570e4](https://github.com/AndersonTavares0/LearnVault/commit/9b570e4fa000fe1dd34ea01e82c6593f219f53d2))
+* navegar entre aulas no player com indice do curso ([#157](https://github.com/AndersonTavares0/LearnVault/issues/157)) ([613ba90](https://github.com/AndersonTavares0/LearnVault/commit/613ba90396c5a00bed85bc6ec2a384125fa678b3))
+* **web:** melhorar login e troca inicial de senha ([#184](https://github.com/AndersonTavares0/LearnVault/issues/184)) ([6046867](https://github.com/AndersonTavares0/LearnVault/commit/6046867f33416cf1119566d75ba1c8e469293ff1))
+* **web:** reorganizar o catalogo como curriculo escaneavel ([#175](https://github.com/AndersonTavares0/LearnVault/issues/175)) ([0312c69](https://github.com/AndersonTavares0/LearnVault/commit/0312c69eaa13b8e258b4ac139f1c052bf24ed920))
+
+
+### Correções
+
+* identidade de versao do servidor Rust por injecao ([d8cc5b5](https://github.com/AndersonTavares0/LearnVault/commit/d8cc5b52807bb1a31291eba52057d7324d298951))
+* passar o repositorio ao gh release create no RC draft ([e434384](https://github.com/AndersonTavares0/LearnVault/commit/e4343846be4816c109eb19b57a289958769ea82e)), closes [#164](https://github.com/AndersonTavares0/LearnVault/issues/164)
+* **web:** preservar aplicativo ao abrir mídia e materiais ([#187](https://github.com/AndersonTavares0/LearnVault/issues/187)) ([ae76ba1](https://github.com/AndersonTavares0/LearnVault/commit/ae76ba1c0c6acfe9b5fd13106694f6fe1f866d27))
+
+
+### Melhorias de desempenho
+
+* **ci:** otimizar argon2 nos builds de teste ([#168](https://github.com/AndersonTavares0/LearnVault/issues/168)) ([93a8e9f](https://github.com/AndersonTavares0/LearnVault/commit/93a8e9f19b5cb2856e1cc643513b0a2af2c823e9))
+
+
+### Reversões
+
+* **release:** desfazer o release 0.4.0 ([#192](https://github.com/AndersonTavares0/LearnVault/issues/192)) ([c4f51f3](https://github.com/AndersonTavares0/LearnVault/commit/c4f51f3ba51ddbc6279a7a7ae188e7a8668b0fd0))
+
 ## [0.3.0](https://github.com/AndersonTavares0/LearnVault/compare/v0.2.0...v0.3.0) (2026-10-17)
 
 
