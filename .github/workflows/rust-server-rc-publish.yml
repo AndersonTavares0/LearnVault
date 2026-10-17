@@ -1,0 +1,115 @@
+# Least privilege: read-only access is the workflow default; this job needs
+# contents: write only to create the authorized draft prerelease, and actions:
+# read only to fetch the artifact from the other workflow run. This never
+# touches the stable vX.Y.Z namespace owned by release.yml/Release Please.
+# Its asset names are disjoint from the Go release assets. It is intentionally
+# a separate workflow so release.yml remains untouched.
+name: Rust server RC publish (draft)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version embedded in the artifact
+        required: true
+        type: string
+      run_id:
+        description: rust-server-rc workflow run ID that produced the artifact
+        required: true
+        type: string
+      tag:
+        description: Tag for the draft prerelease
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish unsigned Rust RC draft
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Guard inputs and event
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          VERSION: ${{ inputs.version }}
+          RUN_ID: ${{ inputs.run_id }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" != "workflow_dispatch" ]]; then
+            echo "::error::publish only runs via workflow_dispatch" >&2
+            exit 1
+          fi
+          if [[ -z "$VERSION" ]]; then
+            echo "::error::version must not be empty" >&2
+            exit 1
+          fi
+          if [[ -z "$RUN_ID" ]]; then
+            echo "::error::run_id must not be empty" >&2
+            exit 1
+          fi
+          if [[ -z "$TAG" ]]; then
+            echo "::error::tag must not be empty" >&2
+            exit 1
+          fi
+          if [[ "$TAG" =~ ^refs/tags/ ]] || [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::stable release tag namespace is not allowed: $TAG" >&2
+            exit 1
+          fi
+          if [[ "$TAG" != rust-rc-* ]]; then
+            echo "::error::tag must start with rust-rc-" >&2
+            exit 1
+          fi
+
+      - name: Download RC artifact from the other run
+        shell: bash
+        env:
+          RUN_ID: ${{ inputs.run_id }}
+        run: |
+          set -euo pipefail
+          gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n rust-server-rc -D dist
+
+      - name: Verify artifact before publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f dist/learnvault-server-linux-x86_64.tar.gz
+          test -f dist/SHA256SUMS.rust-rc
+          (cd dist && sha256sum -c SHA256SUMS.rust-rc)
+          listing="$(tar -tzf dist/learnvault-server-linux-x86_64.tar.gz)"
+          for entry in ./learnvault-server ./web/200.html ./LICENSE; do
+            if ! printf '%s\n' "$listing" | grep -qxF "$entry"; then
+              echo "::error::archive is missing $entry" >&2
+              exit 1
+            fi
+          done
+
+      - name: Publish draft prerelease
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+          RUN_ID: ${{ inputs.run_id }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          notes="$(mktemp)"
+          trap 'rm -f "$notes"' EXIT
+          cat >"$notes" <<EOF
+          Unsigned Rust server release candidate; this is not the supported Linux release (Go tarballs remain that).
+
+          This is a pre-soak draft prerelease for version $VERSION, produced from run $RUN_ID.
+          EOF
+          # `-R "$GITHUB_REPOSITORY"` is required: this job never checks out the
+          # repository, so there is no `.git` directory and `gh` cannot infer the
+          # repository from a git remote. Run 38994990424 failed exactly because of
+          # that ("failed to run git: fatal: not a git repository").
+          release_url="$(gh release create "$TAG" -R "$GITHUB_REPOSITORY" --draft --prerelease --title "Rust server RC $VERSION" --notes "$(cat "$notes")" --target "$GITHUB_SHA" dist/learnvault-server-linux-x86_64.tar.gz dist/SHA256SUMS.rust-rc)"
+          printf 'Draft release URL: %s\n' "$release_url"

@@ -1,41 +1,41 @@
 # EXPERIMENTAL, NON-PUBLISHING OCI definition for the Rust rewrite.
 #
-# Purpose: validate that the Rust server in `crates/server` builds from repository
-# sources and can run inside a container against a read-only library and a writable
-# data directory. This is a scaffolding image for local/manual validation only.
+# This recipe is opt-in validation only. The supported production/reference image
+# remains deploy/container/Containerfile, which packages the stable Go service until
+# the coordinated Rust cutover is complete. Do not publish or sign this image.
 #
-# It is NOT the supported deployment artifact. `deploy/container/Containerfile` (Go)
-# remains the image referenced by Compose, Quadlet, the release workflow and the
-# required CI "Container build" job. Do not publish, sign or document this image as
-# production support.
-#
-# Build (from the repository root):
+# Build from the repository root:
 #   docker build -f deploy/container/Containerfile.rust -t learnvault-rust-validation:local .
 #
-# Run the automated validation instead of invoking the engine by hand:
-#   ./scripts/verify-rust-oci.sh
-#
-# The build stage needs network access to download the Rust dependencies. The alpine
-# variant targets x86_64-unknown-linux-musl, producing a static binary that runs on the
-# alpine runtime. `build-base` supplies the C toolchain required by rusqlite's bundled
-# SQLite. `rust-toolchain.toml` is deliberately not copied so the build uses the image
-# toolchain instead of trying to download a pinned one.
+# The build stages need network access for Rust and Node dependencies. The alpine
+# variant targets x86_64-unknown-linux-musl, and build-base supplies the C toolchain
+# required by rusqlite's bundled SQLite.
+
+FROM node:24-alpine AS web-build
+WORKDIR /src
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/web/package.json ./apps/web/
+RUN corepack enable && corepack install --global pnpm@11.28.5 && pnpm install --frozen-lockfile
+COPY apps/web ./apps/web
+RUN pnpm --filter learnvault-web run build
 
 FROM rust:1.99-alpine AS rust-build
 RUN apk add --no-cache build-base
 WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
+COPY --from=web-build /src/crates/server/web/build ./crates/server/web/build
 RUN cargo build --release --locked --package learnvault-server
 
 FROM alpine:3.24
-RUN apk add --no-cache ca-certificates \
+RUN apk add --no-cache ca-certificates wget \
     && addgroup -S -g 10001 learnvault \
     && adduser -S -D -H -u 10001 -G learnvault learnvault
 WORKDIR /app
 COPY --from=rust-build --chown=10001:10001 /src/target/release/learnvault-server /app/learnvault-server
+COPY --from=rust-build --chown=10001:10001 /src/crates/server/web/build /app/web
 USER 10001:10001
 EXPOSE 8090
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-    CMD wget -q -O - http://127.0.0.1:8090/api/healthz >/dev/null || exit 1
-ENTRYPOINT ["/app/learnvault-server"]
+    CMD wget -q -O - "http://127.0.0.1:${PORT:-8090}/api/healthz" >/dev/null || exit 1
+ENTRYPOINT ["/app/learnvault-server", "--web-root", "/app/web"]

@@ -32,9 +32,9 @@ export default defineConfig(({ mode }) => {
 		}
 	},
 	build: {
-		// O servidor HTTP e o serviço Go consomem `services/go/.../web/build`; o
-		// aplicativo Tauri embute o shell a partir de `crates/desktop/frontend-dist`.
-		outDir: desktop ? '../../crates/desktop/frontend-dist' : '../../services/go/cmd/learnvault/web/build',
+		// O servidor Rust consome a saída canônica; o aplicativo Tauri embute o shell
+		// a partir de `crates/desktop/frontend-dist`.
+		outDir: desktop ? '../../crates/desktop/frontend-dist' : '../../crates/server/web/build',
 		assetsDir: '_app/immutable',
 		emptyOutDir: true,
 		// O webview do desktop é sempre atual e não precisa do polyfill de

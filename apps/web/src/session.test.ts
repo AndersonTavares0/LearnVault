@@ -23,8 +23,8 @@ describe('initial view', () => {
 	});
 
 	it('never routes the desktop to login, even after a library is configured', () => {
-		// Depois de escolher a pasta, o desktop continua sem autenticação nesta fatia:
-		// mostrar o login prenderia o usuário, então a tela offline permanece.
+		// A decisão de tela continua segura sem o bootstrap local: sem uma sessão pronta,
+		// o desktop não oferece login nem abre a biblioteca por acidente.
 		expect(initialView(null, 'configured', 'desktop')).toBe('offline');
 		expect(initialView(null, 'unconfigured', 'desktop')).toBe('offline');
 		expect(initialView(null, 'unknown', 'desktop')).toBe('offline');
@@ -87,5 +87,15 @@ describe('session bootstrap', () => {
 
 		expect(initialView(session.user, session.config)).toBe('app');
 		expect(reads).toBe(0);
+	});
+
+	it('creates a local desktop session only after configuration is confirmed', async () => {
+		const configured = await resolveSession(async () => null, async () => ({ configured: true }), 'desktop');
+		expect(configured.user).toMatchObject({ username: 'Biblioteca local', role: 'admin', mustChangeCredentials: false });
+		expect(initialView(configured.user, configured.config, 'desktop')).toBe('app');
+
+		const unknown = await resolveSession(async () => null, async () => { throw new Error('IPC indisponível'); }, 'desktop');
+		expect(unknown.user).toBeNull();
+		expect(initialView(unknown.user, unknown.config, 'desktop')).toBe('offline');
 	});
 });

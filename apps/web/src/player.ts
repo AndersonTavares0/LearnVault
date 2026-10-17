@@ -26,10 +26,8 @@ export const studySyncSupported: boolean = true;
  * Decide se o player pode ler e gravar progresso de estudo na mídia atual.
  *
  * Exige três coisas: o transporte implementa Study, o estudo está habilitado na sessão e o
- * transporte entregou uma fonte para a mídia (`source`). A última condição é o gating
- * honesto do desktop: sem entrega de mídia não existe reprodução nem posição real, então a
- * barra de estudo permanece fechada em vez de prometer retomada e conclusão que não podem
- * acontecer. No HTTP a fonte acompanha a mídia, então o comportamento é o mesmo de antes.
+ * transporte entregou uma fonte para a mídia (`source`). A fonte pode ser HTTP ou o protocolo
+ * opaco do desktop; em ambos os casos a posição representa reprodução real.
  */
 export function studySyncEnabled(studyEnabled: boolean, mediaId: string | null, source: string | null): boolean {
 	return studySyncSupported && studyEnabled && mediaId !== null && source !== null;
@@ -45,18 +43,19 @@ export function formatDuration(totalSeconds: number): string {
 	return `${minutes}:${paddedSeconds}`;
 }
 
-/**
- * Indica que a reprodução de vídeo/áudio está indisponível no desktop nesta fatia.
- *
- * O protocolo de mídia do desktop entrega apenas arquivos pequenos; vídeo e áudio ficam
- * fora por causa da reprodução parcial incompatível no webview do Linux (WebKitGTK). A
- * constante é resolvida em tempo de compilação para que o HTTP mantenha a mensagem
- * original e o desktop apresente um estado explícito e sanitizado.
- */
-export const desktopPlaybackUnavailable: boolean = __LEARNVAULT_TRANSPORT__ === 'desktop';
-
 export function selectPlayableMedia(media: FileEntry[]): FileEntry | null {
 	return media.find((file) => file.availability?.trim().toLowerCase() !== 'missing') ?? null;
+}
+
+export function selectPlayableSubtitle(subtitles: FileEntry[]): FileEntry | null {
+	return subtitles.find((file) => file.availability?.trim().toLowerCase() !== 'missing') ?? null;
+}
+
+export type MediaPlaybackKind = 'video' | 'audio';
+
+export function mediaPlaybackKind(file: FileEntry): MediaPlaybackKind {
+	const extension = file.name.split(/[?#]/, 1)[0].split('.').pop()?.toLowerCase();
+	return extension && ['aac', 'flac', 'm4a', 'mp3', 'oga', 'ogg', 'opus', 'wav', 'weba', 'wma'].includes(extension) ? 'audio' : 'video';
 }
 
 export function subtitleFormat(path: string): 'vtt' | 'srt' | 'ass' | 'unsupported' {

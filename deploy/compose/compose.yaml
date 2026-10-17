@@ -1,9 +1,12 @@
+# Este arquivo constrói o servidor Rust com `Containerfile.rust`. A imagem/release Go continua
+# sendo a referência de CI e release até a remoção coordenada. Nunca aponte `DATA_DIR` para um
+# banco Go v7/v8 não migrado: o Rust falha fechado; migre antes com `learnvault-server migrate-go`.
 services:
   learnvault:
     build:
       context: ../..
-      dockerfile: deploy/container/Containerfile
-    image: learnvault:local
+      dockerfile: deploy/container/Containerfile.rust
+    image: learnvault-rust:local
     container_name: learnvault
     restart: unless-stopped
     environment:
