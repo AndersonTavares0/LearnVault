@@ -15,7 +15,7 @@ OpenCode loads this file automatically. Project-specific reviewer profiles live 
 ## Multi-agent collaboration
 
 LearnVault is developed with help from multiple agents and harnesses (OpenCode,
-OMP/Pi, Antigravity CLI / Agy), often concurrently. These rules apply to every
+OMP/Pi, Antigravity CLI / Agy, Codex, ClaudeCode), often concurrently. These rules apply to every
 agent, without requiring any shared orchestration infrastructure:
 
 - **Verify before acting** — inspect `git status`, branches, worktrees, recent
