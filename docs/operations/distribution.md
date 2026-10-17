@@ -1,21 +1,34 @@
 # Distribuição e alvos de release
 
-A implementação atual é um serviço Go com SPA SvelteKit embutida, mantida como referência durante
-a reescrita em Rust aprovada no [ADR 0001](../architecture/adr/0001-reescrita-em-rust.md). Docker
-é um adaptador de deploy para servidores, não um requisito de runtime nem o modelo principal de
-desenvolvimento.
+A implementação atual é o servidor Rust (`crates/server`) com a SPA SvelteKit canônica, resultado
+da reescrita aprovada no [ADR 0001](../architecture/adr/0001-reescrita-em-rust.md); o serviço Go foi
+removido na Fase 5. Docker é um adaptador de deploy para servidores, não um requisito de runtime
+nem o modelo principal de desenvolvimento.
 
 ## Matriz de releases
 
 | Alvo | Artefato | Uso | Status |
 | --- | --- | --- | --- |
-| Linux | tarballs Linux Go | Único release Linux suportado | Disponível |
+| Linux | tarball Linux Rust (`learnvault-linux-<arch>.tar.gz`) | Único release Linux suportado | Disponível |
 | Self-hosted | imagem OCI Rust via Compose (Docker/Podman) | Deploy opcional em servidor | Opt-in explícito; imagem local, não publicada |
 | Windows | instalador `.exe` via NSIS | Execução local; instalação por usuário, sem administrador | Automatizado, não assinado |
 | Desktop Linux | Flatpak | Formato Linux preferencial do desktop | Backend `xdg-portal` configurado; build e smoke test no sandbox pendentes |
 
 Não há `.deb` nem `.rpm` como artefatos públicos nesta fase. O instalador Windows NSIS continua
 habilitado no release automático; o Flatpak não é construído nem publicado automaticamente.
+
+### Uso do tarball Linux
+
+O tarball `learnvault-linux-<arch>.tar.gz` traz o binário `learnvault-linux-<arch>`, o `LICENSE` e a
+SPA canônica em `web/`, com `web/200.html`. Extraia e aponte o servidor para essa pasta:
+
+```sh
+tar -xzf learnvault-linux-amd64.tar.gz
+./learnvault-linux-amd64 --web-root web
+```
+
+Sem `--web-root` o servidor não serve a interface (a rota da SPA responde 404); a API continua
+funcionando.
 
 ### Instalador Windows (NSIS)
 
@@ -122,7 +135,7 @@ COMPOSE="docker compose --env-file deploy/compose/.env.example -f deploy/compose
 ```
 
 - Exige a imagem do serviço `learnvault` construída localmente pelo Compose
-  (`learnvault-rust:local`, a partir de `Containerfile.rust`) e o Docker disponível.
+  (`learnvault-rust:local`, a partir de `deploy/container/Containerfile`) e o Docker disponível.
 - Use sempre uma biblioteca de teste. Com o ambiente de exemplo, `LIBRARY_DIR` aponta para
   `testdata/library`. A sonda **tenta escrever** em `/library`; nunca aponte o script para uma
   biblioteca real. No modelo atual, a pasta configurada é registrada como o primeiro curso quando
@@ -131,12 +144,12 @@ COMPOSE="docker compose --env-file deploy/compose/.env.example -f deploy/compose
 
 ## Validação experimental da imagem Rust (OCI)
 
-Enquanto a reescrita em Rust avança, `deploy/container/Containerfile.rust` e
+Enquanto a reescrita em Rust avança, `deploy/container/Containerfile` e
 `scripts/verify-rust-oci.sh` permitem validar localmente que o servidor Rust (`crates/server`)
 compila com a SPA canônica e roda em um contêiner. O caminho self-hosted do Compose constrói
 essa imagem Rust localmente; ela continua experimental, não publicada nem assinada e não é um
-artefato de release. O CI e o workflow de release ainda constroem e usam a imagem e os
-artefatos Go; o serviço Go permanece no repositório até a cutover coordenada final.
+artefato de release. O CI e o workflow de release constroem o servidor Rust a partir do mesmo
+`deploy/container/Containerfile`.
 
 ```sh
 ./scripts/verify-rust-oci.sh
@@ -163,12 +176,11 @@ CONTAINER_ENGINE=podman ./scripts/verify-rust-oci.sh
 
 Decisão de 2026-10-17: o caminho self-hosted do Compose é um **opt-in explícito** do
 servidor Rust. Quem sobe `deploy/compose/compose.yaml` escolhe o servidor Rust de
-propósito; ninguém é migrado por acidente, porque a imagem e os artefatos Go continuam
-sendo o padrão do CI e do release, e o serviço Go permanece no repositório até a cutover
-coordenada final do ADR 0001. Isto não é suporte geral: é um caminho documentado, com os
-limites declarados abaixo.
+propósito; ninguém é migrado por acidente, porque o release Linux suportado é o tarball do
+servidor Rust, o mesmo artefato que o CI e o release constroem. Isto não é suporte geral: é
+um caminho documentado, com os limites declarados abaixo.
 
-O arquivo constrói a imagem a partir de `deploy/container/Containerfile.rust`:
+O arquivo constrói a imagem a partir de `deploy/container/Containerfile`:
 
 ```sh
 docker compose --env-file deploy/compose/.env.example \
@@ -199,7 +211,7 @@ Evidências executadas:
   A saída resolve as variáveis e renderiza o contrato acima, com a biblioteca somente
   leitura.
 - O job `Container build (Rust)` da CI, verde na run `39002977974` sobre a `main`,
-  constrói o mesmo `Containerfile.rust`, roda `scripts/verify-rust-oci.sh` e aplica Trivy
+  constrói o mesmo `deploy/container/Containerfile`, roda `scripts/verify-rust-oci.sh` e aplica Trivy
   HIGH/CRITICAL.
 
 Limites declarados:
@@ -211,7 +223,7 @@ Limites declarados:
   diretório não é usado nesta fase.
 - Expor o serviço à rede exige proxy HTTPS com timeout de cabeçalhos, limite de conexões
   por origem e limite de tamanho de cabeçalho (ver "Proteção do listener HTTP").
-- Os tarballs Linux Go continuam o único release Linux suportado.
+- Os tarballs Linux Rust continuam o único release Linux suportado.
 
 ## Modelo de configuração
 
@@ -264,7 +276,7 @@ gh workflow run rust-server-rc.yml --ref main -f ref=main -f version=0.4.0-rc.1
   `rust-server-rc` (sem o prefixo `release-`), portanto o workflow de release não o
   captura.
 - **Não é o artefato Linux padrão**, não é publicado nem assinado e não é usado por Quadlet,
-  CI ou release. O Compose o constrói localmente; os tarballs Go continuam sendo o único
+  CI ou release. O Compose o constrói localmente; os tarballs Rust continuam sendo o único
   release Linux suportado.
 
 Permanece **não comprovado** por esta etapa:
@@ -278,7 +290,7 @@ Permanece **não comprovado** por esta etapa:
 ## Publicação experimental do RC Rust
 
 O workflow manual **Rust server RC publish (draft)** publica uma draft prerelease com tag
-`rust-rc-*`. O artefato é não assinado e não é o release Linux suportado; os tarballs Go continuam
+`rust-rc-*`. O artefato é não assinado e não é o release Linux suportado; os tarballs Rust continuam
 sendo o release suportado. Despache-o informando a versão, o run do build e a tag:
 
 ```sh
