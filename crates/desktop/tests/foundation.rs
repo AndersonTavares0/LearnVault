@@ -125,6 +125,67 @@ fn config_embeds_frontend_for_production_without_dev_server() {
 }
 
 #[test]
+fn windows_bundle_is_nsis_per_user_with_pt_br_and_english() {
+    let raw = read(&crate_root().join("tauri.conf.json"));
+    let config: serde_json::Value =
+        serde_json::from_str(&raw).expect("tauri.conf.json precisa ser JSON válido");
+
+    assert_eq!(
+        config["bundle"]["active"].as_bool(),
+        Some(true),
+        "o bundle precisa estar ativo para gerar o instalador"
+    );
+    let targets = config["bundle"]["targets"]
+        .as_array()
+        .expect("o bundle precisa declarar targets");
+    assert!(
+        targets.iter().any(|target| target == "nsis"),
+        "o alvo Windows é o instalador NSIS: {targets:?}"
+    );
+    let icons = config["bundle"]["icon"]
+        .as_array()
+        .expect("o bundle precisa listar ícones");
+    assert!(
+        icons.iter().any(|icon| icon == "icons/icon.ico"),
+        "o instalador Windows precisa do ícone .ico: {icons:?}"
+    );
+
+    let nsis = &config["bundle"]["windows"]["nsis"];
+    assert_eq!(
+        nsis["installMode"].as_str(),
+        Some("currentUser"),
+        "a instalação é por usuário, sem senha de administrador"
+    );
+    assert_eq!(
+        nsis["displayLanguageSelector"].as_bool(),
+        Some(true),
+        "o instalador precisa oferecer a escolha de idioma"
+    );
+    let languages = nsis["languages"]
+        .as_array()
+        .expect("o instalador precisa listar idiomas");
+    for language in ["PortugueseBR", "English"] {
+        assert!(
+            languages.iter().any(|candidate| candidate == language),
+            "o idioma '{language}' precisa estar no instalador: {languages:?}"
+        );
+    }
+    for key in ["installerIcon", "uninstallerIcon"] {
+        assert_eq!(
+            nsis[key].as_str(),
+            Some("icons/icon.ico"),
+            "o instalador e o desinstalador precisam usar o ícone do aplicativo: {key}"
+        );
+    }
+
+    assert_eq!(
+        config["bundle"]["windows"]["webviewInstallMode"]["type"].as_str(),
+        Some("downloadBootstrapper"),
+        "o WebView2 ausente é baixado pelo próprio instalador"
+    );
+}
+
+#[test]
 fn capability_is_deny_by_default_without_remote_sources() {
     let raw = read(&crate_root().join("capabilities/default.json"));
     let capability: serde_json::Value =
