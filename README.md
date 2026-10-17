@@ -39,11 +39,13 @@ audit durante a iteração); os comandos individuais continuam em `.github/CONTR
 A SPA é construída a partir de `apps/web/src` e gravada em
 `crates/server/web/build`, que o servidor Rust serve com `--web-root` (`pnpm dev` dispensa esse
 build: o Vite serve a SPA e faz
-proxy de `/api`). Sem configuração, o primeiro acesso usa `admin`/`admin` e exige troca
-imediata; credenciais fornecidas usam `ADMIN_USERNAME` e `ADMIN_PASSWORD` com pelo menos 12
-caracteres. Veja `deploy/compose/.env.example` para as configurações locais.
+proxy de `/api`). Sem configuração, o primeiro acesso usa `admin`/`admin` e entra direto,
+sem tela forçada de troca; a alteração de usuário e senha fica em **Configurações → Conta**,
+sempre autenticada pela senha atual. Credenciais fornecidas usam `ADMIN_USERNAME` e `ADMIN_PASSWORD`
+com pelo menos 12 caracteres. Veja `deploy/compose/.env.example` para as configurações locais.
 
-Na tela de acesso e na troca inicial, **Mostrar/Ocultar** revela somente o campo escolhido;
+Na tela de acesso e na Seção Conta das Configurações, **Mostrar/Ocultar** revela somente o campo
+escolhido;
 as senhas começam ocultas e continuam compatíveis com gerenciadores de senha. A nova senha
 exige ao menos 12 caracteres. Durante o envio, o formulário permanece visível e bloqueia
 reenvios; falhas de login não revelam se o usuário existe.

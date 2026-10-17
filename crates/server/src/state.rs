@@ -136,6 +136,8 @@ impl AppState {
                 let password = setup.admin_password.as_deref().unwrap_or("admin");
                 crate::auth::validate_username(username)
                     .map_err(|_| StateError::InvalidAdministrator)?;
+                // A senha temporária não força troca após o login: a troca acontece
+                // em "Configurações → Conta", autenticada pela senha atual.
                 let password_hash = if using_temporary_default {
                     crate::auth::hash_password_unchecked(password)
                 } else {
@@ -148,7 +150,7 @@ impl AppState {
                     username,
                     &password_hash,
                     unix_now(),
-                    using_temporary_default,
+                    false,
                 )
                 .map_err(StateError::Database)?;
                 Ok((database, shell, shell_too_large, courses, courses_file))
@@ -739,7 +741,9 @@ mod tests {
         let user = state.user("admin".to_owned()).await.unwrap().unwrap();
         assert_eq!(user.username, "admin");
         assert!(user.is_admin);
-        assert!(user.must_change_credentials);
+        // A senha temporária não é trocada à força após o login: a configuração
+        // acontece em "Configurações → Conta", com a senha atual como verificação.
+        assert!(!user.must_change_credentials);
         assert!(crate::verify_password("admin", &user.password_hash).unwrap());
         assert_ne!(user.password_hash, "admin");
     }
