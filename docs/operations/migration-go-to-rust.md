@@ -142,11 +142,42 @@ configuração de proteção da branch.
 | G1 identidade de versão do servidor Rust | Um run de `rust-server-rc.yml` demonstra que o binário reporta a versão injetada. | Injetar a versão no run, executar o smoke test e conservar o artefato e sua saída de `--version`. O binário prefere `LEARNVAULT_BUILD_VERSION` e cai para `CARGO_PKG_VERSION` (`crates/server/src/lib.rs:42`); o dispatch `gh workflow run rust-server-rc.yml --ref main -f ref=main -f version=<v>` falha fechado se a versão vier vazia. | agente prepara o workflow e a evidência; operador confere o artefato | **VERDE** — run 38993897882 sobre `d499881` com `0.4.0-rc.1`: smoke aprovado (`--version` = `learnvault-server 0.4.0-rc.1`, healthz com `"version":"0.4.0-rc.1"` e `no-store`) e artefato verificado (`learnvault-server-linux-x86_64.tar.gz`, SHA-256 `6afef8e010c9c2feae5fff3096699a1ff9c8b89deecdc102a435961dfd7802aa`) |
 | G2 artefato Rust publicado e em soak | Artefato Rust publicado no canal suportado e relatório de soak concluído. | Criar o caminho de publicação e executar o soak contra o artefato. O caminho existe em `.github/workflows/rust-server-rc-publish.yml` como draft prerelease `rust-rc-*`, não assinado; o soak ainda não foi executado nem aceito. | agente implementa o caminho; operador executa e aceita o soak | **VERMELHO** — o soak ainda não foi executado nem aceito |
 | G3 container/Compose Rust suportado ou explicitamente opt-in | Decisão publicada sobre suporte: caminho Rust validado ou opt-in explícito, com instruções e limites. | Validar o Containerfile/Compose Rust em uma instalação suportada e registrar o resultado, ou documentar o opt-in sem alegar suporte geral. | agente documenta e valida; operador executa o cenário | **NÃO COMPROVADO** |
-| G4 required checks sem Go | Proteção de branch exige os checks Rust e desktop pertinentes e não exige `Go tests and vet`; `Container build` não depende da imagem Go. | Atualizar workflows e a proteção da branch. Hoje `Go tests and vet` é required; `Container build` é required e depende de Go (`.github/workflows/ci.yml:17`, `:83`, `:91`); `Rust tests and lints` e `Desktop crate compile and guards` rodam, mas não são required (`.github/workflows/ci.yml:108`, `:152`). | agente altera workflow; usuário altera a configuração de branch protection | **VERMELHO** — os required checks atuais ainda incluem Go; o usuário deve alterar a proteção |
+| G4 required checks sem Go | Proteção de branch exige os checks Rust, desktop e container Rust pertinentes e não exige `Go tests and vet`; `Container build (Rust)` não depende da imagem Go, e nenhum dos dois checks acoplados ao Go (`Go tests and vet` e `Container build`) pode continuar required. | O CI prepara `Container build (Rust)`, que constrói/valida `deploy/container/Containerfile.rust` e aplica o scan Trivy HIGH/CRITICAL sem depender de Go. Sequência aprovada em 2026-10-17 (issue #164): o mantenedor promove `Rust tests and lints`, `Desktop crate compile and guards` e `Container build (Rust)` a required mantendo os dois checks Go, e a remoção destes fica acoplada à pull request dedicada de remoção, porque só nessa janela os caminhos Go deixam de existir e a saída não custa cobertura. | agente prepara o workflow; mantenedor altera a configuração de branch protection | **VERMELHO** — falta remover os dois checks acoplados ao Go; por decisão de sequenciamento essa remoção acompanha a pull request dedicada, para não deixar o módulo Go e a imagem OCI Go suportada sem gate (ver a issue #164) |
 | G5 ensaio aceito em volumes reais pareados | Relatório de ensaio com uma cópia dos volumes reais, quiescência, checksum, backup e saída Rust distintos, e aceite operacional. | Executar o procedimento da seção [Gate de cutover do Compose self-hosted](#gate-de-cutover-do-compose-self-hosted) em volumes reais pareados. `scripts/verify-go-to-rust-cutover.sh` é fixture-only e não vale como evidência de volume real. | operador executa; agente conserva o relatório | **VERMELHO** — não comprovado |
 | G6 aceite do MVP desktop | Aceite explícito do MVP desktop conforme os requisitos da Fase 4 e da distribuição aprovada. | Executar os fluxos desktop e os checks de distribuição aplicáveis, registrar falhas e aceite. | operador aceita após evidência; agente fornece os artefatos | **NÃO COMPROVADO** |
 | G7 rollback por volumes pareados com RPO explícito | Ensaio de rollback que preserve o volume Go, descarte o volume Rust e declare o RPO. | Seguir o procedimento desta página e `.agents/policies/data-safety.md`, incluindo backup verificado antes da promoção e retorno somente ao volume Go. | operador executa e aceita; agente documenta | **NÃO COMPROVADO** — o procedimento está documentado, mas não foi executado como evidência |
 | G8 contrato de API/DB que sobrevive à remoção | Verificação do contrato em `docs/reference/api.md`, da detecção/recusa de banco Go e de `PRAGMA user_version = 4` no caminho suportado. | Executar testes e smoke tests contra o contrato Rust, incluindo banco Go recusado e schema esperado, antes de remover a referência. | agente produz testes; operador executa e aceita | **VERDE** — aceite executado em 2026-10-16: SPA construída; `cargo test -p learnvault-core` (206 testes) e `cargo test -p learnvault-server` (100 testes) aprovados; fmt e clippy sem falhas |
+
+### Checklist de remoção do Go no CI (G4)
+
+Os dois checks obrigatórios acoplados ao Go saem juntos. Enquanto `Container build` for required, o
+job `go` continua bloqueando merges de forma indireta, porque `container` declara `needs: [go, web]`
+(`.github/workflows/ci.yml:83`). Remover apenas `Go tests and vet` não produz "required checks sem
+Go" e não fecha o G4.
+
+Sequência aprovada em 2026-10-17 (issue #164): primeiro o mantenedor promove `Rust tests and lints`,
+`Desktop crate compile and guards` e `Container build (Rust)` a required, mantendo `Go tests and
+vet` e `Container build`, de modo que a cobertura só cresce; a remoção dos dois checks Go fica
+acoplada à pull request dedicada de remoção do Go, porque só nessa janela os caminhos Go deixam de
+existir e a saída não custa cobertura. Até lá, `Go tests and vet` segue como o único gate do módulo
+Go e `Container build` como o único gate da imagem OCI suportada
+(`deploy/container/Containerfile`), enquanto `release.yml` continua publicando os tarballs Linux Go.
+
+Nunca exclua um job antes de remover o check correspondente da proteção: um required check cujo job
+deixou de existir nunca reporta, o GitHub marca "Expected — Waiting for status to be reported" e
+todas as pull requests ficam bloqueadas, inclusive com `strict: true`. Nos dois passos a alteração
+de branch protection é maintainer-only, não fica versionada no repositório e nenhum agente pode
+executá-la.
+
+Na sequência, o agente exclui o job `go` e o staging da SPA que ele exige, exclui o job Go
+`Container build`, exclui `deploy/container/Containerfile`, exclui o workflow de release Go e
+aposenta `services/go`.
+
+O G4 só pode ser marcado VERDE depois que a configuração efetiva for conferida: o conjunto required
+contém os checks Rust, desktop e container Rust; não contém `Go tests and vet` nem `Container build`;
+e cada check novo reporta em pull requests. Enquanto `services/go` e o workflow de release Go
+existirem, registre no status que o código Go permanece no repositório e deixou de ser gateado —
+remover os checks não remove o serviço.
 
 ### Registro de aceite do contrato (G8)
 
