@@ -19,6 +19,9 @@ fn media_path_lookup_returns_the_indexed_identity() -> Result<(), Box<dyn std::e
         find_media_by_path(&db, "library-1", "lesson.mp4")?.expect("media should be indexed");
     assert_eq!(reference.library_id, "library-1");
     assert!(find_media_by_path(&db, "library-1", "../lesson.mp4")?.is_none());
+    // No Unix, `\` é um caractere comum e a travessia só é recusada na normalização da
+    // chave; o resultado precisa ser o mesmo: ausência de mídia, não erro interno.
+    assert!(find_media_by_path(&db, "library-1", "..\\lesson.mp4")?.is_none());
     Ok(())
 }
 

@@ -2,6 +2,8 @@
 
 #![forbid(unsafe_code)]
 
+use std::io::Write;
+
 mod auth;
 mod catalog;
 mod config;
@@ -162,6 +164,7 @@ pub async fn serve<F>(config: Config, shutdown: F) -> Result<(), ServeError>
 where
     F: Future<Output = ()> + Send + 'static,
 {
+    let ephemeral_listener = config.listen_addr.port() == 0;
     let listener = TcpListener::bind(config.listen_addr)
         .await
         .map_err(ServeError::Bind)?;
@@ -169,6 +172,14 @@ where
         .await
         .map_err(|error| ServeError::Startup(error.to_string()))?;
     let app = with_request_limits(build_router(state), Duration::from_secs(30));
+    // Stable machine-readable handoff for process-level smoke tests. It is emitted only for
+    // an explicitly ephemeral listener, after the OS assigned the address and the application
+    // is ready to serve requests; normal fixed-port launches keep their existing output.
+    if ephemeral_listener {
+        let local_addr = listener.local_addr().map_err(ServeError::Bind)?;
+        println!("LEARNVAULT_READY {local_addr}");
+        let _ = std::io::stdout().flush();
+    }
 
     axum::serve(
         listener,
@@ -930,8 +941,18 @@ mod tests {
         assert_eq!(recovered.status(), StatusCode::OK);
 
         let mut timed_out = idle_responses.pop().unwrap();
+        // O primeiro chunk já lido é sempre entregue (o envio tem prioridade sobre o
+        // deadline expirado). Ao retirá-lo, o consumidor libera espaço e o produtor pode
+        // enfileirar o chunk seguinte antes de observar o fim do arquivo — comportamento
+        // previsto: o deadline mede ociosidade do transporte, não descarta dados lidos.
+        // Por isso drenamos até o encerramento em vez de exigir um único frame.
         assert!(timed_out.body_mut().frame().await.unwrap().is_ok());
-        assert!(timed_out.body_mut().frame().await.is_none());
+        while let Some(frame) = timed_out.body_mut().frame().await {
+            assert!(
+                frame.is_ok(),
+                "idle stream delivered an error frame: {frame:?}"
+            );
+        }
         drop(idle_responses);
     }
 }
