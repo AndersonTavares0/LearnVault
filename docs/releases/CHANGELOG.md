@@ -4,6 +4,21 @@ Todas as mudanças relevantes do LearnVault são documentadas neste arquivo.
 
 O formato segue o Keep a Changelog e as versões usam Semantic Versioning.
 
+## [0.5.0](https://github.com/AndersonTavares0/LearnVault/compare/v0.4.0...v0.5.0) (2026-10-17)
+
+
+### Funcionalidades
+
+* importar cursos individualmente e exibir cards na pagina inicial ([#190](https://github.com/AndersonTavares0/LearnVault/issues/190)) ([15459d2](https://github.com/AndersonTavares0/LearnVault/commit/15459d2ab0fc6094e6b56172b162849b7121da4d))
+
+
+### Correções
+
+* **release:** estagiar a SPA para o build Go no release ([#197](https://github.com/AndersonTavares0/LearnVault/issues/197)) ([2e594ea](https://github.com/AndersonTavares0/LearnVault/commit/2e594eab449bf758601cb0be58a4f200799d76fe))
+* **release:** permitir reconstruir assets de release publicada ([#195](https://github.com/AndersonTavares0/LearnVault/issues/195)) ([0bdeb19](https://github.com/AndersonTavares0/LearnVault/commit/0bdeb19a880f9c571857112e12bca4392fdb9771))
+* **release:** publicar assets automaticamente ([#185](https://github.com/AndersonTavares0/LearnVault/issues/185)) ([c9fc17d](https://github.com/AndersonTavares0/LearnVault/commit/c9fc17d28dfb4883419968225c4262175e6943a7))
+* **server:** make healthz reflect database readiness ([#128](https://github.com/AndersonTavares0/LearnVault/issues/128)) ([46c7406](https://github.com/AndersonTavares0/LearnVault/commit/46c7406cea3534b49c0a9e4139b056a3d094b875))
+
 ## [0.4.0](https://github.com/AndersonTavares0/LearnVault/compare/v0.3.0...v0.4.0) (2026-10-17)
 
 
