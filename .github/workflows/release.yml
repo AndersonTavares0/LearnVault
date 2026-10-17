@@ -91,12 +91,18 @@ jobs:
       - name: Install cross-compilation tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends musl-tools gcc-aarch64-linux-gnu libc6-dev-arm64-cross
+          sudo apt-get install -y --no-install-recommends musl-tools
+      - name: Install aarch64 musl cross-compiler
+        run: |
+          curl -fsSLo /tmp/aarch64-linux-musl-cross.tgz https://musl.cc/aarch64-linux-musl-cross.tgz
+          echo "c909817856d6ceda86aa510894fa3527eac7989f0ef6e87b5721c58737a06c38  /tmp/aarch64-linux-musl-cross.tgz" | sha256sum -c -
+          sudo tar -xzf /tmp/aarch64-linux-musl-cross.tgz -C /opt
+          echo "/opt/aarch64-linux-musl-cross/bin" >> "$GITHUB_PATH"
       - name: Build Linux Rust assets
         shell: bash
         env:
           RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: aarch64-linux-gnu-gcc
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: aarch64-linux-musl-gcc
         run: |
           set -euo pipefail
           mkdir -p dist
@@ -106,7 +112,7 @@ jobs:
           tar -czf "dist/learnvault-linux-amd64.tar.gz" -C dist "learnvault-linux-amd64" LICENSE
           rm "dist/learnvault-linux-amd64"
 
-          LEARNVAULT_BUILD_VERSION="$RELEASE_TAG" CC_aarch64_unknown_linux_musl=aarch64-linux-gnu-gcc cargo build --release --locked --package learnvault-server --target aarch64-unknown-linux-musl
+          LEARNVAULT_BUILD_VERSION="$RELEASE_TAG" CC_aarch64_unknown_linux_musl=aarch64-linux-musl-gcc cargo build --release --locked --package learnvault-server --target aarch64-unknown-linux-musl
           cp target/aarch64-unknown-linux-musl/release/learnvault-server dist/learnvault-linux-arm64
           tar -czf "dist/learnvault-linux-arm64.tar.gz" -C dist "learnvault-linux-arm64" LICENSE
           rm "dist/learnvault-linux-arm64"
