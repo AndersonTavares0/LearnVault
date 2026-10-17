@@ -18,9 +18,9 @@ function readBundles(root: string): string {
 }
 
 describe('production shell contract', () => {
-	it('runs the real build and emits the Go fallback shell', () => {
+	it('runs the real build and emits the canonical server shell', () => {
 		execFileSync('pnpm', ['run', 'build'], { cwd: process.cwd(), stdio: 'pipe', shell: true });
-		const shell = resolve(process.cwd(), '../../services/go/cmd/learnvault/web/build/200.html');
+		const shell = resolve(process.cwd(), '../../crates/server/web/build/200.html');
 		expect(existsSync(shell)).toBe(true);
 		expect(readFileSync(shell, 'utf8')).toContain('/_app/immutable/');
 	});
@@ -35,14 +35,14 @@ describe('production shell contract', () => {
 		execFileSync('pnpm', ['run', 'build'], { cwd: process.cwd(), stdio: 'pipe', shell: true });
 
 		const desktop = readBundles(resolve(process.cwd(), '../../crates/desktop/frontend-dist'));
-		const http = readBundles(resolve(process.cwd(), '../../services/go/cmd/learnvault/web/build'));
+		const http = readBundles(resolve(process.cwd(), '../../crates/server/web/build'));
 
 		// O desktop é offline por contrato: nenhum caminho do aplicativo pode abrir rede.
 		expect(desktop).not.toContain('fetch(');
 		// O HTTP preserva a conversão SRT sob demanda (o único fetch de mídia do player).
 		expect(http).toContain('fetch(');
 		expect(http).toContain('Falha ao carregar legenda.');
-		// A entrega de arquivos pequenos no desktop usa o protocolo customizado por mediaId,
+		// A entrega de mídia no desktop usa o protocolo customizado por mediaId,
 		// nunca o endpoint HTTP por caminho; o HTTP mantém `/api/media?path=`.
 		expect(desktop).toContain('learnvault-media');
 		expect(desktop).not.toContain('/api/media?path=');

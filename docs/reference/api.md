@@ -1,6 +1,6 @@
 # Referência da API
 
-A implementação Go permanece a referência funcional. O servidor Rust expõe as mesmas APIs abaixo
+A implementação Go permanece a referência funcional e de rollback. O servidor Rust expõe as mesmas APIs abaixo
 e a SPA web usa o mesmo contrato de Study nos dois transportes. Todas as rotas usam JSON, salvo
 indicação contrária. A autenticação usa um cookie de sessão HttpOnly com SameSite=Strict.
 
@@ -18,7 +18,7 @@ uma origem HTTP(S) compatível, além de SameSite=Strict.
 ## Entrega da SPA no servidor Rust
 
 A entrega é opcional e fica desabilitada por padrão. Use `--web-root` apontando para o diretório
-gerado pelo build estático (`services/go/cmd/learnvault/web/build`), que contém o shell `200.html`. Arquivos
+gerado pelo build estático (`crates/server/web/build`), que contém o shell `200.html`. Arquivos
 existentes são servidos diretamente; caminhos sem extensão usam `200.html` como fallback; assets
 ausentes com extensão retornam 404, e caminhos `/api/*` nunca são convertidos em HTML. Se o shell
 não existir, o servidor retorna 503. O shell usa `Cache-Control: no-cache`; assets sob
@@ -47,10 +47,10 @@ credenciais nem sessões.
 O servidor Rust detecta a assinatura do banco legado Go (`users`, `sessions` e
 `schema_migrations`) antes de aplicar qualquer bootstrap ou migração e encerra com a mensagem
 estável `legacy_go_database_requires_migration: back up the database and migrate it before using the Rust server`.
-Ele não cria `admin/admin`, não converte automaticamente e não sobrescreve dados. Faça uma cópia
-de segurança do arquivo antes de qualquer migração; a conversão do banco Go está fora desta fatia
-e será publicada separadamente. Um banco novo vazio e um banco Rust existente continuam sendo
-abertos normalmente.
+Ele não cria `admin/admin` nem sobrescreve dados. A API de núcleo `legacy_import` e o comando
+`learnvault-server migrate-go` fazem a conversão explícita com backup-first, origem somente leitura
+e saída temporária validada; o subcomando não inicia o listener HTTP. Um banco novo vazio e um
+banco Rust existente continuam sendo abertos normalmente.
 
 ## Catálogo e mídia
 
@@ -65,6 +65,8 @@ a raiz, nem entradas internas. Ignora diretórios temporários de download, clas
 legendas e materiais reconhecidos, e trata `.ts` como vídeo somente quando é maior que 1 MiB para
 não confundir TypeScript com MPEG-TS. A biblioteca física é externa, montada como somente leitura e
 nunca é modificada.
+
+No desktop, o protocolo `learnvault-media://localhost/<media-id>` entrega materiais, vídeo, áudio e arquivos de legenda para download usando somente o `media_id` opaco. `GET` e `HEAD` aceitam uma única faixa; respostas completas, parciais e recusadas usam, respectivamente, `200`, `206`, `413` (corpo acima do limite) ou `416` (faixa inválida ou múltipla), com `Content-Range` quando aplicável. No Windows, a SPA usa `http://learnvault-media.localhost/<media-id>` e o runtime reverte a origem antes do handler. O player desktop usa essa fonte local, renderiza legendas VTT e sincroniza posição e conclusão pelo IPC de Study; SRT, ASS e SSA ficam disponíveis para download, e o build HTTP pode converter SRT sob demanda.
 
 O rescan é uma atualização preservadora, não uma substituição: ele insere arquivos novos, atualiza
 os conhecidos no mesmo caminho (reutilizando o `media_id`, inclusive após um arquivo ausente
@@ -130,8 +132,5 @@ continua valendo. Os comandos não exigem raiz de biblioteca configurada e nunca
 `scan`, `library` nem a biblioteca física.
 
 Limitação desta fatia: o desktop atende um único dono local, sem sessão nem seletor de contas.
-Arquivos pequenos (imagens e materiais) já são entregues pelo protocolo desde a #76, mas o player
-ainda não recebe vídeo/áudio — sem reprodução não há posição real, então a barra de estudo do
-player permanece fechada.
 
 Para limites de arquitetura e deploy, consulte a [visão de arquitetura](../architecture/overview.md).

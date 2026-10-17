@@ -5,22 +5,54 @@ on:
     types: [published]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  release:
-    name: Build and publish release
+  validate-tag:
+    name: Validate release tag
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      commit_sha: ${{ steps.tag.outputs.commit_sha }}
+    steps:
+      - name: Require a strict vX.Y.Z tag
+        id: tag
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::Unexpected release tag format: $RELEASE_TAG" >&2
+            exit 1
+          fi
+          git init --quiet
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          git -c http.extraheader="AUTHORIZATION: bearer $GITHUB_TOKEN" fetch --quiet --no-tags --depth=1 origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          COMMIT_SHA="$(git rev-parse "refs/tags/$RELEASE_TAG^{}")"
+          if [[ ! "$COMMIT_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Release tag did not resolve to a commit: $RELEASE_TAG" >&2
+            exit 1
+          fi
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "commit_sha=$COMMIT_SHA" >> "$GITHUB_OUTPUT"
+
+  linux:
+    name: Build Linux assets
+    needs: validate-tag
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          ref: ${{ github.event.release.tag_name }}
-      - uses: actions/setup-go@v7
+          ref: ${{ needs.validate-tag.outputs.commit_sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.26.x'
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: pnpm
@@ -28,33 +60,130 @@ jobs:
       - run: pnpm run check
       - run: pnpm run build
       - run: go -C services/go test ./...
-      - name: Validate release tag
+      - name: Build Linux Go assets
         shell: bash
         env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: |
-          set -euo pipefail
-          # Release Please publishes Go semantic tags with a leading "v"
-          # (include-v-in-tag: true), e.g. v1.2.3. Each numeric component is
-          # strict SemVer: no leading zeros.
-          if [[ ! "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-            echo "::error::Unexpected release tag format: $RELEASE_TAG" >&2
-            exit 1
-          fi
-          echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
-      - name: Build Linux artifacts
-        shell: bash
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
         run: |
           set -euo pipefail
           mkdir -p dist
           cp LICENSE dist/LICENSE
-          tag="$RELEASE_TAG"
           for arch in amd64 arm64; do
-             GOOS=linux GOARCH="$arch" CGO_ENABLED=0 go -C services/go build -trimpath -ldflags="-s -w -X main.version=$tag" -o "../dist/learnvault-linux-$arch" ./cmd/learnvault
-             tar -czf "dist/learnvault-linux-$arch.tar.gz" -C dist "learnvault-linux-$arch" LICENSE
+            GOOS=linux GOARCH="$arch" CGO_ENABLED=0 go -C services/go build -trimpath -ldflags="-s -w -X main.version=$RELEASE_TAG" -o "../dist/learnvault-linux-$arch" ./cmd/learnvault
+            tar -czf "dist/learnvault-linux-$arch.tar.gz" -C dist "learnvault-linux-$arch" LICENSE
+            rm "dist/learnvault-linux-$arch"
           done
-          sha256sum dist/*.tar.gz > dist/SHA256SUMS
-      - name: Upload release assets
+          rm dist/LICENSE
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-linux
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  windows:
+    name: Build Windows NSIS installer
+    needs: validate-tag
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.validate-tag.outputs.commit_sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build:desktop
+      - name: Install Rust toolchain
+        shell: pwsh
+        run: rustup toolchain install 1.99.0 --profile minimal
+      - name: Select Rust toolchain
+        shell: pwsh
+        run: rustup default 1.99.0
+      - name: Build NSIS installer
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+        run: |
+          $releaseVersion = $env:RELEASE_TAG.Substring(1)
+          $configPath = Join-Path $PWD "tauri.release.json"
+          @{ version = $releaseVersion } | ConvertTo-Json -Compress | Set-Content -Path $configPath -NoNewline
+          pnpm exec tauri build --bundles nsis --config crates/desktop/tauri.conf.json --config $configPath
+      - name: Stage Windows asset
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          $installers = @(Get-ChildItem target/release/bundle/nsis -Filter *.exe -File)
+          if ($installers.Count -ne 1) {
+            throw "Expected exactly one NSIS installer, found $($installers.Count)"
+          }
+          Copy-Item $installers[0].FullName (Join-Path $PWD "dist/learnvault-windows-$env:RELEASE_TAG.exe")
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-windows
+          path: dist/*.exe
+          if-no-files-found: error
+
+  publish:
+    name: Publish release assets
+    needs: [validate-tag, linux, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+      - name: Create SHA256SUMS
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          expected=(
+            "learnvault-linux-amd64.tar.gz"
+            "learnvault-linux-arm64.tar.gz"
+            "learnvault-windows-${RELEASE_TAG}.exe"
+          )
+          mapfile -t actual < <(find dist -maxdepth 1 -type f -printf '%f\n' | sort)
+          if (( ${#actual[@]} != ${#expected[@]} )); then
+            printf '::error::Unexpected release asset count (expected %d, found %d)\n' "${#expected[@]}" "${#actual[@]}" >&2
+            exit 1
+          fi
+          for asset in "${expected[@]}"; do
+            if [[ ! -f "dist/$asset" ]]; then
+              echo "::error::Missing expected release asset: $asset" >&2
+              exit 1
+            fi
+          done
+          printf '%s\n' "${actual[@]}" | sort | diff -u <(printf '%s\n' "${expected[@]}" | sort)
+          (cd dist && sha256sum "${expected[@]}" > SHA256SUMS)
+      - name: Upload assets to the published release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$RELEASE_TAG" dist/*.tar.gz dist/SHA256SUMS --clobber
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+          EXPECTED_COMMIT_SHA: ${{ needs.validate-tag.outputs.commit_sha }}
+        run: |
+          set -euo pipefail
+          git init --quiet tag-check
+          git -C tag-check remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          git -C tag-check -c http.extraheader="AUTHORIZATION: bearer $GITHUB_TOKEN" fetch --quiet --no-tags --depth=1 origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          actual_commit_sha="$(git -C tag-check rev-parse "refs/tags/$RELEASE_TAG^{}")"
+          if [[ "$actual_commit_sha" != "$EXPECTED_COMMIT_SHA" ]]; then
+            echo "::error::Release tag moved during the build (expected $EXPECTED_COMMIT_SHA, found $actual_commit_sha)" >&2
+            exit 1
+          fi
+          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            "dist/learnvault-linux-amd64.tar.gz" \
+            "dist/learnvault-linux-arm64.tar.gz" \
+            "dist/learnvault-windows-${RELEASE_TAG}.exe" \
+             "dist/SHA256SUMS" \
+             --clobber

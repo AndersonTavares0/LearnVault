@@ -25,7 +25,10 @@ use crate::error::{Error, Result};
 use crate::paths::{KeyMode, relative_path_key};
 
 /// Extensões reconhecidas como mídia reproduzível.
-const MEDIA_EXTENSIONS: &[&str] = &["mp4", "webm", "mkv", "m3u8", "ts"];
+const MEDIA_EXTENSIONS: &[&str] = &[
+    "mp4", "webm", "mkv", "m3u8", "ts", "ogv", "mp3", "wav", "ogg", "oga", "m4a", "flac", "aac",
+    "opus", "weba", "wma",
+];
 
 /// Extensões reconhecidas como legenda.
 const SUBTITLE_EXTENSIONS: &[&str] = &["srt", "vtt", "ass", "ssa"];

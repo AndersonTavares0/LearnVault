@@ -1,9 +1,13 @@
-use std::{ffi::OsStr, net::SocketAddr, path::PathBuf};
+use std::{
+    ffi::OsStr,
+    net::{IpAddr, SocketAddr},
+    path::PathBuf,
+};
 
 use thiserror::Error;
 
-const DEFAULT_LISTEN_ADDR: &str = "127.0.0.1:8090";
-const DEFAULT_DATABASE_PATH: &str = "data/learnvault.sqlite";
+use learnvault_core::LegacyImportOptions;
+
 const DEFAULT_LIBRARY_ROOT: &str = "library";
 
 /// Configuração validada necessária para iniciar o servidor.
@@ -30,6 +34,8 @@ pub struct Config {
 pub enum Command {
     /// Imprime a versão compilada e encerra.
     Version,
+    /// Importa um banco Go sem iniciar o servidor HTTP.
+    MigrateGo(LegacyImportOptions),
     /// Inicia o servidor com a configuração validada.
     Run(Config),
 }
@@ -76,6 +82,7 @@ impl Config {
         match parse_command(args)? {
             Command::Run(config) => Ok(config),
             Command::Version => Err(ConfigError::VersionRequested),
+            Command::MigrateGo(_) => Err(ConfigError::InvalidArgument),
         }
     }
 }
@@ -86,15 +93,38 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
+    parse_command_with_env(args, |key| std::env::var(key).ok())
+}
+
+fn parse_command_with_env<I, S, F>(args: I, env: F) -> Result<Command, ConfigError>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+    F: Fn(&str) -> Option<String>,
+{
     let mut args = args.into_iter();
     let _program = args.next();
-    let mut listen_addr = DEFAULT_LISTEN_ADDR.parse().expect("endereço padrão válido");
-    let mut database_path = PathBuf::from(DEFAULT_DATABASE_PATH);
-    let mut library_root = PathBuf::from(DEFAULT_LIBRARY_ROOT);
+    let first_argument = args.next();
+    if first_argument
+        .as_ref()
+        .and_then(|argument| argument.as_ref().to_str())
+        == Some("migrate-go")
+    {
+        return parse_migrate_go(args);
+    }
+    let mut args = first_argument.into_iter().chain(args);
+    let env_listen_addr = env("LISTEN_ADDR").unwrap_or_else(|| "127.0.0.1".to_owned());
+    let env_port = env("PORT").unwrap_or_else(|| "8090".to_owned());
+    let mut listen_addr = None;
+    let data_dir = env("DATA_DIR").unwrap_or_else(|| "data".to_owned());
+    let mut database_path = PathBuf::from(data_dir).join("learnvault.sqlite");
+    let mut library_root =
+        PathBuf::from(env("LIBRARY_DIR").unwrap_or_else(|| DEFAULT_LIBRARY_ROOT.to_owned()));
     let mut web_root = None;
-    let mut admin_username = std::env::var("ADMIN_USERNAME").ok();
-    let admin_password = std::env::var("ADMIN_PASSWORD").ok();
-    let mut cookie_secure = true;
+    let mut admin_username = env("ADMIN_USERNAME").filter(|value| !value.is_empty());
+    let admin_password = env("ADMIN_PASSWORD").filter(|value| !value.is_empty());
+    let env_cookie_secure = env("COOKIE_SECURE");
+    let mut cookie_secure = None;
     let mut version_requested = false;
 
     while let Some(argument) = args.next() {
@@ -106,9 +136,11 @@ where
             "--version" => version_requested = true,
             "--listen-addr" => {
                 let value = next_value(&mut args)?;
-                listen_addr = value
-                    .parse()
-                    .map_err(|_| ConfigError::InvalidListenAddress)?;
+                listen_addr = Some(
+                    value
+                        .parse::<SocketAddr>()
+                        .map_err(|_| ConfigError::InvalidListenAddress)?,
+                );
             }
             "--database" => database_path = PathBuf::from(next_value(&mut args)?),
             "--library-root" => library_root = PathBuf::from(next_value(&mut args)?),
@@ -118,7 +150,7 @@ where
                 let _ = next_value(&mut args)?;
                 return Err(ConfigError::InsecureAdminPasswordArgument);
             }
-            "--insecure-http" => cookie_secure = false,
+            "--insecure-http" => cookie_secure = Some(false),
             _ => return Err(ConfigError::UnknownArgument),
         }
     }
@@ -130,6 +162,19 @@ where
     if database_path.as_os_str().is_empty() {
         return Err(ConfigError::InvalidDatabasePath);
     }
+
+    let listen_addr = match listen_addr {
+        Some(address) => address,
+        None => listen_addr_from_env(&env_listen_addr, &env_port)?,
+    };
+    let cookie_secure = match cookie_secure {
+        Some(value) => value,
+        None => env_cookie_secure
+            .as_deref()
+            .map(parse_bool)
+            .transpose()?
+            .unwrap_or(true),
+    };
 
     let library_root = library_root
         .canonicalize()
@@ -156,6 +201,78 @@ where
     }))
 }
 
+fn parse_migrate_go<I, S>(args: I) -> Result<Command, ConfigError>
+where
+    I: Iterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    let mut input = None;
+    let mut output = None;
+    let mut backup = None;
+    let mut library_id = None;
+
+    let mut args = args;
+    while let Some(argument) = args.next() {
+        let argument = argument
+            .as_ref()
+            .to_str()
+            .ok_or(ConfigError::InvalidArgument)?;
+        let slot = match argument {
+            "--input" => &mut input,
+            "--output" => &mut output,
+            "--backup" => &mut backup,
+            "--library-id" => &mut library_id,
+            _ => return Err(ConfigError::UnknownArgument),
+        };
+        if slot.is_some() {
+            return Err(ConfigError::InvalidArgument);
+        }
+        let value = next_value(&mut args)?;
+        if value.is_empty() {
+            return Err(ConfigError::InvalidArgument);
+        }
+        *slot = Some(value);
+    }
+
+    let (Some(input), Some(output), Some(backup), Some(library_id)) =
+        (input, output, backup, library_id)
+    else {
+        return Err(ConfigError::InvalidArgument);
+    };
+    if library_id.trim().is_empty() {
+        return Err(ConfigError::InvalidArgument);
+    }
+
+    Ok(Command::MigrateGo(LegacyImportOptions {
+        input: PathBuf::from(input),
+        output: PathBuf::from(output),
+        backup: PathBuf::from(backup),
+        library_id,
+    }))
+}
+
+fn listen_addr_from_env(host: &str, port: &str) -> Result<SocketAddr, ConfigError> {
+    if let Ok(address) = host.parse::<SocketAddr>() {
+        return Ok(address);
+    }
+
+    let ip = host
+        .parse::<IpAddr>()
+        .map_err(|_| ConfigError::InvalidListenAddress)?;
+    let port = port
+        .parse::<u16>()
+        .map_err(|_| ConfigError::InvalidListenAddress)?;
+    Ok(SocketAddr::new(ip, port))
+}
+
+fn parse_bool(value: &str) -> Result<bool, ConfigError> {
+    match value {
+        value if value.eq_ignore_ascii_case("true") => Ok(true),
+        value if value.eq_ignore_ascii_case("false") => Ok(false),
+        _ => Err(ConfigError::InvalidArgument),
+    }
+}
+
 fn next_value<I, S>(args: &mut I) -> Result<String, ConfigError>
 where
     I: Iterator<Item = S>,
@@ -167,4 +284,212 @@ where
         .to_str()
         .map(str::to_owned)
         .ok_or(ConfigError::InvalidArgument)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        collections::HashMap,
+        path::{Path, PathBuf},
+    };
+
+    use super::{Command, ConfigError, parse_command_with_env};
+
+    #[test]
+    fn compose_environment_contract_builds_server_config() {
+        let temp = tempfile::tempdir().unwrap();
+        let library = temp.path().join("library");
+        let data = temp.path().join("data");
+        std::fs::create_dir_all(&library).unwrap();
+        std::fs::create_dir_all(&data).unwrap();
+        let environment = HashMap::from([
+            ("LISTEN_ADDR", "0.0.0.0"),
+            ("PORT", "8181"),
+            ("DATA_DIR", data.to_str().unwrap()),
+            ("LIBRARY_DIR", library.to_str().unwrap()),
+            ("COOKIE_SECURE", "false"),
+        ]);
+
+        let command = parse_command_with_env(["learnvault-server"], |key| {
+            environment.get(key).copied().map(str::to_owned)
+        })
+        .unwrap();
+        let Command::Run(config) = command else {
+            panic!("expected run command");
+        };
+
+        assert_eq!(config.listen_addr.to_string(), "0.0.0.0:8181");
+        assert_eq!(config.database_path, data.join("learnvault.sqlite"));
+        assert_eq!(config.library_root, canonical(&library));
+        assert!(!config.cookie_secure);
+    }
+
+    #[test]
+    fn command_line_values_override_compose_environment() {
+        let temp = tempfile::tempdir().unwrap();
+        let env_library = temp.path().join("env-library");
+        let cli_library = temp.path().join("cli-library");
+        let env_data = temp.path().join("env-data");
+        std::fs::create_dir_all(&env_library).unwrap();
+        std::fs::create_dir_all(&cli_library).unwrap();
+        let environment = HashMap::from([
+            ("LISTEN_ADDR", "not-an-address"),
+            ("PORT", "not-a-port"),
+            ("DATA_DIR", env_data.to_str().unwrap()),
+            ("LIBRARY_DIR", env_library.to_str().unwrap()),
+            ("COOKIE_SECURE", "not-a-bool"),
+        ]);
+
+        let command = parse_command_with_env(
+            [
+                "learnvault-server",
+                "--listen-addr",
+                "127.0.0.1:9090",
+                "--database",
+                "custom.sqlite",
+                "--library-root",
+                cli_library.to_str().unwrap(),
+                "--insecure-http",
+            ],
+            |key| environment.get(key).copied().map(str::to_owned),
+        )
+        .unwrap();
+        let Command::Run(config) = command else {
+            panic!("expected run command");
+        };
+
+        assert_eq!(config.listen_addr.to_string(), "127.0.0.1:9090");
+        assert_eq!(config.database_path, PathBuf::from("custom.sqlite"));
+        assert_eq!(config.library_root, canonical(&cli_library));
+        assert!(!config.cookie_secure);
+    }
+
+    #[test]
+    fn invalid_cookie_secure_is_rejected_without_exposing_value() {
+        let temp = tempfile::tempdir().unwrap();
+        let library = temp.path().join("library");
+        std::fs::create_dir_all(&library).unwrap();
+        let environment = HashMap::from([
+            ("LIBRARY_DIR", library.to_str().unwrap()),
+            ("COOKIE_SECURE", "not-a-secret-value"),
+        ]);
+
+        let error = parse_command_with_env(["learnvault-server"], |key| {
+            environment.get(key).copied().map(str::to_owned)
+        })
+        .unwrap_err();
+
+        assert_eq!(error, ConfigError::InvalidArgument);
+        assert!(!error.to_string().contains("not-a-secret-value"));
+    }
+
+    #[test]
+    fn empty_bootstrap_credentials_use_the_safe_first_startup_flow() {
+        let temp = tempfile::tempdir().unwrap();
+        let library = temp.path().join("library");
+        std::fs::create_dir_all(&library).unwrap();
+        let environment = HashMap::from([
+            ("LIBRARY_DIR", library.to_str().unwrap()),
+            ("ADMIN_USERNAME", ""),
+            ("ADMIN_PASSWORD", ""),
+        ]);
+
+        let command = parse_command_with_env(["learnvault-server"], |key| {
+            environment.get(key).copied().map(str::to_owned)
+        })
+        .unwrap();
+        let Command::Run(config) = command else {
+            panic!("expected run command");
+        };
+
+        assert_eq!(config.admin_username, None);
+        assert_eq!(config.admin_password, None);
+    }
+
+    #[test]
+    fn parses_migrate_go_without_server_environment() {
+        let command = parse_command_with_env(
+            [
+                "learnvault-server",
+                "migrate-go",
+                "--input",
+                "go.sqlite",
+                "--output",
+                "rust.sqlite",
+                "--backup",
+                "go.sqlite.backup",
+                "--library-id",
+                "library-42",
+            ],
+            |_| None,
+        )
+        .unwrap();
+
+        assert_eq!(
+            command,
+            Command::MigrateGo(learnvault_core::LegacyImportOptions {
+                input: "go.sqlite".into(),
+                output: "rust.sqlite".into(),
+                backup: "go.sqlite.backup".into(),
+                library_id: "library-42".into(),
+            })
+        );
+    }
+
+    #[test]
+    fn migrate_go_requires_all_explicit_options() {
+        let error = parse_command_with_env(
+            ["learnvault-server", "migrate-go", "--input", "go.sqlite"],
+            |_| None,
+        )
+        .unwrap_err();
+
+        assert_eq!(error, ConfigError::InvalidArgument);
+    }
+
+    #[test]
+    fn migrate_go_rejects_duplicate_and_unknown_options() {
+        let duplicate = parse_command_with_env(
+            [
+                "learnvault-server",
+                "migrate-go",
+                "--input",
+                "one.sqlite",
+                "--input",
+                "two.sqlite",
+                "--output",
+                "rust.sqlite",
+                "--backup",
+                "backup.sqlite",
+                "--library-id",
+                "library-1",
+            ],
+            |_| None,
+        )
+        .unwrap_err();
+        assert_eq!(duplicate, ConfigError::InvalidArgument);
+
+        let unknown = parse_command_with_env(
+            [
+                "learnvault-server",
+                "migrate-go",
+                "--input",
+                "go.sqlite",
+                "--output",
+                "rust.sqlite",
+                "--backup",
+                "backup.sqlite",
+                "--library-id",
+                "library-1",
+                "--listen-addr",
+            ],
+            |_| None,
+        )
+        .unwrap_err();
+        assert_eq!(unknown, ConfigError::UnknownArgument);
+    }
+
+    fn canonical(path: &Path) -> std::path::PathBuf {
+        path.canonicalize().unwrap()
+    }
 }

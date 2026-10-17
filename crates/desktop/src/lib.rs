@@ -12,12 +12,10 @@
 //! comando de estudo aceita `owner_id`, então o webview só lê e grava o progresso do dono
 //! local e nunca o de outro dono.
 //!
-//! Além do IPC, o desktop entrega **arquivos pequenos** — imagens/thumbnails e materiais
-//! pequenos — por um protocolo customizado do Tauri 2 (`learnvault-media://localhost/...`,
-//! ver [`media`]). A entrega é por `media_id` opaco, justificada apenas no catálogo, com
-//! allowlist de tipo de conteúdo e limite explícito de resposta. Vídeo e áudio ficam fora
-//! deste protocolo nesta fatia por causa da reprodução parcial incompatível no webview do
-//! Linux (`WebKitGTK`); legendas continuam no caminho HTTP.
+//! Além do IPC, o desktop entrega imagens/thumbnails, materiais pequenos, vídeo, áudio e
+//! legendas por um protocolo customizado do Tauri 2 (`learnvault-media://localhost/...`, ver
+//! [`media`]). A entrega é por `media_id` opaco, justificada apenas no catálogo, com allowlist
+//! de tipo de conteúdo, suporte a faixas HTTP e limite explícito por resposta.
 //!
 //! A raiz da biblioteca é escolhida por um seletor nativo acionado pelo Rust
 //! (`tauri-plugin-dialog`, interno e não concedido ao webview) e persistida de forma
@@ -30,11 +28,10 @@
 //! andamento. Não há worker, progresso nem cancelamento nesta fatia.
 //!
 //! Não há listener de rede, servidor HTTP, plugin de shell, filesystem, http ou updater,
-//! nem autenticação nesta fatia. A entrega de mídia cobre apenas arquivos pequenos, então o
-//! player do desktop permanece sem reprodução e sem retomada: o progresso existe por IPC, mas
-//! a única fonte de posição real — a reprodução — continua pendente. A biblioteca permanece
-//! externa e somente leitura: o rescan e a entrega de mídia apenas a leem e nenhum caminho de
-//! biblioteca é escrito.
+//! nem autenticação nesta fatia. O player do desktop reproduz mídia local pelo protocolo
+//! customizado e sincroniza posição/conclusão por IPC. A biblioteca permanece externa e
+//! somente leitura: o rescan e a entrega de mídia apenas a leem e nenhum caminho de biblioteca
+//! é escrito.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]

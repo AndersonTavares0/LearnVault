@@ -1,8 +1,8 @@
 #!/bin/sh
 #
-# Experimental OCI validation for the Rust server (`crates/server`).
+# Experimental OCI validation for the opt-in Rust server (`crates/server`).
 #
-# This is a manual, non-publishing scaffold. It builds
+# This is a manual, non-publishing validation. It builds
 # `deploy/container/Containerfile.rust`, runs the image against a synthetic library
 # fixture and checks that:
 #   - the packaged binary runs and reports its version;
@@ -139,6 +139,7 @@ printf '\nStarting the container ...\n'
 	--cap-drop ALL \
 	-e "ADMIN_USERNAME=$ADMIN_USERNAME" \
 	-e "ADMIN_PASSWORD=$ADMIN_PASSWORD" \
+	-e "PORT=$PORT" \
 	-v "$(host_path "$library"):/library:ro" \
 	-v "$(host_path "$data"):/data:rw" \
 	"$IMAGE" \

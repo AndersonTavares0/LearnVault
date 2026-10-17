@@ -46,6 +46,26 @@ func TestScanIgnoresTemporaryDirectoriesAndUnsafeTypeScript(t *testing.T) {
 	}
 }
 
+func TestScanClassifiesSupportedAudioExtensionsAndSubtitles(t *testing.T) {
+	root := t.TempDir()
+	lesson := filepath.Join(root, "Cat", "Curso", "Modulo", "Aula")
+	for _, extension := range []string{"aac", "opus", "weba", "wma"} {
+		writeFixture(t, filepath.Join(lesson, "audio."+extension), "audio")
+	}
+	for _, extension := range []string{"srt", "vtt", "ass", "ssa"} {
+		writeFixture(t, filepath.Join(lesson, "legenda."+extension), "subtitle")
+	}
+
+	result, err := Scan(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := result.Categories[0].Courses[0].Modules[0].Lessons[0]
+	if len(files.Media) != 4 || len(files.Subtitles) != 4 || len(files.Materials) != 0 {
+		t.Fatalf("audio/subtitle classification = %#v", files)
+	}
+}
+
 func TestScanPreservesFilesAtLibraryRoot(t *testing.T) {
 	root := t.TempDir()
 	writeFixture(t, filepath.Join(root, "intro.mp4"), "video")

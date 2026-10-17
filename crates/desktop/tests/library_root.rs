@@ -334,6 +334,25 @@ fn storing_repeatedly_swaps_the_root_without_leftovers() {
     );
 }
 
+#[cfg(windows)]
+#[test]
+fn windows_repeated_library_selection_replaces_existing_configuration() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = dir.path().join("config");
+    let first = library(dir.path());
+    let second_path = dir.path().join("biblioteca-2");
+    fs::create_dir(&second_path).unwrap();
+    let second = LibraryRoot::resolve(&second_path).unwrap();
+
+    store_library_root(&config, &first).unwrap();
+    store_library_root(&config, &second).unwrap();
+
+    assert_eq!(
+        load_library_root(&config).unwrap().as_path(),
+        second.as_path()
+    );
+}
+
 #[test]
 fn a_pre_existing_temporary_file_is_never_reused() {
     let dir = tempfile::tempdir().unwrap();

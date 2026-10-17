@@ -12,9 +12,10 @@
 //! - a biblioteca é externa e **somente leitura**: nada é criado, movido ou modificado
 //!   dentro dela, nem quando a seleção é recusada;
 //! - a configuração vive fora da raiz da biblioteca e fora do banco SQLite;
-//! - a gravação é atômica e serializada: o temporário é criado exclusivamente
-//!   (`create_new`, sem seguir link nem reaproveitar arquivo existente) e a troca usa
-//!   `rename`, que substitui o destino sem apagá-lo antes;
+//! - a gravação é serializada: o temporário é criado exclusivamente (`create_new`, sem
+//!   seguir link nem reaproveitar arquivo existente) e a troca usa `rename`; no Windows,
+//!   como as APIs padrão não substituem um destino existente, ele é removido imediatamente
+//!   antes da troca, deixando uma janela inevitável em que a configuração pode não existir;
 //! - a leitura revalida a raiz no startup: configuração ausente, corrompida, em versão
 //!   desconhecida ou com raiz removida/inacessível resulta em "não configurado";
 //! - nenhuma mensagem de erro carrega caminho do sistema de arquivos.
@@ -142,12 +143,13 @@ pub fn load_library_root(config_dir: &Path) -> Option<LibraryRoot> {
     LibraryRoot::resolve(&stored.library_root).ok()
 }
 
-/// Grava atomicamente a raiz canonicalizada no diretório de configuração.
+/// Grava a raiz canonicalizada no diretório de configuração.
 ///
 /// Se `config_dir` estiver dentro da própria biblioteca — uma configuração errada — a
 /// gravação é recusada **antes** de qualquer criação, para que nada seja criado dentro
 /// da biblioteca. O diretório de configuração é criado fora da raiz, e o arquivo é
-/// escrito em um temporário e depois renomeado sobre o destino.
+/// escrito em um temporário e depois renomeado sobre o destino. No Windows, o destino é
+/// removido imediatamente antes da troca, deixando uma pequena janela não atômica.
 pub fn store_library_root(config_dir: &Path, root: &LibraryRoot) -> Result<(), LibraryError> {
     if config_dir_is_inside(config_dir, root) {
         return Err(LibraryError::WriteFailed);
@@ -186,10 +188,11 @@ fn config_dir_is_inside(config_dir: &Path, root: &LibraryRoot) -> bool {
     }
 }
 
-/// Escreve `bytes` em `dest` de forma atômica e serializada.
+/// Escreve `bytes` em `dest` de forma serializada.
 ///
 /// O temporário é criado com `create_new` e depois trocado por `rename`. O cadeado
-/// [`STORE_LOCK`] garante que gravações concorrentes não se intercalem.
+/// [`STORE_LOCK`] garante que gravações concorrentes não se intercalem. No Windows, o
+/// destino é removido imediatamente antes de `rename`, deixando uma janela sem o arquivo.
 fn write_atomically(dest: &Path, bytes: &[u8]) -> Result<(), LibraryError> {
     let directory = dest.parent().ok_or(LibraryError::WriteFailed)?;
     let _guard = STORE_LOCK.lock().map_err(|_| LibraryError::WriteFailed)?;
@@ -253,13 +256,27 @@ fn temporary_candidate(directory: &Path, attempt: u32) -> PathBuf {
     }
 }
 
-/// Substitui o destino de forma atômica **sem apagar antes**.
+/// Substitui o destino usando apenas APIs padrão.
 ///
-/// `fs::rename` troca o nome no mesmo sistema de arquivos sem janela intermediária e, no
-/// Windows, usa `MoveFileExW(MOVEFILE_REPLACE_EXISTING)`: um `library.json` existente é
-/// substituído em vez de recusado. É a estratégia cross-platform segura, sem
-/// `remove_file` prévio, sem `unsafe` e sem novas dependências.
+/// Fora do Windows, `fs::rename` troca o nome no mesmo sistema de arquivos e substitui o
+/// destino. No Windows, a API padrão não substitui um destino existente: removê-lo
+/// imediatamente antes de `rename` deixa uma janela não atômica em que o destino pode não
+/// existir.
 fn replace_file(source: &Path, dest: &Path) -> Result<(), LibraryError> {
+    #[cfg(windows)]
+    {
+        match fs::remove_file(dest) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) => return Err(LibraryError::WriteFailed),
+        }
+        if fs::rename(source, dest).is_err() {
+            return Err(LibraryError::WriteFailed);
+        }
+        Ok(())
+    }
+
+    #[cfg(not(windows))]
     fs::rename(source, dest).map_err(|_| LibraryError::WriteFailed)
 }
 
