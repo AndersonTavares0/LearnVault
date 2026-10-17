@@ -186,11 +186,12 @@ Rust (`crates/server`) para Linux amd64 musl, como candidato de release candidat
 `push` nem por agendamento.
 
 ```sh
-gh workflow run rust-server-rc.yml --ref main -f ref=main
+gh workflow run rust-server-rc.yml --ref main -f ref=main -f version=0.4.0-rc.1
 ```
 
-- Entradas do dispatch: `ref` (branch ou SHA a construir, padrão `main`) e `target`
-  (fixo em `x86_64-unknown-linux-musl`). O workflow falha de forma fechada contra o
+- Entradas do dispatch: `ref` (branch ou SHA a construir, padrão `main`), `version`
+  (versão injetada no binário; obrigatória, e o workflow falha de forma fechada se ela
+  vier vazia) e `target` (fixo em `x86_64-unknown-linux-musl`). O workflow falha de forma fechada contra o
   namespace de tags estáveis: a guarda pré-checkout rejeita tanto um `vX.Y.Z` puro
   quanto qualquer `refs/tags/*` e, como defesa em profundidade, uma etapa
   pós-checkout falha se o HEAD for exatamente uma tag `vX.Y.Z`. Esse namespace
@@ -199,9 +200,10 @@ gh workflow run rust-server-rc.yml --ref main -f ref=main
   `learnvault-server`, a SPA canônica em `web/` com `web/200.html` e `LICENSE`) e
   `SHA256SUMS.rust-rc`. A verificação de checksum e de inventário do tar ocorre no
   próprio job.
-- O job faz um smoke sem Docker: imprime `--version`, sobe o binário contra
-  diretórios temporários sintéticos (nunca `/mnt/cursos` ou biblioteca real) e
-  confirma `/api/healthz` (200 com `no-store`) e a entrega do shell da SPA.
+- O job faz um smoke sem Docker: confere que `--version` reporta exatamente a versão do
+  dispatch, sobe o binário contra diretórios temporários sintéticos (nunca `/mnt/cursos`
+  ou biblioteca real) e confirma `/api/healthz` (200 com `no-store`, com a mesma versão)
+  e a entrega do shell da SPA.
 - É **deliberadamente não publicado**: não há upload para release, `gh release` nem
   `--clobber` nesta etapa. O artefato sobe apenas no run do Actions com o nome
   `rust-server-rc` (sem o prefixo `release-`), portanto o workflow de release não o
@@ -212,8 +214,8 @@ gh workflow run rust-server-rc.yml --ref main -f ref=main
 
 Permanece **não comprovado** por esta etapa:
 
-- Identidade de versão: o binário se auto-reporta como `0.0.0` (versão do workspace);
-  não é um artefato versionado.
+- Identidade de versão: a versão vem da entrada `version` do dispatch; o workflow não
+  comprova a seleção da versão de release além desse valor fornecido.
 - Assinatura: o artefato não é assinado.
 - Soak/rollout: nenhum teste de duração ou implantação em produção é executado.
 - arm64 não é produzido; também não há validação de runtime fora do smoke do próprio job.
