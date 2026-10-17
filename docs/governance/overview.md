@@ -107,10 +107,12 @@ auto-merge nativo aguarda ou recusa qualquer estado que não satisfaça a prote�
 Quando elegível, o workflow apenas solicita o auto-merge nativo do GitHub com squash. Ele não
 aprova PRs, não usa `--admin`, não faz force-push, rebase ou fechamento automático. A proteção da
 branch continua sendo a autoridade para reviews e checks; a solicitação também é reavaliada pelo
-GitHub quando o head ou os checks mudam. Os checks protegidos atualmente são `SPA checks`,
-`Go tests and vet` e `Container build`; este último inclui a varredura Trivy de vulnerabilidades
-HIGH/CRITICAL. Os jobs Rust e Desktop continuam executando no CI, mas ainda não são checks
-protegidos e portanto não são anunciados como gates da automação.
+GitHub quando o head ou os checks mudam. Os checks protegidos são `SPA checks`, `Go tests and vet`,
+`Container build`, `Rust tests and lints`, `Desktop crate compile and guards` e
+`Container build (Rust)`; `Container build` e `Container build (Rust)` incluem a varredura Trivy de
+vulnerabilidades HIGH/CRITICAL das imagens Go e Rust. A promoção dos três checks Rust a
+obrigatórios foi decidida pelo mantenedor em 2026-10-17 e a remoção dos dois checks acoplados ao Go
+fica acoplada à pull request dedicada de remoção do serviço Go.
 
 O workflow não concede permissões ao `GITHUB_TOKEN` (`permissions: {}`). Para consultar alertas do
 Dependabot com `alert-lookup`, ele exige o segredo
@@ -121,6 +123,9 @@ Dependabot recebem normalmente um `GITHUB_TOKEN` somente leitura e não devem re
 isso esta automação usa a base confiável, o token dedicado e uma chamada de API sem executar o
 conteúdo da PR. Se a proteção de branch for alterada,
 ou uma merge queue for adotada, os gates devem ser reavaliados antes de manter a automação ativa.
+A alteração de 2026-10-17 foi reavaliada: a automação apenas solicita o auto-merge nativo com
+squash e não referencia nomes de checks, então os três checks promovidos passam a ser exigidos sem
+mudança no workflow, e a lista de manifests elegíveis permanece a mesma.
 Como defesa adicional, a automação só considera alterações nos manifests e lockfiles aprovados
 (`package.json`, `apps/web/package.json`, `pnpm-lock.yaml`, `Cargo.toml`, manifests de crates,
 `Cargo.lock`, `services/go/go.mod` e `services/go/go.sum`); workflows, scripts, Containerfiles,
@@ -129,13 +134,17 @@ que ficaram atrás da base, sem fazer polling, rebase ou checkout.
 Para rollback, desabilite o workflow e cancele auto-merges pendentes; não há mutação automática de
 branches ou lockfiles.
 
-Os três nomes de jobs obrigatórios permanecem estáveis: `SPA checks`, `Go tests and vet` e
-`Container build`. O CI roda em pull requests, cancela execuções obsoletas, constrói a SPA uma
-vez para o embed do Go, usa cache e mantém timeouts curtos.
+Os nomes dos jobs obrigatórios são estáveis: na fase atual `SPA checks`, `Go tests and vet` e
+`Container build`, com `Rust tests and lints`, `Desktop crate compile and guards` e
+`Container build (Rust)` promovidos a obrigatórios em 2026-10-17. O CI roda em pull requests,
+cancela execuções obsoletas, constrói a SPA uma vez — consumida tanto pelo embed do Go quanto pela
+imagem Rust — usa cache e mantém timeouts curtos.
 
-O job `Rust tests and lints` roda junto e verifica formatação, lints, testes e a cobertura do
-núcleo em Rust. Ele ainda não é um check obrigatório; a promoção a obrigatório exige decisão
-explícita do mantenedor.
+O job `Rust tests and lints` verifica formatação, lints, testes e a cobertura do núcleo em Rust; o
+job `Desktop crate compile and guards` compila o crate desktop e roda seus testes; e o job
+`Container build (Rust)` constrói e valida a imagem OCI Rust. Toda promoção a obrigatório exige
+decisão explícita do mantenedor, e a remoção dos checks acoplados ao Go acompanha a pull request
+dedicada de remoção do serviço.
 
 O Wiki sync não é check obrigatório: ele roda após mudanças mapeadas chegarem à `main` ou por
 execução manual, escreve somente páginas gerenciadas e não reage a eventos da própria Wiki.
