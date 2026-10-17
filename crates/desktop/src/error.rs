@@ -31,6 +31,10 @@ pub enum IpcErrorCode {
     MediaNotFound,
     /// A posição de retomada enviada é inválida.
     InvalidPosition,
+    /// A remoção exige confirmação porque existe progresso associado.
+    MediaRemovalNeedsConfirmation,
+    /// A remoção de mídia não pôde ser concluída.
+    MediaRemovalUnavailable,
 }
 
 /// Erro IPC serializável devolvido ao webview.
@@ -120,6 +124,22 @@ impl IpcError {
         Self {
             code: IpcErrorCode::InvalidPosition,
             message: "posição de retomada inválida",
+        }
+    }
+
+    /// A remoção exige confirmação porque existe progresso associado.
+    pub fn media_removal_needs_confirmation() -> Self {
+        Self {
+            code: IpcErrorCode::MediaRemovalNeedsConfirmation,
+            message: "a remoção da mídia exige confirmação",
+        }
+    }
+
+    /// A remoção de mídia não pôde ser concluída.
+    pub fn media_removal_unavailable() -> Self {
+        Self {
+            code: IpcErrorCode::MediaRemovalUnavailable,
+            message: "não foi possível remover a mídia",
         }
     }
 }

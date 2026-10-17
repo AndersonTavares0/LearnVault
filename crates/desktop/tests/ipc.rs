@@ -568,3 +568,64 @@ fn concurrent_imports_keep_memory_and_disk_consistent() {
         "importações concorrentes não podem divergir entre memória e disco"
     );
 }
+
+#[test]
+fn media_removal_impact_and_removal_flow_in_desktop() {
+    let dir = tempfile::tempdir().unwrap();
+    let state = desktop(dir.path());
+    let course_dir = make_course(dir.path());
+    let aula_dir = course_dir.join("Aula 1");
+    fs::create_dir_all(&aula_dir).unwrap();
+    fs::write(aula_dir.join("video.mp4"), b"conteudo de video").unwrap();
+
+    state.import_course(|| Some(course_dir.clone())).unwrap();
+    state.rescan().unwrap();
+
+    let cat = state.catalog().unwrap();
+    assert_eq!(cat.categories.len(), 1);
+    let media_id = cat.categories[0].children[0].loose_files[0]
+        .media_id
+        .clone();
+
+    // 1. Impacto inicial sem progresso
+    let impact = state.media_removal_impact(&media_id).unwrap();
+    assert_eq!(impact.media_id, media_id);
+    assert_eq!(impact.progress_owners, 0);
+    assert!(!impact.already_removed);
+
+    // 2. Grava progresso no desktop
+    state.record_position(&media_id, 25).unwrap();
+
+    // 3. Impacto agora acusa 1 dono com progresso
+    let impact = state.media_removal_impact(&media_id).unwrap();
+    assert_eq!(impact.progress_owners, 1);
+
+    // 4. Tentar remover sem confirmação deve falhar com MediaRemovalNeedsConfirmation
+    let err = state.remove_media(&media_id, false).unwrap_err();
+    assert_eq!(err.code, IpcErrorCode::MediaRemovalNeedsConfirmation);
+
+    // 5. Remover com confirmação tem sucesso
+    let outcome = state.remove_media(&media_id, true).unwrap();
+    assert_eq!(outcome.media_id, media_id);
+    assert!(outcome.removed_now);
+    assert_eq!(outcome.preserved_owners, 1);
+
+    // 6. Repetir remoção é idempotente
+    let repeat = state.remove_media(&media_id, true).unwrap();
+    assert_eq!(repeat.media_id, media_id);
+    assert!(!repeat.removed_now);
+
+    // 7. Catálogo passa a omitir a mídia
+    let cat_after = state.catalog().unwrap();
+    assert!(cat_after.categories[0].children.is_empty());
+
+    // 8. Rescan não desfaz a remoção
+    state.rescan().unwrap();
+    let cat_rescan = state.catalog().unwrap();
+    assert!(cat_rescan.categories[0].children.is_empty());
+
+    // 9. Progresso continua legível e preservado
+    let progress = state.study_progress(&media_id).unwrap();
+    assert!(progress.recorded);
+    assert_eq!(progress.position_seconds, 25);
+}

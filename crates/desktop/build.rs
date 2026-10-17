@@ -18,6 +18,8 @@ fn main() {
             "desktop_record_position",
             "desktop_set_completed",
             "desktop_recent_study",
+            "desktop_media_removal_impact",
+            "desktop_remove_media",
         ]));
     tauri_build::try_build(attributes).expect("falha ao executar o tauri-build do LearnVault");
 }

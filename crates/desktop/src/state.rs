@@ -18,7 +18,10 @@ use learnvault_core::{CourseRoot, Database};
 use crate::command::catalog;
 use crate::config::{DesktopConfigDto, database_path};
 use crate::courses::{CourseEntry, load_courses, store_courses};
-use crate::dto::{CatalogDto, RecentStudyDto, RescanSummaryDto, StudyProgressDto};
+use crate::dto::{
+    CatalogDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto, RecentStudyDto, RescanSummaryDto,
+    StudyProgressDto,
+};
 use crate::error::IpcError;
 use crate::study;
 
@@ -217,6 +220,48 @@ impl DesktopState {
             .lock()
             .map_err(|_| IpcError::database_unavailable())?;
         study::recent(&database, limit)
+    }
+
+    /// Consulta o impacto da remoção de uma mídia do catálogo local.
+    pub fn media_removal_impact(&self, media_id: &str) -> Result<MediaRemovalImpactDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        let library_id = learnvault_core::find_media_library_id(&database, media_id)
+            .map_err(|_| IpcError::database_unavailable())?
+            .ok_or_else(IpcError::media_not_found)?;
+        let impact = learnvault_core::media_removal_impact(&database, &library_id, media_id)
+            .map_err(|err| match err {
+                learnvault_core::Error::MediaNotFound { .. } => IpcError::media_not_found(),
+                _ => IpcError::database_unavailable(),
+            })?;
+        Ok(impact.into())
+    }
+
+    /// Remove explicitamente uma mídia do catálogo local (tombstone persistente).
+    pub fn remove_media(
+        &self,
+        media_id: &str,
+        confirm_progress: bool,
+    ) -> Result<MediaRemovalOutcomeDto, IpcError> {
+        let mut database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        let library_id = learnvault_core::find_media_library_id(&database, media_id)
+            .map_err(|_| IpcError::database_unavailable())?
+            .ok_or_else(IpcError::media_not_found)?;
+        let outcome =
+            learnvault_core::remove_media(&mut database, &library_id, media_id, confirm_progress)
+                .map_err(|err| match err {
+                learnvault_core::Error::MediaRemovalNeedsConfirmation { .. } => {
+                    IpcError::media_removal_needs_confirmation()
+                }
+                learnvault_core::Error::MediaNotFound { .. } => IpcError::media_not_found(),
+                _ => IpcError::media_removal_unavailable(),
+            })?;
+        Ok(outcome.into())
     }
 
     /// Reserva o estado de rescan, devolvendo um guarda que o libera no `Drop`.

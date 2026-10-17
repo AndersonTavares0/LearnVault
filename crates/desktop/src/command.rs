@@ -17,7 +17,10 @@ use tauri::State;
 
 use crate::config::DesktopConfigDto;
 use crate::courses::CourseEntry;
-use crate::dto::{CatalogDto, CatalogNodeDto, RecentStudyDto, RescanSummaryDto, StudyProgressDto};
+use crate::dto::{
+    CatalogDto, CatalogNodeDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto, RecentStudyDto,
+    RescanSummaryDto, StudyProgressDto,
+};
 use crate::error::IpcError;
 use crate::state::DesktopState;
 
@@ -168,6 +171,31 @@ pub async fn desktop_recent_study(
     tauri::async_runtime::spawn_blocking(move || state.recent_study(limit))
         .await
         .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// Comando IPC: consulta o impacto da remoção de uma mídia.
+#[tauri::command]
+pub async fn desktop_media_removal_impact(
+    state: State<'_, DesktopState>,
+    media_id: String,
+) -> Result<MediaRemovalImpactDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.media_removal_impact(&media_id))
+        .await
+        .map_err(|_| IpcError::database_unavailable())?
+}
+
+/// Comando IPC: remove uma mídia do catálogo local (tombstone persistente).
+#[tauri::command]
+pub async fn desktop_remove_media(
+    state: State<'_, DesktopState>,
+    media_id: String,
+    confirm_progress: bool,
+) -> Result<MediaRemovalOutcomeDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.remove_media(&media_id, confirm_progress))
+        .await
+        .map_err(|_| IpcError::database_unavailable())?
 }
 
 /// Abre o seletor nativo de diretórios e devolve o caminho escolhido, se houver.

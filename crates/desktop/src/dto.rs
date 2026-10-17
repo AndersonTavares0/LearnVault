@@ -245,3 +245,51 @@ pub struct RecentStudyDto {
     /// Itens de progresso, já ordenados pelo núcleo.
     pub items: Vec<StudyProgressDto>,
 }
+
+/// DTO do impacto de remoção de mídia.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct MediaRemovalImpactDto {
+    /// Identificador da mídia consultada.
+    pub media_id: String,
+    /// Caminho relativo da mídia no catálogo.
+    pub relative_path: String,
+    /// Disponibilidade segundo a última varredura ("available" ou "missing").
+    pub availability: &'static str,
+    /// Quantidade de donos distintos com progresso nesta mídia.
+    pub progress_owners: usize,
+    /// Se a mídia já havia sido removida do catálogo.
+    pub already_removed: bool,
+}
+
+impl From<learnvault_core::MediaRemovalImpact> for MediaRemovalImpactDto {
+    fn from(impact: learnvault_core::MediaRemovalImpact) -> Self {
+        Self {
+            media_id: impact.media_id,
+            relative_path: impact.relative_path,
+            availability: availability(impact.availability),
+            progress_owners: impact.progress_owners,
+            already_removed: impact.already_removed,
+        }
+    }
+}
+
+/// DTO do resultado de remoção de mídia.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct MediaRemovalOutcomeDto {
+    /// Identificador da mídia removida.
+    pub media_id: String,
+    /// Verdadeiro quando a remoção foi gravada agora; falso se já estava removida.
+    pub removed_now: bool,
+    /// Quantidade de donos com progresso preservado.
+    pub preserved_owners: usize,
+}
+
+impl From<learnvault_core::MediaRemovalOutcome> for MediaRemovalOutcomeDto {
+    fn from(outcome: learnvault_core::MediaRemovalOutcome) -> Self {
+        Self {
+            media_id: outcome.media_id,
+            removed_now: outcome.removed_now,
+            preserved_owners: outcome.preserved_owners,
+        }
+    }
+}
