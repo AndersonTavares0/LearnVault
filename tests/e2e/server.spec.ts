@@ -159,7 +159,7 @@ const test = base.extend<{ server: ServerFixture }>({
 
 test('serves the built SPA through the Rust server for a complete study-library journey', async ({ page, server }) => {
 	await page.goto(`${server.baseURL}/#/login`);
-	await expect(page.getByRole('heading', { name: /Conhecimento/ })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Entrar no LearnVault' })).toBeVisible();
 
 	await page.getByLabel('Usuário').fill('admin');
 	// O botão "Mostrar Senha" compartilha o rótulo parcial; exigir o campo exato evita

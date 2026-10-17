@@ -299,7 +299,22 @@
 </script>
 <svelte:head><title>LearnVault — sua biblioteca de estudos</title><meta name="description" content="Sua biblioteca pessoal de cursos." /></svelte:head>
 {#if loading}<div class="loading" aria-live="polite">Carregando seus cursos…</div>
-{:else if !user}<main class="login-page"><div class="brand"><Brand /> LEARNVAULT</div><section><p class="eyebrow">SEU ESPAÇO DE APRENDIZAGEM</p><h1>Conhecimento,<br /><em>no seu ritmo.</em></h1><p class="intro">Uma casa tranquila para seus cursos, ideias e próximos passos.</p><form onsubmit={login}><fieldset class="auth-fields" disabled={authBusy}><label class="form-field" for="login-username">Usuário<input id="login-username" autocomplete="username" bind:value={username} required /></label><PasswordField id="login-password" label="Senha" autocomplete="current-password" bind:value={password} />{#if error}<p class="error" role="alert">{error}</p>{/if}<button type="submit" disabled={authBusy} aria-busy={authBusy}>{authBusy ? 'Entrando…' : 'Entrar'}</button></fieldset></form></section></main>
+{:else if !user}
+	<main class="login-page" aria-labelledby="login-heading">
+		<div class="brand"><Brand /> LEARNVAULT</div>
+		<section>
+			<h1 id="login-heading">Entrar no LearnVault</h1>
+			<p class="intro">Acesse sua biblioteca de cursos.</p>
+			<form onsubmit={login}>
+				<fieldset class="auth-fields" disabled={authBusy}>
+					<label class="form-field" for="login-username">Usuário<input id="login-username" autocomplete="username" autocapitalize="none" spellcheck={false} bind:value={username} required /></label>
+					<PasswordField id="login-password" label="Senha" autocomplete="current-password" bind:value={password} />
+					{#if error}<p class="error" role="alert">{error}</p>{/if}
+					<button type="submit" disabled={authBusy} aria-busy={authBusy}>{authBusy ? 'Entrando…' : 'Entrar'}</button>
+				</fieldset>
+			</form>
+		</section>
+	</main>
 {:else}<div class="shell"><header><div class="brand"><Brand /> LEARNVAULT</div><button class="text-button" onclick={logout}>Sair</button></header><div class="layout"><aside aria-label="Navegação principal"><a class:active={route === 'home'} href={href('home')}>Início</a><a class:active={route === 'settings'} href={href('settings')}>Configurações</a></aside><main><p class="eyebrow">BIBLIOTECA PESSOAL</p>{#if error}<p class="error" role="alert">{error}</p>{/if}
 {#if route === 'home'}
 	<h1>Olá, {user.username}.</h1>
