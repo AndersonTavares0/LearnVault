@@ -1,12 +1,12 @@
 //! Aplicativo desktop do LearnVault (Tauri 2).
 //!
-//! Esta fatia expõe a fronteira IPC de configuração, catálogo, rescan e progresso de
-//! estudo: o webview consulta a configuração (`desktop_config`), dispara a seleção da raiz
-//! da biblioteca (`desktop_select_library`), lê o catálogo (`desktop_catalog`), aciona a
-//! indexação explícita (`desktop_rescan`) e sincroniza o estudo por `desktop_study_progress`,
-//! `desktop_record_position`, `desktop_set_completed` e `desktop_recent_study`. O catálogo, o
-//! resumo do rescan e o progresso são derivados pelo núcleo `learnvault-core` sobre um banco
-//! SQLite local, no diretório de dados do aplicativo.
+//! Esta fatia expõe a fronteira IPC de cursos, catálogo, rescan e progresso de estudo: o
+//! webview importa (`desktop_import_course`) e remove (`desktop_remove_course`) cursos,
+//! lê o catálogo agregado (`desktop_catalog`), aciona a indexação explícita
+//! (`desktop_rescan`) e sincroniza o estudo por `desktop_study_progress`,
+//! `desktop_record_position`, `desktop_set_completed` e `desktop_recent_study`. O catálogo,
+//! o resumo do rescan e o progresso são derivados pelo núcleo `learnvault-core` sobre um
+//! banco SQLite local, no diretório de dados do aplicativo.
 //!
 //! O dono do progresso de estudo é um identificador local fixo escolhido pelo Rust: nenhum
 //! comando de estudo aceita `owner_id`, então o webview só lê e grava o progresso do dono
@@ -17,47 +17,46 @@
 //! [`media`]). A entrega é por `media_id` opaco, justificada apenas no catálogo, com allowlist
 //! de tipo de conteúdo, suporte a faixas HTTP e limite explícito por resposta.
 //!
-//! A raiz da biblioteca é escolhida por um seletor nativo acionado pelo Rust
-//! (`tauri-plugin-dialog`, interno e não concedido ao webview) e persistida de forma
-//! atômica e versionada no diretório de configuração do aplicativo — nunca dentro da
-//! biblioteca nem no SQLite. O webview nunca envia nem recebe um caminho: só o booleano
+//! Cada curso é escolhido por um seletor nativo acionado pelo Rust (`tauri-plugin-dialog`,
+//! interno e não concedido ao webview) e persistido de forma atômica e versionada no
+//! diretório de configuração do aplicativo — nunca dentro das pastas de curso nem no
+//! SQLite. O webview nunca envia nem recebe um caminho: só identidades opacas e o booleano
 //! `configured`.
 //!
-//! O rescan é sempre explícito: nem a inicialização nem a seleção da raiz o disparam, e
+//! O rescan é sempre explícito: nem a inicialização nem a importação o disparam, e
 //! chamadas concorrentes são recusadas com um erro estável enquanto uma varredura está em
 //! andamento. Não há worker, progresso nem cancelamento nesta fatia.
 //!
 //! Não há listener de rede, servidor HTTP, plugin de shell, filesystem, http ou updater,
 //! nem autenticação nesta fatia. O player do desktop reproduz mídia local pelo protocolo
-//! customizado e sincroniza posição/conclusão por IPC. A biblioteca permanece externa e
-//! somente leitura: o rescan e a entrega de mídia apenas a leem e nenhum caminho de biblioteca
-//! é escrito.
+//! customizado e sincroniza posição/conclusão por IPC. As pastas de curso permanecem
+//! externas e somente leitura: o rescan e a entrega de mídia apenas as leem e nenhum
+//! caminho de curso é escrito.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
 pub mod command;
 pub mod config;
+pub mod courses;
 pub mod dto;
 pub mod error;
-pub mod library;
 pub mod media;
 pub mod state;
 pub mod study;
 
 pub use command::{
-    catalog, desktop_catalog, desktop_config, desktop_recent_study, desktop_record_position,
-    desktop_rescan, desktop_select_library, desktop_set_completed, desktop_study_progress,
+    catalog, desktop_catalog, desktop_import_course, desktop_recent_study, desktop_record_position,
+    desktop_remove_course, desktop_rescan, desktop_set_completed, desktop_study_progress,
 };
 pub use config::{DATABASE_FILE_NAME, DesktopConfigDto, database_path};
+pub use courses::{
+    CONFIG_FILE_NAME, CONFIG_VERSION, CourseEntry, LibraryError, load_courses, store_courses,
+};
 pub use dto::{
     CatalogDto, CatalogFileDto, CatalogNodeDto, RecentStudyDto, RescanSummaryDto, StudyProgressDto,
 };
 pub use error::{IpcError, IpcErrorCode};
-pub use library::{
-    CONFIG_FILE_NAME, CONFIG_VERSION, LibraryError, LibraryRoot, load_library_root,
-    store_library_root,
-};
 pub use state::{DesktopState, RescanGuard};
 pub use study::{DEFAULT_RECENT_LIMIT, LOCAL_OWNER_ID};
 
@@ -66,11 +65,10 @@ use tauri::Manager;
 /// Inicializa o webview Tauri apontando para a SPA embutida em `frontend-dist`.
 ///
 /// No `setup`, o estado abre o banco local no diretório de dados do aplicativo, carrega e
-/// revalida a raiz da biblioteca do diretório de configuração, e registra apenas os
-/// comandos de configuração, seleção, catálogo, rescan e estudo. O plugin de diálogo é
-/// registrado para uso interno do Rust e não é concedido ao webview pelo ACL. O
-/// deny-by-default do ACL garante que nada fora das permissões declaradas em
-/// `capabilities/` seja executável pelo webview.
+/// revalida os cursos do diretório de configuração, e registra apenas os comandos de
+/// cursos, catálogo, rescan e estudo. O plugin de diálogo é registrado para uso interno do
+/// Rust e não é concedido ao webview pelo ACL. O deny-by-default do ACL garante que nada
+/// fora das permissões declaradas em `capabilities/` seja executável pelo webview.
 pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -85,9 +83,9 @@ pub fn run() {
         });
     media::register(builder)
         .invoke_handler(tauri::generate_handler![
-            command::desktop_config,
             command::desktop_catalog,
-            command::desktop_select_library,
+            command::desktop_import_course,
+            command::desktop_remove_course,
             command::desktop_rescan,
             command::desktop_study_progress,
             command::desktop_record_position,

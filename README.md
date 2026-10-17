@@ -8,25 +8,25 @@
 [![Svelte](https://img.shields.io/badge/Svelte-5-FF3E00?logo=svelte&logoColor=white)](https://svelte.dev/)
 [![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 
-O LearnVault transforma uma pasta de cursos existente em um espaço de estudo auto-hospedado.
+O LearnVault transforma suas pastas de cursos em um espaço de estudo auto-hospedado.
 Ele combina um núcleo de domínio em Rust (`crates/core`) e um servidor Axum (`crates/server`)
-com uma SPA em Svelte 5 + Vite em torno de uma biblioteca somente leitura, contas locais,
-indexação de catálogo e um fluxo de estudo focado. O serviço Go em `services/go` permanece
-como implementação de referência até a Fase 5 da reescrita.
+com uma SPA em Svelte 5 + Vite em torno de cursos somente leitura, registrados individualmente,
+contas locais, indexação de catálogo e um fluxo de estudo focado. O serviço Go em `services/go`
+permanece como implementação de referência até a Fase 5 da reescrita.
 
 ## Status
 
 A reescrita em Rust está em andamento. `crates/core` (domínio, SQLite, catálogo, scanner,
 identidade de mídia e estado de estudo) e `crates/server` (Axum, autenticação, sessões, mídia
-com `Range` e API de estudo) já estão implementados, junto da SPA Svelte 5 + Vite com dois
+com `Range`, registro de cursos e API de estudo) já estão implementados, junto da SPA Svelte 5 + Vite com dois
 builds. As entregas mescladas #86, #88, #90 e #91 alinham Study no servidor Rust, na SPA web e
-no serviço Go de referência, além de avançarem o desktop com configuração, seleção da raiz,
- catálogo, rescan explícito e reprodução local de materiais, vídeo e áudio, além da entrega de
- legendas por protocolo com faixas limitadas. No desktop, o player renderiza legendas VTT; SRT,
- ASS e SSA ficam disponíveis para download, enquanto o build HTTP pode converter SRT sob demanda.
- O desktop Tauri e a distribuição por plataforma com a remoção do serviço Go
-(Fase 5) **ainda não estão concluídos**; autenticação desktop, janelas reais, migração do banco e
-distribuição continuam gates explícitos.
+no serviço Go de referência, além de avançarem o desktop com catálogo, importação e remoção de
+cursos pelo seletor nativo, rescan explícito e reprodução local de materiais, vídeo e áudio, além
+da entrega de legendas por protocolo com faixas limitadas. No desktop, o player renderiza
+legendas VTT; SRT, ASS e SSA ficam disponíveis para download, enquanto o build HTTP pode
+converter SRT sob demanda. O desktop Tauri e a distribuição por plataforma com a remoção do
+serviço Go (Fase 5) **ainda não estão concluídos**; autenticação desktop, janelas reais, migração
+do banco e distribuição continuam gates explícitos.
 
 ## Comece aqui
 
@@ -94,14 +94,15 @@ documentação. Arquivos de comunidade como `CONTRIBUTING.md`, `CODE_OF_CONDUCT.
 
 - Workspace Rust com um núcleo de domínio compartilhado em `crates/core` e um servidor Axum
   em `crates/server`.
-- O servidor Rust expõe autenticação, sessões, catálogo, mídia com `Range` e Study; o desktop
-  Tauri (`crates/desktop`, Fase 4) já tem fundação, configuração, catálogo, seleção de raiz,
-  rescan explícito e Study por IPC com dono local fixo, mas ainda não é um produto desktop
-  completo.
+- O servidor Rust expõe autenticação, sessões, catálogo agregado de cursos, mídia com `Range` e
+  Study; o desktop Tauri (`crates/desktop`, Fase 4) já tem fundação, importação e remoção de
+  cursos pelo seletor nativo, catálogo, rescan explícito e Study por IPC com dono local fixo, mas
+  ainda não é um produto desktop completo.
 - SQLite no núcleo, com cadeia única de migrações.
 - A SPA em Svelte 5 + TypeScript + Vite tem roteamento por hash e dois builds que escolhem o
   transporte em tempo de compilação.
-- A biblioteca física é somente leitura e permanece fora do armazenamento da aplicação.
+- Cada pasta de curso é somente leitura e permanece fora do armazenamento da aplicação; a página
+  inicial mostra os cursos em cards com capa gerada.
 - O serviço Go em `services/go` permanece como referência funcional até a Fase 5.
 - Docker Compose e Podman/Quadlet são adaptadores opcionais de deploy.
 - Builds nativos continuam sendo a fonte de verdade para instaladores futuros.
