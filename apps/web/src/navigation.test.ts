@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { lessonGroup, lessonSequence, neighboringLessons } from './navigation';
+import { lessonSections, lessonSequence, neighboringLessons } from './navigation';
 import type { CatalogNode } from './transport';
 
 function lesson(title: string, path: string): CatalogNode {
@@ -43,22 +43,38 @@ describe('lesson navigation', () => {
 		expect(neighboringLessons([], 'aula-1')).toEqual({ previous: null, next: null });
 	});
 
-	it('groups a lesson with the other lessons of its course, keeping the order', () => {
-		expect(lessonGroup(catalog, 'aula-1')).toEqual({ title: 'Rust', lessons: [{ title: 'Aula 1', path: 'aula-1' }, { title: 'Aula 2', path: 'aula-2' }, { title: 'Aula 3', path: 'aula-3' }] });
-		expect(lessonGroup(catalog, 'aula-3')).toEqual({ title: 'Rust', lessons: [{ title: 'Aula 1', path: 'aula-1' }, { title: 'Aula 2', path: 'aula-2' }, { title: 'Aula 3', path: 'aula-3' }] });
-		expect(lessonGroup(catalog, 'aula-g1')).toEqual({ title: 'Go', lessons: [{ title: 'Aula G1', path: 'aula-g1' }] });
+	it('groups every lesson by its nearest container, in canonical order', () => {
+		const sections = lessonSections(catalog);
+		expect(sections.map((section) => section.title)).toEqual(['Módulo 1', 'Módulo 2', 'Go']);
+		expect(titles(sections[0].lessons)).toEqual(['Aula 1', 'Aula 2']);
+		expect(titles(sections[1].lessons)).toEqual(['Aula 3']);
+		expect(titles(sections[2].lessons)).toEqual(['Aula G1']);
 	});
 
-	it('falls back to the module when there is no course, and to the whole catalog otherwise', () => {
-		const looseModule = [container('Soltos', 'soltos', 'module', [lesson('Aula X', 'aula-x'), lesson('Aula Y', 'aula-y')])];
-		const looseCategory = [container('TI', 'cat-ti', 'category', [lesson('Aula Z', 'aula-z'), lesson('Aula W', 'aula-w')])];
-		expect(lessonGroup(looseModule, 'aula-y')).toEqual({ title: 'Soltos', lessons: [{ title: 'Aula X', path: 'aula-x' }, { title: 'Aula Y', path: 'aula-y' }] });
-		expect(lessonGroup(looseCategory, 'aula-z')).toEqual({ title: null, lessons: [{ title: 'Aula Z', path: 'aula-z' }, { title: 'Aula W', path: 'aula-w' }] });
+	it('falls back to the course when there is no module, and to the category otherwise', () => {
+		const courseOnly = [container('TI', 'cat-ti', 'category', [container('Rust', 'curso-rust', 'course', [lesson('Aula 1', 'aula-1'), lesson('Aula 2', 'aula-2')])])];
+		expect(lessonSections(courseOnly).map((section) => section.title)).toEqual(['Rust']);
+		const flat = [container('Java', 'cat-java', 'category', [lesson('Aula X', 'aula-x'), lesson('Aula Y', 'aula-y')])];
+		expect(lessonSections(flat).map((section) => section.title)).toEqual(['Java']);
 	});
 
-	it('returns an empty group for an unknown or absent lesson path', () => {
-		expect(lessonGroup(catalog, 'ausente')).toEqual({ title: null, lessons: [] });
-		expect(lessonGroup(catalog, null)).toEqual({ title: null, lessons: [] });
-		expect(lessonGroup([], 'aula-1')).toEqual({ title: null, lessons: [] });
+	it('keeps lessons without any container in a titleless section', () => {
+		expect(lessonSections([lesson('Solta 1', 'solta-1'), lesson('Solta 2', 'solta-2')])).toEqual([
+			{ title: null, lessons: [{ title: 'Solta 1', path: 'solta-1' }, { title: 'Solta 2', path: 'solta-2' }] }
+		]);
+	});
+
+	it('ignores containers without lessons and empty catalogs', () => {
+		expect(lessonSections([container('Vazia', 'cat-vazia', 'category', [])])).toEqual([]);
+		expect(lessonSections([])).toEqual([]);
+	});
+
+	it('keeps two same-named containers in different paths as separate sections', () => {
+		const repeated = [
+			container('TI', 'cat-ti', 'category', [container('Rust', 'curso-rust', 'course', [lesson('Aula A', 'aula-a')])]),
+			container('Outra', 'cat-outra', 'category', [container('Rust', 'curso-rust-2', 'course', [lesson('Aula B', 'aula-b')])])
+		];
+		expect(lessonSections(repeated).map((section) => section.title)).toEqual(['Rust', 'Rust']);
+		expect(lessonSections(repeated).map((section) => section.lessons[0]?.path)).toEqual(['aula-a', 'aula-b']);
 	});
 });

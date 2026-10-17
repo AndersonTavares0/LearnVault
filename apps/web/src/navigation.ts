@@ -1,7 +1,7 @@
 import type { CatalogNode } from './transport';
 
 export type LessonRef = { title: string; path: string };
-export type LessonGroup = { title: string | null; lessons: LessonRef[] };
+export type LessonSection = { title: string | null; lessons: LessonRef[] };
 
 type IndexedLesson = { ref: LessonRef; ancestors: CatalogNode[] };
 
@@ -51,31 +51,38 @@ export function neighboringLessons(nodes: CatalogNode[], lessonPath: string | nu
 }
 
 /**
- * Contêiner que agrupa a aula: o curso mais próximo, senão o módulo mais próximo.
+ * Contêiner de seção: o ancestral mais próximo que agrupa aulas — módulo, curso ou
+ * categoria.
  *
- * "Mais próximo de dentro para fora" por papel, e não por profundidade: uma aula em
- * `categoria/curso/módulo/aula` pertence ao curso, porque é o curso que agrupa os
- * módulos. Sem curso e sem módulo — uma aula solta direto sob a categoria — o grupo é o
- * catálogo inteiro, com título nulo, para o índice continuar util em vez de vazio.
+ * A seção é o agrupamento visível mais próximo da aula: `categoria/curso/módulo/aula`
+ * fica sob o módulo; sem módulo, sob o curso; sem curso, sob a categoria. Aula sem
+ * contêiner (árvore atípica, sem categorias) cai numa seção sem título, para o índice
+ * continuar útil em vez de vazio.
  */
-function groupingContainer(ancestors: CatalogNode[]): CatalogNode | null {
-	for (const role of ['course', 'module']) {
-		const found = [...ancestors].reverse().find((node) => node.role === role);
-		if (found) return found;
-	}
-	return null;
+function sectionContainer(ancestors: CatalogNode[]): CatalogNode | null {
+	return [...ancestors].reverse().find((node) => node.role === 'course' || node.role === 'module' || node.role === 'category') ?? null;
 }
 
 /**
- * O índice de aulas exibido ao lado do player: as aulas do mesmo curso ou módulo, na
- * ordem canônica, com o título do contêiner quando ele existe.
+ * Seções do índice de aulas: todas as aulas do catálogo agrupadas pelo contêiner mais
+ * próximo, na ordem canônica.
+ *
+ * Contêineres são identificados pelo nó da árvore (caminho completo): dois cursos com o
+ * mesmo título em caminhos diferentes não se fundem. A ordem das seções é a da primeira
+ * aula de cada uma, então o índice nunca fica fora da ordem do catálogo.
  */
-export function lessonGroup(nodes: CatalogNode[], lessonPath: string | null): LessonGroup {
-	if (lessonPath === null) return { title: null, lessons: [] };
-	const indexed = indexLessons(nodes);
-	const current = indexed.find((entry) => entry.ref.path === lessonPath);
-	if (!current) return { title: null, lessons: [] };
-	const container = groupingContainer(current.ancestors);
-	const lessons = container === null ? indexed.map((entry) => entry.ref) : indexed.filter((entry) => entry.ancestors.includes(container)).map((entry) => entry.ref);
-	return { title: container?.title ?? null, lessons };
+export function lessonSections(nodes: CatalogNode[]): LessonSection[] {
+	const sections: LessonSection[] = [];
+	const byContainer = new Map<CatalogNode | null, LessonSection>();
+	for (const entry of indexLessons(nodes)) {
+		const container = sectionContainer(entry.ancestors);
+		let section = byContainer.get(container);
+		if (!section) {
+			section = { title: container?.title ?? null, lessons: [] };
+			byContainer.set(container, section);
+			sections.push(section);
+		}
+		section.lessons.push(entry.ref);
+	}
+	return sections;
 }
