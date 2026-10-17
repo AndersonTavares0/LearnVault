@@ -10,7 +10,7 @@ desenvolvimento.
 | Alvo | Artefato | Uso | Status |
 | --- | --- | --- | --- |
 | Linux | tarballs Linux Go | Único release Linux suportado | Disponível |
-| Self-hosted | imagem OCI Rust via Compose (Docker/Podman) | Deploy opcional em servidor | Experimental; imagem local, não publicada |
+| Self-hosted | imagem OCI Rust via Compose (Docker/Podman) | Deploy opcional em servidor | Opt-in explícito; imagem local, não publicada |
 | Windows | instalador `.exe` via NSIS | Execução local; instalação por usuário, sem administrador | Automatizado, não assinado |
 | Desktop Linux | Flatpak | Formato Linux preferencial do desktop | Backend `xdg-portal` configurado; build e smoke test no sandbox pendentes |
 
@@ -160,6 +160,60 @@ CONTAINER_ENGINE=podman ./scripts/verify-rust-oci.sh
 - Não faz parte do CI e não substitui `cargo fmt`, `cargo clippy` e `cargo test`.
 - A referência de imagem do Quadlet (`localhost/learnvault:latest`) continua sem origem
   resolvida até a Fase 5.
+
+## Container Rust no Compose (opt-in explícito)
+
+Decisão de 2026-10-17: o caminho self-hosted do Compose é um **opt-in explícito** do
+servidor Rust. Quem sobe `deploy/compose/compose.yaml` escolhe o servidor Rust de
+propósito; ninguém é migrado por acidente, porque a imagem e os artefatos Go continuam
+sendo o padrão do CI e do release, e o serviço Go permanece no repositório até a cutover
+coordenada final do ADR 0001. Isto não é suporte geral: é um caminho documentado, com os
+limites declarados abaixo.
+
+O arquivo constrói a imagem a partir de `deploy/container/Containerfile.rust`:
+
+```sh
+docker compose --env-file deploy/compose/.env.example \
+  -f deploy/compose/compose.yaml up -d --build
+```
+
+Antes de apontar `DATA_DIR` para um banco existente, migre com
+`learnvault-server migrate-go`: o servidor Rust **falha fechado** em banco no formato Go
+v7/v8 e recusa iniciar.
+
+Contrato aplicado pelo arquivo:
+
+- `read_only: true` na raiz do contêiner, `cap_drop: [ALL]`,
+  `security_opt: [no-new-privileges:true]` e `/tmp` em `tmpfs` `noexec,nosuid`.
+- A biblioteca é montada somente leitura (`/library:ro`); a escrita fica restrita a
+  `/data` e `/cache`.
+- O `HEALTHCHECK` consulta `/api/healthz`; sem resposta saudável o contêiner não é
+  considerado pronto.
+
+Evidências executadas:
+
+- Comando executado em 2026-10-17 num host de desenvolvimento:
+
+  ```sh
+  docker compose --env-file deploy/compose/.env.example -f deploy/compose/compose.yaml config
+  ```
+
+  A saída resolve as variáveis e renderiza o contrato acima, com a biblioteca somente
+  leitura.
+- O job `Container build (Rust)` da CI, verde na run `39002977974` sobre a `main`,
+  constrói o mesmo `Containerfile.rust`, roda `scripts/verify-rust-oci.sh` e aplica Trivy
+  HIGH/CRITICAL.
+
+Limites declarados:
+
+- A imagem não é publicada nem assinada, e não há artefato `arm64`.
+- Não houve soak nem instalação real em servidor; o cenário em produção segue sendo
+  responsabilidade do operador.
+- `CACHE_DIR` é montado, mas o servidor Rust ainda não tem interface de cache; o
+  diretório não é usado nesta fase.
+- Expor o serviço à rede exige proxy HTTPS com timeout de cabeçalhos, limite de conexões
+  por origem e limite de tamanho de cabeçalho (ver "Proteção do listener HTTP").
+- Os tarballs Linux Go continuam o único release Linux suportado.
 
 ## Modelo de configuração
 
