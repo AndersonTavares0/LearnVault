@@ -22,7 +22,15 @@ license = "Apache-2.0"
 rust-version = "1.99"
 
 # O Argon2 é lento por decisão de segurança (m=64MiB, t=2) e domina o tempo dos
-# testes de autenticação. Otimizar somente este pacote nos builds de teste/dev
-# reduz o custo por hash de ~1,3s para ~60ms, sem alterar parâmetros nem releases.
+# testes de autenticação. Otimizar somente o caminho Argon2id nos builds de
+# teste/dev reduz o custo por hash de ~1,3s para ~60ms, sem alterar parâmetros
+# nem releases. O `blake2` é a função de compressão do Argon2id e responde pela
+# maior parte do tempo restante; `debug = false` evita gerar informação de
+# depuração que os testes não consomem.
 [profile.dev.package.argon2]
 opt-level = 3
+debug = false
+
+[profile.dev.package.blake2]
+opt-level = 3
+debug = false
