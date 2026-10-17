@@ -333,3 +333,44 @@ fn a_version_two_database_is_upgraded_additively_preserving_rows() -> TestResult
     );
     Ok(())
 }
+
+#[test]
+fn the_current_schema_is_recognized_on_a_fresh_in_memory_database() -> TestResult {
+    let db = Database::open_in_memory()?;
+    assert!(
+        db.has_current_schema()?,
+        "um banco recém-migrado deve ser reconhecido como pronto para o servidor"
+    );
+    Ok(())
+}
+
+#[test]
+fn the_current_schema_is_recognized_on_a_fresh_file_database() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("learnvault.sqlite");
+
+    let db = Database::open(&path)?;
+
+    assert!(
+        db.has_current_schema()?,
+        "o banco criado pelo próprio binário não pode ser recusado no primeiro start"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_drifted_schema_is_not_reported_as_current() -> TestResult {
+    let db = Database::open_in_memory()?;
+    assert!(db.has_current_schema()?);
+
+    // Qualquer desvio observável (aqui, um índice exigido que sumiu) precisa
+    // reprovar a prontidão em vez de confiar apenas na versão registrada.
+    db.connection()
+        .execute("DROP INDEX session_expires_at_idx", [])?;
+
+    assert!(
+        !db.has_current_schema()?,
+        "o banco sem o índice exigido não está pronto para o servidor"
+    );
+    Ok(())
+}
