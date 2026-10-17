@@ -3,8 +3,9 @@
 //! Cada wrapper `#[tauri::command]` é fino: delega para uma função livre que não conhece
 //! o Tauri. Os testes exercitam as funções livres; o runtime do webview fica fora delas.
 //!
-//! O comando de seleção da biblioteca não aceita argumentos: o webview apenas dispara o
-//! seletor nativo, que roda no Rust, e recebe de volta somente o booleano de configuração.
+//! O comando de importação não aceita argumentos: o webview apenas dispara o seletor
+//! nativo, que roda no Rust, e recebe de volta somente o booleano de configuração. A
+//! remoção aceita apenas a identidade opaca do curso — nunca um caminho.
 //!
 //! Os comandos de estudo aceitam apenas dados do catálogo (`media_id`, posição, conclusão e
 //! limite). O dono do progresso é fixo no Rust: nenhum comando aceita `owner_id`.
@@ -15,24 +16,30 @@ use learnvault_core::Database;
 use tauri::State;
 
 use crate::config::DesktopConfigDto;
-use crate::dto::{CatalogDto, RecentStudyDto, RescanSummaryDto, StudyProgressDto};
+use crate::courses::CourseEntry;
+use crate::dto::{CatalogDto, CatalogNodeDto, RecentStudyDto, RescanSummaryDto, StudyProgressDto};
 use crate::error::IpcError;
 use crate::state::DesktopState;
 
-/// Identificador local da biblioteca, o mesmo usado pelo servidor.
-///
-/// O desktop lê a mesma tabela do domínio, então reusa a identidade para não criar um
-/// catálogo paralelo quando a configuração da raiz chegar.
-pub const LIBRARY_ID: &str = "library-1";
-
-/// Constrói o DTO do catálogo a partir dos dados persistidos no banco local.
+/// Constrói o DTO do catálogo agregado a partir dos dados persistidos no banco local.
 ///
 /// Função livre e testável: não conhece o Tauri e qualquer falha do núcleo é traduzida
-/// para um erro IPC sanitizado, sem ecoar o erro de `Display` do domínio.
-pub fn catalog(database: &Database) -> Result<CatalogDto, IpcError> {
-    learnvault_core::build_catalog(database, LIBRARY_ID)
-        .map(CatalogDto::from)
-        .map_err(|_| IpcError::catalog_unavailable())
+/// para um erro IPC sanitizado, sem ecoar o erro de `Display` do domínio. Cada curso
+/// registrado vira um nó de topo com identidade opaca e título derivado da pasta.
+pub fn catalog(database: &Database, courses: &[CourseEntry]) -> Result<CatalogDto, IpcError> {
+    let mut complete = true;
+    let mut nodes = Vec::with_capacity(courses.len());
+    for course in courses {
+        let inner = learnvault_core::build_catalog(database, &course.id)
+            .map_err(|_| IpcError::catalog_unavailable())?;
+        complete = complete && inner.complete;
+        nodes.push(CatalogNodeDto::course(&course.id, &course.title(), inner));
+    }
+    Ok(CatalogDto {
+        complete,
+        loose_files: Vec::new(),
+        categories: nodes,
+    })
 }
 
 /// Comando IPC: devolve o catálogo do desktop.
@@ -49,28 +56,35 @@ pub async fn desktop_catalog(state: State<'_, DesktopState>) -> Result<CatalogDt
         .map_err(|_| IpcError::database_unavailable())?
 }
 
-/// Comando IPC: devolve a situação de configuração do desktop.
-///
-/// Sempre responde com o booleano; o caminho da biblioteca nunca cruza o IPC.
-#[tauri::command]
-pub fn desktop_config(state: State<'_, DesktopState>) -> DesktopConfigDto {
-    state.config_status()
-}
-
-/// Comando IPC: abre o seletor nativo e persiste a raiz da biblioteca escolhida.
+/// Comando IPC: abre o seletor nativo e registra a pasta escolhida como um curso.
 ///
 /// Sem argumentos: o webview não envia caminho algum. O seletor e a gravação rodam em
 /// `spawn_blocking` para não prender a main thread, e o resultado é apenas o booleano de
 /// configuração. Cancelar preserva o estado anterior; uma falha vira erro sanitizado.
 #[tauri::command]
-pub async fn desktop_select_library(
+pub async fn desktop_import_course(
     app: tauri::AppHandle,
     state: State<'_, DesktopState>,
 ) -> Result<DesktopConfigDto, IpcError> {
     let state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || state.select_library(|| pick_folder(&app)))
+    tauri::async_runtime::spawn_blocking(move || state.import_course(|| pick_folder(&app)))
         .await
-        .map_err(|_| IpcError::library_config_unavailable())?
+        .map_err(|_| IpcError::courses_config_unavailable())?
+}
+
+/// Comando IPC: remove um curso do registro pela identidade opaca.
+///
+/// A remoção não toca nos arquivos e é idempotente: uma identidade desconhecida apenas
+/// devolve o estado atual. O webview nunca envia nem recebe um caminho.
+#[tauri::command]
+pub async fn desktop_remove_course(
+    state: State<'_, DesktopState>,
+    course_id: String,
+) -> Result<DesktopConfigDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.remove_course(&course_id))
+        .await
+        .map_err(|_| IpcError::courses_config_unavailable())?
 }
 
 /// Comando IPC: executa o rescan explícito da biblioteca configurada.

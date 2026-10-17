@@ -237,9 +237,9 @@ fn build_registers_the_app_commands_in_the_acl_manifest() {
         "o build precisa declarar o AppManifest do ACL"
     );
     for command in [
-        "desktop_config",
         "desktop_catalog",
-        "desktop_select_library",
+        "desktop_import_course",
+        "desktop_remove_course",
         "desktop_rescan",
         "desktop_study_progress",
         "desktop_record_position",
@@ -266,9 +266,9 @@ fn capability_grants_only_the_core_default_and_the_app_commands() {
         .collect();
 
     assert!(permissions.contains(&"core:default"));
-    assert!(permissions.contains(&"allow-desktop-config"));
+    assert!(permissions.contains(&"allow-desktop-import-course"));
     assert!(permissions.contains(&"allow-desktop-catalog"));
-    assert!(permissions.contains(&"allow-desktop-select-library"));
+    assert!(permissions.contains(&"allow-desktop-remove-course"));
     assert!(permissions.contains(&"allow-desktop-rescan"));
     assert!(permissions.contains(&"allow-desktop-study-progress"));
     assert!(permissions.contains(&"allow-desktop-record-position"));
@@ -341,10 +341,10 @@ fn the_native_picker_is_registered_in_rust_only() {
     );
 
     let command = read(&crate_root().join("src/command.rs"));
-    let marker = "pub async fn desktop_select_library";
+    let marker = "pub async fn desktop_import_course";
     let start = command
         .find(marker)
-        .expect("desktop_select_library precisa existir como comando assíncrono");
+        .expect("desktop_import_course precisa existir como comando assíncrono");
     let rest = &command[start..];
     let signature = &rest[..rest
         .find('{')
@@ -358,13 +358,13 @@ fn the_native_picker_is_registered_in_rust_only() {
 
     let body = &rest[..rest.find("\n}").expect("o comando precisa fechar o corpo")];
     assert!(
-        body.contains("state.select_library"),
-        "o comando delega a seleção ao estado: {body}"
+        body.contains("state.import_course"),
+        "o comando delega a importação ao estado: {body}"
     );
     for forbidden in ["rescan", "catalog", "database"] {
         assert!(
             !body.contains(forbidden),
-            "selecionar a raiz não pode disparar rescan nem tocar no banco: {body}"
+            "importar um curso não pode disparar rescan nem tocar no banco: {body}"
         );
     }
 
@@ -404,8 +404,12 @@ fn invoke_handler_registers_only_the_desktop_commands() {
     let commands = &rest[..end];
 
     assert!(
-        commands.contains("desktop_config"),
-        "o handler precisa registrar desktop_config: {commands}"
+        commands.contains("desktop_import_course"),
+        "o handler precisa registrar desktop_import_course: {commands}"
+    );
+    assert!(
+        commands.contains("desktop_remove_course"),
+        "o handler precisa registrar desktop_remove_course: {commands}"
     );
     assert!(
         commands.contains("desktop_catalog"),
@@ -575,15 +579,15 @@ fn rescan_is_never_triggered_at_startup_or_after_selection() {
     );
 
     let command = read(&crate_root().join("src/command.rs"));
-    let marker = "pub async fn desktop_select_library";
+    let marker = "pub async fn desktop_import_course";
     let start = command
         .find(marker)
-        .expect("desktop_select_library precisa existir como comando assíncrono");
+        .expect("desktop_import_course precisa existir como comando assíncrono");
     let rest = &command[start..];
     let body = &rest[..rest.find("\n}").expect("o comando precisa fechar o corpo")];
     assert!(
         !body.contains("rescan"),
-        "selecionar a raiz nunca pode disparar um rescan automático: {body}"
+        "importar um curso nunca pode disparar um rescan automático: {body}"
     );
 }
 

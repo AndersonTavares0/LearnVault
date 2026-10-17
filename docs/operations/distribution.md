@@ -128,7 +128,8 @@ COMPOSE="docker compose --env-file deploy/compose/.env.example -f deploy/compose
   (`learnvault-rust:local`, a partir de `Containerfile.rust`) e o Docker disponível.
 - Use sempre uma biblioteca de teste. Com o ambiente de exemplo, `LIBRARY_DIR` aponta para
   `testdata/library`. A sonda **tenta escrever** em `/library`; nunca aponte o script para uma
-  biblioteca real.
+  biblioteca real. No modelo atual, a pasta configurada é registrada como o primeiro curso quando
+  o registro ainda não existe; cursos adicionais entram pela interface, um por pasta.
 - Não faz parte do CI; é uma verificação manual.
 
 ## Validação experimental da imagem Rust (OCI)
@@ -218,9 +219,12 @@ Limites declarados:
 ## Modelo de configuração
 
 Instalações nativas usam variáveis de ambiente ou arquivo de configuração adjacente para
-`DATA_DIR`, `CACHE_DIR`, `LIBRARY_DIR`, `LISTEN_ADDR`, `PORT` e o bootstrap de autenticação.
-A biblioteca física permanece externa e somente leitura em todas as plataformas. Instaladores
-nunca devem copiar a biblioteca para o diretório da aplicação ou para backups.
+`DATA_DIR`, `CACHE_DIR`, `LISTEN_ADDR`, `PORT` e o bootstrap de autenticação. `LIBRARY_DIR`
+continua aceito como semente do primeiro curso (a pasta vira um curso com a identidade histórica
+`library-1` quando o registro ainda não existe); os demais cursos são registrados pela interface,
+em `courses.json`, ao lado do banco. As pastas de curso permanecem externas e somente leitura em
+todas as plataformas. Instaladores nunca devem copiar as pastas de curso para o diretório da
+aplicação ou para backups.
 
 ## Proteção do listener HTTP
 

@@ -58,6 +58,14 @@ export function formatCourseMeta(counts: CatalogCounts): string {
 	]);
 }
 
+/** Meta curta do card de um curso: o essencial para escolher o que estudar. */
+export function formatCourseCardMeta(counts: CatalogCounts): string {
+	return joinParts([
+		counts.modules > 0 ? formatCount(counts.modules, 'módulo', 'módulos') : '',
+		counts.lessons > 0 ? formatCount(counts.lessons, 'aula', 'aulas') : ''
+	]);
+}
+
 /** Meta de uma linha de aula: vídeos e materiais do próprio nó, omitindo as partes zeradas. */
 export function formatLessonMeta(counts: FileCounts): string {
 	return joinParts([

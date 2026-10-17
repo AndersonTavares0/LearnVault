@@ -279,6 +279,8 @@ async fn admin_rescan_populates_the_authenticated_catalog() {
     let rescan_body = rescan.into_body().collect().await.unwrap().to_bytes();
     let rescan_json: serde_json::Value = serde_json::from_slice(&rescan_body).unwrap();
     assert_eq!(rescan_json["complete"], true);
+    assert_eq!(rescan_json["courses"], 1);
+    assert_eq!(rescan_json["failed_courses"], 0);
     assert_eq!(rescan_json["inserted"], 1);
     assert!(rescan_json["scan_id"].as_i64().unwrap() > 0);
 
@@ -296,7 +298,11 @@ async fn admin_rescan_populates_the_authenticated_catalog() {
     let body = catalog.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(json["complete"], true);
-    assert_eq!(json["categories"][0]["title"], "Categoria");
+    // A pasta semeada é um curso: o nó de topo carrega a identidade legada e a
+    // subárvore escaneada fica sob ele.
+    assert_eq!(json["categories"][0]["title"], "library");
+    assert_eq!(json["categories"][0]["role"], "course");
+    assert_eq!(json["categories"][0]["course_id"], "library-1");
     let file = find_file(&json["categories"][0]).expect("lesson file in catalog");
     assert_eq!(file["name"], "lesson.mp4");
     assert_eq!(file["path"], "Categoria/Curso/lesson.mp4");
@@ -340,7 +346,7 @@ async fn catalog_reports_database_errors_without_caching_or_leaking_paths() {
 }
 
 #[tokio::test]
-async fn rescan_sanitizes_a_missing_library_root_error() {
+async fn rescan_reports_a_missing_course_root_as_failed_without_exposing_paths() {
     let temp = tempfile::tempdir().unwrap();
     let library = temp.path().join("library");
     fs::create_dir(&library).unwrap();
@@ -369,11 +375,15 @@ async fn rescan_sanitizes_a_missing_library_root_error() {
         )
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    // Uma raiz removida não derruba os demais cursos: a resposta agrega a falha sem
+    // seguir o alvo e sem expor o caminho.
+    assert_eq!(response.status(), StatusCode::OK);
     assert_private_no_store(&response);
     let body = response.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(json["error"], "library root changed");
+    assert_eq!(json["complete"], false);
+    assert_eq!(json["courses"], 1);
+    assert_eq!(json["failed_courses"], 1);
     assert!(
         !body
             .windows(library.to_str().unwrap().len())
