@@ -4,6 +4,51 @@ Todas as mudanças relevantes do LearnVault são documentadas neste arquivo.
 
 O formato segue o Keep a Changelog e as versões usam Semantic Versioning.
 
+## [0.3.0](https://github.com/AndersonTavares0/LearnVault/compare/v0.2.0...v0.3.0) (2026-10-17)
+
+
+### Funcionalidades
+
+* adicionar fundação Tauri offline ([552de8a](https://github.com/AndersonTavares0/LearnVault/commit/552de8ad8bd23016ddb6d37b163680c7e4932bac))
+* adicionar progresso de estudo persistente ([14e7ba6](https://github.com/AndersonTavares0/LearnVault/commit/14e7ba65eea5406cdc1d4a7840115a08e40ab94b))
+* avançar migração Go para Rust ([d34c8fa](https://github.com/AndersonTavares0/LearnVault/commit/d34c8fae1ce807427a513f2a197a18bd01000c88))
+* **core:** adicionar remoção explícita de mídia do catálogo ([#54](https://github.com/AndersonTavares0/LearnVault/issues/54)) ([c1896aa](https://github.com/AndersonTavares0/LearnVault/commit/c1896aaa61db4670f72747181c733da2392c22fe))
+* criar o workspace Rust e o esqueleto do núcleo ([#44](https://github.com/AndersonTavares0/LearnVault/issues/44)) ([1fb09a4](https://github.com/AndersonTavares0/LearnVault/commit/1fb09a4214f4e0eeb3804d7a3bab82306768f8bc))
+* derivar o catálogo de cursos, módulos e aulas ([#50](https://github.com/AndersonTavares0/LearnVault/issues/50)) ([2ed0c06](https://github.com/AndersonTavares0/LearnVault/commit/2ed0c0638089eec4e19dd4bbc54690b13fbc242c))
+* **desktop:** integrar progresso de estudo via IPC ([3b568f4](https://github.com/AndersonTavares0/LearnVault/commit/3b568f4256095ee5efb6fab27bb7764065635444))
+* **desktop:** servir arquivos pequenos offline por media ID ([a32464d](https://github.com/AndersonTavares0/LearnVault/commit/a32464dc2fb644a796ea5ddb9acba383fd6b8c4e))
+* expor migração Go pelo CLI Rust ([b8b1635](https://github.com/AndersonTavares0/LearnVault/commit/b8b16356c95e1848b6bb6d36b09ae409fa7ea364))
+* **go:** alinhar Study com a API Rust ([2dc4b39](https://github.com/AndersonTavares0/LearnVault/commit/2dc4b397dc917dd449e1c209767a2910699cd00c))
+* implementar a política de rescan e a persistência da descoberta ([#49](https://github.com/AndersonTavares0/LearnVault/issues/49)) ([81594fe](https://github.com/AndersonTavares0/LearnVault/commit/81594fec830d43ab93cf50cf260af2c8dcdaaf1a))
+* implementar o scanner e a identidade de mídia do núcleo ([#48](https://github.com/AndersonTavares0/LearnVault/issues/48)) ([53ee93d](https://github.com/AndersonTavares0/LearnVault/commit/53ee93dc265b8645ecdfb282376801efe47d8f71))
+* implementar persistência SQLite do núcleo em Rust ([#46](https://github.com/AndersonTavares0/LearnVault/issues/46)) ([c827882](https://github.com/AndersonTavares0/LearnVault/commit/c8278824cf3b324ed336a90d5efa01028cb31c7b))
+* migrar SPA para Vite e endurecer primeiro acesso ([#67](https://github.com/AndersonTavares0/LearnVault/issues/67)) ([2470657](https://github.com/AndersonTavares0/LearnVault/commit/2470657af2685da228acf796ce7707ebe0ce4ecd))
+* persistir e atualizar o progresso de estudo ([#52](https://github.com/AndersonTavares0/LearnVault/issues/52)) ([d70af71](https://github.com/AndersonTavares0/LearnVault/commit/d70af711c7ebfd19c05432dcd57510eb16a9ad2f))
+* playback desktop e release Windows ([c93a0a5](https://github.com/AndersonTavares0/LearnVault/commit/c93a0a5ad8a221f10dfcd0339854b3de1d283771))
+* resolver mídia por identificador com confinamento na biblioteca ([#51](https://github.com/AndersonTavares0/LearnVault/issues/51)) ([5a6cf4d](https://github.com/AndersonTavares0/LearnVault/commit/5a6cf4d0001c32e0da04a64592a98527d92660c2))
+* selecionar e persistir raiz da biblioteca desktop ([278ec8a](https://github.com/AndersonTavares0/LearnVault/commit/278ec8a82351478e7e04875a39a2581c87cec971))
+* **server:** adicionar catálogo autenticado e rescan administrativo (F2.4) ([d215753](https://github.com/AndersonTavares0/LearnVault/commit/d21575352d8fb427bfe57a6fec9a042b6e68b07a))
+* **server:** entregar mídia autenticada com Range (F2.3) ([5889045](https://github.com/AndersonTavares0/LearnVault/commit/5889045cca2478c354b851d6f42ca412f0845862))
+* **server:** expose study capabilities ([e3d9caf](https://github.com/AndersonTavares0/LearnVault/commit/e3d9caf5238ffc4044f3724386912b37ed28ed76))
+* **server:** implementar autenticação e sessões (F2.2) ([125aeb6](https://github.com/AndersonTavares0/LearnVault/commit/125aeb616fb4145a1f7966a4dbb4188e60cfa595))
+* **server:** iniciar infraestrutura Axum e healthz ([#56](https://github.com/AndersonTavares0/LearnVault/issues/56)) ([9619013](https://github.com/AndersonTavares0/LearnVault/commit/96190130b4b81163e9b9e0a9d713d8d2b52a0f1a))
+* **server:** servir SPA estatica e endurecer a entrega ([#64](https://github.com/AndersonTavares0/LearnVault/issues/64)) ([df7bc92](https://github.com/AndersonTavares0/LearnVault/commit/df7bc927d3ef68fd4f4a7ca3c2546e136cde450d))
+* usar portal para seleção da biblioteca Linux ([e133a88](https://github.com/AndersonTavares0/LearnVault/commit/e133a88fe70540534ac3e72fa83eb4b87973c7fa))
+* **web:** adicionar busca client-side ao catálogo ([ad25013](https://github.com/AndersonTavares0/LearnVault/commit/ad25013a279dca31f7b61491ab4cf1a899cc6c36))
+* **web:** integrar progresso de estudo com sincronização segura ([5e7866b](https://github.com/AndersonTavares0/LearnVault/commit/5e7866b80fae1709be856356fba7d1d0878947b8))
+
+
+### Correções
+
+* aceitar binario static-pie no smoke do RC Rust ([31970f6](https://github.com/AndersonTavares0/LearnVault/commit/31970f692afecc4e52bfdb490b6934dbd12615f6))
+* **ci:** falhar fechado no estado de alerta do auto-merge ([b40b400](https://github.com/AndersonTavares0/LearnVault/commit/b40b4004ec442704b2e8eefef3069ac88a4bca90))
+* **core:** classificar diretórios de mídia corretamente ([b85433f](https://github.com/AndersonTavares0/LearnVault/commit/b85433f75851acfde1853017f602bb207da64823))
+* **release:** include Apache license in Go archives ([aac814c](https://github.com/AndersonTavares0/LearnVault/commit/aac814c213b414dcb6ae0d841c0dfc22f952c51f))
+* **release:** validate published tag via environment ([97f0de7](https://github.com/AndersonTavares0/LearnVault/commit/97f0de76be91ba326c79aaad92180a5008dd9a67))
+* **server:** make idle media timeout deterministic ([63412fe](https://github.com/AndersonTavares0/LearnVault/commit/63412fe3ff578a09f27e846c125eba62fa8c37d6))
+* **test:** estabilizar a drenagem do stream ocioso da SPA ([#65](https://github.com/AndersonTavares0/LearnVault/issues/65)) ([5c81318](https://github.com/AndersonTavares0/LearnVault/commit/5c813182b9a8210ff838d53b1a34e747d3e6a21f))
+* **verify:** make pnpm verify a real gate ([1629f38](https://github.com/AndersonTavares0/LearnVault/commit/1629f3838117b23b9e71fcc1be1a9170aae7eeab))
+
 ## [0.2.0](https://github.com/AndersonTavares0/LearnVault/compare/v0.1.0...v0.2.0) (2026-10-15)
 
 
