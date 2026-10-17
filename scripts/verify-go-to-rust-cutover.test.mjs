@@ -10,6 +10,7 @@
 // Execução: `pnpm test:scripts` (ou `node --test scripts/verify-go-to-rust-cutover.test.mjs`).
 
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
@@ -163,6 +164,114 @@ test('normaliza TMPDIR/TEMP/TMP inseguros antes de criar qualquer arquivo', () =
 		script.indexOf('guard_fixture_path "$workdir"') !== -1 &&
 			script.indexOf('guard_fixture_path "$workdir"') < script.indexOf('mkdir -p "$library'),
 		'o workdir criado precisa passar pelo guard antes de qualquer mkdir'
+	);
+});
+
+test('o preflight de raiz temporária canonicaliza symlinks, não só o literal', () => {
+	// Um alias por symlink (TMPDIR=/tmp/to-cursos -> /mnt/cursos) só é detectado quando o
+	// caminho é resolvido de verdade, então o preflight precisa de um helper canônico.
+	assert.match(script, /real_path\(\)/, 'precisa de um helper real_path');
+	assert.match(script, /pwd -P/, 'real_path precisa resolver o caminho com pwd -P');
+
+	const preflight = script.slice(
+		script.indexOf('is_unsafe_temp_root'),
+		script.indexOf('workdir=$(mktemp -d)')
+	);
+	assert.match(preflight, /real_path/, 'o preflight precisa resolver os candidatos temporários');
+	assert.match(
+		preflight,
+		/is_unsafe_temp_root\s+"\$?[A-Za-z_]*resolved[A-Za-z_]*"/,
+		'o valor resolvido precisa passar pelo predicado is_unsafe_temp_root'
+	);
+
+	// Defesa em profundidade: o guard de fixture também considera o caminho resolvido.
+	const guard = script.slice(
+		script.indexOf('guard_fixture_path()'),
+		script.indexOf('resolve_dir')
+	);
+	assert.match(guard, /real_path/, 'guard_fixture_path precisa resolver o caminho antes de aceitar');
+});
+
+// Extração e execução reais em um shell POSIX: prova comportamental de que um TMPDIR por
+// symlink para uma árvore cursos é descartado, e não apenas detectado por leitura estática.
+function findPosixShell() {
+	const candidates = [];
+	if (process.env.SHELL) candidates.push(process.env.SHELL);
+	candidates.push(
+		'C:\\Program Files\\Git\\usr\\bin\\sh.exe',
+		'C:\\Program Files\\Git\\bin\\bash.exe',
+		'sh',
+		'bash'
+	);
+	for (const candidate of candidates) {
+		const probe = spawnSync(candidate, ['-c', 'printf ok'], { encoding: 'utf8' });
+		if (!probe.error && probe.status === 0 && (probe.stdout || '').includes('ok')) {
+			return candidate;
+		}
+	}
+	return null;
+}
+
+const posixShell = findPosixShell();
+
+test('sanitize_temp_environment descarta TMPDIR por symlink para uma raiz cursos', (t) => {
+	if (!posixShell) {
+		t.skip('nenhum shell POSIX (sh/bash) disponível para executar o preflight');
+		return;
+	}
+
+	const start = script.indexOf('is_unsafe_temp_root()');
+	const end = script.indexOf('\nsanitize_temp_environment\n');
+	assert.ok(start !== -1 && end > start, 'não foi possível extrair as funções do preflight');
+
+	// Extrai as funções reais do script e as executa inalteradas em um shell POSIX.
+	const preflightFuncs = script.slice(start, end);
+	const harness = [
+		'set -eu',
+		// Git Bash/MSYS: garantir os coreutils do próprio shell e symlinks nativos reais,
+		// sem os quais `ln -s` viraria uma cópia e o cenário testado não existiria.
+		'PATH="/usr/bin:/bin:$PATH"; export PATH',
+		'MSYS=winsymlinks:lnk; export MSYS',
+		preflightFuncs,
+		'base=$(mktemp -d)',
+		'mkdir -p "$base/cursos"',
+		'ln -s "$base/cursos" "$base/to-cursos"',
+		'',
+		'# Alias por symlink: o literal não contém "cursos", mas a resolução contém.',
+		'TMPDIR="$base/to-cursos"',
+		'sanitize_temp_environment',
+		'printf \'ALIAS_TMPDIR=[%s]\\n\' "${TMPDIR:-<unset>}"',
+		'printf \'RESOLVED=[%s]\\n\' "$(real_path "$base/to-cursos")"',
+		'',
+		'# Um TMPDIR genuinamente seguro precisa ser preservado.',
+		'mkdir -p "$base/safe-tmp"',
+		'TMPDIR="$base/safe-tmp"',
+		'sanitize_temp_environment',
+		'case "${TMPDIR:-}" in',
+		'*safe-tmp) printf \'SAFE_TMPDIR=[preserved]\\n\' ;;',
+		'*) printf \'SAFE_TMPDIR=[lost:%s]\\n\' "${TMPDIR:-<unset>}" ;;',
+		'esac',
+		'',
+		'rm -rf "$base"',
+		''
+	].join('\n');
+
+	const result = spawnSync(posixShell, ['-c', harness], { encoding: 'utf8' });
+	assert.equal(result.status, 0, `harness do shell falhou: ${result.stderr || result.stdout}`);
+	assert.match(
+		result.stdout,
+		/ALIAS_TMPDIR=\[<unset>\]/,
+		`TMPDIR por symlink para cursos deveria ser descartado, obtido: ${result.stdout}`
+	);
+	assert.match(
+		result.stdout,
+		/RESOLVED=\[.*cursos\]/,
+		`real_path deveria resolver o symlink para uma árvore cursos, obtido: ${result.stdout}`
+	);
+	assert.match(
+		result.stdout,
+		/SAFE_TMPDIR=\[preserved\]/,
+		`um TMPDIR seguro deveria ser preservado, obtido: ${result.stdout}`
 	);
 });
 

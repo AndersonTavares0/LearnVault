@@ -109,6 +109,10 @@ printf 'Using container engine: %s\n' "$engine"
 # created under /mnt or a cursos tree. Any such value is refused and dropped here so `mktemp`
 # falls back to the safe default (/tmp on POSIX and on MSYS/Git Bash), which keeps
 # Windows/MSYS support. No external tool is used, so the check is always effective.
+#
+# The check resolves symlinks: a lexical match alone misses an alias such as
+# TMPDIR=/tmp/to-cursos where `to-cursos` -> the real-data tree, which would let
+# `mktemp -d` create the fixture inside real user data before any later guard could see it.
 is_unsafe_temp_root() {
 	case "$1" in
 	/mnt | /mnt/* | */cursos | */cursos/*) return 0 ;;
@@ -116,10 +120,21 @@ is_unsafe_temp_root() {
 	esac
 }
 
+# Canonical (symlink-resolving) form of a path using only the shell; on any failure
+# (missing path, `cd` refused) it falls back to the literal input so callers always get a
+# usable value.
+real_path() {
+	(CDPATH= cd -- "$1" 2>/dev/null && pwd -P) || printf '%s' "$1"
+}
+
 drop_unsafe_temp_root() {
 	temp_name=$1
 	temp_value=$2
-	if [ -n "$temp_value" ] && is_unsafe_temp_root "$temp_value"; then
+	if [ -z "$temp_value" ]; then
+		return 0
+	fi
+	temp_resolved=$(real_path "$temp_value")
+	if is_unsafe_temp_root "$temp_value" || is_unsafe_temp_root "$temp_resolved"; then
 		printf 'WARNING: refusing unsafe %s=%s; fixtures will not be created there.\n' \
 			"$temp_name" "$temp_value" >&2
 		unset "$temp_name"
@@ -177,6 +192,16 @@ guard_fixture_path() {
 		exit 3
 		;;
 	esac
+	# Defense in depth: also refuse a real-data tree reached through a symlink alias,
+	# which the lexical check above cannot see.
+	resolved_path=$(real_path "$path")
+	case "$resolved_path" in
+	/mnt/* | /mnt | */cursos | */cursos/*)
+		printf 'ERROR: refusing real-data path (resolved): %s -> %s\n' "$path" "$resolved_path" >&2
+		printf '%s\n' 'This rehearsal only accepts synthetic fixtures under its mktemp directory.' >&2
+		exit 3
+		;;
+	esac
 	case "$path" in
 	"$workdir" | "$workdir"/*) ;;
 	*)
@@ -187,7 +212,7 @@ guard_fixture_path() {
 }
 
 resolve_dir() {
-	(CDPATH= cd -- "$1" 2>/dev/null && pwd -P) || printf '%s' "$1"
+	real_path "$1"
 }
 
 checksum() {
