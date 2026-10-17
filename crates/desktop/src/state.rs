@@ -1,52 +1,52 @@
 //! Estado compartilhado do aplicativo desktop.
 //!
 //! O estado guarda dois recursos independentes: o banco SQLite local protegido por um
-//! mutex e a raiz da biblioteca escolhida, protegida por um mutex próprio. Separar os
+//! mutex e a lista de cursos registrados, protegida por um mutex próprio. Separar os
 //! cadeados é deliberado: o seletor nativo e a persistência da configuração não podem
 //! segurar o cadeado do SQLite, e a leitura do catálogo continua fora da main thread.
 //!
-//! A raiz da biblioteca é apenas um caminho canonicalizado; o estado nunca escreve dentro
-//! dela. A configuração é gravada no diretório de configuração do aplicativo, nunca no
-//! banco nem na biblioteca.
+//! Cada curso é apenas um caminho canonicalizado com identidade estável; o estado nunca
+//! escreve dentro dele. A configuração é gravada no diretório de configuração do
+//! aplicativo, nunca no banco nem nas pastas de curso.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use learnvault_core::Database;
+use learnvault_core::{CourseRoot, Database};
 
-use crate::command::{LIBRARY_ID, catalog};
+use crate::command::catalog;
 use crate::config::{DesktopConfigDto, database_path};
+use crate::courses::{CourseEntry, load_courses, store_courses};
 use crate::dto::{CatalogDto, RecentStudyDto, RescanSummaryDto, StudyProgressDto};
 use crate::error::IpcError;
-use crate::library::{LibraryRoot, load_library_root, store_library_root};
 use crate::study;
 
-/// Estado Tauri do desktop: banco local e raiz da biblioteca.
+/// Estado Tauri do desktop: banco local e cursos registrados.
 #[derive(Clone)]
 pub struct DesktopState {
     database: Arc<Mutex<Database>>,
     config_dir: PathBuf,
-    library_root: Arc<Mutex<Option<LibraryRoot>>>,
+    courses: Arc<Mutex<Vec<CourseEntry>>>,
     rescanning: Arc<AtomicBool>,
 }
 
 impl DesktopState {
-    /// Abre o banco local e carrega a raiz da biblioteca do diretório de configuração.
+    /// Abre o banco local e carrega os cursos registrados do diretório de configuração.
     ///
-    /// O diretório de dados pertence ao aplicativo; a biblioteca externa nunca é criada,
-    /// lida nem escrita por esta operação. A configuração é revalidada: uma raiz removida
-    /// ou inválida rebaixa o estado para não configurado, sem falha fatal.
+    /// O diretório de dados pertence ao aplicativo; as pastas de curso são externas e
+    /// nunca são criadas, lidas nem escritas por esta operação. A configuração é
+    /// revalidada: cursos com raiz removida ou inválida são descartados, sem falha fatal.
     pub fn open(data_dir: &Path, config_dir: &Path) -> Result<Self, IpcError> {
         std::fs::create_dir_all(data_dir).map_err(|_| IpcError::database_unavailable())?;
         let database = Database::open(database_path(data_dir))
             .map_err(|_| IpcError::database_unavailable())?;
-        let library_root = load_library_root(config_dir);
+        let courses = load_courses(config_dir);
 
         Ok(Self {
             database: Arc::new(Mutex::new(database)),
             config_dir: config_dir.to_path_buf(),
-            library_root: Arc::new(Mutex::new(library_root)),
+            courses: Arc::new(Mutex::new(courses)),
             rescanning: Arc::new(AtomicBool::new(false)),
         })
     }
@@ -57,29 +57,39 @@ impl DesktopState {
             .database
             .lock()
             .map_err(|_| IpcError::database_unavailable())?;
-        catalog(&database)
+        catalog(&database, &self.courses())
     }
 
-    /// Situação de configuração exposta ao webview: só o booleano, nunca o caminho.
+    /// Situação de configuração exposta ao webview: só o booleano, nunca um caminho.
     ///
-    /// A raiz é revalidada em cada consulta para que uma biblioteca removida, inacessível ou
-    /// revogada pelo sandbox não continue sendo anunciada como configurada durante a vida do
-    /// processo. A configuração persistida e a raiz em memória não são apagadas aqui: uma
-    /// falha transitória ou um cancelamento continuam preservando o estado anterior, enquanto
-    /// operações que usam a raiz fazem sua própria revalidação antes de prosseguir.
+    /// As raízes são revalidadas em cada consulta para que um curso removido, inacessível
+    /// ou revogado pelo sandbox não continue sendo anunciado como configurado durante a
+    /// vida do processo. A configuração persistida e a lista em memória não são apagadas
+    /// aqui: uma falha transitória ou um cancelamento continuam preservando o estado
+    /// anterior, enquanto operações que usam as raízes fazem sua própria revalidação antes
+    /// de prosseguir.
     pub fn config_status(&self) -> DesktopConfigDto {
-        let configured = self
-            .library_root()
-            .is_some_and(|root| LibraryRoot::resolve(root.as_path()).is_ok());
-        DesktopConfigDto { configured }
+        DesktopConfigDto {
+            configured: self
+                .courses()
+                .iter()
+                .any(|course| CourseRoot::resolve(course.root.as_path()).is_ok()),
+        }
     }
 
-    /// Raiz da biblioteca validada, se houver uma configurada. Uso interno do Rust.
-    pub fn library_root(&self) -> Option<LibraryRoot> {
-        self.library_root
+    /// Fotografia imutável dos cursos registrados. Uso interno do Rust.
+    pub fn courses(&self) -> Vec<CourseEntry> {
+        self.courses
             .lock()
-            .ok()
-            .and_then(|guard| guard.clone())
+            .map(|guard| guard.clone())
+            .unwrap_or_default()
+    }
+
+    /// Curso registrado com a identidade informada, se houver. Uso interno da mídia.
+    pub fn course(&self, course_id: &str) -> Option<CourseEntry> {
+        self.courses()
+            .into_iter()
+            .find(|course| course.id == course_id)
     }
 
     /// Toma o cadeado do banco local para uma leitura. Uso interno da entrega de mídia.
@@ -94,14 +104,15 @@ impl DesktopState {
             .map_err(|_| IpcError::database_unavailable())
     }
 
-    /// Executa o seletor nativo e persiste a raiz escolhida com segurança.
+    /// Executa o seletor nativo e persiste a pasta escolhida como um curso.
     ///
     /// `pick` devolve o caminho bruto escolhido pelo usuário ou `None` quando o seletor é
-    /// cancelado. O cancelamento preserva a configuração anterior e devolve o estado
-    /// atual. Uma escolha inválida ou uma falha de gravação também preserva o estado e
-    /// devolve um erro IPC sanitizado. Em nenhum caso o caminho é escrito dentro da
-    /// biblioteca, e o cadeado do SQLite nunca é adquirido aqui.
-    pub fn select_library(
+    /// cancelado. O cancelamento preserva a lista anterior e devolve o estado atual. Uma
+    /// escolha inválida ou uma falha de gravação também preserva o estado e devolve um
+    /// erro IPC sanitizado. Escolher uma pasta já registrada é idempotente: a lista
+    /// permanece com um único registro. Em nenhum caso o caminho é escrito dentro da
+    /// pasta de curso, e o cadeado do SQLite nunca é adquirido aqui.
+    pub fn import_course(
         &self,
         pick: impl FnOnce() -> Option<PathBuf>,
     ) -> Result<DesktopConfigDto, IpcError> {
@@ -109,20 +120,49 @@ impl DesktopState {
             return Ok(self.config_status());
         };
 
-        let root = LibraryRoot::resolve(&picked).map_err(|_| IpcError::library_root_invalid())?;
+        let root = CourseRoot::resolve(&picked).map_err(|_| IpcError::course_path_invalid())?;
+        let entry = CourseEntry::from_root(root);
 
-        // O cadeado da raiz cobre a gravação e a atualização em memória: duas seleções
-        // concorrentes não podem terminar com a memória apontando para uma raiz diferente
-        // da persistida em disco. É o cadeado da raiz, nunca o do SQLite.
+        // O cadeado da lista cobre a gravação e a atualização em memória: duas importações
+        // concorrentes não podem terminar com a memória divergente do arquivo persistido.
+        // É o cadeado da configuração, nunca o do SQLite.
         let mut guard = self
-            .library_root
+            .courses
             .lock()
-            .map_err(|_| IpcError::library_config_unavailable())?;
-        store_library_root(&self.config_dir, &root)
-            .map_err(|_| IpcError::library_config_unavailable())?;
-        *guard = Some(root);
+            .map_err(|_| IpcError::courses_config_unavailable())?;
+        if guard.iter().any(|course| course.id == entry.id) {
+            return Ok(DesktopConfigDto { configured: true });
+        }
+        let mut next = guard.clone();
+        next.push(entry);
+        store_courses(&self.config_dir, &next)
+            .map_err(|_| IpcError::courses_config_unavailable())?;
+        *guard = next;
 
         Ok(DesktopConfigDto { configured: true })
+    }
+
+    /// Remove um curso do registro, sem tocar nos arquivos.
+    ///
+    /// Remover uma identidade desconhecida é idempotente e não altera a lista. A gravação
+    /// e a atualização em memória acontecem sob o cadeado da lista.
+    pub fn remove_course(&self, course_id: &str) -> Result<DesktopConfigDto, IpcError> {
+        let mut guard = self
+            .courses
+            .lock()
+            .map_err(|_| IpcError::courses_config_unavailable())?;
+        let next: Vec<CourseEntry> = guard
+            .iter()
+            .filter(|course| course.id != course_id)
+            .cloned()
+            .collect();
+        if next.len() != guard.len() {
+            store_courses(&self.config_dir, &next)
+                .map_err(|_| IpcError::courses_config_unavailable())?;
+            *guard = next;
+        }
+        drop(guard);
+        Ok(self.config_status())
     }
 
     /// Lê o progresso de estudo do dono local em uma mídia conhecida.
@@ -194,15 +234,14 @@ impl DesktopState {
         })
     }
 
-    /// Lê a biblioteca configurada e aplica a varredura ao catálogo local.
+    /// Lê as pastas de curso registradas e aplica a varredura a cada catálogo local.
     ///
-    /// Só é executado por ação explícita: nem a inicialização nem a seleção da raiz o
-    /// chamam. Sem raiz configurada devolve [`IpcError::library_not_configured`]; se a raiz
-    /// registrada sumiu, virou link/junction ou ficou inacessível, a revalidação imediata
-    /// devolve [`IpcError::rescan_unavailable`] e a política do núcleo cobre a raiz que já
-    /// não pode ser lida. A raiz é revalidada e copiada antes da varredura e nenhum cadeado
-    /// da configuração é mantido durante a leitura; o banco permanece fora da biblioteca e
-    /// a biblioteca permanece somente leitura. Chamadas concorrentes devolvem
+    /// Só é executado por ação explícita: nem a inicialização nem a importação o chamam.
+    /// Sem cursos registrados devolve [`IpcError::no_courses_registered`]; um curso cuja
+    /// pasta sumiu, virou link/junction ou ficou inacessível conta como falha na agregação
+    /// e não impede os demais. Cada raiz é revalidada imediatamente antes da varredura e
+    /// nenhum cadeado da configuração é mantido durante a leitura; o banco permanece fora
+    /// das pastas e elas permanecem somente leitura. Chamadas concorrentes devolvem
     /// [`IpcError::rescan_in_progress`] sem tocar o catálogo.
     ///
     /// Limitação conhecida desta fatia: o cadeado do banco SQLite é mantido durante toda a
@@ -211,24 +250,51 @@ impl DesktopState {
     pub fn rescan(&self) -> Result<RescanSummaryDto, IpcError> {
         let _guard = self.begin_rescan()?;
 
-        let root = self
-            .library_root()
-            .ok_or_else(IpcError::library_not_configured)?;
-
-        // Revalida a raiz imediatamente antes de varrer: se o diretório foi removido,
-        // substituído por um link/junction ou deixou de ser legível desde a seleção, a
-        // varredura é recusada sem seguir o alvo. A varredura usa a forma revalidada.
-        let root =
-            LibraryRoot::resolve(root.as_path()).map_err(|_| IpcError::rescan_unavailable())?;
+        let courses = self.courses();
+        if courses.is_empty() {
+            return Err(IpcError::no_courses_registered());
+        }
 
         let mut database = self
             .database
             .lock()
             .map_err(|_| IpcError::database_unavailable())?;
 
-        learnvault_core::rescan(&mut database, LIBRARY_ID, root.as_path())
-            .map(RescanSummaryDto::from)
-            .map_err(|_| IpcError::rescan_unavailable())
+        let mut summary = RescanSummaryDto {
+            complete: true,
+            courses: courses.len(),
+            failed: 0,
+            inserted: 0,
+            updated: 0,
+            marked_missing: 0,
+            preserved: 0,
+            ambiguous_count: 0,
+        };
+        for course in &courses {
+            // Revalida a raiz imediatamente antes de varrer: se o diretório foi removido,
+            // substituído por um link/junction ou deixou de ser legível desde a importação,
+            // a varredura é recusada sem seguir o alvo.
+            let Ok(root) = CourseRoot::resolve(course.root.as_path()) else {
+                summary.failed += 1;
+                summary.complete = false;
+                continue;
+            };
+            match learnvault_core::rescan(&mut database, &course.id, root.as_path()) {
+                Ok(course_summary) => {
+                    summary.complete = summary.complete && course_summary.complete;
+                    summary.inserted += course_summary.inserted;
+                    summary.updated += course_summary.updated;
+                    summary.marked_missing += course_summary.marked_missing;
+                    summary.preserved += course_summary.preserved;
+                    summary.ambiguous_count += course_summary.ambiguous.len();
+                }
+                Err(_) => {
+                    summary.failed += 1;
+                    summary.complete = false;
+                }
+            }
+        }
+        Ok(summary)
     }
 }
 

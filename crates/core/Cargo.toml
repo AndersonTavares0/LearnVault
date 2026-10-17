@@ -11,7 +11,7 @@ publish = false
 rusqlite = { version = "0.40", features = ["backup", "bundled"] }
 rusqlite_migration = "2.6"
 thiserror = "2"
-uuid = { version = "1.28", features = ["v7"] }
+uuid = { version = "1.28", features = ["v5", "v7"] }
 walkdir = "2.5"
 
 [dev-dependencies]

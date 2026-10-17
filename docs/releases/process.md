@@ -12,6 +12,45 @@ O workflow de release recebe a tag publicada por variável de ambiente e valida 
 o formato `vMAJOR.MINOR.PATCH`, com componentes numéricos sem zeros à esquerda, antes de
 usá-la. A tag nunca é interpolada diretamente em comandos de shell.
 
+## Reparo de assets
+
+Em evento `release`, o GitHub executa o arquivo de workflow **do commit da tag**, não o da `main`. Uma release
+publicada antes de o `release.yml` corrigido estar na `main` fica sem assets, e a correção só alcança as tags
+criadas depois dela. Para esses casos o workflow aceita disparo manual, restrito a quem tem permissão de escrita
+no repositório:
+
+1. Abra `Actions` → `Release` → `Run workflow`.
+2. Informe a tag exata, no formato `vX.Y.Z`, de uma release já publicada.
+3. O workflow valida a tag, confirma que a release existe e não é rascunho, reconstrói tudo a partir do commit da
+   tag, confere que a tag não se moveu durante o build, reenvia os quatro assets com `--clobber` e acrescenta a
+   seção **Contribuidores**.
+
+O caminho de reparo nunca recria tag nem release: ele apenas reenvia assets para a mesma tag. A seção Contribuidores
+é idempotente pelo marcador `<!-- learnvault:contributors -->`, então repetir o disparo não duplica a lista.
+
+## Convenção de nomes de assets
+
+Cada release publica exatamente quatro arquivos, sempre com os mesmos nomes:
+
+| Asset | Nome |
+| --- | --- |
+| Servidor Linux, x86-64 | `learnvault-linux-amd64.tar.gz` |
+| Servidor Linux, ARM64 | `learnvault-linux-arm64.tar.gz` |
+| Instalador Windows | `learnvault-windows-vMAJOR.MINOR.PATCH.exe` |
+| Checksums SHA-256 | `SHA256SUMS` |
+
+Regras que valem para qualquer ativo novo:
+
+- O prefixo é sempre `learnvault-`; não crie alias, sufixo alternativo de arquitetura (`x64`, `win64`) nem nome
+  comercial.
+- O vocabulário de arquitetura é o do Go e do GitHub Actions: `amd64` e `arm64`, nunca `x86_64` ou `x64`.
+- O instalador Windows carrega a tag no nome porque é o único arquivo que o usuário guarda fora da release; os
+  tarballs não carregam, porque o binário embutido reporta a versão em `--version`.
+- `SHA256SUMS` é sempre gerado pelo workflow com `sha256sum`, nunca à mão, e cobre exatamente os três assets
+  anexados.
+- O release candidate Rust mantém namespace separado (`rust-rc-vX.Y.Z-rc.N` e `SHA256SUMS.rust-rc`) porque é
+  artefato experimental e não é a distribuição suportada.
+
 O Release Please continua sendo a única fonte do `docs/releases/CHANGELOG.md` e do corpo de mudanças das notas. Depois de publicar os assets, o workflow acrescenta uma seção idempotente **Contribuidores**, derivada dos nomes de autor dos commits entre as tags verificadas; ele não gera uma segunda lista de mudanças nem usa notas geradas pelo GitHub. Use prefixos como `feat:`, `fix:`, `docs:` e `chore:` com descrições em pt-BR para manter as versões previsíveis e o changelog consistente.
 
 O workflow exige o secret `RELEASE_PLEASE_TOKEN`; credenciais de automação devem ficar nos

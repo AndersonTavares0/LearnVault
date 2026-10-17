@@ -15,12 +15,12 @@ pub enum IpcErrorCode {
     CatalogUnavailable,
     /// O banco de dados local não pôde ser aberto ou lido.
     DatabaseUnavailable,
-    /// A pasta escolhida como raiz da biblioteca é inválida.
-    LibraryRootInvalid,
-    /// A configuração do aplicativo não pôde ser gravada.
-    LibraryConfigUnavailable,
-    /// Nenhuma raiz de biblioteca está configurada para indexar.
-    LibraryNotConfigured,
+    /// A pasta escolhida para um curso é inválida.
+    CoursePathInvalid,
+    /// A configuração de cursos do aplicativo não pôde ser gravada.
+    CoursesConfigUnavailable,
+    /// Nenhum curso está registrado para indexar.
+    NoCoursesRegistered,
     /// Já existe um rescan em andamento.
     RescanInProgress,
     /// A varredura da biblioteca não pôde ser concluída.
@@ -59,27 +59,27 @@ impl IpcError {
         }
     }
 
-    /// A pasta escolhida como raiz da biblioteca é inválida.
-    pub fn library_root_invalid() -> Self {
+    /// A pasta escolhida para um curso é inválida.
+    pub fn course_path_invalid() -> Self {
         Self {
-            code: IpcErrorCode::LibraryRootInvalid,
-            message: "a pasta escolhida não é uma biblioteca válida",
+            code: IpcErrorCode::CoursePathInvalid,
+            message: "a pasta escolhida não é um curso válido",
         }
     }
 
-    /// A configuração do aplicativo não pôde ser gravada.
-    pub fn library_config_unavailable() -> Self {
+    /// A configuração de cursos do aplicativo não pôde ser gravada.
+    pub fn courses_config_unavailable() -> Self {
         Self {
-            code: IpcErrorCode::LibraryConfigUnavailable,
+            code: IpcErrorCode::CoursesConfigUnavailable,
             message: "não foi possível salvar a configuração do aplicativo",
         }
     }
 
-    /// Nenhuma raiz de biblioteca está configurada para indexar.
-    pub fn library_not_configured() -> Self {
+    /// Nenhum curso está registrado para indexar.
+    pub fn no_courses_registered() -> Self {
         Self {
-            code: IpcErrorCode::LibraryNotConfigured,
-            message: "nenhuma biblioteca está configurada",
+            code: IpcErrorCode::NoCoursesRegistered,
+            message: "nenhum curso está importado",
         }
     }
 

@@ -1,31 +1,33 @@
-//! Seleção e persistência segura da raiz da biblioteca desktop.
+//! Registro local e persistência segura dos cursos do desktop.
 //!
-//! A raiz da biblioteca é escolhida pelo usuário por um seletor nativo acionado pelo
-//! Rust. O webview nunca envia nem recebe um caminho: o único dado que cruza o IPC é o
-//! booleano `configured`. Esta camada resolve o caminho escolhido para a forma canônica,
-//! recusa raízes que não sejam diretórios legíveis (inclusive links simbólicos, junctions
-//! e pontos de reparse no topo) e grava o caminho canonicalizado em um arquivo de
-//! configuração versionado do próprio aplicativo.
+//! Cada curso é uma pasta externa escolhida pelo usuário por um seletor nativo acionado
+//! pelo Rust. O webview nunca envia nem recebe um caminho: os únicos dados que cruzam o
+//! IPC são a identidade opaca do curso e o booleano de configuração.
+//!
+//! Esta camada resolve um caminho escolhido para a forma canônica, recusa pastas que não
+//! sejam diretórios legíveis (inclusive links simbólicos, junctions e pontos de reparse no
+//! topo) e grava a lista canonicalizada em um arquivo de configuração versionado do
+//! próprio aplicativo.
 //!
 //! Regras de segurança preservadas aqui:
 //!
-//! - a biblioteca é externa e **somente leitura**: nada é criado, movido ou modificado
-//!   dentro dela, nem quando a seleção é recusada;
-//! - a configuração vive fora da raiz da biblioteca e fora do banco SQLite;
+//! - os cursos são externos e **somente leitura**: nada é criado, movido ou modificado
+//!   dentro deles, nem quando uma escolha é recusada;
+//! - a configuração vive fora das pastas de curso e fora do banco SQLite;
 //! - a gravação é serializada: o temporário é criado exclusivamente (`create_new`, sem
 //!   seguir link nem reaproveitar arquivo existente) e a troca usa `rename`; no Windows,
 //!   como as APIs padrão não substituem um destino existente, ele é removido imediatamente
 //!   antes da troca, deixando uma janela inevitável em que a configuração pode não existir;
-//! - a leitura revalida a raiz no startup: configuração ausente, corrompida, em versão
-//!   desconhecida ou com raiz removida/inacessível resulta em "não configurado";
+//! - a leitura revalida cada raiz no startup: configuração ausente, corrompida, em versão
+//!   desconhecida ou com pasta removida/inacessível simplesmente não produz aquele curso;
 //! - nenhuma mensagem de erro carrega caminho do sistema de arquivos.
 
-use std::fmt;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
+use learnvault_core::{CourseRoot, LEGACY_LIBRARY_ID, course_id_from_path, course_title};
 use serde::{Deserialize, Serialize};
 
 /// Serializa as gravações da configuração no processo inteiro.
@@ -38,82 +40,60 @@ static STORE_LOCK: Mutex<()> = Mutex::new(());
 /// Número máximo de nomes de temporário tentados antes de desistir da gravação.
 const MAX_TEMP_ATTEMPTS: u32 = 32;
 
-/// Versão do formato de configuração da raiz da biblioteca.
-pub const CONFIG_VERSION: u32 = 1;
+/// Versão do formato de configuração dos cursos.
+pub const CONFIG_VERSION: u32 = 2;
 
-/// Nome do arquivo de configuração da raiz dentro do diretório de configuração do app.
+/// Nome do arquivo de configuração dentro do diretório de configuração do app.
 pub const CONFIG_FILE_NAME: &str = "library.json";
 
-/// Raiz da biblioteca já validada e canonicalizada.
+/// Curso registrado no desktop: identidade estável e raiz já validada.
 ///
 /// O caminho é privado de propósito: ele existe apenas para o Rust e nunca é serializado
 /// para o webview. O `Debug` também oculta o caminho, para que um registro de diagnóstico
-/// não vaze a localização da biblioteca.
+/// não vaze a localização do curso.
 #[derive(Clone, PartialEq, Eq)]
-pub struct LibraryRoot(PathBuf);
+pub struct CourseEntry {
+    /// Identidade estável usada como `library_id` no banco.
+    pub id: String,
+    /// Raiz canônica validada do curso.
+    pub root: CourseRoot,
+}
 
-impl LibraryRoot {
-    /// Valida e canonicaliza um caminho candidato a raiz da biblioteca.
-    ///
-    /// O caminho precisa existir, ser um diretório, não ser um link simbólico, junction
-    /// ou ponto de reparse no próprio topo, e ser legível (`read_dir`). O resultado é a
-    /// forma canônica — a única forma persistida. Nenhum arquivo é criado ou modificado.
-    pub fn resolve(path: &Path) -> Result<Self, LibraryError> {
-        let metadata = match fs::symlink_metadata(path) {
-            Ok(metadata) => metadata,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                return Err(LibraryError::Missing);
-            }
-            Err(_) => return Err(LibraryError::NotReadable),
-        };
-
-        if metadata.file_type().is_symlink() || is_reparse_point(&metadata) {
-            return Err(LibraryError::Link);
+impl CourseEntry {
+    /// Cria a entrada derivando a identidade do caminho canônico.
+    pub fn from_root(root: CourseRoot) -> Self {
+        Self {
+            id: course_id_from_path(root.as_path()),
+            root,
         }
-        if !metadata.is_dir() {
-            return Err(LibraryError::NotADirectory);
-        }
-
-        let canonical = fs::canonicalize(path).map_err(|_| LibraryError::NotReadable)?;
-        fs::read_dir(&canonical).map_err(|_| LibraryError::NotReadable)?;
-
-        Ok(Self(canonical))
     }
 
-    /// Caminho canônico da raiz, somente para uso interno do Rust.
-    pub fn as_path(&self) -> &Path {
-        &self.0
+    /// Título apresentado, derivado do nome da pasta do curso.
+    pub fn title(&self) -> String {
+        course_title(self.root.as_path())
     }
 }
 
-impl fmt::Debug for LibraryRoot {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("LibraryRoot(<oculto>)")
+impl std::fmt::Debug for CourseEntry {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("CourseEntry")
+            .field("id", &self.id)
+            .field("root", &self.root)
+            .finish()
     }
 }
 
-/// Falha estável da validação ou da persistência da raiz. Nunca carrega caminho.
+/// Falha estável da persistência da configuração. Nunca carrega caminho.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LibraryError {
-    /// O caminho escolhido não existe.
-    Missing,
-    /// O caminho escolhido não é um diretório.
-    NotADirectory,
-    /// O caminho escolhido não pôde ser lido (canonicalização ou listagem).
-    NotReadable,
-    /// O caminho escolhido é um link, junction ou ponto de reparse.
-    Link,
     /// A configuração não pôde ser gravada com segurança.
     WriteFailed,
 }
 
-impl fmt::Display for LibraryError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for LibraryError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter.write_str(match self {
-            LibraryError::Missing => "a raiz da biblioteca não existe",
-            LibraryError::NotADirectory => "a raiz da biblioteca não é um diretório",
-            LibraryError::NotReadable => "a raiz da biblioteca não pode ser lida",
-            LibraryError::Link => "a raiz da biblioteca não pode ser um link",
             LibraryError::WriteFailed => "não foi possível gravar a configuração do aplicativo",
         })
     }
@@ -125,33 +105,81 @@ impl std::error::Error for LibraryError {}
 #[derive(Debug, Serialize, Deserialize)]
 struct StoredConfig {
     version: u32,
+    courses: Vec<StoredCourse>,
+}
+
+/// Entrada persistida de um curso. O caminho é a única informação durável.
+#[derive(Debug, Serialize, Deserialize)]
+struct StoredCourse {
+    id: String,
+    path: PathBuf,
+}
+
+/// Formato anterior (versão 1): uma única raiz de biblioteca.
+///
+/// A raiz antiga vira um único curso com a identidade histórica
+/// ([`LEGACY_LIBRARY_ID`]), para que as mídias, varreduras e o progresso de estudo já
+/// gravados continuem associados ao mesmo `library_id`.
+#[derive(Debug, Deserialize)]
+struct LegacyConfig {
+    version: u32,
     library_root: PathBuf,
 }
 
-/// Carrega e revalida a raiz persistida, se houver uma.
+/// Carrega e revalida os cursos persistidos.
 ///
-/// Devolve `None` quando a configuração está ausente, corrompida, em versão desconhecida
-/// ou quando a raiz registrada não passa mais na validação (removida, inacessível ou
-/// transformada em link). O chamador trata `None` como "não configurado"; a leitura nunca
-/// falha de forma fatal nem cria nada no sistema de arquivos.
-pub fn load_library_root(config_dir: &Path) -> Option<LibraryRoot> {
-    let raw = fs::read(config_dir.join(CONFIG_FILE_NAME)).ok()?;
-    let stored: StoredConfig = serde_json::from_slice(&raw).ok()?;
-    if stored.version != CONFIG_VERSION {
-        return None;
+/// Devolve lista vazia quando a configuração está ausente, corrompida ou em versão
+/// desconhecida, e descarta cada curso cuja pasta não passa mais na validação (removida,
+/// inacessível ou transformada em link). A leitura nunca falha de forma fatal nem cria
+/// nada no sistema de arquivos.
+pub fn load_courses(config_dir: &Path) -> Vec<CourseEntry> {
+    let Ok(raw) = fs::read(config_dir.join(CONFIG_FILE_NAME)) else {
+        return Vec::new();
+    };
+
+    let stored: Vec<StoredCourse> = if let Ok(config) = serde_json::from_slice::<StoredConfig>(&raw)
+    {
+        if config.version != CONFIG_VERSION {
+            return Vec::new();
+        }
+        config.courses
+    } else if let Ok(legacy) = serde_json::from_slice::<LegacyConfig>(&raw) {
+        if legacy.version != 1 {
+            return Vec::new();
+        }
+        let Some(root) = CourseRoot::resolve(&legacy.library_root).ok() else {
+            return Vec::new();
+        };
+        return vec![CourseEntry {
+            id: LEGACY_LIBRARY_ID.to_owned(),
+            root,
+        }];
+    } else {
+        return Vec::new();
+    };
+
+    let mut courses: Vec<CourseEntry> = Vec::new();
+    for entry in stored {
+        let Ok(root) = CourseRoot::resolve(&entry.path) else {
+            continue;
+        };
+        if courses.iter().any(|course| course.id == entry.id) {
+            continue;
+        }
+        courses.push(CourseEntry { id: entry.id, root });
     }
-    LibraryRoot::resolve(&stored.library_root).ok()
+    courses
 }
 
-/// Grava a raiz canonicalizada no diretório de configuração.
+/// Grava a lista canonicalizada no diretório de configuração.
 ///
-/// Se `config_dir` estiver dentro da própria biblioteca — uma configuração errada — a
-/// gravação é recusada **antes** de qualquer criação, para que nada seja criado dentro
-/// da biblioteca. O diretório de configuração é criado fora da raiz, e o arquivo é
-/// escrito em um temporário e depois renomeado sobre o destino. No Windows, o destino é
-/// removido imediatamente antes da troca, deixando uma pequena janela não atômica.
-pub fn store_library_root(config_dir: &Path, root: &LibraryRoot) -> Result<(), LibraryError> {
-    if config_dir_is_inside(config_dir, root) {
+/// Se `config_dir` estiver dentro de algum curso — uma configuração errada — a gravação é
+/// recusada **antes** de qualquer criação, para que nada seja criado dentro das pastas de
+/// curso. O diretório de configuração é criado fora das raízes, e o arquivo é escrito em
+/// um temporário e depois renomeado sobre o destino. No Windows, o destino é removido
+/// imediatamente antes da troca, deixando uma pequena janela não atômica.
+pub fn store_courses(config_dir: &Path, courses: &[CourseEntry]) -> Result<(), LibraryError> {
+    if config_dir_is_inside(config_dir, courses) {
         return Err(LibraryError::WriteFailed);
     }
 
@@ -159,33 +187,42 @@ pub fn store_library_root(config_dir: &Path, root: &LibraryRoot) -> Result<(), L
 
     let payload = serde_json::to_vec(&StoredConfig {
         version: CONFIG_VERSION,
-        library_root: root.as_path().to_path_buf(),
+        courses: courses
+            .iter()
+            .map(|course| StoredCourse {
+                id: course.id.clone(),
+                path: course.root.as_path().to_path_buf(),
+            })
+            .collect(),
     })
     .map_err(|_| LibraryError::WriteFailed)?;
 
     write_atomically(&config_dir.join(CONFIG_FILE_NAME), &payload)
 }
 
-/// Indica se o diretório de configuração está dentro da biblioteca.
+/// Indica se o diretório de configuração está dentro de algum curso registrado.
 ///
 /// Compara formas canônicas do ancestral existente mais próximo, então funciona mesmo
-/// quando o diretório de configuração ainda não existe. A comparação é contra a raiz já
-/// canonicalizada, evitando falsos negativos por diferença de prefixo (por exemplo o
+/// quando o diretório de configuração ainda não existe. A comparação é contra as raízes
+/// já canonicalizadas, evitando falsos negativos por diferença de prefixo (por exemplo o
 /// prefixo verbatim do Windows).
-fn config_dir_is_inside(config_dir: &Path, root: &LibraryRoot) -> bool {
+fn config_dir_is_inside(config_dir: &Path, courses: &[CourseEntry]) -> bool {
     let mut probe = config_dir;
-    loop {
+    let resolved = loop {
         if probe.exists() {
-            return match fs::canonicalize(probe) {
-                Ok(canonical) => canonical.starts_with(root.as_path()),
-                Err(_) => config_dir.starts_with(root.as_path()),
-            };
+            break fs::canonicalize(probe).ok();
         }
         match probe.parent() {
             Some(parent) => probe = parent,
-            None => return config_dir.starts_with(root.as_path()),
+            None => break None,
         }
-    }
+    };
+    courses.iter().any(|course| {
+        resolved.as_ref().map_or_else(
+            || config_dir.starts_with(course.root.as_path()),
+            |resolved| resolved.starts_with(course.root.as_path()),
+        )
+    })
 }
 
 /// Escreve `bytes` em `dest` de forma serializada.
@@ -278,19 +315,4 @@ fn replace_file(source: &Path, dest: &Path) -> Result<(), LibraryError> {
 
     #[cfg(not(windows))]
     fs::rename(source, dest).map_err(|_| LibraryError::WriteFailed)
-}
-
-/// Verdadeiro quando o metadado marca um ponto de reparse (junction ou symlink) no Windows.
-#[cfg(windows)]
-fn is_reparse_point(metadata: &fs::Metadata) -> bool {
-    use std::os::windows::fs::MetadataExt;
-
-    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
-    metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
-}
-
-/// Fora do Windows, junctions e pontos de reparse não existem; links já são detectados.
-#[cfg(not(windows))]
-fn is_reparse_point(_metadata: &fs::Metadata) -> bool {
-    false
 }

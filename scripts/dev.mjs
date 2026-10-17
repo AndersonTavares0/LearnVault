@@ -72,7 +72,6 @@ if (mode === 'localhost') {
 	console.log('  A primeira execução compila o servidor e pode demorar.\n');
 	run('cargo', [
 		'run', '-p', 'learnvault-server', '--',
-		'--library-root', 'testdata/library',
 		'--listen-addr', listenAddr,
 		'--insecure-http'
 	]);
@@ -93,7 +92,7 @@ if (mode === 'localhost') {
 
 	console.log('LearnVault desktop (Tauri), sem portas de rede.');
 	console.log('O primeiro build compila o crate desktop; edições da SPA recarregam sozinhas.');
-	console.log('Primeiro uso: escolha testdata/library e use "Indexar biblioteca".\n');
+	console.log('Primeiro uso: use "Importar curso" e escolha a pasta de um curso.\n');
 
 	run('pnpm', ['--filter', 'learnvault-web', 'dev:tauri']);
 

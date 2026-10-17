@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countCatalogFiles, countCatalogNode, formatCount, formatCourseMeta, formatLessonMeta } from './catalog';
+import { countCatalogFiles, countCatalogNode, formatCount, formatCourseCardMeta, formatCourseMeta, formatLessonMeta } from './catalog';
 import type { CatalogNode, FileEntry } from './transport';
 
 function file(name: string, kind: string): FileEntry {
@@ -68,6 +68,18 @@ describe('formatCourseMeta', () => {
 
 	it('returns an empty string when there is nothing to count', () => {
 		expect(formatCourseMeta({ modules: 0, lessons: 0, videos: 0, materials: 0 })).toBe('');
+	});
+});
+
+describe('formatCourseCardMeta', () => {
+	it('keeps only modules and lessons for the card caption', () => {
+		expect(formatCourseCardMeta({ modules: 3, lessons: 12, videos: 20, materials: 4 })).toBe('3 módulos · 12 aulas');
+		expect(formatCourseCardMeta({ modules: 0, lessons: 25, videos: 25, materials: 180 })).toBe('25 aulas');
+		expect(formatCourseCardMeta({ modules: 2, lessons: 0, videos: 0, materials: 9 })).toBe('2 módulos');
+	});
+
+	it('returns an empty string for a course without structure yet', () => {
+		expect(formatCourseCardMeta({ modules: 0, lessons: 0, videos: 0, materials: 0 })).toBe('');
 	});
 });
 
