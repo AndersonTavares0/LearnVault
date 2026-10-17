@@ -1,6 +1,6 @@
 <script lang="ts">
 	import LooseFiles from './LooseFiles.svelte';
-	import { formatDuration, mediaPlaybackKind, selectPlayableMedia, selectPlayableSubtitle, srtConversionSupported, srtToWebVtt, studySyncEnabled, subtitleFormat } from './player';
+	import { clampSpeed, formatDuration, mediaPlaybackKind, PLAYBACK_SPEEDS, type PlaybackSpeed, selectPlayableMedia, selectPlayableSubtitle, srtConversionSupported, srtToWebVtt, studySyncEnabled, subtitleFormat } from './player';
 	import { createPositionSaver } from './study';
 	import { transport, type Lesson, type StudyProgress } from './transport';
 
@@ -13,6 +13,7 @@
 	const syncEnabled = $derived(studySyncEnabled(studyEnabled, mediaId, source));
 
 	let media: HTMLMediaElement | null = $state(null);
+	let playbackSpeed = $state<PlaybackSpeed>(1);
 	let currentTime = $state(0);
 	let duration = $state(0);
 	let progress: StudyProgress | null = $state(null);
@@ -83,6 +84,18 @@
 		return () => { active = false; saver.reset(); };
 	});
 
+	function changeSpeed(speed: number) {
+		const target = clampSpeed(speed);
+		playbackSpeed = target;
+		if (media) media.playbackRate = target;
+	}
+
+	$effect(() => {
+		if (media) {
+			media.playbackRate = playbackSpeed;
+		}
+	});
+
 	function resume() {
 		if (!media || !progress?.recorded) return;
 		media.currentTime = progress.positionSeconds;
@@ -123,7 +136,38 @@
 	}
 </script>
 {#if mediaError}<p class="error" role="alert">{mediaError}</p>
-{:else if source}{#if playbackKind === 'audio'}<!-- svelte-ignore a11y_media_has_caption --><audio class="player-media player-audio" controls preload="metadata" src={source} bind:this={media} bind:currentTime={currentTime} bind:duration={duration} ontimeupdate={handleTimeUpdate} onended={handleEnded} onerror={onMediaError}>{#if captionSource}<track kind="captions" src={captionSource} label="Legenda" default />{/if}</audio>{:else}<!-- svelte-ignore a11y_media_has_caption --><video class="player-media" controls preload="metadata" src={source} bind:this={media} bind:currentTime={currentTime} bind:duration={duration} ontimeupdate={handleTimeUpdate} onended={handleEnded} onerror={onMediaError}>{#if captionSource}<track kind="captions" src={captionSource} label="Legenda" default />{/if}</video>{/if}
+{:else if source}
+	<div class="player-container {playbackKind === 'audio' ? 'audio-container' : 'video-container'}">
+		{#if playbackKind === 'audio'}
+			<div class="audio-banner" aria-hidden="true">
+				<div class="audio-icon-wrap">
+					<svg class="audio-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
+					</svg>
+				</div>
+				<span class="audio-label">Faixa de áudio · {lesson.title}</span>
+			</div>
+			<!-- svelte-ignore a11y_media_has_caption -->
+			<audio class="player-media player-audio" controls preload="metadata" src={source} bind:this={media} bind:currentTime={currentTime} bind:duration={duration} ontimeupdate={handleTimeUpdate} onended={handleEnded} onerror={onMediaError}>
+				{#if captionSource}<track kind="captions" src={captionSource} label="Legenda" default />{/if}
+			</audio>
+		{:else}
+			<!-- svelte-ignore a11y_media_has_caption -->
+			<video class="player-media" controls preload="metadata" src={source} bind:this={media} bind:currentTime={currentTime} bind:duration={duration} ontimeupdate={handleTimeUpdate} onended={handleEnded} onerror={onMediaError}>
+				{#if captionSource}<track kind="captions" src={captionSource} label="Legenda" default />{/if}
+			</video>
+		{/if}
+		<div class="player-controls-bar" role="toolbar" aria-label="Controles de reprodução">
+			<span class="control-label" id="speed-label">Velocidade:</span>
+			<div class="speed-buttons" role="group" aria-labelledby="speed-label">
+				{#each PLAYBACK_SPEEDS as speed}
+					<button type="button" class="speed-button" class:active={playbackSpeed === speed} onclick={() => changeSpeed(speed)} aria-pressed={playbackSpeed === speed}>
+						{speed}x
+					</button>
+				{/each}
+			</div>
+		</div>
+	</div>
 {:else}<p class="empty" role="status">Esta aula não possui mídia disponível.</p>{/if}
 {#if syncEnabled}
 	<div class="study-bar" role="group" aria-label="Progresso da aula">
