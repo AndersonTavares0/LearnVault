@@ -25,7 +25,8 @@ use crate::state::DesktopState;
 ///
 /// Função livre e testável: não conhece o Tauri e qualquer falha do núcleo é traduzida
 /// para um erro IPC sanitizado, sem ecoar o erro de `Display` do domínio. Cada curso
-/// registrado vira um nó de topo com identidade opaca e título derivado da pasta.
+/// registrado vira um nó de topo com identidade opaca e título derivado da pasta, exposto
+/// como `nodes` (árvore canônica) e como `categories` (lista de cursos de topo).
 pub fn catalog(database: &Database, courses: &[CourseEntry]) -> Result<CatalogDto, IpcError> {
     let mut complete = true;
     let mut nodes = Vec::with_capacity(courses.len());
@@ -38,6 +39,9 @@ pub fn catalog(database: &Database, courses: &[CourseEntry]) -> Result<CatalogDt
     Ok(CatalogDto {
         complete,
         loose_files: Vec::new(),
+        // O mesmo nó de topo de curso alimenta os dois campos: `nodes` é a árvore canônica
+        // e `categories` é a lista de cursos de topo do contrato do IPC.
+        nodes: nodes.clone(),
         categories: nodes,
     })
 }

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { findLesson } from './router';
-import { desktopMediaUrl, DesktopStub, HttpTransport, normalizeCatalog, normalizeRecentStudy, normalizeStudyProgress, normalizeUser, STUDY_NOT_AVAILABLE, type Transport } from './transport';
+import { desktopMediaUrl, DesktopStub, HttpTransport, lessonFromNode, normalizeCatalog, normalizeRecentStudy, normalizeStudyProgress, normalizeUser, STUDY_NOT_AVAILABLE, CATALOG_LIMITS, type Transport } from './transport';
 
 // O Tauri só é carregado no desktop: fora dele o módulo é substituído pelo mock, de modo
 // que a suíte nunca toca `window.__TAURI_INTERNALS__`.
@@ -126,8 +126,17 @@ describe('transport contract', () => {
 		// Nós internos não carregam identidade de curso: ela vive apenas no topo.
 		expect(catalog.nodes[0].children[0].courseId).toBeUndefined();
 	});
+	it('requires media_id on canonical root loose files and preserves them when present', () => {
+		// Um arquivo solto de raiz em payload canônico segue a mesma regra dos nós: identidade
+		// obrigatória. Sem `media_id`, o payload é recusado em vez de aceitar um arquivo órfão.
+		expect(() => normalizeCatalog({ complete: true, categories: [], loose_files: [{ name: 'nota.pdf', path: 'nota.pdf', size: 3, kind: 'material' }] })).toThrow('Resposta inválida do servidor');
+		const catalog = normalizeCatalog({ complete: true, categories: [], loose_files: [{ media_id: 'loose-1', name: 'nota.pdf', path: 'nota.pdf', size: 3, kind: 'material' }] });
+		expect(catalog.looseFiles[0]).toMatchObject({ mediaId: 'loose-1', path: 'nota.pdf' });
+	});
 	it('accepts an empty Rust catalog without course wrappers', () => {
-		const catalog = normalizeCatalog({ complete: true, categories: [], loose_files: [{ name: 'nota.pdf', path: 'nota.pdf', size: 3, kind: 'material' }] });
+		// O contrato canônico não usa envelope de categoria: `categories: []` vale como árvore
+		// vazia, sem criar nós de curso artificiais. O arquivo solto canônico carrega identidade.
+		const catalog = normalizeCatalog({ complete: true, categories: [], loose_files: [{ media_id: 'loose-1', name: 'nota.pdf', path: 'nota.pdf', size: 3, kind: 'material' }] });
 		expect(catalog.nodes).toEqual([]);
 		expect(catalog.looseFiles[0].path).toBe('nota.pdf');
 	});
@@ -135,7 +144,7 @@ describe('transport contract', () => {
 		expect(() => normalizeCatalog({ complete: true, loose_files: [], categories: [{ title: 'Curso', path: '', role: 'course', course_id: 42, files: [], loose_files: [], children: [] }] })).toThrow('Resposta inválida do servidor');
 	});
 	it('keeps shallow recursive lessons and files addressable by path', () => {
-		const catalog = normalizeCatalog({ complete: true, loose_files: [], nodes: [{ title: 'Categoria', path: 'cat', role: 'category', files: [{ name: 'cat.pdf', path: 'cat/cat.pdf', size: 1, kind: 'material' }], loose_files: [], children: [{ title: 'Aula', path: 'cat/aula', role: 'lesson', files: [{ name: 'aula.mp4', path: 'cat/aula.mp4', size: 4, kind: 'media' }], loose_files: [], children: [] }] }] });
+		const catalog = normalizeCatalog({ complete: true, loose_files: [], nodes: [{ title: 'Categoria', path: 'cat', role: 'category', files: [{ media_id: 'cat-pdf', name: 'cat.pdf', path: 'cat/cat.pdf', size: 1, kind: 'material' }], loose_files: [], children: [{ title: 'Aula', path: 'cat/aula', role: 'lesson', files: [{ media_id: 'aula-mp4', name: 'aula.mp4', path: 'cat/aula.mp4', size: 4, kind: 'media' }], loose_files: [], children: [] }] }] });
 		expect(catalog.nodes[0].children[0].path).toBe('cat/aula');
 		expect(catalog.nodes[0].children[0].files[0].path).toBe('cat/aula.mp4');
 	});
@@ -180,6 +189,350 @@ describe('transport contract', () => {
 		expect(lesson?.media[0]).toMatchObject({ path: 'programming/go/basics/first/video.mp4', kind: 'media' });
 		expect(lesson?.subtitles[0]).toMatchObject({ path: 'programming/go/basics/first/video.vtt', kind: 'subtitle' });
 		expect(lesson?.materials[0]).toMatchObject({ path: 'programming/go/basics/first/notes.pdf', kind: 'material' });
+	});
+	it('prefers canonical nodes over the legacy categories field when both are present', () => {
+		// O contrato Rust passa a expor `nodes` e `categories` com a mesma árvore recursiva
+		// canônica. Quando os dois vêm no payload, a SPA prefere `nodes` e nunca cai na
+		// projeção de categorias para montar a árvore.
+		const catalog = normalizeCatalog({
+			complete: true,
+			loose_files: [],
+			nodes: [{ title: 'DaNodes', path: 'cat', role: 'category', files: [], loose_files: [], children: [] }],
+			categories: [{ title: 'DaCategories', path: 'cat', role: 'category', files: [], loose_files: [], children: [] }]
+		});
+		expect(catalog.nodes.map((node) => node.title)).toEqual(['DaNodes']);
+	});
+	it('accepts a canonical payload that omits root loose files and prefers nodes over the legacy categories', () => {
+		// O contrato canônico serializa a árvore em `nodes` e omite `loose_files` na raiz quando
+		// não há arquivos soltos (omitempty): a ausência vale como lista vazia. Com o marcador
+		// `complete` a árvore canônica vence a `categories` legada, que é ignorada.
+		const catalog = normalizeCatalog({
+			complete: true,
+			nodes: [{
+				title: 'Programação', path: 'programming', role: 'category', files: [], loose_files: [],
+				children: [{
+					title: 'Go', path: 'programming/go', role: 'group', files: [], loose_files: [],
+					children: [{
+						title: 'Primeiros passos', path: 'programming/go/first', role: 'lesson',
+						files: [{ media_id: 'first-mp4', name: 'video.mp4', path: 'programming/go/first/video.mp4', size: 42, kind: 'media' }],
+						loose_files: [], children: []
+					}]
+				}]
+			}],
+			categories: [{
+				title: 'Programação', path: 'programming',
+				courses: [{
+					title: 'Go', path: 'programming/go',
+					modules: [{ title: 'Primeiros passos', path: 'programming/go/first', lessons: [{ title: 'Primeiros passos', path: 'programming/go/first', media: [{ name: 'video.mp4', path: 'programming/go/first/video.mp4', size: 42 }], subtitles: [], materials: [] }] }]
+				}]
+			}]
+		});
+		expect(catalog.looseFiles).toEqual([]);
+		expect(catalog.nodes[0].path).toBe('programming');
+		expect(findLesson(catalog, 'programming', 'programming/go/first')?.media[0].path).toBe('programming/go/first/video.mp4');
+	});
+	it('falls back to populated legacy categories when nodes is empty', () => {
+		// Um `nodes` vazio não pode esconder a árvore legada entregue em `categories`.
+		const catalog = normalizeCatalog({
+			complete: true,
+			nodes: [],
+			loose_files: [],
+			categories: [{ title: 'Legado', path: 'cat', role: 'category', files: [], loose_files: [], children: [{ title: 'Aula', path: 'cat/aula', role: 'lesson', files: [{ media_id: 'a-mp4', name: 'a.mp4', path: 'cat/aula.mp4', size: 4, kind: 'media' }], loose_files: [], children: [] }] }]
+		});
+		expect(catalog.nodes[0].title).toBe('Legado');
+		expect(catalog.nodes[0].children[0].path).toBe('cat/aula');
+	});
+	it('falls back to a Go catalog when nodes is empty but categories is populated', () => {
+		const catalog = normalizeCatalog({
+			nodes: [],
+			categories: [{ title: 'Programação', path: 'programming', courses: [{ title: 'Go', path: 'programming/go', modules: [{ title: 'Básico', path: 'programming/go/basics', lessons: [{ title: 'Aula', path: 'programming/go/basics/first', media: [{ name: 'v.mp4', path: 'programming/go/basics/first/v.mp4', size: 9 }], subtitles: [], materials: [] }] }] }] }]
+		});
+		expect(catalog.nodes[0].role).toBe('course');
+		expect(findLesson(catalog, 'programming/go', 'programming/go/basics/first')?.media[0].path).toBe('programming/go/basics/first/v.mp4');
+	});
+	it('preserves displayable Go content when a payload carries both additive nodes and legacy categories', () => {
+		// Payload real do serviço Go: `nodes` canônico com papel `group` nos níveis
+		// intermediários e arquivos sem `media_id`, mais a `categories` legada equivalente. Sem
+		// o marcador canônico `complete`, a `categories[].courses` é a fonte autoritativa: ela
+		// vence `nodes` para não perder a árvore legada que o serviço projetou.
+		const catalog = normalizeCatalog({
+			nodes: [{
+				title: 'Programação', path: 'programming', role: 'category', loose_files: [],
+				children: [{
+					title: 'Go', path: 'programming/go', role: 'group', loose_files: [],
+					children: [{
+						title: 'Básico', path: 'programming/go/basics', role: 'group', loose_files: [],
+						children: [{
+							title: 'Primeiros passos', path: 'programming/go/basics/first', role: 'lesson',
+							files: [{ name: 'video.mp4', path: 'programming/go/basics/first/video.mp4', size: 42, kind: 'media' }],
+							loose_files: [], children: []
+						}]
+					}]
+				}]
+			}],
+			categories: [{
+				title: 'Programação', path: 'programming',
+				courses: [{ title: 'Go', path: 'programming/go', modules: [{ title: 'Básico', path: 'programming/go/basics', lessons: [{ title: 'Primeiros passos', path: 'programming/go/basics/first', media: [{ name: 'video.mp4', path: 'programming/go/basics/first/video.mp4', size: 42 }], subtitles: [], materials: [] }] }] }]
+			}]
+		});
+		expect(catalog.nodes.length).toBeGreaterThan(0);
+		// A árvore legada do Go (curso/módulo/aula) venceu os `group` aditivos: cada curso vira
+		// um nó de topo endereçável pela identidade derivada do caminho.
+		expect(catalog.nodes[0].role).toBe('course');
+		expect(catalog.nodes[0].courseId).toBe('programming/go');
+		expect(catalog.nodes[0].children[0].children[0].path).toBe('programming/go/basics/first');
+		expect(findLesson(catalog, 'programming/go', 'programming/go/basics/first')?.media[0].path).toBe('programming/go/basics/first/video.mp4');
+	});
+	it('rejects an explicit non-boolean complete marker instead of treating it as Go', () => {
+		// `complete` presente precisa ser booleano: um `null`/string/objeto não pode ser lido
+		// como "sem marcador" e cair no fallback do Go.
+		const categories = [{ title: 'Legado', path: 'cat', courses: [{ title: 'C', path: 'c', modules: [] }] }];
+		const nodes = [{ title: 'Cat', path: 'cat', role: 'category', files: [], loose_files: [], children: [] }];
+		for (const complete of [null, 'true', 'false', 1, {}, []]) {
+			expect(() => normalizeCatalog({ complete, nodes, categories })).toThrow('Resposta inválida do servidor');
+		}
+	});
+	it('routes a canonical payload strictly through Rust even when categories look like Go courses', () => {
+		// `complete: true` + `nodes` vazio + `categories` em forma Go: o payload é canônico, então
+		// a forma legada do Go não pode servir de fallback. As `courses` não são nós canônicos e o
+		// payload é recusado em vez de virar um catálogo Go.
+		expect(() => normalizeCatalog({ complete: true, nodes: [], categories: [{ title: 'Legado', path: 'cat', courses: [{ title: 'C', path: 'c', modules: [] }] }] })).toThrow('Resposta inválida do servidor');
+		// Um `nodes` canônico vazio, sem categorias, continua sendo um catálogo vazio válido.
+		const empty = normalizeCatalog({ complete: true, nodes: [] });
+		expect(empty.nodes).toEqual([]);
+		expect(empty.looseFiles).toEqual([]);
+	});
+	it('uses the Go legacy categories and ignores non-canonical additive nodes when both are present', () => {
+		// Sem `complete`, o payload é do Go: a `categories[].courses` vence e os `nodes` aditivos
+		// são ignorados — não são parseados como nós canônicos nem consomem o orçamento.
+		const catalog = normalizeCatalog({
+			nodes: [null, 'x', { role: 'group' }],
+			categories: [{ title: 'Cat', path: 'cat', courses: [{ title: 'C', path: 'c', modules: [{ title: 'M', path: 'm', lessons: [{ title: 'A', path: 'm/a', media: [{ name: 'v.mp4', path: 'm/a/v.mp4', size: 1 }], subtitles: [], materials: [] }] }] }] }]
+		});
+		expect(catalog.nodes[0].courseId).toBe('c');
+		expect(findLesson(catalog, 'c', 'm/a')?.media[0].path).toBe('m/a/v.mp4');
+	});
+	it('rejects an oversized additive nodes array even on the Go categories path', () => {
+		// Os `nodes` ignorados não podem trafegar uma árvore ilimitada: um array absurdo é
+		// recusado de forma barata (apenas o comprimento de topo) mesmo sem ser processado.
+		const nodes = Array.from({ length: CATALOG_LIMITS.nodes + 1 }, () => null);
+		expect(() => normalizeCatalog({ nodes, categories: [{ title: 'Cat', path: 'cat', courses: [] }] })).toThrow('Resposta inválida do servidor');
+	});
+	it('rejects Go-only courses fields in a canonical payload instead of yielding empty content', () => {
+		// Mesmo com `role` presente (o que faria o nó "parsear"), um `courses` só-do-Go em um
+		// payload canônico sem nós seria descartado silenciosamente, virando conteúdo vazio.
+		expect(() => normalizeCatalog({
+			complete: true,
+			nodes: [],
+			categories: [{ title: 'Legado', path: 'cat', role: 'category', courses: [{ title: 'C', path: 'c', modules: [] }] }]
+		})).toThrow('Resposta inválida do servidor');
+		// Um `categories` recursivo (Rust legado) sem `courses` continua aceito.
+		const legacy = normalizeCatalog({ complete: true, categories: [{ title: 'Legado', path: 'cat', role: 'category', files: [], loose_files: [], children: [] }] });
+		expect(legacy.nodes[0].title).toBe('Legado');
+	});
+	it('rejects a deeply nested ignored nodes payload on the Go categories path', () => {
+		// A `categories` legada é autoritativa, mas os `nodes` ignorados não podem contornar o
+		// orçamento com uma árvore profunda: o limite de profundidade precisa valer mesmo para a
+		// árvore que não é processada.
+		let deep: Record<string, unknown> = { title: 'Aula', path: 'aula', role: 'group', children: [] };
+		for (let level = 0; level <= CATALOG_LIMITS.depth; level++) {
+			deep = { title: 'N', path: `n${level}`, role: 'group', children: [deep] };
+		}
+		expect(() => normalizeCatalog({
+			nodes: [deep],
+			categories: [{ title: 'Cat', path: 'cat', courses: [] }]
+		})).toThrow('Resposta inválida do servidor');
+	});
+	it('rejects an explicitly malformed nodes field instead of falling back to categories', () => {
+		// Um `nodes` presente com tipo inválido é payload malformado: cair para `categories`
+		// esconderia o erro em vez de recusá-lo, e a árvore canônica ficaria ambígua.
+		const categories = [{ title: 'Legado', path: 'cat', role: 'category', files: [], loose_files: [], children: [] }];
+		for (const nodes of [null, 'nodes', 42, true, {}]) {
+			expect(() => normalizeCatalog({ nodes, categories })).toThrow('Resposta inválida do servidor');
+		}
+	});
+	it('falls back to categories only when nodes is absent', () => {
+		const catalog = normalizeCatalog({ categories: [{ title: 'Legado', path: 'cat', role: 'category', files: [], loose_files: [], children: [] }] });
+		expect(catalog.nodes[0].title).toBe('Legado');
+	});
+	it('preserves lessons through unknown group descendants in the canonical tree', () => {
+		// O serviço Go usa o papel `group` nos níveis intermediários. A busca pela aula precisa
+		// descer por eles em vez de descartar as aulas.
+		const catalog = normalizeCatalog({
+			nodes: [{
+				title: 'Programação', path: 'programming', role: 'category', files: [], loose_files: [],
+				children: [{
+					title: 'Go', path: 'programming/go', role: 'group', files: [], loose_files: [],
+					children: [{
+						title: 'Básico', path: 'programming/go/basics', role: 'group', files: [], loose_files: [],
+						children: [{ title: 'Aula', path: 'programming/go/basics/first', role: 'lesson', files: [{ media_id: 'v-mp4', name: 'v.mp4', path: 'programming/go/basics/first/v.mp4', size: 9, kind: 'media' }], loose_files: [], children: [] }]
+					}]
+				}]
+			}]
+		});
+		expect(catalog.nodes[0].children[0].children[0].children[0].path).toBe('programming/go/basics/first');
+		expect(lessonFromNode(catalog.nodes[0].children[0].children[0].children[0]).media.map((file) => file.path)).toEqual(['programming/go/basics/first/v.mp4']);
+	});
+	it('preserves lessons when a module sits directly under a category without a course level', () => {
+		const catalog = normalizeCatalog({
+			complete: true,
+			loose_files: [],
+			nodes: [{ title: 'Cat', path: 'Cat', role: 'category', files: [], loose_files: [], children: [{ title: 'Curso', path: 'Cat/Curso', role: 'module', files: [], loose_files: [], children: [{ title: 'Aula', path: 'Cat/Curso/Aula', role: 'lesson', files: [{ media_id: 'a-mp4', name: 'a.mp4', path: 'Cat/Curso/Aula/a.mp4', size: 1, kind: 'media' }], loose_files: [], children: [] }] }] }]
+		});
+		expect(catalog.nodes[0].children[0].children[0].path).toBe('Cat/Curso/Aula');
+		expect(findLesson(catalog, 'Cat', 'Cat/Curso/Aula')?.media[0].path).toBe('Cat/Curso/Aula/a.mp4');
+	});
+	it('prefers canonical nodes when the legacy categories carry Go-shaped courses', () => {
+		// O servidor Rust passou a enviar `nodes` recursivo e `categories` na forma legada do
+		// serviço Go (`courses`/`modules`/`lessons`). A SPA usa `nodes` para montar a árvore e
+		// reprojeta as categorias, sem confundir os dois shapes.
+		const catalog = normalizeCatalog({
+			complete: true,
+			loose_files: [],
+			nodes: [{ title: 'DaNodes', path: 'cat', role: 'category', files: [], loose_files: [], children: [] }],
+			categories: [{ title: 'DaCategories', path: 'cat', courses: [{ title: 'Curso', path: 'cat/curso', modules: [{ title: 'Mod', path: 'cat/curso/mod', lessons: [{ title: 'Aula', path: 'cat/curso/mod/aula', media: [{ name: 'v.mp4', path: 'cat/curso/mod/aula/v.mp4', size: 1 }], subtitles: [], materials: [] }] }] }] }]
+		});
+		expect(catalog.nodes[0].title).toBe('DaNodes');
+		// A árvore canônica vem de `nodes`; a `categories` legada do payload não é copiada.
+		expect(catalog.nodes.map((node) => node.title)).toEqual(['DaNodes']);
+	});
+	it('keeps a node of an unknown role in the canonical tree instead of dropping it', () => {
+		// Um papel desconhecido (por exemplo um `group` futuro) não pode sumir: a árvore
+		// canônica o preserva com seus arquivos, e a projeção legada desce por ele.
+		const catalog = normalizeCatalog({
+			nodes: [{
+				title: 'Cat', path: 'cat', role: 'category', files: [], loose_files: [],
+				children: [{
+					title: 'Grupo', path: 'cat/grupo', role: 'group',
+					files: [{ media_id: 'guia-pdf', name: 'guia.pdf', path: 'cat/grupo/guia.pdf', size: 2, kind: 'material' }],
+					loose_files: [], children: []
+				}]
+			}]
+		});
+		expect(catalog.nodes[0].children[0].role).toBe('group');
+		expect(catalog.nodes[0].children[0].files[0].path).toBe('cat/grupo/guia.pdf');
+		// O arquivo do nó de papel desconhecido continua acessível: `lessonFromNode` o trata
+		// como material (catch-all) em vez de descartá-lo.
+		expect(lessonFromNode(catalog.nodes[0].children[0]).materials.map((file) => file.path)).toEqual(['cat/grupo/guia.pdf']);
+	});
+	it('keeps an unknown file kind instead of dropping it from the lesson projection', () => {
+		// Um `kind` que a SPA ainda não conhece não pode fazer o arquivo desaparecer: a árvore
+		// canônica preserva o valor original e a aula o trata como material (catch-all).
+		const catalog = normalizeCatalog({
+			nodes: [{
+				title: 'Cat', path: 'cat', role: 'category', files: [], loose_files: [],
+				children: [{
+					title: 'Aula', path: 'cat/aula', role: 'lesson',
+					files: [{ media_id: 'extra-bin', name: 'extra.bin', path: 'cat/aula/extra.bin', size: 1, kind: 'bonus' }],
+					loose_files: [], children: []
+				}]
+			}]
+		});
+		expect(catalog.nodes[0].children[0].files[0].kind).toBe('bonus');
+		const lesson = lessonFromNode(catalog.nodes[0].children[0]);
+		expect(lesson.media).toEqual([]);
+		expect(lesson.subtitles).toEqual([]);
+		expect(lesson.materials.map((file) => file.path)).toEqual(['cat/aula/extra.bin']);
+	});
+	it('keeps a top-level node of an unknown role searchable instead of dropping it', () => {
+		// Um papel de topo desconhecido não some do payload: a árvore canônica o mantém e a
+		// busca por aula continua alcançando seus descendentes.
+		const catalog = normalizeCatalog({
+			nodes: [{
+				title: 'Coleção', path: 'colecao', role: 'collection', files: [], loose_files: [],
+				children: [{
+					title: 'Aula', path: 'colecao/aula', role: 'lesson',
+					files: [{ media_id: 'm1', name: 'v.mp4', path: 'colecao/aula/v.mp4', size: 1, kind: 'media' }],
+					loose_files: [], children: []
+				}]
+			}]
+		});
+		expect(catalog.nodes[0].role).toBe('collection');
+		expect(findLesson(catalog, 'colecao', 'colecao/aula')?.media[0].path).toBe('colecao/aula/v.mp4');
+		// Nada se perde com o papel desconhecido: a aula continua na árvore canônica.
+		expect(catalog.nodes[0].children.map((child) => child.path)).toEqual(['colecao/aula']);
+	});
+	it('requires a non-empty media_id for canonical Rust node files', () => {
+		// A árvore canônica Rust declara `media_id` obrigatório: um arquivo sem identidade não
+		// é endereçável. `complete: bool` marca o contrato canônico (Rust/desktop).
+		const bare = { name: 'aula.mp4', path: 'cat/aula.mp4', size: 1, kind: 'media' };
+		expect(() => normalizeCatalog({ complete: true, nodes: [{ title: 'Cat', path: 'cat', role: 'category', files: [bare], loose_files: [], children: [] }] })).toThrow('Resposta inválida do servidor');
+		const empty = { ...bare, media_id: '' };
+		expect(() => normalizeCatalog({ complete: true, nodes: [{ title: 'Cat', path: 'cat', role: 'category', files: [], loose_files: [empty], children: [] }] })).toThrow('Resposta inválida do servidor');
+		// A `categories` recursiva (fallback Rust quando `nodes` está vazio) também é canônica.
+		expect(() => normalizeCatalog({ complete: true, nodes: [], categories: [{ title: 'Cat', path: 'cat', role: 'category', files: [bare], loose_files: [], children: [] }] })).toThrow('Resposta inválida do servidor');
+	});
+	it('keeps media_id optional for the legacy Go fallback', () => {
+		// O serviço Go não emite `media_id`: o fallback por `categories` com `courses` continua
+		// aceito sem identidade de mídia.
+		const catalog = normalizeCatalog({ categories: [{ title: 'Cat', courses: [{ title: 'Curso', modules: [{ title: 'Mod', lessons: [{ title: 'Aula', path: 'a', media: [{ name: 'v.mp4', path: 'a/v.mp4', size: 1 }], subtitles: [], materials: [] }] }] }] }] });
+		expect(catalog.nodes[0].children[0].children[0].files[0].mediaId).toBeUndefined();
+	});
+	it('keeps root loose files without media_id for the Go fallback', () => {
+		// Sem o marcador canônico `complete`, o payload é do Go, que não emite identidade.
+		const catalog = normalizeCatalog({ categories: [], loose_files: [{ name: 'nota.pdf', path: 'nota.pdf', size: 3 }] });
+		expect(catalog.looseFiles[0].mediaId).toBeUndefined();
+	});
+	it('rejects a catalog deeper than the depth limit instead of overflowing the stack', () => {
+		let deep: Record<string, unknown> = { title: 'Aula', path: 'aula', role: 'lesson', files: [], loose_files: [], children: [] };
+		for (let level = 0; level <= CATALOG_LIMITS.depth; level++) {
+			deep = { title: 'Nó', path: `n${level}`, role: 'module', files: [], loose_files: [], children: [deep] };
+		}
+		expect(() => normalizeCatalog({ nodes: [deep] })).toThrow('Resposta inválida do servidor');
+	});
+	it('rejects a catalog with more nodes than the limit without truncating', () => {
+		const leaf = { title: 'Aula', path: 'aula', role: 'lesson', files: [], loose_files: [], children: [] };
+		const children = Array.from({ length: CATALOG_LIMITS.nodes }, () => leaf);
+		// Uma categoria mais o limite de filhos ultrapassa o orçamento total de nós.
+		expect(() => normalizeCatalog({ nodes: [{ title: 'Cat', path: 'cat', role: 'category', files: [], loose_files: [], children }] })).toThrow('Resposta inválida do servidor');
+	});
+	it('rejects a catalog with more files than the limit without truncating', () => {
+		const file = { media_id: 'm', name: 'f', path: 'f', size: 1 };
+		const files = Array.from({ length: CATALOG_LIMITS.files + 1 }, () => file);
+		expect(() => normalizeCatalog({ nodes: [{ title: 'Cat', path: 'cat', role: 'category', files, loose_files: [], children: [] }] })).toThrow('Resposta inválida do servidor');
+	});
+	it('rejects an explicit null root loose_files instead of treating it as absent', () => {
+		expect(() => normalizeCatalog({ nodes: [], categories: [], loose_files: null })).toThrow('Resposta inválida do servidor');
+		expect(() => normalizeCatalog({ nodes: [], looseFiles: null })).toThrow('Resposta inválida do servidor');
+	});
+	it('rejects a wrong-type or nested-array root loose_files', () => {
+		expect(() => normalizeCatalog({ nodes: [], loose_files: 'nao-lista' })).toThrow('Resposta inválida do servidor');
+		expect(() => normalizeCatalog({ nodes: [], loose_files: [[{ name: 'a.pdf', path: 'a.pdf', size: 1 }]] })).toThrow('Resposta inválida do servidor');
+	});
+	it('rejects conflicting snake_case and camelCase loose files', () => {
+		expect(() => normalizeCatalog({ nodes: [], loose_files: [], looseFiles: [{ name: 'a.pdf', path: 'a.pdf', size: 1 }] })).toThrow('conflitantes');
+	});
+	it('accepts equal snake_case and camelCase loose files deterministically', () => {
+		const file = { name: 'a.pdf', path: 'a.pdf', size: 1, kind: 'material' };
+		const catalog = normalizeCatalog({ nodes: [], loose_files: [file], looseFiles: [file] });
+		expect(catalog.looseFiles[0].path).toBe('a.pdf');
+	});
+	it('rejects a present optional file field with the wrong type', () => {
+		// O serviço Go não emite esses campos, então a ausência é aceita; um valor presente
+		// com tipo incorreto não pode vazar para a interface.
+		const base = { name: 'a.pdf', path: 'a.pdf', size: 1 };
+		const malformed = [
+			{ ...base, media_id: 42 },
+			{ ...base, media_id: null },
+			{ ...base, kind: 7 },
+			{ ...base, availability: false },
+			{ ...base, unverified: 'sim' }
+		];
+		for (const file of malformed) {
+			expect(() => normalizeCatalog({ nodes: [], loose_files: [file] })).toThrow('Resposta inválida do servidor');
+		}
+		// O mesmo vale para um arquivo aninhado em um nó canônico.
+		expect(() => normalizeCatalog({ nodes: [{ title: 'C', path: 'c', role: 'category', files: [{ ...base, media_id: 1 }], loose_files: [], children: [] }] })).toThrow('Resposta inválida do servidor');
+	});
+	it('keeps a file whose optional fields are present and valid', () => {
+		const catalog = normalizeCatalog({ nodes: [], loose_files: [{ name: 'a.pdf', path: 'a.pdf', size: 5, media_id: 'm1', kind: 'material', availability: 'missing', unverified: true }] });
+		expect(catalog.looseFiles[0]).toEqual({ name: 'a.pdf', path: 'a.pdf', size: 5, mediaId: 'm1', kind: 'material', availability: 'missing', unverified: true });
+	});
+	it('rejects a fractional, negative or unsafe file size', () => {
+		const base = { name: 'a.pdf', path: 'a.pdf' };
+		for (const size of [1.5, -1, Number.MAX_SAFE_INTEGER + 1, Number.NaN]) {
+			expect(() => normalizeCatalog({ nodes: [], loose_files: [{ ...base, size }] })).toThrow('Resposta inválida do servidor');
+		}
 	});
 	it('rejects an unknown catalog shape with a controlled error', () => expect(() => normalizeCatalog({ nope: true })).toThrow('Resposta inválida do servidor'));
 	it('normalizes a study progress record with optional timestamp', () => {
@@ -245,6 +598,21 @@ describe('desktop transport over IPC', () => {
 		expect(catalog.nodes[0].role).toBe('category');
 		expect(catalog.nodes[0].title).toBe('Curso');
 		vi.unstubAllGlobals();
+	});
+
+	it('prefers canonical nodes over the legacy categories field in the desktop payload', async () => {
+		// O `desktop_catalog` também passa a devolver `nodes` e `categories`; a SPA usa
+		// `nodes` e ignora a árvore legada quando ela está presente.
+		vi.mocked(invoke).mockResolvedValue({
+			complete: true,
+			loose_files: [],
+			nodes: [{ title: 'Nós', path: 'cat', role: 'category', files: [], loose_files: [], children: [] }],
+			categories: [{ title: 'Categorias', path: 'cat', role: 'category', files: [], loose_files: [], children: [] }]
+		});
+
+		const catalog = await new DesktopStub().catalog();
+
+		expect(catalog.nodes.map((node) => node.title)).toEqual(['Nós']);
 	});
 
 	it('maps a known IPC code to its stable sanitized message, ignoring arbitrary text', async () => {
