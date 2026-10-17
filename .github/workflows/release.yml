@@ -185,7 +185,7 @@ jobs:
               exit 1
             fi
           done
-          printf '%s\n' "${actual[@]}" | sort | diff -u <(printf '%s\n' "${expected[@]}" | sort)
+          printf '%s\n' "${actual[@]}" | sort | diff -u <(printf '%s\n' "${expected[@]}" | sort) -
           (cd dist && sha256sum "${expected[@]}" > SHA256SUMS)
       - name: Upload assets to the published release
         env:
