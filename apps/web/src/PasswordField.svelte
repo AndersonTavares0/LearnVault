@@ -12,6 +12,18 @@
 
 	let { id, label, autocomplete, value = $bindable(''), minLength, hint }: Props = $props();
 	let visible = $state(false);
+	let input = $state<HTMLInputElement | null>(null);
+
+	$effect(() => {
+		let length = 0;
+		if (minLength !== undefined) {
+			for (const character of value) {
+				length += 1;
+				if (length >= minLength) break;
+			}
+		}
+		input?.setCustomValidity(value && minLength !== undefined && length < minLength ? `Use ao menos ${minLength} caracteres.` : '');
+	});
 </script>
 
 <div class="password-field">
@@ -22,9 +34,8 @@
 			type={visible ? 'text' : 'password'}
 			{autocomplete}
 			bind:value
+			bind:this={input}
 			required
-			maxlength="1024"
-			minlength={minLength}
 			aria-describedby={hint ? `${id}-hint` : undefined}
 		/>
 		<button
