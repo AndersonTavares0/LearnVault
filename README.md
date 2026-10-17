@@ -51,6 +51,11 @@ proxy de `/api`). Sem configuração, o primeiro acesso usa `admin`/`admin` e ex
 imediata; credenciais fornecidas usam `ADMIN_USERNAME` e `ADMIN_PASSWORD` com pelo menos 12
 caracteres. Veja `deploy/compose/.env.example` para as configurações locais.
 
+Na tela de acesso e na troca inicial, **Mostrar/Ocultar** revela somente o campo escolhido;
+as senhas começam ocultas e continuam compatíveis com gerenciadores de senha. A nova senha
+exige ao menos 12 caracteres. Durante o envio, o formulário permanece visível e bloqueia
+reenvios; falhas de login não revelam se o usuário existe.
+
 Esse caminho é o contrato canônico preparatório para a futura cutover coordenada: o CI também
 estagia a mesma saída para os testes Go. O serviço Go e a imagem Go padrão continuam sendo a
 produção/referência estável; a imagem Rust permanece opt-in e experimental.
