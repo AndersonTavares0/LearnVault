@@ -1,9 +1,9 @@
 {
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
-  "release-type": "go",
+  "release-type": "rust",
   "packages": {
     ".": {
-      "release-type": "go",
+      "release-type": "rust",
       "changelog-path": "docs/releases/CHANGELOG.md",
       "include-v-in-tag": true,
       "include-v-in-release-name": true,

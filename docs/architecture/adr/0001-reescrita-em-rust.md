@@ -2,11 +2,11 @@
 
 ## Status
 
-Accepted — 2026-10-14
+Accepted — 2026-10-14 (Implementado — 2026-10-17)
 
-Este ADR registra a **arquitetura aprovada**. A **implementação atual ainda é Go com SvelteKit**
-e permanece no repositório como referência funcional e visual até que o MVP em Rust cubra os
-requisitos aprovados.
+Este ADR registra a **arquitetura aprovada**. A reescrita em Rust foi concluída nas Fases 1 a 5,
+e a implementação legada em Go foi integralmente removida do repositório no PR #206, consolidando
+o Rust como backend único do LearnVault.
 
 ## Context
 

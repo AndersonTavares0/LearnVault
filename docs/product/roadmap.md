@@ -43,20 +43,20 @@ A execução avança por fases, com um pull request por fase:
   - [x] Fase 4 (rescan da biblioteca) — comando `desktop_rescan` sem argumentos e assíncrono (`spawn_blocking`) indexa explicitamente a raiz persistida reutilizando `learnvault-core` (`rescan`/`RescanSummary`), com estado ocupado que serializa chamadas concorrentes por um erro estável (`rescan_in_progress`), raiz não configurada (`library_not_configured`) e raiz inacessível (`rescan_unavailable`) sanitizados; o rescan nunca é automático e a biblioteca permanece somente leitura. Mídia, autenticação e janelas reais continuam pendentes
   - [x] Fase 4 (mídia local) — protocolo customizado `learnvault-media://localhost/<media-id>` entrega imagens/thumbnails, materiais pequenos, vídeo, áudio e legendas pelo `media_id` opaco, com parsing estrito, allowlist de tipo de conteúdo, faixas HTTP limitadas, limite explícito por resposta (`200`/`HEAD`/`206`/`413`/`416`) e revalidação pelo `learnvault-core` (`open_media`); no Windows (WebView2) a SPA pede `http://learnvault-media.localhost/<media-id>` e o runtime reverte para o esquema antes do handler (Linux/macOS usam o esquema direto); nenhuma capability nova
   - [x] Fase 4 (Study desktop) — comandos `desktop_study_progress`, `desktop_record_position`, `desktop_set_completed` e `desktop_recent_study`, assíncronos (`spawn_blocking`) e com ACL mínima, reutilizam `learnvault-core::study` com o dono local fixo resolvido no Rust — o webview nunca envia `owner_id` — e devolvem o mesmo contrato snake_case do HTTP (`recorded`, `updated_at`) com erros estáveis (`media_not_found`, `invalid_position`, `study_unavailable`). A SPA ativa Study nos dois transportes por `invoke`, sem `fetch`, e sincroniza posição real da reprodução local; autenticação e janelas reais continuam pendentes
-- [ ] Fase 5 — distribuição por plataforma e remoção do serviço Go — ver o [Gate de elegibilidade para a remoção do serviço Go](../operations/migration-go-to-rust.md#gate-de-elegibilidade-para-a-remoção-do-serviço-go)
+- [x] Fase 5 — distribuição por plataforma e remoção do serviço Go — executada em 2026-10-17 (PR #206), consolidando o Rust como backend único e eliminando `services/go`
 
-## Atual — fundação e catálogo
+## Histórico — implementação de referência em Go (removida)
 
-Esta seção descreve a implementação atual em Go, mantida como referência funcional e visual
-durante a reescrita.
+Esta seção documenta o escopo original atendido pelo backend Go, mantido durante a transição
+como referência funcional e integralmente substituído pelo ecossistema Rust:
 
-- [x] Serviço Go com SPA SvelteKit embutida
-- [x] Bootstrap do administrador e sessões seguras
-- [x] Migrações SQLite e persistência do catálogo
-- [x] Scan explícito e somente leitura da biblioteca
-- [x] Catálogo autenticado e endpoint de mídia com suporte a Range
-- [x] Base reproduzível de deploy com Docker/Podman
-- [x] CI, automação de releases e governança do repositório
+- [x] Serviço Go com SPA SvelteKit embutida (substituído por `crates/server` e `apps/web`)
+- [x] Bootstrap do administrador e sessões seguras (substituído por Argon2id e sessões Axum em `crates/server`)
+- [x] Migrações SQLite e persistência do catálogo (substituído por `crates/core`)
+- [x] Scan explícito e somente leitura da biblioteca (substituído por `crates/core`)
+- [x] Catálogo autenticado e endpoint de mídia com suporte a Range (substituído por `crates/server` e protocolo Tauri)
+- [x] Base reproduzível de deploy com Docker/Podman (substituído por `deploy/container/Containerfile` Rust)
+- [x] CI, automação de releases e governança do repositório (atualizados para a stack nativa Rust)
 
 ## Entregue — ciclo de estudo compatível
 
