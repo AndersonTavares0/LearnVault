@@ -87,22 +87,15 @@ jobs:
         run: |
           rustup toolchain install 1.99.0 --profile minimal
           rustup default 1.99.0
-          rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
-      - name: Install cross-compilation tools
+          rustup target add x86_64-unknown-linux-musl
+      - name: Install musl toolchain
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends musl-tools
-      - name: Install aarch64 musl cross-compiler
-        run: |
-          curl -fsSLo /tmp/aarch64-linux-musl-cross.tgz https://musl.cc/aarch64-linux-musl-cross.tgz
-          echo "c909817856d6ceda86aa510894fa3527eac7989f0ef6e87b5721c58737a06c38  /tmp/aarch64-linux-musl-cross.tgz" | sha256sum -c -
-          sudo tar -xzf /tmp/aarch64-linux-musl-cross.tgz -C /opt
-          echo "/opt/aarch64-linux-musl-cross/bin" >> "$GITHUB_PATH"
-      - name: Build Linux Rust assets
+      - name: Build Linux Rust asset
         shell: bash
         env:
           RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: aarch64-linux-musl-gcc
         run: |
           set -euo pipefail
           mkdir -p dist
@@ -110,17 +103,49 @@ jobs:
           LEARNVAULT_BUILD_VERSION="$RELEASE_TAG" cargo build --release --locked --package learnvault-server --target x86_64-unknown-linux-musl
           cp target/x86_64-unknown-linux-musl/release/learnvault-server dist/learnvault-linux-amd64
           tar -czf "dist/learnvault-linux-amd64.tar.gz" -C dist "learnvault-linux-amd64" LICENSE
-          rm "dist/learnvault-linux-amd64"
-
-          LEARNVAULT_BUILD_VERSION="$RELEASE_TAG" CC_aarch64_unknown_linux_musl=aarch64-linux-musl-gcc cargo build --release --locked --package learnvault-server --target aarch64-unknown-linux-musl
-          cp target/aarch64-unknown-linux-musl/release/learnvault-server dist/learnvault-linux-arm64
-          tar -czf "dist/learnvault-linux-arm64.tar.gz" -C dist "learnvault-linux-arm64" LICENSE
-          rm "dist/learnvault-linux-arm64"
-
-          rm dist/LICENSE
+          rm "dist/learnvault-linux-amd64" dist/LICENSE
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: release-linux
+          name: release-linux-amd64
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  linux-arm64:
+    name: Build Linux arm64 assets
+    needs: validate-tag
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.validate-tag.outputs.commit_sha }}
+          persist-credentials: false
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install 1.99.0 --profile minimal
+          rustup default 1.99.0
+          rustup target add aarch64-unknown-linux-musl
+      - name: Install musl toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends musl-tools
+      - name: Build arm64 Rust asset
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+          CC_aarch64_unknown_linux_musl: musl-gcc
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp LICENSE dist/LICENSE
+          LEARNVAULT_BUILD_VERSION="$RELEASE_TAG" cargo build --release --locked --package learnvault-server --target aarch64-unknown-linux-musl
+          cp target/aarch64-unknown-linux-musl/release/learnvault-server dist/learnvault-linux-arm64
+          tar -czf "dist/learnvault-linux-arm64.tar.gz" -C dist "learnvault-linux-arm64" LICENSE
+          rm "dist/learnvault-linux-arm64" dist/LICENSE
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-linux-arm64
           path: dist/*.tar.gz
           if-no-files-found: error
 
@@ -175,7 +200,7 @@ jobs:
 
   publish:
     name: Publish release assets
-    needs: [validate-tag, linux, windows]
+    needs: [validate-tag, linux, linux-arm64, windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write
