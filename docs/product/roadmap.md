@@ -49,6 +49,8 @@ mantendo retomada e conclusão no mesmo fluxo de estudo.
 ## Próximo — ciclo de estudo utilizável
 
 - [ ] Detalhes do curso e navegação de aulas
+  - [x] Navegação anterior/próxima entre aulas e índice de aulas do curso no player (`apps/web`)
+  - [ ] Página de detalhes do curso
 - [ ] Player direto com links de legendas e materiais
 - [x] Progresso individual e posição de retomada
 - [x] Marcar aula como concluída e painel de histórico recente
