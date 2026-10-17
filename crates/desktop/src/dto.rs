@@ -19,6 +19,8 @@ pub struct CatalogDto {
     /// Arquivos soltos de uma biblioteca global. O desktop agrega cursos e mantém esta
     /// lista vazia: arquivos soltos pertencem ao nó do curso correspondente.
     pub loose_files: Vec<CatalogFileDto>,
+    /// Árvore recursiva canônica, o contrato preferido pela SPA.
+    pub nodes: Vec<CatalogNodeDto>,
     /// Cursos, na ordem de importação. Cada nó de topo tem papel `course`.
     pub categories: Vec<CatalogNodeDto>,
 }

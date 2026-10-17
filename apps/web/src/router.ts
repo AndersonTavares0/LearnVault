@@ -1,6 +1,6 @@
-import { courseIdOf, type Catalog, type CatalogNode, type FileEntry, type Lesson } from './transport';
+import { courseIdOf, lessonFromNode, type Catalog, type CatalogNode, type FileEntry, type Lesson } from './transport';
 
-export type Route = 'login' | 'home' | 'course' | 'player';
+export type Route = 'login' | 'home' | 'course' | 'player' | 'settings';
 export type HashLocation = { route: Route; courseId: string | null; lessonPath: string | null };
 
 function decodeSegment(value: string | undefined): string | null {
@@ -17,13 +17,14 @@ function decodeSegment(value: string | undefined): string | null {
  *
  * `#/course/<id>` abre um curso e `#/player/<id>/<caminho>` abre uma aula dentro do curso:
  * o caminho relativo da aula só é único por curso, então a identidade do curso faz parte
- * da rota. `#/player/<caminho>` é a forma legada de um arquivo solto sem curso dono;
+ * da rota. `#/settings` abre as preferências locais e não identifica curso algum.
+ * `#/player/<caminho>` é a forma legada de um arquivo solto sem curso dono;
  * o caminho deve começar a busca global. Qualquer outro valor cai no login.
  */
 export function locationFromHash(hash: string): HashLocation {
 	const value = hash.replace(/^#\/?/, '');
 	const [name, ...parts] = value.split('/');
-	const route = name === 'home' || name === 'course' || name === 'player' ? name : 'login';
+	const route = name === 'home' || name === 'course' || name === 'player' || name === 'settings' ? name : 'login';
 	if (route === 'course') return { route, courseId: decodeSegment(parts[0]), lessonPath: null };
 	if (route === 'player') {
 		if (parts.length === 0) return { route, courseId: null, lessonPath: null };
@@ -52,7 +53,7 @@ export function href(route: Route, courseId?: string, lessonPath?: string): stri
 /** Destino seguro depois do login, preservando uma rota já navegável. */
 export function destinationAfterLogin(hash: string): string {
 	const location = locationFromHash(hash);
-	if (location.route === 'home' || location.route === 'course') return href(location.route, location.courseId ?? undefined);
+	if (location.route === 'home' || location.route === 'course' || location.route === 'settings') return href(location.route, location.courseId ?? undefined);
 	if (location.route === 'player') {
 		const parts = hash.replace(/^#\/?/, '').split('/');
 		if (parts.length === 1) {
@@ -68,11 +69,6 @@ export function destinationAfterLogin(hash: string): string {
 export function findCourse(catalog: Catalog | null, courseId: string | null): CatalogNode | null {
 	if (!catalog || !courseId) return null;
 	return catalog.nodes.find((node) => courseIdOf(node) === courseId) ?? null;
-}
-
-function lessonFromNode(node: CatalogNode): Lesson {
-	const files = [...node.files, ...node.looseFiles];
-	return { title: node.title, path: node.path, media: files.filter((file) => file.kind === 'media'), subtitles: files.filter((file) => file.kind === 'subtitle'), materials: files.filter((file) => file.kind === 'material') };
 }
 
 /**

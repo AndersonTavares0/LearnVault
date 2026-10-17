@@ -99,6 +99,7 @@ fn empty_database_produces_a_complete_empty_catalog() {
 
     assert!(catalog.complete);
     assert!(catalog.loose_files.is_empty());
+    assert!(catalog.nodes.is_empty());
     assert!(catalog.categories.is_empty());
 }
 
@@ -120,10 +121,13 @@ fn catalog_dto_uses_the_snake_case_spa_contract() {
             Vec::new(),
         )],
     };
+    let complete = source.complete;
+    let nodes = vec![CatalogNodeDto::course("course-42", "Curso", source)];
     let dto = CatalogDto {
-        complete: source.complete,
+        complete,
         loose_files: Vec::new(),
-        categories: vec![CatalogNodeDto::course("course-42", "Curso", source)],
+        nodes: nodes.clone(),
+        categories: nodes,
     };
 
     let json = serde_json::to_value(dto).unwrap();
@@ -152,10 +156,37 @@ fn catalog_dto_uses_the_snake_case_spa_contract() {
         json["categories"][0]["children"][0]["files"][0]["kind"],
         "media"
     );
-    assert_eq!(
-        json["categories"][0]["children"][0]["files"][0]["availability"],
-        "available"
-    );
+    // O desktop agrega cursos: a lista solta de topo fica vazia e os arquivos soltos vivem
+    // no nó do curso.
+    assert_eq!(json["loose_files"], serde_json::json!([]));
+
+    // `nodes` é a árvore recursiva canônica, o contrato preferido pela SPA, e carrega o
+    // mesmo nó de topo de curso: identidade opaca, identidade de mídia, caminhos relativos,
+    // disponibilidade e verificação dos arquivos seguem preservados, e a aula continua
+    // alcançável sob o curso sem depender de nenhuma projeção legada.
+    assert_eq!(json["nodes"], json["categories"]);
+    let node = &json["nodes"][0];
+    assert_eq!(node["title"], "Curso");
+    assert_eq!(node["path"], "");
+    assert_eq!(node["role"], "course");
+    assert_eq!(node["course_id"], "course-42");
+    assert_eq!(node["loose_files"][0]["media_id"], "loose");
+    assert_eq!(node["loose_files"][0]["name"], "aula.mp4");
+    assert_eq!(node["loose_files"][0]["path"], "cat/aula.mp4");
+    assert_eq!(node["loose_files"][0]["size"], 10);
+    assert_eq!(node["loose_files"][0]["kind"], "material");
+    assert_eq!(node["loose_files"][0]["availability"], "missing");
+    assert_eq!(node["loose_files"][0]["unverified"], true);
+    assert_eq!(node["children"][0]["role"], "lesson");
+    assert_eq!(node["children"][0]["path"], "aula");
+    let node_file = &node["children"][0]["files"][0];
+    assert_eq!(node_file["media_id"], "m1");
+    assert_eq!(node_file["name"], "aula.mp4");
+    assert_eq!(node_file["path"], "cat/aula.mp4");
+    assert_eq!(node_file["size"], 10);
+    assert_eq!(node_file["kind"], "media");
+    assert_eq!(node_file["availability"], "available");
+    assert_eq!(node_file["unverified"], false);
 }
 
 #[test]
@@ -196,20 +227,26 @@ fn every_core_enum_maps_to_a_stable_string() {
         (MediaKind::Material, "material"),
     ];
     for (kind, expected) in kinds {
+        let course = CatalogNodeDto::course(
+            "course-1",
+            "Curso",
+            Catalog {
+                complete: true,
+                loose_files: vec![file("f", kind, Availability::Available, false)],
+                categories: Vec::new(),
+            },
+        );
         let dto = CatalogDto {
             complete: true,
             loose_files: Vec::new(),
-            categories: vec![CatalogNodeDto::course(
-                "course-1",
-                "Curso",
-                Catalog {
-                    complete: true,
-                    loose_files: vec![file("f", kind, Availability::Available, false)],
-                    categories: Vec::new(),
-                },
-            )],
+            nodes: vec![course.clone()],
+            categories: vec![course],
         };
         let json = serde_json::to_value(dto).unwrap();
+        assert_eq!(
+            json["nodes"][0]["loose_files"][0]["kind"], expected,
+            "tipo {kind:?} precisa ser estável na árvore canônica"
+        );
         assert_eq!(
             json["categories"][0]["loose_files"][0]["kind"], expected,
             "tipo {kind:?} precisa ser estável"

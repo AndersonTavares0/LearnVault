@@ -32,6 +32,10 @@ describe('hash router', () => {
 		expect(locationFromHash('#/player/%E0%A4%A/aula')).toEqual({ route: 'player', courseId: null, lessonPath: 'aula' });
 	});
 
+	it('supports settings as an authenticated destination', () => {
+		expect(locationFromHash('#/settings')).toEqual({ route: 'settings', courseId: null, lessonPath: null });
+		expect(destinationAfterLogin('#/settings')).toBe('#/settings');
+	});
 	it('creates server-independent links with the course identity', () => {
 		expect(href('home')).toBe('#/home');
 		expect(href('course', 'course one')).toBe('#/course/course%20one');
@@ -96,5 +100,33 @@ describe('hash router', () => {
 		expect(findLesson(data, null, 'aviso.pdf')).toBeNull();
 		expect(findLesson(data, null, 'ausente.mp4')).toBeNull();
 		expect(findLesson(data, null, 'removido.mp4')).toBeNull();
+	});
+
+	// Portado do PR 121 (nós canônicos recursivos): o roteador é a única porta de entrada de
+	// uma aula, então um `kind` desconhecido não pode ficar inalcançável. A estrutura tem
+	// níveis aninhados (módulo dentro do curso) como na árvore canônica.
+	it('keeps an unknown-kind file reachable through open/deep-link and media id', () => {
+		const files: FileEntry[] = [
+			{ name: 'video.mp4', path: 'curso/mod/aula.mp4', size: 10, mediaId: 'm1', kind: 'media' },
+			{ name: 'extra.bin', path: 'curso/mod/extra.bin', size: 2, mediaId: 'bonus-1', kind: 'bonus' }
+		];
+		const module: CatalogNode = { title: 'Módulo', path: 'curso/mod', role: 'module', files: [], looseFiles: [], children: [{ title: 'Aula', path: 'curso/mod/aula', role: 'lesson', files, looseFiles: [], children: [] }] };
+		const data = catalog([course('course-1', [module])]);
+
+		const location = locationFromHash(href('player', 'course-1', 'curso/mod/aula'));
+		const opened = findLesson(data, location.courseId, location.lessonPath);
+		expect(location).toEqual({ route: 'player', courseId: 'course-1', lessonPath: 'curso/mod/aula' });
+		expect(opened?.media.map((file) => file.path)).toEqual(['curso/mod/aula.mp4']);
+		expect(opened?.materials.map((file) => file.path)).toEqual(['curso/mod/extra.bin']);
+		expect(findLessonLocation(data, 'bonus-1')).toMatchObject({ courseId: 'course-1', lesson: { path: 'curso/mod/aula' } });
+	});
+
+	it('opens a nested loose media in the player and restores it by id without a course', () => {
+		const nested: FileEntry = { name: 'extra.mp4', path: 'curso/extra.mp4', size: 10, kind: 'media', mediaId: 'nested' };
+		const data = catalog([{ title: 'Curso course-1', path: '', role: 'course', courseId: 'course-1', files: [], looseFiles: [nested], children: [] }]);
+
+		expect(locationFromHash(href('player', nested.path)).lessonPath).toBe(nested.path);
+		expect(findLesson(data, null, nested.path)).toMatchObject({ title: nested.name, path: nested.path, media: [nested] });
+		expect(findLessonLocation(data, 'nested')).toMatchObject({ courseId: 'course-1', lesson: { path: nested.path } });
 	});
 });

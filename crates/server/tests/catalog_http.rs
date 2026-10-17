@@ -236,6 +236,9 @@ async fn admin_rescan_populates_the_authenticated_catalog() {
     let library = temp.path().join("library");
     std::fs::create_dir_all(library.join("Categoria/Curso")).unwrap();
     std::fs::write(library.join("Categoria/Curso/lesson.mp4"), b"video").unwrap();
+    // Arquivo solto diretamente na categoria: a projeção legada não tem onde guardá-lo, mas
+    // ele precisa continuar acessível na árvore canônica `nodes`.
+    std::fs::write(library.join("Categoria/nota.pdf"), b"nota").unwrap();
     let mut server_config = Config::from_args([
         "learnvault-server",
         "--database",
@@ -281,8 +284,27 @@ async fn admin_rescan_populates_the_authenticated_catalog() {
     assert_eq!(rescan_json["complete"], true);
     assert_eq!(rescan_json["courses"], 1);
     assert_eq!(rescan_json["failed_courses"], 0);
-    assert_eq!(rescan_json["inserted"], 1);
+    assert_eq!(rescan_json["inserted"], 2);
     assert!(rescan_json["scan_id"].as_i64().unwrap() > 0);
+    // Resposta sanitizada: expõe apenas a contagem de chaves ambíguas, nunca os caminhos
+    // relativos que as compõem. Produzir ambiguidade real por HTTP não é portável (depende
+    // da normalização de separadores por plataforma); o caso com caminho é coberto de forma
+    // determinística pelo teste unitário de `RescanResponse::from` em `catalog.rs`.
+    assert!(
+        rescan_json["ambiguous_count"].is_u64(),
+        "ambiguous_count precisa ser uma contagem numérica: {rescan_json}"
+    );
+    assert!(
+        rescan_json.get("ambiguous").is_none(),
+        "a lista de caminhos ambíguos não pode cruzar a API: {rescan_json}"
+    );
+    let rescan_text = String::from_utf8_lossy(&rescan_body);
+    assert!(
+        !rescan_text.contains("Categoria")
+            && !rescan_text.contains("lesson.mp4")
+            && !rescan_text.contains("nota.pdf"),
+        "a resposta do rescan não pode vazar caminhos relativos: {rescan_text}"
+    );
 
     let catalog = app
         .oneshot(
@@ -298,9 +320,49 @@ async fn admin_rescan_populates_the_authenticated_catalog() {
     let body = catalog.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(json["complete"], true);
-    // A pasta semeada é um curso: o nó de topo carrega a identidade legada e a
-    // subárvore escaneada fica sob ele.
-    assert_eq!(json["categories"][0]["title"], "library");
+
+    // O nó de topo é o curso registrado a partir da raiz semeada: identidade opaca
+    // (`library-1`, a identidade histórica da raiz) e título derivado da pasta.
+    let course = &json["nodes"][0];
+    assert_eq!(course["title"], "library");
+    assert_eq!(course["path"], "");
+    assert_eq!(course["role"], "course");
+    assert_eq!(course["course_id"], "library-1");
+    // `nodes` é a árvore recursiva canônica, o contrato preferido pela SPA: a categoria e a
+    // subárvore de aulas ficam sob o nó do curso, com identidade de mídia, caminhos
+    // relativos, disponibilidade e verificação preservados.
+    let category = &course["children"][0];
+    assert_eq!(category["title"], "Categoria");
+    assert_eq!(category["path"], "Categoria");
+    assert_eq!(category["role"], "category");
+    let lesson = &category["children"][0];
+    assert_eq!(lesson["title"], "Curso");
+    assert_eq!(lesson["path"], "Categoria/Curso");
+    assert_eq!(lesson["role"], "lesson");
+    let node_file = &lesson["files"][0];
+    assert_eq!(node_file["name"], "lesson.mp4");
+    assert_eq!(node_file["path"], "Categoria/Curso/lesson.mp4");
+    assert_eq!(node_file["size"], 5);
+    assert_eq!(node_file["kind"], "media");
+    assert_eq!(node_file["availability"], "available");
+    assert_eq!(node_file["unverified"], false);
+    assert!(
+        node_file["media_id"].is_string(),
+        "a identidade de mídia precisa sobreviver em nodes"
+    );
+    // O arquivo solto da categoria não pertence a nenhuma aula: ele continua acessível, sem
+    // perda, nos arquivos soltos do próprio nó da categoria.
+    let loose = &category["loose_files"][0];
+    assert_eq!(loose["name"], "nota.pdf");
+    assert_eq!(loose["path"], "Categoria/nota.pdf");
+    assert!(
+        loose["media_id"].is_string(),
+        "o arquivo solto também carrega identidade de mídia em nodes"
+    );
+
+    // `categories` expõe a mesma lista de cursos de topo: cada nó tem papel `course`,
+    // `course_id` opaco e a subárvore escaneada sob ele.
+    assert_eq!(json["categories"], json["nodes"]);
     assert_eq!(json["categories"][0]["role"], "course");
     assert_eq!(json["categories"][0]["course_id"], "library-1");
     let file = find_file(&json["categories"][0]).expect("lesson file in catalog");

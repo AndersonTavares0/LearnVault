@@ -58,7 +58,7 @@ banco Rust existente continuam sendo abertos normalmente.
 
 | Método | Rota | Autenticação | Finalidade |
 | --- | --- | --- | --- |
-| `GET` | `/api/catalog` | Sessão | Retorna um nó de topo por curso registrado (`role: course`, com `course_id` opaco e `title`), com a subárvore de módulos e aulas derivada dos dados persistidos |
+| `GET` | `/api/catalog` | Sessão | Retorna um nó de topo por curso registrado (`role: course`, com `course_id` opaco e `title`), com a subárvore de módulos e aulas derivada dos dados persistidos, tanto na árvore canônica `nodes` quanto na lista de cursos de topo `categories` |
 | `POST` | `/api/admin/courses` | Sessão admin | Aceita `{ "path": "..." }` e registra a pasta como um curso; a pasta precisa existir, ser um diretório legível e não ser link/junction. Importar não indexa: a indexação é o `rescan` |
 | `DELETE` | `/api/admin/courses/{id}` | Sessão admin | Remove o curso do registro, sem apagar arquivos nem dados; remover um curso desconhecido responde `removed: false` |
 | `POST` | `/api/admin/catalog/rescan` | Sessão admin | Faz scan explícito de todos os cursos registrados e atualiza cada catálogo de forma preservadora: insere arquivos novos, reafirma os conhecidos e marca ausentes os que sumiram, sem excluir nenhum registro. Sem cursos registrados responde `400 no_courses_registered`; a resposta agrega `courses` e `failed_courses` |
@@ -88,7 +88,7 @@ O desktop não tem rotas para catálogo, cursos e remoção: a SPA chama comando
 
 | Comando | Argumentos | Finalidade |
 | --- | --- | --- |
-| `desktop_catalog` | — | Catálogo agregado dos cursos registrados, um nó de topo por curso |
+| `desktop_catalog` | — | Catálogo agregado dos cursos registrados, um nó de topo por curso em `nodes` (árvore canônica) e em `categories` |
 | `desktop_import_course` | — | Abre o seletor nativo e registra a pasta escolhida como um curso; importar uma pasta já registrada é idempotente |
 | `desktop_remove_course` | `courseId` | Remove o curso do registro, sem tocar nos arquivos nem nos dados |
 | `desktop_rescan` | — | Indexa explicitamente todos os cursos registrados; raízes removidas contam como falha agregada |
@@ -102,15 +102,45 @@ caminhos canonicalizados e revalidados a cada carregamento. O formato anterior (
 O rescan é uma atualização preservadora, não uma substituição: ele insere arquivos novos, atualiza
 os conhecidos no mesmo caminho (reutilizando o `media_id`, inclusive após um arquivo ausente
 reaparecer) e marca como ausentes os que deixaram de aparecer. Nenhum rescan exclui registros,
-reescreve a identidade de mídia ou apaga o estado associado.
+reescreve a identidade de mídia ou apaga o estado associado. A resposta `200` devolve apenas o
+resumo sanitizado do núcleo — contagens, incluindo `ambiguous_count` — e nunca os caminhos
+relativos das chaves ambíguas, que exporiam a estrutura da biblioteca.
 Tanto no servidor Rust quanto no desktop e no serviço Go de referência, a remoção explícita de
-mídia é gravada como tombstone em `media_removal`. Nenhum rescan cria, apaga ou reescreve esse
+mídia é gravada como tombstone em `media_removal` (chaveado pela identidade de mídia `media_id` no
+Rust/desktop e pelo caminho relativo canônico no Go). Nenhum rescan cria, apaga ou reescreve esse
 registro, e o carimbo `removed_at` não é alterado por uma varredura. A leitura do catálogo
 filtra os itens removidos, então a mídia sai de `/api/catalog` (e do `desktop_catalog`) e
 `/api/media` responde 404, mesmo que o arquivo reapareça no disco depois. A remoção não apaga a
 linha de catálogo nem o progresso de estudo associado, e repetir a remoção é idempotente. Um arquivo
 que deixou de aparecer no scan também deixa de ser autorizado por `/api/media`, ainda que exista
 uma resposta ou referência antiga em cache.
+
+O `GET /api/catalog` do servidor Rust expõe a árvore recursiva canônica em `nodes` — o
+contrato preferido pela SPA, com `media_id` obrigatório em cada arquivo, caminho relativo
+completo, disponibilidade e verificação. Cada nó de topo é um curso registrado: papel `course`,
+`path` vazio e a identidade opaca em `course_id`, com a subárvore de categorias, módulos e aulas
+sob ele. Nenhuma aula e nenhum arquivo deixa de ser alcançável por `nodes`, inclusive os
+arquivos soltos diretamente numa categoria, num curso ou num módulo. `categories` traz a mesma
+lista de cursos de topo (`role: course`, `course_id` opaco e as mesmas subárvores), então um
+consumidor que só lê `categories` também encontra todos os cursos.
+O `desktop_catalog` expõe o mesmo par por IPC. O `complete: bool` do servidor Rust/desktop marca
+o contrato canônico: presente, precisa ser booleano — um
+`null`/string é recusado — e o payload é normalizado estritamente pelo contrato Rust/desktop,
+nunca caindo para a forma legada do Go mesmo que a `categories` pareça `courses`. Sem nós
+canônicos, um `categories[].courses` só-do-Go é recusado em vez de virar conteúdo vazio. Sem o
+campo `complete`, o payload é do Go e a `categories[].courses` legada é a fonte autoritativa —
+ela vence o `nodes` aditivo (papel `group`) quando os dois coexistem, para não perder a árvore
+que o serviço projetou; os `nodes` então ignorados passam por uma travessia limitada (sem
+normalização recursiva) para não contornarem o orçamento com profundidade ou volume.
+
+Ao normalizar, a SPA exige `media_id` não vazio nos arquivos dos nós canônicos Rust/desktop,
+incluindo os arquivos soltos da raiz (o payload aditivo e o fallback legado do Go não emitem
+identidade e seguem sem ela para os nós e para os arquivos soltos), e recusa de forma
+determinística um payload que ultrapasse os limites explícitos de profundidade, número de nós ou
+de arquivos — nunca truncando a árvore: o payload inteiro é rejeitado como inválido. Um `kind`
+que a SPA ainda não conhece é preservado como material (balde catch-all) na normalização, no
+roteador e na UI, de modo que abrir uma aula por deep-link ou pelo `media_id` nunca descarta o
+arquivo.
 
 ## Estudo
 
