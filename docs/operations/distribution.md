@@ -11,11 +11,53 @@ desenvolvimento.
 | --- | --- | --- | --- |
 | Linux | tarballs Linux Go | Único release Linux suportado | Disponível |
 | Self-hosted | imagem OCI Rust via Compose (Docker/Podman) | Deploy opcional em servidor | Experimental; imagem local, não publicada |
-| Windows | instalador `.exe` via NSIS | Execução local e instalação gerenciada | Automatizado, não assinado |
+| Windows | instalador `.exe` via NSIS | Execução local; instalação por usuário, sem administrador | Automatizado, não assinado |
 | Desktop Linux | Flatpak | Formato Linux preferencial do desktop | Backend `xdg-portal` configurado; build e smoke test no sandbox pendentes |
 
 Não há `.deb` nem `.rpm` como artefatos públicos nesta fase. O instalador Windows NSIS continua
 habilitado no release automático; o Flatpak não é construído nem publicado automaticamente.
+
+### Instalador Windows (NSIS)
+
+O instalador do desktop é um `.exe` NSIS construído no workflow de release e publicado com os
+demais artefatos, conforme a matriz do [ADR 0001](../architecture/adr/0001-reescrita-em-rust.md).
+Ele instala somente para o usuário atual (`currentUser`), em
+`%LOCALAPPDATA%\LearnVault`, sem exigir senha de administrador. Os textos do instalador estão em
+português (Brasil) e inglês, com seletor de idioma, e o WebView2 ausente é baixado pelo próprio
+instalador (`downloadBootstrapper`) — a internet só é necessária nesse caso.
+
+Para gerar o instalador localmente no Windows, usando o mesmo comando do workflow de release (sem
+o override de versão):
+
+```sh
+pnpm install --frozen-lockfile
+pnpm run build:desktop
+pnpm exec tauri build --bundles nsis --config crates/desktop/tauri.conf.json
+```
+
+O artefato fica em `target/release/bundle/nsis/` (`LearnVault_<versão>_x64-setup.exe`) e é
+publicado no release como `learnvault-windows-<tag>.exe`. Sem o override de release, a versão vem
+do workspace (`0.0.0`); no release, a tag `vX.Y.Z` define a versão publicada. O instalador não é
+assinado: o Windows pode exibir o aviso do SmartScreen ("O Windows protegeu o PC"). Em "Mais
+informações", a opção "Executar assim mesmo" prossegue com a instalação; confira o `SHA256SUMS` do
+release antes de distribuir um download.
+
+#### Dados do usuário no Windows
+
+O desktop guarda os dados no perfil do usuário, fora da biblioteca, que permanece externa e
+somente leitura e nunca é copiada.
+
+| Caminho | Conteúdo |
+| --- | --- |
+| `%APPDATA%\app.learnvault.desktop\library.json` | raiz da biblioteca escolhida (configuração versionada, gravação atômica) |
+| `%APPDATA%\app.learnvault.desktop\learnvault.sqlite` | catálogo indexado e progresso de estudo (SQLite local) |
+| `%LOCALAPPDATA%\app.learnvault.desktop\` | dados internos do WebView2, mantidos pelo próprio Windows |
+
+Atualizar o aplicativo por cima preserva esses dados. Na desinstalação, o desinstalador exibe uma
+caixa de seleção desmarcada por padrão — "Remover dados do programa" no idioma português e "Delete
+the application data" no inglês: sem marcá-la, os dados permanecem; marcada, os diretórios
+`%APPDATA%\app.learnvault.desktop` e `%LOCALAPPDATA%\app.learnvault.desktop` são removidos.
+Nenhum instalador copia a biblioteca física para os dados da aplicação ou para backups.
 
 ## Limites de build
 

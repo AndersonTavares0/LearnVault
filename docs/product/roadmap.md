@@ -49,6 +49,8 @@ mantendo retomada e conclusão no mesmo fluxo de estudo.
 ## Próximo — ciclo de estudo utilizável
 
 - [ ] Detalhes do curso e navegação de aulas
+  - [x] Navegação anterior/próxima entre aulas e índice de aulas do curso no player (`apps/web`)
+  - [ ] Página de detalhes do curso
 - [ ] Player direto com links de legendas e materiais
 - [x] Progresso individual e posição de retomada
 - [x] Marcar aula como concluída e painel de histórico recente
@@ -76,7 +78,7 @@ mantendo retomada e conclusão no mesmo fluxo de estudo.
 A matriz aprovada está no [ADR 0001](../architecture/adr/0001-reescrita-em-rust.md).
 
 - [ ] Manter o núcleo compilável sem Docker ou Podman
-- [x] Publicar instalador Windows `.exe` via NSIS (não assinado)
+- [x] Publicar instalador Windows `.exe` via NSIS (por usuário, pt-BR/en, não assinado)
 - [ ] Publicar Flatpak como formato Linux preferencial do desktop — a seleção usa o backend
   oficial `xdg-portal` no Linux e o manifesto não concede filesystem amplo; ainda faltam build e
   smoke test reais no sandbox Flatpak, inclusive validação do acesso persistente ao diretório
