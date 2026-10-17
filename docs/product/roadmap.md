@@ -1,7 +1,27 @@
 # Roadmap do LearnVault
 
 Este roadmap é o resumo durável do produto e é orientado a resultados. Detalhes de
-implementação pertencem às Issues e pull requests relacionadas.
+implementação pertencem às Issues e pull requests relacionadas. Os requisitos funcionais e
+não funcionais consolidados ficam em [requirements.md](requirements.md).
+
+## Escopo do MVP (proposta)
+
+O MVP é o conjunto mínimo que permite aposentar o serviço Go de referência (Fase 5) e publicar o
+desktop:
+
+- **Inclui:** RF-01 a RF-10 completos; RNF-01 a RNF-07 atendidos (segurança, privacidade,
+  desempenho de mídia, operação, portabilidade e qualidade); RNF-08 e RNF-09 seguem como metas
+  contínuas. RF-11 coberto por instalador Windows NSIS e imagem OCI ou binário nativo do
+  servidor; estratégia para bancos Go legados resolvida ou suporte explicitamente delimitado,
+  conforme o milestone
+  [Migração Go → Rust](https://github.com/AndersonTavares0/LearnVault/milestone/3).
+- **Não inclui:** Whisper e transcrições, notas, favoritos, busca avançada e cliente mobile
+  nativo (seção "Mais tarde"); `.msi` e versão portátil para Windows (discussion
+  [#131](https://github.com/AndersonTavares0/LearnVault/discussions/131)); Flatpak como bloqueio
+  de release, já que a validação técnica pode seguir em paralelo.
+
+Esta delimitação é uma proposta para revisão do mantenedor; mudanças de escopo atualizam esta
+seção.
 
 ## Corrente — reescrita em Rust
 
@@ -119,3 +139,4 @@ persistente ao diretório escolhido e reprodução de mídia, ainda estão pende
 
 - [Escopo e prioridades das próximas versões](https://github.com/AndersonTavares0/LearnVault/discussions/32)
 - [Camada de análise e dados](https://github.com/AndersonTavares0/LearnVault/discussions/33)
+- [Artefatos Windows além do instalador padrão (`.msi`, portátil)](https://github.com/AndersonTavares0/LearnVault/discussions/131)
