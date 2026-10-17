@@ -7,6 +7,7 @@ use std::io::Write;
 mod auth;
 mod catalog;
 mod config;
+mod courses;
 mod health;
 mod media;
 mod spa;
@@ -45,7 +46,6 @@ pub const VERSION: &str = match option_env!("LEARNVAULT_BUILD_VERSION") {
     Some(version) if !version.is_empty() => version,
     _ => env!("CARGO_PKG_VERSION"),
 };
-pub(crate) const LIBRARY_ID: &str = "library-1";
 
 /// Monta as rotas públicas mínimas do servidor.
 pub fn build_router(state: AppState) -> Router {
@@ -62,6 +62,11 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/api/catalog", get(catalog::catalog))
         .route("/api/admin/catalog/rescan", post(catalog::rescan))
+        .route("/api/admin/courses", post(courses::import))
+        .route(
+            "/api/admin/courses/{id}",
+            axum::routing::delete(courses::remove),
+        )
         .route("/api/media", get(media::media).head(media::media))
         .route("/api/study/recent", get(study::recent))
         .route("/api/study/progress", get(study::progress))
@@ -201,8 +206,7 @@ mod tests {
     use tower::ServiceExt;
 
     use super::{
-        AppState, Command, Config, LIBRARY_ID, VERSION, build_router, parse_command, serve,
-        with_request_limits,
+        AppState, Command, Config, VERSION, build_router, parse_command, serve, with_request_limits,
     };
 
     async fn media_app() -> (axum::Router, tempfile::TempDir, AppState) {
@@ -579,7 +583,7 @@ mod tests {
         let unauthenticated = app
             .clone()
             .oneshot(
-                Request::get("/api/media?path=lesson.mp4")
+                Request::get("/api/media?course=library-1&path=lesson.mp4")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -591,7 +595,7 @@ mod tests {
         let full = app
             .clone()
             .oneshot(
-                Request::get("/api/media?path=lesson.mp4")
+                Request::get("/api/media?course=library-1&path=lesson.mp4")
                     .header("cookie", &cookie)
                     .body(Body::empty())
                     .unwrap(),
@@ -609,7 +613,7 @@ mod tests {
         let head = app
             .clone()
             .oneshot(
-                Request::head("/api/media?path=lesson.mp4")
+                Request::head("/api/media?course=library-1&path=lesson.mp4")
                     .header("cookie", &cookie)
                     .body(Body::empty())
                     .unwrap(),
@@ -630,7 +634,7 @@ mod tests {
         let partial = app
             .clone()
             .oneshot(
-                Request::get("/api/media?path=lesson.mp4")
+                Request::get("/api/media?course=library-1&path=lesson.mp4")
                     .header("cookie", &cookie)
                     .header("range", "bytes=2-5")
                     .body(Body::empty())
@@ -647,7 +651,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn media_uses_the_configured_library_when_paths_collide() {
+    async fn media_resolves_the_course_requested_when_relative_paths_collide() {
         let temp = tempfile::tempdir().unwrap();
         let configured_root = temp.path().join("configured");
         let other_root = temp.path().join("other");
@@ -668,18 +672,30 @@ mod tests {
         config.admin_password = Some("uma senha local muito segura".to_owned());
         config.cookie_secure = false;
         let state = AppState::initialize(config).await.unwrap();
+        // O segundo curso entra no registro como a interface faria; as duas pastas têm o
+        // mesmo caminho relativo e o parâmetro `course` decide qual mídia é servida.
+        let other_id = learnvault_core::course_id_from_path(&other_root.canonicalize().unwrap());
+        state
+            .courses
+            .write()
+            .unwrap()
+            .push(super::courses::RegisteredCourse {
+                id: other_id.clone(),
+                title: "Other".to_owned(),
+                root: learnvault_core::CourseRoot::resolve(&other_root).unwrap(),
+            });
         {
             let mut database = state.database.try_lock().unwrap();
             learnvault_core::apply_scan(
                 &mut database,
-                "library-2",
+                &other_id,
                 &learnvault_core::scan(&other_root).unwrap(),
                 learnvault_core::KeyMode::for_host(),
             )
             .unwrap();
             learnvault_core::apply_scan(
                 &mut database,
-                LIBRARY_ID,
+                "library-1",
                 &learnvault_core::scan(&configured_root).unwrap(),
                 learnvault_core::KeyMode::for_host(),
             )
@@ -688,9 +704,10 @@ mod tests {
         let app = build_router(state);
         let cookie = media_cookie(&app).await;
         let response = app
+            .clone()
             .oneshot(
-                Request::get("/api/media?path=lesson.mp4")
-                    .header("cookie", cookie)
+                Request::get("/api/media?course=library-1&path=lesson.mp4")
+                    .header("cookie", &cookie)
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -702,6 +719,22 @@ mod tests {
             response.into_body().collect().await.unwrap().to_bytes(),
             "configured"
         );
+
+        let other = app
+            .oneshot(
+                Request::get(format!("/api/media?course={other_id}&path=lesson.mp4"))
+                    .header("cookie", cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(other.status(), StatusCode::OK);
+        assert_eq!(
+            other.into_body().collect().await.unwrap().to_bytes(),
+            "other"
+        );
     }
 
     #[tokio::test]
@@ -711,7 +744,7 @@ mod tests {
         let range = app
             .clone()
             .oneshot(
-                Request::get("/api/media?path=lesson.mp4")
+                Request::get("/api/media?course=library-1&path=lesson.mp4")
                     .header("cookie", &cookie)
                     .header("range", "bytes=99-")
                     .body(Body::empty())
@@ -731,7 +764,7 @@ mod tests {
 
         let traversal = app
             .oneshot(
-                Request::get("/api/media?path=../lesson.mp4")
+                Request::get("/api/media?course=library-1&path=../lesson.mp4")
                     .header("cookie", &cookie)
                     .body(Body::empty())
                     .unwrap(),
@@ -764,7 +797,7 @@ mod tests {
 
         let response = app
             .oneshot(
-                Request::get("/api/media?path=lesson.mp4")
+                Request::get("/api/media?course=library-1&path=lesson.mp4")
                     .header("cookie", &cookie)
                     .body(Body::empty())
                     .unwrap(),
@@ -792,7 +825,7 @@ mod tests {
 
         let response = app
             .oneshot(
-                Request::get("/api/media?path=lesson.mp4")
+                Request::get("/api/media?course=library-1&path=lesson.mp4")
                     .header("cookie", cookie)
                     .body(Body::empty())
                     .unwrap(),
@@ -818,7 +851,7 @@ mod tests {
             let response = app
                 .clone()
                 .oneshot(
-                    Request::get("/api/media?path=slow.mp4")
+                    Request::get("/api/media?course=library-1&path=slow.mp4")
                         .header("cookie", &cookie)
                         .body(Body::empty())
                         .unwrap(),
@@ -832,7 +865,7 @@ mod tests {
         let saturated = app
             .clone()
             .oneshot(
-                Request::get("/api/media?path=slow.mp4")
+                Request::get("/api/media?course=library-1&path=slow.mp4")
                     .header("cookie", &cookie)
                     .body(Body::empty())
                     .unwrap(),
@@ -844,7 +877,7 @@ mod tests {
         drop(slow_responses);
         let recovered = app
             .oneshot(
-                Request::get("/api/media?path=slow.mp4")
+                Request::get("/api/media?course=library-1&path=slow.mp4")
                     .header("cookie", cookie)
                     .body(Body::empty())
                     .unwrap(),
@@ -864,7 +897,7 @@ mod tests {
             let response = app
                 .clone()
                 .oneshot(
-                    Request::get("/api/media?path=slow.mp4")
+                    Request::get("/api/media?course=library-1&path=slow.mp4")
                         .header("cookie", &cookie)
                         .body(Body::empty())
                         .unwrap(),
@@ -878,7 +911,7 @@ mod tests {
         let saturated = app
             .clone()
             .oneshot(
-                Request::get("/api/media?path=slow.mp4")
+                Request::get("/api/media?course=library-1&path=slow.mp4")
                     .header("cookie", &cookie)
                     .body(Body::empty())
                     .unwrap(),
@@ -898,7 +931,7 @@ mod tests {
 
         let recovered = app
             .oneshot(
-                Request::get("/api/media?path=slow.mp4")
+                Request::get("/api/media?course=library-1&path=slow.mp4")
                     .header("cookie", cookie)
                     .body(Body::empty())
                     .unwrap(),

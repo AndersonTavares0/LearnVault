@@ -4,11 +4,11 @@
 	import { createPositionSaver } from './study';
 	import { transport, type Lesson, type StudyProgress } from './transport';
 
-	let { lesson, mediaError, onMediaError, studyEnabled = true }: { lesson: Lesson; mediaError: string; onMediaError: () => void; studyEnabled?: boolean } = $props();
+	let { lesson, courseId, mediaError, onMediaError, studyEnabled = true }: { lesson: Lesson; courseId: string; mediaError: string; onMediaError: () => void; studyEnabled?: boolean } = $props();
 
 	const playable = $derived(selectPlayableMedia(lesson.media));
 	const mediaId = $derived(playable?.mediaId ?? null);
-	const source = $derived(playable ? transport.mediaUrl(playable) : null);
+	const source = $derived(playable ? transport.mediaUrl(playable, courseId) : null);
 	const playbackKind = $derived(playable ? mediaPlaybackKind(playable) : 'video');
 	const syncEnabled = $derived(studySyncEnabled(studyEnabled, mediaId, source));
 
@@ -38,7 +38,7 @@
 
 	$effect(() => {
 		const subtitle = selectPlayableSubtitle(lesson.subtitles);
-		const url = subtitle ? transport.mediaUrl(subtitle) : null;
+		const url = subtitle ? transport.mediaUrl(subtitle, courseId) : null;
 		let active = true;
 		let objectUrl: string | null = null;
 		captionSource = null;
@@ -135,4 +135,4 @@
 	</div>
 {/if}
 {#if captionMessage}<p class="empty" role="status">{captionMessage}{#if captionDownload} <a href={captionDownload} download>Baixar legenda</a>{/if}</p>{/if}
-<LooseFiles files={[...lesson.subtitles, ...lesson.materials]} heading="Materiais" />
+<LooseFiles files={[...lesson.subtitles, ...lesson.materials]} heading="Materiais" {courseId} />

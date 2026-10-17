@@ -40,6 +40,12 @@ Decisões de domínio que a reescrita mantém:
 - Identidade de mídia (`media_id`) separada da localização física. `relative_path` é a
   localização atual, não a chave, e a comparação é normalizada conforme o sistema operacional.
 - A raiz da biblioteca é configuração da plataforma, não dado do domínio.
+- Emenda (issue #182): a unidade de configuração da plataforma passa a ser a **pasta de cada
+  curso**, registrada individualmente — no servidor em um arquivo ao lado do banco, no desktop em
+  `library.json` v2 — e o catálogo agrega um nó de topo por curso. O `library_id` continua sendo
+  identidade do domínio, a pasta continua externa e somente leitura, e a raiz semeada pela
+  implantação antiga preserva a identidade `library-1` para não perder mídias, varreduras e
+  progresso de estudo já gravados.
 - O rescan nunca exclui registros automaticamente: arquivo ausente é marcado como ausente e
   arquivo que reaparece no mesmo caminho reutiliza o `media_id`. Remoção só por ação explícita.
 - A biblioteca física permanece externa e somente leitura.
