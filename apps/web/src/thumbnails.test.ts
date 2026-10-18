@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { IndexedDbThumbnailCacheAdapter, ThumbnailCache, ThumbnailTaskQueue, thumbnailCacheKey, selectThumbnailSource, captureTimeSeconds, fitThumbnailDimensions, captureVideoThumbnail, getOrCreateThumbnail, observeThumbnailVisibility, type ThumbnailCacheAdapter, type ThumbnailCacheEntry, type VideoCaptureDependencies } from './thumbnails';
+import { IndexedDbThumbnailCacheAdapter, ThumbnailCache, ThumbnailTaskQueue, thumbnailCacheKey, selectThumbnailSource, captureTimeSeconds, fitThumbnailDimensions, captureVideoThumbnail, getOrCreateThumbnail, observeThumbnailVisibility, loadCourseThumbnail, type ThumbnailCacheAdapter, type ThumbnailCacheEntry, type VideoCaptureDependencies } from './thumbnails';
 import type { CatalogNode } from './transport';
 
 function lesson(title: string, files: CatalogNode['files']): CatalogNode {
@@ -100,6 +100,40 @@ describe('bounded thumbnail cache', () => {
 		expect(await cache.get('oversized')).toBeNull();
 	});
 
+	it('enforces entry and byte limits independently for each profile', async () => {
+		const adapter = new MemoryThumbnailCache();
+		const cache = new ThumbnailCache(adapter, { maxEntries: 1, maxBytes: 8, maxImageBytes: 4 });
+		const source = file('lesson.mp4', { mediaId: 'media-1', size: 500, mtimeSeconds: 123 });
+		const profileA1 = thumbnailCacheKey('user-a', 'course-1', source);
+		const profileA2 = thumbnailCacheKey('user-a', 'course-2', source);
+		const profileB = thumbnailCacheKey('user-b', 'course-1', source);
+
+		await cache.put(profileA1, new Blob(['1111']));
+		await cache.put(profileB, new Blob(['2222']));
+		await cache.put(profileA2, new Blob(['3333']));
+
+		expect(await cache.get(profileA1)).toBeNull();
+		expect(await cache.get(profileA2)).not.toBeNull();
+		expect(await cache.get(profileB)).not.toBeNull();
+	});
+
+	it('enforces the byte quota independently for each profile', async () => {
+		const adapter = new MemoryThumbnailCache();
+		const cache = new ThumbnailCache(adapter, { maxEntries: 5, maxBytes: 4, maxImageBytes: 4 });
+		const source = file('lesson.mp4', { mediaId: 'media-1', size: 500, mtimeSeconds: 123 });
+		const profileA1 = thumbnailCacheKey('user-a', 'course-1', source);
+		const profileA2 = thumbnailCacheKey('user-a', 'course-2', source);
+		const profileB = thumbnailCacheKey('user-b', 'course-1', source);
+
+		await cache.put(profileA1, new Blob(['1111']));
+		await cache.put(profileB, new Blob(['2222']));
+		await cache.put(profileA2, new Blob(['3333']));
+
+		expect(await cache.get(profileA1)).toBeNull();
+		expect(await cache.get(profileA2)).not.toBeNull();
+		expect(await cache.get(profileB)).not.toBeNull();
+	});
+
 	it('removes invalid stored entries and reports false when limits evict the new item', async () => {
 		const adapter = new MemoryThumbnailCache();
 		adapter.entries.set('corrupt', { key: 'corrupt', blob: new Blob(['123456']), lastUsed: 0 });
@@ -188,6 +222,17 @@ describe('IndexedDB thumbnail adapter', () => {
 		const harness = indexedDbHarness({ transactionError: true });
 		const adapter = new IndexedDbThumbnailCacheAdapter(harness.factory as unknown as IDBFactory);
 		await expect(adapter.put({ key: 'k', blob: new Blob(['jpeg']), lastUsed: 1 })).rejects.toThrow();
+	});
+
+	it('defers unavailable IndexedDB failure until cache use', async () => {
+		vi.stubGlobal('indexedDB', undefined);
+		try {
+			const adapter = new IndexedDbThumbnailCacheAdapter();
+			expect(adapter).toBeDefined();
+			await expect(adapter.get('key')).rejects.toThrow();
+		} finally {
+			vi.unstubAllGlobals();
+		}
 	});
 });
 
@@ -310,6 +355,81 @@ describe('video frame capture', () => {
 		harness.deps.waitForMetadata = async () => { throw new Error('decode failed'); };
 		harness.deps.revokeObjectUrl = () => { throw new Error('cleanup failed'); };
 		await expect(captureVideoThumbnail('opaque', harness.deps)).resolves.toBeNull();
+	});
+});
+
+describe('course thumbnail orchestration', () => {
+	 it('does not resolve a media URL or capture when the course has no eligible source', async () => {
+		const mediaUrl = vi.fn(() => '/should-not-be-used');
+		const capture = vi.fn(async () => new Blob(['image'], { type: 'image/jpeg' }));
+		const result = await loadCourseThumbnail({
+			course: course([lesson('Lesson', [file('notes.pdf')])]),
+			profile: 'user-1',
+			cache: new ThumbnailCache(new MemoryThumbnailCache()),
+			queue: new ThumbnailTaskQueue(),
+			mediaUrl,
+			capture
+		});
+
+		expect(result).toBeNull();
+		expect(mediaUrl).not.toHaveBeenCalled();
+		expect(capture).not.toHaveBeenCalled();
+	});
+
+	it('uses the transport URL, profile-scoped cache key, and shared capture queue', async () => {
+		const selected = file('lesson.mp4');
+		const cache = new ThumbnailCache(new MemoryThumbnailCache());
+		const mediaUrl = vi.fn(() => '/api/media?opaque=only');
+		const capture = vi.fn(async () => new Blob(['image'], { type: 'image/jpeg' }));
+		const options = {
+			course: course([lesson('Lesson', [selected])]),
+			profile: 'user-1',
+			cache,
+			queue: new ThumbnailTaskQueue(),
+			mediaUrl,
+			capture
+		};
+
+		const first = await loadCourseThumbnail(options);
+		const second = await loadCourseThumbnail({ ...options, profile: 'user-2' });
+
+		expect(mediaUrl).toHaveBeenCalledWith(selected, 'course-id');
+		expect(capture).toHaveBeenCalledTimes(2);
+		expect(first?.type).toBe('image/jpeg');
+		expect(second?.type).toBe('image/jpeg');
+	});
+
+	it('does not capture when transport cannot produce a media URL', async () => {
+		const capture = vi.fn(async () => new Blob(['image'], { type: 'image/jpeg' }));
+		const result = await loadCourseThumbnail({
+			course: course([lesson('Lesson', [file('lesson.mp4')])]),
+			profile: 'user-1',
+			cache: new ThumbnailCache(new MemoryThumbnailCache()),
+			queue: new ThumbnailTaskQueue(),
+			mediaUrl: () => null,
+			capture
+		});
+
+		expect(result).toBeNull();
+		expect(capture).not.toHaveBeenCalled();
+	});
+
+	it('defers to a manual cover without capturing or resolving a media URL', async () => {
+		const mediaUrl = vi.fn(() => '/should-not-be-used');
+		const capture = vi.fn(async () => new Blob(['image'], { type: 'image/jpeg' }));
+		const result = await loadCourseThumbnail({
+			course: course([lesson('Lesson', [file('lesson.mp4')])]),
+			profile: 'user-1',
+			cache: new ThumbnailCache(new MemoryThumbnailCache()),
+			queue: new ThumbnailTaskQueue(),
+			mediaUrl,
+			capture,
+			manualCoverUrl: 'learnvault-media://uploaded-cover'
+		});
+
+		expect(result).toBeNull();
+		expect(mediaUrl).not.toHaveBeenCalled();
+		expect(capture).not.toHaveBeenCalled();
 	});
 });
 
