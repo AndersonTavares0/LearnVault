@@ -19,12 +19,13 @@ function decodeSegment(value: string | undefined): string | null {
  * o caminho relativo da aula só é único por curso, então a identidade do curso faz parte
  * da rota. `#/settings` abre as preferências locais e não identifica curso algum.
  * `#/player/<caminho>` é a forma legada de um arquivo solto sem curso dono;
- * o caminho deve começar a busca global. Qualquer outro valor cai no login.
+ * o caminho deve começar a busca global. Qualquer outro valor cai na rota padrão do build:
+ * o login no servidor e a tela inicial no desktop, que não tem sessão.
  */
-export function locationFromHash(hash: string): HashLocation {
+export function locationFromHash(hash: string, fallback: Route = 'login'): HashLocation {
 	const value = hash.replace(/^#\/?/, '');
 	const [name, ...parts] = value.split('/');
-	const route = name === 'home' || name === 'course' || name === 'player' || name === 'settings' ? name : 'login';
+	const route = name === 'home' || name === 'course' || name === 'player' || name === 'settings' ? name : fallback;
 	if (route === 'course') return { route, courseId: decodeSegment(parts[0]), lessonPath: null };
 	if (route === 'player') {
 		if (parts.length === 0) return { route, courseId: null, lessonPath: null };
@@ -34,8 +35,8 @@ export function locationFromHash(hash: string): HashLocation {
 	return { route, courseId: null, lessonPath: null };
 }
 
-export function routeFromHash(hash: string): Route {
-	return locationFromHash(hash).route;
+export function routeFromHash(hash: string, fallback: Route = 'login'): Route {
+	return locationFromHash(hash, fallback).route;
 }
 
 /** Monta o hash canônico de uma rota. */
