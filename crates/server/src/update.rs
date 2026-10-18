@@ -402,10 +402,10 @@ fn parse_version(value: &str) -> Option<Version> {
         Some((left, right)) => (left, Some(right)),
         None => (value, None),
     };
-    if let Some(build) = build {
-        if !valid_identifiers(build, false) {
-            return None;
-        }
+    if let Some(build) = build
+        && !valid_identifiers(build, false)
+    {
+        return None;
     }
     let (core, pre) = match without_build.split_once('-') {
         Some((core, pre)) => (core, Some(pre)),
