@@ -171,4 +171,21 @@ describe('player preference controls', () => {
 
 		expect(body).toContain('aria-pressed="true">1.5x');
 	});
+
+	it('keeps a single media choice simple and leaves auto-advance off by default', () => {
+		const oneMediaLesson = lesson([media('aula.mp4')]);
+		const { body } = render(Player, { props: { ...baseProps, lesson: oneMediaLesson } });
+
+		expect(body).not.toContain('aria-label="Mídia da aula"');
+		expect(body).toContain('Avançar automaticamente');
+		expect(body).toContain('<input type="checkbox"/>');
+	});
+
+	it('restores the independent video speed and auto-advance preference', () => {
+		const preferences = { ...createDefaultPlayerPreferences(), videoSpeed: 2 as const, autoNext: true };
+		const { body } = render(Player, { props: { ...baseProps, lesson: lesson([media('aula.mp4')]), preferences, autoNext: true } });
+
+		expect(body).toContain('aria-pressed="true">2x');
+		expect(body).toContain('<input type="checkbox" checked=""/>');
+	});
 });
