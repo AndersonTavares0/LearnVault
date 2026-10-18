@@ -1,12 +1,13 @@
 <script lang="ts">
 	import LooseFiles from './LooseFiles.svelte';
-	import { clampSpeed, formatDuration, mediaPlaybackKind, PLAYBACK_SPEEDS, type PlaybackSpeed, selectPlayableMedia, selectPlayableSubtitle, srtConversionSupported, srtToWebVtt, studySyncEnabled, subtitleFormat } from './player';
+	import { clampSpeed, formatDuration, mediaAvailability, mediaPlaybackKind, PLAYBACK_SPEEDS, type PlaybackSpeed, selectPlayableMedia, selectPlayableSubtitle, srtConversionSupported, srtToWebVtt, studySyncEnabled, subtitleFormat } from './player';
 	import { createPositionSaver } from './study';
 	import { transport, type Lesson, type StudyProgress } from './transport';
 
 	let { lesson, courseId, mediaError, onMediaError, studyEnabled = true }: { lesson: Lesson; courseId: string; mediaError: string; onMediaError: () => void; studyEnabled?: boolean } = $props();
 
 	const playable = $derived(selectPlayableMedia(lesson.media));
+	const availability = $derived(mediaAvailability(lesson.media));
 	const mediaId = $derived(playable?.mediaId ?? null);
 	const source = $derived(playable ? transport.mediaUrl(playable, courseId) : null);
 	const playbackKind = $derived(playable ? mediaPlaybackKind(playable) : 'video');
@@ -168,6 +169,7 @@
 			</div>
 		</div>
 	</div>
+{:else if availability === 'missing'}<p class="empty" role="status">A mídia desta aula não está no disco. A aula e o seu progresso foram preservados; indexe os cursos novamente depois de reconectar o disco ou repor o arquivo.</p>
 {:else}<p class="empty" role="status">Esta aula não possui mídia disponível.</p>{/if}
 {#if syncEnabled}
 	<div class="study-bar" role="group" aria-label="Progresso da aula">

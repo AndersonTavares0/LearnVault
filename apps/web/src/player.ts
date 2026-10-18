@@ -54,6 +54,24 @@ export function selectPlayableMedia(media: FileEntry[]): FileEntry | null {
 	return media.find((file) => file.availability?.trim().toLowerCase() !== 'missing') ?? null;
 }
 
+/**
+ * Estado da mídia de uma aula, derivado apenas do catálogo.
+ *
+ * `playable`: existe mídia disponível. `missing`: a aula tem mídia catalogada e nenhuma
+ * está disponível — o arquivo saiu do disco (disco externo desconectado, arquivo
+ * renomeado) e a varredura marcou `availability = 'missing'`, preservando a aula e o
+ * progresso. `absent`: a aula não tem nenhum arquivo de mídia no catálogo.
+ *
+ * A distinção existe para a mensagem do player ser factual: uma aula cuja mídia
+ * desapareceu do disco não é a mesma coisa que uma aula sem mídia nenhuma.
+ */
+export type MediaAvailability = 'playable' | 'missing' | 'absent';
+
+export function mediaAvailability(media: FileEntry[]): MediaAvailability {
+	if (selectPlayableMedia(media)) return 'playable';
+	return media.length > 0 ? 'missing' : 'absent';
+}
+
 export function selectPlayableSubtitle(subtitles: FileEntry[]): FileEntry | null {
 	return subtitles.find((file) => file.availability?.trim().toLowerCase() !== 'missing') ?? null;
 }
