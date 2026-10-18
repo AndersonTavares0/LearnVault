@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use learnvault_desktop::DesktopState;
 use learnvault_desktop::media::{
     MAIN_WEBVIEW_LABEL, MAX_SMALL_FILE_BYTES, MEDIA_HOST, MEDIA_SCHEME, MediaMethod,
-    MediaRejection, MediaResponse, RawMediaRequest, parse_media_request,
+    MediaRejection, MediaResponse, RawMediaRequest, apply_media_cors, parse_media_request,
 };
 
 /// Conteúdo sintético pequeno com extensão de imagem para as fixtures.
@@ -74,6 +74,50 @@ fn raw<'a>(method: &'a str, path: &'a str) -> RawMediaRequest<'a> {
         query: None,
         range: None,
         webview_label: MAIN_WEBVIEW_LABEL,
+    }
+}
+
+#[test]
+fn media_cors_reflects_only_the_exact_valid_window_origin_without_changing_playback() {
+    let window_origin = "http://tauri.localhost";
+    for request_origin in [Some(window_origin), Some("http://evil.example"), None] {
+        let response = MediaResponse {
+            status: 206,
+            headers: vec![("Content-Type".to_owned(), "video/mp4".to_owned())],
+            body: b"synthetic-range".to_vec(),
+        };
+
+        let response = apply_media_cors(response, request_origin, window_origin);
+
+        assert_eq!(response.status, 206);
+        assert_eq!(response.body, b"synthetic-range");
+        assert_eq!(
+            response.header("Access-Control-Allow-Origin"),
+            request_origin.filter(|origin| *origin == window_origin)
+        );
+    }
+}
+
+#[test]
+fn media_cors_rejects_malformed_or_non_origin_values() {
+    let window_origin = "http://tauri.localhost";
+    for request_origin in [
+        "http://tauri.localhost/",
+        "null",
+        "https://tauri.localhost",
+        "http://tauri.localhost.evil.example",
+    ] {
+        let response = MediaResponse {
+            status: 200,
+            headers: Vec::new(),
+            body: b"synthetic-video".to_vec(),
+        };
+
+        let response = apply_media_cors(response, Some(request_origin), window_origin);
+
+        assert_eq!(response.status, 200);
+        assert_eq!(response.body, b"synthetic-video");
+        assert_eq!(response.header("Access-Control-Allow-Origin"), None);
     }
 }
 
