@@ -45,6 +45,8 @@ tmp/
 
 # Local tooling, IDEs and OS metadata
 .playwright-mcp/
+test-results/
+playwright-report/
 .vscode/
 .idea/
 .DS_Store
