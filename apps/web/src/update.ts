@@ -24,9 +24,36 @@ export function updateMessage(status: UpdateStatus): string {
 	}
 }
 
-// Só oferece o link quando há uma versão nova e a URL é HTTPS: nunca um destino
-// inesperado, e nunca um link para a release atual quando já se está atualizado.
+// Só oferece o link da versão informada no repositório oficial, nunca outro destino
+// HTTPS recebido na resposta e nunca um link quando já se está atualizado.
 export function updateReleaseUrl(status: UpdateStatus): string | null {
 	const url = status.available ? status.url : null;
-	return url && url.startsWith('https://') ? url : null;
+	if (!url || !status.latest) return null;
+
+	try {
+		const parsed = new URL(url);
+		const releasePath = '/AndersonTavares0/LearnVault/releases/tag/';
+		const tag = parsed.pathname.startsWith(releasePath)
+			? parsed.pathname.slice(releasePath.length).replace(/^v/, '')
+			: '';
+		const [tagVersion, buildMetadata, ...extraMetadata] = tag.split('+');
+		const validBuildMetadata = buildMetadata === undefined
+			|| (extraMetadata.length === 0
+				&& buildMetadata !== ''
+				&& buildMetadata.split('.').every((identifier) => /^[0-9A-Za-z-]+$/.test(identifier)));
+		const expectedPath = tagVersion === status.latest && validBuildMetadata;
+		if (
+			parsed.origin !== 'https://github.com'
+			|| parsed.username
+			|| parsed.password
+			|| parsed.search
+			|| parsed.hash
+			|| !expectedPath
+		) {
+			return null;
+		}
+		return parsed.href;
+	} catch {
+		return null;
+	}
 }

@@ -262,7 +262,11 @@ fn success_from(release: &ReleaseInfo, evaluation: Evaluation, checked_at: Strin
         Evaluation::UpToDate => None,
     };
     let available = latest.is_some();
-    let url = latest.as_deref().and_then(release_url);
+    let url = if available {
+        release_url(&release.tag_name)
+    } else {
+        None
+    };
     Success {
         available,
         latest,
@@ -475,8 +479,7 @@ fn release_url(version: &str) -> Option<String> {
         return None;
     }
     Some(format!(
-        "https://github.com/AndersonTavares0/LearnVault/releases/tag/v{}",
-        parsed.original
+        "https://github.com/AndersonTavares0/LearnVault/releases/tag/{version}"
     ))
 }
 
@@ -690,8 +693,35 @@ mod tests {
             release_url("v1.2.3"),
             Some("https://github.com/AndersonTavares0/LearnVault/releases/tag/v1.2.3".to_owned())
         );
+        assert_eq!(
+            release_url("1.2.3"),
+            Some("https://github.com/AndersonTavares0/LearnVault/releases/tag/1.2.3".to_owned())
+        );
+        assert_eq!(
+            release_url("v1.2.3+build.7"),
+            Some(
+                "https://github.com/AndersonTavares0/LearnVault/releases/tag/v1.2.3+build.7"
+                    .to_owned()
+            )
+        );
         assert_eq!(release_url("1.2.3-rc.1+build.7"), None);
         assert_eq!(release_url("https://attacker.test"), None);
+    }
+
+    #[test]
+    fn preserves_the_original_release_tag_in_the_available_update_link() {
+        let release = release("1.2.3");
+        let result = success_from(
+            &release,
+            evaluate(&release, "1.0.0").unwrap(),
+            "1".to_owned(),
+        );
+
+        assert_eq!(result.latest.as_deref(), Some("1.2.3"));
+        assert_eq!(
+            result.url.as_deref(),
+            Some("https://github.com/AndersonTavares0/LearnVault/releases/tag/1.2.3")
+        );
     }
 
     #[test]

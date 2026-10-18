@@ -50,4 +50,16 @@ describe('update presentation', () => {
 		expect(updateReleaseUrl(status({ available: true, latest: '0.4.0', url: 'ftp://example.test/release' }))).toBeNull();
 		expect(updateReleaseUrl(status({ available: true, latest: '0.4.0', url: null }))).toBeNull();
 	});
+
+	it('only offers the matching release from the official repository', () => {
+		const available = { available: true, latest: '0.4.0' };
+		expect(updateReleaseUrl(status({ ...available, url: 'https://example.com/AndersonTavares0/LearnVault/releases/tag/v0.4.0' }))).toBeNull();
+		expect(updateReleaseUrl(status({ ...available, url: 'https://github.com/attacker/LearnVault/releases/tag/v0.4.0' }))).toBeNull();
+		expect(updateReleaseUrl(status({ ...available, url: 'https://github.com/AndersonTavares0/LearnVault/releases/tag/v0.5.0' }))).toBeNull();
+		expect(updateReleaseUrl(status({ ...available, url: 'https://user@github.com/AndersonTavares0/LearnVault/releases/tag/v0.4.0' }))).toBeNull();
+		expect(updateReleaseUrl(status({ ...available, url: 'https://github.com/AndersonTavares0/LearnVault/releases/tag/v0.4.0?redirect=1' }))).toBeNull();
+		expect(updateReleaseUrl(status({ ...available, url: 'https://github.com/AndersonTavares0/LearnVault/releases/tag/v0.4.0' }))).toBe('https://github.com/AndersonTavares0/LearnVault/releases/tag/v0.4.0');
+		expect(updateReleaseUrl(status({ ...available, url: 'https://github.com/AndersonTavares0/LearnVault/releases/tag/0.4.0' }))).toBe('https://github.com/AndersonTavares0/LearnVault/releases/tag/0.4.0');
+		expect(updateReleaseUrl(status({ ...available, url: 'https://github.com/AndersonTavares0/LearnVault/releases/tag/v0.4.0+build.7' }))).toBe('https://github.com/AndersonTavares0/LearnVault/releases/tag/v0.4.0+build.7');
+	});
 });
