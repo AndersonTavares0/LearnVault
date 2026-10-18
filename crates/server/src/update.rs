@@ -38,6 +38,8 @@ pub(crate) const DEFAULT_CACHE_INTERVAL: Duration = Duration::from_secs(3600);
 
 /// Orçamento de rede de cada checagem. Estar offline não pode segurar a tela.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
+/// Limite defensivo do JSON da API de releases.
+const MAX_RESPONSE_BYTES: usize = 64 * 1024;
 
 /// Motivo genérico quando não há um erro mais específico do último attempt.
 const FALLBACK_ERROR: &str = "não foi possível verificar a atualização";
@@ -47,7 +49,6 @@ const FALLBACK_ERROR: &str = "não foi possível verificar a atualização";
 pub(crate) struct ReleaseInfo {
     pub(crate) tag_name: String,
     pub(crate) published_at: Option<String>,
-    pub(crate) html_url: Option<String>,
     pub(crate) draft: bool,
     pub(crate) prerelease: bool,
 }
@@ -261,6 +262,7 @@ fn success_from(release: &ReleaseInfo, evaluation: Evaluation, checked_at: Strin
         Evaluation::UpToDate => None,
     };
     let available = latest.is_some();
+    let url = latest.as_deref().and_then(release_url);
     Success {
         available,
         latest,
@@ -271,11 +273,7 @@ fn success_from(release: &ReleaseInfo, evaluation: Evaluation, checked_at: Strin
         } else {
             None
         },
-        url: if available {
-            release.html_url.clone()
-        } else {
-            None
-        },
+        url: if available { url } else { None },
         checked_at,
         checked_instant: Instant::now(),
     }
@@ -309,8 +307,6 @@ fn parse_release(body: &str) -> Result<ReleaseInfo, ()> {
         #[serde(default)]
         published_at: Option<String>,
         #[serde(default)]
-        html_url: Option<String>,
-        #[serde(default)]
         draft: bool,
         #[serde(default)]
         prerelease: bool,
@@ -324,7 +320,6 @@ fn parse_release(body: &str) -> Result<ReleaseInfo, ()> {
     Ok(ReleaseInfo {
         tag_name,
         published_at: payload.published_at,
-        html_url: payload.html_url,
         draft: payload.draft,
         prerelease: payload.prerelease,
     })
@@ -400,21 +395,31 @@ fn compare_pre(left: &[PreId], right: &[PreId]) -> std::cmp::Ordering {
     left.len().cmp(&right.len())
 }
 
-/// Interpreta uma versão aceitando um `v` inicial opcional e ignorando metadados de build.
+/// Interpreta SemVer estrito aceitando `v` inicial opcional (convenção das tags GitHub).
 fn parse_version(value: &str) -> Option<Version> {
-    let trimmed = value.trim();
-    let trimmed = trimmed.strip_prefix('v').unwrap_or(trimmed);
-    let trimmed = trimmed.split('+').next()?;
-    let (core, pre) = match trimmed.split_once('-') {
-        Some((core, pre)) => (core, Some(pre)),
-        None => (trimmed, None),
+    let value = value.strip_prefix('v').unwrap_or(value);
+    let (without_build, build) = match value.split_once('+') {
+        Some((left, right)) => (left, Some(right)),
+        None => (value, None),
     };
-    if core.is_empty() {
+    if let Some(build) = build {
+        if !valid_identifiers(build, false) {
+            return None;
+        }
+    }
+    let (core, pre) = match without_build.split_once('-') {
+        Some((core, pre)) => (core, Some(pre)),
+        None => (without_build, None),
+    };
+    if core.is_empty() || core.contains('-') || core.split('.').count() != 3 {
         return None;
     }
     let mut release = Vec::new();
     for component in core.split('.') {
-        if component.is_empty() || !component.bytes().all(|byte| byte.is_ascii_digit()) {
+        if component.is_empty()
+            || (component.len() > 1 && component.starts_with('0'))
+            || !component.bytes().all(|byte| byte.is_ascii_digit())
+        {
             return None;
         }
         release.push(component.parse::<u64>().ok()?);
@@ -426,24 +431,66 @@ fn parse_version(value: &str) -> Option<Version> {
         None => None,
     };
     Some(Version {
-        original: trimmed.to_owned(),
+        original: without_build
+            .strip_prefix('v')
+            .unwrap_or(without_build)
+            .to_owned(),
         release,
         pre,
     })
 }
 
 fn parse_pre(value: &str) -> Option<Vec<PreId>> {
+    if !valid_identifiers(value, true) {
+        return None;
+    }
     let mut identifiers = Vec::new();
     for identifier in value.split('.') {
-        if identifier.is_empty() {
-            return None;
-        }
-        identifiers.push(match identifier.parse::<u64>() {
-            Ok(number) => PreId::Number(number),
-            Err(_) => PreId::Text(identifier.to_owned()),
+        identifiers.push(if identifier.bytes().all(|byte| byte.is_ascii_digit()) {
+            PreId::Number(identifier.parse::<u64>().ok()?)
+        } else {
+            PreId::Text(identifier.to_owned())
         });
     }
     Some(identifiers)
+}
+
+fn valid_identifiers(value: &str, reject_numeric_leading_zero: bool) -> bool {
+    !value.is_empty()
+        && value.split('.').all(|identifier| {
+            !identifier.is_empty()
+                && identifier
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+                && !(reject_numeric_leading_zero
+                    && identifier.len() > 1
+                    && identifier.bytes().all(|byte| byte.is_ascii_digit())
+                    && identifier.starts_with('0'))
+        })
+}
+
+fn release_url(version: &str) -> Option<String> {
+    let parsed = parse_version(version)?;
+    if parsed.pre.is_some() {
+        return None;
+    }
+    Some(format!(
+        "https://github.com/AndersonTavares0/LearnVault/releases/tag/v{}",
+        parsed.original
+    ))
+}
+
+fn append_body_chunk(body: &mut Vec<u8>, chunk: &[u8]) -> Result<(), ()> {
+    if body
+        .len()
+        .checked_add(chunk.len())
+        .filter(|size| *size <= MAX_RESPONSE_BYTES)
+        .is_none()
+    {
+        return Err(());
+    }
+    body.extend_from_slice(chunk);
+    Ok(())
 }
 
 /// Instante da checagem como segundos desde a época Unix (string opaca para o cliente).
@@ -463,6 +510,7 @@ fn github_client() -> Result<&'static reqwest::Client, String> {
         let _ = rustls::crypto::ring::default_provider().install_default();
         reqwest::Client::builder()
             .timeout(REQUEST_TIMEOUT)
+            .redirect(reqwest::redirect::Policy::none())
             .build()
             .map_err(|_| ())
     });
@@ -474,6 +522,9 @@ fn github_client() -> Result<&'static reqwest::Client, String> {
 pub(crate) fn github_fetcher() -> Fetcher {
     Arc::new(|| {
         Box::pin(async {
+            if VERSION == "0.0.0" {
+                return Err("versão local indisponível para comparação".to_owned());
+            }
             let client = github_client()?;
             let response = client
                 .get(RELEASES_URL)
@@ -485,11 +536,25 @@ pub(crate) fn github_fetcher() -> Fetcher {
             if !response.status().is_success() {
                 return Err("o GitHub recusou a consulta de release".to_owned());
             }
-            let body = response
-                .text()
+            if response
+                .content_length()
+                .is_some_and(|length| length > MAX_RESPONSE_BYTES as u64)
+            {
+                return Err("resposta do GitHub excede o limite permitido".to_owned());
+            }
+            let mut response = response;
+            let mut body = Vec::new();
+            while let Some(chunk) = response
+                .chunk()
                 .await
-                .map_err(|_| "não foi possível ler a resposta do GitHub".to_owned())?;
-            parse_release(&body).map_err(|()| "resposta de release inválida".to_owned())
+                .map_err(|_| "não foi possível ler a resposta do GitHub".to_owned())?
+            {
+                append_body_chunk(&mut body, &chunk)
+                    .map_err(|()| "resposta do GitHub excede o limite permitido".to_owned())?;
+            }
+            let body = std::str::from_utf8(&body)
+                .map_err(|_| "resposta de release inválida".to_owned())?;
+            parse_release(body).map_err(|()| "resposta de release inválida".to_owned())
         })
     })
 }
@@ -512,9 +577,6 @@ mod tests {
         ReleaseInfo {
             tag_name: tag.to_owned(),
             published_at: Some("2026-10-17T12:00:00Z".to_owned()),
-            html_url: Some(
-                "https://github.com/AndersonTavares0/LearnVault/releases/tag/v9".to_owned(),
-            ),
             draft: false,
             prerelease: false,
         }
@@ -543,15 +605,11 @@ mod tests {
     #[test]
     fn parses_a_published_release_payload() {
         let parsed = parse_release(
-            r#"{"tag_name":"v0.4.0","published_at":"2026-10-17T12:00:00Z","html_url":"https://github.com/AndersonTavares0/LearnVault/releases/tag/v0.4.0","draft":false,"prerelease":false}"#,
+            r#"{"tag_name":"v0.4.0","published_at":"2026-10-17T12:00:00Z","html_url":"https://attacker.test/","draft":false,"prerelease":false}"#,
         )
         .unwrap();
         assert_eq!(parsed.tag_name, "v0.4.0");
         assert_eq!(parsed.published_at.as_deref(), Some("2026-10-17T12:00:00Z"));
-        assert_eq!(
-            parsed.html_url.as_deref(),
-            Some("https://github.com/AndersonTavares0/LearnVault/releases/tag/v0.4.0")
-        );
         assert!(!parsed.draft && !parsed.prerelease);
     }
 
@@ -560,7 +618,6 @@ mod tests {
         let parsed = parse_release(r#"{"tag_name":"0.4.0"}"#).unwrap();
         assert_eq!(parsed.tag_name, "0.4.0");
         assert_eq!(parsed.published_at, None);
-        assert_eq!(parsed.html_url, None);
     }
 
     #[test]
@@ -598,14 +655,31 @@ mod tests {
     #[test]
     fn rejects_unparsable_versions() {
         for value in [
-            "", "v", "1.0.0-", "1.x", "abc", "1..2", "-1.0.0", "1.2",
-            "1.2.3.4", " 1.2.3", "1.2.3 ", "01.2.3", "1.02.3", "1.2.03",
-            "1.2.3-01", "1.2.3-alpha..1", "1.2.3+build..1", "1.2.3+bad_thing",
-            "1.2.3-ümlaut", "1.2.3+",
+            "",
+            "v",
+            "1.0.0-",
+            "1.x",
+            "abc",
+            "1..2",
+            "-1.0.0",
+            "1.2",
+            "1.2.3.4",
+            " 1.2.3",
+            "1.2.3 ",
+            "01.2.3",
+            "1.02.3",
+            "1.2.03",
+            "1.2.3-01",
+            "1.2.3-alpha.01",
+            "1.2.3-alpha..1",
+            "1.2.3+build..1",
+            "1.2.3+bad_thing",
+            "1.2.3-ümlaut",
+            "1.2.3+",
         ] {
             assert!(parse_version(value).is_none(), "{value}");
         }
-        for value in ["1.2.3+001", "1.2.3-alpha.01", "1.2.3-rc.1+build.007"] {
+        for value in ["1.2.3+001", "1.2.3-alpha.1", "1.2.3-rc.1+build.007"] {
             assert!(parse_version(value).is_some(), "{value}");
         }
     }

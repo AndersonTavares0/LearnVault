@@ -17,6 +17,16 @@ nem o modelo principal de desenvolvimento.
 Não há `.deb` nem `.rpm` como artefatos públicos nesta fase. O instalador Windows NSIS continua
 habilitado no release automático; o Flatpak não é construído nem publicado automaticamente.
 
+### Aviso manual de atualização
+
+Quando habilitado nas configurações, o servidor consulta a API pública de releases do GitHub por
+HTTPS e compara a tag estável com a versão local usando SemVer estrito. A consulta tem timeout de
+5 segundos e aceita no máximo 64 KiB de resposta; há cache em processo de uma hora, ignorado pelo
+botão de verificação manual. O resultado exige sessão autenticada e não é armazenado por caches
+HTTP. O link exibido é construído para o repositório oficial, sem confiar no `html_url` retornado
+pela API. Nenhum arquivo é baixado ou instalado automaticamente. Builds locais com versão
+`0.0.0` não consultam a API, pois não possuem versão de release para comparar.
+
 ### Uso do tarball Linux
 
 O tarball `learnvault-linux-<arch>.tar.gz` traz o binário `learnvault-linux-<arch>`, o `LICENSE` e a
