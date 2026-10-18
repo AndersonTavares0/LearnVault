@@ -9,3 +9,4 @@ Decisões entram por pull request; mudanças de escopo são discutidas no GitHub
 | ADR | Título | Status | Data |
 | --- | --- | --- | --- |
 | [0001](0001-reescrita-em-rust.md) | Reescrever o LearnVault em Rust com núcleo compartilhado | Accepted | 2026-10-14 |
+| [0002](0002-miniaturas-automaticas-de-cursos.md) | Gerar miniaturas de cursos no WebView | Accepted | 2026-10-18 |
