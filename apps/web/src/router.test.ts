@@ -40,6 +40,16 @@ describe('hash router', () => {
 		expect(locationFromHash('#/player/%E0%A4%A/aula')).toEqual({ route: 'player', courseId: null, lessonPath: 'aula' });
 	});
 
+	it('defaults unknown and login hashes to the fallback route of the build', () => {
+		// O desktop não tem sessão: login e endereços desconhecidos caem na tela inicial.
+		expect(routeFromHash('', 'home')).toBe('home');
+		expect(routeFromHash('#/login', 'home')).toBe('home');
+		expect(routeFromHash('#/desconhecido', 'home')).toBe('home');
+		expect(locationFromHash('#/login', 'home')).toEqual({ route: 'home', courseId: null, lessonPath: null });
+		// Rotas nomeadas continuam valendo independentemente do padrão do build.
+		expect(routeFromHash('#/settings', 'home')).toBe('settings');
+	});
+
 	it('supports settings as an authenticated destination', () => {
 		expect(locationFromHash('#/settings')).toEqual({ route: 'settings', courseId: null, lessonPath: null });
 		expect(destinationAfterLogin('#/settings')).toBe('#/settings');
