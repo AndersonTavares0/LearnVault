@@ -50,8 +50,13 @@ export function formatDuration(totalSeconds: number): string {
 	return `${minutes}:${paddedSeconds}`;
 }
 
-export function selectPlayableMedia(media: FileEntry[]): FileEntry | null {
-	return media.find((file) => file.availability?.trim().toLowerCase() !== 'missing') ?? null;
+export function selectPlayableMedia(media: FileEntry[], preferredMediaId?: string): FileEntry | null {
+	const available = (file: FileEntry) => file.availability?.trim().toLowerCase() !== 'missing';
+	if (preferredMediaId) {
+		const preferred = media.find((file) => file.mediaId === preferredMediaId && available(file));
+		if (preferred) return preferred;
+	}
+	return media.find(available) ?? null;
 }
 
 /**
@@ -72,8 +77,14 @@ export function mediaAvailability(media: FileEntry[]): MediaAvailability {
 	return media.length > 0 ? 'missing' : 'absent';
 }
 
-export function selectPlayableSubtitle(subtitles: FileEntry[]): FileEntry | null {
-	return subtitles.find((file) => file.availability?.trim().toLowerCase() !== 'missing') ?? null;
+export function selectPlayableSubtitle(subtitles: FileEntry[], preferredSubtitleId?: string | null): FileEntry | null {
+	if (preferredSubtitleId === null) return null;
+	const available = (file: FileEntry) => file.availability?.trim().toLowerCase() !== 'missing';
+	if (preferredSubtitleId) {
+		const preferred = subtitles.find((file) => file.mediaId === preferredSubtitleId && available(file));
+		if (preferred) return preferred;
+	}
+	return subtitles.find(available) ?? null;
 }
 
 export type MediaPlaybackKind = 'video' | 'audio';
