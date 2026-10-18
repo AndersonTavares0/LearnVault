@@ -100,12 +100,14 @@ fn media_cors_reflects_only_the_exact_valid_window_origin_without_changing_playb
 
 #[test]
 fn media_cors_rejects_malformed_or_non_origin_values() {
-    let window_origin = "http://tauri.localhost";
     for request_origin in [
         "http://tauri.localhost/",
         "null",
         "https://tauri.localhost",
         "http://tauri.localhost.evil.example",
+        "1http://tauri.localhost",
+        "http://tauri.localhost:99999",
+        "http://user@tauri.localhost",
     ] {
         let response = MediaResponse {
             status: 200,
@@ -113,7 +115,7 @@ fn media_cors_rejects_malformed_or_non_origin_values() {
             body: b"synthetic-video".to_vec(),
         };
 
-        let response = apply_media_cors(response, Some(request_origin), window_origin);
+        let response = apply_media_cors(response, Some(request_origin), request_origin);
 
         assert_eq!(response.status, 200);
         assert_eq!(response.body, b"synthetic-video");
