@@ -69,7 +69,7 @@ describe('player preferences', () => {
 			audioSpeed: 3,
 			videoSpeed: 'fast',
 			autoNext: 'yes',
-			lessons: { broken: { mediaId: 12, subtitleId: '../private' } }
+			lessons: { broken: { mediaId: 12, subtitleId: 42 } }
 		}));
 
 		expect(readPlayerPreferences(storage, 'http-user:user-a')).toEqual(createDefaultPlayerPreferences());
