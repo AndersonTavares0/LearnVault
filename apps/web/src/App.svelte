@@ -315,7 +315,7 @@
 			</form>
 		</section>
 	</main>
-{:else}<div class="shell"><header><div class="brand"><Brand /> LEARNVAULT</div><button class="text-button" onclick={logout}>Sair</button></header><div class="layout"><aside aria-label="Navegação principal"><a class:active={route === 'home'} href={href('home')}>Início</a><a class:active={route === 'settings'} href={href('settings')}>Configurações</a></aside><main><p class="eyebrow">BIBLIOTECA PESSOAL</p>{#if error}<p class="error" role="alert">{error}</p>{/if}
+{:else}<div class="shell"><header><div class="brand"><Brand /> LEARNVAULT</div><button class="text-button" onclick={logout}>Sair</button></header><div class="layout"><nav aria-label="Navegação principal"><a class:active={route === 'home'} href={href('home')}>Início</a><a class:active={route === 'settings'} href={href('settings')}>Configurações</a></nav><main><p class="eyebrow">BIBLIOTECA PESSOAL</p>{#if error}<p class="error" role="alert">{error}</p>{/if}
 {#if route === 'home'}
 	<h1>Olá, {user.username}.</h1>
 	<p class="intro">{catalog && catalog.nodes.length ? 'Escolha um curso para continuar estudando.' : 'Importe seu primeiro curso para montar sua biblioteca.'}</p>
@@ -336,7 +336,8 @@
 	{#if importError}<p class="error" role="alert">{importError}</p>{/if}
 	{#if user.role === 'admin' && rescanMessage}<p class="catalog-message" aria-live="polite">{rescanMessage}</p>{/if}
 	{#if catalog && catalog.nodes.length}
-		{#if filteredNodes.length}<ul class="course-grid">{#each filteredNodes as courseItem (courseItem.courseId ?? courseItem.path)}<li><CourseCard course={courseItem} /></li>{/each}</ul>
+	<h2 id="courses-heading" class="courses-heading">Cursos</h2>
+	{#if filteredNodes.length}<ul class="course-grid" aria-labelledby="courses-heading">{#each filteredNodes as courseItem (courseItem.courseId ?? courseItem.path)}<li><CourseCard course={courseItem} /></li>{/each}</ul>
 		{:else}<p class="empty" role="status">Nenhum curso corresponde a “{catalogQuery.trim()}”.</p>{/if}
 	{:else if canManage}<div class="empty-state"><p class="empty">Nenhum curso por aqui ainda.</p><p class="intro">Clique em “Importar curso” e escolha a pasta de um curso. Nada é movido, alterado ou apagado — a pasta permanece somente leitura.</p></div>{/if}
 	{#if catalog && catalog.looseFiles.length}<LooseFiles files={catalog.looseFiles} heading="Arquivos soltos" />{/if}
