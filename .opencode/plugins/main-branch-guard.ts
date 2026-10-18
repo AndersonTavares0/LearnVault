@@ -7,6 +7,9 @@
  * diretamente — o shell `$` do runtime deixou de devolver a branch de forma confiável em
  * versões recentes do aplicativo, e a guarda não pode depender dele. Quando a verificação
  * falha, um diagnóstico é gravado em arquivo temporário e o caminho aparece no erro.
+ * O módulo exporta apenas a função do plugin: o carregador do opencode trata cada export
+ * do arquivo como um plugin e exige uma função, então um export a mais derruba o
+ * carregamento inteiro.
  * Não substitui a branch protection do GitHub nem cobre todas as formas de escrita via
  * Bash — veja o README deste diretório.
  */
@@ -28,7 +31,7 @@ const GITHUB_PR_MERGE = /\bgh\b[^|;&\n]*\s+pr\s+merge\b/
 const PATCH_TARGET = /^\*\*\* (?:Add File|Update File|Delete File|Move to): (.+)$/gm
 
 /** Arquivo de diagnóstico da verificação de branch, fora do repositório. */
-export const DIAGNOSTIC_LOG = path.join(tmpdir(), "learnvault-main-branch-guard.log")
+const DIAGNOSTIC_LOG = path.join(tmpdir(), "learnvault-main-branch-guard.log")
 
 type GitResult = { root: string; exitCode: number; stdout: string; stderr: string }
 

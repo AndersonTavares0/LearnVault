@@ -34,6 +34,13 @@ ou repetir a operação.
   conhecidos e pode ser contornada por sintaxes alternativas.
 - Alterações no plugin só entram em vigor após reiniciar o opencode.
 
+## Contrato do módulo
+
+O arquivo do plugin exporta **somente** a função do plugin. O carregador do opencode trata
+cada export do módulo como um plugin e exige uma função (ou um objeto com `server`); um
+export a mais impede o carregamento do arquivo inteiro. O teste
+`main-branch-guard.test.mjs` verifica essa regra.
+
 ## Testes
 
 ```sh
