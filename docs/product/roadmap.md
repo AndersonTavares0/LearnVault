@@ -77,6 +77,7 @@ pasta é um curso, registrado com identidade estável, e a interface não conhec
   - [x] Navegação anterior/próxima entre aulas e índice de aulas do curso no player (`apps/web`)
   - [ ] Página de detalhes do curso
 - [ ] Player direto com links de legendas e materiais
+- [x] Preferências do player: velocidade independente para áudio/vídeo, seleção de mídia e legenda por aula, atalhos limitados ao foco e avanço automático opcional
 - [x] Progresso individual e posição de retomada
 - [x] Marcar aula como concluída e painel de histórico recente
 - [ ] Permissões de acesso a cursos para múltiplos usuários locais
