@@ -543,14 +543,14 @@ mod tests {
     #[test]
     fn parses_a_published_release_payload() {
         let parsed = parse_release(
-            r#"{"tag_name":"v0.4.0","published_at":"2026-10-17T12:00:00Z","html_url":"https://example.test/v0.4.0","draft":false,"prerelease":false}"#,
+            r#"{"tag_name":"v0.4.0","published_at":"2026-10-17T12:00:00Z","html_url":"https://github.com/AndersonTavares0/LearnVault/releases/tag/v0.4.0","draft":false,"prerelease":false}"#,
         )
         .unwrap();
         assert_eq!(parsed.tag_name, "v0.4.0");
         assert_eq!(parsed.published_at.as_deref(), Some("2026-10-17T12:00:00Z"));
         assert_eq!(
             parsed.html_url.as_deref(),
-            Some("https://example.test/v0.4.0")
+            Some("https://github.com/AndersonTavares0/LearnVault/releases/tag/v0.4.0")
         );
         assert!(!parsed.draft && !parsed.prerelease);
     }
@@ -579,11 +579,6 @@ mod tests {
             parse_version("v1.2.3").unwrap(),
             parse_version("1.2.3").unwrap()
         );
-        // Componentes ausentes valem zero.
-        assert_eq!(
-            parse_version("1.2").unwrap(),
-            parse_version("1.2.0").unwrap()
-        );
         // Metadados de build não participam da comparação.
         assert_eq!(
             parse_version("1.2.3+build.7").unwrap(),
@@ -602,9 +597,41 @@ mod tests {
 
     #[test]
     fn rejects_unparsable_versions() {
-        for value in ["", "v", "1.0.0-", "1.x", "abc", "1..2", "-1.0.0"] {
+        for value in [
+            "", "v", "1.0.0-", "1.x", "abc", "1..2", "-1.0.0", "1.2",
+            "1.2.3.4", " 1.2.3", "1.2.3 ", "01.2.3", "1.02.3", "1.2.03",
+            "1.2.3-01", "1.2.3-alpha..1", "1.2.3+build..1", "1.2.3+bad_thing",
+            "1.2.3-ümlaut", "1.2.3+",
+        ] {
             assert!(parse_version(value).is_none(), "{value}");
         }
+        for value in ["1.2.3+001", "1.2.3-alpha.01", "1.2.3-rc.1+build.007"] {
+            assert!(parse_version(value).is_some(), "{value}");
+        }
+    }
+
+    #[test]
+    fn release_link_is_constructed_only_for_the_official_repository() {
+        assert_eq!(
+            release_url("v1.2.3"),
+            Some("https://github.com/AndersonTavares0/LearnVault/releases/tag/v1.2.3".to_owned())
+        );
+        assert_eq!(release_url("1.2.3-rc.1+build.7"), None);
+        assert_eq!(release_url("https://attacker.test"), None);
+    }
+
+    #[test]
+    fn bounds_accumulated_github_response_body() {
+        let mut body = Vec::new();
+        assert!(append_body_chunk(&mut body, &vec![b'a'; MAX_RESPONSE_BYTES]).is_ok());
+        assert_eq!(body.len(), MAX_RESPONSE_BYTES);
+        assert!(append_body_chunk(&mut body, b"x").is_err());
+        assert_eq!(body.len(), MAX_RESPONSE_BYTES);
+
+        let mut body = Vec::new();
+        assert!(append_body_chunk(&mut body, &vec![b'a'; MAX_RESPONSE_BYTES - 1]).is_ok());
+        assert!(append_body_chunk(&mut body, b"ab").is_err());
+        assert_eq!(body.len(), MAX_RESPONSE_BYTES - 1);
     }
 
     #[test]
