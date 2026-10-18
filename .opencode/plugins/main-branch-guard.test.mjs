@@ -1,27 +1,45 @@
 import assert from "node:assert/strict"
+import { execFileSync } from "node:child_process"
+import { mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import test from "node:test"
+import { after, test } from "node:test"
 
-const { MainBranchGuard } = await import(new URL("./main-branch-guard.ts", import.meta.url).href)
+const guardModule = await import(new URL("./main-branch-guard.ts", import.meta.url).href)
+const { MainBranchGuard } = guardModule
 
-const ROOT = path.resolve(path.parse(process.cwd()).root, "learnvault-guard-test-root")
+// Mesmo caminho usado pelo plugin. A constante não é exportada porque o carregador do
+// opencode trata todo export do módulo como plugin e exige uma função.
+const DIAGNOSTIC_LOG = path.join(tmpdir(), "learnvault-main-branch-guard.log")
+
 const OUTSIDE = path.join(tmpdir(), "learnvault-guard-test-outside.ts")
 
-const shellFor =
-  ({ branch = "main", fails = false } = {}) =>
-  () => {
-    const result = {
-      exitCode: fails ? 1 : 0,
-      text: async () => (fails ? "" : branch),
-    }
-    result.quiet = () => result
-    result.nothrow = () => result
-    return result
-  }
+// Repositórios reais temporários: a guarda lê a branch pelo git de verdade, como em
+// produção — foi um mock de shell que escondeu a regressão de ambiente que motivou a
+// troca para `node:child_process`.
+const tempRoots = []
 
-const hookFor = async (options) => {
-  const hooks = await MainBranchGuard({ $: shellFor(options), directory: ROOT, worktree: ROOT })
+function repoWithBranch(branch) {
+  const root = mkdtempSync(path.join(tmpdir(), "learnvault-guard-repo-"))
+  execFileSync("git", ["init", "-q"], { cwd: root })
+  execFileSync("git", ["checkout", "-q", "-b", branch], { cwd: root })
+  tempRoots.push(root)
+  return root
+}
+
+function plainDirectory() {
+  const root = mkdtempSync(path.join(tmpdir(), "learnvault-guard-plain-"))
+  tempRoots.push(root)
+  return root
+}
+
+after(() => {
+  for (const root of tempRoots) rmSync(root, { recursive: true, force: true })
+})
+
+const hookFor = async ({ branch = "main", worktree, directory } = {}) => {
+  const repo = repoWithBranch(branch)
+  const hooks = await MainBranchGuard({ directory: directory ?? repo, worktree: worktree ?? repo })
   return hooks["tool.execute.before"]
 }
 
@@ -35,6 +53,16 @@ const attempt = async (hook, tool, args) => {
 }
 
 const patchText = (...targets) => targets.map((target) => `*** Update File: ${target}`).join("\n")
+
+test("exports only plugin functions, as the opencode loader requires", async () => {
+  // Espelha getServerPlugin() do opencode: todo export precisa ser uma função ou um
+  // objeto com `server` função; um export a mais derruba o carregamento do arquivo.
+  for (const value of Object.values(guardModule)) {
+    const isPlugin =
+      typeof value === "function" || (value !== null && typeof value === "object" && typeof value.server === "function")
+    assert.equal(isPlugin, true, "todo export do módulo precisa ser uma função de plugin")
+  }
+})
 
 test("blocks file tools that touch the worktree on protected branches", async () => {
   const hook = await hookFor({ branch: "main" })
@@ -96,11 +124,21 @@ test("allows mutations on a feature branch", async () => {
   assert.equal(applyPatch.blocked, false)
 })
 
-test("fails closed when the branch cannot be verified", async () => {
-  const hook = await hookFor({ fails: true })
+test("falls back to the project directory when the worktree is not a repository", async () => {
+  const hook = await hookFor({ branch: "feat/x", worktree: plainDirectory() })
+  const edit = await attempt(hook, "edit", { filePath: "README.md" })
+  assert.equal(edit.blocked, false)
+})
+
+test("fails closed and writes a diagnostic when the branch cannot be verified", async () => {
+  const directory = plainDirectory()
+  const hooks = await MainBranchGuard({ directory, worktree: directory })
+  const hook = hooks["tool.execute.before"]
+
   const edit = await attempt(hook, "edit", { filePath: "README.md" })
   assert.equal(edit.blocked, true)
   assert.match(edit.message, /Não foi possível confirmar/)
+  assert.ok(edit.message.includes(DIAGNOSTIC_LOG))
 
   const commit = await attempt(hook, "bash", { command: 'git commit -m "x"' })
   assert.equal(commit.blocked, true)
@@ -110,6 +148,9 @@ test("fails closed when the branch cannot be verified", async () => {
 
   const read = await attempt(hook, "read", { filePath: "README.md" })
   assert.equal(read.blocked, false)
+
+  // O diagnóstico registra o motivo para depuração futura, sem tocar o repositório.
+  assert.match(readFileSync(DIAGNOSTIC_LOG, "utf8"), /não foi possível confirmar a branch atual/)
 })
 
 test("instructs the agent to ask the user before creating a branch", async () => {

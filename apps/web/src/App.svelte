@@ -11,7 +11,7 @@
 	import { destinationAfterLogin, findCourse, findLesson, findLessonLocation, href, locationFromHash, type Route } from './router';
 	import { transport, transportKind, STUDY_NOT_AVAILABLE, type Catalog, type CatalogNode, type Lesson, type StudyProgress, type UpdateStatus, type User } from './transport';
 	import { updateOutcome, updateMessage, updateReleaseUrl } from './update';
-	import { resolveSession } from './session';
+	import { defaultRoute, resolveSession } from './session';
 	import { formatDuration, studySyncSupported } from './player';
 	import Brand from './Brand.svelte';
 	import { applyTheme, persistThemeMode, readThemeMode, resolveTheme, type ThemeMode } from './theme';
@@ -19,9 +19,13 @@
 	let themeMode: ThemeMode = readThemeMode(safeLocalStorage());
 	let systemDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
 	let resolvedTheme = resolveTheme(themeMode, systemDark);
-	let route: Route = locationFromHash(location.hash).route;
-	let courseId: string | null = locationFromHash(location.hash).courseId;
-	let lessonPath: string | null = locationFromHash(location.hash).lessonPath;
+	// O desktop não tem tela de login: um endereço de login ou desconhecido cai na tela
+	// inicial em vez de abrir um formulário que não consegue autenticar.
+	const fallbackRoute = defaultRoute(transportKind);
+	const initialLocation = locationFromHash(location.hash, fallbackRoute);
+	let route: Route = initialLocation.route;
+	let courseId: string | null = initialLocation.courseId;
+	let lessonPath: string | null = initialLocation.lessonPath;
 	let user: User | null = null;
 	let catalog: Catalog | null = null;
 	let lesson: Lesson | null = null;
@@ -93,7 +97,7 @@
 
 	onMount(() => {
 		const change = () => {
-			const next = locationFromHash(location.hash);
+			const next = locationFromHash(location.hash, fallbackRoute);
 			route = next.route;
 			courseId = next.courseId;
 			lessonPath = next.lessonPath;
@@ -358,7 +362,7 @@
 			</form>
 		</section>
 	</main>
-{:else}<div class="shell"><header><div class="brand"><Brand /> LEARNVAULT</div><button class="text-button" onclick={logout}>Sair</button></header><div class="layout"><nav aria-label="Navegação principal"><a class:active={route === 'home'} href={href('home')}>Início</a><a class:active={route === 'settings'} href={href('settings')}>Configurações</a></nav><main><p class="eyebrow">BIBLIOTECA PESSOAL</p>{#if error}<p class="error" role="alert">{error}</p>{/if}
+{:else}<div class="shell"><header><div class="brand"><Brand /> LEARNVAULT</div>{#if transportKind === 'http'}<button class="text-button" onclick={logout}>Sair</button>{/if}</header><div class="layout"><nav aria-label="Navegação principal"><a class:active={route === 'home'} href={href('home')}>Início</a><a class:active={route === 'settings'} href={href('settings')}>Configurações</a></nav><main><p class="eyebrow">BIBLIOTECA PESSOAL</p>{#if error}<p class="error" role="alert">{error}</p>{/if}
 {#if route === 'home'}
 	<h1>Olá, {user.username}.</h1>
 	<p class="intro">{catalog && catalog.nodes.length ? 'Escolha um curso para continuar estudando.' : 'Importe seu primeiro curso para montar sua biblioteca.'}</p>
