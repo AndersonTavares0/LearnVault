@@ -318,14 +318,14 @@ fn study_failure_response(failure: StudyFailure) -> Response {
 }
 
 /// Falha da autenticação/limite antes de traduzir para HTTP.
-enum AuthFailure {
+pub(crate) enum AuthFailure {
     Unauthorized,
     CredentialsRequired,
     Busy,
 }
 
 impl AuthFailure {
-    fn into_response(self) -> Response {
+    pub(crate) fn into_response(self) -> Response {
         match self {
             AuthFailure::Unauthorized => status_private_no_store(StatusCode::UNAUTHORIZED),
             AuthFailure::CredentialsRequired => credentials_required(),
@@ -334,7 +334,7 @@ impl AuthFailure {
     }
 }
 
-async fn user_or_response(
+pub(crate) async fn user_or_response(
     state: &AppState,
     headers: &HeaderMap,
 ) -> Result<AuthSession, AuthFailure> {
