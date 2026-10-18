@@ -35,7 +35,7 @@ use std::io::{Read, Seek, SeekFrom};
 
 use learnvault_core::{CourseRoot, Error, MediaKind, OpenMedia};
 use tauri::http::{Request, Response, StatusCode, header};
-use tauri::{Manager, Runtime};
+use tauri::{Manager, Runtime, Url};
 
 use crate::state::DesktopState;
 
@@ -171,6 +171,68 @@ impl MediaResponse {
     }
 }
 
+/// Adiciona CORS apenas para a origem exata da janela que solicitou a mídia.
+///
+/// CORS controla a leitura dos pixels pelo canvas; não é autorização da mídia e, por isso,
+/// uma origem ausente ou não correspondente não altera status nem corpo da resposta.
+pub fn apply_media_cors(
+    mut response: MediaResponse,
+    request_origin: Option<&str>,
+    window_origin: &str,
+) -> MediaResponse {
+    let matches = request_origin
+        .and_then(parse_serialized_origin)
+        .zip(parse_serialized_origin(window_origin))
+        .is_some_and(|(request, window)| request == window && request == window_origin);
+    if matches && (200..300).contains(&response.status) {
+        response
+            .headers
+            .retain(|(name, _)| !name.eq_ignore_ascii_case("Access-Control-Allow-Origin"));
+        response.headers.push((
+            "Access-Control-Allow-Origin".to_owned(),
+            window_origin.to_owned(),
+        ));
+    }
+    response
+}
+
+/// Valida uma origem serializada com o parser URL e retorna sua forma canônica.
+fn parse_serialized_origin(origin: &str) -> Option<String> {
+    if origin.is_empty() || origin.trim() != origin || origin.eq_ignore_ascii_case("null") {
+        return None;
+    }
+    let url = Url::parse(origin).ok()?;
+    if !url.username().is_empty()
+        || url.password().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+        || (!url.path().is_empty() && url.path() != "/")
+    {
+        return None;
+    }
+    let parsed = url.origin().ascii_serialization();
+    if parsed != "null" {
+        return (parsed == origin).then_some(parsed);
+    }
+    let host = url.host_str()?;
+    if !host.eq_ignore_ascii_case("localhost") || url.port().is_some() {
+        return None;
+    }
+    let canonical = format!("{}://{}", url.scheme(), host.to_ascii_lowercase());
+    (canonical == origin).then_some(canonical)
+}
+
+/// Extrai a origem da URL da janela sem depender de uma origem fixa por plataforma.
+fn window_url_origin(url: &Url) -> Option<String> {
+    let serialized = url.origin().ascii_serialization();
+    if serialized != "null" {
+        return Some(serialized);
+    }
+    let host = url.host_str()?;
+    (host.eq_ignore_ascii_case("localhost") && url.port().is_none())
+        .then(|| format!("{}://{}", url.scheme(), host.to_ascii_lowercase()))
+}
+
 /// Status HTTP usados pelo protocolo.
 mod status {
     /// Requisição inválida.
@@ -284,7 +346,21 @@ pub fn register<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
     builder.register_uri_scheme_protocol(MEDIA_SCHEME, |context, request| {
         let state = context.app_handle().state::<DesktopState>();
         let raw = raw_request(context.webview_label(), &request);
-        http_response(state.serve_media(&raw))
+        let request_origin = request
+            .headers()
+            .get(header::ORIGIN)
+            .and_then(|value| value.to_str().ok());
+        let window_origin = context
+            .app_handle()
+            .get_webview_window(context.webview_label())
+            .and_then(|window| window.url().ok())
+            .and_then(|url| window_url_origin(&url));
+        let response = state.serve_media(&raw);
+        let response = match window_origin.as_deref() {
+            Some(origin) => apply_media_cors(response, request_origin, origin),
+            None => response,
+        };
+        http_response(response)
     })
 }
 

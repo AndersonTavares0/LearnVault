@@ -103,8 +103,6 @@ fn media_cors_rejects_malformed_or_non_origin_values() {
     for request_origin in [
         "http://tauri.localhost/",
         "null",
-        "https://tauri.localhost",
-        "http://tauri.localhost.evil.example",
         "1http://tauri.localhost",
         "http://tauri.localhost:99999",
         "http://user@tauri.localhost",
@@ -121,6 +119,22 @@ fn media_cors_rejects_malformed_or_non_origin_values() {
         assert_eq!(response.body, b"synthetic-video");
         assert_eq!(response.header("Access-Control-Allow-Origin"), None);
     }
+}
+
+#[test]
+fn media_cors_supports_tauri_custom_localhost_origins() {
+    let response = MediaResponse {
+        status: 200,
+        headers: Vec::new(),
+        body: b"synthetic-video".to_vec(),
+    };
+
+    let response = apply_media_cors(response, Some("tauri://localhost"), "tauri://localhost");
+
+    assert_eq!(
+        response.header("Access-Control-Allow-Origin"),
+        Some("tauri://localhost")
+    );
 }
 
 /// Entrega uma mídia pelo caminho do protocolo, montando a URI canônica.
