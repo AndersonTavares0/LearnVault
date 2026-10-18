@@ -62,8 +62,9 @@ RF-11 também na [distribuição](../operations/distribution.md).
   arquivos inteiros em memória; mudanças sensíveis a desempenho incluem medições.
 - **RNF-05 — Operação.** O servidor expõe a saúde do processo e a prontidão do banco em
   `/api/healthz`; deploys expostos usam proxy HTTPS com limites de conexão; dados e cache ficam
-  em diretórios separados; o rollback permanece possível enquanto o serviço Go de referência
-  existir.
+  em diretórios separados; o rollback reinstala a release anterior publicada, com artefatos e
+  checksums verificáveis, e, no cutover self-hosted, exige volumes pareados com RPO no instante
+  do backup da importação — procedimento documentado, ainda não comprovado (G7).
 - **RNF-06 — Portabilidade.** O núcleo compila sem Docker ou Podman; containers são adaptadores
   opcionais; o CI constrói cada artefato de plataforma antes de montar instaladores.
 - **RNF-07 — Qualidade.** Cobertura de testes Rust de pelo menos 80% medida com `cargo-llvm-cov`,
