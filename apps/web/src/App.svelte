@@ -362,22 +362,21 @@
 			</form>
 		</section>
 	</main>
-{:else}<div class="shell"><header><div class="brand"><Brand /> LEARNVAULT</div>{#if transportKind === 'http'}<button class="text-button" onclick={logout}>Sair</button>{/if}</header><div class="layout"><nav aria-label="Navegação principal"><a class:active={route === 'home'} href={href('home')}>Início</a><a class:active={route === 'settings'} href={href('settings')}>Configurações</a></nav><main><p class="eyebrow">BIBLIOTECA PESSOAL</p>{#if error}<p class="error" role="alert">{error}</p>{/if}
+{:else}<div class="shell"><header><div class="brand"><Brand /> LEARNVAULT</div>{#if transportKind === 'http'}<button class="text-button" onclick={logout}>Sair</button>{/if}</header><div class="layout"><nav aria-label="Navegação principal"><a class:active={route === 'home'} href={href('home')}>Início</a><a class:active={route === 'settings'} href={href('settings')}>Configurações</a></nav><main class:home={route === 'home'}>{#if error}<p class="error" role="alert">{error}</p>{/if}
 {#if route === 'home'}
-	<h1>Olá, {user.username}.</h1>
-	<p class="intro">{catalog && catalog.nodes.length ? 'Escolha um curso para continuar estudando.' : 'Importe seu primeiro curso para montar sua biblioteca.'}</p>
-	{#if studySyncSupported && recent.length}<section class="recent-study" aria-labelledby="recent-heading"><h2 id="recent-heading">Continuar assistindo</h2><ul>{#each recent as item}{@const location = findLessonLocation(catalog, item.mediaId)}<li>{#if location}<div class="recent-study-info"><a href={href('player', location.courseId, location.lesson.path)}>{location.lesson.title}</a><small title={formatLocationContext(location.courseTitle, location.moduleTitle)}>{formatLocationContext(location.courseTitle, location.moduleTitle)}</small></div><small>{item.completed ? 'Concluído' : `Parou em ${formatDuration(item.positionSeconds)}`}</small>{:else}<span>Mídia não disponível no catálogo</span>{/if}</li>{/each}</ul></section>{/if}
+	<h1 class="visually-hidden">Início</h1>
 	{#if canManage || (catalog && catalog.nodes.length)}
 		<div class="home-toolbar">
-			{#if catalog && catalog.nodes.length}<form class="catalog-search" role="search" onsubmit={(event) => event.preventDefault()}><label for="catalog-search-input">Buscar nos cursos</label><input id="catalog-search-input" type="search" placeholder="Nome do curso" bind:value={catalogQuery} /></form>{/if}
+			{#if catalog && catalog.nodes.length}<form class="catalog-search" role="search" onsubmit={(event) => event.preventDefault()}><label class="visually-hidden" for="catalog-search-input">Buscar nos cursos</label><div class="search-field"><svg class="search-glyph" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"></circle><path d="m16.6 16.6 4.2 4.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg><input id="catalog-search-input" type="search" placeholder="Buscar nos cursos" bind:value={catalogQuery} /></div></form>{/if}
 			{#if canManage}
 				<div class="home-actions">
 					{#if transportKind === 'desktop'}<button class="primary" onclick={importCourse} disabled={importing} aria-busy={importing}>{importing ? 'Importando…' : 'Importar curso'}</button>{:else}<button class="primary" onclick={() => (importFormOpen = !importFormOpen)} aria-expanded={importFormOpen}>Importar curso</button>{/if}
-					<button class="text-button" onclick={rescan} disabled={rescanning || !catalog || !catalog.nodes.length}>{rescanning ? 'Indexando…' : 'Indexar cursos'}</button>
+					<button class="secondary" onclick={rescan} disabled={rescanning || !catalog || !catalog.nodes.length}>{rescanning ? 'Indexando…' : 'Indexar cursos'}</button>
 				</div>
 			{/if}
 		</div>
 	{/if}
+	{#if studySyncSupported && recent.length}<section class="recent-study" aria-labelledby="recent-heading"><h2 id="recent-heading">Continuar assistindo</h2><ul>{#each recent as item}{@const location = findLessonLocation(catalog, item.mediaId)}<li>{#if location}<div class="recent-study-info"><a href={href('player', location.courseId, location.lesson.path)}>{location.lesson.title}</a><small title={formatLocationContext(location.courseTitle, location.moduleTitle)}>{formatLocationContext(location.courseTitle, location.moduleTitle)}</small></div><small>{item.completed ? 'Concluído' : `Parou em ${formatDuration(item.positionSeconds)}`}</small>{:else}<span>Mídia não disponível no catálogo</span>{/if}</li>{/each}</ul></section>{/if}
 	{#if !canManage && catalog && catalog.nodes.length === 0}<p class="empty" role="status">Nenhum curso disponível. Peça ao administrador para importar um curso.</p>{/if}
 	{#if user.role === 'admin' && importFormOpen}<form class="import-form" onsubmit={submitImport}><label for="import-path">Caminho da pasta do curso no servidor</label><input id="import-path" bind:value={importPath} placeholder="C:\cursos\Meu curso" required /><div class="import-form-actions"><button class="primary" disabled={importing} aria-busy={importing}>{importing ? 'Importando…' : 'Importar'}</button><button type="button" class="text-button" onclick={() => (importFormOpen = false)}>Cancelar</button></div></form>{/if}
 	{#if importError}<p class="error" role="alert">{importError}</p>{/if}
