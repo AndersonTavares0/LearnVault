@@ -222,6 +222,28 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	expect((await recentResponse.json()).items.length).toBeGreaterThan(0);
 	await page.reload();
 	await expect(page.getByText('Continuar assistindo')).toBeVisible();
+
+	// Cada item identifica a aula pelo título limpo e mostra o contexto (curso · módulo)
+	// em uma linha secundária; o nome cru do arquivo não pode vazar para o usuário.
+	const firstRecentItem = page.locator('.recent-study li').first();
+	const lessonLabel = (await firstRecentItem.locator('a').first().innerText()).trim();
+	expect(lessonLabel).not.toMatch(/\.[a-z0-9]{2,4}$/i);
+	expect(lessonLabel).not.toMatch(/^\d+[\s._-]/);
+	const contextNode = firstRecentItem.locator('.recent-study-info small');
+	await expect(contextNode).toHaveText(/\S/);
+	const contextText = (await contextNode.innerText()).trim();
+	expect(await contextNode.getAttribute('title')).toBe(contextText);
+
+	// Em tela estreita a lista não pode gerar rolagem horizontal.
+	const originalViewport = page.viewportSize();
+	await page.setViewportSize({ width: 390, height: 844 });
+	const narrowWidths = await page.evaluate(() => ({
+		scrollWidth: document.documentElement.scrollWidth,
+		clientWidth: document.documentElement.clientWidth
+	}));
+	expect(narrowWidths.scrollWidth).toBeLessThanOrEqual(narrowWidths.clientWidth);
+	if (originalViewport) await page.setViewportSize(originalViewport);
+
 	const lightColors = await page.locator('.recent-study small').first().evaluate((element) => {
 		let node: HTMLElement | null = element as HTMLElement;
 		const foreground = getComputedStyle(element).color;

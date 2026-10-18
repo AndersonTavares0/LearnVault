@@ -5,7 +5,7 @@
 	import CourseCard from './CourseCard.svelte';
 	import Player from './Player.svelte';
 	import { filterCatalog } from './search';
-	import { countCatalogNode, formatCourseMeta } from './catalog';
+	import { countCatalogNode, formatCourseMeta, formatLocationContext } from './catalog';
 	import PasswordField from './PasswordField.svelte';
 	import { lessonSections, neighboringLessons, type LessonSection } from './navigation';
 	import { destinationAfterLogin, findCourse, findLesson, findLessonLocation, href, locationFromHash, type Route } from './router';
@@ -319,7 +319,7 @@
 {#if route === 'home'}
 	<h1>Olá, {user.username}.</h1>
 	<p class="intro">{catalog && catalog.nodes.length ? 'Escolha um curso para continuar estudando.' : 'Importe seu primeiro curso para montar sua biblioteca.'}</p>
-	{#if studySyncSupported && recent.length}<section class="recent-study" aria-labelledby="recent-heading"><h2 id="recent-heading">Continuar assistindo</h2><ul>{#each recent as item}{@const location = findLessonLocation(catalog, item.mediaId)}<li>{#if location}<a href={href('player', location.courseId, location.lesson.path)}>{location.lesson.title}</a><small>{item.completed ? 'Concluído' : `Parou em ${formatDuration(item.positionSeconds)}`}</small>{:else}<span>Mídia não disponível no catálogo</span>{/if}</li>{/each}</ul></section>{/if}
+	{#if studySyncSupported && recent.length}<section class="recent-study" aria-labelledby="recent-heading"><h2 id="recent-heading">Continuar assistindo</h2><ul>{#each recent as item}{@const location = findLessonLocation(catalog, item.mediaId)}<li>{#if location}<div class="recent-study-info"><a href={href('player', location.courseId, location.lesson.path)}>{location.lesson.title}</a><small title={formatLocationContext(location.courseTitle, location.moduleTitle)}>{formatLocationContext(location.courseTitle, location.moduleTitle)}</small></div><small>{item.completed ? 'Concluído' : `Parou em ${formatDuration(item.positionSeconds)}`}</small>{:else}<span>Mídia não disponível no catálogo</span>{/if}</li>{/each}</ul></section>{/if}
 	{#if canManage || (catalog && catalog.nodes.length)}
 		<div class="home-toolbar">
 			{#if catalog && catalog.nodes.length}<form class="catalog-search" role="search" onsubmit={(event) => event.preventDefault()}><label for="catalog-search-input">Buscar nos cursos</label><input id="catalog-search-input" type="search" placeholder="Nome do curso" bind:value={catalogQuery} /></form>{/if}
