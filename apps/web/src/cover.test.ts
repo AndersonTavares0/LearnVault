@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { courseCover, courseMonogram } from './cover';
+import { courseCover, courseMonogram, selectCourseCoverSource } from './cover';
 
 describe('generated course covers', () => {
 	it('is deterministic for the same title', () => {
@@ -28,5 +28,21 @@ describe('generated course covers', () => {
 			expect(color).toMatch(/^hsl\(\d+ \d+% \d+%\)$/);
 		}
 		expect(first).not.toEqual(second);
+	});
+});
+
+describe('course cover precedence', () => {
+	it('prefers a manual cover over an automatic thumbnail', () => {
+		expect(selectCourseCoverSource({ manualCoverUrl: 'cover://uploaded', thumbnailUrl: 'blob:frame' })).toBe('manual');
+	});
+
+	it('prefers the automatic thumbnail when no manual cover exists', () => {
+		expect(selectCourseCoverSource({ thumbnailUrl: 'blob:frame' })).toBe('thumbnail');
+	});
+
+	it('falls back to the generated title cover when neither source is present', () => {
+		expect(selectCourseCoverSource({})).toBe('generated');
+		expect(selectCourseCoverSource({ manualCoverUrl: null, thumbnailUrl: null })).toBe('generated');
+		expect(selectCourseCoverSource({ manualCoverUrl: '', thumbnailUrl: '' })).toBe('generated');
 	});
 });

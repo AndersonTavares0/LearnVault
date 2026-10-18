@@ -56,6 +56,8 @@ pub struct CatalogFileDto {
     pub path: String,
     /// Tamanho em bytes na última observação.
     pub size: u64,
+    /// Modificação da mídia em segundos desde a época Unix na última observação.
+    pub mtime_seconds: i64,
     /// Tipo do arquivo: `media`, `subtitle` ou `material`.
     pub kind: &'static str,
     /// Disponibilidade na última varredura: `available` ou `missing`.
@@ -117,6 +119,7 @@ impl From<CatalogFile> for CatalogFileDto {
             name: file.name,
             path: file.path,
             size: file.size,
+            mtime_seconds: file.mtime_seconds,
             kind: media_kind(file.kind),
             availability: availability(file.availability),
             unverified: file.unverified,
