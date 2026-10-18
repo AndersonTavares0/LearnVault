@@ -175,19 +175,48 @@ impl MediaResponse {
 ///
 /// CORS controla a leitura dos pixels pelo canvas; não é autorização da mídia e, por isso,
 /// uma origem ausente ou não correspondente não altera status nem corpo da resposta.
+///
+/// Nenhum `Access-Control-Allow-Origin` herdado é refletido: o cabeçalho só é emitido na
+/// correspondência exata. Toda requisição que traz `Origin` marca a resposta com
+/// `Vary: Origin`, porque o cabeçalho CORS (e portanto a representação) depende da origem
+/// mesmo quando o ACAO não é emitido.
 pub fn apply_media_cors(
     mut response: MediaResponse,
     request_origin: Option<&str>,
     window_origin: &str,
 ) -> MediaResponse {
-    let matches = request_origin
-        .and_then(parse_serialized_origin)
+    response
+        .headers
+        .retain(|(name, _)| !name.eq_ignore_ascii_case("Access-Control-Allow-Origin"));
+
+    let Some(request_origin) = request_origin else {
+        return response;
+    };
+
+    let has_origin_vary = response.headers.iter().any(|(name, value)| {
+        name.eq_ignore_ascii_case("Vary")
+            && value
+                .split(',')
+                .any(|token| token.trim().eq_ignore_ascii_case("Origin"))
+    });
+    if !has_origin_vary {
+        if let Some((_, value)) = response
+            .headers
+            .iter_mut()
+            .find(|(name, _)| name.eq_ignore_ascii_case("Vary"))
+        {
+            value.push_str(", Origin");
+        } else {
+            response
+                .headers
+                .push(("Vary".to_owned(), "Origin".to_owned()));
+        }
+    }
+
+    let matches = parse_serialized_origin(request_origin)
         .zip(parse_serialized_origin(window_origin))
         .is_some_and(|(request, window)| request == window && request == window_origin);
     if matches && (200..300).contains(&response.status) {
-        response
-            .headers
-            .retain(|(name, _)| !name.eq_ignore_ascii_case("Access-Control-Allow-Origin"));
         response.headers.push((
             "Access-Control-Allow-Origin".to_owned(),
             window_origin.to_owned(),
