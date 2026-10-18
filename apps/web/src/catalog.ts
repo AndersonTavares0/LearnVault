@@ -73,3 +73,8 @@ export function formatLessonMeta(counts: FileCounts): string {
 		counts.materials > 0 ? formatCount(counts.materials, 'material', 'materiais') : ''
 	]);
 }
+
+/** Contexto de origem de um item recente: o curso e, quando houver, o módulo. */
+export function formatLocationContext(courseTitle: string, moduleTitle: string | null): string {
+	return joinParts([courseTitle, moduleTitle ?? '']);
+}
