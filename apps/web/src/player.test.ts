@@ -2,6 +2,7 @@ import { render } from 'svelte/server';
 import { describe, expect, it } from 'vitest';
 import Player from './Player.svelte';
 import { clampSpeed, formatDuration, mediaAvailability, mediaPlaybackKind, PLAYBACK_SPEEDS, playerShortcutAction, selectPlayableMedia, selectPlayableSubtitle, shouldAutoAdvance, srtConversionSupported, srtToWebVtt, studySyncEnabled, studySyncSupported, subtitleFormat } from './player';
+import { createDefaultPlayerPreferences, updateLessonPreference } from './player-preferences';
 import type { FileEntry, Lesson } from './transport';
 
 describe('player media and subtitles', () => {
@@ -129,5 +130,45 @@ describe('player without playable media', () => {
 		const { body } = render(Player, { props: { lesson: lesson([media('aula.mp4')]), courseId: 'course-1', mediaError: '', onMediaError: () => undefined } });
 		expect(body).toContain('<video');
 		expect(body).toContain('path=aula.mp4');
+	});
+});
+
+describe('player preference controls', () => {
+	const baseProps = {
+		lesson: lesson([media('a.mp4'), media('b.mp4')]),
+		courseId: 'course-1',
+		mediaError: '',
+		onMediaError: () => undefined,
+		onPreferencesChange: () => true
+	};
+
+	it('restores the selected media and exposes a selector only for multiple choices', () => {
+		const preferences = updateLessonPreference(createDefaultPlayerPreferences(), 'course-1', 'curso/aula', { mediaId: 'b.mp4' });
+		const { body } = render(Player, { props: { ...baseProps, preferences } });
+
+		expect(body).toContain('aria-label="Mídia da aula"');
+		expect(body).toContain('selected');
+		expect(body).toContain('path=b.mp4');
+	});
+
+	it('offers subtitles off and restores the remembered subtitle selection', () => {
+		const lessonWithSubtitles = {
+			...baseProps.lesson,
+			subtitles: [media('a.vtt'), media('b.vtt')].map((file) => ({ ...file, kind: 'subtitle' }))
+		};
+		const preferences = updateLessonPreference(createDefaultPlayerPreferences(), 'course-1', 'curso/aula', { subtitleId: 'b.vtt' });
+		const { body } = render(Player, { props: { ...baseProps, lesson: lessonWithSubtitles, preferences } });
+
+		expect(body).toContain('aria-label="Legenda da aula"');
+		expect(body).toContain('Sem legendas');
+		expect(body).toContain('b.vtt');
+	});
+
+	it('uses the separately persisted speed for the current media type', () => {
+		const preferences = { ...createDefaultPlayerPreferences(), audioSpeed: 1.5 as const };
+		const audioLesson = lesson([{ ...media('aula.mp3'), kind: 'media' }]);
+		const { body } = render(Player, { props: { ...baseProps, lesson: audioLesson, preferences } });
+
+		expect(body).toContain('aria-pressed="true">1.5x');
 	});
 });
