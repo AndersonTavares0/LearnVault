@@ -5,7 +5,12 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { after, test } from "node:test"
 
-const { DIAGNOSTIC_LOG, MainBranchGuard } = await import(new URL("./main-branch-guard.ts", import.meta.url).href)
+const guardModule = await import(new URL("./main-branch-guard.ts", import.meta.url).href)
+const { MainBranchGuard } = guardModule
+
+// Mesmo caminho usado pelo plugin. A constante não é exportada porque o carregador do
+// opencode trata todo export do módulo como plugin e exige uma função.
+const DIAGNOSTIC_LOG = path.join(tmpdir(), "learnvault-main-branch-guard.log")
 
 const OUTSIDE = path.join(tmpdir(), "learnvault-guard-test-outside.ts")
 
@@ -48,6 +53,16 @@ const attempt = async (hook, tool, args) => {
 }
 
 const patchText = (...targets) => targets.map((target) => `*** Update File: ${target}`).join("\n")
+
+test("exports only plugin functions, as the opencode loader requires", async () => {
+  // Espelha getServerPlugin() do opencode: todo export precisa ser uma função ou um
+  // objeto com `server` função; um export a mais derruba o carregamento do arquivo.
+  for (const value of Object.values(guardModule)) {
+    const isPlugin =
+      typeof value === "function" || (value !== null && typeof value === "object" && typeof value.server === "function")
+    assert.equal(isPlugin, true, "todo export do módulo precisa ser uma função de plugin")
+  }
+})
 
 test("blocks file tools that touch the worktree on protected branches", async () => {
   const hook = await hookFor({ branch: "main" })
