@@ -205,7 +205,7 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	// que o locator resolva tanto o input quanto o alternador de visibilidade.
 	await page.getByLabel('Senha', { exact: true }).fill(ADMIN_PASSWORD);
 	await page.getByRole('button', { name: 'Entrar' }).click();
-	await expect(page.getByRole('heading', { name: 'Olá, admin.' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Início' })).toBeAttached();
 
 	await page.getByRole('button', { name: 'Indexar cursos' }).click();
 	await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
@@ -356,7 +356,7 @@ test('reports a lesson whose media disappears from disk and restores it when the
 	};
 	const indexFromHome = async () => {
 		await page.goto(`${server.baseURL}/#/home`);
-		await expect(page.getByRole('heading', { name: 'Olá, admin.' })).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'Início' })).toBeAttached();
 		await page.getByRole('button', { name: 'Indexar cursos' }).click();
 		await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
 	};
@@ -365,7 +365,7 @@ test('reports a lesson whose media disappears from disk and restores it when the
 	await page.getByLabel('Usuário').fill('admin');
 	await page.getByLabel('Senha', { exact: true }).fill(ADMIN_PASSWORD);
 	await page.getByRole('button', { name: 'Entrar' }).click();
-	await expect(page.getByRole('heading', { name: 'Olá, admin.' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Início' })).toBeAttached();
 	await page.getByRole('button', { name: 'Indexar cursos' }).click();
 	await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
 
