@@ -1,7 +1,7 @@
 import { render } from 'svelte/server';
 import { describe, expect, it } from 'vitest';
 import Player from './Player.svelte';
-import { clampSpeed, formatDuration, mediaAvailability, mediaPlaybackKind, PLAYBACK_SPEEDS, selectPlayableMedia, selectPlayableSubtitle, srtConversionSupported, srtToWebVtt, studySyncEnabled, studySyncSupported, subtitleFormat } from './player';
+import { clampSpeed, formatDuration, mediaAvailability, mediaPlaybackKind, PLAYBACK_SPEEDS, playerShortcutAction, selectPlayableMedia, selectPlayableSubtitle, shouldAutoAdvance, srtConversionSupported, srtToWebVtt, studySyncEnabled, studySyncSupported, subtitleFormat } from './player';
 import type { FileEntry, Lesson } from './transport';
 
 describe('player media and subtitles', () => {
@@ -74,6 +74,16 @@ describe('player media and subtitles', () => {
 		expect(clampSpeed(0.5)).toBe(1);
 		expect(clampSpeed(3)).toBe(1);
 		expect(clampSpeed(Number.NaN)).toBe(1);
+	});
+	it('handles only focused player shortcuts and never loops auto-next at the end', () => {
+		expect(playerShortcutAction(' ', true)).toBe('toggle-playback');
+		expect(playerShortcutAction('ArrowLeft', true)).toBe('seek-backward');
+		expect(playerShortcutAction('ArrowRight', true)).toBe('seek-forward');
+		expect(playerShortcutAction(' ', false)).toBeNull();
+		expect(playerShortcutAction('Enter', true)).toBeNull();
+		expect(shouldAutoAdvance(true, true)).toBe(true);
+		expect(shouldAutoAdvance(false, true)).toBe(false);
+		expect(shouldAutoAdvance(true, false)).toBe(false);
 	});
 });
 
