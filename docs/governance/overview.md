@@ -139,7 +139,10 @@ usa cache e mantém timeouts curtos.
 
 O job `Rust tests and lints` verifica formatação, lints, testes e a cobertura do núcleo em Rust; o
 job `Desktop crate compile and guards` compila o crate desktop e roda seus testes; e o job
-`Container build (Rust)` constrói e valida a imagem OCI Rust. Toda promoção a obrigatório exige decisão explícita do mantenedor; os checks acoplados ao Go foram
+`Container build (Rust)` constrói e valida a imagem OCI Rust. O job `Rust dependency audit`
+audita o `Cargo.lock` com `cargo audit --deny unsound`, reprovando vulnerabilidades e advisories
+`unsound`, com uma única exceção estreita e documentada em `.cargo/audit.toml`
+(`RUSTSEC-2024-0429`, `glib`). Toda promoção a obrigatório exige decisão explícita do mantenedor; os checks acoplados ao Go foram
 removidos na Fase 5 (PR #206).
 
 O Wiki sync não é check obrigatório: ele roda após mudanças mapeadas chegarem à `main` ou por

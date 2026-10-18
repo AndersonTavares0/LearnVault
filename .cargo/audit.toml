@@ -1,0 +1,37 @@
+# Configuração do cargo-audit para o workspace Rust do LearnVault.
+#
+# Este arquivo NÃO desliga a auditoria de dependências Rust. Ele registra, de
+# forma estreita e rastreável, uma única exceção aprovada. Tudo o que não
+# estiver listado em `ignore` continua reprovando a verificação.
+#
+# Local: o cargo-audit 0.22.x lê a configuração em `.cargo/audit.toml` relativo
+# ao diretório de execução; um `audit.toml` na raiz do repositório é IGNORADO
+# por essa versão (verificado em 2026-10-18: erro de sintaxe no arquivo de
+# `.cargo/` é reportado, erro de sintaxe na raiz não).
+#
+# O job `Rust dependency audit` (`.github/workflows/ci.yml`) executa
+# `cargo audit --deny unsound`, que reprova vulnerabilidades (sempre) e
+# advisories classificados como `unsound`.
+
+[advisories]
+ignore = [
+    # RUSTSEC-2024-0429 = GHSA-wrw7-89jp-8q8g (categoria: unsound)
+    # glib >= 0.15.0, < 0.20.0 | primeira versão corrigida: 0.20.0
+    # "Unsoundness in `Iterator` and `DoubleEndedIterator` impls for
+    # `glib::VariantStrIter`". Afeta apenas
+    # glib::VariantStrIter::{next,nth,last,next_back,nth_back}.
+    #
+    # Por que é aceito hoje (2026-10-18):
+    # - O Cargo.lock resolve glib 0.18.5 pelo caminho
+    #   learnvault-desktop -> tauri 2.12.4 -> gtk 0.18.2 -> glib ^0.18.
+    # - A correção só existe a partir de glib 0.20.0, alcançável apenas via
+    #   gtk 0.19.0 -> glib 0.22, um salto breaking da pilha GTK/Tauri.
+    # - Não há caminho de atualização não-breaking. O dono do produto decidiu
+    #   não fazer o upgrade agora; o alerta do Dependabot (#16) permanece
+    #   aberto e rastreado em issue própria.
+    #
+    # Condição de remoção: remover esta entrada assim que a pilha desktop
+    # (Tauri/GTK) puder consumir glib >= 0.20.0, ou imediatamente se o
+    # workspace passar a usar diretamente glib::VariantStrIter.
+    "RUSTSEC-2024-0429",
+]
