@@ -343,6 +343,7 @@ async fn admin_rescan_populates_the_authenticated_catalog() {
     assert_eq!(node_file["name"], "lesson.mp4");
     assert_eq!(node_file["path"], "Categoria/Curso/lesson.mp4");
     assert_eq!(node_file["size"], 5);
+    assert!(node_file["mtime_seconds"].as_i64().is_some_and(|mtime| mtime >= 0));
     assert_eq!(node_file["kind"], "media");
     assert_eq!(node_file["availability"], "available");
     assert_eq!(node_file["unverified"], false);
