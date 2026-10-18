@@ -83,3 +83,8 @@ export const MainBranchGuard: Plugin = async ({ $, directory, worktree }) => {
     },
   }
 }
+
+export default {
+  id: "main-branch-guard",
+  setup: MainBranchGuard,
+}
