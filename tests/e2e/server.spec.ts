@@ -46,6 +46,7 @@ function contrastRatio(foreground: string, background: string) {
 
 type ServerFixture = {
 	baseURL: string;
+	libraryPath: string;
 	outsidePath: string;
 	stop: () => Promise<void>;
 };
@@ -172,6 +173,7 @@ async function startServer(): Promise<ServerFixture> {
 
 	return {
 		baseURL,
+		libraryPath: library,
 		outsidePath,
 		stop: async () => {
 			try {
@@ -329,4 +331,87 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	expect(afterLogoutMedia.status()).toBe(401);
 	const afterLogoutCatalog = await page.request.get(`${server.baseURL}/api/catalog`);
 	expect(afterLogoutCatalog.status()).toBe(401);
+});
+
+test('reports a lesson whose media disappears from disk and restores it when the file returns', async ({ page, server }) => {
+	// A fixture já tem Categoria/Curso/Aula.mp4, usado pelo outro cenário. Em vez de apagar
+	// esse arquivo, o cenário cria um módulo próprio com duas aulas: a mídia de uma delas
+	// sai do disco e volta, para exercitar o ciclo inteiro de disponibilidade.
+	const moduleRoot = join(server.libraryPath, 'Categoria', 'Modulo Extra');
+	const lessonAPath = join(moduleRoot, 'Aula A');
+	const lessonBPath = join(moduleRoot, 'Aula B');
+	await mkdir(lessonAPath, { recursive: true });
+	await mkdir(lessonBPath, { recursive: true });
+	await writeFile(join(lessonAPath, 'A.mp4'), Buffer.from('extra-a-fixture'));
+	const lessonBMedia = join(lessonBPath, 'B.mp4');
+	const lessonBContent = Buffer.from('extra-b-fixture');
+	await writeFile(lessonBMedia, lessonBContent);
+
+	const courseModule = page.locator('details.course-section').filter({ has: page.getByText('Modulo Extra', { exact: true }) });
+	const openCourse = async () => {
+		await page.getByRole('link', { name: /library/ }).click();
+		await expect(page.getByRole('heading', { name: 'library', exact: true })).toBeVisible();
+		// A meta do módulo é visível com o disclosure fechado; as linhas exigem abri-lo.
+		await courseModule.locator('summary').click();
+	};
+	const indexFromHome = async () => {
+		await page.goto(`${server.baseURL}/#/home`);
+		await expect(page.getByRole('heading', { name: 'Olá, admin.' })).toBeVisible();
+		await page.getByRole('button', { name: 'Indexar cursos' }).click();
+		await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
+	};
+
+	await page.goto(`${server.baseURL}/#/login`);
+	await page.getByLabel('Usuário').fill('admin');
+	await page.getByLabel('Senha', { exact: true }).fill(ADMIN_PASSWORD);
+	await page.getByRole('button', { name: 'Entrar' }).click();
+	await expect(page.getByRole('heading', { name: 'Olá, admin.' })).toBeVisible();
+	await page.getByRole('button', { name: 'Indexar cursos' }).click();
+	await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
+
+	// Fase 1: o arquivo está no disco — duas aulas disponíveis, sem selo, linha navegável.
+	await openCourse();
+	await expect(courseModule.locator('.section-meta')).toHaveText('2 aulas');
+	const lessonA = courseModule.getByRole('link', { name: /Aula A/ });
+	const lessonB = courseModule.getByRole('link', { name: /Aula B/ });
+	await expect(lessonA).toHaveAttribute('href', /#\/player\//);
+	await expect(lessonB).toHaveAttribute('href', /#\/player\//);
+	await expect(lessonB).not.toContainText('ausente');
+
+	// Fase 2: o arquivo desaparece do disco (disco externo desconectado ou arquivo renomeado).
+	await rm(lessonBMedia, { force: true });
+	await indexFromHome();
+	await openCourse();
+	await expect(courseModule.locator('.section-meta')).toHaveText('1 aula · 1 ausente');
+	const missingRow = courseModule.locator('.lesson-row', { hasText: 'Aula B' });
+	await expect(missingRow).toBeVisible();
+	await expect(missingRow).toContainText('(ausente)');
+	// Continua listada, mas não navega: sem link, sem foco de teclado.
+	await expect(courseModule.getByRole('link', { name: /Aula B/ })).toHaveCount(0);
+	expect(await missingRow.evaluate((element) => element.tagName)).toBe('DIV');
+	expect(await missingRow.evaluate((element) => { (element as HTMLElement).focus(); return document.activeElement === element; })).toBe(false);
+	// A aula disponível ao lado mantém link e foco — a checagem anterior discrimina.
+	expect(await lessonA.evaluate((element) => { (element as HTMLElement).focus(); return document.activeElement === element; })).toBe(true);
+
+	// Acesso direto pela URL da aula ausente: o player não pede o arquivo nem renderiza mídia.
+	const catalog = await (await page.request.get(`${server.baseURL}/api/catalog`)).json();
+	const courseId = catalog.categories?.[0]?.course_id ?? catalog.nodes?.[0]?.course_id;
+	expect(courseId).toBeTruthy();
+	const mediaRequests: string[] = [];
+	page.on('request', (request) => {
+		const url = new URL(request.url());
+		if (url.pathname === '/api/media') mediaRequests.push(url.search);
+	});
+	await page.goto(`${server.baseURL}/#/player/${encodeURIComponent(courseId)}/${encodeURIComponent('Categoria/Modulo Extra/Aula B')}`);
+	await expect(page.getByText('A mídia desta aula não está no disco.')).toBeVisible();
+	expect(await page.locator('video, audio').count()).toBe(0);
+	expect(mediaRequests).toEqual([]);
+
+	// Fase 3: o mesmo arquivo volta ao mesmo caminho e a reindexação restaura a aula.
+	await writeFile(lessonBMedia, lessonBContent);
+	await indexFromHome();
+	await openCourse();
+	await expect(courseModule.locator('.section-meta')).toHaveText('2 aulas');
+	await expect(lessonB).toHaveAttribute('href', /#\/player\//);
+	await expect(lessonB).not.toContainText('ausente');
 });
