@@ -4,7 +4,7 @@
 import { invoke } from '@tauri-apps/api/core';
 
 export type User = { userId: string; username: string; role: string; isAdmin: boolean; mustChangeCredentials: boolean };
-export type FileEntry = { name: string; path: string; size: number; mediaId?: string; kind?: string; availability?: string; unverified?: boolean };
+export type FileEntry = { name: string; path: string; size: number; mediaId?: string; mtimeSeconds?: number; kind?: string; availability?: string; unverified?: boolean };
 export type Lesson = { title: string; path: string; media: FileEntry[]; subtitles: FileEntry[]; materials: FileEntry[]; availability?: string; unverified?: boolean };
 // Cada nó de topo do catálogo é um curso com identidade opaca (`courseId`). Nós internos
 // não carregam a identidade: a árvore inteira pertence ao curso do topo.
@@ -54,7 +54,7 @@ export interface Transport {
 	mediaUrl(file: FileEntry, courseId?: string): string | null;
 }
 
-type RustFile = { media_id?: string; name?: string; path?: string; size?: number; kind?: string; availability?: string; unverified?: boolean };
+type RustFile = { media_id?: string; name?: string; path?: string; size?: number; mtime_seconds?: number; kind?: string; availability?: string; unverified?: boolean };
 type RustNode = { title?: string; path?: string; role?: string; course_id?: string; files?: RustFile[]; loose_files?: RustFile[]; children?: RustNode[] };
 type RustCatalog = { complete?: boolean; categories?: RustNode[]; nodes?: RustNode[]; loose_files?: RustFile[]; looseFiles?: RustFile[] };
 
@@ -114,6 +114,16 @@ function fileSize(value: unknown): number {
 	return value;
 }
 
+// Revisões antigas podem omitir mtime; um valor presente precisa ser um segundo Unix inteiro
+// representável com segurança pelo JavaScript.
+function optionalMtimeSeconds(value: unknown): number | undefined {
+	if (value === undefined) return undefined;
+	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+		throw invalidPayload('arquivo com mtime inválido.');
+	}
+	return value;
+}
+
 // Arquivo do contrato canônico Rust/desktop: exige identidade `media_id` não vazia para que
 // o arquivo seja endereçável.
 function normalizeFile(value: unknown): FileEntry {
@@ -128,6 +138,7 @@ function normalizeFile(value: unknown): FileEntry {
 		name,
 		path,
 		size: fileSize(file.size),
+		mtimeSeconds: optionalMtimeSeconds(file.mtime_seconds),
 		mediaId,
 		kind: optionalFileString(file.kind, 'kind'),
 		availability: optionalFileString(file.availability, 'availability'),

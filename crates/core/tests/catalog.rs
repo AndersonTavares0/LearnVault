@@ -107,8 +107,8 @@ fn a_four_level_tree_is_derived_bottom_up() -> TestResult {
     );
     assert_eq!(file.kind, MediaKind::Media);
     assert_eq!(file.availability, Availability::Available);
-        assert!(!file.unverified);
-        assert_eq!(file.mtime_seconds, 1_760_000_000);
+    assert!(!file.unverified);
+    assert_eq!(file.mtime_seconds, 1_760_000_000);
     Ok(())
 }
 
@@ -646,6 +646,7 @@ fn catalog_file(media_id: &str, path: &str, kind: MediaKind) -> CatalogFile {
         name: path.rsplit('/').next().unwrap_or(path).to_owned(),
         path: path.to_owned(),
         size: 1024,
+        mtime_seconds: 1_760_000_000,
         kind,
         availability: Availability::Available,
         unverified: false,
