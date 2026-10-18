@@ -107,7 +107,8 @@ fn a_four_level_tree_is_derived_bottom_up() -> TestResult {
     );
     assert_eq!(file.kind, MediaKind::Media);
     assert_eq!(file.availability, Availability::Available);
-    assert!(!file.unverified);
+        assert!(!file.unverified);
+        assert_eq!(file.mtime_seconds, 1_760_000_000);
     Ok(())
 }
 
