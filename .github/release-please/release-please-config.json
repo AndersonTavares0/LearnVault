@@ -1,9 +1,10 @@
 {
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
-  "release-type": "rust",
+  "release-type": "simple",
   "packages": {
     ".": {
-      "release-type": "rust",
+      "release-type": "simple",
+      "version-file": ".github/release-please/version.txt",
       "changelog-path": "docs/releases/CHANGELOG.md",
       "include-v-in-tag": true,
       "include-v-in-release-name": true,
