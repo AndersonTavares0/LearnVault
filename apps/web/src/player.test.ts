@@ -20,6 +20,25 @@ describe('player media and subtitles', () => {
 		expect(mediaPlaybackKind({ name: 'aula.mp4', path: 'aula.mp4', size: 1, kind: 'media' })).toBe('video');
 		expect(mediaPlaybackKind({ name: 'aula.m4a', path: 'aula.m4a', size: 1, kind: 'media' })).toBe('audio');
 	});
+	it('restores a remembered playable media and falls back when it disappeared', () => {
+		const media = [
+			{ name: 'a.mp4', path: 'a.mp4', size: 1, mediaId: 'media-a', availability: 'available' },
+			{ name: 'b.mp4', path: 'b.mp4', size: 2, mediaId: 'media-b', availability: 'available' }
+		];
+
+		expect(selectPlayableMedia(media, 'media-b')?.mediaId).toBe('media-b');
+		expect(selectPlayableMedia(media, 'removed')?.mediaId).toBe('media-a');
+	});
+	it('restores a remembered subtitle or keeps captions explicitly off', () => {
+		const subtitles = [
+			{ name: 'a.vtt', path: 'a.vtt', size: 1, mediaId: 'subtitle-a', availability: 'available' },
+			{ name: 'b.vtt', path: 'b.vtt', size: 2, mediaId: 'subtitle-b', availability: 'available' }
+		];
+
+		expect(selectPlayableSubtitle(subtitles, 'subtitle-b')?.mediaId).toBe('subtitle-b');
+		expect(selectPlayableSubtitle(subtitles, 'removed')?.mediaId).toBe('subtitle-a');
+		expect(selectPlayableSubtitle(subtitles, null)).toBeNull();
+	});
 	it('converts SRT deterministically and classifies formats', () => {
 		expect(srtToWebVtt('1\r\n00:00:01,500 --> 00:00:02,500\r\nOlá\r\n')).toBe('WEBVTT\n\n00:00:01.500 --> 00:00:02.500\nOlá\n');
 		expect(subtitleFormat('legenda.VTT')).toBe('vtt');
