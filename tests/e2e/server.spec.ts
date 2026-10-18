@@ -7,6 +7,43 @@ import { spawn, type ChildProcess } from 'node:child_process';
 
 const ADMIN_PASSWORD = 'uma senha local muito segura';
 
+function firstMediaId(value: unknown): string | undefined {
+	if (Array.isArray(value)) {
+		for (const item of value) {
+			const mediaId = firstMediaId(item);
+			if (mediaId) return mediaId;
+		}
+		return undefined;
+	}
+	if (!value || typeof value !== 'object') return undefined;
+	const record = value as Record<string, unknown>;
+	if (Array.isArray(record.files)) {
+		for (const file of record.files) {
+			if (file && typeof file === 'object' && typeof (file as Record<string, unknown>).media_id === 'string') {
+				return (file as Record<string, string>).media_id;
+			}
+		}
+	}
+	return firstMediaId(record.children) ?? firstMediaId(record.nodes) ?? firstMediaId(record.categories);
+}
+
+function parseRgb(value: string): [number, number, number] {
+	const match = value.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+	if (!match) throw new Error(`cor inválida: ${value}`);
+	return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+function contrastRatio(foreground: string, background: string) {
+	const luminance = (color: string) => parseRgb(color).reduce((sum, channel, index) => {
+		const normalized = channel / 255;
+		const linear = normalized <= 0.03928 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+		return sum + linear * [0.2126, 0.7152, 0.0722][index];
+	}, 0);
+	const foregroundLuminance = luminance(foreground);
+	const backgroundLuminance = luminance(background);
+	return (Math.max(foregroundLuminance, backgroundLuminance) + 0.05) / (Math.min(foregroundLuminance, backgroundLuminance) + 0.05);
+}
+
 type ServerFixture = {
 	baseURL: string;
 	outsidePath: string;
@@ -170,6 +207,47 @@ test('serves the built SPA through the Rust server for a complete study-library 
 
 	await page.getByRole('button', { name: 'Indexar cursos' }).click();
 	await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
+	await expect(page.getByRole('navigation', { name: 'Navegação principal' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Cursos' })).toBeVisible();
+	const initialCatalog = await (await page.request.get(`${server.baseURL}/api/catalog`)).json();
+	const mediaId = firstMediaId(initialCatalog);
+	expect(mediaId).toBeTruthy();
+	const positionResponse = await page.request.post(`${server.baseURL}/api/study/position`, {
+		headers: { Origin: server.baseURL },
+		data: { media_id: mediaId, position_seconds: 5 }
+	});
+	await expect(positionResponse).toBeOK();
+	const recentResponse = await page.request.get(`${server.baseURL}/api/study/recent?limit=6`);
+	await expect(recentResponse).toBeOK();
+	expect((await recentResponse.json()).items.length).toBeGreaterThan(0);
+	await page.reload();
+	await expect(page.getByText('Continuar assistindo')).toBeVisible();
+	const lightColors = await page.locator('.recent-study small').first().evaluate((element) => {
+		let node: HTMLElement | null = element as HTMLElement;
+		const foreground = getComputedStyle(element).color;
+		while (node) {
+			const background = getComputedStyle(node).backgroundColor;
+			if (background !== 'rgba(0, 0, 0, 0)' && background !== 'transparent') return { foreground, background };
+			node = node.parentElement;
+		}
+		return { foreground, background: getComputedStyle(document.body).backgroundColor };
+	});
+	expect(contrastRatio(lightColors.foreground, lightColors.background)).toBeGreaterThanOrEqual(4.5);
+	await page.emulateMedia({ colorScheme: 'dark' });
+	await page.reload();
+	const darkColors = await page.locator('.recent-study small').first().evaluate((element) => {
+		let node: HTMLElement | null = element as HTMLElement;
+		const foreground = getComputedStyle(element).color;
+		while (node) {
+			const background = getComputedStyle(node).backgroundColor;
+			if (background !== 'rgba(0, 0, 0, 0)' && background !== 'transparent') return { foreground, background };
+			node = node.parentElement;
+		}
+		return { foreground, background: getComputedStyle(document.body).backgroundColor };
+	});
+	expect(contrastRatio(darkColors.foreground, darkColors.background)).toBeGreaterThanOrEqual(4.5);
+	const faviconResponse = await page.request.get(`${server.baseURL}/favicon.svg`);
+	expect(faviconResponse.status()).toBe(200);
 
 	// A home lista cada curso registrado como card; o card abre a página do curso.
 	const courseCard = page.getByRole('link', { name: /library/ });
