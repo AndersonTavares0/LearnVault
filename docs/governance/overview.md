@@ -32,6 +32,7 @@ Cada issue deve ter uma pessoa responsável, definida pelo `assignee`.
 - Features usam `.github/ISSUE_TEMPLATE/feature.yml`.
 - Documentação e typos usam `.github/ISSUE_TEMPLATE/documentation.yml`.
 - Dependências e CI usam `.github/ISSUE_TEMPLATE/maintenance.yml`.
+- Planejamento de trabalho usa `.github/ISSUE_TEMPLATE/planning.yml`, com a label `planning`.
 - Vulnerabilidades usam a política privada de segurança, nunca uma issue pública.
 - Pull requests usam `.github/pull_request_template.md`.
 - Dúvidas e decisões abertas devem usar GitHub Discussions.
@@ -147,7 +148,7 @@ execução manual, escreve somente páginas gerenciadas e não reage a eventos d
 ## Labels automáticas
 
 `.github/labeler.yml` e o workflow `Labeler` classificam pull requests por arquivos
-alterados: `area:web`, `area:rust`, `area:desktop`, `area:go`, `area:docs`, `area:ci` e
+alterados: `area:web`, `area:rust`, `area:desktop`, `area:docs`, `area:ci` e
 `area:deploy`, além de `tests` e `dependencies`. O workflow usa `actions/labeler` fixado em
 SHA completo, roda em `pull_request_target`, não faz checkout, não usa segredos e não executa
 código da pull request; a configuração é lida da base confiável e execuções vindas de forks

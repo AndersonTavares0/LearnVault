@@ -1,0 +1,44 @@
+name: Planejamento
+description: Organize contexto, escopo e critérios de aceite de um trabalho planejado
+title: "[Planejamento] "
+labels:
+  - planning
+body:
+  - type: textarea
+    id: objective
+    attributes:
+      label: Contexto e objetivo
+      description: Explique por que este trabalho existe e o resultado esperado.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Escopo
+      description: Liste o que está incluído neste planejamento.
+    validations:
+      required: true
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Fora de escopo
+      description: Registre o que não será tratado aqui.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Critérios de aceite
+      description: Como saberemos que o trabalho está concluído?
+    validations:
+      required: true
+  - type: textarea
+    id: risks
+    attributes:
+      label: Riscos e dependências
+      description: Liste riscos, bloqueios e dependências conhecidas.
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: Use Discussions para dúvidas ainda não resolvidas antes de abrir a issue.
