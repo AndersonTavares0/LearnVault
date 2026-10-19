@@ -326,8 +326,8 @@ fn replace_file(source: &Path, dest: &Path) -> std::io::Result<()> {
 /// Valida e normaliza a requisição crua, sem tocar o sistema de arquivos.
 ///
 /// Recusa qualquer coisa que não seja exatamente o protocolo registrado para a janela
-/// principal: outro esquema, outro host, query, caminho com mais de um segmento e
-/// identidades fora do alfabeto seguro.
+/// principal: outro esquema, outro host, query fora de `v=<dígitos>`, caminho com mais de
+/// um segmento e identidades fora do alfabeto seguro.
 pub fn parse_cover_request(raw: &RawCoverRequest<'_>) -> Result<CoverRequest, CoverRejection> {
     if raw.webview_label != MAIN_WEBVIEW_LABEL {
         return Err(CoverRejection::Forbidden);
@@ -339,7 +339,8 @@ pub fn parse_cover_request(raw: &RawCoverRequest<'_>) -> Result<CoverRequest, Co
         _ => return Err(CoverRejection::MethodNotAllowed),
     };
 
-    if raw.scheme != COVER_SCHEME || raw.host != Some(COVER_HOST) || raw.query.is_some() {
+    if raw.scheme != COVER_SCHEME || raw.host != Some(COVER_HOST) || !valid_cover_version(raw.query)
+    {
         return Err(CoverRejection::Malformed);
     }
 
@@ -354,6 +355,21 @@ pub fn parse_cover_request(raw: &RawCoverRequest<'_>) -> Result<CoverRequest, Co
         method,
         course_id: course_id.to_owned(),
     })
+}
+
+/// A versão da capa é opcional e só pode chegar como `v=<dígitos>`.
+///
+/// A SPA usa o valor para trocar a URL do `<img>` quando a capa muda; o handler o ignora
+/// na resolução e continua respondendo com `Cache-Control: no-store`. Qualquer outra
+/// query é recusada em vez de silenciosamente descartada.
+fn valid_cover_version(query: Option<&str>) -> bool {
+    let Some(query) = query else {
+        return true;
+    };
+    let Some(version) = query.strip_prefix("v=") else {
+        return false;
+    };
+    !version.is_empty() && version.len() <= 20 && version.bytes().all(|byte| byte.is_ascii_digit())
 }
 
 /// Registra o protocolo de capas no builder do Tauri.
@@ -440,7 +456,7 @@ mod tests {
     use std::path::Path;
 
     use super::{
-        COVER_HOST, COVER_SCHEME, CoverRejection, RawCoverRequest, cover_file, parse_cover_request,
+        COVER_HOST, COVER_SCHEME, RawCoverRequest, cover_file, parse_cover_request,
         raw_cover_request, read_picked_cover,
     };
     use crate::media::MAIN_WEBVIEW_LABEL;
@@ -466,11 +482,10 @@ mod tests {
                 webview_label: MAIN_WEBVIEW_LABEL,
             }
         );
-        // A versão na query é visível ao handler e, por isso, é recusada explicitamente em vez
-        // de silenciosamente ignorada.
+        // A versão na query é aceita pela SPA como cache-buster e não altera a resolução.
         assert_eq!(
-            parse_cover_request(&raw).unwrap_err(),
-            CoverRejection::Malformed
+            parse_cover_request(&raw).unwrap().course_id,
+            "course-1".to_owned()
         );
     }
 
