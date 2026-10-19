@@ -115,6 +115,10 @@ jobs:
         run: test -f crates/server/web/build/200.html
       - name: Install Rust toolchain
         run: rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --component llvm-tools-preview
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+        with:
+          tool: nextest@0.9.148
       - name: Cache Cargo registry and target
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -139,8 +143,10 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Run clippy
         run: cargo clippy --workspace --exclude learnvault-desktop --all-targets -- -D warnings
-      - name: Run Rust tests
-        run: cargo test --workspace --exclude learnvault-desktop
+      - name: Run Rust tests with nextest
+        run: cargo nextest run --workspace --exclude learnvault-desktop
+      - name: Run Rust doc tests
+        run: cargo test --doc --workspace --exclude learnvault-desktop
       - name: Run tests with coverage
         run: cargo llvm-cov --package learnvault-core --all-targets --fail-under-lines 80
 
