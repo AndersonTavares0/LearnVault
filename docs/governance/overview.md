@@ -92,6 +92,11 @@ as descrições ficam em pt-BR para manter o Release Please consistente.
 O Release Please controla versão, changelog, tags e metadados do GitHub Release. A publicação
 de artefatos acontece em workflow separado.
 
+O código e a documentação do LearnVault são distribuídos sob a licença MIT, conforme o arquivo
+[`LICENSE`](../../LICENSE). Os metadados do workspace Rust, do pacote npm e do metainfo desktop
+devem permanecer alinhados com essa licença; registros no changelog descrevem o estado histórico
+das versões e não substituem a licença vigente.
+
 ### Automação segura do Dependabot
 
 O workflow `Dependabot safe auto-merge` usa a configuração confiável da base por
