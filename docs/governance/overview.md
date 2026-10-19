@@ -199,3 +199,9 @@ individuais e exigem revisão de compatibilidade e checks atuais.
 
 Os testes mantêm cobertura real de Argon2id e autenticação. Fixtures são isoladas e não acessam dados
 externos.
+
+## Próximos passos
+
+- [[Getting-Started]] para rodar o projeto.
+- [[Architecture]] para a divisão entre núcleo, servidor e desktop.
+- [[Operations]] para publicação e operação.

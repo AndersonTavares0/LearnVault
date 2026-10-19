@@ -47,3 +47,9 @@ mas o projeto não executa mais o serviço antigo.
 O instalador Windows NSIS e o tarball Linux do servidor são publicados a cada release. O desktop
 Linux/Flatpak e a publicação da imagem OCI ainda dependem de validação. O [[Roadmap]] mostra o que
 falta e a página [[Operations]] detalha cada formato.
+
+## Próximos passos
+
+- [[Getting-Started]] para instalar, rodar e resolver os primeiros problemas.
+- [[Architecture]] para entender como servidor, desktop e núcleo se dividem.
+- [[Roadmap]] para ver o que já foi entregue e o que vem depois.

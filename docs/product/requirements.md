@@ -84,3 +84,9 @@ visão de arquitetura; RNF-04 vem das regras de entrega do [roadmap](roadmap.md)
 RNF-06 vem da [distribuição](../operations/distribution.md) e do roadmap; RNF-07 vem do ADR 0001 e do
 [playbook de testes](../../.agents/playbooks/testing.md); RNF-08 vem do roadmap; RNF-09 vem de
 [`.agents/policies/governance.md`](../../.agents/policies/governance.md).
+
+## Próximos passos
+
+- [[Roadmap]] para o estado de entrega de cada requisito.
+- [[Architecture]] para as decisões técnicas que sustentam os requisitos.
+- [[Development-and-Governance]] para o fluxo de mudança e revisão.
