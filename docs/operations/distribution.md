@@ -423,3 +423,9 @@ O produto apenas **verifica e avisa**: a SPA mostra a versão atual e, quando h�
 número da release e um link para a página do GitHub. Nada é baixado, verificado por checksum,
 instalado ou aplicado automaticamente. A atualização continua manual, pelo mesmo caminho de
 distribuição descrito neste documento (tarball Linux, instalador Windows ou Flatpak).
+
+## Próximos passos
+
+- [[Getting-Started]] para o ambiente de desenvolvimento.
+- [[Architecture]] para entender os limites do sistema.
+- [[Development-and-Governance]] para o fluxo de release e checks.

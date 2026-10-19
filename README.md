@@ -44,10 +44,16 @@ O LearnVault está em desenvolvimento ativo. Para rodar a versão local, instale
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm dev
 ```
 
-Abra a URL da SPA exibida no terminal. `pnpm dev` também inicia o servidor local; `pnpm dev:tauri` abre o aplicativo desktop durante o desenvolvimento.
+Rode esse comando uma vez por checkout. Ele não roda sozinho dentro de `pnpm dev` nem de `pnpm dev:tauri`.
+
+| Comando | O que abre |
+| --- | --- |
+| `pnpm dev` | Servidor Rust e interface web em `http://localhost:5173` |
+| `pnpm dev:tauri` | Aplicativo desktop Tauri |
+
+`pnpm dev` sobe a API em `http://127.0.0.1:8090` e a interface web com recarga automática. Na primeira execução, entre com `admin`/`admin`, importe uma pasta de curso e troque a senha. `pnpm dev:tauri` abre o desktop offline, sem login e sem portas de rede.
 
 Antes de enviar uma mudança, rode:
 

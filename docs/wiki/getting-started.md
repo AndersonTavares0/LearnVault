@@ -4,6 +4,10 @@ Esta página é para quem vai rodar o LearnVault pela primeira vez, seja para us
 desenvolver. O caminho mais curto é instalar as ferramentas, rodar `pnpm dev` e entrar com a
 credencial temporária. Se algo falhar, comece pela tabela de problemas comuns no fim da página.
 
+Se você só quer usar o LearnVault, não precisa montar o ambiente de desenvolvimento. Baixe o
+instalador Windows ou o tarball Linux na
+[página de releases](https://github.com/AndersonTavares0/LearnVault/releases).
+
 Docker e Podman são opcionais. Você não precisa deles para desenvolver nem para usar o desktop.
 
 ## Ferramentas de desenvolvimento
@@ -28,36 +32,43 @@ Use as linhas acima em vez de fixar uma versão de patch:
 ## Rodar em desenvolvimento
 
 ```sh
-pnpm install --frozen-lockfile   # uma vez por checkout
-pnpm dev                         # API Rust + SPA com recarga automática
+pnpm install --frozen-lockfile
 ```
 
-`pnpm install --frozen-lockfile` instala exatamente o que está no lockfile. Se o comando pedir para
-atualizar algo, a versão do pnpm ou o lockfile estão diferentes do esperado.
+Rode esse comando uma vez por checkout. Ele não roda automaticamente dentro de `pnpm dev` nem de
+`pnpm dev:tauri`; se o `pnpm-lock.yaml` mudar, rode de novo.
 
-`pnpm dev` sobe a API Rust em `http://127.0.0.1:8090` e a interface web (SPA) em
-`http://localhost:5173`, com proxy de `/api` para o servidor. Abra a SPA e faça login. Na primeira
-execução, a biblioteca começa vazia: entre com `admin`/`admin`, clique em "Importar curso" e
-escolha a pasta de um curso. O LearnVault lê a pasta e não altera os arquivos.
+Depois escolha como abrir o LearnVault:
+
+| Comando | O que abre |
+| --- | --- |
+| `pnpm dev` | Servidor Rust e interface web em `http://localhost:5173` |
+| `pnpm dev:tauri` | Aplicativo desktop Tauri |
+
+`pnpm dev` sobe a API em `http://127.0.0.1:8090` e a interface web em `http://localhost:5173`, com
+recarga automática. Abra `http://localhost:5173` no navegador. Na primeira execução, a biblioteca
+começa vazia: entre com `admin`/`admin`, clique em "Importar curso" e escolha a pasta de um curso. O
+LearnVault lê a pasta e não altera os arquivos.
+
+`pnpm dev:tauri` compila o desktop e abre o aplicativo offline, sem login e sem portas de rede. O
+primeiro build pode demorar.
 
 Antes de abrir um pull request, rode `pnpm verify`. Durante a iteração, `pnpm verify --fast` pula
 builds e audit e mantém os checks rápidos.
 
-## Primeiro acesso em detalhe
+## Mudar a porta da API
 
-Desenvolvimento local no PowerShell:
-
-```powershell
-pnpm install --frozen-lockfile
-pnpm dev
-# abra http://localhost:5173 e entre com a credencial temporária
-```
-
-POSIX (bash/zsh), mudando a porta da API quando necessário:
+Por padrão, a API usa `127.0.0.1:8090`. Para usar outra porta:
 
 ```sh
-pnpm install --frozen-lockfile
-LEARNVAULT_LISTEN_ADDR=127.0.0.1:8090 pnpm dev
+LEARNVAULT_LISTEN_ADDR=127.0.0.1:8091 pnpm dev
+```
+
+O proxy da interface acompanha a variável. No PowerShell, defina a variável antes do comando:
+
+```powershell
+$env:LEARNVAULT_LISTEN_ADDR = "127.0.0.1:8091"
+pnpm dev
 ```
 
 ## Credenciais de bootstrap
@@ -95,5 +106,12 @@ Para subir um servidor com Docker ou Podman, copie `deploy/compose/.env.example`
 O desktop Tauri (`crates/desktop`) é um cliente offline com janela real, comandos internos (IPC)
 para cursos, catálogo, releitura da biblioteca e estudo, além de reprodução local de mídia. Ele não
 tem autenticação nem abre portas de rede. `pnpm dev:tauri` inicia o app para desenvolvimento; esse
-comando não valida pacotes de release. O instalador Windows NSIS está disponível. Flatpak e distribuição Linux desktop ainda
-dependem de validação em sandbox, incluindo acesso persistente à biblioteca e reprodução.
+comando não valida pacotes de release. O instalador Windows NSIS está disponível. Flatpak e
+distribuição Linux desktop ainda dependem de validação em sandbox, incluindo acesso persistente à
+biblioteca e reprodução.
+
+## Próximos passos
+
+- [[Architecture]] para saber onde cada tipo de mudança entra.
+- [[Development-and-Governance]] para o fluxo de issue, pull request e CI.
+- [[Operations]] para instalar, publicar ou operar o servidor.
