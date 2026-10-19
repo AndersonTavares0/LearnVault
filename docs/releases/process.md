@@ -63,7 +63,7 @@ Regras que valem para qualquer ativo novo:
 - O release candidate Rust mantém namespace separado (`rust-rc-vX.Y.Z-rc.N` e `SHA256SUMS.rust-rc`) porque é
   artefato experimental e não é a distribuição suportada.
 
-O Release Please continua sendo a única fonte do `docs/releases/CHANGELOG.md` e do corpo de mudanças das notas. Depois de publicar os assets, o workflow acrescenta uma seção idempotente **Contribuidores**, derivada dos nomes de autor dos commits entre as tags verificadas; ele não gera uma segunda lista de mudanças nem usa notas geradas pelo GitHub. Use prefixos como `feat:`, `fix:`, `docs:` e `chore:` com descrições em pt-BR para manter as versões previsíveis e o changelog consistente.
+O Release Please continua sendo a única fonte do `docs/releases/CHANGELOG.md` e do corpo de mudanças das notas. Depois de publicar os assets, o workflow acrescenta uma seção idempotente **Contribuidores**, derivada dos autores e coautores dos commits entre as tags verificadas. Identidades de commits do Dependabot são excluídas; nomes repetidos aparecem uma vez. O workflow não gera uma segunda lista de mudanças nem usa notas geradas pelo GitHub. Use prefixos como `feat:`, `fix:`, `docs:` e `chore:` com descrições em pt-BR para manter as versões previsíveis e o changelog consistente.
 
 O workflow exige o secret `RELEASE_PLEASE_TOKEN`; credenciais de automação devem ficar nos
 secrets do GitHub Actions, nunca em arquivos versionados. O token precisa abrir PRs de release

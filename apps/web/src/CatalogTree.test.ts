@@ -99,4 +99,23 @@ describe('catalog tree rendering', () => {
 		// A linha continua listada, agora sem destino de player.
 		expect(body).not.toContain('href="#/player');
 	});
+
+	it('renders manual order controls only for managers with more than one sibling', () => {
+		const module = node('module', 'Módulo', 'mod', [
+			node('lesson', 'Aula 2', 'mod/aula-2', [], [file('a.mp4', 'media')]),
+			node('lesson', 'Aula 10', 'mod/aula-10', [], [file('b.mp4', 'media')])
+		]);
+		const managed = render(CatalogTree, { props: { nodes: [module], courseId: 'course-1', manage: true } });
+		expect(managed.body).toContain('order-controls');
+		expect(managed.body).toContain('para cima');
+		expect(managed.body).toContain('para baixo');
+
+		// Um leitor (sem `manage`) nunca vê os controles.
+		const readOnly = render(CatalogTree, { props: { nodes: [module], courseId: 'course-1' } });
+		expect(readOnly.body).not.toContain('order-controls');
+
+		// Um irmão solitário não tem para onde ir.
+		const single = render(CatalogTree, { props: { nodes: [module.children[0]], courseId: 'course-1', manage: true } });
+		expect(single.body).not.toContain('order-controls');
+	});
 });

@@ -40,6 +40,22 @@ export function clampSpeed(speed: number): PlaybackSpeed {
 	return (PLAYBACK_SPEEDS as readonly number[]).includes(speed) ? (speed as PlaybackSpeed) : 1;
 }
 
+export type PlayerShortcutAction = 'toggle-playback' | 'seek-backward' | 'seek-forward';
+
+/** Atalhos só são aplicados quando o contêiner do player, e não um controle interno, tem foco. */
+export function playerShortcutAction(key: string, playerRootHasFocus: boolean): PlayerShortcutAction | null {
+	if (!playerRootHasFocus) return null;
+	if (key === ' ' || key === 'Spacebar') return 'toggle-playback';
+	if (key === 'ArrowLeft') return 'seek-backward';
+	if (key === 'ArrowRight') return 'seek-forward';
+	return null;
+}
+
+/** Não há avanço automático se a preferência estiver desligada ou a sequência terminou. */
+export function shouldAutoAdvance(enabled: boolean, hasNextLesson: boolean): boolean {
+	return enabled && hasNextLesson;
+}
+
 export function formatDuration(totalSeconds: number): string {
 	if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return '0:00';
 	const seconds = Math.floor(totalSeconds % 60);
@@ -50,8 +66,13 @@ export function formatDuration(totalSeconds: number): string {
 	return `${minutes}:${paddedSeconds}`;
 }
 
-export function selectPlayableMedia(media: FileEntry[]): FileEntry | null {
-	return media.find((file) => file.availability?.trim().toLowerCase() !== 'missing') ?? null;
+export function selectPlayableMedia(media: FileEntry[], preferredMediaId?: string): FileEntry | null {
+	const available = (file: FileEntry) => file.availability?.trim().toLowerCase() !== 'missing';
+	if (preferredMediaId) {
+		const preferred = media.find((file) => file.mediaId === preferredMediaId && available(file));
+		if (preferred) return preferred;
+	}
+	return media.find(available) ?? null;
 }
 
 /**
@@ -72,8 +93,14 @@ export function mediaAvailability(media: FileEntry[]): MediaAvailability {
 	return media.length > 0 ? 'missing' : 'absent';
 }
 
-export function selectPlayableSubtitle(subtitles: FileEntry[]): FileEntry | null {
-	return subtitles.find((file) => file.availability?.trim().toLowerCase() !== 'missing') ?? null;
+export function selectPlayableSubtitle(subtitles: FileEntry[], preferredSubtitleId?: string | null): FileEntry | null {
+	if (preferredSubtitleId === null) return null;
+	const available = (file: FileEntry) => file.availability?.trim().toLowerCase() !== 'missing';
+	if (preferredSubtitleId) {
+		const preferred = subtitles.find((file) => file.mediaId === preferredSubtitleId && available(file));
+		if (preferred) return preferred;
+	}
+	return subtitles.find(available) ?? null;
 }
 
 export type MediaPlaybackKind = 'video' | 'audio';

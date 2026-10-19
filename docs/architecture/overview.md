@@ -13,9 +13,9 @@ para a aplicação Tauri offline e `apps/web` para a SPA Svelte 5 + Vite — com
 em `crates/core`. O backend legado em Go foi integralmente removido na Fase 5, consolidando Rust como
 stack backend exclusiva do projeto.
 
-A reescrita em Rust já entrega `crates/core`, `crates/server` e o `crates/desktop` com a
-**fundação** (crate Tauri 2 que embute a SPA por `frontendDist`, capability em deny-by-default e
-sem portas de rede) e as **fatias de IPC**: o catálogo agregado de cursos (`desktop_catalog`), com
+A migração do stack Rust foi concluída. O desktop Tauri 2 embute a SPA por `frontendDist`, define
+uma janela `main` em `crates/desktop/tauri.conf.json` e não abre portas de rede. Ele expõe o
+catálogo agregado de cursos (`desktop_catalog`), com
 ACL app-defined mínima e derivação pelo `learnvault-core` sobre um banco SQLite local, no
 diretório de dados do aplicativo; os comandos `desktop_import_course` e `desktop_remove_course`,
 que usam o seletor nativo interno ao Rust e persistem o **registro de cursos** (versão 2, com
@@ -45,7 +45,10 @@ importação e remoção, e `LIBRARY_DIR`/`--library-root` continua aceito apena
 primeiro curso. A API de Study tem paridade entre o servidor Rust e a SPA web,
 e o desktop a expõe por IPC; o player desktop reproduz mídia local e sincroniza
 posição/conclusão. O player desktop renderiza legendas VTT; SRT, ASS e SSA são baixáveis, e o build
-HTTP pode converter SRT sob demanda. Autenticação e janelas reais ainda não existem no desktop.
+HTTP pode converter SRT sob demanda. O desktop não tem autenticação por decisão de arquitetura.
+O instalador Windows NSIS está disponível; o pacote Linux desktop/Flatpak continua pendente até a
+validação em sandbox, incluindo acesso persistente à biblioteca e reprodução. Veja
+[distribuição](../operations/distribution.md).
 
 ```text
 Proxy HTTPS local
@@ -92,7 +95,7 @@ Responsabilidades:
   cada raiz de curso já resolvida.
 - `crates/server` traduz o domínio para HTTP: autenticação, sessões, `Range`, cabeçalhos de
   segurança, registro de cursos e entrega da SPA.
- - `crates/desktop` integra com o sistema de arquivos e entrega mídia ao webview, sem autenticação e sem portas de rede. Expõe o IPC de cursos e catálogo sobre o banco local, a importação e a remoção de cursos (seletor nativo interno ao Rust, com persistência atômica fora das pastas de curso), a escolha e a remoção da capa personalizada de um curso (seletor nativo de imagens, validação por bytes iniciais e gravação atômica no diretório de dados), o rescan explícito de todos os cursos e o progresso de estudo do dono local fixo, reutilizando o núcleo com estado ocupado e sem varredura automática, e protocolos customizados que entregam materiais, vídeo, áudio, legendas pelo `media_id` opaco e capas de curso pela identidade opaca do curso, com faixas limitadas, allowlist e CORS de origem exata. O player renderiza VTT; SRT, ASS e SSA são baixáveis.
+- `crates/desktop` integra com o sistema de arquivos e entrega mídia ao webview, sem autenticação e sem portas de rede. Expõe IPC para cursos, catálogo, capas, rescan e estudo; protocolos locais entregam mídia por identificadores opacos e faixas limitadas. O pacote Linux/Flatpak continua pendente de validação em sandbox.
 - `apps/web/` é uma única SPA em Svelte 5 + TypeScript + Vite, com roteamento por hash e dois
   builds que escolhem o transporte em tempo de compilação.
 

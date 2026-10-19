@@ -41,6 +41,10 @@ pub enum IpcErrorCode {
     InvalidCover,
     /// A capa do curso não pôde ser gravada nem removida.
     CoverUnavailable,
+    /// A ordem informada não é uma permutação válida dos irmãos.
+    InvalidOrder,
+    /// A ordem manual do curso não pôde ser gravada nem removida.
+    OrderUnavailable,
 }
 
 /// Erro IPC serializável devolvido ao webview.
@@ -170,6 +174,22 @@ impl IpcError {
         Self {
             code: IpcErrorCode::CoverUnavailable,
             message: "não foi possível atualizar a capa do curso",
+        }
+    }
+
+    /// A ordem informada não é uma permutação válida dos irmãos.
+    pub fn invalid_order() -> Self {
+        Self {
+            code: IpcErrorCode::InvalidOrder,
+            message: "a ordem informada não é válida",
+        }
+    }
+
+    /// A ordem manual do curso não pôde ser gravada nem removida.
+    pub fn order_unavailable() -> Self {
+        Self {
+            code: IpcErrorCode::OrderUnavailable,
+            message: "não foi possível salvar a ordem do curso",
         }
     }
 }

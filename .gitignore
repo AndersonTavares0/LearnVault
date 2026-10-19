@@ -3,6 +3,7 @@
 .env.*
 !.env.example
 !.env.*.example
+deploy/compose/secrets/
 
 # SvelteKit and frontend dependencies/build output
 .svelte-kit/

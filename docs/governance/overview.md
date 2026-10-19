@@ -61,9 +61,11 @@ Arquivos de comunidade (`CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`) 
 fica em `.github/release-please/`. Os perfis específicos do OpenCode ficam em `.opencode/`.
 A raiz mantém apenas `AGENTS.md`, `README.md`, `LICENSE`, `.dockerignore`, `.gitignore`,
 `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, `package.json`, `pnpm-lock.yaml` e
-`pnpm-workspace.yaml`. O crate `desktop` (Tauri) pertence à Fase 4 e já existe, mas a fase
-permanece incompleta: mídia, autenticação e janelas reais ainda são gates. A distribuição por
-plataforma e a remoção do serviço Go foram concluídas na Fase 5 (PR #206).
+`pnpm-workspace.yaml`. O crate `desktop` (Tauri) implementa a Fase 4: janela real, IPC, biblioteca
+somente leitura e reprodução local, sem autenticação nem listener de rede por decisão de
+arquitetura. O serviço Go foi removido na Fase 5 (PR #206). A distribuição Linux desktop/Flatpak
+continua pendente de validação; o estado dos pacotes está em
+[`docs/operations/distribution.md`](../operations/distribution.md).
 
 Saída gerada (`crates/server/web/build`, `crates/desktop/frontend-dist`, `target`, `node_modules`
 e dados/cache locais)
@@ -92,6 +94,11 @@ as descrições ficam em pt-BR para manter o Release Please consistente.
 O Release Please controla versão, changelog, tags e metadados do GitHub Release. A publicação
 de artefatos acontece em workflow separado.
 
+O código e a documentação do LearnVault são distribuídos sob a licença MIT, conforme o arquivo
+[`LICENSE`](../../LICENSE). Os metadados do workspace Rust, do pacote npm e do metainfo desktop
+devem permanecer alinhados com essa licença; registros no changelog descrevem o estado histórico
+das versões e não substituem a licença vigente.
+
 ### Automação segura do Dependabot
 
 O workflow `Dependabot safe auto-merge` usa a configuração confiável da base por
@@ -107,10 +114,12 @@ auto-merge nativo aguarda ou recusa qualquer estado que não satisfaça a prote�
 Quando elegível, o workflow apenas solicita o auto-merge nativo do GitHub com squash. Ele não
 aprova PRs, não usa `--admin`, não faz force-push, rebase ou fechamento automático. A proteção da
 branch continua sendo a autoridade para reviews e checks; a solicitação também é reavaliada pelo
-GitHub quando o head ou os checks mudam. Os checks protegidos são `SPA checks`, `Rust tests and lints`, `Desktop crate compile and guards` e
-`Container build (Rust)`; este último inclui a varredura Trivy de vulnerabilidades HIGH/CRITICAL da
-imagem Rust. A promoção dos três checks Rust a obrigatórios e a remoção dos checks acoplados ao Go
-foram concluídas pelo mantenedor em 2026-10-17.
+GitHub quando o head ou os checks mudam. Os checks protegidos são `SPA checks`, `Rust tests and lints`,
+`Desktop crate compile and guards`, `Container build (Rust)` e `CI gate`; este último agrega os
+resultados da execução e permite skips somente para os jobs pesados dispensados pelos filtros de
+docs/release. `Container build (Rust)` inclui a varredura Trivy de vulnerabilidades HIGH/CRITICAL da
+imagem Rust. A promoção dos checks Rust e do gate estável a obrigatórios, preservando os quatro
+checks anteriores, foi concluída pelo mantenedor em 2026-10-19.
 
 O workflow não concede permissões ao `GITHUB_TOKEN` (`permissions: {}`). Para consultar alertas do
 Dependabot com `alert-lookup`, ele exige o segredo
@@ -133,9 +142,11 @@ Para rollback, desabilite o workflow e cancele auto-merges pendentes; não há m
 branches ou lockfiles.
 
 Os nomes dos jobs obrigatórios são estáveis: `SPA checks`, `Rust tests and lints`,
-`Desktop crate compile and guards` e `Container build (Rust)`. O CI roda em pull requests,
+`Desktop crate compile and guards`, `Container build (Rust)` e `CI gate`. O CI roda em pull requests,
 cancela execuções obsoletas, constrói a SPA uma vez — consumida pela imagem Rust e pelo desktop —
-usa cache e mantém timeouts curtos.
+usa cache e mantém timeouts curtos. Para alterações exclusivamente em documentação ou metadados de
+release, os jobs E2E, Rust, desktop, container e auditoria de dependências podem ser legitimamente
+ignorados; o `CI gate` permanece estável e reprova falhas, cancelamentos e skips inesperados.
 
 O job `Rust tests and lints` verifica formatação, lints, testes e a cobertura do núcleo em Rust; o
 job `Desktop crate compile and guards` compila o crate desktop e roda seus testes; e o job

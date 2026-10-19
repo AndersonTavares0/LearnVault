@@ -15,7 +15,7 @@ use std::sync::{Arc, Mutex};
 
 use learnvault_core::{CourseRoot, Database};
 
-use crate::command::catalog;
+use crate::command::catalog_with_orders;
 use crate::config::{DesktopConfigDto, database_path};
 use crate::courses::{CourseEntry, load_courses, store_courses};
 use crate::covers::{
@@ -26,6 +26,7 @@ use crate::dto::{
     RecentStudyDto, RescanSummaryDto, StudyProgressDto,
 };
 use crate::error::IpcError;
+use crate::ordering::{CourseOrders, load_orders, store_orders};
 use crate::study;
 
 /// Estado Tauri do desktop: banco local e cursos registrados.
@@ -34,7 +35,9 @@ pub struct DesktopState {
     database: Arc<Mutex<Database>>,
     config_dir: PathBuf,
     covers_dir: PathBuf,
+    orders_dir: PathBuf,
     courses: Arc<Mutex<Vec<CourseEntry>>>,
+    orders: Arc<Mutex<CourseOrders>>,
     rescanning: Arc<AtomicBool>,
 }
 
@@ -51,12 +54,15 @@ impl DesktopState {
         let database = Database::open(database_path(data_dir))
             .map_err(|_| IpcError::database_unavailable())?;
         let courses = load_courses(config_dir);
+        let orders = load_orders(data_dir);
 
         Ok(Self {
             database: Arc::new(Mutex::new(database)),
             config_dir: config_dir.to_path_buf(),
             covers_dir: data_dir.join(COVERS_DIR_NAME),
+            orders_dir: data_dir.to_path_buf(),
             courses: Arc::new(Mutex::new(courses)),
+            orders: Arc::new(Mutex::new(orders)),
             rescanning: Arc::new(AtomicBool::new(false)),
         })
     }
@@ -72,7 +78,102 @@ impl DesktopState {
             .database
             .lock()
             .map_err(|_| IpcError::database_unavailable())?;
-        catalog(&database, &self.courses(), &self.covers_dir)
+        catalog_with_orders(
+            &database,
+            &self.courses(),
+            &self.orders_snapshot(),
+            &self.covers_dir,
+        )
+    }
+
+    /// Fotografia imutável das preferências de ordenação. Uso interno do Rust.
+    fn orders_snapshot(&self) -> CourseOrders {
+        self.orders
+            .lock()
+            .map(|orders| orders.clone())
+            .unwrap_or_default()
+    }
+
+    /// Define a ordem manual dos irmãos de um nó do curso.
+    ///
+    /// A lista precisa ser uma permutação exata dos irmãos do caminho `parent` (vazio para
+    /// os módulos diretamente sob o curso): um caminho de fora ou uma lista parcial é
+    /// recusado com [`IpcError::invalid_order`]. O curso precisa estar registrado. A ordem
+    /// vive no diretório de dados; nenhum arquivo do curso é lido além do catálogo.
+    pub fn set_course_order(
+        &self,
+        course_id: &str,
+        parent: &str,
+        children: &[String],
+    ) -> Result<(), IpcError> {
+        let Some(course) = self.course(course_id) else {
+            return Err(IpcError::course_not_found());
+        };
+        let siblings = {
+            let database = self
+                .database
+                .lock()
+                .map_err(|_| IpcError::database_unavailable())?;
+            let catalog = learnvault_core::build_catalog(&database, &course.id)
+                .map_err(|_| IpcError::catalog_unavailable())?;
+            let shaped: Vec<learnvault_core::CatalogNode> = catalog
+                .categories
+                .into_iter()
+                .map(learnvault_core::course_file_lessons)
+                .collect();
+            learnvault_core::sibling_paths(&shaped, parent).ok_or_else(IpcError::invalid_order)?
+        };
+        if siblings.is_empty() || !learnvault_core::validate_siblings(&siblings, children) {
+            return Err(IpcError::invalid_order());
+        }
+
+        let mut guard = self
+            .orders
+            .lock()
+            .map_err(|_| IpcError::order_unavailable())?;
+        let mut next = guard.clone();
+        next.entry(course_id.to_owned())
+            .or_default()
+            .set_children(parent, children.to_vec());
+        store_orders(&self.orders_dir, &next).map_err(|_| IpcError::order_unavailable())?;
+        *guard = next;
+        Ok(())
+    }
+
+    /// Restaura a ordem automática de um pai específico (`Some`) ou de todo o curso (`None`).
+    ///
+    /// É idempotente: restaurar o que já estava automático devolve `false`.
+    pub fn reset_course_order(
+        &self,
+        course_id: &str,
+        parent: Option<&str>,
+    ) -> Result<bool, IpcError> {
+        if self.course(course_id).is_none() {
+            return Err(IpcError::course_not_found());
+        }
+        let mut guard = self
+            .orders
+            .lock()
+            .map_err(|_| IpcError::order_unavailable())?;
+        let mut next = guard.clone();
+        let removed = match parent {
+            Some(parent) => next
+                .get_mut(course_id)
+                .is_some_and(|order| order.remove(parent)),
+            None => next.remove(course_id).is_some(),
+        };
+        if !removed {
+            return Ok(false);
+        }
+        if next
+            .get(course_id)
+            .is_some_and(learnvault_core::CatalogOrder::is_empty)
+        {
+            next.remove(course_id);
+        }
+        store_orders(&self.orders_dir, &next).map_err(|_| IpcError::order_unavailable())?;
+        *guard = next;
+        Ok(true)
     }
 
     /// Executa o seletor nativo de imagens e grava a capa do curso escolhido.

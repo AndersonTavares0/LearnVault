@@ -35,6 +35,15 @@ O LearnVault passa a ser um workspace Rust:
 - `apps/web/` — uma única SPA em Svelte 5 + TypeScript + Vite, sem SvelteKit, com roteamento por
   hash e dois builds que selecionam o transporte em tempo de compilação.
 
+### Estado após a migração
+
+Em 2026-10-19, as fases de implementação do stack foram registradas como concluídas na issue #41.
+O serviço Go foi removido na PR #206; o importador explícito de bancos Go legados permanece. A
+janela Tauri e as fatias de IPC descritas em `docs/architecture/overview.md` estão implementadas.
+Isso não conclui a distribuição: Flatpak/Linux desktop segue pendente de validação em sandbox, e
+outros alvos pendentes estão listados em `docs/product/roadmap.md` e
+`docs/operations/distribution.md`.
+
 Decisões de domínio que a reescrita mantém:
 
 - Identidade de mídia (`media_id`) separada da localização física. `relative_path` é a
@@ -101,9 +110,10 @@ A execução acontece por fases: governança, `crates/core`, `crates/server`, `a
 
 - **Empacotamento Flatpak:** tratado como formato preferencial, não definitivo; permissões,
   acesso persistente às bibliotecas e reprodução de mídia precisam de validação técnica.
-- **Reprodução de mídia no desktop:** depende de streaming parcial no protocolo escolhido;
-  será investigado na fase do desktop.
-- **Versão única entre binários:** exige uma fonte única de verdade para o número de versão.
+- **Reprodução no Linux desktop empacotado:** o protocolo e os testes existem, mas o Flatpak ainda
+  precisa de smoke test real para validar permissões persistentes e reprodução dentro do sandbox.
+- **Versão única entre binários:** exige uma fonte única de verdade para o número de versão; a
+  versão do servidor já é exposta em `--version` e `/api/healthz`.
 
 ## Validation and rollback
 
@@ -111,6 +121,9 @@ Validação prevista: cobertura de testes Rust de pelo menos 80% medida com `car
 `cargo fmt --check`, `cargo clippy` sem avisos, builds da SPA nos dois modos e execução dos
 artefatos de distribuição antes de cada release.
 
-Rollback: enquanto a reescrita não estiver concluída, o serviço Go permanece no repositório e no
-histórico, de modo que a implementação anterior pode ser retomada. A remoção do Go acontece em
-pull request próprio, somente quando o MVP em Rust cobrir os requisitos aprovados.
+Registro histórico: durante a reescrita, o serviço Go permaneceu disponível até sua remoção na PR
+#206, em 2026-10-17. Hoje o runtime Go não está no repositório. A importação de bancos SQLite
+legados é explícita e backup-first; o procedimento e os limites estão em
+`docs/operations/migration-go-to-rust.md`. Não houve ensaio comprovado de cutover/rollback com
+volumes reais; isso continua sendo uma tarefa operacional separada, não uma etapa de código ainda
+por implementar.

@@ -28,6 +28,10 @@ HealthTimeout=3s
 [Service]
 Restart=always
 TimeoutStartSec=900
+LoadCredential=admin_username:%h/stacks/learnvault/secrets/admin_username
+LoadCredential=admin_password:%h/stacks/learnvault/secrets/admin_password
+Environment=ADMIN_USERNAME_FILE=%d/admin_username
+Environment=ADMIN_PASSWORD_FILE=%d/admin_password
 
 [Install]
 WantedBy=default.target
