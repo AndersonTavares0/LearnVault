@@ -1,5 +1,12 @@
 # LearnVault agent instructions
 
+LearnVault organiza pastas de cursos que o usuário já possui em um espaço de estudo
+auto-hospedado, sem mover nem alterar os arquivos originais. O produto é pequeno,
+sustentável e autocontido: servidor Rust (`crates/server`, Axum, SQLite), SPA Svelte
+(`apps/web`), núcleo de domínio compartilhado (`crates/core`) e aplicativo desktop
+offline Tauri 2 (`crates/desktop`). Docker/Podman são adaptadores opcionais de deploy,
+não requisitos de runtime.
+
 ## Mandatory rule for every agent
 
 Every agent working in this repository must follow this instruction file, read
@@ -11,6 +18,34 @@ to implementation, review, planning, documentation, and automation agents.
 OpenCode loads this file automatically. Project-specific reviewer profiles live in
 `.opencode/agents/`; shared policies, playbooks, checklists, and templates live in
 `.agents/`.
+
+## Commands
+
+```sh
+pnpm install --frozen-lockfile   # once per checkout
+pnpm dev                         # API Rust em http://127.0.0.1:8090 + SPA com recarga
+pnpm dev:tauri                   # aplicativo desktop (Tauri) durante o desenvolvimento
+pnpm verify                      # checks de PR (SPA + Rust + desktop); --fast pula builds e audit
+pnpm run check                   # lints/types da SPA
+pnpm run test:scripts            # node --test scripts/*.test.mjs (roda na CI em todo PR)
+pnpm run build / build:desktop   # builds da SPA e do bundle desktop
+pnpm audit --audit-level=low     # auditoria de dependências
+cargo fmt --all -- --check       # formatação Rust
+cargo clippy --all-targets -- -D warnings
+cargo test --all
+```
+
+A versão do Rust é garantida por `rust-toolchain.toml`; Node.js 24 e pnpm 11.28.5 vêm de
+`packageManager` em `package.json`. Docker é opcional.
+
+## Conventions
+
+- Documentação, Wiki e textos editoriais em pt-BR; Conventional Commits com prefixo em
+  inglês e descrição em pt-BR (ex.: `docs: ajustar README`).
+- A biblioteca de cursos é somente leitura: nenhuma mudança pode escrever, mover ou
+  copiar os arquivos de origem.
+- Nunca inclua segredos, dados de cursos, bancos de dados ou mídia gerada em commits,
+  logs ou prompts. Testes usam diretórios temporários e fixtures sintéticas.
 
 ## Multi-agent collaboration
 
@@ -36,3 +71,14 @@ agent, without requiring any shared orchestration infrastructure:
 - **Act responsibly with autonomy** — continue independent tasks without asking for
   confirmation, and only request guidance on genuine conflicts, ambiguous
   ownership, or risk of losing work.
+
+## Repository map
+
+- `crates/` — workspace Rust: `core` (domínio, catálogo, estudo, SQLite), `server`
+  (Axum + API HTTP), `desktop` (Tauri 2).
+- `apps/web/` — SPA SvelteKit, membro do workspace pnpm.
+- `docs/` — documentação canônica; navegue por [`docs/README.md`](docs/README.md).
+- `.agents/` — políticas, playbooks, checklists e templates compartilhados.
+- `.opencode/agents/` — perfis de revisão por tipo de agente.
+- `deploy/`, `scripts/`, `testdata/` — adaptadores de deploy, automações e fixtures
+  sintéticas.
