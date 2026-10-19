@@ -13,10 +13,6 @@
   </p>
 </div>
 
-<p align="center">
-  <img src="docs/qa/course-navigation/after-dark.webp" alt="Catálogo do LearnVault com um curso e seus módulos organizados para estudo" width="900">
-</p>
-
 ## Estude no seu ritmo
 
 O LearnVault organiza cursos que você já tem em pastas. Ele cria um catálogo para encontrar aulas, assistir a vídeos, ouvir áudios e acompanhar seu progresso, sem mover nem alterar os arquivos originais.
