@@ -116,15 +116,22 @@ describe('transport contract', () => {
 	});
 	it('normalizes the Rust user and recursive catalog contract', () => {
 		expect(normalizeUser({ user_id: 'u1', username: 'admin', is_admin: true, must_change_credentials: true })).toEqual({ userId: 'u1', username: 'admin', role: 'admin', isAdmin: true, mustChangeCredentials: true });
-		const catalog = normalizeCatalog({ complete: true, loose_files: [], categories: [{ title: 'Física', path: '', role: 'course', course_id: 'course-1', files: [], loose_files: [{ media_id: 'loose', name: 'nota.pdf', path: 'nota.pdf', size: 3, kind: 'material', availability: 'missing', unverified: true }], children: [{ title: 'Módulo', path: 'mod', role: 'module', files: [], loose_files: [], children: [{ title: 'Aula', path: 'mod/aula', role: 'lesson', files: [{ media_id: 'm1', name: 'aula.mp4', path: 'mod/aula.mp4', size: 10, kind: 'media', availability: 'available', unverified: false }, { media_id: 's1', name: 'aula.vtt', path: 'mod/aula.vtt', size: 2, kind: 'subtitle', availability: 'available', unverified: false }], loose_files: [], children: [] }] }] }] });
+		const catalog = normalizeCatalog({ complete: true, loose_files: [], categories: [{ title: 'Física', path: '', role: 'course', course_id: 'course-1', files: [], loose_files: [{ media_id: 'loose', name: 'nota.pdf', path: 'nota.pdf', size: 3, kind: 'material', availability: 'missing', unverified: true }], children: [{ title: 'Módulo', path: 'mod', role: 'module', files: [], loose_files: [], children: [{ title: 'Aula', path: 'mod/aula', role: 'lesson', files: [{ media_id: 'm1', name: 'aula.mp4', path: 'mod/aula.mp4', size: 10, mtime_seconds: 1_760_000_000, kind: 'media', availability: 'available', unverified: false }, { media_id: 's1', name: 'aula.vtt', path: 'mod/aula.vtt', size: 2, kind: 'subtitle', availability: 'available', unverified: false }], loose_files: [], children: [] }] }] }] });
 		expect(catalog.complete).toBe(true);
 		expect(catalog.nodes[0]).toMatchObject({ title: 'Física', role: 'course', courseId: 'course-1' });
 		expect(catalog.nodes[0].looseFiles[0]).toMatchObject({ mediaId: 'loose', path: 'nota.pdf', availability: 'missing', unverified: true });
 		expect(catalog.nodes[0].children[0].children[0].files[0].path).toBe('mod/aula.mp4');
 		expect(catalog.nodes[0].children[0].children[0].files[0].mediaId).toBe('m1');
+		expect(catalog.nodes[0].children[0].children[0].files[0].mtimeSeconds).toBe(1_760_000_000);
 		expect(catalog.nodes[0].children[0].children[0].files[1].kind).toBe('subtitle');
 		// Nós internos não carregam identidade de curso: ela vive apenas no topo.
 		expect(catalog.nodes[0].children[0].courseId).toBeUndefined();
+	});
+	it('rejects invalid media revision metadata when present', () => {
+		const file = { media_id: 'm1', name: 'aula.mp4', path: 'aula.mp4', size: 10, kind: 'media' };
+		for (const mtime_seconds of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1, '1760000000']) {
+			expect(() => normalizeCatalog({ complete: true, categories: [], loose_files: [{ ...file, mtime_seconds }] })).toThrow('Resposta inválida do servidor');
+		}
 	});
 	it('requires media_id on canonical root loose files and preserves them when present', () => {
 		// Um arquivo solto de raiz em payload canônico segue a mesma regra dos nós: identidade

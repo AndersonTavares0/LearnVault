@@ -415,3 +415,75 @@ test('reports a lesson whose media disappears from disk and restores it when the
 	await expect(lessonB).toHaveAttribute('href', /#\/player\//);
 	await expect(lessonB).not.toContainText('ausente');
 });
+
+test('renders an automatic video thumbnail in the built SPA without leaking library paths', async ({ page, server }) => {
+	await page.goto(`${server.baseURL}/#/login`);
+	await page.getByLabel('Usuário').fill('admin');
+	await page.getByLabel('Senha', { exact: true }).fill(ADMIN_PASSWORD);
+	await page.getByRole('button', { name: 'Entrar' }).click();
+	await expect(page.getByRole('heading', { name: 'Início' })).toBeAttached();
+
+	// Grava um WebM sintético inteiramente no navegador e o entrega ao servidor como arquivo
+	// do curso. Nenhum vídeo real, asset externo ou dependência de codec entra no repositório:
+	// a mídia é gerada pelo próprio decoder do WebView sob teste.
+	const recorded = await page.evaluate(async () => {
+		const canvas = document.createElement('canvas');
+		canvas.width = 320;
+		canvas.height = 180;
+		const context = canvas.getContext('2d');
+		if (!context) throw new Error('sem contexto 2D');
+		if (!window.MediaRecorder || !MediaRecorder.isTypeSupported('video/webm')) throw new Error('MediaRecorder WebM indisponível');
+		const stream = canvas.captureStream(12);
+		const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+		const chunks: Blob[] = [];
+		recorder.ondataavailable = (event) => { if (event.data.size) chunks.push(event.data); };
+		const stopped = new Promise<void>((resolve) => { recorder.onstop = () => resolve(); });
+		recorder.start();
+		const start = performance.now();
+		const draw = () => {
+			const t = (performance.now() - start) / 1000;
+			context.fillStyle = '#17324d';
+			context.fillRect(0, 0, 320, 180);
+			context.fillStyle = '#f4c95d';
+			context.fillRect(Math.round((t * 160) % 240), 40, 60, 60);
+			if (recorder.state === 'recording') requestAnimationFrame(draw);
+		};
+		requestAnimationFrame(draw);
+		await new Promise((resolve) => setTimeout(resolve, 900));
+		recorder.stop();
+		await stopped;
+		stream.getTracks().forEach((track) => track.stop());
+		const buffer = new Uint8Array(await new Blob(chunks, { type: 'video/webm' }).arrayBuffer());
+		let binary = '';
+		for (const byte of buffer) binary += String.fromCharCode(byte);
+		return btoa(binary);
+	});
+	expect(recorded.length).toBeGreaterThan(0);
+
+	// A lição "Aula zero" ordena antes de "Curso", então o vídeo decodificável é a primeira
+	// mídia da árvore e o card do curso passa a ter miniatura automática.
+	const lessonDir = join(server.libraryPath, 'Categoria', 'Aula zero');
+	await mkdir(lessonDir, { recursive: true });
+	await writeFile(join(lessonDir, 'Video.webm'), Buffer.from(recorded, 'base64'));
+	await page.getByRole('button', { name: 'Indexar cursos' }).click();
+	await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
+
+	const thumbnail = page.locator('.course-thumbnail').first();
+	await expect(thumbnail).toBeVisible({ timeout: 30_000 });
+	// `naturalWidth` só é positivo quando a CSP do servidor permite carregar o `blob:`; um
+	// bloqueio de imagem deixaria a capa gerada no lugar e este valor seria zero.
+	await expect
+		.poll(() => thumbnail.evaluate((element) => (element as HTMLImageElement).naturalWidth), { timeout: 30_000 })
+		.toBeGreaterThan(0);
+	const image = await thumbnail.evaluate((element) => {
+		const node = element as HTMLImageElement;
+		return { width: node.naturalWidth, height: node.naturalHeight, src: node.src };
+	});
+	expect(image.src.startsWith('blob:')).toBe(true);
+	expect(image.width).toBeLessThanOrEqual(320);
+	expect(image.height).toBeLessThanOrEqual(180);
+	// O card nunca expõe o caminho do arquivo no sistema de arquivos.
+	expect(image.src).not.toContain(server.libraryPath);
+	expect(image.src).not.toContain('Categoria');
+	expect(image.src).not.toContain('Video.webm');
+});

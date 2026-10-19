@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use learnvault_desktop::DesktopState;
 use learnvault_desktop::media::{
     MAIN_WEBVIEW_LABEL, MAX_SMALL_FILE_BYTES, MEDIA_HOST, MEDIA_SCHEME, MediaMethod,
-    MediaRejection, MediaResponse, RawMediaRequest, parse_media_request,
+    MediaRejection, MediaResponse, RawMediaRequest, apply_media_cors, parse_media_request,
 };
 
 /// Conteúdo sintético pequeno com extensão de imagem para as fixtures.
@@ -75,6 +75,145 @@ fn raw<'a>(method: &'a str, path: &'a str) -> RawMediaRequest<'a> {
         range: None,
         webview_label: MAIN_WEBVIEW_LABEL,
     }
+}
+
+#[test]
+fn media_cors_reflects_only_the_exact_valid_window_origin_without_changing_playback() {
+    let window_origin = "http://tauri.localhost";
+    for request_origin in [Some(window_origin), Some("http://evil.example"), None] {
+        let response = MediaResponse {
+            status: 206,
+            headers: vec![("Content-Type".to_owned(), "video/mp4".to_owned())],
+            body: b"synthetic-range".to_vec(),
+        };
+
+        let response = apply_media_cors(response, request_origin, window_origin);
+
+        assert_eq!(response.status, 206);
+        assert_eq!(response.body, b"synthetic-range");
+        assert_eq!(
+            response.header("Access-Control-Allow-Origin"),
+            request_origin.filter(|origin| *origin == window_origin)
+        );
+        assert_eq!(response.header("Vary"), request_origin.map(|_| "Origin"));
+    }
+}
+
+#[test]
+fn media_cors_rejects_malformed_or_non_origin_values() {
+    for request_origin in [
+        "http://tauri.localhost/",
+        "null",
+        "1http://tauri.localhost",
+        "http://tauri.localhost:99999",
+        "http://user@tauri.localhost",
+    ] {
+        let response = MediaResponse {
+            status: 200,
+            headers: Vec::new(),
+            body: b"synthetic-video".to_vec(),
+        };
+
+        let response = apply_media_cors(response, Some(request_origin), request_origin);
+
+        assert_eq!(response.status, 200);
+        assert_eq!(response.body, b"synthetic-video");
+        assert_eq!(response.header("Access-Control-Allow-Origin"), None);
+        assert_eq!(response.header("Vary"), Some("Origin"));
+    }
+}
+
+#[test]
+fn media_cors_supports_tauri_custom_localhost_origins() {
+    let response = MediaResponse {
+        status: 200,
+        headers: Vec::new(),
+        body: b"synthetic-video".to_vec(),
+    };
+
+    let response = apply_media_cors(response, Some("tauri://localhost"), "tauri://localhost");
+
+    assert_eq!(
+        response.header("Access-Control-Allow-Origin"),
+        Some("tauri://localhost")
+    );
+}
+
+#[test]
+fn media_cors_preserves_existing_vary_values_and_adds_origin_once() {
+    let response = MediaResponse {
+        status: 200,
+        headers: vec![
+            ("Vary".to_owned(), "Accept-Encoding".to_owned()),
+            ("Content-Type".to_owned(), "video/mp4".to_owned()),
+        ],
+        body: b"synthetic-video".to_vec(),
+    };
+
+    let response = apply_media_cors(
+        response,
+        Some("http://tauri.localhost"),
+        "http://tauri.localhost",
+    );
+
+    assert_eq!(response.header("Vary"), Some("Accept-Encoding, Origin"));
+    assert_eq!(
+        response.header("Access-Control-Allow-Origin"),
+        Some("http://tauri.localhost")
+    );
+}
+
+#[test]
+fn media_cors_does_not_duplicate_an_existing_origin_vary_token() {
+    let response = MediaResponse {
+        status: 200,
+        headers: vec![("Vary".to_owned(), "Accept-Encoding, origin".to_owned())],
+        body: Vec::new(),
+    };
+
+    let response = apply_media_cors(
+        response,
+        Some("http://tauri.localhost"),
+        "http://tauri.localhost",
+    );
+
+    assert_eq!(response.header("Vary"), Some("Accept-Encoding, origin"));
+}
+
+#[test]
+fn media_cors_never_reflects_an_inherited_allow_origin_header() {
+    let response = MediaResponse {
+        status: 200,
+        headers: vec![("Access-Control-Allow-Origin".to_owned(), "*".to_owned())],
+        body: b"synthetic-video".to_vec(),
+    };
+
+    let response = apply_media_cors(
+        response,
+        Some("http://evil.example"),
+        "http://tauri.localhost",
+    );
+
+    assert_eq!(response.header("Access-Control-Allow-Origin"), None);
+    assert_eq!(response.header("Vary"), Some("Origin"));
+}
+
+#[test]
+fn media_cors_withholds_the_allow_origin_outside_success_statuses() {
+    let response = MediaResponse {
+        status: 416,
+        headers: Vec::new(),
+        body: Vec::new(),
+    };
+
+    let response = apply_media_cors(
+        response,
+        Some("http://tauri.localhost"),
+        "http://tauri.localhost",
+    );
+
+    assert_eq!(response.header("Access-Control-Allow-Origin"), None);
+    assert_eq!(response.header("Vary"), Some("Origin"));
 }
 
 /// Entrega uma mídia pelo caminho do protocolo, montando a URI canônica.

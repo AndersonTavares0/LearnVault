@@ -77,6 +77,8 @@ pub struct CatalogFile {
     pub path: String,
     /// Tamanho em bytes na última observação.
     pub size: u64,
+    /// Modificação da mídia em segundos desde a época Unix na última observação.
+    pub mtime_seconds: i64,
     /// Tipo derivado do nome e do tamanho.
     pub kind: MediaKind,
     /// Disponibilidade na última varredura.
@@ -145,6 +147,7 @@ pub fn build_catalog(db: &Database, library_id: &str) -> Result<Catalog> {
             name,
             path: row.relative_path.clone(),
             size,
+            mtime_seconds: row.mtime,
             availability: availability_of(&row.availability),
             unverified: scan.failed || is_under_unverified(&row.relative_path_key, &scan.areas),
         };
@@ -472,6 +475,7 @@ struct MediaRow {
     relative_path: String,
     relative_path_key: String,
     size: i64,
+    mtime: i64,
     availability: String,
 }
 
@@ -535,7 +539,7 @@ fn last_scan(db: &Database, library_id: &str, mode: KeyMode) -> Result<LastScan>
 /// própria linha.
 fn media_rows(db: &Database, library_id: &str) -> Result<Vec<MediaRow>> {
     let mut statement = db.connection().prepare(
-        "SELECT media_id, relative_path, relative_path_key, size, availability
+        "SELECT media_id, relative_path, relative_path_key, size, mtime, availability
          FROM media
          WHERE library_id = ?1
            AND NOT EXISTS (SELECT 1
@@ -550,7 +554,8 @@ fn media_rows(db: &Database, library_id: &str) -> Result<Vec<MediaRow>> {
             relative_path: row.get(1)?,
             relative_path_key: row.get(2)?,
             size: row.get(3)?,
-            availability: row.get(4)?,
+            mtime: row.get(4)?,
+            availability: row.get(5)?,
         })
     })?;
     let mut result = Vec::new();

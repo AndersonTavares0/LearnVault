@@ -53,6 +53,7 @@ fn file(
         name: "aula.mp4".to_owned(),
         path: "cat/aula.mp4".to_owned(),
         size: 10,
+        mtime_seconds: 1_760_000_000,
         kind,
         availability,
         unverified,
@@ -145,6 +146,7 @@ fn catalog_dto_uses_the_snake_case_spa_contract() {
         "cat/aula.mp4"
     );
     assert_eq!(json["categories"][0]["loose_files"][0]["size"], 10);
+    assert!(json["categories"][0]["loose_files"][0]["mtime_seconds"].is_number());
     assert_eq!(json["categories"][0]["loose_files"][0]["kind"], "material");
     assert_eq!(
         json["categories"][0]["loose_files"][0]["availability"],
@@ -184,6 +186,7 @@ fn catalog_dto_uses_the_snake_case_spa_contract() {
     assert_eq!(node_file["name"], "aula.mp4");
     assert_eq!(node_file["path"], "cat/aula.mp4");
     assert_eq!(node_file["size"], 10);
+    assert!(node_file["mtime_seconds"].is_number());
     assert_eq!(node_file["kind"], "media");
     assert_eq!(node_file["availability"], "available");
     assert_eq!(node_file["unverified"], false);

@@ -47,6 +47,23 @@ export function courseMonogram(title: string): string {
 	return initials || '?';
 }
 
+/** Fonte efetiva da capa, na ordem de precedência definida na ADR 0002. */
+export type CourseCoverSource = 'manual' | 'thumbnail' | 'generated';
+
+/**
+ * Resolve a capa a exibir: capa personalizada tem precedência, seguida da miniatura
+ * automática e, como fallback, da capa gerada pelo título. Valores vazios contam como
+ * ausentes, então a futura fonte de upload (issue #237) só precisa informar uma URL.
+ */
+export function selectCourseCoverSource(input: {
+	manualCoverUrl?: string | null;
+	thumbnailUrl?: string | null;
+}): CourseCoverSource {
+	if (input.manualCoverUrl) return 'manual';
+	if (input.thumbnailUrl) return 'thumbnail';
+	return 'generated';
+}
+
 /** Capa determinística do curso. */
 export function courseCover(title: string): CourseCover {
 	const hash = hashTitle(normalize(title).toLowerCase());
