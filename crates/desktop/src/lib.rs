@@ -70,9 +70,9 @@ pub use covers::{
     parse_cover_request, valid_course_id,
 };
 pub use dto::{
-    CatalogDto, CatalogFileDto, CatalogNodeDto, CoverDto, CoverRemovalDto,
-    MediaRemovalImpactDto, MediaRemovalOutcomeDto, RecentStudyDto, RescanSummaryDto,
-    StudyNoteDto, StudyNotesDto, StudyProgressDto,
+    CatalogDto, CatalogFileDto, CatalogNodeDto, CoverDto, CoverRemovalDto, MediaRemovalImpactDto,
+    MediaRemovalOutcomeDto, RecentStudyDto, RescanSummaryDto, StudyNoteDto, StudyNotesDto,
+    StudyProgressDto,
 };
 pub use error::{IpcError, IpcErrorCode};
 pub use ordering::{CourseOrders, OrderError, order_path};

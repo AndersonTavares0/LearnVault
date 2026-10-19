@@ -84,7 +84,7 @@ pub(crate) async fn list(
 ) -> Response {
     let user = match user_or_response(&state, &headers).await {
         Ok(user) => user,
-        Err(response) => return response,
+        Err(failure) => return failure.into_response(),
     };
     let Some(query) = raw
         .as_deref()
@@ -118,7 +118,7 @@ pub(crate) async fn create(
     }
     let user = match user_or_response(&state, &headers).await {
         Ok(user) => user,
-        Err(response) => return response,
+        Err(failure) => return failure.into_response(),
     };
     let owner = user.user_id;
     match run(&state, move |db| {
@@ -148,7 +148,7 @@ pub(crate) async fn update(
     }
     let user = match user_or_response(&state, &headers).await {
         Ok(user) => user,
-        Err(response) => return response,
+        Err(failure) => return failure.into_response(),
     };
     let owner = user.user_id;
     match run(&state, move |db| {
@@ -171,7 +171,7 @@ pub(crate) async fn delete(
     }
     let user = match user_or_response(&state, &headers).await {
         Ok(user) => user,
-        Err(response) => return response,
+        Err(failure) => return failure.into_response(),
     };
     let owner = user.user_id;
     match run(&state, move |db| {
@@ -205,19 +205,49 @@ where
     .map_err(Failure::Core)
 }
 
-async fn user_or_response(state: &AppState, headers: &HeaderMap) -> Result<AuthSession, Response> {
+/// Falha da autenticação/limite antes de traduzir para HTTP.
+///
+/// A variante de erro é pequena de propósito: a resposta HTTP completa tem 128 bytes ou
+/// mais e o clippy do CI recusa um `Result` que carrega esse tamanho.
+enum AuthFailure {
+    /// A requisição não tem sessão válida.
+    Unauthorized,
+    /// A sessão exige troca de credenciais antes de continuar.
+    CredentialsRequired,
+    /// O servidor está sem capacidade para a tarefa.
+    Busy,
+    /// Falha inesperada do estado da aplicação.
+    Unavailable,
+}
+
+impl AuthFailure {
+    fn into_response(self) -> Response {
+        match self {
+            AuthFailure::Unauthorized => private(StatusCode::UNAUTHORIZED.into_response()),
+            AuthFailure::CredentialsRequired => {
+                error(StatusCode::FORBIDDEN, "credentials_change_required")
+            }
+            AuthFailure::Busy => service_unavailable(),
+            AuthFailure::Unavailable => {
+                error(StatusCode::INTERNAL_SERVER_ERROR, "notes_unavailable")
+            }
+        }
+    }
+}
+
+async fn user_or_response(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> Result<AuthSession, AuthFailure> {
     let Some(token) = request_token(headers) else {
-        return Err(private(StatusCode::UNAUTHORIZED.into_response()));
+        return Err(AuthFailure::Unauthorized);
     };
     match state.session_user(hash_session_token(&token)).await {
         Ok(Some(user)) if !user.must_change_credentials => Ok(user),
-        Ok(Some(_)) => Err(error(StatusCode::FORBIDDEN, "credentials_change_required")),
-        Ok(None) => Err(private(StatusCode::UNAUTHORIZED.into_response())),
-        Err(StateError::Capacity) => Err(service_unavailable()),
-        Err(_) => Err(error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "notes_unavailable",
-        )),
+        Ok(Some(_)) => Err(AuthFailure::CredentialsRequired),
+        Ok(None) => Err(AuthFailure::Unauthorized),
+        Err(StateError::Capacity) => Err(AuthFailure::Busy),
+        Err(_) => Err(AuthFailure::Unavailable),
     }
 }
 

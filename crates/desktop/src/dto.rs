@@ -387,7 +387,10 @@ mod tests {
     fn the_notes_list_uses_the_same_envelope_as_the_http_adapter() {
         // A SPA valida `{ items: [...] }` nos dois transportes: um array puro faria o
         // painel de notas recusar a lista inteira no desktop.
-        let value = serde_json::to_value(StudyNotesDto { items: vec![note()] }).unwrap();
+        let value = serde_json::to_value(StudyNotesDto {
+            items: vec![note()],
+        })
+        .unwrap();
         assert_eq!(
             value,
             serde_json::json!({

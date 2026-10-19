@@ -40,7 +40,10 @@ pub fn list_notes(db: &Database, owner_id: &str, media_id: &str) -> Result<Vec<S
          LIMIT ?3",
     )?;
     Ok(statement
-        .query_map(params![owner_id, media_id, MAX_NOTES_PER_MEDIA as i64], note_from_row)?
+        .query_map(
+            params![owner_id, media_id, MAX_NOTES_PER_MEDIA as i64],
+            note_from_row,
+        )?
         .collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
@@ -148,12 +151,12 @@ fn validate(owner_id: &str, text: &str, position_seconds: Option<i64>) -> Result
     if text.trim().is_empty() || text.len() > MAX_NOTE_TEXT_BYTES {
         return Err(Error::InvalidStudyNote);
     }
-    if let Some(position) = position_seconds {
-        if position < 0 {
-            return Err(Error::InvalidStudyPosition {
-                position_seconds: position,
-            });
-        }
+    if let Some(position) = position_seconds
+        && position < 0
+    {
+        return Err(Error::InvalidStudyPosition {
+            position_seconds: position,
+        });
     }
     Ok(())
 }

@@ -372,11 +372,7 @@ async fn http_notes_enforce_csrf_on_every_mutation() {
         }
         let response = app
             .clone()
-            .oneshot(
-                request
-                    .body(Body::from(body.unwrap_or_default()))
-                    .unwrap(),
-            )
+            .oneshot(request.body(Body::from(body.unwrap_or_default())).unwrap())
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::FORBIDDEN);

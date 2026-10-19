@@ -28,7 +28,10 @@ fn notes_support_owner_scoped_crud_validation_and_persistence() {
         ("Initial note", Some(42))
     );
     assert_eq!(list_notes(&db, OTHER, "m1").unwrap(), []);
-    assert_eq!(list_notes(&db, OWNER, "m1").unwrap(), [created.clone()]);
+    assert_eq!(
+        list_notes(&db, OWNER, "m1").unwrap(),
+        std::slice::from_ref(&created)
+    );
 
     let edited = update_note(&db, OWNER, created.note_id, "Edited note", None).unwrap();
     assert_eq!(
@@ -60,7 +63,10 @@ fn notes_support_owner_scoped_crud_validation_and_persistence() {
     let note = create_note(&persisted, OWNER, "m1", "Durable", None).unwrap();
     drop(persisted);
     let reopened = Database::open(path.path()).unwrap();
-    assert_eq!(list_notes(&reopened, OWNER, "m1").unwrap(), [note.clone()]);
+    assert_eq!(
+        list_notes(&reopened, OWNER, "m1").unwrap(),
+        std::slice::from_ref(&note)
+    );
     delete_note(&reopened, OWNER, note.note_id).unwrap();
     assert!(list_notes(&reopened, OWNER, "m1").unwrap().is_empty());
     assert!(delete_note(&reopened, OTHER, note.note_id).is_err());
@@ -129,7 +135,10 @@ fn notes_keep_updated_at_stable_when_the_content_does_not_change() {
         changed.updated_at > created.updated_at,
         "uma alteração real move updated_at"
     );
-    assert_eq!(changed.created_at, created.created_at, "created_at é imutável");
+    assert_eq!(
+        changed.created_at, created.created_at,
+        "created_at é imutável"
+    );
 }
 
 #[test]
@@ -162,7 +171,10 @@ fn notes_list_follows_creation_order() {
     let third = create_note(&db, OWNER, "m1", "terceira", None).unwrap();
 
     let ids = |notes: Vec<learnvault_core::StudyNote>| {
-        notes.into_iter().map(|note| note.note_id).collect::<Vec<i64>>()
+        notes
+            .into_iter()
+            .map(|note| note.note_id)
+            .collect::<Vec<i64>>()
     };
     assert_eq!(
         ids(list_notes(&db, OWNER, "m1").unwrap()),
@@ -190,5 +202,8 @@ fn notes_store_the_text_verbatim() {
     // reescreve o conteúdo.
     let created = create_note(&db, OWNER, "m1", "  texto com espaços  ", None).unwrap();
     assert_eq!(created.text, "  texto com espaços  ");
-    assert_eq!(list_notes(&db, OWNER, "m1").unwrap()[0].text, "  texto com espaços  ");
+    assert_eq!(
+        list_notes(&db, OWNER, "m1").unwrap()[0].text,
+        "  texto com espaços  "
+    );
 }
