@@ -32,6 +32,7 @@ Cada issue deve ter uma pessoa responsável, definida pelo `assignee`.
 - Features usam `.github/ISSUE_TEMPLATE/feature.yml`.
 - Documentação e typos usam `.github/ISSUE_TEMPLATE/documentation.yml`.
 - Dependências e CI usam `.github/ISSUE_TEMPLATE/maintenance.yml`.
+- Planejamento de trabalho usa `.github/ISSUE_TEMPLATE/planning.yml`, com a label `planning`.
 - Vulnerabilidades usam a política privada de segurança, nunca uma issue pública.
 - Pull requests usam `.github/pull_request_template.md`.
 - Dúvidas e decisões abertas devem usar GitHub Discussions.
@@ -138,7 +139,10 @@ usa cache e mantém timeouts curtos.
 
 O job `Rust tests and lints` verifica formatação, lints, testes e a cobertura do núcleo em Rust; o
 job `Desktop crate compile and guards` compila o crate desktop e roda seus testes; e o job
-`Container build (Rust)` constrói e valida a imagem OCI Rust. Toda promoção a obrigatório exige decisão explícita do mantenedor; os checks acoplados ao Go foram
+`Container build (Rust)` constrói e valida a imagem OCI Rust. O job `Rust dependency audit`
+audita o `Cargo.lock` com `cargo audit --deny unsound`, reprovando vulnerabilidades e advisories
+`unsound`, com uma única exceção estreita e documentada em `.cargo/audit.toml`
+(`RUSTSEC-2024-0429`, `glib`). Toda promoção a obrigatório exige decisão explícita do mantenedor; os checks acoplados ao Go foram
 removidos na Fase 5 (PR #206).
 
 O Wiki sync não é check obrigatório: ele roda após mudanças mapeadas chegarem à `main` ou por
@@ -147,7 +151,7 @@ execução manual, escreve somente páginas gerenciadas e não reage a eventos d
 ## Labels automáticas
 
 `.github/labeler.yml` e o workflow `Labeler` classificam pull requests por arquivos
-alterados: `area:web`, `area:rust`, `area:desktop`, `area:go`, `area:docs`, `area:ci` e
+alterados: `area:web`, `area:rust`, `area:desktop`, `area:docs`, `area:ci` e
 `area:deploy`, além de `tests` e `dependencies`. O workflow usa `actions/labeler` fixado em
 SHA completo, roda em `pull_request_target`, não faz checkout, não usa segredos e não executa
 código da pull request; a configuração é lida da base confiável e execuções vindas de forks

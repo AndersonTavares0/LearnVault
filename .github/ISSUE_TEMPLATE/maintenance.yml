@@ -1,8 +1,6 @@
 name: Dependências ou manutenção de CI
 description: Atualize dependências ou faça um ajuste simples de CI
 title: "chore: "
-labels:
-  - maintenance
 body:
   - type: dropdown
     id: area

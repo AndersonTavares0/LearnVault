@@ -19,12 +19,13 @@ function decodeSegment(value: string | undefined): string | null {
  * o caminho relativo da aula só é único por curso, então a identidade do curso faz parte
  * da rota. `#/settings` abre as preferências locais e não identifica curso algum.
  * `#/player/<caminho>` é a forma legada de um arquivo solto sem curso dono;
- * o caminho deve começar a busca global. Qualquer outro valor cai no login.
+ * o caminho deve começar a busca global. Qualquer outro valor cai na rota padrão do build:
+ * o login no servidor e a tela inicial no desktop, que não tem sessão.
  */
-export function locationFromHash(hash: string): HashLocation {
+export function locationFromHash(hash: string, fallback: Route = 'login'): HashLocation {
 	const value = hash.replace(/^#\/?/, '');
 	const [name, ...parts] = value.split('/');
-	const route = name === 'home' || name === 'course' || name === 'player' || name === 'settings' ? name : 'login';
+	const route = name === 'home' || name === 'course' || name === 'player' || name === 'settings' ? name : fallback;
 	if (route === 'course') return { route, courseId: decodeSegment(parts[0]), lessonPath: null };
 	if (route === 'player') {
 		if (parts.length === 0) return { route, courseId: null, lessonPath: null };
@@ -34,8 +35,8 @@ export function locationFromHash(hash: string): HashLocation {
 	return { route, courseId: null, lessonPath: null };
 }
 
-export function routeFromHash(hash: string): Route {
-	return locationFromHash(hash).route;
+export function routeFromHash(hash: string, fallback: Route = 'login'): Route {
+	return locationFromHash(hash, fallback).route;
 }
 
 /** Monta o hash canônico de uma rota. */
@@ -104,29 +105,78 @@ export function findLesson(catalog: Catalog | null, courseId: string | null, les
 	return standaloneMedia(catalog, (file) => file.path === lessonPath);
 }
 
-/** Localização de uma aula pelo `media_id`: o curso e a aula que a contêm. */
-export function findLessonLocation(catalog: Catalog | null, mediaId: string | null): { courseId: string; lesson: Lesson } | null {
+/** Localização de uma aula pelo `media_id`: o curso, o módulo (quando houver) e a aula. */
+export type LessonLocation = {
+	courseId: string;
+	courseTitle: string;
+	moduleTitle: string | null;
+	lesson: Lesson;
+};
+
+// Mídia tocável: um arquivo de mídia que a última varredura não marcou como ausente.
+function playableMedia(file: FileEntry): boolean {
+	return file.kind === 'media' && file.availability?.trim().toLowerCase() !== 'missing';
+}
+
+// Agrupador visível de aulas na árvore canônica: módulo ou categoria. O primeiro nível sob o
+// curso é servido com papel `category`, então ele também conta como contexto de módulo.
+function groupsLessons(node: CatalogNode): boolean {
+	return node.role === 'module' || node.role === 'category';
+}
+
+/**
+ * Título apresentado de uma mídia solta: sem prefixo numérico nem extensão.
+ *
+ * Repete a limpeza que o catálogo aplica ao título de uma aula derivada de arquivo, para que
+ * a rede de segurança do cliente nunca mostre o nome cru do arquivo na tela inicial.
+ */
+export function cleanMediaTitle(name: string): string {
+	const lastDot = name.lastIndexOf('.');
+	const stem = lastDot > 0 ? name.slice(0, lastDot) : name;
+	const cleaned = stem.replace(/^[0-9._\- •\t]+/, '').trim();
+	return cleaned || name;
+}
+
+/**
+ * Localização de uma aula pelo `media_id`: o curso, o módulo (quando houver) e a aula.
+ *
+ * O curso é o nó de topo que contém a mídia. O módulo é o agrupador mais próximo da aula —
+ * módulo ou categoria — e é `null` quando a aula está diretamente sob o curso. Mídia solta na
+ * raiz do curso continua sendo um item avulso (o catálogo a mantém em `loose_files`), resolvida
+ * com o título limpo e sem módulo.
+ */
+export function findLessonLocation(catalog: Catalog | null, mediaId: string | null): LessonLocation | null {
 	if (!catalog || !mediaId) return null;
 	for (const course of catalog.nodes) {
-		function visit(node: CatalogNode): Lesson | null {
-			if (node.role === 'lesson') {
-				const files = [...node.files, ...node.looseFiles];
-				if (files.some((file) => file.mediaId === mediaId)) return lessonFromNode(node);
-			}
-			for (const child of node.children) {
-				const found = visit(child);
-				if (found) return found;
-			}
-			return null;
-		}
-		const lesson = visit(course);
-		if (lesson) return { courseId: courseIdOf(course), lesson };
+		const found = locateInCourse(course, mediaId);
+		if (found) return found;
 	}
-	for (const course of catalog.nodes) {
-		const loose = course.looseFiles.find(
-			(file) => file.kind === 'media' && file.availability?.trim().toLowerCase() !== 'missing' && file.mediaId === mediaId
-		);
-		if (loose) return { courseId: courseIdOf(course), lesson: { title: loose.name, path: loose.path, media: [loose], subtitles: [], materials: [] } };
+	return null;
+}
+
+function locateInCourse(course: CatalogNode, mediaId: string): LessonLocation | null {
+	function visit(node: CatalogNode, moduleTitle: string | null, isRoot: boolean): { moduleTitle: string | null; lesson: Lesson } | null {
+		if (node.role === 'lesson' && [...node.files, ...node.looseFiles].some((file) => file.mediaId === mediaId)) {
+			return { moduleTitle, lesson: lessonFromNode(node) };
+		}
+		// A própria raiz do curso nunca conta como módulo: só o agrupamento abaixo dela.
+		const nested = !isRoot && groupsLessons(node) ? node.title : moduleTitle;
+		for (const child of node.children) {
+			const found = visit(child, nested, false);
+			if (found) return found;
+		}
+		return null;
+	}
+	const found = visit(course, null, true);
+	if (found) return { courseId: courseIdOf(course), courseTitle: course.title, moduleTitle: found.moduleTitle, lesson: found.lesson };
+	const loose = course.looseFiles.find((file) => playableMedia(file) && file.mediaId === mediaId);
+	if (loose) {
+		return {
+			courseId: courseIdOf(course),
+			courseTitle: course.title,
+			moduleTitle: null,
+			lesson: { title: cleanMediaTitle(loose.name), path: loose.path, media: [loose], subtitles: [], materials: [] }
+		};
 	}
 	return null;
 }

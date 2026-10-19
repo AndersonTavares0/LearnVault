@@ -15,6 +15,10 @@ repositório quando a branch atual é `main` ou `master`.
   (`git checkout -b` / `git switch -c`).
 - Opera em **fail-closed**: quando não é possível confirmar a branch atual, operações
   mutantes são bloqueadas.
+- Lê a branch com `node:child_process` (sem depender do shell `$` do runtime) e tenta
+  `worktree` e `directory` como raiz. Quando a verificação falha, grava um diagnóstico em
+  `learnvault-main-branch-guard.log` no diretório temporário do sistema e cita o caminho no
+  erro devolvido ao agente.
 
 ## Comportamento esperado do agente ao ser bloqueado
 
@@ -29,6 +33,13 @@ ou repetir a operação.
 - Não bloqueia todas as formas de escrita via Bash; a detecção de comandos usa padrões
   conhecidos e pode ser contornada por sintaxes alternativas.
 - Alterações no plugin só entram em vigor após reiniciar o opencode.
+
+## Contrato do módulo
+
+O arquivo do plugin exporta **somente** a função do plugin. O carregador do opencode trata
+cada export do módulo como um plugin e exige uma função (ou um objeto com `server`); um
+export a mais impede o carregamento do arquivo inteiro. O teste
+`main-branch-guard.test.mjs` verifica essa regra.
 
 ## Testes
 

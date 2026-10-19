@@ -7,8 +7,46 @@ import { spawn, type ChildProcess } from 'node:child_process';
 
 const ADMIN_PASSWORD = 'uma senha local muito segura';
 
+function firstMediaId(value: unknown): string | undefined {
+	if (Array.isArray(value)) {
+		for (const item of value) {
+			const mediaId = firstMediaId(item);
+			if (mediaId) return mediaId;
+		}
+		return undefined;
+	}
+	if (!value || typeof value !== 'object') return undefined;
+	const record = value as Record<string, unknown>;
+	if (Array.isArray(record.files)) {
+		for (const file of record.files) {
+			if (file && typeof file === 'object' && typeof (file as Record<string, unknown>).media_id === 'string') {
+				return (file as Record<string, string>).media_id;
+			}
+		}
+	}
+	return firstMediaId(record.children) ?? firstMediaId(record.nodes) ?? firstMediaId(record.categories);
+}
+
+function parseRgb(value: string): [number, number, number] {
+	const match = value.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+	if (!match) throw new Error(`cor inválida: ${value}`);
+	return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+function contrastRatio(foreground: string, background: string) {
+	const luminance = (color: string) => parseRgb(color).reduce((sum, channel, index) => {
+		const normalized = channel / 255;
+		const linear = normalized <= 0.03928 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+		return sum + linear * [0.2126, 0.7152, 0.0722][index];
+	}, 0);
+	const foregroundLuminance = luminance(foreground);
+	const backgroundLuminance = luminance(background);
+	return (Math.max(foregroundLuminance, backgroundLuminance) + 0.05) / (Math.min(foregroundLuminance, backgroundLuminance) + 0.05);
+}
+
 type ServerFixture = {
 	baseURL: string;
+	libraryPath: string;
 	outsidePath: string;
 	stop: () => Promise<void>;
 };
@@ -135,6 +173,7 @@ async function startServer(): Promise<ServerFixture> {
 
 	return {
 		baseURL,
+		libraryPath: library,
 		outsidePath,
 		stop: async () => {
 			try {
@@ -166,10 +205,73 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	// que o locator resolva tanto o input quanto o alternador de visibilidade.
 	await page.getByLabel('Senha', { exact: true }).fill(ADMIN_PASSWORD);
 	await page.getByRole('button', { name: 'Entrar' }).click();
-	await expect(page.getByRole('heading', { name: 'Olá, admin.' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Início' })).toBeAttached();
 
 	await page.getByRole('button', { name: 'Indexar cursos' }).click();
 	await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
+	await expect(page.getByRole('navigation', { name: 'Navegação principal' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Cursos' })).toBeVisible();
+	const initialCatalog = await (await page.request.get(`${server.baseURL}/api/catalog`)).json();
+	const mediaId = firstMediaId(initialCatalog);
+	expect(mediaId).toBeTruthy();
+	const positionResponse = await page.request.post(`${server.baseURL}/api/study/position`, {
+		headers: { Origin: server.baseURL },
+		data: { media_id: mediaId, position_seconds: 5 }
+	});
+	await expect(positionResponse).toBeOK();
+	const recentResponse = await page.request.get(`${server.baseURL}/api/study/recent?limit=6`);
+	await expect(recentResponse).toBeOK();
+	expect((await recentResponse.json()).items.length).toBeGreaterThan(0);
+	await page.reload();
+	await expect(page.getByText('Continuar assistindo')).toBeVisible();
+
+	// Cada item identifica a aula pelo título limpo e mostra o contexto (curso · módulo)
+	// em uma linha secundária; o nome cru do arquivo não pode vazar para o usuário.
+	const firstRecentItem = page.locator('.recent-study li').first();
+	const lessonLabel = (await firstRecentItem.locator('a').first().innerText()).trim();
+	expect(lessonLabel).not.toMatch(/\.[a-z0-9]{2,4}$/i);
+	expect(lessonLabel).not.toMatch(/^\d+[\s._-]/);
+	const contextNode = firstRecentItem.locator('.recent-study-info small');
+	await expect(contextNode).toHaveText(/\S/);
+	const contextText = (await contextNode.innerText()).trim();
+	expect(await contextNode.getAttribute('title')).toBe(contextText);
+
+	// Em tela estreita a lista não pode gerar rolagem horizontal.
+	const originalViewport = page.viewportSize();
+	await page.setViewportSize({ width: 390, height: 844 });
+	const narrowWidths = await page.evaluate(() => ({
+		scrollWidth: document.documentElement.scrollWidth,
+		clientWidth: document.documentElement.clientWidth
+	}));
+	expect(narrowWidths.scrollWidth).toBeLessThanOrEqual(narrowWidths.clientWidth);
+	if (originalViewport) await page.setViewportSize(originalViewport);
+
+	const lightColors = await page.locator('.recent-study small').first().evaluate((element) => {
+		let node: HTMLElement | null = element as HTMLElement;
+		const foreground = getComputedStyle(element).color;
+		while (node) {
+			const background = getComputedStyle(node).backgroundColor;
+			if (background !== 'rgba(0, 0, 0, 0)' && background !== 'transparent') return { foreground, background };
+			node = node.parentElement;
+		}
+		return { foreground, background: getComputedStyle(document.body).backgroundColor };
+	});
+	expect(contrastRatio(lightColors.foreground, lightColors.background)).toBeGreaterThanOrEqual(4.5);
+	await page.emulateMedia({ colorScheme: 'dark' });
+	await page.reload();
+	const darkColors = await page.locator('.recent-study small').first().evaluate((element) => {
+		let node: HTMLElement | null = element as HTMLElement;
+		const foreground = getComputedStyle(element).color;
+		while (node) {
+			const background = getComputedStyle(node).backgroundColor;
+			if (background !== 'rgba(0, 0, 0, 0)' && background !== 'transparent') return { foreground, background };
+			node = node.parentElement;
+		}
+		return { foreground, background: getComputedStyle(document.body).backgroundColor };
+	});
+	expect(contrastRatio(darkColors.foreground, darkColors.background)).toBeGreaterThanOrEqual(4.5);
+	const faviconResponse = await page.request.get(`${server.baseURL}/favicon.svg`);
+	expect(faviconResponse.status()).toBe(200);
 
 	// A home lista cada curso registrado como card; o card abre a página do curso.
 	const courseCard = page.getByRole('link', { name: /library/ });
@@ -229,4 +331,87 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	expect(afterLogoutMedia.status()).toBe(401);
 	const afterLogoutCatalog = await page.request.get(`${server.baseURL}/api/catalog`);
 	expect(afterLogoutCatalog.status()).toBe(401);
+});
+
+test('reports a lesson whose media disappears from disk and restores it when the file returns', async ({ page, server }) => {
+	// A fixture já tem Categoria/Curso/Aula.mp4, usado pelo outro cenário. Em vez de apagar
+	// esse arquivo, o cenário cria um módulo próprio com duas aulas: a mídia de uma delas
+	// sai do disco e volta, para exercitar o ciclo inteiro de disponibilidade.
+	const moduleRoot = join(server.libraryPath, 'Categoria', 'Modulo Extra');
+	const lessonAPath = join(moduleRoot, 'Aula A');
+	const lessonBPath = join(moduleRoot, 'Aula B');
+	await mkdir(lessonAPath, { recursive: true });
+	await mkdir(lessonBPath, { recursive: true });
+	await writeFile(join(lessonAPath, 'A.mp4'), Buffer.from('extra-a-fixture'));
+	const lessonBMedia = join(lessonBPath, 'B.mp4');
+	const lessonBContent = Buffer.from('extra-b-fixture');
+	await writeFile(lessonBMedia, lessonBContent);
+
+	const courseModule = page.locator('details.course-section').filter({ has: page.getByText('Modulo Extra', { exact: true }) });
+	const openCourse = async () => {
+		await page.getByRole('link', { name: /library/ }).click();
+		await expect(page.getByRole('heading', { name: 'library', exact: true })).toBeVisible();
+		// A meta do módulo é visível com o disclosure fechado; as linhas exigem abri-lo.
+		await courseModule.locator('summary').click();
+	};
+	const indexFromHome = async () => {
+		await page.goto(`${server.baseURL}/#/home`);
+		await expect(page.getByRole('heading', { name: 'Início' })).toBeAttached();
+		await page.getByRole('button', { name: 'Indexar cursos' }).click();
+		await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
+	};
+
+	await page.goto(`${server.baseURL}/#/login`);
+	await page.getByLabel('Usuário').fill('admin');
+	await page.getByLabel('Senha', { exact: true }).fill(ADMIN_PASSWORD);
+	await page.getByRole('button', { name: 'Entrar' }).click();
+	await expect(page.getByRole('heading', { name: 'Início' })).toBeAttached();
+	await page.getByRole('button', { name: 'Indexar cursos' }).click();
+	await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
+
+	// Fase 1: o arquivo está no disco — duas aulas disponíveis, sem selo, linha navegável.
+	await openCourse();
+	await expect(courseModule.locator('.section-meta')).toHaveText('2 aulas');
+	const lessonA = courseModule.getByRole('link', { name: /Aula A/ });
+	const lessonB = courseModule.getByRole('link', { name: /Aula B/ });
+	await expect(lessonA).toHaveAttribute('href', /#\/player\//);
+	await expect(lessonB).toHaveAttribute('href', /#\/player\//);
+	await expect(lessonB).not.toContainText('ausente');
+
+	// Fase 2: o arquivo desaparece do disco (disco externo desconectado ou arquivo renomeado).
+	await rm(lessonBMedia, { force: true });
+	await indexFromHome();
+	await openCourse();
+	await expect(courseModule.locator('.section-meta')).toHaveText('1 aula · 1 ausente');
+	const missingRow = courseModule.locator('.lesson-row', { hasText: 'Aula B' });
+	await expect(missingRow).toBeVisible();
+	await expect(missingRow).toContainText('(ausente)');
+	// Continua listada, mas não navega: sem link, sem foco de teclado.
+	await expect(courseModule.getByRole('link', { name: /Aula B/ })).toHaveCount(0);
+	expect(await missingRow.evaluate((element) => element.tagName)).toBe('DIV');
+	expect(await missingRow.evaluate((element) => { (element as HTMLElement).focus(); return document.activeElement === element; })).toBe(false);
+	// A aula disponível ao lado mantém link e foco — a checagem anterior discrimina.
+	expect(await lessonA.evaluate((element) => { (element as HTMLElement).focus(); return document.activeElement === element; })).toBe(true);
+
+	// Acesso direto pela URL da aula ausente: o player não pede o arquivo nem renderiza mídia.
+	const catalog = await (await page.request.get(`${server.baseURL}/api/catalog`)).json();
+	const courseId = catalog.categories?.[0]?.course_id ?? catalog.nodes?.[0]?.course_id;
+	expect(courseId).toBeTruthy();
+	const mediaRequests: string[] = [];
+	page.on('request', (request) => {
+		const url = new URL(request.url());
+		if (url.pathname === '/api/media') mediaRequests.push(url.search);
+	});
+	await page.goto(`${server.baseURL}/#/player/${encodeURIComponent(courseId)}/${encodeURIComponent('Categoria/Modulo Extra/Aula B')}`);
+	await expect(page.getByText('A mídia desta aula não está no disco.')).toBeVisible();
+	expect(await page.locator('video, audio').count()).toBe(0);
+	expect(mediaRequests).toEqual([]);
+
+	// Fase 3: o mesmo arquivo volta ao mesmo caminho e a reindexação restaura a aula.
+	await writeFile(lessonBMedia, lessonBContent);
+	await indexFromHome();
+	await openCourse();
+	await expect(courseModule.locator('.section-meta')).toHaveText('2 aulas');
+	await expect(lessonB).toHaveAttribute('href', /#\/player\//);
+	await expect(lessonB).not.toContainText('ausente');
 });

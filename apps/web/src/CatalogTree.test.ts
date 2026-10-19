@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import CatalogTree from './CatalogTree.svelte';
 import type { CatalogNode, FileEntry } from './transport';
 
-function file(name: string, kind: string): FileEntry {
-	return { name, path: name, size: 10, mediaId: name, kind, availability: 'available' };
+function file(name: string, kind: string, availability = 'available'): FileEntry {
+	return { name, path: name, size: 10, mediaId: name, kind, availability };
 }
 
 function node(role: string, title: string, path: string, children: CatalogNode[] = [], files: FileEntry[] = []): CatalogNode {
@@ -51,5 +51,52 @@ describe('catalog tree rendering', () => {
 		const { body } = render(CatalogTree, { props: { nodes: [category], courseId: 'course-1' } });
 		expect(body).toContain('1 aula · 2 materiais');
 		expect(body).toContain('<li>');
+	});
+
+	it('renders a missing lesson as static content with the badge and without a player link', () => {
+		const lesson = node('lesson', 'Aula 1', 'curso/aula-1', [], [file('a.mp4', 'media', 'missing')]);
+		const { body } = render(CatalogTree, { props: { nodes: [lesson], courseId: 'course-1' } });
+		// A aula continua listada, com título e selo como texto real do conteúdo (legível por
+		// leitor de tela), mas sem `href`: um elemento sem link não recebe foco nem abre o player.
+		expect(body).toContain('<span class="lesson-title">Aula 1</span>');
+		expect(body).toContain('<small class="lesson-meta">(ausente)</small>');
+		expect(body).toContain('<div class="lesson-row">');
+		expect(body).not.toContain('<a ');
+		expect(body).not.toContain('#/player/course-1/curso%2Faula-1');
+	});
+
+	it('keeps an available lesson as a real link without any badge text', () => {
+		const lesson = node('lesson', 'Aula 1', 'curso/aula-1', [], [file('a.mp4', 'media')]);
+		const { body } = render(CatalogTree, { props: { nodes: [lesson], courseId: 'course-1' } });
+		expect(body).toContain('href="#/player/course-1/curso%2Faula-1"');
+		expect(body).not.toContain('ausente');
+	});
+
+	it('reports available and missing lessons side by side in the module count', () => {
+		const module = node('module', 'Módulo', 'curso/modulo', [
+			node('lesson', 'Aula 1', 'curso/modulo/aula-1', [], [file('a.mp4', 'media')]),
+			node('lesson', 'Aula 2', 'curso/modulo/aula-2', [], [file('b.mp4', 'media', 'missing')]),
+			node('lesson', 'Aula 3', 'curso/modulo/aula-3', [], [file('c.mp4', 'media', 'missing'), file('c.srt', 'subtitle')])
+		]);
+		const { body } = render(CatalogTree, { props: { nodes: [module], courseId: 'course-1' } });
+		expect(body).toContain('<span class="section-meta">1 aula · 2 ausentes</span>');
+		expect(body.match(/\(ausente\)/g)).toHaveLength(2);
+		// Só a aula disponível continua roteável.
+		expect(body.match(/href="#\/player/g)).toHaveLength(1);
+	});
+
+	it('reports missing lessons in the course meta of a category header', () => {
+		const category = node('category', 'Curso', 'curso', [node('lesson', 'Aula', 'curso/aula', [], [file('a.mp4', 'media', 'missing')])]);
+		const { body } = render(CatalogTree, { props: { nodes: [category], courseId: 'course-1' } });
+		expect(body).toContain('<p class="course-meta">0 aulas · 1 ausente</p>');
+	});
+
+	it('keeps the count readable when every lesson of the module is missing', () => {
+		const module = node('module', 'Módulo', 'curso/modulo', [node('lesson', 'Aula 1', 'curso/modulo/aula-1', [], [file('a.mp4', 'media', 'missing')])]);
+		const { body } = render(CatalogTree, { props: { nodes: [module], courseId: 'course-1' } });
+		expect(body).toContain('<span class="section-meta">0 aulas · 1 ausente</span>');
+		expect(body).toContain('(ausente)');
+		// A linha continua listada, agora sem destino de player.
+		expect(body).not.toContain('href="#/player');
 	});
 });

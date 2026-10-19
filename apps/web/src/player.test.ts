@@ -1,5 +1,8 @@
+import { render } from 'svelte/server';
 import { describe, expect, it } from 'vitest';
-import { clampSpeed, formatDuration, mediaPlaybackKind, PLAYBACK_SPEEDS, selectPlayableMedia, selectPlayableSubtitle, srtConversionSupported, srtToWebVtt, studySyncEnabled, studySyncSupported, subtitleFormat } from './player';
+import Player from './Player.svelte';
+import { clampSpeed, formatDuration, mediaAvailability, mediaPlaybackKind, PLAYBACK_SPEEDS, selectPlayableMedia, selectPlayableSubtitle, srtConversionSupported, srtToWebVtt, studySyncEnabled, studySyncSupported, subtitleFormat } from './player';
+import type { FileEntry, Lesson } from './transport';
 
 describe('player media and subtitles', () => {
 	it('selects the first media that is not missing', () => {
@@ -52,5 +55,50 @@ describe('player media and subtitles', () => {
 		expect(clampSpeed(0.5)).toBe(1);
 		expect(clampSpeed(3)).toBe(1);
 		expect(clampSpeed(Number.NaN)).toBe(1);
+	});
+});
+
+function media(name: string, availability = 'available'): FileEntry {
+	return { name, path: name, size: 10, mediaId: name, kind: 'media', availability };
+}
+
+function lesson(mediaFiles: FileEntry[]): Lesson {
+	return { title: 'Aula', path: 'curso/aula', media: mediaFiles, subtitles: [], materials: [] };
+}
+
+describe('mediaAvailability', () => {
+	it('distinguishes playable, missing and absent media', () => {
+		expect(mediaAvailability([])).toBe('absent');
+		expect(mediaAvailability([media('aula.mp4', 'missing')])).toBe('missing');
+		expect(mediaAvailability([media('aula.mp4', 'missing'), media('aula.mp3')])).toBe('playable');
+		expect(mediaAvailability([media('aula.mp4')])).toBe('playable');
+	});
+
+	it('reads availability tolerantly like the player selection', () => {
+		expect(mediaAvailability([{ ...media('aula.mp4'), availability: ' Missing ' }])).toBe('missing');
+	});
+});
+
+describe('player without playable media', () => {
+	it('renders no media element and no media URL when the file is gone from disk', () => {
+		// Acesso direto pela URL da aula: o player não pode pedir um arquivo que a varredura
+		// marcou como ausente — sem `<video>`, sem `<audio>` e sem URL de mídia no HTML.
+		const { body } = render(Player, { props: { lesson: lesson([media('aula.mp4', 'missing')]), courseId: 'course-1', mediaError: '', onMediaError: () => undefined } });
+		expect(body).toContain('A mídia desta aula não está no disco.');
+		expect(body).not.toContain('<video');
+		expect(body).not.toContain('<audio');
+		expect(body).not.toContain('/api/media');
+	});
+
+	it('keeps the plain message for a lesson without any media file', () => {
+		const { body } = render(Player, { props: { lesson: lesson([]), courseId: 'course-1', mediaError: '', onMediaError: () => undefined } });
+		expect(body).toContain('Esta aula não possui mídia disponível.');
+		expect(body).not.toContain('não está no disco');
+	});
+
+	it('renders the media element with its URL when the media is available', () => {
+		const { body } = render(Player, { props: { lesson: lesson([media('aula.mp4')]), courseId: 'course-1', mediaError: '', onMediaError: () => undefined } });
+		expect(body).toContain('<video');
+		expect(body).toContain('path=aula.mp4');
 	});
 });

@@ -78,6 +78,7 @@ tests:
       - any-glob-to-any-file:
           - 'crates/**/tests/**'
           - 'apps/web/src/**/*.test.ts'
+          - 'tests/**'
           - 'testdata/**'
 
 # Manifestos e lockfiles dos ecossistemas acompanhados pelo Dependabot.
