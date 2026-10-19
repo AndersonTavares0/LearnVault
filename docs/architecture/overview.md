@@ -31,7 +31,15 @@ e arquivos de legenda por `learnvault-media://localhost/<media-id>` — no Windo
 `http://learnvault-media.localhost/<media-id>`, que o runtime reverte para esse esquema antes do
 handler —, com o webview apontando pelo `media_id` opaco (nunca por um caminho), resolução da
 biblioteca pelo próprio identificador, allowlist de tipo de conteúdo, faixas HTTP limitadas,
-limite explícito de resposta e revalidação pelo `learnvault-core`. No servidor self-hosted, o
+limite explícito de resposta e revalidação pelo `learnvault-core`. As **capas personalizadas dos
+cursos** usam dois caminhos equivalentes: no servidor, as rotas administrativas
+`PUT`/`DELETE /api/admin/courses/{id}/cover` e a leitura autenticada `GET /api/courses/{id}/cover`;
+no desktop, o protocolo `learnvault-cover://localhost/<course-id>` e os comandos
+`desktop_import_course_cover`/`desktop_remove_course_cover`, em que o seletor nativo de imagens roda
+no Rust e nenhum byte de arquivo cruza o IPC. A capa é um único arquivo de até 4 MiB por curso,
+guardado ao lado do banco no servidor e no diretório de dados do aplicativo no desktop — nunca
+dentro da pasta do curso —, com o formato decidido pelos bytes iniciais (PNG, JPEG ou WebP),
+gravação atômica e versão em segundos exposta no catálogo como `cover_version`. No servidor self-hosted, o
 registro de cursos vive em `courses.json` ao lado do banco, com endpoints administrativos de
 importação e remoção, e `LIBRARY_DIR`/`--library-root` continua aceito apenas como semente do
 primeiro curso. A API de Study tem paridade entre o servidor Rust e a SPA web,
@@ -84,7 +92,7 @@ Responsabilidades:
   cada raiz de curso já resolvida.
 - `crates/server` traduz o domínio para HTTP: autenticação, sessões, `Range`, cabeçalhos de
   segurança, registro de cursos e entrega da SPA.
- - `crates/desktop` integra com o sistema de arquivos e entrega mídia ao webview, sem autenticação e sem portas de rede. Expõe o IPC de cursos e catálogo sobre o banco local, a importação e a remoção de cursos (seletor nativo interno ao Rust, com persistência atômica fora das pastas de curso), o rescan explícito de todos os cursos e o progresso de estudo do dono local fixo, reutilizando o núcleo com estado ocupado e sem varredura automática, e um protocolo customizado que entrega materiais, vídeo, áudio e arquivos de legenda pelo `media_id` opaco, com faixas limitadas e allowlist. O player renderiza VTT; SRT, ASS e SSA são baixáveis.
+ - `crates/desktop` integra com o sistema de arquivos e entrega mídia ao webview, sem autenticação e sem portas de rede. Expõe o IPC de cursos e catálogo sobre o banco local, a importação e a remoção de cursos (seletor nativo interno ao Rust, com persistência atômica fora das pastas de curso), a escolha e a remoção da capa personalizada de um curso (seletor nativo de imagens, validação por bytes iniciais e gravação atômica no diretório de dados), o rescan explícito de todos os cursos e o progresso de estudo do dono local fixo, reutilizando o núcleo com estado ocupado e sem varredura automática, e protocolos customizados que entregam materiais, vídeo, áudio, legendas pelo `media_id` opaco e capas de curso pela identidade opaca do curso, com faixas limitadas, allowlist e CORS de origem exata. O player renderiza VTT; SRT, ASS e SSA são baixáveis.
 - `apps/web/` é uma única SPA em Svelte 5 + TypeScript + Vite, com roteamento por hash e dois
   builds que escolhem o transporte em tempo de compilação.
 
@@ -102,6 +110,9 @@ Invariantes:
 - Ações administrativas são explícitas; não há scan silencioso na inicialização nem importação
   que indexe sem pedido.
 - Cache e mídia derivada são descartáveis e ficam em locais separados dos dados duráveis.
+- Uma capa personalizada é dado do aplicativo, não do curso: fica ao lado do banco (servidor) ou
+  no diretório de dados do aplicativo (desktop), com no máximo 4 MiB por curso, formato decidido
+  pelos bytes iniciais e gravação atômica. Nenhuma pasta de curso recebe arquivo.
 - Docker e Podman são adaptadores opcionais de deploy, não dependências do runtime.
 
 Consulte [distribuição](../operations/distribution.md) para executáveis e pacotes.

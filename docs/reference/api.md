@@ -62,6 +62,9 @@ banco Rust existente continuam sendo abertos normalmente.
 | `POST` | `/api/admin/courses` | Sessão admin | Aceita `{ "path": "..." }` e registra a pasta como um curso; a pasta precisa existir, ser um diretório legível e não ser link/junction. Importar não indexa: a indexação é o `rescan` |
 | `DELETE` | `/api/admin/courses/{id}` | Sessão admin | Remove o curso do registro, sem apagar arquivos nem dados; remover um curso desconhecido responde `removed: false` |
 | `POST` | `/api/admin/catalog/rescan` | Sessão admin | Faz scan explícito de todos os cursos registrados e atualiza cada catálogo de forma preservadora: insere arquivos novos, reafirma os conhecidos e marca ausentes os que sumiram, sem excluir nenhum registro. Sem cursos registrados responde `400 no_courses_registered`; a resposta agrega `courses` e `failed_courses` |
+| `PUT` | `/api/admin/courses/{id}/cover` | Sessão admin | Grava a capa personalizada do curso. O corpo é a imagem crua (até 4 MiB) e o formato é decidido pelos bytes iniciais; outra assinatura responde `415 unsupported_cover_type` e um corpo acima do limite responde `413 cover_too_large`. A resposta `200` traz `{ "cover_version": <segundos> }` |
+| `DELETE` | `/api/admin/courses/{id}/cover` | Sessão admin | Remove a capa personalizada do curso, sem tocar em nenhum arquivo do curso; a resposta `200` traz `{ "removed": bool }` e repetir é idempotente |
+| `GET` | `/api/courses/{id}/cover` | Sessão | Serve a capa personalizada do curso com o `Content-Type` derivado dos bytes guardados e `Cache-Control: private, no-store`; sem capa responde `404` sem corpo |
 | `GET`, `HEAD` | `/api/media?course=...&path=...` | Sessão | Transmite um arquivo aprovado do curso indicado com suporte a HTTP Range; caminho relativo é interpretado dentro da pasta daquele curso |
 | `GET` | `/api/admin/media/{id}/impact` | Sessão admin | Consulta o impacto da remoção de uma mídia: retorna `{ media_id, relative_path, availability, progress_owners, already_removed }` |
 | `DELETE` | `/api/admin/media/{id}` | Sessão admin | Remove explicitamente a mídia do catálogo (tombstone persistente). Aceita `{ "confirm_progress": bool }`. Se houver progresso e `confirm_progress` for falso, responde `409 media_removal_needs_confirmation`. Repetir é idempotente |
@@ -93,17 +96,46 @@ somente leitura e nunca são modificadas.
 
 No desktop, o protocolo `learnvault-media://localhost/<media-id>` entrega materiais, vídeo, áudio e arquivos de legenda para download usando somente o `media_id` opaco. `GET` e `HEAD` aceitam uma única faixa; respostas completas, parciais e recusadas usam, respectivamente, `200`, `206`, `413` (corpo acima do limite) ou `416` (faixa inválida ou múltipla), com `Content-Range` quando aplicável. No Windows, a SPA usa `http://learnvault-media.localhost/<media-id>` e o runtime reverte a origem antes do handler. O player desktop usa essa fonte local, renderiza legendas VTT e sincroniza posição e conclusão pelo IPC de Study; SRT, ASS e SSA ficam disponíveis para download, e o build HTTP pode converter SRT sob demanda.
 
+### Capas personalizadas
+
+Uma capa personalizada é um arquivo único por curso, com no máximo 4 MiB, guardado pelo
+aplicativo — no servidor em `covers/<id>.cover`, no mesmo diretório de `courses.json`, e no
+desktop em `covers/`, um subdiretório do diretório de dados do aplicativo. Nada é escrito
+dentro da pasta do curso, que permanece externa e somente leitura. O formato é decidido
+apenas pelos bytes iniciais: PNG, JPEG e WebP são aceitos e nenhum decodificador de imagem
+é embarcado; o `Content-Type` servido vem sempre do arquivo guardado, nunca do pedido de
+upload. O nome do arquivo é apenas a identidade opaca do curso, validada como um segmento de
+caminho seguro, então nenhuma identidade recebida pela API escapa do diretório de capas. A
+gravação é atômica (arquivo temporário exclusivo e troca por `rename`), e uma leitura
+concorrente nunca observa uma capa truncada.
+
+O nó de topo do curso expõe `cover_version` (segundos de modificação do arquivo) quando
+existe capa, no `GET /api/catalog` e no `desktop_catalog`. A SPA usa esse valor como `?v=` na
+URL da capa para invalidar a imagem já exibida; sem capa, o campo fica ausente e o card cai
+na miniatura automática ou na capa gerada pelo título. Um curso desconhecido, uma identidade
+insegura e uma capa ausente respondem como ausência (`404` sem corpo); uma capa guardada que
+deixou de ser uma imagem suportada responde `500` sem corpo. Nenhuma resposta carrega caminho
+do sistema de arquivos em corpo, cabeçalhos ou mensagem.
+
+No desktop, a capa é entregue pelo protocolo `learnvault-cover://localhost/<course-id>` (no
+Windows, `http://learnvault-cover.localhost/<course-id>`), com `GET`/`HEAD`, `Cache-Control:
+no-store` e o mesmo CORS da mídia: a origem exata da janela é refletida apenas em respostas
+`2xx` e toda requisição com `Origin` marca `Vary: Origin`, sem curinga e sem credenciais.
+
 ### Cursos e mídia no desktop (IPC)
 
 O desktop não tem rotas para catálogo, cursos e remoção: a SPA chama comandos Tauri por `invoke`, sem
 `fetch`. O webview nunca envia nem recebe um caminho — só identidades opacas e o booleano
-`configured`.
+`configured`. O seletor nativo de pastas (cursos) e de imagens (capas) roda internamente no Rust
+(`tauri-plugin-dialog`) e não é concedido ao webview pelo ACL.
 
 | Comando | Argumentos | Finalidade |
 | --- | --- | --- |
 | `desktop_catalog` | — | Catálogo agregado dos cursos registrados, um nó de topo por curso em `nodes` (árvore canônica) e em `categories` |
 | `desktop_import_course` | — | Abre o seletor nativo e registra a pasta escolhida como um curso; importar uma pasta já registrada é idempotente |
 | `desktop_remove_course` | `courseId` | Remove o curso do registro, sem tocar nos arquivos nem nos dados |
+| `desktop_import_course_cover` | `courseId` | Abre o seletor nativo de imagens e grava a capa daquele curso; o arquivo escolhido fica no Rust e não cruza o IPC |
+| `desktop_remove_course_cover` | `courseId` | Remove a capa do curso; um curso sem capa é idempotente (`removed: false`) |
 | `desktop_rescan` | — | Indexa explicitamente todos os cursos registrados; raízes removidas contam como falha agregada |
 | `desktop_media_removal_impact` | `mediaId` | Consulta o impacto da remoção de uma mídia (identidade, caminho, donos com progresso) |
 | `desktop_remove_media` | `mediaId`, `confirmProgress` | Remove explicitamente a mídia do catálogo local com confirmação de progresso |
