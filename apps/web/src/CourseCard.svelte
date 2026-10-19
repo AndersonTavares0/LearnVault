@@ -22,13 +22,23 @@
 		course,
 		profile,
 		mediaUrl,
-		manualCoverUrl = null
+		manualCoverUrl = null,
+		canManage = false,
+		menuOpen = false,
+		onMenuOpen,
+		onChangeCover,
+		onRemoveCover
 	}: {
 		course: CatalogNode;
 		profile: string;
 		mediaUrl: (file: FileEntry, courseId: string) => string | null;
 		/** Capa personalizada (upload da issue #237); tem precedência sobre a miniatura. */
 		manualCoverUrl?: string | null;
+		canManage?: boolean;
+		menuOpen?: boolean;
+		onMenuOpen?: (open: boolean) => void;
+		onChangeCover?: (course: CatalogNode) => void;
+		onRemoveCover?: (course: CatalogNode) => void;
 	} = $props();
 	const counts = $derived(countCatalogNode(course));
 	const meta = $derived(formatCourseCardMeta(counts));
@@ -37,6 +47,12 @@
 	let objectUrl: string | null = null;
 	/** Capa efetiva: manual > miniatura automática > gerada pelo título. */
 	const coverSource = $derived(selectCourseCoverSource({ manualCoverUrl, thumbnailUrl }));
+
+	function openContextMenu(event: MouseEvent) {
+		if (!canManage) return;
+		event.preventDefault();
+		onMenuOpen?.(true);
+	}
 
 	function revokeThumbnail() {
 		if (objectUrl) {
@@ -97,12 +113,36 @@
 		};
 	}
 </script>
-<a class="course-card" href={href('course', courseIdOf(course))}>
-	<span class="course-cover" use:cleanupThumbnail={{ course, profile, manualCover: manualCoverUrl }} style:--cover-from={cover.from} style:--cover-to={cover.to} style:--cover-angle={`${cover.angle}deg`} aria-hidden="true">
-		{#if coverSource === 'manual'}<img class="course-cover-image" src={manualCoverUrl ?? ''} alt="" />
-		{:else if coverSource === 'thumbnail'}<img class="course-thumbnail" src={thumbnailUrl ?? ''} alt="" />{/if}
-		<span class="course-monogram">{cover.monogram}</span>
-	</span>
-	<span class="course-card-title">{course.title}</span>
-	{#if meta}<span class="course-card-meta">{meta}</span>{/if}
-</a>
+<div class="course-card-shell">
+	<a class="course-card" href={href('course', courseIdOf(course))} oncontextmenu={openContextMenu}>
+		<span class="course-cover" use:cleanupThumbnail={{ course, profile, manualCover: manualCoverUrl }} style:--cover-from={cover.from} style:--cover-to={cover.to} style:--cover-angle={`${cover.angle}deg`} aria-hidden="true">
+			{#if coverSource === 'manual'}<img class="course-cover-image" src={manualCoverUrl ?? ''} alt="" />
+			{:else if coverSource === 'thumbnail'}<img class="course-thumbnail" src={thumbnailUrl ?? ''} alt="" />{/if}
+			<span class="course-monogram">{cover.monogram}</span>
+		</span>
+		<span class="course-card-title">{course.title}</span>
+		{#if meta}<span class="course-card-meta">{meta}</span>{/if}
+	</a>
+	{#if canManage}
+		<button
+			class="course-card-menu-toggle"
+			type="button"
+			aria-label="Ações de capa de {course.title}"
+			aria-haspopup="menu"
+			aria-expanded={menuOpen}
+			onclick={() => onMenuOpen?.(!menuOpen)}
+		>
+			<span aria-hidden="true">⋯</span>
+		</button>
+		{#if menuOpen}
+			<div class="course-card-menu" role="menu" aria-label="Capa de {course.title}">
+				<button type="button" role="menuitem" onclick={() => onChangeCover?.(course)}>
+					{manualCoverUrl ? 'Trocar capa' : 'Adicionar capa'}
+				</button>
+				{#if manualCoverUrl}
+					<button type="button" role="menuitem" onclick={() => onRemoveCover?.(course)}>Remover capa</button>
+				{/if}
+			</div>
+		{/if}
+	{/if}
+</div>
