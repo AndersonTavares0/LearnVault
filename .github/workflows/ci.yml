@@ -279,18 +279,22 @@ jobs:
     if: ${{ always() }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: ${{ always() && !cancelled() }}
+      - name: Fail closed when the workflow is cancelled
+        if: ${{ always() && cancelled() }}
+        run: |
+          echo "CI gate cannot pass because the workflow was cancelled."
+          exit 1
       - name: Enforce CI results
-        if: ${{ always() }}
+        if: ${{ always() && !cancelled() }}
         env:
           CI_GATE_NEEDS: ${{ toJSON(needs) }}
-          CI_WORKFLOW_CANCELLED: ${{ cancelled() }}
         run: |
           node --input-type=module <<'NODE'
           import { evaluateCiGateFromNeeds } from './scripts/ci-gate.mjs';
 
           const needs = JSON.parse(process.env.CI_GATE_NEEDS);
-          const workflowCancelled = process.env.CI_WORKFLOW_CANCELLED === 'true';
-          const result = evaluateCiGateFromNeeds(needs, { workflowCancelled });
+          const result = evaluateCiGateFromNeeds(needs);
 
           if (!result.passed) {
             console.error(result.errors.join('\n'));
