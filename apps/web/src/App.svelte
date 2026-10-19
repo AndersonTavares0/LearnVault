@@ -9,7 +9,7 @@
 	import PasswordField from './PasswordField.svelte';
 	import { lessonSections, neighboringLessons, type LessonSection } from './navigation';
 	import { destinationAfterLogin, findCourse, findLesson, findLessonLocation, href, locationFromHash, type Route } from './router';
-	import { transport, transportKind, STUDY_NOT_AVAILABLE, type Catalog, type CatalogNode, type Lesson, type StudyProgress, type User } from './transport';
+	import { transport, transportKind, COVER_ACCEPT, MAX_COVER_BYTES, courseIdOf, STUDY_NOT_AVAILABLE, type Catalog, type CatalogNode, type Lesson, type StudyProgress, type User } from './transport';
 	import { defaultRoute, resolveSession } from './session';
 	import { formatDuration, studySyncSupported } from './player';
 	import Brand from './Brand.svelte';
@@ -58,6 +58,9 @@
 	let removeConfirm = false;
 	let removeError = '';
 	let mediaError = '';
+	let coverBusy = false;
+	let coverError = '';
+	let coverMessage = '';
 	let recent: StudyProgress[] = [];
 	let recentLoading = false;
 	let studyEnabled = studySyncSupported;
@@ -280,6 +283,60 @@
 		mediaError = 'Não foi possível carregar esta mídia.';
 	}
 
+	// A capa personalizada é uma escolha administrativa do curso aberto. No desktop o seletor
+	// de imagens roda no Rust (nenhum arquivo cruza o IPC); no servidor o arquivo escolhido no
+	// navegador é enviado ao endpoint administrativo. Em ambos os casos o shell recarrega o
+	// catálogo, porque a versão da capa (`?v=`) é o que invalida a imagem já exibida.
+	async function changeCover() {
+		await submitCover(null);
+	}
+
+	async function submitCover(file: File | null) {
+		const current = course;
+		if (!current || coverBusy) return;
+		coverBusy = true;
+		coverError = '';
+		coverMessage = '';
+		try {
+			await transport.importCourseCover(courseIdOf(current), file);
+			syncCatalog(await transport.catalog());
+			coverMessage = 'Capa atualizada.';
+		} catch (cause) {
+			coverError = cause instanceof Error ? cause.message : 'Não foi possível salvar a capa do curso.';
+		} finally {
+			coverBusy = false;
+		}
+	}
+
+	function pickCover(event: Event) {
+		const input = event.currentTarget as HTMLInputElement;
+		const file = input.files?.[0] ?? null;
+		// O valor é limpo para que escolher o mesmo arquivo de novo volte a disparar o evento.
+		input.value = '';
+		if (file && file.size > MAX_COVER_BYTES) {
+			coverError = 'A imagem é maior que 4 MiB.';
+			return;
+		}
+		void submitCover(file);
+	}
+
+	async function removeCover() {
+		const current = course;
+		if (!current || coverBusy) return;
+		coverBusy = true;
+		coverError = '';
+		coverMessage = '';
+		try {
+			await transport.removeCourseCover(courseIdOf(current));
+			syncCatalog(await transport.catalog());
+			coverMessage = 'Capa removida.';
+		} catch (cause) {
+			coverError = cause instanceof Error ? cause.message : 'Não foi possível remover a capa do curso.';
+		} finally {
+			coverBusy = false;
+		}
+	}
+
 	// Mantém a aula atual visível dentro da caixa do índice sem arrastar a página: o
 	// ajuste é feito somente no contêiner rolável do índice, com o mínimo de rolagem.
 	function revealActive(node: HTMLElement, active: boolean) {
@@ -340,7 +397,7 @@
 	{#if user.role === 'admin' && rescanMessage}<p class="catalog-message" aria-live="polite">{rescanMessage}</p>{/if}
 	{#if catalog && catalog.nodes.length}
 	<h2 id="courses-heading" class="courses-heading">Cursos</h2>
-{#if filteredNodes.length}<ul class="course-grid" aria-labelledby="courses-heading">{#each filteredNodes as courseItem (courseItem.courseId ?? courseItem.path)}<li><CourseCard course={courseItem} profile={user.userId} mediaUrl={(file, courseId) => transport.mediaUrl(file, courseId)} /></li>{/each}</ul>
+{#if filteredNodes.length}<ul class="course-grid" aria-labelledby="courses-heading">{#each filteredNodes as courseItem (courseItem.courseId ?? courseItem.path)}<li><CourseCard course={courseItem} profile={user.userId} mediaUrl={(file, courseId) => transport.mediaUrl(file, courseId)} manualCoverUrl={transport.coverUrl(courseIdOf(courseItem), courseItem.coverVersion ?? null)} /></li>{/each}</ul>
 		{:else}<p class="empty" role="status">Nenhum curso corresponde a “{catalogQuery.trim()}”.</p>{/if}
 	{:else if canManage}<div class="empty-state"><p class="empty">Nenhum curso por aqui ainda.</p><p class="intro">Clique em “Importar curso” e escolha a pasta de um curso. Nada é movido, alterado ou apagado — a pasta permanece somente leitura.</p></div>{/if}
 	{#if catalog && catalog.looseFiles.length}<LooseFiles files={catalog.looseFiles} heading="Arquivos soltos" />{/if}
@@ -352,6 +409,9 @@
 		<header class="course-page-header"><h1>{course.title}</h1>{#if courseMeta}<p class="course-meta">{courseMeta}</p>{/if}</header>
 		{#if canManage}<div class="course-actions">{#if removeConfirm}<span class="remove-question" role="alert">Remover “{course.title}” da biblioteca? Os arquivos não serão apagados.</span><button class="text-button danger" onclick={removeCourse} disabled={removing} aria-busy={removing}>{removing ? 'Removendo…' : 'Remover curso'}</button><button class="text-button" onclick={() => (removeConfirm = false)} disabled={removing}>Cancelar</button>{:else}<button class="text-button" onclick={() => (removeConfirm = true)}>Remover curso</button><button class="text-button" onclick={rescan} disabled={rescanning}>{rescanning ? 'Indexando…' : 'Indexar cursos'}</button>{/if}</div>{/if}
 		{#if removeError}<p class="error" role="alert">{removeError}</p>{/if}
+		{#if canManage}<div class="course-cover-actions">{#if transportKind === 'desktop'}<button class="secondary" onclick={changeCover} disabled={coverBusy} aria-busy={coverBusy} aria-label={`Trocar a capa de ${course.title}`}>{coverBusy ? 'Enviando…' : 'Trocar capa'}</button>{:else}<label class="cover-file-field" for="course-cover-file">Trocar capa<input id="course-cover-file" type="file" accept={COVER_ACCEPT} onchange={pickCover} disabled={coverBusy} aria-busy={coverBusy} /></label>{/if}{#if course.coverVersion !== undefined}<button class="text-button" onclick={removeCover} disabled={coverBusy} aria-busy={coverBusy} aria-label={`Remover a capa de ${course.title}`}>Remover capa</button>{/if}</div>{/if}
+		{#if coverError}<p class="error" role="alert">{coverError}</p>{/if}
+		{#if coverMessage}<p class="catalog-message" role="status" aria-live="polite">{coverMessage}</p>{/if}
 		{#if rescanMessage}<p class="catalog-message" aria-live="polite">{rescanMessage}</p>{/if}
 		{#if course.looseFiles.length}<LooseFiles files={course.looseFiles} heading="Arquivos soltos" courseId={course.courseId ?? course.path} />{/if}
 		{#if course.children.length}<CatalogTree nodes={course.children} courseId={course.courseId ?? course.path} />{:else}<p class="empty" role="status">Este curso ainda não foi indexado. Use “Indexar cursos” para montar o catálogo.</p>{/if}

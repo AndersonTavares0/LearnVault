@@ -29,6 +29,20 @@ describe('generated course covers', () => {
 		}
 		expect(first).not.toEqual(second);
 	});
+
+	it('derives a deterministic gradient angle within a readable range', () => {
+		const titles = ['Física Quântica', 'História da Arte', 'Programação em Go', '   ', '--', 'Matemática'];
+		const angles = titles.map((title) => courseCover(title).angle);
+
+		for (const angle of angles) {
+			expect(Number.isInteger(angle)).toBe(true);
+			expect(angle).toBeGreaterThanOrEqual(95);
+			expect(angle).toBeLessThanOrEqual(200);
+		}
+		// O mesmo título produz sempre o mesmo ângulo, e títulos distintos variam.
+		expect(courseCover('Física Quântica').angle).toBe(courseCover('Física Quântica').angle);
+		expect(new Set(angles).size).toBeGreaterThan(1);
+	});
 });
 
 describe('course cover precedence', () => {
