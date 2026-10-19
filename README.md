@@ -66,12 +66,6 @@ Veja o [guia de contribuição](.github/CONTRIBUTING.md) para os checks, conven�
 
 O projeto usa `pnpm` para dependências do frontend e Conventional Commits para títulos e commits. Consulte [CONTRIBUTING.md](.github/CONTRIBUTING.md) antes de começar.
 
-## Releases
-
-O Release Please prepara versões e changelog. Cada release publicada oferece o instalador Windows, tarballs do servidor Linux e checksums. A lista automática de contribuidores ignora commits identificados como Dependabot. O [processo de release](docs/releases/process.md) explica a publicação e os assets.
-
-Flatpak, distribuição desktop Linux e publicação OCI/self-hosted permanecem no [roadmap](docs/product/roadmap.md); não são formatos de release disponíveis hoje.
-
 ## Mais informações
 
 - [Guia de início e uso](docs/wiki/getting-started.md)
