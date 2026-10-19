@@ -172,6 +172,13 @@ describe('player preference controls', () => {
 		expect(body).toContain('aria-pressed="true">1.5x');
 	});
 
+	it('identifica os atalhos do player visual e semanticamente', () => {
+		const { body } = render(Player, { props: baseProps });
+
+		expect(body).toContain('aria-keyshortcuts="Space ArrowLeft ArrowRight"');
+		expect(body).toContain('Atalhos: espaço reproduz ou pausa; ← e → avançam ou retrocedem 10 segundos.');
+	});
+
 	it('keeps a single media choice simple and leaves auto-advance off by default', () => {
 		const oneMediaLesson = lesson([media('aula.mp4')]);
 		const { body } = render(Player, { props: { ...baseProps, lesson: oneMediaLesson } });
