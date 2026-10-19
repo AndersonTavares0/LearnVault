@@ -2,6 +2,7 @@
 
 .player-media{display:block;width:100%;max-width:100%;border-radius:12px;background:#1f2b25;box-shadow:0 18px 45px #26382d1f;accent-color:#c18b52}.player-media:focus-visible{outline-color:#c18b52}.player-audio{margin:0;width:100%;background:var(--surface,#fffefa);border-radius:8px;box-shadow:none}
 .player-container{display:grid;gap:12px;margin:25px 0}
+.player-shortcut-hint{margin:0;color:var(--muted,#596257);font-size:13px}
 .audio-container{padding:20px;background:var(--surface,#fffefa);border:1px solid var(--line,#d5d9cf);border-radius:12px;box-shadow:0 4px 16px #26382d0a}
 .audio-banner{display:flex;align-items:center;gap:14px;margin-bottom:8px}
 .audio-icon-wrap{display:grid;place-items:center;width:40px;height:40px;border-radius:10px;background:var(--hover,#e7e9df);color:var(--accent,#2f493d)}

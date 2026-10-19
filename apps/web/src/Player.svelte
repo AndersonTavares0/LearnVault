@@ -184,8 +184,9 @@
 </script>
 {#if mediaError}<p class="error" role="alert">{mediaError}</p>
 {:else if source}
-	<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions (the labeled player group is keyboard-focusable for shortcuts) -->
-	<div class="player-container {playbackKind === 'audio' ? 'audio-container' : 'video-container'}" role="group" tabindex="0" onkeydown={handleKeydown} aria-label="Player. Espaço reproduz ou pausa; setas esquerda e direita avançam ou retrocedem 10 segundos.">
+	<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions (o grupo identificado do player recebe foco para ativar atalhos) -->
+	<div class="player-container {playbackKind === 'audio' ? 'audio-container' : 'video-container'}" role="group" tabindex="0" onkeydown={handleKeydown} aria-label="Player" aria-keyshortcuts="Space ArrowLeft ArrowRight">
+		<p class="player-shortcut-hint">Atalhos: espaço reproduz ou pausa; ← e → avançam ou retrocedem 10 segundos.</p>
 		{#if availableMedia.length > 1}<label class="player-select-label">Mídia da aula<select aria-label="Mídia da aula" value={playable?.mediaId ?? ''} onchange={selectMedia}>{#each availableMedia as item}<option value={item.mediaId ?? ''}>{item.name}</option>{/each}</select></label>{/if}
 		{#if availableSubtitles.length > 0}<label class="player-select-label">Legenda<select aria-label="Legenda da aula" value={lessonPreference.subtitleId === null ? '' : selectedSubtitle?.mediaId ?? ''} onchange={selectSubtitle}><option value="">Sem legendas</option>{#each availableSubtitles as item}<option value={item.mediaId ?? ''}>{item.name}</option>{/each}</select></label>{/if}
 		{#if playbackKind === 'audio'}
