@@ -17,22 +17,29 @@ function readBundles(root: string): string {
 	return contents.join('\n');
 }
 
+/** Builds outputs for standalone tests; CI inspects the artifacts produced by its upstream job. */
+function buildOutputsIfNeeded(...commands: string[][]): void {
+	if (process.env.LEARNVAULT_PREBUILT_OUTPUTS === '1') return;
+	for (const args of commands) {
+		execFileSync('pnpm', args, { cwd: process.cwd(), stdio: 'pipe', shell: true });
+	}
+}
+
 describe('production shell contract', () => {
-	it('runs the real build and emits the canonical server shell', () => {
-		execFileSync('pnpm', ['run', 'build'], { cwd: process.cwd(), stdio: 'pipe', shell: true });
+	it('inspects the canonical server shell from the production build', () => {
+		buildOutputsIfNeeded(['run', 'build']);
 		const shell = resolve(process.cwd(), '../../crates/server/web/build/200.html');
 		expect(existsSync(shell)).toBe(true);
 		expect(readFileSync(shell, 'utf8')).toContain('/_app/immutable/');
 	});
-	it('runs the desktop build into the Tauri frontend directory', () => {
-		execFileSync('pnpm', ['run', 'build:desktop'], { cwd: process.cwd(), stdio: 'pipe', shell: true });
+	it('inspects the desktop shell from the production build', () => {
+		buildOutputsIfNeeded(['run', 'build:desktop']);
 		const shell = resolve(process.cwd(), '../../crates/desktop/frontend-dist/200.html');
 		expect(existsSync(shell)).toBe(true);
 		expect(readFileSync(shell, 'utf8')).toContain('/_app/immutable/');
 	});
 	it('ships a desktop bundle without any application fetch while keeping SRT conversion on HTTP', () => {
-		execFileSync('pnpm', ['run', 'build:desktop'], { cwd: process.cwd(), stdio: 'pipe', shell: true });
-		execFileSync('pnpm', ['run', 'build'], { cwd: process.cwd(), stdio: 'pipe', shell: true });
+		buildOutputsIfNeeded(['run', 'build:desktop'], ['run', 'build']);
 
 		const desktop = readBundles(resolve(process.cwd(), '../../crates/desktop/frontend-dist'));
 		const http = readBundles(resolve(process.cwd(), '../../crates/server/web/build'));
