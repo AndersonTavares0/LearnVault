@@ -237,6 +237,20 @@ test("blocks patch writes when the patch tool is named patch", async () => {
   assert.equal(outside.blocked, false)
 })
 
+test("fails closed when a patch call has no readable patch text", async () => {
+  const hook = await hookFor({ branch: "main" })
+  for (const args of [{}, { patchText: 42 }, { patchText: null }, { patchText: {} }]) {
+    const result = await attempt(hook, "patch", args)
+    assert.equal(result.blocked, true, "patch sem texto legível deveria ser bloqueado")
+    assert.match(result.message, /protegida/)
+  }
+
+  // Em branch de trabalho a guarda não bloqueia: a proteção é da branch protegida.
+  const featureHook = await hookFor({ branch: "feat/x" })
+  const allowed = await attempt(featureHook, "patch", {})
+  assert.equal(allowed.blocked, false)
+})
+
 test("treats a path on another Windows drive as outside the worktree", { skip: process.platform !== "win32" }, async () => {
   const repo = repoWithBranch("main")
   const hooks = await MainBranchGuard({ directory: repo, worktree: repo })
