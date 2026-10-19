@@ -46,7 +46,7 @@ ou repetir a operação.
 
 - É uma proteção preventiva contra erros do agente: **não substitui** a branch protection
   do GitHub nem o fluxo de pull request.
-- Não bloqueia todas as formas de escrita via Bash; a detecção de comandos usa padrões
+- Não bloqueia todas as formas de escrita via shell; a detecção de comandos usa padrões
   conhecidos e pode ser contornada por sintaxes alternativas.
 - Alterações no plugin só entram em vigor após reiniciar o opencode.
 

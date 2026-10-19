@@ -11,7 +11,7 @@
  * do arquivo como um plugin e exige uma função, então um export a mais derruba o
  * carregamento inteiro.
  * Não substitui a branch protection do GitHub nem cobre todas as formas de escrita via
- * Bash — veja o README deste diretório.
+ * shell (`bash`/`shell`) — veja o README deste diretório.
  * A guarda reconhece a ferramenta de shell pelos nomes `bash` e `shell`, e a de patch
  * pelos nomes `apply_patch` e `patch`: o opencode v2 renomeou as duas e, sem os dois
  * nomes, a proteção não dispararia.
