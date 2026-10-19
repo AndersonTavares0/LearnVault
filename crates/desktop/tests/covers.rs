@@ -119,7 +119,7 @@ fn accepts_head_and_keeps_the_opaque_identity() {
 }
 
 #[test]
-fn rejects_a_foreign_scheme_host_or_query() {
+fn rejects_a_foreign_scheme_host_or_invalid_query() {
     let mut scheme = raw("GET", "/course-1");
     scheme.scheme = "learnvault-media";
     assert_eq!(
@@ -141,13 +141,20 @@ fn rejects_a_foreign_scheme_host_or_query() {
         CoverRejection::Malformed
     );
 
-    // A versão da capa é uma questão da SPA; a query nunca chega ao handler.
-    let mut query = raw("GET", "/course-1");
-    query.query = Some("v=123");
-    assert_eq!(
-        parse_cover_request(&query).unwrap_err(),
-        CoverRejection::Malformed
-    );
+    // A versão da capa chega como `v=<dígitos>` e é aceita como cache-buster; qualquer
+    // outra query é recusada.
+    let mut version = raw("GET", "/course-1");
+    version.query = Some("v=123");
+    assert_eq!(parse_cover_request(&version).unwrap().course_id, "course-1");
+    for invalid in ["v=", "v=abc", "v=1&x=2", "path=../segredo", "v=-1"] {
+        let mut request = raw("GET", "/course-1");
+        request.query = Some(invalid);
+        assert_eq!(
+            parse_cover_request(&request).unwrap_err(),
+            CoverRejection::Malformed,
+            "query aceita indevidamente: {invalid}"
+        );
+    }
 }
 
 #[test]
