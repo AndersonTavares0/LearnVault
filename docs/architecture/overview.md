@@ -112,3 +112,9 @@ integridade, chaves estrangeiras e contagens. A biblioteca física não particip
 A decisão pela reescrita em Rust e as alternativas consideradas estão no
 [ADR 0001](adr/0001-reescrita-em-rust.md). Consulte [distribuição](../operations/distribution.md)
 para executáveis e pacotes.
+
+## Próximos passos
+
+- [[Requirements]] para os requisitos numerados do produto.
+- [[Development-and-Governance]] para o fluxo de contribuição e CI.
+- [[Operations]] para distribuição e operação.

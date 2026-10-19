@@ -82,3 +82,9 @@ Detalhes de implementação ficam nas issues e pull requests.
 - [Escopo e prioridades das próximas versões](https://github.com/AndersonTavares0/LearnVault/discussions/32)
 - [Camada de análise e dados](https://github.com/AndersonTavares0/LearnVault/discussions/33)
 - [Artefatos Windows além do instalador padrão (`.msi`, portátil)](https://github.com/AndersonTavares0/LearnVault/discussions/131)
+
+## Próximos passos
+
+- [[Requirements]] para os requisitos por trás dos itens.
+- [[Architecture]] para as decisões técnicas atuais.
+- [[Home]] para voltar ao índice da Wiki.
