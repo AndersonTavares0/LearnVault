@@ -9,7 +9,7 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 
 describe('transport contract', () => {
 	it('exposes every method of the transport contract', () => {
-		const methods = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'checkUpdate', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover', 'setCourseOrder', 'resetCourseOrder', 'listNotes', 'listAllNotes', 'createNote', 'updateNote', 'deleteNote'] as const;
+		const methods = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'courseProgress', 'checkUpdate', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover', 'setCourseOrder', 'resetCourseOrder', 'listNotes', 'listAllNotes', 'createNote', 'updateNote', 'deleteNote'] as const;
 		// A lista é exaustiva: se a interface `Transport` ganhar ou perder um método, o
 		// tipo abaixo deixa de compilar e o typecheck do projeto reprova o teste.
 		type Exact<Contract, Listed> = [Listed] extends [Contract] ? ([Contract] extends [Listed] ? true : never) : never;

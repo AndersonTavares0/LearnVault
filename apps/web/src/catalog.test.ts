@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { countCatalogFiles, countCatalogNode, formatCount, formatCourseCardMeta, formatCourseMeta, formatLessonCounts, formatLessonMeta, isLessonMissing } from './catalog';
+import { countCatalogFiles, countCatalogNode, courseLessonEntries, formatCount, formatCourseCardMeta, formatCourseMeta, formatLessonCounts, formatLessonMeta, isLessonMissing } from './catalog';
 import type { CatalogCounts } from './catalog';
-import type { CatalogNode, FileEntry } from './transport';
+import { createDefaultPlayerPreferences, updateLessonPreference } from './player-preferences';
+import { courseIdOf, type CatalogNode, type FileEntry } from './transport';
 
 function file(name: string, kind: string, availability = 'available'): FileEntry {
 	return { name, path: name, size: 10, mediaId: name, kind, availability };
@@ -208,5 +209,34 @@ describe('lesson counting with missing media', () => {
 		expect(isLessonMissing(catalog.children[0].children[0])).toBe(false);
 		expect(countCatalogNode(catalog)).toMatchObject({ lessons: 1, missingLessons: 0 });
 		expect(formatLessonCounts(countCatalogNode(catalog))).toBe('1 aula');
+	});
+});
+
+describe('courseLessonEntries', () => {
+	it('lists every lesson in catalog order with the media the playlist will open', () => {
+		const course = node('course', 'Rust', [
+			node('module', 'Módulo 1', [
+				node('lesson', 'Aula 1', [], [file('a.mp4', 'media'), file('b.mp4', 'media')]),
+				node('lesson', 'Aula 2', [], [missing('c.mp4', 'media')])
+			]),
+			node('lesson', 'Aula solta', [], [file('d.mp4', 'media')])
+		]);
+
+		expect(courseLessonEntries(course)).toEqual([
+			{ path: 'Aula 1', title: 'Aula 1', mediaId: 'a.mp4' },
+			{ path: 'Aula 2', title: 'Aula 2', mediaId: null },
+			{ path: 'Aula solta', title: 'Aula solta', mediaId: 'd.mp4' }
+		]);
+	});
+
+	it('honours the lesson media preference so the checkbox follows the lesson, not the first file', () => {
+		const course = node('course', 'Rust', [node('lesson', 'Aula 1', [], [file('a.mp4', 'media'), file('b.mp4', 'media')])]);
+		const preferences = updateLessonPreference(createDefaultPlayerPreferences(), courseIdOf(course), 'Aula 1', { mediaId: 'b.mp4' });
+
+		expect(courseLessonEntries(course, preferences)[0].mediaId).toBe('b.mp4');
+	});
+
+	it('returns nothing for a course without lessons yet', () => {
+		expect(courseLessonEntries(node('course', 'Vazio'))).toEqual([]);
 	});
 });

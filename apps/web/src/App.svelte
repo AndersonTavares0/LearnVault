@@ -5,16 +5,18 @@
 	import CourseCard from './CourseCard.svelte';
 	import Player from './Player.svelte';
 	import { filterCatalog } from './search';
-	import { countCatalogNode, formatLessonCounts, formatLocationContext } from './catalog';
+	import { courseLessonEntries, formatLocationContext } from './catalog';
 	import PasswordField from './PasswordField.svelte';
 	import NotesIndex from './NotesIndex.svelte';
+	import StudyNotes from './StudyNotes.svelte';
 	import { defaultLessonPath, lessonContainer, neighboringLessons } from './navigation';
 	import { destinationAfterLogin, findCourse, findLesson, findLessonLocation, href, locationFromHash, type Route } from './router';
 	import { transport, transportKind, COVER_ACCEPT, MAX_COVER_BYTES, courseIdOf, STUDY_NOT_AVAILABLE, type Catalog, type CatalogNode, type Lesson, type StudyProgress, type UpdateStatus, type User } from './transport';
 	import { updateOutcome, updateMessage, updateReleaseUrl } from './update';
 	import { defaultRoute, resolveSession } from './session';
-	import { formatDuration, studySyncSupported } from './player';
-	import { createDefaultPlayerPreferences, playerPreferencesScope, readPlayerPreferences, writePlayerPreferences, type PlayerPreferences } from './player-preferences';
+	import { formatDuration, selectPlayableMedia, studySyncSupported } from './player';
+	import { createDefaultPlayerPreferences, lessonPreferenceKey, playerPreferencesScope, readPlayerPreferences, writePlayerPreferences, type PlayerPreferences } from './player-preferences';
+	import { createDefaultUiPreferences, hasStoredUiPreferences, readUiPreferences, uiPreferencesScope, writeUiPreferences, type UiPreferences } from './ui-preferences';
 	import Brand from './Brand.svelte';
 	import { applyTheme, persistThemeMode, readThemeMode, resolveTheme, type ThemeMode } from './theme';
 
@@ -97,10 +99,33 @@
 		void checkUpdate(false);
 	}
 	let playerPreferences: PlayerPreferences = createDefaultPlayerPreferences();
+	let uiPreferences: UiPreferences = createDefaultUiPreferences();
+	// A conclusão do curso aberto vive aqui: a playlist é a dona do estado e o player só
+	// reporta o fim do vídeo. Assim o checkbox e a barra de progresso nunca divergem.
+	let completedMedia = new Set<string>();
+	let courseProgressLoading = false;
+	let courseProgressError = '';
+	let progressCourseId = '';
+	let panelTab: 'lessons' | 'notes' = 'lessons';
+	let playerTime = 0;
+	let playerComponent: { seek: (seconds: number) => void } | undefined;
 
 	// Só o admin importa e indexa: no servidor isso evita que um usuário comum aponte o
 	// servidor para pastas arbitrárias; no desktop a identidade local é admin.
 	$: canManage = user !== null && user.role === 'admin';
+
+	$: currentCourseId = course ? courseIdOf(course) : null;
+	$: courseLessons = course ? courseLessonEntries(course, playerPreferences) : [];
+	$: playableLessons = courseLessons.filter((entry) => entry.mediaId !== null);
+	$: completedCount = playableLessons.filter((entry) => entry.mediaId && completedMedia.has(entry.mediaId)).length;
+	// A mídia da aula aberta, resolvida com a mesma preferência que o player usa: a nota e o
+	// checkbox precisam falar do arquivo que está tocando, não do primeiro da lista.
+	$: currentMediaId = lesson && currentCourseId
+		? selectPlayableMedia(lesson.media, playerPreferences.lessons[lessonPreferenceKey(currentCourseId, lesson.path)]?.mediaId)?.mediaId ?? null
+		: null;
+	// Carrega as conclusões quando o curso muda; a guarda por id evita recarregar a cada
+	// alteração de preferência do player.
+	$: if (currentCourseId && studyEnabled) ensureCourseProgress(currentCourseId);
 
 	applyTheme(document.documentElement, resolvedTheme);
 	const scheme = window.matchMedia?.('(prefers-color-scheme: dark)');
@@ -178,6 +203,76 @@
 		const saved = writePlayerPreferences(safeLocalStorage(), scope, next);
 		return saved;
 	}
+	function loadUiPreferences(currentUser: User | null) {
+		const storage = safeLocalStorage();
+		const scope = uiPreferencesScope(transportKind, currentUser?.userId);
+		uiPreferences = readUiPreferences(storage, scope);
+		// Em tela estreita a sidebar nasce compacta; assim que a pessoa escolhe, a escolha manda.
+		if (!hasStoredUiPreferences(storage, scope) && window.matchMedia?.('(max-width: 1100px)').matches) {
+			uiPreferences = { ...uiPreferences, sidebarCollapsed: true };
+		}
+	}
+	function saveUiPreferences(next: UiPreferences): boolean {
+		uiPreferences = next;
+		const scope = uiPreferencesScope(transportKind, user?.userId);
+		return writeUiPreferences(safeLocalStorage(), scope, next);
+	}
+	function toggleSidebar() {
+		saveUiPreferences({ ...uiPreferences, sidebarCollapsed: !uiPreferences.sidebarCollapsed });
+	}
+	function togglePanel() {
+		saveUiPreferences({ ...uiPreferences, panelCollapsed: !uiPreferences.panelCollapsed });
+	}
+	// Reabrir o painel já escolhe a aba pedida, para o botão do cabeçalho valer por si só.
+	function openPanel(tab: 'lessons' | 'notes') {
+		panelTab = tab;
+		if (uiPreferences.panelCollapsed) saveUiPreferences({ ...uiPreferences, panelCollapsed: false });
+	}
+	function ensureCourseProgress(currentId: string) {
+		if (currentId === progressCourseId) return;
+		progressCourseId = currentId;
+		void loadCourseProgress(currentId);
+	}
+	// Releitura manual depois de um erro: limpa a guarda para o efeito reativo nao bloquear a nova tentativa.
+	function retryCourseProgress(currentId: string) {
+		progressCourseId = '';
+		ensureCourseProgress(currentId);
+	}
+	async function loadCourseProgress(currentId: string) {
+		if (!studyEnabled) return;
+		courseProgressLoading = true;
+		courseProgressError = '';
+		try {
+			const result = await transport.courseProgress(currentId);
+			if (progressCourseId !== currentId) return;
+			completedMedia = new Set(result.items.filter((item) => item.completed).map((item) => item.mediaId));
+		} catch (cause) {
+			if (progressCourseId !== currentId) return;
+			courseProgressError = cause instanceof Error ? cause.message : 'Não foi possível carregar o progresso do curso.';
+		} finally {
+			if (progressCourseId === currentId) courseProgressLoading = false;
+		}
+	}
+	function setCompletedLocally(mediaId: string, completed: boolean) {
+		const next = new Set(completedMedia);
+		if (completed) next.add(mediaId);
+		else next.delete(mediaId);
+		completedMedia = next;
+	}
+	// Otimista: o checkbox responde na hora e volta ao estado anterior se a gravação falhar.
+	async function toggleLessonCompleted(mediaId: string, completed: boolean) {
+		const previous = completedMedia;
+		setCompletedLocally(mediaId, completed);
+		courseProgressError = '';
+		try {
+			const result = await transport.setCompleted(mediaId, completed);
+			if (!result.recorded) throw new Error('Não foi possível atualizar a conclusão.');
+			setCompletedLocally(mediaId, result.completed);
+		} catch (cause) {
+			completedMedia = previous;
+			courseProgressError = cause instanceof Error ? cause.message : 'Não foi possível atualizar a conclusão.';
+		}
+	}
 	function autoAdvance() {
 		if (!playerPreferences.autoNext || !neighbors.next) return;
 		location.hash = href('course', courseId ?? '', neighbors.next.path);
@@ -195,6 +290,7 @@
 			const session = await resolveSession(() => transport.me(), transportKind);
 			user = session.user;
 			loadPlayerPreferences(session.user);
+			loadUiPreferences(session.user);
 			error = session.error;
 			if (user) {
 				catalog = await transport.catalog();
@@ -217,6 +313,7 @@
 		try {
 			user = await transport.login(username, password);
 			loadPlayerPreferences(user);
+			loadUiPreferences(user);
 			password = '';
 			catalog = await transport.catalog();
 			await loadRecent();
@@ -251,6 +348,10 @@
 		await transport.logout();
 		user = null;
 		playerPreferences = createDefaultPlayerPreferences();
+		uiPreferences = createDefaultUiPreferences();
+		completedMedia = new Set();
+		courseProgressError = '';
+		progressCourseId = '';
 		catalog = null;
 		recent = [];
 		username = '';
@@ -492,21 +593,20 @@
 			</form>
 		</section>
 	</main>
-{:else}<div class="shell"><div class="layout" class:watch-layout={watchRoute}><aside class="sidebar"><div class="brand"><Brand /> LEARNVAULT</div><nav aria-label="Navegação principal"><a class:active={route === 'home' || watchRoute} href={href('home')}>Início</a><a class:active={route === 'notes'} href={href('notes')}>Anotações</a><a class:active={route === 'settings'} href={href('settings')}>Configurações</a></nav>{#if transportKind === 'http'}<button class="text-button sidebar-logout" onclick={logout}>Sair</button>{/if}</aside><main class:home={route === 'home'} class:watch={watchRoute}>{#if error}<p class="error" role="alert">{error}</p>{/if}
+{:else}<div class="shell"><div class="layout" class:watch-layout={watchRoute} class:sidebar-compact={uiPreferences.sidebarCollapsed}><aside class="sidebar"><div class="sidebar-top"><div class="brand"><Brand /> <span class="brand-name">LEARNVAULT</span></div><button class="sidebar-toggle" type="button" onclick={toggleSidebar} aria-expanded={!uiPreferences.sidebarCollapsed} aria-label={uiPreferences.sidebarCollapsed ? 'Expandir menu' : 'Compactar menu'} title={uiPreferences.sidebarCollapsed ? 'Expandir menu' : 'Compactar menu'}><svg viewBox="0 0 16 16" aria-hidden="true">{#if uiPreferences.sidebarCollapsed}<path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />{:else}<path d="M10 4 6 8l4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />{/if}</svg></button></div><nav aria-label="Navegação principal"><a class:active={route === 'home' || watchRoute} href={href('home')} title="Início"><svg class="nav-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 7.5 8 3l5 4.5V13H9.7V9.5H6.3V13H3z" /></svg><span class="nav-label">Início</span></a><a class:active={route === 'notes'} href={href('notes')} title="Anotações"><svg class="nav-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5h5l3 3v8H4z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" /><path d="M6 8h4M6 10.4h4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" /></svg><span class="nav-label">Anotações</span></a><a class:active={route === 'settings'} href={href('settings')} title="Configurações"><svg class="nav-icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.3" fill="none" stroke="currentColor" stroke-width="1.3" /><path d="M8 1.9v1.9M8 12.2v1.9M1.9 8h1.9M12.2 8h1.9M3.7 3.7l1.35 1.35M10.95 10.95l1.35 1.35M12.3 3.7l-1.35 1.35M5.05 10.95 3.7 12.3" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" /></svg><span class="nav-label">Configurações</span></a></nav>{#if transportKind === 'http'}<button class="text-button sidebar-logout" onclick={logout} title="Sair"><svg class="nav-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 3.5h6.5v9H4z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" /><path d="M9.8 8H2.6M5.1 5.5 2.6 8l2.5 2.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" /></svg><span class="nav-label">Sair</span></button>{/if}</aside><main class:home={route === 'home'} class:watch={watchRoute}>{#if error}<p class="error" role="alert">{error}</p>{/if}
 {#if route === 'home'}
 	<h1 class="visually-hidden">Início</h1>
 	{#if canManage || (catalog && catalog.nodes.length)}
-		<div class="home-toolbar">
+		<div class="home-command">
 			{#if catalog && catalog.nodes.length}<form class="catalog-search" role="search" onsubmit={(event) => event.preventDefault()}><label class="visually-hidden" for="catalog-search-input">Buscar nos cursos</label><div class="search-field"><svg class="search-glyph" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"></circle><path d="m16.6 16.6 4.2 4.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg><input id="catalog-search-input" type="search" placeholder="Buscar nos cursos" bind:value={catalogQuery} /></div></form>{/if}
 			{#if canManage}
 				<div class="home-actions">
 					{#if transportKind === 'desktop'}<button class="primary" onclick={importCourse} disabled={importing} aria-busy={importing}>{importing ? 'Importando…' : 'Importar curso'}</button>{:else}<button class="primary" onclick={() => (importFormOpen = !importFormOpen)} aria-expanded={importFormOpen}>Importar curso</button>{/if}
-					<button class="secondary" onclick={rescan} disabled={rescanning || !catalog || !catalog.nodes.length}>{rescanning ? 'Indexando…' : 'Indexar cursos'}</button>
+					<button class="secondary" onclick={rescan} disabled={rescanning || !catalog || !catalog.nodes.length}>{rescanning ? 'Indexando…' : 'Indexar'}</button>
 				</div>
 			{/if}
 		</div>
 	{/if}
-	{#if studySyncSupported && recent.length}<section class="recent-study" aria-labelledby="recent-heading"><h2 id="recent-heading">Continuar assistindo</h2><ul>{#each recent.slice(0, 6) as item}{@const location = findLessonLocation(catalog, item.mediaId)}<li>{#if location}<div class="recent-study-info"><a href={href('course', location.courseId, location.lesson.path)}>{location.lesson.title}</a><small title={formatLocationContext(location.courseTitle, location.moduleTitle)}>{formatLocationContext(location.courseTitle, location.moduleTitle)}</small></div><small>{item.completed ? 'Concluído' : `Parou em ${formatDuration(item.positionSeconds)}`}</small>{:else}<span>Mídia não disponível no catálogo</span>{/if}</li>{/each}</ul></section>{/if}
 	{#if !canManage && catalog && catalog.nodes.length === 0}<p class="empty" role="status">Nenhum curso disponível. Peça ao administrador para importar um curso.</p>{/if}
 	{#if user.role === 'admin' && importFormOpen}<form class="import-form" onsubmit={submitImport}><label for="import-path">Caminho da pasta do curso no servidor</label><input id="import-path" bind:value={importPath} placeholder="C:\cursos\Meu curso" required /><div class="import-form-actions"><button class="primary" disabled={importing} aria-busy={importing}>{importing ? 'Importando…' : 'Importar'}</button><button type="button" class="text-button" onclick={() => (importFormOpen = false)}>Cancelar</button></div></form>{/if}
 	{#if importError}<p class="error" role="alert">{importError}</p>{/if}
@@ -515,10 +615,20 @@
 	{#if coverError}<p class="error" role="alert">{coverError}</p>{/if}
 	{#if coverMessage}<p class="catalog-message" role="status" aria-live="polite">{coverMessage}</p>{/if}
 	{#if catalog && catalog.nodes.length}
-	<h2 id="courses-heading" class="courses-heading">Cursos</h2>
-{#if filteredNodes.length}<ul class="course-grid" aria-labelledby="courses-heading">{#each filteredNodes as courseItem (courseItem.courseId ?? courseItem.path)}<li><CourseCard course={courseItem} profile={user.userId} mediaUrl={(file, courseId) => transport.mediaUrl(file, courseId)} manualCoverUrl={transport.coverUrl(courseIdOf(courseItem), courseItem.coverVersion ?? null)} {canManage} menuOpen={coverMenuId === courseIdOf(courseItem)} onMenuOpen={(open) => toggleCoverMenu(courseItem, open)} onChangeCover={requestCourseCover} onRemoveCover={removeCover} /></li>{/each}</ul>
+	<div class="home-grid" class:with-rail={studySyncSupported && recent.length}>
+		<div class="home-main">
+			<h2 id="courses-heading" class="courses-heading">Cursos</h2>
+			{#if filteredNodes.length}<ul class="course-grid" class:sparse={filteredNodes.length <= 2} aria-labelledby="courses-heading">{#each filteredNodes as courseItem (courseItem.courseId ?? courseItem.path)}<li><CourseCard course={courseItem} profile={user.userId} mediaUrl={(file, courseId) => transport.mediaUrl(file, courseId)} manualCoverUrl={transport.coverUrl(courseIdOf(courseItem), courseItem.coverVersion ?? null)} {canManage} menuOpen={coverMenuId === courseIdOf(courseItem)} onMenuOpen={(open) => toggleCoverMenu(courseItem, open)} onChangeCover={requestCourseCover} onRemoveCover={removeCover} /></li>{/each}</ul>
 		{:else}<p class="empty" role="status">Nenhum curso corresponde a “{catalogQuery.trim()}”.</p>{/if}
-	{:else if canManage}<div class="empty-state"><p class="empty">Nenhum curso por aqui ainda.</p><p class="intro">Clique em “Importar curso” e escolha a pasta de um curso. Nada é movido, alterado ou apagado — a pasta permanece somente leitura.</p></div>{/if}
+		</div>
+		{#if studySyncSupported && recent.length}
+			<aside class="home-rail" aria-labelledby="recent-heading">
+				<h2 id="recent-heading">Continuar assistindo</h2>
+				<ul class="recent-study">{#each recent.slice(0, 6) as item}{@const location = findLessonLocation(catalog, item.mediaId)}<li>{#if location}<div class="recent-study-info"><a href={href('course', location.courseId, location.lesson.path)}>{location.lesson.title}</a><small title={formatLocationContext(location.courseTitle, location.moduleTitle)}>{formatLocationContext(location.courseTitle, location.moduleTitle)}</small></div><small>{item.completed ? 'Concluído' : `Parou em ${formatDuration(item.positionSeconds)}`}</small>{:else}<span>Mídia não disponível no catálogo</span>{/if}</li>{/each}</ul>
+			</aside>
+		{/if}
+	</div>
+	{:else if canManage}<div class="empty-state"><h2 class="empty-title">Comece pela sua pasta de cursos</h2><ol class="empty-steps"><li><strong>Importar</strong><span>Escolha a pasta que já guarda seus cursos.</span></li><li><strong>Indexar</strong><span>O LearnVault lê os arquivos e organiza as aulas.</span></li><li><strong>Assistir</strong><span>Estude com progresso e anotações no mesmo lugar.</span></li></ol><p class="intro">Nada é movido, alterado ou apagado — a pasta permanece somente leitura.</p></div>{/if}
 	{#if catalog && catalog.looseFiles.length}<LooseFiles files={catalog.looseFiles} heading="Arquivos soltos" />{/if}
 {:else if route === 'settings'}<h1>Preferências</h1><p class="intro">Escolha como o LearnVault aparece neste dispositivo.</p><fieldset class="theme-options"><legend>Tema</legend><label><input type="radio" name="theme" value="system" checked={themeMode === 'system'} onchange={() => changeTheme('system')} />Sistema <span>Acompanha a preferência do sistema.</span></label><label><input type="radio" name="theme" value="light" checked={themeMode === 'light'} onchange={() => changeTheme('light')} />Claro <span>Usa sempre o tema claro.</span></label><label><input type="radio" name="theme" value="dark" checked={themeMode === 'dark'} onchange={() => changeTheme('dark')} />Escuro <span>Usa sempre o tema escuro.</span></label></fieldset><p class="theme-status" aria-live="polite">Tema atual: {resolvedTheme === 'dark' ? 'escuro' : 'claro'}{themeMode === 'system' ? ' (sistema)' : ''}</p><section class="account-settings" aria-labelledby="account-heading"><h2 id="account-heading">Conta</h2><p><strong>{user.username}</strong> · {user.isAdmin ? 'Administrador' : 'Estudante'}</p><form class="credentials-form" onsubmit={credentials}><fieldset class="auth-fields" disabled={authBusy}><legend>Credenciais de acesso</legend><PasswordField id="settings-current-password" label="Senha atual" autocomplete="current-password" bind:value={currentPassword} /><label class="form-field" for="settings-new-username">Novo usuário<input id="settings-new-username" autocomplete="username" bind:value={username} required /></label><PasswordField id="settings-new-password" label="Nova senha" autocomplete="new-password" bind:value={password} minLength={12} hint="Use ao menos 12 caracteres." />{#if accountError}<p class="error" role="alert">{accountError}</p>{/if}{#if accountStatus}<p class="catalog-message" role="status">{accountStatus}</p>{/if}<button type="submit" disabled={authBusy} aria-busy={authBusy}>{authBusy ? 'Salvando…' : 'Atualizar credenciais'}</button></fieldset></form>{#if transportKind === 'http'}<button class="text-button" onclick={logout}>Encerrar sessão</button>{:else}<p class="catalog-message">Biblioteca local neste dispositivo.</p>{/if}</section>
 {#if transportKind === 'http'}<section class="account-settings" aria-labelledby="update-heading"><h2 id="update-heading">Atualização</h2>{#if updateStatus}<p>Versão atual: <strong>{updateStatus.current}</strong></p>{/if}<button class="text-button" onclick={() => checkUpdate(true)} disabled={updateChecking} aria-busy={updateChecking}>{updateChecking ? 'Verificando…' : 'Verificar atualização'}</button>{#if updateStatus}{@const outcome = updateOutcome(updateStatus)}{@const releaseUrl = updateReleaseUrl(updateStatus)}{#if outcome !== 'error' || updateManual}<p class="catalog-message" role="status">{updateMessage(updateStatus)}</p>{/if}{#if outcome === 'available' && releaseUrl}<p class="catalog-message"><a href={releaseUrl} target="_blank" rel="noopener noreferrer">Ver a release</a></p>{/if}{/if}</section>{/if}
@@ -549,27 +659,55 @@
 					{/if}
 				</div>
 			{/if}
+			{#if uiPreferences.panelCollapsed}
+				<div class="watch-panel-actions">
+					<button class="panel-reopen" type="button" onclick={() => openPanel('lessons')} aria-controls="watch-panel"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4h10M3 8h10M3 12h10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" /></svg>Aulas</button>
+					<button class="panel-reopen" type="button" onclick={() => openPanel('notes')} aria-controls="watch-panel"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5h5l3 3v8H4z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" /><path d="M6 8h4M6 10.4h4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" /></svg>Anotações</button>
+				</div>
+			{/if}
 		</div>
 		{#if removeError}<p class="error" role="alert">{removeError}</p>{/if}
 		{#if orderError}<p class="error" role="alert">{orderError}</p>{/if}
 		{#if orderMessage}<p class="catalog-message" role="status" aria-live="polite">{orderMessage}</p>{/if}
-		<div class="watch-grid">
+		<div class="watch-grid" class:panel-collapsed={uiPreferences.panelCollapsed}>
 			<div class="watch-main">
 				{#if lesson}
 					<Player {lesson} courseId={courseIdOf(course)} lessonTitle={lesson.title} {mediaError} onMediaError={mediaFailed} {studyEnabled} preferences={playerPreferences}
 						onPreferencesChange={savePlayerPreferences} autoNext={playerPreferences.autoNext}
 						hasNextLesson={neighbors.next !== null} onAutoNext={autoAdvance}
-						onAutoNextChange={(enabled) => savePlayerPreferences({ ...playerPreferences, autoNext: enabled })} />
+						onAutoNextChange={(enabled) => savePlayerPreferences({ ...playerPreferences, autoNext: enabled })}
+						bind:this={playerComponent}
+						completed={currentMediaId ? completedMedia.has(currentMediaId) : false}
+						onCompletedChange={toggleLessonCompleted}
+						onTimeChange={(seconds) => (playerTime = seconds)} />
 				{:else}<p class="empty" role="status">Este curso não tem nenhuma aula disponível.</p>{/if}
 				{#if activeContainer && (activeContainer.files.length || activeContainer.looseFiles.length)}<LooseFiles files={[...activeContainer.files, ...activeContainer.looseFiles]} heading="Materiais do módulo" courseId={courseIdOf(course)} />{/if}
 				{#if course.looseFiles.length}<LooseFiles files={course.looseFiles} heading="Arquivos soltos do curso" courseId={courseIdOf(course)} />{/if}
 				{#if neighbors.previous || neighbors.next}<nav class="lesson-nav" aria-label="Aulas vizinhas">{#if neighbors.previous}<a href={href('course', courseIdOf(course), neighbors.previous.path)}>← {neighbors.previous.title}</a>{/if}{#if neighbors.next}<a href={href('course', courseIdOf(course), neighbors.next.path)}>{neighbors.next.title} →</a>{/if}</nav>{/if}
 			</div>
-			<aside class="watch-playlist" aria-label="Aulas do curso">
-				<div class="playlist-heading"><h2>Aulas do curso</h2><span>{formatLessonCounts(countCatalogNode(course))}</span></div>
-				<div class="course-playlist-body" data-playlist-body>
-					{#if course.children.length}<CatalogTree nodes={course.children} courseId={courseIdOf(course)} activePath={activePath} showFiles={false} />{:else}<p class="empty" role="status">Este curso ainda não foi indexado.</p>{/if}
+			<aside class="watch-playlist" class:collapsed={uiPreferences.panelCollapsed} id="watch-panel" aria-label="Painel da aula">
+				<div class="panel-head">
+					<div class="panel-tabs" role="tablist" aria-label="Painel da aula">
+						<button class="panel-tab" class:active={panelTab === 'lessons'} type="button" role="tab" id="panel-tab-lessons" aria-selected={panelTab === 'lessons'} aria-controls="panel-lessons" onclick={() => (panelTab = 'lessons')}>Aulas</button>
+						<button class="panel-tab" class:active={panelTab === 'notes'} type="button" role="tab" id="panel-tab-notes" aria-selected={panelTab === 'notes'} aria-controls="panel-notes" onclick={() => (panelTab = 'notes')}>Anotações</button>
+					</div>
+					<button class="panel-collapse" type="button" onclick={togglePanel} aria-label="Recolher painel" title="Recolher painel"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
 				</div>
+				{#if panelTab === 'lessons'}
+					<div class="panel-body" role="tabpanel" id="panel-lessons" aria-labelledby="panel-tab-lessons" data-playlist-body>
+						<div class="playlist-progress">
+							<p>{completedCount} de {playableLessons.length} concluídas</p>
+							<div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax={playableLessons.length} aria-valuenow={completedCount} aria-label="Progresso do curso"><span style={`width: ${playableLessons.length ? Math.round((completedCount / playableLessons.length) * 100) : 0}%`}></span></div>
+						</div>
+						{#if courseProgressError}<div class="panel-warning" role="status"><p>{courseProgressError}</p><button class="text-button" type="button" onclick={() => retryCourseProgress(courseIdOf(course))}>Tentar de novo</button></div>{/if}
+						{#if courseProgressLoading}<p class="panel-loading" role="status">Carregando progresso…</p>{/if}
+						{#if course.children.length}<CatalogTree nodes={course.children} courseId={courseIdOf(course)} activePath={activePath} showFiles={false} {completedMedia} preferences={playerPreferences} onToggleCompleted={toggleLessonCompleted} progressDisabled={courseProgressLoading || courseProgressError !== ''} />{:else}<p class="empty" role="status">Este curso ainda não foi indexado.</p>{/if}
+					</div>
+				{:else}
+					<div class="panel-body" role="tabpanel" id="panel-notes" aria-labelledby="panel-tab-notes">
+						{#if currentMediaId}<StudyNotes mediaId={currentMediaId} currentTime={playerTime} onSeek={(seconds) => playerComponent?.seek(seconds)} onViewAll={() => (location.hash = href('notes'))} />{:else}<p class="empty" role="status">Abra uma aula para escrever anotações.</p>{/if}
+					</div>
+				{/if}
 			</aside>
 		</div>
 	{/if}

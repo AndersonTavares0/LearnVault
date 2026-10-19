@@ -1,4 +1,6 @@
-import type { CatalogNode, FileEntry } from './transport';
+import { selectPlayableMedia } from './player';
+import { lessonPreferenceKey, type PlayerPreferences } from './player-preferences';
+import { courseIdOf, type CatalogNode, type FileEntry } from './transport';
 
 export type FileCounts = { videos: number; materials: number };
 export type CatalogCounts = FileCounts & { modules: number; lessons: number; missingLessons: number };
@@ -128,4 +130,29 @@ export function formatLessonMeta(counts: FileCounts): string {
 /** Contexto de origem de um item recente: o curso e, quando houver, o módulo. */
 export function formatLocationContext(courseTitle: string, moduleTitle: string | null): string {
 	return joinParts([courseTitle, moduleTitle ?? '']);
+}
+
+export type CourseLessonEntry = { path: string; title: string; mediaId: string | null };
+
+/**
+ * Aulas de um curso com a mídia que o player abriria, na ordem canônica.
+ *
+ * A playlist usa esta lista para contar conclusões e desenhar a barra de progresso
+ * sem duplicar a regra de seleção de mídia do player. `mediaId` é nulo quando a aula
+ * não tem mídia reproduzível; essas aulas continuam na lista, mas não entram na conta.
+ */
+export function courseLessonEntries(course: CatalogNode, preferences?: PlayerPreferences): CourseLessonEntry[] {
+	const courseId = courseIdOf(course);
+	const entries: CourseLessonEntry[] = [];
+	function visit(node: CatalogNode): void {
+		if (node.role === 'lesson') {
+			const preferred = preferences?.lessons[lessonPreferenceKey(courseId, node.path)]?.mediaId;
+			const selected = selectPlayableMedia([...node.files, ...node.looseFiles], preferred);
+			entries.push({ path: node.path, title: node.title, mediaId: selected?.mediaId ?? null });
+			return;
+		}
+		for (const child of node.children) visit(child);
+	}
+	visit(course);
+	return entries;
 }

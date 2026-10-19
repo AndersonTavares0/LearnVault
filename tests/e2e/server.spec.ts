@@ -222,7 +222,7 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	await page.getByRole('button', { name: 'Entrar' }).click();
 	await expect(page.getByRole('heading', { name: 'Início' })).toBeAttached();
 
-	await page.getByRole('button', { name: 'Indexar cursos' }).click();
+	await page.getByRole('button', { name: 'Indexar', exact: true }).click();
 	await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
 	await expect(page.getByRole('navigation', { name: 'Navegação principal' })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'Cursos' })).toBeVisible();
@@ -301,7 +301,7 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	await expect(page.getByRole('heading', { name: 'Categoria' })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'Curso', exact: true })).toBeVisible();
 	// A aula inicial vem do histórico recente gravado acima.
-	await expect(page.locator('.course-playlist-body .lesson-row.active .lesson-title')).toHaveText('Curso');
+	await expect(page.locator('[data-playlist-body] .lesson-row.active .lesson-title')).toHaveText('Curso');
 	const videoSource = (await videoRequest).url();
 	const videoURL = new URL(videoSource, server.baseURL);
 	expect(videoURL.pathname).toBe('/api/media');
@@ -404,7 +404,7 @@ test('creates, edits, reloads and deletes a personal note in the player', async 
 
 	// O servidor é compartilhado por worker: a varredura só roda quando o catálogo ainda
 	// não está indexado.
-	const indexButton = page.getByRole('button', { name: 'Indexar cursos' });
+	const indexButton = page.getByRole('button', { name: 'Indexar', exact: true });
 	if (await indexButton.isVisible({ timeout: 2_000 }).catch(() => false)) {
 		await indexButton.click();
 		await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
@@ -419,14 +419,18 @@ test('creates, edits, reloads and deletes a personal note in the player', async 
 	await courseCard.click();
 	await expect(page.getByRole('heading', { name: 'Curso', exact: true })).toBeVisible();
 
-	const notes = page.getByRole('region', { name: 'Suas anotações' });
-	await expect(notes.getByRole('heading', { name: 'Suas anotações' })).toBeVisible();
+	// As anotações agora vivem na aba do painel da aula, ao lado da playlist.
+	await page.getByRole('tab', { name: 'Anotações' }).click();
+	const notes = page.getByRole('tabpanel', { name: 'Anotações' });
+	await expect(notes.getByRole('heading', { name: 'Anotações' })).toBeVisible();
+	await expect(notes.getByText('Ainda não há anotações nesta aula.')).toBeVisible();
 
 	// A nota nasce como texto simples, com a posição de reprodução anexada.
 	const texto = 'Nota de estudo criada pela jornada de UI.';
+	await notes.getByRole('button', { name: 'Nova anotação' }).click();
 	await notes.getByLabel('Nova anotação').fill(texto);
-	await notes.getByLabel(/Anexar posição atual/).check();
-	await notes.getByRole('button', { name: 'Adicionar anotação' }).click();
+	await notes.getByLabel(/Salvar posição atual/).check();
+	await notes.getByRole('button', { name: 'Salvar anotação' }).click();
 	await expect(notes.locator('p.note-text')).toHaveText(texto);
 	await expect(notes.getByRole('button', { name: /Ir para/ })).toBeVisible();
 
@@ -438,21 +442,35 @@ test('creates, edits, reloads and deletes a personal note in the player', async 
 
 	// A nota sobrevive a um recarregamento: a lista vem do servidor, não do estado local.
 	await page.reload();
+	await page.getByRole('tab', { name: 'Anotações' }).click();
 	await expect(notes.locator('p.note-text')).toHaveText(texto);
 
-	// A página de anotações lista as notas do dono agrupadas por curso.
+	// A página de anotações lista as notas do dono agrupadas por curso e permite filtrar.
 	const playerUrl = page.url();
 	await page.goto(`${server.baseURL}/#/notes`);
 	await expect(page.getByRole('heading', { name: 'Anotações', level: 1 })).toBeVisible();
 	await expect(page.getByText(texto).first()).toBeVisible();
-	await expect(page.getByRole('heading', { level: 2 }).first()).toBeVisible();
+	await expect(page.locator('.note-group h2').first()).toBeVisible();
+	await expect(page.locator('.notes-status')).toContainText('de');
 	const all = await (await page.request.get(`${server.baseURL}/api/study/notes/all`)).json();
 	expect(all.truncated).toBe(false);
 	expect(all.items.some((item: { text: string }) => item.text === texto)).toBe(true);
 
+	// A busca ignora acentos e caixa e convive com o agrupamento escolhido.
+	await page.getByLabel('Buscar nas anotações').fill('JORNADA');
+	await expect(page.getByText(texto).first()).toBeVisible();
+	await page.getByLabel('Buscar nas anotações').fill('assunto inexistente xyz');
+	await expect(page.getByRole('heading', { name: 'Nenhuma anotação corresponde aos filtros' })).toBeVisible();
+	await page.getByRole('button', { name: 'Limpar filtros' }).first().click();
+	await expect(page.getByText(texto).first()).toBeVisible();
+	await page.getByRole('button', { name: 'Por data' }).click();
+	await expect(page.getByRole('button', { name: 'Por data' })).toHaveAttribute('aria-pressed', 'true');
+	await page.getByRole('button', { name: 'Por curso' }).click();
+
 	// Volta ao player para seguir com a edição da nota.
 	await page.goto(playerUrl);
-	await expect(notes.getByRole('heading', { name: 'Suas anotações' })).toBeVisible();
+	await page.getByRole('tab', { name: 'Anotações' }).click();
+	await expect(notes.getByRole('heading', { name: 'Anotações' })).toBeVisible();
 
 	// Editar a nota reescreve o texto no servidor.
 	const editado = 'Nota de estudo editada pela jornada de UI.';
@@ -464,13 +482,45 @@ test('creates, edits, reloads and deletes a personal note in the player', async 
 	expect(afterEdit.items.length).toBe(1);
 	expect(afterEdit.items[0].text).toBe(editado);
 
-	// A exclusão pede confirmação; o teste aceita o diálogo e a nota some da lista.
-	page.on('dialog', (dialog) => void dialog.accept());
+	// A exclusão confirma na própria linha, sem diálogo do navegador.
 	await notes.getByRole('button', { name: 'Excluir' }).click();
+	await notes.locator('.confirm').getByRole('button', { name: 'Excluir' }).click();
 	await expect(notes.locator('p.note-text')).toHaveCount(0);
-	await expect(notes.getByText('Ainda não há anotações para esta mídia.')).toBeVisible();
+	await expect(notes.getByText('Ainda não há anotações nesta aula.')).toBeVisible();
 	const afterDelete = await (await page.request.get(`${server.baseURL}/api/study/notes?media_id=${encodeURIComponent(mediaId)}`)).json();
 	expect(afterDelete.items.length).toBe(0);
+
+	// A aba de aulas concentra o progresso do curso e o checkbox de conclusão.
+	await page.getByRole('tab', { name: 'Aulas' }).click();
+	const lessons = page.getByRole('tabpanel', { name: 'Aulas' });
+	await expect(lessons.locator('.playlist-progress p')).toHaveText(/\d+ de \d+ concluídas?/);
+	const checkbox = lessons.locator('.lesson-row input.lesson-check:enabled').first();
+	await expect(checkbox).toBeVisible();
+	if (!(await checkbox.isChecked())) await checkbox.check();
+	await expect(checkbox).toBeChecked();
+	const courseId = decodeURIComponent(new URL(page.url()).hash.split('/')[2] ?? '');
+	expect(courseId).toBeTruthy();
+	await expect
+		.poll(async () => {
+			const response = await page.request.get(`${server.baseURL}/api/study/courses/${encodeURIComponent(courseId)}/progress`);
+			const body = (await response.json()) as { items: { media_id: string }[] };
+			return body.items.length;
+		})
+		.toBeGreaterThan(0);
+
+	// Recolher o painel libera a área do player e revela os atalhos no cabeçalho.
+	const panel = page.locator('#watch-panel');
+	await panel.getByRole('button', { name: 'Recolher painel' }).click();
+	await expect(panel).toBeHidden();
+	await page.getByRole('button', { name: 'Aulas' }).click();
+	await expect(panel).toBeVisible();
+
+	// A escolha do painel sobrevive ao recarregamento, por usuário.
+	await panel.getByRole('button', { name: 'Recolher painel' }).click();
+	await page.reload();
+	await expect(page.locator('#watch-panel')).toBeHidden();
+	await page.getByRole('button', { name: 'Anotações' }).click();
+	await expect(page.locator('#watch-panel').getByRole('tabpanel', { name: 'Anotações' })).toBeVisible();
 });
 
 test('reports a lesson whose media disappears from disk and restores it when the file returns', async ({ page, server }) => {
@@ -499,7 +549,7 @@ test('reports a lesson whose media disappears from disk and restores it when the
 	const indexFromHome = async () => {
 		await page.goto(`${server.baseURL}/#/home`);
 		await expect(page.getByRole('heading', { name: 'Início' })).toBeAttached();
-		await page.getByRole('button', { name: 'Indexar cursos' }).click();
+		await page.getByRole('button', { name: 'Indexar', exact: true }).click();
 		await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
 	};
 
@@ -508,7 +558,7 @@ test('reports a lesson whose media disappears from disk and restores it when the
 	await page.getByLabel('Senha', { exact: true }).fill(ADMIN_PASSWORD);
 	await page.getByRole('button', { name: 'Entrar' }).click();
 	await expect(page.getByRole('heading', { name: 'Início' })).toBeAttached();
-	await page.getByRole('button', { name: 'Indexar cursos' }).click();
+	await page.getByRole('button', { name: 'Indexar', exact: true }).click();
 	await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
 
 	// Fase 1: o arquivo está no disco — duas aulas disponíveis, sem selo, linha navegável.
@@ -607,7 +657,7 @@ test('renders an automatic video thumbnail in the built SPA without leaking libr
 	const lessonDir = join(server.libraryPath, 'Categoria', 'Aula zero');
 	await mkdir(lessonDir, { recursive: true });
 	await writeFile(join(lessonDir, 'Video.webm'), Buffer.from(recorded, 'base64'));
-	await page.getByRole('button', { name: 'Indexar cursos' }).click();
+	await page.getByRole('button', { name: 'Indexar', exact: true }).click();
 	await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
 
 	const thumbnail = page.locator('.course-thumbnail').first();
@@ -636,7 +686,7 @@ test('moves the cover actions to the course card and keeps the course page clean
 	await page.getByLabel('Senha', { exact: true }).fill(ADMIN_PASSWORD);
 	await page.getByRole('button', { name: 'Entrar' }).click();
 	await expect(page.getByRole('heading', { name: 'Início' })).toBeAttached();
-	await page.getByRole('button', { name: 'Indexar cursos' }).click();
+	await page.getByRole('button', { name: 'Indexar', exact: true }).click();
 	await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
 
 	const courseCard = page.getByRole('link', { name: /library/ });

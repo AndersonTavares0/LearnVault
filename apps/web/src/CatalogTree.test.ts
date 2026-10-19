@@ -116,7 +116,9 @@ describe('catalog tree rendering', () => {
 		const second = node('module', 'Módulo 2', 'mod-2', [node('lesson', 'Aula 3', 'mod-2/aula-3', [], [file('c.mp4', 'media')])]);
 		const { body } = render(CatalogTree, { props: { nodes: [first, second], courseId: 'course-1', activePath: 'mod-1/aula-2' } });
 
-		expect(body).toMatch(/class="[^"]*\bactive\b[^"]*"[^>]*href="#\/course\/course-1\/mod-1%2Faula-2"[^>]*aria-current="page"/);
+		// O estado ativo vive no contêiner da linha; o link continua sendo o destino.
+		expect(body).toContain('<div class="lesson-row active">');
+		expect(body).toMatch(/class="lesson-link" href="#\/course\/course-1\/mod-1%2Faula-2" aria-current="page"/);
 		expect(body.match(/course-section"[^>]* open/g)).toHaveLength(1);
 		expect(body).toContain('href="#/course/course-1/mod-1%2Faula-1"');
 	});
