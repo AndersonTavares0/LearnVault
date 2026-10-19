@@ -271,6 +271,35 @@ fn recent_study_only_returns_the_local_owner() {
 }
 
 #[test]
+fn course_progress_lists_the_local_owner_completed_lessons_without_a_cap() {
+    let dir = tempfile::tempdir().unwrap();
+    let state = desktop(dir.path());
+    for media in ["m1", "m2", "m3"] {
+        seed_media(dir.path(), media);
+    }
+    seed_state(dir.path(), LOCAL_OWNER_ID, "m1", 10, true, 300);
+    seed_state(dir.path(), LOCAL_OWNER_ID, "m2", 20, false, 200);
+    seed_state(dir.path(), LOCAL_OWNER_ID, "m3", 30, true, 100);
+    seed_state(dir.path(), "outro-dono", "m1", 40, true, 400);
+
+    let completed = state.completed_course("library-1").unwrap();
+
+    assert_eq!(
+        recent_ids(&completed),
+        ["m1", "m3"],
+        "só as conclusões do dono local na biblioteca, sem o teto de recentes: {completed:?}"
+    );
+    assert!(completed.items.iter().all(|item| item.completed));
+    assert!(
+        state
+            .completed_course("biblioteca-inexistente")
+            .unwrap()
+            .items
+            .is_empty()
+    );
+}
+
+#[test]
 fn position_and_completion_stay_independent_through_the_adapter() {
     let dir = tempfile::tempdir().unwrap();
     let state = desktop(dir.path());

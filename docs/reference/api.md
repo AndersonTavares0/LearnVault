@@ -196,6 +196,7 @@ descrito ao final desta seção; ele não usa rotas HTTP.
 | --- | --- | --- | --- |
 | `GET` | `/api/study/recent?limit=N` | Sessão | Lista o progresso do usuário, do mais recente ao mais antigo (padrão 20, teto fixo de 100) |
 | `GET` | `/api/study/progress?media_id=...` | Sessão | Lê a posição e a conclusão do usuário em uma mídia conhecida |
+| `GET` | `/api/study/courses/{course_id}/progress` | Sessão | Lista somente as aulas concluídas do curso (sem teto de recentes) |
 | `POST` | `/api/study/position` | Sessão | Aceita `{ "media_id": "...", "position_seconds": 0 }` e grava o ponto de retomada |
 | `POST` | `/api/study/completed` | Sessão | Aceita `{ "media_id": "...", "completed": true }` e marca ou desmarca a conclusão |
 
@@ -236,6 +237,13 @@ escrita de progresso. Uma mídia removida do catálogo também mantém a leitura
 progresso — a identidade sobrevive à remoção —, mas deixa de aparecer em
 `/api/study/recent`, como no núcleo de remoção.
 
+A rota por curso devolve `{ "items": [...] }` com o mesmo item do histórico, mas apenas as
+aulas com `completed: true` da biblioteca indicada, da alteração mais recente para a mais
+antiga e sem o teto de `/api/study/recent` — uma playlist grande precisa de todas as
+conclusões. A posição de retomada da aula aberta continua vindo de
+`/api/study/progress?media_id=...`. Um `course_id` vazio responde `400 invalid_query`; um
+curso sem conclusões responde `200` com `{ "items": [] }`. A resposta é `private, no-store`.
+
 ### Study no desktop (IPC)
 
 O desktop não tem rotas: a SPA chama comandos Tauri por `invoke`, sem `fetch`, e recebe o mesmo
@@ -247,6 +255,7 @@ shape snake_case (`media_id`, `position_seconds`, `completed`, `updated_at`, `re
 | `desktop_record_position` | `mediaId`, `positionSeconds` | Grava o ponto de retomada, preservando a conclusão |
 | `desktop_set_completed` | `mediaId`, `completed` | Marca ou desmarca a conclusão, preservando a posição |
 | `desktop_recent_study` | `limit` (opcional) | Lista o progresso do dono local, do mais recente ao mais antigo |
+| `desktop_course_progress` | `courseId` | Lista somente as aulas concluídas do curso local (sem teto de recentes) |
 | `desktop_study_notes` | `mediaId` | Lista notas do dono local para a mídia, no mesmo envelope `{ "items": [...], "truncated": false }` do HTTP |
 | `desktop_study_notes_all` | — | Lista todas as notas do dono local, no mesmo envelope `{ "items": [...], "truncated": false }` do HTTP |
 | `desktop_create_study_note` | `mediaId`, `text`, `positionSeconds` (opcional) | Cria nota de texto simples |

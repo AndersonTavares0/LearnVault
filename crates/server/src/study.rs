@@ -13,7 +13,7 @@
 
 use axum::{
     Json,
-    extract::{RawQuery, State},
+    extract::{Path, RawQuery, State},
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
@@ -137,6 +137,42 @@ pub(crate) async fn recent(
     let owner = user.user_id;
     match run_study(&state, move |db| {
         learnvault_core::recent_study(db, &owner, limit)
+    })
+    .await
+    {
+        Ok(states) => private_no_store(
+            Json(RecentResponse {
+                items: states.into_iter().map(ProgressResponse::recorded).collect(),
+            })
+            .into_response(),
+        ),
+        Err(failure) => study_failure_response(failure),
+    }
+}
+
+/// Lista somente as aulas concluídas pelo usuário autenticado em um curso.
+///
+/// A playlist usa esta rota para desenhar as caixas de seleção e a barra do curso sem
+/// depender do teto de [`learnvault_core::MAX_RECENT_STUDY`], que não cobre um curso
+/// grande. A resposta tem o mesmo envelope `{ items }` do histórico e cada item carrega
+/// `completed: true`; a posição de retomada da aula aberta continua vindo de
+/// `/api/study/progress`. Um `course_id` vazio é uma consulta inválida (400).
+pub(crate) async fn completed_course(
+    State(state): State<AppState>,
+    Path(course_id): Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let course_id = course_id.trim().to_owned();
+    if course_id.is_empty() {
+        return invalid_query();
+    }
+    let owner = user.user_id;
+    match run_study(&state, move |db| {
+        learnvault_core::completed_in_course(db, &owner, &course_id)
     })
     .await
     {

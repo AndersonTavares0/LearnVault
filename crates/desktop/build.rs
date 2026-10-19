@@ -5,7 +5,8 @@
 //! aplicativo (`desktop_catalog`, `desktop_import_course`, `desktop_remove_course`,
 //! `desktop_import_course_cover`, `desktop_remove_course_cover`, `desktop_rescan`,
 //! `desktop_study_progress`, `desktop_record_position`, `desktop_set_completed`,
-//! `desktop_recent_study`, `desktop_set_course_order`, `desktop_reset_course_order`,
+//! `desktop_recent_study`, `desktop_course_progress`, `desktop_set_course_order`,
+//! `desktop_reset_course_order`,
 //! `desktop_study_notes`, `desktop_study_notes_all`, `desktop_create_study_note`,
 //! `desktop_update_study_note` e `desktop_delete_study_note`). Ele não abre sockets nem
 //! depende de display; a validação
@@ -24,6 +25,7 @@ fn main() {
             "desktop_record_position",
             "desktop_set_completed",
             "desktop_recent_study",
+            "desktop_course_progress",
             "desktop_media_removal_impact",
             "desktop_remove_media",
             "desktop_set_course_order",

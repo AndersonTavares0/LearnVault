@@ -84,6 +84,20 @@ pub fn recent(database: &Database, limit: Option<usize>) -> Result<RecentStudyDt
     .map_err(study_error)
 }
 
+/// Lista somente as aulas concluídas pelo dono local em um curso.
+///
+/// O envelope `{ items }` é o mesmo do histórico recente, mas sem o teto de
+/// [`learnvault_core::MAX_RECENT_STUDY`]: a playlist do curso precisa de todas as
+/// conclusões da biblioteca, não apenas das mais recentes. O curso é a identidade opaca
+/// recebida do catálogo; o dono continua sendo o identificador local fixo.
+pub fn completed_course(database: &Database, course_id: &str) -> Result<RecentStudyDto, IpcError> {
+    learnvault_core::completed_in_course(database, LOCAL_OWNER_ID, course_id)
+        .map(|states| RecentStudyDto {
+            items: states.into_iter().map(StudyProgressDto::from).collect(),
+        })
+        .map_err(study_error)
+}
+
 /// Traduz o erro do núcleo para o erro IPC estável, sem ecoar o identificador consultado.
 ///
 /// Uma mídia desconhecida e uma posição negativa são falhas de entrada com código próprio,

@@ -156,6 +156,9 @@ async fn study_requires_authentication() {
         Request::get("/api/study/progress?media_id=m1")
             .body(Body::empty())
             .unwrap(),
+        Request::get("/api/study/courses/library-1/progress")
+            .body(Body::empty())
+            .unwrap(),
         Request::post("/api/study/position")
             .header("origin", "http://localhost")
             .header("content-type", "application/json")
@@ -530,6 +533,80 @@ async fn recent_is_ordered_and_respects_the_limit() {
             .unwrap()
             .is_empty()
     );
+}
+
+/// A playlist precisa das conclusões do curso inteiro, e o teto de recentes não cobre um
+/// curso grande: a rota por curso devolve só as conclusões daquela biblioteca, sem limite.
+#[tokio::test]
+async fn course_progress_lists_only_completed_lessons_of_the_course() {
+    let temp = tempfile::tempdir().unwrap();
+    seed(
+        &temp,
+        &["m1", "m2", "m3"],
+        &[
+            (ADMIN_ID, "m1", 30, true, 300),
+            (ADMIN_ID, "m2", 20, false, 200),
+            (ADMIN_ID, "m3", 10, true, 100),
+        ],
+    );
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let cookie = login(&app, ADMIN, ADMIN_PASSWORD).await;
+
+    let response = app
+        .clone()
+        .oneshot(get_with_cookie(
+            "/api/study/courses/library-1/progress",
+            &cookie,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_private_no_store(&response);
+    let body = json_body(response).await;
+    let items = body["items"].as_array().unwrap();
+    assert_eq!(items.len(), 2, "só as conclusões do curso aparecem");
+    assert_eq!(
+        items
+            .iter()
+            .map(|item| item["media_id"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        ["m1", "m3"],
+        "da alteração mais recente para a mais antiga"
+    );
+    assert!(items.iter().all(|item| item["completed"] == true));
+    assert_eq!(items[0]["recorded"], true);
+
+    let unknown = app
+        .oneshot(get_with_cookie(
+            "/api/study/courses/curso-sem-progresso/progress",
+            &cookie,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(unknown.status(), StatusCode::OK);
+    assert!(
+        json_body(unknown).await["items"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[tokio::test]
+async fn an_empty_course_id_is_rejected() {
+    let temp = tempfile::tempdir().unwrap();
+    seed(&temp, &["m1"], &[]);
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let cookie = login(&app, ADMIN, ADMIN_PASSWORD).await;
+
+    let response = app
+        .oneshot(get_with_cookie("/api/study/courses/%20/progress", &cookie))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert_private_no_store(&response);
+    assert_eq!(json_body(response).await["error"], "invalid_query");
 }
 
 #[tokio::test]

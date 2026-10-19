@@ -190,6 +190,50 @@ pub fn recent_study(db: &Database, owner_id: &str, limit: usize) -> Result<Vec<S
     Ok(states)
 }
 
+/// Lista somente as aulas concluídas pelo dono em um curso.
+///
+/// A playlist precisa saber quais aulas já foram concluídas para desenhar as caixas de
+/// seleção e a barra de progresso do curso. Devolver o histórico inteiro seria pior: o
+/// teto de [`MAX_RECENT_STUDY`] não cobre um curso grande e a posição da aula aberta já
+/// chega por [`study_progress`]. Por isso a consulta filtra `completed = 1` e não tem
+/// limite — o resultado é, no máximo, uma linha por aula do curso.
+///
+/// `course_id` é a identidade da biblioteca (`media.library_id`), a mesma que o catálogo
+/// usa como identidade do curso. Mídias removidas do catálogo não aparecem, mas o
+/// progresso delas continua gravado, como em [`recent_study`].
+pub fn completed_in_course(
+    db: &Database,
+    owner_id: &str,
+    course_id: &str,
+) -> Result<Vec<StudyProgress>> {
+    validate_owner(owner_id)?;
+
+    let conn = db.connection();
+    let mut statement = conn.prepare(
+        "SELECT s.media_id, s.position_seconds, s.completed, s.updated_at
+           FROM study_state s
+           JOIN media m ON m.media_id = s.media_id
+          WHERE s.owner_id = ?1
+            AND m.library_id = ?2
+            AND s.completed = 1
+            AND NOT EXISTS (SELECT 1
+                              FROM media_removal r
+                              JOIN media rm
+                                ON rm.library_id = r.library_id
+                               AND rm.media_id = r.media_id
+                             WHERE rm.media_id = s.media_id)
+          ORDER BY s.updated_at DESC, s.media_id ASC",
+    )?;
+    let rows = statement.query_map(rusqlite::params![owner_id, course_id], progress_from_row)?;
+
+    let mut states = Vec::new();
+    for state in rows {
+        states.push(state?);
+    }
+
+    Ok(states)
+}
+
 /// Recusa um dono não identificado.
 fn validate_owner(owner_id: &str) -> Result<()> {
     if owner_id.trim().is_empty() {

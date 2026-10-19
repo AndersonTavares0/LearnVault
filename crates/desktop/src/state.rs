@@ -408,6 +408,18 @@ impl DesktopState {
         study::recent(&database, limit)
     }
 
+    /// Lista somente as aulas concluídas pelo dono local em um curso.
+    ///
+    /// Diferente de [`Self::recent_study`], não há teto de histórico: a playlist do curso
+    /// precisa de todas as conclusões da biblioteca. O dono é o identificador local fixo.
+    pub fn completed_course(&self, course_id: &str) -> Result<RecentStudyDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::completed_course(&database, course_id)
+    }
+
     /// Consulta o impacto da remoção de uma mídia do catálogo local.
     pub fn media_removal_impact(&self, media_id: &str) -> Result<MediaRemovalImpactDto, IpcError> {
         let database = self

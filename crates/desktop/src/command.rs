@@ -304,6 +304,23 @@ pub async fn desktop_recent_study(
         .map_err(|_| IpcError::study_unavailable())?
 }
 
+/// Comando IPC: lista somente as aulas concluídas pelo dono local em um curso.
+///
+/// O webview envia apenas a identidade opaca do curso vinda do catálogo; o dono é o
+/// identificador local fixo e nunca cruza o IPC. Diferente do histórico recente, a
+/// resposta não sofre o teto de `MAX_RECENT_STUDY`: a playlist do curso precisa das
+/// conclusões da biblioteca inteira.
+#[tauri::command]
+pub async fn desktop_course_progress(
+    state: State<'_, DesktopState>,
+    course_id: String,
+) -> Result<RecentStudyDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.completed_course(&course_id))
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
 /// Comando IPC: consulta o impacto da remoção de uma mídia.
 #[tauri::command]
 pub async fn desktop_media_removal_impact(

@@ -6,8 +6,8 @@
 
 use learnvault_core::paths::relative_path_key;
 use learnvault_core::{
-    Database, Error, KeyMode, MAX_RECENT_STUDY, recent_study, record_position, set_completed,
-    study_progress,
+    Database, Error, KeyMode, MAX_RECENT_STUDY, completed_in_course, recent_study, record_position,
+    set_completed, study_progress,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -272,6 +272,92 @@ fn recent_study_is_ordered_from_the_most_recent_change() -> TestResult {
     seed(&db, OWNER, "m3", 0, false, 200)?;
 
     assert_eq!(recent_ids(&db, OWNER, 10), ["m2", "m3", "m1"]);
+    Ok(())
+}
+
+#[test]
+fn completed_in_course_returns_only_completed_lessons_of_that_course() -> TestResult {
+    let db = library_db()?;
+    db.connection().execute(
+        "INSERT INTO library (library_id, available) VALUES (?1, 1)",
+        ["bib-2"],
+    )?;
+    for media in ["m1", "m2", "m3"] {
+        insert_media(&db, media, "available")?;
+    }
+    let other_path = "outro/m4.mp4";
+    db.connection().execute(
+        "INSERT INTO media (media_id, library_id, relative_path, relative_path_key, size, mtime, availability)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        rusqlite::params![
+            "m4",
+            "bib-2",
+            other_path,
+            key(other_path),
+            1024,
+            1_760_000_000,
+            "available"
+        ],
+    )?;
+    seed(&db, OWNER, "m1", 10, true, 100)?;
+    seed(&db, OWNER, "m2", 20, true, 300)?;
+    seed(&db, OWNER, "m3", 30, false, 400)?;
+    seed(&db, OWNER, "m4", 40, true, 500)?;
+    seed(&db, OTHER, "m1", 50, true, 600)?;
+
+    let completed = completed_in_course(&db, OWNER, LIB)?;
+
+    assert_eq!(
+        completed
+            .iter()
+            .map(|state| state.media_id.as_str())
+            .collect::<Vec<_>>(),
+        ["m2", "m1"],
+        "só conclusões do curso, da alteração mais recente para a mais antiga"
+    );
+    assert!(completed.iter().all(|state| state.completed));
+    assert_eq!(completed[0].position_seconds, 20);
+    assert_eq!(
+        completed_in_course(&db, OTHER, LIB)?.len(),
+        1,
+        "cada dono vê apenas as próprias conclusões"
+    );
+    assert!(
+        completed_in_course(&db, OWNER, "bib-2")?
+            .iter()
+            .all(|state| state.media_id == "m4")
+    );
+    Ok(())
+}
+
+#[test]
+fn completed_in_course_sorts_ties_and_ignores_removed_media() -> TestResult {
+    let db = library_db()?;
+    for media in ["m2", "m1"] {
+        insert_media(&db, media, "available")?;
+    }
+    seed(&db, OWNER, "m2", 0, true, SEEDED_AT)?;
+    seed(&db, OWNER, "m1", 0, true, SEEDED_AT)?;
+    db.connection().execute(
+        "INSERT INTO media_removal (library_id, media_id, removed_at) VALUES (?1, ?2, ?3)",
+        rusqlite::params![LIB, "m2", 1_760_000_000],
+    )?;
+
+    let completed = completed_in_course(&db, OWNER, LIB)?;
+
+    assert_eq!(
+        completed
+            .iter()
+            .map(|state| state.media_id.as_str())
+            .collect::<Vec<_>>(),
+        ["m1"],
+        "mídia removida sai da playlist sem perder o progresso"
+    );
+    assert_eq!(
+        study_progress(&db, OWNER, "m2")?.map(|state| state.completed),
+        Some(true),
+        "o progresso da mídia removida continua gravado"
+    );
     Ok(())
 }
 
