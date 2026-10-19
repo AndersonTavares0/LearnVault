@@ -13,6 +13,7 @@
 	import { updateOutcome, updateMessage, updateReleaseUrl } from './update';
 	import { defaultRoute, resolveSession } from './session';
 	import { formatDuration, studySyncSupported } from './player';
+	import { createDefaultPlayerPreferences, playerPreferencesScope, readPlayerPreferences, writePlayerPreferences, type PlayerPreferences } from './player-preferences';
 	import Brand from './Brand.svelte';
 	import { applyTheme, persistThemeMode, readThemeMode, resolveTheme, type ThemeMode } from './theme';
 
@@ -83,6 +84,7 @@
 		updateRequested = true;
 		void checkUpdate(false);
 	}
+	let playerPreferences: PlayerPreferences = createDefaultPlayerPreferences();
 
 	// Só o admin importa e indexa: no servidor isso evita que um usuário comum aponte o
 	// servidor para pastas arbitrárias; no desktop a identidade local é admin.
@@ -127,6 +129,20 @@
 			return null;
 		}
 	}
+	function loadPlayerPreferences(currentUser: User | null) {
+		const scope = playerPreferencesScope(transportKind, currentUser?.userId);
+		playerPreferences = readPlayerPreferences(safeLocalStorage(), scope);
+	}
+	function savePlayerPreferences(next: PlayerPreferences): boolean {
+		playerPreferences = next;
+		const scope = playerPreferencesScope(transportKind, user?.userId);
+		const saved = writePlayerPreferences(safeLocalStorage(), scope, next);
+		return saved;
+	}
+	function autoAdvance() {
+		if (!playerPreferences.autoNext || !neighbors.next) return;
+		location.hash = href('player', courseId ?? '', neighbors.next.path);
+	}
 	function changeTheme(mode: ThemeMode) {
 		themeMode = mode;
 		resolvedTheme = resolveTheme(mode, systemDark);
@@ -139,6 +155,7 @@
 		try {
 			const session = await resolveSession(() => transport.me(), transportKind);
 			user = session.user;
+			loadPlayerPreferences(session.user);
 			error = session.error;
 			if (user) {
 				catalog = await transport.catalog();
@@ -161,6 +178,7 @@
 		const destination = location.hash;
 		try {
 			user = await transport.login(username, password);
+			loadPlayerPreferences(user);
 			password = '';
 			catalog = await transport.catalog();
 			lesson = findLesson(catalog, courseId, lessonPath);
@@ -195,6 +213,7 @@
 	async function logout() {
 		await transport.logout();
 		user = null;
+		playerPreferences = createDefaultPlayerPreferences();
 		catalog = null;
 		lesson = null;
 		recent = [];
@@ -506,7 +525,10 @@
 	{#if !lesson}<h1>Aula não encontrada</h1><p class="empty" role="status">Não foi possível encontrar esta aula no catálogo atual.</p>{:else}
 		<a class="back" href={course ? href('course', course.courseId ?? course.path) : href('home')}>← {course ? course.title : 'Início'}</a>
 		<h1>{lesson.title}</h1>
-		<Player {lesson} courseId={courseId ?? ''} {mediaError} onMediaError={mediaFailed} {studyEnabled} />
+		<Player {lesson} courseId={courseId ?? ''} {mediaError} onMediaError={mediaFailed} {studyEnabled} preferences={playerPreferences}
+			onPreferencesChange={savePlayerPreferences} autoNext={playerPreferences.autoNext}
+			hasNextLesson={neighbors.next !== null} onAutoNext={autoAdvance}
+			onAutoNextChange={(enabled) => savePlayerPreferences({ ...playerPreferences, autoNext: enabled })} />
 		{#if lessonCount > 1}<nav class="lesson-index" aria-label="Índice de aulas"><h2>Índice de aulas</h2><div class="lesson-index-body">{#each sections as section}{#if section.title}<h3>{section.title}</h3>{/if}<ol>{#each section.lessons as lessonItem}<li><a class:active={lessonItem.path === lesson.path} href={href('player', courseId ?? '', lessonItem.path)} aria-current={lessonItem.path === lesson.path ? 'page' : undefined} use:revealActive={lessonItem.path === lesson.path}>{lessonItem.title}</a></li>{/each}</ol>{/each}</div></nav>{/if}
 		{#if neighbors.previous || neighbors.next}<nav class="lesson-nav" aria-label="Aulas vizinhas">{#if neighbors.previous}<a href={href('player', courseId ?? '', neighbors.previous.path)}>← {neighbors.previous.title}</a>{/if}{#if neighbors.next}<a href={href('player', courseId ?? '', neighbors.next.path)}>{neighbors.next.title} →</a>{/if}</nav>{/if}
 	{/if}

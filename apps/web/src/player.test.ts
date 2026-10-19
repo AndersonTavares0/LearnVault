@@ -1,7 +1,8 @@
 import { render } from 'svelte/server';
 import { describe, expect, it } from 'vitest';
 import Player from './Player.svelte';
-import { clampSpeed, formatDuration, mediaAvailability, mediaPlaybackKind, PLAYBACK_SPEEDS, selectPlayableMedia, selectPlayableSubtitle, srtConversionSupported, srtToWebVtt, studySyncEnabled, studySyncSupported, subtitleFormat } from './player';
+import { clampSpeed, formatDuration, mediaAvailability, mediaPlaybackKind, PLAYBACK_SPEEDS, playerShortcutAction, selectPlayableMedia, selectPlayableSubtitle, shouldAutoAdvance, srtConversionSupported, srtToWebVtt, studySyncEnabled, studySyncSupported, subtitleFormat } from './player';
+import { createDefaultPlayerPreferences, updateLessonPreference } from './player-preferences';
 import type { FileEntry, Lesson } from './transport';
 
 describe('player media and subtitles', () => {
@@ -19,6 +20,25 @@ describe('player media and subtitles', () => {
 		])?.path).toBe('aula.vtt');
 		expect(mediaPlaybackKind({ name: 'aula.mp4', path: 'aula.mp4', size: 1, kind: 'media' })).toBe('video');
 		expect(mediaPlaybackKind({ name: 'aula.m4a', path: 'aula.m4a', size: 1, kind: 'media' })).toBe('audio');
+	});
+	it('restores a remembered playable media and falls back when it disappeared', () => {
+		const media = [
+			{ name: 'a.mp4', path: 'a.mp4', size: 1, mediaId: 'media-a', availability: 'available' },
+			{ name: 'b.mp4', path: 'b.mp4', size: 2, mediaId: 'media-b', availability: 'available' }
+		];
+
+		expect(selectPlayableMedia(media, 'media-b')?.mediaId).toBe('media-b');
+		expect(selectPlayableMedia(media, 'removed')?.mediaId).toBe('media-a');
+	});
+	it('restores a remembered subtitle or keeps captions explicitly off', () => {
+		const subtitles = [
+			{ name: 'a.vtt', path: 'a.vtt', size: 1, mediaId: 'subtitle-a', availability: 'available' },
+			{ name: 'b.vtt', path: 'b.vtt', size: 2, mediaId: 'subtitle-b', availability: 'available' }
+		];
+
+		expect(selectPlayableSubtitle(subtitles, 'subtitle-b')?.mediaId).toBe('subtitle-b');
+		expect(selectPlayableSubtitle(subtitles, 'removed')?.mediaId).toBe('subtitle-a');
+		expect(selectPlayableSubtitle(subtitles, null)).toBeNull();
 	});
 	it('converts SRT deterministically and classifies formats', () => {
 		expect(srtToWebVtt('1\r\n00:00:01,500 --> 00:00:02,500\r\nOlá\r\n')).toBe('WEBVTT\n\n00:00:01.500 --> 00:00:02.500\nOlá\n');
@@ -55,6 +75,16 @@ describe('player media and subtitles', () => {
 		expect(clampSpeed(0.5)).toBe(1);
 		expect(clampSpeed(3)).toBe(1);
 		expect(clampSpeed(Number.NaN)).toBe(1);
+	});
+	it('handles only focused player shortcuts and never loops auto-next at the end', () => {
+		expect(playerShortcutAction(' ', true)).toBe('toggle-playback');
+		expect(playerShortcutAction('ArrowLeft', true)).toBe('seek-backward');
+		expect(playerShortcutAction('ArrowRight', true)).toBe('seek-forward');
+		expect(playerShortcutAction(' ', false)).toBeNull();
+		expect(playerShortcutAction('Enter', true)).toBeNull();
+		expect(shouldAutoAdvance(true, true)).toBe(true);
+		expect(shouldAutoAdvance(false, true)).toBe(false);
+		expect(shouldAutoAdvance(true, false)).toBe(false);
 	});
 });
 
@@ -100,5 +130,69 @@ describe('player without playable media', () => {
 		const { body } = render(Player, { props: { lesson: lesson([media('aula.mp4')]), courseId: 'course-1', mediaError: '', onMediaError: () => undefined } });
 		expect(body).toContain('<video');
 		expect(body).toContain('path=aula.mp4');
+	});
+});
+
+describe('player preference controls', () => {
+	const baseProps = {
+		lesson: lesson([media('a.mp4'), media('b.mp4')]),
+		courseId: 'course-1',
+		mediaError: '',
+		onMediaError: () => undefined,
+		onPreferencesChange: () => true
+	};
+
+	it('restores the selected media and exposes a selector only for multiple choices', () => {
+		const preferences = updateLessonPreference(createDefaultPlayerPreferences(), 'course-1', 'curso/aula', { mediaId: 'b.mp4' });
+		const { body } = render(Player, { props: { ...baseProps, preferences } });
+
+		expect(body).toContain('aria-label="Mídia da aula"');
+		expect(body).toContain('selected');
+		expect(body).toContain('path=b.mp4');
+	});
+
+	it('offers subtitles off and restores the remembered subtitle selection', () => {
+		const lessonWithSubtitles = {
+			...baseProps.lesson,
+			subtitles: [media('a.vtt'), media('b.vtt')].map((file) => ({ ...file, kind: 'subtitle' }))
+		};
+		const preferences = updateLessonPreference(createDefaultPlayerPreferences(), 'course-1', 'curso/aula', { subtitleId: 'b.vtt' });
+		const { body } = render(Player, { props: { ...baseProps, lesson: lessonWithSubtitles, preferences } });
+
+		expect(body).toContain('aria-label="Legenda da aula"');
+		expect(body).toContain('Sem legendas');
+		expect(body).toContain('b.vtt');
+	});
+
+	it('uses the separately persisted speed for the current media type', () => {
+		const preferences = { ...createDefaultPlayerPreferences(), audioSpeed: 1.5 as const };
+		const audioLesson = lesson([{ ...media('aula.mp3'), kind: 'media' }]);
+		const { body } = render(Player, { props: { ...baseProps, lesson: audioLesson, preferences } });
+
+		expect(body).toContain('aria-pressed="true">1.5x');
+	});
+
+	it('identifica os atalhos do player visual e semanticamente', () => {
+		const { body } = render(Player, { props: baseProps });
+
+		expect(body).toContain('aria-keyshortcuts="Space ArrowLeft ArrowRight"');
+		expect(body).toContain('Atalhos: espaço reproduz ou pausa; ← e → avançam ou retrocedem 10 segundos.');
+	});
+
+	it('keeps a single media choice simple and leaves auto-advance off by default', () => {
+		const oneMediaLesson = lesson([media('aula.mp4')]);
+		const { body } = render(Player, { props: { ...baseProps, lesson: oneMediaLesson } });
+
+		expect(body).not.toContain('aria-label="Mídia da aula"');
+		expect(body).toContain('Avançar automaticamente');
+		expect(body).toContain('<input type="checkbox"/>');
+	});
+
+	it('restores the independent video speed and auto-advance preference', () => {
+		const preferences = { ...createDefaultPlayerPreferences(), videoSpeed: 2 as const, autoNext: true };
+		const { body } = render(Player, { props: { ...baseProps, lesson: lesson([media('aula.mp4')]), preferences, autoNext: true } });
+
+		expect(body).toContain('aria-pressed="true">2x');
+		expect(body).toContain('<input type="checkbox" checked=""/>');
 	});
 });
