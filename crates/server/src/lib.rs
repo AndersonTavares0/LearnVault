@@ -11,6 +11,7 @@ mod courses;
 mod covers;
 mod health;
 mod media;
+mod ordering;
 mod spa;
 mod state;
 mod stream;
@@ -72,6 +73,10 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/api/admin/courses/{id}/cover",
             axum::routing::put(covers::put_cover).delete(covers::delete_cover),
+        )
+        .route(
+            "/api/admin/courses/{id}/order",
+            axum::routing::put(ordering::put_order).delete(ordering::reset_order),
         )
         .route("/api/courses/{id}/cover", get(covers::get_cover))
         .route("/api/admin/media/{id}/impact", get(media::impact))

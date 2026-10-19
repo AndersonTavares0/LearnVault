@@ -125,23 +125,53 @@ fn apply_node(node: &mut CatalogNode, order: &CatalogOrder) {
     }
 }
 
-/// Verdadeiro quando `desired` é uma permutação exata dos filhos de `children`.
+/// Caminhos dos filhos do pai indicado, quando o pai existe na árvore.
+///
+/// A lista de topo é o pai de caminho vazio (`""`), a mesma convenção de
+/// [`apply_order`]. Um pai que não existe na árvore devolve `None`, e o adaptador o
+/// trata como alvo inválido em vez de criar uma preferência órfã.
+pub fn sibling_paths(nodes: &[CatalogNode], parent: &str) -> Option<Vec<String>> {
+    if parent.is_empty() {
+        return Some(nodes.iter().map(|node| node.path.clone()).collect());
+    }
+    find_node(nodes, parent).map(|node| {
+        node.children
+            .iter()
+            .map(|child| child.path.clone())
+            .collect()
+    })
+}
+
+/// Ancestral de caminho exato, em qualquer profundidade.
+fn find_node<'a>(nodes: &'a [CatalogNode], path: &str) -> Option<&'a CatalogNode> {
+    for node in nodes {
+        if node.path == path {
+            return Some(node);
+        }
+        if let Some(found) = find_node(&node.children, path) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+/// Verdadeiro quando `desired` é uma permutação exata de `existing`.
 ///
 /// Uma reordenação manual só pode trocar irmãos de posição: a lista precisa conter
 /// exatamente os mesmos caminhos, sem repetição e sem omitir nem acrescentar ninguém.
 /// Isso recusa movimentos entre pais diferentes e listas desatualizadas.
-pub fn validate_siblings(children: &[CatalogNode], desired: &[String]) -> bool {
-    if desired.len() != children.len() {
+pub fn validate_siblings(existing: &[String], desired: &[String]) -> bool {
+    if desired.len() != existing.len() {
         return false;
     }
     let mut counts: BTreeMap<&str, usize> = BTreeMap::new();
     for path in desired {
         *counts.entry(path.as_str()).or_insert(0) += 1;
     }
-    if counts.len() != children.len() {
+    if counts.len() != existing.len() {
         return false;
     }
-    children
+    existing
         .iter()
-        .all(|child| counts.get(child.path.as_str()) == Some(&1))
+        .all(|path| counts.get(path.as_str()) == Some(&1))
 }

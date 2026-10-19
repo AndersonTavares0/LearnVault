@@ -8,7 +8,7 @@
 use learnvault_core::paths::relative_path_key;
 use learnvault_core::{
     Catalog, CatalogNode, CatalogOrder, Database, KeyMode, apply_order, build_catalog,
-    validate_siblings,
+    sibling_paths, validate_siblings,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -220,37 +220,55 @@ fn reset_restores_the_automatic_order() -> TestResult {
 }
 
 #[test]
-fn validate_siblings_accepts_permutations_and_rejects_foreign_or_partial_lists() -> TestResult {
+fn sibling_paths_returns_children_of_a_parent_and_the_top_level() -> TestResult {
     let (_db, catalog) = three_module_catalog()?;
-    let children = &catalog.categories;
 
-    assert!(validate_siblings(
-        children,
-        &[
-            "Modulo 10".to_owned(),
+    // `""` é a lista de topo passada a `apply_order`.
+    assert_eq!(
+        sibling_paths(&catalog.categories, ""),
+        Some(vec![
             "Modulo 2".to_owned(),
             "Modulo 3".to_owned(),
-        ]
+            "Modulo 10".to_owned(),
+        ])
+    );
+    // Um pai existente devolve os filhos; um pai desconhecido não existe.
+    assert_eq!(
+        sibling_paths(&catalog.categories, "Modulo 2"),
+        Some(vec!["Modulo 2/Aula 1".to_owned()])
+    );
+    assert_eq!(sibling_paths(&catalog.categories, "Modulo X"), None);
+    Ok(())
+}
+
+#[test]
+fn validate_siblings_accepts_permutations_and_rejects_foreign_or_partial_lists() -> TestResult {
+    let (_db, catalog) = three_module_catalog()?;
+    let existing = child_paths(&catalog.categories);
+    let owned = |paths: &[&str]| {
+        paths
+            .iter()
+            .map(|path| (*path).to_owned())
+            .collect::<Vec<_>>()
+    };
+
+    assert!(validate_siblings(
+        &existing,
+        &owned(&["Modulo 10", "Modulo 2", "Modulo 3"])
     ));
     // Omitir um irmão não é uma permutação válida.
-    assert!(!validate_siblings(children, &["Modulo 10".to_owned()]));
+    assert!(!validate_siblings(&existing, &owned(&["Modulo 10"])));
     // Caminho de outro pai é recusado.
     assert!(!validate_siblings(
-        children,
-        &[
-            "Modulo 10".to_owned(),
-            "Modulo 2".to_owned(),
-            "Modulo Outro".to_owned(),
-        ]
+        &existing,
+        &owned(&["Modulo 10", "Modulo 2", "Modulo Outro"])
     ));
     // Repetição é recusada.
     assert!(!validate_siblings(
-        children,
-        &[
-            "Modulo 2".to_owned(),
-            "Modulo 2".to_owned(),
-            "Modulo 3".to_owned(),
-        ]
+        &existing,
+        &owned(&["Modulo 2", "Modulo 2", "Modulo 3"])
     ));
+    // Lista vazia para um pai sem filhos é aceita (nada a reordenar).
+    assert!(validate_siblings(&[], &[]));
     Ok(())
 }
