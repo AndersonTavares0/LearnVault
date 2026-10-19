@@ -487,3 +487,71 @@ test('renders an automatic video thumbnail in the built SPA without leaking libr
 	expect(image.src).not.toContain('Categoria');
 	expect(image.src).not.toContain('Video.webm');
 });
+
+test('moves the cover actions to the course card and keeps the course page clean', async ({ page, server }) => {
+	await page.goto(`${server.baseURL}/#/login`);
+	await page.getByLabel('Usuário').fill('admin');
+	await page.getByLabel('Senha', { exact: true }).fill(ADMIN_PASSWORD);
+	await page.getByRole('button', { name: 'Entrar' }).click();
+	await expect(page.getByRole('heading', { name: 'Início' })).toBeAttached();
+	await page.getByRole('button', { name: 'Indexar cursos' }).click();
+	await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
+
+	const courseCard = page.getByRole('link', { name: /library/ });
+	await expect(courseCard).toBeVisible();
+
+	// O menu abre pelo clique direito e fecha com Escape.
+	await courseCard.click({ button: 'right' });
+	await expect(page.getByRole('menu', { name: 'Capa de library' })).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(page.getByRole('menu', { name: 'Capa de library' })).toHaveCount(0);
+
+	// O botão de ações do card abre o mesmo menu.
+	await page.getByRole('button', { name: 'Ações de capa de library' }).click();
+	await page.getByRole('menuitem', { name: 'Adicionar capa' }).click();
+
+	// PNG 1x1: conteúdo válido para a validação por magic bytes e para o `<img>` carregar.
+	const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+	await page.locator('.course-cover-input').setInputFiles({ name: 'capa.png', mimeType: 'image/png', buffer: png });
+	await expect(page.getByText('Capa atualizada.')).toBeVisible();
+
+	const coverImage = page.locator('.course-grid .course-cover-image');
+	await expect(coverImage).toHaveCount(1);
+	const coverSource = await coverImage.getAttribute('src');
+	expect(coverSource).toBeTruthy();
+	const coverUrl = new URL(coverSource as string, server.baseURL);
+	expect(coverUrl.pathname).toMatch(/^\/api\/courses\/[^/]+\/cover$/);
+	expect(coverUrl.searchParams.get('v')).toMatch(/^\d+$/);
+	const coverResponse = await page.request.get(coverUrl.toString());
+	await expect(coverResponse).toBeOK();
+	expect(coverResponse.headers()['content-type']).toBe('image/png');
+	expect(await coverResponse.body()).toEqual(png);
+
+	const catalog = await (await page.request.get(`${server.baseURL}/api/catalog`)).json();
+	expect(catalog.nodes[0].cover_version).toBeGreaterThan(0);
+
+	// Com capa manual, o menu oferece trocar e remover.
+	await courseCard.click({ button: 'right' });
+	await expect(page.getByRole('menuitem', { name: 'Trocar capa' })).toBeVisible();
+	await expect(page.getByRole('menuitem', { name: 'Remover capa' })).toBeVisible();
+	await page.keyboard.press('Escape');
+
+	// A página do curso volta ao layout anterior, sem controles de capa.
+	await courseCard.click();
+	await expect(page.getByRole('heading', { name: 'library', exact: true })).toBeVisible();
+	await expect(page.locator('.course-cover-actions')).toHaveCount(0);
+	await expect(page.getByText('Trocar capa')).toHaveCount(0);
+	await expect(page.getByText('Remover capa')).toHaveCount(0);
+
+	// A remoção também é feita pelo card.
+	await page.getByRole('link', { name: 'Início', exact: true }).click();
+	await courseCard.click({ button: 'right' });
+	await page.getByRole('menuitem', { name: 'Remover capa' }).click();
+	await expect(page.getByText('Capa removida.')).toBeVisible();
+	await expect(page.locator('.course-grid .course-cover-image')).toHaveCount(0);
+
+	const afterRemoval = await page.request.get(coverUrl.toString());
+	expect(afterRemoval.status()).toBe(404);
+	const catalogAfter = await (await page.request.get(`${server.baseURL}/api/catalog`)).json();
+	expect(catalogAfter.nodes[0].cover_version).toBeUndefined();
+});
