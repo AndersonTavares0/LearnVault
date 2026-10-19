@@ -96,8 +96,8 @@ export function evaluateCiGateFromNeeds(needs, { workflowCancelled = false } = {
     return { passed: false, errors: ['change-scope docs_release_only output must be true or false'] };
   }
 
-    return evaluateCiGate({
-      workflowCancelled,
+  return evaluateCiGate({
+    workflowCancelled,
     docsReleaseOnly: docsReleaseOutput === 'true',
     results: {
       changes: needs['change-scope']?.result,
