@@ -262,6 +262,8 @@ jobs:
           tool: cargo-audit@0.22.2
       - name: Audit Cargo.lock for vulnerable and unsound dependencies
         run: cargo audit --deny unsound
+      - name: Temporary gate failure probe
+        run: exit 1
 
   gate:
     name: CI gate
