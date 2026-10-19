@@ -1,4 +1,4 @@
-import { expect, test as base } from '@playwright/test';
+import { chromium, expect, test as base } from '@playwright/test';
 import { once } from 'node:events';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -19,7 +19,14 @@ function firstMediaId(value: unknown): string | undefined {
 	const record = value as Record<string, unknown>;
 	if (Array.isArray(record.files)) {
 		for (const file of record.files) {
-			if (file && typeof file === 'object' && typeof (file as Record<string, unknown>).media_id === 'string') {
+			// Só a mídia jogável interessa: legenda e material também têm `media_id`, e a
+			// ordem alfabética dos arquivos não é a ordem em que o player escolhe a mídia.
+			if (
+				file &&
+				typeof file === 'object' &&
+				(file as Record<string, unknown>).kind === 'media' &&
+				typeof (file as Record<string, unknown>).media_id === 'string'
+			) {
 				return (file as Record<string, string>).media_id;
 			}
 		}
@@ -48,6 +55,7 @@ type ServerFixture = {
 	baseURL: string;
 	libraryPath: string;
 	outsidePath: string;
+	mediaBytes: Buffer;
 	stop: () => Promise<void>;
 };
 
@@ -134,13 +142,60 @@ async function waitForHealth(url: string, process: ChildProcess) {
 	throw new Error('server did not become ready within 30 seconds');
 }
 
+// Gera um WebM real de um segundo: o player só decodifica o que é vídeo de verdade, e um
+// arquivo de texto com cara de `.mp4` nunca prova que a mídia toca. O clipe nasce dentro
+// do próprio teste (canvas + MediaRecorder), sem binário no repositório.
+async function gerarWebm(): Promise<Buffer> {
+	const browser = await chromium.launch();
+	try {
+		const page = await browser.newPage();
+		const base64 = await page.evaluate(async () => {
+			const canvas = document.createElement('canvas');
+			canvas.width = 320;
+			canvas.height = 180;
+			const context = canvas.getContext('2d');
+			if (!context) throw new Error('canvas 2d indisponível');
+			const recorder = new MediaRecorder(canvas.captureStream(25), {
+				mimeType: 'video/webm'
+			});
+			const chunks: Blob[] = [];
+			recorder.ondataavailable = (event) => {
+				if (event.data.size > 0) chunks.push(event.data);
+			};
+			const finished = new Promise<void>((resolve) => {
+				recorder.onstop = () => resolve();
+			});
+			recorder.start();
+			for (let frame = 0; frame < 25; frame += 1) {
+				context.fillStyle = frame % 2 === 0 ? '#1f2b25' : '#c18b52';
+				context.fillRect(0, 0, canvas.width, canvas.height);
+				await new Promise((resolve) => setTimeout(resolve, 40));
+			}
+			recorder.stop();
+			await finished;
+			const bytes = new Uint8Array(
+				await new Blob(chunks, { type: 'video/webm' }).arrayBuffer()
+			);
+			let binary = '';
+			for (const byte of bytes) binary += String.fromCharCode(byte);
+			return btoa(binary);
+		});
+		return Buffer.from(base64, 'base64');
+	} finally {
+		await browser.close();
+	}
+}
+
 async function startServer(): Promise<ServerFixture> {
 	const root = await mkdtemp(join(tmpdir(), 'learnvault-e2e-'));
 	const library = join(root, 'library');
 	const outsidePath = join(root, 'outside.mp4');
 	await writeFile(outsidePath, Buffer.from('outside-sentinel'));
 	await mkdir(join(library, 'Categoria', 'Curso'), { recursive: true });
-	await writeFile(join(library, 'Categoria', 'Curso', 'Aula.mp4'), Buffer.from('video-fixture'));
+	// A mídia do curso é um WebM de verdade: o player precisa decodificar, e a asserção
+	// do teste compara os bytes que o servidor entregou.
+	const mediaBytes = await gerarWebm();
+	await writeFile(join(library, 'Categoria', 'Curso', 'Aula.webm'), mediaBytes);
 	await writeFile(join(library, 'Categoria', 'Curso', 'Aula.vtt'), 'WEBVTT\n');
 	await writeFile(join(library, 'Categoria', 'Curso', 'Material.pdf'), Buffer.from('material-fixture'));
 
@@ -175,6 +230,7 @@ async function startServer(): Promise<ServerFixture> {
 		baseURL,
 		libraryPath: library,
 		outsidePath,
+		mediaBytes,
 		stop: async () => {
 			try {
 				await stopProcess(server, closed);
@@ -279,7 +335,7 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	await expect(courseCard).toBeVisible();
 	const videoRequest = page.waitForRequest((request) => {
 		const url = new URL(request.url());
-		return url.pathname === '/api/media' && url.searchParams.get('path') === 'Categoria/Curso/Aula.mp4';
+		return url.pathname === '/api/media' && url.searchParams.get('path') === 'Categoria/Curso/Aula.webm';
 	});
 	await courseCard.click();
 	await expect(page.locator('.breadcrumb')).toContainText('library');
@@ -290,12 +346,39 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	const videoSource = (await videoRequest).url();
 	const videoURL = new URL(videoSource, server.baseURL);
 	expect(videoURL.pathname).toBe('/api/media');
-	expect(videoURL.searchParams.get('path')).toBe('Categoria/Curso/Aula.mp4');
+	expect(videoURL.searchParams.get('path')).toBe('Categoria/Curso/Aula.webm');
 	// Toda mídia é resolvida dentro de um curso registrado, nunca por caminho global.
 	expect(videoURL.searchParams.get('course')).toBeTruthy();
 	const videoResponse = await page.request.get(videoURL.toString());
 	await expect(videoResponse).toBeOK();
-	await expect(videoResponse.body()).resolves.toEqual(Buffer.from('video-fixture'));
+	// O servidor entrega o WebM real, com o tipo declarado e suporte a Range.
+	expect(videoResponse.headers()['content-type']).toContain('video/webm');
+	expect(videoResponse.headers()['accept-ranges']).toBe('bytes');
+	await expect(videoResponse.body()).resolves.toEqual(server.mediaBytes);
+	// O container WebM começa com o magic EBML: os bytes são de um vídeo de verdade.
+	const served = await videoResponse.body();
+	expect(served.subarray(0, 4)).toEqual(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]));
+	// Um trecho do arquivo é servido com 206: o player navega no vídeo por Range.
+	const range = await page.request.get(videoURL.toString(), {
+		headers: { Range: 'bytes=0-99' }
+	});
+	expect(range.status()).toBe(206);
+	expect((await range.body()).length).toBe(100);
+
+	// O player decodifica a mídia: o vídeo tem dimensões e o estado pronto, e a
+	// mensagem de falha da mídia não aparece.
+	const video = page.locator('video');
+	await expect(video).toBeVisible();
+	await expect
+		.poll(async () =>
+			video.evaluate((element) => (element as HTMLVideoElement).readyState)
+		)
+		.toBeGreaterThanOrEqual(2);
+	expect(await video.evaluate((element) => (element as HTMLVideoElement).videoWidth))
+		.toBeGreaterThan(0);
+	await expect(
+		page.locator('p.error[role="alert"]').filter({ hasText: /mídia/i })
+	).toHaveCount(0);
 
 	const materialHref = await page.getByRole('link', { name: 'Material.pdf' }).getAttribute('href');
 	expect(materialHref).toBeTruthy();
@@ -319,7 +402,7 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	}
 	// Sem o curso, a rota não entrega mídia alguma, mesmo para um caminho indexado.
 	const unscoped = await page.request.get(
-		`${server.baseURL}/api/media?path=${encodeURIComponent('Categoria/Curso/Aula.mp4')}`
+		`${server.baseURL}/api/media?path=${encodeURIComponent('Categoria/Curso/Aula.webm')}`
 	);
 	expect(unscoped.status()).toBe(400);
 
@@ -358,14 +441,14 @@ test('creates, edits, reloads and deletes a personal note in the player', async 
 	await courseCard.click();
 	await expect(page.getByRole('heading', { name: 'Curso', exact: true })).toBeVisible();
 
-	const notes = page.getByRole('region', { name: 'Minhas notas' });
-	await expect(notes.getByRole('heading', { name: 'Minhas notas' })).toBeVisible();
+	const notes = page.getByRole('region', { name: 'Suas anotações' });
+	await expect(notes.getByRole('heading', { name: 'Suas anotações' })).toBeVisible();
 
 	// A nota nasce como texto simples, com a posição de reprodução anexada.
 	const texto = 'Nota de estudo criada pela jornada de UI.';
-	await notes.getByLabel('Nova nota').fill(texto);
+	await notes.getByLabel('Nova anotação').fill(texto);
 	await notes.getByLabel(/Anexar posição atual/).check();
-	await notes.getByRole('button', { name: 'Adicionar nota' }).click();
+	await notes.getByRole('button', { name: 'Adicionar anotação' }).click();
 	await expect(notes.locator('p.note-text')).toHaveText(texto);
 	await expect(notes.getByRole('button', { name: /Ir para/ })).toBeVisible();
 
@@ -382,7 +465,7 @@ test('creates, edits, reloads and deletes a personal note in the player', async 
 	// Editar a nota reescreve o texto no servidor.
 	const editado = 'Nota de estudo editada pela jornada de UI.';
 	await notes.getByRole('button', { name: 'Editar' }).click();
-	await notes.getByLabel('Editar nota').fill(editado);
+	await notes.getByLabel('Editar anotação').fill(editado);
 	await notes.getByRole('button', { name: 'Salvar edição' }).click();
 	await expect(notes.locator('p.note-text')).toHaveText(editado);
 	const afterEdit = await (await page.request.get(`${server.baseURL}/api/study/notes?media_id=${encodeURIComponent(mediaId)}`)).json();
@@ -393,13 +476,13 @@ test('creates, edits, reloads and deletes a personal note in the player', async 
 	page.on('dialog', (dialog) => void dialog.accept());
 	await notes.getByRole('button', { name: 'Excluir' }).click();
 	await expect(notes.locator('p.note-text')).toHaveCount(0);
-	await expect(notes.getByText('Ainda não há notas para esta mídia.')).toBeVisible();
+	await expect(notes.getByText('Ainda não há anotações para esta mídia.')).toBeVisible();
 	const afterDelete = await (await page.request.get(`${server.baseURL}/api/study/notes?media_id=${encodeURIComponent(mediaId)}`)).json();
 	expect(afterDelete.items.length).toBe(0);
 });
 
 test('reports a lesson whose media disappears from disk and restores it when the file returns', async ({ page, server }) => {
-	// A fixture já tem Categoria/Curso/Aula.mp4, usado pelo outro cenário. Em vez de apagar
+	// A fixture já tem Categoria/Curso/Aula.webm, usado pelo outro cenário. Em vez de apagar
 	// esse arquivo, o cenário cria um módulo próprio com duas aulas: a mídia de uma delas
 	// sai do disco e volta, para exercitar o ciclo inteiro de disponibilidade.
 	const moduleRoot = join(server.libraryPath, 'Categoria', 'Modulo Extra');
