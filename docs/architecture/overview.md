@@ -8,47 +8,27 @@ duas formas:
 
 ## Estado atual
 
-O LearnVault é implementado no workspace Rust — `crates/server` para o servidor Axum, `crates/desktop`
-para a aplicação Tauri offline e `apps/web` para a SPA Svelte 5 + Vite — com o núcleo compartilhado
-em `crates/core`. O backend legado em Go foi integralmente removido na Fase 5, consolidando Rust como
-stack backend exclusiva do projeto.
+O LearnVault roda no workspace Rust: `crates/server` (Axum), `crates/desktop` (Tauri 2) e
+`apps/web` (Svelte 5 + Vite), com o domínio compartilhado em `crates/core`. O backend Go foi
+removido na Fase 5 (PR #206).
 
-A migração do stack Rust foi concluída. O desktop Tauri 2 embute a SPA por `frontendDist`, define
-uma janela `main` em `crates/desktop/tauri.conf.json` e não abre portas de rede. Ele expõe o
-catálogo agregado de cursos (`desktop_catalog`), com
-ACL app-defined mínima e derivação pelo `learnvault-core` sobre um banco SQLite local, no
-diretório de dados do aplicativo; os comandos `desktop_import_course` e `desktop_remove_course`,
-que usam o seletor nativo interno ao Rust e persistem o **registro de cursos** (versão 2, com
-migração do formato anterior de raiz única) de forma atômica e serializada no diretório de
-configuração do aplicativo, fora das pastas de curso e do SQLite — o webview nunca envia nem
-recebe um caminho; o comando `desktop_rescan`, que indexa explicitamente todos os cursos
-registrados reutilizando o `learnvault-core`, com estado ocupado que serializa chamadas
-concorrentes, agregação de falhas por curso e nunca varredura automática; os comandos de estudo
-`desktop_study_progress`, `desktop_record_position`, `desktop_set_completed` e
-`desktop_recent_study`, que reutilizam `learnvault-core::study` com o dono local fixo resolvido no
-Rust; e o **protocolo de mídia**, que entrega imagens/thumbnails, materiais pequenos, vídeo, áudio
-e arquivos de legenda por `learnvault-media://localhost/<media-id>` — no Windows (WebView2) o webview pede
-`http://learnvault-media.localhost/<media-id>`, que o runtime reverte para esse esquema antes do
-handler —, com o webview apontando pelo `media_id` opaco (nunca por um caminho), resolução da
-biblioteca pelo próprio identificador, allowlist de tipo de conteúdo, faixas HTTP limitadas,
-limite explícito de resposta e revalidação pelo `learnvault-core`. As **capas personalizadas dos
-cursos** usam dois caminhos equivalentes: no servidor, as rotas administrativas
-`PUT`/`DELETE /api/admin/courses/{id}/cover` e a leitura autenticada `GET /api/courses/{id}/cover`;
-no desktop, o protocolo `learnvault-cover://localhost/<course-id>` e os comandos
-`desktop_import_course_cover`/`desktop_remove_course_cover`, em que o seletor nativo de imagens roda
-no Rust e nenhum byte de arquivo cruza o IPC. A capa é um único arquivo de até 4 MiB por curso,
-guardado ao lado do banco no servidor e no diretório de dados do aplicativo no desktop — nunca
-dentro da pasta do curso —, com o formato decidido pelos bytes iniciais (PNG, JPEG ou WebP),
-gravação atômica e versão em segundos exposta no catálogo como `cover_version`. No servidor self-hosted, o
-registro de cursos vive em `courses.json` ao lado do banco, com endpoints administrativos de
-importação e remoção, e `LIBRARY_DIR`/`--library-root` continua aceito apenas como semente do
-primeiro curso. A API de Study tem paridade entre o servidor Rust e a SPA web,
-e o desktop a expõe por IPC; o player desktop reproduz mídia local e sincroniza
-posição/conclusão. O player desktop renderiza legendas VTT; SRT, ASS e SSA são baixáveis, e o build
-HTTP pode converter SRT sob demanda. O desktop não tem autenticação por decisão de arquitetura.
-O instalador Windows NSIS está disponível; o pacote Linux desktop/Flatpak continua pendente até a
-validação em sandbox, incluindo acesso persistente à biblioteca e reprodução. Veja
-[distribuição](../operations/distribution.md).
+- **Servidor self-hosted**: API HTTP, autenticação e entrega da SPA. O registro de cursos fica em
+  `courses.json` ao lado do banco SQLite; `LIBRARY_DIR`/`--library-root` é apenas semente do
+  primeiro curso.
+- **Desktop offline**: janela `main` em `crates/desktop/tauri.conf.json`, com a SPA embutida por
+  `frontendDist`, sem autenticação nem portas de rede. Importação, remoção, rescan e estudo são
+  comandos IPC explícitos; o webview recebe identificadores opacos e nunca caminhos.
+- **Mídia**: o protocolo `learnvault-media://localhost/<media-id>` entrega imagens, materiais,
+  vídeo, áudio e legendas com allowlist de tipo, faixas HTTP e limite de resposta. No Windows
+  (WebView2), o webview usa `http://learnvault-media.localhost/<media-id>`.
+- **Capas**: um arquivo de até 4 MiB por curso, com formato detectado pelos bytes iniciais,
+  gravação atômica e `cover_version` no catálogo. Ficam fora das pastas de curso; no desktop,
+  usam o protocolo `learnvault-cover://` e comandos IPC dedicados.
+- **Estudo**: posição, conclusão e recentes têm paridade entre servidor, SPA e IPC desktop. O
+  player desktop reproduz mídia local, renderiza VTT e permite baixar SRT/ASS/SSA; o build HTTP
+  converte SRT sob demanda.
+- **Distribuição**: instalador Windows NSIS disponível; pacote Linux/Flatpak pendente de
+  validação em sandbox. Veja [distribuição](../operations/distribution.md).
 
 ```text
 Proxy HTTPS local
@@ -58,9 +38,6 @@ Serviço HTTP Rust -- SQLite + registro de cursos (/data)
         |-- cache (/cache)
         `-- pastas de curso (/courses/*:ro)
 ```
-
-O serviço HTTP Go foi removido na Fase 5 (PR #206); o servidor atual é a implementação Rust
-descrita pelo fluxo acima.
 
 O núcleo também possui uma API de importação explícita do formato legado de SQLite (`legacy_import`):
 a origem é somente leitura, recebe backup antes da operação e a saída é promovida somente após transação,

@@ -101,45 +101,31 @@ das versões e não substituem a licença vigente.
 
 ### Automação segura do Dependabot
 
-O workflow `Dependabot safe auto-merge` usa a configuração confiável da base por
-`pull_request_target`, sem checkout, instalação de dependências ou execução de código da pull
-request. Ele só considera PRs do `dependabot[bot]` para `main`, no mesmo repositório, com uma
-atualização individual patch/minor cujo estado de alerta de segurança seja explicitamente `null`,
-com o head atual confirmado pela API. O gate de alerta falha fechado: qualquer estado de alerta
-ausente, vazio ou desconhecido desqualifica a PR em vez de ser tratado como não relacionado a
-segurança. Atualizações major, de segurança, com estado de alerta não explicitamente `null`,
-agrupadas, desconhecidas, conflitantes ou desatualizadas permanecem para análise humana; o
-auto-merge nativo aguarda ou recusa qualquer estado que não satisfaça a proteção da branch.
+O workflow `Dependabot safe auto-merge` usa `pull_request_target` com a configuração confiável da
+base, sem checkout, instalação de dependências ou execução de código da pull request. Ele só
+considera PRs do `dependabot[bot]` para `main`, no mesmo repositório, com uma atualização
+individual patch/minor, alerta de segurança explicitamente `null` e head confirmado pela API.
 
-Quando elegível, o workflow apenas solicita o auto-merge nativo do GitHub com squash. Ele não
+O gate de alerta falha fechado: estado ausente, vazio ou desconhecido desqualifica a PR.
+Atualizações major, de segurança, agrupadas, conflitantes ou desatualizadas permanecem para
+análise humana. Quando elegível, o workflow apenas solicita o auto-merge nativo com squash; não
 aprova PRs, não usa `--admin`, não faz force-push, rebase ou fechamento automático. A proteção da
-branch continua sendo a autoridade para reviews e checks; a solicitação também é reavaliada pelo
-GitHub quando o head ou os checks mudam. Os checks protegidos são `SPA checks`, `Rust tests and lints`,
-`Desktop crate compile and guards`, `Container build (Rust)` e `CI gate`; este último agrega os
-resultados da execução e permite skips somente para os jobs pesados dispensados pelos filtros de
-docs/release. `Container build (Rust)` inclui a varredura Trivy de vulnerabilidades HIGH/CRITICAL da
-imagem Rust. A promoção dos checks Rust e do gate estável a obrigatórios, preservando os quatro
-checks anteriores, foi concluída pelo mantenedor em 2026-10-19.
+branch continua sendo a autoridade para reviews e checks, e o GitHub reavalia a solicitação quando
+o head ou os checks mudam.
 
-O workflow não concede permissões ao `GITHUB_TOKEN` (`permissions: {}`). Para consultar alertas do
-Dependabot com `alert-lookup`, ele exige o segredo
-`DEPENDABOT_AUTOMERGE_TOKEN`, configurado como um fine-grained PAT ou token de GitHub App com
-apenas `Dependabot alerts: read`, `Contents: write` e `Pull requests: write`. Sem esse segredo,
-o job falha fechado e nenhum auto-merge é solicitado. Workflows disparados diretamente por PRs do
-Dependabot recebem normalmente um `GITHUB_TOKEN` somente leitura e não devem receber segredos; por
-isso esta automação usa a base confiável, o token dedicado e uma chamada de API sem executar o
-conteúdo da PR. Se a proteção de branch for alterada,
-ou uma merge queue for adotada, os gates devem ser reavaliados antes de manter a automação ativa.
-A alteração de 2026-10-17 foi reavaliada: a automação apenas solicita o auto-merge nativo com
-squash e não referencia nomes de checks, então os três checks promovidos passam a ser exigidos sem
-mudança no workflow, e a lista de manifests elegíveis permanece a mesma.
-Como defesa adicional, a automação só considera alterações nos manifests e lockfiles aprovados
-(`package.json`, `apps/web/package.json`, `pnpm-lock.yaml`, `Cargo.toml`, manifests de crates e
-`Cargo.lock`); workflows, scripts, Containerfiles,
-Compose e outros caminhos permanecem manuais. Ela confirma o SHA da base e do head e rejeita PRs
-que ficaram atrás da base, sem fazer polling, rebase ou checkout.
-Para rollback, desabilite o workflow e cancele auto-merges pendentes; não há mutação automática de
-branches ou lockfiles.
+O workflow não concede permissões ao `GITHUB_TOKEN` (`permissions: {}`). Para consultar alertas
+com `alert-lookup`, exige o segredo `DEPENDABOT_AUTOMERGE_TOKEN`, um fine-grained PAT ou token de
+GitHub App com `Dependabot alerts: read`, `Contents: write` e `Pull requests: write`. Sem esse
+segredo, o job falha fechado e nenhum auto-merge é solicitado. Workflows disparados diretamente
+por PRs do Dependabot recebem `GITHUB_TOKEN` somente leitura e não devem receber segredos.
+
+Só são elegíveis alterações nos manifests e lockfiles aprovados (`package.json`,
+`apps/web/package.json`, `pnpm-lock.yaml`, `Cargo.toml`, manifests de crates e `Cargo.lock`);
+workflows, scripts, Containerfiles, Compose e outros caminhos permanecem manuais. A automação
+confirma o SHA da base e do head e rejeita PRs que ficaram atrás da base, sem polling, rebase ou
+checkout. Para rollback, desabilite o workflow e cancele auto-merges pendentes. Se a proteção de
+branch mudar ou uma merge queue for adotada, os gates devem ser reavaliados antes de manter a
+automação ativa.
 
 Os nomes dos jobs obrigatórios são estáveis: `SPA checks`, `Rust tests and lints`,
 `Desktop crate compile and guards`, `Container build (Rust)` e `CI gate`. O CI roda em pull requests,
