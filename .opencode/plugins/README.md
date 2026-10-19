@@ -36,6 +36,10 @@ como `bash` em runtimes antigos e como `shell` a partir do opencode v2, e a de p
 aparece como `apply_patch` ou como `patch`. A guarda reconhece **os dois nomes** de
 cada ferramenta; sem isso ela não enxergaria o comando e a proteção não dispararia.
 
+Nomes verificados no **opencode v2.0.32**. Se o runtime renomear uma ferramenta de novo,
+a guarda volta a ficar inerte sem erro visível: confira o nome em
+`packages/core/src/tool/plugin/` e acrescente o novo ao conjunto correspondente.
+
 ## Comportamento esperado do agente ao ser bloqueado
 
 O erro orienta o agente a **não contornar** com outros comandos: ele deve informar o
