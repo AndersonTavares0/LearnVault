@@ -107,10 +107,12 @@ auto-merge nativo aguarda ou recusa qualquer estado que não satisfaça a prote�
 Quando elegível, o workflow apenas solicita o auto-merge nativo do GitHub com squash. Ele não
 aprova PRs, não usa `--admin`, não faz force-push, rebase ou fechamento automático. A proteção da
 branch continua sendo a autoridade para reviews e checks; a solicitação também é reavaliada pelo
-GitHub quando o head ou os checks mudam. Os checks protegidos são `SPA checks`, `Rust tests and lints`, `Desktop crate compile and guards` e
-`Container build (Rust)`; este último inclui a varredura Trivy de vulnerabilidades HIGH/CRITICAL da
-imagem Rust. A promoção dos três checks Rust a obrigatórios e a remoção dos checks acoplados ao Go
-foram concluídas pelo mantenedor em 2026-10-17.
+GitHub quando o head ou os checks mudam. Os checks protegidos são `SPA checks`, `Rust tests and lints`,
+`Desktop crate compile and guards`, `Container build (Rust)` e `CI gate`; este último agrega os
+resultados da execução e permite skips somente para os jobs pesados dispensados pelos filtros de
+docs/release. `Container build (Rust)` inclui a varredura Trivy de vulnerabilidades HIGH/CRITICAL da
+imagem Rust. A promoção dos checks Rust e do gate estável a obrigatórios, preservando os quatro
+checks anteriores, foi concluída pelo mantenedor em 2026-10-19.
 
 O workflow não concede permissões ao `GITHUB_TOKEN` (`permissions: {}`). Para consultar alertas do
 Dependabot com `alert-lookup`, ele exige o segredo
@@ -133,9 +135,11 @@ Para rollback, desabilite o workflow e cancele auto-merges pendentes; não há m
 branches ou lockfiles.
 
 Os nomes dos jobs obrigatórios são estáveis: `SPA checks`, `Rust tests and lints`,
-`Desktop crate compile and guards` e `Container build (Rust)`. O CI roda em pull requests,
+`Desktop crate compile and guards`, `Container build (Rust)` e `CI gate`. O CI roda em pull requests,
 cancela execuções obsoletas, constrói a SPA uma vez — consumida pela imagem Rust e pelo desktop —
-usa cache e mantém timeouts curtos.
+usa cache e mantém timeouts curtos. Para alterações exclusivamente em documentação ou metadados de
+release, os jobs E2E, Rust, desktop, container e auditoria de dependências podem ser legitimamente
+ignorados; o `CI gate` permanece estável e reprova falhas, cancelamentos e skips inesperados.
 
 O job `Rust tests and lints` verifica formatação, lints, testes e a cobertura do núcleo em Rust; o
 job `Desktop crate compile and guards` compila o crate desktop e roda seus testes; e o job
