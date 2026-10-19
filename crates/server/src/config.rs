@@ -22,8 +22,10 @@ pub struct Config {
     /// Raiz opcional dos arquivos estáticos da interface web.
     pub web_root: Option<PathBuf>,
     /// Usuário inicial usado somente quando o banco ainda não possui administrador.
+    /// `ADMIN_USERNAME_FILE` carrega o mesmo valor de um arquivo de segredo.
     pub admin_username: Option<String>,
     /// Senha inicial usada somente quando o banco ainda não possui administrador.
+    /// `ADMIN_PASSWORD_FILE` carrega o mesmo valor de um arquivo de segredo.
     pub admin_password: Option<String>,
     /// Define se cookies de sessão recebem o atributo `Secure`.
     pub cookie_secure: bool,
@@ -70,6 +72,9 @@ pub enum ConfigError {
     /// Segredo não pode ser exposto na lista de processos.
     #[error("admin password must be supplied through ADMIN_PASSWORD or a secret file")]
     InsecureAdminPasswordArgument,
+    /// Uma credencial inicial não pôde ser carregada com segurança.
+    #[error("invalid bootstrap credential configuration")]
+    InvalidBootstrapCredential,
     /// `--version` não representa uma configuração de execução.
     #[error("version requested")]
     VersionRequested,
@@ -125,8 +130,8 @@ where
         .filter(|value| !value.is_empty())
         .map(PathBuf::from);
     let mut web_root = None;
-    let mut admin_username = env("ADMIN_USERNAME").filter(|value| !value.is_empty());
-    let admin_password = env("ADMIN_PASSWORD").filter(|value| !value.is_empty());
+    let mut admin_username = bootstrap_credential(&env, "ADMIN_USERNAME")?;
+    let admin_password = bootstrap_credential(&env, "ADMIN_PASSWORD")?;
     let env_cookie_secure = env("COOKIE_SECURE");
     let mut cookie_secure = None;
     let env_update_check = env("LEARNVAULT_UPDATE_CHECK");
@@ -227,6 +232,33 @@ where
         cookie_secure,
         update_check,
     }))
+}
+
+fn bootstrap_credential<F>(env: &F, name: &str) -> Result<Option<String>, ConfigError>
+where
+    F: Fn(&str) -> Option<String>,
+{
+    let direct = env(name).filter(|value| !value.is_empty());
+    let file_path = env(&format!("{name}_FILE")).filter(|value| !value.is_empty());
+    match (direct, file_path) {
+        (Some(_), Some(_)) => Err(ConfigError::InvalidBootstrapCredential),
+        (Some(value), None) => Ok(Some(value)),
+        (None, Some(file_path)) => {
+            let mut value = std::fs::read_to_string(file_path)
+                .map_err(|_| ConfigError::InvalidBootstrapCredential)?;
+            if let Some(without_lf) = value.strip_suffix('\n') {
+                value = without_lf
+                    .strip_suffix('\r')
+                    .unwrap_or(without_lf)
+                    .to_owned();
+            }
+            if value.is_empty() {
+                return Err(ConfigError::InvalidBootstrapCredential);
+            }
+            Ok(Some(value))
+        }
+        (None, None) => Ok(None),
+    }
 }
 
 fn parse_migrate_go<I, S>(args: I) -> Result<Command, ConfigError>
@@ -432,6 +464,84 @@ mod tests {
 
         assert_eq!(config.admin_username, None);
         assert_eq!(config.admin_password, None);
+    }
+
+    #[test]
+    fn bootstrap_credentials_can_be_loaded_from_secret_files() {
+        let temp = tempfile::tempdir().unwrap();
+        let library = temp.path().join("library");
+        let username_file = temp.path().join("username");
+        let password_file = temp.path().join("password");
+        std::fs::create_dir_all(&library).unwrap();
+        std::fs::write(&username_file, "first-admin\r\n").unwrap();
+        std::fs::write(&password_file, "synthetic-test-secret\n").unwrap();
+        let environment = HashMap::from([
+            ("LIBRARY_DIR", library.to_str().unwrap()),
+            ("ADMIN_USERNAME_FILE", username_file.to_str().unwrap()),
+            ("ADMIN_PASSWORD_FILE", password_file.to_str().unwrap()),
+        ]);
+
+        let command = parse_command_with_env(["learnvault-server"], |key| {
+            environment.get(key).copied().map(str::to_owned)
+        })
+        .unwrap();
+        let Command::Run(config) = command else {
+            panic!("expected run command");
+        };
+
+        assert_eq!(config.admin_username.as_deref(), Some("first-admin"));
+        assert_eq!(
+            config.admin_password.as_deref(),
+            Some("synthetic-test-secret")
+        );
+    }
+
+    #[test]
+    fn direct_and_file_bootstrap_credentials_cannot_be_combined() {
+        let temp = tempfile::tempdir().unwrap();
+        let password_file = temp.path().join("password");
+        std::fs::write(&password_file, "synthetic-test-secret").unwrap();
+        let environment = HashMap::from([
+            ("ADMIN_PASSWORD", "direct-secret"),
+            ("ADMIN_PASSWORD_FILE", password_file.to_str().unwrap()),
+        ]);
+
+        let error = parse_command_with_env(["learnvault-server"], |key| {
+            environment.get(key).copied().map(str::to_owned)
+        })
+        .unwrap_err();
+
+        assert!(!error.to_string().contains("direct-secret"));
+        assert!(!error.to_string().contains(password_file.to_str().unwrap()));
+    }
+
+    #[test]
+    fn missing_bootstrap_secret_file_fails_without_exposing_its_path() {
+        let temp = tempfile::tempdir().unwrap();
+        let missing_file = temp.path().join("missing-secret");
+        let environment = HashMap::from([("ADMIN_PASSWORD_FILE", missing_file.to_str().unwrap())]);
+
+        let error = parse_command_with_env(["learnvault-server"], |key| {
+            environment.get(key).copied().map(str::to_owned)
+        })
+        .unwrap_err();
+
+        assert!(!error.to_string().contains(missing_file.to_str().unwrap()));
+    }
+
+    #[test]
+    fn empty_bootstrap_secret_file_is_rejected() {
+        let temp = tempfile::tempdir().unwrap();
+        let password_file = temp.path().join("password");
+        std::fs::write(&password_file, "\n").unwrap();
+        let environment = HashMap::from([("ADMIN_PASSWORD_FILE", password_file.to_str().unwrap())]);
+
+        assert!(
+            parse_command_with_env(["learnvault-server"], |key| {
+                environment.get(key).copied().map(str::to_owned)
+            })
+            .is_err()
+        );
     }
 
     #[test]
