@@ -16,10 +16,10 @@ for AI coding agents. Keep these instructions aligned with `.github/CONTRIBUTING
 
 ## Safety
 
-- Never access or modify `/mnt/cursos`; tests use temporary directories and fake
-  fixtures only.
-- Never add secrets, course files, database contents, or homelab-specific private
-  data to commits, logs, or prompts.
+- Never access or modify the user's course library outside the project; it is
+  external, read-only data. Tests use temporary directories and fake fixtures only.
+- Never add secrets, course files, database contents, or private infrastructure
+  details to commits, logs, or prompts.
 - Do not bypass branch protection, review requirements, or required CI checks.
 
 ## Layout
