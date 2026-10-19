@@ -21,6 +21,13 @@ use crate::{
     ordering::CourseOrders,
 };
 
+/// Limite de corpo da requisição de ordenação, acima do limite padrão do roteador (8 KiB).
+///
+/// Reordenar um módulo com muitas aulas (ou um curso com muitos módulos) gera um corpo com
+/// um caminho relativo por irmão; o limite generoso evita um `413` surpresa numa biblioteca
+/// grande, sem afetar as demais rotas.
+pub(crate) const ORDER_BODY_LIMIT: usize = 512 * 1024;
+
 enum RescanFailure {
     Busy,
     Failed,

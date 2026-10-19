@@ -76,7 +76,9 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route(
             "/api/admin/courses/{id}/order",
-            axum::routing::put(ordering::put_order).delete(ordering::reset_order),
+            axum::routing::put(ordering::put_order)
+                .delete(ordering::reset_order)
+                .layer(DefaultBodyLimit::max(catalog::ORDER_BODY_LIMIT)),
         )
         .route("/api/courses/{id}/cover", get(covers::get_cover))
         .route("/api/admin/media/{id}/impact", get(media::impact))

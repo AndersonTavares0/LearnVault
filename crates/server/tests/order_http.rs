@@ -349,6 +349,53 @@ async fn reset_restores_the_automatic_order() {
 }
 
 #[tokio::test]
+async fn order_accepts_a_large_sibling_list_above_the_default_body_limit() {
+    let temp = tempfile::tempdir().unwrap();
+    let library = temp.path().join("library");
+    // 200 módulos com nomes longos: o corpo do pedido passa de 8 KiB (o limite padrão do
+    // roteador), então a rota precisa do limite próprio para não responder 413.
+    let modules: Vec<String> = (0..200)
+        .map(|index| format!("Modulo {index:040}"))
+        .collect();
+    for module in &modules {
+        let directory = library.join(module).join("Aula 1");
+        std::fs::create_dir_all(&directory).unwrap();
+        std::fs::write(directory.join("aula.mp4"), b"video").unwrap();
+    }
+
+    let app = build_router(AppState::initialize(config(&temp, &library)).await.unwrap());
+    let cookie = login(&app).await;
+    rescan(&app, &cookie).await;
+
+    let reversed: Vec<String> = modules.iter().rev().cloned().collect();
+    let body = serde_json::json!({ "parent": "", "children": reversed }).to_string();
+    assert!(
+        body.len() > 8 * 1024,
+        "o corpo do teste precisa exceder o limite padrão: {} bytes",
+        body.len()
+    );
+
+    let put = app
+        .clone()
+        .oneshot(
+            Request::put("/api/admin/courses/library-1/order")
+                .header("origin", "http://localhost")
+                .header("cookie", &cookie)
+                .header("content-type", "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(put.status(), StatusCode::OK);
+
+    let paths = module_paths(&catalog(&app, &cookie).await);
+    assert_eq!(paths.len(), 200);
+    assert_eq!(paths[0], reversed[0]);
+    assert_eq!(paths[199], reversed[199]);
+}
+
+#[tokio::test]
 async fn order_rejects_requests_when_blocking_capacity_is_saturated() {
     let temp = tempfile::tempdir().unwrap();
     let library = library(&temp);
