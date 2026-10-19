@@ -1,6 +1,6 @@
-import { chromium, expect, test as base } from '@playwright/test';
+import { expect, test as base } from '@playwright/test';
 import { once } from 'node:events';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -142,59 +142,18 @@ async function waitForHealth(url: string, process: ChildProcess) {
 	throw new Error('server did not become ready within 30 seconds');
 }
 
-// Gera um WebM real de um segundo: o player só decodifica o que é vídeo de verdade, e um
-// arquivo de texto com cara de `.mp4` nunca prova que a mídia toca. O clipe nasce dentro
-// do próprio teste (canvas + MediaRecorder), sem binário no repositório.
-async function gerarWebm(): Promise<Buffer> {
-	const browser = await chromium.launch();
-	try {
-		const page = await browser.newPage();
-		const base64 = await page.evaluate(async () => {
-			const canvas = document.createElement('canvas');
-			canvas.width = 320;
-			canvas.height = 180;
-			const context = canvas.getContext('2d');
-			if (!context) throw new Error('canvas 2d indisponível');
-			const recorder = new MediaRecorder(canvas.captureStream(25), {
-				mimeType: 'video/webm'
-			});
-			const chunks: Blob[] = [];
-			recorder.ondataavailable = (event) => {
-				if (event.data.size > 0) chunks.push(event.data);
-			};
-			const finished = new Promise<void>((resolve) => {
-				recorder.onstop = () => resolve();
-			});
-			recorder.start();
-			for (let frame = 0; frame < 25; frame += 1) {
-				context.fillStyle = frame % 2 === 0 ? '#1f2b25' : '#c18b52';
-				context.fillRect(0, 0, canvas.width, canvas.height);
-				await new Promise((resolve) => setTimeout(resolve, 40));
-			}
-			recorder.stop();
-			await finished;
-			const bytes = new Uint8Array(
-				await new Blob(chunks, { type: 'video/webm' }).arrayBuffer()
-			);
-			let binary = '';
-			for (const byte of bytes) binary += String.fromCharCode(byte);
-			return btoa(binary);
-		});
-		return Buffer.from(base64, 'base64');
-	} finally {
-		await browser.close();
-	}
-}
-
 async function startServer(): Promise<ServerFixture> {
 	const root = await mkdtemp(join(tmpdir(), 'learnvault-e2e-'));
 	const library = join(root, 'library');
 	const outsidePath = join(root, 'outside.mp4');
 	await writeFile(outsidePath, Buffer.from('outside-sentinel'));
 	await mkdir(join(library, 'Categoria', 'Curso'), { recursive: true });
-	// A mídia do curso é um WebM de verdade: o player precisa decodificar, e a asserção
-	// do teste compara os bytes que o servidor entregou.
-	const mediaBytes = await gerarWebm();
+	// A mídia do curso é um WebM de verdade, versionado no repositório
+	// (`testdata/media/amostra.webm`): o player precisa decodificar, e a asserção do
+	// teste compara os bytes que o servidor entregou. A amostra é um arquivo do
+	// repositório, não um artefato gerado no runtime: a prova roda igual em qualquer
+	// máquina e no CI, sem depender de codificador disponível no host.
+	const mediaBytes = await readFile(join(resolve(process.cwd(), 'testdata'), 'media', 'amostra.webm'));
 	await writeFile(join(library, 'Categoria', 'Curso', 'Aula.webm'), mediaBytes);
 	await writeFile(join(library, 'Categoria', 'Curso', 'Aula.vtt'), 'WEBVTT\n');
 	await writeFile(join(library, 'Categoria', 'Curso', 'Material.pdf'), Buffer.from('material-fixture'));
