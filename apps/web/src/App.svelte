@@ -62,6 +62,9 @@
 	let coverBusy = false;
 	let coverError = '';
 	let coverMessage = '';
+	let orderBusy = false;
+	let orderError = '';
+	let orderMessage = '';
 	let recent: StudyProgress[] = [];
 	let recentLoading = false;
 	let studyEnabled = studySyncSupported;
@@ -353,6 +356,43 @@
 		}
 	}
 
+	// A ordem manual de módulos e aulas é uma escolha administrativa do curso aberto. A
+	// nova lista de irmãos é calculada localmente (`moveSibling`) e validada no
+	// servidor/Rust como uma permutação exata; a lista recarregada reflete a ordem gravada.
+	async function reorder(parentPath: string, order: string[]) {
+		const current = course;
+		if (!current || orderBusy) return;
+		orderBusy = true;
+		orderError = '';
+		orderMessage = '';
+		try {
+			await transport.setCourseOrder(courseIdOf(current), parentPath, order);
+			syncCatalog(await transport.catalog());
+			orderMessage = 'Ordem atualizada.';
+		} catch (cause) {
+			orderError = cause instanceof Error ? cause.message : 'Não foi possível salvar a ordem.';
+		} finally {
+			orderBusy = false;
+		}
+	}
+
+	async function resetOrder() {
+		const current = course;
+		if (!current || orderBusy) return;
+		orderBusy = true;
+		orderError = '';
+		orderMessage = '';
+		try {
+			await transport.resetCourseOrder(courseIdOf(current));
+			syncCatalog(await transport.catalog());
+			orderMessage = 'Ordem automática restaurada.';
+		} catch (cause) {
+			orderError = cause instanceof Error ? cause.message : 'Não foi possível restaurar a ordem.';
+		} finally {
+			orderBusy = false;
+		}
+	}
+
 	// O botão manual força a checagem; a abertura da tela usa a checagem não forçada. Uma
 	// falha só vira mensagem após a ação do usuário — abrir Configurações offline não
 	// incomoda. `updateManual` guarda qual foi a última tentativa.
@@ -451,14 +491,16 @@
 	{#if !course}<h1>Curso não encontrado</h1><p class="empty" role="status">Não foi possível encontrar este curso no catálogo atual. Ele pode ter sido removido.</p>
 	{:else}
 		<header class="course-page-header"><h1>{course.title}</h1>{#if courseMeta}<p class="course-meta">{courseMeta}</p>{/if}</header>
-		{#if canManage}<div class="course-actions">{#if removeConfirm}<span class="remove-question" role="alert">Remover “{course.title}” da biblioteca? Os arquivos não serão apagados.</span><button class="text-button danger" onclick={removeCourse} disabled={removing} aria-busy={removing}>{removing ? 'Removendo…' : 'Remover curso'}</button><button class="text-button" onclick={() => (removeConfirm = false)} disabled={removing}>Cancelar</button>{:else}<button class="text-button" onclick={() => (removeConfirm = true)}>Remover curso</button><button class="text-button" onclick={rescan} disabled={rescanning}>{rescanning ? 'Indexando…' : 'Indexar cursos'}</button>{/if}</div>{/if}
+		{#if canManage}<div class="course-actions">{#if removeConfirm}<span class="remove-question" role="alert">Remover “{course.title}” da biblioteca? Os arquivos não serão apagados.</span><button class="text-button danger" onclick={removeCourse} disabled={removing} aria-busy={removing}>{removing ? 'Removendo…' : 'Remover curso'}</button><button class="text-button" onclick={() => (removeConfirm = false)} disabled={removing}>Cancelar</button>{:else}<button class="text-button" onclick={() => (removeConfirm = true)}>Remover curso</button><button class="text-button" onclick={rescan} disabled={rescanning}>{rescanning ? 'Indexando…' : 'Indexar cursos'}</button><button class="text-button" onclick={resetOrder} disabled={orderBusy} aria-busy={orderBusy}>{orderBusy ? 'Restaurando…' : 'Restaurar ordem'}</button>{/if}</div>{/if}
 		{#if removeError}<p class="error" role="alert">{removeError}</p>{/if}
 		{#if canManage}<div class="course-cover-actions">{#if transportKind === 'desktop'}<button class="secondary" onclick={changeCover} disabled={coverBusy} aria-busy={coverBusy} aria-label={`Trocar a capa de ${course.title}`}>{coverBusy ? 'Enviando…' : 'Trocar capa'}</button>{:else}<label class="cover-file-field" for="course-cover-file">Trocar capa<input id="course-cover-file" type="file" accept={COVER_ACCEPT} onchange={pickCover} disabled={coverBusy} aria-busy={coverBusy} /></label>{/if}{#if course.coverVersion !== undefined}<button class="text-button" onclick={removeCover} disabled={coverBusy} aria-busy={coverBusy} aria-label={`Remover a capa de ${course.title}`}>Remover capa</button>{/if}</div>{/if}
 		{#if coverError}<p class="error" role="alert">{coverError}</p>{/if}
 		{#if coverMessage}<p class="catalog-message" role="status" aria-live="polite">{coverMessage}</p>{/if}
+		{#if orderError}<p class="error" role="alert">{orderError}</p>{/if}
+		{#if orderMessage}<p class="catalog-message" role="status" aria-live="polite">{orderMessage}</p>{/if}
 		{#if rescanMessage}<p class="catalog-message" aria-live="polite">{rescanMessage}</p>{/if}
 		{#if course.looseFiles.length}<LooseFiles files={course.looseFiles} heading="Arquivos soltos" courseId={course.courseId ?? course.path} />{/if}
-		{#if course.children.length}<CatalogTree nodes={course.children} courseId={course.courseId ?? course.path} />{:else}<p class="empty" role="status">Este curso ainda não foi indexado. Use “Indexar cursos” para montar o catálogo.</p>{/if}
+		{#if course.children.length}<CatalogTree nodes={course.children} courseId={course.courseId ?? course.path} manage={canManage} onReorder={reorder} />{:else}<p class="empty" role="status">Este curso ainda não foi indexado. Use “Indexar cursos” para montar o catálogo.</p>{/if}
 	{/if}
 {:else}
 	{#if !lesson}<h1>Aula não encontrada</h1><p class="empty" role="status">Não foi possível encontrar esta aula no catálogo atual.</p>{:else}

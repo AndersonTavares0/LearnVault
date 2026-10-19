@@ -54,3 +54,4 @@ div.lesson-row:hover,div.lesson-row:active{background-color:transparent;color:va
 .cover-file-field input::file-selector-button{margin-right:10px;padding:8px 14px;border:1px solid var(--input-border);border-radius:8px;background:var(--surface);color:var(--accent);font:inherit;cursor:pointer}
 .cover-file-field input:not(:disabled)::file-selector-button:hover{background:var(--hover);border-color:var(--line);color:var(--heading)}
 .cover-file-field input:disabled{opacity:.55;cursor:default}
+.order-controls{display:inline-flex;align-items:center;gap:4px;margin-left:auto}.order-button{font-size:13px;line-height:1;padding:4px 8px;border-radius:6px;text-decoration:none}.order-button:disabled{opacity:.4;cursor:default;text-decoration:none}.course-header{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px}.course-header .order-controls{margin-left:auto}
