@@ -63,6 +63,9 @@
 	let coverBusy = false;
 	let coverError = '';
 	let coverMessage = '';
+	let coverTargetId: string | null = null;
+	let coverMenuId: string | null = null;
+	let coverInput: HTMLInputElement | null = null;
 	let orderBusy = false;
 	let orderError = '';
 	let orderMessage = '';
@@ -112,12 +115,32 @@
 			lesson = findLesson(catalog, courseId, lessonPath);
 			removeConfirm = false;
 			removeError = '';
+			coverBusy = false;
+			coverError = '';
+			coverMessage = '';
+			coverTargetId = null;
+			coverMenuId = null;
 			mediaError = '';
 		};
+		// Um clique fora do menu (ou em outra parte da página) fecha as ações da capa; o
+		// botão do próprio card e o menu ficam de fora para que a ação escolhida funcione.
+		const closeCoverMenu = (event: PointerEvent) => {
+			if (!coverMenuId) return;
+			const target = event.target;
+			if (target instanceof Element && target.closest('.course-card-menu, .course-card-menu-toggle')) return;
+			coverMenuId = null;
+		};
+		const closeCoverMenuOnEscape = (event: KeyboardEvent) => {
+			if (event.key === 'Escape') coverMenuId = null;
+		};
 		window.addEventListener('hashchange', change);
+		window.addEventListener('pointerdown', closeCoverMenu);
+		window.addEventListener('keydown', closeCoverMenuOnEscape);
 		void initialize();
 		return () => {
 			window.removeEventListener('hashchange', change);
+			window.removeEventListener('pointerdown', closeCoverMenu);
+			window.removeEventListener('keydown', closeCoverMenuOnEscape);
 			scheme?.removeEventListener('change', updateSystemTheme);
 		};
 	});
@@ -321,28 +344,42 @@
 		mediaError = 'Não foi possível carregar esta mídia.';
 	}
 
-	// A capa personalizada é uma escolha administrativa do curso aberto. No desktop o seletor
-	// de imagens roda no Rust (nenhum arquivo cruza o IPC); no servidor o arquivo escolhido no
-	// navegador é enviado ao endpoint administrativo. Em ambos os casos o shell recarrega o
-	// catálogo, porque a versão da capa (`?v=`) é o que invalida a imagem já exibida.
-	async function changeCover() {
-		await submitCover(null);
+	// A capa é escolhida no card do curso. No desktop o seletor de imagens roda no Rust
+	// (nenhum arquivo cruza o IPC); no servidor o arquivo escolhido no navegador é enviado
+	// ao endpoint administrativo. Em ambos os casos o shell recarrega o catálogo, porque a
+	// versão da capa (`?v=`) é o que invalida a imagem já exibida.
+	function toggleCoverMenu(courseItem: CatalogNode, open: boolean) {
+		coverMenuId = open && canManage ? courseIdOf(courseItem) : null;
+	}
+
+	function requestCourseCover(courseItem: CatalogNode) {
+		if (coverBusy) return;
+		coverMenuId = null;
+		coverTargetId = courseIdOf(courseItem);
+		coverError = '';
+		coverMessage = '';
+		if (transportKind === 'desktop') {
+			void submitCover(null);
+			return;
+		}
+		coverInput?.click();
 	}
 
 	async function submitCover(file: File | null) {
-		const current = course;
-		if (!current || coverBusy) return;
+		const target = coverTargetId;
+		if (!target || coverBusy) return;
 		coverBusy = true;
 		coverError = '';
 		coverMessage = '';
 		try {
-			await transport.importCourseCover(courseIdOf(current), file);
+			await transport.importCourseCover(target, file);
 			syncCatalog(await transport.catalog());
 			coverMessage = 'Capa atualizada.';
 		} catch (cause) {
 			coverError = cause instanceof Error ? cause.message : 'Não foi possível salvar a capa do curso.';
 		} finally {
 			coverBusy = false;
+			coverTargetId = null;
 		}
 	}
 
@@ -352,22 +389,24 @@
 		// O valor é limpo para que escolher o mesmo arquivo de novo volte a disparar o evento.
 		input.value = '';
 		if (file && file.size > MAX_COVER_BYTES) {
+			coverMessage = '';
 			coverError = 'A imagem é maior que 4 MiB.';
+			coverTargetId = null;
 			return;
 		}
 		void submitCover(file);
 	}
 
-	async function removeCover() {
-		const current = course;
-		if (!current || coverBusy) return;
+	async function removeCover(courseItem: CatalogNode) {
+		if (coverBusy) return;
+		coverMenuId = null;
 		coverBusy = true;
 		coverError = '';
 		coverMessage = '';
 		try {
-			await transport.removeCourseCover(courseIdOf(current));
+			const removed = await transport.removeCourseCover(courseIdOf(courseItem));
 			syncCatalog(await transport.catalog());
-			coverMessage = 'Capa removida.';
+			coverMessage = removed ? 'Capa removida.' : 'Nenhuma capa personalizada para remover.';
 		} catch (cause) {
 			coverError = cause instanceof Error ? cause.message : 'Não foi possível remover a capa do curso.';
 		} finally {
@@ -497,9 +536,12 @@
 	{#if user.role === 'admin' && importFormOpen}<form class="import-form" onsubmit={submitImport}><label for="import-path">Caminho da pasta do curso no servidor</label><input id="import-path" bind:value={importPath} placeholder="C:\cursos\Meu curso" required /><div class="import-form-actions"><button class="primary" disabled={importing} aria-busy={importing}>{importing ? 'Importando…' : 'Importar'}</button><button type="button" class="text-button" onclick={() => (importFormOpen = false)}>Cancelar</button></div></form>{/if}
 	{#if importError}<p class="error" role="alert">{importError}</p>{/if}
 	{#if user.role === 'admin' && rescanMessage}<p class="catalog-message" aria-live="polite">{rescanMessage}</p>{/if}
+	{#if canManage}<input class="visually-hidden course-cover-input" type="file" accept={COVER_ACCEPT} bind:this={coverInput} onchange={pickCover} tabindex="-1" aria-hidden="true" />{/if}
+	{#if coverError}<p class="error" role="alert">{coverError}</p>{/if}
+	{#if coverMessage}<p class="catalog-message" role="status" aria-live="polite">{coverMessage}</p>{/if}
 	{#if catalog && catalog.nodes.length}
 	<h2 id="courses-heading" class="courses-heading">Cursos</h2>
-{#if filteredNodes.length}<ul class="course-grid" aria-labelledby="courses-heading">{#each filteredNodes as courseItem (courseItem.courseId ?? courseItem.path)}<li><CourseCard course={courseItem} profile={user.userId} mediaUrl={(file, courseId) => transport.mediaUrl(file, courseId)} manualCoverUrl={transport.coverUrl(courseIdOf(courseItem), courseItem.coverVersion ?? null)} /></li>{/each}</ul>
+{#if filteredNodes.length}<ul class="course-grid" aria-labelledby="courses-heading">{#each filteredNodes as courseItem (courseItem.courseId ?? courseItem.path)}<li><CourseCard course={courseItem} profile={user.userId} mediaUrl={(file, courseId) => transport.mediaUrl(file, courseId)} manualCoverUrl={transport.coverUrl(courseIdOf(courseItem), courseItem.coverVersion ?? null)} {canManage} menuOpen={coverMenuId === courseIdOf(courseItem)} onMenuOpen={(open) => toggleCoverMenu(courseItem, open)} onChangeCover={requestCourseCover} onRemoveCover={removeCover} /></li>{/each}</ul>
 		{:else}<p class="empty" role="status">Nenhum curso corresponde a “{catalogQuery.trim()}”.</p>{/if}
 	{:else if canManage}<div class="empty-state"><p class="empty">Nenhum curso por aqui ainda.</p><p class="intro">Clique em “Importar curso” e escolha a pasta de um curso. Nada é movido, alterado ou apagado — a pasta permanece somente leitura.</p></div>{/if}
 	{#if catalog && catalog.looseFiles.length}<LooseFiles files={catalog.looseFiles} heading="Arquivos soltos" />{/if}
@@ -512,9 +554,6 @@
 		<header class="course-page-header"><h1>{course.title}</h1>{#if courseMeta}<p class="course-meta">{courseMeta}</p>{/if}</header>
 		{#if canManage}<div class="course-actions">{#if removeConfirm}<span class="remove-question" role="alert">Remover “{course.title}” da biblioteca? Os arquivos não serão apagados.</span><button class="text-button danger" onclick={removeCourse} disabled={removing} aria-busy={removing}>{removing ? 'Removendo…' : 'Remover curso'}</button><button class="text-button" onclick={() => (removeConfirm = false)} disabled={removing}>Cancelar</button>{:else}<button class="text-button" onclick={() => (removeConfirm = true)}>Remover curso</button><button class="text-button" onclick={rescan} disabled={rescanning}>{rescanning ? 'Indexando…' : 'Indexar cursos'}</button><button class="text-button" onclick={resetOrder} disabled={orderBusy} aria-busy={orderBusy}>{orderBusy ? 'Restaurando…' : 'Restaurar ordem'}</button>{/if}</div>{/if}
 		{#if removeError}<p class="error" role="alert">{removeError}</p>{/if}
-		{#if canManage}<div class="course-cover-actions">{#if transportKind === 'desktop'}<button class="secondary" onclick={changeCover} disabled={coverBusy} aria-busy={coverBusy} aria-label={`Trocar a capa de ${course.title}`}>{coverBusy ? 'Enviando…' : 'Trocar capa'}</button>{:else}<label class="cover-file-field" for="course-cover-file">Trocar capa<input id="course-cover-file" type="file" accept={COVER_ACCEPT} onchange={pickCover} disabled={coverBusy} aria-busy={coverBusy} /></label>{/if}{#if course.coverVersion !== undefined}<button class="text-button" onclick={removeCover} disabled={coverBusy} aria-busy={coverBusy} aria-label={`Remover a capa de ${course.title}`}>Remover capa</button>{/if}</div>{/if}
-		{#if coverError}<p class="error" role="alert">{coverError}</p>{/if}
-		{#if coverMessage}<p class="catalog-message" role="status" aria-live="polite">{coverMessage}</p>{/if}
 		{#if orderError}<p class="error" role="alert">{orderError}</p>{/if}
 		{#if orderMessage}<p class="catalog-message" role="status" aria-live="polite">{orderMessage}</p>{/if}
 		{#if rescanMessage}<p class="catalog-message" aria-live="polite">{rescanMessage}</p>{/if}
