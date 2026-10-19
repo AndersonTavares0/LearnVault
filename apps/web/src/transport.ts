@@ -15,6 +15,20 @@ export type Catalog = { complete: boolean; looseFiles: FileEntry[]; nodes: Catal
 export type TransportKind = 'http' | 'desktop';
 export type StudyProgress = { mediaId: string; positionSeconds: number; completed: boolean; updatedAt: number | null; recorded: boolean };
 export type RecentStudy = { items: StudyProgress[] };
+// Estado da verificação de atualização, tal como o servidor local devolve em `/api/update`.
+// Uma falha de rede do servidor nunca vira erro HTTP: chega como `error` preenchido e
+// `available: false`. `enabled: false` significa que a checagem está desligada por
+// configuração (nenhuma chamada de rede acontece).
+export type UpdateStatus = {
+	current: string;
+	enabled: boolean;
+	available: boolean;
+	latest: string | null;
+	releasedAt: string | null;
+	url: string | null;
+	checkedAt: string | null;
+	error: string | null;
+};
 export const STUDY_NOT_AVAILABLE = 'study_not_available';
 
 // Protocolo customizado do desktop para mídia local. O webview aponta somente pelo
@@ -68,6 +82,8 @@ export interface Transport {
 	recordPosition(mediaId: string, positionSeconds: number): Promise<StudyProgress>;
 	setCompleted(mediaId: string, completed: boolean): Promise<StudyProgress>;
 	recentStudy(limit?: number): Promise<RecentStudy>;
+	// Verifica a atualização; `force` ignora o intervalo mínimo de cache do servidor.
+	checkUpdate(force?: boolean): Promise<UpdateStatus>;
 	mediaUrl(file: FileEntry, courseId?: string): string | null;
 	// URL da capa personalizada, derivada da versão exposta pelo catálogo. Sem versão (sem
 	// capa) devolve `null`, e a interface cai na miniatura ou na capa gerada.
@@ -292,6 +308,30 @@ export function normalizeRecentStudy(value: unknown): RecentStudy {
 	return { items: (value as { items: unknown[] }).items.map(normalizeStudyProgress) };
 }
 
+// Campo de atualização opcional: `null`/ausente valem como nulo; um tipo que não seja
+// string é recusado em vez de vazar para a interface.
+function optionalUpdateString(value: unknown, key: string): string | null {
+	if (value === undefined || value === null) return null;
+	if (typeof value !== 'string') throw invalidPayload(`campo ${key} da atualização inválido.`);
+	return value;
+}
+
+export function normalizeUpdateStatus(value: unknown): UpdateStatus {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('estado de atualização ausente.');
+	const status = value as { current?: unknown; enabled?: unknown; available?: unknown; latest?: unknown; releasedAt?: unknown; url?: unknown; checkedAt?: unknown; error?: unknown };
+	if (typeof status.current !== 'string' || typeof status.enabled !== 'boolean' || typeof status.available !== 'boolean') throw invalidPayload('estado de atualização incompleto.');
+	return {
+		current: status.current,
+		enabled: status.enabled,
+		available: status.available,
+		latest: optionalUpdateString(status.latest, 'latest'),
+		releasedAt: optionalUpdateString(status.releasedAt, 'releasedAt'),
+		url: optionalUpdateString(status.url, 'url'),
+		checkedAt: optionalUpdateString(status.checkedAt, 'checkedAt'),
+		error: optionalUpdateString(status.error, 'error')
+	};
+}
+
 // Envelope de categoria da projeção de categorias: `{ children }`.
 function isCategoryEnvelope(item: unknown): boolean {
 	return item !== null && typeof item === 'object' && !Array.isArray(item) && 'children' in item;
@@ -393,6 +433,9 @@ export class HttpTransport implements Transport {
 	async recordPosition(mediaId: string, positionSeconds: number) { const response = await fetch('/api/study/position', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: mediaId, position_seconds: positionSeconds }) }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? 'Mídia não encontrada.' : response.status === 422 ? 'Posição inválida.' : 'Não foi possível salvar o progresso.'); return normalizeStudyProgress(await response.json()); }
 	async setCompleted(mediaId: string, completed: boolean) { const response = await fetch('/api/study/completed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: mediaId, completed }) }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? 'Mídia não encontrada.' : 'Não foi possível atualizar a conclusão.'); return normalizeStudyProgress(await response.json()); }
 	async recentStudy(limit?: number) { const url = limit === undefined ? '/api/study/recent' : `/api/study/recent?limit=${limit}`; const response = await fetch(url); if (!response.ok) throw response.status === 404 ? Object.assign(new Error('Estudo não disponível neste servidor.'), { code: STUDY_NOT_AVAILABLE }) : new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar o histórico.'); return normalizeRecentStudy(await response.json()); }
+	// O servidor local faz a checagem por HTTPS e devolve o estado; o navegador só o exibe.
+	// `force=1` (checagem manual) ignora o intervalo mínimo de cache do servidor.
+	async checkUpdate(force = false) { const response = await fetch(force ? '/api/update?force=1' : '/api/update'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível verificar a atualização.'); return normalizeUpdateStatus(await response.json()); }
 	mediaUrl(file: FileEntry, courseId?: string) { return `/api/media?course=${encodeURIComponent(courseId ?? '')}&path=${encodeURIComponent(file.path)}`; }
 	// A versão (mtime em segundos) exposta pelo catálogo entra como `?v=` para invalidar a
 	// imagem em cache do navegador quando a capa é trocada. Sem capa, não há URL manual.
@@ -468,6 +511,10 @@ export class DesktopStub implements Transport {
 	// Sem limite informado, o comando usa o padrão do contrato; por isso o argumento é
 	// omitido em vez de enviado como `undefined`.
 	async recentStudy(limit?: number) { try { return normalizeRecentStudy(await invoke<unknown>('desktop_recent_study', limit === undefined ? {} : { limit })); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar o histórico de estudo.'); } }
+	// O desktop não hospeda `crates/server` nem possui canal IPC de atualização: a
+	// checagem fica desligada, sem tocar a rede. Isso preserva a regra de que o bundle
+	// desktop não contém nenhum `fetch` do aplicativo.
+	checkUpdate() { return Promise.resolve({ current: '', enabled: false, available: false, latest: null, releasedAt: null, url: null, checkedAt: null, error: null } satisfies UpdateStatus); }
 	// Toda mídia entregue ao player usa a identidade autorizada. O caminho catalogado é
 	// deliberadamente ignorado, inclusive no desktop, para que ele nunca atravesse o webview.
 	mediaUrl(file: FileEntry, _courseId?: string) {

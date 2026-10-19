@@ -9,7 +9,8 @@
 	import PasswordField from './PasswordField.svelte';
 	import { lessonSections, neighboringLessons, type LessonSection } from './navigation';
 	import { destinationAfterLogin, findCourse, findLesson, findLessonLocation, href, locationFromHash, type Route } from './router';
-	import { transport, transportKind, COVER_ACCEPT, MAX_COVER_BYTES, courseIdOf, STUDY_NOT_AVAILABLE, type Catalog, type CatalogNode, type Lesson, type StudyProgress, type User } from './transport';
+	import { transport, transportKind, COVER_ACCEPT, MAX_COVER_BYTES, courseIdOf, STUDY_NOT_AVAILABLE, type Catalog, type CatalogNode, type Lesson, type StudyProgress, type UpdateStatus, type User } from './transport';
+	import { updateOutcome, updateMessage, updateReleaseUrl } from './update';
 	import { defaultRoute, resolveSession } from './session';
 	import { formatDuration, studySyncSupported } from './player';
 	import Brand from './Brand.svelte';
@@ -64,6 +65,21 @@
 	let recent: StudyProgress[] = [];
 	let recentLoading = false;
 	let studyEnabled = studySyncSupported;
+	// Estado mínimo da verificação de atualização: o último resultado, se uma checagem
+	// está em curso e se a última foi manual (para só mostrar erro após uma ação do
+	// usuário, e nunca durante a abertura da tela).
+	let updateStatus: UpdateStatus | null = null;
+	let updateChecking = false;
+	let updateManual = false;
+	let updateRequested = false;
+
+	// Carrega o estado da atualização ao abrir Configurações (checagem não forçada, que o
+	// servidor serve do cache quando dentro do intervalo mínimo). Só o transporte HTTP tem
+	// o endpoint; o desktop fica sem canal de atualização.
+	$: if (transportKind === 'http' && route === 'settings' && user && !updateRequested) {
+		updateRequested = true;
+		void checkUpdate(false);
+	}
 
 	// Só o admin importa e indexa: no servidor isso evita que um usuário comum aponte o
 	// servidor para pastas arbitrárias; no desktop a identidade local é admin.
@@ -337,6 +353,33 @@
 		}
 	}
 
+	// O botão manual força a checagem; a abertura da tela usa a checagem não forçada. Uma
+	// falha só vira mensagem após a ação do usuário — abrir Configurações offline não
+	// incomoda. `updateManual` guarda qual foi a última tentativa.
+	async function checkUpdate(manual: boolean) {
+		if (updateChecking) return;
+		updateChecking = true;
+		updateManual = manual;
+		try {
+			updateStatus = await transport.checkUpdate(manual);
+		} catch (cause) {
+			if (manual) {
+				updateStatus = {
+					current: updateStatus?.current ?? '',
+					enabled: true,
+					available: false,
+					latest: null,
+					releasedAt: null,
+					url: null,
+					checkedAt: null,
+					error: cause instanceof Error ? cause.message : 'Não foi possível verificar a atualização.'
+				};
+			}
+		} finally {
+			updateChecking = false;
+		}
+	}
+
 	// Mantém a aula atual visível dentro da caixa do índice sem arrastar a página: o
 	// ajuste é feito somente no contêiner rolável do índice, com o mínimo de rolagem.
 	function revealActive(node: HTMLElement, active: boolean) {
@@ -402,6 +445,7 @@
 	{:else if canManage}<div class="empty-state"><p class="empty">Nenhum curso por aqui ainda.</p><p class="intro">Clique em “Importar curso” e escolha a pasta de um curso. Nada é movido, alterado ou apagado — a pasta permanece somente leitura.</p></div>{/if}
 	{#if catalog && catalog.looseFiles.length}<LooseFiles files={catalog.looseFiles} heading="Arquivos soltos" />{/if}
 {:else if route === 'settings'}<h1>Preferências</h1><p class="intro">Escolha como o LearnVault aparece neste dispositivo.</p><fieldset class="theme-options"><legend>Tema</legend><label><input type="radio" name="theme" value="system" checked={themeMode === 'system'} onchange={() => changeTheme('system')} />Sistema <span>Acompanha a preferência do sistema.</span></label><label><input type="radio" name="theme" value="light" checked={themeMode === 'light'} onchange={() => changeTheme('light')} />Claro <span>Usa sempre o tema claro.</span></label><label><input type="radio" name="theme" value="dark" checked={themeMode === 'dark'} onchange={() => changeTheme('dark')} />Escuro <span>Usa sempre o tema escuro.</span></label></fieldset><p class="theme-status" aria-live="polite">Tema atual: {resolvedTheme === 'dark' ? 'escuro' : 'claro'}{themeMode === 'system' ? ' (sistema)' : ''}</p><section class="account-settings" aria-labelledby="account-heading"><h2 id="account-heading">Conta</h2><p><strong>{user.username}</strong> · {user.isAdmin ? 'Administrador' : 'Estudante'}</p><form class="credentials-form" onsubmit={credentials}><fieldset class="auth-fields" disabled={authBusy}><legend>Credenciais de acesso</legend><PasswordField id="settings-current-password" label="Senha atual" autocomplete="current-password" bind:value={currentPassword} /><label class="form-field" for="settings-new-username">Novo usuário<input id="settings-new-username" autocomplete="username" bind:value={username} required /></label><PasswordField id="settings-new-password" label="Nova senha" autocomplete="new-password" bind:value={password} minLength={12} hint="Use ao menos 12 caracteres." />{#if accountError}<p class="error" role="alert">{accountError}</p>{/if}{#if accountStatus}<p class="catalog-message" role="status">{accountStatus}</p>{/if}<button type="submit" disabled={authBusy} aria-busy={authBusy}>{authBusy ? 'Salvando…' : 'Atualizar credenciais'}</button></fieldset></form>{#if transportKind === 'http'}<button class="text-button" onclick={logout}>Encerrar sessão</button>{:else}<p class="catalog-message">Biblioteca local neste dispositivo.</p>{/if}</section>
+{#if transportKind === 'http'}<section class="account-settings" aria-labelledby="update-heading"><h2 id="update-heading">Atualização</h2>{#if updateStatus}<p>Versão atual: <strong>{updateStatus.current}</strong></p>{/if}<button class="text-button" onclick={() => checkUpdate(true)} disabled={updateChecking} aria-busy={updateChecking}>{updateChecking ? 'Verificando…' : 'Verificar atualização'}</button>{#if updateStatus}{@const outcome = updateOutcome(updateStatus)}{@const releaseUrl = updateReleaseUrl(updateStatus)}{#if outcome !== 'error' || updateManual}<p class="catalog-message" role="status">{updateMessage(updateStatus)}</p>{/if}{#if outcome === 'available' && releaseUrl}<p class="catalog-message"><a href={releaseUrl} target="_blank" rel="noopener noreferrer">Ver a release</a></p>{/if}{/if}</section>{/if}
 {:else if route === 'course'}
 	<a class="back" href={href('home')}>← Início</a>
 	{#if !course}<h1>Curso não encontrado</h1><p class="empty" role="status">Não foi possível encontrar este curso no catálogo atual. Ele pode ter sido removido.</p>
