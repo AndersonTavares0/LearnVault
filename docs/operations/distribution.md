@@ -1,11 +1,14 @@
-# Distribuição e alvos de release
+# Distribuição e operações
 
-A implementação atual é o servidor Rust (`crates/server`) com a SPA SvelteKit canônica, resultado
-da reescrita aprovada no [ADR 0001](../architecture/adr/0001-reescrita-em-rust.md); o serviço Go foi
-removido na Fase 5. Docker é um adaptador de deploy para servidores, não um requisito de runtime
-nem o modelo principal de desenvolvimento.
+**Para quem é:** quem vai publicar, instalar ou operar o LearnVault. Se você vai desenvolver, leia
+[Getting-Started](../wiki/getting-started.md); se quer entender o produto, leia
+[Home](../wiki/home.md).
 
-## Matriz de releases
+**Resumo:** o LearnVault publica um instalador Windows para o desktop, um tarball Linux para o
+servidor e uma imagem OCI opcional. O Flatpak ainda não está pronto. O servidor Rust substituiu o
+serviço Go na Fase 5, e Docker é um adaptador de deploy, não um requisito de runtime.
+
+## O que está disponível hoje
 
 | Alvo | Artefato | Uso | Status |
 | --- | --- | --- | --- |
@@ -16,6 +19,16 @@ nem o modelo principal de desenvolvimento.
 
 Não há `.deb` nem `.rpm` como artefatos públicos nesta fase. O instalador Windows NSIS continua
 habilitado no release automático; o Flatpak não é construído nem publicado automaticamente.
+
+## Como escolher o caminho
+
+- **Windows, uso local:** use o instalador NSIS. Ele instala só para o usuário atual e não pede
+  senha de administrador.
+- **Linux, servidor:** use o tarball `learnvault-linux-<arch>.tar.gz`.
+- **Self-hosted com container:** use o Compose como opt-in explícito. A imagem é construída
+  localmente e não é publicada.
+- **Linux, desktop:** o Flatpak é o formato preferencial, mas ainda depende de build e smoke test no
+  sandbox.
 
 ### Aviso manual de atualização
 
@@ -47,7 +60,7 @@ demais artefatos, conforme a matriz do [ADR 0001](../architecture/adr/0001-reesc
 Ele instala somente para o usuário atual (`currentUser`), em
 `%LOCALAPPDATA%\LearnVault`, sem exigir senha de administrador. Os textos do instalador estão em
 português (Brasil) e inglês, com seletor de idioma, e o WebView2 ausente é baixado pelo próprio
-instalador (`downloadBootstrapper`) — a internet só é necessária nesse caso.
+instalador (`downloadBootstrapper`). A internet só é necessária nesse caso.
 
 Para gerar o instalador localmente no Windows, usando o mesmo comando do workflow de release (sem
 o override de versão):
@@ -77,7 +90,7 @@ somente leitura e nunca é copiada.
 | `%LOCALAPPDATA%\app.learnvault.desktop\` | dados internos do WebView2, mantidos pelo próprio Windows |
 
 Atualizar o aplicativo por cima preserva esses dados. Na desinstalação, o desinstalador exibe uma
-caixa de seleção desmarcada por padrão — "Remover dados do programa" no idioma português e "Delete
+caixa de seleção desmarcada por padrão: "Remover dados do programa" no idioma português e "Delete
 the application data" no inglês: sem marcá-la, os dados permanecem; marcada, os diretórios
 `%APPDATA%\app.learnvault.desktop` e `%LOCALAPPDATA%\app.learnvault.desktop` são removidos.
 Nenhum instalador copia a biblioteca física para os dados da aplicação ou para backups.
@@ -154,8 +167,8 @@ COMPOSE="docker compose --env-file deploy/compose/.env.example -f deploy/compose
 
 ## Validação experimental da imagem Rust (OCI)
 
-Enquanto a reescrita em Rust avança, `deploy/container/Containerfile` e
-`scripts/verify-rust-oci.sh` permitem validar localmente que o servidor Rust (`crates/server`)
+O `deploy/container/Containerfile` e o `scripts/verify-rust-oci.sh` permitem validar localmente que
+o servidor Rust (`crates/server`)
 compila com a SPA canônica e roda em um contêiner. O caminho self-hosted do Compose constrói
 essa imagem Rust localmente; ela continua experimental, não publicada nem assinada e não é um
 artefato de release. O CI e o workflow de release constroem o servidor Rust a partir do mesmo
@@ -179,8 +192,8 @@ CONTAINER_ENGINE=podman ./scripts/verify-rust-oci.sh
 - O servidor Rust ainda não possui interface de cache (`CACHE_DIR`); não há diretório de
   cache para validar nesta fase.
 - Não faz parte do CI e não substitui `cargo fmt`, `cargo clippy` e `cargo test`.
-- A referência de imagem do Quadlet (`localhost/learnvault:latest`) continua sem origem
-  resolvida até a Fase 5.
+- A referência de imagem do Quadlet (`localhost/learnvault:latest`) ainda não tem uma origem
+  publicada; a imagem precisa ser construída localmente.
 
 ## Container Rust no Compose (opt-in explícito)
 
@@ -375,7 +388,7 @@ mais nova. A resposta é sempre `private, no-store` e tem o formato:
 - Rascunhos (`draft`) e pré-lançamentos (`prerelease`) são ignorados: o canal estável só anuncia
   releases publicados. A comparação é numérica por componente (`0.10.0` > `0.9.0`), com o `v`
   inicial opcional e um pré-lançamento sempre abaixo do lançamento correspondente.
-- `?force=1` (ou `?force=true`) ignora o intervalo mínimo de cache — é o que o botão manual usa.
+- `?force=1` (ou `?force=true`) ignora o intervalo mínimo de cache. É o que o botão manual usa.
 
 A checagem acontece **no servidor local**, nunca no navegador. O servidor faz uma única
 requisição de saída, por HTTPS, para um destino fixo no código (não há URL vinda da requisição,
@@ -408,5 +421,5 @@ Desligada, a checagem responde com `enabled: false` e não faz **nenhuma** chama
 
 O produto apenas **verifica e avisa**: a SPA mostra a versão atual e, quando há algo novo, o
 número da release e um link para a página do GitHub. Nada é baixado, verificado por checksum,
-instalado ou aplicado automaticamente — a atualização continua manual, pelo mesmo caminho de
+instalado ou aplicado automaticamente. A atualização continua manual, pelo mesmo caminho de
 distribuição descrito neste documento (tarball Linux, instalador Windows ou Flatpak).
