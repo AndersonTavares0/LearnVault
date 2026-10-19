@@ -33,6 +33,8 @@ jobs:
             changed:
               - '**'
           list-files: json
+      - name: Temporary cancellation probe delay
+        run: sleep 180
       - name: Classify docs and release changes
         id: classify
         env:
