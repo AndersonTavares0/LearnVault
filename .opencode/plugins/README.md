@@ -7,10 +7,16 @@ repositório quando a branch atual é `main` ou `master`.
 
 - Bloqueia as ferramentas de escrita do agente (`edit`, `write`, `apply_patch`) para
   arquivos dentro do repositório (para `apply_patch`, os caminhos são lidos dos marcadores
-  `*** Add File`, `*** Update File`, `*** Delete File` e `*** Move to`).
+  `*** Add File`, `*** Update File`, `*** Delete File` e `*** Move to`). O caminho é
+  comparado por segmento: só sai do repositório quando o primeiro segmento é exatamente
+  `..`, então um arquivo cujo nome começa com dois pontos (ex.: `..env`) continua
+  protegido.
 - Bloqueia comandos git mutantes via Bash (`commit`, `push`, `add`, `merge`, `rebase`,
   `reset`, `revert`, `stash`, `tag`, `checkout`/`switch` sem criação de branch) e
   `gh pr merge`.
+- Bloqueia chamadas de Bash cujo comando não pode ser lido (argumento ausente ou em
+  formato inesperado): quando a guarda não entende o que será executado, ela falha
+  fechada em vez de tratar a chamada como inofensiva.
 - Permite leitura, execução de testes/builds e a criação de branch
   (`git checkout -b` / `git switch -c`).
 - Opera em **fail-closed**: quando não é possível confirmar a branch atual, operações

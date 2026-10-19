@@ -96,7 +96,12 @@ export const MainBranchGuard: Plugin = async ({ directory, worktree }) => {
   const touchesWorktree = (filePath: unknown): boolean => {
     if (typeof filePath !== "string" || filePath.length === 0) return true
     const relative = path.relative(root, path.resolve(directory, filePath))
-    return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))
+    if (relative === "") return true
+    if (path.isAbsolute(relative)) return false
+    // Só sai do repositório quando o primeiro segmento é exatamente "..". Um nome de
+    // arquivo que começa com dois pontos (ex.: "..env") continua dentro do worktree e
+    // precisa ser bloqueado como qualquer outro arquivo.
+    return relative.split(/[\\/]/)[0] !== ".."
   }
 
   const patchTouchesWorktree = (patchText: unknown): boolean => {
@@ -110,10 +115,10 @@ export const MainBranchGuard: Plugin = async ({ directory, worktree }) => {
     if (tool === "apply_patch") return patchTouchesWorktree(args?.patchText)
     if (tool !== "bash") return false
     const command = args?.command
-    return (
-      typeof command === "string" &&
-      (GIT_MUTATION.test(command) || GIT_BRANCH_SWITCH.test(command) || GITHUB_PR_MERGE.test(command))
-    )
+    // Comando ausente ou em formato inesperado é tratado como mutante: a guarda não pode
+    // falhar aberta quando não entende o que a ferramenta vai executar.
+    if (typeof command !== "string") return true
+    return GIT_MUTATION.test(command) || GIT_BRANCH_SWITCH.test(command) || GITHUB_PR_MERGE.test(command)
   }
 
   const deny = (reason: string): never => {
