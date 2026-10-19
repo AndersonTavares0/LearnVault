@@ -334,6 +334,70 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	expect(afterLogoutCatalog.status()).toBe(401);
 });
 
+test('creates, edits, reloads and deletes a personal note in the player', async ({ page, server }) => {
+	await page.goto(`${server.baseURL}/#/login`);
+	await page.getByLabel('Usuário').fill('admin');
+	await page.getByLabel('Senha', { exact: true }).fill(ADMIN_PASSWORD);
+	await page.getByRole('button', { name: 'Entrar' }).click();
+	await expect(page.getByRole('heading', { name: 'Início' })).toBeAttached();
+
+	// O servidor é compartilhado por worker: a varredura só roda quando o catálogo ainda
+	// não está indexado.
+	const indexButton = page.getByRole('button', { name: 'Indexar cursos' });
+	if (await indexButton.isVisible({ timeout: 2_000 }).catch(() => false)) {
+		await indexButton.click();
+		await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
+	}
+
+	const catalog = await (await page.request.get(`${server.baseURL}/api/catalog`)).json();
+	const mediaId = firstMediaId(catalog);
+	expect(mediaId).toBeTruthy();
+
+	const courseCard = page.getByRole('link', { name: /library/ });
+	await expect(courseCard).toBeVisible();
+	await courseCard.click();
+	await expect(page.getByRole('heading', { name: 'Curso', exact: true })).toBeVisible();
+
+	const notes = page.getByRole('region', { name: 'Minhas notas' });
+	await expect(notes.getByRole('heading', { name: 'Minhas notas' })).toBeVisible();
+
+	// A nota nasce como texto simples, com a posição de reprodução anexada.
+	const texto = 'Nota de estudo criada pela jornada de UI.';
+	await notes.getByLabel('Nova nota').fill(texto);
+	await notes.getByLabel(/Anexar posição atual/).check();
+	await notes.getByRole('button', { name: 'Adicionar nota' }).click();
+	await expect(notes.locator('p.note-text')).toHaveText(texto);
+	await expect(notes.getByRole('button', { name: /Ir para/ })).toBeVisible();
+
+	// O servidor guardou a nota do dono da sessão, com o texto como texto simples.
+	const created = await (await page.request.get(`${server.baseURL}/api/study/notes?media_id=${encodeURIComponent(mediaId)}`)).json();
+	expect(created.items.length).toBe(1);
+	expect(created.items[0].text).toBe(texto);
+	expect(created.items[0].position_seconds).toBe(0);
+
+	// A nota sobrevive a um recarregamento: a lista vem do servidor, não do estado local.
+	await page.reload();
+	await expect(notes.locator('p.note-text')).toHaveText(texto);
+
+	// Editar a nota reescreve o texto no servidor.
+	const editado = 'Nota de estudo editada pela jornada de UI.';
+	await notes.getByRole('button', { name: 'Editar' }).click();
+	await notes.getByLabel('Editar nota').fill(editado);
+	await notes.getByRole('button', { name: 'Salvar edição' }).click();
+	await expect(notes.locator('p.note-text')).toHaveText(editado);
+	const afterEdit = await (await page.request.get(`${server.baseURL}/api/study/notes?media_id=${encodeURIComponent(mediaId)}`)).json();
+	expect(afterEdit.items.length).toBe(1);
+	expect(afterEdit.items[0].text).toBe(editado);
+
+	// A exclusão pede confirmação; o teste aceita o diálogo e a nota some da lista.
+	page.on('dialog', (dialog) => void dialog.accept());
+	await notes.getByRole('button', { name: 'Excluir' }).click();
+	await expect(notes.locator('p.note-text')).toHaveCount(0);
+	await expect(notes.getByText('Ainda não há notas para esta mídia.')).toBeVisible();
+	const afterDelete = await (await page.request.get(`${server.baseURL}/api/study/notes?media_id=${encodeURIComponent(mediaId)}`)).json();
+	expect(afterDelete.items.length).toBe(0);
+});
+
 test('reports a lesson whose media disappears from disk and restores it when the file returns', async ({ page, server }) => {
 	// A fixture já tem Categoria/Curso/Aula.mp4, usado pelo outro cenário. Em vez de apagar
 	// esse arquivo, o cenário cria um módulo próprio com duas aulas: a mídia de uma delas
