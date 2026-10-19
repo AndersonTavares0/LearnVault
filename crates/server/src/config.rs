@@ -70,6 +70,9 @@ pub enum ConfigError {
     /// Segredo não pode ser exposto na lista de processos.
     #[error("admin password must be supplied through ADMIN_PASSWORD or a secret file")]
     InsecureAdminPasswordArgument,
+    /// Uma credencial inicial não pôde ser carregada com segurança.
+    #[error("invalid bootstrap credential configuration")]
+    InvalidBootstrapCredential,
     /// `--version` não representa uma configuração de execução.
     #[error("version requested")]
     VersionRequested,
@@ -125,8 +128,8 @@ where
         .filter(|value| !value.is_empty())
         .map(PathBuf::from);
     let mut web_root = None;
-    let mut admin_username = env("ADMIN_USERNAME").filter(|value| !value.is_empty());
-    let admin_password = env("ADMIN_PASSWORD").filter(|value| !value.is_empty());
+    let mut admin_username = bootstrap_credential(&env, "ADMIN_USERNAME")?;
+    let admin_password = bootstrap_credential(&env, "ADMIN_PASSWORD")?;
     let env_cookie_secure = env("COOKIE_SECURE");
     let mut cookie_secure = None;
     let env_update_check = env("LEARNVAULT_UPDATE_CHECK");
@@ -227,6 +230,30 @@ where
         cookie_secure,
         update_check,
     }))
+}
+
+fn bootstrap_credential<F>(env: &F, name: &str) -> Result<Option<String>, ConfigError>
+where
+    F: Fn(&str) -> Option<String>,
+{
+    let direct = env(name).filter(|value| !value.is_empty());
+    let file_path = env(&format!("{name}_FILE")).filter(|value| !value.is_empty());
+    match (direct, file_path) {
+        (Some(_), Some(_)) => Err(ConfigError::InvalidBootstrapCredential),
+        (Some(value), None) => Ok(Some(value)),
+        (None, Some(file_path)) => {
+            let mut value = std::fs::read_to_string(file_path)
+                .map_err(|_| ConfigError::InvalidBootstrapCredential)?;
+            if let Some(without_lf) = value.strip_suffix('\n') {
+                value = without_lf.strip_suffix('\r').unwrap_or(without_lf).to_owned();
+            }
+            if value.is_empty() {
+                return Err(ConfigError::InvalidBootstrapCredential);
+            }
+            Ok(Some(value))
+        }
+        (None, None) => Ok(None),
+    }
 }
 
 fn parse_migrate_go<I, S>(args: I) -> Result<Command, ConfigError>
