@@ -12,6 +12,7 @@ mod covers;
 mod health;
 mod media;
 mod ordering;
+mod notes;
 mod spa;
 mod state;
 mod stream;
@@ -93,6 +94,15 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/study/completed", post(study::set_completed))
         .route("/api/study/capabilities", get(study::capabilities))
         .route("/api/update", get(update::update))
+        .merge(
+            Router::new()
+                .route("/api/study/notes", get(notes::list).post(notes::create))
+                .route(
+                    "/api/study/notes/{note_id}",
+                    axum::routing::put(notes::update).delete(notes::delete),
+                )
+                .layer(DefaultBodyLimit::max(128 * 1024)),
+        )
         .fallback(spa::serve)
         .layer(DefaultBodyLimit::max(8 * 1024))
         .layer(map_response(move |response| {
@@ -451,7 +461,7 @@ mod tests {
         for (name, setup) in [
             ("missing", "PRAGMA user_version = 0"),
             ("older", "PRAGMA user_version = 3"),
-            ("newer", "PRAGMA user_version = 5"),
+            ("newer", "PRAGMA user_version = 6"),
             (
                 "missing required column",
                 "ALTER TABLE user RENAME COLUMN must_change_credentials TO changed",

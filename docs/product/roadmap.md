@@ -23,6 +23,8 @@ Detalhes de implementação ficam nas issues e pull requests.
   remoção por curso, releitura explícita da biblioteca, mídia local por identificador e progresso de
   estudo por comandos internos (IPC). O desktop não tem autenticação e não abre portas de rede.
 - **Regras de estudo** compartilhadas entre servidor, interface web e desktop (#86, #88, #90, #91).
+- **Notas pessoais** de texto simples por mídia, persistidas em SQLite fora da biblioteca, com o
+  dono derivado da sessão autenticada no servidor e fixo no Rust no desktop (#183).
 - **Player** com seleção de mídia e legenda por aula, atalhos limitados ao foco e avanço
   automático opcional.
 - **Tela de estudo do curso:** player e lista de aulas na mesma tela, retomada da última aula

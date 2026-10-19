@@ -252,6 +252,18 @@ pub enum Error {
         position_seconds: i64,
     },
 
+    /// O texto de uma nota é vazio ou excede o limite em bytes.
+    #[error("texto de nota inválido")]
+    InvalidStudyNote,
+
+    /// A nota não existe para o dono consultado.
+    #[error("a nota não existe")]
+    StudyNoteNotFound,
+
+    /// A mídia já tem o teto de notas para este dono.
+    #[error("a mídia já tem o número máximo de notas")]
+    TooManyNotes,
+
     /// A mídia foi removida explicitamente do catálogo.
     ///
     /// A linha de `media` e o progresso continuam existindo: a remoção tira a mídia do

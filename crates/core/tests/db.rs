@@ -41,14 +41,14 @@ fn table_exists(db: &Database, name: &str) -> bool {
 #[test]
 fn in_memory_database_starts_at_the_current_schema_version() -> TestResult {
     let db = Database::open_in_memory()?;
-    assert_eq!(db.schema_version()?, 4);
+    assert_eq!(db.schema_version()?, 5);
     Ok(())
 }
 
 #[test]
 fn in_memory_database_creates_all_domain_tables() -> TestResult {
     let db = Database::open_in_memory()?;
-    assert_eq!(table_count(&db), 8);
+    assert_eq!(table_count(&db), 9);
     Ok(())
 }
 
@@ -76,7 +76,7 @@ fn persistent_database_is_created_and_uses_the_wal_journal() -> TestResult {
     assert!(path.exists(), "o arquivo do banco deve existir");
     assert_eq!(journal_mode(&db), "wal");
     assert_eq!(foreign_keys_enabled(&db), 1);
-    assert_eq!(db.schema_version()?, 4);
+    assert_eq!(db.schema_version()?, 5);
     Ok(())
 }
 
@@ -95,7 +95,7 @@ fn reopening_applies_migrations_once_and_preserves_data() -> TestResult {
 
     let db = Database::open(&path)?;
 
-    assert_eq!(db.schema_version()?, 4);
+    assert_eq!(db.schema_version()?, 5);
     let libraries: i64 = db
         .connection()
         .query_row("SELECT COUNT(*) FROM library", [], |row| row.get(0))?;
@@ -125,13 +125,13 @@ fn database_with_a_newer_schema_is_rejected_without_panicking() -> TestResult {
 
     {
         let conn = rusqlite::Connection::open(&path)?;
-        conn.pragma_update(None, "user_version", 5)?;
+        conn.pragma_update(None, "user_version", 6)?;
     }
 
     match Database::open(&path) {
         Err(Error::SchemaTooNew { found, known }) => {
-            assert_eq!(found, 5);
-            assert_eq!(known, 4);
+            assert_eq!(found, 6);
+            assert_eq!(known, 5);
         }
         other => panic!("esperava Error::SchemaTooNew, obtive {other:?}"),
     }
@@ -169,7 +169,7 @@ fn legacy_go_database_is_rejected_before_bootstrap_or_migration() -> TestResult 
 fn new_empty_database_is_not_mistaken_for_legacy_go() -> TestResult {
     let dir = tempfile::tempdir()?;
     let db = Database::open(dir.path().join("new.sqlite"))?;
-    assert_eq!(db.schema_version()?, 4);
+    assert_eq!(db.schema_version()?, 5);
     assert!(table_exists(&db, "user"));
     Ok(())
 }
@@ -181,7 +181,7 @@ fn rejecting_a_newer_schema_leaves_the_database_untouched() -> TestResult {
 
     {
         let conn = rusqlite::Connection::open(&path)?;
-        conn.pragma_update(None, "user_version", 5)?;
+        conn.pragma_update(None, "user_version", 6)?;
     }
 
     match Database::open(&path) {
@@ -200,7 +200,7 @@ fn rejecting_a_newer_schema_leaves_the_database_untouched() -> TestResult {
     assert_eq!(tables, 0, "nenhuma tabela deve ter sido criada");
 
     let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(version, 5, "a versão do banco não deve ser alterada");
+    assert_eq!(version, 6, "a versão do banco não deve ser alterada");
 
     let journal: String =
         conn.query_row("PRAGMA journal_mode", [], |row| row.get::<_, String>(0))?;
@@ -247,7 +247,7 @@ fn a_version_one_database_is_upgraded_additively_preserving_rows() -> TestResult
 
     assert_eq!(
         db.schema_version()?,
-        4,
+        5,
         "a cadeia deve aplicar a migração aditiva"
     );
     assert!(table_exists(&db, "scan_inaccessible"));
@@ -310,7 +310,7 @@ fn a_version_two_database_is_upgraded_additively_preserving_rows() -> TestResult
 
     assert_eq!(
         db.schema_version()?,
-        4,
+        5,
         "a cadeia deve aplicar a migração aditiva"
     );
     assert!(
@@ -372,5 +372,56 @@ fn a_drifted_schema_is_not_reported_as_current() -> TestResult {
         !db.has_current_schema()?,
         "o banco sem o índice exigido não está pronto para o servidor"
     );
+    Ok(())
+}
+
+#[test]
+fn a_version_four_database_gains_the_notes_table_without_losing_rows() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("learnvault.sqlite");
+
+    // Banco gravado pela versão 4 do schema: as tabelas anteriores existem, mas a tabela
+    // de notas ainda não. A migração 5 é aditiva, então recriar esse estado é dropar a
+    // tabela nova e voltar a versão gravada.
+    {
+        let db = Database::open(&path)?;
+        db.connection()
+            .execute_batch("DROP TABLE study_note; PRAGMA user_version = 4;")?;
+        db.connection().execute(
+            "INSERT INTO library (library_id, available) VALUES ('lib-1', 1)",
+            [],
+        )?;
+        db.connection().execute(
+            "INSERT INTO media (media_id, library_id, relative_path, relative_path_key, size, mtime, availability) VALUES ('m1', 'lib-1', 'a.mp4', ?1, 1, 1, 'available')",
+            [learnvault_core::paths::relative_path_key(
+                "a.mp4",
+                learnvault_core::KeyMode::for_host(),
+            )?],
+        )?;
+    }
+
+    let db = Database::open(&path)?;
+
+    assert_eq!(
+        db.schema_version()?,
+        5,
+        "a cadeia deve aplicar a migração das notas"
+    );
+    assert!(
+        table_exists(&db, "study_note"),
+        "a migração cria a tabela de notas"
+    );
+
+    // As linhas anteriores sobrevivem: a migração é aditiva.
+    let media_id: String = db.connection().query_row(
+        "SELECT media_id FROM media WHERE media_id = 'm1'",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(media_id, "m1", "a linha existente deve sobreviver");
+
+    // A tabela nova já serve o domínio: a nota é criada e listada no banco migrado.
+    learnvault_core::create_note(&db, "usr-1", "m1", "nota", Some(5))?;
+    assert_eq!(learnvault_core::list_notes(&db, "usr-1", "m1")?.len(), 1);
     Ok(())
 }

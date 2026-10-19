@@ -8,6 +8,14 @@ Se você só quer usar o LearnVault, comece por
 uma interface web de página única (SPA). O servidor HTTP e o desktop offline compartilham o mesmo
 núcleo de domínio. Nenhum dos dois altera os arquivos da biblioteca.
 
+## Notas pessoais
+
+As notas pessoais de texto simples usam `learnvault-core::notes`, SQLite durável fora da biblioteca
+de cursos, com o dono derivado da sessão HTTP autenticada no servidor e com o dono local fixo
+resolvido no Rust no desktop (`desktop_study_notes`, `desktop_create_study_note`,
+`desktop_update_study_note`, `desktop_delete_study_note`). O player reproduz mídia local e
+sincroniza posição/conclusão; notas com timestamp podem buscar o trecho.
+
 ## Dois modos, um núcleo
 
 O produto atende dois cenários:

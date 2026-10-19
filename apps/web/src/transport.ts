@@ -29,6 +29,8 @@ export type UpdateStatus = {
 	checkedAt: string | null;
 	error: string | null;
 };
+export type StudyNote = { noteId: number; mediaId: string; text: string; positionSeconds: number | null; createdAt: number; updatedAt: number };
+export type StudyNotes = { items: StudyNote[] };
 export const STUDY_NOT_AVAILABLE = 'study_not_available';
 
 // Protocolo customizado do desktop para mídia local. O webview aponta somente pelo
@@ -99,6 +101,12 @@ export interface Transport {
 	// Restaura a ordem automática de um pai específico ou, sem `parent`, do curso inteiro.
 	// Devolve `true` quando havia uma preferência a remover.
 	resetCourseOrder(courseId: string, parent?: string): Promise<boolean>;
+	// Notas pessoais da mídia: o dono nunca atravessa a interface (a sessão autenticada
+	// resolve o dono no servidor; no desktop o dono local é fixo no Rust).
+	listNotes(mediaId: string): Promise<StudyNotes>;
+	createNote(mediaId: string, text: string, positionSeconds: number | null): Promise<StudyNote>;
+	updateNote(noteId: number, text: string, positionSeconds: number | null): Promise<StudyNote>;
+	deleteNote(noteId: number): Promise<void>;
 }
 
 type RustFile = { media_id?: string; name?: string; path?: string; size?: number; mtime_seconds?: number; kind?: string; availability?: string; unverified?: boolean };
@@ -355,6 +363,35 @@ function hasLegacyCourses(categories: unknown): boolean {
 	return false;
 }
 
+export function normalizeStudyNote(value: unknown): StudyNote {
+	if (!value || typeof value !== 'object' || !('note_id' in value) || !('media_id' in value) || !('text' in value) || !('position_seconds' in value) || !('created_at' in value) || !('updated_at' in value)) throw invalidPayload('nota ausente.');
+	const note = value;
+	if (typeof note.note_id !== 'number' || !Number.isSafeInteger(note.note_id) || note.note_id <= 0 || typeof note.media_id !== 'string' || typeof note.text !== 'string' ||
+		(note.position_seconds !== null && (typeof note.position_seconds !== 'number' || !Number.isSafeInteger(note.position_seconds) || note.position_seconds < 0)) ||
+		typeof note.created_at !== 'number' || !Number.isSafeInteger(note.created_at) || typeof note.updated_at !== 'number' || !Number.isSafeInteger(note.updated_at)) throw invalidPayload('nota incompleta.');
+	return { noteId: note.note_id, mediaId: note.media_id, text: note.text, positionSeconds: note.position_seconds, createdAt: note.created_at, updatedAt: note.updated_at };
+}
+
+export function normalizeStudyNotes(value: unknown): StudyNotes {
+	if (!value || typeof value !== 'object' || !('items' in value) || !Array.isArray(value.items)) throw invalidPayload('lista de notas inválida.');
+	return { items: value.items.map(normalizeStudyNote) };
+}
+
+// O servidor recusa uma nota por dois motivos diferentes com o mesmo status 422 (texto
+// ou posição inválidos, e teto de notas por mídia). O código no corpo diz qual foi, e a
+// mensagem exibida ao usuário precisa ser precisa.
+async function noteErrorMessage(response: Response, invalid: string, missing: string, generic: string): Promise<string> {
+	if (response.status === 404) return missing;
+	if (response.status !== 422) return generic;
+	try {
+		const body = (await response.json()) as { error?: string } | null;
+		if (body?.error === 'too_many_notes') return 'A mídia já tem o número máximo de notas.';
+	} catch {
+		// Corpo ausente ou ilegível: vale a mensagem padrão de 422.
+	}
+	return invalid;
+}
+
 export function normalizeCatalog(value: unknown): Catalog {
 	if (!value || typeof value !== 'object') throw invalidPayload('catálogo ausente.');
 	const record = value as Record<string, unknown>;
@@ -482,6 +519,10 @@ export class HttpTransport implements Transport {
 		if (!response.ok) throw new Error(orderErrorMessage(response.status));
 		return removalFlag(response);
 	}
+	async listNotes(mediaId: string) { const response = await fetch(`/api/study/notes?media_id=${encodeURIComponent(mediaId)}`); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar as notas.'); return normalizeStudyNotes(await response.json()); }
+	async createNote(mediaId: string, text: string, positionSeconds: number | null) { const response = await fetch('/api/study/notes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: mediaId, text, position_seconds: positionSeconds }) }); if (!response.ok) throw new Error(await noteErrorMessage(response, 'Nota ou posição inválida.', 'Mídia não encontrada.', 'Não foi possível salvar a nota.')); return normalizeStudyNote(await response.json()); }
+	async updateNote(noteId: number, text: string, positionSeconds: number | null) { const response = await fetch(`/api/study/notes/${noteId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, position_seconds: positionSeconds }) }); if (!response.ok) throw new Error(await noteErrorMessage(response, 'Nota ou posição inválida.', 'Nota não encontrada.', 'Não foi possível atualizar a nota.')); return normalizeStudyNote(await response.json()); }
+	async deleteNote(noteId: number) { const response = await fetch(`/api/study/notes/${noteId}`, { method: 'DELETE' }); if (!response.ok) throw new Error(response.status === 404 ? 'Nota não encontrada.' : 'Não foi possível excluir a nota.'); }
 }
 
 // Códigos estáveis de erro IPC e a mensagem sanitizada correspondente. Um código
@@ -502,7 +543,10 @@ const DESKTOP_ERROR_MESSAGES: Record<string, string> = {
 	invalid_cover: 'A capa precisa ser PNG, JPEG ou WebP de até 4 MiB.',
 	cover_unavailable: 'Não foi possível atualizar a capa do curso.',
 	invalid_order: 'A ordem enviada não é válida; recarregue a página.',
-	order_unavailable: 'Não foi possível salvar a ordem do curso.'
+	order_unavailable: 'Não foi possível salvar a ordem do curso.',
+	invalid_note: 'Nota inválida.',
+	note_not_found: 'Nota não encontrada.',
+	too_many_notes: 'A mídia já tem o número máximo de notas.'
 };
 
 // O comando devolve o erro como objeto serializado `{ code, message }`, não como `Error`.
@@ -544,6 +588,10 @@ export class DesktopStub implements Transport {
 	// checagem fica desligada, sem tocar a rede. Isso preserva a regra de que o bundle
 	// desktop não contém nenhum `fetch` do aplicativo.
 	checkUpdate() { return Promise.resolve({ current: '', enabled: false, available: false, latest: null, releasedAt: null, url: null, checkedAt: null, error: null } satisfies UpdateStatus); }
+	async listNotes(mediaId: string) { try { return normalizeStudyNotes(await invoke<unknown>('desktop_study_notes', { mediaId })); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar as notas.'); } }
+	async createNote(mediaId: string, text: string, positionSeconds: number | null) { try { return normalizeStudyNote(await invoke<unknown>('desktop_create_study_note', { mediaId, text, positionSeconds })); } catch (cause) { throw desktopError(cause, 'Não foi possível salvar a nota.'); } }
+	async updateNote(noteId: number, text: string, positionSeconds: number | null) { try { return normalizeStudyNote(await invoke<unknown>('desktop_update_study_note', { noteId, text, positionSeconds })); } catch (cause) { throw desktopError(cause, 'Não foi possível atualizar a nota.'); } }
+	async deleteNote(noteId: number) { try { await invoke<unknown>('desktop_delete_study_note', { noteId }); } catch (cause) { throw desktopError(cause, 'Não foi possível excluir a nota.'); } }
 	// Toda mídia entregue ao player usa a identidade autorizada. O caminho catalogado é
 	// deliberadamente ignorado, inclusive no desktop, para que ele nunca atravesse o webview.
 	mediaUrl(file: FileEntry, _courseId?: string) {

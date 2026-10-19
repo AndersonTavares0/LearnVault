@@ -6,7 +6,7 @@
 //! desktop sem alteração.
 
 use learnvault_core::{
-    Availability, Catalog, CatalogFile, CatalogNode, MediaKind, NodeRole, RescanSummary,
+    Availability, Catalog, CatalogFile, CatalogNode, MediaKind, NodeRole, RescanSummary, StudyNote,
     StudyProgress,
 };
 use serde::Serialize;
@@ -326,4 +326,86 @@ pub struct CoverDto {
 pub struct CoverRemovalDto {
     /// Verdadeiro quando havia uma capa e ela foi removida agora.
     pub removed: bool,
+}
+/// Nota pessoal do dono local no shape snake_case compartilhado com o HTTP.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct StudyNoteDto {
+    /// Identificador estável da nota.
+    pub note_id: i64,
+    /// Identidade estável da mídia associada.
+    pub media_id: String,
+    /// Texto simples.
+    pub text: String,
+    /// Posição opcional de reprodução em segundos.
+    pub position_seconds: Option<i64>,
+    /// Instante de criação em segundos Unix.
+    pub created_at: i64,
+    /// Instante da última alteração em segundos Unix.
+    pub updated_at: i64,
+}
+
+impl From<StudyNote> for StudyNoteDto {
+    fn from(note: StudyNote) -> Self {
+        Self {
+            note_id: note.note_id,
+            media_id: note.media_id,
+            text: note.text,
+            position_seconds: note.position_seconds,
+            created_at: note.created_at,
+            updated_at: note.updated_at,
+        }
+    }
+}
+
+/// Lista de notas do dono local.
+///
+/// É a projeção serializável do mesmo contrato `{ items: [...] }` do adaptador HTTP: os
+/// dois transportes entregam o mesmo envelope para a SPA, que valida a forma antes de
+/// usar os itens.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct StudyNotesDto {
+    /// Notas do dono local, já ordenadas pelo núcleo.
+    pub items: Vec<StudyNoteDto>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{StudyNote, StudyNoteDto, StudyNotesDto};
+
+    fn note() -> StudyNoteDto {
+        StudyNoteDto::from(StudyNote {
+            note_id: 7,
+            media_id: "m1".to_owned(),
+            text: "nota simples".to_owned(),
+            position_seconds: Some(12),
+            created_at: 1,
+            updated_at: 2,
+        })
+    }
+
+    #[test]
+    fn the_notes_list_uses_the_same_envelope_as_the_http_adapter() {
+        // A SPA valida `{ items: [...] }` nos dois transportes: um array puro faria o
+        // painel de notas recusar a lista inteira no desktop.
+        let value = serde_json::to_value(StudyNotesDto { items: vec![note()] }).unwrap();
+        assert_eq!(
+            value,
+            serde_json::json!({
+                "items": [{
+                    "note_id": 7,
+                    "media_id": "m1",
+                    "text": "nota simples",
+                    "position_seconds": 12,
+                    "created_at": 1,
+                    "updated_at": 2
+                }]
+            })
+        );
+    }
+
+    #[test]
+    fn an_empty_notes_list_keeps_the_envelope() {
+        let value = serde_json::to_value(StudyNotesDto { items: Vec::new() }).unwrap();
+        assert_eq!(value, serde_json::json!({ "items": [] }));
+    }
 }

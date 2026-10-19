@@ -199,6 +199,30 @@ descrito ao final desta seção; ele não usa rotas HTTP.
 | `POST` | `/api/study/position` | Sessão | Aceita `{ "media_id": "...", "position_seconds": 0 }` e grava o ponto de retomada |
 | `POST` | `/api/study/completed` | Sessão | Aceita `{ "media_id": "...", "completed": true }` e marca ou desmarca a conclusão |
 
+### Notas pessoais
+
+As notas são texto simples (não são interpretadas como HTML), ficam no SQLite fora da
+biblioteca e pertencem ao par dono autenticado + `media_id`. O servidor nunca aceita `owner_id`
+do cliente. O texto deve conter conteúdo não branco e ter até 20.000 bytes UTF-8; a posição
+opcional deve ser um inteiro não negativo. A lista é ordenada por criação e cada nota inclui
+`note_id`, `media_id`, `text`, `position_seconds`, `created_at` e `updated_at`. Reenviar o
+mesmo texto e a mesma posição não é uma alteração e não move `updated_at`. Cada par dono + mídia
+aceita até 500 notas: a criação acima do teto responde `422 too_many_notes` e a leitura nunca
+devolve mais que esse teto.
+
+| Método | Rota | Autenticação | Finalidade |
+| --- | --- | --- | --- |
+| `GET` | `/api/study/notes?media_id=...` | Sessão | Lista as notas do usuário para uma mídia conhecida |
+| `POST` | `/api/study/notes` | Sessão + CSRF | Cria `{ "media_id": "...", "text": "...", "position_seconds": null }` |
+| `PUT` | `/api/study/notes/{note_id}` | Sessão + CSRF | Atualiza `{ "text": "...", "position_seconds": 42 }` somente se pertencer à sessão |
+| `DELETE` | `/api/study/notes/{note_id}` | Sessão + CSRF | Exclui somente uma nota pertencente à sessão (resposta `204`) |
+
+Texto ou posição inválidos respondem `422 invalid_note` ou `422 invalid_position`; mídia e
+nota ausentes (inclusive uma nota de outro dono) respondem `404 media_not_found` e
+`404 note_not_found`. Listas vazias respondem `200` com `{ "items": [] }`. As respostas da rota são
+`private, no-store`; as rejeições do extrator de corpo (por exemplo `422` ou `413`) respondem
+apenas `no-store`. As escritas exigem mesma origem. Notas não alteram a biblioteca física.
+
 Uma mídia conhecida sem progresso responde `200` com `recorded: false`; a ausência não é um
 erro. Uma mídia desconhecida no catálogo responde `404 media_not_found`, uma posição negativa
 responde `422 invalid_position` e uma consulta malformada responde `400 invalid_query`. As
@@ -220,6 +244,10 @@ shape snake_case (`media_id`, `position_seconds`, `completed`, `updated_at`, `re
 | `desktop_record_position` | `mediaId`, `positionSeconds` | Grava o ponto de retomada, preservando a conclusão |
 | `desktop_set_completed` | `mediaId`, `completed` | Marca ou desmarca a conclusão, preservando a posição |
 | `desktop_recent_study` | `limit` (opcional) | Lista o progresso do dono local, do mais recente ao mais antigo |
+| `desktop_study_notes` | `mediaId` | Lista notas do dono local para a mídia, no mesmo envelope `{ "items": [...] }` do HTTP |
+| `desktop_create_study_note` | `mediaId`, `text`, `positionSeconds` (opcional) | Cria nota de texto simples |
+| `desktop_update_study_note` | `noteId`, `text`, `positionSeconds` (opcional) | Atualiza nota do dono local |
+| `desktop_delete_study_note` | `noteId` | Exclui nota do dono local |
 
 O dono é um identificador local fixo resolvido no Rust: nenhum comando aceita `owner_id` como
 argumento, então o webview não escolhe nem conhece o dono. Uma mídia conhecida sem progresso
@@ -228,6 +256,13 @@ posição negativa vira `invalid_position` e as demais falhas viram `study_unava
 `database_unavailable`. Sem `limit`, o histórico usa o padrão do contrato e o teto do núcleo
 continua valendo. Os comandos não exigem nenhum curso registrado e nunca gravam `media`,
 `scan`, `library` nem as pastas de curso.
+
+As notas usam o mesmo shape snake_case, o mesmo envelope `{ "items": [...] }` e os mesmos
+limites de texto/posição do HTTP: a lista do IPC e a do HTTP têm exatamente o mesmo formato, então
+a SPA não distingue o transporte ao ler as notas. O dono local fixo é resolvido pelo Rust, nenhum
+comando aceita `owner_id`, e a SPA usa somente `invoke`. Uma mídia desconhecida vira
+`media_not_found`, uma nota ausente vira `note_not_found` e texto ou posição inválidos viram
+`invalid_note` ou `invalid_position`.
 
 Limitação desta fatia: o desktop atende um único dono local, sem sessão nem seletor de contas.
 

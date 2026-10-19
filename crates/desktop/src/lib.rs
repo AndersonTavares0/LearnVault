@@ -53,11 +53,12 @@ pub mod state;
 pub mod study;
 
 pub use command::{
-    catalog, catalog_with_orders, desktop_catalog, desktop_import_course,
-    desktop_import_course_cover, desktop_media_removal_impact, desktop_recent_study,
-    desktop_record_position, desktop_remove_course, desktop_remove_course_cover,
-    desktop_remove_media, desktop_rescan, desktop_reset_course_order, desktop_set_completed,
-    desktop_set_course_order, desktop_study_progress,
+    catalog, catalog_with_orders, desktop_catalog, desktop_create_study_note,
+    desktop_delete_study_note, desktop_import_course, desktop_import_course_cover,
+    desktop_media_removal_impact, desktop_recent_study, desktop_record_position,
+    desktop_remove_course, desktop_remove_course_cover, desktop_remove_media, desktop_rescan,
+    desktop_reset_course_order, desktop_set_completed, desktop_set_course_order,
+    desktop_study_notes, desktop_study_progress, desktop_update_study_note,
 };
 pub use config::{DATABASE_FILE_NAME, DesktopConfigDto, database_path};
 pub use courses::{
@@ -69,8 +70,9 @@ pub use covers::{
     parse_cover_request, valid_course_id,
 };
 pub use dto::{
-    CatalogDto, CatalogFileDto, CatalogNodeDto, CoverDto, CoverRemovalDto, MediaRemovalImpactDto,
-    MediaRemovalOutcomeDto, RecentStudyDto, RescanSummaryDto, StudyProgressDto,
+    CatalogDto, CatalogFileDto, CatalogNodeDto, CoverDto, CoverRemovalDto,
+    MediaRemovalImpactDto, MediaRemovalOutcomeDto, RecentStudyDto, RescanSummaryDto,
+    StudyNoteDto, StudyNotesDto, StudyProgressDto,
 };
 pub use error::{IpcError, IpcErrorCode};
 pub use ordering::{CourseOrders, OrderError, order_path};
@@ -113,7 +115,11 @@ pub fn run() {
             command::desktop_import_course_cover,
             command::desktop_remove_course_cover,
             command::desktop_set_course_order,
-            command::desktop_reset_course_order
+            command::desktop_reset_course_order,
+            command::desktop_study_notes,
+            command::desktop_create_study_note,
+            command::desktop_update_study_note,
+            command::desktop_delete_study_note
         ])
         .run(tauri::generate_context!())
         .expect("falha ao executar o aplicativo desktop do LearnVault");

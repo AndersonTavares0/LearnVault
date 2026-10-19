@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { findLesson } from './router';
-import { desktopCoverUrl, desktopMediaUrl, DesktopStub, HttpTransport, lessonFromNode, MAX_COVER_BYTES, normalizeCatalog, normalizeRecentStudy, normalizeStudyProgress, normalizeUpdateStatus, normalizeUser, STUDY_NOT_AVAILABLE, CATALOG_LIMITS, type Transport } from './transport';
+import { desktopCoverUrl, desktopMediaUrl, DesktopStub, HttpTransport, lessonFromNode, MAX_COVER_BYTES, normalizeCatalog, normalizeRecentStudy, normalizeStudyNote, normalizeStudyProgress, normalizeUpdateStatus, normalizeUser, STUDY_NOT_AVAILABLE, CATALOG_LIMITS, type Transport } from './transport';
 
 // O Tauri só é carregado no desktop: fora dele o módulo é substituído pelo mock, de modo
 // que a suíte nunca toca `window.__TAURI_INTERNALS__`.
@@ -9,8 +9,8 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 
 describe('transport contract', () => {
 	it('exposes the HTTP transport seam without routing assumptions', () => {
-		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'checkUpdate', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover'];
-		expect(methods).toHaveLength(18);
+		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'checkUpdate', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover', 'listNotes', 'createNote', 'updateNote', 'deleteNote'];
+		expect(methods).toHaveLength(22);
 	});
 	it('does not offer native folder selection over HTTP', async () => {
 		await expect(new HttpTransport().importCourse()).rejects.toThrow('desktop é quem escolhe pastas');
@@ -570,6 +570,45 @@ describe('transport contract', () => {
 		const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 403 }));
 		vi.stubGlobal('fetch', fetchMock);
 		await expect(new HttpTransport().checkUpdate()).rejects.toThrow('credentials_change_required');
+		vi.unstubAllGlobals();
+	});
+	it('uses the authenticated HTTP notes CRUD contract', async () => {
+		const note = { note_id: 7, media_id: 'm1', text: '<plain>', position_seconds: 12, created_at: 1, updated_at: 2 };
+		const fetchMock = vi.fn()
+			.mockResolvedValueOnce(new Response(JSON.stringify({ items: [note] }), { status: 200 }))
+			.mockResolvedValueOnce(new Response(JSON.stringify(note), { status: 201 }))
+			.mockResolvedValueOnce(new Response(JSON.stringify(note), { status: 200 }))
+			.mockResolvedValueOnce(new Response(null, { status: 204 }));
+		vi.stubGlobal('fetch', fetchMock);
+		const transport = new HttpTransport();
+		expect((await transport.listNotes('media & one')).items[0].text).toBe('<plain>');
+		await transport.createNote('m1', 'new', null);
+		await transport.updateNote(7, 'edit', 14);
+		await transport.deleteNote(7);
+		expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/study/notes?media_id=media%20%26%20one', '/api/study/notes', '/api/study/notes/7', '/api/study/notes/7']);
+		expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ method: 'POST', body: JSON.stringify({ media_id: 'm1', text: 'new', position_seconds: null }) });
+		expect(fetchMock.mock.calls[2]?.[1]).toMatchObject({ method: 'PUT', body: JSON.stringify({ text: 'edit', position_seconds: 14 }) });
+		vi.unstubAllGlobals();
+	});
+	it('rejects malformed note payloads', () => {
+		expect(() => normalizeStudyNote({ note_id: 'bad' })).toThrow('Resposta inválida do servidor');
+	});
+	it('uses desktop IPC notes CRUD without HTTP or owner identifiers', async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+		vi.mocked(invoke).mockImplementation(async (name: string) => {
+			if (name === 'desktop_study_notes') return { items: [{ note_id: 7, media_id: 'm1', text: 'note', position_seconds: null, created_at: 1, updated_at: 1 }] };
+			return { note_id: 7, media_id: 'm1', text: 'note', position_seconds: null, created_at: 1, updated_at: 1 };
+		});
+		const transport = new DesktopStub();
+		await transport.listNotes('m1');
+		await transport.createNote('m1', 'note', null);
+		await transport.updateNote(7, 'edit', 4);
+		await transport.deleteNote(7);
+		expect(vi.mocked(invoke).mock.calls.map(([name]) => name)).toEqual(['desktop_study_notes', 'desktop_create_study_note', 'desktop_update_study_note', 'desktop_delete_study_note']);
+		expect(vi.mocked(invoke).mock.calls[1]?.[1]).toEqual({ mediaId: 'm1', text: 'note', positionSeconds: null });
+		expect(JSON.stringify(vi.mocked(invoke).mock.calls)).not.toContain('owner');
+		expect(fetchMock).not.toHaveBeenCalled();
 		vi.unstubAllGlobals();
 	});
 });

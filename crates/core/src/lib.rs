@@ -7,8 +7,8 @@
 //!
 //! Estado atual: workspace e persistência SQLite com cadeia única de migrações (1.2),
 //! scanner da biblioteca e identidade de mídia (1.3), política de rescan (1.4), catálogo
-//! derivado (1.5), resolução segura de mídia (1.6), progresso de estudo (1.7) e remoção
-//! explícita de mídia (1.8).
+//! derivado (1.5), resolução segura de mídia (1.6), progresso de estudo (1.7), remoção
+//! explícita de mídia (1.8) e notas pessoais (1.9).
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -22,6 +22,7 @@ pub mod ids;
 pub mod legacy_import;
 pub mod media;
 pub mod ordering;
+pub mod notes;
 pub mod paths;
 pub mod removal;
 pub mod rescan;
@@ -48,6 +49,10 @@ pub use legacy_import::{LegacyImportOptions, LegacyImportReport, import_go_datab
 pub use media::{
     MediaReference, OpenMedia, find_media_by_path, find_media_library_id, open_media,
     open_media_reference,
+};
+pub use notes::{
+    MAX_NOTE_TEXT_BYTES, MAX_NOTES_PER_MEDIA, StudyNote, create_note, delete_note, list_notes,
+    update_note,
 };
 pub use ordering::{CatalogOrder, apply_order, order_siblings, sibling_paths, validate_siblings};
 pub use paths::KeyMode;

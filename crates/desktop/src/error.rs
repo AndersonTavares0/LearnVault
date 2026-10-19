@@ -45,6 +45,12 @@ pub enum IpcErrorCode {
     InvalidOrder,
     /// A ordem manual do curso não pôde ser gravada nem removida.
     OrderUnavailable,
+    /// O texto da nota é inválido.
+    InvalidNote,
+    /// A nota não existe para o dono local.
+    NoteNotFound,
+    /// A mídia já tem o teto de notas para o dono local.
+    TooManyNotes,
 }
 
 /// Erro IPC serializável devolvido ao webview.
