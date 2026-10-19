@@ -14,6 +14,7 @@ mod spa;
 mod state;
 mod stream;
 mod study;
+mod update;
 
 pub use auth::{
     AuthError, generate_session_token, hash_password, hash_session_token,
@@ -78,6 +79,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/study/position", post(study::record_position))
         .route("/api/study/completed", post(study::set_completed))
         .route("/api/study/capabilities", get(study::capabilities))
+        .route("/api/update", get(update::update))
         .fallback(spa::serve)
         .layer(DefaultBodyLimit::max(8 * 1024))
         .layer(map_response(move |response| {
@@ -269,6 +271,9 @@ mod tests {
             temp.path().join("learnvault.sqlite").to_str().unwrap(),
             "--library-root",
             temp.path().to_str().unwrap(),
+            // Nenhum teste de rota pode sair para a rede: a verificação de atualização
+            // fica desligada por padrão nas fixtures.
+            "--no-update-check",
         ])
         .expect("configuração de teste válida");
         config.admin_username = Some("admin".to_owned());
@@ -314,6 +319,64 @@ mod tests {
                 .and_then(|value| value.to_str().ok()),
             Some("private, no-store")
         );
+    }
+
+    #[tokio::test]
+    async fn update_endpoint_requires_authentication() {
+        let temp = tempfile::tempdir().unwrap();
+        let app = build_router(AppState::new(config_fixture(&temp)));
+
+        let response = app
+            .oneshot(Request::get("/api/update").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            response
+                .headers()
+                .get("cache-control")
+                .and_then(|value| value.to_str().ok()),
+            Some("private, no-store")
+        );
+    }
+
+    #[tokio::test]
+    async fn update_endpoint_reports_the_check_as_disabled_without_network() {
+        let temp = tempfile::tempdir().unwrap();
+        let state = AppState::initialize(config_fixture(&temp)).await.unwrap();
+        let app = build_router(state);
+        let cookie = media_cookie(&app).await;
+
+        let response = app
+            .oneshot(
+                Request::get("/api/update")
+                    .header("cookie", cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()["content-type"], "application/json");
+        assert_eq!(
+            response
+                .headers()
+                .get("cache-control")
+                .and_then(|value| value.to_str().ok()),
+            Some("private, no-store")
+        );
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["current"], VERSION);
+        assert_eq!(json["enabled"], false);
+        assert_eq!(json["available"], false);
+        assert_eq!(json["latest"], serde_json::Value::Null);
+        assert_eq!(json["releasedAt"], serde_json::Value::Null);
+        assert_eq!(json["url"], serde_json::Value::Null);
+        assert_eq!(json["checkedAt"], serde_json::Value::Null);
+        assert_eq!(json["error"], serde_json::Value::Null);
     }
 
     #[tokio::test]

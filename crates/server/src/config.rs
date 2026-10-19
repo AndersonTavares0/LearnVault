@@ -27,6 +27,9 @@ pub struct Config {
     pub admin_password: Option<String>,
     /// Define se cookies de sessão recebem o atributo `Secure`.
     pub cookie_secure: bool,
+    /// Define se o servidor consulta a release mais recente do LearnVault. Desligada,
+    /// nenhuma chamada de rede sai do processo.
+    pub update_check: bool,
 }
 
 /// Comando aceito pelo executável antes de iniciar o listener.
@@ -126,6 +129,8 @@ where
     let admin_password = env("ADMIN_PASSWORD").filter(|value| !value.is_empty());
     let env_cookie_secure = env("COOKIE_SECURE");
     let mut cookie_secure = None;
+    let env_update_check = env("LEARNVAULT_UPDATE_CHECK");
+    let mut update_check = None;
     let mut version_requested = false;
 
     while let Some(argument) = args.next() {
@@ -152,6 +157,7 @@ where
                 return Err(ConfigError::InsecureAdminPasswordArgument);
             }
             "--insecure-http" => cookie_secure = Some(false),
+            "--no-update-check" => update_check = Some(false),
             _ => return Err(ConfigError::UnknownArgument),
         }
     }
@@ -175,6 +181,23 @@ where
             .map(parse_bool)
             .transpose()?
             .unwrap_or(true),
+    };
+    let update_check = match update_check {
+        Some(value) => value,
+        None => match env_update_check.as_deref().map(str::trim) {
+            None | Some("") => true,
+            Some(value)
+                if value.eq_ignore_ascii_case("off") || value.eq_ignore_ascii_case("false") =>
+            {
+                false
+            }
+            Some(value)
+                if value.eq_ignore_ascii_case("on") || value.eq_ignore_ascii_case("true") =>
+            {
+                true
+            }
+            Some(_) => return Err(ConfigError::InvalidArgument),
+        },
     };
 
     let library_root = library_root
@@ -202,6 +225,7 @@ where
         admin_username,
         admin_password,
         cookie_secure,
+        update_check,
     }))
 }
 
@@ -491,6 +515,59 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(unknown, ConfigError::UnknownArgument);
+    }
+
+    #[test]
+    fn update_check_defaults_to_enabled() {
+        let command = parse_command_with_env(["learnvault-server"], |_| None).unwrap();
+        let Command::Run(config) = command else {
+            panic!("expected run command");
+        };
+
+        assert!(config.update_check);
+    }
+
+    #[test]
+    fn the_no_update_check_flag_wins_over_the_environment() {
+        let environment = HashMap::from([("LEARNVAULT_UPDATE_CHECK", "on")]);
+
+        let command = parse_command_with_env(["learnvault-server", "--no-update-check"], |key| {
+            environment.get(key).copied().map(str::to_owned)
+        })
+        .unwrap();
+        let Command::Run(config) = command else {
+            panic!("expected run command");
+        };
+
+        assert!(!config.update_check);
+    }
+
+    #[test]
+    fn the_update_check_environment_can_disable_the_check() {
+        let environment = HashMap::from([("LEARNVAULT_UPDATE_CHECK", "off")]);
+
+        let command = parse_command_with_env(["learnvault-server"], |key| {
+            environment.get(key).copied().map(str::to_owned)
+        })
+        .unwrap();
+        let Command::Run(config) = command else {
+            panic!("expected run command");
+        };
+
+        assert!(!config.update_check);
+    }
+
+    #[test]
+    fn invalid_update_check_environment_is_rejected_without_exposing_value() {
+        let environment = HashMap::from([("LEARNVAULT_UPDATE_CHECK", "not-a-secret-value")]);
+
+        let error = parse_command_with_env(["learnvault-server"], |key| {
+            environment.get(key).copied().map(str::to_owned)
+        })
+        .unwrap_err();
+
+        assert_eq!(error, ConfigError::InvalidArgument);
+        assert!(!error.to_string().contains("not-a-secret-value"));
     }
 
     fn canonical(path: &Path) -> std::path::PathBuf {

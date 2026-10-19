@@ -17,6 +17,16 @@ nem o modelo principal de desenvolvimento.
 Não há `.deb` nem `.rpm` como artefatos públicos nesta fase. O instalador Windows NSIS continua
 habilitado no release automático; o Flatpak não é construído nem publicado automaticamente.
 
+### Aviso manual de atualização
+
+Quando habilitado nas configurações, o servidor consulta a API pública de releases do GitHub por
+HTTPS e compara a tag estável com a versão local usando SemVer estrito. A consulta tem timeout de
+5 segundos e aceita no máximo 64 KiB de resposta; há cache em processo de uma hora, ignorado pelo
+botão de verificação manual. O resultado exige sessão autenticada e não é armazenado por caches
+HTTP. O link exibido é construído para o repositório oficial, sem confiar no `html_url` retornado
+pela API. Nenhum arquivo é baixado ou instalado automaticamente. Builds locais com versão
+`0.0.0` não consultam a API, pois não possuem versão de release para comparar.
+
 ### Uso do tarball Linux
 
 O tarball `learnvault-linux-<arch>.tar.gz` traz o binário `learnvault-linux-<arch>`, o `LICENSE` e a
@@ -297,3 +307,56 @@ sendo o release suportado. Despache-o informando a versão, o run do build e a t
 gh workflow run "Rust server RC publish (draft)" --ref main \
   -f version=<v> -f run_id=<rust-server-rc-run-id> -f tag=rust-rc-<v>
 ```
+
+## Verificação de atualização
+
+O servidor Rust expõe `GET /api/update`, uma consulta autenticada (mesma proteção das rotas de
+estudo: sessão válida e sem troca de credenciais pendente) que informa se há uma release publicada
+mais nova. A resposta é sempre `private, no-store` e tem o formato:
+
+```json
+{ "current": "0.3.0", "enabled": true, "available": false, "latest": null, "releasedAt": null, "url": null, "checkedAt": "1760702400", "error": null }
+```
+
+- `current` é a versão em execução; `enabled` indica se a checagem está ligada.
+- `available` é `true` apenas quando a release publicada é mais nova que a versão em execução.
+  Nesse caso, `latest` traz a versão (sem o `v` inicial), `releasedAt` a data de publicação e
+  `url` o link da release. Fora disso, esses três campos vêm nulos.
+- Rascunhos (`draft`) e pré-lançamentos (`prerelease`) são ignorados: o canal estável só anuncia
+  releases publicados. A comparação é numérica por componente (`0.10.0` > `0.9.0`), com o `v`
+  inicial opcional e um pré-lançamento sempre abaixo do lançamento correspondente.
+- `?force=1` (ou `?force=true`) ignora o intervalo mínimo de cache — é o que o botão manual usa.
+
+A checagem acontece **no servidor local**, nunca no navegador. O servidor faz uma única
+requisição de saída, por HTTPS, para um destino fixo no código (não há URL vinda da requisição,
+o que evita SSRF):
+
+```text
+GET https://api.github.com/repos/AndersonTavares0/LearnVault/releases/latest
+Accept: application/vnd.github+json
+User-Agent: learnvault/<versão em execução>
+```
+
+O orçamento de rede é de 5 segundos. Uma falha de rede **nunca** vira erro HTTP: a resposta
+continua `200`, com `available: false`, `latest: null` e um `error` curto em português, e o
+último resultado bem-sucedido permanece em cache. Estar offline não quebra nem trava a tela de
+Configurações.
+
+Checagens externas respeitam um intervalo mínimo em processo, de **3600 segundos** (uma hora) por
+padrão, e requisições concorrentes são coalescidas em uma única chamada ao GitHub.
+
+### Como desligar
+
+- Flag de linha de comando: `--no-update-check`.
+- Variável de ambiente: `LEARNVAULT_UPDATE_CHECK=off` (aceita `off`/`false` para desligar e
+  `on`/`true` para ligar; qualquer outro valor é rejeitado). A flag tem precedência sobre a
+  variável.
+
+Desligada, a checagem responde com `enabled: false` e não faz **nenhuma** chamada de rede.
+
+### Sem download nem instalação automática
+
+O produto apenas **verifica e avisa**: a SPA mostra a versão atual e, quando há algo novo, o
+número da release e um link para a página do GitHub. Nada é baixado, verificado por checksum,
+instalado ou aplicado automaticamente — a atualização continua manual, pelo mesmo caminho de
+distribuição descrito neste documento (tarball Linux, instalador Windows ou Flatpak).

@@ -15,6 +15,7 @@ use crate::{
     Config,
     auth::hash_password,
     courses::{RegisteredCourse, legacy_seed, load_registry, registry_path},
+    update::{UpdateChecker, github_fetcher},
 };
 
 const SESSION_LIFETIME_SECONDS: i64 = 12 * 60 * 60;
@@ -41,6 +42,8 @@ pub struct AppState {
     pub(crate) rescan_lock: Arc<Mutex<()>>,
     pub(crate) inline_script_hashes: Arc<[String]>,
     pub(crate) inline_style_hashes: Arc<[String]>,
+    /// Checagem de atualização do produto, feita pelo servidor local.
+    pub(crate) update: UpdateChecker,
     spa_shell: Option<Arc<SpaShell>>,
     spa_shell_too_large: bool,
     blocking_tasks: Arc<Semaphore>,
@@ -80,7 +83,9 @@ impl AppState {
         let spa_shell = load_spa_shell(config.web_root.as_deref()).map(Arc::new);
         let (inline_script_hashes, inline_style_hashes) = shell_hashes(spa_shell.as_deref());
         let courses_file = registry_path(&config.database_path);
+        let update = UpdateChecker::new(config.update_check, github_fetcher());
         Self {
+            update,
             inline_script_hashes: inline_script_hashes.into(),
             inline_style_hashes: inline_style_hashes.into(),
             spa_shell,
@@ -158,8 +163,10 @@ impl AppState {
             .await
             .map_err(StateError::Blocking)??;
         let (inline_script_hashes, inline_style_hashes) = shell_hashes(spa_shell.as_deref());
+        let update = UpdateChecker::new(config.update_check, github_fetcher());
         Ok(Self {
             config,
+            update,
             courses: Arc::new(RwLock::new(courses)),
             courses_file,
             database: Arc::new(Mutex::new(database)),
@@ -704,6 +711,7 @@ mod tests {
             admin_username: None,
             admin_password: None,
             cookie_secure: false,
+            update_check: true,
         }
     }
 

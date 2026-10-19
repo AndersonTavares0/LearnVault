@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { findLesson } from './router';
-import { desktopMediaUrl, DesktopStub, HttpTransport, lessonFromNode, normalizeCatalog, normalizeRecentStudy, normalizeStudyProgress, normalizeUser, STUDY_NOT_AVAILABLE, CATALOG_LIMITS, type Transport } from './transport';
+import { desktopMediaUrl, DesktopStub, HttpTransport, lessonFromNode, normalizeCatalog, normalizeRecentStudy, normalizeStudyProgress, normalizeUpdateStatus, normalizeUser, STUDY_NOT_AVAILABLE, CATALOG_LIMITS, type Transport } from './transport';
 
 // O Tauri só é carregado no desktop: fora dele o módulo é substituído pelo mock, de modo
 // que a suíte nunca toca `window.__TAURI_INTERNALS__`.
@@ -9,8 +9,8 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 
 describe('transport contract', () => {
 	it('exposes the HTTP transport seam without routing assumptions', () => {
-		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'mediaUrl'];
-		expect(methods).toHaveLength(14);
+		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'checkUpdate', 'mediaUrl'];
+		expect(methods).toHaveLength(15);
 	});
 	it('does not offer native folder selection over HTTP', async () => {
 		await expect(new HttpTransport().importCourse()).rejects.toThrow('desktop é quem escolhe pastas');
@@ -470,6 +470,32 @@ describe('transport contract', () => {
 		await expect(new HttpTransport().recentStudy()).rejects.toMatchObject({ message: 'Estudo não disponível neste servidor.', code: STUDY_NOT_AVAILABLE });
 		vi.unstubAllGlobals();
 	});
+	it('normalizes the update status and keeps a nullable error', () => {
+		expect(normalizeUpdateStatus({ current: '0.3.0', enabled: true, available: true, latest: '0.4.0', releasedAt: '2026-10-17T12:00:00Z', url: 'https://github.com/AndersonTavares0/LearnVault/releases/tag/v0.4.0', checkedAt: '1760702400', error: null })).toEqual({
+			current: '0.3.0', enabled: true, available: true, latest: '0.4.0', releasedAt: '2026-10-17T12:00:00Z', url: 'https://github.com/AndersonTavares0/LearnVault/releases/tag/v0.4.0', checkedAt: '1760702400', error: null
+		});
+		// Uma falha chega como 200 com `error` preenchido e sem versão nova.
+		expect(normalizeUpdateStatus({ current: '0.3.0', enabled: true, available: false, latest: null, releasedAt: null, url: null, checkedAt: null, error: 'não foi possível contatar o GitHub' })).toMatchObject({ available: false, latest: null, error: 'não foi possível contatar o GitHub' });
+		// Um campo presente com tipo incorreto é recusado em vez de vazar para a interface.
+		expect(() => normalizeUpdateStatus({ current: '0.3.0', enabled: true, available: false, latest: 42 })).toThrow('Resposta inválida do servidor');
+		expect(() => normalizeUpdateStatus({ current: 0.3, enabled: true, available: false })).toThrow('Resposta inválida do servidor');
+		expect(() => normalizeUpdateStatus(null)).toThrow('Resposta inválida do servidor');
+	});
+	it('checks the update endpoint and only forces a fresh check when asked', async () => {
+		const fetchMock = vi.fn().mockImplementation(() => new Response(JSON.stringify({ current: '0.3.0', enabled: true, available: false, latest: null, releasedAt: null, url: null, checkedAt: '1', error: null }), { status: 200 }));
+		vi.stubGlobal('fetch', fetchMock);
+		await expect(new HttpTransport().checkUpdate()).resolves.toMatchObject({ current: '0.3.0', enabled: true, available: false });
+		expect(fetchMock).toHaveBeenLastCalledWith('/api/update');
+		await new HttpTransport().checkUpdate(true);
+		expect(fetchMock).toHaveBeenLastCalledWith('/api/update?force=1');
+		vi.unstubAllGlobals();
+	});
+	it('maps a rejected update check to an actionable message', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 403 }));
+		vi.stubGlobal('fetch', fetchMock);
+		await expect(new HttpTransport().checkUpdate()).rejects.toThrow('credentials_change_required');
+		vi.unstubAllGlobals();
+	});
 });
 
 describe('desktop transport over IPC', () => {
@@ -682,5 +708,15 @@ describe('desktop transport over IPC', () => {
 
 		vi.mocked(invoke).mockRejectedValue({ code: 'courses_config_unavailable', message: 'falha em C:\\segredo' });
 		await expect(new DesktopStub().removeCourse('course-1')).rejects.toThrow('Não foi possível salvar a configuração do aplicativo.');
+	});
+
+	it('reports the update check as disabled on the desktop without touching fetch', async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+		const desktop: Transport = new DesktopStub();
+		await expect(desktop.checkUpdate(true)).resolves.toMatchObject({ enabled: false, available: false, error: null });
+		expect(fetchMock).not.toHaveBeenCalled();
+		expect(invoke).not.toHaveBeenCalled();
+		vi.unstubAllGlobals();
 	});
 });
