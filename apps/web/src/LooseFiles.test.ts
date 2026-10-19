@@ -15,7 +15,7 @@ describe('loose files rendering', () => {
 		const { body } = render(LooseFiles, { props: { files: [file('apostila.pdf'), file('aula.mp4', { kind: 'media', path: 'aula.mp4' }), file('extra.pdf', { unverified: true })], heading: 'Arquivos soltos', courseId: 'course-1' } });
 		expect(body).toContain('<strong>Arquivos soltos</strong>');
 		expect(body.match(/<li>/g)).toHaveLength(3);
-		expect(body).toContain('href="#/player/course-1/aula.mp4"');
+		expect(body).toContain('href="#/course/course-1/aula.mp4"');
 		expect(body).toContain('/api/media?course=course-1&amp;path=apostila.pdf');
 		expect(body).toContain('download="apostila.pdf"');
 		expect(body).toContain('target="_blank"');

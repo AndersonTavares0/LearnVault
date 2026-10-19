@@ -23,8 +23,11 @@ Detalhes de implementação ficam nas issues e pull requests.
   remoção por curso, releitura explícita da biblioteca, mídia local por identificador e progresso de
   estudo por comandos internos (IPC). O desktop não tem autenticação e não abre portas de rede.
 - **Regras de estudo** compartilhadas entre servidor, interface web e desktop (#86, #88, #90, #91).
-- **Player** com velocidade independente para áudio e vídeo, seleção de mídia e legenda por aula,
-  atalhos limitados ao foco e avanço automático opcional.
+- **Player** com seleção de mídia e legenda por aula, atalhos limitados ao foco e avanço
+  automático opcional.
+- **Tela de estudo do curso:** player e lista de aulas na mesma tela, retomada da última aula
+  assistida, módulo da aula atual aberto, materiais do módulo fora da playlist e ações
+  administrativas em um menu do curso.
 - **Capas** geradas a partir do título e capas manuais por upload do admin ou seletor nativo no
   desktop, com validação PNG/JPEG/WebP, limite de 4 MiB e gravação atômica fora das pastas de curso.
 - **Distribuição** com instalador Windows NSIS, tarballs Linux do servidor e `SHA256SUMS` em cada
@@ -32,16 +35,12 @@ Detalhes de implementação ficam nas issues e pull requests.
 
 ## Agora: uma rotina de estudo completa
 
-- [ ] Página de detalhes do curso. A navegação anterior/próxima e o índice de aulas no player já
-  existem.
 - [ ] Player direto com links para legendas e materiais.
 - [ ] Permissões de acesso a cursos para vários usuários locais.
 
 ## Em seguida: uma mesa de estudo
 
-- [ ] Sidebar persistente no desktop e navegação mobile.
 - [ ] "Continuar estudando" em destaque na tela inicial.
-- [ ] Player como área principal de estudo, com índice de aulas.
 - [ ] Acessibilidade: teclado, foco, contraste, movimento reduzido e leitores de tela.
 - [ ] Manter a identidade visual original do projeto.
 

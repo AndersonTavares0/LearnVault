@@ -15,9 +15,10 @@ function decodeSegment(value: string | undefined): string | null {
 /**
  * Interpreta o hash da localização.
  *
- * `#/course/<id>` abre um curso e `#/player/<id>/<caminho>` abre uma aula dentro do curso:
- * o caminho relativo da aula só é único por curso, então a identidade do curso faz parte
- * da rota. `#/settings` abre as preferências locais e não identifica curso algum.
+ * `#/course/<id>` abre um curso e `#/course/<id>/<caminho>` abre a aula indicada dentro
+ * dele: o caminho relativo da aula só é único por curso, então a identidade do curso faz
+ * parte da rota. `#/player/<id>/<caminho>` é a forma legada da mesma tela e continua
+ * aceita. `#/settings` abre as preferências locais e não identifica curso algum.
  * `#/player/<caminho>` é a forma legada de um arquivo solto sem curso dono;
  * o caminho deve começar a busca global. Qualquer outro valor cai na rota padrão do build:
  * o login no servidor e a tela inicial no desktop, que não tem sessão.
@@ -26,7 +27,11 @@ export function locationFromHash(hash: string, fallback: Route = 'login'): HashL
 	const value = hash.replace(/^#\/?/, '');
 	const [name, ...parts] = value.split('/');
 	const route = name === 'home' || name === 'course' || name === 'player' || name === 'settings' ? name : fallback;
-	if (route === 'course') return { route, courseId: decodeSegment(parts[0]), lessonPath: null };
+	if (route === 'course') {
+		if (parts.length === 0) return { route, courseId: null, lessonPath: null };
+		const lessonString = parts.slice(1).join('/');
+		return { route, courseId: decodeSegment(parts[0]), lessonPath: lessonString === '' ? null : decodeSegment(lessonString) };
+	}
 	if (route === 'player') {
 		if (parts.length === 0) return { route, courseId: null, lessonPath: null };
 		if (parts.length === 1) return { route, courseId: null, lessonPath: decodeSegment(parts[0]) };
@@ -41,7 +46,10 @@ export function routeFromHash(hash: string, fallback: Route = 'login'): Route {
 
 /** Monta o hash canônico de uma rota. */
 export function href(route: Route, courseId?: string, lessonPath?: string): string {
-	if (route === 'course' && courseId !== undefined) return `#/course/${encodeURIComponent(courseId)}`;
+	if (route === 'course' && courseId !== undefined) {
+		const base = `#/course/${encodeURIComponent(courseId)}`;
+		return lessonPath ? `${base}/${encodeURIComponent(lessonPath)}` : base;
+	}
 	if (route === 'player' && courseId !== undefined && lessonPath !== undefined) {
 		return `#/player/${encodeURIComponent(courseId)}/${encodeURIComponent(lessonPath)}`;
 	}
@@ -54,7 +62,7 @@ export function href(route: Route, courseId?: string, lessonPath?: string): stri
 /** Destino seguro depois do login, preservando uma rota já navegável. */
 export function destinationAfterLogin(hash: string): string {
 	const location = locationFromHash(hash);
-	if (location.route === 'home' || location.route === 'course' || location.route === 'settings') return href(location.route, location.courseId ?? undefined);
+	if (location.route === 'home' || location.route === 'course' || location.route === 'settings') return href(location.route, location.courseId ?? undefined, location.lessonPath ?? undefined);
 	if (location.route === 'player') {
 		const parts = hash.replace(/^#\/?/, '').split('/');
 		if (parts.length === 1) {

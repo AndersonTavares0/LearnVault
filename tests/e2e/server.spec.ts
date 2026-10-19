@@ -273,19 +273,20 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	const faviconResponse = await page.request.get(`${server.baseURL}/favicon.svg`);
 	expect(faviconResponse.status()).toBe(200);
 
-	// A home lista cada curso registrado como card; o card abre a página do curso.
+	// A home lista cada curso registrado como card; o card abre a tela de estudo já com o
+	// player na última aula assistida e a lista lateral de aulas.
 	const courseCard = page.getByRole('link', { name: /library/ });
 	await expect(courseCard).toBeVisible();
-	await courseCard.click();
-	await expect(page.getByRole('heading', { name: 'library', exact: true })).toBeVisible();
-	await expect(page.getByRole('heading', { name: 'Categoria' })).toBeVisible();
-
 	const videoRequest = page.waitForRequest((request) => {
 		const url = new URL(request.url());
 		return url.pathname === '/api/media' && url.searchParams.get('path') === 'Categoria/Curso/Aula.mp4';
 	});
-	await page.getByRole('link', { name: /Curso/ }).click();
+	await courseCard.click();
+	await expect(page.locator('.breadcrumb')).toContainText('library');
+	await expect(page.getByRole('heading', { name: 'Categoria' })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'Curso', exact: true })).toBeVisible();
+	// A aula inicial vem do histórico recente gravado acima.
+	await expect(page.locator('.course-playlist-body .lesson-row.active .lesson-title')).toHaveText('Curso');
 	const videoSource = (await videoRequest).url();
 	const videoURL = new URL(videoSource, server.baseURL);
 	expect(videoURL.pathname).toBe('/api/media');
@@ -322,9 +323,9 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	);
 	expect(unscoped.status()).toBe(400);
 
-	// O link de voltar no player retorna à página do curso.
-	await page.getByRole('link', { name: /library/ }).click();
-	await expect(page.getByRole('heading', { name: 'library', exact: true })).toBeVisible();
+	// O caminho de volta para a biblioteca continua no breadcrumb da tela de estudo.
+	await page.getByRole('link', { name: 'Cursos', exact: true }).click();
+	await expect(page.getByRole('heading', { name: 'Cursos' })).toBeVisible();
 	await page.getByRole('button', { name: 'Sair' }).click();
 	await expect(page.getByRole('button', { name: 'Entrar' })).toBeVisible();
 	const afterLogoutMedia = await page.request.get(new URL(videoSource as string, server.baseURL).toString());
@@ -350,9 +351,11 @@ test('reports a lesson whose media disappears from disk and restores it when the
 	const courseModule = page.locator('details.course-section').filter({ has: page.getByText('Modulo Extra', { exact: true }) });
 	const openCourse = async () => {
 		await page.getByRole('link', { name: /library/ }).click();
-		await expect(page.getByRole('heading', { name: 'library', exact: true })).toBeVisible();
-		// A meta do módulo é visível com o disclosure fechado; as linhas exigem abri-lo.
-		await courseModule.locator('summary').click();
+		await expect(page.locator('.breadcrumb')).toContainText('library');
+		// O módulo da aula inicial pode já estar aberto; só clica quando precisa.
+		if (!(await courseModule.evaluate((element) => element.hasAttribute('open')))) {
+			await courseModule.locator('summary').click();
+		}
 	};
 	const indexFromHome = async () => {
 		await page.goto(`${server.baseURL}/#/home`);
@@ -374,8 +377,8 @@ test('reports a lesson whose media disappears from disk and restores it when the
 	await expect(courseModule.locator('.section-meta')).toHaveText('2 aulas');
 	const lessonA = courseModule.getByRole('link', { name: /Aula A/ });
 	const lessonB = courseModule.getByRole('link', { name: /Aula B/ });
-	await expect(lessonA).toHaveAttribute('href', /#\/player\//);
-	await expect(lessonB).toHaveAttribute('href', /#\/player\//);
+	await expect(lessonA).toHaveAttribute('href', /#\/course\//);
+	await expect(lessonB).toHaveAttribute('href', /#\/course\//);
 	await expect(lessonB).not.toContainText('ausente');
 
 	// Fase 2: o arquivo desaparece do disco (disco externo desconectado ou arquivo renomeado).
@@ -412,7 +415,7 @@ test('reports a lesson whose media disappears from disk and restores it when the
 	await indexFromHome();
 	await openCourse();
 	await expect(courseModule.locator('.section-meta')).toHaveText('2 aulas');
-	await expect(lessonB).toHaveAttribute('href', /#\/player\//);
+	await expect(lessonB).toHaveAttribute('href', /#\/course\//);
 	await expect(lessonB).not.toContainText('ausente');
 });
 
@@ -538,7 +541,7 @@ test('moves the cover actions to the course card and keeps the course page clean
 
 	// A página do curso volta ao layout anterior, sem controles de capa.
 	await courseCard.click();
-	await expect(page.getByRole('heading', { name: 'library', exact: true })).toBeVisible();
+	await expect(page.locator('.breadcrumb')).toContainText('library');
 	await expect(page.locator('.course-cover-actions')).toHaveCount(0);
 	await expect(page.getByText('Trocar capa')).toHaveCount(0);
 	await expect(page.getByText('Remover capa')).toHaveCount(0);

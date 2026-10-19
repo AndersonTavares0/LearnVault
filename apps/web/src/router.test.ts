@@ -36,6 +36,9 @@ describe('hash router', () => {
 		expect(routeFromHash('#/course/course-1')).toBe('course');
 		expect(routeFromHash('#/player/course-1/aula')).toBe('player');
 		expect(locationFromHash('#/course/course%20one')).toEqual({ route: 'course', courseId: 'course one', lessonPath: null });
+		expect(locationFromHash('#/course/course-1/modules/aula%20one')).toEqual({ route: 'course', courseId: 'course-1', lessonPath: 'modules/aula one' });
+		// Barra final não inventa uma aula de caminho vazio.
+		expect(locationFromHash('#/course/course-1/')).toEqual({ route: 'course', courseId: 'course-1', lessonPath: null });
 		expect(locationFromHash('#/player/course-1/modules/aula%20one')).toEqual({ route: 'player', courseId: 'course-1', lessonPath: 'modules/aula one' });
 		expect(locationFromHash('#/player/%E0%A4%A/aula')).toEqual({ route: 'player', courseId: null, lessonPath: 'aula' });
 	});
@@ -57,11 +60,14 @@ describe('hash router', () => {
 	it('creates server-independent links with the course identity', () => {
 		expect(href('home')).toBe('#/home');
 		expect(href('course', 'course one')).toBe('#/course/course%20one');
+		expect(href('course', 'course one', 'modules/aula one')).toBe('#/course/course%20one/modules%2Faula%20one');
+		expect(href('course', 'course one', '')).toBe('#/course/course%20one');
 		expect(href('player', 'course-1', 'modules/aula one')).toBe('#/player/course-1/modules%2Faula%20one');
 	});
 
 	it('preserves a deep-link after login', () => {
 		expect(destinationAfterLogin('#/course/course-1')).toBe('#/course/course-1');
+		expect(destinationAfterLogin('#/course/course-1/aula')).toBe('#/course/course-1/aula');
 		expect(destinationAfterLogin('#/player/course-1/aula')).toBe('#/player/course-1/aula');
 	});
 

@@ -1,11 +1,11 @@
 <script lang="ts">
 	import LooseFiles from './LooseFiles.svelte';
-	import { clampSpeed, formatDuration, mediaAvailability, mediaPlaybackKind, PLAYBACK_SPEEDS, playerShortcutAction, selectPlayableMedia, selectPlayableSubtitle, shouldAutoAdvance, srtConversionSupported, srtToWebVtt, studySyncEnabled, subtitleFormat } from './player';
+	import { formatDuration, mediaAvailability, mediaPlaybackKind, playerShortcutAction, selectPlayableMedia, selectPlayableSubtitle, shouldAutoAdvance, srtConversionSupported, srtToWebVtt, studySyncEnabled, subtitleFormat } from './player';
 	import { createPositionSaver } from './study';
 	import { createDefaultPlayerPreferences, lessonPreferenceKey, updateLessonPreference, type PlayerPreferences } from './player-preferences';
 	import { transport, type Lesson, type StudyProgress } from './transport';
 
-	let { lesson, courseId, mediaError, onMediaError, studyEnabled = true, preferences = createDefaultPlayerPreferences(), onPreferencesChange = () => true, autoNext = false, hasNextLesson = false, onAutoNext = () => undefined, onAutoNextChange = () => true }: { lesson: Lesson; courseId: string; mediaError: string; onMediaError: () => void; studyEnabled?: boolean; preferences?: PlayerPreferences; onPreferencesChange?: (next: PlayerPreferences) => boolean; autoNext?: boolean; hasNextLesson?: boolean; onAutoNext?: () => void; onAutoNextChange?: (enabled: boolean) => boolean } = $props();
+	let { lesson, courseId, mediaError, onMediaError, studyEnabled = true, preferences = createDefaultPlayerPreferences(), onPreferencesChange = () => true, autoNext = false, hasNextLesson = false, onAutoNext = () => undefined, onAutoNextChange = () => true, lessonTitle = null }: { lesson: Lesson; courseId: string; mediaError: string; onMediaError: () => void; studyEnabled?: boolean; preferences?: PlayerPreferences; onPreferencesChange?: (next: PlayerPreferences) => boolean; autoNext?: boolean; hasNextLesson?: boolean; onAutoNext?: () => void; onAutoNextChange?: (enabled: boolean) => boolean; lessonTitle?: string | null } = $props();
 
 	const lessonPreference = $derived(preferences.lessons[lessonPreferenceKey(courseId, lesson.path)] ?? {});
 	const availableMedia = $derived(lesson.media.filter((file) => file.availability?.trim().toLowerCase() !== 'missing'));
@@ -31,14 +31,11 @@
 	let captionSource = $state<string | null>(null);
 	let captionDownload = $state<string | null>(null);
 	let captionMessage = $state('');
-	let preferenceMessage = $state('');
 
 	const saver = createPositionSaver((id, position) => transport.recordPosition(id, position));
 
 	function saveLessonPreference(patch: { mediaId?: string; subtitleId?: string | null }) {
-		preferenceMessage = onPreferencesChange(updateLessonPreference(preferences, courseId, lesson.path, patch))
-			? 'Preferência do player salva.'
-			: 'Não foi possível salvar a preferência; ela valerá apenas até fechar o aplicativo.';
+		onPreferencesChange(updateLessonPreference(preferences, courseId, lesson.path, patch));
 	}
 
 	function selectMedia(event: Event) {
@@ -52,9 +49,7 @@
 	}
 
 	function changeAutoNext(enabled: boolean) {
-		preferenceMessage = onAutoNextChange(enabled)
-			? 'Preferência de avanço automático salva.'
-			: 'Não foi possível salvar a preferência; ela valerá apenas até fechar o aplicativo.';
+		onAutoNextChange(enabled);
 	}
 
 	function handleKeydown(event: KeyboardEvent) {
@@ -126,15 +121,6 @@
 		return () => { active = false; saver.reset(); };
 	});
 
-	function changeSpeed(speed: number) {
-		const target = clampSpeed(speed);
-		if (media) media.playbackRate = target;
-		const next = playbackKind === 'audio' ? { ...preferences, audioSpeed: target } : { ...preferences, videoSpeed: target };
-		preferenceMessage = onPreferencesChange(next)
-			? 'Velocidade salva.'
-			: 'Não foi possível salvar a velocidade; ela valerá apenas até fechar o aplicativo.';
-	}
-
 	$effect(() => {
 		if (media) {
 			media.playbackRate = playbackSpeed;
@@ -182,11 +168,13 @@
 		if (shouldAutoAdvance(autoNext, hasNextLesson)) onAutoNext();
 	}
 </script>
-{#if mediaError}<p class="error" role="alert">{mediaError}</p>
+{#snippet lessonHeading()}
+	{#if lessonTitle}<h2 class="player-lesson-title">{lessonTitle}</h2>{/if}
+{/snippet}
+{#if mediaError}<p class="error" role="alert">{mediaError}</p>{@render lessonHeading()}
 {:else if source}
 	<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions (o grupo identificado do player recebe foco para ativar atalhos) -->
 	<div class="player-container {playbackKind === 'audio' ? 'audio-container' : 'video-container'}" role="group" tabindex="0" onkeydown={handleKeydown} aria-label="Player" aria-keyshortcuts="Space ArrowLeft ArrowRight">
-		<p class="player-shortcut-hint">Atalhos: espaço reproduz ou pausa; ← e → avançam ou retrocedem 10 segundos.</p>
 		{#if availableMedia.length > 1}<label class="player-select-label">Mídia da aula<select aria-label="Mídia da aula" value={playable?.mediaId ?? ''} onchange={selectMedia}>{#each availableMedia as item}<option value={item.mediaId ?? ''}>{item.name}</option>{/each}</select></label>{/if}
 		{#if availableSubtitles.length > 0}<label class="player-select-label">Legenda<select aria-label="Legenda da aula" value={lessonPreference.subtitleId === null ? '' : selectedSubtitle?.mediaId ?? ''} onchange={selectSubtitle}><option value="">Sem legendas</option>{#each availableSubtitles as item}<option value={item.mediaId ?? ''}>{item.name}</option>{/each}</select></label>{/if}
 		{#if playbackKind === 'audio'}
@@ -208,21 +196,13 @@
 				{#if captionSource}<track kind="captions" src={captionSource} label="Legenda" default />{/if}
 			</video>
 		{/if}
-		<div class="player-controls-bar" role="toolbar" aria-label="Controles de reprodução">
-			<span class="control-label" id="speed-label">Velocidade:</span>
-			<div class="speed-buttons" role="group" aria-labelledby="speed-label">
-				{#each PLAYBACK_SPEEDS as speed}
-					<button type="button" class="speed-button" class:active={playbackSpeed === speed} onclick={() => changeSpeed(speed)} aria-pressed={playbackSpeed === speed}>
-						{speed}x
-					</button>
-				{/each}
-			</div>
-		<label class="auto-next-toggle"><input type="checkbox" checked={autoNext} onchange={(event) => changeAutoNext(event.currentTarget.checked)} />Avançar automaticamente</label>
+		{@render lessonHeading()}
+		<div class="player-controls-bar" role="group" aria-label="Preferências de reprodução">
+			<label class="auto-next-toggle"><input type="checkbox" checked={autoNext} onchange={(event) => changeAutoNext(event.currentTarget.checked)} />Avançar automaticamente</label>
 		</div>
-		{#if preferenceMessage}<p class="catalog-message" role="status">{preferenceMessage}</p>{/if}
 	</div>
-{:else if availability === 'missing'}<p class="empty" role="status">A mídia desta aula não está no disco. A aula e o seu progresso foram preservados; indexe os cursos novamente depois de reconectar o disco ou repor o arquivo.</p>
-{:else}<p class="empty" role="status">Esta aula não possui mídia disponível.</p>{/if}
+{:else if availability === 'missing'}<p class="empty" role="status">A mídia desta aula não está no disco. A aula e o seu progresso foram preservados; indexe os cursos novamente depois de reconectar o disco ou repor o arquivo.</p>{@render lessonHeading()}
+{:else}<p class="empty" role="status">Esta aula não possui mídia disponível.</p>{@render lessonHeading()}{/if}
 {#if syncEnabled}
 	<div class="study-bar" role="group" aria-label="Progresso da aula">
 		{#if progressLoading}<span class="study-hint">Carregando progresso…</span>
@@ -233,4 +213,4 @@
 	</div>
 {/if}
 {#if captionMessage}<p class="empty" role="status">{captionMessage}{#if captionDownload} <a href={captionDownload} download>Baixar legenda</a>{/if}</p>{/if}
-<LooseFiles files={[...lesson.subtitles, ...lesson.materials]} heading="Materiais" {courseId} />
+{#if lesson.subtitles.length || lesson.materials.length}<LooseFiles files={[...lesson.subtitles, ...lesson.materials]} heading="Materiais" {courseId} />{/if}
