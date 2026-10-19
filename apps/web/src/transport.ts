@@ -92,6 +92,13 @@ export interface Transport {
 	// Servidor: envia o arquivo escolhido pelo usuário no navegador.
 	importCourseCover(courseId: string, file?: File | null): Promise<void>;
 	removeCourseCover(courseId: string): Promise<boolean>;
+	// Ordenação manual de módulos e aulas entre irmãos. `parent` é o caminho relativo do
+	// nó pai (vazio para a lista de topo); `children` é a ordem desejada dos filhos, que
+	// precisa ser uma permutação exata dos irmãos.
+	setCourseOrder(courseId: string, parent: string, children: string[]): Promise<void>;
+	// Restaura a ordem automática de um pai específico ou, sem `parent`, do curso inteiro.
+	// Devolve `true` quando havia uma preferência a remover.
+	resetCourseOrder(courseId: string, parent?: string): Promise<boolean>;
 }
 
 type RustFile = { media_id?: string; name?: string; path?: string; size?: number; mtime_seconds?: number; kind?: string; availability?: string; unverified?: boolean };
@@ -409,6 +416,16 @@ async function removalFlag(response: Response): Promise<boolean> {
 	return payload?.removed === true;
 }
 
+// Mensagem acionável para os endpoints de ordenação. Um `422` indica lista desatualizada
+// (não é mais uma permutação dos irmãos), então a interface precisa recarregar.
+function orderErrorMessage(status: number): string {
+	if (status === 403) return 'credentials_change_required';
+	if (status === 404) return 'Curso não encontrado.';
+	if (status === 422) return 'A ordem enviada não é válida; recarregue a página.';
+	if (status === 503) return 'O servidor está ocupado; tente de novo em instantes.';
+	return 'Não foi possível salvar a ordem.';
+}
+
 export class HttpTransport implements Transport {
 	async me() { const response = await fetch('/api/me'); return response.ok ? normalizeUser(await response.json()) : null; }
 	async login(username: string, password: string) {
@@ -455,6 +472,16 @@ export class HttpTransport implements Transport {
 		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? 'Curso não encontrado.' : 'Não foi possível remover a capa do curso.');
 		return removalFlag(response);
 	}
+	async setCourseOrder(courseId: string, parent: string, children: string[]) {
+		const response = await fetch(`/api/admin/courses/${encodeURIComponent(courseId)}/order`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ parent, children }) });
+		if (!response.ok) throw new Error(orderErrorMessage(response.status));
+	}
+	async resetCourseOrder(courseId: string, parent?: string) {
+		const query = parent === undefined ? '' : `?parent=${encodeURIComponent(parent)}`;
+		const response = await fetch(`/api/admin/courses/${encodeURIComponent(courseId)}/order${query}`, { method: 'DELETE' });
+		if (!response.ok) throw new Error(orderErrorMessage(response.status));
+		return removalFlag(response);
+	}
 }
 
 // Códigos estáveis de erro IPC e a mensagem sanitizada correspondente. Um código
@@ -473,7 +500,9 @@ const DESKTOP_ERROR_MESSAGES: Record<string, string> = {
 	invalid_position: 'Posição inválida.',
 	course_not_found: 'Curso não encontrado.',
 	invalid_cover: 'A capa precisa ser PNG, JPEG ou WebP de até 4 MiB.',
-	cover_unavailable: 'Não foi possível atualizar a capa do curso.'
+	cover_unavailable: 'Não foi possível atualizar a capa do curso.',
+	invalid_order: 'A ordem enviada não é válida; recarregue a página.',
+	order_unavailable: 'Não foi possível salvar a ordem do curso.'
 };
 
 // O comando devolve o erro como objeto serializado `{ code, message }`, não como `Error`.
@@ -531,6 +560,12 @@ export class DesktopStub implements Transport {
 	// byte de arquivo cruza o IPC. O parâmetro é mantido para o contrato comum dos transportes.
 	async importCourseCover(courseId: string, _file?: File | null) { try { await invoke<unknown>('desktop_import_course_cover', { courseId }); } catch (cause) { throw desktopError(cause, 'Não foi possível salvar a capa do curso.'); } }
 	async removeCourseCover(courseId: string) { try { const result = await invoke<{ removed?: unknown } | null>('desktop_remove_course_cover', { courseId }); return result?.removed === true; } catch (cause) { throw desktopError(cause, 'Não foi possível remover a capa do curso.'); } }
+	// A ordem é endereçada pela identidade opaca do curso e por caminhos relativos já
+	// catalogados; nenhum caminho do sistema de arquivos cruza o IPC.
+	async setCourseOrder(courseId: string, parent: string, children: string[]) { try { await invoke<unknown>('desktop_set_course_order', { courseId, parent, children }); } catch (cause) { throw desktopError(cause, 'Não foi possível salvar a ordem.'); } }
+	// Sem `parent`, o comando restaura o curso inteiro; o argumento é omitido em vez de
+	// enviado como `undefined`.
+	async resetCourseOrder(courseId: string, parent?: string) { try { const result = await invoke<boolean | null>('desktop_reset_course_order', parent === undefined ? { courseId } : { courseId, parent }); return result === true; } catch (cause) { throw desktopError(cause, 'Não foi possível restaurar a ordem.'); } }
 }
 
 export const transportKind: TransportKind = __LEARNVAULT_TRANSPORT__ === 'desktop' ? 'desktop' : 'http';

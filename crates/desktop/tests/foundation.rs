@@ -253,6 +253,8 @@ fn build_registers_the_app_commands_in_the_acl_manifest() {
         "desktop_recent_study",
         "desktop_media_removal_impact",
         "desktop_remove_media",
+        "desktop_set_course_order",
+        "desktop_reset_course_order",
     ] {
         assert!(
             build.contains(command),
@@ -286,9 +288,11 @@ fn capability_grants_only_the_core_default_and_the_app_commands() {
     assert!(permissions.contains(&"allow-desktop-recent-study"));
     assert!(permissions.contains(&"allow-desktop-media-removal-impact"));
     assert!(permissions.contains(&"allow-desktop-remove-media"));
+    assert!(permissions.contains(&"allow-desktop-set-course-order"));
+    assert!(permissions.contains(&"allow-desktop-reset-course-order"));
     assert_eq!(
         permissions.len(),
-        13,
+        15,
         "a capability não pode ampliar além do núcleo e dos comandos do app: {permissions:?}"
     );
 }
@@ -440,6 +444,8 @@ fn invoke_handler_registers_only_the_desktop_commands() {
         "desktop_remove_media",
         "desktop_import_course_cover",
         "desktop_remove_course_cover",
+        "desktop_set_course_order",
+        "desktop_reset_course_order",
     ] {
         assert!(
             commands.contains(command),
