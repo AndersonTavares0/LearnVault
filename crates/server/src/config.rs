@@ -435,6 +435,79 @@ mod tests {
     }
 
     #[test]
+    fn bootstrap_credentials_can_be_loaded_from_secret_files() {
+        let temp = tempfile::tempdir().unwrap();
+        let library = temp.path().join("library");
+        let username_file = temp.path().join("username");
+        let password_file = temp.path().join("password");
+        std::fs::create_dir_all(&library).unwrap();
+        std::fs::write(&username_file, "first-admin\r\n").unwrap();
+        std::fs::write(&password_file, "synthetic-test-secret\n").unwrap();
+        let environment = HashMap::from([
+            ("LIBRARY_DIR", library.to_str().unwrap()),
+            ("ADMIN_USERNAME_FILE", username_file.to_str().unwrap()),
+            ("ADMIN_PASSWORD_FILE", password_file.to_str().unwrap()),
+        ]);
+
+        let command = parse_command_with_env(["learnvault-server"], |key| {
+            environment.get(key).copied().map(str::to_owned)
+        })
+        .unwrap();
+        let Command::Run(config) = command else {
+            panic!("expected run command");
+        };
+
+        assert_eq!(config.admin_username.as_deref(), Some("first-admin"));
+        assert_eq!(config.admin_password.as_deref(), Some("synthetic-test-secret"));
+    }
+
+    #[test]
+    fn direct_and_file_bootstrap_credentials_cannot_be_combined() {
+        let temp = tempfile::tempdir().unwrap();
+        let password_file = temp.path().join("password");
+        std::fs::write(&password_file, "synthetic-test-secret").unwrap();
+        let environment = HashMap::from([
+            ("ADMIN_PASSWORD", "direct-secret"),
+            ("ADMIN_PASSWORD_FILE", password_file.to_str().unwrap()),
+        ]);
+
+        let error = parse_command_with_env(["learnvault-server"], |key| {
+            environment.get(key).copied().map(str::to_owned)
+        })
+        .unwrap_err();
+
+        assert!(!error.to_string().contains("direct-secret"));
+        assert!(!error.to_string().contains(password_file.to_str().unwrap()));
+    }
+
+    #[test]
+    fn missing_bootstrap_secret_file_fails_without_exposing_its_path() {
+        let temp = tempfile::tempdir().unwrap();
+        let missing_file = temp.path().join("missing-secret");
+        let environment = HashMap::from([("ADMIN_PASSWORD_FILE", missing_file.to_str().unwrap())]);
+
+        let error = parse_command_with_env(["learnvault-server"], |key| {
+            environment.get(key).copied().map(str::to_owned)
+        })
+        .unwrap_err();
+
+        assert!(!error.to_string().contains(missing_file.to_str().unwrap()));
+    }
+
+    #[test]
+    fn empty_bootstrap_secret_file_is_rejected() {
+        let temp = tempfile::tempdir().unwrap();
+        let password_file = temp.path().join("password");
+        std::fs::write(&password_file, "\n").unwrap();
+        let environment = HashMap::from([("ADMIN_PASSWORD_FILE", password_file.to_str().unwrap())]);
+
+        assert!(parse_command_with_env(["learnvault-server"], |key| {
+            environment.get(key).copied().map(str::to_owned)
+        })
+        .is_err());
+    }
+
+    #[test]
     fn parses_migrate_go_without_server_environment() {
         let command = parse_command_with_env(
             [
