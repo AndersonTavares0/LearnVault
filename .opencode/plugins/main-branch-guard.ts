@@ -68,12 +68,26 @@ function diagnose(lines: string[]): void {
   }
 }
 
+// Diz se um caminho está dentro de uma raiz. Só o primeiro segmento ".." tira o
+// arquivo do repositório: um nome que começa com dois pontos (ex.: "..env") continua
+// dentro e precisa ser bloqueado como qualquer outro arquivo.
+function isInside(base: string, target: string): boolean {
+  const relative = path.relative(base, target)
+  if (relative === "") return true
+  if (path.isAbsolute(relative)) return false
+  return relative.split(/[\\/]/)[0] !== ".."
+}
+
 export const MainBranchGuard: Plugin = async ({ directory, worktree }) => {
   const root = worktree || directory
+  // O caminho recebido do agente é relativo ao diretório do projeto: essa é a base
+  // correta para resolvê-lo, mesmo quando o worktree aponta para outro lugar.
+  const projectRoot = typeof directory === "string" && directory.length > 0 ? directory : root
   // Em uso normal `worktree` e `directory` são o mesmo repositório; tentar os dois
   // protege contra mudanças de valor entre versões do aplicativo.
   const roots = [worktree, directory].filter(
-    (value, index, all) => typeof value === "string" && value.length > 0 && all.indexOf(value) === index
+    (value, index, all): value is string =>
+      typeof value === "string" && value.length > 0 && all.indexOf(value) === index
   )
 
   const currentBranch = async (): Promise<string | null> => {
@@ -95,13 +109,12 @@ export const MainBranchGuard: Plugin = async ({ directory, worktree }) => {
 
   const touchesWorktree = (filePath: unknown): boolean => {
     if (typeof filePath !== "string" || filePath.length === 0) return true
-    const relative = path.relative(root, path.resolve(directory, filePath))
-    if (relative === "") return true
-    if (path.isAbsolute(relative)) return false
-    // Só sai do repositório quando o primeiro segmento é exatamente "..". Um nome de
-    // arquivo que começa com dois pontos (ex.: "..env") continua dentro do worktree e
-    // precisa ser bloqueado como qualquer outro arquivo.
-    return relative.split(/[\\/]/)[0] !== ".."
+    // O caminho recebido é resolvido a partir do diretório do projeto e comparado com
+    // as raízes conhecidas. Comparar contra uma raiz diferente da que resolve o
+    // caminho desligaria a proteção: no caso em que o worktree não é o repositório,
+    // todo caminho interno pareceria externo e a escrita passaria.
+    const target = path.resolve(projectRoot, filePath)
+    return roots.some((base) => isInside(base, target))
   }
 
   const patchTouchesWorktree = (patchText: unknown): boolean => {

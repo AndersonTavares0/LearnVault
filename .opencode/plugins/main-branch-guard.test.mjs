@@ -130,6 +130,24 @@ test("falls back to the project directory when the worktree is not a repository"
   assert.equal(edit.blocked, false)
 })
 
+test("blocks writes to the project directory when the worktree is not a repository", async () => {
+  const repo = repoWithBranch("main")
+  const hooks = await MainBranchGuard({ directory: repo, worktree: plainDirectory() })
+  const hook = hooks["tool.execute.before"]
+
+  // O caminho do agente é relativo ao diretório do projeto: mesmo com o worktree
+  // apontando para outro lugar, a escrita dentro do repositório precisa ser bloqueada.
+  for (const filePath of ["README.md", path.join(repo, "README.md")]) {
+    const result = await attempt(hook, "edit", { filePath })
+    assert.equal(result.blocked, true, `"${filePath}" deveria ser bloqueado`)
+    assert.match(result.message, /protegida/)
+  }
+
+  // Fora do repositório continua permitido.
+  const outside = await attempt(hook, "edit", { filePath: OUTSIDE })
+  assert.equal(outside.blocked, false)
+})
+
 test("fails closed and writes a diagnostic when the branch cannot be verified", async () => {
   const directory = plainDirectory()
   const hooks = await MainBranchGuard({ directory, worktree: directory })

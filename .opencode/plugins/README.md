@@ -10,7 +10,9 @@ repositório quando a branch atual é `main` ou `master`.
   `*** Add File`, `*** Update File`, `*** Delete File` e `*** Move to`). O caminho é
   comparado por segmento: só sai do repositório quando o primeiro segmento é exatamente
   `..`, então um arquivo cujo nome começa com dois pontos (ex.: `..env`) continua
-  protegido.
+  protegido. A comparação usa o mesmo caminho resolvido contra as raízes conhecidas
+  (`worktree` e diretório do projeto), então uma escrita no repositório continua
+  bloqueada mesmo quando o `worktree` não é o repositório.
 - Bloqueia comandos git mutantes via Bash (`commit`, `push`, `add`, `merge`, `rebase`,
   `reset`, `revert`, `stash`, `tag`, `checkout`/`switch` sem criação de branch) e
   `gh pr merge`.
