@@ -48,14 +48,16 @@ pub mod covers;
 pub mod dto;
 pub mod error;
 pub mod media;
+pub mod ordering;
 pub mod state;
 pub mod study;
 
 pub use command::{
-    catalog, desktop_catalog, desktop_import_course, desktop_import_course_cover,
-    desktop_media_removal_impact, desktop_recent_study, desktop_record_position,
-    desktop_remove_course, desktop_remove_course_cover, desktop_remove_media, desktop_rescan,
-    desktop_set_completed, desktop_study_progress,
+    catalog, catalog_with_orders, desktop_catalog, desktop_import_course,
+    desktop_import_course_cover, desktop_media_removal_impact, desktop_recent_study,
+    desktop_record_position, desktop_remove_course, desktop_remove_course_cover,
+    desktop_remove_media, desktop_rescan, desktop_reset_course_order, desktop_set_completed,
+    desktop_set_course_order, desktop_study_progress,
 };
 pub use config::{DATABASE_FILE_NAME, DesktopConfigDto, database_path};
 pub use courses::{
@@ -71,6 +73,7 @@ pub use dto::{
     MediaRemovalOutcomeDto, RecentStudyDto, RescanSummaryDto, StudyProgressDto,
 };
 pub use error::{IpcError, IpcErrorCode};
+pub use ordering::{CourseOrders, OrderError, order_path};
 pub use state::{DesktopState, RescanGuard};
 pub use study::{DEFAULT_RECENT_LIMIT, LOCAL_OWNER_ID};
 
@@ -108,7 +111,9 @@ pub fn run() {
             command::desktop_media_removal_impact,
             command::desktop_remove_media,
             command::desktop_import_course_cover,
-            command::desktop_remove_course_cover
+            command::desktop_remove_course_cover,
+            command::desktop_set_course_order,
+            command::desktop_reset_course_order
         ])
         .run(tauri::generate_context!())
         .expect("falha ao executar o aplicativo desktop do LearnVault");
