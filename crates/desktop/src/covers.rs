@@ -399,6 +399,42 @@ fn raw_cover_request<'a>(
     }
 }
 
+impl DesktopState {
+    /// Entrega a capa autorizada pelo protocolo customizado.
+    ///
+    /// O parsing é puro e prefere a recusa estável; só depois de validada a requisição o
+    /// registro de cursos e o diretório de capas são consultados. Um curso não registrado
+    /// responde como uma capa ausente, sem revelar nada.
+    pub fn serve_cover(&self, raw: &RawCoverRequest<'_>) -> MediaResponse {
+        match parse_cover_request(raw) {
+            Ok(request) => self.open_cover_request(&request),
+            Err(rejection) => MediaResponse::empty(rejection.status()),
+        }
+    }
+
+    /// Monta a resposta da capa de um curso registrado.
+    fn open_cover_request(&self, request: &CoverRequest) -> MediaResponse {
+        if self.course(&request.course_id).is_none() {
+            return MediaResponse::empty(COVER_STATUS_NOT_FOUND);
+        }
+        match read_cover(&self.covers_dir(), &request.course_id) {
+            Ok(Some((bytes, image_type))) => {
+                let mut response = MediaResponse::bare(COVER_STATUS_OK);
+                response.push("Content-Type", image_type.content_type());
+                response.push("Content-Length", bytes.len().to_string());
+                response.push("Cache-Control", "no-store");
+                response.push("X-Content-Type-Options", "nosniff");
+                if request.method == CoverMethod::Get {
+                    response.body = bytes;
+                }
+                response
+            }
+            Ok(None) => MediaResponse::empty(COVER_STATUS_NOT_FOUND),
+            Err(_) => MediaResponse::empty(COVER_STATUS_INTERNAL_SERVER_ERROR),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::Path;
@@ -467,41 +503,5 @@ mod tests {
         let png = temp.path().join("real.png");
         std::fs::write(&png, b"\x89PNG\r\n\x1a\n").unwrap();
         assert_eq!(read_picked_cover(&png).unwrap(), b"\x89PNG\r\n\x1a\n");
-    }
-}
-
-impl DesktopState {
-    /// Entrega a capa autorizada pelo protocolo customizado.
-    ///
-    /// O parsing é puro e prefere a recusa estável; só depois de validada a requisição o
-    /// registro de cursos e o diretório de capas são consultados. Um curso não registrado
-    /// responde como uma capa ausente, sem revelar nada.
-    pub fn serve_cover(&self, raw: &RawCoverRequest<'_>) -> MediaResponse {
-        match parse_cover_request(raw) {
-            Ok(request) => self.open_cover_request(&request),
-            Err(rejection) => MediaResponse::empty(rejection.status()),
-        }
-    }
-
-    /// Monta a resposta da capa de um curso registrado.
-    fn open_cover_request(&self, request: &CoverRequest) -> MediaResponse {
-        if self.course(&request.course_id).is_none() {
-            return MediaResponse::empty(COVER_STATUS_NOT_FOUND);
-        }
-        match read_cover(&self.covers_dir(), &request.course_id) {
-            Ok(Some((bytes, image_type))) => {
-                let mut response = MediaResponse::bare(COVER_STATUS_OK);
-                response.push("Content-Type", image_type.content_type());
-                response.push("Content-Length", bytes.len().to_string());
-                response.push("Cache-Control", "no-store");
-                response.push("X-Content-Type-Options", "nosniff");
-                if request.method == CoverMethod::Get {
-                    response.body = bytes;
-                }
-                response
-            }
-            Ok(None) => MediaResponse::empty(COVER_STATUS_NOT_FOUND),
-            Err(_) => MediaResponse::empty(COVER_STATUS_INTERNAL_SERVER_ERROR),
-        }
     }
 }
