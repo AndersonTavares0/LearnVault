@@ -1,7 +1,7 @@
 # LearnVault
 
 [![CI](https://github.com/AndersonTavares0/LearnVault/actions/workflows/ci.yml/badge.svg)](https://github.com/AndersonTavares0/LearnVault/actions/workflows/ci.yml)
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/Rust-1.99-000000?logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-24.x-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![pnpm](https://img.shields.io/badge/pnpm-11.28.5-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
@@ -134,4 +134,4 @@ Questões de segurança devem ser reportadas de forma privada, conforme descrito
 
 ## Licença
 
-O LearnVault é distribuído sob a [Apache License 2.0](LICENSE).
+O LearnVault é distribuído sob a [licença MIT](LICENSE).
