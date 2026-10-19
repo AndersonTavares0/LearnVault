@@ -30,7 +30,7 @@ export type UpdateStatus = {
 	error: string | null;
 };
 export type StudyNote = { noteId: number; mediaId: string; text: string; positionSeconds: number | null; createdAt: number; updatedAt: number };
-export type StudyNotes = { items: StudyNote[] };
+export type StudyNotes = { items: StudyNote[]; truncated: boolean };
 export const STUDY_NOT_AVAILABLE = 'study_not_available';
 
 // Protocolo customizado do desktop para mídia local. O webview aponta somente pelo
@@ -104,6 +104,7 @@ export interface Transport {
 	// Notas pessoais da mídia: o dono nunca atravessa a interface (a sessão autenticada
 	// resolve o dono no servidor; no desktop o dono local é fixo no Rust).
 	listNotes(mediaId: string): Promise<StudyNotes>;
+	listAllNotes(): Promise<StudyNotes>;
 	createNote(mediaId: string, text: string, positionSeconds: number | null): Promise<StudyNote>;
 	updateNote(noteId: number, text: string, positionSeconds: number | null): Promise<StudyNote>;
 	deleteNote(noteId: number): Promise<void>;
@@ -374,7 +375,8 @@ export function normalizeStudyNote(value: unknown): StudyNote {
 
 export function normalizeStudyNotes(value: unknown): StudyNotes {
 	if (!value || typeof value !== 'object' || !('items' in value) || !Array.isArray(value.items)) throw invalidPayload('lista de notas inválida.');
-	return { items: value.items.map(normalizeStudyNote) };
+	const payload = value as { items: unknown[]; truncated?: unknown };
+	return { items: payload.items.map(normalizeStudyNote), truncated: payload.truncated === true };
 }
 
 // O servidor recusa uma nota por dois motivos diferentes com o mesmo status 422 (texto
@@ -520,6 +522,7 @@ export class HttpTransport implements Transport {
 		return removalFlag(response);
 	}
 	async listNotes(mediaId: string) { const response = await fetch(`/api/study/notes?media_id=${encodeURIComponent(mediaId)}`); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar as notas.'); return normalizeStudyNotes(await response.json()); }
+	async listAllNotes() { const response = await fetch('/api/study/notes/all'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar as anotações.'); return normalizeStudyNotes(await response.json()); }
 	async createNote(mediaId: string, text: string, positionSeconds: number | null) { const response = await fetch('/api/study/notes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: mediaId, text, position_seconds: positionSeconds }) }); if (!response.ok) throw new Error(await noteErrorMessage(response, 'Nota ou posição inválida.', 'Mídia não encontrada.', 'Não foi possível salvar a nota.')); return normalizeStudyNote(await response.json()); }
 	async updateNote(noteId: number, text: string, positionSeconds: number | null) { const response = await fetch(`/api/study/notes/${noteId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, position_seconds: positionSeconds }) }); if (!response.ok) throw new Error(await noteErrorMessage(response, 'Nota ou posição inválida.', 'Nota não encontrada.', 'Não foi possível atualizar a nota.')); return normalizeStudyNote(await response.json()); }
 	async deleteNote(noteId: number) { const response = await fetch(`/api/study/notes/${noteId}`, { method: 'DELETE' }); if (!response.ok) throw new Error(response.status === 404 ? 'Nota não encontrada.' : 'Não foi possível excluir a nota.'); }
@@ -589,6 +592,7 @@ export class DesktopStub implements Transport {
 	// desktop não contém nenhum `fetch` do aplicativo.
 	checkUpdate() { return Promise.resolve({ current: '', enabled: false, available: false, latest: null, releasedAt: null, url: null, checkedAt: null, error: null } satisfies UpdateStatus); }
 	async listNotes(mediaId: string) { try { return normalizeStudyNotes(await invoke<unknown>('desktop_study_notes', { mediaId })); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar as notas.'); } }
+	async listAllNotes() { try { return normalizeStudyNotes(await invoke<unknown>('desktop_study_notes_all')); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar as anotações.'); } }
 	async createNote(mediaId: string, text: string, positionSeconds: number | null) { try { return normalizeStudyNote(await invoke<unknown>('desktop_create_study_note', { mediaId, text, positionSeconds })); } catch (cause) { throw desktopError(cause, 'Não foi possível salvar a nota.'); } }
 	async updateNote(noteId: number, text: string, positionSeconds: number | null) { try { return normalizeStudyNote(await invoke<unknown>('desktop_update_study_note', { noteId, text, positionSeconds })); } catch (cause) { throw desktopError(cause, 'Não foi possível atualizar a nota.'); } }
 	async deleteNote(noteId: number) { try { await invoke<unknown>('desktop_delete_study_note', { noteId }); } catch (cause) { throw desktopError(cause, 'Não foi possível excluir a nota.'); } }

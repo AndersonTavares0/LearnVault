@@ -359,13 +359,15 @@ impl From<StudyNote> for StudyNoteDto {
 
 /// Lista de notas do dono local.
 ///
-/// É a projeção serializável do mesmo contrato `{ items: [...] }` do adaptador HTTP: os
-/// dois transportes entregam o mesmo envelope para a SPA, que valida a forma antes de
-/// usar os itens.
+/// É a projeção serializável do mesmo contrato `{ items: [...], truncated }` do adaptador
+/// HTTP: os dois transportes entregam o mesmo envelope para a SPA, que valida a forma
+/// antes de usar os itens.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct StudyNotesDto {
     /// Notas do dono local, já ordenadas pelo núcleo.
     pub items: Vec<StudyNoteDto>,
+    /// Verdadeiro quando a listagem global do dono atingiu o teto de notas.
+    pub truncated: bool,
 }
 
 #[cfg(test)]
@@ -389,6 +391,7 @@ mod tests {
         // painel de notas recusar a lista inteira no desktop.
         let value = serde_json::to_value(StudyNotesDto {
             items: vec![note()],
+            truncated: false,
         })
         .unwrap();
         assert_eq!(
@@ -401,14 +404,22 @@ mod tests {
                     "position_seconds": 12,
                     "created_at": 1,
                     "updated_at": 2
-                }]
+                }],
+                "truncated": false
             })
         );
     }
 
     #[test]
     fn an_empty_notes_list_keeps_the_envelope() {
-        let value = serde_json::to_value(StudyNotesDto { items: Vec::new() }).unwrap();
-        assert_eq!(value, serde_json::json!({ "items": [] }));
+        let value = serde_json::to_value(StudyNotesDto {
+            items: Vec::new(),
+            truncated: false,
+        })
+        .unwrap();
+        assert_eq!(
+            value,
+            serde_json::json!({ "items": [], "truncated": false })
+        );
     }
 }

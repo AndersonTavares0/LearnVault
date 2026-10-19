@@ -97,6 +97,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(
             Router::new()
                 .route("/api/study/notes", get(notes::list).post(notes::create))
+                .route("/api/study/notes/all", get(notes::list_all))
                 .route(
                     "/api/study/notes/{note_id}",
                     axum::routing::put(notes::update).delete(notes::delete),
@@ -461,7 +462,7 @@ mod tests {
         for (name, setup) in [
             ("missing", "PRAGMA user_version = 0"),
             ("older", "PRAGMA user_version = 3"),
-            ("newer", "PRAGMA user_version = 6"),
+            ("newer", "PRAGMA user_version = 7"),
             (
                 "missing required column",
                 "ALTER TABLE user RENAME COLUMN must_change_credentials TO changed",

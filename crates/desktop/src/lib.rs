@@ -117,6 +117,7 @@ pub fn run() {
             command::desktop_set_course_order,
             command::desktop_reset_course_order,
             command::desktop_study_notes,
+            command::desktop_study_notes_all,
             command::desktop_create_study_note,
             command::desktop_update_study_note,
             command::desktop_delete_study_note

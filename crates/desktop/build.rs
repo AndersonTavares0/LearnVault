@@ -6,8 +6,9 @@
 //! `desktop_import_course_cover`, `desktop_remove_course_cover`, `desktop_rescan`,
 //! `desktop_study_progress`, `desktop_record_position`, `desktop_set_completed`,
 //! `desktop_recent_study`, `desktop_set_course_order`, `desktop_reset_course_order`,
-//! `desktop_study_notes`, `desktop_create_study_note`, `desktop_update_study_note` e
-//! `desktop_delete_study_note`). Ele não abre sockets nem depende de display; a validação
+//! `desktop_study_notes`, `desktop_study_notes_all`, `desktop_create_study_note`,
+//! `desktop_update_study_note` e `desktop_delete_study_note`). Ele não abre sockets nem
+//! depende de display; a validação
 //! de runtime pertence ao `tauri dev`/`tauri build`.
 
 fn main() {
@@ -28,6 +29,7 @@ fn main() {
             "desktop_set_course_order",
             "desktop_reset_course_order",
             "desktop_study_notes",
+            "desktop_study_notes_all",
             "desktop_create_study_note",
             "desktop_update_study_note",
             "desktop_delete_study_note",

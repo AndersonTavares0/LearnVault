@@ -336,16 +336,23 @@ pub async fn desktop_study_notes(
     media_id: String,
 ) -> Result<StudyNotesDto, IpcError> {
     let state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        let database = state.lock_database()?;
-        learnvault_core::list_notes(&database, crate::study::LOCAL_OWNER_ID, &media_id)
-            .map(|notes| StudyNotesDto {
-                items: notes.into_iter().map(StudyNoteDto::from).collect(),
-            })
-            .map_err(note_error)
-    })
-    .await
-    .map_err(|_| IpcError::study_unavailable())?
+    tauri::async_runtime::spawn_blocking(move || state.study_notes(&media_id))
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// Lista todas as notas do dono local, das mais recentes para as mais antigas.
+///
+/// O comando não recebe dono nem mídia: a listagem global é do dono local fixo, e o
+/// envelope avisa quando o teto truncou o resultado.
+#[tauri::command]
+pub async fn desktop_study_notes_all(
+    state: State<'_, DesktopState>,
+) -> Result<StudyNotesDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.study_notes_all())
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
 }
 
 /// Cria nota para o dono local, sem aceitar identidade de dono do webview.
@@ -367,7 +374,7 @@ pub async fn desktop_create_study_note(
             position_seconds,
         )
         .map(StudyNoteDto::from)
-        .map_err(note_error)
+        .map_err(crate::study::note_error)
     })
     .await
     .map_err(|_| IpcError::study_unavailable())?
@@ -392,7 +399,7 @@ pub async fn desktop_update_study_note(
             position_seconds,
         )
         .map(StudyNoteDto::from)
-        .map_err(note_error)
+        .map_err(crate::study::note_error)
     })
     .await
     .map_err(|_| IpcError::study_unavailable())?
@@ -408,21 +415,10 @@ pub async fn desktop_delete_study_note(
     tauri::async_runtime::spawn_blocking(move || {
         let database = state.lock_database()?;
         learnvault_core::delete_note(&database, crate::study::LOCAL_OWNER_ID, note_id)
-            .map_err(note_error)
+            .map_err(crate::study::note_error)
     })
     .await
     .map_err(|_| IpcError::study_unavailable())?
-}
-
-fn note_error(error: learnvault_core::Error) -> IpcError {
-    match error {
-        learnvault_core::Error::MediaNotFound { .. } => IpcError::media_not_found(),
-        learnvault_core::Error::StudyNoteNotFound => IpcError::note_not_found(),
-        learnvault_core::Error::InvalidStudyNote => IpcError::invalid_note(),
-        learnvault_core::Error::TooManyNotes => IpcError::too_many_notes(),
-        learnvault_core::Error::InvalidStudyPosition { .. } => IpcError::invalid_position(),
-        _ => IpcError::study_unavailable(),
-    }
 }
 
 /// Abre o seletor nativo de diretórios e devolve o caminho escolhido, se houver.
@@ -456,8 +452,8 @@ fn pick_cover(app: &tauri::AppHandle) -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::note_error;
     use crate::error::IpcErrorCode;
+    use crate::study::note_error;
     use learnvault_core::Error as CoreError;
 
     #[test]

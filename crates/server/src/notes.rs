@@ -39,6 +39,8 @@ pub struct UpdateNoteRequest {
 #[derive(Serialize)]
 struct NotesResponse {
     items: Vec<NoteResponse>,
+    /// Verdadeiro quando a listagem global do dono atingiu o teto de notas.
+    truncated: bool,
 }
 
 #[derive(Serialize)]
@@ -101,6 +103,35 @@ pub(crate) async fn list(
         Ok(items) => private(
             Json(NotesResponse {
                 items: items.into_iter().map(NoteResponse::from).collect(),
+                truncated: false,
+            })
+            .into_response(),
+        ),
+        Err(failure) => failure_response(failure),
+    }
+}
+
+/// Lista todas as notas do dono, das mais recentes para as mais antigas.
+///
+/// A rota é separada da listagem por mídia porque ali `media_id` é obrigatório: a
+/// ausência do parâmetro é uma query inválida, e não um pedido de tudo. A resposta
+/// avisa quando o teto do dono truncou a lista, para que a tela não esconda notas em
+/// silêncio.
+pub(crate) async fn list_all(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let owner = user.user_id;
+    match run(&state, move |db| {
+        learnvault_core::list_all_notes(db, &owner)
+    })
+    .await
+    {
+        Ok((items, truncated)) => private(
+            Json(NotesResponse {
+                items: items.into_iter().map(NoteResponse::from).collect(),
+                truncated,
             })
             .into_response(),
         ),

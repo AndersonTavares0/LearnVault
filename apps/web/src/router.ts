@@ -1,6 +1,6 @@
 import { courseIdOf, lessonFromNode, type Catalog, type CatalogNode, type FileEntry, type Lesson } from './transport';
 
-export type Route = 'login' | 'home' | 'course' | 'player' | 'settings';
+export type Route = 'login' | 'home' | 'course' | 'player' | 'settings' | 'notes';
 export type HashLocation = { route: Route; courseId: string | null; lessonPath: string | null };
 
 function decodeSegment(value: string | undefined): string | null {
@@ -26,7 +26,7 @@ function decodeSegment(value: string | undefined): string | null {
 export function locationFromHash(hash: string, fallback: Route = 'login'): HashLocation {
 	const value = hash.replace(/^#\/?/, '');
 	const [name, ...parts] = value.split('/');
-	const route = name === 'home' || name === 'course' || name === 'player' || name === 'settings' ? name : fallback;
+	const route = name === 'home' || name === 'course' || name === 'player' || name === 'settings' || name === 'notes' ? name : fallback;
 	if (route === 'course') {
 		if (parts.length === 0) return { route, courseId: null, lessonPath: null };
 		const lessonString = parts.slice(1).join('/');
@@ -62,7 +62,7 @@ export function href(route: Route, courseId?: string, lessonPath?: string): stri
 /** Destino seguro depois do login, preservando uma rota já navegável. */
 export function destinationAfterLogin(hash: string): string {
 	const location = locationFromHash(hash);
-	if (location.route === 'home' || location.route === 'course' || location.route === 'settings') return href(location.route, location.courseId ?? undefined, location.lessonPath ?? undefined);
+	if (location.route === 'home' || location.route === 'course' || location.route === 'settings' || location.route === 'notes') return href(location.route, location.courseId ?? undefined, location.lessonPath ?? undefined);
 	if (location.route === 'player') {
 		const parts = hash.replace(/^#\/?/, '').split('/');
 		if (parts.length === 1) {

@@ -439,3 +439,109 @@ async fn http_notes_refuse_creation_above_the_ceiling_and_list_the_envelope() {
     assert_eq!(items[0]["text"], "nota 1");
     assert_eq!(items[0]["media_id"], "m1");
 }
+
+#[tokio::test]
+async fn http_notes_all_lists_every_note_of_the_owner_across_media() {
+    let temp = tempfile::tempdir().unwrap();
+    seed(&temp);
+
+    // Uma segunda mídia prova que a listagem global não é filtrada por mídia.
+    {
+        let db = Database::open(temp.path().join("notes.sqlite")).unwrap();
+        db.connection()
+            .execute(
+                "INSERT INTO media (media_id, library_id, relative_path, relative_path_key, size, mtime, availability) VALUES ('m2', 'library-1', 'b.mp4', ?1, 1, 1, 'available')",
+                [learnvault_core::paths::relative_path_key("b.mp4", KeyMode::for_host()).unwrap()],
+            )
+            .unwrap();
+    }
+
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let admin = login(&app, "admin", PASSWORD).await;
+    let reader = login(&app, "reader", "senha do leitor local").await;
+
+    // Sem sessão a rota global é recusada como qualquer outra.
+    let unauthorized = app
+        .clone()
+        .oneshot(
+            Request::get("/api/study/notes/all")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(unauthorized.status(), StatusCode::UNAUTHORIZED);
+
+    let first = payload(
+        app.clone()
+            .oneshot(json_request(
+                "POST",
+                "/api/study/notes",
+                &admin,
+                Some(serde_json::json!({
+                    "media_id": "m1",
+                    "text": "primeira",
+                    "position_seconds": null
+                })),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let second = payload(
+        app.clone()
+            .oneshot(json_request(
+                "POST",
+                "/api/study/notes",
+                &admin,
+                Some(serde_json::json!({
+                    "media_id": "m2",
+                    "text": "segunda",
+                    "position_seconds": 12
+                })),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+
+    let listed = app
+        .clone()
+        .oneshot(
+            Request::get("/api/study/notes/all")
+                .header("cookie", &admin)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(listed.status(), StatusCode::OK);
+    let body = payload(listed).await;
+    assert_eq!(body["truncated"], false, "a listagem avisa quando trunca");
+    let items = body["items"]
+        .as_array()
+        .expect("a listagem global usa o envelope { items: [...] }");
+    assert_eq!(
+        items.len(),
+        2,
+        "a listagem global junta as notas de todas as mídias"
+    );
+    // Da mais recente para a mais antiga.
+    assert_eq!(items[0]["note_id"], second["note_id"]);
+    assert_eq!(items[1]["note_id"], first["note_id"]);
+    assert_eq!(items[0]["media_id"], "m2");
+
+    // O leitor não enxerga as notas de outro dono.
+    let reader_listed = app
+        .clone()
+        .oneshot(
+            Request::get("/api/study/notes/all")
+                .header("cookie", &reader)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let reader_body = payload(reader_listed).await;
+    assert_eq!(reader_body["items"].as_array().unwrap().len(), 0);
+}

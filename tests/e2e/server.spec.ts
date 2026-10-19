@@ -440,6 +440,20 @@ test('creates, edits, reloads and deletes a personal note in the player', async 
 	await page.reload();
 	await expect(notes.locator('p.note-text')).toHaveText(texto);
 
+	// A página de anotações lista as notas do dono agrupadas por curso.
+	const playerUrl = page.url();
+	await page.goto(`${server.baseURL}/#/notes`);
+	await expect(page.getByRole('heading', { name: 'Anotações', level: 1 })).toBeVisible();
+	await expect(page.getByText(texto).first()).toBeVisible();
+	await expect(page.getByRole('heading', { level: 2 }).first()).toBeVisible();
+	const all = await (await page.request.get(`${server.baseURL}/api/study/notes/all`)).json();
+	expect(all.truncated).toBe(false);
+	expect(all.items.some((item: { text: string }) => item.text === texto)).toBe(true);
+
+	// Volta ao player para seguir com a edição da nota.
+	await page.goto(playerUrl);
+	await expect(notes.getByRole('heading', { name: 'Suas anotações' })).toBeVisible();
+
 	// Editar a nota reescreve o texto no servidor.
 	const editado = 'Nota de estudo editada pela jornada de UI.';
 	await notes.getByRole('button', { name: 'Editar' }).click();

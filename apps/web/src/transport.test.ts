@@ -9,7 +9,7 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 
 describe('transport contract', () => {
 	it('exposes every method of the transport contract', () => {
-		const methods = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'checkUpdate', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover', 'setCourseOrder', 'resetCourseOrder', 'listNotes', 'createNote', 'updateNote', 'deleteNote'] as const;
+		const methods = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'checkUpdate', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover', 'setCourseOrder', 'resetCourseOrder', 'listNotes', 'listAllNotes', 'createNote', 'updateNote', 'deleteNote'] as const;
 		// A lista é exaustiva: se a interface `Transport` ganhar ou perder um método, o
 		// tipo abaixo deixa de compilar e o typecheck do projeto reprova o teste.
 		type Exact<Contract, Listed> = [Listed] extends [Contract] ? ([Contract] extends [Listed] ? true : never) : never;
@@ -600,6 +600,26 @@ describe('transport contract', () => {
 		expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ method: 'POST', body: JSON.stringify({ media_id: 'm1', text: 'new', position_seconds: null }) });
 		expect(fetchMock.mock.calls[2]?.[1]).toMatchObject({ method: 'PUT', body: JSON.stringify({ text: 'edit', position_seconds: 14 }) });
 		vi.unstubAllGlobals();
+	});
+	it('lists every note of the owner through the global index contract', async () => {
+		const note = { note_id: 7, media_id: 'm1', text: 'indexada', position_seconds: null, created_at: 1, updated_at: 2 };
+
+		// HTTP: a rota global traz as notas mais recentes e avisa quando truncou.
+		const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [note], truncated: true }), { status: 200 }));
+		vi.stubGlobal('fetch', fetchMock);
+		const http = new HttpTransport();
+		const listed = await http.listAllNotes();
+		expect(listed.items[0].text).toBe('indexada');
+		expect(listed.truncated).toBe(true);
+		expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/study/notes/all']);
+		vi.unstubAllGlobals();
+
+		// Desktop: o mesmo envelope chega pelo IPC, sem pedir identificador de dono.
+		vi.mocked(invoke).mockResolvedValue({ items: [note], truncated: false });
+		const desktop = new DesktopStub();
+		expect(await desktop.listAllNotes()).toMatchObject({ truncated: false });
+		expect(vi.mocked(invoke).mock.calls.map(([name]) => name)).toContain('desktop_study_notes_all');
+		expect(JSON.stringify(vi.mocked(invoke).mock.calls)).not.toContain('owner');
 	});
 	it('rejects malformed note payloads', () => {
 		expect(() => normalizeStudyNote({ note_id: 'bad' })).toThrow('Resposta inválida do servidor');

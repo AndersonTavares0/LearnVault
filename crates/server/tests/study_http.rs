@@ -772,10 +772,11 @@ async fn credentials_pending_flag_blocks_study_until_changed() {
     );
 }
 
-/// Uma base persistida já sai da cadeia de migrações na versão 5 e **já contém**
-/// `study_state`: a tabela nasce na migração V1 (a primeira da cadeia), então nenhuma
-/// migração nova é necessária para bancos existentes. Este teste prova isso no arquivo
-/// real (não em memória) e verifica as restrições que o adaptador HTTP depende.
+/// Uma base persistida já sai da cadeia de migrações na versão 6 e **já contém**
+/// `study_state`: a tabela nasce na migração V1 (a primeira da cadeia) e a migração V6,
+/// que reconstrói `study_note` para trocar o limite de bytes por caracteres, não a
+/// remove. Este teste prova isso no arquivo real (não em memória) e verifica as
+/// restrições que o adaptador HTTP depende.
 #[tokio::test]
 async fn an_existing_database_already_carries_study_state_and_its_constraints() {
     let temp = tempfile::tempdir().unwrap();
@@ -786,7 +787,7 @@ async fn an_existing_database_already_carries_study_state_and_its_constraints() 
         .connection()
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 5, "o formato persistido permanece na versão 5");
+    assert_eq!(version, 6, "o formato persistido permanece na versão 6");
     let present: i64 = db
         .connection()
         .query_row(

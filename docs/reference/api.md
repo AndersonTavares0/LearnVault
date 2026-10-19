@@ -203,7 +203,7 @@ descrito ao final desta seção; ele não usa rotas HTTP.
 
 As notas são texto simples (não são interpretadas como HTML), ficam no SQLite fora da
 biblioteca e pertencem ao par dono autenticado + `media_id`. O servidor nunca aceita `owner_id`
-do cliente. O texto deve conter conteúdo não branco e ter até 20.000 bytes UTF-8; a posição
+do cliente. O texto deve conter conteúdo não branco e ter até 20.000 caracteres; a posição
 opcional deve ser um inteiro não negativo. A lista é ordenada por criação e cada nota inclui
 `note_id`, `media_id`, `text`, `position_seconds`, `created_at` e `updated_at`. Reenviar o
 mesmo texto e a mesma posição não é uma alteração e não move `updated_at`. Cada par dono + mídia
@@ -213,13 +213,16 @@ devolve mais que esse teto.
 | Método | Rota | Autenticação | Finalidade |
 | --- | --- | --- | --- |
 | `GET` | `/api/study/notes?media_id=...` | Sessão | Lista as notas do usuário para uma mídia conhecida |
+| `GET` | `/api/study/notes/all` | Sessão | Lista todas as notas do usuário, da mais recente à mais antiga (teto de 2.000) |
 | `POST` | `/api/study/notes` | Sessão + CSRF | Cria `{ "media_id": "...", "text": "...", "position_seconds": null }` |
 | `PUT` | `/api/study/notes/{note_id}` | Sessão + CSRF | Atualiza `{ "text": "...", "position_seconds": 42 }` somente se pertencer à sessão |
 | `DELETE` | `/api/study/notes/{note_id}` | Sessão + CSRF | Exclui somente uma nota pertencente à sessão (resposta `204`) |
 
 Texto ou posição inválidos respondem `422 invalid_note` ou `422 invalid_position`; mídia e
 nota ausentes (inclusive uma nota de outro dono) respondem `404 media_not_found` e
-`404 note_not_found`. Listas vazias respondem `200` com `{ "items": [] }`. As respostas da rota são
+`404 note_not_found`. Listas vazias respondem `200` com `{ "items": [], "truncated": false }`. A listagem global devolve as
+notas mais recentes até o teto de 2.000 e sinaliza `truncated: true` quando o dono tem mais notas
+do que o teto — o índice nunca esconde nota sem avisar. As respostas da rota são
 `private, no-store`; as rejeições do extrator de corpo (por exemplo `422` ou `413`) respondem
 apenas `no-store`. As escritas exigem mesma origem. Notas não alteram a biblioteca física.
 
@@ -244,7 +247,8 @@ shape snake_case (`media_id`, `position_seconds`, `completed`, `updated_at`, `re
 | `desktop_record_position` | `mediaId`, `positionSeconds` | Grava o ponto de retomada, preservando a conclusão |
 | `desktop_set_completed` | `mediaId`, `completed` | Marca ou desmarca a conclusão, preservando a posição |
 | `desktop_recent_study` | `limit` (opcional) | Lista o progresso do dono local, do mais recente ao mais antigo |
-| `desktop_study_notes` | `mediaId` | Lista notas do dono local para a mídia, no mesmo envelope `{ "items": [...] }` do HTTP |
+| `desktop_study_notes` | `mediaId` | Lista notas do dono local para a mídia, no mesmo envelope `{ "items": [...], "truncated": false }` do HTTP |
+| `desktop_study_notes_all` | — | Lista todas as notas do dono local, no mesmo envelope `{ "items": [...], "truncated": false }` do HTTP |
 | `desktop_create_study_note` | `mediaId`, `text`, `positionSeconds` (opcional) | Cria nota de texto simples |
 | `desktop_update_study_note` | `noteId`, `text`, `positionSeconds` (opcional) | Atualiza nota do dono local |
 | `desktop_delete_study_note` | `noteId` | Exclui nota do dono local |
@@ -257,7 +261,7 @@ posição negativa vira `invalid_position` e as demais falhas viram `study_unava
 continua valendo. Os comandos não exigem nenhum curso registrado e nunca gravam `media`,
 `scan`, `library` nem as pastas de curso.
 
-As notas usam o mesmo shape snake_case, o mesmo envelope `{ "items": [...] }` e os mesmos
+As notas usam o mesmo shape snake_case, o mesmo envelope `{ "items": [...], "truncated": false }` e os mesmos
 limites de texto/posição do HTTP: a lista do IPC e a do HTTP têm exatamente o mesmo formato, então
 a SPA não distingue o transporte ao ler as notas. O dono local fixo é resolvido pelo Rust, nenhum
 comando aceita `owner_id`, e a SPA usa somente `invoke`. Uma mídia desconhecida vira
