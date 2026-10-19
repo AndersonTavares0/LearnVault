@@ -1,15 +1,13 @@
 # Wiki do LearnVault
 
-LearnVault é uma biblioteca de estudos autocontida formada por um núcleo de domínio em Rust
-(`crates/core`), um servidor Axum (`crates/server`) e uma SPA em Svelte 5 + Vite. Ela indexa
-pastas de curso existentes, registradas individualmente, sem modificar a biblioteca física. O
-desktop Tauri (Fase 4) já
-tem fundação, IPC de cursos/catálogo, importação e remoção de cursos, rescan explícito de todos e
-entrega de
- materiais, vídeo, áudio e arquivos de legenda pelo protocolo de mídia com faixas limitadas. O player
- desktop renderiza VTT; SRT, ASS e SSA são baixáveis, e o build HTTP pode converter SRT sob demanda.
- Autenticação, janelas reais e a distribuição por plataforma (Fase 5) foram consolidadas com Rust
- como backend único.
+LearnVault usa um núcleo Rust (`crates/core`), um servidor Axum (`crates/server`), um desktop Tauri
+offline (`crates/desktop`) e uma SPA Svelte 5 + Vite. Pastas de cursos são registradas
+individualmente e permanecem somente leitura.
+
+A migração do stack Rust foi concluída e o serviço Go removido. O importador de bancos Go legados
+permanece no servidor Rust. O desktop tem janela real, IPC e reprodução local, sem autenticação nem
+portas de rede. São publicados o instalador Windows NSIS e tarballs Linux do servidor. Flatpak/Linux
+desktop e publicação OCI self-hosted continuam pendentes; veja [[Roadmap]] e [[Operations]].
 
 Use esta Wiki para uma visão navegável do projeto. A documentação do repositório é canônica
 e revisada por pull requests.

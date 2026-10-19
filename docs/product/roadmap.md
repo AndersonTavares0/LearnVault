@@ -1,32 +1,29 @@
 # Roadmap do LearnVault
 
-Este roadmap é o resumo durável do produto e é orientado a resultados. Detalhes de
-implementação pertencem às Issues e pull requests relacionadas. Os requisitos funcionais e
-não funcionais consolidados ficam em [requirements.md](requirements.md).
+Este roadmap registra entregas concluídas e trabalho pendente. Os requisitos funcionais e não
+funcionais ficam em [requirements.md](requirements.md); a arquitetura atual está em
+[overview.md](../architecture/overview.md).
 
 ## Escopo do MVP (proposta)
 
-O MVP é o conjunto mínimo que permitiu concluir a remoção do serviço Go de referência na Fase 5 e publicar o
-desktop:
+O marco de migração do stack terminou com a remoção do serviço Go na Fase 5. Isso não significa
+que todos os alvos de distribuição ou o backlog do produto estejam concluídos:
 
-- **Inclui:** RF-01 a RF-10 completos; RNF-01 a RNF-07 atendidos (segurança, privacidade,
-  desempenho de mídia, operação, portabilidade e qualidade); RNF-08 e RNF-09 seguem como metas
-  contínuas. RF-11 coberto por instalador Windows NSIS e imagem OCI ou binário nativo do
-  servidor; estratégia para bancos Go legados resolvida ou suporte explicitamente delimitado,
-  conforme o milestone
-  [Migração Go → Rust](https://github.com/AndersonTavares0/LearnVault/milestone/3).
-- **Não inclui:** Whisper e transcrições, notas, favoritos, busca avançada e cliente mobile
-  nativo (seção "Mais tarde"); `.msi` e versão portátil para Windows (discussion
-  [#131](https://github.com/AndersonTavares0/LearnVault/discussions/131)); Flatpak como bloqueio
-  de release, já que a validação técnica pode seguir em paralelo.
+- **Entregue na migração:** núcleo Rust compartilhado, servidor Axum, SPA, desktop Tauri offline,
+  remoção do serviço Go e importador explícito e limitado para bancos Go legados.
+- **Distribuição disponível:** tarballs do servidor para Linux e instalador Windows NSIS.
+- **Pendente:** Flatpak e validação em sandbox, publicação OCI/binário self-hosted, assinatura dos
+  artefatos e demais itens listados em Distribuição. Eles continuam no roadmap e não bloqueiam o
+  registro da migração do stack como concluída.
 
-Esta delimitação é uma proposta para revisão do mantenedor; mudanças de escopo atualizam esta
-seção.
+Esta seção distingue a migração concluída das entregas de produto e distribuição ainda pendentes.
 
 ## Corrente — reescrita em Rust
 
-A arquitetura aprovada está no [ADR 0001](../architecture/adr/0001-reescrita-em-rust.md).
-A execução avança por fases, com um pull request por fase:
+A arquitetura aprovada está no [ADR 0001](../architecture/adr/0001-reescrita-em-rust.md). As fases
+0 a 5 da migração do stack estão concluídas; a Fase 5 removeu o serviço Go na PR #206. Esta
+conclusão cobre o código e a CI do stack Rust, não cutover de dados reais nem todos os pacotes de
+distribuição.
 
 - [x] Fase 0 — ADR, arquitetura e roadmap atualizados
 - [x] Fase 1 — `crates/core` com domínio, SQLite, catálogo, identidade e política de rescan
@@ -36,19 +33,21 @@ A execução avança por fases, com um pull request por fase:
 - [x] Fase 3a — recusa segura de bancos Go legados e API explícita, limitada e backup-first para
   importar usuários, catálogo e estado; o comando legado `learnvault-server migrate-go` continua executando a operação
   sem iniciar o listener HTTP
-- [ ] Fase 4 — `crates/desktop` com Tauri 2, offline e sem portas de rede
-  - [x] Fase 4 (fundação) — crate `crates/desktop` no workspace, `frontendDist` embutido, capability deny-by-default e CSP explícita; IPC de domínio, mídia e janelas reais ainda pendentes
-  - [x] Fase 4 (IPC de catálogo) — comandos `desktop_config` e `desktop_catalog` offline com ACL app-defined mínima, DTOs snake_case do catálogo e erros IPC sanitizados; mídia, autenticação, seleção da raiz da biblioteca e janelas reais continuam pendentes
-  - [x] Fase 4 (seleção da raiz) — comando `desktop_select_library` sem argumentos aciona o seletor nativo no Rust e persiste a raiz canonicalizada de forma versionada e atômica no diretório de configuração do aplicativo, com revalidação no startup e biblioteca somente leitura; mídia, autenticação e janelas reais continuam pendentes
-  - [x] Fase 4 (rescan da biblioteca) — comando `desktop_rescan` sem argumentos e assíncrono (`spawn_blocking`) indexa explicitamente a raiz persistida reutilizando `learnvault-core` (`rescan`/`RescanSummary`), com estado ocupado que serializa chamadas concorrentes por um erro estável (`rescan_in_progress`), raiz não configurada (`library_not_configured`) e raiz inacessível (`rescan_unavailable`) sanitizados; o rescan nunca é automático e a biblioteca permanece somente leitura. Mídia, autenticação e janelas reais continuam pendentes
-  - [x] Fase 4 (mídia local) — protocolo customizado `learnvault-media://localhost/<media-id>` entrega imagens/thumbnails, materiais pequenos, vídeo, áudio e legendas pelo `media_id` opaco, com parsing estrito, allowlist de tipo de conteúdo, faixas HTTP limitadas, limite explícito por resposta (`200`/`HEAD`/`206`/`413`/`416`) e revalidação pelo `learnvault-core` (`open_media`); no Windows (WebView2) a SPA pede `http://learnvault-media.localhost/<media-id>` e o runtime reverte para o esquema antes do handler (Linux/macOS usam o esquema direto); nenhuma capability nova
-  - [x] Fase 4 (Study desktop) — comandos `desktop_study_progress`, `desktop_record_position`, `desktop_set_completed` e `desktop_recent_study`, assíncronos (`spawn_blocking`) e com ACL mínima, reutilizam `learnvault-core::study` com o dono local fixo resolvido no Rust — o webview nunca envia `owner_id` — e devolvem o mesmo contrato snake_case do HTTP (`recorded`, `updated_at`) com erros estáveis (`media_not_found`, `invalid_position`, `study_unavailable`). A SPA ativa Study nos dois transportes por `invoke`, sem `fetch`, e sincroniza posição real da reprodução local; autenticação e janelas reais continuam pendentes
+- [x] Fase 4 — `crates/desktop` com Tauri 2, offline e sem portas de rede; janela real, IPC de cursos, catálogo e estudo, importação/remoção explícitas, rescan e protocolo local de mídia. O desktop não tem autenticação por decisão de arquitetura. A distribuição Linux/Flatpak e sua validação real permanecem no backlog.
+  - [x] Fase 4 (fundação) — crate Tauri 2 no workspace, SPA embutida, capability deny-by-default, CSP explícita e janela `main` em `crates/desktop/tauri.conf.json`
+  - [x] Fase 4 (IPC e biblioteca) — catálogo, seleção nativa, persistência atômica, importação/remoção e rescan explícito pelo núcleo compartilhado
+  - [x] Fase 4 (mídia local) — protocolo por `media_id` opaco, `GET`/`HEAD`, faixas limitadas (`200`/`206`/`416`), allowlist e revalidação pelo núcleo; WebView2 usa o host local mapeado pelo runtime
+  - [x] Fase 4 (Study desktop) — IPC reutiliza `learnvault-core::study`; o dono local é resolvido no Rust e o webview não envia `owner_id`
 - [x] Fase 5 — distribuição por plataforma e remoção do serviço Go — executada em 2026-10-17 (PR #206), consolidando o Rust como backend único e eliminando `services/go`
 
 ## Histórico — implementação de referência em Go (removida)
 
 Esta seção documenta o escopo original atendido pelo backend Go, mantido durante a transição
 como referência funcional e integralmente substituído pelo ecossistema Rust:
+
+O serviço e os arquivos de runtime Go foram removidos na PR #206. O suporte restante é um
+importador Rust explícito para bancos SQLite legados e documentação histórica; o repositório não
+contém backend Go executável.
 
 - [x] Serviço Go com SPA SvelteKit embutida (substituído por `crates/server` e `apps/web`)
 - [x] Bootstrap do administrador e sessões seguras (substituído por Argon2id e sessões Axum em `crates/server`)
@@ -103,7 +102,8 @@ pasta é um curso, registrado com identidade estável, e a interface não conhec
 
 ## Distribuição — portabilidade primeiro
 
-A matriz aprovada está no [ADR 0001](../architecture/adr/0001-reescrita-em-rust.md).
+A matriz aprovada está no [ADR 0001](../architecture/adr/0001-reescrita-em-rust.md). Esta frente
+de distribuição é separada da migração do stack; os itens sem marca permanecem pendentes.
 
 - [ ] Manter o núcleo compilável sem Docker ou Podman
 - [x] Publicar instalador Windows `.exe` via NSIS (por usuário, pt-BR/en, não assinado)
@@ -111,7 +111,7 @@ A matriz aprovada está no [ADR 0001](../architecture/adr/0001-reescrita-em-rust
   oficial `xdg-portal` no Linux e o manifesto não concede filesystem amplo; ainda faltam build e
   smoke test reais no sandbox Flatpak, inclusive validação do acesso persistente ao diretório
   escolhido
-- [ ] Publicar imagem OCI e binário nativo para instalação self-hosted
+- [ ] Publicar imagem OCI e binário nativo para instalação self-hosted (Compose OCI permanece opt-in local; não é artefato publicado)
 - [ ] Assinar artefatos desktop quando houver credenciais de plataforma
 - [x] Gerar `SHA256SUMS` para cada release
 - [ ] Manter Docker Compose e Podman rootless/Quadlet como adaptadores opcionais de servidor

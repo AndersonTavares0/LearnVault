@@ -123,17 +123,14 @@ recuperação sob falha. Ele também não comprova migração de dados reais de 
 Qualquer cutover real exige uma janela de manutenção planejada com quiescência do escritor,
 backup verificado e ensaio em uma cópia dos volumes reais antes de promover o Rust.
 
-## Registro da remoção do serviço Go
+## Registro histórico da remoção do serviço Go
 
 ### Autoridade e propósito
 
-Este foi o gate terminal da Fase 5. A remoção do serviço Go foi concluída na PR #206 em
-2026-10-17, preservando no histórico a possibilidade de retomar a implementação anterior enquanto a reescrita não
-estava concluída (`docs/architecture/adr/0001-reescrita-em-rust.md:54`,
-`docs/architecture/adr/0001-reescrita-em-rust.md:109`). O roadmap registra essa entrega como
-“Fase 5 — distribuição por plataforma e remoção do serviço Go” (`docs/product/roadmap.md:26`).
-Este documento consolida a evidência necessária; não substitui a revisão do pull request nem a
-configuração de proteção da branch.
+O serviço Go e seu workflow de release foram removidos na PR #206, em 2026-10-17. Este registro
+preserva as evidências e os limites conhecidos na época da remoção. A migração de código está
+concluída; os ensaios operacionais que não foram executados continuam pendentes, sem bloquear esse
+marco. O roadmap atual mantém distribuição e validação de pacotes como trabalho separado.
 
 ### Tabela de gates
 
@@ -142,7 +139,7 @@ configuração de proteção da branch.
 | G1 identidade de versão do servidor Rust | Um run de `rust-server-rc.yml` demonstra que o binário reporta a versão injetada. | Injetar a versão no run, executar o smoke test e conservar o artefato e sua saída de `--version`. O binário prefere `LEARNVAULT_BUILD_VERSION` e cai para `CARGO_PKG_VERSION` (`crates/server/src/lib.rs:42`); o dispatch `gh workflow run rust-server-rc.yml --ref main -f ref=main -f version=<v>` falha fechado se a versão vier vazia. | agente prepara o workflow e a evidência; operador confere o artefato | **VERDE** — run 38993897882 sobre `d499881` com `0.4.0-rc.1`: smoke aprovado (`--version` = `learnvault-server 0.4.0-rc.1`, healthz com `"version":"0.4.0-rc.1"` e `no-store`) e artefato verificado (`learnvault-server-linux-x86_64.tar.gz`, SHA-256 `6afef8e010c9c2feae5fff3096699a1ff9c8b89deecdc102a435961dfd7802aa`) |
 | G2 artefato Rust publicado e em soak | Artefato Rust publicado no canal suportado e relatório de soak concluído. | Criar o caminho de publicação e executar o soak contra o artefato. O caminho existe em `.github/workflows/rust-server-rc-publish.yml` como draft prerelease `rust-rc-*`, não assinado; o soak ainda não foi executado nem aceito. | agente implementa o caminho; operador executa e aceita o soak | **VERMELHO** — o soak ainda não foi executado nem aceito |
 | G3 container/Compose Rust suportado ou explicitamente opt-in | Decisão publicada sobre suporte: caminho Rust validado ou opt-in explícito, com instruções e limites. | Validar o Containerfile/Compose Rust em uma instalação suportada e registrar o resultado, ou documentar o opt-in sem alegar suporte geral. | agente documenta e valida; operador executa o cenário | **VERDE** — opt-in explícito publicado em 2026-10-17 na seção "Container Rust no Compose (opt-in explícito)" de `docs/operations/distribution.md`, com instruções, contrato aplicado e limites declarados, sem alegar suporte geral; evidências executadas: `docker compose --env-file deploy/compose/.env.example -f deploy/compose/compose.yaml config` (2026-10-17) renderiza o contrato com `/library` somente leitura, e o job `Container build (Rust)` da CI está verde na run 39002977974 sobre a `main`, construindo o mesmo `deploy/container/Containerfile`, rodando `scripts/verify-rust-oci.sh` e aplicando Trivy HIGH/CRITICAL; o cenário em servidor real continua pendente do operador |
-| G4 required checks sem Go | Proteção de branch exige os checks Rust, desktop e container Rust pertinentes e não exige `Go tests and vet`; `Container build (Rust)` não depende da imagem Go, e nenhum dos dois checks acoplados ao Go (`Go tests and vet` e `Container build`) pode continuar required. | O CI prepara `Container build (Rust)`, que constrói/valida `deploy/container/Containerfile` e aplica o scan Trivy HIGH/CRITICAL sem depender de Go. Sequência executada em 2026-10-17: a branch protection da `main` foi atualizada via GitHub API exigindo exclusivamente `SPA checks`, `Rust tests and lints`, `Desktop crate compile and guards` e `Container build (Rust)`, removendo `Go tests and vet` e `Container build`. | agente prepara o workflow; mantenedor/API altera a configuração de branch protection | **VERDE** — checks obrigatórios atualizados na branch `main`: `SPA checks`, `Rust tests and lints`, `Desktop crate compile and guards`, `Container build (Rust)`. `Go tests and vet` e `Container build` removidos de required checks. |
+| G4 required checks sem Go | Proteção de branch exige os checks do stack Rust e não exige checks acoplados ao Go. | O CI prepara `Container build (Rust)`, que constrói/valida `deploy/container/Containerfile` e aplica o scan Trivy HIGH/CRITICAL sem depender de Go. A proteção foi atualizada em 2026-10-17 para remover `Go tests and vet` e o antigo `Container build`. | agente prepara o workflow; mantenedor/API altera a configuração de branch protection | **VERDE** — a branch `main` exige os quatro checks da época; o `CI gate` foi acrescentado depois, preservando os quatro originais. A configuração atual exige `SPA checks`, `Rust tests and lints`, `Desktop crate compile and guards`, `Container build (Rust)` e `CI gate`. |
 | G5 ensaio aceito em volumes reais pareados | Relatório de ensaio com uma cópia dos volumes reais, quiescência, checksum, backup e saída Rust distintos, e aceite operacional. | Executar o procedimento da seção [Gate de cutover do Compose self-hosted](#gate-de-cutover-do-compose-self-hosted) em volumes reais pareados. `scripts/verify-go-to-rust-cutover.sh` é fixture-only e não vale como evidência de volume real. | operador executa; agente conserva o relatório | **VERMELHO** — não comprovado |
 | G6 aceite do MVP desktop | Aceite explícito do MVP desktop conforme os requisitos da Fase 4 e da distribuição aprovada. | Executar os fluxos desktop e os checks de distribuição aplicáveis, registrar falhas e aceite. | operador aceita após evidência; agente fornece os artefatos | **NÃO COMPROVADO** |
 | G7 rollback por volumes pareados com RPO explícito | Ensaio de rollback que preserve o volume Go, descarte o volume Rust e declare o RPO. | Seguir o procedimento desta página e `.agents/policies/data-safety.md`, incluindo backup verificado antes da promoção e retorno somente ao volume Go. | operador executa e aceita; agente documenta | **NÃO COMPROVADO** — o procedimento está documentado, mas não foi executado como evidência |
@@ -158,9 +155,9 @@ Go" e não fecharia o G4.
 
 Sequência aprovada em 2026-10-17 (issue #164) e executada na PR #206: o mantenedor promoveu
 `Rust tests and lints`, `Desktop crate compile and guards` e `Container build (Rust)` a required e
-removeu `Go tests and vet` e `Container build`. Atualmente, os quatro checks protegidos são
-`SPA checks`, `Rust tests and lints`, `Desktop crate compile and guards` e `Container build (Rust)`,
-e o release suportado publica os tarballs Linux Rust.
+removeu `Go tests and vet` e `Container build`. Na época, quatro checks protegiam a branch; o
+`CI gate` passou a ser o quinto check em 2026-10-19. A lista atual está em
+[`docs/governance/overview.md`](../governance/overview.md).
 
 Nunca exclua um job antes de remover o check correspondente da proteção: um required check cujo job
 deixou de existir nunca reporta, o GitHub marca "Expected — Waiting for status to be reported" e
@@ -189,7 +186,7 @@ O contrato verificado diretamente no código é:
 - Importer: `migrate-go` exige `--input`, `--output`, `--backup` e `--library-id` (`crates/server/src/config.rs:204-251`), coberto por `parses_migrate_go_without_server_environment`, `migrate_go_requires_all_explicit_options` e `migrate_go_rejects_duplicate_and_unknown_options` (`crates/server/src/config.rs:409-490`). O fluxo backup-first e a importação são cobertos por `imports_users_media_sessions_progress_and_removals_after_backup` e `backup_includes_uncheckpointed_wal_data` (`crates/core/tests/legacy_import.rs:60-166`); recusas antes do backup por `rejects_schema_other_than_go_v8_before_backup`.
 - Credenciais/Argon2id: `hash_password` usa Argon2id PHC compatível (`crates/server/src/auth.rs:38-65`), coberto por `password_hash_uses_the_legacy_compatible_argon2id_parameters` e `password_verification_is_boolean_and_does_not_leak_hash_details` (`crates/server/src/auth.rs:477-503`); o contrato HTTP é exercitado por `login_me_and_logout_use_an_expiring_secure_cookie`, `invalid_credentials_have_a_uniform_unauthorized_response` e `credentials_change_is_transactional_and_invalidates_old_sessions` (`crates/server/tests/auth_http.rs:60-411`).
 
-Permanece **NÃO provado**: nenhum banco Go real foi usado (somente fixtures sintéticas temporárias), não houve aceite operacional por operador nem execução em produção. A remoção do runtime Go foi concluída na Fase 5/PR #206. O resultado não altera o G2, que continua **VERMELHO**.
+Permanece **NÃO provado**: nenhum banco Go real foi usado (somente fixtures sintéticas temporárias), não houve aceite operacional por operador nem execução em produção. A remoção do runtime Go foi concluída na Fase 5/PR #206. O G2 continua **VERMELHO** até que o operador execute e aceite o soak descrito abaixo; isso é uma validação operacional de artefato, não uma etapa pendente da migração do código.
 
 
 ### Runbook de soak do artefato Rust (G2)
@@ -327,9 +324,10 @@ aceitar este soak; este kit não fecha o G2 por si só.
 
 ### Regra de decisão
 
-O pull request dedicado de remoção só pode ser aberto quando **todos os gates G1–G8 estiverem
-verdes**, com evidência executada e preservada. Um gate documentado, planejado ou meramente
-executável não é verde.
+Na época, a regra de governança previa que o pull request de remoção aguardasse todos os gates
+G1–G8 verdes. A PR #206 removeu o serviço com G2, G5, G6 e G7 ainda sem comprovação operacional;
+esse registro corrige a expectativa histórica. A remoção do código foi concluída, mas esses ensaios
+não devem ser descritos como executados ou aceitos.
 
 ### Pareamento de rollback e RPO
 
@@ -340,43 +338,23 @@ escritas posteriores no Rust são perdidas. A operação deve seguir também `.a
 
 ### O que permanece não comprovado
 
-Permanece não comprovada a publicação e o soak do artefato Rust, a decisão de suporte do
-container/Compose, a remoção dos required checks Go, o ensaio em volumes reais, o aceite do MVP
-desktop, o rollback executado com RPO observado e a verificação de aceite do contrato API/DB.
-O ensaio de fixture sintética descrito acima não reduz essas lacunas.
+Permanecem sem comprovação operacional: G2, o soak de um artefato RC pelo operador; G5, o ensaio
+em cópias de volumes reais; G6, o aceite de distribuição do MVP desktop; e G7, o rollback com RPO
+observado. G3 (Compose explicitamente opt-in), G4 (checks sem Go) e G8 (contratos API/DB) foram
+registrados como concluídos. A fixture sintética não substitui ensaios com dados reais. Essas
+pendências não significam que o runtime Go ainda exista nem reabrem a migração de código.
 
-### O que não pode ser removido junto com o Go
+### Compatibilidade legada preservada no Rust
 
-Os seguintes componentes permanecem até que a importação, a recusa segura e a compatibilidade
-tenham sido substituídas e aceitas:
+A remoção do serviço não removeu a importação explícita de bancos Go v8 nem a recusa de abrir esses
+bancos como se fossem bancos Rust. Esses componentes são compatibilidade de dados, não runtime Go:
 
 - `crates/core/src/legacy_import.rs`;
 - a detecção/recusa de banco Go em `crates/core/src/db.rs`;
 - os erros em `crates/core/src/error.rs`;
 - o comando `learnvault-server migrate-go` (`crates/server/src/config.rs`, `crates/server/src/main.rs`);
 - a compatibilidade de credenciais (`crates/server/src/auth.rs`);
-- os testes/fixtures v8 (`crates/core/tests/legacy_import.rs`, `crates/core/tests/db.rs`).
-
-### Inventário do que a remoção vai exigir
-
-Este é inventário de planejamento apenas; nenhum item abaixo muda neste gate.
-
-- **CI e imagem:** remover o job Go, o staging da SPA e o `needs` do container em
-  `.github/workflows/ci.yml:16-41,79-91`; substituir os assets Go e os asserts exatos de release
-  (build Linux Go e job de publicação) em `.github/workflows/release.yml:63-79,132-184`;
-  reescrever `deploy/container/Containerfile:9-20`; revisar `.dockerignore:15-16` e
-  `.gitignore:21`.
-- **Automação e governança:** revisar o ecossistema `gomod` em `.github/dependabot.yml:22-36`,
-  `area:go` em `.github/labeler.yml:38-41`, as exceções Go em
-  `.github/workflows/dependabot-automerge.yml:89-90`, e `release-type: "go"` em
-  `.github/release-please/release-please-config.json:2-6`.
-- **Políticas e orientação:** revisar `.github/CONTRIBUTING.md:41-45`,
-  `.github/pull_request_template.md:25-28`, `.agents/repository.md:16-19`,
-  `.agents/policies/governance.md:16-18`, `.agents/playbooks/testing.md:5-6`,
-  `README.md:9,14,27,55-58,96` e `docs/**`.
-- **Scripts e contrato da SPA:** revisar `scripts/verify.mjs:16-17`,
-  `scripts/verify-go-to-rust-cutover.*`, `apps/web/src/transport.ts:58-92` e seu teste
-  `apps/web/src/transport.test.ts:4-45`.
+- os testes de importação e recusa (`crates/core/tests/legacy_import.rs`, `crates/core/tests/db.rs`).
 
 ### Armadilhas
 

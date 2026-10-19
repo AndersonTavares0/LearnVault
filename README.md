@@ -19,7 +19,8 @@ identidade de mídia e estado de estudo) e `crates/server` (Axum, autenticação
 com `Range`, registro de cursos e API de estudo) são a stack backend oficial, junto da SPA Svelte 5 + Vite com dois
 builds. O desktop Tauri (`crates/desktop`) possui catálogo, importação e remoção de
 cursos pelo seletor nativo, rescan explícito e reprodução local de materiais, vídeo e áudio, além
-da entrega de legendas por protocolo customizado com faixas parciais. O serviço legado em Go foi descontinuado.
+da entrega de legendas por protocolo customizado com faixas parciais. O serviço Go foi removido na
+PR #206. O importador de bancos SQLite Go legados permanece no servidor Rust.
 
 ## Comece aqui
 
@@ -68,7 +69,7 @@ testdata/         Fixtures sintéticas usadas pelos testes
 ```
 
 A raiz fica limitada a manifestos, configuração de ferramentas, políticas do projeto e pontos
-de entrada exigidos pelas toolchains Rust e Go, pelo pnpm e Vite, pelo GitHub ou pela
+de entrada exigidos pelas toolchains Rust e Node/pnpm/Vite, pelo GitHub ou pela
 documentação. Arquivos de comunidade como `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` e
 `SECURITY.md` ficam em `.github/`. Saída gerada e dados de runtime são ignorados.
 
@@ -77,9 +78,9 @@ documentação. Arquivos de comunidade como `CONTRIBUTING.md`, `CODE_OF_CONDUCT.
 - Workspace Rust com um núcleo de domínio compartilhado em `crates/core` e um servidor Axum
   em `crates/server`.
 - O servidor Rust expõe autenticação, sessões, catálogo agregado de cursos, mídia com `Range` e
-  Study; o desktop Tauri (`crates/desktop`, Fase 4) já tem fundação, importação e remoção de
-  cursos pelo seletor nativo, catálogo, rescan explícito e Study por IPC com dono local fixo, mas
-  ainda não é um produto desktop completo.
+  Study. O desktop Tauri é offline, sem autenticação nem listener de rede, e implementa janela,
+  catálogo, importação/remoção, rescan e Study por IPC com dono local fixo. A distribuição Linux
+  desktop/Flatpak e sua validação em sandbox continuam pendentes.
 - SQLite no núcleo, com cadeia única de migrações.
 - A SPA em Svelte 5 + TypeScript + Vite tem roteamento por hash e dois builds que escolhem o
   transporte em tempo de compilação.
@@ -107,7 +108,7 @@ Detalhes de contêiner e Quadlet estão em [`deploy/`](deploy/) e no
 O Release Please cuida do cálculo de versão, das PRs de release, do
 [`CHANGELOG.md`](docs/releases/CHANGELOG.md), das tags e das notas do GitHub Release. Use
 Conventional Commits como `feat:`, `fix:`, `docs:` e `chore:`. Releases publicados recebem
-automaticamente binários Linux versionados e `SHA256SUMS` a partir da implementação
+automaticamente tarballs Linux versionados do servidor e `SHA256SUMS` a partir da implementação
 oficial em Rust.
 
 O instalador Windows via NSIS já é construído e publicado automaticamente: instala por usuário,
@@ -116,7 +117,8 @@ sem exigir administrador, com textos em português e inglês. O
 local e os avisos do SmartScreen, já que o binário ainda não é assinado. O Flatpak permanece
 bloqueado e fora dos releases: a seleção Linux já usa o backend oficial `xdg-portal`, mas ainda
 faltam o build e o smoke test reais no sandbox, incluindo acesso persistente e reprodução de
-mídia. A publicação do servidor ainda pertence à Fase 5 da reescrita.
+mídia. Os tarballs Linux do servidor já são publicados; Flatpak e publicação OCI/binário self-hosted
+continuam pendentes no roadmap.
 
 Leia o [processo de release](docs/releases/process.md) antes de alterar arquivos de release.
 

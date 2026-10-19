@@ -23,14 +23,10 @@ Proteja-os com permissões do sistema operacional; o servidor não valida o modo
 publique valores reais em documentação, compose ou logs. Use a fixture sintética em `testdata/`. Nunca aponte a
 automação para dados externos; a biblioteca deve permanecer somente leitura.
 
-O aplicativo desktop Tauri (`crates/desktop`, Fase 4) ainda não está concluído; a fatia atual
-inclui a fundação, IPC de cursos/catálogo, importação e remoção de cursos pelo seletor nativo,
-rescan explícito de todos os cursos e entrega de materiais, vídeo, áudio e arquivos de legenda pelo
-protocolo de mídia, com faixas limitadas e respostas explicitamente limitadas. O player desktop
-renderiza VTT; SRT, ASS e SSA são baixáveis,
-e o build HTTP pode converter SRT sob demanda. Autenticação, janelas reais e a distribuição por plataforma (Fase 5)
-também não estão concluídas. O atalho
-`pnpm dev:tauri` cobre somente o que já foi implementado; não implica runtime ou distribuição
-completos.
+O aplicativo desktop Tauri (`crates/desktop`) é um cliente offline com janela real, IPC de cursos,
+catálogo, rescan e estudo, além de reprodução local por protocolo de mídia. Ele não tem autenticação
+nem abre portas de rede. `pnpm dev:tauri` inicia o app para desenvolvimento; não valida pacotes de
+release. O instalador Windows NSIS está disponível. Flatpak e distribuição Linux desktop continuam
+pendentes até validar o app em sandbox, incluindo acesso persistente à biblioteca e reprodução.
 
 Consulte o README do repositório para configuração e deploy opcional com Compose/Quadlet.

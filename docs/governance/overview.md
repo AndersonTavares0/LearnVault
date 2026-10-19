@@ -61,9 +61,11 @@ Arquivos de comunidade (`CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`) 
 fica em `.github/release-please/`. Os perfis específicos do OpenCode ficam em `.opencode/`.
 A raiz mantém apenas `AGENTS.md`, `README.md`, `LICENSE`, `.dockerignore`, `.gitignore`,
 `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, `package.json`, `pnpm-lock.yaml` e
-`pnpm-workspace.yaml`. O crate `desktop` (Tauri) pertence à Fase 4 e já existe, mas a fase
-permanece incompleta: mídia, autenticação e janelas reais ainda são gates. A distribuição por
-plataforma e a remoção do serviço Go foram concluídas na Fase 5 (PR #206).
+`pnpm-workspace.yaml`. O crate `desktop` (Tauri) implementa a Fase 4: janela real, IPC, biblioteca
+somente leitura e reprodução local, sem autenticação nem listener de rede por decisão de
+arquitetura. O serviço Go foi removido na Fase 5 (PR #206). A distribuição Linux desktop/Flatpak
+continua pendente de validação; o estado dos pacotes está em
+[`docs/operations/distribution.md`](../operations/distribution.md).
 
 Saída gerada (`crates/server/web/build`, `crates/desktop/frontend-dist`, `target`, `node_modules`
 e dados/cache locais)
