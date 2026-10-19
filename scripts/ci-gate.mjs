@@ -36,8 +36,12 @@ export function classifyDocsReleaseOnly(paths) {
   );
 }
 
-export function evaluateCiGate({ docsReleaseOnly, results } = {}) {
+export function evaluateCiGate({ docsReleaseOnly, results, workflowCancelled = false } = {}) {
   const errors = [];
+
+  if (workflowCancelled) {
+    errors.push('Workflow was cancelled');
+  }
 
   if (typeof docsReleaseOnly !== 'boolean') {
     errors.push('docsReleaseOnly must be a Boolean');
@@ -73,7 +77,7 @@ const githubNeedsJobs = [
   'rust-audit',
 ];
 
-export function evaluateCiGateFromNeeds(needs) {
+export function evaluateCiGateFromNeeds(needs, { workflowCancelled = false } = {}) {
   if (!needs || typeof needs !== 'object' || Array.isArray(needs)) {
     return { passed: false, errors: ['CI gate received invalid needs data'] };
   }
@@ -92,7 +96,8 @@ export function evaluateCiGateFromNeeds(needs) {
     return { passed: false, errors: ['change-scope docs_release_only output must be true or false'] };
   }
 
-  return evaluateCiGate({
+    return evaluateCiGate({
+      workflowCancelled,
     docsReleaseOnly: docsReleaseOutput === 'true',
     results: {
       changes: needs['change-scope']?.result,
