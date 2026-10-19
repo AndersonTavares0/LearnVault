@@ -11,7 +11,7 @@ use rusqlite_migration::{M, Migrations};
 /// A recusa de um schema mais novo não depende desta constante — ela vem de
 /// `SchemaVersion::Outside` —, mas ela deve acompanhar a cadeia de migrações porque
 /// aparece na mensagem de diagnóstico de [`crate::Error::SchemaTooNew`].
-pub(crate) const SCHEMA_VERSION: usize = 5;
+pub(crate) const SCHEMA_VERSION: usize = 6;
 
 /// Versão 1: bibliotecas, mídia, varreduras e estado de estudo.
 ///
@@ -152,7 +152,38 @@ CREATE TABLE study_note (
 CREATE INDEX study_note_owner_media_idx ON study_note (owner_id, media_id, created_at, note_id);
 ";
 
-const MIGRATIONS_SLICE: &[M<'static>] = &[M::up(V1), M::up(V2), M::up(V3), M::up(V4), M::up(V5)];
+/// Versão 6: o limite do texto das notas passa a contar caracteres, não bytes.
+///
+/// O banco recusava o texto pela contagem em bytes UTF-8, que não é a unidade que a
+/// interface mostra ao usuário: uma nota acentuada dentro do limite visível era
+/// recusada na gravação. O SQLite não altera um `CHECK` no lugar, então a tabela é
+/// reconstruída preservando as notas. `length(text)` sobre `TEXT` conta caracteres —
+/// a mesma unidade de `chars().count()` no núcleo.
+const V6: &str = "
+CREATE TABLE study_note_v6 (
+    note_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_id TEXT NOT NULL,
+    media_id TEXT NOT NULL REFERENCES media (media_id) ON DELETE NO ACTION,
+    text TEXT NOT NULL CHECK (length(trim(text)) > 0 AND length(text) <= 20000),
+    position_seconds INTEGER CHECK (position_seconds IS NULL OR position_seconds >= 0),
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+INSERT INTO study_note_v6 (note_id, owner_id, media_id, text, position_seconds, created_at, updated_at)
+    SELECT note_id, owner_id, media_id, text, position_seconds, created_at, updated_at FROM study_note;
+DROP TABLE study_note;
+ALTER TABLE study_note_v6 RENAME TO study_note;
+CREATE INDEX study_note_owner_media_idx ON study_note (owner_id, media_id, created_at, note_id);
+";
+
+const MIGRATIONS_SLICE: &[M<'static>] = &[
+    M::up(V1),
+    M::up(V2),
+    M::up(V3),
+    M::up(V4),
+    M::up(V5),
+    M::up(V6),
+];
 
 /// Cadeia de migrações aplicada por [`crate::db::Database`].
 pub(crate) const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATIONS_SLICE);

@@ -51,8 +51,8 @@ pub use media::{
     open_media_reference,
 };
 pub use notes::{
-    MAX_NOTE_TEXT_BYTES, MAX_NOTES_PER_MEDIA, StudyNote, create_note, delete_note, list_notes,
-    update_note,
+    MAX_NOTE_TEXT_CHARS, MAX_NOTES_PER_MEDIA, MAX_NOTES_PER_OWNER, StudyNote, create_note,
+    delete_note, list_all_notes, list_notes, update_note,
 };
 pub use ordering::{CatalogOrder, apply_order, order_siblings, sibling_paths, validate_siblings};
 pub use paths::KeyMode;

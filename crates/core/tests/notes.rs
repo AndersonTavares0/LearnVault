@@ -1,7 +1,7 @@
 use learnvault_core::paths::relative_path_key;
 use learnvault_core::{
-    Database, Error, KeyMode, MAX_NOTES_PER_MEDIA, create_note, delete_note, list_notes,
-    update_note,
+    Database, Error, KeyMode, MAX_NOTE_TEXT_CHARS, MAX_NOTES_PER_MEDIA, MAX_NOTES_PER_OWNER,
+    create_note, delete_note, list_all_notes, list_notes, update_note,
 };
 use rusqlite::params;
 
@@ -46,9 +46,9 @@ fn notes_support_owner_scoped_crud_validation_and_persistence() {
         "a nota não existe"
     );
     assert!(create_note(&db, OWNER, "m1", "  ", None).is_err());
-    let boundary = create_note(&db, OWNER, "m1", &"x".repeat(20_000), None).unwrap();
+    let boundary = create_note(&db, OWNER, "m1", &"x".repeat(MAX_NOTE_TEXT_CHARS), None).unwrap();
     delete_note(&db, OWNER, boundary.note_id).unwrap();
-    assert!(create_note(&db, OWNER, "m1", &"x".repeat(20_001), None).is_err());
+    assert!(create_note(&db, OWNER, "m1", &"x".repeat(MAX_NOTE_TEXT_CHARS + 1), None).is_err());
     assert!(create_note(&db, OWNER, "m1", "negative", Some(-1)).is_err());
 
     let path = tempfile::NamedTempFile::new().unwrap();
@@ -232,4 +232,75 @@ fn notes_store_the_text_verbatim() {
         list_notes(&db, OWNER, "m1").unwrap()[0].text,
         "  texto com espaços  "
     );
+}
+
+#[test]
+fn notes_count_the_text_limit_in_characters_not_bytes() {
+    let db = database();
+
+    // 20.000 caracteres acentuados ocupam 40.000 bytes: com o limite em bytes a nota
+    // seria recusada antes de a interface mostrar que ainda cabe.
+    let acentos = "á".repeat(MAX_NOTE_TEXT_CHARS);
+    assert!(
+        acentos.len() > MAX_NOTE_TEXT_CHARS,
+        "o caso de teste precisa de bytes extras"
+    );
+    let created = create_note(&db, OWNER, "m1", &acentos, None).unwrap();
+    assert_eq!(created.text.chars().count(), MAX_NOTE_TEXT_CHARS);
+    assert!(
+        create_note(&db, OWNER, "m1", &"á".repeat(MAX_NOTE_TEXT_CHARS + 1), None).is_err(),
+        "um caractere acima do limite é recusado"
+    );
+}
+
+#[test]
+fn notes_list_every_note_of_the_owner_for_the_index() {
+    let db = database();
+    db.connection()
+        .execute(
+            "INSERT INTO media (media_id, library_id, relative_path, relative_path_key, size, mtime, availability) VALUES ('m2', 'lib', 'b.mp4', ?1, 1, 1, 'available')",
+            [relative_path_key("b.mp4", KeyMode::for_host()).unwrap()],
+        )
+        .unwrap();
+
+    let first = create_note(&db, OWNER, "m1", "primeira", Some(10)).unwrap();
+    let second = create_note(&db, OWNER, "m2", "segunda", None).unwrap();
+    let other = create_note(&db, OTHER, "m1", "de outro dono", None).unwrap();
+
+    let (notes, truncated) = list_all_notes(&db, OWNER).unwrap();
+    assert!(!truncated, "a listagem cabe no teto do dono");
+    let ids: Vec<i64> = notes.iter().map(|note| note.note_id).collect();
+    assert!(ids.contains(&first.note_id));
+    assert!(ids.contains(&second.note_id));
+    assert!(
+        !ids.contains(&other.note_id),
+        "a listagem global é do dono: a nota de outro dono não aparece"
+    );
+    // A ordem é da mais recente para a mais antiga.
+    assert_eq!(ids, vec![second.note_id, first.note_id]);
+}
+
+#[test]
+fn notes_report_when_the_global_list_is_truncated() {
+    let db = database();
+    {
+        let mut statement = db
+            .connection()
+            .prepare(
+                "INSERT INTO study_note (owner_id, media_id, text, position_seconds, created_at, updated_at)
+                 VALUES (?1, 'm1', 'nota', NULL, 1, 1)",
+            )
+            .unwrap();
+        for _ in 0..MAX_NOTES_PER_OWNER + 1 {
+            statement.execute(params![OWNER]).unwrap();
+        }
+    }
+
+    let (notes, truncated) = list_all_notes(&db, OWNER).unwrap();
+    assert_eq!(
+        notes.len(),
+        MAX_NOTES_PER_OWNER,
+        "a listagem respeita o teto do dono"
+    );
+    assert!(truncated, "a listagem avisa que truncou");
 }

@@ -1,25 +1,29 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_NOTE_TEXT_BYTES, noteTextBytes, noteTextTooLarge } from './studyNotes';
+import { MAX_NOTE_TEXT_CHARS, noteTextChars, noteTextTooLarge } from './studyNotes';
 
 describe('limite de texto da nota', () => {
-	it('mede o texto em bytes UTF-8, a unidade do servidor', () => {
-		expect(noteTextBytes('abc')).toBe(3);
-		// Acento ocupa dois bytes; emoji ocupa quatro.
-		expect(noteTextBytes('á')).toBe(2);
-		expect(noteTextBytes('😀')).toBe(4);
+	it('mede o texto em caracteres, a unidade do servidor', () => {
+		expect(noteTextChars('abc')).toBe(3);
+		// Acento e emoji ocupam um caractere cada, mesmo ocupando dois e quatro bytes.
+		expect(noteTextChars('á')).toBe(1);
+		expect(noteTextChars('😀')).toBe(1);
 	});
 
-	it('aceita o texto até o limite de bytes do servidor', () => {
-		expect(MAX_NOTE_TEXT_BYTES).toBe(20_000);
-		expect(noteTextTooLarge('a'.repeat(MAX_NOTE_TEXT_BYTES))).toBe(false);
-		expect(noteTextTooLarge('a'.repeat(MAX_NOTE_TEXT_BYTES + 1))).toBe(true);
+	it('aceita o texto até o limite de caracteres do servidor', () => {
+		expect(MAX_NOTE_TEXT_CHARS).toBe(20_000);
+		expect(noteTextTooLarge('a'.repeat(MAX_NOTE_TEXT_CHARS))).toBe(false);
+		expect(noteTextTooLarge('a'.repeat(MAX_NOTE_TEXT_CHARS + 1))).toBe(true);
 	});
 
-	it('rejeita antes do servidor o texto que só passaria pelo maxlength do navegador', () => {
-		// 10.001 caracteres acentuados: 10.001 unidades UTF-16 (aceitas pelo `maxlength`),
-		// mas 20.002 bytes — acima do limite do servidor.
-		const acentuado = 'á'.repeat(10_001);
-		expect(acentuado.length).toBeLessThan(MAX_NOTE_TEXT_BYTES);
-		expect(noteTextTooLarge(acentuado)).toBe(true);
+	it('aceita texto acentuado que em bytes passaria do limite antigo', () => {
+		// 20.000 caracteres acentuados são 40.000 bytes: o limite medido em bytes recusaria
+		// antes de o usuário chegar ao limite que a interface mostra.
+		const acentuado = 'á'.repeat(20_000);
+		expect(noteTextTooLarge(acentuado)).toBe(false);
+	});
+
+	it('rejeita antes do servidor o texto que passa do limite em caracteres', () => {
+		const excedido = 'á'.repeat(20_001);
+		expect(noteTextTooLarge(excedido)).toBe(true);
 	});
 });

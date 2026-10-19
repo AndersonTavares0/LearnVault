@@ -352,7 +352,7 @@ fn expected_checks(table: &str) -> &'static [&'static str] {
         "study_state" => &["completed in (0, 1)"],
         "user" => &["is_admin in (0, 1)", "must_change_credentials in (0, 1)"],
         "study_note" => &[
-            "length(trim(text)) > 0 and length(cast(text as blob)) <= 20000",
+            "length(trim(text)) > 0 and length(text) <= 20000",
             "position_seconds is null or position_seconds >= 0",
         ],
         _ => &[],

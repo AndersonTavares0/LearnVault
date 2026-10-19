@@ -4,14 +4,23 @@ use rusqlite::{OptionalExtension, params};
 
 use crate::{Database, Error, Result, db::now_unix_seconds};
 
-/// Tamanho máximo em bytes UTF-8 para o texto de uma nota.
-pub const MAX_NOTE_TEXT_BYTES: usize = 20_000;
+/// Tamanho máximo em caracteres para o texto de uma nota.
+///
+/// A unidade é o caractere, e não o byte UTF-8: é a mesma contagem que a interface
+/// mostra ao usuário e a que o banco valida com `length(text)`.
+pub const MAX_NOTE_TEXT_CHARS: usize = 20_000;
 
 /// Teto de notas por dono e mídia.
 ///
 /// A criação recusa passar do teto e a listagem traz `LIMIT`: assim a lista nunca
 /// trunca notas em silêncio, e a resposta não cresce sem limite.
 pub const MAX_NOTES_PER_MEDIA: usize = 500;
+
+/// Teto de notas por dono na listagem de todas as anotações.
+///
+/// A listagem global avisa quando truncou, para que a tela nunca esconda uma nota
+/// sem dizer isso.
+pub const MAX_NOTES_PER_OWNER: usize = 2_000;
 
 /// Nota pessoal vinculada a uma mídia.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -45,6 +54,29 @@ pub fn list_notes(db: &Database, owner_id: &str, media_id: &str) -> Result<Vec<S
             note_from_row,
         )?
         .collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+/// Lista todas as notas de um dono, das mais recentes para as mais antigas.
+///
+/// A listagem global tem teto próprio: quando truncou, o segundo valor devolvido é
+/// `true` e a interface avisa, em vez de esconder notas em silêncio.
+pub fn list_all_notes(db: &Database, owner_id: &str) -> Result<(Vec<StudyNote>, bool)> {
+    validate_owner(owner_id)?;
+    let mut statement = db.conn.prepare(
+        "SELECT note_id, media_id, text, position_seconds, created_at, updated_at
+         FROM study_note WHERE owner_id = ?1
+         ORDER BY updated_at DESC, note_id DESC
+         LIMIT ?2",
+    )?;
+    let mut notes = statement
+        .query_map(
+            params![owner_id, MAX_NOTES_PER_OWNER as i64 + 1],
+            note_from_row,
+        )?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let truncated = notes.len() > MAX_NOTES_PER_OWNER;
+    notes.truncate(MAX_NOTES_PER_OWNER);
+    Ok((notes, truncated))
 }
 
 /// Cria uma nota pessoal para o dono e mídia informados.
@@ -146,7 +178,7 @@ fn note_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StudyNote> {
 
 fn validate(owner_id: &str, text: &str, position_seconds: Option<i64>) -> Result<()> {
     validate_owner(owner_id)?;
-    if text.trim().is_empty() || text.len() > MAX_NOTE_TEXT_BYTES {
+    if text.trim().is_empty() || text.chars().count() > MAX_NOTE_TEXT_CHARS {
         return Err(Error::InvalidStudyNote);
     }
     if let Some(position) = position_seconds

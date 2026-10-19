@@ -252,7 +252,7 @@ pub enum Error {
         position_seconds: i64,
     },
 
-    /// O texto de uma nota é vazio ou excede o limite em bytes.
+    /// O texto de uma nota é vazio ou excede o limite em caracteres.
     #[error("texto de nota inválido")]
     InvalidStudyNote,
 

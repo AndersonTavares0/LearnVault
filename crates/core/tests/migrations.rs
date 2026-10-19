@@ -80,6 +80,7 @@ fn all_domain_tables_are_created() -> TestResult {
         "media_removal",
         "scan",
         "scan_inaccessible",
+        "study_note",
         "study_state",
         "user",
         "session",
@@ -481,5 +482,75 @@ fn media_removal_identity_is_the_pair_library_and_media() -> TestResult {
         "remoção repetida do mesmo par",
     );
     assert_eq!(count(&db, "media_removal"), 1);
+    Ok(())
+}
+
+/// A migração V6 troca o limite do texto das notas de bytes para caracteres.
+///
+/// O SQLite não altera `CHECK` no lugar: a tabela é reconstruída. A prova é que as
+/// notas existentes atravessam a migração e que o limite passa a contar caracteres.
+#[test]
+fn migrating_the_note_limit_to_characters_preserves_the_notes() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("learnvault.sqlite");
+
+    {
+        let db = Database::open(&path)?;
+        insert_library(&db, "lib", 1)?;
+        insert_media(&db, "m1", "lib", "a.mp4")?;
+        // O banco volta ao formato da V5 (limite em bytes) para exercitar a migração de
+        // verdade, e não só a criação de uma base que já nasce nova.
+        db.connection().execute_batch(
+            "DROP TABLE study_note;
+             CREATE TABLE study_note (
+                 note_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 owner_id TEXT NOT NULL,
+                 media_id TEXT NOT NULL REFERENCES media (media_id) ON DELETE NO ACTION,
+                 text TEXT NOT NULL CHECK (length(trim(text)) > 0 AND length(CAST(text AS BLOB)) <= 20000),
+                 position_seconds INTEGER CHECK (position_seconds IS NULL OR position_seconds >= 0),
+                 created_at INTEGER NOT NULL,
+                 updated_at INTEGER NOT NULL
+             );
+             PRAGMA user_version = 5;",
+        )?;
+        db.connection().execute(
+            "INSERT INTO study_note (owner_id, media_id, text, position_seconds, created_at, updated_at)
+             VALUES ('owner', 'm1', 'nota antiga', 12, 1, 1)",
+            [],
+        )?;
+    }
+
+    let db = Database::open(&path)?;
+    assert_eq!(db.schema_version()?, 6);
+    let (text, position, created_at): (String, Option<i64>, i64) = db.connection().query_row(
+        "SELECT text, position_seconds, created_at FROM study_note WHERE owner_id = 'owner'",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )?;
+    assert_eq!(text, "nota antiga");
+    assert_eq!(position, Some(12));
+    assert_eq!(created_at, 1);
+
+    // O limite novo conta caracteres: 20.000 acentos ocupam 40.000 bytes e cabem.
+    let acentos = "á".repeat(20_000);
+    assert!(acentos.len() > 20_000, "o caso precisa de bytes extras");
+    assert!(
+        db.connection()
+            .execute(
+                "INSERT INTO study_note (owner_id, media_id, text, position_seconds, created_at, updated_at)
+                 VALUES ('owner', 'm1', ?1, NULL, 2, 2)",
+                rusqlite::params![acentos],
+            )
+            .is_ok(),
+        "o limite em caracteres aceita o texto acentuado"
+    );
+    assert_constraint_violation(
+        db.connection().execute(
+            "INSERT INTO study_note (owner_id, media_id, text, position_seconds, created_at, updated_at)
+             VALUES ('owner', 'm1', ?1, NULL, 3, 3)",
+            rusqlite::params!["á".repeat(20_001)],
+        ),
+        "20.001 caracteres excedem o limite em caracteres",
+    );
     Ok(())
 }

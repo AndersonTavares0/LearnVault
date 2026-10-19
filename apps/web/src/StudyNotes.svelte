@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { formatDuration } from './player';
-	import { MAX_NOTE_TEXT_BYTES, noteTextBytes, noteTextTooLarge } from './studyNotes';
+	import { MAX_NOTE_TEXT_CHARS, noteTextChars, noteTextTooLarge } from './studyNotes';
 	import { transport, type StudyNote } from './transport';
 
 	let { mediaId, currentTime, onSeek }: { mediaId: string; currentTime: number; onSeek: (seconds: number) => void } = $props();
@@ -14,7 +14,7 @@
 	let editText = $state('');
 	let editPosition = $state(false);
 	let editRemovePosition = $state(false);
-	// O servidor valida o texto em bytes UTF-8; a interface mede o mesmo limite.
+	// O servidor valida o texto em caracteres; a interface mede o mesmo limite.
 	let overLimit = $derived(noteTextTooLarge(text));
 	let editOverLimit = $derived(noteTextTooLarge(editText));
 
@@ -68,9 +68,12 @@
 	<h2 id="notes-heading">Suas anotações</h2>
 	<form onsubmit={createNote}>
 		<label for="note-text">Nova anotação</label>
-		<textarea id="note-text" bind:value={text} maxlength="20000" required rows="3" placeholder="Escreva uma observação sobre esta aula…"></textarea>
-		<p class="hint">Texto simples, até {MAX_NOTE_TEXT_BYTES.toLocaleString('pt-BR')} bytes ({noteTextBytes(text)} agora).</p>
-		{#if overLimit}<p class="error" role="alert">O texto passou de {MAX_NOTE_TEXT_BYTES.toLocaleString('pt-BR')} bytes. Encurte a anotação antes de salvar.</p>{/if}
+		<!-- O `maxlength` do navegador conta unidades UTF-16 e um caractere fora do plano
+		     básico ocupa duas: o teto do atributo é o dobro para nunca barrar texto que o
+		     limite em caracteres aceita. A validação fina é a da interface e a do servidor. -->
+		<textarea id="note-text" bind:value={text} maxlength={MAX_NOTE_TEXT_CHARS * 2} required rows="3" placeholder="Escreva uma observação sobre esta aula…"></textarea>
+		<p class="hint">Texto simples, até {MAX_NOTE_TEXT_CHARS.toLocaleString('pt-BR')} caracteres ({noteTextChars(text)} agora).</p>
+		{#if overLimit}<p class="error" role="alert">O texto passou de {MAX_NOTE_TEXT_CHARS.toLocaleString('pt-BR')} caracteres. Encurte a anotação antes de salvar.</p>{/if}
 		<label class="check"><input type="checkbox" bind:checked={capturePosition} /> Anexar posição atual ({formatDuration(Math.floor(currentTime))})</label>
 		<button type="submit" disabled={saving || !text.trim() || overLimit}>{saving ? 'Salvando…' : 'Adicionar anotação'}</button>
 	</form>
@@ -84,9 +87,9 @@
 				<li>
 					{#if editingId === note.noteId}
 						<label for="edit-note-{note.noteId}">Editar anotação</label>
-						<textarea id="edit-note-{note.noteId}" bind:value={editText} maxlength="20000" required rows="3"></textarea>
-						<p class="hint">Até {MAX_NOTE_TEXT_BYTES.toLocaleString('pt-BR')} bytes ({noteTextBytes(editText)} agora).</p>
-						{#if editOverLimit}<p class="error" role="alert">O texto passou de {MAX_NOTE_TEXT_BYTES.toLocaleString('pt-BR')} bytes. Encurte a anotação antes de salvar.</p>{/if}
+						<textarea id="edit-note-{note.noteId}" bind:value={editText} maxlength={MAX_NOTE_TEXT_CHARS * 2} required rows="3"></textarea>
+						<p class="hint">Até {MAX_NOTE_TEXT_CHARS.toLocaleString('pt-BR')} caracteres ({noteTextChars(editText)} agora).</p>
+						{#if editOverLimit}<p class="error" role="alert">O texto passou de {MAX_NOTE_TEXT_CHARS.toLocaleString('pt-BR')} caracteres. Encurte a anotação antes de salvar.</p>{/if}
 						<label class="check"><input type="checkbox" bind:checked={editPosition} /> Atualizar timestamp para posição atual ({formatDuration(Math.floor(currentTime))})</label>
 						{#if note.positionSeconds !== null}<label class="check"><input type="checkbox" bind:checked={editRemovePosition} /> Remover timestamp existente</label>{/if}
 						<button type="button" onclick={() => saveEdit(note)} disabled={saving || !editText.trim() || editOverLimit}>Salvar edição</button>
