@@ -55,7 +55,10 @@ Antes de enviar uma mudança, rode:
 pnpm verify
 ```
 
-Veja o [guia de contribuição](.github/CONTRIBUTING.md) para os checks, convenções de PR, segurança dos dados e configuração completa.
+Para a instalação das ferramentas e o primeiro acesso passo a passo, consulte
+[Primeiros passos](docs/wiki/getting-started.md). Veja o [guia de
+contribuição](.github/CONTRIBUTING.md) para os checks, convenções de PR, segurança
+dos dados e configuração completa.
 
 ## Contribuir
 
