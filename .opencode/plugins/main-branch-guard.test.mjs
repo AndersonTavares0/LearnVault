@@ -210,6 +210,33 @@ test("fails closed when a bash call has no readable command", async () => {
   assert.equal(allowed.blocked, false)
 })
 
+test("blocks git mutations when the shell tool is named shell", async () => {
+  const hook = await hookFor({ branch: "main" })
+  const commands = ['git commit -m "x"', "git push origin main", "git add .", "gh pr merge 86 --squash"]
+  for (const command of commands) {
+    const result = await attempt(hook, "shell", { command })
+    assert.equal(result.blocked, true, `"${command}" deveria ser bloqueado`)
+    assert.match(result.message, /protegida/)
+  }
+
+  // Leitura continua permitida e comando ilegível falha fechado.
+  const read = await attempt(hook, "shell", { command: "git status" })
+  assert.equal(read.blocked, false)
+  const unreadable = await attempt(hook, "shell", {})
+  assert.equal(unreadable.blocked, true)
+})
+
+test("blocks patch writes when the patch tool is named patch", async () => {
+  const hook = await hookFor({ branch: "main" })
+  const blocked = await attempt(hook, "patch", { patchText: patchText("apps/web/src/App.svelte") })
+  assert.equal(blocked.blocked, true, "escrita via patch deveria ser bloqueada")
+  assert.match(blocked.message, /protegida/)
+
+  // Patch que aponta para fora do repositório continua permitido.
+  const outside = await attempt(hook, "patch", { patchText: patchText(OUTSIDE) })
+  assert.equal(outside.blocked, false)
+})
+
 test("treats a path on another Windows drive as outside the worktree", { skip: process.platform !== "win32" }, async () => {
   const repo = repoWithBranch("main")
   const hooks = await MainBranchGuard({ directory: repo, worktree: repo })

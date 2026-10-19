@@ -12,6 +12,9 @@
  * carregamento inteiro.
  * Não substitui a branch protection do GitHub nem cobre todas as formas de escrita via
  * Bash — veja o README deste diretório.
+ * A guarda reconhece a ferramenta de shell pelos nomes `bash` e `shell`, e a de patch
+ * pelos nomes `apply_patch` e `patch`: o opencode v2 renomeou as duas e, sem os dois
+ * nomes, a proteção não dispararia.
  */
 
 import { execFile } from "node:child_process"
@@ -22,6 +25,12 @@ import path from "node:path"
 import type { Plugin } from "@opencode-ai/plugin"
 
 const PROTECTED_BRANCHES = new Set(["main", "master"])
+
+// Nomes das ferramentas no runtime. O opencode v2 chama a ferramenta de shell de
+// "shell" e a de patch de "patch"; os nomes antigos seguem reconhecidos porque
+// runtimes anteriores ainda os usam. Sem isso, a guarda nunca enxerga o comando.
+const SHELL_TOOLS = new Set(["bash", "shell"])
+const PATCH_TOOLS = new Set(["apply_patch", "patch"])
 
 const GIT_MUTATION =
   /\bgit(\s+-(C|c)\s+\S+)?\s+(commit|push|merge|rebase|reset|revert|cherry-pick|am|apply|clean|restore|stash|add|tag)\b/
@@ -125,8 +134,8 @@ export const MainBranchGuard: Plugin = async ({ directory, worktree }) => {
 
   const isMutating = (tool: string, args: Record<string, unknown> | undefined): boolean => {
     if (tool === "edit" || tool === "write") return touchesWorktree(args?.filePath)
-    if (tool === "apply_patch") return patchTouchesWorktree(args?.patchText)
-    if (tool !== "bash") return false
+    if (PATCH_TOOLS.has(tool)) return patchTouchesWorktree(args?.patchText)
+    if (!SHELL_TOOLS.has(tool)) return false
     const command = args?.command
     // Comando ausente ou em formato inesperado é tratado como mutante: a guarda não pode
     // falhar aberta quando não entende o que a ferramenta vai executar.
