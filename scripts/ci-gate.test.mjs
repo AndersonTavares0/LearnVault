@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { classifyDocsReleaseOnly, evaluateCiGate } from './ci-gate.mjs'
+import { classifyDocsReleaseOnly, evaluateCiGate, evaluateCiGateFromNeeds } from './ci-gate.mjs'
 
 const successfulResults = {
   changes: 'success',
@@ -12,6 +12,22 @@ const successfulResults = {
   rust: 'success',
   desktop: 'success',
   rustAudit: 'success',
+}
+
+function githubNeeds(results = successfulResults, docsReleaseOnly = false) {
+  return {
+    'change-scope': {
+      result: results.changes,
+      outputs: { docs_release_only: String(docsReleaseOnly) },
+    },
+    'web-artifacts': { result: results.webArtifacts },
+    web: { result: results.web },
+    'e2e-server': { result: results.e2eServer },
+    'rust-container': { result: results.rustContainer },
+    rust: { result: results.rust },
+    desktop: { result: results.desktop },
+    'rust-audit': { result: results.rustAudit },
+  }
 }
 
 test('classifies documentation and release metadata changes as skippable', () => {
@@ -113,4 +129,19 @@ test('fails closed for unknown, missing, or malformed job results', () => {
     false,
   )
   assert.equal(evaluateCiGate({ docsReleaseOnly: false, results: null }).passed, false)
+})
+
+test('maps GitHub needs results and outputs into the gate decision', () => {
+  assert.deepEqual(evaluateCiGateFromNeeds(githubNeeds()), { passed: true, errors: [] })
+
+  const docResults = { ...successfulResults, rust: 'skipped', desktop: 'skipped' }
+  assert.deepEqual(evaluateCiGateFromNeeds(githubNeeds(docResults, true)), { passed: true, errors: [] })
+})
+
+test('fails closed when GitHub needs data or change-scope output is missing', () => {
+  assert.equal(evaluateCiGateFromNeeds(null).passed, false)
+
+  const needsWithoutScopeOutput = githubNeeds()
+  delete needsWithoutScopeOutput['change-scope'].outputs.docs_release_only
+  assert.equal(evaluateCiGateFromNeeds(needsWithoutScopeOutput).passed, false)
 })
