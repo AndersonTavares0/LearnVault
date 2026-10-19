@@ -339,6 +339,25 @@ test('serves the built SPA through the Rust server for a complete study-library 
 		page.locator('p.error[role="alert"]').filter({ hasText: /mídia/i })
 	).toHaveCount(0);
 
+	// Em tela larga a coluna principal usa a largura toda da janela e a lista de
+	// aulas encosta na borda direita: um teto de largura no `main` voltaria a
+	// deixar uma faixa vazia entre o conteúdo e o painel.
+	const wideViewport = page.viewportSize();
+	await page.setViewportSize({ width: 1920, height: 1080 });
+	const wideLayout = await page.evaluate(() => {
+		const panel = document.querySelector('aside.watch-playlist');
+		const panelRect = panel?.getBoundingClientRect();
+		return {
+			scrollWidth: document.documentElement.scrollWidth,
+			clientWidth: document.documentElement.clientWidth,
+			panelRight: panelRect?.right ?? 0,
+			viewportWidth: window.innerWidth
+		};
+	});
+	expect(wideLayout.scrollWidth).toBeLessThanOrEqual(wideLayout.clientWidth);
+	expect(wideLayout.panelRight).toBeGreaterThanOrEqual(wideLayout.viewportWidth - 100);
+	if (wideViewport) await page.setViewportSize(wideViewport);
+
 	const materialHref = await page.getByRole('link', { name: 'Material.pdf' }).getAttribute('href');
 	expect(materialHref).toBeTruthy();
 	const materialURL = new URL(materialHref as string, server.baseURL);
