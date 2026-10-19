@@ -22,8 +22,10 @@ pub struct Config {
     /// Raiz opcional dos arquivos estáticos da interface web.
     pub web_root: Option<PathBuf>,
     /// Usuário inicial usado somente quando o banco ainda não possui administrador.
+    /// `ADMIN_USERNAME_FILE` carrega o mesmo valor de um arquivo de segredo.
     pub admin_username: Option<String>,
     /// Senha inicial usada somente quando o banco ainda não possui administrador.
+    /// `ADMIN_PASSWORD_FILE` carrega o mesmo valor de um arquivo de segredo.
     pub admin_password: Option<String>,
     /// Define se cookies de sessão recebem o atributo `Secure`.
     pub cookie_secure: bool,

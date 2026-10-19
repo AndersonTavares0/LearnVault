@@ -245,6 +245,56 @@ em `courses.json`, ao lado do banco. As pastas de curso permanecem externas e so
 todas as plataformas. Instaladores nunca devem copiar as pastas de curso para o diretório da
 aplicação ou para backups.
 
+### Credenciais iniciais por arquivo de segredo
+
+O bootstrap aceita `ADMIN_USERNAME` e `ADMIN_PASSWORD` diretamente, por compatibilidade, ou
+`ADMIN_USERNAME_FILE` e `ADMIN_PASSWORD_FILE`, apontando para arquivos de segredo. Para cada
+credencial, configure somente uma das duas origens; definir ambas é erro de configuração. Os arquivos
+devem ser UTF-8 e não vazios. Um único `LF` final (e o `CR` que o precede) é removido; outros espaços
+e quebras são preservados. Erros de leitura são genéricos e não exibem o valor nem o caminho.
+
+Essas credenciais são usadas apenas para criar o administrador quando o banco ainda não tem um. Não
+alteram uma conta existente. Sem credenciais configuradas, o fluxo atual de primeiro acesso permanece
+inalterado. O servidor não verifica o modo/permissões do arquivo: o operador deve restringir a leitura
+ao usuário/grupo do serviço e evitar diretórios ou backups acessíveis a outros usuários. O arquivo é
+lido na inicialização; para trocar credenciais existentes, use o fluxo autenticado de alteração de
+credenciais.
+
+#### Compose com secrets locais
+
+O arquivo de override `deploy/compose/compose.secrets.yaml` monta secrets de arquivos locais em
+`/run/secrets/` e aponta as variáveis `*_FILE` para eles. Crie `deploy/compose/secrets/admin_username`
+e `admin_password` fora do controle de versão (a pasta já está ignorada pelo Git), com conteúdo
+sintético apenas em testes. Em um host Linux, restrinja os arquivos ao UID não-root `10001`, usado
+pelo container, por exemplo com modo `0400`. O conteúdo não deve ser colocado em argumentos de
+comando, shell history ou arquivo `.env`.
+
+```sh
+docker compose --env-file deploy/compose/.env.example \
+  -f deploy/compose/compose.yaml \
+  -f deploy/compose/compose.secrets.yaml config
+docker compose --env-file deploy/compose/.env.example \
+  -f deploy/compose/compose.yaml \
+  -f deploy/compose/compose.secrets.yaml up -d --build
+```
+
+O override limpa as variáveis diretas do `.env.example`, evitando conflito com `*_FILE`. Os arquivos
+locais são bind mounts de segredo do Compose; proteja também a origem no host. Não adicione esses
+arquivos, valores reais ou caminhos privados a commits.
+
+#### Quadlet com credenciais systemd
+
+O exemplo `deploy/quadlet/learnvault.container` usa `LoadCredential=` e disponibiliza os arquivos
+protegidos pelo systemd ao processo via `%d/admin_username` e `%d/admin_password`. Coloque as fontes
+em `%h/stacks/learnvault/secrets/`, restrinja-as ao usuário do serviço (por exemplo, modo `0600`) e
+remova `ADMIN_USERNAME`/`ADMIN_PASSWORD` antigos de `learnvault.env`; mantenha ali apenas as demais
+configurações. O systemd prepara um diretório de credenciais privado para cada execução do serviço.
+
+Em instalações que preferem o armazenamento nativo de secrets do Podman, Quadlet também aceita
+`Secret=` (equivalente a `podman --secret`, montado em `/run/secrets/<nome>` por padrão). Nesse caso,
+use `ADMIN_USERNAME_FILE=/run/secrets/<nome>` e `ADMIN_PASSWORD_FILE=/run/secrets/<nome>` e não
+configure as variáveis diretas correspondentes.
+
 ## Proteção do listener HTTP
 
 O timeout de 30 segundos do serviço Rust é aplicado depois que a requisição HTTP foi aceita pelo
