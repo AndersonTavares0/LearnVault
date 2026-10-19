@@ -18,9 +18,12 @@ use learnvault_core::{CourseRoot, Database};
 use crate::command::catalog;
 use crate::config::{DesktopConfigDto, database_path};
 use crate::courses::{CourseEntry, load_courses, store_courses};
+use crate::covers::{
+    COVERS_DIR_NAME, CoverError, cover_version, read_picked_cover, remove_cover, store_cover,
+};
 use crate::dto::{
-    CatalogDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto, RecentStudyDto, RescanSummaryDto,
-    StudyProgressDto,
+    CatalogDto, CoverDto, CoverRemovalDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto,
+    RecentStudyDto, RescanSummaryDto, StudyProgressDto,
 };
 use crate::error::IpcError;
 use crate::study;
@@ -30,6 +33,7 @@ use crate::study;
 pub struct DesktopState {
     database: Arc<Mutex<Database>>,
     config_dir: PathBuf,
+    covers_dir: PathBuf,
     courses: Arc<Mutex<Vec<CourseEntry>>>,
     rescanning: Arc<AtomicBool>,
 }
@@ -40,6 +44,8 @@ impl DesktopState {
     /// O diretório de dados pertence ao aplicativo; as pastas de curso são externas e
     /// nunca são criadas, lidas nem escritas por esta operação. A configuração é
     /// revalidada: cursos com raiz removida ou inválida são descartados, sem falha fatal.
+    /// As capas personalizadas vivem em um subdiretório de capas do diretório de dados,
+    /// criado sob demanda na primeira gravação.
     pub fn open(data_dir: &Path, config_dir: &Path) -> Result<Self, IpcError> {
         std::fs::create_dir_all(data_dir).map_err(|_| IpcError::database_unavailable())?;
         let database = Database::open(database_path(data_dir))
@@ -49,9 +55,15 @@ impl DesktopState {
         Ok(Self {
             database: Arc::new(Mutex::new(database)),
             config_dir: config_dir.to_path_buf(),
+            covers_dir: data_dir.join(COVERS_DIR_NAME),
             courses: Arc::new(Mutex::new(courses)),
             rescanning: Arc::new(AtomicBool::new(false)),
         })
+    }
+
+    /// Diretório das capas personalizadas. Uso interno do Rust: nunca cruza o IPC.
+    pub(crate) fn covers_dir(&self) -> PathBuf {
+        self.covers_dir.clone()
     }
 
     /// Constrói o catálogo a partir do banco local.
@@ -60,7 +72,55 @@ impl DesktopState {
             .database
             .lock()
             .map_err(|_| IpcError::database_unavailable())?;
-        catalog(&database, &self.courses())
+        catalog(&database, &self.courses(), &self.covers_dir)
+    }
+
+    /// Executa o seletor nativo de imagens e grava a capa do curso escolhido.
+    ///
+    /// `pick` devolve o arquivo bruto escolhido pelo usuário ou `None` quando o seletor é
+    /// cancelado. O cancelamento preserva a capa anterior e devolve a versão atual. O curso
+    /// precisa estar registrado: uma identidade desconhecida ou insegura é recusada sem
+    /// tocar o disco nem o seletor. O arquivo é reaberto e revalidado no Rust (tipo pelos
+    /// magic bytes e limite de tamanho) antes da gravação atômica; nada é escrito dentro da
+    /// pasta do curso.
+    pub fn import_course_cover(
+        &self,
+        course_id: &str,
+        pick: impl FnOnce() -> Option<PathBuf>,
+    ) -> Result<CoverDto, IpcError> {
+        if self.course(course_id).is_none() {
+            return Err(IpcError::course_not_found());
+        }
+        let Some(picked) = pick() else {
+            return Ok(self.cover_status(course_id));
+        };
+        let bytes = read_picked_cover(&picked).map_err(|error| match error {
+            CoverError::Rejected => IpcError::invalid_cover(),
+            _ => IpcError::cover_unavailable(),
+        })?;
+        store_cover(&self.covers_dir, course_id, &bytes)
+            .map_err(|_| IpcError::cover_unavailable())?;
+        Ok(self.cover_status(course_id))
+    }
+
+    /// Remove a capa personalizada de um curso registrado.
+    ///
+    /// A remoção não toca na pasta do curso e é idempotente: um curso sem capa devolve
+    /// `removed: false`. Uma identidade desconhecida é recusada com um erro estável.
+    pub fn remove_course_cover(&self, course_id: &str) -> Result<CoverRemovalDto, IpcError> {
+        if self.course(course_id).is_none() {
+            return Err(IpcError::course_not_found());
+        }
+        let removed =
+            remove_cover(&self.covers_dir, course_id).map_err(|_| IpcError::cover_unavailable())?;
+        Ok(CoverRemovalDto { removed })
+    }
+
+    /// Situação atual da capa de um curso, sem caminho.
+    fn cover_status(&self, course_id: &str) -> CoverDto {
+        CoverDto {
+            cover_version: cover_version(&self.covers_dir, course_id),
+        }
     }
 
     /// Situação de configuração exposta ao webview: só o booleano, nunca um caminho.
