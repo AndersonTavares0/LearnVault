@@ -18,7 +18,15 @@ use crate::{
     AppState, StateError,
     auth::{hash_session_token, request_token, same_origin},
     courses::RegisteredCourse,
+    ordering::CourseOrders,
 };
+
+/// Limite de corpo da requisição de ordenação, acima do limite padrão do roteador (8 KiB).
+///
+/// Reordenar um módulo com muitas aulas (ou um curso com muitos módulos) gera um corpo com
+/// um caminho relativo por irmão; o limite generoso evita um `413` surpresa numa biblioteca
+/// grande, sem afetar as demais rotas.
+pub(crate) const ORDER_BODY_LIMIT: usize = 512 * 1024;
 
 enum RescanFailure {
     Busy,
@@ -99,6 +107,7 @@ pub(crate) async fn catalog(State(state): State<AppState>, headers: HeaderMap) -
         return service_unavailable();
     }
     let courses = state.courses_snapshot();
+    let orders = state.orders_snapshot();
     let database = state.database.clone().lock_owned().await;
     let Some(blocking_task) = state.try_acquire_blocking_task() else {
         return service_unavailable();
@@ -106,7 +115,7 @@ pub(crate) async fn catalog(State(state): State<AppState>, headers: HeaderMap) -
     let covers = crate::covers::covers_dir(&state.config.database_path);
     match tokio::task::spawn_blocking(move || {
         let _blocking_task = blocking_task;
-        build_course_catalog(&database, &courses, &covers)
+        build_course_catalog(&database, &courses, &orders, &covers)
     })
     .await
     {
@@ -122,13 +131,17 @@ pub(crate) async fn catalog(State(state): State<AppState>, headers: HeaderMap) -
 /// nó; não existe mais uma raiz global de arquivos soltos. Um curso sem varredura aparece
 /// vazio, e a resposta é marcada como incompleta se qualquer curso estiver incompleto.
 ///
+/// Cada subárvore recebe a preferência de ordenação manual do curso ([`CourseOrders`]),
+/// aplicada por sobreposição sobre a ordem natural; cursos continuam na ordem automática.
 /// A mesma lista de nós de topo alimenta `nodes` (árvore recursiva canônica) e `categories`
 /// (lista de cursos de topo): nenhum dos dois contratos perde aula, arquivo ou identidade.
 fn build_course_catalog(
     database: &learnvault_core::Database,
     courses: &[RegisteredCourse],
+    orders: &CourseOrders,
     covers_dir: &Path,
 ) -> Result<CatalogResponse, learnvault_core::Error> {
+    let empty = learnvault_core::CatalogOrder::new();
     let mut complete = true;
     let mut nodes = Vec::with_capacity(courses.len());
     let mut courses: Vec<_> = courses.iter().collect();
@@ -150,6 +163,12 @@ fn build_course_catalog(
     for course in courses {
         let catalog = learnvault_core::build_catalog(database, &course.id)?;
         complete = complete && catalog.complete;
+        let mut children: Vec<learnvault_core::CatalogNode> = catalog
+            .categories
+            .into_iter()
+            .map(learnvault_core::course_file_lessons)
+            .collect();
+        learnvault_core::apply_order(&mut children, orders.get(&course.id).unwrap_or(&empty));
         nodes.push(CatalogNodeResponse {
             title: course.title.clone(),
             path: String::new(),
@@ -158,12 +177,7 @@ fn build_course_catalog(
             cover_version: crate::covers::cover_version(covers_dir, &course.id),
             files: Vec::new(),
             loose_files: catalog.loose_files.into_iter().map(Into::into).collect(),
-            children: catalog
-                .categories
-                .into_iter()
-                .map(learnvault_core::course_file_lessons)
-                .map(Into::into)
-                .collect(),
+            children: children.into_iter().map(Into::into).collect(),
         });
     }
     Ok(CatalogResponse {

@@ -22,6 +22,7 @@ use crate::dto::{
     MediaRemovalOutcomeDto, RecentStudyDto, RescanSummaryDto, StudyProgressDto,
 };
 use crate::error::IpcError;
+use crate::ordering::CourseOrders;
 use crate::state::DesktopState;
 
 /// Constrói o DTO do catálogo agregado a partir dos dados persistidos no banco local.
@@ -31,11 +32,25 @@ use crate::state::DesktopState;
 /// registrado vira um nó de topo com identidade opaca, título derivado da pasta e a versão
 /// da capa personalizada (derivada do diretório de capas, nunca de um caminho do curso),
 /// exposto como `nodes` (árvore canônica) e como `categories` (lista de cursos de topo).
+///
+/// A preferência de ordenação é aplicada por sobreposição sobre a ordem natural da
+/// subárvore de cada curso; um curso sem preferência permanece na ordem automática.
 pub fn catalog(
     database: &Database,
     courses: &[CourseEntry],
     covers_dir: &Path,
 ) -> Result<CatalogDto, IpcError> {
+    catalog_with_orders(database, courses, &CourseOrders::new(), covers_dir)
+}
+
+/// Como [`catalog`], aplicando as preferências de ordenação manual por curso.
+pub fn catalog_with_orders(
+    database: &Database,
+    courses: &[CourseEntry],
+    orders: &CourseOrders,
+    covers_dir: &Path,
+) -> Result<CatalogDto, IpcError> {
+    let empty = learnvault_core::CatalogOrder::new();
     let mut complete = true;
     let mut nodes = Vec::with_capacity(courses.len());
     let mut courses: Vec<_> = courses.iter().collect();
@@ -57,14 +72,16 @@ pub fn catalog(
     for course in courses {
         let inner = learnvault_core::build_catalog(database, &course.id)
             .map_err(|_| IpcError::catalog_unavailable())?;
+        let mut categories: Vec<learnvault_core::CatalogNode> = inner
+            .categories
+            .into_iter()
+            .map(learnvault_core::course_file_lessons)
+            .collect();
+        learnvault_core::apply_order(&mut categories, orders.get(&course.id).unwrap_or(&empty));
         let shaped = learnvault_core::Catalog {
             complete: inner.complete,
             loose_files: inner.loose_files,
-            categories: inner
-                .categories
-                .into_iter()
-                .map(learnvault_core::course_file_lessons)
-                .collect(),
+            categories,
         };
         complete = complete && shaped.complete;
         nodes.push(CatalogNodeDto::course(
@@ -162,6 +179,45 @@ pub async fn desktop_remove_course(
     tauri::async_runtime::spawn_blocking(move || state.remove_course(&course_id))
         .await
         .map_err(|_| IpcError::courses_config_unavailable())?
+}
+
+/// Comando IPC: define a ordem manual dos irmãos de um nó do curso.
+///
+/// O webview envia apenas a identidade opaca do curso, o caminho relativo do pai e a
+/// ordem desejada dos filhos (caminhos relativos). Nenhum caminho do sistema de arquivos
+/// cruza o IPC. A validação (permutação exata dos irmãos) e a gravação atômica rodam no
+/// Rust, em `spawn_blocking`; uma lista inválida vira `invalid_order` sem gravar nada.
+#[tauri::command]
+pub async fn desktop_set_course_order(
+    state: State<'_, DesktopState>,
+    course_id: String,
+    parent: String,
+    children: Vec<String>,
+) -> Result<(), IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        state.set_course_order(&course_id, &parent, &children)
+    })
+    .await
+    .map_err(|_| IpcError::order_unavailable())?
+}
+
+/// Comando IPC: restaura a ordem automática de um pai específico ou de todo o curso.
+///
+/// `parent` ausente restaura o curso inteiro. A resposta diz se havia uma preferência a
+/// remover, para que a interface seja idempotente sem tocar nos arquivos do curso.
+#[tauri::command]
+pub async fn desktop_reset_course_order(
+    state: State<'_, DesktopState>,
+    course_id: String,
+    parent: Option<String>,
+) -> Result<bool, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        state.reset_course_order(&course_id, parent.as_deref())
+    })
+    .await
+    .map_err(|_| IpcError::order_unavailable())?
 }
 
 /// Comando IPC: executa o rescan explícito da biblioteca configurada.
