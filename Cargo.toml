@@ -18,7 +18,7 @@ resolver = "3"
 [workspace.package]
 version = "0.0.0"
 edition = "2024"
-license = "Apache-2.0"
+license = "MIT"
 rust-version = "1.99"
 
 # O Argon2 é lento por decisão de segurança (m=64MiB, t=2) e domina o tempo dos
