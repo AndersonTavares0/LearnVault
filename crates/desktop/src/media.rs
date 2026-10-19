@@ -142,7 +142,10 @@ pub struct MediaResponse {
 
 impl MediaResponse {
     /// Resposta sem corpo e sem headers.
-    fn bare(status: u16) -> Self {
+    ///
+    /// Compartilhada com as capas ([`crate::covers`]): as duas entregas do protocolo
+    /// customizado falam o mesmo contrato de resposta e recebem o mesmo CORS.
+    pub(crate) fn bare(status: u16) -> Self {
         Self {
             status,
             headers: Vec::new(),
@@ -151,14 +154,14 @@ impl MediaResponse {
     }
 
     /// Resposta de erro estável: apenas o status e `Cache-Control: no-store`.
-    fn empty(status: u16) -> Self {
+    pub(crate) fn empty(status: u16) -> Self {
         let mut response = Self::bare(status);
         response.push("Cache-Control", "no-store");
         response
     }
 
     /// Acrescenta um header.
-    fn push(&mut self, name: &str, value: impl Into<String>) {
+    pub(crate) fn push(&mut self, name: &str, value: impl Into<String>) {
         self.headers.push((name.to_owned(), value.into()));
     }
 
@@ -252,7 +255,9 @@ fn parse_serialized_origin(origin: &str) -> Option<String> {
 }
 
 /// Extrai a origem da URL da janela sem depender de uma origem fixa por plataforma.
-fn window_url_origin(url: &Url) -> Option<String> {
+///
+/// Compartilhada com as capas ([`crate::covers`]), que aplicam o mesmo CORS de origem exata.
+pub(crate) fn window_url_origin(url: &Url) -> Option<String> {
     let serialized = url.origin().ascii_serialization();
     if serialized != "null" {
         return Some(serialized);
@@ -411,7 +416,7 @@ fn raw_request<'a>(webview_label: &'a str, request: &'a Request<Vec<u8>>) -> Raw
 }
 
 /// Converte a resposta do protocolo na resposta HTTP do runtime.
-fn http_response(response: MediaResponse) -> Response<Cow<'static, [u8]>> {
+pub(crate) fn http_response(response: MediaResponse) -> Response<Cow<'static, [u8]>> {
     let status = StatusCode::from_u16(response.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
     let mut builder = Response::builder().status(status);
     for (name, value) in &response.headers {

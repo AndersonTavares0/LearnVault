@@ -37,6 +37,10 @@ pub struct CatalogNodeDto {
     /// Identidade do curso que contém o nó, presente apenas no nó de topo.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub course_id: Option<String>,
+    /// Segundos de modificação da capa personalizada do curso, quando existir. É a versão
+    /// usada pela SPA para invalidar a URL (`?v=`); ausente quando não há capa.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cover_version: Option<i64>,
     /// Arquivos da aula; vazio fora de nós `lesson`.
     pub files: Vec<CatalogFileDto>,
     /// Arquivos diretamente no nó, sem pertencer a uma aula.
@@ -73,6 +77,7 @@ impl From<CatalogNode> for CatalogNodeDto {
             path: node.path,
             role: node_role(node.role),
             course_id: None,
+            cover_version: None,
             files: node.files.into_iter().map(CatalogFileDto::from).collect(),
             loose_files: node
                 .loose_files
@@ -89,14 +94,20 @@ impl From<CatalogNode> for CatalogNodeDto {
 }
 
 impl CatalogNodeDto {
-    /// Nó de topo de um curso registrado: identidade opaca, título da pasta e a
-    /// subárvore derivada dos dados persistidos.
-    pub fn course(course_id: &str, title: &str, catalog: Catalog) -> Self {
+    /// Nó de topo de um curso registrado: identidade opaca, título da pasta, a versão da
+    /// capa personalizada (quando existir) e a subárvore derivada dos dados persistidos.
+    pub fn course(
+        course_id: &str,
+        title: &str,
+        catalog: Catalog,
+        cover_version: Option<i64>,
+    ) -> Self {
         Self {
             title: title.to_owned(),
             path: String::new(),
             role: "course",
             course_id: Some(course_id.to_owned()),
+            cover_version,
             files: Vec::new(),
             loose_files: catalog
                 .loose_files
@@ -297,4 +308,22 @@ impl From<learnvault_core::MediaRemovalOutcome> for MediaRemovalOutcomeDto {
             preserved_owners: outcome.preserved_owners,
         }
     }
+}
+
+/// DTO da capa personalizada de um curso.
+///
+/// Carrega apenas a versão (segundos de modificação) que a SPA usa para invalidar a URL da
+/// imagem. Nem o caminho do arquivo nem o diretório de capas cruzam o IPC.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct CoverDto {
+    /// Versão da capa do curso; ausente quando o curso ainda não tem capa.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cover_version: Option<i64>,
+}
+
+/// DTO do resultado da remoção da capa.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct CoverRemovalDto {
+    /// Verdadeiro quando havia uma capa e ela foi removida agora.
+    pub removed: bool,
 }

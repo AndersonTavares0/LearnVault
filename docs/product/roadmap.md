@@ -88,6 +88,7 @@ pasta é um curso, registrado com identidade estável, e a interface não conhec
 - [ ] Construir o player como canvas principal de estudo com índice de aulas
 - [ ] Adicionar capas manuais, estados vazios, carregamento e recuperação
   - [x] Capas geradas a partir do título e estados vazios da página inicial
+  - [x] Capas manuais por upload do admin no servidor (`/api/admin/courses/{id}/cover`) e por seletor nativo de imagens no desktop (`desktop_import_course_cover`), com validação por bytes iniciais (PNG, JPEG ou WebP), limite de 4 MiB por capa, gravação atômica fora das pastas de curso, versão exposta no catálogo (`cover_version`) e entrega local por `learnvault-cover://` no desktop
 - [ ] Validar navegação por teclado, foco, contraste, movimento reduzido e labels para leitores de tela
 - [ ] Manter a identidade visual original do projeto
 

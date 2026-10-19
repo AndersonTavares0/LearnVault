@@ -110,6 +110,10 @@ fn config_embeds_frontend_for_production_without_dev_server() {
         csp.contains("learnvault-media: http://learnvault-media.localhost"),
         "a CSP precisa liberar o protocolo de mídia local: {csp}"
     );
+    assert!(
+        csp.contains("learnvault-cover: http://learnvault-cover.localhost"),
+        "a CSP precisa liberar o protocolo de capas como imagem: {csp}"
+    );
 
     let window = &config["app"]["windows"][0];
     assert_eq!(
@@ -240,6 +244,8 @@ fn build_registers_the_app_commands_in_the_acl_manifest() {
         "desktop_catalog",
         "desktop_import_course",
         "desktop_remove_course",
+        "desktop_import_course_cover",
+        "desktop_remove_course_cover",
         "desktop_rescan",
         "desktop_study_progress",
         "desktop_record_position",
@@ -271,6 +277,8 @@ fn capability_grants_only_the_core_default_and_the_app_commands() {
     assert!(permissions.contains(&"allow-desktop-import-course"));
     assert!(permissions.contains(&"allow-desktop-catalog"));
     assert!(permissions.contains(&"allow-desktop-remove-course"));
+    assert!(permissions.contains(&"allow-desktop-import-course-cover"));
+    assert!(permissions.contains(&"allow-desktop-remove-course-cover"));
     assert!(permissions.contains(&"allow-desktop-rescan"));
     assert!(permissions.contains(&"allow-desktop-study-progress"));
     assert!(permissions.contains(&"allow-desktop-record-position"));
@@ -280,7 +288,7 @@ fn capability_grants_only_the_core_default_and_the_app_commands() {
     assert!(permissions.contains(&"allow-desktop-remove-media"));
     assert_eq!(
         permissions.len(),
-        11,
+        13,
         "a capability não pode ampliar além do núcleo e dos comandos do app: {permissions:?}"
     );
 }
@@ -430,6 +438,8 @@ fn invoke_handler_registers_only_the_desktop_commands() {
         "desktop_recent_study",
         "desktop_media_removal_impact",
         "desktop_remove_media",
+        "desktop_import_course_cover",
+        "desktop_remove_course_cover",
     ] {
         assert!(
             commands.contains(command),
@@ -622,6 +632,36 @@ fn media_protocol_is_registered_without_a_new_capability() {
     assert!(
         !raw.contains("learnvault-media"),
         "o protocolo de mídia não pode ampliar a capability do webview"
+    );
+}
+
+#[test]
+fn cover_protocol_is_registered_without_a_new_capability() {
+    // O protocolo de capas é registrado no builder do Tauri, restrito à janela principal por
+    // rótulo, e reusa o CORS de origem exata da mídia. Ele não é uma capability: o ACL
+    // continua deny-by-default e nenhuma permissão de plugin é ampliada.
+    let lib = read(&crate_root().join("src/lib.rs"));
+    assert!(
+        lib.contains("covers::register"),
+        "o protocolo de capas precisa ser registrado no builder: {lib}"
+    );
+
+    let covers = read(&crate_root().join("src/covers.rs"));
+    for token in ["register_uri_scheme_protocol", "MAIN_WEBVIEW_LABEL"] {
+        assert!(
+            covers.contains(token),
+            "o protocolo de capas precisa usar a API oficial do Tauri e restringir a janela principal: {token}"
+        );
+    }
+    assert!(
+        covers.contains("apply_media_cors"),
+        "o protocolo de capas precisa reusar o CORS de origem exata da mídia"
+    );
+
+    let raw = read(&crate_root().join("capabilities/default.json"));
+    assert!(
+        !raw.contains("learnvault-cover"),
+        "o protocolo de capas não pode ampliar a capability do webview"
     );
 }
 

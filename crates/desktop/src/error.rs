@@ -35,6 +35,12 @@ pub enum IpcErrorCode {
     MediaRemovalNeedsConfirmation,
     /// A remoção de mídia não pôde ser concluída.
     MediaRemovalUnavailable,
+    /// O curso informado não está registrado no aplicativo.
+    CourseNotFound,
+    /// A imagem escolhida para a capa não é PNG, JPEG ou WebP, ou excede o limite.
+    InvalidCover,
+    /// A capa do curso não pôde ser gravada nem removida.
+    CoverUnavailable,
 }
 
 /// Erro IPC serializável devolvido ao webview.
@@ -140,6 +146,30 @@ impl IpcError {
         Self {
             code: IpcErrorCode::MediaRemovalUnavailable,
             message: "não foi possível remover a mídia",
+        }
+    }
+
+    /// O curso informado não está registrado no aplicativo.
+    pub fn course_not_found() -> Self {
+        Self {
+            code: IpcErrorCode::CourseNotFound,
+            message: "curso não encontrado",
+        }
+    }
+
+    /// A imagem escolhida para a capa não é PNG, JPEG ou WebP, ou excede o limite.
+    pub fn invalid_cover() -> Self {
+        Self {
+            code: IpcErrorCode::InvalidCover,
+            message: "a capa precisa ser PNG, JPEG ou WebP de até 4 MiB",
+        }
+    }
+
+    /// A capa do curso não pôde ser gravada nem removida.
+    pub fn cover_unavailable() -> Self {
+        Self {
+            code: IpcErrorCode::CoverUnavailable,
+            message: "não foi possível atualizar a capa do curso",
         }
     }
 }

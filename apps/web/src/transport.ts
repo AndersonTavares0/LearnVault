@@ -8,7 +8,7 @@ export type FileEntry = { name: string; path: string; size: number; mediaId?: st
 export type Lesson = { title: string; path: string; media: FileEntry[]; subtitles: FileEntry[]; materials: FileEntry[]; availability?: string; unverified?: boolean };
 // Cada nó de topo do catálogo é um curso com identidade opaca (`courseId`). Nós internos
 // não carregam a identidade: a árvore inteira pertence ao curso do topo.
-export type CatalogNode = { title: string; path: string; role: string; courseId?: string; files: FileEntry[]; looseFiles: FileEntry[]; children: CatalogNode[] };
+export type CatalogNode = { title: string; path: string; role: string; courseId?: string; coverVersion?: number; files: FileEntry[]; looseFiles: FileEntry[]; children: CatalogNode[] };
 export type Catalog = { complete: boolean; looseFiles: FileEntry[]; nodes: CatalogNode[] };
 // A seleção nativa de uma pasta de curso é específica do desktop: no HTTP o servidor
 // registra cursos por caminho e nenhum caminho cruza o frontend.
@@ -36,16 +36,33 @@ export const STUDY_NOT_AVAILABLE = 'study_not_available';
 export const DESKTOP_MEDIA_SCHEME = 'learnvault-media';
 export const DESKTOP_MEDIA_HOST = 'localhost';
 
+// Protocolo customizado do desktop para as capas personalizadas dos cursos. O webview aponta
+// somente pela identidade opaca do curso: o handler do Rust resolve o arquivo no diretório de
+// capas do próprio aplicativo.
+export const DESKTOP_COVER_SCHEME = 'learnvault-cover';
+
+// Formatos e limite aceitos para uma capa personalizada. A validação real acontece nos bytes
+// iniciais (magic bytes) no servidor/Rust; aqui a lista apenas orienta o seletor de arquivos.
+export const COVER_ACCEPT = 'image/png,image/jpeg,image/webp';
+export const MAX_COVER_BYTES = 4 * 1024 * 1024;
+
 // No Chromium embutido (WebView2 no Windows e o webview do Android) um esquema customizado
 // do Tauri só é resolvido na forma `http://<esquema>.localhost`; o runtime reverte esse
 // prefixo por requisição antes de chamar o handler, que continua vendo
 // `learnvault-media://localhost/...`. No Linux (WebKitGTK) e no macOS (WKWebView) o esquema
-// é resolvido direto. Sem o prefixo correto o Chromium não resolve `learnvault-media://` e a
-// mídia não carrega. A detecção usa apenas o `userAgent` do webview atual, sem
-// dependência nova.
+// é resolvido direto. Sem o prefixo correto o Chromium não resolve o esquema e o recurso não
+// carrega. A detecção usa apenas o `userAgent` do webview atual, sem dependência nova.
+function desktopProtocolBase(scheme: string, userAgent: string): string {
+	return /Windows|Android/i.test(userAgent) ? `http://${scheme}.localhost` : `${scheme}://${DESKTOP_MEDIA_HOST}`;
+}
+
 export function desktopMediaUrl(mediaId: string, userAgent: string): string {
-	const base = /Windows|Android/i.test(userAgent) ? `http://${DESKTOP_MEDIA_SCHEME}.localhost` : `${DESKTOP_MEDIA_SCHEME}://${DESKTOP_MEDIA_HOST}`;
-	return `${base}/${encodeURIComponent(mediaId)}`;
+	return `${desktopProtocolBase(DESKTOP_MEDIA_SCHEME, userAgent)}/${encodeURIComponent(mediaId)}`;
+}
+
+/** URL da capa personalizada no desktop, endereçada pela identidade opaca do curso. */
+export function desktopCoverUrl(courseId: string, userAgent: string): string {
+	return `${desktopProtocolBase(DESKTOP_COVER_SCHEME, userAgent)}/${encodeURIComponent(courseId)}`;
 }
 
 export interface Transport {
@@ -68,10 +85,17 @@ export interface Transport {
 	// Verifica a atualização; `force` ignora o intervalo mínimo de cache do servidor.
 	checkUpdate(force?: boolean): Promise<UpdateStatus>;
 	mediaUrl(file: FileEntry, courseId?: string): string | null;
+	// URL da capa personalizada, derivada da versão exposta pelo catálogo. Sem versão (sem
+	// capa) devolve `null`, e a interface cai na miniatura ou na capa gerada.
+	coverUrl(courseId: string, coverVersion?: number | null): string | null;
+	// Desktop: dispara o seletor nativo de imagens no Rust (o arquivo não cruza o IPC).
+	// Servidor: envia o arquivo escolhido pelo usuário no navegador.
+	importCourseCover(courseId: string, file?: File | null): Promise<void>;
+	removeCourseCover(courseId: string): Promise<boolean>;
 }
 
 type RustFile = { media_id?: string; name?: string; path?: string; size?: number; mtime_seconds?: number; kind?: string; availability?: string; unverified?: boolean };
-type RustNode = { title?: string; path?: string; role?: string; course_id?: string; files?: RustFile[]; loose_files?: RustFile[]; children?: RustNode[] };
+type RustNode = { title?: string; path?: string; role?: string; course_id?: string; cover_version?: number; files?: RustFile[]; loose_files?: RustFile[]; children?: RustNode[] };
 type RustCatalog = { complete?: boolean; categories?: RustNode[]; nodes?: RustNode[]; loose_files?: RustFile[]; looseFiles?: RustFile[] };
 
 function invalidPayload(message: string): Error { return new Error(`Resposta inválida do servidor: ${message}`); }
@@ -214,6 +238,14 @@ function optionalArray(source: object, key: string): unknown[] {
 	return raw;
 }
 
+// Versão da capa personalizada de um curso: um segundo Unix inteiro não negativo. Uma
+// revisão antiga do servidor simplesmente não envia o campo (sem capa).
+function optionalCoverVersion(value: unknown): number | undefined {
+	if (value === undefined) return undefined;
+	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw invalidPayload('curso com versão de capa inválida.');
+	return value;
+}
+
 function normalizeRustNode(value: unknown, depth: number, budget: CatalogBudget): CatalogNode {
 	countNode(budget, depth);
 	if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('node Rust inválido.');
@@ -225,6 +257,7 @@ function normalizeRustNode(value: unknown, depth: number, budget: CatalogBudget)
 		path: node.path,
 		role: node.role,
 		courseId: node.course_id,
+		coverVersion: optionalCoverVersion(node.cover_version),
 		files: optionalArray(value, 'files').map((file) => normalizeRustFile(file, budget)),
 		looseFiles: optionalArray(value, 'loose_files').map((file) => normalizeRustFile(file, budget)),
 		children: optionalArray(value, 'children').map((child) => normalizeRustNode(child, depth + 1, budget))
@@ -358,6 +391,24 @@ async function importErrorMessage(response: Response): Promise<string> {
 	}
 }
 
+// Mensagem acionável para o upload de capa. O servidor decide o formato pelos bytes iniciais,
+// então `415` cobre também o arquivo renomeado com uma extensão de imagem.
+function coverUploadErrorMessage(status: number): string {
+	if (status === 403) return 'credentials_change_required';
+	if (status === 404) return 'Curso não encontrado.';
+	if (status === 413) return 'A imagem é maior que 4 MiB.';
+	if (status === 415) return 'A capa precisa ser PNG, JPEG ou WebP.';
+	if (status === 503) return 'O servidor está ocupado; tente de novo em instantes.';
+	return 'Não foi possível salvar a capa do curso.';
+}
+
+// O valor de `removed` vem do corpo JSON; uma resposta sem corpo válido vale como `false`,
+// nunca como sucesso silencioso de uma remoção que não aconteceu.
+async function removalFlag(response: Response): Promise<boolean> {
+	const payload = await response.json().catch(() => null) as { removed?: unknown } | null;
+	return payload?.removed === true;
+}
+
 export class HttpTransport implements Transport {
 	async me() { const response = await fetch('/api/me'); return response.ok ? normalizeUser(await response.json()) : null; }
 	async login(username: string, password: string) {
@@ -386,6 +437,24 @@ export class HttpTransport implements Transport {
 	// `force=1` (checagem manual) ignora o intervalo mínimo de cache do servidor.
 	async checkUpdate(force = false) { const response = await fetch(force ? '/api/update?force=1' : '/api/update'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível verificar a atualização.'); return normalizeUpdateStatus(await response.json()); }
 	mediaUrl(file: FileEntry, courseId?: string) { return `/api/media?course=${encodeURIComponent(courseId ?? '')}&path=${encodeURIComponent(file.path)}`; }
+	// A versão (mtime em segundos) exposta pelo catálogo entra como `?v=` para invalidar a
+	// imagem em cache do navegador quando a capa é trocada. Sem capa, não há URL manual.
+	coverUrl(courseId: string, coverVersion?: number | null) {
+		if (coverVersion === undefined || coverVersion === null) return null;
+		return `/api/courses/${encodeURIComponent(courseId)}/cover?v=${coverVersion}`;
+	}
+	async importCourseCover(courseId: string, file?: File | null) {
+		if (!file) throw new Error('Escolha uma imagem para a capa.');
+		// O limite é verificado antes de enviar: um arquivo grande demais nunca ocupa a rede.
+		if (file.size > MAX_COVER_BYTES) throw new Error('A imagem é maior que 4 MiB.');
+		const response = await fetch(`/api/admin/courses/${encodeURIComponent(courseId)}/cover`, { method: 'PUT', body: file });
+		if (!response.ok) throw new Error(coverUploadErrorMessage(response.status));
+	}
+	async removeCourseCover(courseId: string) {
+		const response = await fetch(`/api/admin/courses/${encodeURIComponent(courseId)}/cover`, { method: 'DELETE' });
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? 'Curso não encontrado.' : 'Não foi possível remover a capa do curso.');
+		return removalFlag(response);
+	}
 }
 
 // Códigos estáveis de erro IPC e a mensagem sanitizada correspondente. Um código
@@ -401,7 +470,10 @@ const DESKTOP_ERROR_MESSAGES: Record<string, string> = {
 	rescan_unavailable: 'Não foi possível indexar os cursos.',
 	study_unavailable: 'Não foi possível sincronizar o progresso de estudo.',
 	media_not_found: 'Mídia não encontrada.',
-	invalid_position: 'Posição inválida.'
+	invalid_position: 'Posição inválida.',
+	course_not_found: 'Curso não encontrado.',
+	invalid_cover: 'A capa precisa ser PNG, JPEG ou WebP de até 4 MiB.',
+	cover_unavailable: 'Não foi possível atualizar a capa do curso.'
 };
 
 // O comando devolve o erro como objeto serializado `{ code, message }`, não como `Error`.
@@ -449,6 +521,16 @@ export class DesktopStub implements Transport {
 		if (!file.mediaId || !['media', 'subtitle', 'material'].includes(file.kind ?? '')) return null;
 		return desktopMediaUrl(file.mediaId, navigator.userAgent);
 	}
+	// A capa é endereçada pela identidade opaca do curso no protocolo `learnvault-cover://`,
+	// com a mesma inversão de prefixo por plataforma da mídia.
+	coverUrl(courseId: string, coverVersion?: number | null) {
+		if (coverVersion === undefined || coverVersion === null) return null;
+		return `${desktopCoverUrl(courseId, navigator.userAgent)}?v=${coverVersion}`;
+	}
+	// O seletor nativo roda no Rust: o webview envia apenas a identidade do curso e nenhum
+	// byte de arquivo cruza o IPC. O parâmetro é mantido para o contrato comum dos transportes.
+	async importCourseCover(courseId: string, _file?: File | null) { try { await invoke<unknown>('desktop_import_course_cover', { courseId }); } catch (cause) { throw desktopError(cause, 'Não foi possível salvar a capa do curso.'); } }
+	async removeCourseCover(courseId: string) { try { const result = await invoke<{ removed?: unknown } | null>('desktop_remove_course_cover', { courseId }); return result?.removed === true; } catch (cause) { throw desktopError(cause, 'Não foi possível remover a capa do curso.'); } }
 }
 
 export const transportKind: TransportKind = __LEARNVAULT_TRANSPORT__ === 'desktop' ? 'desktop' : 'http';

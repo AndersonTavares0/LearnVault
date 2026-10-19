@@ -10,7 +10,7 @@
 //! Os comandos de estudo aceitam apenas dados do catálogo (`media_id`, posição, conclusão e
 //! limite). O dono do progresso é fixo no Rust: nenhum comando aceita `owner_id`.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use learnvault_core::Database;
 use tauri::State;
@@ -18,8 +18,8 @@ use tauri::State;
 use crate::config::DesktopConfigDto;
 use crate::courses::CourseEntry;
 use crate::dto::{
-    CatalogDto, CatalogNodeDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto, RecentStudyDto,
-    RescanSummaryDto, StudyProgressDto,
+    CatalogDto, CatalogNodeDto, CoverDto, CoverRemovalDto, MediaRemovalImpactDto,
+    MediaRemovalOutcomeDto, RecentStudyDto, RescanSummaryDto, StudyProgressDto,
 };
 use crate::error::IpcError;
 use crate::state::DesktopState;
@@ -28,9 +28,14 @@ use crate::state::DesktopState;
 ///
 /// Função livre e testável: não conhece o Tauri e qualquer falha do núcleo é traduzida
 /// para um erro IPC sanitizado, sem ecoar o erro de `Display` do domínio. Cada curso
-/// registrado vira um nó de topo com identidade opaca e título derivado da pasta, exposto
-/// como `nodes` (árvore canônica) e como `categories` (lista de cursos de topo).
-pub fn catalog(database: &Database, courses: &[CourseEntry]) -> Result<CatalogDto, IpcError> {
+/// registrado vira um nó de topo com identidade opaca, título derivado da pasta e a versão
+/// da capa personalizada (derivada do diretório de capas, nunca de um caminho do curso),
+/// exposto como `nodes` (árvore canônica) e como `categories` (lista de cursos de topo).
+pub fn catalog(
+    database: &Database,
+    courses: &[CourseEntry],
+    covers_dir: &Path,
+) -> Result<CatalogDto, IpcError> {
     let mut complete = true;
     let mut nodes = Vec::with_capacity(courses.len());
     let mut courses: Vec<_> = courses.iter().collect();
@@ -62,7 +67,12 @@ pub fn catalog(database: &Database, courses: &[CourseEntry]) -> Result<CatalogDt
                 .collect(),
         };
         complete = complete && shaped.complete;
-        nodes.push(CatalogNodeDto::course(&course.id, &course.title(), shaped));
+        nodes.push(CatalogNodeDto::course(
+            &course.id,
+            &course.title(),
+            shaped,
+            crate::covers::cover_version(covers_dir, &course.id),
+        ));
     }
     Ok(CatalogDto {
         complete,
@@ -102,6 +112,41 @@ pub async fn desktop_import_course(
     tauri::async_runtime::spawn_blocking(move || state.import_course(|| pick_folder(&app)))
         .await
         .map_err(|_| IpcError::courses_config_unavailable())?
+}
+
+/// Comando IPC: abre o seletor nativo de imagens e registra a capa de um curso.
+///
+/// O webview envia apenas a identidade opaca do curso — nunca um caminho. O seletor, a
+/// leitura e a gravação atômica rodam em `spawn_blocking` para não prender a main thread. O
+/// tipo (magic bytes) e o tamanho são validados no Rust: uma imagem fora do contrato vira
+/// `invalid_cover` e nada é gravado. Cancelar preserva a capa anterior.
+#[tauri::command]
+pub async fn desktop_import_course_cover(
+    app: tauri::AppHandle,
+    state: State<'_, DesktopState>,
+    course_id: String,
+) -> Result<CoverDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        state.import_course_cover(&course_id, || pick_cover(&app))
+    })
+    .await
+    .map_err(|_| IpcError::cover_unavailable())?
+}
+
+/// Comando IPC: remove a capa personalizada de um curso pela identidade opaca.
+///
+/// A remoção não toca na pasta do curso e é idempotente: um curso sem capa devolve
+/// `removed: false`. Nenhum caminho cruza o IPC em nenhuma direção.
+#[tauri::command]
+pub async fn desktop_remove_course_cover(
+    state: State<'_, DesktopState>,
+    course_id: String,
+) -> Result<CoverRemovalDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.remove_course_cover(&course_id))
+        .await
+        .map_err(|_| IpcError::cover_unavailable())?
 }
 
 /// Comando IPC: remove um curso do registro pela identidade opaca.
@@ -237,5 +282,21 @@ fn pick_folder(app: &tauri::AppHandle) -> Option<PathBuf> {
     app.dialog()
         .file()
         .blocking_pick_folder()
+        .and_then(|path| path.into_path().ok())
+}
+
+/// Abre o seletor nativo de imagens e devolve o arquivo escolhido, se houver.
+///
+/// Filtro por extensão apenas para orientar o usuário: a decisão real do formato é dos
+/// bytes iniciais do arquivo ([`crate::covers::detect_image_type`]), nunca do nome. Como o
+/// seletor de pastas, o diálogo é interno ao Rust e não é exposto ao webview.
+fn pick_cover(app: &tauri::AppHandle) -> Option<PathBuf> {
+    use tauri_plugin_dialog::DialogExt;
+
+    app.dialog()
+        .file()
+        .set_title("Escolha a imagem da capa")
+        .add_filter("Imagem (PNG, JPEG, WebP)", &["png", "jpg", "jpeg", "webp"])
+        .blocking_pick_file()
         .and_then(|path| path.into_path().ok())
 }

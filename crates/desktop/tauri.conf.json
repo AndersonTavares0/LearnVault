@@ -19,7 +19,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost learnvault-media: http://learnvault-media.localhost data: blob:; media-src 'self' asset: http://asset.localhost learnvault-media: http://learnvault-media.localhost blob:; object-src 'none'; base-uri 'self'"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost learnvault-media: http://learnvault-media.localhost learnvault-cover: http://learnvault-cover.localhost data: blob:; media-src 'self' asset: http://asset.localhost learnvault-media: http://learnvault-media.localhost blob:; object-src 'none'; base-uri 'self'"
     }
   },
   "bundle": {
