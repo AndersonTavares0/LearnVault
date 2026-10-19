@@ -164,19 +164,19 @@ describe('player preference controls', () => {
 		expect(body).toContain('b.vtt');
 	});
 
-	it('uses the separately persisted speed for the current media type', () => {
-		const preferences = { ...createDefaultPlayerPreferences(), audioSpeed: 1.5 as const };
-		const audioLesson = lesson([{ ...media('aula.mp3'), kind: 'media' }]);
-		const { body } = render(Player, { props: { ...baseProps, lesson: audioLesson, preferences } });
-
-		expect(body).toContain('aria-pressed="true">1.5x');
-	});
-
-	it('identifica os atalhos do player visual e semanticamente', () => {
+	it('keeps the player shortcuts available without repeating the hint on screen', () => {
 		const { body } = render(Player, { props: baseProps });
 
 		expect(body).toContain('aria-keyshortcuts="Space ArrowLeft ArrowRight"');
-		expect(body).toContain('Atalhos: espaço reproduz ou pausa; ← e → avançam ou retrocedem 10 segundos.');
+		expect(body).not.toContain('Atalhos:');
+	});
+
+	it('shows the lesson title below the media when a title is provided', () => {
+		const { body } = render(Player, { props: { ...baseProps, lessonTitle: 'Aula 1' } });
+
+		expect(body).toContain('<h2 class="player-lesson-title">Aula 1</h2>');
+		expect(body.indexOf('player-lesson-title')).toBeGreaterThan(body.indexOf('</video>'));
+		expect(body.indexOf('player-lesson-title')).toBeLessThan(body.indexOf('player-controls-bar'));
 	});
 
 	it('keeps a single media choice simple and leaves auto-advance off by default', () => {
@@ -188,11 +188,10 @@ describe('player preference controls', () => {
 		expect(body).toContain('<input type="checkbox"/>');
 	});
 
-	it('restores the independent video speed and auto-advance preference', () => {
-		const preferences = { ...createDefaultPlayerPreferences(), videoSpeed: 2 as const, autoNext: true };
+	it('restores the auto-advance preference', () => {
+		const preferences = { ...createDefaultPlayerPreferences(), autoNext: true };
 		const { body } = render(Player, { props: { ...baseProps, lesson: lesson([media('aula.mp4')]), preferences, autoNext: true } });
 
-		expect(body).toContain('aria-pressed="true">2x');
 		expect(body).toContain('<input type="checkbox" checked=""/>');
 	});
 });

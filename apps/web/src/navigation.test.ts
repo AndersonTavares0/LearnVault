@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { lessonSections, lessonSequence, neighboringLessons } from './navigation';
-import type { CatalogNode } from './transport';
+import { defaultLessonPath, firstAvailableLessonPath, lessonContainer, lessonPathForMedia, lessonSections, lessonSequence, neighboringLessons } from './navigation';
+import type { CatalogNode, FileEntry } from './transport';
 
 function lesson(title: string, path: string): CatalogNode {
 	return { title, path, role: 'lesson', files: [], looseFiles: [], children: [] };
@@ -76,5 +76,65 @@ describe('lesson navigation', () => {
 		];
 		expect(lessonSections(repeated).map((section) => section.title)).toEqual(['Rust', 'Rust']);
 		expect(lessonSections(repeated).map((section) => section.lessons[0]?.path)).toEqual(['aula-a', 'aula-b']);
+	});
+});
+
+function mediaFile(mediaId: string, availability = 'available'): FileEntry {
+	return { name: `${mediaId}.mp4`, path: `${mediaId}.mp4`, size: 10, mediaId, kind: 'media', availability };
+}
+
+function lessonWith(title: string, path: string, files: FileEntry[]): CatalogNode {
+	return { title, path, role: 'lesson', files, looseFiles: [], children: [] };
+}
+
+describe('default lesson', () => {
+	it('picks the first lesson with playable media and skips missing ones', () => {
+		const module = container('Módulo', 'mod', 'module', [
+			lessonWith('Aula 1', 'mod/aula-1', [mediaFile('m1', 'missing')]),
+			lessonWith('Aula 2', 'mod/aula-2', [mediaFile('m2')]),
+			lessonWith('Aula 3', 'mod/aula-3', [mediaFile('m3')])
+		]);
+		expect(firstAvailableLessonPath([module])).toBe('mod/aula-2');
+	});
+
+	it('falls back to loose media when no lesson is playable', () => {
+		const module = container('Módulo', 'mod', 'module', [lessonWith('Aula vazia', 'mod/vazia', [])]);
+		module.looseFiles = [mediaFile('solta')];
+		expect(firstAvailableLessonPath([module])).toBe('solta.mp4');
+	});
+
+	it('maps a media id to its lesson or loose file and ignores missing media', () => {
+		const module = container('Módulo', 'mod', 'module', [lessonWith('Aula', 'mod/aula', [mediaFile('m2')])]);
+		module.looseFiles = [mediaFile('solta')];
+		expect(lessonPathForMedia([module], 'm2')).toBe('mod/aula');
+		expect(lessonPathForMedia([module], 'solta')).toBe('solta.mp4');
+		expect(lessonPathForMedia([module], 'ausente')).toBeNull();
+		expect(lessonPathForMedia([module], null)).toBeNull();
+
+		const missing = lessonWith('Ausente', 'mod/ausente', [mediaFile('m4', 'missing')]);
+		expect(lessonPathForMedia([container('Módulo', 'mod', 'module', [missing])], 'm4')).toBeNull();
+	});
+
+	it('resumes the most recent media of the course and falls back to the first lesson', () => {
+		const module = container('Módulo', 'mod', 'module', [
+			lessonWith('Aula 1', 'mod/aula-1', [mediaFile('m1')]),
+			lessonWith('Aula 2', 'mod/aula-2', [mediaFile('m2')])
+		]);
+		expect(defaultLessonPath([module], ['m2', 'm1'])).toBe('mod/aula-2');
+		expect(defaultLessonPath([module], ['de-outro-curso', 'm1'])).toBe('mod/aula-1');
+		expect(defaultLessonPath([module], ['de-outro-curso'])).toBe('mod/aula-1');
+		expect(defaultLessonPath([module], [])).toBe('mod/aula-1');
+	});
+
+	it('finds the nearest module or category for the active lesson or loose media', () => {
+		const module = container('Módulo', 'mod', 'module', [lessonWith('Aula', 'mod/aula', [mediaFile('m1')])]);
+		module.looseFiles = [mediaFile('solta')];
+		const course = container('Curso', 'curso', 'course', [module, lessonWith('Aula solta', 'curso/aula', [mediaFile('m2')])]);
+
+		expect(lessonContainer([course], 'mod/aula')?.path).toBe('mod');
+		expect(lessonContainer([course], 'solta.mp4')?.path).toBe('mod');
+		expect(lessonContainer([course], 'curso/aula')).toBeNull();
+		expect(lessonContainer([course], 'ausente')).toBeNull();
+		expect(lessonContainer([course], null)).toBeNull();
 	});
 });
