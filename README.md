@@ -13,6 +13,8 @@
   </p>
 </div>
 
+> **Fase inicial.** O LearnVault está em desenvolvimento ativo, antes da versão 1.0. Espere mudanças entre versões nas funcionalidades e na organização dos dados; não use como único repositório de materiais que você não pode perder.
+
 ## Estude no seu ritmo
 
 O LearnVault organiza cursos que você já tem em pastas. Ele cria um catálogo para encontrar aulas, assistir a vídeos, ouvir áudios e acompanhar seu progresso, sem mover nem alterar os arquivos originais.
