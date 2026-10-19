@@ -56,7 +56,7 @@
 	}
 
 	async function remove(note: StudyNote) {
-		if (saving || !window.confirm('Excluir esta nota? Esta ação não pode ser desfeita.')) return;
+		if (saving || !window.confirm('Excluir esta anotação? Esta ação não pode ser desfeita.')) return;
 		saving = true; error = '';
 		try { await transport.deleteNote(note.noteId); notes = notes.filter((item) => item.noteId !== note.noteId); }
 		catch (cause) { error = cause instanceof Error ? cause.message : 'Não foi possível excluir a nota.'; }
@@ -65,28 +65,28 @@
 </script>
 
 <section class="notes" aria-labelledby="notes-heading">
-	<h2 id="notes-heading">Minhas notas</h2>
+	<h2 id="notes-heading">Suas anotações</h2>
 	<form onsubmit={createNote}>
-		<label for="note-text">Nova nota</label>
+		<label for="note-text">Nova anotação</label>
 		<textarea id="note-text" bind:value={text} maxlength="20000" required rows="3" placeholder="Escreva uma observação sobre esta aula…"></textarea>
 		<p class="hint">Texto simples, até {MAX_NOTE_TEXT_BYTES.toLocaleString('pt-BR')} bytes ({noteTextBytes(text)} agora).</p>
-		{#if overLimit}<p class="error" role="alert">O texto passou de {MAX_NOTE_TEXT_BYTES.toLocaleString('pt-BR')} bytes. Encurte a nota antes de salvar.</p>{/if}
+		{#if overLimit}<p class="error" role="alert">O texto passou de {MAX_NOTE_TEXT_BYTES.toLocaleString('pt-BR')} bytes. Encurte a anotação antes de salvar.</p>{/if}
 		<label class="check"><input type="checkbox" bind:checked={capturePosition} /> Anexar posição atual ({formatDuration(Math.floor(currentTime))})</label>
-		<button type="submit" disabled={saving || !text.trim() || overLimit}>{saving ? 'Salvando…' : 'Adicionar nota'}</button>
+		<button type="submit" disabled={saving || !text.trim() || overLimit}>{saving ? 'Salvando…' : 'Adicionar anotação'}</button>
 	</form>
 	{#if error}<p class="error" role="alert">{error}</p>{/if}
 	{#if saving}<p class="state" role="status">Salvando alterações…</p>{/if}
-	{#if loading}<p class="state" role="status">Carregando notas…</p>
-	{:else if !error && notes.length === 0}<p class="state" role="status">Ainda não há notas para esta mídia.</p>
+	{#if loading}<p class="state" role="status">Carregando anotações…</p>
+	{:else if !error && notes.length === 0}<p class="state" role="status">Ainda não há anotações para esta mídia.</p>
 	{:else if notes.length > 0}
 		<ul>
 			{#each notes as note (note.noteId)}
 				<li>
 					{#if editingId === note.noteId}
-						<label for="edit-note-{note.noteId}">Editar nota</label>
+						<label for="edit-note-{note.noteId}">Editar anotação</label>
 						<textarea id="edit-note-{note.noteId}" bind:value={editText} maxlength="20000" required rows="3"></textarea>
 						<p class="hint">Até {MAX_NOTE_TEXT_BYTES.toLocaleString('pt-BR')} bytes ({noteTextBytes(editText)} agora).</p>
-						{#if editOverLimit}<p class="error" role="alert">O texto passou de {MAX_NOTE_TEXT_BYTES.toLocaleString('pt-BR')} bytes. Encurte a nota antes de salvar.</p>{/if}
+						{#if editOverLimit}<p class="error" role="alert">O texto passou de {MAX_NOTE_TEXT_BYTES.toLocaleString('pt-BR')} bytes. Encurte a anotação antes de salvar.</p>{/if}
 						<label class="check"><input type="checkbox" bind:checked={editPosition} /> Atualizar timestamp para posição atual ({formatDuration(Math.floor(currentTime))})</label>
 						{#if note.positionSeconds !== null}<label class="check"><input type="checkbox" bind:checked={editRemovePosition} /> Remover timestamp existente</label>{/if}
 						<button type="button" onclick={() => saveEdit(note)} disabled={saving || !editText.trim() || editOverLimit}>Salvar edição</button>
