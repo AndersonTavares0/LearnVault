@@ -300,9 +300,9 @@ jobs:
           fi
           contributors_text="$(
             {
-              git log --format='%aN' "$range"
-              git log --format='%b' "$range" | sed -n 's/^Co-authored-by: \(.*\) <[^<>]*>$/\1/p'
-            } | tr -d '\r' | sed '/^$/d' | sort -fu
+              git log --format='%aN%x09%aE' "$range"
+              git log --format='%b' "$range" | sed -n 's/^Co-authored-by: \(.*\) <\([^<>]*\)>$/\1\t\2/p'
+            } | tr -d '\r' | node scripts/release-contributors.mjs
           )"
           mapfile -t contributors <<< "$contributors_text"
           if [[ -z "$contributors_text" ]]; then

@@ -99,6 +99,7 @@ jobs:
           name: spa-desktop-build
           path: crates/desktop/frontend-dist
       - run: pnpm run check
+      - run: pnpm run test:scripts
       - name: Test SPA and generated output contracts
         run: pnpm --filter learnvault-web test
         env:
