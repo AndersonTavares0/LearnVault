@@ -49,6 +49,10 @@ struct CatalogNodeResponse {
     role: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     course_id: Option<String>,
+    /// Segundos de modificação da capa personalizada do curso, quando existir. É a
+    /// versão usada pela SPA para invalidar a URL (`?v=`); ausente quando não há capa.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cover_version: Option<i64>,
     files: Vec<CatalogFileResponse>,
     loose_files: Vec<CatalogFileResponse>,
     children: Vec<CatalogNodeResponse>,
@@ -99,9 +103,10 @@ pub(crate) async fn catalog(State(state): State<AppState>, headers: HeaderMap) -
     let Some(blocking_task) = state.try_acquire_blocking_task() else {
         return service_unavailable();
     };
+    let covers = crate::covers::covers_dir(&state.config.database_path);
     match tokio::task::spawn_blocking(move || {
         let _blocking_task = blocking_task;
-        build_course_catalog(&database, &courses)
+        build_course_catalog(&database, &courses, &covers)
     })
     .await
     {
@@ -122,6 +127,7 @@ pub(crate) async fn catalog(State(state): State<AppState>, headers: HeaderMap) -
 fn build_course_catalog(
     database: &learnvault_core::Database,
     courses: &[RegisteredCourse],
+    covers_dir: &Path,
 ) -> Result<CatalogResponse, learnvault_core::Error> {
     let mut complete = true;
     let mut nodes = Vec::with_capacity(courses.len());
@@ -149,6 +155,7 @@ fn build_course_catalog(
             path: String::new(),
             role: "course",
             course_id: Some(course.id.clone()),
+            cover_version: crate::covers::cover_version(covers_dir, &course.id),
             files: Vec::new(),
             loose_files: catalog.loose_files.into_iter().map(Into::into).collect(),
             children: catalog
@@ -358,6 +365,7 @@ impl From<CatalogNode> for CatalogNodeResponse {
             path: node.path,
             role: node_role(node.role),
             course_id: None,
+            cover_version: None,
             files: node.files.into_iter().map(Into::into).collect(),
             loose_files: node.loose_files.into_iter().map(Into::into).collect(),
             children: node.children.into_iter().map(Into::into).collect(),
