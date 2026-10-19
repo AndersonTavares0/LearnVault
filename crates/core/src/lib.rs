@@ -21,6 +21,7 @@ pub mod error;
 pub mod ids;
 pub mod legacy_import;
 pub mod media;
+pub mod ordering;
 pub mod paths;
 pub mod removal;
 pub mod rescan;
@@ -48,6 +49,7 @@ pub use media::{
     MediaReference, OpenMedia, find_media_by_path, find_media_library_id, open_media,
     open_media_reference,
 };
+pub use ordering::{CatalogOrder, apply_order, order_siblings, validate_siblings};
 pub use paths::KeyMode;
 pub use removal::{MediaRemovalImpact, MediaRemovalOutcome, media_removal_impact, remove_media};
 pub use rescan::{RescanSummary, apply_scan, rescan};
