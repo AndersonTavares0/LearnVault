@@ -245,7 +245,10 @@ where
             let mut value = std::fs::read_to_string(file_path)
                 .map_err(|_| ConfigError::InvalidBootstrapCredential)?;
             if let Some(without_lf) = value.strip_suffix('\n') {
-                value = without_lf.strip_suffix('\r').unwrap_or(without_lf).to_owned();
+                value = without_lf
+                    .strip_suffix('\r')
+                    .unwrap_or(without_lf)
+                    .to_owned();
             }
             if value.is_empty() {
                 return Err(ConfigError::InvalidBootstrapCredential);
@@ -485,7 +488,10 @@ mod tests {
         };
 
         assert_eq!(config.admin_username.as_deref(), Some("first-admin"));
-        assert_eq!(config.admin_password.as_deref(), Some("synthetic-test-secret"));
+        assert_eq!(
+            config.admin_password.as_deref(),
+            Some("synthetic-test-secret")
+        );
     }
 
     #[test]
@@ -528,10 +534,12 @@ mod tests {
         std::fs::write(&password_file, "\n").unwrap();
         let environment = HashMap::from([("ADMIN_PASSWORD_FILE", password_file.to_str().unwrap())]);
 
-        assert!(parse_command_with_env(["learnvault-server"], |key| {
-            environment.get(key).copied().map(str::to_owned)
-        })
-        .is_err());
+        assert!(
+            parse_command_with_env(["learnvault-server"], |key| {
+                environment.get(key).copied().map(str::to_owned)
+            })
+            .is_err()
+        );
     }
 
     #[test]
