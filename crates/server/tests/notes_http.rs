@@ -379,3 +379,63 @@ async fn http_notes_enforce_csrf_on_every_mutation() {
         assert_eq!(payload(response).await["error"], "csrf_failed");
     }
 }
+
+#[tokio::test]
+async fn http_notes_refuse_creation_above_the_ceiling_and_list_the_envelope() {
+    let temp = tempfile::tempdir().unwrap();
+    seed(&temp);
+
+    // O banco do dono já com o teto de notas, inserido direto para não gastar 500
+    // requisições só para encher a tabela.
+    {
+        let db = Database::open(temp.path().join("notes.sqlite")).unwrap();
+        db.connection()
+            .execute_batch(
+                "INSERT INTO study_note (owner_id, media_id, text, position_seconds, created_at, updated_at)
+                 SELECT 'usr-admin', 'm1', 'nota ' || value, NULL, 1, 1
+                 FROM (WITH RECURSIVE seq(value) AS (SELECT 1 UNION ALL SELECT value + 1 FROM seq WHERE value < 500) SELECT value FROM seq);",
+            )
+            .unwrap();
+    }
+
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let admin = login(&app, "admin", PASSWORD).await;
+
+    // A criação acima do teto é recusada com o código estável.
+    let refused = app
+        .clone()
+        .oneshot(json_request(
+            "POST",
+            "/api/study/notes",
+            &admin,
+            Some(serde_json::json!({
+                "media_id": "m1",
+                "text": "acima do teto",
+                "position_seconds": null
+            })),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(refused.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(payload(refused).await["error"], "too_many_notes");
+
+    // A listagem devolve o envelope `{ items: [...] }` e nunca mais que o teto.
+    let listed = app
+        .clone()
+        .oneshot(
+            Request::get("/api/study/notes?media_id=m1")
+                .header("cookie", &admin)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(listed.status(), StatusCode::OK);
+    let body = payload(listed).await;
+    let items = body["items"]
+        .as_array()
+        .expect("a listagem usa o envelope { items: [...] }");
+    assert_eq!(items.len(), 500, "a listagem nunca devolve mais que o teto");
+    assert_eq!(items[0]["text"], "nota 1");
+    assert_eq!(items[0]["media_id"], "m1");
+}

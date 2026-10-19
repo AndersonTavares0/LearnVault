@@ -51,7 +51,7 @@ Detalhes de implementação ficam nas issues e pull requests.
 - [ ] Capas por imagem dentro da pasta do curso.
 - [ ] Cache de remux sob demanda para mídias incompatíveis.
 - [ ] Busca no catálogo, nos materiais e nas notas.
-- [ ] Favoritos e notas com timestamp.
+- [ ] Favoritos.
 - [ ] Navegação responsiva.
 
 ## Distribuição: portabilidade primeiro

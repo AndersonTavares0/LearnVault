@@ -8,9 +8,20 @@ import { desktopCoverUrl, desktopMediaUrl, DesktopStub, HttpTransport, lessonFro
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 
 describe('transport contract', () => {
-	it('exposes the HTTP transport seam without routing assumptions', () => {
-		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'checkUpdate', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover', 'listNotes', 'createNote', 'updateNote', 'deleteNote'];
-		expect(methods).toHaveLength(22);
+	it('exposes every method of the transport contract', () => {
+		const methods = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'checkUpdate', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover', 'setCourseOrder', 'resetCourseOrder', 'listNotes', 'createNote', 'updateNote', 'deleteNote'] as const;
+		// A lista é exaustiva: se a interface `Transport` ganhar ou perder um método, o
+		// tipo abaixo deixa de compilar e o typecheck do projeto reprova o teste.
+		type Exact<Contract, Listed> = [Listed] extends [Contract] ? ([Contract] extends [Listed] ? true : never) : never;
+		const exhaustive: Exact<keyof Transport, (typeof methods)[number]> = true;
+		expect(exhaustive).toBe(true);
+		// E cada método do contrato existe de fato nas duas implementações.
+		const http = new HttpTransport() as unknown as Record<string, unknown>;
+		const desktop = new DesktopStub() as unknown as Record<string, unknown>;
+		for (const method of methods) {
+			expect(typeof http[method], `HTTP sem ${method}`).toBe('function');
+			expect(typeof desktop[method], `desktop sem ${method}`).toBe('function');
+		}
 	});
 	it('does not offer native folder selection over HTTP', async () => {
 		await expect(new HttpTransport().importCourse()).rejects.toThrow('desktop é quem escolhe pastas');
@@ -608,6 +619,35 @@ describe('transport contract', () => {
 		expect(vi.mocked(invoke).mock.calls.map(([name]) => name)).toEqual(['desktop_study_notes', 'desktop_create_study_note', 'desktop_update_study_note', 'desktop_delete_study_note']);
 		expect(vi.mocked(invoke).mock.calls[1]?.[1]).toEqual({ mediaId: 'm1', text: 'note', positionSeconds: null });
 		expect(JSON.stringify(vi.mocked(invoke).mock.calls)).not.toContain('owner');
+		expect(fetchMock).not.toHaveBeenCalled();
+		vi.unstubAllGlobals();
+	});
+	it('tells the note ceiling apart from an invalid note over HTTP', async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+		const transport = new HttpTransport();
+
+		// O teto de notas e o texto inválido chegam com o mesmo status 422: o código no
+		// corpo diz qual dos dois aconteceu, e a mensagem precisa distinguir os dois.
+		fetchMock.mockResolvedValue(new Response(JSON.stringify({ error: 'too_many_notes' }), { status: 422 }));
+		await expect(transport.createNote('m1', 'nota', null)).rejects.toThrow('A mídia já tem o número máximo de notas.');
+		fetchMock.mockResolvedValue(new Response(JSON.stringify({ error: 'invalid_note' }), { status: 422 }));
+		await expect(transport.createNote('m1', 'nota', null)).rejects.toThrow('Nota ou posição inválida.');
+		fetchMock.mockResolvedValue(new Response(JSON.stringify({ error: 'invalid_position' }), { status: 422 }));
+		await expect(transport.updateNote(7, 'nota', -1)).rejects.toThrow('Nota ou posição inválida.');
+		// Uma nota ausente é outro erro, com a sua própria mensagem.
+		fetchMock.mockResolvedValue(new Response(JSON.stringify({ error: 'note_not_found' }), { status: 404 }));
+		await expect(transport.updateNote(7, 'nota', null)).rejects.toThrow('Nota não encontrada.');
+
+		vi.unstubAllGlobals();
+	});
+	it('tells the note ceiling apart from an invalid note over IPC', async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+		vi.mocked(invoke).mockRejectedValue({ code: 'too_many_notes', message: 'a mídia já tem o número máximo de notas' });
+		await expect(new DesktopStub().createNote('m1', 'nota', null)).rejects.toThrow('A mídia já tem o número máximo de notas.');
+		vi.mocked(invoke).mockRejectedValue({ code: 'invalid_note', message: 'nota inválida' });
+		await expect(new DesktopStub().createNote('m1', 'nota', null)).rejects.toThrow('Nota inválida.');
 		expect(fetchMock).not.toHaveBeenCalled();
 		vi.unstubAllGlobals();
 	});

@@ -3,6 +3,7 @@ use learnvault_core::{
     Database, Error, KeyMode, MAX_NOTES_PER_MEDIA, create_note, delete_note, list_notes,
     update_note,
 };
+use rusqlite::params;
 
 const OWNER: &str = "owner-a";
 const OTHER: &str = "owner-b";
@@ -161,6 +162,31 @@ fn notes_enforce_the_per_media_ceiling() {
 
     // O teto é por par dono + mídia: outro dono tem o próprio orçamento.
     assert!(create_note(&db, OTHER, "m1", "nota de outro dono", None).is_ok());
+}
+
+#[test]
+fn notes_list_never_returns_more_than_the_ceiling() {
+    let db = database();
+
+    // Linhas inseridas direto no banco, contornando a criação: a listagem precisa
+    // respeitar o teto mesmo quando o banco tem mais notas do que o limite.
+    for index in 0..MAX_NOTES_PER_MEDIA + 1 {
+        db.connection()
+            .execute(
+                "INSERT INTO study_note (owner_id, media_id, text, position_seconds, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, NULL, 1, 1)",
+                params![OWNER, "m1", format!("nota {index}")],
+            )
+            .unwrap();
+    }
+
+    assert_eq!(
+        list_notes(&db, OWNER, "m1").unwrap().len(),
+        MAX_NOTES_PER_MEDIA,
+        "a listagem nunca devolve mais que o teto"
+    );
+    // O teto é por par dono + mídia: o outro dono não é afetado.
+    assert!(list_notes(&db, OTHER, "m1").unwrap().is_empty());
 }
 
 #[test]

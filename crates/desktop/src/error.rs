@@ -198,4 +198,28 @@ impl IpcError {
             message: "não foi possível salvar a ordem do curso",
         }
     }
+
+    /// O texto da nota é inválido.
+    pub fn invalid_note() -> Self {
+        Self {
+            code: IpcErrorCode::InvalidNote,
+            message: "nota inválida",
+        }
+    }
+
+    /// A nota não existe para o dono local.
+    pub fn note_not_found() -> Self {
+        Self {
+            code: IpcErrorCode::NoteNotFound,
+            message: "nota não encontrada",
+        }
+    }
+
+    /// A mídia já tem o número máximo de notas do dono local.
+    pub fn too_many_notes() -> Self {
+        Self {
+            code: IpcErrorCode::TooManyNotes,
+            message: "a mídia já tem o número máximo de notas",
+        }
+    }
 }

@@ -261,8 +261,9 @@ As notas usam o mesmo shape snake_case, o mesmo envelope `{ "items": [...] }` e 
 limites de texto/posição do HTTP: a lista do IPC e a do HTTP têm exatamente o mesmo formato, então
 a SPA não distingue o transporte ao ler as notas. O dono local fixo é resolvido pelo Rust, nenhum
 comando aceita `owner_id`, e a SPA usa somente `invoke`. Uma mídia desconhecida vira
-`media_not_found`, uma nota ausente vira `note_not_found` e texto ou posição inválidos viram
-`invalid_note` ou `invalid_position`.
+`media_not_found`, uma nota ausente vira `note_not_found`, texto ou posição inválidos viram
+`invalid_note` ou `invalid_position` e um par dono + mídia que já atingiu o teto de notas vira
+`too_many_notes`.
 
 Limitação desta fatia: o desktop atende um único dono local, sem sessão nem seletor de contas.
 

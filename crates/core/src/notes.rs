@@ -58,21 +58,19 @@ pub fn create_note(
     validate(owner_id, text, position_seconds)?;
     require_media(&db.conn, media_id)?;
     // O teto é do par (dono, mídia): acima dele a criação é recusada, para que a
-    // listagem com `LIMIT` nunca esconda notas sem avisar.
-    let count: i64 = db.conn.query_row(
-        "SELECT COUNT(*) FROM study_note WHERE owner_id = ?1 AND media_id = ?2",
-        params![owner_id, media_id],
-        |row| row.get(0),
+    // listagem com `LIMIT` nunca esconda notas sem avisar. A contagem e a inserção
+    // formam uma única instrução: contagem e inserção separadas deixariam passar
+    // duas criações simultâneas acima do teto.
+    let now = now_unix_seconds();
+    let inserted = db.conn.execute(
+        "INSERT INTO study_note (owner_id, media_id, text, position_seconds, created_at, updated_at)
+         SELECT ?1, ?2, ?3, ?4, ?5, ?5
+         WHERE (SELECT COUNT(*) FROM study_note WHERE owner_id = ?1 AND media_id = ?2) < ?6",
+        params![owner_id, media_id, text, position_seconds, now, MAX_NOTES_PER_MEDIA as i64],
     )?;
-    if count >= MAX_NOTES_PER_MEDIA as i64 {
+    if inserted == 0 {
         return Err(Error::TooManyNotes);
     }
-    let now = now_unix_seconds();
-    db.conn.execute(
-        "INSERT INTO study_note (owner_id, media_id, text, position_seconds, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
-        params![owner_id, media_id, text, position_seconds, now],
-    )?;
     let note_id = db.conn.last_insert_rowid();
     get_note(&db.conn, owner_id, note_id)?.ok_or(Error::StudyNoteNotFound)
 }

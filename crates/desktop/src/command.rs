@@ -415,19 +415,13 @@ pub async fn desktop_delete_study_note(
 }
 
 fn note_error(error: learnvault_core::Error) -> IpcError {
-    let code = match error {
-        learnvault_core::Error::MediaNotFound { .. } => crate::error::IpcErrorCode::MediaNotFound,
-        learnvault_core::Error::StudyNoteNotFound => crate::error::IpcErrorCode::NoteNotFound,
-        learnvault_core::Error::InvalidStudyNote => crate::error::IpcErrorCode::InvalidNote,
-        learnvault_core::Error::TooManyNotes => crate::error::IpcErrorCode::TooManyNotes,
-        learnvault_core::Error::InvalidStudyPosition { .. } => {
-            crate::error::IpcErrorCode::InvalidPosition
-        }
-        _ => return IpcError::study_unavailable(),
-    };
-    IpcError {
-        code,
-        message: "não foi possível processar a nota",
+    match error {
+        learnvault_core::Error::MediaNotFound { .. } => IpcError::media_not_found(),
+        learnvault_core::Error::StudyNoteNotFound => IpcError::note_not_found(),
+        learnvault_core::Error::InvalidStudyNote => IpcError::invalid_note(),
+        learnvault_core::Error::TooManyNotes => IpcError::too_many_notes(),
+        learnvault_core::Error::InvalidStudyPosition { .. } => IpcError::invalid_position(),
+        _ => IpcError::study_unavailable(),
     }
 }
 
