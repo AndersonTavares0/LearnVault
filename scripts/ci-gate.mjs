@@ -61,3 +61,48 @@ export function evaluateCiGate({ docsReleaseOnly, results } = {}) {
 
   return { passed: errors.length === 0, errors };
 }
+
+const githubNeedsJobs = [
+  'change-scope',
+  'web-artifacts',
+  'web',
+  'e2e-server',
+  'rust-container',
+  'rust',
+  'desktop',
+  'rust-audit',
+];
+
+export function evaluateCiGateFromNeeds(needs) {
+  if (!needs || typeof needs !== 'object' || Array.isArray(needs)) {
+    return { passed: false, errors: ['CI gate received invalid needs data'] };
+  }
+
+  const receivedJobs = Object.keys(needs).sort();
+  const expectedJobs = [...githubNeedsJobs].sort();
+  if (
+    receivedJobs.length !== expectedJobs.length ||
+    receivedJobs.some((job, index) => job !== expectedJobs[index])
+  ) {
+    return { passed: false, errors: ['CI gate received missing or unexpected job results'] };
+  }
+
+  const docsReleaseOutput = needs['change-scope']?.outputs?.docs_release_only;
+  if (docsReleaseOutput !== 'true' && docsReleaseOutput !== 'false') {
+    return { passed: false, errors: ['change-scope docs_release_only output must be true or false'] };
+  }
+
+  return evaluateCiGate({
+    docsReleaseOnly: docsReleaseOutput === 'true',
+    results: {
+      changes: needs['change-scope']?.result,
+      webArtifacts: needs['web-artifacts']?.result,
+      web: needs.web?.result,
+      e2eServer: needs['e2e-server']?.result,
+      rustContainer: needs['rust-container']?.result,
+      rust: needs.rust?.result,
+      desktop: needs.desktop?.result,
+      rustAudit: needs['rust-audit']?.result,
+    },
+  });
+}
