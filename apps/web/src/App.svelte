@@ -276,7 +276,21 @@
 	}
 	function showSettingsSection(section: 'theme' | 'account' | 'updates', id: string) {
 		settingsSection = section;
-		document.getElementById(id)?.scrollIntoView({ block: 'start' });
+		const heading = document.getElementById(id);
+		if (heading) {
+			heading.scrollIntoView({ block: 'start' });
+			heading.focus({ preventScroll: true });
+		}
+	}
+
+	// A seção ativa acompanha a rolagem: o observador marca a seção no terço superior e é
+	// desconectado quando o elemento sai do DOM.
+	function trackSection(node: HTMLElement, id: 'theme' | 'account' | 'updates'): { destroy: () => void } {
+		const observer = new IntersectionObserver((entries) => {
+			for (const entry of entries) if (entry.isIntersecting) settingsSection = id;
+		}, { rootMargin: '-30% 0px -60% 0px' });
+		observer.observe(node);
+		return { destroy: () => observer.disconnect() };
 	}
 	async function initialize() {
 		try {
@@ -925,8 +939,8 @@
 				{#if transportKind === 'http'}<button class:sel={settingsSection === 'updates'} type="button" aria-current={settingsSection === 'updates' ? 'page' : undefined} onclick={() => showSettingsSection('updates', 'update-heading')}>Atualizações</button>{/if}
 			</nav>
 			<div class="setting-content">
-				<section class="setting-card" aria-labelledby="theme-heading">
-					<h3 id="theme-heading">Tema</h3>
+				<section class="setting-card" aria-labelledby="theme-heading" use:trackSection={'theme'}>
+					<h3 id="theme-heading" tabindex="-1">Tema</h3>
 					<p>Escolha o modo de exibição. A paleta selecionada acompanha os dois modos.</p>
 					<div class="tools theme-buttons" role="group" aria-label="Tema">
 						<button class="btn" class:primary={themeMode === 'light'} type="button" aria-pressed={themeMode === 'light'} onclick={() => changeTheme('light')}>Claro</button>
@@ -940,8 +954,8 @@
 					<h3 id="palette-heading">Paletas</h3>
 					<PaletteSettings preferences={palettePreferences} onChange={changePalette} />
 				</section>
-				<section class="setting-card" aria-labelledby="account-heading">
-					<h3 id="account-heading">Conta</h3>
+				<section class="setting-card" aria-labelledby="account-heading" use:trackSection={'account'}>
+					<h3 id="account-heading" tabindex="-1">Conta</h3>
 					<p><strong>{user.username}</strong> · {user.isAdmin ? 'Administrador' : 'Estudante'}</p>
 					{#if transportKind === 'http'}
 						<form class="credentials-form" onsubmit={credentials}>
@@ -959,8 +973,8 @@
 					{:else}<p class="catalog-message">Biblioteca local neste dispositivo.</p>{/if}
 				</section>
 				{#if transportKind === 'http'}
-					<section class="setting-card" aria-labelledby="update-heading">
-						<h3 id="update-heading">Atualizações</h3>
+					<section class="setting-card" aria-labelledby="update-heading" use:trackSection={'updates'}>
+						<h3 id="update-heading" tabindex="-1">Atualizações</h3>
 						{#if updateStatus}<p>Versão atual: <strong>{updateStatus.current}</strong></p>{/if}
 						<button class="text-button" type="button" onclick={() => checkUpdate(true)} disabled={updateChecking} aria-busy={updateChecking}>{updateChecking ? 'Verificando…' : 'Verificar atualização'}</button>
 						{#if updateStatus}
@@ -979,14 +993,18 @@
 		<header class="analytics-head"><div><div class="eyebrow">Seu ritmo de aprendizagem</div><h1 id="analytics-heading">Estatísticas de estudo</h1><p>Resumo do progresso salvo nesta instalação.</p></div></header>
 		<p class="tracking-note"><strong>Dados registrados pelo LearnVault.</strong> Totais baseados apenas nas posições e conclusões salvas; sem estimativas de atividade externa.</p>
 		{#if studyAnalytics}
+			{#if studyAnalytics.trackedCount === 0}
+				<EmptyState title="Nenhum estudo registrado ainda" description="As estatísticas aparecem quando você reproduz aulas nesta instalação." action={{ label: 'Ir para os cursos', href: href('home') }} />
+			{:else}
 			<div class="metric-strip" aria-label="Totais de estudo">
 				<div class="metric"><small>Aulas acompanhadas</small><strong>{studyAnalytics.trackedCount}</strong><em>com progresso salvo</em></div>
 				<div class="metric"><small>Aulas concluídas</small><strong>{studyAnalytics.completedCount}</strong><em>marcações explícitas</em></div>
-				<div class="metric"><small>Posição acumulada</small><strong>{formatDuration(studyAnalytics.totalPositionSeconds)}</strong><em>total registrado</em></div>
+				<div class="metric"><small>Posição acumulada</small><strong>{formatDuration(studyAnalytics.totalPositionSeconds)}</strong><em>soma das posições salvas</em></div>
 				<div class="metric"><small>Última atividade</small><strong>{studyAnalytics.lastActivityAt === null ? '—' : new Date(studyAnalytics.lastActivityAt * 1000).toLocaleDateString('pt-BR')}</strong><em>{studyAnalytics.lastActivityAt === null ? 'sem atividade registrada' : 'data do registro mais recente'}</em></div>
 			</div>
+			{/if}
 		{:else if studyAnalyticsError}
-			<p class="empty" role="alert">{studyAnalyticsError}</p><button class="secondary" type="button" onclick={() => { studyAnalyticsRequested = false; }}>Tentar novamente</button>
+			<div class="analytics-card"><EmptyState tone="error" title="Não foi possível carregar as estatísticas" description={studyAnalyticsError} /><button class="btn" type="button" onclick={() => { studyAnalyticsRequested = false; }}>Tentar novamente</button></div>
 		{:else}<p class="empty" role="status">Carregando estatísticas…</p>{/if}
 		<div class="analytics-grid">
 			<section class="analytics-card"><h2>Atividade recente</h2><p>Últimas posições e conclusões salvas no catálogo local.</p>
@@ -999,7 +1017,7 @@
 					</tbody></table></div>
 				{:else}<p class="empty" role="status">Ainda não há posições ou conclusões registradas.</p>{/if}
 			</section>
-			<section class="analytics-card"><h2>Progresso por curso</h2><p>O contrato atual não discrimina totais ou duração por curso; esta comparação permanece indisponível.</p></section>
+			<section class="analytics-card"><h2>Progresso por curso</h2><p>Os registros atuais mostram totais e atividade recente, sem comparação por curso.</p></section>
 		</div>
 	</section>
 {:else if route === 'notes'}
