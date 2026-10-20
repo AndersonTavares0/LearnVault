@@ -7,7 +7,7 @@ fictícios na aplicação: as fixtures sintéticas existem apenas para screensho
 
 | # | Prancha | Implementação | Estado |
 | --- | --- | --- | --- |
-| 01 | Meus cursos | `#/home`: topbar, busca, Pomodoro, “Continuar estudando”, filtros, grid e ações da biblioteca | Entregue |
+| 01 | Meus cursos | `#/home`: topbar, busca, Pomodoro, “Continuar estudando”, filtros, grid e ações da biblioteca | Comparado diretamente em Chromium 155/1440×1000; busca alinhada; gate visual aberto por métricas de progresso ausentes e fixture de catálogo divergente — ver `docs/screenshots/README.md` |
 | 02 | Curso | `#/course/<id>`: hero petroleum, estatísticas reais, currículo expansível, aula atual e caixa de retomada | Entregue, sem percentual ou duração inventados |
 | 03 | Player + currículo | `#/player/...`: topbar imersiva, palco, abas reais Currículo/Anotações/Materiais, recolher/restaurar | Entregue; controles nativos do elemento de mídia |
 | 04 | Anotações | `#/notes`: layout de filtros e lista, com indisponibilidade explícita | Estrutura entregue; persistência futura |

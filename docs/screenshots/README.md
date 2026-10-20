@@ -23,6 +23,9 @@ estados e responsividade.
 | `phase7-login-reference-1440x1000.png` | 1440×1000 | Captura atual direta de `06-login.html` |
 | `phase7-login-spa-1440x1000-light.png` | 1440×1000 | SPA, Graphite claro, capturada via REA/Playwright |
 | `phase7-login-side-by-side-1440x1000.png` | 2880×1000 | Referência à esquerda; SPA à direita |
+| `phase7-board01-reference-1440x1000.png` | 1440×1000 | Captura direta atual de `01-library.html` |
+| `phase7-board01-spa-1440x1000-light.png` | 1440×1000 | SPA isolada, Graphite claro, capturada via REA/Playwright |
+| `phase7-board01-side-by-side-1440x1000.png` | 2880×1000 | Prancha 01 à esquerda; SPA à direita |
 
 As imagens documentam o shell aprovado do Graphite: barra petroleum com navegação
 horizontal, busca real, chip compacto de Pomodoro, biblioteca com "Continuar
@@ -71,3 +74,34 @@ claro. Diferenças observadas e tratadas:
   visual funcional restante. Erros e estado ocupado também permanecem funcionais.
 
 Evidência REA/Playwright da captura clara: `ev_bb6e2696598102f2ce2d84bfb59f7211ce6e127ef8254da45b283d8589a985cd`.
+
+### Comparação direta — biblioteca (prancha 01)
+
+Capturas contemporâneas em Chromium 155, 1440×1000, Graphite claro. A busca do topbar
+foi corrigida após a comparação: o ícone agora fica dentro do campo, que usa a largura,
+posição, altura, borda e padding da referência.
+
+O gate visual permanece aberto; a SPA ainda diverge estruturalmente e não avançamos para
+outra prancha:
+
+- Os cartões “Continuar estudando” da referência incluem uma barra com percentual. O
+  contrato de estudo fornece apenas posição em segundos e conclusão explícita, não a
+  duração total da aula nem o percentual por curso. Não desenhamos uma barra vazia ou
+  percentual estimado para simular esse dado.
+- A referência mostra 12 cursos e três cursos/dados de demonstração específicos; a
+  captura isolada da SPA tem quatro cursos (três fixtures sintéticas e um curso legado
+  da base temporária) e nomes/conteúdo diferentes. Isso é diferença dos dados de
+  demonstração, não uma licença para inserir catálogo fictício no produto.
+- Sem o bloco de progresso, cada cartão de retomada fica mais baixo e “Todos os cursos”
+  começa antes da posição da referência. Não adicionamos altura ou preenchimento
+  decorativo para mascarar a diferença.
+- A referência inclui um título documental antes do quadro; ele não faz parte da SPA.
+  O shell começa deslocado, embora o conteúdo principal esteja alinhado ao quadro.
+
+Correção aplicada: composição do campo de busca no topbar. Evidências diretas da
+comparação: referência `ev_fe8fc703929bcd7c2b231fdbc2b7434870b0aba7d70fa12ac1a2bc2b58b01ff1`;
+SPA `ev_f18737fd2fb79a14927533a0e248f7a68ad509724e7322b9767ef06d835916a6`.
+Pendente para fechar a prancha: uma base de comparação aprovada com dados de catálogo e
+progresso que não impliquem métricas inventadas, ou evolução contratual para fornecer
+esses dados. Nenhuma outra tela deve ser considerada validada enquanto este gate estiver
+aberto.

@@ -144,6 +144,12 @@
 .top .brand i{margin-left:1px}
 .search-form{margin-left:auto;display:flex;align-items:center;gap:7px;color:#9fb2b8}
 .search-form .search{margin-left:0}
+/* Match the approved topbar search: one 280px field, with its glyph inside. */
+.top .pomo-wrap{margin-left:0}
+.search-form{position:relative;flex:0 0 280px;margin-left:auto;gap:0}
+.search-form>span{position:absolute;left:12px;z-index:1;color:#cad5d9;line-height:1;pointer-events:none}
+.search-form .search{box-sizing:border-box;width:280px;height:auto;min-width:0;margin:0;padding:9px 12px 9px 34px;border:1px solid #52636a;border-radius:6px;background:#263a43;color:#cad5d9;font-size:14px;line-height:20px}
+.search-form .search::placeholder{color:#cad5d9;opacity:1}
 .section-head{display:flex;justify-content:space-between;align-items:baseline;gap:14px}
 .section-head .small{color:var(--muted);font-size:12px;font-weight:400}
 .course-hero h1{color:#f6f8f9}
