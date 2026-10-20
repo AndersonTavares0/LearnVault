@@ -6,8 +6,21 @@ import { join, resolve } from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
 
 const ADMIN_PASSWORD = 'uma senha local muito segura';
+async function loginAsAdmin(page: Page, baseURL: string, password = ADMIN_PASSWORD) {
+	await page.goto(`${baseURL}/#/login`);
+	await page.getByLabel('Usuário').fill('admin');
+	await page.getByLabel('Senha', { exact: true }).fill(password);
+	await page.getByRole('button', { name: 'Entrar' }).click();
+}
+
+async function catalogTitles(page: Page, baseURL: string): Promise<string[]> {
+	const response = await page.request.get(`${baseURL}/api/catalog`);
+	expect(response.ok()).toBe(true);
+	const catalog = await response.json();
+	return (catalog.nodes ?? []).map((node: { title?: string }) => node.title ?? '');
+}
 async function indexCourses(page: Page) {
-	await page.getByText('Ações da biblioteca', { exact: true }).click();
+	await page.getByText('Mais ações', { exact: true }).click();
 	await page.getByRole('button', { name: 'Indexar cursos' }).click();
 	await expect(page.locator('p.catalog-message')).toHaveText('Catálogo atualizado.');
 }
@@ -139,7 +152,13 @@ async function waitForHealth(url: string, process: ChildProcess) {
 	throw new Error('server did not become ready within 30 seconds');
 }
 
-async function startServer(): Promise<ServerFixture> {
+type StartServerOptions = {
+	/** Registra a fixture como raiz de biblioteca; false inicia sem nenhum curso. */
+	registerLibrary?: boolean;
+};
+
+async function startServer(options: StartServerOptions = {}): Promise<ServerFixture> {
+	const { registerLibrary = true } = options;
 	const root = await mkdtemp(join(tmpdir(), 'learnvault-e2e-'));
 	const library = join(root, 'library');
 	const outsidePath = join(root, 'outside.mp4');
@@ -155,11 +174,18 @@ async function startServer(): Promise<ServerFixture> {
 	const server = spawn(binary, [
 		'--listen-addr', '127.0.0.1:0',
 		'--database', join(root, 'learnvault.sqlite'),
-		'--library-root', library,
+		...(registerLibrary ? ['--library-root', library] : []),
 		'--web-root', webRoot,
 		'--insecure-http'
 	], {
-		env: { ...process.env, ADMIN_USERNAME: 'admin', ADMIN_PASSWORD },
+		env: {
+			...process.env,
+			ADMIN_USERNAME: 'admin',
+			ADMIN_PASSWORD,
+			// A fixture cria a pasta para importá-la depois; sem a flag, o ambiente vazio
+			// impede que uma variável herdada registre a biblioteca no arranque.
+			...(registerLibrary ? {} : { LIBRARY_DIR: '' })
+		},
 		stdio: ['ignore', 'pipe', 'ignore']
 	});
 	const closed = childClosed(server);
@@ -222,7 +248,7 @@ test('serves the built SPA through the Rust server for a complete study-library 
 
 	await indexCourses(page);
 	await expect(page.getByRole('navigation', { name: 'Navegação principal' })).toBeVisible();
-	await expect(page.getByRole('heading', { name: 'Todos os cursos', exact: false })).toBeVisible();
+	await expect(page.getByRole('list', { name: 'Todos os cursos' })).toBeVisible();
 	const importPathInput = page.getByLabel('Caminho da pasta do curso no servidor');
 	await page.getByRole('button', { name: 'Importar curso' }).click();
 	await importPathInput.fill(join(server.libraryPath, 'Categoria', 'Curso'));
@@ -247,7 +273,7 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	await expect(page.getByRole('heading', { name: 'Continuar estudando', exact: true })).toBeVisible();
 	await page.getByRole('button', { name: 'Em andamento' }).click();
 	await expect(page.getByRole('link', { name: 'Retomar aula' }).first()).toBeVisible();
-	await expect(page.getByRole('heading', { name: 'Todos os cursos' })).toContainText('1');
+	await expect(page.getByRole('list', { name: 'Todos os cursos' }).getByRole('listitem')).toHaveCount(1);
 	await page.getByRole('button', { name: 'Tudo' }).click();
 
 	// A lista mostra o curso, a aula e o tempo real; nunca o nome cru do arquivo.
@@ -341,8 +367,9 @@ test('serves the built SPA through the Rust server for a complete study-library 
 
 	// O caminho de volta para a biblioteca continua no breadcrumb da tela de estudo.
 	await page.getByRole('link', { name: 'Cursos', exact: true }).click();
-	await expect(page.getByRole('heading', { name: 'Todos os cursos', exact: false })).toBeVisible();
-	await page.getByRole('button', { name: 'Sair' }).click();
+	await expect(page.getByRole('list', { name: 'Todos os cursos' })).toBeVisible();
+	await page.getByLabel('Abrir conta').click();
+	await page.getByRole('button', { name: 'Encerrar sessão' }).click();
 	await expect(page.getByRole('button', { name: 'Entrar' })).toBeVisible();
 	const afterLogoutMedia = await page.request.get(new URL(videoSource as string, server.baseURL).toString());
 	expect(afterLogoutMedia.status()).toBe(401);
@@ -359,7 +386,7 @@ test('creates, edits, reloads and deletes a personal note in the player', async 
 
 	// O servidor é compartilhado por worker: a varredura só roda quando o catálogo ainda
 	// não está indexado.
-	await page.getByText('Ações da biblioteca', { exact: true }).click();
+	await page.getByText('Mais ações', { exact: true }).click();
 	const indexButton = page.getByRole('button', { name: 'Indexar cursos' });
 	if (await indexButton.isEnabled()) {
 		await indexButton.click();
@@ -405,6 +432,8 @@ test('creates, edits, reloads and deletes a personal note in the player', async 
 	await expect(page.getByText(texto).first()).toBeVisible();
 	const globalNotesSearch = page.getByLabel('Buscar anotações');
 	// Busca única: o termo entra pelo header; sem eco em segunda caixa.
+	await expect(page.locator('#notes-search')).toHaveCount(0);
+	await expect(page.getByRole('searchbox')).toHaveCount(1);
 	await globalNotesSearch.fill('texto que não existe');
 	await expect(page.getByRole('status').filter({ hasText: 'Nenhuma anotação corresponde aos filtros' })).toBeVisible();
 	await globalNotesSearch.fill(texto);
@@ -658,4 +687,342 @@ test('moves the cover actions to the course card and keeps the course page clean
 	expect(afterRemoval.status()).toBe(404);
 	const catalogAfter = await (await page.request.get(`${server.baseURL}/api/catalog`)).json();
 	expect(catalogAfter.nodes[0].cover_version).toBeUndefined();
+});
+
+test('offers a single first-course action on a truly empty library and returns clean when cancelled', async ({ page }) => {
+	// Instância própria: a fixture compartilhada do worker já tem um curso indexado.
+	const server = await startServer({ registerLibrary: false });
+	try {
+		await loginAsAdmin(page, server.baseURL);
+		await expect(page.getByRole('heading', { name: 'Meus cursos' })).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'Adicione seu primeiro curso' })).toBeVisible();
+		await expect(page.getByText('Escolha uma pasta que já existe. Seus arquivos continuam no lugar.')).toBeVisible();
+		// Sem catálogo não há ordenação, filtro nem menu de ações vazio.
+		await expect(page.getByLabel('Ordenar cursos')).toHaveCount(0);
+		await expect(page.getByRole('group', { name: 'Filtrar cursos' })).toHaveCount(0);
+		await expect(page.getByText('Ações da biblioteca', { exact: true })).toHaveCount(0);
+
+		await page.getByRole('button', { name: 'Importar curso' }).click();
+		await expect(page.getByRole('heading', { name: 'Importar curso', level: 1 })).toBeVisible();
+		await expect(page.getByLabel('Caminho da pasta do curso no servidor')).toBeVisible();
+
+		await page.getByRole('button', { name: 'Cancelar', exact: true }).click();
+		await expect(page.getByRole('heading', { name: 'Adicione seu primeiro curso' })).toBeVisible();
+		await expect(page.locator('#import-path-error')).toHaveCount(0);
+		await expect(page.getByRole('alert')).toHaveCount(0);
+	} finally {
+		await server.stop();
+	}
+});
+
+test('reports an unreadable import path inside the form and registers the course only after confirmation', async ({ page }) => {
+	const server = await startServer({ registerLibrary: false });
+	const requests = { preview: 0, import: 0 };
+	page.on('request', (request) => {
+		if (request.method() !== 'POST') return;
+		const { pathname } = new URL(request.url());
+		if (pathname === '/api/admin/courses/preview') requests.preview += 1;
+		if (pathname === '/api/admin/courses') requests.import += 1;
+	});
+	try {
+		await loginAsAdmin(page, server.baseURL);
+		await expect(page.getByRole('heading', { name: 'Adicione seu primeiro curso' })).toBeVisible();
+		await page.getByRole('button', { name: 'Importar curso' }).click();
+
+		const pathInput = page.getByLabel('Caminho da pasta do curso no servidor');
+		const missingPath = join(server.libraryPath, 'Categoria', 'Pasta inexistente');
+		await pathInput.fill(missingPath);
+		await page.getByRole('button', { name: 'Analisar pasta' }).click();
+
+		const errorBox = page.locator('#import-path-error');
+		await expect(errorBox).toBeVisible();
+		await expect(errorBox).toContainText('Não foi possível analisar esta pasta');
+		await expect(errorBox).toContainText('A pasta informada não existe ou não pode ser lida no servidor.');
+		await expect(pathInput).toHaveValue(missingPath);
+		await expect(pathInput).toHaveAttribute('aria-invalid', 'true');
+		const describedBy = await pathInput.getAttribute('aria-describedby');
+		expect(describedBy).toContain('import-path-error');
+		expect(describedBy).toContain('import-path-help');
+
+		const validPath = join(server.libraryPath, 'Categoria', 'Curso');
+		await pathInput.fill(validPath);
+		await page.getByRole('button', { name: 'Analisar pasta' }).click();
+		await expect(page.getByRole('heading', { name: 'Revise a pasta antes de importar' })).toBeVisible();
+		await expect(page.locator('#import-path')).toHaveCount(0);
+
+		// A prévia é somente leitura: o catálogo continua vazio até a confirmação.
+		expect(await catalogTitles(page, server.baseURL)).toEqual([]);
+
+		await page.getByRole('button', { name: 'Confirmar importação' }).click();
+		await expect(page.getByText('Curso', { exact: true }).first()).toBeVisible();
+		await expect(page.locator('.course-card-title')).toHaveText('Curso');
+		expect(requests.import).toBe(1);
+		expect(requests.preview).toBe(2);
+		expect(await catalogTitles(page, server.baseURL)).toEqual(['Curso']);
+	} finally {
+		await server.stop();
+	}
+});
+
+test('keeps the registered course after a failed rescan and retries only the catalog refresh', async ({ page }) => {
+	const server = await startServer({ registerLibrary: false });
+	let registrationRequests = 0;
+	let rescanRequests = 0;
+	page.on('request', (request) => {
+		if (request.method() !== 'POST') return;
+		const { pathname } = new URL(request.url());
+		if (pathname === '/api/admin/courses') registrationRequests += 1;
+		if (pathname === '/api/admin/catalog/rescan') rescanRequests += 1;
+	});
+	const rescanRoute = '**/api/admin/catalog/rescan';
+	try {
+		await loginAsAdmin(page, server.baseURL);
+		await page.getByRole('button', { name: 'Importar curso' }).click();
+		await page.getByLabel('Caminho da pasta do curso no servidor').fill(join(server.libraryPath, 'Categoria', 'Curso'));
+		await page.getByRole('button', { name: 'Analisar pasta' }).click();
+		await expect(page.getByRole('heading', { name: 'Revise a pasta antes de importar' })).toBeVisible();
+
+		// Intercepta apenas o navegador deste teste: o servidor continua real.
+		await page.route(rescanRoute, (route) => route.fulfill({
+			status: 500,
+			contentType: 'application/json',
+			body: JSON.stringify({ error: 'rescan_unavailable' })
+		}));
+		await page.getByRole('button', { name: 'Confirmar importação' }).click();
+		await expect(page.getByRole('alert').filter({ hasText: 'Curso registrado; não foi possível atualizar o catálogo.' })).toBeVisible();
+		await expect(page.getByRole('button', { name: 'Confirmar importação' })).toHaveCount(0);
+		expect(registrationRequests).toBe(1);
+		expect(rescanRequests).toBe(1);
+
+		await page.unroute(rescanRoute);
+		await page.getByRole('button', { name: 'Tentar atualizar catálogo' }).click();
+		await expect(page.locator('.course-card-title')).toHaveText('Curso');
+		// A nova tentativa nunca reimporta o curso já registrado.
+		expect(registrationRequests).toBe(1);
+		expect(rescanRequests).toBe(2);
+		expect(await catalogTitles(page, server.baseURL)).toEqual(['Curso']);
+	} finally {
+		await page.unroute(rescanRoute).catch(() => undefined);
+		await server.stop();
+	}
+});
+
+test('keeps palette choices across reloads and confines custom palette edits to valid full palettes', async ({ page }) => {
+	// Instância própria: mantém o limite de tentativas de login do servidor compartilhado.
+	const paletteServer = await startServer();
+	try {
+		await page.emulateMedia({ colorScheme: 'light' });
+		await loginAsAdmin(page, paletteServer.baseURL);
+		await expect(page.getByRole('heading', { name: 'Meus cursos' })).toBeAttached();
+		await page.goto(`${paletteServer.baseURL}/#/settings`);
+		const root = page.locator('html');
+		const paletteSettings = page.locator('.palette-settings');
+		const stoneOption = paletteSettings.locator('.palette-option').filter({ hasText: 'Pedra, areia e oliva' });
+		const graphiteOption = paletteSettings.locator('.palette-option').filter({ hasText: 'Graphite clássico' });
+
+		// Graphite é uma escolha persistida, não apenas um destaque de botão.
+		await graphiteOption.getByRole('button', { name: /Graphite clássico/ }).click();
+		await expect(root).toHaveAttribute('data-palette', 'graphite');
+		await expect(graphiteOption.getByRole('button', { name: /Graphite clássico/ })).toHaveAttribute('aria-pressed', 'true');
+		expect((await root.evaluate((element) => element.style.getPropertyValue('--accent'))).toLowerCase()).toBe('#276f73');
+		await page.reload();
+		await expect(root).toHaveAttribute('data-palette', 'graphite');
+		await expect(page.locator('.palette-option').filter({ hasText: 'Graphite clássico' }).getByRole('button', { name: /Graphite clássico/ })).toHaveAttribute('aria-pressed', 'true');
+
+		// Duplicar Pedra cria uma cópia daquela paleta, não da seleção atual (Graphite).
+		await stoneOption.getByRole('button', { name: 'Duplicar e editar' }).click();
+		const editor = page.getByRole('region', { name: 'Editor de paleta' });
+		await expect(editor).toBeVisible();
+		await expect(page.getByLabel('Nome da paleta')).toHaveValue('Meu estudo');
+		await page.getByLabel('Destaque (hexadecimal)', { exact: true }).fill('#3F5A32');
+		await editor.getByRole('button', { name: 'Escuro', exact: true }).click();
+		await page.getByLabel('Destaque (hexadecimal)', { exact: true }).fill('#C2D9A0');
+		await editor.getByRole('button', { name: 'Salvar e aplicar' }).click();
+		await expect(paletteSettings.getByRole('status')).toContainText('Paleta salva e aplicada.');
+		const customId = await root.getAttribute('data-palette');
+		expect(customId).toMatch(/^custom-/);
+		expect((await root.evaluate((element) => element.style.getPropertyValue('--accent'))).toLowerCase()).toBe('#3f5a32');
+		const customOption = paletteSettings.locator('.palette-option').filter({ hasText: 'Meu estudo' });
+		await expect(customOption.getByRole('button', { name: /Meu estudo/ })).toHaveAttribute('aria-pressed', 'true');
+		await expect(customOption.getByText('Ativa')).toBeVisible();
+
+		// A paleta custom sobrevive ao recarregamento, como o preset.
+		await page.reload();
+		await expect(root).toHaveAttribute('data-palette', customId!);
+		expect((await root.evaluate((element) => element.style.getPropertyValue('--accent'))).toLowerCase()).toBe('#3f5a32');
+
+		// Cancelar descarta o rascunho e mantém a seleção e as cores aplicadas.
+		const reloadedCustom = page.locator('.palette-option').filter({ hasText: 'Meu estudo' });
+		await reloadedCustom.getByRole('button', { name: 'Editar' }).click();
+		await page.getByLabel('Destaque (hexadecimal)', { exact: true }).fill('#123456');
+		await page.getByRole('region', { name: 'Editor de paleta' }).getByRole('button', { name: 'Cancelar', exact: true }).click();
+		await expect(root).toHaveAttribute('data-palette', customId!);
+		expect((await root.evaluate((element) => element.style.getPropertyValue('--accent'))).toLowerCase()).toBe('#3f5a32');
+		await expect(reloadedCustom.getByRole('button', { name: /Meu estudo/ })).toHaveAttribute('aria-pressed', 'true');
+
+		// Contraste insuficiente mantém o rascunho e nunca aplica uma paleta ilegível.
+		await reloadedCustom.getByRole('button', { name: 'Editar' }).click();
+		const background = await page.getByLabel('Fundo (hexadecimal)', { exact: true }).inputValue();
+		await page.getByLabel('Texto (hexadecimal)', { exact: true }).fill(background);
+		const contrastErrors = page.getByRole('region', { name: 'Editor de paleta' }).getByRole('alert');
+		await expect(contrastErrors).toContainText('Contraste insuficiente');
+		await page.getByRole('region', { name: 'Editor de paleta' }).getByRole('button', { name: 'Salvar e aplicar' }).click();
+		await expect(page.locator('.palette-settings').getByRole('status')).toHaveText('Corrija os problemas indicados antes de salvar.');
+		await expect(root).toHaveAttribute('data-palette', customId!);
+		await page.getByRole('region', { name: 'Editor de paleta' }).getByRole('button', { name: 'Cancelar', exact: true }).click();
+
+		// Excluir a paleta ativa volta ao padrão Pedra, areia e oliva.
+		await reloadedCustom.getByRole('button', { name: 'Excluir', exact: true }).click();
+		await expect(reloadedCustom.getByText('Excluir esta paleta?')).toBeVisible();
+		await reloadedCustom.getByRole('button', { name: 'Excluir', exact: true }).click();
+		await expect(root).toHaveAttribute('data-palette', 'stone-olive');
+		await expect(page.locator('.palette-option').filter({ hasText: 'Pedra, areia e oliva' }).getByRole('button', { name: /Pedra, areia e oliva/ })).toHaveAttribute('aria-pressed', 'true');
+		await expect(paletteSettings.getByRole('status')).toHaveText('Paleta excluída. Pedra, areia e oliva volta a ser ativa.');
+
+		// Storage bloqueado: aplica só nesta sessão e anuncia a limitação.
+		await paletteSettings.getByRole('button', { name: 'Criar tema' }).click();
+		await page.getByLabel('Nome da paleta').fill('Tema sem armazenamento');
+		await page.evaluate(() => {
+			Object.defineProperty(Storage.prototype, 'setItem', {
+				configurable: true,
+				value: () => { throw new DOMException('blocked', 'SecurityError'); }
+			});
+		});
+		await page.getByRole('region', { name: 'Editor de paleta' }).getByRole('button', { name: 'Salvar e aplicar' }).click();
+		await expect(paletteSettings.getByRole('status')).toHaveText('Paleta aplicada nesta sessão; não foi possível salvar neste navegador.');
+		expect(await root.getAttribute('data-palette')).toMatch(/^custom-/);
+		await page.reload();
+		// Nada foi gravado: sem o tema custom, a leitura volta ao padrão.
+		await expect(root).toHaveAttribute('data-palette', 'stone-olive');
+	} finally {
+		await paletteServer.stop();
+	}
+});
+
+test.describe('credenciais', () => {
+	test('updates credentials once, revokes the sibling session and never receives the confirmation field', async ({ browser }) => {
+		const server = await startServer();
+		const contextA = await browser.newContext();
+		const contextB = await browser.newContext();
+		const pageA = await contextA.newPage();
+		const pageB = await contextB.newPage();
+		// Limites novos: 7 é curto, 8 é o mínimo; 128 é o máximo, 129 é longo.
+		// Quatro emojis têm 8 unidades UTF-16 e apenas 4 caracteres; oito emojis
+		// têm 8 caracteres e 16 unidades. Só a contagem por code point é válida.
+		const seven = 'ç'.repeat(7);
+		const astralUtf16 = '🔑'.repeat(4);
+		const tooLong = 'ç'.repeat(129);
+		const astral = '🔑'.repeat(8);
+		const maximum = 'ç'.repeat(128);
+		const wrongConfirmation = 'confirmação divergente para o teste';
+		const credentialBodies: Record<string, unknown>[] = [];
+		try {
+			await loginAsAdmin(pageA, server.baseURL);
+			await loginAsAdmin(pageB, server.baseURL);
+			await expect(pageA.getByRole('heading', { name: 'Meus cursos' })).toBeAttached();
+			await expect(pageB.getByRole('heading', { name: 'Meus cursos' })).toBeAttached();
+			expect((await pageB.request.get(`${server.baseURL}/api/me`)).status()).toBe(200);
+
+			pageA.on('request', (request) => {
+				if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/account/credentials') {
+					credentialBodies.push(request.postDataJSON() as Record<string, unknown>);
+				}
+			});
+			await pageA.goto(`${server.baseURL}/#/settings`);
+			const current = pageA.getByLabel('Senha atual', { exact: true });
+			const next = pageA.getByLabel('Nova senha', { exact: true });
+			const confirmation = pageA.getByLabel('Confirmar nova senha', { exact: true });
+			const submit = pageA.getByRole('button', { name: 'Atualizar credenciais' });
+
+			await pageA.getByLabel('Nome de usuário').fill('admin');
+			await current.fill(ADMIN_PASSWORD);
+			await next.fill('frase de senha segura');
+			await confirmation.fill(wrongConfirmation);
+			await submit.click();
+			await expect(pageA.locator('#settings-confirm-password-error')).toHaveText('As senhas não coincidem.');
+			await expect.poll(() => pageA.evaluate(() => document.activeElement?.id ?? '')).toBe('settings-confirm-password');
+			expect(credentialBodies.length).toBe(0);
+
+			// 7 caracteres Unicode são recusados no cliente, sem requisição.
+			await next.fill(seven);
+			await confirmation.fill(seven);
+			await submit.click();
+			await expect(pageA.locator('#settings-new-password-error')).toHaveText('Use ao menos 8 caracteres.');
+			await expect.poll(() => pageA.evaluate(() => document.activeElement?.id ?? '')).toBe('settings-new-password');
+			expect(credentialBodies.length).toBe(0);
+
+			// Quatro emojis somam 8 unidades UTF-16, mas só 4 caracteres Unicode.
+			await next.fill(astralUtf16);
+			await confirmation.fill(astralUtf16);
+			await submit.click();
+			await expect(pageA.locator('#settings-new-password-error')).toHaveText('Use ao menos 8 caracteres.');
+			expect(credentialBodies.length).toBe(0);
+
+			// Acima do máximo de 128 caracteres também não há requisição.
+			await next.fill(tooLong);
+			await confirmation.fill(tooLong);
+			await submit.click();
+			await expect(pageA.locator('#settings-new-password-error')).toHaveText('Use no máximo 128 caracteres.');
+			expect(credentialBodies.length).toBe(0);
+
+			// Oito caracteres astrais (16 unidades UTF-16) passam pela validação local
+			// e chegam ao servidor; a senha atual errada falha e B continua válida.
+			await next.fill(astral);
+			await confirmation.fill(astral);
+			await current.fill('senha atual incorreta');
+			const wrongCurrent = pageA.waitForResponse((response) => new URL(response.url()).pathname === '/api/account/credentials' && response.status() === 401);
+			await submit.click();
+			await wrongCurrent;
+			await expect(pageA.getByRole('alert').filter({ hasText: 'Senha atual incorreta.' })).toHaveText('Senha atual incorreta.');
+			expect(credentialBodies.length).toBe(1);
+			expect(Array.from(String(credentialBodies[0].password)).length).toBe(8);
+			expect(String(credentialBodies[0].password).length).toBe(16);
+			expect((await pageB.request.get(`${server.baseURL}/api/me`)).status()).toBe(200);
+
+			// O limite superior de 128 caracteres Unicode é aceito e aplicado.
+			await current.fill(ADMIN_PASSWORD);
+			await next.fill(maximum);
+			await confirmation.fill(maximum);
+			const updated = pageA.waitForResponse((response) => new URL(response.url()).pathname === '/api/account/credentials' && response.status() === 200);
+			await submit.click();
+			await updated;
+			const success = pageA.getByText('Credenciais atualizadas. Outras sessões foram encerradas.');
+			await expect(success).toBeVisible();
+			expect(credentialBodies.length).toBe(2);
+			for (const body of credentialBodies) {
+				expect(Object.keys(body).sort()).toEqual(['current_password', 'password', 'username']);
+				expect('confirmation' in body).toBe(false);
+				expect('confirm_password' in body).toBe(false);
+				expect('password_confirmation' in body).toBe(false);
+			}
+			expect(Array.from(String(credentialBodies[1].password)).length).toBe(128);
+			expect(credentialBodies[0].username).toBe('admin');
+			expect(credentialBodies[1].username).toBe('admin');
+			const successText = await success.innerText();
+			expect([ADMIN_PASSWORD, seven, astralUtf16, tooLong, astral, maximum, wrongConfirmation].some((secret) => successText.includes(secret))).toBe(false);
+
+			// Os campos são limpos após o sucesso, sem reter segredos na tela.
+			await expect(current).toHaveValue('');
+			await expect(next).toHaveValue('');
+			await expect(confirmation).toHaveValue('');
+
+			expect((await pageA.request.get(`${server.baseURL}/api/me`)).status()).toBe(200);
+			// A transação revogou a sessão anterior de B; só o cookie substituto de A vale.
+			expect((await pageB.request.get(`${server.baseURL}/api/me`)).status()).toBe(401);
+
+			await pageA.getByRole('button', { name: 'Encerrar sessão' }).click();
+			await expect(pageA.getByRole('heading', { name: 'Entrar', level: 2 })).toBeVisible();
+			await pageA.getByLabel('Usuário').fill('admin');
+			await pageA.getByLabel('Senha', { exact: true }).fill(ADMIN_PASSWORD);
+			await pageA.getByRole('button', { name: 'Entrar' }).click();
+			await expect(pageA.getByRole('alert')).toHaveText('Usuário ou senha incorretos.');
+			await pageA.getByLabel('Senha', { exact: true }).fill(maximum);
+			await pageA.getByRole('button', { name: 'Entrar' }).click();
+			await expect(pageA.getByRole('heading', { name: 'Meus cursos' })).toBeAttached();
+		} finally {
+			await contextA.close();
+			await contextB.close();
+			await server.stop();
+		}
+	});
 });
