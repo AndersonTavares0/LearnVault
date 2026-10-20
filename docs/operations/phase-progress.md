@@ -10,7 +10,7 @@ curso é usado durante o desenvolvimento.
 | 2 — Descoberta e prévia | Concluída | `feat/phase2-import-discovery` / `870642e` | Descoberta física somente leitura separada de interpretação heurística; prévia HTTP autenticada e confirmação explícita; testes Rust, servidor, desktop, frontend, build e auditoria passaram. |
 | 3 — Catálogo lógico e correções | Concluída | `feat/phase3-logical-catalog` / commit da branch | Corrige diretórios mistos: mídia direta vira aula explícita e subdiretórios permanecem módulos aninhados, sem alterar caminhos ou identidades. |
 | 4 — Materiais, capas e visualização segura | Concluída | `feat/phase4-materials-safe-view` / `3761124` | Visualização inline somente para tipos allowlisted; capas derivadas de materiais de imagem; arquivos e raízes continuam somente leitura. |
-| 5 — Study Analytics | Pendente | — | Executar somente após o commit da Fase 4. |
+| 5 — Study Analytics | Concluída | `feat/phase5-study-analytics` / commit da branch | Agregação somente leitura por usuário, excluindo mídias removidas e sem alterar o estado de progresso; contratos HTTP e desktop mantêm isolamento por dono. |
 | 6 — Pomodoro persistente | Pendente | — | Executar somente após o commit da Fase 5. |
 | 7 — Redesign visual | Pendente | — | Auditar a implementação existente antes de alterar; executar somente após a Fase 6. |
 

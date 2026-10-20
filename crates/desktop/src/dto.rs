@@ -7,7 +7,7 @@
 
 use learnvault_core::{
     Availability, Catalog, CatalogFile, CatalogNode, MediaKind, NodeRole, RescanSummary,
-    StudyProgress,
+    StudyAnalytics, StudyProgress,
 };
 use serde::Serialize;
 
@@ -246,6 +246,30 @@ impl StudyProgressDto {
 pub struct RecentStudyDto {
     /// Itens de progresso, já ordenados pelo núcleo.
     pub items: Vec<StudyProgressDto>,
+}
+
+/// Métricas agregadas do estudo do dono local.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct StudyAnalyticsDto {
+    /// Quantidade de mídias com estado de estudo não removidas.
+    pub tracked_count: usize,
+    /// Quantidade concluída.
+    pub completed_count: usize,
+    /// Soma das posições de retomada em segundos.
+    pub total_position_seconds: i64,
+    /// Última atividade, se houver.
+    pub last_activity_at: Option<i64>,
+}
+
+impl From<StudyAnalytics> for StudyAnalyticsDto {
+    fn from(value: StudyAnalytics) -> Self {
+        Self {
+            tracked_count: value.tracked_count,
+            completed_count: value.completed_count,
+            total_position_seconds: value.total_position_seconds,
+            last_activity_at: value.last_activity_at,
+        }
+    }
 }
 
 /// DTO do impacto de remoção de mídia.

@@ -9,7 +9,7 @@
 	import PasswordField from './PasswordField.svelte';
 	import { lessonSections, neighboringLessons, type LessonSection } from './navigation';
 	import { destinationAfterLogin, findCourse, findLesson, findLessonLocation, href, locationFromHash, type Route } from './router';
-	import { transport, transportKind, STUDY_NOT_AVAILABLE, type Catalog, type CatalogNode, type Lesson, type StudyProgress, type User } from './transport';
+ import { transport, transportKind, STUDY_NOT_AVAILABLE, type Catalog, type CatalogNode, type Lesson, type StudyAnalytics, type StudyProgress, type User } from './transport';
 	import { defaultRoute, resolveSession } from './session';
 	import { formatDuration, studySyncSupported } from './player';
 	import Brand from './Brand.svelte';
@@ -66,6 +66,7 @@
 	let catalogOrderError = false;
 	let mediaError = '';
 	let recent: StudyProgress[] = [];
+	let studyAnalytics: StudyAnalytics | null = null;
 	let recentLoading = false;
 	let studyEnabled = studySyncSupported;
 
@@ -324,10 +325,12 @@
 		if (!studySyncSupported) return;
 		recentLoading = true;
 		try {
-			const result = await transport.recentStudy(6);
+			const [result, analytics] = await Promise.all([transport.recentStudy(6), transport.studyAnalytics()]);
 			recent = result.items;
+			studyAnalytics = analytics;
 		} catch (cause) {
 			recent = [];
+			studyAnalytics = null;
 			if (cause && typeof cause === 'object' && (cause as { code?: string }).code === STUDY_NOT_AVAILABLE) {
 				studyEnabled = false;
 			}
@@ -393,6 +396,7 @@
 			{/if}
 		</div>
 	{/if}
+	{#if studySyncSupported && studyAnalytics}<section class="study-analytics" aria-labelledby="analytics-heading"><h2 id="analytics-heading">Seu estudo</h2><dl><div><dt>Aulas acompanhadas</dt><dd>{studyAnalytics.trackedCount}</dd></div><div><dt>Concluídas</dt><dd>{studyAnalytics.completedCount}</dd></div><div><dt>Tempo estudado</dt><dd>{formatDuration(studyAnalytics.totalPositionSeconds)}</dd></div></dl></section>{/if}
 	{#if studySyncSupported && recent.length}<section class="recent-study" aria-labelledby="recent-heading"><h2 id="recent-heading">Continuar assistindo</h2><ul>{#each recent as item}{@const location = findLessonLocation(catalog, item.mediaId)}<li>{#if location}<div class="recent-study-info"><a href={href('player', location.courseId, location.lesson.path)}>{location.lesson.title}</a><small title={formatLocationContext(location.courseTitle, location.moduleTitle)}>{formatLocationContext(location.courseTitle, location.moduleTitle)}</small></div><small>{item.completed ? 'Concluído' : `Parou em ${formatDuration(item.positionSeconds)}`}</small>{:else}<span>Mídia não disponível no catálogo</span>{/if}</li>{/each}</ul></section>{/if}
 	{#if !canManage && catalog && catalog.nodes.length === 0}<p class="empty" role="status">Nenhum curso disponível. Peça ao administrador para importar um curso.</p>{/if}
 	{#if user.role === 'admin' && importFormOpen && !importPreview}<form class="import-form" onsubmit={submitImport}><label for="import-path">Caminho da pasta do curso no servidor</label><input id="import-path" bind:value={importPath} placeholder="C:\cursos\Meu curso" required /><div class="import-form-actions"><button class="primary" disabled={previewingImport || importing} aria-busy={previewingImport}>{previewingImport ? 'Analisando…' : 'Analisar pasta'}</button><button type="button" class="text-button" onclick={() => (importFormOpen = false)}>Cancelar</button></div></form>{/if}

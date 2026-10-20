@@ -83,6 +83,7 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/api/media", get(media::media).head(media::media))
         .route("/api/study/recent", get(study::recent))
+        .route("/api/study/analytics", get(study::analytics))
         .route("/api/study/progress", get(study::progress))
         .route("/api/study/position", post(study::record_position))
         .route("/api/study/completed", post(study::set_completed))

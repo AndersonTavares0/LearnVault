@@ -16,7 +16,7 @@
 
 use learnvault_core::Database;
 
-use crate::dto::{RecentStudyDto, StudyProgressDto};
+use crate::dto::{RecentStudyDto, StudyAnalyticsDto, StudyProgressDto};
 use crate::error::IpcError;
 
 /// Dono local fixo do progresso de estudo do desktop.
@@ -82,6 +82,13 @@ pub fn recent(database: &Database, limit: Option<usize>) -> Result<RecentStudyDt
         items: states.into_iter().map(StudyProgressDto::from).collect(),
     })
     .map_err(study_error)
+}
+
+/// Lê métricas agregadas do estudo do dono local.
+pub fn analytics(database: &Database) -> Result<StudyAnalyticsDto, IpcError> {
+    learnvault_core::study_analytics(database, LOCAL_OWNER_ID)
+        .map(StudyAnalyticsDto::from)
+        .map_err(study_error)
 }
 
 /// Traduz o erro do núcleo para o erro IPC estável, sem ecoar o identificador consultado.

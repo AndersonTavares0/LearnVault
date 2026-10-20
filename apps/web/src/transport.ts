@@ -15,6 +15,7 @@ export type Catalog = { complete: boolean; looseFiles: FileEntry[]; nodes: Catal
 export type TransportKind = 'http' | 'desktop';
 export type StudyProgress = { mediaId: string; positionSeconds: number; completed: boolean; updatedAt: number | null; recorded: boolean };
 export type RecentStudy = { items: StudyProgress[] };
+export type StudyAnalytics = { trackedCount: number; completedCount: number; totalPositionSeconds: number; lastActivityAt: number | null };
 export type DiscoveryStatus = { status: 'found' } | { status: 'ignored' | 'inaccessible' | 'unsupported'; reason: string };
 export type DiscoveryNode = { name: string; path: string; entryKind: 'directory' | 'file'; status: DiscoveryStatus; fileKind?: 'media' | 'subtitle' | 'material'; size?: number; children: DiscoveryNode[] };
 export type ImportPreview = {
@@ -62,6 +63,7 @@ export interface Transport {
 	recordPosition(mediaId: string, positionSeconds: number): Promise<StudyProgress>;
 	setCompleted(mediaId: string, completed: boolean): Promise<StudyProgress>;
 	recentStudy(limit?: number): Promise<RecentStudy>;
+	studyAnalytics(): Promise<StudyAnalytics>;
 	mediaUrl(file: FileEntry, courseId?: string): string | null;
 }
 
@@ -313,6 +315,21 @@ export function normalizeRecentStudy(value: unknown): RecentStudy {
 	return { items: (value as { items: unknown[] }).items.map(normalizeStudyProgress) };
 }
 
+export function normalizeStudyAnalytics(value: unknown): StudyAnalytics {
+	if (!value || typeof value !== 'object') throw invalidPayload('analytics de estudo ausente.');
+	const analytics = value as { tracked_count?: unknown; completed_count?: unknown; total_position_seconds?: unknown; last_activity_at?: unknown };
+	const trackedCount = analytics.tracked_count;
+	const completedCount = analytics.completed_count;
+	const totalPositionSeconds = analytics.total_position_seconds;
+	if (typeof trackedCount !== 'number' || !Number.isSafeInteger(trackedCount) || trackedCount < 0
+		|| typeof completedCount !== 'number' || !Number.isSafeInteger(completedCount) || completedCount < 0
+		|| typeof totalPositionSeconds !== 'number' || !Number.isSafeInteger(totalPositionSeconds) || totalPositionSeconds < 0) throw invalidPayload('analytics de estudo inválida.');
+	if (completedCount > trackedCount) throw invalidPayload('contagem de conclusão inválida.');
+	const lastActivityAt = analytics.last_activity_at;
+	if (lastActivityAt !== null && lastActivityAt !== undefined && (typeof lastActivityAt !== 'number' || !Number.isSafeInteger(lastActivityAt) || lastActivityAt < 0)) throw invalidPayload('última atividade inválida.');
+	return { trackedCount, completedCount, totalPositionSeconds, lastActivityAt: typeof lastActivityAt === 'number' ? lastActivityAt : null };
+}
+
 // Envelope de categoria da projeção de categorias: `{ children }`.
 function isCategoryEnvelope(item: unknown): boolean {
 	return item !== null && typeof item === 'object' && !Array.isArray(item) && 'children' in item;
@@ -417,6 +434,7 @@ export class HttpTransport implements Transport {
 	async recordPosition(mediaId: string, positionSeconds: number) { const response = await fetch('/api/study/position', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: mediaId, position_seconds: positionSeconds }) }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? 'Mídia não encontrada.' : response.status === 422 ? 'Posição inválida.' : 'Não foi possível salvar o progresso.'); return normalizeStudyProgress(await response.json()); }
 	async setCompleted(mediaId: string, completed: boolean) { const response = await fetch('/api/study/completed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: mediaId, completed }) }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? 'Mídia não encontrada.' : 'Não foi possível atualizar a conclusão.'); return normalizeStudyProgress(await response.json()); }
 	async recentStudy(limit?: number) { const url = limit === undefined ? '/api/study/recent' : `/api/study/recent?limit=${limit}`; const response = await fetch(url); if (!response.ok) throw response.status === 404 ? Object.assign(new Error('Estudo não disponível neste servidor.'), { code: STUDY_NOT_AVAILABLE }) : new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar o histórico.'); return normalizeRecentStudy(await response.json()); }
+	async studyAnalytics() { const response = await fetch('/api/study/analytics'); if (!response.ok) throw response.status === 404 ? Object.assign(new Error('Estudo não disponível neste servidor.'), { code: STUDY_NOT_AVAILABLE }) : new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar as métricas de estudo.'); return normalizeStudyAnalytics(await response.json()); }
 	mediaUrl(file: FileEntry, courseId?: string) { return `/api/media?course=${encodeURIComponent(courseId ?? '')}&path=${encodeURIComponent(file.path)}`; }
 }
 
@@ -481,6 +499,7 @@ export class DesktopStub implements Transport {
 	// Sem limite informado, o comando usa o padrão do contrato; por isso o argumento é
 	// omitido em vez de enviado como `undefined`.
 	async recentStudy(limit?: number) { try { return normalizeRecentStudy(await invoke<unknown>('desktop_recent_study', limit === undefined ? {} : { limit })); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar o histórico de estudo.'); } }
+	async studyAnalytics() { try { return normalizeStudyAnalytics(await invoke<unknown>('desktop_study_analytics')); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar as métricas de estudo.'); } }
 	// Toda mídia entregue ao player usa a identidade autorizada. O caminho catalogado é
 	// deliberadamente ignorado, inclusive no desktop, para que ele nunca atravesse o webview.
 	mediaUrl(file: FileEntry, _courseId?: string) {

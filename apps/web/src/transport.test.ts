@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { findLesson } from './router';
-import { desktopMediaUrl, DesktopStub, HttpTransport, lessonFromNode, normalizeCatalog, normalizeImportPreview, normalizeRecentStudy, normalizeStudyProgress, normalizeUser, STUDY_NOT_AVAILABLE, CATALOG_LIMITS, type Transport } from './transport';
+import { desktopMediaUrl, DesktopStub, HttpTransport, lessonFromNode, normalizeCatalog, normalizeImportPreview, normalizeRecentStudy, normalizeStudyAnalytics, normalizeStudyProgress, normalizeUser, STUDY_NOT_AVAILABLE, CATALOG_LIMITS, type Transport } from './transport';
 
 // O Tauri só é carregado no desktop: fora dele o módulo é substituído pelo mock, de modo
 // que a suíte nunca toca `window.__TAURI_INTERNALS__`.
@@ -21,8 +21,8 @@ describe('transport contract', () => {
 		expect(() => normalizeImportPreview({ discovery: { root: {}, summary: { found: 0, ignored: 0, inaccessible: 0, unsupported: 0 } }, interpretation: { suggestions: [] } })).toThrow('Resposta inválida do servidor');
 	});
 	it('exposes the HTTP transport seam without routing assumptions', () => {
-		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'saveCatalogOrder', 'resetCatalogOrder', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'mediaUrl'];
-		expect(methods).toHaveLength(16);
+		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'saveCatalogOrder', 'resetCatalogOrder', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'studyAnalytics', 'mediaUrl'];
+		expect(methods).toHaveLength(17);
 	});
 	it('saves and resets a sibling order through authenticated HTTP endpoints', async () => {
 		const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
@@ -473,6 +473,10 @@ describe('transport contract', () => {
 		expect(recent.items).toHaveLength(1);
 		expect(recent.items[0].mediaId).toBe('m1');
 	});
+	it('normalizes study analytics and rejects impossible counts', () => {
+		expect(normalizeStudyAnalytics({ tracked_count: 3, completed_count: 1, total_position_seconds: 90, last_activity_at: 12 })).toEqual({ trackedCount: 3, completedCount: 1, totalPositionSeconds: 90, lastActivityAt: 12 });
+		expect(() => normalizeStudyAnalytics({ tracked_count: 1, completed_count: 2, total_position_seconds: 0, last_activity_at: null })).toThrow('Resposta inválida');
+	});
 	it('reads study progress from the HTTP endpoint', async () => {
 		const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ media_id: 'm1', position_seconds: 42, completed: false, recorded: true }), { status: 200 }));
 		vi.stubGlobal('fetch', fetchMock);
@@ -497,6 +501,13 @@ describe('transport contract', () => {
 		const recent = await new HttpTransport().recentStudy(5);
 		expect(fetchMock).toHaveBeenCalledWith('/api/study/recent?limit=5');
 		expect(recent.items[0].mediaId).toBe('m1');
+		vi.unstubAllGlobals();
+	});
+	it('loads study analytics from the HTTP endpoint', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ tracked_count: 2, completed_count: 1, total_position_seconds: 120, last_activity_at: 8 }), { status: 200 }));
+		vi.stubGlobal('fetch', fetchMock);
+		await expect(new HttpTransport().studyAnalytics()).resolves.toEqual({ trackedCount: 2, completedCount: 1, totalPositionSeconds: 120, lastActivityAt: 8 });
+		expect(fetchMock).toHaveBeenCalledWith('/api/study/analytics');
 		vi.unstubAllGlobals();
 	});
 	it('reports study endpoints as unavailable when the server returns 404', async () => {

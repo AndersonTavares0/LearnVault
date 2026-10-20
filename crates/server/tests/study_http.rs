@@ -337,6 +337,56 @@ async fn record_position_round_trips_and_appears_in_recent() {
 }
 
 #[tokio::test]
+async fn analytics_is_authenticated_and_aggregates_the_session_owner() {
+    let temp = tempfile::tempdir().unwrap();
+    seed(
+        &temp,
+        &["m1", "m2"],
+        &[
+            (ADMIN_ID, "m1", 30, false, 300),
+            (READER_ID, "m2", 90, true, 400),
+        ],
+    );
+    seed_user(&temp, READER_ID, READER, READER_PASSWORD);
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let admin_cookie = login(&app, ADMIN, ADMIN_PASSWORD).await;
+    let reader_cookie = login(&app, READER, READER_PASSWORD).await;
+
+    let admin = app
+        .clone()
+        .oneshot(get_with_cookie("/api/study/analytics", &admin_cookie))
+        .await
+        .unwrap();
+    assert_eq!(admin.status(), StatusCode::OK);
+    let admin = json_body(admin).await;
+    assert_eq!(admin["tracked_count"], 1);
+    assert_eq!(admin["completed_count"], 0);
+    assert_eq!(admin["total_position_seconds"], 30);
+    assert_eq!(admin["last_activity_at"], 300);
+
+    let reader = app
+        .clone()
+        .oneshot(get_with_cookie("/api/study/analytics", &reader_cookie))
+        .await
+        .unwrap();
+    assert_eq!(reader.status(), StatusCode::OK);
+    let reader = json_body(reader).await;
+    assert_eq!(reader["tracked_count"], 1);
+    assert_eq!(reader["completed_count"], 1);
+    assert_eq!(reader["total_position_seconds"], 90);
+
+    let unauthorized = app
+        .oneshot(
+            Request::get("/api/study/analytics")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(unauthorized.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
 async fn an_unknown_media_without_progress_is_absent_and_not_an_error() {
     let temp = tempfile::tempdir().unwrap();
     seed(&temp, &["m1"], &[]);

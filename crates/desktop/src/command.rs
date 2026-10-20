@@ -19,7 +19,7 @@ use crate::config::DesktopConfigDto;
 use crate::courses::CourseEntry;
 use crate::dto::{
     CatalogDto, CatalogNodeDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto, RecentStudyDto,
-    RescanSummaryDto, StudyProgressDto,
+    RescanSummaryDto, StudyAnalyticsDto, StudyProgressDto,
 };
 use crate::error::IpcError;
 use crate::state::DesktopState;
@@ -348,6 +348,17 @@ pub async fn desktop_recent_study(
 ) -> Result<RecentStudyDto, IpcError> {
     let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || state.recent_study(limit))
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// Comando IPC: consulta métricas agregadas do estudo do dono local.
+#[tauri::command]
+pub async fn desktop_study_analytics(
+    state: State<'_, DesktopState>,
+) -> Result<StudyAnalyticsDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.study_analytics())
         .await
         .map_err(|_| IpcError::study_unavailable())?
 }

@@ -20,7 +20,7 @@ use crate::config::{DesktopConfigDto, database_path};
 use crate::courses::{CourseEntry, load_courses, store_courses};
 use crate::dto::{
     CatalogDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto, RecentStudyDto, RescanSummaryDto,
-    StudyProgressDto,
+    StudyAnalyticsDto, StudyProgressDto,
 };
 use crate::error::IpcError;
 use crate::study;
@@ -249,6 +249,15 @@ impl DesktopState {
             .lock()
             .map_err(|_| IpcError::database_unavailable())?;
         study::recent(&database, limit)
+    }
+
+    /// Consulta métricas agregadas do estudo do dono local.
+    pub fn study_analytics(&self) -> Result<StudyAnalyticsDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::analytics(&database)
     }
 
     /// Consulta o impacto da remoção de uma mídia do catálogo local.
