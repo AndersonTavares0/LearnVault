@@ -23,9 +23,9 @@
 		if (Array.from(name).length < 2 || Array.from(name).length > 64 || /\p{Cc}/u.test(name) || name !== name.trim()) invalid.push('settings-new-username');
 		if (currentPassword.length < 1 || currentPassword.length > 1024) invalid.push('settings-current-password');
 		const newLength = Array.from(newPassword).length;
-		if (newLength < 12 || newLength > 1024) invalid.push('settings-new-password');
+		if (newLength < 8 || newLength > 128) invalid.push('settings-new-password');
 		const confirmLength = Array.from(confirmPassword).length;
-		if (confirmLength < 12 || confirmLength > 1024 || (confirmPassword !== '' && confirmPassword !== newPassword)) invalid.push('settings-confirm-password');
+		if (confirmLength < 8 || confirmLength > 128 || (confirmPassword !== '' && confirmPassword !== newPassword)) invalid.push('settings-confirm-password');
 		return invalid;
 	});
 
@@ -69,8 +69,8 @@
 			<input id="settings-new-username" name="username" autocomplete="username" autocapitalize="none" spellcheck={false} bind:value={newUsername} required />
 		</label>
 		<PasswordField id="settings-current-password" name="current-password" label="Senha atual" autocomplete="current-password" bind:value={currentPassword} maxLength={1024} hint="Necessária para confirmar a alteração." />
-		<PasswordField id="settings-new-password" name="new-password" label="Nova senha" autocomplete="new-password" bind:value={newPassword} minLength={12} maxLength={1024} hint="Use de 12 a 1.024 caracteres. Você pode usar uma frase." />
-		<PasswordField id="settings-confirm-password" name="confirm-password" label="Confirmar nova senha" autocomplete="new-password" bind:value={confirmPassword} minLength={12} maxLength={1024} error={mismatch || undefined} />
+		<PasswordField id="settings-new-password" name="new-password" label="Nova senha" autocomplete="new-password" bind:value={newPassword} minLength={8} maxLength={128} hint="Use de 8 a 128 caracteres. Você pode usar uma frase." />
+		<PasswordField id="settings-confirm-password" name="confirm-password" label="Confirmar nova senha" autocomplete="new-password" bind:value={confirmPassword} minLength={8} maxLength={128} error={mismatch || undefined} />
 		<p class="small credentials-note">A alteração encerra as outras sessões. Você continuará conectado neste navegador.</p>
 		<button class="btn primary" type="submit" disabled={busy} aria-busy={busy}>{busy ? 'Salvando…' : 'Atualizar credenciais'}</button>
 	</fieldset>

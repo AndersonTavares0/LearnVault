@@ -25,9 +25,11 @@
 </section>
 
 <style>
-	.empty-state { display: grid; justify-items: start; gap: 8px; max-width: 60ch; padding: 24px; border-radius: var(--radius-md); background: var(--surface-subtle); }
-	.empty-state h2, .empty-state h3 { margin: 0; font-size: 16px; line-height: 24px; color: var(--ink); }
-	.empty-state p { margin: 0; color: var(--muted); font-size: 14px; line-height: 20px; overflow-wrap: anywhere; }
-	.empty-state.error { border-left: 3px solid var(--danger); }
+	.empty-state { display: grid; justify-items: start; gap: 8px; max-width: 60ch; padding: 0; background: transparent; border: 0; }
+	.empty-state h2, .empty-state h3 { margin: 0; font-size: 20px; line-height: 28px; font-weight: 650; color: var(--ink); }
+	.empty-state p { margin: 0; color: var(--muted); font-size: 16px; line-height: 24px; overflow-wrap: anywhere; }
+	.empty-state.error { padding-left: 16px; border-left: 3px solid var(--danger); }
 	.empty-state .btn { justify-self: start; margin-top: 8px; }
+	:global(.analytics .empty-state) { margin: 0 0 24px; }
+	:global(main.home .empty-state) { margin: 8px 0 24px; }
 </style>

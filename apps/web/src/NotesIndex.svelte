@@ -189,7 +189,7 @@
 </section>
 
 <style>
-	.notes-index { max-width: 1240px; margin: 0 auto; padding: clamp(36px, 5vw, 64px) clamp(24px, 4vw, 56px) 64px; }
+	.notes-index { max-width: none; margin: 0; padding: 40px var(--inset, 24px) 64px; }
 	.notes-header { margin: 0 0 34px; }
 	.notes-index .title { font-size: 32px; line-height: 38px; margin: 6px 0 8px; letter-spacing: -0.025em; color: var(--ink); }
 	.notes-index .sub { margin: 0; color: var(--muted); font-size: 15px; }
@@ -212,7 +212,7 @@
 	.note-text.clamped { display: -webkit-box; -webkit-line-clamp: 6; line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
 	.note-copy > time { display: block; margin-top: 6px; color: var(--muted); font-size: 13px; line-height: 20px; }
 	.note-actions { display: flex; align-items: flex-start; gap: 6px; color: var(--muted); }
-	.note-actions button { padding: 6px 9px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink); font-size: 14px; min-height: 34px; }
+	.note-actions button { padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink); font-size: 14px; min-height: 44px; }
 	.note-actions .note-menu-toggle { border: 0; background: transparent; color: var(--muted); font-size: 19px; line-height: 1; }
 	.note-actions .danger, .edited { color: var(--danger); }
 	.edited { font-size: 13px; }
@@ -224,7 +224,7 @@
 	.empty-panel p { margin: 0 0 12px; color: var(--muted); }
 	.empty-panel .btn, .empty-panel .text-button { justify-self: start; }
 	.confirm-label { color: var(--muted); font-size: 14px; }
-	.notes-results { min-width: 0; }
+	.notes-results { min-width: 0; max-width: 860px; }
 	.notes-toolbar { align-items: center; min-height: 44px; margin-bottom: 13px; padding-bottom: 13px; border-bottom: 1px solid var(--line); }
 	.notes-toolbar strong { color: var(--ink); font-size: 14px; }
 	.notes-toolbar .btn { white-space: nowrap; }

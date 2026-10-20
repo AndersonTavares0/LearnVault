@@ -21,13 +21,55 @@
 <p class="small-screen-note" aria-live="polite">Etapa {currentStep} de 5 — {current.title}</p>
 
 <style>
-	.flow-steps { list-style: none; margin: 16px 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; counter-reset: step; }
-	.flow-step { display: grid; gap: 3px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); font-size: 13px; color: var(--muted); }
-	.flow-step b { color: var(--ink); font-size: 13px; }
-	.flow-step.current { border-color: var(--accent); background: var(--accent-soft); }
-	.flow-step.current b { color: var(--accent); }
-	.flow-step.done b { color: var(--accent); }
-	.small-screen-note { display: none; margin: 0; color: var(--muted); font-size: 13px; }
+	.flow-steps {
+		list-style: none;
+		margin: 0 0 24px;
+		padding: 8px 0 0;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0;
+		border-top: 1px solid var(--line);
+		counter-reset: step;
+	}
+
+	.flow-step {
+		display: grid;
+		gap: 2px;
+		flex: 1 1 160px;
+		min-width: 0;
+		padding: 12px 16px 12px 0;
+		margin-right: 16px;
+		border-right: 1px solid var(--line);
+		color: var(--muted);
+		font-size: 13px;
+		line-height: 20px;
+	}
+
+	.flow-step:last-child { border-right: 0; margin-right: 0; }
+
+	.flow-step b {
+		color: var(--muted);
+		font-size: 14px;
+		line-height: 20px;
+		font-weight: 650;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.flow-step span { display: none; }
+
+	.flow-step.current b { color: var(--accent-strong); }
+
+	.flow-step.current span { display: block; color: var(--muted); }
+
+	.flow-step.done b { color: var(--ink); }
+
+	.small-screen-note { display: none; margin: 0 0 20px; color: var(--muted); font-size: 14px; line-height: 20px; }
+
+	@media (max-width: 950px) {
+		.flow-step { flex-basis: 140px; padding-right: 12px; margin-right: 12px; }
+		.flow-step span { display: none; }
+	}
+
 	@media (max-width: 700px) {
 		.flow-steps { display: none; }
 		.small-screen-note { display: block; }

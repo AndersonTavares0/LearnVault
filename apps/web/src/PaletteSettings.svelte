@@ -76,8 +76,7 @@
 		return !palettes.some((palette) => palette.id !== ignoreId && palette.name.toLowerCase() === normalized);
 	}
 
-	function startCreate(): void {
-		const origin = selected;
+	function startCreate(origin: Palette = selected): void {
 		const id = `custom-${crypto.randomUUID()}`;
 		const next: Palette = {
 			id,
@@ -153,11 +152,13 @@
 	}
 
 	function deleteCustom(id: string): void {
+		// A seleção muda ao persistir; capture-a antes para anunciar o fallback correto.
+		const wasActive = selectedId === id;
 		const customPalettes = preferences.customPalettes.filter((palette) => palette.id !== id);
-		const selectedPaletteId = selectedId === id ? DEFAULT_PALETTE_ID : selectedId;
+		const selectedPaletteId = wasActive ? DEFAULT_PALETTE_ID : selectedId;
 		onChange({ ...preferences, selectedPaletteId, customPalettes });
 		confirmingDelete = null;
-		message = selectedId === id ? 'Paleta excluída. Pedra, areia e oliva volta a ser ativa.' : 'Paleta excluída.';
+		message = wasActive ? 'Paleta excluída. Pedra, areia e oliva volta a ser ativa.' : 'Paleta excluída.';
 	}
 </script>
 
@@ -182,7 +183,7 @@
 				</button>
 				<div class="palette-tools">
 					{#if PALETTE_PRESETS.some((preset) => preset.id === palette.id)}
-						<button class="text-button" type="button" onclick={() => startCreate()} disabled={Boolean(draft)}>Duplicar e editar</button>
+						<button class="text-button" type="button" onclick={() => startCreate(palette)} disabled={Boolean(draft)}>Duplicar e editar</button>
 					{:else}
 						<button class="text-button" type="button" onclick={() => startEdit(palette)} disabled={Boolean(draft) && !isDraft}>Editar</button>
 						{#if confirmingDelete === palette.id}
@@ -201,7 +202,7 @@
 	</ul>
 
 	{#if !draft}
-		<button class="btn primary" type="button" onclick={startCreate}>Criar tema</button>
+		<button class="btn primary create-palette" type="button" onclick={() => startCreate()}>Criar tema</button>
 	{/if}
 
 	{#if draft}
@@ -265,19 +266,20 @@
 </div>
 
 <style>
-	.palette-settings { display: grid; gap: 16px; }
+	.palette-settings { display: grid; gap: 16px; justify-items: stretch; }
+	.create-palette { justify-self: start; }
 	.palette-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-	.palette-option { display: flex; align-items: stretch; gap: 8px; flex-wrap: wrap; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); padding: 8px; }
-	.palette-option.selected { border-color: var(--accent); }
-	.palette-choice { display: grid; grid-template-columns: auto auto; align-items: center; gap: 4px 12px; border: 0; background: transparent; color: var(--ink); text-align: left; padding: 4px; min-height: 44px; }
+	.palette-option { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); }
+	.palette-option.selected { border-color: var(--accent); background: var(--accent-soft); }
+	.palette-choice { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 4px; border: 0; background: transparent; color: var(--ink); text-align: left; }
 	.palette-choice:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
-	.palette-choice .palette-name { font-weight: 650; font-size: 14px; }
-	.palette-choice .small { grid-column: 2; color: var(--muted); font-size: 13px; }
-	.palette-option.selected .palette-choice .small { color: var(--accent); font-weight: 700; }
-	.swatches { display: grid; grid-template-columns: 44px 44px; gap: 4px; }
-	.swatch { display: inline-flex; gap: 3px; align-items: center; justify-content: center; width: 44px; height: 28px; border-radius: 6px; border: 1px solid var(--line); }
-	.swatch i { width: 10px; height: 10px; border-radius: 3px; }
-	.palette-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+	.palette-choice .palette-name { font-weight: 650; font-size: 14px; line-height: 20px; }
+	.palette-choice .small { color: var(--muted); font-size: 13px; line-height: 18px; }
+	.palette-option.selected .palette-choice .small { color: var(--accent-strong); font-weight: 650; }
+	.swatches { display: inline-flex; gap: 6px; }
+	.swatch { display: inline-flex; gap: 3px; align-items: center; justify-content: center; width: 44px; height: 28px; border-radius: 6px; border: 1px solid var(--line-strong); }
+	.swatch i { width: 9px; height: 9px; border-radius: 2px; }
+	.palette-tools { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-left: auto; }
 	.confirm { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
 	.editor { display: grid; gap: 14px; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface-raised); }
 	.editor-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }

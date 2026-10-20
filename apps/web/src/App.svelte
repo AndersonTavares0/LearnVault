@@ -738,11 +738,13 @@
 	{:else if importFormOpen}
 		<section class="import-form-screen" aria-labelledby="import-heading">
 			<header class="page-head">
-				<h1 id="import-heading">Importar curso</h1>
-				<p class="sub">Informe a pasta no servidor para analisar o conteúdo antes de importar.</p>
+				<div>
+					<h1 id="import-heading">Importar curso</h1>
+					<p class="sub">Informe a pasta no servidor para analisar o conteúdo antes de importar.</p>
+				</div>
 			</header>
+			<ImportSteps currentStep={previewingImport ? 2 : 1} />
 			<div class="import-layout">
-				<ImportSteps currentStep={previewingImport ? 2 : 1} />
 				<section class="import-card" aria-labelledby="import-scope-heading">
 					<form class="import-form" onsubmit={submitImport} aria-busy={previewingImport}>
 						<label class="form-field" for="import-path">Caminho da pasta do curso no servidor
@@ -786,6 +788,21 @@
 						<button id="course-filter-all" class="btn" class:active={courseFilter === 'all'} aria-pressed={courseFilter === 'all'} onclick={() => (courseFilter = 'all')}>Tudo</button>
 						<button class="btn" class:active={courseFilter === 'in-progress'} aria-pressed={courseFilter === 'in-progress'} onclick={() => (courseFilter = 'in-progress')}>Em andamento</button>
 					</div>
+					{#if canManage}
+						<div class="library-actions" aria-label="Ações da biblioteca">
+							{#if transportKind === 'desktop'}
+								<button class="btn primary" type="button" onclick={importCourse} disabled={importing} aria-busy={importing}>{importing ? 'Importando…' : 'Importar curso'}</button>
+							{:else}
+								<button class="btn primary" type="button" onclick={toggleImportForm} aria-expanded={importFormOpen} disabled={importing || previewingImport} aria-busy={importing || previewingImport}>Importar curso</button>
+							{/if}
+							<details class="library-more">
+								<summary class="btn">Mais ações</summary>
+								<div class="home-actions">
+									<button class="secondary" type="button" onclick={rescan} disabled={rescanning || !catalog || !catalog.nodes.length}>{rescanning ? 'Indexando…' : 'Indexar cursos'}</button>
+								</div>
+							</details>
+						</div>
+					{/if}
 				</div>
 			{/if}
 		</header>
@@ -853,21 +870,6 @@
 				{/if}
 			{/if}
 			{#if catalog && catalog.looseFiles.length}<LooseFiles files={catalog.looseFiles} heading="Arquivos soltos" />{/if}
-			{#if canManage}
-				<div class="library-bar" aria-label="Ações da biblioteca">
-					<details class="library-actions">
-						<summary class="btn">Ações da biblioteca</summary>
-						<div class="home-actions">
-							{#if transportKind === 'desktop'}
-								<button class="primary" type="button" onclick={importCourse} disabled={importing} aria-busy={importing}>{importing ? 'Importando…' : 'Importar curso'}</button>
-							{:else}
-								<button class="primary" type="button" onclick={toggleImportForm} aria-expanded={importFormOpen} disabled={importing || previewingImport} aria-busy={importing || previewingImport}>Importar curso</button>
-							{/if}
-							<button class="secondary" type="button" onclick={rescan} disabled={rescanning || !catalog || !catalog.nodes.length}>{rescanning ? 'Indexando…' : 'Indexar cursos'}</button>
-						</div>
-					</details>
-				</div>
-			{/if}
 		{/if}
 	{/if}
 {:else if route === 'course' && !watchRoute}

@@ -106,21 +106,76 @@
 </section>
 
 <style>
-	.notes { margin: 28px 0; padding: 20px; border: 1px solid color-mix(in srgb, currentColor 18%, transparent); border-radius: 12px; color: inherit; }
-	h2 { margin: 0 0 14px; font: 400 22px Georgia, serif; }
+	.notes {
+		margin: 24px 0;
+		padding: 20px;
+		border: 1px solid var(--line);
+		border-radius: var(--radius-md, 12px);
+		background: var(--surface);
+		color: var(--ink);
+	}
+
+	h2 { margin: 0 0 12px; font-size: 16px; line-height: 24px; font-weight: 650; }
+
 	form, li { display: grid; gap: 10px; }
-	textarea { box-sizing: border-box; width: 100%; resize: vertical; padding: 10px; border: 1px solid color-mix(in srgb, currentColor 28%, transparent); border-radius: 7px; background: transparent; color: inherit; font: inherit; }
-	.check { display: flex; align-items: center; gap: 8px; font-size: 14px; }
-	button { width: fit-content; padding: 8px 12px; border: 1px solid currentColor; border-radius: 7px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
-	button:disabled { opacity: .6; cursor: wait; }
-	button:focus-visible, textarea:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
-	ul { list-style: none; display: grid; gap: 14px; margin: 18px 0 0; padding: 0; }
-	li { padding: 14px 0; border-top: 1px solid color-mix(in srgb, currentColor 15%, transparent); }
-	.note-text { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
-	.timestamp { font-weight: 700; }
+
+	label { color: var(--ink); font-size: 14px; line-height: 20px; font-weight: 600; }
+
+	textarea {
+		box-sizing: border-box;
+		width: 100%;
+		min-height: 88px;
+		padding: 10px 12px;
+		resize: vertical;
+		border: 1px solid var(--line-strong);
+		border-radius: var(--radius-sm, 8px);
+		background: var(--input);
+		color: var(--ink);
+		font: inherit;
+		font-size: 16px;
+		line-height: 24px;
+	}
+
+	.check { display: flex; align-items: center; gap: 8px; font-size: 14px; line-height: 20px; }
+
+	button {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: fit-content;
+		min-height: 44px;
+		padding: 10px 16px;
+		border: 1px solid var(--line-strong);
+		border-radius: var(--radius-sm, 8px);
+		background: var(--surface);
+		color: var(--ink);
+		font: inherit;
+		font-size: 14px;
+		font-weight: 600;
+		cursor: pointer;
+	}
+
+	button[type='submit'] { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+
+	button:disabled { opacity: .55; cursor: wait; }
+
+	button:focus-visible, textarea:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+	ul { list-style: none; display: grid; gap: 0; margin: 16px 0 0; padding: 0; }
+
+	li { padding: 14px 0; border-top: 1px solid var(--line); }
+
+	.note-text { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; font-size: 16px; line-height: 24px; }
+
+	.timestamp { min-height: 32px; padding: 4px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-strong); font-weight: 650; font-variant-numeric: tabular-nums; }
+
 	.actions { display: flex; gap: 8px; }
-	.secondary { opacity: .8; }
-	.state { color: inherit; opacity: .75; }
-	.hint { font-size: 13px; opacity: .7; }
-	.error { color: var(--danger); }
+
+	.secondary { background: transparent; }
+
+	.state { margin: 0; color: var(--muted); font-size: 14px; line-height: 20px; }
+
+	.hint { margin: 0; color: var(--muted); font-size: 13px; line-height: 20px; }
+
+	.error { margin: 0; color: var(--danger); font-size: 14px; line-height: 20px; }
 </style>
