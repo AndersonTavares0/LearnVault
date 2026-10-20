@@ -48,6 +48,8 @@ describe('hash router', () => {
 		expect(locationFromHash('#/login', 'home')).toEqual({ route: 'home', courseId: null, lessonPath: null });
 		// Rotas nomeadas continuam valendo independentemente do padrão do build.
 		expect(routeFromHash('#/settings', 'home')).toBe('settings');
+		expect(routeFromHash('#/notes', 'home')).toBe('notes');
+		expect(routeFromHash('#/analytics', 'home')).toBe('analytics');
 	});
 
 	it('supports settings as an authenticated destination', () => {

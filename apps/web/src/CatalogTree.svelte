@@ -17,6 +17,7 @@
 		expandAll = false,
 		organizing = false,
 		parentPath = '',
+		currentPath = '',
 		siblings: suppliedSiblings,
 		siblingIndex: suppliedIndex,
 		orderSaving = false,
@@ -28,6 +29,7 @@
 		expandAll?: boolean;
 		organizing?: boolean;
 		parentPath?: string;
+		currentPath?: string;
 		siblings?: CatalogNode[];
 		siblingIndex?: number;
 		orderSaving?: boolean;
@@ -40,13 +42,13 @@
 	{@const itemIndex = suppliedSiblings ? suppliedIndex ?? 0 : index}
 	{#if node.role === 'module'}
 		<details class="course-section" open={expandAll}>
-			<summary>
+			<summary class="module">
+				<span class="section-chevron" aria-hidden="true">⌄</span>
 				<span class="section-title">{node.title}</span>
-				<span class="section-meta">{formatLessonCounts(countCatalogNode(node))}</span>
-				<svg class="section-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+				<span class="small">{formatLessonCounts(countCatalogNode(node))}</span>
 			</summary>
 			<ul class="lesson-list">
-				{#each node.children as child, childIndex (child.path)}<li><CatalogTree nodes={[child]} {courseId} {expandAll} {organizing} parentPath={node.path} siblings={node.children} siblingIndex={childIndex} {orderSaving} {onSaveOrder} {onResetOrder} /></li>{/each}
+				{#each node.children as child, childIndex (child.path)}<li><CatalogTree nodes={[child]} {courseId} {expandAll} {organizing} {currentPath} parentPath={node.path} siblings={node.children} siblingIndex={childIndex} {orderSaving} {onSaveOrder} {onResetOrder} /></li>{/each}
 			</ul>
 			{#if node.files.length || node.looseFiles.length}<LooseFiles files={[...node.files, ...node.looseFiles]} heading="Materiais complementares" {courseId} />{/if}
 		</details>
@@ -57,24 +59,19 @@
 		{#if missing}
 			<!-- Aula sem mídia disponível: continua listada e legível, mas não abre o player,
 			     então a linha é conteúdo estático — sem link e fora da ordem de foco. -->
-			<div class="lesson-row">
-				<svg class="lesson-glyph" viewBox="0 0 16 16" aria-hidden="true">
-					{#if counts.videos > 0}<path d="M5.5 3.5l6.5 4.5-6.5 4.5z" />{:else}<path d="M4.5 2.5h7v11h-7z" fill="none" stroke="currentColor" stroke-width="1.4" />{/if}
-				</svg>
-				<span class="lesson-title">{node.title}</span>
-				<small class="lesson-meta">(ausente)</small>
-				{#if meta}<span class="lesson-meta">{meta}</span>{/if}
+			<div class="lesson missing">
+				<span class="circle" aria-hidden="true"></span>
+				<span>{node.title}</span>
+				<small class="small">(ausente){#if meta} · {meta}{/if}</small>
 			</div>
 		{:else}
-			<a class="lesson-row" href={href('player', courseId, node.path)}>
-				<svg class="lesson-glyph" viewBox="0 0 16 16" aria-hidden="true">
-					{#if counts.videos > 0}<path d="M5.5 3.5l6.5 4.5-6.5 4.5z" />{:else}<path d="M4.5 2.5h7v11h-7z" fill="none" stroke="currentColor" stroke-width="1.4" />{/if}
-				</svg>
-				<span class="lesson-title">{node.title}</span>
-				{#if meta}<span class="lesson-meta">{meta}</span>{/if}
+			<a class="lesson" class:current={node.path === currentPath} href={href('player', courseId, node.path)}>
+				<span class="circle" aria-hidden="true"></span>
+				<span>{node.title}</span>
+				{#if meta}<span class="small">{meta}</span>{/if}
 			</a>
 		{/if}
-		{#if node.children.length}<div class="lesson-children">{#each node.children as child, childIndex (child.path)}<CatalogTree nodes={[child]} {courseId} {expandAll} {organizing} parentPath={node.path} siblings={node.children} siblingIndex={childIndex} {orderSaving} {onSaveOrder} {onResetOrder} />{/each}</div>{/if}
+		{#if node.children.length}<div class="lesson-children">{#each node.children as child, childIndex (child.path)}<CatalogTree nodes={[child]} {courseId} {expandAll} {organizing} {currentPath} parentPath={node.path} siblings={node.children} siblingIndex={childIndex} {orderSaving} {onSaveOrder} {onResetOrder} />{/each}</div>{/if}
 	{:else}
 		{@const cover = node.looseFiles.find(isCoverFile)}
 		{@const meta = formatCourseMeta(countCatalogNode(node))}
@@ -85,7 +82,7 @@
 				{#if meta}<p class="course-meta">{meta}</p>{/if}
 			</header>
 			{#if node.files.length || node.looseFiles.length}<LooseFiles files={[...node.files, ...node.looseFiles]} heading="Arquivos soltos" {courseId} />{/if}
-			{#if node.children.length}<div class="course-body">{#each node.children as child, childIndex (child.path)}<CatalogTree nodes={[child]} {courseId} {expandAll} {organizing} parentPath={node.path} siblings={node.children} siblingIndex={childIndex} {orderSaving} {onSaveOrder} {onResetOrder} />{/each}</div>{/if}
+			{#if node.children.length}<div class="course-body">{#each node.children as child, childIndex (child.path)}<CatalogTree nodes={[child]} {courseId} {expandAll} {organizing} {currentPath} parentPath={node.path} siblings={node.children} siblingIndex={childIndex} {orderSaving} {onSaveOrder} {onResetOrder} />{/each}</div>{/if}
 		</section>
 	{/if}
 	{#if organizing && canReorderCatalogSiblings(siblingNodes)}

@@ -13,12 +13,21 @@ estados e responsividade.
 | `reference-course-light.png` | 1440×1000 | Claro, curso com hero, currículo e progresso |
 | `reference-player-light.png` | 1440×1000 | Claro, player com painel de currículo |
 | `reference-settings-light.png` | 1440×1000 | Claro, configurações em cards |
+| `reference-notes-light.png` | 1440×1000 | Claro, anotações com indisponibilidade honesta |
+| `reference-analytics-light.png` | 1440×1000 | Claro, métricas reais |
+| `reference-analytics-dark.png` | 1440×1000 | Escuro, métricas reais |
+| `reference-analytics-mobile-dark.png` | 390×844 | Escuro, métricas reais no mobile |
+| `reference-pomodoro-light.png` | 1440×1000 | Claro, painel Pomodoro aberto sobre a biblioteca |
 | `reference-login-light.png` | 1440×1000 | Claro, login dividido |
 | `reference-login-mobile-dark.png` | 390×844 | Escuro, login mobile |
 
 As imagens documentam o shell aprovado do Graphite: barra petroleum com navegação
 horizontal, busca real, chip compacto de Pomodoro, biblioteca com "Continuar
-estudando", hero de curso, player imersivo e configurações em cards. O player usa um
-arquivo de mídia vazio no fixture sintético; por isso a captura mostra o estado real
-de mídia indisponível, sem inventar um vídeo ou poster. Os temas claro e escuro
-reutilizam os mesmos tokens e componentes.
+estudando", hero de curso, player imersivo, configurações em cards e a rota de
+estatísticas com apenas métricas reais. O player usa um arquivo de mídia vazio no
+fixture sintético; por isso a captura mostra o estado real de mídia indisponível, sem
+inventar um vídeo ou poster. Os temas claro e escuro reutilizam os mesmos tokens e
+componentes.
+
+O mapeamento de cada prancha para a implementação, incluindo limitações declaradas,
+está em [`docs/product/graphite-reference-matrix.md`](../product/graphite-reference-matrix.md).

@@ -4,15 +4,15 @@
 	import { href } from './router';
 	import { courseIdOf, type CatalogNode } from './transport';
 
-	let { course }: { course: CatalogNode } = $props();
+	let { course, variant = '' }: { course: CatalogNode; variant?: '' | 'alt' | 'violet' } = $props();
 	const counts = $derived(countCatalogNode(course));
 	const meta = $derived(formatCourseCardMeta(counts));
 	const cover = $derived(courseCover(course.title));
 </script>
-<a class="course-card" href={href('course', courseIdOf(course))}>
-	<span class="course-cover" style:--cover-from={cover.from} style:--cover-to={cover.to} aria-hidden="true">
-		<span class="course-monogram">{cover.monogram}</span>
-	</span>
-	<span class="course-card-title">{course.title}</span>
-	{#if meta}<span class="course-card-meta">{meta}</span>{/if}
+<a class="course" href={href('course', courseIdOf(course))}>
+	<div class="cover {variant}" aria-hidden="true">{cover.monogram}</div>
+	<div class="course-body">
+		<h3>{course.title}</h3>
+		{#if meta}<p>{meta}</p>{/if}
+	</div>
 </a>
