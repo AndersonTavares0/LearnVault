@@ -1,0 +1,773 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-10-20T22:46:54.195Z",
+  "revision": {
+    "branch": "feat/graphite-redesign-original-boards",
+    "commit": "4987d35a3c7744e92a005158e258e75ad25677e1"
+  },
+  "browser": "OMP-managed Chromium",
+  "viewportCss": "recorded per entry; physical PNG = CSS x 1.25 dpr",
+  "fixtures": {
+    "empty": "server started without --library-root and LIBRARY_DIR empty; catalog returned zero nodes",
+    "data": "synthetic temp library (Categoria/Curso/Aula.mp4 + Aula.vtt + Material.pdf), one note and one position seeded through the authenticated API",
+    "credentials": "fixture admin only; no password recorded"
+  },
+  "limitations": [
+    "Media fixture bytes are not a decodable video, so the player viewport shows the media-error state instead of a playback frame.",
+    "Fonts: the family declares Inter with system fallbacks; no webfont face is downloaded in the fixture, so the resolved face depends on the host.",
+    "DPR is 1.25 for every capture; PNG pixel sizes are CSS dimensions x 1.25.",
+    "Reference PNGs are crops of the approved board sections; palette tokens differ by user-approved design, so pixel equality is not expected."
+  ],
+  "entries": [
+    {
+      "route": "analytics",
+      "state": "data",
+      "palette": "stone-olive",
+      "mode": "dark",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": "docs/screenshots/graphite-reference/baseline-reference-analytics-1440x900.png",
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-dark-1440x900.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-analytics-data-stone-dark-1440x900-after.png"
+    },
+    {
+      "route": "analytics",
+      "state": "data",
+      "palette": "stone-olive",
+      "mode": "dark",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": "docs/screenshots/graphite-reference/baseline-reference-analytics-1440x900.png",
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-dark-390x844.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-analytics-data-stone-dark-390x844-after.png"
+    },
+    {
+      "route": "analytics",
+      "state": "data",
+      "palette": "stone-olive",
+      "mode": "dark",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": "docs/screenshots/graphite-reference/baseline-reference-analytics-1440x900.png",
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-dark-768x1024.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-analytics-data-stone-dark-768x1024-after.png"
+    },
+    {
+      "route": "analytics",
+      "state": "data",
+      "palette": "stone-olive",
+      "mode": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": "docs/screenshots/graphite-reference/baseline-reference-analytics-1440x900.png",
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-light-1440x900.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-analytics-data-stone-light-1440x900-after.png"
+    },
+    {
+      "route": "analytics",
+      "state": "data",
+      "palette": "stone-olive",
+      "mode": "light",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": "docs/screenshots/graphite-reference/baseline-reference-analytics-1440x900.png",
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-light-390x844.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-analytics-data-stone-light-390x844-after.png"
+    },
+    {
+      "route": "analytics",
+      "state": "data",
+      "palette": "stone-olive",
+      "mode": "light",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": "docs/screenshots/graphite-reference/baseline-reference-analytics-1440x900.png",
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-light-768x1024.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-analytics-data-stone-light-768x1024-after.png"
+    },
+    {
+      "route": "course",
+      "state": "data",
+      "palette": "stone-olive",
+      "mode": "dark",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": null,
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-dark-1440x900.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-course-data-stone-dark-1440x900-after.png"
+    },
+    {
+      "route": "course",
+      "state": "data",
+      "palette": "stone-olive",
+      "mode": "dark",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": null,
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-dark-390x844.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-course-data-stone-dark-390x844-after.png"
+    },
+    {
+      "route": "course",
+      "state": "data",
+      "palette": "stone-olive",
+      "mode": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": null,
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-light-1440x900.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-course-data-stone-light-1440x900-after.png"
+    },
+    {
+      "route": "course",
+      "state": "data",
+      "palette": "stone-olive",
+      "mode": "light",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": null,
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-light-390x844.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-course-data-stone-light-390x844-after.png"
+    },
+    {
+      "route": "home",
+      "state": "data",
+      "palette": "custom",
+      "mode": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": null,
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-light-1440x900.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-home-data-custom-light-1440x900-after.png"
+    },
+    {
+      "route": "home",
+      "state": "data",
+      "palette": "graphite",
+      "mode": "dark",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": null,
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-dark-1440x900.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-home-data-graphite-dark-1440x900-after.png"
+    },
+    {
+      "route": "home",
+      "state": "data",
+      "palette": "graphite",
+      "mode": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": null,
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-light-1440x900.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-home-data-graphite-light-1440x900-after.png"
+    },
+    {
+      "route": "home",
+      "state": "data",
+      "palette": "stone-olive",
+      "mode": "dark",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": null,
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-dark-1440x900.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-home-data-stone-dark-1440x900-after.png"
+    },
+    {
+      "route": "home",
+      "state": "data",
+      "palette": "stone-olive",
+      "mode": "dark",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": null,
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-dark-390x844.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-home-data-stone-dark-390x844-after.png"
+    },
+    {
+      "route": "home",
+      "state": "data",
+      "palette": "stone-olive",
+      "mode": "dark",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": null,
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-dark-768x1024.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-home-data-stone-dark-768x1024-after.png"
+    },
+    {
+      "route": "home",
+      "state": "data",
+      "palette": "stone-olive",
+      "mode": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": null,
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-light-1440x900.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-home-data-stone-light-1440x900-after.png"
+    },
+    {
+      "route": "home",
+      "state": "data",
+      "palette": "stone-olive",
+      "mode": "light",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": null,
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-light-390x844.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-home-data-stone-light-390x844-after.png"
+    },
+    {
+      "route": "home",
+      "state": "data",
+      "palette": "stone-olive",
+      "mode": "light",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": null,
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-light-768x1024.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-home-data-stone-light-768x1024-after.png"
+    },
+    {
+      "route": "home",
+      "state": "empty",
+      "palette": "stone-olive",
+      "mode": "dark",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1.25,
+      "fixture": "registerLibrary=false (temporary DB, no library root)",
+      "reference": null,
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-empty-dark-1440x900.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-home-empty-stone-dark-1440x900-after.png"
+    },
+    {
+      "route": "home",
+      "state": "empty",
+      "palette": "stone-olive",
+      "mode": "dark",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "dpr": 1.25,
+      "fixture": "registerLibrary=false (temporary DB, no library root)",
+      "reference": null,
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-empty-dark-390x844.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-home-empty-stone-dark-390x844-after.png"
+    },
+    {
+      "route": "home",
+      "state": "empty",
+      "palette": "stone-olive",
+      "mode": "dark",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "dpr": 1.25,
+      "fixture": "registerLibrary=false (temporary DB, no library root)",
+      "reference": null,
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-empty-dark-768x1024.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-home-empty-stone-dark-768x1024-after.png"
+    },
+    {
+      "route": "home",
+      "state": "empty",
+      "palette": "stone-olive",
+      "mode": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1.25,
+      "fixture": "registerLibrary=false (temporary DB, no library root)",
+      "reference": null,
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-empty-light-1440x900.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-home-empty-stone-light-1440x900-after.png"
+    },
+    {
+      "route": "home",
+      "state": "empty",
+      "palette": "stone-olive",
+      "mode": "light",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "dpr": 1.25,
+      "fixture": "registerLibrary=false (temporary DB, no library root)",
+      "reference": null,
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-empty-light-390x844.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-home-empty-stone-light-390x844-after.png"
+    },
+    {
+      "route": "home",
+      "state": "empty",
+      "palette": "stone-olive",
+      "mode": "light",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "dpr": 1.25,
+      "fixture": "registerLibrary=false (temporary DB, no library root)",
+      "reference": null,
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-empty-light-768x1024.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-home-empty-stone-light-768x1024-after.png"
+    },
+    {
+      "route": "import",
+      "state": "import-error",
+      "palette": "stone-olive",
+      "mode": "dark",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1.25,
+      "fixture": "registerLibrary=false (temporary DB, no library root)",
+      "reference": "docs/screenshots/graphite-reference/baseline-reference-import-1440x900.png",
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-dark-1440x900.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-import-error-stone-dark-1440x900-after.png"
+    },
+    {
+      "route": "import",
+      "state": "import-error",
+      "palette": "stone-olive",
+      "mode": "dark",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "dpr": 1.25,
+      "fixture": "registerLibrary=false (temporary DB, no library root)",
+      "reference": "docs/screenshots/graphite-reference/baseline-reference-import-1440x900.png",
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-dark-390x844.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-import-error-stone-dark-390x844-after.png"
+    },
+    {
+      "route": "import",
+      "state": "import-error",
+      "palette": "stone-olive",
+      "mode": "dark",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "dpr": 1.25,
+      "fixture": "registerLibrary=false (temporary DB, no library root)",
+      "reference": "docs/screenshots/graphite-reference/baseline-reference-import-1440x900.png",
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-dark-768x1024.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-import-error-stone-dark-768x1024-after.png"
+    },
+    {
+      "route": "import",
+      "state": "import-error",
+      "palette": "stone-olive",
+      "mode": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1.25,
+      "fixture": "registerLibrary=false (temporary DB, no library root)",
+      "reference": "docs/screenshots/graphite-reference/baseline-reference-import-1440x900.png",
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-light-1440x900.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-import-error-stone-light-1440x900-after.png"
+    },
+    {
+      "route": "import",
+      "state": "import-error",
+      "palette": "stone-olive",
+      "mode": "light",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "dpr": 1.25,
+      "fixture": "registerLibrary=false (temporary DB, no library root)",
+      "reference": "docs/screenshots/graphite-reference/baseline-reference-import-1440x900.png",
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-light-390x844.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-import-error-stone-light-390x844-after.png"
+    },
+    {
+      "route": "import",
+      "state": "import-error",
+      "palette": "stone-olive",
+      "mode": "light",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "dpr": 1.25,
+      "fixture": "registerLibrary=false (temporary DB, no library root)",
+      "reference": "docs/screenshots/graphite-reference/baseline-reference-import-1440x900.png",
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-light-768x1024.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-import-error-stone-light-768x1024-after.png"
+    },
+    {
+      "route": "",
+      "state": "login",
+      "palette": "stone-olive",
+      "mode": "dark",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": "docs/screenshots/graphite-reference/01-library-browser-1440x1000.png",
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-dark-1440x900.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-login-stone-dark-1440x900-after.png"
+    },
+    {
+      "route": "",
+      "state": "login",
+      "palette": "stone-olive",
+      "mode": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": "docs/screenshots/graphite-reference/01-library-browser-1440x1000.png",
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-light-1440x900.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-login-stone-light-1440x900-after.png"
+    },
+    {
+      "route": "",
+      "state": "login",
+      "palette": "stone-olive",
+      "mode": "light",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": "docs/screenshots/graphite-reference/01-library-browser-1440x1000.png",
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-light-390x844.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-login-stone-light-390x844-after.png"
+    },
+    {
+      "route": "notes",
+      "state": "data",
+      "palette": "stone-olive",
+      "mode": "dark",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": "docs/screenshots/graphite-reference/baseline-reference-notes-1440x900.png",
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-dark-1440x900.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-notes-data-stone-dark-1440x900-after.png"
+    },
+    {
+      "route": "notes",
+      "state": "data",
+      "palette": "stone-olive",
+      "mode": "dark",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": "docs/screenshots/graphite-reference/baseline-reference-notes-1440x900.png",
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-dark-390x844.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-notes-data-stone-dark-390x844-after.png"
+    },
+    {
+      "route": "notes",
+      "state": "data",
+      "palette": "stone-olive",
+      "mode": "dark",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": "docs/screenshots/graphite-reference/baseline-reference-notes-1440x900.png",
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-dark-768x1024.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-notes-data-stone-dark-768x1024-after.png"
+    },
+    {
+      "route": "notes",
+      "state": "data",
+      "palette": "stone-olive",
+      "mode": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": "docs/screenshots/graphite-reference/baseline-reference-notes-1440x900.png",
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-light-1440x900.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-notes-data-stone-light-1440x900-after.png"
+    },
+    {
+      "route": "notes",
+      "state": "data",
+      "palette": "stone-olive",
+      "mode": "light",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": "docs/screenshots/graphite-reference/baseline-reference-notes-1440x900.png",
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-light-390x844.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-notes-data-stone-light-390x844-after.png"
+    },
+    {
+      "route": "notes",
+      "state": "data",
+      "palette": "stone-olive",
+      "mode": "light",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": "docs/screenshots/graphite-reference/baseline-reference-notes-1440x900.png",
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-light-768x1024.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-notes-data-stone-light-768x1024-after.png"
+    },
+    {
+      "route": "player",
+      "state": "data",
+      "palette": "stone-olive",
+      "mode": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": null,
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-light-1440x900.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-player-data-stone-light-1440x900-after.png"
+    },
+    {
+      "route": "settings",
+      "state": "data",
+      "palette": "custom",
+      "mode": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": "docs/screenshots/graphite-reference/baseline-reference-settings-1440x900.png",
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-light-1440x900.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-settings-data-custom-light-1440x900-after.png"
+    },
+    {
+      "route": "settings",
+      "state": "data",
+      "palette": "graphite",
+      "mode": "dark",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": "docs/screenshots/graphite-reference/baseline-reference-settings-1440x900.png",
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-dark-1440x900.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-settings-data-graphite-dark-1440x900-after.png"
+    },
+    {
+      "route": "settings",
+      "state": "data",
+      "palette": "graphite",
+      "mode": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": "docs/screenshots/graphite-reference/baseline-reference-settings-1440x900.png",
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-light-1440x900.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-settings-data-graphite-light-1440x900-after.png"
+    },
+    {
+      "route": "settings",
+      "state": "data",
+      "palette": "stone-olive",
+      "mode": "dark",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": "docs/screenshots/graphite-reference/baseline-reference-settings-1440x900.png",
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-dark-1440x900.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-settings-data-stone-dark-1440x900-after.png"
+    },
+    {
+      "route": "settings",
+      "state": "data",
+      "palette": "stone-olive",
+      "mode": "dark",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": "docs/screenshots/graphite-reference/baseline-reference-settings-1440x900.png",
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-dark-390x844.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-settings-data-stone-dark-390x844-after.png"
+    },
+    {
+      "route": "settings",
+      "state": "data",
+      "palette": "stone-olive",
+      "mode": "dark",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": "docs/screenshots/graphite-reference/baseline-reference-settings-1440x900.png",
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-dark-768x1024.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-settings-data-stone-dark-768x1024-after.png"
+    },
+    {
+      "route": "settings",
+      "state": "data",
+      "palette": "stone-olive",
+      "mode": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": "docs/screenshots/graphite-reference/baseline-reference-settings-1440x900.png",
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-light-1440x900.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-settings-data-stone-light-1440x900-after.png"
+    },
+    {
+      "route": "settings",
+      "state": "data",
+      "palette": "stone-olive",
+      "mode": "light",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": "docs/screenshots/graphite-reference/baseline-reference-settings-1440x900.png",
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-light-390x844.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-settings-data-stone-light-390x844-after.png"
+    },
+    {
+      "route": "settings",
+      "state": "data",
+      "palette": "stone-olive",
+      "mode": "light",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "dpr": 1.25,
+      "fixture": "synthetic temp library with one indexed course, one media, one note and one progress record",
+      "reference": "docs/screenshots/graphite-reference/baseline-reference-settings-1440x900.png",
+      "before": "docs/screenshots/graphite-implementation/baseline-analytics-data-light-768x1024.png",
+      "after": "docs/screenshots/graphite-implementation/ux-palettes-settings-data-stone-light-768x1024-after.png"
+    }
+  ]
+}

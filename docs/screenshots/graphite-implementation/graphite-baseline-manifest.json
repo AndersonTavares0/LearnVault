@@ -1,0 +1,1707 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-10-20T21:12:57.088Z",
+  "revision": {
+    "branch": "feat/graphite-redesign-original-boards",
+    "commit": "957d90c430d2f1ed199fe875ae646987395411ff"
+  },
+  "baseline": {
+    "themeFamily": "Graphite",
+    "frontend": "Built from isolated git archive of HEAD 957d90c430d2f1ed199fe875ae646987395411ff; current worktree artifact was not used.",
+    "artifacts": [
+      {
+        "path": "C:/Users/ander/AppData/Local/Temp/lv-graphite-head957d90/crates/server/web/build/_app/immutable/200-B92bVtvA.css",
+        "sha256": "3c3528f5c96325936ec5d1458bbf70032ec090519550caf962d25d0c3f19122d"
+      },
+      {
+        "path": "C:/Users/ander/AppData/Local/Temp/lv-graphite-head957d90/crates/server/web/build/_app/immutable/200-Z3OYrR_d.js",
+        "sha256": "fffcf7dbf8493476830cea92d3aa285f74564642f0d6bd0023ada64e1dbb8fd1"
+      }
+    ],
+    "viewportSet": [
+      [
+        1440,
+        900
+      ],
+      [
+        768,
+        1024
+      ],
+      [
+        390,
+        844
+      ]
+    ],
+    "additionalViewport": [
+      1568,
+      795
+    ],
+    "browser": "OMP-managed Chromium",
+    "dpr": "1.0 actual for every capture",
+    "imageValidation": "Each PNG signature and IHDR dimensions checked from file bytes; SHA-256 recorded per entry.",
+    "buildCommand": "node node_modules/vite/bin/vite.js build (cwd: C:/Users/ander/AppData/Local/Temp/lv-graphite-head957d90/apps/web)",
+    "buildSource": "git archive HEAD from target worktree; source revision 957d90c430d2f1ed199fe875ae646987395411ff",
+    "screenshotCapture": "OMP-managed Chromium, PNG bytes copied from screenshot output file (not temporary path strings)."
+  },
+  "fixtures": {
+    "data": {
+      "baseURL": "http://127.0.0.1:54685",
+      "tempRoot": "C:/Users/ander/AppData/Local/Temp/lv-baseline-evidence-VliJBE",
+      "libraryPath": "C:/Users/ander/AppData/Local/Temp/lv-baseline-evidence-VliJBE/library",
+      "description": "Synthetic only: three category folders, one indexed root course (library) with nine generated media files; four progress records and four notes seeded via authenticated study APIs. No external course files or passwords in captures.",
+      "databasePath": "C:/Users/ander/AppData/Local/Temp/lv-baseline-evidence-VliJBE/baseline-head.sqlite"
+    },
+    "empty": {
+      "baseURL": "http://127.0.0.1:54686",
+      "tempRoot": "C:/Users/ander/AppData/Local/Temp/lv-baseline-empty-evidence",
+      "description": "No library root configured; catalog API returned zero nodes. Empty state is real.",
+      "databasePath": "C:/Users/ander/AppData/Local/Temp/lv-baseline-empty-evidence/baseline-head.sqlite"
+    },
+    "credentials": {
+      "username": "admin",
+      "password": "[not recorded]"
+    },
+    "runnerScript": "C:/Users/ander/AppData/Local/Temp/lv-baseline-start.mjs",
+    "runningService": "learnvault-baseline-runner",
+    "stopInstruction": "Stop service learnvault-baseline-runner; it forwards SIGTERM to both server children and leaves temporary fixture files for inspection."
+  },
+  "reference": {
+    "fullSource": "C:/Users/ander/Downloads/learnvault-referencia-15-telas/00-referencia-original-completa.html",
+    "canonicalCopy": "docs/design/graphite/00-referencia-original-completa.html",
+    "sha256": "a5c8bd5a4e66d00c867b6427cd9b9d412075eb59a1c864014cc7b061f750d49b",
+    "comparison": "Identical byte-level SHA-256 for Downloads full HTML and canonical full HTML; isolated board files rendered read-only and cropped to .screen."
+  },
+  "entries": [
+    {
+      "path": "graphite-implementation/baseline-analytics-data-dark-1440x900.png",
+      "route": "analytics",
+      "state": "data",
+      "palette": "graphite",
+      "mode": "dark",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 59619,
+        "width": 1440,
+        "height": 900,
+        "sha256": "244409b39e84c08aaae1c7e21a12403cc80077676a2a9c3e19cc847b93d7a591"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-analytics-data-dark-390x844.png",
+      "route": "analytics",
+      "state": "data",
+      "palette": "graphite",
+      "mode": "dark",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 40504,
+        "width": 390,
+        "height": 844,
+        "sha256": "bbfc1618c4db0133b8f582134c780a259773025b38f6de267832719879d7a997"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-analytics-data-dark-768x1024.png",
+      "route": "analytics",
+      "state": "data",
+      "palette": "graphite",
+      "mode": "dark",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 57271,
+        "width": 768,
+        "height": 1024,
+        "sha256": "93c0c6d3d2fbb119619622bd232e4f8109bf2e6f9bc347f4310913980c1381a6"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-analytics-data-light-1440x900.png",
+      "route": "analytics",
+      "state": "data",
+      "palette": "graphite",
+      "mode": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 62009,
+        "width": 1440,
+        "height": 900,
+        "sha256": "75538c75ec19736b9de86ef0ed7dcb5de6a68fec183e48ed816de2577acf7a89"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-analytics-data-light-390x844.png",
+      "route": "analytics",
+      "state": "data",
+      "palette": "graphite",
+      "mode": "light",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 40624,
+        "width": 390,
+        "height": 844,
+        "sha256": "51c66324223f904e209a440db5d9fa1985b207343fe7f96cc4ab4b7af9f3fb00"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-analytics-data-light-768x1024.png",
+      "route": "analytics",
+      "state": "data",
+      "palette": "graphite",
+      "mode": "light",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 58887,
+        "width": 768,
+        "height": 1024,
+        "sha256": "34083fb003b305dc351413ff61b3a7e17503e5850253d6c11c977c3b98427315"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-analytics-empty-dark-1440x900.png",
+      "route": "analytics",
+      "state": "empty",
+      "palette": "graphite",
+      "mode": "dark",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 50479,
+        "width": 1440,
+        "height": 900,
+        "sha256": "06a00fc4fcba792084b43eb2753ceac2c1934c86c941c8b2932802436dce6663"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-analytics-empty-dark-390x844.png",
+      "route": "analytics",
+      "state": "empty",
+      "palette": "graphite",
+      "mode": "dark",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 38555,
+        "width": 390,
+        "height": 844,
+        "sha256": "6c2f27ef887221b7dc6697054e5904520d626e2c654632653d243794ea2575b2"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-analytics-empty-dark-768x1024.png",
+      "route": "analytics",
+      "state": "empty",
+      "palette": "graphite",
+      "mode": "dark",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 48740,
+        "width": 768,
+        "height": 1024,
+        "sha256": "fa72b09bbc36c28e9951a7b40916d94352b5d38b9f2f2e06478692d374382c06"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-analytics-empty-light-1440x900.png",
+      "route": "analytics",
+      "state": "empty",
+      "palette": "graphite",
+      "mode": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 52882,
+        "width": 1440,
+        "height": 900,
+        "sha256": "6ce9fcdb050cfab14292bc10b3e51721c272f63293156dec265268f4da89590f"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-analytics-empty-light-390x844.png",
+      "route": "analytics",
+      "state": "empty",
+      "palette": "graphite",
+      "mode": "light",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 38879,
+        "width": 390,
+        "height": 844,
+        "sha256": "a2e6127de71c4b942c2d5c120692c5e978b4af7531e7d30d81ef818adb01c3eb"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-analytics-empty-light-768x1024.png",
+      "route": "analytics",
+      "state": "empty",
+      "palette": "graphite",
+      "mode": "light",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 50339,
+        "width": 768,
+        "height": 1024,
+        "sha256": "46782fcd0ec2cb386eb9f70979b7b77c4e0da2cac38bef6a45b19e66f8c4dba5"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-home-data-dark-1440x900.png",
+      "route": "home",
+      "state": "data",
+      "palette": "graphite",
+      "mode": "dark",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 89859,
+        "width": 1440,
+        "height": 900,
+        "sha256": "05876864b1d8de66021262bfa48d622e9e7a8a7e5fd34562f0f21e4a2c7ec265"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-home-data-dark-390x844.png",
+      "route": "home",
+      "state": "data",
+      "palette": "graphite",
+      "mode": "dark",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 56495,
+        "width": 390,
+        "height": 844,
+        "sha256": "07ea4212c4547b6f66ad4841263d2fc7b8dc88c008ec7ca684bb0f562e6307e7"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-home-data-dark-768x1024.png",
+      "route": "home",
+      "state": "data",
+      "palette": "graphite",
+      "mode": "dark",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 85067,
+        "width": 768,
+        "height": 1024,
+        "sha256": "6565910237ce4b208b1b8c2c4347acf371a1dcc20d7ee23bb921890812627802"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-home-data-light-1440x900.png",
+      "route": "home",
+      "state": "data",
+      "palette": "graphite",
+      "mode": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 90151,
+        "width": 1440,
+        "height": 900,
+        "sha256": "dfa75c81ad31084884adafbbef0dc1accdb407c2d674d6770221b7228537bcfb"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-home-data-light-390x844.png",
+      "route": "home",
+      "state": "data",
+      "palette": "graphite",
+      "mode": "light",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 56609,
+        "width": 390,
+        "height": 844,
+        "sha256": "6d35610616d786bf73f148ed05f743fed5f562cfddbde5b10c71a1ab34dd8320"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-home-data-light-768x1024.png",
+      "route": "home",
+      "state": "data",
+      "palette": "graphite",
+      "mode": "light",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 85846,
+        "width": 768,
+        "height": 1024,
+        "sha256": "1e2c548bd1f04968a9203502bc9fbf61fd88957e583059db543c892f8b8d50f9"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-home-empty-dark-1440x900.png",
+      "route": "home",
+      "state": "empty",
+      "palette": "graphite",
+      "mode": "dark",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 35168,
+        "width": 1440,
+        "height": 900,
+        "sha256": "e3113943d18dfc63357bb10f27d561240882c30b37bc95b6c2385a0632e56bd4"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-home-empty-dark-1568x795.png",
+      "route": "home",
+      "state": "empty",
+      "palette": "graphite",
+      "mode": "dark",
+      "viewport": {
+        "width": 1568,
+        "height": 795
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 34416,
+        "width": 1568,
+        "height": 795,
+        "sha256": "527eaed3e6e2c10d07a841083fbe147d2bbe2168449449b2391fd8f83e795fc7"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-home-empty-dark-390x844.png",
+      "route": "home",
+      "state": "empty",
+      "palette": "graphite",
+      "mode": "dark",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 27438,
+        "width": 390,
+        "height": 844,
+        "sha256": "c20fe173b67a698ae04fcd6ddf97ac79be83eab001dd0737e3a2c4a686e9bf74"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-home-empty-dark-768x1024.png",
+      "route": "home",
+      "state": "empty",
+      "palette": "graphite",
+      "mode": "dark",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 30087,
+        "width": 768,
+        "height": 1024,
+        "sha256": "1340741954fffb96048c705c4972468decae78516defbbf2006082145be0f579"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-home-empty-light-1440x900.png",
+      "route": "home",
+      "state": "empty",
+      "palette": "graphite",
+      "mode": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 35708,
+        "width": 1440,
+        "height": 900,
+        "sha256": "0d8e7875c43994618242e8cc99f978194bd0d9f9293bb88b7bda2b19c05b382a"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-home-empty-light-1568x795.png",
+      "route": "home",
+      "state": "empty",
+      "palette": "graphite",
+      "mode": "light",
+      "viewport": {
+        "width": 1568,
+        "height": 795
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 35317,
+        "width": 1568,
+        "height": 795,
+        "sha256": "b62f2e4450c9409d8314caf010954bcddb461299bf052bfb3a5a7bf57f637d48"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-home-empty-light-390x844.png",
+      "route": "home",
+      "state": "empty",
+      "palette": "graphite",
+      "mode": "light",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 27826,
+        "width": 390,
+        "height": 844,
+        "sha256": "cabc76cf8a6e879b06ae4d437fa5f6603d779dcc963020fe479ea6646f84fd6e"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-home-empty-light-768x1024.png",
+      "route": "home",
+      "state": "empty",
+      "palette": "graphite",
+      "mode": "light",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 30852,
+        "width": 768,
+        "height": 1024,
+        "sha256": "addebc76a827176ebb85cf794b3719470cec7ad1d23832b35358648d5167422d"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-import-http-dark-1440x900.png",
+      "route": "import",
+      "state": "form",
+      "palette": "graphite",
+      "mode": "dark",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 53241,
+        "width": 1440,
+        "height": 900,
+        "sha256": "3b98f1bfeb51776b6800c1a80f7c7fd126c4680949f065d11bf7b8288858067a"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-import-http-dark-1568x795.png",
+      "route": "import",
+      "state": "form",
+      "palette": "graphite",
+      "mode": "dark",
+      "viewport": {
+        "width": 1568,
+        "height": 795
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 52648,
+        "width": 1568,
+        "height": 795,
+        "sha256": "bd60ff1d986f51b90865db7fe01df2b11eb037d32c4d2162d2b1e34a0b58e420"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-import-http-dark-390x844.png",
+      "route": "import",
+      "state": "form",
+      "palette": "graphite",
+      "mode": "dark",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 40742,
+        "width": 390,
+        "height": 844,
+        "sha256": "cf7ae4182ad62d9fd444328d42cc0607b65005baefcab01f2a2788b2a829c67f"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-import-http-dark-768x1024.png",
+      "route": "import",
+      "state": "form",
+      "palette": "graphite",
+      "mode": "dark",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 51743,
+        "width": 768,
+        "height": 1024,
+        "sha256": "3ca47cf2fdf59a00f4ea1abbaece7d8dc083ddcf1715a638f3ab9f4633229084"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-import-http-light-1440x900.png",
+      "route": "import",
+      "state": "form",
+      "palette": "graphite",
+      "mode": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 53317,
+        "width": 1440,
+        "height": 900,
+        "sha256": "c16926efcf8e12b9fa680e2770b36a5bdb6987bc18ae65deabd09b508cbf5377"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-import-http-light-1568x795.png",
+      "route": "import",
+      "state": "form",
+      "palette": "graphite",
+      "mode": "light",
+      "viewport": {
+        "width": 1568,
+        "height": 795
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 52761,
+        "width": 1568,
+        "height": 795,
+        "sha256": "a819d818b3f75926fe3445da53a94928a93f0b982057d254baecaf7a0a174673"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-import-http-light-390x844.png",
+      "route": "import",
+      "state": "form",
+      "palette": "graphite",
+      "mode": "light",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 40059,
+        "width": 390,
+        "height": 844,
+        "sha256": "91962558bc0ae11b4a91962b7969484b46ed43d00ebbacdab71a902bc67365fe"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-import-http-light-768x1024.png",
+      "route": "import",
+      "state": "form",
+      "palette": "graphite",
+      "mode": "light",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 51627,
+        "width": 768,
+        "height": 1024,
+        "sha256": "48fd2ff6556fcebb4ac9e3dc945646a139e136004859982c9938f57761db34d7"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-notes-data-dark-1440x900.png",
+      "route": "notes",
+      "state": "data",
+      "palette": "graphite",
+      "mode": "dark",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 65252,
+        "width": 1440,
+        "height": 900,
+        "sha256": "197a8e446b2217af0a511854dca8d486abb09a7a53b8e273b01e7c12083fa1cb"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-notes-data-dark-390x844.png",
+      "route": "notes",
+      "state": "data",
+      "palette": "graphite",
+      "mode": "dark",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 30550,
+        "width": 390,
+        "height": 844,
+        "sha256": "cbd40aef546d1967f25596536a92e010ac251d2144e7373b24beef6250e167b0"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-notes-data-dark-768x1024.png",
+      "route": "notes",
+      "state": "data",
+      "palette": "graphite",
+      "mode": "dark",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 65887,
+        "width": 768,
+        "height": 1024,
+        "sha256": "e1c9b274b3b821fccdecce9e990a3fc28055df1c23186666f3947f0180c0f883"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-notes-data-light-1440x900.png",
+      "route": "notes",
+      "state": "data",
+      "palette": "graphite",
+      "mode": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 67475,
+        "width": 1440,
+        "height": 900,
+        "sha256": "ebdd8282378a2efab095296a376eeaf25ef0df474eb93ac0ce2f563ef341f016"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-notes-data-light-390x844.png",
+      "route": "notes",
+      "state": "data",
+      "palette": "graphite",
+      "mode": "light",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 31005,
+        "width": 390,
+        "height": 844,
+        "sha256": "aff1d565894a577c2e76ef98289535bb038389052ae92c0f60cb8c4ea866c4f7"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-notes-data-light-768x1024.png",
+      "route": "notes",
+      "state": "data",
+      "palette": "graphite",
+      "mode": "light",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 67379,
+        "width": 768,
+        "height": 1024,
+        "sha256": "2790453dd4107ca2ddb0b3daca3b81b2b7d5948f4cde0df3d4b3d81713cf9827"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-notes-empty-dark-1440x900.png",
+      "route": "notes",
+      "state": "empty",
+      "palette": "graphite",
+      "mode": "dark",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 38759,
+        "width": 1440,
+        "height": 900,
+        "sha256": "767d48ba4a4a37cbd4adc006b0a398f63760469d5032ab3836d66608f2739c23"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-notes-empty-dark-390x844.png",
+      "route": "notes",
+      "state": "empty",
+      "palette": "graphite",
+      "mode": "dark",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 30650,
+        "width": 390,
+        "height": 844,
+        "sha256": "e6b1b070b474c7116db14682e2f4bc5240a76e2d904f3b622679a4c46e2c61ee"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-notes-empty-dark-768x1024.png",
+      "route": "notes",
+      "state": "empty",
+      "palette": "graphite",
+      "mode": "dark",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 34551,
+        "width": 768,
+        "height": 1024,
+        "sha256": "d230e1ca45ff9d01c323e4c5814792e1aa33d4782d9a8541cc851214f23f24f2"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-notes-empty-light-1440x900.png",
+      "route": "notes",
+      "state": "empty",
+      "palette": "graphite",
+      "mode": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 40339,
+        "width": 1440,
+        "height": 900,
+        "sha256": "289846371034b766eb07ccd87f2b9539f92d362b37a260f05d15f72fe96c78c0"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-notes-empty-light-390x844.png",
+      "route": "notes",
+      "state": "empty",
+      "palette": "graphite",
+      "mode": "light",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 31227,
+        "width": 390,
+        "height": 844,
+        "sha256": "241e274be70811cfabe99ef7f4629c5b2b48321dfb245bfb95a0ec0edaabd9fc"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-notes-empty-light-768x1024.png",
+      "route": "notes",
+      "state": "empty",
+      "palette": "graphite",
+      "mode": "light",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 36025,
+        "width": 768,
+        "height": 1024,
+        "sha256": "280b3c7c9dafa5873f8b94a5bbf4e3de12e7a48da1a40644281e866c7bb6c75a"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-settings-data-dark-1440x900.png",
+      "route": "settings",
+      "state": "data",
+      "palette": "graphite",
+      "mode": "dark",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 45034,
+        "width": 1440,
+        "height": 900,
+        "sha256": "836ac5505ead52d597040fcaa856a7de0e982389d3d6022b78b03ba62649d0b1"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-settings-data-dark-390x844.png",
+      "route": "settings",
+      "state": "data",
+      "palette": "graphite",
+      "mode": "dark",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 31099,
+        "width": 390,
+        "height": 844,
+        "sha256": "14efc1c85c091fd3cf8d1de6896540401fd78d973609b3eace1628bc2ab49944"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-settings-data-dark-768x1024.png",
+      "route": "settings",
+      "state": "data",
+      "palette": "graphite",
+      "mode": "dark",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 41454,
+        "width": 768,
+        "height": 1024,
+        "sha256": "fdad580fc349027199161f90de428e3ed6a627a0491cda1bd4d2a631bee01bd4"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-settings-data-light-1440x900.png",
+      "route": "settings",
+      "state": "data",
+      "palette": "graphite",
+      "mode": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 46543,
+        "width": 1440,
+        "height": 900,
+        "sha256": "6976fc1c9a236f3dfde25f8c5f9fb6c9a05aff7229fa8f2286480685cde33303"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-settings-data-light-390x844.png",
+      "route": "settings",
+      "state": "data",
+      "palette": "graphite",
+      "mode": "light",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 31601,
+        "width": 390,
+        "height": 844,
+        "sha256": "23f2bbcc6b64747dcea150d96264d79964b31960b9ba78bfa1ac1b731c44d7e1"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-settings-data-light-768x1024.png",
+      "route": "settings",
+      "state": "data",
+      "palette": "graphite",
+      "mode": "light",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 42636,
+        "width": 768,
+        "height": 1024,
+        "sha256": "fbac3cdb81423a8efa67a1a98daa250fbfbc58823ac5cc61e3ab14c8598fe339"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-settings-empty-dark-1440x900.png",
+      "route": "settings",
+      "state": "empty",
+      "palette": "graphite",
+      "mode": "dark",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 44636,
+        "width": 1440,
+        "height": 900,
+        "sha256": "98a16bc0f334c20cdb44d6a6ef67145b4638b7670155a6e10db5aaebe0ec3d1f"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-settings-empty-dark-390x844.png",
+      "route": "settings",
+      "state": "empty",
+      "palette": "graphite",
+      "mode": "dark",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 31059,
+        "width": 390,
+        "height": 844,
+        "sha256": "bfee37f99f4b7af7a4b7c610a57484d7de2c9d5a2b22d57a8e72cbfc9e53001f"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-settings-empty-dark-768x1024.png",
+      "route": "settings",
+      "state": "empty",
+      "palette": "graphite",
+      "mode": "dark",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 41065,
+        "width": 768,
+        "height": 1024,
+        "sha256": "7c7dfeb2a26c09fe6823d1ee1eb42364e32315177c6c7da7d16f062ea6ce2f61"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-settings-empty-light-1440x900.png",
+      "route": "settings",
+      "state": "empty",
+      "palette": "graphite",
+      "mode": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 45700,
+        "width": 1440,
+        "height": 900,
+        "sha256": "6b7817ec886b0c2d4536986b74eda915aa2df5de0f4571dbc3385d8791841d34"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-settings-empty-light-390x844.png",
+      "route": "settings",
+      "state": "empty",
+      "palette": "graphite",
+      "mode": "light",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 31202,
+        "width": 390,
+        "height": 844,
+        "sha256": "e53d1d137398693a29c456365aec7fa8353cf871ac54a65c56ea4a0e1c4efe77"
+      }
+    },
+    {
+      "path": "graphite-implementation/baseline-settings-empty-light-768x1024.png",
+      "route": "settings",
+      "state": "empty",
+      "palette": "graphite",
+      "mode": "light",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "dpr": 1,
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "interAvailableCheck": true,
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 41914,
+        "width": 768,
+        "height": 1024,
+        "sha256": "a11cc09b1837c8ff53145c101af3891adc4e3d4bbeda5aa0866aa5ec205564d5"
+      }
+    },
+    {
+      "path": "graphite-reference/baseline-reference-analytics-1440x900.png",
+      "route": "analytics",
+      "state": "source-reference",
+      "palette": "graphite-reference",
+      "mode": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1,
+      "cropSelector": ".screen",
+      "pngViewport": {
+        "width": 1392,
+        "height": 1784
+      },
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 129426,
+        "width": 1392,
+        "height": 1784,
+        "sha256": "6c8b89477ec5aff3557c17cc243715f7d9b9ad8eced4836739a6d939582e865b"
+      },
+      "source": {
+        "file": "docs/design/graphite/09-analytics.html",
+        "provenance": "Individual board extracted from 00-reference; full Downloads HTML and canonical full HTML have identical SHA-256.",
+        "fullReferenceSha256": "a5c8bd5a4e66d00c867b6427cd9b9d412075eb59a1c864014cc7b061f750d49b"
+      }
+    },
+    {
+      "path": "graphite-reference/baseline-reference-import-1440x900.png",
+      "route": "import",
+      "state": "source-reference",
+      "palette": "graphite-reference",
+      "mode": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1,
+      "cropSelector": ".screen",
+      "pngViewport": {
+        "width": 1392,
+        "height": 1223
+      },
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 135257,
+        "width": 1392,
+        "height": 1223,
+        "sha256": "9f620ea47d0ce327b7426ceaf457926094d98d87fd6cbad67c2b8f88c0e436fa"
+      },
+      "source": {
+        "file": "docs/design/graphite/15-catalog-flow.html",
+        "provenance": "Individual board extracted from 00-reference; full Downloads HTML and canonical full HTML have identical SHA-256.",
+        "fullReferenceSha256": "a5c8bd5a4e66d00c867b6427cd9b9d412075eb59a1c864014cc7b061f750d49b"
+      }
+    },
+    {
+      "path": "graphite-reference/baseline-reference-import-1568x795.png",
+      "route": "import",
+      "state": "source-reference",
+      "palette": "graphite-reference",
+      "mode": "light",
+      "viewport": {
+        "width": 1568,
+        "height": 795
+      },
+      "dpr": 1,
+      "cropSelector": ".screen",
+      "pngViewport": {
+        "width": 1452,
+        "height": 1223
+      },
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 136043,
+        "width": 1452,
+        "height": 1223,
+        "sha256": "9cd03ef1045de5f5cf77fb7a1653990b554194447e21b2d1dc582e3d3a7dbd61"
+      },
+      "source": {
+        "file": "docs/design/graphite/15-catalog-flow.html",
+        "provenance": "Individual board extracted from 00-reference; full Downloads HTML and canonical full HTML have identical SHA-256.",
+        "fullReferenceSha256": "a5c8bd5a4e66d00c867b6427cd9b9d412075eb59a1c864014cc7b061f750d49b"
+      }
+    },
+    {
+      "path": "graphite-reference/baseline-reference-library-1440x900.png",
+      "route": "library",
+      "state": "source-reference",
+      "palette": "graphite-reference",
+      "mode": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1,
+      "cropSelector": ".screen",
+      "pngViewport": {
+        "width": 1392,
+        "height": 976
+      },
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 183276,
+        "width": 1392,
+        "height": 976,
+        "sha256": "84a37ff4fea12b6cf72faad35c6ad8de29f71960edf3da7413d84caa0c03ae96"
+      },
+      "source": {
+        "file": "docs/design/graphite/01-library.html",
+        "provenance": "Individual board extracted from 00-reference; full Downloads HTML and canonical full HTML have identical SHA-256.",
+        "fullReferenceSha256": "a5c8bd5a4e66d00c867b6427cd9b9d412075eb59a1c864014cc7b061f750d49b"
+      }
+    },
+    {
+      "path": "graphite-reference/baseline-reference-library-1568x795.png",
+      "route": "library",
+      "state": "source-reference",
+      "palette": "graphite-reference",
+      "mode": "light",
+      "viewport": {
+        "width": 1568,
+        "height": 795
+      },
+      "dpr": 1,
+      "cropSelector": ".screen",
+      "pngViewport": {
+        "width": 1452,
+        "height": 976
+      },
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 184809,
+        "width": 1452,
+        "height": 976,
+        "sha256": "582c77ed48cb551c770f23a91af21d6b909f600c6193f7a8ea6ccc5bef33264c"
+      },
+      "source": {
+        "file": "docs/design/graphite/01-library.html",
+        "provenance": "Individual board extracted from 00-reference; full Downloads HTML and canonical full HTML have identical SHA-256.",
+        "fullReferenceSha256": "a5c8bd5a4e66d00c867b6427cd9b9d412075eb59a1c864014cc7b061f750d49b"
+      }
+    },
+    {
+      "path": "graphite-reference/baseline-reference-notes-1440x900.png",
+      "route": "notes",
+      "state": "source-reference",
+      "palette": "graphite-reference",
+      "mode": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1,
+      "cropSelector": ".screen",
+      "pngViewport": {
+        "width": 1392,
+        "height": 740
+      },
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 54181,
+        "width": 1392,
+        "height": 740,
+        "sha256": "a41a44e41a8bfe520e33fbf9d63af9b39ed8b4414b0576ed84c223fafa7182bc"
+      },
+      "source": {
+        "file": "docs/design/graphite/04-notes.html",
+        "provenance": "Individual board extracted from 00-reference; full Downloads HTML and canonical full HTML have identical SHA-256.",
+        "fullReferenceSha256": "a5c8bd5a4e66d00c867b6427cd9b9d412075eb59a1c864014cc7b061f750d49b"
+      }
+    },
+    {
+      "path": "graphite-reference/baseline-reference-settings-1440x900.png",
+      "route": "settings",
+      "state": "source-reference",
+      "palette": "graphite-reference",
+      "mode": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dpr": 1,
+      "cropSelector": ".screen",
+      "pngViewport": {
+        "width": 1392,
+        "height": 1017
+      },
+      "fonts": {
+        "cssFamily": "Inter, ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+        "fontFaceSet": [],
+        "limitation": "No downloadable font faces were loaded; browser CSS fallback identity is not exposed by computed font-family."
+      },
+      "image": {
+        "bytes": 54637,
+        "width": 1392,
+        "height": 1017,
+        "sha256": "61b082571d2faaecdae140034b714349b016c1a2681ca6012f7c9a56fdad5760"
+      },
+      "source": {
+        "file": "docs/design/graphite/05-settings.html",
+        "provenance": "Individual board extracted from 00-reference; full Downloads HTML and canonical full HTML have identical SHA-256.",
+        "fullReferenceSha256": "a5c8bd5a4e66d00c867b6427cd9b9d412075eb59a1c864014cc7b061f750d49b"
+      }
+    }
+  ],
+  "limitations": [
+    "Settings has no data-dependent state; its “data” and “empty” entries are the same settings composition captured against both fixture server states.",
+    "The staged import form is the real HTTP import form before submit; no fake error or preview was inserted.",
+    "These captures document the original graphite baseline and are not approval of visual fidelity.",
+    "Reference board PNG dimensions are the cropped .screen element and can exceed the CSS viewport; both are stored per entry.",
+    "Before PNGs were captured from an isolated build of the recorded HEAD, not the mutable current worktree build.",
+    "Populated screenshots were captured only after catalog/activity/note data had rendered (course-linked notes and actual persisted progress). Empty analytics waited for the real no-activity state."
+  ]
+}
