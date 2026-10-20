@@ -1,17 +1,26 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { findLesson } from './router';
-import { desktopCoverUrl, desktopMediaUrl, DesktopStub, HttpTransport, lessonFromNode, MAX_COVER_BYTES, normalizeCatalog, normalizeRecentStudy, normalizeStudyProgress, normalizeUpdateStatus, normalizeUser, STUDY_NOT_AVAILABLE, CATALOG_LIMITS, type Transport } from './transport';
+import { desktopCoverUrl, desktopMediaUrl, DesktopStub, HttpTransport, lessonFromNode, MAX_COVER_BYTES, normalizeCatalog, normalizeImportPreview, normalizePomodoro, normalizeRecentStudy, normalizeStudyAnalytics, normalizeStudyNote, normalizeStudyProgress, normalizeUpdateStatus, normalizeUser, STUDY_NOT_AVAILABLE, CATALOG_LIMITS, type Transport } from './transport';
 
 // O Tauri só é carregado no desktop: fora dele o módulo é substituído pelo mock, de modo
 // que a suíte nunca toca `window.__TAURI_INTERNALS__`.
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 
 describe('transport contract', () => {
-	it('exposes the HTTP transport seam without routing assumptions', () => {
-		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'checkUpdate', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover'];
-		expect(methods).toHaveLength(18);
+	it('normalizes a physical import preview and rejects malformed trees', () => {
+		const preview = normalizeImportPreview({
+			discovery: {
+				root: { name: 'Curso', path: '.', entry_kind: 'directory', status: { status: 'found' }, file_kind: null, size: null, children: [{ name: 'a.mp4', path: 'a.mp4', entry_kind: 'file', status: { status: 'found' }, file_kind: 'media', size: 3, children: [] }] },
+				summary: { found: 1, ignored: 0, inaccessible: 0, unsupported: 0 }
+			},
+			interpretation: { suggestions: [{ path: '.', proposed_role: 'possível curso', confidence: 'low', explanation: 'revisar', ambiguous: true }] }
+		});
+		expect(preview.discovery.root.children[0].fileKind).toBe('media');
+		expect(preview.interpretation.suggestions[0].ambiguous).toBe(true);
+		expect(() => normalizeImportPreview({ discovery: { root: {}, summary: { found: 0, ignored: 0, inaccessible: 0, unsupported: 0 } }, interpretation: { suggestions: [] } })).toThrow('Resposta inválida do servidor');
 	});
+
 	it('does not offer native folder selection over HTTP', async () => {
 		await expect(new HttpTransport().importCourse()).rejects.toThrow('desktop é quem escolhe pastas');
 	});
@@ -438,6 +447,14 @@ describe('transport contract', () => {
 		expect(recent.items).toHaveLength(1);
 		expect(recent.items[0].mediaId).toBe('m1');
 	});
+	it('normalizes study analytics and rejects impossible counts', () => {
+		expect(normalizeStudyAnalytics({ tracked_count: 3, completed_count: 1, total_position_seconds: 90, last_activity_at: 12 })).toEqual({ trackedCount: 3, completedCount: 1, totalPositionSeconds: 90, lastActivityAt: 12 });
+		expect(() => normalizeStudyAnalytics({ tracked_count: 1, completed_count: 2, total_position_seconds: 0, last_activity_at: null })).toThrow('Resposta inválida');
+	});
+	it('normalizes Pomodoro state and rejects elapsed values beyond duration', () => {
+		expect(normalizePomodoro({ status: 'running', duration_seconds: 1500, elapsed_seconds: 12, updated_at: 8 })).toEqual({ status: 'running', durationSeconds: 1500, elapsedSeconds: 12, updatedAt: 8 });
+		expect(() => normalizePomodoro({ status: 'paused', duration_seconds: 1500, elapsed_seconds: 1501, updated_at: 8 })).toThrow('Resposta inválida');
+	});
 	it('reads study progress from the HTTP endpoint', async () => {
 		const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ media_id: 'm1', position_seconds: 42, completed: false, recorded: true }), { status: 200 }));
 		vi.stubGlobal('fetch', fetchMock);
@@ -462,6 +479,27 @@ describe('transport contract', () => {
 		const recent = await new HttpTransport().recentStudy(5);
 		expect(fetchMock).toHaveBeenCalledWith('/api/study/recent?limit=5');
 		expect(recent.items[0].mediaId).toBe('m1');
+		vi.unstubAllGlobals();
+	});
+	it('loads study analytics from the HTTP endpoint', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ tracked_count: 2, completed_count: 1, total_position_seconds: 120, last_activity_at: 8 }), { status: 200 }));
+		vi.stubGlobal('fetch', fetchMock);
+		await expect(new HttpTransport().studyAnalytics()).resolves.toEqual({ trackedCount: 2, completedCount: 1, totalPositionSeconds: 120, lastActivityAt: 8 });
+		expect(fetchMock).toHaveBeenCalledWith('/api/study/analytics');
+		vi.unstubAllGlobals();
+	});
+	it('reads and mutates Pomodoro through HTTP endpoints', async () => {
+		const fetchMock = vi.fn().mockImplementation(() => new Response(JSON.stringify({ status: 'paused', duration_seconds: 1500, elapsed_seconds: 12, updated_at: 8 }), { status: 200 }));
+		vi.stubGlobal('fetch', fetchMock);
+		const http = new HttpTransport();
+		await expect(http.pomodoro()).resolves.toMatchObject({ status: 'paused', elapsedSeconds: 12 });
+		await http.startPomodoro(1500);
+		await http.pausePomodoro(12);
+		await http.resetPomodoro();
+		expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/pomodoro');
+		expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/pomodoro', expect.objectContaining({ method: 'POST', body: JSON.stringify({ duration_seconds: 1500 }) }));
+		expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/pomodoro/pause', expect.objectContaining({ method: 'POST', body: JSON.stringify({ elapsed_seconds: 12 }) }));
+		expect(fetchMock).toHaveBeenNthCalledWith(4, '/api/pomodoro/reset', expect.objectContaining({ method: 'POST' }));
 		vi.unstubAllGlobals();
 	});
 	it('reports study endpoints as unavailable when the server returns 404', async () => {
@@ -570,6 +608,65 @@ describe('transport contract', () => {
 		const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 403 }));
 		vi.stubGlobal('fetch', fetchMock);
 		await expect(new HttpTransport().checkUpdate()).rejects.toThrow('credentials_change_required');
+		vi.unstubAllGlobals();
+	});
+	it('uses the authenticated HTTP notes CRUD contract', async () => {
+		const note = { note_id: 7, media_id: 'm1', text: '<plain>', position_seconds: 12, created_at: 1, updated_at: 2 };
+		const fetchMock = vi.fn()
+			.mockResolvedValueOnce(new Response(JSON.stringify({ items: [note] }), { status: 200 }))
+			.mockResolvedValueOnce(new Response(JSON.stringify(note), { status: 201 }))
+			.mockResolvedValueOnce(new Response(JSON.stringify(note), { status: 200 }))
+			.mockResolvedValueOnce(new Response(null, { status: 204 }));
+		vi.stubGlobal('fetch', fetchMock);
+		const transport = new HttpTransport();
+		expect((await transport.listNotes('media & one')).items[0].text).toBe('<plain>');
+		await transport.createNote('m1', 'new', null);
+		await transport.updateNote(7, 'edit', 14);
+		await transport.deleteNote(7);
+		expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/study/notes?media_id=media%20%26%20one', '/api/study/notes', '/api/study/notes/7', '/api/study/notes/7']);
+		expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ method: 'POST', body: JSON.stringify({ media_id: 'm1', text: 'new', position_seconds: null }) });
+		expect(fetchMock.mock.calls[2]?.[1]).toMatchObject({ method: 'PUT', body: JSON.stringify({ text: 'edit', position_seconds: 14 }) });
+		vi.unstubAllGlobals();
+	});
+	it('lists every note of the owner through the global index contract', async () => {
+		const note = { note_id: 7, media_id: 'm1', text: 'indexada', position_seconds: null, created_at: 1, updated_at: 2 };
+
+		// HTTP: a rota global traz as notas mais recentes e avisa quando truncou.
+		const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [note], truncated: true }), { status: 200 }));
+		vi.stubGlobal('fetch', fetchMock);
+		const http = new HttpTransport();
+		const listed = await http.listAllNotes();
+		expect(listed.items[0].text).toBe('indexada');
+		expect(listed.truncated).toBe(true);
+		expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/study/notes/all']);
+		vi.unstubAllGlobals();
+
+		// Desktop: o mesmo envelope chega pelo IPC, sem pedir identificador de dono.
+		vi.mocked(invoke).mockResolvedValue({ items: [note], truncated: false });
+		const desktop = new DesktopStub();
+		expect(await desktop.listAllNotes()).toMatchObject({ truncated: false });
+		expect(vi.mocked(invoke).mock.calls.map(([name]) => name)).toContain('desktop_study_notes_all');
+		expect(JSON.stringify(vi.mocked(invoke).mock.calls)).not.toContain('owner');
+	});
+	it('rejects malformed note payloads', () => {
+		expect(() => normalizeStudyNote({ note_id: 'bad' })).toThrow('Resposta inválida do servidor');
+	});
+	it('uses desktop IPC notes CRUD without HTTP or owner identifiers', async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+		vi.mocked(invoke).mockImplementation(async (name: string) => {
+			if (name === 'desktop_study_notes') return { items: [{ note_id: 7, media_id: 'm1', text: 'note', position_seconds: null, created_at: 1, updated_at: 1 }] };
+			return { note_id: 7, media_id: 'm1', text: 'note', position_seconds: null, created_at: 1, updated_at: 1 };
+		});
+		const transport = new DesktopStub();
+		await transport.listNotes('m1');
+		await transport.createNote('m1', 'note', null);
+		await transport.updateNote(7, 'edit', 4);
+		await transport.deleteNote(7);
+		expect(vi.mocked(invoke).mock.calls.map(([name]) => name)).toEqual(['desktop_study_notes', 'desktop_create_study_note', 'desktop_update_study_note', 'desktop_delete_study_note']);
+		expect(vi.mocked(invoke).mock.calls[1]?.[1]).toEqual({ mediaId: 'm1', text: 'note', positionSeconds: null });
+		expect(JSON.stringify(vi.mocked(invoke).mock.calls)).not.toContain('owner');
+		expect(fetchMock).not.toHaveBeenCalled();
 		vi.unstubAllGlobals();
 	});
 });

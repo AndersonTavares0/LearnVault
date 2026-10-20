@@ -142,6 +142,10 @@ pub(crate) async fn media(
         header::CONTENT_TYPE,
         HeaderValue::from_static(content_type(&path)),
     );
+    response_headers.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
     if let Some(disposition) = content_disposition(&path) {
         response_headers.insert(header::CONTENT_DISPOSITION, disposition);
     }
@@ -242,7 +246,9 @@ fn content_type(path: &str) -> &'static str {
         .next()
         .unwrap_or_default()
         .to_ascii_lowercase();
-    playable_media_type(&extension).unwrap_or("application/octet-stream")
+    playable_media_type(&extension)
+        .or_else(|| safe_material_type(&extension))
+        .unwrap_or("application/octet-stream")
 }
 
 fn playable_media_type(extension: &str) -> Option<&'static str> {
@@ -260,13 +266,25 @@ fn playable_media_type(extension: &str) -> Option<&'static str> {
     })
 }
 
+fn safe_material_type(extension: &str) -> Option<&'static str> {
+    Some(match extension {
+        "pdf" => "application/pdf",
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "txt" | "md" | "csv" => "text/plain; charset=utf-8",
+        _ => return None,
+    })
+}
+
 fn content_disposition(path: &str) -> Option<HeaderValue> {
     let extension = path
         .rsplit('.')
         .next()
         .unwrap_or_default()
         .to_ascii_lowercase();
-    if playable_media_type(&extension).is_some() {
+    if playable_media_type(&extension).is_some() || safe_material_type(&extension).is_some() {
         return None;
     }
 
@@ -506,6 +524,18 @@ mod tests {
                 content_disposition(path).unwrap().to_str().unwrap(),
                 expected
             );
+        }
+    }
+
+    #[test]
+    fn safe_material_types_are_inline_and_nosniff_compatible() {
+        for (path, content) in [
+            ("capa.png", "image/png"),
+            ("apostila.pdf", "application/pdf"),
+            ("notas.md", "text/plain; charset=utf-8"),
+        ] {
+            assert_eq!(content_type(path), content);
+            assert_eq!(content_disposition(path), None);
         }
     }
 

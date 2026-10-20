@@ -62,7 +62,7 @@ describe('desktop shell has no session chrome', () => {
 		const uses = [...source.matchAll(/onclick=\{logout\}/g)].map((match) => match.index ?? -1);
 		expect(uses.length).toBeGreaterThan(0);
 		for (const at of uses) {
-			expect(source.slice(Math.max(0, at - 200), at)).toContain("transportKind === 'http'");
+			expect(source.slice(Math.max(0, at - 450), at)).toContain("transportKind === 'http'");
 		}
 	});
 

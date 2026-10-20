@@ -17,7 +17,7 @@ use axum::{
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
-use learnvault_core::{AuthSession, Database, StudyProgress};
+use learnvault_core::{AuthSession, Database, StudyAnalytics, StudyProgress};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -74,6 +74,14 @@ struct ProgressResponse {
 #[derive(Serialize)]
 struct RecentResponse {
     items: Vec<ProgressResponse>,
+}
+
+#[derive(Serialize)]
+struct AnalyticsResponse {
+    tracked_count: usize,
+    completed_count: usize,
+    total_position_seconds: i64,
+    last_activity_at: Option<i64>,
 }
 
 /// Documento de capacidades do Study, o contrato explícito de detecção de recursos.
@@ -147,6 +155,34 @@ pub(crate) async fn recent(
             .into_response(),
         ),
         Err(failure) => study_failure_response(failure),
+    }
+}
+
+/// Retorna métricas agregadas do estudo do usuário autenticado.
+pub(crate) async fn analytics(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let owner = user.user_id;
+    match run_study(&state, move |db| {
+        learnvault_core::study_analytics(db, &owner)
+    })
+    .await
+    {
+        Ok(analytics) => private_no_store(Json(AnalyticsResponse::from(analytics)).into_response()),
+        Err(failure) => study_failure_response(failure),
+    }
+}
+
+impl From<StudyAnalytics> for AnalyticsResponse {
+    fn from(value: StudyAnalytics) -> Self {
+        Self {
+            tracked_count: value.tracked_count,
+            completed_count: value.completed_count,
+            total_position_seconds: value.total_position_seconds,
+            last_activity_at: value.last_activity_at,
+        }
     }
 }
 
@@ -364,7 +400,7 @@ fn parse_progress_query(raw: Option<&str>) -> Option<ProgressQuery> {
     serde_urlencoded::from_str::<ProgressQuery>(raw.unwrap_or_default()).ok()
 }
 
-fn internal_error(message: &'static str) -> Response {
+pub(crate) fn internal_error(message: &'static str) -> Response {
     error_response(StatusCode::INTERNAL_SERVER_ERROR, message)
 }
 
@@ -372,11 +408,11 @@ fn invalid_query() -> Response {
     error_response(StatusCode::BAD_REQUEST, "invalid_query")
 }
 
-fn error_response(status: StatusCode, error: &'static str) -> Response {
+pub(crate) fn error_response(status: StatusCode, error: &'static str) -> Response {
     private_no_store((status, Json(ErrorResponse { error })).into_response())
 }
 
-fn credentials_required() -> Response {
+pub(crate) fn credentials_required() -> Response {
     error_response(StatusCode::FORBIDDEN, "credentials_change_required")
 }
 
@@ -384,7 +420,7 @@ fn csrf_failed() -> Response {
     error_response(StatusCode::FORBIDDEN, "csrf_failed")
 }
 
-fn private_no_store(mut response: Response) -> Response {
+pub(crate) fn private_no_store(mut response: Response) -> Response {
     response.headers_mut().insert(
         header::CACHE_CONTROL,
         HeaderValue::from_static("private, no-store"),
@@ -392,6 +428,6 @@ fn private_no_store(mut response: Response) -> Response {
     response
 }
 
-fn status_private_no_store(status: StatusCode) -> Response {
+pub(crate) fn status_private_no_store(status: StatusCode) -> Response {
     private_no_store(status.into_response())
 }

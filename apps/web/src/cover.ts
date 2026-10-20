@@ -1,14 +1,13 @@
 /**
- * Capa gerada de um curso, sem imagens: cor e tipografia derivadas do título.
- *
- * O visual parte da identidade editorial do LearnVault — papel quente, verde profundo e
- * terracota — restringindo o matiz a uma faixa terrosa e usando o monograma em serifa
- * como elemento gráfico. A função é determinística: o mesmo título produz sempre a mesma
- * capa, e dois cursos com títulos diferentes quase sempre produzem capas distinguíveis.
+ * Gradientes gerados a partir das três capas da prancha Graphite 01.
+ * Mantém as capas determinísticas sem substituir capas manuais ou miniaturas.
  */
 
-/** Matizes canônicos da paleta do produto: verde, oliva, âmbar e terracota. */
-const HUES = [158, 130, 86, 40, 20];
+const PALETTES = [
+	['#295c67', '#a7c9bd'],
+	['#695e4e', '#d4b77e'],
+	['#3e4160', '#a4a6d5']
+] as const;
 
 export type CourseCover = {
 	/** Cor inicial do gradiente. */
@@ -17,12 +16,7 @@ export type CourseCover = {
 	to: string;
 	/** Iniciais exibidas na capa. */
 	monogram: string;
-	/**
-	 * Ângulo do gradiente em graus, determinístico por título.
-	 *
-	 * Varia entre 95° e 200° para que cada capa tenha uma inclinação própria e legível,
-	 * sem depender de aleatoriedade nem de ordem de renderização.
-	 */
+	/** Direção fixa do gradiente original Graphite. */
 	angle: number;
 };
 
@@ -71,17 +65,13 @@ export function selectCourseCoverSource(input: {
 	return 'generated';
 }
 
-/** Capa determinística do curso. */
+/** Capa determinística usando a paleta original Graphite 01. */
 export function courseCover(title: string): CourseCover {
-	const hash = hashTitle(normalize(title).toLowerCase());
-	const hue = HUES[hash % HUES.length];
-	const shift = 8 + (hash % 8);
-	// Bits altos do hash alimentam o ângulo, para que ele varie mesmo quando o matiz repete.
-	const angle = 95 + ((hash >>> 8) % 106);
+	const palette = PALETTES[hashTitle(normalize(title).toLowerCase()) % PALETTES.length];
 	return {
-		from: `hsl(${hue} 26% 31%)`,
-		to: `hsl(${(hue + shift) % 360} 32% 17%)`,
+		from: palette[0],
+		to: palette[1],
 		monogram: courseMonogram(title),
-		angle
+		angle: 140
 	};
 }

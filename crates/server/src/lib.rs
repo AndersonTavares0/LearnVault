@@ -11,7 +11,9 @@ mod courses;
 mod covers;
 mod health;
 mod media;
+mod notes;
 mod ordering;
+mod pomodoro;
 mod spa;
 mod state;
 mod stream;
@@ -65,6 +67,7 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/api/catalog", get(catalog::catalog))
         .route("/api/admin/catalog/rescan", post(catalog::rescan))
+        .route("/api/admin/courses/preview", post(courses::preview))
         .route("/api/admin/courses", post(courses::import))
         .route(
             "/api/admin/courses/{id}",
@@ -88,11 +91,25 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/api/media", get(media::media).head(media::media))
         .route("/api/study/recent", get(study::recent))
+        .route("/api/study/analytics", get(study::analytics))
         .route("/api/study/progress", get(study::progress))
         .route("/api/study/position", post(study::record_position))
         .route("/api/study/completed", post(study::set_completed))
         .route("/api/study/capabilities", get(study::capabilities))
         .route("/api/update", get(update::update))
+        .route("/api/pomodoro", get(pomodoro::state).post(pomodoro::start))
+        .route("/api/pomodoro/pause", post(pomodoro::pause))
+        .route("/api/pomodoro/reset", post(pomodoro::reset))
+        .merge(
+            Router::new()
+                .route("/api/study/notes", get(notes::list).post(notes::create))
+                .route("/api/study/notes/all", get(notes::list_all))
+                .route(
+                    "/api/study/notes/{note_id}",
+                    axum::routing::put(notes::update).delete(notes::delete),
+                )
+                .layer(DefaultBodyLimit::max(128 * 1024)),
+        )
         .fallback(spa::serve)
         .layer(DefaultBodyLimit::max(8 * 1024))
         .layer(map_response(move |response| {
@@ -451,7 +468,7 @@ mod tests {
         for (name, setup) in [
             ("missing", "PRAGMA user_version = 0"),
             ("older", "PRAGMA user_version = 3"),
-            ("newer", "PRAGMA user_version = 5"),
+            ("newer", "PRAGMA user_version = 9"),
             (
                 "missing required column",
                 "ALTER TABLE user RENAME COLUMN must_change_credentials TO changed",

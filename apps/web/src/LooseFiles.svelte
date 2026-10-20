@@ -1,6 +1,7 @@
 <script lang="ts">
  import { fileStatus, transport, type FileEntry } from './transport';
  import { href } from './router';
+ import MaterialPreview from './MaterialPreview.svelte';
  let { files, heading, courseId }: { files: FileEntry[]; heading: string; courseId?: string } = $props();
 </script>
 <section class="loose-files" aria-label={heading}>
@@ -16,8 +17,9 @@
 					{:else}
 						<a href={href('player', file.path)}>Reproduzir {file.name}</a>
 					{/if}
-				{:else if url}
-					<a href={url} download={file.name} target="_blank" rel="noopener noreferrer">Baixar {file.name}</a>
+ {:else if url}
+  <a href={url} download={file.name} target="_blank" rel="noopener noreferrer">Baixar {file.name}</a>
+  {#if courseId}<MaterialPreview {file} {courseId} />{/if}
 				{:else}
 					<span>{file.name}</span>
 				{/if}

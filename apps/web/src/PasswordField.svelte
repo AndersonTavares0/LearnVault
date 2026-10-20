@@ -6,11 +6,12 @@
 		label: string;
 		autocomplete: HTMLInputAttributes['autocomplete'];
 		value: string;
+		placeholder?: string;
 		minLength?: number;
 		hint?: string;
 	};
 
-	let { id, label, autocomplete, value = $bindable(''), minLength, hint }: Props = $props();
+	let { id, label, autocomplete, value = $bindable(''), placeholder, minLength, hint }: Props = $props();
 	let visible = $state(false);
 	let input = $state<HTMLInputElement | null>(null);
 
@@ -33,6 +34,7 @@
 			{id}
 			type={visible ? 'text' : 'password'}
 			{autocomplete}
+			{placeholder}
 			bind:value
 			bind:this={input}
 			required

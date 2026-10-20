@@ -16,7 +16,7 @@ const TOKEN_HASH: &str = "token-hash-sha256";
 fn existing_auth_tables_are_available_without_a_new_migration() -> TestResult {
     let db = Database::open_in_memory()?;
 
-    assert_eq!(db.schema_version()?, 4);
+    assert_eq!(db.schema_version()?, 8);
     for table in ["user", "session"] {
         let exists: i64 = db.connection().query_row(
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",

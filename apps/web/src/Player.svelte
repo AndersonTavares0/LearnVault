@@ -1,6 +1,7 @@
 <script lang="ts">
 	import LooseFiles from './LooseFiles.svelte';
 	import { formatDuration, mediaAvailability, mediaPlaybackKind, playerShortcutAction, selectPlayableMedia, selectPlayableSubtitle, shouldAutoAdvance, srtConversionSupported, srtToWebVtt, studySyncEnabled, subtitleFormat } from './player';
+	import StudyNotes from './StudyNotes.svelte';
 	import { createPositionSaver } from './study';
 	import { createDefaultPlayerPreferences, lessonPreferenceKey, updateLessonPreference, type PlayerPreferences } from './player-preferences';
 	import { transport, type Lesson, type StudyProgress } from './transport';
@@ -211,6 +212,7 @@
 		{:else if showCompleted}<span class="study-hint">{progress?.completed ? 'Concluído' : 'Não concluído'}</span>{/if}
 		{#if showCompleted}<button class="text-button" onclick={toggleCompleted} disabled={saving || saver.saving} type="button" aria-pressed={progress?.completed}>{progress?.completed ? 'Marcar como não concluído' : 'Marcar como concluído'}</button>{/if}
 	</div>
+{#if syncEnabled && mediaId}<StudyNotes {mediaId} {currentTime} onSeek={(seconds) => { if (media) media.currentTime = seconds; }} />{/if}
 {/if}
 {#if captionMessage}<p class="empty" role="status">{captionMessage}{#if captionDownload} <a href={captionDownload} download>Baixar legenda</a>{/if}</p>{/if}
 {#if lesson.subtitles.length || lesson.materials.length}<LooseFiles files={[...lesson.subtitles, ...lesson.materials]} heading="Materiais" {courseId} />{/if}

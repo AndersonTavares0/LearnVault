@@ -7,7 +7,7 @@
 use learnvault_core::paths::relative_path_key;
 use learnvault_core::{
     Database, Error, KeyMode, MAX_RECENT_STUDY, recent_study, record_position, set_completed,
-    study_progress,
+    study_analytics, study_progress,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -82,6 +82,29 @@ fn recent_ids(db: &Database, owner_id: &str, limit: usize) -> Vec<String> {
         .into_iter()
         .map(|state| state.media_id)
         .collect()
+}
+
+#[test]
+fn analytics_aggregates_one_owner_and_ignores_removed_media() -> TestResult {
+    let db = library_db()?;
+    insert_media(&db, "m1", "available")?;
+    insert_media(&db, "m2", "available")?;
+    insert_media(&db, "m3", "available")?;
+    seed(&db, OWNER, "m1", 30, false, 10)?;
+    seed(&db, OWNER, "m2", 90, true, 20)?;
+    seed(&db, OTHER, "m3", 500, true, 30)?;
+    db.connection().execute(
+        "INSERT INTO media_removal (library_id, media_id, removed_at) VALUES (?1, ?2, ?3)",
+        rusqlite::params![LIB, "m2", 40],
+    )?;
+
+    let analytics = study_analytics(&db, OWNER)?;
+    assert_eq!(analytics.tracked_count, 1);
+    assert_eq!(analytics.completed_count, 0);
+    assert_eq!(analytics.total_position_seconds, 30);
+    assert_eq!(analytics.last_activity_at, Some(10));
+    assert_eq!(study_analytics(&db, OTHER)?.completed_count, 1);
+    Ok(())
 }
 
 fn count(db: &Database, table: &str) -> i64 {

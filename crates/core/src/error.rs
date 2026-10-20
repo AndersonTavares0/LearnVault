@@ -151,6 +151,10 @@ pub enum Error {
         path: String,
     },
 
+    /// Uma preferência de ordem manual está vazia, duplicada ou fora dos limites.
+    #[error("ordem manual do catálogo inválida")]
+    InvalidCatalogOrder,
+
     /// A tentativa de varredura não pôde ser registrada no histórico.
     ///
     /// Registrar o histórico é secundário: a falha original da varredura é preservada
@@ -251,6 +255,24 @@ pub enum Error {
         /// Posição recusada, em segundos.
         position_seconds: i64,
     },
+
+    /// A duração do Pomodoro está fora do intervalo permitido.
+    #[error("duração do Pomodoro inválida: {duration_seconds}")]
+    InvalidPomodoroDuration {
+        /// Duração recusada, em segundos.
+        duration_seconds: i64,
+    },
+    /// O texto de uma nota é vazio ou excede o limite em caracteres.
+    #[error("texto de nota inválido")]
+    InvalidStudyNote,
+
+    /// A nota não existe para o dono consultado.
+    #[error("a nota não existe")]
+    StudyNoteNotFound,
+
+    /// A mídia já tem o teto de notas para este dono.
+    #[error("a mídia já tem o número máximo de notas")]
+    TooManyNotes,
 
     /// A mídia foi removida explicitamente do catálogo.
     ///

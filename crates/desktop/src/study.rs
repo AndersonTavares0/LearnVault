@@ -16,7 +16,9 @@
 
 use learnvault_core::Database;
 
-use crate::dto::{RecentStudyDto, StudyProgressDto};
+use crate::dto::{
+    PomodoroDto, RecentStudyDto, StudyAnalyticsDto, StudyNoteDto, StudyNotesDto, StudyProgressDto,
+};
 use crate::error::IpcError;
 
 /// Dono local fixo do progresso de estudo do desktop.
@@ -84,6 +86,38 @@ pub fn recent(database: &Database, limit: Option<usize>) -> Result<RecentStudyDt
     .map_err(study_error)
 }
 
+/// Lê métricas agregadas do estudo do dono local.
+pub fn analytics(database: &Database) -> Result<StudyAnalyticsDto, IpcError> {
+    learnvault_core::study_analytics(database, LOCAL_OWNER_ID)
+        .map(StudyAnalyticsDto::from)
+        .map_err(study_error)
+}
+
+/// Lê a sessão Pomodoro local.
+pub fn pomodoro(database: &Database) -> Result<PomodoroDto, IpcError> {
+    learnvault_core::pomodoro_state(database, LOCAL_OWNER_ID)
+        .map(PomodoroDto::from)
+        .map_err(pomodoro_error)
+}
+/// Inicia ou retoma a sessão Pomodoro local.
+pub fn start_pomodoro(database: &Database, duration_seconds: i64) -> Result<PomodoroDto, IpcError> {
+    learnvault_core::start_pomodoro(database, LOCAL_OWNER_ID, duration_seconds)
+        .map(PomodoroDto::from)
+        .map_err(pomodoro_error)
+}
+/// Pausa a sessão Pomodoro local.
+pub fn pause_pomodoro(database: &Database, elapsed_seconds: i64) -> Result<PomodoroDto, IpcError> {
+    learnvault_core::pause_pomodoro(database, LOCAL_OWNER_ID, elapsed_seconds)
+        .map(PomodoroDto::from)
+        .map_err(pomodoro_error)
+}
+/// Reinicia a sessão Pomodoro local.
+pub fn reset_pomodoro(database: &Database) -> Result<PomodoroDto, IpcError> {
+    learnvault_core::reset_pomodoro(database, LOCAL_OWNER_ID)
+        .map(PomodoroDto::from)
+        .map_err(pomodoro_error)
+}
+
 /// Traduz o erro do núcleo para o erro IPC estável, sem ecoar o identificador consultado.
 ///
 /// Uma mídia desconhecida e uma posição negativa são falhas de entrada com código próprio,
@@ -94,6 +128,67 @@ fn study_error(error: learnvault_core::Error) -> IpcError {
 
     match error {
         Error::MediaNotFound { .. } => IpcError::media_not_found(),
+        Error::InvalidStudyPosition { .. } => IpcError::invalid_position(),
+        _ => IpcError::study_unavailable(),
+    }
+}
+
+/// Traduz as falhas de Pomodoro para códigos IPC estáveis.
+fn pomodoro_error(error: learnvault_core::Error) -> IpcError {
+    if matches!(
+        error,
+        learnvault_core::Error::InvalidPomodoroDuration { .. }
+            | learnvault_core::Error::InvalidStudyPosition { .. }
+    ) {
+        IpcError::invalid_pomodoro()
+    } else {
+        IpcError::pomodoro_unavailable()
+    }
+}
+
+/// Lista as notas do dono local de uma mídia conhecida.
+///
+/// Sem notas é um estado normal: devolve o envelope vazio. Mídia desconhecida vira
+/// [`IpcError::media_not_found`], como no adaptador HTTP.
+pub fn notes(database: &Database, media_id: &str) -> Result<StudyNotesDto, IpcError> {
+    match learnvault_core::list_notes(database, LOCAL_OWNER_ID, media_id) {
+        Ok(notes) => Ok(StudyNotesDto {
+            items: notes.into_iter().map(StudyNoteDto::from).collect(),
+            truncated: false,
+        }),
+        Err(error) => Err(note_error(error)),
+    }
+}
+
+/// Lista todas as notas do dono local, das mais recentes para as mais antigas.
+///
+/// O envelope avisa quando o teto de notas do dono truncou a listagem: a tela de
+/// anotações nunca esconde nota sem dizer.
+pub fn all_notes(database: &Database) -> Result<StudyNotesDto, IpcError> {
+    match learnvault_core::list_all_notes(database, LOCAL_OWNER_ID) {
+        Ok((notes, truncated)) => Ok(StudyNotesDto {
+            items: notes.into_iter().map(StudyNoteDto::from).collect(),
+            truncated,
+        }),
+        Err(error) => Err(note_error(error)),
+    }
+}
+
+/// Traduz o erro do núcleo para o código estável do IPC das notas.
+///
+/// O `Display` do domínio não é ecoado: o identificador de mídia consultado nunca
+/// aparece na resposta enviada ao webview.
+///
+/// A tradução é pública para que a fronteira IPC e os testes de integração compartilhem
+/// exatamente o mesmo contrato de códigos estáveis.
+pub fn note_error(error: learnvault_core::Error) -> IpcError {
+    use learnvault_core::Error;
+
+    match error {
+        Error::MediaNotFound { .. } => IpcError::media_not_found(),
+        Error::StudyNoteNotFound => IpcError::note_not_found(),
+        Error::InvalidStudyNote => IpcError::invalid_note(),
+        Error::TooManyNotes => IpcError::too_many_notes(),
         Error::InvalidStudyPosition { .. } => IpcError::invalid_position(),
         _ => IpcError::study_unavailable(),
     }

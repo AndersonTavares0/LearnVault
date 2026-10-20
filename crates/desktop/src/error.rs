@@ -27,6 +27,10 @@ pub enum IpcErrorCode {
     RescanUnavailable,
     /// O progresso de estudo do dono local não pôde ser lido nem gravado.
     StudyUnavailable,
+    /// A sessão Pomodoro não pôde ser lida nem gravada.
+    PomodoroUnavailable,
+    /// A duração ou o tempo informado para o Pomodoro é inválido.
+    InvalidPomodoro,
     /// A mídia consultada não existe no catálogo local.
     MediaNotFound,
     /// A posição de retomada enviada é inválida.
@@ -45,6 +49,12 @@ pub enum IpcErrorCode {
     InvalidOrder,
     /// A ordem manual do curso não pôde ser gravada nem removida.
     OrderUnavailable,
+    /// O texto da nota é inválido.
+    InvalidNote,
+    /// A nota não existe para o dono local.
+    NoteNotFound,
+    /// A mídia já tem o teto de notas para o dono local.
+    TooManyNotes,
 }
 
 /// Erro IPC serializável devolvido ao webview.
@@ -121,6 +131,21 @@ impl IpcError {
         }
     }
 
+    /// Pomodoro indisponível.
+    pub fn pomodoro_unavailable() -> Self {
+        Self {
+            code: IpcErrorCode::PomodoroUnavailable,
+            message: "não foi possível atualizar o Pomodoro",
+        }
+    }
+    /// Entrada inválida do Pomodoro.
+    pub fn invalid_pomodoro() -> Self {
+        Self {
+            code: IpcErrorCode::InvalidPomodoro,
+            message: "configuração do Pomodoro inválida",
+        }
+    }
+
     /// A mídia consultada não existe no catálogo local.
     pub fn media_not_found() -> Self {
         Self {
@@ -190,6 +215,29 @@ impl IpcError {
         Self {
             code: IpcErrorCode::OrderUnavailable,
             message: "não foi possível salvar a ordem do curso",
+        }
+    }
+    /// Nota ausente para o dono local.
+    pub fn note_not_found() -> Self {
+        Self {
+            code: IpcErrorCode::NoteNotFound,
+            message: "nota não encontrada",
+        }
+    }
+
+    /// Texto ou posição da nota inválidos.
+    pub fn invalid_note() -> Self {
+        Self {
+            code: IpcErrorCode::InvalidNote,
+            message: "nota inválida",
+        }
+    }
+
+    /// A mídia atingiu o limite de notas do dono local.
+    pub fn too_many_notes() -> Self {
+        Self {
+            code: IpcErrorCode::TooManyNotes,
+            message: "a mídia já tem o número máximo de notas",
         }
     }
 }

@@ -44,6 +44,19 @@ use crate::error::{Error, Result};
 /// valor acompanha o código e muda só com uma decisão de projeto.
 pub const MAX_RECENT_STUDY: usize = 100;
 
+/// Agregado de estudo do dono sobre mídias ainda presentes no catálogo.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct StudyAnalytics {
+    /// Quantidade de mídias com algum estado de estudo.
+    pub tracked_count: usize,
+    /// Quantidade dessas mídias marcadas como concluídas.
+    pub completed_count: usize,
+    /// Soma dos pontos de retomada em segundos.
+    pub total_position_seconds: i64,
+    /// Instante da atividade mais recente, se houver estado.
+    pub last_activity_at: Option<i64>,
+}
+
 /// Progresso de estudo de uma mídia para um dono.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StudyProgress {
@@ -188,6 +201,36 @@ pub fn recent_study(db: &Database, owner_id: &str, limit: usize) -> Result<Vec<S
     }
 
     Ok(states)
+}
+
+/// Calcula métricas agregadas sem alterar progresso, catálogo ou histórico.
+///
+/// Estados associados a mídias removidas continuam no banco para preservar a identidade,
+/// mas não aparecem nas métricas apresentadas ao usuário.
+pub fn study_analytics(db: &Database, owner_id: &str) -> Result<StudyAnalytics> {
+    validate_owner(owner_id)?;
+    let row = db.connection().query_row(
+        "SELECT COUNT(*), COALESCE(SUM(s.position_seconds), 0),
+                COALESCE(SUM(CASE WHEN s.completed <> 0 THEN 1 ELSE 0 END), 0),
+                MAX(s.updated_at)
+           FROM study_state s
+          WHERE s.owner_id = ?1
+            AND NOT EXISTS (SELECT 1
+                              FROM media_removal r
+                              JOIN media m ON m.library_id = r.library_id
+                                           AND m.media_id = r.media_id
+                             WHERE m.media_id = s.media_id)",
+        [owner_id],
+        |row| {
+            Ok(StudyAnalytics {
+                tracked_count: row.get::<_, i64>(0)?.try_into().unwrap_or(usize::MAX),
+                completed_count: row.get::<_, i64>(2)?.try_into().unwrap_or(usize::MAX),
+                total_position_seconds: row.get(1)?,
+                last_activity_at: row.get(3)?,
+            })
+        },
+    )?;
+    Ok(row)
 }
 
 /// Recusa um dono não identificado.

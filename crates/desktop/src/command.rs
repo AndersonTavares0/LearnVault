@@ -19,7 +19,8 @@ use crate::config::DesktopConfigDto;
 use crate::courses::CourseEntry;
 use crate::dto::{
     CatalogDto, CatalogNodeDto, CoverDto, CoverRemovalDto, MediaRemovalImpactDto,
-    MediaRemovalOutcomeDto, RecentStudyDto, RescanSummaryDto, StudyProgressDto,
+    MediaRemovalOutcomeDto, PomodoroDto, RecentStudyDto, RescanSummaryDto, StudyAnalyticsDto,
+    StudyNoteDto, StudyNotesDto, StudyProgressDto,
 };
 use crate::error::IpcError;
 use crate::ordering::CourseOrders;
@@ -303,6 +304,58 @@ pub async fn desktop_recent_study(
         .map_err(|_| IpcError::study_unavailable())?
 }
 
+/// Comando IPC: consulta métricas agregadas do estudo do dono local.
+#[tauri::command]
+pub async fn desktop_study_analytics(
+    state: State<'_, DesktopState>,
+) -> Result<StudyAnalyticsDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.study_analytics())
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// L? a sess?o Pomodoro do dono local.
+#[tauri::command]
+pub async fn desktop_pomodoro(state: State<'_, DesktopState>) -> Result<PomodoroDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.pomodoro())
+        .await
+        .map_err(|_| IpcError::pomodoro_unavailable())?
+}
+/// Inicia ou retoma uma sess?o Pomodoro.
+#[tauri::command]
+pub async fn desktop_start_pomodoro(
+    state: State<'_, DesktopState>,
+    duration_seconds: i64,
+) -> Result<PomodoroDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.start_pomodoro(duration_seconds))
+        .await
+        .map_err(|_| IpcError::pomodoro_unavailable())?
+}
+/// Pausa uma sess?o Pomodoro.
+#[tauri::command]
+pub async fn desktop_pause_pomodoro(
+    state: State<'_, DesktopState>,
+    elapsed_seconds: i64,
+) -> Result<PomodoroDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.pause_pomodoro(elapsed_seconds))
+        .await
+        .map_err(|_| IpcError::pomodoro_unavailable())?
+}
+/// Reinicia uma sess?o Pomodoro.
+#[tauri::command]
+pub async fn desktop_reset_pomodoro(
+    state: State<'_, DesktopState>,
+) -> Result<PomodoroDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.reset_pomodoro())
+        .await
+        .map_err(|_| IpcError::pomodoro_unavailable())?
+}
+
 /// Comando IPC: consulta o impacto da remoção de uma mídia.
 #[tauri::command]
 pub async fn desktop_media_removal_impact(
@@ -326,6 +379,98 @@ pub async fn desktop_remove_media(
     tauri::async_runtime::spawn_blocking(move || state.remove_media(&media_id, confirm_progress))
         .await
         .map_err(|_| IpcError::database_unavailable())?
+}
+
+/// Lista as notas do dono local para a mídia indicada; o dono nunca cruza o IPC.
+#[tauri::command]
+pub async fn desktop_study_notes(
+    state: State<'_, DesktopState>,
+    media_id: String,
+) -> Result<StudyNotesDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.study_notes(&media_id))
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// Lista todas as notas do dono local, das mais recentes para as mais antigas.
+///
+/// O comando não recebe dono nem mídia: a listagem global é do dono local fixo, e o
+/// envelope avisa quando o teto truncou o resultado.
+#[tauri::command]
+pub async fn desktop_study_notes_all(
+    state: State<'_, DesktopState>,
+) -> Result<StudyNotesDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.study_notes_all())
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// Cria nota para o dono local, sem aceitar identidade de dono do webview.
+#[tauri::command]
+pub async fn desktop_create_study_note(
+    state: State<'_, DesktopState>,
+    media_id: String,
+    text: String,
+    position_seconds: Option<i64>,
+) -> Result<StudyNoteDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let database = state.lock_database()?;
+        learnvault_core::create_note(
+            &database,
+            crate::study::LOCAL_OWNER_ID,
+            &media_id,
+            &text,
+            position_seconds,
+        )
+        .map(StudyNoteDto::from)
+        .map_err(crate::study::note_error)
+    })
+    .await
+    .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// Atualiza uma nota pertencente ao dono local.
+#[tauri::command]
+pub async fn desktop_update_study_note(
+    state: State<'_, DesktopState>,
+    note_id: i64,
+    text: String,
+    position_seconds: Option<i64>,
+) -> Result<StudyNoteDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let database = state.lock_database()?;
+        learnvault_core::update_note(
+            &database,
+            crate::study::LOCAL_OWNER_ID,
+            note_id,
+            &text,
+            position_seconds,
+        )
+        .map(StudyNoteDto::from)
+        .map_err(crate::study::note_error)
+    })
+    .await
+    .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// Exclui uma nota pertencente ao dono local.
+#[tauri::command]
+pub async fn desktop_delete_study_note(
+    state: State<'_, DesktopState>,
+    note_id: i64,
+) -> Result<(), IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let database = state.lock_database()?;
+        learnvault_core::delete_note(&database, crate::study::LOCAL_OWNER_ID, note_id)
+            .map_err(crate::study::note_error)
+    })
+    .await
+    .map_err(|_| IpcError::study_unavailable())?
 }
 
 /// Abre o seletor nativo de diretórios e devolve o caminho escolhido, se houver.
@@ -355,4 +500,64 @@ fn pick_cover(app: &tauri::AppHandle) -> Option<PathBuf> {
         .add_filter("Imagem (PNG, JPEG, WebP)", &["png", "jpg", "jpeg", "webp"])
         .blocking_pick_file()
         .and_then(|path| path.into_path().ok())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::error::IpcErrorCode;
+    use crate::study::note_error;
+    use learnvault_core::Error as CoreError;
+
+    #[test]
+    fn note_errors_keep_the_stable_wire_codes() {
+        // O codigo no wire e o contrato da SPA: `media_not_found`, `note_not_found`,
+        // `invalid_note`, `invalid_position` e `too_many_notes`.
+        let cases = [
+            (
+                CoreError::MediaNotFound {
+                    media_id: "m1".to_owned(),
+                },
+                IpcErrorCode::MediaNotFound,
+                "media_not_found",
+            ),
+            (
+                CoreError::StudyNoteNotFound,
+                IpcErrorCode::NoteNotFound,
+                "note_not_found",
+            ),
+            (
+                CoreError::InvalidStudyNote,
+                IpcErrorCode::InvalidNote,
+                "invalid_note",
+            ),
+            (
+                CoreError::InvalidStudyPosition {
+                    position_seconds: -1,
+                },
+                IpcErrorCode::InvalidPosition,
+                "invalid_position",
+            ),
+            (
+                CoreError::TooManyNotes,
+                IpcErrorCode::TooManyNotes,
+                "too_many_notes",
+            ),
+        ];
+        for (error, expected, wire) in cases {
+            let mapped = note_error(error);
+            assert_eq!(mapped.code, expected);
+            assert_eq!(
+                serde_json::to_value(mapped.code).unwrap(),
+                serde_json::json!(wire)
+            );
+        }
+    }
+
+    #[test]
+    fn an_unexpected_core_error_stays_generic() {
+        // Um erro do nucleo que nao e de nota vira a falha generica: a mensagem do
+        // dominio nao atravessa o IPC.
+        let mapped = note_error(CoreError::InvalidOwnerId);
+        assert_eq!(mapped.code, IpcErrorCode::StudyUnavailable);
+    }
 }

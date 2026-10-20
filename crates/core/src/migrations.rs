@@ -11,7 +11,7 @@ use rusqlite_migration::{M, Migrations};
 /// A recusa de um schema mais novo não depende desta constante — ela vem de
 /// `SchemaVersion::Outside` —, mas ela deve acompanhar a cadeia de migrações porque
 /// aparece na mensagem de diagnóstico de [`crate::Error::SchemaTooNew`].
-pub(crate) const SCHEMA_VERSION: usize = 4;
+pub(crate) const SCHEMA_VERSION: usize = 8;
 
 /// Versão 1: bibliotecas, mídia, varreduras e estado de estudo.
 ///
@@ -138,8 +138,72 @@ const V4: &str = "
 -- Usuários existentes já tinham credenciais; somente o bootstrap temporário define 1.
 ALTER TABLE user ADD COLUMN must_change_credentials INTEGER NOT NULL DEFAULT 0 CHECK (must_change_credentials IN (0, 1));
 ";
+/// Versão 7: notas pessoais de estudo vinculadas à mídia.
+const V7: &str = "
+-- Notas pessoais são texto simples e pertencem ao dono e à identidade estável da mídia.
+CREATE TABLE study_note (
+    note_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_id TEXT NOT NULL,
+    media_id TEXT NOT NULL REFERENCES media (media_id) ON DELETE NO ACTION,
+    text TEXT NOT NULL CHECK (length(trim(text)) > 0 AND length(CAST(text AS BLOB)) <= 20000),
+    position_seconds INTEGER CHECK (position_seconds IS NULL OR position_seconds >= 0),
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+CREATE INDEX study_note_owner_media_idx ON study_note (owner_id, media_id, created_at, note_id);
+";
+/// Versão 8: o limite de notas passa a contar caracteres, como a interface.
+const V8: &str = "
+CREATE TABLE study_note_v8 (
+    note_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_id TEXT NOT NULL,
+    media_id TEXT NOT NULL REFERENCES media (media_id) ON DELETE NO ACTION,
+    text TEXT NOT NULL CHECK (length(trim(text)) > 0 AND length(text) <= 20000),
+    position_seconds INTEGER CHECK (position_seconds IS NULL OR position_seconds >= 0),
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+INSERT INTO study_note_v8 (note_id, owner_id, media_id, text, position_seconds, created_at, updated_at)
+    SELECT note_id, owner_id, media_id, text, position_seconds, created_at, updated_at FROM study_note;
+DROP TABLE study_note;
+ALTER TABLE study_note_v8 RENAME TO study_note;
+CREATE INDEX study_note_owner_media_idx ON study_note (owner_id, media_id, created_at, note_id);
+";
 
-const MIGRATIONS_SLICE: &[M<'static>] = &[M::up(V1), M::up(V2), M::up(V3), M::up(V4)];
+/// Versão 5: ordem manual do catálogo, isolada por dono, biblioteca e lista de irmãos.
+const V5: &str = "
+CREATE TABLE catalog_order (
+    owner_id TEXT NOT NULL CHECK (length(owner_id) > 0),
+    library_id TEXT NOT NULL REFERENCES library (library_id) ON DELETE NO ACTION,
+    parent_path TEXT NOT NULL,
+    child_path TEXT NOT NULL,
+    position INTEGER NOT NULL CHECK (position >= 0),
+    PRIMARY KEY (owner_id, library_id, parent_path, child_path),
+    UNIQUE (owner_id, library_id, parent_path, position)
+);
+";
+
+/// Versão 6: estado persistente do Pomodoro por dono.
+const V6: &str = "
+CREATE TABLE pomodoro_state (
+    owner_id TEXT PRIMARY KEY NOT NULL CHECK (length(owner_id) > 0),
+    status TEXT NOT NULL CHECK (status IN ('idle', 'running', 'paused')),
+    duration_seconds INTEGER NOT NULL CHECK (duration_seconds > 0),
+    elapsed_seconds INTEGER NOT NULL CHECK (elapsed_seconds >= 0),
+    updated_at INTEGER NOT NULL
+);
+";
+
+const MIGRATIONS_SLICE: &[M<'static>] = &[
+    M::up(V1),
+    M::up(V2),
+    M::up(V3),
+    M::up(V4),
+    M::up(V5),
+    M::up(V6),
+    M::up(V7),
+    M::up(V8),
+];
 
 /// Cadeia de migrações aplicada por [`crate::db::Database`].
 pub(crate) const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATIONS_SLICE);

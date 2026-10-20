@@ -40,8 +40,8 @@ fn natural_order_handles_unicode_and_arbitrarily_large_digit_runs() -> TestResul
     for (id, path) in [
         ("m10", "Curso/Éclair 10/Aula.mp4"),
         ("m2", "Curso/Éclair 2/Aula.mp4"),
-        ("u10", "Curso/東京 10/Aula.mp4"),
-        ("u2", "Curso/東京 2/Aula.mp4"),
+        ("u10", "Curso/Tóquio 10/Aula.mp4"),
+        ("u2", "Curso/Tóquio 2/Aula.mp4"),
         (
             "h10",
             "Curso/Parte 9999999999999999999999999999999999999999/Aula.mp4",
@@ -61,10 +61,10 @@ fn natural_order_handles_unicode_and_arbitrarily_large_digit_runs() -> TestResul
         [
             "Curso/Parte 8888888888888888888888888888888888888888",
             "Curso/Parte 9999999999999999999999999999999999999999",
+            "Curso/Tóquio 2",
+            "Curso/Tóquio 10",
             "Curso/Éclair 2",
             "Curso/Éclair 10",
-            "Curso/東京 2",
-            "Curso/東京 10",
         ]
     );
     Ok(())

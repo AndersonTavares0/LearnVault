@@ -23,7 +23,8 @@ use crate::covers::{
 };
 use crate::dto::{
     CatalogDto, CoverDto, CoverRemovalDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto,
-    RecentStudyDto, RescanSummaryDto, StudyProgressDto,
+    PomodoroDto, RecentStudyDto, RescanSummaryDto, StudyAnalyticsDto, StudyNotesDto,
+    StudyProgressDto,
 };
 use crate::error::IpcError;
 use crate::ordering::{CourseOrders, load_orders, store_orders};
@@ -342,6 +343,31 @@ impl DesktopState {
         study::progress(&database, media_id)
     }
 
+    /// Lista as notas do dono local em uma mídia conhecida.
+    ///
+    /// O dono é o identificador local fixo do desktop: o webview nunca o envia. A leitura
+    /// bloqueante do SQLite é serializada pelo cadeado do banco, como as demais operações
+    /// do estado.
+    pub fn study_notes(&self, media_id: &str) -> Result<StudyNotesDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::notes(&database, media_id)
+    }
+
+    /// Lista todas as notas do dono local, das mais recentes para as mais antigas.
+    ///
+    /// É a fonte da tela de anotações: o dono é o identificador local fixo e o envelope
+    /// avisa quando o teto do dono truncou a listagem.
+    pub fn study_notes_all(&self) -> Result<StudyNotesDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::all_notes(&database)
+    }
+
     /// Registra a posição de retomada do dono local, preservando a conclusão.
     ///
     /// A regra de posição e conclusão independentes pertence ao núcleo; o estado apenas
@@ -381,6 +407,48 @@ impl DesktopState {
             .lock()
             .map_err(|_| IpcError::database_unavailable())?;
         study::recent(&database, limit)
+    }
+
+    /// Consulta métricas agregadas do estudo do dono local.
+    pub fn study_analytics(&self) -> Result<StudyAnalyticsDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::analytics(&database)
+    }
+
+    /// Lê a sessão Pomodoro persistente do dono local.
+    pub fn pomodoro(&self) -> Result<PomodoroDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::pomodoro(&database)
+    }
+    /// Inicia ou retoma a sessão Pomodoro local.
+    pub fn start_pomodoro(&self, duration: i64) -> Result<PomodoroDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::start_pomodoro(&database, duration)
+    }
+    /// Pausa a sessão Pomodoro local.
+    pub fn pause_pomodoro(&self, elapsed: i64) -> Result<PomodoroDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::pause_pomodoro(&database, elapsed)
+    }
+    /// Reinicia a sessão Pomodoro local.
+    pub fn reset_pomodoro(&self) -> Result<PomodoroDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::reset_pomodoro(&database)
     }
 
     /// Consulta o impacto da remoção de uma mídia do catálogo local.

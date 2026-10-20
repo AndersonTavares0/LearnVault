@@ -29,6 +29,16 @@ export type UpdateStatus = {
 	checkedAt: string | null;
 	error: string | null;
 };
+export type StudyAnalytics = { trackedCount: number; completedCount: number; totalPositionSeconds: number; lastActivityAt: number | null };
+export type Pomodoro = { status: 'idle' | 'running' | 'paused'; durationSeconds: number; elapsedSeconds: number; updatedAt: number };
+export type DiscoveryStatus = { status: 'found' } | { status: 'ignored' | 'inaccessible' | 'unsupported'; reason: string };
+export type DiscoveryNode = { name: string; path: string; entryKind: 'directory' | 'file'; status: DiscoveryStatus; fileKind?: 'media' | 'subtitle' | 'material'; size?: number; children: DiscoveryNode[] };
+export type ImportPreview = {
+	discovery: { root: DiscoveryNode; summary: { found: number; ignored: number; inaccessible: number; unsupported: number } };
+	interpretation: { suggestions: Array<{ path: string; proposedRole: string; confidence: 'high' | 'medium' | 'low'; explanation: string; ambiguous: boolean }> };
+};
+export type StudyNote = { noteId: number; mediaId: string; text: string; positionSeconds: number | null; createdAt: number; updatedAt: number };
+export type StudyNotes = { items: StudyNote[]; truncated: boolean };
 export const STUDY_NOT_AVAILABLE = 'study_not_available';
 
 // Protocolo customizado do desktop para mídia local. O webview aponta somente pelo
@@ -74,6 +84,7 @@ export interface Transport {
 	importCourse(): Promise<void>;
 	// Servidor: registra um curso pelo caminho informado pelo admin.
 	importCoursePath(path: string): Promise<void>;
+	previewImport(path: string): Promise<ImportPreview>;
 	// Remove um curso do registro, sem tocar nos arquivos.
 	removeCourse(courseId: string): Promise<void>;
 	rescan(): Promise<void>;
@@ -84,6 +95,11 @@ export interface Transport {
 	recentStudy(limit?: number): Promise<RecentStudy>;
 	// Verifica a atualização; `force` ignora o intervalo mínimo de cache do servidor.
 	checkUpdate(force?: boolean): Promise<UpdateStatus>;
+	studyAnalytics(): Promise<StudyAnalytics>;
+	pomodoro(): Promise<Pomodoro>;
+	startPomodoro(durationSeconds?: number): Promise<Pomodoro>;
+	pausePomodoro(elapsedSeconds: number): Promise<Pomodoro>;
+	resetPomodoro(): Promise<Pomodoro>;
 	mediaUrl(file: FileEntry, courseId?: string): string | null;
 	// URL da capa personalizada, derivada da versão exposta pelo catálogo. Sem versão (sem
 	// capa) devolve `null`, e a interface cai na miniatura ou na capa gerada.
@@ -99,11 +115,58 @@ export interface Transport {
 	// Restaura a ordem automática de um pai específico ou, sem `parent`, do curso inteiro.
 	// Devolve `true` quando havia uma preferência a remover.
 	resetCourseOrder(courseId: string, parent?: string): Promise<boolean>;
+	// Notas pessoais da mídia: o dono nunca atravessa a interface (a sessão autenticada
+	// resolve o dono no servidor; no desktop o dono local é fixo no Rust).
+	listNotes(mediaId: string): Promise<StudyNotes>;
+	listAllNotes(): Promise<StudyNotes>;
+	createNote(mediaId: string, text: string, positionSeconds: number | null): Promise<StudyNote>;
+	updateNote(noteId: number, text: string, positionSeconds: number | null): Promise<StudyNote>;
+	deleteNote(noteId: number): Promise<void>;
 }
 
 type RustFile = { media_id?: string; name?: string; path?: string; size?: number; mtime_seconds?: number; kind?: string; availability?: string; unverified?: boolean };
 type RustNode = { title?: string; path?: string; role?: string; course_id?: string; cover_version?: number; files?: RustFile[]; loose_files?: RustFile[]; children?: RustNode[] };
 type RustCatalog = { complete?: boolean; categories?: RustNode[]; nodes?: RustNode[]; loose_files?: RustFile[]; looseFiles?: RustFile[] };
+
+const PREVIEW_LIMITS = { depth: 32, nodes: 100_000 } as const;
+
+function normalizeDiscoveryStatus(value: unknown): DiscoveryStatus {
+	if (!value || typeof value !== 'object') throw invalidPayload('status da descoberta inválido.');
+	const status = value as { status?: unknown; reason?: unknown };
+	if (status.status === 'found') return { status: 'found' };
+	if (!['ignored', 'inaccessible', 'unsupported'].includes(String(status.status)) || typeof status.reason !== 'string') throw invalidPayload('status da descoberta inválido.');
+	return { status: status.status as 'ignored' | 'inaccessible' | 'unsupported', reason: status.reason };
+}
+
+function normalizeDiscoveryNode(value: unknown, depth: number, count: { value: number }): DiscoveryNode {
+	if (depth > PREVIEW_LIMITS.depth || count.value >= PREVIEW_LIMITS.nodes || !value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('árvore de descoberta inválida.');
+	count.value += 1;
+	const node = value as Record<string, unknown>;
+	if (typeof node.name !== 'string' || typeof node.path !== 'string' || !['directory', 'file'].includes(String(node.entry_kind)) || !Array.isArray(node.children)) throw invalidPayload('nó de descoberta incompleto.');
+	const size = node.size;
+	if (size !== undefined && size !== null && (typeof size !== 'number' || !Number.isSafeInteger(size) || size < 0)) throw invalidPayload('tamanho de descoberta inválido.');
+	const fileKind = node.file_kind;
+	if (fileKind !== undefined && fileKind !== null && !['media', 'subtitle', 'material'].includes(String(fileKind))) throw invalidPayload('tipo de arquivo descoberto inválido.');
+	return { name: node.name, path: node.path, entryKind: node.entry_kind as 'directory' | 'file', status: normalizeDiscoveryStatus(node.status), fileKind: fileKind as DiscoveryNode['fileKind'], size: typeof size === 'number' ? size : undefined, children: node.children.map((child) => normalizeDiscoveryNode(child, depth + 1, count)) };
+}
+
+export function normalizeImportPreview(value: unknown): ImportPreview {
+	if (!value || typeof value !== 'object') throw invalidPayload('prévia de importação inválida.');
+	const source = value as Record<string, unknown>;
+	const discovery = source.discovery as Record<string, unknown> | undefined;
+	const summary = discovery?.summary as Record<string, unknown> | undefined;
+	if (!discovery || !summary || !discovery.root || !['found', 'ignored', 'inaccessible', 'unsupported'].every((key) => typeof summary[key] === 'number' && Number.isSafeInteger(summary[key]) && summary[key] >= 0)) throw invalidPayload('resumo da descoberta inválido.');
+	const interpretation = source.interpretation as Record<string, unknown> | undefined;
+	if (!interpretation || !Array.isArray(interpretation.suggestions)) throw invalidPayload('interpretação inválida.');
+	const suggestions = interpretation.suggestions.map((item) => {
+		if (!item || typeof item !== 'object') throw invalidPayload('sugestão inválida.');
+		const suggestion = item as Record<string, unknown>;
+		if (typeof suggestion.path !== 'string' || typeof suggestion.proposed_role !== 'string' || typeof suggestion.explanation !== 'string' || typeof suggestion.ambiguous !== 'boolean' || !['high', 'medium', 'low'].includes(String(suggestion.confidence))) throw invalidPayload('sugestão incompleta.');
+		return { path: suggestion.path, proposedRole: suggestion.proposed_role, confidence: suggestion.confidence as 'high' | 'medium' | 'low', explanation: suggestion.explanation, ambiguous: suggestion.ambiguous };
+	});
+	const normalizedSummary = Object.fromEntries(['found', 'ignored', 'inaccessible', 'unsupported'].map((key) => [key, summary[key]])) as ImportPreview['discovery']['summary'];
+	return { discovery: { root: normalizeDiscoveryNode(discovery.root, 0, { value: 0 }), summary: normalizedSummary }, interpretation: { suggestions } };
+}
 
 function invalidPayload(message: string): Error { return new Error(`Resposta inválida do servidor: ${message}`); }
 
@@ -132,6 +195,22 @@ function countFile(budget: CatalogBudget): void {
 
 export function fileStatus(file: FileEntry): string {
 	return [file.availability === 'missing' ? 'ausente' : '', file.unverified ? 'não verificado' : ''].filter(Boolean).join(' · ');
+}
+
+export type MaterialPreviewKind = 'image' | 'pdf' | 'text';
+
+export function materialPreviewKind(name: string): MaterialPreviewKind | null {
+	const extension = name.split('.').pop()?.toLowerCase();
+	if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(extension ?? '')) return 'image';
+	if (extension === 'pdf') return 'pdf';
+	if (['txt', 'md', 'csv'].includes(extension ?? '')) return 'text';
+	return null;
+}
+
+export function isCoverFile(file: FileEntry): boolean {
+	if (file.kind !== 'material' || !materialPreviewKind(file.name) || materialPreviewKind(file.name) === 'text') return false;
+	const stem = file.name.split(/[\\/.]/).slice(-2, -1)[0]?.toLowerCase() ?? '';
+	return ['cover', 'capa', 'thumbnail', 'thumb'].some((marker) => stem === marker || stem.startsWith(`${marker}-`) || stem.startsWith(`${marker}_`));
 }
 
 /** Identidade de um curso no catálogo: a opaca do contrato ou o caminho do nó legado. */
@@ -338,6 +417,27 @@ export function normalizeUpdateStatus(value: unknown): UpdateStatus {
 		error: optionalUpdateString(status.error, 'error')
 	};
 }
+export function normalizeStudyAnalytics(value: unknown): StudyAnalytics {
+	if (!value || typeof value !== 'object') throw invalidPayload('analytics de estudo ausente.');
+	const analytics = value as { tracked_count?: unknown; completed_count?: unknown; total_position_seconds?: unknown; last_activity_at?: unknown };
+	const trackedCount = analytics.tracked_count;
+	const completedCount = analytics.completed_count;
+	const totalPositionSeconds = analytics.total_position_seconds;
+	if (typeof trackedCount !== 'number' || !Number.isSafeInteger(trackedCount) || trackedCount < 0
+		|| typeof completedCount !== 'number' || !Number.isSafeInteger(completedCount) || completedCount < 0
+		|| typeof totalPositionSeconds !== 'number' || !Number.isSafeInteger(totalPositionSeconds) || totalPositionSeconds < 0) throw invalidPayload('analytics de estudo inválida.');
+	if (completedCount > trackedCount) throw invalidPayload('contagem de conclusão inválida.');
+	const lastActivityAt = analytics.last_activity_at;
+	if (lastActivityAt !== null && lastActivityAt !== undefined && (typeof lastActivityAt !== 'number' || !Number.isSafeInteger(lastActivityAt) || lastActivityAt < 0)) throw invalidPayload('última atividade inválida.');
+	return { trackedCount, completedCount, totalPositionSeconds, lastActivityAt: typeof lastActivityAt === 'number' ? lastActivityAt : null };
+}
+
+export function normalizePomodoro(value: unknown): Pomodoro {
+	if (!value || typeof value !== 'object') throw invalidPayload('Pomodoro ausente.');
+	const item = value as { status?: unknown; duration_seconds?: unknown; elapsed_seconds?: unknown; updated_at?: unknown };
+	if (!['idle', 'running', 'paused'].includes(String(item.status)) || typeof item.duration_seconds !== 'number' || !Number.isSafeInteger(item.duration_seconds) || item.duration_seconds < 60 || typeof item.elapsed_seconds !== 'number' || !Number.isSafeInteger(item.elapsed_seconds) || item.elapsed_seconds < 0 || item.elapsed_seconds > item.duration_seconds || typeof item.updated_at !== 'number' || !Number.isSafeInteger(item.updated_at) || item.updated_at < 0) throw invalidPayload('Pomodoro inválido.');
+	return { status: item.status as Pomodoro['status'], durationSeconds: item.duration_seconds, elapsedSeconds: item.elapsed_seconds, updatedAt: item.updated_at };
+}
 
 // Envelope de categoria da projeção de categorias: `{ children }`.
 function isCategoryEnvelope(item: unknown): boolean {
@@ -353,6 +453,36 @@ function hasLegacyCourses(categories: unknown): boolean {
 		}
 	}
 	return false;
+}
+
+export function normalizeStudyNote(value: unknown): StudyNote {
+	if (!value || typeof value !== 'object' || !('note_id' in value) || !('media_id' in value) || !('text' in value) || !('position_seconds' in value) || !('created_at' in value) || !('updated_at' in value)) throw invalidPayload('nota ausente.');
+	const note = value;
+	if (typeof note.note_id !== 'number' || !Number.isSafeInteger(note.note_id) || note.note_id <= 0 || typeof note.media_id !== 'string' || typeof note.text !== 'string' ||
+		(note.position_seconds !== null && (typeof note.position_seconds !== 'number' || !Number.isSafeInteger(note.position_seconds) || note.position_seconds < 0)) ||
+		typeof note.created_at !== 'number' || !Number.isSafeInteger(note.created_at) || typeof note.updated_at !== 'number' || !Number.isSafeInteger(note.updated_at)) throw invalidPayload('nota incompleta.');
+	return { noteId: note.note_id, mediaId: note.media_id, text: note.text, positionSeconds: note.position_seconds, createdAt: note.created_at, updatedAt: note.updated_at };
+}
+
+export function normalizeStudyNotes(value: unknown): StudyNotes {
+	if (!value || typeof value !== 'object' || !('items' in value) || !Array.isArray(value.items)) throw invalidPayload('lista de notas inválida.');
+	const payload = value as { items: unknown[]; truncated?: unknown };
+	return { items: payload.items.map(normalizeStudyNote), truncated: payload.truncated === true };
+}
+
+// O servidor recusa uma nota por dois motivos diferentes com o mesmo status 422 (texto
+// ou posição inválidos, e teto de notas por mídia). O código no corpo diz qual foi, e a
+// mensagem exibida ao usuário precisa ser precisa.
+async function noteErrorMessage(response: Response, invalid: string, missing: string, generic: string): Promise<string> {
+	if (response.status === 404) return missing;
+	if (response.status !== 422) return generic;
+	try {
+		const body = (await response.json()) as { error?: string } | null;
+		if (body?.error === 'too_many_notes') return 'A mídia já tem o número máximo de notas.';
+	} catch {
+		// Corpo ausente ou ilegível: vale a mensagem padrão de 422.
+	}
+	return invalid;
 }
 
 export function normalizeCatalog(value: unknown): Catalog {
@@ -439,6 +569,11 @@ export class HttpTransport implements Transport {
 		const response = await fetch('/api/admin/courses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }) });
 		if (!response.ok) throw new Error(await importErrorMessage(response));
 	}
+	async previewImport(path: string) {
+		const response = await fetch('/api/admin/courses/preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }) });
+		if (!response.ok) throw new Error(response.status === 400 ? 'A pasta informada não existe ou não pode ser lida no servidor.' : response.status === 403 ? 'credentials_change_required' : 'Não foi possível analisar a pasta.');
+		return normalizeImportPreview(await response.json());
+	}
 	async removeCourse(courseId: string) {
 		const response = await fetch(`/api/admin/courses/${encodeURIComponent(courseId)}`, { method: 'DELETE' });
 		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível remover o curso.');
@@ -453,6 +588,11 @@ export class HttpTransport implements Transport {
 	// O servidor local faz a checagem por HTTPS e devolve o estado; o navegador só o exibe.
 	// `force=1` (checagem manual) ignora o intervalo mínimo de cache do servidor.
 	async checkUpdate(force = false) { const response = await fetch(force ? '/api/update?force=1' : '/api/update'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível verificar a atualização.'); return normalizeUpdateStatus(await response.json()); }
+	async studyAnalytics() { const response = await fetch('/api/study/analytics'); if (!response.ok) throw response.status === 404 ? Object.assign(new Error('Estudo não disponível neste servidor.'), { code: STUDY_NOT_AVAILABLE }) : new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar as métricas de estudo.'); return normalizeStudyAnalytics(await response.json()); }
+	async pomodoro() { const response = await fetch('/api/pomodoro'); if (!response.ok) throw new Error('Não foi possível carregar o Pomodoro.'); return normalizePomodoro(await response.json()); }
+	async startPomodoro(durationSeconds = 1500) { const response = await fetch('/api/pomodoro', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ duration_seconds: durationSeconds }) }); if (!response.ok) throw new Error(response.status === 422 ? 'Configuração do Pomodoro inválida.' : 'Não foi possível iniciar o Pomodoro.'); return normalizePomodoro(await response.json()); }
+	async pausePomodoro(elapsedSeconds: number) { const response = await fetch('/api/pomodoro/pause', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ elapsed_seconds: elapsedSeconds }) }); if (!response.ok) throw new Error('Não foi possível pausar o Pomodoro.'); return normalizePomodoro(await response.json()); }
+	async resetPomodoro() { const response = await fetch('/api/pomodoro/reset', { method: 'POST', headers: { 'Content-Type': 'application/json' } }); if (!response.ok) throw new Error('Não foi possível reiniciar o Pomodoro.'); return normalizePomodoro(await response.json()); }
 	mediaUrl(file: FileEntry, courseId?: string) { return `/api/media?course=${encodeURIComponent(courseId ?? '')}&path=${encodeURIComponent(file.path)}`; }
 	// A versão (mtime em segundos) exposta pelo catálogo entra como `?v=` para invalidar a
 	// imagem em cache do navegador quando a capa é trocada. Sem capa, não há URL manual.
@@ -482,6 +622,11 @@ export class HttpTransport implements Transport {
 		if (!response.ok) throw new Error(orderErrorMessage(response.status));
 		return removalFlag(response);
 	}
+	async listNotes(mediaId: string) { const response = await fetch(`/api/study/notes?media_id=${encodeURIComponent(mediaId)}`); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar as notas.'); return normalizeStudyNotes(await response.json()); }
+	async listAllNotes() { const response = await fetch('/api/study/notes/all'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar as anotações.'); return normalizeStudyNotes(await response.json()); }
+	async createNote(mediaId: string, text: string, positionSeconds: number | null) { const response = await fetch('/api/study/notes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: mediaId, text, position_seconds: positionSeconds }) }); if (!response.ok) throw new Error(await noteErrorMessage(response, 'Nota ou posição inválida.', 'Mídia não encontrada.', 'Não foi possível salvar a nota.')); return normalizeStudyNote(await response.json()); }
+	async updateNote(noteId: number, text: string, positionSeconds: number | null) { const response = await fetch(`/api/study/notes/${noteId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, position_seconds: positionSeconds }) }); if (!response.ok) throw new Error(await noteErrorMessage(response, 'Nota ou posição inválida.', 'Nota não encontrada.', 'Não foi possível atualizar a nota.')); return normalizeStudyNote(await response.json()); }
+	async deleteNote(noteId: number) { const response = await fetch(`/api/study/notes/${noteId}`, { method: 'DELETE' }); if (!response.ok) throw new Error(response.status === 404 ? 'Nota não encontrada.' : 'Não foi possível excluir a nota.'); }
 }
 
 // Códigos estáveis de erro IPC e a mensagem sanitizada correspondente. Um código
@@ -502,7 +647,10 @@ const DESKTOP_ERROR_MESSAGES: Record<string, string> = {
 	invalid_cover: 'A capa precisa ser PNG, JPEG ou WebP de até 4 MiB.',
 	cover_unavailable: 'Não foi possível atualizar a capa do curso.',
 	invalid_order: 'A ordem enviada não é válida; recarregue a página.',
-	order_unavailable: 'Não foi possível salvar a ordem do curso.'
+	order_unavailable: 'Não foi possível salvar a ordem do curso.',
+	invalid_note: 'Nota inválida.',
+	note_not_found: 'Nota não encontrada.',
+	too_many_notes: 'A mídia já tem o número máximo de notas.'
 };
 
 // O comando devolve o erro como objeto serializado `{ code, message }`, não como `Error`.
@@ -524,6 +672,7 @@ export class DesktopStub implements Transport {
 	// devolvido. Cancelar preserva a lista anterior de cursos.
 	async importCourse() { try { await invoke<unknown>('desktop_import_course'); } catch (cause) { throw desktopError(cause, 'Não foi possível importar o curso.'); } }
 	importCoursePath(_path: string) { return Promise.reject(new Error('No desktop a pasta é escolhida pelo seletor nativo do sistema.')); }
+	previewImport(_path: string) { return Promise.reject(new Error('A prévia por caminho está disponível no transporte do servidor.')); }
 	// A remoção envia somente a identidade opaca do curso, nunca um caminho.
 	async removeCourse(courseId: string) { try { await invoke<unknown>('desktop_remove_course', { courseId }); } catch (cause) { throw desktopError(cause, 'Não foi possível remover o curso.'); } }
 	// O rescan desktop é sempre explícito: o webview só o dispara a pedido do usuário. A
@@ -544,6 +693,16 @@ export class DesktopStub implements Transport {
 	// checagem fica desligada, sem tocar a rede. Isso preserva a regra de que o bundle
 	// desktop não contém nenhum `fetch` do aplicativo.
 	checkUpdate() { return Promise.resolve({ current: '', enabled: false, available: false, latest: null, releasedAt: null, url: null, checkedAt: null, error: null } satisfies UpdateStatus); }
+	async studyAnalytics() { try { return normalizeStudyAnalytics(await invoke<unknown>('desktop_study_analytics')); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar as métricas de estudo.'); } }
+	async pomodoro() { try { return normalizePomodoro(await invoke<unknown>('desktop_pomodoro')); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar o Pomodoro.'); } }
+	async startPomodoro(durationSeconds = 1500) { try { return normalizePomodoro(await invoke<unknown>('desktop_start_pomodoro', { durationSeconds })); } catch (cause) { throw desktopError(cause, 'Não foi possível iniciar o Pomodoro.'); } }
+	async pausePomodoro(elapsedSeconds: number) { try { return normalizePomodoro(await invoke<unknown>('desktop_pause_pomodoro', { elapsedSeconds })); } catch (cause) { throw desktopError(cause, 'Não foi possível pausar o Pomodoro.'); } }
+	async resetPomodoro() { try { return normalizePomodoro(await invoke<unknown>('desktop_reset_pomodoro')); } catch (cause) { throw desktopError(cause, 'Não foi possível reiniciar o Pomodoro.'); } }
+	async listNotes(mediaId: string) { try { return normalizeStudyNotes(await invoke<unknown>('desktop_study_notes', { mediaId })); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar as notas.'); } }
+	async listAllNotes() { try { return normalizeStudyNotes(await invoke<unknown>('desktop_study_notes_all')); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar as anotações.'); } }
+	async createNote(mediaId: string, text: string, positionSeconds: number | null) { try { return normalizeStudyNote(await invoke<unknown>('desktop_create_study_note', { mediaId, text, positionSeconds })); } catch (cause) { throw desktopError(cause, 'Não foi possível salvar a nota.'); } }
+	async updateNote(noteId: number, text: string, positionSeconds: number | null) { try { return normalizeStudyNote(await invoke<unknown>('desktop_update_study_note', { noteId, text, positionSeconds })); } catch (cause) { throw desktopError(cause, 'Não foi possível atualizar a nota.'); } }
+	async deleteNote(noteId: number) { try { await invoke<unknown>('desktop_delete_study_note', { noteId }); } catch (cause) { throw desktopError(cause, 'Não foi possível excluir a nota.'); } }
 	// Toda mídia entregue ao player usa a identidade autorizada. O caminho catalogado é
 	// deliberadamente ignorado, inclusive no desktop, para que ele nunca atravesse o webview.
 	mediaUrl(file: FileEntry, _courseId?: string) {

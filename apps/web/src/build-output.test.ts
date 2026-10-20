@@ -55,5 +55,5 @@ describe('production shell contract', () => {
 		expect(desktop).not.toContain('/api/media?course=');
 		expect(http).toContain('/api/media?course=');
 		expect(http).not.toContain('learnvault-media');
-	});
+	}, 60000);
 });

@@ -59,6 +59,9 @@ banco Rust existente continuam sendo abertos normalmente.
 | Método | Rota | Autenticação | Finalidade |
 | --- | --- | --- | --- |
 | `GET` | `/api/catalog` | Sessão | Retorna um nó de topo por curso registrado (`role: course`, com `course_id` opaco e `title`), com a subárvore de módulos e aulas derivada dos dados persistidos, tanto na árvore canônica `nodes` quanto na lista de cursos de topo `categories` |
+| `PUT` | `/api/admin/courses/{id}/order` | Sessão admin + mesma origem | Salva `{ "parent": "...", "children": ["..."] }` para todos os filhos diretos do pai indicado; `parent` vazio representa os módulos do curso |
+| `DELETE` | `/api/admin/courses/{id}/order?parent=...` | Sessão admin + mesma origem | Restaura a ordem automática do pai indicado; sem `parent`, restaura todo o curso e responde `{ "removed": bool }` |
+| `POST` | `/api/admin/courses/preview` | Sessão admin + mesma origem | Aceita `{ "path": "..." }` e devolve uma árvore física somente leitura, com itens encontrados, ignorados, inacessíveis e não suportados, além de sugestões heurísticas explicáveis; não registra curso, mídia ou classificação |
 | `POST` | `/api/admin/courses` | Sessão admin | Aceita `{ "path": "..." }` e registra a pasta como um curso; a pasta precisa existir, ser um diretório legível e não ser link/junction. Importar não indexa: a indexação é o `rescan` |
 | `DELETE` | `/api/admin/courses/{id}` | Sessão admin | Remove o curso do registro, sem apagar arquivos nem dados; remover um curso desconhecido responde `removed: false` |
 | `POST` | `/api/admin/catalog/rescan` | Sessão admin | Faz scan explícito de todos os cursos registrados e atualiza cada catálogo de forma preservadora: insere arquivos novos, reafirma os conhecidos e marca ausentes os que sumiram, sem excluir nenhum registro. Sem cursos registrados responde `400 no_courses_registered`; a resposta agrega `courses` e `failed_courses` |
@@ -73,7 +76,9 @@ banco Rust existente continuam sendo abertos normalmente.
 ### Organização dos cursos registrados
 
 Pastas de módulo contendo vídeos diretamente são apresentadas como módulos recolhíveis,
-com uma aula por vídeo, sem alterar caminhos, arquivos ou identidades de mídia.
+com uma aula por vídeo, sem alterar caminhos, arquivos ou identidades de mídia. Uma pasta
+mista, com vídeos diretos e subpastas, mantém ambos: os vídeos viram aulas filhas e as
+subpastas continuam módulos aninhados, sem alternar papéis por causa da profundidade.
 Materiais complementares continuam disponíveis no módulo e legendas correspondentes
 permanecem associadas à mídia. A árvore de diretórios já existente é preservada.
 
@@ -87,6 +92,14 @@ aceito como semente de implantação: quando o registro ainda não existe, a pas
 registrada como o primeiro curso com a identidade histórica `library-1`, preservando mídias,
 varreduras e progresso de estudo já gravados; uma remoção explícita do curso semente não o
 traz de volta no próximo start.
+
+Administradores podem substituir a ordem automática de módulos e aulas dentro da mesma lista de
+irmãos. A preferência fica no diretório de dados do servidor ou do desktop, não altera a pasta
+do curso e não modifica o progresso salvo. A lista enviada deve ser uma permutação exata dos
+filhos exibidos; novos itens não presentes na preferência são acrescentados em ordem natural.
+`DELETE /api/admin/courses/{id}/order` restaura a ordem automática de um pai ou de todo o curso.
+O servidor aceita corpos JSON de até 1 MiB; o `id` do curso é opaco, e `parent`/`children`
+são caminhos relativos do catálogo, nunca caminhos absolutos do sistema.
 
 O scanner lê somente entradas e metadados de diretórios. Links simbólicos não são seguidos — nem
 as raízes dos cursos, nem entradas internas. Ignora diretórios temporários de download, classifica
@@ -132,6 +145,8 @@ O desktop não tem rotas para catálogo, cursos e remoção: a SPA chama comando
 | Comando | Argumentos | Finalidade |
 | --- | --- | --- |
 | `desktop_catalog` | — | Catálogo agregado dos cursos registrados, um nó de topo por curso em `nodes` (árvore canônica) e em `categories` |
+| `desktop_set_course_order` | `courseId`, `parent`, `children` | Persiste uma permutação exata dos irmãos do curso no diretório de dados local |
+| `desktop_reset_course_order` | `courseId`, `parent?` | Restaura a ordem automática de um pai; sem `parent`, restaura todo o curso |
 | `desktop_import_course` | — | Abre o seletor nativo e registra a pasta escolhida como um curso; importar uma pasta já registrada é idempotente |
 | `desktop_remove_course` | `courseId` | Remove o curso do registro, sem tocar nos arquivos nem nos dados |
 | `desktop_import_course_cover` | `courseId` | Abre o seletor nativo de imagens e grava a capa daquele curso; o arquivo escolhido fica no Rust e não cruza o IPC |
@@ -195,9 +210,45 @@ descrito ao final desta seção; ele não usa rotas HTTP.
 | Método | Rota | Autenticação | Finalidade |
 | --- | --- | --- | --- |
 | `GET` | `/api/study/recent?limit=N` | Sessão | Lista o progresso do usuário, do mais recente ao mais antigo (padrão 20, teto fixo de 100) |
+| `GET` | `/api/study/analytics` | Sessão | Retorna contagens e tempo acumulado do estudo do usuário, excluindo mídias removidas |
 | `GET` | `/api/study/progress?media_id=...` | Sessão | Lê a posição e a conclusão do usuário em uma mídia conhecida |
 | `POST` | `/api/study/position` | Sessão | Aceita `{ "media_id": "...", "position_seconds": 0 }` e grava o ponto de retomada |
 | `POST` | `/api/study/completed` | Sessão | Aceita `{ "media_id": "...", "completed": true }` e marca ou desmarca a conclusão |
+
+### Pomodoro
+
+| Método | Rota | Autenticação | Finalidade |
+| --- | --- | --- | --- |
+| `GET` | `/api/pomodoro` | Sessão | Lê a sessão persistente do usuário |
+| `POST` | `/api/pomodoro` | Sessão + mesma origem | Inicia ou retoma; aceita `{ "duration_seconds": 1500 }` |
+| `POST` | `/api/pomodoro/pause` | Sessão + mesma origem | Pausa com `{ "elapsed_seconds": 300 }`, limitado à duração |
+| `POST` | `/api/pomodoro/reset` | Sessão + mesma origem | Reinicia o tempo transcorrido, preservando a duração |
+### Notas pessoais
+
+As notas são texto simples (não são interpretadas como HTML), ficam no SQLite fora da
+biblioteca e pertencem ao par dono autenticado + `media_id`. O servidor nunca aceita `owner_id`
+do cliente. O texto deve conter conteúdo não branco e ter até 20.000 caracteres Unicode; a posição
+opcional deve ser um inteiro não negativo. A lista é ordenada por criação e cada nota inclui
+`note_id`, `media_id`, `text`, `position_seconds`, `created_at` e `updated_at`. Reenviar o
+mesmo texto e a mesma posição não é uma alteração e não move `updated_at`. Cada par dono + mídia
+aceita até 500 notas: a criação acima do teto responde `422 too_many_notes` e a leitura nunca
+devolve mais que esse teto.
+
+| Método | Rota | Autenticação | Finalidade |
+| --- | --- | --- | --- |
+| `GET` | `/api/study/notes?media_id=...` | Sessão | Lista as notas do usuário para uma mídia conhecida |
+| `GET` | `/api/study/notes/all` | Sessão | Lista todas as notas do usuário, da mais recente à mais antiga (teto de 2.000) |
+| `POST` | `/api/study/notes` | Sessão + CSRF | Cria `{ "media_id": "...", "text": "...", "position_seconds": null }` |
+| `PUT` | `/api/study/notes/{note_id}` | Sessão + CSRF | Atualiza `{ "text": "...", "position_seconds": 42 }` somente se pertencer à sessão |
+| `DELETE` | `/api/study/notes/{note_id}` | Sessão + CSRF | Exclui somente uma nota pertencente à sessão (resposta `204`) |
+
+Texto ou posição inválidos respondem `422 invalid_note` ou `422 invalid_position`; mídia e
+nota ausentes (inclusive uma nota de outro dono) respondem `404 media_not_found` e
+`404 note_not_found`. Listas vazias respondem `200` com `{ "items": [], "truncated": false }`. A listagem global devolve as
+notas mais recentes até o teto de 2.000 e sinaliza `truncated: true` quando o dono tem mais notas
+do que o teto — o índice nunca esconde nota sem avisar. As respostas da rota são
+`private, no-store`; as rejeições do extrator de corpo (por exemplo `422` ou `413`) respondem
+apenas `no-store`. As escritas exigem mesma origem. Notas não alteram a biblioteca física.
 
 Uma mídia conhecida sem progresso responde `200` com `recorded: false`; a ausência não é um
 erro. Uma mídia desconhecida no catálogo responde `404 media_not_found`, uma posição negativa
@@ -220,6 +271,15 @@ shape snake_case (`media_id`, `position_seconds`, `completed`, `updated_at`, `re
 | `desktop_record_position` | `mediaId`, `positionSeconds` | Grava o ponto de retomada, preservando a conclusão |
 | `desktop_set_completed` | `mediaId`, `completed` | Marca ou desmarca a conclusão, preservando a posição |
 | `desktop_recent_study` | `limit` (opcional) | Lista o progresso do dono local, do mais recente ao mais antigo |
+| `desktop_pomodoro` | — | Lê a sessão Pomodoro persistente do dono local |
+| `desktop_start_pomodoro` | `durationSeconds` | Inicia ou retoma a sessão |
+| `desktop_pause_pomodoro` | `elapsedSeconds` | Pausa a sessão com o tempo informado |
+| `desktop_reset_pomodoro` | — | Reinicia o tempo, preservando a duração |
+| `desktop_study_notes` | `mediaId` | Lista notas do dono local para a mídia, no envelope `{ "items": [...], "truncated": false }` do HTTP |
+| `desktop_study_notes_all` | — | Lista todas as notas do dono local, no mesmo envelope e com indicação de truncamento |
+| `desktop_create_study_note` | `mediaId`, `text`, `positionSeconds` (opcional) | Cria nota de texto simples |
+| `desktop_update_study_note` | `noteId`, `text`, `positionSeconds` (opcional) | Atualiza nota do dono local |
+| `desktop_delete_study_note` | `noteId` | Exclui nota do dono local |
 
 O dono é um identificador local fixo resolvido no Rust: nenhum comando aceita `owner_id` como
 argumento, então o webview não escolhe nem conhece o dono. Uma mídia conhecida sem progresso
@@ -228,6 +288,13 @@ posição negativa vira `invalid_position` e as demais falhas viram `study_unava
 `database_unavailable`. Sem `limit`, o histórico usa o padrão do contrato e o teto do núcleo
 continua valendo. Os comandos não exigem nenhum curso registrado e nunca gravam `media`,
 `scan`, `library` nem as pastas de curso.
+
+As notas usam o mesmo shape snake_case, o mesmo envelope `{ "items": [...], "truncated": false }` e os mesmos
+limites de texto/posição do HTTP: a lista do IPC e a do HTTP têm exatamente o mesmo formato, então
+a SPA não distingue o transporte ao ler as notas. O dono local fixo é resolvido pelo Rust, nenhum
+comando aceita `owner_id`, e a SPA usa somente `invoke`. Uma mídia desconhecida vira
+`media_not_found`, uma nota ausente vira `note_not_found` e texto ou posição inválidos viram
+`invalid_note` ou `invalid_position`.
 
 Limitação desta fatia: o desktop atende um único dono local, sem sessão nem seletor de contas.
 

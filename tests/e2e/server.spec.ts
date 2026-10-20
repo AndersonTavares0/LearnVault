@@ -1,4 +1,4 @@
-import { expect, test as base } from '@playwright/test';
+import { expect, test as base, type Page } from '@playwright/test';
 import { once } from 'node:events';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -6,6 +6,11 @@ import { join, resolve } from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
 
 const ADMIN_PASSWORD = 'uma senha local muito segura';
+async function indexCourses(page: Page) {
+	await page.getByText('Ações da biblioteca', { exact: true }).click();
+	await page.getByRole('button', { name: 'Indexar cursos' }).click();
+	await expect(page.locator('p.catalog-message')).toHaveText('Catálogo atualizado.');
+}
 
 function firstMediaId(value: unknown): string | undefined {
 	if (Array.isArray(value)) {
@@ -198,19 +203,35 @@ const test = base.extend<{ server: ServerFixture }>({
 
 test('serves the built SPA through the Rust server for a complete study-library journey', async ({ page, server }) => {
 	await page.goto(`${server.baseURL}/#/login`);
-	await expect(page.getByRole('heading', { name: 'Entrar no LearnVault' })).toBeVisible();
+	await page.emulateMedia({ colorScheme: 'dark' });
+	await page.reload();
+	await expect(page.getByRole('heading', { name: 'Entrar', level: 2 })).toBeVisible();
+	const loginColors = await page.locator('.login-card h2').evaluate((element) => {
+		const foreground = getComputedStyle(element).color;
+		const background = getComputedStyle(element.closest('.login-card') as HTMLElement).backgroundColor;
+		return { foreground, background };
+	});
+	expect(contrastRatio(loginColors.foreground, loginColors.background)).toBeGreaterThanOrEqual(4.5);
 
 	await page.getByLabel('Usuário').fill('admin');
 	// O botão "Mostrar Senha" compartilha o rótulo parcial; exigir o campo exato evita
 	// que o locator resolva tanto o input quanto o alternador de visibilidade.
 	await page.getByLabel('Senha', { exact: true }).fill(ADMIN_PASSWORD);
 	await page.getByRole('button', { name: 'Entrar' }).click();
-	await expect(page.getByRole('heading', { name: 'Início' })).toBeAttached();
+	await expect(page.getByRole('heading', { name: 'Meus cursos' })).toBeAttached();
 
-	await page.getByRole('button', { name: 'Indexar cursos' }).click();
-	await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
+	await indexCourses(page);
 	await expect(page.getByRole('navigation', { name: 'Navegação principal' })).toBeVisible();
-	await expect(page.getByRole('heading', { name: 'Cursos' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Todos os cursos', exact: false })).toBeVisible();
+	const importPathInput = page.getByLabel('Caminho da pasta do curso no servidor');
+	await page.getByRole('button', { name: 'Importar curso' }).click();
+	await importPathInput.fill(join(server.libraryPath, 'Categoria', 'Curso'));
+	await page.getByRole('button', { name: 'Analisar pasta' }).click();
+	await expect(page.getByRole('heading', { name: 'Revise a pasta antes de importar' })).toBeVisible();
+	await expect(importPathInput).toHaveCount(0);
+	await page.getByRole('button', { name: 'Cancelar', exact: true }).click();
+	await expect(importPathInput).toBeVisible();
+	await page.getByRole('button', { name: 'Cancelar', exact: true }).click();
 	const initialCatalog = await (await page.request.get(`${server.baseURL}/api/catalog`)).json();
 	const mediaId = firstMediaId(initialCatalog);
 	expect(mediaId).toBeTruthy();
@@ -223,19 +244,20 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	await expect(recentResponse).toBeOK();
 	expect((await recentResponse.json()).items.length).toBeGreaterThan(0);
 	await page.reload();
-	await expect(page.getByText('Continuar assistindo')).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Continuar estudando', exact: true })).toBeVisible();
+	await page.getByRole('button', { name: 'Em andamento' }).click();
+	await expect(page.getByRole('link', { name: 'Retomar aula' }).first()).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Todos os cursos' })).toContainText('1');
+	await page.getByRole('button', { name: 'Tudo' }).click();
 
-	// Cada item identifica a aula pelo título limpo e mostra o contexto (curso · módulo)
-	// em uma linha secundária; o nome cru do arquivo não pode vazar para o usuário.
-	const firstRecentItem = page.locator('.recent-study li').first();
-	const lessonLabel = (await firstRecentItem.locator('a').first().innerText()).trim();
-	expect(lessonLabel).not.toMatch(/\.[a-z0-9]{2,4}$/i);
-	expect(lessonLabel).not.toMatch(/^\d+[\s._-]/);
-	const contextNode = firstRecentItem.locator('.recent-study-info small');
+	// A lista mostra o curso, a aula e o tempo real; nunca o nome cru do arquivo.
+	const firstRecentItem = page.locator('.resume-item').first();
+	const courseLabel = (await firstRecentItem.locator('h3').innerText()).trim();
+	expect(courseLabel).not.toMatch(/\.[a-z0-9]{2,4}$/i);
+	const contextNode = firstRecentItem.locator('.resume-copy p');
 	await expect(contextNode).toHaveText(/\S/);
 	const contextText = (await contextNode.innerText()).trim();
-	expect(await contextNode.getAttribute('title')).toBe(contextText);
-
+	expect(contextText).toContain('Parou em');
 	// Em tela estreita a lista não pode gerar rolagem horizontal.
 	const originalViewport = page.viewportSize();
 	await page.setViewportSize({ width: 390, height: 844 });
@@ -246,35 +268,30 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	expect(narrowWidths.scrollWidth).toBeLessThanOrEqual(narrowWidths.clientWidth);
 	if (originalViewport) await page.setViewportSize(originalViewport);
 
-	const lightColors = await page.locator('.recent-study small').first().evaluate((element) => {
-		let node: HTMLElement | null = element as HTMLElement;
+	const lightColors = await page.locator('.resume-item p').first().evaluate((element) => {
 		const foreground = getComputedStyle(element).color;
-		while (node) {
-			const background = getComputedStyle(node).backgroundColor;
-			if (background !== 'rgba(0, 0, 0, 0)' && background !== 'transparent') return { foreground, background };
-			node = node.parentElement;
-		}
-		return { foreground, background: getComputedStyle(document.body).backgroundColor };
+		const background = getComputedStyle(element.closest('.resume-item') as HTMLElement).backgroundColor;
+		return { foreground, background };
 	});
 	expect(contrastRatio(lightColors.foreground, lightColors.background)).toBeGreaterThanOrEqual(4.5);
 	await page.emulateMedia({ colorScheme: 'dark' });
 	await page.reload();
-	const darkColors = await page.locator('.recent-study small').first().evaluate((element) => {
-		let node: HTMLElement | null = element as HTMLElement;
+	const darkColors = await page.locator('.resume-item p').first().evaluate((element) => {
 		const foreground = getComputedStyle(element).color;
-		while (node) {
-			const background = getComputedStyle(node).backgroundColor;
-			if (background !== 'rgba(0, 0, 0, 0)' && background !== 'transparent') return { foreground, background };
-			node = node.parentElement;
-		}
-		return { foreground, background: getComputedStyle(document.body).backgroundColor };
+		const background = getComputedStyle(element.closest('.resume-item') as HTMLElement).backgroundColor;
+		return { foreground, background };
 	});
 	expect(contrastRatio(darkColors.foreground, darkColors.background)).toBeGreaterThanOrEqual(4.5);
+	const darkPageColors = await page.locator('.home h1').evaluate((element) => {
+		const foreground = getComputedStyle(element).color;
+		const background = getComputedStyle(element.closest('main') as HTMLElement).backgroundColor;
+		return { foreground, background };
+	});
+	expect(contrastRatio(darkPageColors.foreground, darkPageColors.background)).toBeGreaterThanOrEqual(4.5);
 	const faviconResponse = await page.request.get(`${server.baseURL}/favicon.svg`);
 	expect(faviconResponse.status()).toBe(200);
 
-	// A home lista cada curso registrado como card; o card abre a tela de estudo já com o
-	// player na última aula assistida e a lista lateral de aulas.
+	// O card abre a visão do curso; a aula selecionada inicia o player autenticado.
 	const courseCard = page.getByRole('link', { name: /library/ });
 	await expect(courseCard).toBeVisible();
 	const videoRequest = page.waitForRequest((request) => {
@@ -282,11 +299,10 @@ test('serves the built SPA through the Rust server for a complete study-library 
 		return url.pathname === '/api/media' && url.searchParams.get('path') === 'Categoria/Curso/Aula.mp4';
 	});
 	await courseCard.click();
-	await expect(page.locator('.breadcrumb')).toContainText('library');
+	await expect(page.getByRole('heading', { name: 'library', exact: true })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'Categoria' })).toBeVisible();
+	await page.getByRole('link', { name: /^Curso\b/ }).click();
 	await expect(page.getByRole('heading', { name: 'Curso', exact: true })).toBeVisible();
-	// A aula inicial vem do histórico recente gravado acima.
-	await expect(page.locator('.course-playlist-body .lesson-row.active .lesson-title')).toHaveText('Curso');
 	const videoSource = (await videoRequest).url();
 	const videoURL = new URL(videoSource, server.baseURL);
 	expect(videoURL.pathname).toBe('/api/media');
@@ -325,7 +341,7 @@ test('serves the built SPA through the Rust server for a complete study-library 
 
 	// O caminho de volta para a biblioteca continua no breadcrumb da tela de estudo.
 	await page.getByRole('link', { name: 'Cursos', exact: true }).click();
-	await expect(page.getByRole('heading', { name: 'Cursos' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Todos os cursos', exact: false })).toBeVisible();
 	await page.getByRole('button', { name: 'Sair' }).click();
 	await expect(page.getByRole('button', { name: 'Entrar' })).toBeVisible();
 	const afterLogoutMedia = await page.request.get(new URL(videoSource as string, server.baseURL).toString());
@@ -334,6 +350,95 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	expect(afterLogoutCatalog.status()).toBe(401);
 });
 
+test('creates, edits, reloads and deletes a personal note in the player', async ({ page, server }) => {
+	await page.goto(`${server.baseURL}/#/login`);
+	await page.getByLabel('Usuário').fill('admin');
+	await page.getByLabel('Senha', { exact: true }).fill(ADMIN_PASSWORD);
+	await page.getByRole('button', { name: 'Entrar' }).click();
+	await expect(page.getByRole('heading', { name: 'Meus cursos' })).toBeAttached();
+
+	// O servidor é compartilhado por worker: a varredura só roda quando o catálogo ainda
+	// não está indexado.
+	await page.getByText('Ações da biblioteca', { exact: true }).click();
+	const indexButton = page.getByRole('button', { name: 'Indexar cursos' });
+	if (await indexButton.isEnabled()) {
+		await indexButton.click();
+		await expect(page.locator('p.catalog-message')).toHaveText('Catálogo atualizado.');
+	}
+
+	const catalog = await (await page.request.get(`${server.baseURL}/api/catalog`)).json();
+	const mediaId = firstMediaId(catalog);
+	expect(mediaId).toBeTruthy();
+
+	const courseCard = page.getByRole('link', { name: /library/ });
+	await expect(courseCard).toBeVisible();
+	await courseCard.click();
+	await expect(page.getByRole('heading', { name: 'library', exact: true })).toBeVisible();
+	await page.getByRole('link', { name: /^Curso\b/ }).click();
+	await expect(page.getByRole('heading', { name: 'Curso', exact: true })).toBeVisible();
+
+	const notes = page.getByRole('region', { name: 'Minhas notas' });
+	await expect(notes.getByRole('heading', { name: 'Minhas notas' })).toBeVisible();
+
+	// A nota nasce como texto simples, com a posição de reprodução anexada.
+	const texto = 'Nota de estudo criada pela jornada de UI.';
+	await notes.getByLabel('Nova anotação').fill(texto);
+	await notes.getByLabel(/Anexar posição atual/).check();
+	await notes.getByRole('button', { name: 'Adicionar nota' }).click();
+	await expect(notes.locator('p.note-text')).toHaveText(texto);
+	await expect(notes.getByRole('button', { name: /Ir para/ })).toBeVisible();
+
+	// O servidor guardou a nota do dono da sessão, com o texto como texto simples.
+	const created = await (await page.request.get(`${server.baseURL}/api/study/notes?media_id=${encodeURIComponent(mediaId)}`)).json();
+	expect(created.items.length).toBe(1);
+	expect(created.items[0].text).toBe(texto);
+	expect(created.items[0].position_seconds).toBe(0);
+
+	// A nota sobrevive a um recarregamento: a lista vem do servidor, não do estado local.
+	await page.reload();
+	await expect(notes.locator('p.note-text')).toHaveText(texto);
+
+	// A página de anotações lista as notas do dono agrupadas por curso.
+	const playerUrl = page.url();
+	await page.goto(`${server.baseURL}/#/notes`);
+	await expect(page.getByRole('heading', { name: 'Anotações', level: 1 })).toBeVisible();
+	await expect(page.getByText(texto).first()).toBeVisible();
+	const notesSearch = page.getByLabel('Buscar no texto');
+	const globalNotesSearch = page.getByLabel('Buscar anotações');
+	await globalNotesSearch.fill('texto que não existe');
+	await expect(notesSearch).toHaveValue('texto que não existe');
+	await expect(page.getByRole('status')).toContainText('Nenhuma anotação corresponde aos filtros');
+	await notesSearch.fill(texto);
+	await expect(globalNotesSearch).toHaveValue(texto);
+	await expect(page.getByText(texto).first()).toBeVisible();
+	await expect(page.getByRole('button', { name: /Agrupar por curso/ })).toHaveAttribute('aria-pressed', 'true');
+	await expect(page.getByRole('heading', { level: 3 }).first()).toBeVisible();
+	const all = await (await page.request.get(`${server.baseURL}/api/study/notes/all`)).json();
+	expect(all.truncated).toBe(false);
+	expect(all.items.some((item: { text: string }) => item.text === texto)).toBe(true);
+
+	// Volta ao player para seguir com a edição da nota.
+	await page.goto(playerUrl);
+	await expect(notes.getByRole('heading', { name: 'Minhas notas' })).toBeVisible();
+
+	// Editar a nota reescreve o texto no servidor.
+	const editado = 'Nota de estudo editada pela jornada de UI.';
+	await notes.getByRole('button', { name: 'Editar' }).click();
+	await notes.getByLabel('Editar anotação').fill(editado);
+	await notes.getByRole('button', { name: 'Salvar edição' }).click();
+	await expect(notes.locator('p.note-text')).toHaveText(editado);
+	const afterEdit = await (await page.request.get(`${server.baseURL}/api/study/notes?media_id=${encodeURIComponent(mediaId)}`)).json();
+	expect(afterEdit.items.length).toBe(1);
+	expect(afterEdit.items[0].text).toBe(editado);
+
+	// A exclusão pede confirmação; o teste aceita o diálogo e a nota some da lista.
+	page.on('dialog', (dialog) => void dialog.accept());
+	await notes.getByRole('button', { name: 'Excluir' }).click();
+	await expect(notes.locator('p.note-text')).toHaveCount(0);
+	await expect(notes.getByText('Ainda não há notas para esta mídia.')).toBeVisible();
+	const afterDelete = await (await page.request.get(`${server.baseURL}/api/study/notes?media_id=${encodeURIComponent(mediaId)}`)).json();
+	expect(afterDelete.items.length).toBe(0);
+});
 test('reports a lesson whose media disappears from disk and restores it when the file returns', async ({ page, server }) => {
 	// A fixture já tem Categoria/Curso/Aula.mp4, usado pelo outro cenário. Em vez de apagar
 	// esse arquivo, o cenário cria um módulo próprio com duas aulas: a mídia de uma delas
@@ -351,7 +456,7 @@ test('reports a lesson whose media disappears from disk and restores it when the
 	const courseModule = page.locator('details.course-section').filter({ has: page.getByText('Modulo Extra', { exact: true }) });
 	const openCourse = async () => {
 		await page.getByRole('link', { name: /library/ }).click();
-		await expect(page.locator('.breadcrumb')).toContainText('library');
+		await expect(page.getByRole('heading', { name: 'library', exact: true })).toBeVisible();
 		// O módulo da aula inicial pode já estar aberto; só clica quando precisa.
 		if (!(await courseModule.evaluate((element) => element.hasAttribute('open')))) {
 			await courseModule.locator('summary').click();
@@ -359,26 +464,24 @@ test('reports a lesson whose media disappears from disk and restores it when the
 	};
 	const indexFromHome = async () => {
 		await page.goto(`${server.baseURL}/#/home`);
-		await expect(page.getByRole('heading', { name: 'Início' })).toBeAttached();
-		await page.getByRole('button', { name: 'Indexar cursos' }).click();
-		await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'Meus cursos' })).toBeAttached();
+		await indexCourses(page);
 	};
 
 	await page.goto(`${server.baseURL}/#/login`);
 	await page.getByLabel('Usuário').fill('admin');
 	await page.getByLabel('Senha', { exact: true }).fill(ADMIN_PASSWORD);
 	await page.getByRole('button', { name: 'Entrar' }).click();
-	await expect(page.getByRole('heading', { name: 'Início' })).toBeAttached();
-	await page.getByRole('button', { name: 'Indexar cursos' }).click();
-	await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Meus cursos' })).toBeAttached();
+	await indexCourses(page);
 
 	// Fase 1: o arquivo está no disco — duas aulas disponíveis, sem selo, linha navegável.
 	await openCourse();
 	await expect(courseModule.locator('.section-meta')).toHaveText('2 aulas');
 	const lessonA = courseModule.getByRole('link', { name: /Aula A/ });
 	const lessonB = courseModule.getByRole('link', { name: /Aula B/ });
-	await expect(lessonA).toHaveAttribute('href', /#\/course\//);
-	await expect(lessonB).toHaveAttribute('href', /#\/course\//);
+	await expect(lessonA).toHaveAttribute('href', /#\/player\//);
+	await expect(lessonB).toHaveAttribute('href', /#\/player\//);
 	await expect(lessonB).not.toContainText('ausente');
 
 	// Fase 2: o arquivo desaparece do disco (disco externo desconectado ou arquivo renomeado).
@@ -415,7 +518,7 @@ test('reports a lesson whose media disappears from disk and restores it when the
 	await indexFromHome();
 	await openCourse();
 	await expect(courseModule.locator('.section-meta')).toHaveText('2 aulas');
-	await expect(lessonB).toHaveAttribute('href', /#\/course\//);
+	await expect(lessonB).toHaveAttribute('href', /#\/player\//);
 	await expect(lessonB).not.toContainText('ausente');
 });
 
@@ -424,7 +527,7 @@ test('renders an automatic video thumbnail in the built SPA without leaking libr
 	await page.getByLabel('Usuário').fill('admin');
 	await page.getByLabel('Senha', { exact: true }).fill(ADMIN_PASSWORD);
 	await page.getByRole('button', { name: 'Entrar' }).click();
-	await expect(page.getByRole('heading', { name: 'Início' })).toBeAttached();
+	await expect(page.getByRole('heading', { name: 'Meus cursos' })).toBeAttached();
 
 	// Grava um WebM sintético inteiramente no navegador e o entrega ao servidor como arquivo
 	// do curso. Nenhum vídeo real, asset externo ou dependência de codec entra no repositório:
@@ -468,8 +571,7 @@ test('renders an automatic video thumbnail in the built SPA without leaking libr
 	const lessonDir = join(server.libraryPath, 'Categoria', 'Aula zero');
 	await mkdir(lessonDir, { recursive: true });
 	await writeFile(join(lessonDir, 'Video.webm'), Buffer.from(recorded, 'base64'));
-	await page.getByRole('button', { name: 'Indexar cursos' }).click();
-	await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
+	await indexCourses(page);
 
 	const thumbnail = page.locator('.course-thumbnail').first();
 	await expect(thumbnail).toBeVisible({ timeout: 30_000 });
@@ -496,9 +598,8 @@ test('moves the cover actions to the course card and keeps the course page clean
 	await page.getByLabel('Usuário').fill('admin');
 	await page.getByLabel('Senha', { exact: true }).fill(ADMIN_PASSWORD);
 	await page.getByRole('button', { name: 'Entrar' }).click();
-	await expect(page.getByRole('heading', { name: 'Início' })).toBeAttached();
-	await page.getByRole('button', { name: 'Indexar cursos' }).click();
-	await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Meus cursos' })).toBeAttached();
+	await indexCourses(page);
 
 	const courseCard = page.getByRole('link', { name: /library/ });
 	await expect(courseCard).toBeVisible();
@@ -541,13 +642,13 @@ test('moves the cover actions to the course card and keeps the course page clean
 
 	// A página do curso volta ao layout anterior, sem controles de capa.
 	await courseCard.click();
-	await expect(page.locator('.breadcrumb')).toContainText('library');
+	await expect(page.getByRole('heading', { name: 'library', exact: true })).toBeVisible();
 	await expect(page.locator('.course-cover-actions')).toHaveCount(0);
 	await expect(page.getByText('Trocar capa')).toHaveCount(0);
 	await expect(page.getByText('Remover capa')).toHaveCount(0);
 
 	// A remoção também é feita pelo card.
-	await page.getByRole('link', { name: 'Início', exact: true }).click();
+	await page.getByRole('link', { name: 'Aprender', exact: true }).click();
 	await courseCard.click({ button: 'right' });
 	await page.getByRole('menuitem', { name: 'Remover capa' }).click();
 	await expect(page.getByText('Capa removida.')).toBeVisible();

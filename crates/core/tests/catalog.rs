@@ -193,10 +193,9 @@ fn deeper_lessons_keep_every_file_and_nest_deterministically() -> TestResult {
     let module = node(&course.children, "Programação/Go Essencial/Módulo 1");
     assert_eq!(module.role, NodeRole::Module);
 
-    // A primeira aula reivindica `Aula 1` como aula; a segunda cria `extras` como
-    // outra aula, aninhada. Nenhum arquivo é descartado.
+    // Uma pasta mista organiza a mídia direta e a subpasta sem descartar nenhum arquivo.
     let lesson = node(&module.children, "Programação/Go Essencial/Módulo 1/Aula 1");
-    assert_eq!(lesson.role, NodeRole::Lesson);
+    assert_eq!(lesson.role, NodeRole::Module);
     assert_eq!(lesson.files.len(), 1);
     let nested = node(
         &lesson.children,
@@ -438,17 +437,17 @@ fn a_node_role_does_not_depend_on_the_order_of_the_files() -> TestResult {
     media(&db, "m2", "Curso/Modulo1/z.mp4")?;
 
     let catalog = build_catalog(&db, LIB)?;
-    let lesson = node(&catalog.categories[0].children, "Curso/Modulo1");
+    let module = node(&catalog.categories[0].children, "Curso/Modulo1");
 
     assert_eq!(
-        lesson.role,
-        NodeRole::Lesson,
-        "um diretório com mídia é uma aula, independentemente da ordem de leitura"
+        module.role,
+        NodeRole::Module,
+        "um diretório misto organiza mídia direta e subdiretórios"
     );
-    assert_eq!(lesson.files.len(), 1);
-    assert_eq!(lesson.files[0].media_id, "m2");
+    assert_eq!(module.files.len(), 1);
+    assert_eq!(module.files[0].media_id, "m2");
 
-    let nested = node(&lesson.children, "Curso/Modulo1/a-bonus");
+    let nested = node(&module.children, "Curso/Modulo1/a-bonus");
     assert_eq!(nested.role, NodeRole::Lesson);
     assert_eq!(nested.files[0].media_id, "m1");
     Ok(())
@@ -787,4 +786,41 @@ fn course_grouping_preserves_nested_modules_and_file_identities() {
     assert_eq!(grouped.children[0].files[0].media_id, "course-media");
     assert_eq!(grouped.children[1].path, "Curso/Modulo 2");
     assert_eq!(grouped.children[1].children[0].files[0].media_id, "nested");
+}
+
+#[test]
+fn mixed_directory_becomes_module_and_keeps_direct_media_as_lessons() {
+    let nested_lesson = CatalogNode {
+        title: "Submódulo".to_owned(),
+        path: "Curso/Módulo/Submódulo".to_owned(),
+        role: NodeRole::Module,
+        files: Vec::new(),
+        loose_files: vec![catalog_file(
+            "nested-video",
+            "Curso/Módulo/Submódulo/aula.mp4",
+            MediaKind::Media,
+        )],
+        children: Vec::new(),
+    };
+    let mixed = CatalogNode {
+        title: "Módulo".to_owned(),
+        path: "Curso/Módulo".to_owned(),
+        role: NodeRole::Lesson,
+        files: vec![catalog_file(
+            "direct-video",
+            "Curso/Módulo/introdução.mp4",
+            MediaKind::Media,
+        )],
+        loose_files: Vec::new(),
+        children: vec![nested_lesson],
+    };
+
+    let grouped = course_file_lessons(mixed);
+
+    assert_eq!(grouped.role, NodeRole::Module);
+    assert_eq!(grouped.children.len(), 2);
+    let direct = node(&grouped.children, "Curso/Módulo/introdução.mp4");
+    assert_eq!(direct.files[0].media_id, "direct-video");
+    let nested = node(&grouped.children, "Curso/Módulo/Submódulo");
+    assert_eq!(nested.children[0].files[0].media_id, "nested-video");
 }

@@ -15,7 +15,7 @@ describe('catalog tree rendering', () => {
 	it('renders a lesson as a real link to the player inside its course with counts', () => {
 		const lesson = node('lesson', 'Aula 1', 'curso/aula-1', [], [file('a.mp4', 'media'), file('b.pdf', 'material'), file('b.srt', 'subtitle')]);
 		const { body } = render(CatalogTree, { props: { nodes: [lesson], courseId: 'course-1' } });
-		expect(body).toContain('href="#/course/course-1/curso%2Faula-1"');
+		expect(body).toContain('href="#/player/course-1/curso%2Faula-1"');
 		expect(body).toContain('1 vídeo · 2 materiais');
 	});
 
@@ -24,7 +24,7 @@ describe('catalog tree rendering', () => {
 		const closed = render(CatalogTree, { props: { nodes: [module], courseId: 'course-1' } });
 		expect(closed.body).toContain('course-section"');
 		expect(closed.body).not.toMatch(/course-section"[^>]* open/);
-		expect(closed.body).toContain('href="#/course/course-1/curso%2Fmodulo%2Faula"');
+		expect(closed.body).toContain('href="#/player/course-1/curso%2Fmodulo%2Faula"');
 		const open = render(CatalogTree, { props: { nodes: [module], courseId: 'course-1', expandAll: true } });
 		expect(open.body).toMatch(/course-section"[^>]* open/);
 	});
@@ -35,7 +35,7 @@ describe('catalog tree rendering', () => {
 		const { body } = render(CatalogTree, { props: { nodes: [module], courseId: 'course-1' } });
 		expect(body).toContain('aria-label="Materiais complementares"');
 		expect(body).toContain('download="exercicios.pdf"');
-		expect(body).not.toContain('#/course/course-1/exercicios.pdf');
+		expect(body).not.toContain('#/player/course-1/exercicios.pdf');
 		expect(body.indexOf('download="exercicios.pdf"')).toBeLessThan(body.indexOf('</details>'));
 	});
 
@@ -50,7 +50,7 @@ describe('catalog tree rendering', () => {
 	it('keeps nested lessons of a lesson visible and unannotated from the parent meta', () => {
 		const parent = node('lesson', 'Aula 01', 'curso/aula-01', [node('lesson', 'Bônus', 'curso/aula-01/bonus', [], [file('b.pdf', 'material')])], [file('a.mp4', 'media')]);
 		const { body } = render(CatalogTree, { props: { nodes: [parent], courseId: 'course-1' } });
-		expect(body).toContain('href="#/course/course-1/curso%2Faula-01%2Fbonus"');
+		expect(body).toContain('href="#/player/course-1/curso%2Faula-01%2Fbonus"');
 		expect(body).toContain('<span class="lesson-meta">1 vídeo</span>');
 	});
 
@@ -70,13 +70,13 @@ describe('catalog tree rendering', () => {
 		expect(body).toContain('<small class="lesson-meta">(ausente)</small>');
 		expect(body).toContain('<div class="lesson-row">');
 		expect(body).not.toContain('<a ');
-		expect(body).not.toContain('#/course/course-1/curso%2Faula-1');
+		expect(body).not.toContain('#/player/course-1/curso%2Faula-1');
 	});
 
 	it('keeps an available lesson as a real link without any badge text', () => {
 		const lesson = node('lesson', 'Aula 1', 'curso/aula-1', [], [file('a.mp4', 'media')]);
 		const { body } = render(CatalogTree, { props: { nodes: [lesson], courseId: 'course-1' } });
-		expect(body).toContain('href="#/course/course-1/curso%2Faula-1"');
+		expect(body).toContain('href="#/player/course-1/curso%2Faula-1"');
 		expect(body).not.toContain('ausente');
 	});
 
@@ -90,7 +90,7 @@ describe('catalog tree rendering', () => {
 		expect(body).toContain('<span class="section-meta">1 aula · 2 ausentes</span>');
 		expect(body.match(/\(ausente\)/g)).toHaveLength(2);
 		// Só a aula disponível continua roteável.
-		expect(body.match(/href="#\/course/g)).toHaveLength(1);
+		expect(body.match(/href="#\/player/g)).toHaveLength(1);
 	});
 
 	it('reports missing lessons in the course meta of a category header', () => {
@@ -105,7 +105,7 @@ describe('catalog tree rendering', () => {
 		expect(body).toContain('<span class="section-meta">0 aulas · 1 ausente</span>');
 		expect(body).toContain('(ausente)');
 		// A linha continua listada, agora sem destino de player.
-		expect(body).not.toContain('href="#/course');
+		expect(body).not.toContain('href="#/player');
 	});
 
 	it('highlights the active lesson and opens only the module that contains it', () => {
@@ -116,8 +116,8 @@ describe('catalog tree rendering', () => {
 		const second = node('module', 'Módulo 2', 'mod-2', [node('lesson', 'Aula 3', 'mod-2/aula-3', [], [file('c.mp4', 'media')])]);
 		const { body } = render(CatalogTree, { props: { nodes: [first, second], courseId: 'course-1', activePath: 'mod-1/aula-2' } });
 
-		expect(body).toMatch(/class="[^"]*\bactive\b[^"]*"[^>]*href="#\/course\/course-1\/mod-1%2Faula-2"[^>]*aria-current="page"/);
+		expect(body).toMatch(/class="[^"]*\bactive\b[^"]*"[^>]*href="#\/player\/course-1\/mod-1%2Faula-2"[^>]*aria-current="page"/);
 		expect(body.match(/course-section"[^>]* open/g)).toHaveLength(1);
-		expect(body).toContain('href="#/course/course-1/mod-1%2Faula-1"');
+		expect(body).toContain('href="#/player/course-1/mod-1%2Faula-1"');
 	});
 });

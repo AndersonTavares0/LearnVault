@@ -114,14 +114,16 @@
 	}
 </script>
 <div class="course-card-shell">
-	<a class="course-card" href={href('course', courseIdOf(course))} oncontextmenu={openContextMenu}>
+	<a class="course-card course" href={href('course', courseIdOf(course))} oncontextmenu={openContextMenu}>
 		<span class="course-cover" use:cleanupThumbnail={{ course, profile, manualCover: manualCoverUrl }} style:--cover-from={cover.from} style:--cover-to={cover.to} style:--cover-angle={`${cover.angle}deg`} aria-hidden="true">
 			{#if coverSource === 'manual'}<img class="course-cover-image" src={manualCoverUrl ?? ''} alt="" />
 			{:else if coverSource === 'thumbnail'}<img class="course-thumbnail" src={thumbnailUrl ?? ''} alt="" />{/if}
 			<span class="course-monogram">{cover.monogram}</span>
 		</span>
-		<span class="course-card-title">{course.title}</span>
-		{#if meta}<span class="course-card-meta">{meta}</span>{/if}
+		<span class="course-body">
+			<span class="course-card-title">{course.title}</span>
+			{#if meta}<span class="course-card-meta">{meta}</span>{/if}
+		</span>
 	</a>
 	{#if canManage}
 		<button

@@ -7,6 +7,7 @@ onde uma decisão ou procedimento deve ficar.
 | --- | --- |
 | [`architecture/`](architecture/) | Limites do sistema, fluxo de dados e ADRs |
 | [`governance/`](governance/) | Regras do repositório, ownership e política de CI |
+| [`design/graphite/`](design/graphite/README.md) | Referências Graphite aprovadas e matriz das 15 pranchas |
 | [`operations/`](operations/) | Deploy e alvos de distribuição |
 | [`product/`](product/) | Roadmap, requisitos e direção do produto |
 | [`releases/`](releases/) | Versionamento e procedimentos de release |

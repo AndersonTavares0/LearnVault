@@ -255,6 +255,11 @@ fn build_registers_the_app_commands_in_the_acl_manifest() {
         "desktop_remove_media",
         "desktop_set_course_order",
         "desktop_reset_course_order",
+        "desktop_study_notes",
+        "desktop_study_notes_all",
+        "desktop_create_study_note",
+        "desktop_update_study_note",
+        "desktop_delete_study_note",
     ] {
         assert!(
             build.contains(command),
@@ -290,9 +295,14 @@ fn capability_grants_only_the_core_default_and_the_app_commands() {
     assert!(permissions.contains(&"allow-desktop-remove-media"));
     assert!(permissions.contains(&"allow-desktop-set-course-order"));
     assert!(permissions.contains(&"allow-desktop-reset-course-order"));
+    assert!(permissions.contains(&"allow-desktop-study-notes"));
+    assert!(permissions.contains(&"allow-desktop-study-notes-all"));
+    assert!(permissions.contains(&"allow-desktop-create-study-note"));
+    assert!(permissions.contains(&"allow-desktop-update-study-note"));
+    assert!(permissions.contains(&"allow-desktop-delete-study-note"));
     assert_eq!(
         permissions.len(),
-        15,
+        20,
         "a capability não pode ampliar além do núcleo e dos comandos do app: {permissions:?}"
     );
 }

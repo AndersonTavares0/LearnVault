@@ -20,28 +20,19 @@ describe('generated course covers', () => {
 		expect(courseCover('Ação e Reação').monogram).toBe('AR');
 	});
 
-	it('uses gradient colors from the product palette and varies by title', () => {
-		const first = courseCover('Física');
-		const second = courseCover('História da Arte');
+	it('uses the three original Graphite gradients and their fixed direction', () => {
+		const approvedPalettes = new Set([
+			'#295c67:#a7c9bd',
+			'#695e4e:#d4b77e',
+			'#3e4160:#a4a6d5'
+		]);
+		const titles = ['Física', 'História da Arte', 'Programação em Go', 'Matemática'];
 
-		for (const color of [first.from, first.to, second.from, second.to]) {
-			expect(color).toMatch(/^hsl\(\d+ \d+% \d+%\)$/);
+		for (const title of titles) {
+			const { from, to, angle } = courseCover(title);
+			expect(approvedPalettes.has(`${from}:${to}`)).toBe(true);
+			expect(angle).toBe(140);
 		}
-		expect(first).not.toEqual(second);
-	});
-
-	it('derives a deterministic gradient angle within a readable range', () => {
-		const titles = ['Física Quântica', 'História da Arte', 'Programação em Go', '   ', '--', 'Matemática'];
-		const angles = titles.map((title) => courseCover(title).angle);
-
-		for (const angle of angles) {
-			expect(Number.isInteger(angle)).toBe(true);
-			expect(angle).toBeGreaterThanOrEqual(95);
-			expect(angle).toBeLessThanOrEqual(200);
-		}
-		// O mesmo título produz sempre o mesmo ângulo, e títulos distintos variam.
-		expect(courseCover('Física Quântica').angle).toBe(courseCover('Física Quântica').angle);
-		expect(new Set(angles).size).toBeGreaterThan(1);
 	});
 });
 

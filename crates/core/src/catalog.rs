@@ -282,10 +282,18 @@ fn role_of(path: &str, files: &[CatalogFile], children: &[CatalogNode]) -> NodeR
     if !path.contains('/') {
         return NodeRole::Category;
     }
-    if !files.is_empty() {
+    if !files.is_empty() && children.is_empty() {
         return NodeRole::Lesson;
     }
-    if children.iter().any(|child| child.role == NodeRole::Module) {
+    // A directory with both direct files and children is a container, not a lesson.
+    // Its direct media is converted to child lessons by `course_file_lessons`.
+    if !files.is_empty() {
+        return NodeRole::Module;
+    }
+    // In the canonical category/course layout, only the first node below a category can be a
+    // course. A deeper container remains a module even when it contains nested modules; this
+    // prevents arbitrary depth from making roles alternate between course and module.
+    if path.split('/').count() == 2 && children.iter().any(|child| child.role == NodeRole::Module) {
         return NodeRole::Course;
     }
     NodeRole::Module
@@ -395,13 +403,28 @@ pub fn course_file_lessons(node: CatalogNode) -> CatalogNode {
         children,
     } = node;
     let mut children: Vec<_> = children.into_iter().map(course_file_lessons).collect();
+    // A directory lesson keeps its associated files together. Every other node treats direct
+    // files as loose material candidates so media can become explicit lesson children. This is
+    // what preserves mixed directories without flattening their nested modules.
+    if role == NodeRole::Lesson && children.is_empty() {
+        return CatalogNode {
+            title,
+            path,
+            role,
+            files,
+            loose_files,
+            children,
+        };
+    }
     let mut media = Vec::new();
-    let mut loose = Vec::new();
-    for file in loose_files {
+    let mut loose = loose_files;
+    loose.extend(files);
+    let mut remaining = Vec::new();
+    for file in loose {
         if file.kind == MediaKind::Media {
             media.push(file);
         } else {
-            loose.push(file);
+            remaining.push(file);
         }
     }
 
@@ -410,8 +433,8 @@ pub fn course_file_lessons(node: CatalogNode) -> CatalogNode {
             title,
             path,
             role,
-            files,
-            loose_files: loose,
+            files: Vec::new(),
+            loose_files: remaining,
             children,
         };
     }
@@ -420,9 +443,11 @@ pub fn course_file_lessons(node: CatalogNode) -> CatalogNode {
         let stem = file_stem(&file.name);
         let mut lesson_files = Vec::new();
         let mut index = 0;
-        while index < loose.len() {
-            if loose[index].kind == MediaKind::Subtitle && file_stem(&loose[index].name) == stem {
-                lesson_files.push(loose.remove(index));
+        while index < remaining.len() {
+            if remaining[index].kind == MediaKind::Subtitle
+                && file_stem(&remaining[index].name) == stem
+            {
+                lesson_files.push(remaining.remove(index));
             } else {
                 index += 1;
             }
@@ -443,8 +468,8 @@ pub fn course_file_lessons(node: CatalogNode) -> CatalogNode {
         title,
         path,
         role: NodeRole::Module,
-        files,
-        loose_files: loose,
+        files: Vec::new(),
+        loose_files: remaining,
         children,
     }
 }

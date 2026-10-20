@@ -670,3 +670,51 @@ fn media_removal_impact_and_removal_flow_in_desktop() {
     assert!(progress.recorded);
     assert_eq!(progress.position_seconds, 25);
 }
+
+#[test]
+fn desktop_catalog_order_persists_locally_validates_siblings_and_resets() {
+    let dir = tempfile::tempdir().unwrap();
+    let course = make_course(dir.path());
+    for module in ["Módulo 1", "Módulo 2"] {
+        let lesson = course.join(module).join("Aula 1");
+        fs::create_dir_all(&lesson).unwrap();
+        fs::write(lesson.join("video.mp4"), b"video").unwrap();
+    }
+    let state = desktop(dir.path());
+    state.import_course(|| Some(course.clone())).unwrap();
+    state.rescan().unwrap();
+    let course_id = state.courses()[0].id.clone();
+
+    state
+        .set_course_order(
+            &course_id,
+            "",
+            &["Módulo 2".to_owned(), "Módulo 1".to_owned()],
+        )
+        .unwrap();
+    let catalog = state.catalog().unwrap();
+    assert_eq!(catalog.categories[0].children[0].path, "Módulo 2");
+
+    let invalid = state.set_course_order(&course_id, "", &["not-a-sibling".to_owned()]);
+    assert_eq!(invalid.unwrap_err().code, IpcErrorCode::InvalidOrder);
+    assert_eq!(
+        state.catalog().unwrap().categories[0].children[0].path,
+        "Módulo 2",
+        "ordem inválida não pode substituir a preferência salva"
+    );
+
+    let restarted = desktop(dir.path());
+    assert_eq!(
+        restarted.catalog().unwrap().categories[0].children[0].path,
+        "Módulo 2",
+        "preferência local deve persistir ao reiniciar"
+    );
+
+    restarted.reset_course_order(&course_id, None).unwrap();
+    assert_eq!(
+        restarted.catalog().unwrap().categories[0].children[0].path,
+        "Módulo 1",
+        "reset deve restaurar ordem natural"
+    );
+    assert!(course.join("Módulo 1/Aula 1/video.mp4").exists());
+}
