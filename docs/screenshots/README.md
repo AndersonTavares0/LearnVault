@@ -31,3 +31,21 @@ componentes.
 
 O mapeamento de cada prancha para a implementação, incluindo limitações declaradas,
 está em [`docs/product/graphite-reference-matrix.md`](../product/graphite-reference-matrix.md).
+
+## Comparações com as pranchas aprovadas
+
+As imagens `reference-board-*.png` são capturas diretas das pranchas HTML aprovadas, na
+mesma resolução das capturas do aplicativo, para comparação lado a lado:
+
+| Prancha aprovada | Aplicativo |
+| --- | --- |
+| `reference-board-01-library.png` | `reference-home-light.png` |
+| `reference-board-02-course.png` | `reference-course-light.png` |
+| `reference-board-03-player.png` | `reference-player-light.png` |
+| `reference-board-04-notes.png` | `reference-notes-light.png` |
+| `reference-board-05-settings.png` | `reference-settings-light.png` |
+| `reference-board-06-login.png` | `reference-login-light.png` |
+| `reference-board-09-analytics.png` | `reference-analytics-light.png` |
+
+As demais pranchas são fluxos de importação/materiais já cobertos pelos componentes
+reais ou documentos de decisão, conforme a matriz.
