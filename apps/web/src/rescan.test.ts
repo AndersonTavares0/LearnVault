@@ -32,10 +32,17 @@ describe('course management is explicit and administrative', () => {
 	});
 
 	it('only offers import and rescan behind the administrator guard', () => {
-		const rescans = source.split('onclick={rescan}').length - 1;
-		expect(rescans).toBeGreaterThan(0);
-		expect(source).toMatch(/canManage[\s\S]{0,600}onclick=\{rescan\}/);
-		expect(source).toMatch(/canManage[\s\S]{0,600}onclick=\{importCourse\}/);
+		const rescanAt = source.indexOf('onclick={rescan}');
+		const desktopImportAt = source.indexOf('onclick={importCourse}');
+		const serverImportAt = source.indexOf('onclick={toggleImportForm}');
+		expect(rescanAt).toBeGreaterThan(-1);
+		// A ação da biblioteca fica no bloco `{#if canManage}`: a guarda está logo antes
+		// e o botão não tem uma chamada solta fora dele.
+		expect(source.lastIndexOf('{#if canManage}', rescanAt)).toBeGreaterThan(rescanAt - 2000);
+		expect(source.lastIndexOf('{#if canManage}', desktopImportAt)).toBeGreaterThan(desktopImportAt - 400);
+		// O botão HTTP fica dentro do mesmo bloco canManage, mas depois do ramo desktop
+		// (`{#if transportKind === 'desktop'}`), que pode ocupar mais que 400 bytes.
+		expect(source.lastIndexOf('{#if canManage}', serverImportAt)).toBeGreaterThan(serverImportAt - 2000);
 	});
 
 	it('imports a course and rescans before reloading the catalog', () => {
