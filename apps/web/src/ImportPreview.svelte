@@ -2,11 +2,14 @@
 	import ImportSteps from './ImportSteps.svelte';
 	import type { DiscoveryNode, ImportPreview as ImportPreviewData } from './transport';
 
-	let { preview, onCancel, onConfirm, busy = false }: {
+	let { preview, onCancel, onConfirm, busy = false, step = 3 as 3 | 4 | 5, error = '', onRetryRescan = null as null | (() => void) }: {
 		preview: ImportPreviewData;
 		onCancel: () => void;
 		onConfirm: () => void;
 		busy?: boolean;
+		step?: 3 | 4 | 5;
+		error?: string;
+		onRetryRescan?: null | (() => void);
 	} = $props();
 
 	type Row = { node: DiscoveryNode; depth: number };
@@ -26,7 +29,7 @@
 		<h2 id="import-preview-heading">Revise a pasta antes de importar</h2>
 		<p>A estrutura física não será alterada. Sugestões são explicáveis e não classificações definitivas.</p>
 	</div>
-	<ImportSteps currentStep={busy ? 4 : 3} />
+	<ImportSteps currentStep={step} />
 	<div class="scan-summary" aria-label="Resumo da descoberta">
 		<div class="scan-count"><strong>{preview.discovery.summary.found}</strong> encontrados</div>
 		<div class="scan-count"><strong>{preview.discovery.summary.ignored}</strong> ignorados</div>
@@ -57,8 +60,13 @@
 		</section>
 	</div>
 	<div class="import-preview-actions">
-		<button type="button" class="text-button" onclick={onCancel} disabled={busy}>Cancelar</button>
-		<button type="button" class="primary" onclick={onConfirm} disabled={busy} aria-busy={busy}>{busy ? 'Importando…' : 'Confirmar importação'}</button>
+		{#if step === 5 && onRetryRescan}
+			<p class="rescan-error" role="alert"><strong>Curso registrado; não foi possível atualizar o catálogo.</strong> {error}</p>
+			<button type="button" class="primary" onclick={onRetryRescan}>Tentar atualizar catálogo</button>
+		{:else}
+			<button type="button" class="text-button" onclick={onCancel} disabled={busy}>Cancelar</button>
+			<button type="button" class="primary" onclick={onConfirm} disabled={busy} aria-busy={busy}>{busy ? 'Importando…' : 'Confirmar importação'}</button>
+		{/if}
 	</div>
 </section>
 <style>
@@ -74,6 +82,8 @@
 	.preview-suggestions code{display:block;margin-top:5px;overflow-wrap:anywhere;color:var(--muted)}
 	.preview-suggestions p{margin:6px 0 0}
 	.preview-suggestions small{display:block;margin-top:6px;color:var(--amber)}
-	.import-preview-actions{display:flex;justify-content:flex-end;gap:9px;margin-top:16px}
+	.import-preview-actions{display:flex;justify-content:flex-end;gap:9px;margin-top:16px;align-items:center;flex-wrap:wrap}
+	.rescan-error{margin:0;display:grid;gap:4px;padding:10px 12px;border:1px solid var(--line);border-left:3px solid var(--danger);border-radius:var(--radius-sm);background:var(--surface-subtle);color:var(--muted);font-size:13px;flex:1;min-width:0}
+	.rescan-error strong{color:var(--ink)}
 	@media(max-width:700px){.import-preview-actions{flex-direction:column-reverse}.import-preview-actions button{width:100%}}
 </style>

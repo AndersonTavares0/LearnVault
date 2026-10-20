@@ -11,6 +11,7 @@
 	import { countCatalogNode, formatLessonCounts, formatLocationContext } from './catalog';
 	import PasswordField from './PasswordField.svelte';
 	import NotesIndex from './NotesIndex.svelte';
+	import EmptyState from './EmptyState.svelte';
 	import { defaultLessonPath, lessonContainer, neighboringLessons } from './navigation';
 	import { destinationAfterLogin, findCourse, findLesson, findLessonLocation, href, locationFromHash, type Route } from './router';
 	import { transport, transportKind, COVER_ACCEPT, MAX_COVER_BYTES, courseIdOf, STUDY_NOT_AVAILABLE, type Catalog, type CatalogNode, type ImportPreview as ImportPreviewData, type Lesson, type StudyAnalytics, type StudyProgress, type UpdateStatus, type User } from './transport';
@@ -93,6 +94,7 @@
 	let rescanMessage = '';
 	let importing = false;
 	let importFormOpen = false;
+	let importPhase: 'choose' | 'discover' | 'review' | 'import' | 'rescan' | 'rescan-error' = 'choose';
 	let importPath = '';
 	let importPreviewPath = '';
 	let importError = '';
@@ -389,13 +391,16 @@
 		if (previewingImport || importing) return;
 		previewingImport = true;
 		importError = '';
+		importPhase = 'discover';
 		try {
 			const previewPath = importPath.trim();
 			importPreview = await transport.previewImport(previewPath);
 			importPreviewPath = previewPath;
 			importFormOpen = false;
+			importPhase = 'review';
 		} catch (cause) {
 			importError = cause instanceof Error ? cause.message : 'Não foi possível analisar a pasta.';
+			importPhase = 'choose';
 		} finally {
 			previewingImport = false;
 		}
@@ -406,6 +411,8 @@
 		importPreview = null;
 		importPreviewPath = '';
 		importFormOpen = true;
+		importPhase = 'choose';
+		importError = '';
 	}
 
 	function toggleImportForm() {
@@ -415,25 +422,44 @@
 			return;
 		}
 		importFormOpen = !importFormOpen;
+		importPhase = importFormOpen ? 'choose' : importPhase;
+		if (!importFormOpen) importError = '';
 	}
 
+	// Registra o curso uma única vez; o catálogo só muda depois do rescan bem-sucedido.
 	async function confirmImport() {
 		if (!importPreview || importing) return;
 		importing = true;
 		importError = '';
+		importPhase = 'import';
 		try {
 			await transport.importCoursePath(importPreviewPath);
+			await finishImportRescan();
+		} catch (cause) {
+			importError = cause instanceof Error ? cause.message : 'Não foi possível importar o curso.';
+			importPhase = 'review';
+		} finally {
+			importing = false;
+		}
+	}
+
+	// Repete apenas rescan/catalog/recent: o curso já está registrado e nunca deve ser
+	// importado de novo como se fosse nova tentativa.
+	async function finishImportRescan(): Promise<void> {
+		importPhase = 'rescan';
+		try {
+			await transport.rescan();
+			syncCatalog(await transport.catalog());
+			await loadRecent();
 			importPath = '';
 			importPreview = null;
 			importPreviewPath = '';
 			importFormOpen = false;
-			await transport.rescan();
-			syncCatalog(await transport.catalog());
-			await loadRecent();
+			importPhase = 'choose';
+			importError = '';
 		} catch (cause) {
-			importError = cause instanceof Error ? cause.message : 'Não foi possível importar o curso.';
-		} finally {
-			importing = false;
+			importError = cause instanceof Error ? cause.message : 'Não foi possível atualizar o catálogo.';
+			importPhase = 'rescan-error';
 		}
 	}
 
@@ -714,79 +740,142 @@
 			<main id="main-content" tabindex="-1" class:home={route === 'home'} class:import-flow={route === 'home' && (importFormOpen || importPreview !== null)} class:course={route === 'course' && !watchRoute} class:settings={route === 'settings'} class:watch={watchRoute}>{#if error}<p class="error" role="alert">{error}</p>{/if}
 {#if route === 'home'}
 	{#if importPreview}
-		<ImportPreview preview={importPreview} onCancel={cancelImportPreview} onConfirm={confirmImport} busy={importing} />
+		<ImportPreview preview={importPreview} onCancel={cancelImportPreview} onConfirm={confirmImport} busy={importing} step={importPhase === 'rescan' || importPhase === 'rescan-error' ? 5 : importing ? 4 : 3} error={importError} onRetryRescan={importPhase === 'rescan-error' ? () => void finishImportRescan() : null} />
 	{:else if importFormOpen}
-		<section class="flow-screen import-form-screen" aria-labelledby="import-heading">
-			<div class="eyebrow">Importação segura · escolha do escopo</div>
-			<h1 class="visually-hidden">Importar curso</h1>
-			<h2 id="import-heading">Escolha uma pasta de curso</h2>
-			<p>O servidor examina os arquivos e estados de acesso sem registrar o curso ou alterar a pasta de origem.</p>
-			<ImportSteps currentStep={previewingImport ? 2 : 1} />
-			<div class="flow-grid">
-				<section class="flow-card" aria-labelledby="import-scope-heading">
-					<h3 id="import-scope-heading">Escopo da descoberta</h3>
-					<p>Informe o caminho da pasta no servidor. A prévia mostra a estrutura encontrada antes de qualquer importação.</p>
-					<form class="flow-path-form" onsubmit={submitImport} aria-busy={previewingImport}>
-						<label for="import-path">Caminho da pasta do curso no servidor</label>
-						<input id="import-path" bind:value={importPath} placeholder="C:\cursos\Meu curso" required disabled={previewingImport} />
+		<section class="import-form-screen" aria-labelledby="import-heading">
+			<header class="page-head">
+				<h1 id="import-heading">Importar curso</h1>
+				<p class="sub">Informe a pasta no servidor para analisar o conteúdo antes de importar.</p>
+			</header>
+			<div class="import-layout">
+				<ImportSteps currentStep={previewingImport ? 2 : 1} />
+				<section class="import-card" aria-labelledby="import-scope-heading">
+					<form class="import-form" onsubmit={submitImport} aria-busy={previewingImport}>
+						<label class="form-field" for="import-path">Caminho da pasta do curso no servidor
+							<input id="import-path" name="import-path" class="field" bind:value={importPath} placeholder="C:\cursos\Meu curso" required disabled={previewingImport} autocomplete="off" spellcheck={false} aria-describedby={importError ? 'import-path-help import-path-error' : 'import-path-help'} aria-invalid={importError ? 'true' : undefined} />
+							<p class="small" id="import-path-help">Use um caminho acessível pelo servidor; ele pode ser diferente do caminho deste navegador.</p>
+						</label>
+						{#if importError}
+							<div class="import-error" id="import-path-error" role="alert">
+								<strong>Não foi possível analisar esta pasta</strong>
+								<p>{importError}</p>
+								<p class="small">Verifique o caminho e as permissões de leitura, depois tente novamente.</p>
+							</div>
+						{/if}
 						<div class="flow-actions">
 							<button class="primary" type="submit" disabled={previewingImport || importing} aria-busy={previewingImport}>{previewingImport ? 'Analisando…' : 'Analisar pasta'}</button>
 							<button type="button" onclick={() => (importFormOpen = false)} disabled={previewingImport || importing}>Cancelar</button>
 						</div>
 					</form>
 				</section>
-				<aside class="flow-card" aria-labelledby="import-safety-heading">
+				<aside class="import-help" aria-labelledby="import-safety-heading">
 					<h3 id="import-safety-heading">Importação segura</h3>
-					<div class="flow-status">
-						<div><strong>Somente leitura</strong>A análise não grava no catálogo nem altera a pasta.</div>
-						<div><strong>Confirmação explícita</strong>O curso só é registrado após revisar a prévia.</div>
-						<div><strong>Arquivos preservados</strong>Importar não move, renomeia ou apaga arquivos.</div>
-					</div>
+					<p>Somente leitura — a análise não grava no catálogo nem altera a pasta.</p>
+					<p>Confirmação explícita — o curso só é registrado após revisar a prévia.</p>
+					<p>Arquivos preservados — importar não move, renomeia ou apaga nada.</p>
 				</aside>
 			</div>
 		</section>
 	{:else}
-		<header class="intro library-intro row"><div><div class="eyebrow">Seu espaço de estudo</div><h1 class="title">Meus cursos</h1><p class="sub">Retome uma aula diretamente ou escolha outro curso.</p></div><div class="tools" role="group" aria-label="Ordenação e filtros do catálogo"><select class="btn library-sort" aria-label="Ordenar cursos" bind:value={courseSort}><option value="recent" disabled={!studyEnabled}>Recentes</option><option value="library">Ordem da biblioteca</option></select><button class="btn" type="button" aria-controls="course-filters" onclick={() => document.getElementById('course-filter-all')?.focus()} disabled={!catalog?.nodes.length}>Filtros</button></div></header>
-		{#if studySyncSupported && inProgressCourseIds.size}
-			<section class="recent-study" aria-labelledby="recent-heading">
-				<div class="row section-row"><h2 id="recent-heading" class="section-head">Continuar estudando</h2><span class="small">{inProgressCourseIds.size} {inProgressCourseIds.size === 1 ? 'curso em andamento' : 'cursos em andamento'} · atividade recente</span></div>
-				<ul class="resume-list">
-					{#each recentInProgressItems() as item, index}
-						{@const location = findLessonLocation(catalog, item.mediaId)}
-						{#if location}
-							<li class="resume-item">
-								<div class="cover" class:alt={index === 1} class:violet={index > 1} aria-hidden="true">{courseCover(location.courseTitle).monogram}</div>
-								<div class="resume-copy">
-									<h3>{location.courseTitle}</h3>
-									<p>{location.lesson.title} · {formatLocationContext(location.courseTitle, location.moduleTitle)} · Parou em {formatDuration(item.positionSeconds)}</p>
-								</div>
-								<a class="btn primary" href={href('player', location.courseId, location.lesson.path)}>Retomar aula</a>
-							</li>
-						{/if}
-					{/each}
-				</ul>
-			</section>
-		{/if}
-		{#if !canManage && catalog && catalog.nodes.length === 0}<p class="empty" role="status">Nenhum curso disponível. Peça ao administrador para importar um curso.</p>{/if}
-		{#if user.role === 'admin' && rescanMessage}<p class="catalog-message" aria-live="polite">{rescanMessage}</p>{/if}
-		{#if canManage}<input class="visually-hidden course-cover-input" type="file" accept={COVER_ACCEPT} bind:this={coverInput} onchange={pickCover} tabindex="-1" aria-hidden="true" />{/if}
-		{#if coverError}<p class="error" role="alert">{coverError}</p>{/if}
-		{#if coverMessage}<p class="catalog-message" role="status" aria-live="polite">{coverMessage}</p>{/if}
-		{#if catalog && catalog.nodes.length}
-			<div class="row courses-row">
-				<h2 id="courses-heading" class="courses-heading">Todos os cursos <span class="small">{filteredNodes.length}</span></h2>
-				<div class="tools course-filters" id="course-filters" role="group" aria-label="Filtrar cursos">
-					<button id="course-filter-all" class="btn" class:active={courseFilter === 'all'} aria-pressed={courseFilter === 'all'} onclick={() => (courseFilter = 'all')}>Tudo</button>
-					<button class="btn" class:active={courseFilter === 'in-progress'} aria-pressed={courseFilter === 'in-progress'} onclick={() => (courseFilter = 'in-progress')}>Em andamento</button>
-				</div>
+		<header class="page-head library-head">
+			<div>
+				<h1 class="title">Meus cursos</h1>
+				<p class="sub">Retome uma aula diretamente ou escolha outro curso.</p>
 			</div>
-			{#if filteredNodes.length}<ul class="course-grid" aria-labelledby="courses-heading">{#each filteredNodes as courseItem (courseItem.courseId ?? courseItem.path)}<li><CourseCard course={courseItem} profile={user.userId} mediaUrl={(file, courseId) => transport.mediaUrl(file, courseId)} manualCoverUrl={transport.coverUrl(courseIdOf(courseItem), courseItem.coverVersion ?? null)} {canManage} menuOpen={coverMenuId === courseIdOf(courseItem)} onMenuOpen={(open) => toggleCoverMenu(courseItem, open)} onChangeCover={requestCourseCover} onRemoveCover={removeCover} /></li>{/each}</ul>
-			{:else}<p class="empty" role="status">{courseFilter === 'in-progress' ? 'Nenhum curso em andamento.' : `Nenhum curso corresponde a “${catalogQuery.trim()}”.`}</p>{/if}
-		{:else if canManage}<div class="empty-state"><p class="empty">Nenhum curso por aqui ainda.</p><p class="intro">Clique em “Ações da biblioteca” para importar um curso. Nada é movido, alterado ou apagado — a pasta permanece somente leitura.</p></div>{/if}
-		{#if catalog && catalog.looseFiles.length}<LooseFiles files={catalog.looseFiles} heading="Arquivos soltos" />{/if}
-		{#if canManage}<footer class="admin"><span>Biblioteca local</span><details class="library-actions"><summary class="btn">Ações da biblioteca</summary><div class="home-actions">{#if transportKind === 'desktop'}<button class="primary" onclick={importCourse} disabled={importing} aria-busy={importing}>{importing ? 'Importando…' : 'Importar curso'}</button>{:else}<button class="primary" onclick={toggleImportForm} aria-expanded={importFormOpen} aria-busy={importing} disabled={importing || previewingImport}>{importing ? 'Importando…' : 'Importar curso'}</button>{/if}<button class="secondary" onclick={rescan} disabled={rescanning || !catalog || !catalog.nodes.length}>{rescanning ? 'Indexando…' : 'Indexar cursos'}</button></div></details></footer>{/if}
+			{#if catalog && catalog.nodes.length}
+				<div class="tools" role="group" aria-label="Ordenação e filtros do catálogo">
+					<select class="btn library-sort" aria-label="Ordenar cursos" bind:value={courseSort}>
+						<option value="recent" disabled={!studyEnabled}>Recentes</option>
+						<option value="library">Ordem da biblioteca</option>
+					</select>
+					<div class="course-filters" id="course-filters" role="group" aria-label="Filtrar cursos">
+						<button id="course-filter-all" class="btn" class:active={courseFilter === 'all'} aria-pressed={courseFilter === 'all'} onclick={() => (courseFilter = 'all')}>Tudo</button>
+						<button class="btn" class:active={courseFilter === 'in-progress'} aria-pressed={courseFilter === 'in-progress'} onclick={() => (courseFilter = 'in-progress')}>Em andamento</button>
+					</div>
+				</div>
+			{/if}
+		</header>
+		{#if catalog && catalog.nodes.length === 0}
+			{#if canManage}
+				<div class="welcome-block">
+					<div class="welcome-main">
+						<h2>Adicione seu primeiro curso</h2>
+						<p>Escolha uma pasta que já existe. Seus arquivos continuam no lugar.</p>
+						{#if transportKind === 'desktop'}
+							<button class="btn primary" type="button" onclick={importCourse} disabled={importing} aria-busy={importing}>{importing ? 'Importando…' : 'Importar curso'}</button>
+						{:else}
+							<button class="btn primary" type="button" onclick={toggleImportForm} disabled={importing || previewingImport} aria-busy={importing || previewingImport}>Importar curso</button>
+						{/if}
+						{#if importError}<p class="error" role="alert">{importError}</p>{/if}
+					</div>
+					<aside class="welcome-help">
+						<h3>Seus arquivos ficam onde estão</h3>
+						<ul>
+							<li>O LearnVault lê a pasta no lugar onde ela está.</li>
+							<li>Nada é movido, renomeado ou apagado.</li>
+							{#if transportKind === 'http'}<li>Você revisa a estrutura antes de importar.</li>{:else}<li>O desktop usa o seletor de pasta nativo do sistema.</li>{/if}
+						</ul>
+					</aside>
+				</div>
+			{:else}
+				<EmptyState title="Sua biblioteca ainda está vazia" description="Nenhum curso foi importado nesta instalação. Peça ao administrador para importar um curso pela área dele." />
+			{/if}
+		{:else}
+			{#if studySyncSupported && inProgressCourseIds.size}
+				<section class="recent-study" aria-labelledby="recent-heading">
+					<div class="row section-row"><h2 id="recent-heading" class="section-head">Continuar estudando</h2><span class="small">{inProgressCourseIds.size} {inProgressCourseIds.size === 1 ? 'curso em andamento' : 'cursos em andamento'} · atividade recente</span></div>
+					<ul class="resume-list">
+						{#each recentInProgressItems() as item, index}
+							{@const location = findLessonLocation(catalog, item.mediaId)}
+							{#if location}
+								<li class="resume-item">
+									<div class="cover" class:alt={index === 1} class:violet={index > 1} aria-hidden="true">{courseCover(location.courseTitle).monogram}</div>
+									<div class="resume-copy">
+										<h3>{location.courseTitle}</h3>
+										<p>{location.lesson.title} · {formatLocationContext(location.courseTitle, location.moduleTitle)} · Parou em {formatDuration(item.positionSeconds)}</p>
+									</div>
+									<a class="btn primary" href={href('player', location.courseId, location.lesson.path)}>Retomar aula</a>
+								</li>
+							{/if}
+						{/each}
+					</ul>
+				</section>
+			{/if}
+			{#if user.role === 'admin' && rescanMessage}<p class="catalog-message" aria-live="polite">{rescanMessage}</p>{/if}
+			{#if canManage}<input class="visually-hidden course-cover-input" type="file" accept={COVER_ACCEPT} bind:this={coverInput} onchange={pickCover} tabindex="-1" aria-hidden="true" />{/if}
+			{#if coverError}<p class="error" role="alert">{coverError}</p>{/if}
+			{#if coverMessage}<p class="catalog-message" role="status" aria-live="polite">{coverMessage}</p>{/if}
+			{#if catalog && catalog.nodes.length}
+				{#if filteredNodes.length}
+					<ul class="course-grid" aria-label="Todos os cursos">
+						{#each filteredNodes as courseItem (courseItem.courseId ?? courseItem.path)}
+							<li><CourseCard course={courseItem} profile={user.userId} mediaUrl={(file, courseId) => transport.mediaUrl(file, courseId)} manualCoverUrl={transport.coverUrl(courseIdOf(courseItem), courseItem.coverVersion ?? null)} {canManage} menuOpen={coverMenuId === courseIdOf(courseItem)} onMenuOpen={(open) => toggleCoverMenu(courseItem, open)} onChangeCover={requestCourseCover} onRemoveCover={removeCover} /></li>
+						{/each}
+					</ul>
+				{:else if catalogQuery.trim() !== ''}
+					<EmptyState title="Nenhum curso corresponde à busca" description={`Nada encontrado para “${catalogQuery.trim()}”. Ajuste o termo ou limpe a busca.`} action={{ label: 'Limpar busca', onClick: () => { catalogQuery = ''; courseFilter = 'all'; } }} />
+				{:else if courseFilter === 'in-progress'}
+					<EmptyState title="Nenhum curso em andamento" description="Você ainda não abriu nenhuma aula nesta instalação." action={{ label: 'Mostrar todos os cursos', onClick: () => (courseFilter = 'all') }} />
+				{/if}
+			{/if}
+			{#if catalog && catalog.looseFiles.length}<LooseFiles files={catalog.looseFiles} heading="Arquivos soltos" />{/if}
+			{#if canManage}
+				<div class="library-bar" aria-label="Ações da biblioteca">
+					<details class="library-actions">
+						<summary class="btn">Ações da biblioteca</summary>
+						<div class="home-actions">
+							{#if transportKind === 'desktop'}
+								<button class="primary" type="button" onclick={importCourse} disabled={importing} aria-busy={importing}>{importing ? 'Importando…' : 'Importar curso'}</button>
+							{:else}
+								<button class="primary" type="button" onclick={toggleImportForm} aria-expanded={importFormOpen} disabled={importing || previewingImport} aria-busy={importing || previewingImport}>Importar curso</button>
+							{/if}
+							<button class="secondary" type="button" onclick={rescan} disabled={rescanning || !catalog || !catalog.nodes.length}>{rescanning ? 'Indexando…' : 'Indexar cursos'}</button>
+						</div>
+					</details>
+				</div>
+			{/if}
+		{/if}
 	{/if}
-	{#if importError}<p class="error" role="alert">{importError}</p>{/if}
 {:else if route === 'course' && !watchRoute}
 	{#if !course}<section class="wrap"><h1>Curso não encontrado</h1><p class="empty" role="status">Não foi possível encontrar este curso no catálogo atual.</p></section>
 	{:else}
