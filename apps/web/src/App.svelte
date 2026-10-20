@@ -10,12 +10,13 @@
 	import PasswordField from './PasswordField.svelte';
 	import { lessonSections, neighboringLessons, type LessonSection } from './navigation';
 	import { destinationAfterLogin, findCourse, findLesson, findLessonLocation, href, locationFromHash, type Route } from './router';
- import { transport, transportKind, STUDY_NOT_AVAILABLE, type Catalog, type CatalogNode, type Lesson, type StudyAnalytics, type StudyProgress, type User } from './transport';
+ import { courseIdOf, isCoverFile, transport, transportKind, STUDY_NOT_AVAILABLE, type Catalog, type CatalogNode, type Lesson, type StudyAnalytics, type StudyProgress, type User } from './transport';
 	import { defaultRoute, resolveSession } from './session';
 	import { formatDuration, studySyncSupported } from './player';
 	import Brand from './Brand.svelte';
 	import ImportPreview from './ImportPreview.svelte';
 	import { applyTheme, persistThemeMode, readThemeMode, resolveTheme, type ThemeMode } from './theme';
+	import { courseCover } from './cover';
 
 	let themeMode: ThemeMode = readThemeMode(safeLocalStorage());
 	let systemDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
@@ -42,6 +43,23 @@
 	$: neighbors = course ? neighboringLessons([course], lessonPath) : { previous: null, next: null };
 	$: sections = course ? lessonSections([course]) : [];
 	$: lessonCount = sections.reduce((total, section) => total + section.lessons.length, 0);
+	$: courseCounts = course ? countCatalogNode(course) : null;
+	$: courseCoverArt = course ? courseCover(course.title) : null;
+	$: courseCoverFile = course?.looseFiles.find(isCoverFile) ?? null;
+	$: progressCourseIds = new Set(recent.map((item) => findLessonLocation(catalog, item.mediaId)?.courseId).filter((id): id is string => Boolean(id)));
+	$: visibleCourses = [...filteredNodes]
+		.filter((node) => courseFilter === 'all' || progressCourseIds.has(courseIdOf(node)))
+		.sort((left, right) => courseSort === 'title' ? left.title.localeCompare(right.title, 'pt-BR') : recentRank(left) - recentRank(right));
+	$: courseRecent = course
+		? recent.find((item) => findLessonLocation(catalog, item.mediaId)?.courseId === courseIdOf(course!)) ?? null
+		: null;
+	$: courseResumeLocation = courseRecent ? findLessonLocation(catalog, courseRecent.mediaId) : null;
+
+	function recentRank(node: CatalogNode): number {
+		const id = courseIdOf(node);
+		const index = recent.findIndex((item) => findLessonLocation(catalog, item.mediaId)?.courseId === id);
+		return index === -1 ? Number.MAX_SAFE_INTEGER : index;
+	}
 	let loading = true;
 	let authBusy = false;
 	let error = '';
@@ -70,6 +88,10 @@
 	let studyAnalytics: StudyAnalytics | null = null;
 	let recentLoading = false;
 	let studyEnabled = studySyncSupported;
+	let courseFilter: 'all' | 'progress' = 'all';
+	let courseSort: 'recent' | 'title' = 'recent';
+	let playerTab: 'curriculum' | 'notes' | 'materials' = 'curriculum';
+	let panelCollapsed = false;
 
 	// Só o admin importa e indexa: no servidor isso evita que um usuário comum aponte o
 	// servidor para pastas arbitrárias; no desktop a identidade local é admin.
@@ -83,7 +105,7 @@
 			resolvedTheme = resolveTheme(themeMode, systemDark);
 			applyTheme(document.documentElement, resolvedTheme);
 			const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
-			if (themeColor) themeColor.content = resolvedTheme === 'dark' ? '#0d2528' : '#eef4f1';
+			if (themeColor) themeColor.content = resolvedTheme === 'dark' ? '#14232b' : '#f2f5f7';
 		}
 	};
 	scheme?.addEventListener('change', updateSystemTheme);
@@ -121,7 +143,7 @@
 		resolvedTheme = resolveTheme(mode, systemDark);
 		applyTheme(document.documentElement, resolvedTheme);
 		const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
-		if (themeColor) themeColor.content = resolvedTheme === 'dark' ? '#0d2528' : '#eef4f1';
+		if (themeColor) themeColor.content = resolvedTheme === 'dark' ? '#14232b' : '#f2f5f7';
 		persistThemeMode(safeLocalStorage(), mode);
 	}
 	async function initialize() {
@@ -383,7 +405,7 @@
 			</form>
 		</section>
 	</main>
-{:else}<div class="shell"><header class="app-header"><div class="brand-lockup"><div class="brand"><Brand /> <span>LEARNVAULT</span></div><span class="header-kicker">MESA DE ESTUDO</span></div><nav class="global-nav" aria-label="Navegação principal"><a class:active={route === 'home'} href={href('home')}>Aprender</a><a class:active={route === 'settings'} href={href('settings')}>Configurações</a></nav><div class="header-search" aria-label="Busca"><span aria-hidden="true">⌕</span><span>Buscar cursos</span></div><div class="header-actions">{#if studySyncSupported}<a class="pomo-chip" href={href('home')}>Pomodoro <span>25:00</span></a>{/if}{#if user}<span class="user-chip" title={user.username}>{user.username.slice(0, 1).toUpperCase()}</span>{/if}{#if transportKind === 'http'}<button class="text-button" onclick={logout}>Sair</button>{/if}</div></header><div class="layout"><nav class="legacy-nav" aria-label="Navegação secundária"><p class="nav-label">Workspace</p><a class:active={route === 'home'} href={href('home')}><span aria-hidden="true">⌂</span> Início</a><a class:active={route === 'settings'} href={href('settings')}><span aria-hidden="true">◌</span> Configurações</a><div class="nav-note"><span class="status-dot" aria-hidden="true"></span><span>{transportKind === 'desktop' ? 'Modo offline' : 'Servidor conectado'}</span></div></nav><main class:home={route === 'home'}>{#if error}<p class="error" role="alert">{error}</p>{/if}
+{:else}<div class="shell"><header class="app-header"><div class="brand-lockup"><div class="brand"><Brand /> <span>LEARNVAULT</span></div><span class="header-kicker">MESA DE ESTUDO</span></div><nav class="global-nav" aria-label="Navegação principal"><a class:active={route === 'home'} href={href('home')}>Aprender</a><a class:active={route === 'settings'} href={href('settings')}>Configurações</a></nav><form class="header-search" role="search" onsubmit={(event) => { event.preventDefault(); location.hash = href('home'); }}><span aria-hidden="true">⌕</span><input aria-label="Buscar cursos" placeholder="Buscar cursos" bind:value={catalogQuery} /></form><div class="header-actions">{#if studySyncSupported}<Pomodoro />{/if}{#if user}<span class="user-chip" title={user.username}>{user.username.slice(0, 1).toUpperCase()}</span>{/if}{#if transportKind === 'http'}<button class="text-button" onclick={logout}>Sair</button>{/if}</div></header><div class="layout"><main class:home={route === 'home'}>{#if error}<p class="error" role="alert">{error}</p>{/if}
 {#if route === 'home'}
 	<div class="page-lead"><p class="eyebrow">Seu espaço de estudo</p><h1>Meus cursos</h1><p class="subhead">Retome uma aula diretamente ou escolha outro curso.</p></div>
 	{#if canManage || (catalog && catalog.nodes.length)}
@@ -398,17 +420,16 @@
 		</div>
 	{/if}
 	{#if studySyncSupported && studyAnalytics}<section class="study-analytics" aria-labelledby="analytics-heading"><h2 id="analytics-heading">Seu estudo</h2><dl><div><dt>Aulas acompanhadas</dt><dd>{studyAnalytics.trackedCount}</dd></div><div><dt>Concluídas</dt><dd>{studyAnalytics.completedCount}</dd></div><div><dt>Tempo estudado</dt><dd>{formatDuration(studyAnalytics.totalPositionSeconds)}</dd></div></dl></section>{/if}
-	{#if studySyncSupported}<Pomodoro />{/if}
-	{#if studySyncSupported && recent.length}<section class="recent-study" aria-labelledby="recent-heading"><div class="section-heading"><div><p class="eyebrow">Atividade recente</p><h2 id="recent-heading">Continuar estudando</h2></div><span class="small">{recent.length} cursos em andamento</span></div><ul>{#each recent as item}{@const location = findLessonLocation(catalog, item.mediaId)}<li>{#if location}<div class="resume-cover" aria-hidden="true">{location.courseTitle.slice(0, 2).toUpperCase()}</div><div class="recent-study-info"><a href={href('player', location.courseId, location.lesson.path)}>{location.courseTitle}</a><strong>{location.lesson.title}</strong><small title={formatLocationContext(location.courseTitle, location.moduleTitle)}>{formatLocationContext(location.courseTitle, location.moduleTitle)}</small><span class="resume-progress"><i style={`width:${item.completed ? 100 : Math.min(94, Math.max(8, item.positionSeconds % 100))}%`}></i></span></div><a class="resume-cta" href={href('player', location.courseId, location.lesson.path)}>{item.completed ? 'Revisar aula' : 'Retomar aula'} <span aria-hidden="true">→</span></a>{:else}<span>Mídia não disponível no catálogo</span>{/if}</li>{/each}</ul></section>{/if}
+	{#if studySyncSupported && recent.length}<section class="recent-study" aria-labelledby="recent-heading"><div class="section-heading"><div><p class="eyebrow">Atividade recente</p><h2 id="recent-heading">Continuar estudando</h2></div><span class="small">{recent.length} cursos em andamento</span></div><ul>{#each recent as item}{@const location = findLessonLocation(catalog, item.mediaId)}<li>{#if location}<div class="resume-cover" aria-hidden="true">{location.courseTitle.slice(0, 2).toUpperCase()}</div><div class="recent-study-info"><a href={href('player', location.courseId, location.lesson.path)}>{location.courseTitle}</a><strong>{location.lesson.title}</strong><small title={formatLocationContext(location.courseTitle, location.moduleTitle)}>{formatLocationContext(location.courseTitle, location.moduleTitle)}</small><small>{item.completed ? 'Aula concluída' : `Parou em ${formatDuration(item.positionSeconds)}`}</small></div><a class="resume-cta" href={href('player', location.courseId, location.lesson.path)}>{item.completed ? 'Revisar aula' : 'Retomar aula'} <span aria-hidden="true">→</span></a>{:else}<span>Mídia não disponível no catálogo</span>{/if}</li>{/each}</ul></section>{/if}
 	{#if !canManage && catalog && catalog.nodes.length === 0}<p class="empty" role="status">Nenhum curso disponível. Peça ao administrador para importar um curso.</p>{/if}
 	{#if user.role === 'admin' && importFormOpen && !importPreview}<form class="import-form" onsubmit={submitImport}><label for="import-path">Caminho da pasta do curso no servidor</label><input id="import-path" bind:value={importPath} placeholder="C:\cursos\Meu curso" required /><div class="import-form-actions"><button class="primary" disabled={previewingImport || importing} aria-busy={previewingImport}>{previewingImport ? 'Analisando…' : 'Analisar pasta'}</button><button type="button" class="text-button" onclick={() => (importFormOpen = false)}>Cancelar</button></div></form>{/if}
 	{#if importPreview}<ImportPreview preview={importPreview} onCancel={cancelImportPreview} onConfirm={confirmImport} busy={importing} />{/if}
 	{#if importError}<p class="error" role="alert">{importError}</p>{/if}
 	{#if user.role === 'admin' && rescanMessage}<p class="catalog-message" aria-live="polite">{rescanMessage}</p>{/if}
 	{#if catalog && catalog.nodes.length}
-	<div class="section-heading courses-heading"><h2 id="courses-heading">Todos os cursos</h2><div class="catalog-filters"><button class="secondary" type="button">Recentes⌄</button><button class="secondary" type="button">Filtros</button></div></div>
-	{#if filteredNodes.length}<ul class="course-grid" aria-labelledby="courses-heading">{#each filteredNodes as courseItem (courseItem.courseId ?? courseItem.path)}<li><CourseCard course={courseItem} /></li>{/each}</ul>
-		{:else}<p class="empty" role="status">Nenhum curso corresponde a “{catalogQuery.trim()}”.</p>{/if}
+	<div class="section-heading courses-heading"><h2 id="courses-heading">Todos os cursos</h2><div class="catalog-filters"><button class="secondary" type="button" onclick={() => (courseFilter = courseFilter === 'progress' ? 'all' : 'progress')} aria-pressed={courseFilter === 'progress'}>{courseFilter === 'progress' ? 'Em andamento' : 'Tudo'}</button><button class="secondary" type="button" onclick={() => (courseSort = courseSort === 'recent' ? 'title' : 'recent')}>{courseSort === 'recent' ? 'Recentes' : 'Título'}⌄</button></div></div>
+	{#if visibleCourses.length}<ul class="course-grid" aria-labelledby="courses-heading">{#each visibleCourses as courseItem (courseItem.courseId ?? courseItem.path)}<li><CourseCard course={courseItem} /></li>{/each}</ul>
+		{:else}<p class="empty" role="status">{catalogQuery.trim() ? `Nenhum curso corresponde a “${catalogQuery.trim()}”.` : 'Nenhum curso em andamento.'}</p>{/if}
 	{:else if canManage}<div class="empty-state"><p class="empty">Nenhum curso por aqui ainda.</p><p class="intro">Clique em “Importar curso” e escolha a pasta de um curso. Nada é movido, alterado ou apagado — a pasta permanece somente leitura.</p></div>{/if}
 	{#if catalog && catalog.looseFiles.length}<LooseFiles files={catalog.looseFiles} heading="Arquivos soltos" />{/if}
 {:else if route === 'settings'}<h1>Preferências</h1><p class="intro">Escolha como o LearnVault aparece neste dispositivo.</p><fieldset class="theme-options"><legend>Tema</legend><label><input type="radio" name="theme" value="system" checked={themeMode === 'system'} onchange={() => changeTheme('system')} />Sistema <span>Acompanha a preferência do sistema.</span></label><label><input type="radio" name="theme" value="light" checked={themeMode === 'light'} onchange={() => changeTheme('light')} />Claro <span>Usa sempre o tema claro.</span></label><label><input type="radio" name="theme" value="dark" checked={themeMode === 'dark'} onchange={() => changeTheme('dark')} />Escuro <span>Usa sempre o tema escuro.</span></label></fieldset><p class="theme-status" aria-live="polite">Tema atual: {resolvedTheme === 'dark' ? 'escuro' : 'claro'}{themeMode === 'system' ? ' (sistema)' : ''}</p><section class="account-settings" aria-labelledby="account-heading"><h2 id="account-heading">Conta</h2><p><strong>{user.username}</strong> · {user.isAdmin ? 'Administrador' : 'Estudante'}</p><form class="credentials-form" onsubmit={credentials}><fieldset class="auth-fields" disabled={authBusy}><legend>Credenciais de acesso</legend><PasswordField id="settings-current-password" label="Senha atual" autocomplete="current-password" bind:value={currentPassword} /><label class="form-field" for="settings-new-username">Novo usuário<input id="settings-new-username" autocomplete="username" bind:value={username} required /></label><PasswordField id="settings-new-password" label="Nova senha" autocomplete="new-password" bind:value={password} minLength={12} hint="Use ao menos 12 caracteres." />{#if accountError}<p class="error" role="alert">{accountError}</p>{/if}{#if accountStatus}<p class="catalog-message" role="status">{accountStatus}</p>{/if}<button type="submit" disabled={authBusy} aria-busy={authBusy}>{authBusy ? 'Salvando…' : 'Atualizar credenciais'}</button></fieldset></form>{#if transportKind === 'http'}<button class="text-button" onclick={logout}>Encerrar sessão</button>{:else}<p class="catalog-message">Biblioteca local neste dispositivo.</p>{/if}</section>
@@ -416,20 +437,72 @@
 	<a class="back" href={href('home')}>← Início</a>
 	{#if !course}<h1>Curso não encontrado</h1><p class="empty" role="status">Não foi possível encontrar este curso no catálogo atual. Ele pode ter sido removido.</p>
 	{:else}
-		<header class="course-page-header"><h1>{course.title}</h1>{#if courseMeta}<p class="course-meta">{courseMeta}</p>{/if}</header>
+		<header class="course-hero">
+			<div class="course-hero-wrap">
+				<div>
+					<p class="course-breadcrumb"><a href={href('home')}>Meus cursos</a><span aria-hidden="true"> / </span>{course.title}</p>
+					<h1>{course.title}</h1>
+					{#if courseMeta}<p class="course-description">{courseMeta}</p>{/if}
+					<div class="course-stats"><span>{courseCounts?.modules ?? 0} módulos</span><span>{courseCounts?.lessons ?? 0} aulas</span><span>{courseCounts?.materials ?? 0} materiais</span></div>
+				</div>
+				<div class="course-hero-cover" style:--cover-from={courseCoverArt?.from ?? '#20343d'} style:--cover-to={courseCoverArt?.to ?? '#276f73'} aria-hidden="true">
+					{#if courseCoverFile && transport.mediaUrl(courseCoverFile, course.courseId ?? course.path)}<img src={transport.mediaUrl(courseCoverFile, course.courseId ?? course.path) ?? ''} alt="" loading="lazy" />{:else}<span>{courseCoverArt?.monogram ?? course.title.slice(0, 2).toUpperCase()}</span>{/if}
+				</div>
+			</div>
+		</header>
+		<div class="overview-grid"><div class="course-outline">
 		{#if canManage || user}<div class="course-actions">{#if user}<button class="secondary" onclick={() => (organizingCatalog = !organizingCatalog)} aria-pressed={organizingCatalog}>{organizingCatalog ? 'Concluir organização' : 'Organizar aulas'}</button>{/if}{#if canManage}{#if removeConfirm}<span class="remove-question" role="alert">Remover “{course.title}” da biblioteca? Os arquivos não serão apagados.</span><button class="text-button danger" onclick={removeCourse} disabled={removing} aria-busy={removing}>{removing ? 'Removendo…' : 'Remover curso'}</button><button class="text-button" onclick={() => (removeConfirm = false)} disabled={removing}>Cancelar</button>{:else}<button class="text-button" onclick={() => (removeConfirm = true)}>Remover curso</button><button class="text-button" onclick={rescan} disabled={rescanning}>{rescanning ? 'Indexando…' : 'Indexar cursos'}</button>{/if}{/if}</div>{/if}
 		{#if removeError}<p class="error" role="alert">{removeError}</p>{/if}
 		{#if rescanMessage}<p class="catalog-message" aria-live="polite">{rescanMessage}</p>{/if}
 		{#if catalogOrderMessage}<p class:error={catalogOrderError} class="catalog-message" role={catalogOrderError ? 'alert' : 'status'}>{catalogOrderMessage}</p>{/if}
 		{#if course.looseFiles.length}<LooseFiles files={course.looseFiles} heading="Arquivos soltos" courseId={course.courseId ?? course.path} />{/if}
 		{#if course.children.length}<CatalogTree nodes={course.children} courseId={course.courseId ?? course.path} organizing={organizingCatalog} orderSaving={catalogOrderSaving} onSaveOrder={saveCatalogOrder} onResetOrder={resetCatalogOrder} />{:else}<p class="empty" role="status">Este curso ainda não foi indexado. Use “Indexar cursos” para montar o catálogo.</p>{/if}
+		</div>
+		<aside class="resume-box" aria-label="Seu progresso neste curso">
+			<h3>Seu progresso</h3>
+			{#if courseResumeLocation}
+				<p class="small">Última aula</p>
+				<p class="resume-lesson"><strong>{courseResumeLocation.lesson.title}</strong><span>{formatLocationContext(courseResumeLocation.courseTitle, courseResumeLocation.moduleTitle)}</span></p>
+				<a class="primary" href={href('player', courseResumeLocation.courseId, courseResumeLocation.lesson.path)}>Retomar aula</a>
+			{:else}
+				<p class="small">Este curso ainda não tem atividade registrada.</p>
+				{#if sections[0]?.lessons[0]}<a class="primary" href={href('player', course.courseId ?? course.path, sections[0].lessons[0].path)}>Começar curso</a>{/if}
+			{/if}
+			<div class="mini-stat"><span>Módulos</span><b>{courseCounts?.modules ?? 0}</b></div>
+			<div class="mini-stat"><span>Aulas</span><b>{courseCounts?.lessons ?? 0}</b></div>
+			<div class="mini-stat"><span>Materiais</span><b>{courseCounts?.materials ?? 0}</b></div>
+		</aside>
+	</div>
 	{/if}
 {:else}
 	{#if !lesson}<h1>Aula não encontrada</h1><p class="empty" role="status">Não foi possível encontrar esta aula no catálogo atual.</p>{:else}
 		<a class="back" href={course ? href('course', course.courseId ?? course.path) : href('home')}>← {course ? course.title : 'Início'}</a>
 		<h1>{lesson.title}</h1>
-		<div class="study-player-layout"><section class="study-stage"><Player {lesson} courseId={courseId ?? ''} {mediaError} onMediaError={mediaFailed} {studyEnabled} /><nav class="lesson-nav" aria-label="Aulas vizinhas">{#if neighbors.previous}<a href={href('player', courseId ?? '', neighbors.previous.path)}>← Aula anterior</a>{/if}{#if neighbors.next}<a href={href('player', courseId ?? '', neighbors.next.path)}>Próxima aula →</a>{/if}</nav></section><aside class="player-panel"><div class="player-tools"><span class="grip" aria-hidden="true"></span><span>Painel lateral · currículo</span><button class="text-button" type="button" aria-label="Recolher painel" title="Painel visual nesta versão">− Recolher</button></div><div class="player-tabs" role="tablist" aria-label="Conteúdo da aula"><button class="active" type="button" role="tab" aria-selected="true">Currículo</button><button type="button" role="tab" aria-selected="false">Anotações</button><button type="button" role="tab" aria-selected="false">Materiais</button></div>{#if lessonCount > 1}<nav class="lesson-index" aria-label="Índice de aulas"><h2>Conteúdo do curso</h2><div class="lesson-index-body">{#each sections as section}{#if section.title}<h3>{section.title}</h3>{/if}<ol>{#each section.lessons as lessonItem}<li><a class:active={lessonItem.path === lesson.path} href={href('player', courseId ?? '', lessonItem.path)} aria-current={lessonItem.path === lesson.path ? 'page' : undefined} use:revealActive={lessonItem.path === lesson.path}>{lessonItem.title}</a></li>{/each}</ol>{/each}</div></nav>{/if}<p class="panel-note">Anotações e materiais da aula aparecem abaixo do player.</p></aside></div>
-		{#if neighbors.previous || neighbors.next}<nav class="lesson-nav" aria-label="Aulas vizinhas">{#if neighbors.previous}<a href={href('player', courseId ?? '', neighbors.previous.path)}>← {neighbors.previous.title}</a>{/if}{#if neighbors.next}<a href={href('player', courseId ?? '', neighbors.next.path)}>{neighbors.next.title} →</a>{/if}</nav>{/if}
+		<h1 class="player-page-title">{lesson.title}</h1>
+		<div class:collapsed={panelCollapsed} class="study-player-layout">
+			<section class="study-stage">
+				<Player {lesson} courseId={courseId ?? ''} {mediaError} onMediaError={mediaFailed} {studyEnabled} materialsInPanel={!panelCollapsed} />
+				<nav class="lesson-nav" aria-label="Aulas vizinhas">{#if neighbors.previous}<a href={href('player', courseId ?? '', neighbors.previous.path)}>← Aula anterior</a>{/if}{#if neighbors.next}<a href={href('player', courseId ?? '', neighbors.next.path)}>Próxima aula →</a>{/if}</nav>
+				{#if panelCollapsed}<button class="panel-reopen secondary" type="button" onclick={() => (panelCollapsed = false)}>Mostrar painel</button>{/if}
+			</section>
+			{#if !panelCollapsed}
+				<aside class="player-panel">
+					<div class="player-tools"><span class="grip" aria-hidden="true"></span><span>Painel lateral</span><button class="text-button" type="button" onclick={() => (panelCollapsed = true)}>− Recolher</button></div>
+					<div class="player-tabs" role="group" aria-label="Conteúdo da aula">
+						<button class:active={playerTab === 'curriculum'} type="button" aria-pressed={playerTab === 'curriculum'} onclick={() => (playerTab = 'curriculum')}>Currículo</button>
+						<button class:active={playerTab === 'notes'} type="button" aria-pressed={playerTab === 'notes'} onclick={() => (playerTab = 'notes')}>Anotações</button>
+						<button class:active={playerTab === 'materials'} type="button" aria-pressed={playerTab === 'materials'} onclick={() => (playerTab = 'materials')}>Materiais</button>
+					</div>
+					{#if playerTab === 'curriculum'}
+						{#if lessonCount > 1}<nav class="lesson-index" aria-label="Índice de aulas"><h2>Conteúdo do curso</h2><div class="lesson-index-body">{#each sections as section}{#if section.title}<h3>{section.title}</h3>{/if}<ol>{#each section.lessons as lessonItem}<li><a class:active={lessonItem.path === lesson.path} href={href('player', courseId ?? '', lessonItem.path)} aria-current={lessonItem.path === lesson.path ? 'page' : undefined} use:revealActive={lessonItem.path === lesson.path}>{lessonItem.title}</a></li>{/each}</ol>{/each}</div></nav>{:else}<p class="panel-empty">Esta aula não possui outras aulas no curso.</p>{/if}
+					{:else if playerTab === 'notes'}
+						<p class="panel-empty">As anotações por aula ainda não estão disponíveis nesta versão. Seu progresso e seus materiais continuam preservados.</p>
+					{:else}
+						<div class="panel-materials"><LooseFiles files={[...lesson.subtitles, ...lesson.materials]} heading="Materiais da aula" courseId={courseId ?? ''} /></div>
+					{/if}
+				</aside>
+			{/if}
+		</div>
 	{/if}
 {/if}
 </main></div></div>{/if}

@@ -4,7 +4,7 @@
 	import { createPositionSaver } from './study';
 	import { transport, type Lesson, type StudyProgress } from './transport';
 
-	let { lesson, courseId, mediaError, onMediaError, studyEnabled = true }: { lesson: Lesson; courseId: string; mediaError: string; onMediaError: () => void; studyEnabled?: boolean } = $props();
+	let { lesson, courseId, mediaError, onMediaError, studyEnabled = true, materialsInPanel = false }: { lesson: Lesson; courseId: string; mediaError: string; onMediaError: () => void; studyEnabled?: boolean; materialsInPanel?: boolean } = $props();
 
 	const playable = $derived(selectPlayableMedia(lesson.media));
 	const availability = $derived(mediaAvailability(lesson.media));
@@ -181,4 +181,4 @@
 	</div>
 {/if}
 {#if captionMessage}<p class="empty" role="status">{captionMessage}{#if captionDownload} <a href={captionDownload} download>Baixar legenda</a>{/if}</p>{/if}
-<LooseFiles files={[...lesson.subtitles, ...lesson.materials]} heading="Materiais" {courseId} />
+{#if !materialsInPanel}<LooseFiles files={[...lesson.subtitles, ...lesson.materials]} heading="Materiais" {courseId} />{/if}
