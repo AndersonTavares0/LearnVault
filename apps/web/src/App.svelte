@@ -57,6 +57,10 @@
 	let removing = false;
 	let removeConfirm = false;
 	let removeError = '';
+	let organizingCatalog = false;
+	let catalogOrderSaving = false;
+	let catalogOrderMessage = '';
+	let catalogOrderError = false;
 	let mediaError = '';
 	let recent: StudyProgress[] = [];
 	let recentLoading = false;
@@ -88,6 +92,8 @@
 			lesson = findLesson(catalog, courseId, lessonPath);
 			removeConfirm = false;
 			removeError = '';
+			organizingCatalog = false;
+			catalogOrderMessage = '';
 			mediaError = '';
 		};
 		window.addEventListener('hashchange', change);
@@ -260,6 +266,40 @@
 		}
 	}
 
+	async function saveCatalogOrder(parentPath: string, childPaths: string[]) {
+		if (!course) return;
+		catalogOrderSaving = true;
+		catalogOrderMessage = '';
+		catalogOrderError = false;
+		try {
+			await transport.saveCatalogOrder(course.courseId ?? course.path, parentPath, childPaths);
+			syncCatalog(await transport.catalog());
+			catalogOrderMessage = 'Ordem salva.';
+		} catch (cause) {
+			catalogOrderError = true;
+			catalogOrderMessage = cause instanceof Error ? cause.message : 'Não foi possível salvar a ordem.';
+		} finally {
+			catalogOrderSaving = false;
+		}
+	}
+
+	async function resetCatalogOrder(parentPath: string) {
+		if (!course || !window.confirm('Restaurar a ordem automática desta lista?')) return;
+		catalogOrderSaving = true;
+		catalogOrderMessage = '';
+		catalogOrderError = false;
+		try {
+			await transport.resetCatalogOrder(course.courseId ?? course.path, parentPath);
+			syncCatalog(await transport.catalog());
+			catalogOrderMessage = 'Ordem automática restaurada.';
+		} catch (cause) {
+			catalogOrderError = true;
+			catalogOrderMessage = cause instanceof Error ? cause.message : 'Não foi possível restaurar a ordem.';
+		} finally {
+			catalogOrderSaving = false;
+		}
+	}
+
 	async function loadRecent() {
 		if (!studySyncSupported) return;
 		recentLoading = true;
@@ -350,11 +390,12 @@
 	{#if !course}<h1>Curso não encontrado</h1><p class="empty" role="status">Não foi possível encontrar este curso no catálogo atual. Ele pode ter sido removido.</p>
 	{:else}
 		<header class="course-page-header"><h1>{course.title}</h1>{#if courseMeta}<p class="course-meta">{courseMeta}</p>{/if}</header>
-		{#if canManage}<div class="course-actions">{#if removeConfirm}<span class="remove-question" role="alert">Remover “{course.title}” da biblioteca? Os arquivos não serão apagados.</span><button class="text-button danger" onclick={removeCourse} disabled={removing} aria-busy={removing}>{removing ? 'Removendo…' : 'Remover curso'}</button><button class="text-button" onclick={() => (removeConfirm = false)} disabled={removing}>Cancelar</button>{:else}<button class="text-button" onclick={() => (removeConfirm = true)}>Remover curso</button><button class="text-button" onclick={rescan} disabled={rescanning}>{rescanning ? 'Indexando…' : 'Indexar cursos'}</button>{/if}</div>{/if}
+		{#if canManage || user}<div class="course-actions">{#if user}<button class="secondary" onclick={() => (organizingCatalog = !organizingCatalog)} aria-pressed={organizingCatalog}>{organizingCatalog ? 'Concluir organização' : 'Organizar aulas'}</button>{/if}{#if canManage}{#if removeConfirm}<span class="remove-question" role="alert">Remover “{course.title}” da biblioteca? Os arquivos não serão apagados.</span><button class="text-button danger" onclick={removeCourse} disabled={removing} aria-busy={removing}>{removing ? 'Removendo…' : 'Remover curso'}</button><button class="text-button" onclick={() => (removeConfirm = false)} disabled={removing}>Cancelar</button>{:else}<button class="text-button" onclick={() => (removeConfirm = true)}>Remover curso</button><button class="text-button" onclick={rescan} disabled={rescanning}>{rescanning ? 'Indexando…' : 'Indexar cursos'}</button>{/if}{/if}</div>{/if}
 		{#if removeError}<p class="error" role="alert">{removeError}</p>{/if}
 		{#if rescanMessage}<p class="catalog-message" aria-live="polite">{rescanMessage}</p>{/if}
+		{#if catalogOrderMessage}<p class:error={catalogOrderError} class="catalog-message" role={catalogOrderError ? 'alert' : 'status'}>{catalogOrderMessage}</p>{/if}
 		{#if course.looseFiles.length}<LooseFiles files={course.looseFiles} heading="Arquivos soltos" courseId={course.courseId ?? course.path} />{/if}
-		{#if course.children.length}<CatalogTree nodes={course.children} courseId={course.courseId ?? course.path} />{:else}<p class="empty" role="status">Este curso ainda não foi indexado. Use “Indexar cursos” para montar o catálogo.</p>{/if}
+		{#if course.children.length}<CatalogTree nodes={course.children} courseId={course.courseId ?? course.path} organizing={organizingCatalog} orderSaving={catalogOrderSaving} onSaveOrder={saveCatalogOrder} onResetOrder={resetCatalogOrder} />{:else}<p class="empty" role="status">Este curso ainda não foi indexado. Use “Indexar cursos” para montar o catálogo.</p>{/if}
 	{/if}
 {:else}
 	{#if !lesson}<h1>Aula não encontrada</h1><p class="empty" role="status">Não foi possível encontrar esta aula no catálogo atual.</p>{:else}

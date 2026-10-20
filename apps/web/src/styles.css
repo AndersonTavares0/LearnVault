@@ -45,3 +45,4 @@ div.lesson-row:hover,div.lesson-row:active{background-color:transparent;color:va
 .login-page .auth-fields{gap:18px}
 @media(max-width:420px){.login-page{padding:28px 20px}}
 @media(max-height:560px){.login-page{align-content:start;padding-top:28px;padding-bottom:28px}}
+.catalog-order-controls{display:flex;flex-wrap:wrap;align-items:center;gap:6px;width:max-content;max-width:100%;margin:5px 0 10px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}.catalog-order-controls button{min-width:36px;min-height:36px;padding:6px 9px;border-radius:6px}.catalog-order-controls button:disabled{opacity:.5;cursor:not-allowed}.course-actions .secondary[aria-pressed=true]{background:var(--hover);border-color:var(--accent)}

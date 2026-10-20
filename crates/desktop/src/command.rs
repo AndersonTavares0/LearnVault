@@ -12,7 +12,7 @@
 
 use std::path::PathBuf;
 
-use learnvault_core::Database;
+use learnvault_core::{CatalogNode, Database, NodeRole};
 use tauri::State;
 
 use crate::config::DesktopConfigDto;
@@ -52,14 +52,23 @@ pub fn catalog(database: &Database, courses: &[CourseEntry]) -> Result<CatalogDt
     for course in courses {
         let inner = learnvault_core::build_catalog(database, &course.id)
             .map_err(|_| IpcError::catalog_unavailable())?;
+        let mut categories: Vec<_> = inner
+            .categories
+            .into_iter()
+            .map(learnvault_core::course_file_lessons)
+            .collect();
+        learnvault_core::apply_saved_catalog_order(
+            database,
+            crate::study::LOCAL_OWNER_ID,
+            &course.id,
+            &mut categories,
+            "",
+        )
+        .map_err(|_| IpcError::catalog_unavailable())?;
         let shaped = learnvault_core::Catalog {
             complete: inner.complete,
             loose_files: inner.loose_files,
-            categories: inner
-                .categories
-                .into_iter()
-                .map(learnvault_core::course_file_lessons)
-                .collect(),
+            categories,
         };
         complete = complete && shaped.complete;
         nodes.push(CatalogNodeDto::course(&course.id, &course.title(), shaped));
@@ -74,6 +83,116 @@ pub fn catalog(database: &Database, courses: &[CourseEntry]) -> Result<CatalogDt
     })
 }
 
+/// Salva a ordem de uma lista de irmãos real do catálogo local.
+///
+/// O dono é fixo no Rust. O webview só pode apontar para um curso registrado, um pai
+/// reordenável e a permutação exata dos caminhos relativos que aparecem como irmãos.
+pub fn reorder_catalog(
+    database: &Database,
+    courses: &[CourseEntry],
+    course_id: &str,
+    parent_path: &str,
+    child_paths: &[String],
+) -> Result<(), IpcError> {
+    let course = courses
+        .iter()
+        .find(|course| course.id == course_id)
+        .ok_or_else(IpcError::invalid_catalog_order)?;
+    let siblings = reorderable_siblings(database, course, parent_path)?
+        .ok_or_else(IpcError::invalid_catalog_order)?;
+    if !same_paths(&siblings, child_paths) {
+        return Err(IpcError::invalid_catalog_order());
+    }
+    let child_paths: Vec<_> = child_paths.iter().map(String::as_str).collect();
+    learnvault_core::persist_catalog_order(
+        database,
+        crate::study::LOCAL_OWNER_ID,
+        &course.id,
+        parent_path,
+        &child_paths,
+    )
+    .map_err(|error| match error {
+        learnvault_core::Error::InvalidCatalogOrder => IpcError::invalid_catalog_order(),
+        _ => IpcError::database_unavailable(),
+    })
+}
+
+/// Remove somente a preferência da lista selecionada no catálogo local.
+pub fn reset_catalog_order(
+    database: &Database,
+    courses: &[CourseEntry],
+    course_id: &str,
+    parent_path: &str,
+) -> Result<(), IpcError> {
+    let course = courses
+        .iter()
+        .find(|course| course.id == course_id)
+        .ok_or_else(IpcError::invalid_catalog_order)?;
+    reorderable_siblings(database, course, parent_path)?
+        .ok_or_else(IpcError::invalid_catalog_order)?;
+    learnvault_core::reset_catalog_order(
+        database,
+        crate::study::LOCAL_OWNER_ID,
+        &course.id,
+        parent_path,
+    )
+    .map_err(|error| match error {
+        learnvault_core::Error::InvalidCatalogOrder => IpcError::invalid_catalog_order(),
+        _ => IpcError::database_unavailable(),
+    })
+}
+
+fn reorderable_siblings(
+    database: &Database,
+    course: &CourseEntry,
+    parent_path: &str,
+) -> Result<Option<Vec<String>>, IpcError> {
+    let catalog = learnvault_core::build_catalog(database, &course.id)
+        .map_err(|_| IpcError::database_unavailable())?;
+    let mut roots: Vec<_> = catalog
+        .categories
+        .into_iter()
+        .map(learnvault_core::course_file_lessons)
+        .collect();
+    if parent_path.is_empty() {
+        return Ok(Some(roots.into_iter().map(|node| node.path).collect()));
+    }
+    let Some(parent) = find_node_mut(&mut roots, parent_path) else {
+        return Ok(None);
+    };
+    if !matches!(parent.role, NodeRole::Category | NodeRole::Module) {
+        return Ok(None);
+    }
+    Ok(Some(
+        parent
+            .children
+            .iter()
+            .map(|node| node.path.clone())
+            .collect(),
+    ))
+}
+
+fn find_node_mut<'a>(nodes: &'a mut [CatalogNode], path: &str) -> Option<&'a mut CatalogNode> {
+    for node in nodes {
+        if node.path == path {
+            return Some(node);
+        }
+        if let Some(found) = find_node_mut(&mut node.children, path) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+fn same_paths(existing: &[String], requested: &[String]) -> bool {
+    if existing.len() != requested.len() {
+        return false;
+    }
+    let existing: std::collections::HashSet<_> = existing.iter().collect();
+    let requested: std::collections::HashSet<_> = requested.iter().collect();
+    existing.len() == requested.len() && existing == requested
+}
+
 /// Comando IPC: devolve o catálogo do desktop.
 ///
 /// O comando é `async` de propósito: um comando síncrono do Tauri roda na main thread do
@@ -86,6 +205,37 @@ pub async fn desktop_catalog(state: State<'_, DesktopState>) -> Result<CatalogDt
     tauri::async_runtime::spawn_blocking(move || state.catalog())
         .await
         .map_err(|_| IpcError::database_unavailable())?
+}
+
+/// Comando IPC: persiste a ordem enviada para os irmãos atualmente exibidos.
+#[tauri::command]
+pub async fn desktop_reorder_catalog(
+    state: State<'_, DesktopState>,
+    course_id: String,
+    parent_path: String,
+    child_paths: Vec<String>,
+) -> Result<(), IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        state.reorder_catalog(&course_id, &parent_path, &child_paths)
+    })
+    .await
+    .map_err(|_| IpcError::database_unavailable())?
+}
+
+/// Comando IPC: restaura a ordenação natural somente para a lista selecionada.
+#[tauri::command]
+pub async fn desktop_reset_catalog_order(
+    state: State<'_, DesktopState>,
+    course_id: String,
+    parent_path: String,
+) -> Result<(), IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        state.reset_catalog_order(&course_id, &parent_path)
+    })
+    .await
+    .map_err(|_| IpcError::database_unavailable())?
 }
 
 /// Comando IPC: abre o seletor nativo e registra a pasta escolhida como um curso.

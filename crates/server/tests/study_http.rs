@@ -772,7 +772,7 @@ async fn credentials_pending_flag_blocks_study_until_changed() {
     );
 }
 
-/// Uma base persistida já sai da cadeia de migrações na versão 4 e **já contém**
+/// Uma base persistida já sai da cadeia de migrações na versão 5 e **já contém**
 /// `study_state`: a tabela nasce na migração V1 (a primeira da cadeia), então nenhuma
 /// migração nova é necessária para bancos existentes. Este teste prova isso no arquivo
 /// real (não em memória) e verifica as restrições que o adaptador HTTP depende.
@@ -786,7 +786,7 @@ async fn an_existing_v4_database_already_carries_study_state_and_its_constraints
         .connection()
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 4, "o formato persistido permanece na versão 4");
+    assert_eq!(version, 5, "o formato persistido permanece na versão 5");
     let present: i64 = db
         .connection()
         .query_row(
@@ -797,7 +797,7 @@ async fn an_existing_v4_database_already_carries_study_state_and_its_constraints
         .unwrap();
     assert_eq!(
         present, 1,
-        "a versão 4 já contém study_state; nenhuma migração nova é necessária"
+        "a versão 5 já contém study_state; nenhuma migração nova é necessária"
     );
 
     // Chave estrangeira: uma mídia inexistente é recusada e nada é gravado.

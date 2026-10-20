@@ -11,7 +11,7 @@ use rusqlite_migration::{M, Migrations};
 /// A recusa de um schema mais novo não depende desta constante — ela vem de
 /// `SchemaVersion::Outside` —, mas ela deve acompanhar a cadeia de migrações porque
 /// aparece na mensagem de diagnóstico de [`crate::Error::SchemaTooNew`].
-pub(crate) const SCHEMA_VERSION: usize = 4;
+pub(crate) const SCHEMA_VERSION: usize = 5;
 
 /// Versão 1: bibliotecas, mídia, varreduras e estado de estudo.
 ///
@@ -139,7 +139,20 @@ const V4: &str = "
 ALTER TABLE user ADD COLUMN must_change_credentials INTEGER NOT NULL DEFAULT 0 CHECK (must_change_credentials IN (0, 1));
 ";
 
-const MIGRATIONS_SLICE: &[M<'static>] = &[M::up(V1), M::up(V2), M::up(V3), M::up(V4)];
+/// Versão 5: ordem manual do catálogo, isolada por dono, biblioteca e lista de irmãos.
+const V5: &str = "
+CREATE TABLE catalog_order (
+    owner_id TEXT NOT NULL CHECK (length(owner_id) > 0),
+    library_id TEXT NOT NULL REFERENCES library (library_id) ON DELETE NO ACTION,
+    parent_path TEXT NOT NULL,
+    child_path TEXT NOT NULL,
+    position INTEGER NOT NULL CHECK (position >= 0),
+    PRIMARY KEY (owner_id, library_id, parent_path, child_path),
+    UNIQUE (owner_id, library_id, parent_path, position)
+);
+";
+
+const MIGRATIONS_SLICE: &[M<'static>] = &[M::up(V1), M::up(V2), M::up(V3), M::up(V4), M::up(V5)];
 
 /// Cadeia de migrações aplicada por [`crate::db::Database`].
 pub(crate) const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATIONS_SLICE);

@@ -112,6 +112,16 @@ impl Database {
                     &self.conn,
                     "media",
                     &[("library_id", "BINARY"), ("relative_path_key", "BINARY")],
+                )?
+                && unique_index_matches(
+                    &self.conn,
+                    "catalog_order",
+                    &[
+                        ("owner_id", "BINARY"),
+                        ("library_id", "BINARY"),
+                        ("parent_path", "BINARY"),
+                        ("position", "BINARY"),
+                    ],
                 )?,
         )
     }
@@ -230,6 +240,16 @@ const REQUIRED_TABLES: &[TableDefinition] = &[
             ("removed_at", "INTEGER", true, None, 0),
         ],
     },
+    TableDefinition {
+        name: "catalog_order",
+        columns: &[
+            ("owner_id", "TEXT", true, None, 1),
+            ("library_id", "TEXT", true, None, 2),
+            ("parent_path", "TEXT", true, None, 3),
+            ("child_path", "TEXT", true, None, 4),
+            ("position", "INTEGER", true, None, 0),
+        ],
+    },
 ];
 
 fn definition_matches(conn: &Connection, definition: &TableDefinition) -> Result<bool> {
@@ -339,6 +359,7 @@ fn expected_checks(table: &str) -> &'static [&'static str] {
         "scan" => &["status in ('completed', 'failed')", "complete in (0, 1)"],
         "study_state" => &["completed in (0, 1)"],
         "user" => &["is_admin in (0, 1)", "must_change_credentials in (0, 1)"],
+        "catalog_order" => &["length(owner_id) > 0", "position >= 0"],
         _ => &[],
     }
 }
@@ -359,6 +380,7 @@ fn expected_foreign_keys(
             ("media_id", "media", "media_id", "NO ACTION"),
             ("library_id", "library", "library_id", "NO ACTION"),
         ],
+        "catalog_order" => &[("library_id", "library", "library_id", "NO ACTION")],
         _ => &[],
     }
 }

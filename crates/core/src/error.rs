@@ -151,6 +151,10 @@ pub enum Error {
         path: String,
     },
 
+    /// Uma preferência de ordem manual está vazia, duplicada ou fora dos limites.
+    #[error("ordem manual do catálogo inválida")]
+    InvalidCatalogOrder,
+
     /// A tentativa de varredura não pôde ser registrada no histórico.
     ///
     /// Registrar o histórico é secundário: a falha original da varredura é preservada

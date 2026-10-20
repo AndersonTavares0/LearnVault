@@ -2,6 +2,8 @@
 	import CatalogTree from './CatalogTree.svelte';
 	import LooseFiles from './LooseFiles.svelte';
 	import { countCatalogFiles, countCatalogNode, formatCourseMeta, formatLessonCounts, formatLessonMeta, isLessonMissing } from './catalog';
+	import CatalogOrderControls from './CatalogOrderControls.svelte';
+	import { canReorderCatalogSiblings, movedCatalogPaths } from './catalog-order';
 	import { href } from './router';
 	import type { CatalogNode } from './transport';
 
@@ -9,9 +11,33 @@
 	// dentro de um módulo não fique escondido atrás do disclosure recolhido.
 	// `courseId` viaja com a subárvore para que links de aula e de mídia carreguem a
 	// identidade do curso, que desempata caminhos relativos iguais entre cursos.
-	let { nodes, courseId, expandAll = false }: { nodes: CatalogNode[]; courseId: string; expandAll?: boolean } = $props();
+	let {
+		nodes,
+		courseId,
+		expandAll = false,
+		organizing = false,
+		parentPath = '',
+		siblings: suppliedSiblings,
+		siblingIndex: suppliedIndex,
+		orderSaving = false,
+		onSaveOrder,
+		onResetOrder
+	}: {
+		nodes: CatalogNode[];
+		courseId: string;
+		expandAll?: boolean;
+		organizing?: boolean;
+		parentPath?: string;
+		siblings?: CatalogNode[];
+		siblingIndex?: number;
+		orderSaving?: boolean;
+		onSaveOrder?: (parentPath: string, childPaths: string[]) => void;
+		onResetOrder?: (parentPath: string) => void;
+	} = $props();
 </script>
-{#each nodes as node (node.path)}
+{#each nodes as node, index (node.path)}
+	{@const siblingNodes = suppliedSiblings ?? nodes}
+	{@const itemIndex = suppliedSiblings ? suppliedIndex ?? 0 : index}
 	{#if node.role === 'module'}
 		<details class="course-section" open={expandAll}>
 			<summary>
@@ -20,7 +46,7 @@
 				<svg class="section-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
 			</summary>
 			<ul class="lesson-list">
-				{#each node.children as child (child.path)}<li><CatalogTree nodes={[child]} {courseId} {expandAll} /></li>{/each}
+				{#each node.children as child, childIndex (child.path)}<li><CatalogTree nodes={[child]} {courseId} {expandAll} {organizing} parentPath={node.path} siblings={node.children} siblingIndex={childIndex} {orderSaving} {onSaveOrder} {onResetOrder} /></li>{/each}
 			</ul>
 			{#if node.files.length || node.looseFiles.length}<LooseFiles files={[...node.files, ...node.looseFiles]} heading="Materiais complementares" {courseId} />{/if}
 		</details>
@@ -48,7 +74,7 @@
 				{#if meta}<span class="lesson-meta">{meta}</span>{/if}
 			</a>
 		{/if}
-		{#if node.children.length}<div class="lesson-children">{#each node.children as child (child.path)}<CatalogTree nodes={[child]} {courseId} {expandAll} />{/each}</div>{/if}
+		{#if node.children.length}<div class="lesson-children">{#each node.children as child, childIndex (child.path)}<CatalogTree nodes={[child]} {courseId} {expandAll} {organizing} parentPath={node.path} siblings={node.children} siblingIndex={childIndex} {orderSaving} {onSaveOrder} {onResetOrder} />{/each}</div>{/if}
 	{:else}
 		{@const meta = formatCourseMeta(countCatalogNode(node))}
 		<section class="course-block">
@@ -57,7 +83,10 @@
 				{#if meta}<p class="course-meta">{meta}</p>{/if}
 			</header>
 			{#if node.files.length || node.looseFiles.length}<LooseFiles files={[...node.files, ...node.looseFiles]} heading="Arquivos soltos" {courseId} />{/if}
-			{#if node.children.length}<div class="course-body">{#each node.children as child (child.path)}<CatalogTree nodes={[child]} {courseId} {expandAll} />{/each}</div>{/if}
+			{#if node.children.length}<div class="course-body">{#each node.children as child, childIndex (child.path)}<CatalogTree nodes={[child]} {courseId} {expandAll} {organizing} parentPath={node.path} siblings={node.children} siblingIndex={childIndex} {orderSaving} {onSaveOrder} {onResetOrder} />{/each}</div>{/if}
 		</section>
+	{/if}
+	{#if organizing && canReorderCatalogSiblings(siblingNodes)}
+		<CatalogOrderControls itemTitle={node.title} index={itemIndex} count={siblingNodes.length} busy={orderSaving} onMove={(offset) => { const paths = movedCatalogPaths(siblingNodes, itemIndex, offset); if (paths) onSaveOrder?.(parentPath, paths); }} onReset={() => onResetOrder?.(parentPath)} />
 	{/if}
 {/each}

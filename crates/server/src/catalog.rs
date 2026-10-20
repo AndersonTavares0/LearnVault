@@ -12,7 +12,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use learnvault_core::{Availability, CatalogFile, CatalogNode, MediaKind, NodeRole, RescanSummary};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     AppState, StateError,
@@ -83,12 +83,16 @@ struct RescanResponse {
 
 pub(crate) async fn catalog(State(state): State<AppState>, headers: HeaderMap) -> Response {
     match authenticated_user(&state, &headers).await {
-        Ok(Some(user)) if !user.must_change_credentials => {}
-        Ok(Some(_)) => return credentials_required(),
-        Err(StateError::Capacity) => return service_unavailable(),
-        Ok(None) | Err(_) => return status_private_no_store(StatusCode::UNAUTHORIZED),
+        Ok(Some(user)) if !user.must_change_credentials => {
+            catalog_for_user(state, user.user_id).await
+        }
+        Ok(Some(_)) => credentials_required(),
+        Err(StateError::Capacity) => service_unavailable(),
+        Ok(None) | Err(_) => status_private_no_store(StatusCode::UNAUTHORIZED),
     }
+}
 
+async fn catalog_for_user(state: AppState, owner_id: String) -> Response {
     // Evita segurar o mutex do banco só para devolver 503 sob saturação.
     if !state.has_blocking_capacity() {
         return service_unavailable();
@@ -100,13 +104,216 @@ pub(crate) async fn catalog(State(state): State<AppState>, headers: HeaderMap) -
     };
     match tokio::task::spawn_blocking(move || {
         let _blocking_task = blocking_task;
-        build_course_catalog(&database, &courses)
+        build_course_catalog(&database, &courses, &owner_id)
     })
     .await
     {
         Ok(Ok(catalog)) => private_no_store(Json(catalog).into_response()),
         Ok(Err(_)) | Err(_) => internal_error("catalog unavailable"),
     }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CatalogOrderRequest {
+    course_id: String,
+    parent_path: String,
+    child_paths: Vec<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CatalogOrderResetRequest {
+    course_id: String,
+    parent_path: String,
+}
+
+#[derive(Serialize)]
+struct CatalogOrderResponse {
+    saved: bool,
+}
+
+enum CatalogOrderFailure {
+    Invalid,
+}
+
+pub(crate) async fn save_order(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<CatalogOrderRequest>,
+) -> Response {
+    let user = match authenticated_user(&state, &headers).await {
+        Ok(Some(user)) => user,
+        Err(StateError::Capacity) => return service_unavailable(),
+        Ok(None) | Err(_) => return status_private_no_store(StatusCode::UNAUTHORIZED),
+    };
+    if !same_origin(&headers) {
+        return csrf_failed();
+    }
+    if user.must_change_credentials {
+        return credentials_required();
+    }
+    if request.course_id.is_empty()
+        || request.course_id.len() > 256
+        || request.parent_path.len() > 4_096
+        || request.child_paths.is_empty()
+        || request.child_paths.len() > 10_000
+    {
+        return status_private_no_store(StatusCode::BAD_REQUEST);
+    }
+    run_order_mutation(
+        state,
+        user.user_id,
+        request.course_id,
+        move |database, course, owner_id| {
+            let siblings = reorderable_siblings(database, course, &request.parent_path)?
+                .ok_or(CatalogOrderFailure::Invalid)?;
+            if !same_paths(&siblings, &request.child_paths) {
+                return Err(CatalogOrderFailure::Invalid);
+            }
+            let child_paths: Vec<_> = request.child_paths.iter().map(String::as_str).collect();
+            learnvault_core::persist_catalog_order(
+                database,
+                owner_id,
+                &course.id,
+                &request.parent_path,
+                &child_paths,
+            )
+            .map_err(|_| CatalogOrderFailure::Invalid)
+        },
+    )
+    .await
+}
+
+pub(crate) async fn reset_order(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<CatalogOrderResetRequest>,
+) -> Response {
+    let user = match authenticated_user(&state, &headers).await {
+        Ok(Some(user)) => user,
+        Err(StateError::Capacity) => return service_unavailable(),
+        Ok(None) | Err(_) => return status_private_no_store(StatusCode::UNAUTHORIZED),
+    };
+    if !same_origin(&headers) {
+        return csrf_failed();
+    }
+    if user.must_change_credentials {
+        return credentials_required();
+    }
+    if request.course_id.is_empty()
+        || request.course_id.len() > 256
+        || request.parent_path.len() > 4_096
+    {
+        return status_private_no_store(StatusCode::BAD_REQUEST);
+    }
+    let owner_id = user.user_id;
+    run_order_mutation(
+        state,
+        owner_id.clone(),
+        request.course_id,
+        move |database, course, owner_id| {
+            reorderable_siblings(database, course, &request.parent_path)?
+                .ok_or(CatalogOrderFailure::Invalid)?;
+            learnvault_core::reset_catalog_order(
+                database,
+                owner_id,
+                &course.id,
+                &request.parent_path,
+            )
+            .map_err(|_| CatalogOrderFailure::Invalid)
+        },
+    )
+    .await
+}
+
+async fn run_order_mutation(
+    state: AppState,
+    owner_id: String,
+    course_id: String,
+    operation: impl FnOnce(
+        &learnvault_core::Database,
+        &RegisteredCourse,
+        &str,
+    ) -> Result<(), CatalogOrderFailure>
+    + Send
+    + 'static,
+) -> Response {
+    if !state.has_blocking_capacity() {
+        return service_unavailable();
+    }
+    let Some(course) = state
+        .courses_snapshot()
+        .into_iter()
+        .find(|course| course.id == course_id)
+    else {
+        return status_private_no_store(StatusCode::NOT_FOUND);
+    };
+    let database = state.database.clone().lock_owned().await;
+    let Some(blocking_task) = state.try_acquire_blocking_task() else {
+        return service_unavailable();
+    };
+    match tokio::task::spawn_blocking(move || {
+        let _blocking_task = blocking_task;
+        operation(&database, &course, &owner_id)
+    })
+    .await
+    {
+        Ok(Ok(_)) => private_no_store(Json(CatalogOrderResponse { saved: true }).into_response()),
+        Ok(Err(CatalogOrderFailure::Invalid)) => status_private_no_store(StatusCode::BAD_REQUEST),
+        Err(_) => internal_error("catalog order unavailable"),
+    }
+}
+
+fn reorderable_siblings(
+    database: &learnvault_core::Database,
+    course: &RegisteredCourse,
+    parent_path: &str,
+) -> Result<Option<Vec<String>>, CatalogOrderFailure> {
+    let catalog = learnvault_core::build_catalog(database, &course.id)
+        .map_err(|_| CatalogOrderFailure::Invalid)?;
+    let mut roots: Vec<_> = catalog
+        .categories
+        .into_iter()
+        .map(learnvault_core::course_file_lessons)
+        .collect();
+    if parent_path.is_empty() {
+        return Ok(Some(roots.into_iter().map(|node| node.path).collect()));
+    }
+    let Some(parent) = find_node_mut(&mut roots, parent_path) else {
+        return Ok(None);
+    };
+    if !matches!(parent.role, NodeRole::Category | NodeRole::Module) {
+        return Ok(None);
+    }
+    Ok(Some(
+        parent
+            .children
+            .iter()
+            .map(|node| node.path.clone())
+            .collect(),
+    ))
+}
+
+fn find_node_mut<'a>(nodes: &'a mut [CatalogNode], path: &str) -> Option<&'a mut CatalogNode> {
+    for node in nodes {
+        if node.path == path {
+            return Some(node);
+        }
+        if let Some(found) = find_node_mut(&mut node.children, path) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+fn same_paths(existing: &[String], requested: &[String]) -> bool {
+    if existing.len() != requested.len() {
+        return false;
+    }
+    let existing: std::collections::HashSet<_> = existing.iter().collect();
+    let requested: std::collections::HashSet<_> = requested.iter().collect();
+    existing.len() == requested.len() && existing == requested
 }
 
 /// Agrega o catálogo dos cursos registrados.
@@ -121,6 +328,7 @@ pub(crate) async fn catalog(State(state): State<AppState>, headers: HeaderMap) -
 fn build_course_catalog(
     database: &learnvault_core::Database,
     courses: &[RegisteredCourse],
+    owner_id: &str,
 ) -> Result<CatalogResponse, learnvault_core::Error> {
     let mut complete = true;
     let mut nodes = Vec::with_capacity(courses.len());
@@ -143,6 +351,18 @@ fn build_course_catalog(
     for course in courses {
         let catalog = learnvault_core::build_catalog(database, &course.id)?;
         complete = complete && catalog.complete;
+        let mut children: Vec<_> = catalog
+            .categories
+            .into_iter()
+            .map(learnvault_core::course_file_lessons)
+            .collect();
+        learnvault_core::apply_saved_catalog_order(
+            database,
+            owner_id,
+            &course.id,
+            &mut children,
+            "",
+        )?;
         nodes.push(CatalogNodeResponse {
             title: course.title.clone(),
             path: String::new(),
@@ -150,12 +370,7 @@ fn build_course_catalog(
             course_id: Some(course.id.clone()),
             files: Vec::new(),
             loose_files: catalog.loose_files.into_iter().map(Into::into).collect(),
-            children: catalog
-                .categories
-                .into_iter()
-                .map(learnvault_core::course_file_lessons)
-                .map(Into::into)
-                .collect(),
+            children: children.into_iter().map(Into::into).collect(),
         });
     }
     Ok(CatalogResponse {

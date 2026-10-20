@@ -31,6 +31,8 @@ pub enum IpcErrorCode {
     MediaNotFound,
     /// A posição de retomada enviada é inválida.
     InvalidPosition,
+    /// A ordem enviada não corresponde aos irmãos reordenáveis do catálogo.
+    InvalidCatalogOrder,
     /// A remoção exige confirmação porque existe progresso associado.
     MediaRemovalNeedsConfirmation,
     /// A remoção de mídia não pôde ser concluída.
@@ -124,6 +126,14 @@ impl IpcError {
         Self {
             code: IpcErrorCode::InvalidPosition,
             message: "posição de retomada inválida",
+        }
+    }
+
+    /// A ordem enviada não corresponde a uma lista real de irmãos do catálogo.
+    pub fn invalid_catalog_order() -> Self {
+        Self {
+            code: IpcErrorCode::InvalidCatalogOrder,
+            message: "ordem do catálogo inválida",
         }
     }
 

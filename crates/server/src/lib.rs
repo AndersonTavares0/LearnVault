@@ -61,6 +61,14 @@ pub fn build_router(state: AppState) -> Router {
             axum::routing::post(auth::credentials),
         )
         .route("/api/catalog", get(catalog::catalog))
+        .route(
+            "/api/catalog/order",
+            axum::routing::put(catalog::save_order)
+                .delete(catalog::reset_order)
+                // Uma lista completa de irmãos pode exceder o limite genérico das demais
+                // APIs; ainda assim, o corpo fica limitado e o núcleo valida cada caminho.
+                .layer(DefaultBodyLimit::max(1024 * 1024)),
+        )
         .route("/api/admin/catalog/rescan", post(catalog::rescan))
         .route("/api/admin/courses", post(courses::import))
         .route(
@@ -373,7 +381,7 @@ mod tests {
         for (name, setup) in [
             ("missing", "PRAGMA user_version = 0"),
             ("older", "PRAGMA user_version = 3"),
-            ("newer", "PRAGMA user_version = 5"),
+            ("newer", "PRAGMA user_version = 6"),
             (
                 "missing required column",
                 "ALTER TABLE user RENAME COLUMN must_change_credentials TO changed",

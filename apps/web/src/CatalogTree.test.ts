@@ -99,4 +99,27 @@ describe('catalog tree rendering', () => {
 		// A linha continua listada, agora sem destino de player.
 		expect(body).not.toContain('href="#/player');
 	});
+
+	it('shows accessible sibling controls only in organize mode and offers reset once per list', () => {
+		const lessons = [node('lesson', 'Aula 1', 'aula-1', [], [file('a.mp4', 'media')]), node('lesson', 'Aula 2', 'aula-2', [], [file('b.mp4', 'media')])];
+		const normal = render(CatalogTree, { props: { nodes: lessons, courseId: 'course-1' } });
+		expect(normal.body).not.toContain('Mover Aula 1 para cima');
+
+		const organized = render(CatalogTree, { props: { nodes: lessons, courseId: 'course-1', organizing: true } });
+		expect(organized.body).toContain('aria-label="Mover Aula 1 para cima" disabled');
+		expect(organized.body).toContain('aria-label="Mover Aula 1 para baixo"');
+		expect(organized.body).toContain('aria-label="Mover Aula 2 para cima"');
+		expect(organized.body).toContain('aria-label="Mover Aula 2 para baixo" disabled');
+		expect(organized.body.match(/Restaurar ordem automática/g)).toHaveLength(1);
+	});
+
+	it('provides controls for actual nested lesson siblings, not isolated recursive nodes', () => {
+		const module = node('module', 'Módulo', 'modulo', [
+			node('lesson', 'Aula 1', 'modulo/aula-1', [], [file('a.mp4', 'media')]),
+			node('lesson', 'Aula 2', 'modulo/aula-2', [], [file('b.mp4', 'media')])
+		]);
+		const { body } = render(CatalogTree, { props: { nodes: [module], courseId: 'course-1', organizing: true } });
+		expect(body.match(/Mover Aula [12] para (cima|baixo)/g)).toHaveLength(4);
+		expect(body.match(/Restaurar ordem automática/g)).toHaveLength(1);
+	});
 });

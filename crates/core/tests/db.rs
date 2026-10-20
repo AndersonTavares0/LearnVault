@@ -41,14 +41,14 @@ fn table_exists(db: &Database, name: &str) -> bool {
 #[test]
 fn in_memory_database_starts_at_the_current_schema_version() -> TestResult {
     let db = Database::open_in_memory()?;
-    assert_eq!(db.schema_version()?, 4);
+    assert_eq!(db.schema_version()?, 5);
     Ok(())
 }
 
 #[test]
 fn in_memory_database_creates_all_domain_tables() -> TestResult {
     let db = Database::open_in_memory()?;
-    assert_eq!(table_count(&db), 8);
+    assert_eq!(table_count(&db), 9);
     Ok(())
 }
 
@@ -76,7 +76,7 @@ fn persistent_database_is_created_and_uses_the_wal_journal() -> TestResult {
     assert!(path.exists(), "o arquivo do banco deve existir");
     assert_eq!(journal_mode(&db), "wal");
     assert_eq!(foreign_keys_enabled(&db), 1);
-    assert_eq!(db.schema_version()?, 4);
+    assert_eq!(db.schema_version()?, 5);
     Ok(())
 }
 
@@ -95,7 +95,7 @@ fn reopening_applies_migrations_once_and_preserves_data() -> TestResult {
 
     let db = Database::open(&path)?;
 
-    assert_eq!(db.schema_version()?, 4);
+    assert_eq!(db.schema_version()?, 5);
     let libraries: i64 = db
         .connection()
         .query_row("SELECT COUNT(*) FROM library", [], |row| row.get(0))?;
@@ -125,13 +125,13 @@ fn database_with_a_newer_schema_is_rejected_without_panicking() -> TestResult {
 
     {
         let conn = rusqlite::Connection::open(&path)?;
-        conn.pragma_update(None, "user_version", 5)?;
+        conn.pragma_update(None, "user_version", 6)?;
     }
 
     match Database::open(&path) {
         Err(Error::SchemaTooNew { found, known }) => {
-            assert_eq!(found, 5);
-            assert_eq!(known, 4);
+            assert_eq!(found, 6);
+            assert_eq!(known, 5);
         }
         other => panic!("esperava Error::SchemaTooNew, obtive {other:?}"),
     }
@@ -169,7 +169,7 @@ fn legacy_go_database_is_rejected_before_bootstrap_or_migration() -> TestResult 
 fn new_empty_database_is_not_mistaken_for_legacy_go() -> TestResult {
     let dir = tempfile::tempdir()?;
     let db = Database::open(dir.path().join("new.sqlite"))?;
-    assert_eq!(db.schema_version()?, 4);
+    assert_eq!(db.schema_version()?, 5);
     assert!(table_exists(&db, "user"));
     Ok(())
 }
@@ -181,7 +181,7 @@ fn rejecting_a_newer_schema_leaves_the_database_untouched() -> TestResult {
 
     {
         let conn = rusqlite::Connection::open(&path)?;
-        conn.pragma_update(None, "user_version", 5)?;
+        conn.pragma_update(None, "user_version", 6)?;
     }
 
     match Database::open(&path) {
@@ -200,7 +200,7 @@ fn rejecting_a_newer_schema_leaves_the_database_untouched() -> TestResult {
     assert_eq!(tables, 0, "nenhuma tabela deve ter sido criada");
 
     let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(version, 5, "a versão do banco não deve ser alterada");
+    assert_eq!(version, 6, "a versão do banco não deve ser alterada");
 
     let journal: String =
         conn.query_row("PRAGMA journal_mode", [], |row| row.get::<_, String>(0))?;
@@ -247,7 +247,7 @@ fn a_version_one_database_is_upgraded_additively_preserving_rows() -> TestResult
 
     assert_eq!(
         db.schema_version()?,
-        4,
+        5,
         "a cadeia deve aplicar a migração aditiva"
     );
     assert!(table_exists(&db, "scan_inaccessible"));
@@ -310,7 +310,7 @@ fn a_version_two_database_is_upgraded_additively_preserving_rows() -> TestResult
 
     assert_eq!(
         db.schema_version()?,
-        4,
+        5,
         "a cadeia deve aplicar a migração aditiva"
     );
     assert!(
@@ -371,6 +371,190 @@ fn a_drifted_schema_is_not_reported_as_current() -> TestResult {
     assert!(
         !db.has_current_schema()?,
         "o banco sem o índice exigido não está pronto para o servidor"
+    );
+    Ok(())
+}
+
+#[test]
+fn catalog_order_schema_requires_unique_sibling_positions() -> TestResult {
+    let db = Database::open_in_memory()?;
+    db.connection().execute_batch(
+        "DROP TABLE catalog_order;
+         CREATE TABLE catalog_order (
+             owner_id TEXT NOT NULL CHECK (length(owner_id) > 0),
+             library_id TEXT NOT NULL REFERENCES library (library_id) ON DELETE NO ACTION,
+             parent_path TEXT NOT NULL,
+             child_path TEXT NOT NULL,
+             position INTEGER NOT NULL CHECK (position >= 0),
+             PRIMARY KEY (owner_id, library_id, parent_path, child_path)
+         );",
+    )?;
+
+    assert!(
+        !db.has_current_schema()?,
+        "o schema sem unicidade de posição entre irmãos deve ser rejeitado"
+    );
+    Ok(())
+}
+
+#[test]
+fn upgrading_v4_to_v5_adds_catalog_order_without_changing_existing_study_data() -> TestResult {
+    let directory = tempfile::tempdir()?;
+    let path = directory.path().join("schema-v4.sqlite");
+    let connection = rusqlite::Connection::open(&path)?;
+    connection.execute_batch(
+        r#"
+        PRAGMA foreign_keys = ON;
+        CREATE TABLE library (
+            library_id TEXT PRIMARY KEY NOT NULL,
+            available INTEGER NOT NULL CHECK (available IN (0, 1))
+        );
+        CREATE TABLE media (
+            media_id TEXT PRIMARY KEY NOT NULL,
+            library_id TEXT NOT NULL REFERENCES library(library_id) ON DELETE NO ACTION,
+            relative_path TEXT NOT NULL,
+            relative_path_key TEXT NOT NULL,
+            size INTEGER NOT NULL,
+            mtime INTEGER NOT NULL,
+            availability TEXT NOT NULL CHECK (availability IN ('available', 'missing')),
+            UNIQUE (library_id, relative_path_key)
+        );
+        CREATE TABLE scan (
+            scan_id INTEGER PRIMARY KEY,
+            library_id TEXT NOT NULL REFERENCES library(library_id) ON DELETE NO ACTION,
+            status TEXT NOT NULL CHECK (status IN ('completed', 'failed')),
+            completed_at INTEGER NOT NULL,
+            complete INTEGER NOT NULL DEFAULT 1 CHECK (complete IN (0, 1))
+        );
+        CREATE TABLE scan_inaccessible (
+            scan_id INTEGER NOT NULL REFERENCES scan(scan_id) ON DELETE NO ACTION,
+            relative_path TEXT NOT NULL,
+            PRIMARY KEY (scan_id, relative_path)
+        );
+        CREATE TABLE study_state (
+            owner_id TEXT NOT NULL,
+            media_id TEXT NOT NULL REFERENCES media(media_id) ON DELETE NO ACTION,
+            position_seconds INTEGER NOT NULL DEFAULT 0,
+            completed INTEGER NOT NULL CHECK (completed IN (0, 1)),
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY (owner_id, media_id)
+        );
+        CREATE TABLE user (
+            user_id TEXT PRIMARY KEY NOT NULL,
+            username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+            password_hash TEXT NOT NULL,
+            is_admin INTEGER NOT NULL CHECK (is_admin IN (0, 1)),
+            created_at INTEGER NOT NULL,
+            must_change_credentials INTEGER NOT NULL DEFAULT 0
+                CHECK (must_change_credentials IN (0, 1))
+        );
+        CREATE TABLE session (
+            token_hash TEXT PRIMARY KEY NOT NULL,
+            user_id TEXT NOT NULL REFERENCES user(user_id) ON DELETE NO ACTION,
+            expires_at INTEGER NOT NULL
+        );
+        CREATE INDEX session_expires_at_idx ON session(expires_at);
+        CREATE TABLE media_removal (
+            library_id TEXT NOT NULL REFERENCES library(library_id) ON DELETE NO ACTION,
+            media_id TEXT NOT NULL REFERENCES media(media_id) ON DELETE NO ACTION,
+            removed_at INTEGER NOT NULL,
+            PRIMARY KEY (library_id, media_id)
+        );
+
+        INSERT INTO library VALUES ('library-v4', 1);
+        INSERT INTO media VALUES (
+            'media-v4', 'library-v4', 'Module 1/Lesson 1.mp4',
+            'module 1/lesson 1.mp4', 12345, 1700000000, 'available'
+        );
+        INSERT INTO scan VALUES (7, 'library-v4', 'completed', 1700000010, 1);
+        INSERT INTO scan_inaccessible VALUES (7, 'restricted/');
+        INSERT INTO study_state VALUES ('owner-v4', 'media-v4', 83, 1, 1700000020);
+        INSERT INTO user VALUES ('owner-v4', 'learner', 'test-hash', 0, 1600000000, 0);
+        INSERT INTO session VALUES ('session-hash', 'owner-v4', 1800000000);
+        INSERT INTO media_removal VALUES ('library-v4', 'media-v4', 1700000030);
+        PRAGMA user_version = 4;
+        "#,
+    )?;
+    drop(connection);
+
+    let database = Database::open(&path)?;
+    assert_eq!(database.schema_version()?, 5);
+    assert!(table_exists(&database, "catalog_order"));
+
+    let library: (String, i64) = database.connection().query_row(
+        "SELECT library_id, available FROM library WHERE library_id = 'library-v4'",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+    assert_eq!(library, ("library-v4".to_owned(), 1));
+
+    let media: (String, String, String, i64, i64, String) = database.connection().query_row(
+        "SELECT media_id, library_id, relative_path, size, mtime, availability FROM media WHERE media_id = 'media-v4'",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?)),
+    )?;
+    assert_eq!(
+        media,
+        (
+            "media-v4".to_owned(),
+            "library-v4".to_owned(),
+            "Module 1/Lesson 1.mp4".to_owned(),
+            12345,
+            1700000000,
+            "available".to_owned(),
+        )
+    );
+
+    let scan: (String, i64, i64) = database.connection().query_row(
+        "SELECT status, completed_at, complete FROM scan WHERE scan_id = 7",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )?;
+    assert_eq!(scan, ("completed".to_owned(), 1700000010, 1));
+    let inaccessible: String = database.connection().query_row(
+        "SELECT relative_path FROM scan_inaccessible WHERE scan_id = 7",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(inaccessible, "restricted/");
+
+    let progress: (i64, i64, i64) = database.connection().query_row(
+        "SELECT position_seconds, completed, updated_at FROM study_state WHERE owner_id = 'owner-v4' AND media_id = 'media-v4'",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )?;
+    assert_eq!(progress, (83, 1, 1700000020));
+
+    let user: (String, String, i64, i64, i64) = database.connection().query_row(
+        "SELECT username, password_hash, is_admin, created_at, must_change_credentials FROM user WHERE user_id = 'owner-v4'",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+    )?;
+    assert_eq!(
+        user,
+        (
+            "learner".to_owned(),
+            "test-hash".to_owned(),
+            0,
+            1600000000,
+            0
+        )
+    );
+    let session: (String, i64) = database.connection().query_row(
+        "SELECT user_id, expires_at FROM session WHERE token_hash = 'session-hash'",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+    assert_eq!(session, ("owner-v4".to_owned(), 1800000000));
+
+    let removal: (String, String, i64) = database.connection().query_row(
+        "SELECT library_id, media_id, removed_at FROM media_removal WHERE library_id = 'library-v4' AND media_id = 'media-v4'",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )?;
+    assert_eq!(
+        removal,
+        ("library-v4".to_owned(), "media-v4".to_owned(), 1700000030)
     );
     Ok(())
 }

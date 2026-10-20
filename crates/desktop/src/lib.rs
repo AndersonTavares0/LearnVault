@@ -48,7 +48,8 @@ pub mod study;
 pub use command::{
     catalog, desktop_catalog, desktop_import_course, desktop_media_removal_impact,
     desktop_recent_study, desktop_record_position, desktop_remove_course, desktop_remove_media,
-    desktop_rescan, desktop_set_completed, desktop_study_progress,
+    desktop_reorder_catalog, desktop_rescan, desktop_reset_catalog_order, desktop_set_completed,
+    desktop_study_progress,
 };
 pub use config::{DATABASE_FILE_NAME, DesktopConfigDto, database_path};
 pub use courses::{
@@ -86,6 +87,8 @@ pub fn run() {
     media::register(builder)
         .invoke_handler(tauri::generate_handler![
             command::desktop_catalog,
+            command::desktop_reorder_catalog,
+            command::desktop_reset_catalog_order,
             command::desktop_import_course,
             command::desktop_remove_course,
             command::desktop_rescan,

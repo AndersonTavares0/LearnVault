@@ -88,6 +88,7 @@ pasta é um curso, registrado com identidade estável, e a interface não conhec
 - [ ] Construir o player como canvas principal de estudo com índice de aulas
 - [ ] Adicionar capas manuais, estados vazios, carregamento e recuperação
   - [x] Capas geradas a partir do título e estados vazios da página inicial
+- [x] Permitir reordenar módulos e aulas entre irmãos sem alterar as pastas dos cursos
 - [ ] Validar navegação por teclado, foco, contraste, movimento reduzido e labels para leitores de tela
 - [ ] Manter a identidade visual original do projeto
 

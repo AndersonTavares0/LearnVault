@@ -59,6 +59,8 @@ banco Rust existente continuam sendo abertos normalmente.
 | Método | Rota | Autenticação | Finalidade |
 | --- | --- | --- | --- |
 | `GET` | `/api/catalog` | Sessão | Retorna um nó de topo por curso registrado (`role: course`, com `course_id` opaco e `title`), com a subárvore de módulos e aulas derivada dos dados persistidos, tanto na árvore canônica `nodes` quanto na lista de cursos de topo `categories` |
+| `PUT` | `/api/catalog/order` | Sessão + mesma origem | Salva `{ "course_id": "...", "parent_path": "...", "child_paths": ["..."] }` para a lista completa de módulos/aulas irmãos; a identidade do dono vem da sessão |
+| `DELETE` | `/api/catalog/order` | Sessão + mesma origem | Recebe `{ "course_id": "...", "parent_path": "..." }` e remove somente a preferência daquela lista de irmãos |
 | `POST` | `/api/admin/courses` | Sessão admin | Aceita `{ "path": "..." }` e registra a pasta como um curso; a pasta precisa existir, ser um diretório legível e não ser link/junction. Importar não indexa: a indexação é o `rescan` |
 | `DELETE` | `/api/admin/courses/{id}` | Sessão admin | Remove o curso do registro, sem apagar arquivos nem dados; remover um curso desconhecido responde `removed: false` |
 | `POST` | `/api/admin/catalog/rescan` | Sessão admin | Faz scan explícito de todos os cursos registrados e atualiza cada catálogo de forma preservadora: insere arquivos novos, reafirma os conhecidos e marca ausentes os que sumiram, sem excluir nenhum registro. Sem cursos registrados responde `400 no_courses_registered`; a resposta agrega `courses` e `failed_courses` |
@@ -85,6 +87,14 @@ registrada como o primeiro curso com a identidade histórica `library-1`, preser
 varreduras e progresso de estudo já gravados; uma remoção explícita do curso semente não o
 traz de volta no próximo start.
 
+Cada usuário pode substituir a ordem automática de módulos ou aulas dentro da mesma lista de
+irmãos. A preferência é persistida no banco LearnVault e isolada por usuário, curso e pai; não
+altera a pasta do curso. Os novos itens não presentes na preferência são acrescentados em ordem
+natural, e caminhos já salvos são mantidos durante reindexações mesmo quando temporariamente
+ausentes. `DELETE /api/catalog/order` restaura a ordem natural somente para o pai indicado. A
+rota de escrita aceita corpos JSON de até 1 MiB; `course_id` é opaco e os caminhos são relativos,
+nunca caminhos absolutos do sistema.
+
 O scanner lê somente entradas e metadados de diretórios. Links simbólicos não são seguidos — nem
 as raízes dos cursos, nem entradas internas. Ignora diretórios temporários de download, classifica
 mídias, legendas e materiais reconhecidos, e trata `.ts` como vídeo somente quando é maior que
@@ -102,6 +112,8 @@ O desktop não tem rotas para catálogo, cursos e remoção: a SPA chama comando
 | Comando | Argumentos | Finalidade |
 | --- | --- | --- |
 | `desktop_catalog` | — | Catálogo agregado dos cursos registrados, um nó de topo por curso em `nodes` (árvore canônica) e em `categories` |
+| `desktop_reorder_catalog` | `courseId`, `parentPath`, `childPaths` | Salva a ordem completa de irmãos no banco local LearnVault; o dono é fixo no runtime Rust e não é fornecido pelo webview |
+| `desktop_reset_catalog_order` | `courseId`, `parentPath` | Restaura a ordem natural somente para a lista de irmãos indicada |
 | `desktop_import_course` | — | Abre o seletor nativo e registra a pasta escolhida como um curso; importar uma pasta já registrada é idempotente |
 | `desktop_remove_course` | `courseId` | Remove o curso do registro, sem tocar nos arquivos nem nos dados |
 | `desktop_rescan` | — | Indexa explicitamente todos os cursos registrados; raízes removidas contam como falha agregada |

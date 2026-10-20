@@ -78,6 +78,7 @@ fn all_domain_tables_are_created() -> TestResult {
         "library",
         "media",
         "media_removal",
+        "catalog_order",
         "scan",
         "scan_inaccessible",
         "study_state",

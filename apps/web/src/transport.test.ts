@@ -9,8 +9,38 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 
 describe('transport contract', () => {
 	it('exposes the HTTP transport seam without routing assumptions', () => {
-		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'mediaUrl'];
-		expect(methods).toHaveLength(14);
+		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'saveCatalogOrder', 'resetCatalogOrder', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'mediaUrl'];
+		expect(methods).toHaveLength(16);
+	});
+	it('saves and resets a sibling order through authenticated HTTP endpoints', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+		vi.stubGlobal('fetch', fetchMock);
+		const transport = new HttpTransport();
+		await transport.saveCatalogOrder('course 1', 'Módulo 1', ['Módulo 1/Aula 2', 'Módulo 1/Aula 1']);
+		expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/catalog/order', expect.objectContaining({
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ course_id: 'course 1', parent_path: 'Módulo 1', child_paths: ['Módulo 1/Aula 2', 'Módulo 1/Aula 1'] })
+		}));
+		await transport.resetCatalogOrder('course 1', 'Módulo 1');
+		expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/catalog/order', expect.objectContaining({
+			method: 'DELETE',
+			body: JSON.stringify({ course_id: 'course 1', parent_path: 'Módulo 1' })
+		}));
+		vi.unstubAllGlobals();
+	});
+	it('invokes desktop order commands without transmitting an owner id', async () => {
+		vi.mocked(invoke).mockResolvedValue(undefined);
+		const transport = new DesktopStub();
+		await transport.saveCatalogOrder('course-1', '', ['Módulo 2', 'Módulo 1']);
+		expect(invoke).toHaveBeenNthCalledWith(1, 'desktop_reorder_catalog', {
+			courseId: 'course-1', parentPath: '', childPaths: ['Módulo 2', 'Módulo 1']
+		});
+		await transport.resetCatalogOrder('course-1', 'Módulo 1');
+		expect(invoke).toHaveBeenNthCalledWith(2, 'desktop_reset_catalog_order', {
+			courseId: 'course-1', parentPath: 'Módulo 1'
+		});
+		for (const [, args] of vi.mocked(invoke).mock.calls) expect(args).not.toHaveProperty('ownerId');
 	});
 	it('does not offer native folder selection over HTTP', async () => {
 		await expect(new HttpTransport().importCourse()).rejects.toThrow('desktop é quem escolhe pastas');

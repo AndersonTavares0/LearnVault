@@ -15,7 +15,7 @@ use std::sync::{Arc, Mutex};
 
 use learnvault_core::{CourseRoot, Database};
 
-use crate::command::catalog;
+use crate::command::{catalog, reorder_catalog, reset_catalog_order};
 use crate::config::{DesktopConfigDto, database_path};
 use crate::courses::{CourseEntry, load_courses, store_courses};
 use crate::dto::{
@@ -61,6 +61,35 @@ impl DesktopState {
             .lock()
             .map_err(|_| IpcError::database_unavailable())?;
         catalog(&database, &self.courses())
+    }
+
+    /// Persiste a ordem dos irmãos selecionados para o dono local do desktop.
+    pub fn reorder_catalog(
+        &self,
+        course_id: &str,
+        parent_path: &str,
+        child_paths: &[String],
+    ) -> Result<(), IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        reorder_catalog(
+            &database,
+            &self.courses(),
+            course_id,
+            parent_path,
+            child_paths,
+        )
+    }
+
+    /// Remove a preferência da lista selecionada para o dono local do desktop.
+    pub fn reset_catalog_order(&self, course_id: &str, parent_path: &str) -> Result<(), IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        reset_catalog_order(&database, &self.courses(), course_id, parent_path)
     }
 
     /// Situação de configuração exposta ao webview: só o booleano, nunca um caminho.

@@ -39,6 +39,10 @@ export interface Transport {
 	login(username: string, password: string): Promise<User>;
 	logout(): Promise<void>;
 	catalog(): Promise<Catalog>;
+	// Persiste a permutação completa dos irmãos de um pai no catálogo.
+	saveCatalogOrder(courseId: string, parentPath: string, childPaths: string[]): Promise<void>;
+	// Remove apenas a preferência da lista de irmãos selecionada.
+	resetCatalogOrder(courseId: string, parentPath: string): Promise<void>;
 	// Desktop: dispara o seletor nativo e registra a pasta escolhida como um curso.
 	importCourse(): Promise<void>;
 	// Servidor: registra um curso pelo caminho informado pelo admin.
@@ -325,6 +329,22 @@ export class HttpTransport implements Transport {
 		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível remover o curso.');
 	}
 	async catalog() { const response = await fetch('/api/catalog'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar o catálogo.'); return normalizeCatalog(await response.json()); }
+	async saveCatalogOrder(courseId: string, parentPath: string, childPaths: string[]) {
+		const response = await fetch('/api/catalog/order', {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ course_id: courseId, parent_path: parentPath, child_paths: childPaths })
+		});
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 400 ? 'A lista de itens mudou; atualize o catálogo e tente novamente.' : 'Não foi possível salvar a ordem do catálogo.');
+	}
+	async resetCatalogOrder(courseId: string, parentPath: string) {
+		const response = await fetch('/api/catalog/order', {
+			method: 'DELETE',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ course_id: courseId, parent_path: parentPath })
+		});
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 400 ? 'A lista de itens mudou; atualize o catálogo e tente novamente.' : 'Não foi possível restaurar a ordem do catálogo.');
+	}
 	async rescan() { const response = await fetch('/api/admin/catalog/rescan', { method: 'POST' }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 409 ? 'Já existe um rescan em andamento.' : response.status === 400 ? 'Nenhum curso foi importado ainda.' : 'Não foi possível indexar os cursos.'); }
 	async updateCredentials(username: string, password: string, currentPassword = password) { const response = await fetch('/api/account/credentials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ current_password: currentPassword, username, password }) }); if (!response.ok) throw new Error(response.status === 422 ? 'Usuário ou senha inválidos.' : response.status === 401 ? 'Senha atual incorreta.' : 'Não foi possível atualizar as credenciais.'); return normalizeUser(await response.json()); }
 	async studyProgress(mediaId: string) { const response = await fetch(`/api/study/progress?media_id=${encodeURIComponent(mediaId)}`); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? 'Mídia não encontrada.' : 'Não foi possível ler o progresso.'); return normalizeStudyProgress(await response.json()); }
@@ -347,7 +367,8 @@ const DESKTOP_ERROR_MESSAGES: Record<string, string> = {
 	rescan_unavailable: 'Não foi possível indexar os cursos.',
 	study_unavailable: 'Não foi possível sincronizar o progresso de estudo.',
 	media_not_found: 'Mídia não encontrada.',
-	invalid_position: 'Posição inválida.'
+	invalid_position: 'Posição inválida.',
+	invalid_catalog_order: 'A ordem do catálogo não corresponde aos itens atuais.'
 };
 
 // O comando devolve o erro como objeto serializado `{ code, message }`, não como `Error`.
@@ -365,6 +386,14 @@ export class DesktopStub implements Transport {
 	login() { return Promise.reject(new Error('Transporte desktop ainda não implementado.')); }
 	logout() { return Promise.resolve(); }
 	async catalog() { try { return normalizeCatalog(await invoke<unknown>('desktop_catalog')); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar o catálogo.'); } }
+	async saveCatalogOrder(courseId: string, parentPath: string, childPaths: string[]) {
+		try { await invoke<unknown>('desktop_reorder_catalog', { courseId, parentPath, childPaths }); }
+		catch (cause) { throw desktopError(cause, 'Não foi possível salvar a ordem do catálogo.'); }
+	}
+	async resetCatalogOrder(courseId: string, parentPath: string) {
+		try { await invoke<unknown>('desktop_reset_catalog_order', { courseId, parentPath }); }
+		catch (cause) { throw desktopError(cause, 'Não foi possível restaurar a ordem do catálogo.'); }
+	}
 	// O webview apenas dispara o seletor nativo no Rust; nenhum caminho é enviado nem
 	// devolvido. Cancelar preserva a lista anterior de cursos.
 	async importCourse() { try { await invoke<unknown>('desktop_import_course'); } catch (cause) { throw desktopError(cause, 'Não foi possível importar o curso.'); } }
