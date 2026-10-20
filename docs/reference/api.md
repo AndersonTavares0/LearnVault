@@ -73,7 +73,9 @@ banco Rust existente continuam sendo abertos normalmente.
 ### Organização dos cursos registrados
 
 Pastas de módulo contendo vídeos diretamente são apresentadas como módulos recolhíveis,
-com uma aula por vídeo, sem alterar caminhos, arquivos ou identidades de mídia.
+com uma aula por vídeo, sem alterar caminhos, arquivos ou identidades de mídia. Uma pasta
+mista, com vídeos diretos e subpastas, mantém ambos: os vídeos viram aulas filhas e as
+subpastas continuam módulos aninhados, sem alternar papéis por causa da profundidade.
 Materiais complementares continuam disponíveis no módulo e legendas correspondentes
 permanecem associadas à mídia. A árvore de diretórios já existente é preservada.
 
