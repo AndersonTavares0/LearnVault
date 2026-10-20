@@ -10,6 +10,7 @@
 	import { filterCatalog } from './search';
 	import { countCatalogNode, formatLessonCounts, formatLocationContext } from './catalog';
 	import PasswordField from './PasswordField.svelte';
+	import CredentialsForm from './CredentialsForm.svelte';
 	import NotesIndex from './NotesIndex.svelte';
 	import EmptyState from './EmptyState.svelte';
 	import { defaultLessonPath, lessonContainer, neighboringLessons } from './navigation';
@@ -42,6 +43,8 @@
 	$: activeBoard = route === 'home' ? graphiteScreens.library.board : route === 'course' && lessonPath === null ? graphiteScreens.course.board : route === 'settings' ? graphiteScreens.settings.board : route === 'analytics' ? graphiteScreens.analytics.board : route === 'notes' ? graphiteScreens.notes.board : graphiteScreens.player.board;
 	let lessonPath: string | null = initialLocation.lessonPath;
 	let user: User | null = null;
+	let accountUser: User = { userId: '', username: '', role: '', isAdmin: false, mustChangeCredentials: false };
+	$: accountUser = user ?? accountUser;
 	let catalog: Catalog | null = null;
 	$: course = findCourse(catalog, courseId);
 	let lesson: Lesson | null = null;
@@ -87,9 +90,6 @@
 	let error = '';
 	let username = '';
 	let password = '';
-	let currentPassword = '';
-	let accountStatus = '';
-	let accountError = '';
 	let rescanning = false;
 	let rescanMessage = '';
 	let importing = false;
@@ -330,25 +330,6 @@
 		}
 	}
 
-	async function credentials(event: SubmitEvent) {
-		event.preventDefault();
-		if (authBusy) return;
-		accountError = '';
-		accountStatus = '';
-		authBusy = true;
-		try {
-			user = await transport.updateCredentials(username, password, currentPassword);
-			username = '';
-			password = '';
-			currentPassword = '';
-			accountStatus = 'Credenciais atualizadas. Use-as no próximo acesso.';
-		} catch (cause) {
-			accountError = cause instanceof Error ? cause.message : 'Não foi possível atualizar as credenciais.';
-		} finally {
-			authBusy = false;
-		}
-	}
-
 	async function logout() {
 		await transport.logout();
 		user = null;
@@ -357,7 +338,6 @@
 		recent = [];
 		username = '';
 		password = '';
-		currentPassword = '';
 		location.hash = href('login');
 	}
 
@@ -956,20 +936,10 @@
 				</section>
 				<section class="setting-card" aria-labelledby="account-heading" use:trackSection={'account'}>
 					<h3 id="account-heading" tabindex="-1">Conta</h3>
-					<p><strong>{user.username}</strong> · {user.isAdmin ? 'Administrador' : 'Estudante'}</p>
+					<p><strong>{accountUser.username}</strong> · {accountUser.isAdmin ? 'Administrador' : 'Estudante'}</p>
 					{#if transportKind === 'http'}
-						<form class="credentials-form" onsubmit={credentials}>
-							<fieldset class="auth-fields" disabled={authBusy}>
-								<legend>Credenciais de acesso</legend>
-								<PasswordField id="settings-current-password" label="Senha atual" autocomplete="current-password" bind:value={currentPassword} />
-								<label class="form-field" for="settings-new-username">Novo usuário<input id="settings-new-username" autocomplete="username" bind:value={username} required /></label>
-								<PasswordField id="settings-new-password" label="Nova senha" autocomplete="new-password" bind:value={password} minLength={12} hint="Use ao menos 12 caracteres." />
-								{#if accountError}<p class="error" role="alert">{accountError}</p>{/if}
-								{#if accountStatus}<p class="catalog-message" role="status">{accountStatus}</p>{/if}
-								<button class="btn primary" type="submit" disabled={authBusy} aria-busy={authBusy}>{authBusy ? 'Salvando…' : 'Atualizar credenciais'}</button>
-							</fieldset>
-						</form>
-						<button class="text-button danger" type="button" onclick={transportKind === 'http' ? logout : undefined}>Encerrar sessão</button>
+						<CredentialsForm user={accountUser} onUpdated={(updated) => (user = updated)} />
+						<button class="text-button danger" type="button" onclick={logout}>Encerrar sessão</button>
 					{:else}<p class="catalog-message">Biblioteca local neste dispositivo.</p>{/if}
 				</section>
 				{#if transportKind === 'http'}

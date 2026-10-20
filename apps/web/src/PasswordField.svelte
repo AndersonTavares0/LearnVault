@@ -8,22 +8,37 @@
 		value: string;
 		placeholder?: string;
 		minLength?: number;
+		maxLength?: number;
 		hint?: string;
+		error?: string;
+		/** name do input; por padrão o próprio id, preservando formulários existentes. */
+		name?: string;
 	};
 
-	let { id, label, autocomplete, value = $bindable(''), placeholder, minLength, hint }: Props = $props();
+	let { id, label, autocomplete, value = $bindable(''), placeholder, minLength, maxLength, hint, error, name = id }: Props = $props();
 	let visible = $state(false);
 	let input = $state<HTMLInputElement | null>(null);
+	let touched = $state(false);
+
+	const length = $derived.by(() => {
+		let count = 0;
+		if ((minLength !== undefined || maxLength !== undefined) && value) {
+			for (const _ of value) count += 1;
+		}
+		return count;
+	});
+	const localError = $derived.by(() => {
+		if (!value) return '';
+		if (minLength !== undefined && length < minLength) return `Use ao menos ${minLength} caracteres.`;
+		if (maxLength !== undefined && length > maxLength) return `Use no máximo ${maxLength} caracteres.`;
+		return '';
+	});
+	const exposedError = $derived(error ?? localError);
 
 	$effect(() => {
-		let length = 0;
-		if (minLength !== undefined) {
-			for (const character of value) {
-				length += 1;
-				if (length >= minLength) break;
-			}
-		}
-		input?.setCustomValidity(value && minLength !== undefined && length < minLength ? `Use ao menos ${minLength} caracteres.` : '');
+		// A validade conta caracteres Unicode por iteração; minlength/maxlength do HTML
+		// contam unidades UTF-16 e não representam esses limites.
+		input?.setCustomValidity(touched && exposedError ? exposedError : '');
 	});
 </script>
 
@@ -32,13 +47,17 @@
 	<div class="password-input">
 		<input
 			{id}
+			{name}
 			type={visible ? 'text' : 'password'}
 			{autocomplete}
 			{placeholder}
 			bind:value
 			bind:this={input}
 			required
-			aria-describedby={hint ? `${id}-hint` : undefined}
+			aria-invalid={(touched && exposedError) || error ? 'true' : undefined}
+			aria-describedby={[hint ? `${id}-hint` : null, exposedError ? `${id}-error` : null].filter(Boolean).join(' ') || undefined}
+			onblur={() => (touched = true)}
+			oninput={() => { if (touched) input?.setCustomValidity(''); }}
 		/>
 		<button
 			type="button"
@@ -59,4 +78,9 @@
 		</button>
 	</div>
 	{#if hint}<p id={`${id}-hint`} class="password-hint">{hint}</p>{/if}
+	{#if exposedError}<p id={`${id}-error`} class="password-error" role="alert">{exposedError}</p>{/if}
 </div>
+
+<style>
+	.password-error { margin: 4px 0 0; color: var(--danger); font-size: 14px; line-height: 20px; }
+</style>
