@@ -122,8 +122,6 @@
 				<option value="recent">Mais recentes</option>
 				<option value="oldest">Mais antigas</option>
 			</select>
-			<label for="notes-search">Buscar no texto</label>
-			<input id="notes-search" class="field" type="search" bind:value={searchQuery} placeholder="Buscar anotações" />
 			{#if activeFilters}<button class="text-button clear-filters" type="button" onclick={clearFilters}>Limpar filtros</button>{/if}
 		</aside>
 		<div class="notes-results">

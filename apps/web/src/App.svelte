@@ -24,6 +24,7 @@
 	import { applyPalette, readPalettePreferences, persistPalettePreferences, resolvePalette, type PalettePreferences } from './palettes';
 	import { graphiteScreens } from './graphite/layout';
 
+	let accountDetails: HTMLDetailsElement | null = null;
 	let themeMode: ThemeMode = readThemeMode(safeLocalStorage());
 	let systemDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
 	let resolvedTheme = resolveTheme(themeMode, systemDark);
@@ -209,6 +210,9 @@
 				courseMenuOpen = false;
 				removeConfirm = false;
 			}
+			if (accountDetails?.open && !(target instanceof Element && target.closest('.account-details'))) {
+				accountDetails.open = false;
+			}
 			if (!coverMenuId) return;
 			if (target instanceof Element && target.closest('.course-card-menu, .course-card-menu-toggle')) return;
 			coverMenuId = null;
@@ -218,6 +222,10 @@
 			coverMenuId = null;
 			courseMenuOpen = false;
 			removeConfirm = false;
+			if (accountDetails?.open) {
+				accountDetails.open = false;
+				accountDetails.querySelector('summary')?.focus();
+			}
 		};
 		window.addEventListener('hashchange', change);
 		window.addEventListener('pointerdown', closeMenus);
@@ -665,6 +673,7 @@
 	</main>
 {:else}
 	<div class="shell graphite-app" data-board={activeBoard}>
+		<a class="skip-link" href="#main-content">Pular para conteúdo</a>
 		<header class="top">
 			<a class="brand" href={href('home')}>Learn<i>Vault</i></a>
 			<nav class="globalnav" aria-label="Navegação principal">
@@ -677,12 +686,19 @@
 				<label class="visually-hidden" for="global-search">{route === 'notes' ? 'Buscar anotações' : 'Buscar cursos'}</label>
 				<div class="search-field">
 					<svg class="search-glyph" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"></circle><path d="m16.6 16.6 4.2 4.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>
-					<input id="global-search" class="search" type="search" placeholder={route === 'notes' ? 'Buscar anotações' : 'Buscar cursos'} value={route === 'notes' ? notesSearchQuery : catalogQuery} oninput={(event) => route === 'notes' ? notesSearchQuery = event.currentTarget.value : catalogQuery = event.currentTarget.value} />
+				<input id="global-search" class="search" type="search" placeholder={route === 'notes' ? 'Buscar anotações' : 'Buscar cursos'} value={route === 'notes' ? notesSearchQuery : catalogQuery} oninput={(event) => route === 'notes' ? notesSearchQuery = event.currentTarget.value : catalogQuery = event.currentTarget.value} onkeydown={(event) => { if (event.key === 'Enter' && route !== 'notes') { event.preventDefault(); courseFilter = 'all'; location.hash = href('home'); } }} />
 				</div>
 			</form>
 			{#if studySyncSupported}<Pomodoro />{/if}
 			{#if transportKind === 'http'}
-				<button class="user account-button" type="button" title="Sair" aria-label="Sair da conta" onclick={logout}>{user.username.slice(0, 1).toUpperCase()}</button>
+				<details class="account-details" bind:this={accountDetails}>
+					<summary class="user account-button" title="Abrir conta" aria-label="Abrir conta">{user.username.slice(0, 1).toUpperCase()}</summary>
+					<div class="account-menu" role="group" aria-label="Conta de {user.username}">
+						<span class="account-name">{user.username}</span>
+						<a href={href('settings')} aria-label="Abrir configurações">Configurações</a>
+						<button class="text-button danger" type="button" onclick={logout}>Encerrar sessão</button>
+					</div>
+				</details>
 			{:else}
 				<div class="user" aria-label={user.username}>{user.username.slice(0, 1).toUpperCase()}</div>
 			{/if}
@@ -695,7 +711,7 @@
 		</nav>
 		<div class="layout" class:watch-layout={watchRoute}>
 			<aside class="sidebar" aria-hidden="true"></aside>
-			<main class:home={route === 'home'} class:import-flow={route === 'home' && (importFormOpen || importPreview !== null)} class:course={route === 'course' && !watchRoute} class:settings={route === 'settings'} class:watch={watchRoute}>{#if error}<p class="error" role="alert">{error}</p>{/if}
+			<main id="main-content" tabindex="-1" class:home={route === 'home'} class:import-flow={route === 'home' && (importFormOpen || importPreview !== null)} class:course={route === 'course' && !watchRoute} class:settings={route === 'settings'} class:watch={watchRoute}>{#if error}<p class="error" role="alert">{error}</p>{/if}
 {#if route === 'home'}
 	{#if importPreview}
 		<ImportPreview preview={importPreview} onCancel={cancelImportPreview} onConfirm={confirmImport} busy={importing} />

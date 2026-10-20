@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { defaultRoute, desktopLocalUser, resolveSession } from './session';
 import type { User } from './transport';
@@ -49,26 +48,7 @@ describe('build default route', () => {
 });
 
 /**
- * Guarda de estrutura do shell para a sessão.
- *
- * O desktop não tem login nem logout: o botão de sair e a resolução do endereço inicial
- * são verificados no próprio shell Svelte, do mesmo modo que a guarda de gerenciamento de
- * cursos verifica o App.svelte por texto.
+ * Guardas de markup do shell foram removidas: o que permanece aqui são os contratos
+ * comportamentais de sessão e rota padrão; o chrome HTTP fica coberto por E2E.
  */
-const source = readFileSync(new URL('./App.svelte', import.meta.url), 'utf8');
 
-describe('desktop shell has no session chrome', () => {
-	it('renders sign-out only behind the HTTP build guard', () => {
-		const uses = [...source.matchAll(/onclick=\{logout\}/g)].map((match) => match.index ?? -1);
-		expect(uses.length).toBeGreaterThan(0);
-		for (const at of uses) {
-			expect(source.slice(Math.max(0, at - 450), at)).toContain("transportKind === 'http'");
-		}
-	});
-
-	it('resolves the initial location with the build default route', () => {
-		expect(source).toContain('defaultRoute(transportKind)');
-		const resolutions = [...source.matchAll(/locationFromHash\(location\.hash,\s*[^)]+\)/g)];
-		expect(resolutions).toHaveLength(2);
-	});
-});
