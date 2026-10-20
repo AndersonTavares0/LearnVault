@@ -22,11 +22,13 @@
 	import { applyTheme, persistThemeMode, readThemeMode, resolveTheme, type ThemeMode } from './theme';
 	import './graphite/shell.css';
 	import './graphite/reference.css';
+	import './graphite/refinement.css';
 	import { graphiteScreens } from './graphite/layout';
 
 	let themeMode: ThemeMode = readThemeMode(safeLocalStorage());
 	let systemDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
 	let resolvedTheme = resolveTheme(themeMode, systemDark);
+	let settingsSection: 'theme' | 'account' | 'updates' = 'theme';
 	// O desktop não tem tela de login: um endereço de login ou desconhecido cai na tela
 	// inicial em vez de abrir um formulário que não consegue autenticar.
 	const fallbackRoute = defaultRoute(transportKind);
@@ -256,6 +258,10 @@
 		const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
 		if (themeColor) themeColor.content = resolvedTheme === 'dark' ? '#14232b' : '#e8edf0';
 		persistThemeMode(safeLocalStorage(), mode);
+	}
+	function showSettingsSection(section: 'theme' | 'account' | 'updates', id: string) {
+		settingsSection = section;
+		document.getElementById(id)?.scrollIntoView({ block: 'start' });
 	}
 	async function initialize() {
 		try {
@@ -803,11 +809,11 @@
 		<h1 class="title">Configurações</h1>
 		<p class="sub">Aparência, conta e comportamento do LearnVault.</p>
 		<div class="settings-layout">
-			<aside class="setting-nav" aria-label="Seções de configurações">
-				<div class="sel">Aparência</div>
-				<div>Conta e segurança</div>
-				{#if transportKind === 'http'}<div>Atualizações</div>{/if}
-			</aside>
+			<nav class="setting-nav" aria-label="Seções de configurações">
+				<button class:sel={settingsSection === 'theme'} type="button" aria-current={settingsSection === 'theme' ? 'page' : undefined} onclick={() => showSettingsSection('theme', 'theme-heading')}>Aparência</button>
+				<button class:sel={settingsSection === 'account'} type="button" aria-current={settingsSection === 'account' ? 'page' : undefined} onclick={() => showSettingsSection('account', 'account-heading')}>Conta e segurança</button>
+				{#if transportKind === 'http'}<button class:sel={settingsSection === 'updates'} type="button" aria-current={settingsSection === 'updates' ? 'page' : undefined} onclick={() => showSettingsSection('updates', 'update-heading')}>Atualizações</button>{/if}
+			</nav>
 			<div class="setting-content">
 				<section class="setting-card" aria-labelledby="theme-heading">
 					<h3 id="theme-heading">Tema</h3>
@@ -844,7 +850,7 @@
 								<button class="btn primary" type="submit" disabled={authBusy} aria-busy={authBusy}>{authBusy ? 'Salvando…' : 'Atualizar credenciais'}</button>
 							</fieldset>
 						</form>
-						<button class="text-button" type="button" onclick={transportKind === 'http' ? logout : undefined}>Encerrar sessão</button>
+						<button class="text-button danger" type="button" onclick={transportKind === 'http' ? logout : undefined}>Encerrar sessão</button>
 					{:else}<p class="catalog-message">Biblioteca local neste dispositivo.</p>{/if}
 				</section>
 				{#if transportKind === 'http'}

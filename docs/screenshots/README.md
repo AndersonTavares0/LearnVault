@@ -24,6 +24,14 @@ HTTP temporários; dados sintéticos existem apenas na fixture e nas capturas.
 | `graphite-implementation/06-login-browser-1568x795.png` | 1568×795 | Escuro, login full-viewport com painel claro de autenticação |
 | `graphite-implementation/06-login-browser-1440x900.png` | 1440×900 | Escuro, desktop refinado |
 | `graphite-implementation/06-login-browser-390x844.png` | 390×844 | Escuro, mobile responsivo sem overflow |
+| `graphite-implementation/06-refinement-home-light-1440x900.png` | 1440×900 | Refinamento claro, Meus cursos, fixture isolada |
+| `graphite-implementation/06-refinement-notes-light-1440x900.png` | 1440×900 | Refinamento claro, Anotações, estado vazio real |
+| `graphite-implementation/06-refinement-settings-light-1440x900.png` | 1440×900 | Refinamento claro, Configurações |
+| `graphite-implementation/06-refinement-analytics-light-1440x900.png` | 1440×900 | Refinamento claro, Estatísticas, sem dados sintéticos |
+| `graphite-implementation/06-refinement-home-dark-390x844.png` | 390×844 | Refinamento escuro, Meus cursos, mobile |
+| `graphite-implementation/06-refinement-notes-dark-390x844.png` | 390×844 | Refinamento escuro, Anotações, mobile |
+| `graphite-implementation/06-refinement-settings-dark-390x844.png` | 390×844 | Refinamento escuro, Configurações, mobile |
+| `graphite-implementation/06-refinement-analytics-dark-390x844.png` | 390×844 | Refinamento escuro, Estatísticas, mobile |
 | `phase7-login-spa-1440x1000-light.png` | 1440×1000 | SPA, Graphite claro, capturada via REA/Playwright |
 | `phase7-login-side-by-side-1440x1000.png` | 2880×1000 | Referência à esquerda; SPA à direita |
 | `phase7-board01-reference-1440x1000.png` | 1440×1000 | Captura direta atual de `01-library.html` |
@@ -40,6 +48,17 @@ componentes.
 
 O mapeamento de cada prancha para a implementação, incluindo limitações declaradas,
 está em [`docs/product/graphite-reference-matrix.md`](../product/graphite-reference-matrix.md).
+## Refinamento visual atual
+
+Esta rodada usa `docs/design/graphite/00-referencia-original-completa.html` e as
+pranchas individuais como fonte estrutural e de tokens. O acabamento atual melhora
+hierarquia, limites de conteúdo, estados vazios, controles, foco, navegação móvel e
+separação entre superfícies sem criar dados de demonstração na aplicação.
+
+As capturas `06-refinement-*` usam uma sessão HTTP temporária e uma biblioteca fixture
+isolada. O curso exibido em Meus cursos é apenas evidência de layout; as telas de
+Anotações e Estatísticas preservam os estados reais de ausência de dados.
+
 ## Comparação atual — anotações (prancha 04)
 
 `graphite-reference/board-04-notes-1440x1000.png` e
