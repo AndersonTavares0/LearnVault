@@ -5,6 +5,10 @@ const copy = (): Palette => ({ ...structuredClone(PALETTE_PRESETS[0]), id: 'cust
 const prefs = (customPalettes: Palette[], selectedPaletteId = 'custom-test'): PalettePreferences => ({ version: 1, selectedPaletteId, customPalettes });
 const storage = (value: unknown) => ({ getItem: () => JSON.stringify(value) });
 describe('paletas locais com contraste verificável', () => {
+ it('usa a curva sRGB WCAG no limite do texto auxiliar sobre o fundo', () => {
+  const palette = structuredClone(PALETTE_PRESETS[1]); palette.light.muted = '#64737E';
+  expect(validatePalette(palette).some(e => e.field === 'light.muted' && e.message.includes('background'))).toBe(true);
+ });
  it('valida todos os pares dos dois modos dos presets', () => { for (const palette of PALETTE_PRESETS) expect(validatePalette(palette)).toEqual([]); });
  it('rejeita cor arbitrária, contraste insuficiente e nomes vazios', () => {
   const palette = copy(); palette.light.text = '#GG0000'; expect(validatePalette(palette).some(e => e.field.includes('text'))).toBe(true);

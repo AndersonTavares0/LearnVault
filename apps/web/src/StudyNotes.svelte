@@ -122,5 +122,5 @@
 	.secondary { opacity: .8; }
 	.state { color: inherit; opacity: .75; }
 	.hint { font-size: 13px; opacity: .7; }
-	.error { color: #a23f32; }
+	.error { color: var(--danger); }
 </style>

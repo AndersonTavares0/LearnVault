@@ -123,139 +123,27 @@
 </div>
 
 <style>
-	.pomo-wrap {
-		position: relative;
-	}
-
-	.pomo-chip {
-		border: 1px solid #587078;
-		background: #20363e;
-		color: #e8f2f2;
-		border-radius: 6px;
-		padding: 7px 10px;
-		font-size: 12px;
-		font-weight: 650;
-		white-space: nowrap;
-	}
-
-	.pomo-chip span {
-		color: #8ed1c4;
-		font-variant-numeric: tabular-nums;
-		margin-left: 5px;
-	}
-
-	.pomo-panel {
-		position: absolute;
-		z-index: 20;
-		top: calc(100% + 10px);
-		right: 0;
-		width: min(330px, calc(100vw - 28px));
-		overflow: hidden;
-		border: 1px solid var(--line, #d9e1e6);
-		border-radius: 9px;
-		background: var(--surface, #fff);
-		color: var(--ink, #1b2832);
-		box-shadow: 0 10px 28px #14232b26;
-	}
-
-	.pomo-panel-head {
-		display: flex;
-		align-items: center;
-		padding: 14px 16px;
-		border-bottom: 1px solid var(--line, #d9e1e6);
-	}
-
-	.pomo-panel-head strong {
-		font-size: 14px;
-	}
-
-	.close-button {
-		margin-left: auto;
-		border: 0;
-		background: transparent;
-		color: var(--muted, #64737e);
-		padding: 7px;
-		font-size: 18px;
-		line-height: 1;
-	}
-
-	.pomo-clock {
-		display: block;
-		text-align: center;
-		padding: 19px 16px 9px;
-	}
-
-	.pomo-clock-digits {
-		display: block;
-		color: var(--ink, #1b2832);
-		font-size: 48px;
-		font-weight: 750;
-		line-height: 1;
-		letter-spacing: -0.05em;
-		font-variant-numeric: tabular-nums;
-	}
-
-	.pomo-clock small {
-		display: block;
-		margin-top: 8px;
-		color: var(--muted, #64737e);
-	}
-
-	.pomo-actions {
-		display: flex;
-		justify-content: center;
-		gap: 7px;
-		padding: 0 14px 15px;
-	}
-
-	.pomo-actions button {
-		border: 1px solid var(--line, #d9e1e6);
-		border-radius: 6px;
-		background: var(--surface, #fff);
-		color: var(--ink, #344750);
-		padding: 9px 12px;
-		font-size: 12px;
-		font-weight: 650;
-	}
-
-	.pomo-actions button.primary {
-		border-color: var(--accent, #276f73);
-		background: var(--accent, #276f73);
-		color: #fff;
-	}
-:global(:root[data-theme="dark"]) .pomo-actions button.primary {
-	color: #14232b;
-}
-
-	.pomo-actions button:disabled {
-		cursor: wait;
-		opacity: 0.65;
-	}
-
-	.error {
-		margin: 0 14px 14px;
-		padding: 10px 11px;
-		border-radius: 6px;
-		background: var(--amber-soft, #fbf0e4);
-		color: var(--amber, #8b531f);
-		font-size: 12px;
-	}
-
-	.pomo-wrap button:focus-visible {
-		outline: 2px solid var(--focus, #276f73);
-		outline-offset: 2px;
-	}
-
+	.pomo-wrap { position: relative; min-width: 0; }
+	.pomo-chip { min-height: 44px; padding: 8px 12px; border: 1px solid var(--on-nav); border-radius: 8px; background: var(--nav); color: var(--on-nav); font-size: 14px; font-weight: 600; white-space: nowrap; }
+	.pomo-chip span { font-variant-numeric: tabular-nums; margin-left: 8px; }
+	.pomo-chip:hover { outline: 1px solid currentColor; outline-offset: 1px; }
+	.pomo-chip:focus-visible { outline: 3px solid var(--on-nav); outline-offset: 2px; }
+	.pomo-panel { position: absolute; z-index: 20; top: calc(100% + 8px); right: 0; width: min(330px, calc(100vw - 40px)); border: 1px solid var(--line-strong); border-radius: 16px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+	.pomo-panel-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; border-bottom: 1px solid var(--line); }
+	.pomo-panel-head strong { font-size: 16px; }
+	.close-button { width: 44px; height: 44px; border: 0; background: transparent; color: var(--ink); font-size: 24px; }
+	.pomo-clock { text-align: center; padding: 24px 16px; }
+	.pomo-clock-digits { display: block; color: var(--ink); font-size: 48px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+	.pomo-clock small { display: block; margin-top: 12px; color: var(--muted); font-size: 14px; }
+	.pomo-actions { display: flex; justify-content: center; gap: 8px; padding: 0 16px 24px; }
+	.pomo-actions button { min-height: 44px; padding: 8px 16px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); color: var(--ink); font-size: 14px; font-weight: 600; }
+	.pomo-actions button.primary { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+	.pomo-actions button:hover:not(:disabled) { outline: 1px solid currentColor; outline-offset: 1px; }
+	.pomo-actions button:disabled { cursor: wait; opacity: .55; }
+	.error { margin: 0 16px 16px; color: var(--danger); font-size: 14px; }
 	@media (max-width: 700px) {
-		.pomo-chip {
-			padding: 6px 7px;
-		}
-
-		.pomo-panel {
-			position: fixed;
-			top: auto;
-			right: 14px;
-			bottom: 14px;
-		}
+		.pomo-chip { padding: 8px; font-size: 13px; }
+		.pomo-chip span { margin-left: 4px; }
+		.pomo-panel { position: fixed; top: auto; right: max(20px, env(safe-area-inset-right)); bottom: max(20px, env(safe-area-inset-bottom)); }
 	}
 </style>

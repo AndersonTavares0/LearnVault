@@ -20,14 +20,15 @@
 	import { courseCover } from './cover';
 	import { createDefaultPlayerPreferences, playerPreferencesScope, readPlayerPreferences, writePlayerPreferences, type PlayerPreferences } from './player-preferences';
 	import { applyTheme, persistThemeMode, readThemeMode, resolveTheme, type ThemeMode } from './theme';
-	import './graphite/shell.css';
-	import './graphite/reference.css';
-	import './graphite/refinement.css';
+	import PaletteSettings from './PaletteSettings.svelte';
+	import { applyPalette, readPalettePreferences, persistPalettePreferences, resolvePalette, type PalettePreferences } from './palettes';
 	import { graphiteScreens } from './graphite/layout';
 
 	let themeMode: ThemeMode = readThemeMode(safeLocalStorage());
 	let systemDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
 	let resolvedTheme = resolveTheme(themeMode, systemDark);
+	let palettePreferences = readPalettePreferences(safeLocalStorage());
+	let themePersistenceMessage = '';
 	let settingsSection: 'theme' | 'account' | 'updates' = 'theme';
 	// O desktop não tem tela de login: um endereço de login ou desconhecido cai na tela
 	// inicial em vez de abrir um formulário que não consegue autenticar.
@@ -171,14 +172,14 @@
 	$: canManage = user !== null && user.role === 'admin';
 
 	applyTheme(document.documentElement, resolvedTheme);
+	applyPalette(document.documentElement, resolvePalette(palettePreferences), resolvedTheme);
 	const scheme = window.matchMedia?.('(prefers-color-scheme: dark)');
 	const updateSystemTheme = (event: MediaQueryListEvent) => {
 		systemDark = event.matches;
 		if (themeMode === 'system') {
 			resolvedTheme = resolveTheme(themeMode, systemDark);
 			applyTheme(document.documentElement, resolvedTheme);
-			const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
-			if (themeColor) themeColor.content = resolvedTheme === 'dark' ? '#14232b' : '#e8edf0';
+			applyPalette(document.documentElement, resolvePalette(palettePreferences), resolvedTheme);
 		}
 	};
 	scheme?.addEventListener('change', updateSystemTheme);
@@ -255,9 +256,13 @@
 		themeMode = mode;
 		resolvedTheme = resolveTheme(mode, systemDark);
 		applyTheme(document.documentElement, resolvedTheme);
-		const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
-		if (themeColor) themeColor.content = resolvedTheme === 'dark' ? '#14232b' : '#e8edf0';
-		persistThemeMode(safeLocalStorage(), mode);
+		applyPalette(document.documentElement, resolvePalette(palettePreferences), resolvedTheme);
+		themePersistenceMessage = persistThemeMode(safeLocalStorage(), mode) ? '' : 'Tema aplicado nesta sessão; não foi possível salvar neste navegador.';
+	}
+	function changePalette(next: PalettePreferences): boolean {
+		palettePreferences = next;
+		applyPalette(document.documentElement, resolvePalette(next), resolvedTheme);
+		return persistPalettePreferences(safeLocalStorage(), next);
 	}
 	function showSettingsSection(section: 'theme' | 'account' | 'updates', id: string) {
 		settingsSection = section;
@@ -817,23 +822,18 @@
 			<div class="setting-content">
 				<section class="setting-card" aria-labelledby="theme-heading">
 					<h3 id="theme-heading">Tema</h3>
-					<p>Escolha a aparência. A paleta permanece Graphite ao alternar entre claro e escuro.</p>
+					<p>Escolha o modo de exibição. A paleta selecionada acompanha os dois modos.</p>
 					<div class="tools theme-buttons" role="group" aria-label="Tema">
 						<button class="btn" class:primary={themeMode === 'light'} type="button" aria-pressed={themeMode === 'light'} onclick={() => changeTheme('light')}>Claro</button>
 						<button class="btn" class:primary={themeMode === 'dark'} type="button" aria-pressed={themeMode === 'dark'} onclick={() => changeTheme('dark')}>Escuro</button>
 						<button class="btn" class:primary={themeMode === 'system'} type="button" aria-pressed={themeMode === 'system'} onclick={() => changeTheme('system')}>Sistema</button>
 					</div>
 					<p class="theme-status" aria-live="polite">Tema atual: {resolvedTheme === 'dark' ? 'escuro' : 'claro'}{themeMode === 'system' ? ' (sistema)' : ''}</p>
+					{#if themePersistenceMessage}<p class="inline-status" role="status">{themePersistenceMessage}</p>{/if}
 				</section>
 				<section class="setting-card" aria-labelledby="palette-heading">
-					<h3 id="palette-heading">Paleta</h3>
-					<p>Graphite é a paleta disponível neste LearnVault.</p>
-					<div class="modes">
-						<div class="mode selected" aria-label="Paleta Graphite ativa">
-							<div class="theme-preview"><i></i><b></b><span></span></div>
-							<strong>Graphite</strong><div class="small">Claro e escuro</div>
-						</div>
-					</div>
+					<h3 id="palette-heading">Paletas</h3>
+					<PaletteSettings preferences={palettePreferences} onChange={changePalette} />
 				</section>
 				<section class="setting-card" aria-labelledby="account-heading">
 					<h3 id="account-heading">Conta</h3>
