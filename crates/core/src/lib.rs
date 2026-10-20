@@ -25,6 +25,7 @@ pub mod interpretation;
 pub mod legacy_import;
 pub mod media;
 pub mod paths;
+pub mod pomodoro;
 pub mod removal;
 pub mod rescan;
 pub mod scanner;
@@ -63,6 +64,10 @@ pub use media::{
     open_media_reference,
 };
 pub use paths::KeyMode;
+pub use pomodoro::{
+    DEFAULT_POMODORO_SECONDS, PomodoroState, PomodoroStatus, pause_pomodoro, pomodoro_state,
+    reset_pomodoro, start_pomodoro,
+};
 pub use removal::{MediaRemovalImpact, MediaRemovalOutcome, media_removal_impact, remove_media};
 pub use rescan::{RescanSummary, apply_scan, rescan};
 pub use scanner::{MediaKind, ScanOutcome, ScannedFile, scan};

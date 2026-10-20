@@ -47,9 +47,10 @@ pub mod study;
 
 pub use command::{
     catalog, desktop_catalog, desktop_import_course, desktop_media_removal_impact,
-    desktop_recent_study, desktop_record_position, desktop_remove_course, desktop_remove_media,
-    desktop_reorder_catalog, desktop_rescan, desktop_reset_catalog_order, desktop_set_completed,
-    desktop_study_analytics, desktop_study_progress,
+    desktop_pause_pomodoro, desktop_pomodoro, desktop_recent_study, desktop_record_position,
+    desktop_remove_course, desktop_remove_media, desktop_reorder_catalog, desktop_rescan,
+    desktop_reset_catalog_order, desktop_reset_pomodoro, desktop_set_completed,
+    desktop_start_pomodoro, desktop_study_analytics, desktop_study_progress,
 };
 pub use config::{DATABASE_FILE_NAME, DesktopConfigDto, database_path};
 pub use courses::{
@@ -57,7 +58,7 @@ pub use courses::{
 };
 pub use dto::{
     CatalogDto, CatalogFileDto, CatalogNodeDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto,
-    RecentStudyDto, RescanSummaryDto, StudyAnalyticsDto, StudyProgressDto,
+    PomodoroDto, RecentStudyDto, RescanSummaryDto, StudyAnalyticsDto, StudyProgressDto,
 };
 pub use error::{IpcError, IpcErrorCode};
 pub use state::{DesktopState, RescanGuard};
@@ -97,6 +98,10 @@ pub fn run() {
             command::desktop_set_completed,
             command::desktop_recent_study,
             command::desktop_study_analytics,
+            command::desktop_pomodoro,
+            command::desktop_start_pomodoro,
+            command::desktop_pause_pomodoro,
+            command::desktop_reset_pomodoro,
             command::desktop_media_removal_impact,
             command::desktop_remove_media
         ])

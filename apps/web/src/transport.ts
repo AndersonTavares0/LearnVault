@@ -16,6 +16,7 @@ export type TransportKind = 'http' | 'desktop';
 export type StudyProgress = { mediaId: string; positionSeconds: number; completed: boolean; updatedAt: number | null; recorded: boolean };
 export type RecentStudy = { items: StudyProgress[] };
 export type StudyAnalytics = { trackedCount: number; completedCount: number; totalPositionSeconds: number; lastActivityAt: number | null };
+export type Pomodoro = { status: 'idle' | 'running' | 'paused'; durationSeconds: number; elapsedSeconds: number; updatedAt: number };
 export type DiscoveryStatus = { status: 'found' } | { status: 'ignored' | 'inaccessible' | 'unsupported'; reason: string };
 export type DiscoveryNode = { name: string; path: string; entryKind: 'directory' | 'file'; status: DiscoveryStatus; fileKind?: 'media' | 'subtitle' | 'material'; size?: number; children: DiscoveryNode[] };
 export type ImportPreview = {
@@ -64,6 +65,10 @@ export interface Transport {
 	setCompleted(mediaId: string, completed: boolean): Promise<StudyProgress>;
 	recentStudy(limit?: number): Promise<RecentStudy>;
 	studyAnalytics(): Promise<StudyAnalytics>;
+	pomodoro(): Promise<Pomodoro>;
+	startPomodoro(durationSeconds?: number): Promise<Pomodoro>;
+	pausePomodoro(elapsedSeconds: number): Promise<Pomodoro>;
+	resetPomodoro(): Promise<Pomodoro>;
 	mediaUrl(file: FileEntry, courseId?: string): string | null;
 }
 
@@ -330,6 +335,13 @@ export function normalizeStudyAnalytics(value: unknown): StudyAnalytics {
 	return { trackedCount, completedCount, totalPositionSeconds, lastActivityAt: typeof lastActivityAt === 'number' ? lastActivityAt : null };
 }
 
+export function normalizePomodoro(value: unknown): Pomodoro {
+	if (!value || typeof value !== 'object') throw invalidPayload('Pomodoro ausente.');
+	const item = value as { status?: unknown; duration_seconds?: unknown; elapsed_seconds?: unknown; updated_at?: unknown };
+	if (!['idle', 'running', 'paused'].includes(String(item.status)) || typeof item.duration_seconds !== 'number' || !Number.isSafeInteger(item.duration_seconds) || item.duration_seconds < 60 || typeof item.elapsed_seconds !== 'number' || !Number.isSafeInteger(item.elapsed_seconds) || item.elapsed_seconds < 0 || item.elapsed_seconds > item.duration_seconds || typeof item.updated_at !== 'number' || !Number.isSafeInteger(item.updated_at) || item.updated_at < 0) throw invalidPayload('Pomodoro inválido.');
+	return { status: item.status as Pomodoro['status'], durationSeconds: item.duration_seconds, elapsedSeconds: item.elapsed_seconds, updatedAt: item.updated_at };
+}
+
 // Envelope de categoria da projeção de categorias: `{ children }`.
 function isCategoryEnvelope(item: unknown): boolean {
 	return item !== null && typeof item === 'object' && !Array.isArray(item) && 'children' in item;
@@ -435,6 +447,10 @@ export class HttpTransport implements Transport {
 	async setCompleted(mediaId: string, completed: boolean) { const response = await fetch('/api/study/completed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: mediaId, completed }) }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? 'Mídia não encontrada.' : 'Não foi possível atualizar a conclusão.'); return normalizeStudyProgress(await response.json()); }
 	async recentStudy(limit?: number) { const url = limit === undefined ? '/api/study/recent' : `/api/study/recent?limit=${limit}`; const response = await fetch(url); if (!response.ok) throw response.status === 404 ? Object.assign(new Error('Estudo não disponível neste servidor.'), { code: STUDY_NOT_AVAILABLE }) : new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar o histórico.'); return normalizeRecentStudy(await response.json()); }
 	async studyAnalytics() { const response = await fetch('/api/study/analytics'); if (!response.ok) throw response.status === 404 ? Object.assign(new Error('Estudo não disponível neste servidor.'), { code: STUDY_NOT_AVAILABLE }) : new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar as métricas de estudo.'); return normalizeStudyAnalytics(await response.json()); }
+	async pomodoro() { const response = await fetch('/api/pomodoro'); if (!response.ok) throw new Error('Não foi possível carregar o Pomodoro.'); return normalizePomodoro(await response.json()); }
+	async startPomodoro(durationSeconds = 1500) { const response = await fetch('/api/pomodoro', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ duration_seconds: durationSeconds }) }); if (!response.ok) throw new Error(response.status === 422 ? 'Configuração do Pomodoro inválida.' : 'Não foi possível iniciar o Pomodoro.'); return normalizePomodoro(await response.json()); }
+	async pausePomodoro(elapsedSeconds: number) { const response = await fetch('/api/pomodoro/pause', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ elapsed_seconds: elapsedSeconds }) }); if (!response.ok) throw new Error('Não foi possível pausar o Pomodoro.'); return normalizePomodoro(await response.json()); }
+	async resetPomodoro() { const response = await fetch('/api/pomodoro/reset', { method: 'POST', headers: { 'Content-Type': 'application/json' } }); if (!response.ok) throw new Error('Não foi possível reiniciar o Pomodoro.'); return normalizePomodoro(await response.json()); }
 	mediaUrl(file: FileEntry, courseId?: string) { return `/api/media?course=${encodeURIComponent(courseId ?? '')}&path=${encodeURIComponent(file.path)}`; }
 }
 
@@ -500,6 +516,10 @@ export class DesktopStub implements Transport {
 	// omitido em vez de enviado como `undefined`.
 	async recentStudy(limit?: number) { try { return normalizeRecentStudy(await invoke<unknown>('desktop_recent_study', limit === undefined ? {} : { limit })); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar o histórico de estudo.'); } }
 	async studyAnalytics() { try { return normalizeStudyAnalytics(await invoke<unknown>('desktop_study_analytics')); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar as métricas de estudo.'); } }
+	async pomodoro() { try { return normalizePomodoro(await invoke<unknown>('desktop_pomodoro')); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar o Pomodoro.'); } }
+	async startPomodoro(durationSeconds = 1500) { try { return normalizePomodoro(await invoke<unknown>('desktop_start_pomodoro', { durationSeconds })); } catch (cause) { throw desktopError(cause, 'Não foi possível iniciar o Pomodoro.'); } }
+	async pausePomodoro(elapsedSeconds: number) { try { return normalizePomodoro(await invoke<unknown>('desktop_pause_pomodoro', { elapsedSeconds })); } catch (cause) { throw desktopError(cause, 'Não foi possível pausar o Pomodoro.'); } }
+	async resetPomodoro() { try { return normalizePomodoro(await invoke<unknown>('desktop_reset_pomodoro')); } catch (cause) { throw desktopError(cause, 'Não foi possível reiniciar o Pomodoro.'); } }
 	// Toda mídia entregue ao player usa a identidade autorizada. O caminho catalogado é
 	// deliberadamente ignorado, inclusive no desktop, para que ele nunca atravesse o webview.
 	mediaUrl(file: FileEntry, _courseId?: string) {

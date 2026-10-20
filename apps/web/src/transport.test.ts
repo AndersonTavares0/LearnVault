@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { findLesson } from './router';
-import { desktopMediaUrl, DesktopStub, HttpTransport, lessonFromNode, normalizeCatalog, normalizeImportPreview, normalizeRecentStudy, normalizeStudyAnalytics, normalizeStudyProgress, normalizeUser, STUDY_NOT_AVAILABLE, CATALOG_LIMITS, type Transport } from './transport';
+import { desktopMediaUrl, DesktopStub, HttpTransport, lessonFromNode, normalizeCatalog, normalizeImportPreview, normalizePomodoro, normalizeRecentStudy, normalizeStudyAnalytics, normalizeStudyProgress, normalizeUser, STUDY_NOT_AVAILABLE, CATALOG_LIMITS, type Transport } from './transport';
 
 // O Tauri só é carregado no desktop: fora dele o módulo é substituído pelo mock, de modo
 // que a suíte nunca toca `window.__TAURI_INTERNALS__`.
@@ -21,8 +21,8 @@ describe('transport contract', () => {
 		expect(() => normalizeImportPreview({ discovery: { root: {}, summary: { found: 0, ignored: 0, inaccessible: 0, unsupported: 0 } }, interpretation: { suggestions: [] } })).toThrow('Resposta inválida do servidor');
 	});
 	it('exposes the HTTP transport seam without routing assumptions', () => {
-		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'saveCatalogOrder', 'resetCatalogOrder', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'studyAnalytics', 'mediaUrl'];
-		expect(methods).toHaveLength(17);
+		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'saveCatalogOrder', 'resetCatalogOrder', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'studyAnalytics', 'pomodoro', 'startPomodoro', 'pausePomodoro', 'resetPomodoro', 'mediaUrl'];
+		expect(methods).toHaveLength(21);
 	});
 	it('saves and resets a sibling order through authenticated HTTP endpoints', async () => {
 		const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
@@ -477,6 +477,10 @@ describe('transport contract', () => {
 		expect(normalizeStudyAnalytics({ tracked_count: 3, completed_count: 1, total_position_seconds: 90, last_activity_at: 12 })).toEqual({ trackedCount: 3, completedCount: 1, totalPositionSeconds: 90, lastActivityAt: 12 });
 		expect(() => normalizeStudyAnalytics({ tracked_count: 1, completed_count: 2, total_position_seconds: 0, last_activity_at: null })).toThrow('Resposta inválida');
 	});
+	it('normalizes Pomodoro state and rejects elapsed values beyond duration', () => {
+		expect(normalizePomodoro({ status: 'running', duration_seconds: 1500, elapsed_seconds: 12, updated_at: 8 })).toEqual({ status: 'running', durationSeconds: 1500, elapsedSeconds: 12, updatedAt: 8 });
+		expect(() => normalizePomodoro({ status: 'paused', duration_seconds: 1500, elapsed_seconds: 1501, updated_at: 8 })).toThrow('Resposta inválida');
+	});
 	it('reads study progress from the HTTP endpoint', async () => {
 		const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ media_id: 'm1', position_seconds: 42, completed: false, recorded: true }), { status: 200 }));
 		vi.stubGlobal('fetch', fetchMock);
@@ -508,6 +512,20 @@ describe('transport contract', () => {
 		vi.stubGlobal('fetch', fetchMock);
 		await expect(new HttpTransport().studyAnalytics()).resolves.toEqual({ trackedCount: 2, completedCount: 1, totalPositionSeconds: 120, lastActivityAt: 8 });
 		expect(fetchMock).toHaveBeenCalledWith('/api/study/analytics');
+		vi.unstubAllGlobals();
+	});
+	it('reads and mutates Pomodoro through HTTP endpoints', async () => {
+		const fetchMock = vi.fn().mockImplementation(() => new Response(JSON.stringify({ status: 'paused', duration_seconds: 1500, elapsed_seconds: 12, updated_at: 8 }), { status: 200 }));
+		vi.stubGlobal('fetch', fetchMock);
+		const http = new HttpTransport();
+		await expect(http.pomodoro()).resolves.toMatchObject({ status: 'paused', elapsedSeconds: 12 });
+		await http.startPomodoro(1500);
+		await http.pausePomodoro(12);
+		await http.resetPomodoro();
+		expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/pomodoro');
+		expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/pomodoro', expect.objectContaining({ method: 'POST', body: JSON.stringify({ duration_seconds: 1500 }) }));
+		expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/pomodoro/pause', expect.objectContaining({ method: 'POST', body: JSON.stringify({ elapsed_seconds: 12 }) }));
+		expect(fetchMock).toHaveBeenNthCalledWith(4, '/api/pomodoro/reset', expect.objectContaining({ method: 'POST' }));
 		vi.unstubAllGlobals();
 	});
 	it('reports study endpoints as unavailable when the server returns 404', async () => {

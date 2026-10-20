@@ -11,7 +11,7 @@ use rusqlite_migration::{M, Migrations};
 /// A recusa de um schema mais novo não depende desta constante — ela vem de
 /// `SchemaVersion::Outside` —, mas ela deve acompanhar a cadeia de migrações porque
 /// aparece na mensagem de diagnóstico de [`crate::Error::SchemaTooNew`].
-pub(crate) const SCHEMA_VERSION: usize = 5;
+pub(crate) const SCHEMA_VERSION: usize = 6;
 
 /// Versão 1: bibliotecas, mídia, varreduras e estado de estudo.
 ///
@@ -152,7 +152,25 @@ CREATE TABLE catalog_order (
 );
 ";
 
-const MIGRATIONS_SLICE: &[M<'static>] = &[M::up(V1), M::up(V2), M::up(V3), M::up(V4), M::up(V5)];
+/// Versão 6: estado persistente do Pomodoro por dono.
+const V6: &str = "
+CREATE TABLE pomodoro_state (
+    owner_id TEXT PRIMARY KEY NOT NULL CHECK (length(owner_id) > 0),
+    status TEXT NOT NULL CHECK (status IN ('idle', 'running', 'paused')),
+    duration_seconds INTEGER NOT NULL CHECK (duration_seconds > 0),
+    elapsed_seconds INTEGER NOT NULL CHECK (elapsed_seconds >= 0),
+    updated_at INTEGER NOT NULL
+);
+";
+
+const MIGRATIONS_SLICE: &[M<'static>] = &[
+    M::up(V1),
+    M::up(V2),
+    M::up(V3),
+    M::up(V4),
+    M::up(V5),
+    M::up(V6),
+];
 
 /// Cadeia de migrações aplicada por [`crate::db::Database`].
 pub(crate) const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATIONS_SLICE);

@@ -6,8 +6,8 @@
 //! desktop sem alteração.
 
 use learnvault_core::{
-    Availability, Catalog, CatalogFile, CatalogNode, MediaKind, NodeRole, RescanSummary,
-    StudyAnalytics, StudyProgress,
+    Availability, Catalog, CatalogFile, CatalogNode, MediaKind, NodeRole, PomodoroState,
+    PomodoroStatus, RescanSummary, StudyAnalytics, StudyProgress,
 };
 use serde::Serialize;
 
@@ -259,6 +259,34 @@ pub struct StudyAnalyticsDto {
     pub total_position_seconds: i64,
     /// Última atividade, se houver.
     pub last_activity_at: Option<i64>,
+}
+
+/// Estado Pomodoro serializável para o webview.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PomodoroDto {
+    /// Estado textual (`idle`, `running` ou `paused`).
+    pub status: &'static str,
+    /// Duração alvo em segundos.
+    pub duration_seconds: i64,
+    /// Tempo transcorrido em segundos.
+    pub elapsed_seconds: i64,
+    /// Instante da última alteração.
+    pub updated_at: i64,
+}
+
+impl From<PomodoroState> for PomodoroDto {
+    fn from(value: PomodoroState) -> Self {
+        Self {
+            status: match value.status {
+                PomodoroStatus::Idle => "idle",
+                PomodoroStatus::Running => "running",
+                PomodoroStatus::Paused => "paused",
+            },
+            duration_seconds: value.duration_seconds,
+            elapsed_seconds: value.elapsed_seconds,
+            updated_at: value.updated_at,
+        }
+    }
 }
 
 impl From<StudyAnalytics> for StudyAnalyticsDto {

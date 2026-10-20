@@ -4,6 +4,7 @@
 	import CatalogTree from './CatalogTree.svelte';
 	import CourseCard from './CourseCard.svelte';
 	import Player from './Player.svelte';
+	import Pomodoro from './Pomodoro.svelte';
 	import { filterCatalog } from './search';
 	import { countCatalogNode, formatCourseMeta, formatLocationContext } from './catalog';
 	import PasswordField from './PasswordField.svelte';
@@ -397,6 +398,7 @@
 		</div>
 	{/if}
 	{#if studySyncSupported && studyAnalytics}<section class="study-analytics" aria-labelledby="analytics-heading"><h2 id="analytics-heading">Seu estudo</h2><dl><div><dt>Aulas acompanhadas</dt><dd>{studyAnalytics.trackedCount}</dd></div><div><dt>Concluídas</dt><dd>{studyAnalytics.completedCount}</dd></div><div><dt>Tempo estudado</dt><dd>{formatDuration(studyAnalytics.totalPositionSeconds)}</dd></div></dl></section>{/if}
+	{#if studySyncSupported}<Pomodoro />{/if}
 	{#if studySyncSupported && recent.length}<section class="recent-study" aria-labelledby="recent-heading"><h2 id="recent-heading">Continuar assistindo</h2><ul>{#each recent as item}{@const location = findLessonLocation(catalog, item.mediaId)}<li>{#if location}<div class="recent-study-info"><a href={href('player', location.courseId, location.lesson.path)}>{location.lesson.title}</a><small title={formatLocationContext(location.courseTitle, location.moduleTitle)}>{formatLocationContext(location.courseTitle, location.moduleTitle)}</small></div><small>{item.completed ? 'Concluído' : `Parou em ${formatDuration(item.positionSeconds)}`}</small>{:else}<span>Mídia não disponível no catálogo</span>{/if}</li>{/each}</ul></section>{/if}
 	{#if !canManage && catalog && catalog.nodes.length === 0}<p class="empty" role="status">Nenhum curso disponível. Peça ao administrador para importar um curso.</p>{/if}
 	{#if user.role === 'admin' && importFormOpen && !importPreview}<form class="import-form" onsubmit={submitImport}><label for="import-path">Caminho da pasta do curso no servidor</label><input id="import-path" bind:value={importPath} placeholder="C:\cursos\Meu curso" required /><div class="import-form-actions"><button class="primary" disabled={previewingImport || importing} aria-busy={previewingImport}>{previewingImport ? 'Analisando…' : 'Analisar pasta'}</button><button type="button" class="text-button" onclick={() => (importFormOpen = false)}>Cancelar</button></div></form>{/if}

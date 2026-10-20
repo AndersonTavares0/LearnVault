@@ -256,6 +256,13 @@ pub enum Error {
         position_seconds: i64,
     },
 
+    /// A duração do Pomodoro está fora do intervalo permitido.
+    #[error("duração do Pomodoro inválida: {duration_seconds}")]
+    InvalidPomodoroDuration {
+        /// Duração recusada, em segundos.
+        duration_seconds: i64,
+    },
+
     /// A mídia foi removida explicitamente do catálogo.
     ///
     /// A linha de `media` e o progresso continuam existindo: a remoção tira a mídia do

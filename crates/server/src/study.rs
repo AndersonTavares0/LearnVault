@@ -400,7 +400,7 @@ fn parse_progress_query(raw: Option<&str>) -> Option<ProgressQuery> {
     serde_urlencoded::from_str::<ProgressQuery>(raw.unwrap_or_default()).ok()
 }
 
-fn internal_error(message: &'static str) -> Response {
+pub(crate) fn internal_error(message: &'static str) -> Response {
     error_response(StatusCode::INTERNAL_SERVER_ERROR, message)
 }
 
@@ -408,11 +408,11 @@ fn invalid_query() -> Response {
     error_response(StatusCode::BAD_REQUEST, "invalid_query")
 }
 
-fn error_response(status: StatusCode, error: &'static str) -> Response {
+pub(crate) fn error_response(status: StatusCode, error: &'static str) -> Response {
     private_no_store((status, Json(ErrorResponse { error })).into_response())
 }
 
-fn credentials_required() -> Response {
+pub(crate) fn credentials_required() -> Response {
     error_response(StatusCode::FORBIDDEN, "credentials_change_required")
 }
 
@@ -420,7 +420,7 @@ fn csrf_failed() -> Response {
     error_response(StatusCode::FORBIDDEN, "csrf_failed")
 }
 
-fn private_no_store(mut response: Response) -> Response {
+pub(crate) fn private_no_store(mut response: Response) -> Response {
     response.headers_mut().insert(
         header::CACHE_CONTROL,
         HeaderValue::from_static("private, no-store"),
@@ -428,6 +428,6 @@ fn private_no_store(mut response: Response) -> Response {
     response
 }
 
-fn status_private_no_store(status: StatusCode) -> Response {
+pub(crate) fn status_private_no_store(status: StatusCode) -> Response {
     private_no_store(status.into_response())
 }

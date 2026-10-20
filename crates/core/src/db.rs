@@ -250,6 +250,16 @@ const REQUIRED_TABLES: &[TableDefinition] = &[
             ("position", "INTEGER", true, None, 0),
         ],
     },
+    TableDefinition {
+        name: "pomodoro_state",
+        columns: &[
+            ("owner_id", "TEXT", true, None, 1),
+            ("status", "TEXT", true, None, 0),
+            ("duration_seconds", "INTEGER", true, None, 0),
+            ("elapsed_seconds", "INTEGER", true, None, 0),
+            ("updated_at", "INTEGER", true, None, 0),
+        ],
+    },
 ];
 
 fn definition_matches(conn: &Connection, definition: &TableDefinition) -> Result<bool> {
@@ -360,6 +370,12 @@ fn expected_checks(table: &str) -> &'static [&'static str] {
         "study_state" => &["completed in (0, 1)"],
         "user" => &["is_admin in (0, 1)", "must_change_credentials in (0, 1)"],
         "catalog_order" => &["length(owner_id) > 0", "position >= 0"],
+        "pomodoro_state" => &[
+            "length(owner_id) > 0",
+            "status in ('idle', 'running', 'paused')",
+            "duration_seconds > 0",
+            "elapsed_seconds >= 0",
+        ],
         _ => &[],
     }
 }

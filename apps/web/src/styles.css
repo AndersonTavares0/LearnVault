@@ -54,3 +54,7 @@ div.lesson-row:hover,div.lesson-row:active{background-color:transparent;color:va
 .material-preview iframe { width: min(100%, 42rem); height: 24rem; }
 :root{--analytics-surface:#faf9f5}
 .study-analytics{margin:28px 0;padding:20px;border:1px solid var(--line,#d5d4c9);border-radius:12px;background:var(--surface,var(--analytics-surface))}.study-analytics h2{margin:0 0 16px;color:var(--heading,#304438);font:400 24px Georgia,serif}.study-analytics dl{display:flex;gap:12px;flex-wrap:wrap;margin:0}.study-analytics dl div{min-width:130px}.study-analytics dt{color:var(--muted,#687066);font-size:13px}.study-analytics dd{margin:4px 0 0;color:var(--heading,#304438);font-size:24px;font-weight:700}
+.pomodoro { display: flex; align-items: center; gap: 1rem; justify-content: space-between; margin: 1rem 0; padding: 1rem; border: 1px solid var(--border, #cbd5e1); border-radius: .75rem; }
+.pomodoro h2, .pomodoro p { margin: 0; }
+.pomodoro strong { font-variant-numeric: tabular-nums; font-size: 1.6rem; }
+.pomodoro-actions { display: flex; gap: .5rem; }

@@ -183,6 +183,15 @@ descrito ao final desta seção; ele não usa rotas HTTP.
 | `POST` | `/api/study/position` | Sessão | Aceita `{ "media_id": "...", "position_seconds": 0 }` e grava o ponto de retomada |
 | `POST` | `/api/study/completed` | Sessão | Aceita `{ "media_id": "...", "completed": true }` e marca ou desmarca a conclusão |
 
+### Pomodoro
+
+| Método | Rota | Autenticação | Finalidade |
+| --- | --- | --- | --- |
+| `GET` | `/api/pomodoro` | Sessão | Lê a sessão persistente do usuário |
+| `POST` | `/api/pomodoro` | Sessão + mesma origem | Inicia ou retoma; aceita `{ "duration_seconds": 1500 }` |
+| `POST` | `/api/pomodoro/pause` | Sessão + mesma origem | Pausa com `{ "elapsed_seconds": 300 }`, limitado à duração |
+| `POST` | `/api/pomodoro/reset` | Sessão + mesma origem | Reinicia o tempo transcorrido, preservando a duração |
+
 Uma mídia conhecida sem progresso responde `200` com `recorded: false`; a ausência não é um
 erro. Uma mídia desconhecida no catálogo responde `404 media_not_found`, uma posição negativa
 responde `422 invalid_position` e uma consulta malformada responde `400 invalid_query`. As
@@ -204,6 +213,10 @@ shape snake_case (`media_id`, `position_seconds`, `completed`, `updated_at`, `re
 | `desktop_record_position` | `mediaId`, `positionSeconds` | Grava o ponto de retomada, preservando a conclusão |
 | `desktop_set_completed` | `mediaId`, `completed` | Marca ou desmarca a conclusão, preservando a posição |
 | `desktop_recent_study` | `limit` (opcional) | Lista o progresso do dono local, do mais recente ao mais antigo |
+| `desktop_pomodoro` | — | Lê a sessão Pomodoro persistente do dono local |
+| `desktop_start_pomodoro` | `durationSeconds` | Inicia ou retoma a sessão |
+| `desktop_pause_pomodoro` | `elapsedSeconds` | Pausa a sessão com o tempo informado |
+| `desktop_reset_pomodoro` | — | Reinicia o tempo, preservando a duração |
 
 O dono é um identificador local fixo resolvido no Rust: nenhum comando aceita `owner_id` como
 argumento, então o webview não escolhe nem conhece o dono. Uma mídia conhecida sem progresso

@@ -19,8 +19,8 @@ use crate::command::{catalog, reorder_catalog, reset_catalog_order};
 use crate::config::{DesktopConfigDto, database_path};
 use crate::courses::{CourseEntry, load_courses, store_courses};
 use crate::dto::{
-    CatalogDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto, RecentStudyDto, RescanSummaryDto,
-    StudyAnalyticsDto, StudyProgressDto,
+    CatalogDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto, PomodoroDto, RecentStudyDto,
+    RescanSummaryDto, StudyAnalyticsDto, StudyProgressDto,
 };
 use crate::error::IpcError;
 use crate::study;
@@ -258,6 +258,39 @@ impl DesktopState {
             .lock()
             .map_err(|_| IpcError::database_unavailable())?;
         study::analytics(&database)
+    }
+
+    /// Lê a sessão Pomodoro persistente do dono local.
+    pub fn pomodoro(&self) -> Result<PomodoroDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::pomodoro(&database)
+    }
+    /// Inicia ou retoma a sessão Pomodoro local.
+    pub fn start_pomodoro(&self, duration: i64) -> Result<PomodoroDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::start_pomodoro(&database, duration)
+    }
+    /// Pausa a sessão Pomodoro local.
+    pub fn pause_pomodoro(&self, elapsed: i64) -> Result<PomodoroDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::pause_pomodoro(&database, elapsed)
+    }
+    /// Reinicia a sessão Pomodoro local.
+    pub fn reset_pomodoro(&self) -> Result<PomodoroDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::reset_pomodoro(&database)
     }
 
     /// Consulta o impacto da remoção de uma mídia do catálogo local.

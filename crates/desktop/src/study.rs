@@ -16,7 +16,7 @@
 
 use learnvault_core::Database;
 
-use crate::dto::{RecentStudyDto, StudyAnalyticsDto, StudyProgressDto};
+use crate::dto::{PomodoroDto, RecentStudyDto, StudyAnalyticsDto, StudyProgressDto};
 use crate::error::IpcError;
 
 /// Dono local fixo do progresso de estudo do desktop.
@@ -91,6 +91,31 @@ pub fn analytics(database: &Database) -> Result<StudyAnalyticsDto, IpcError> {
         .map_err(study_error)
 }
 
+/// Lê a sessão Pomodoro local.
+pub fn pomodoro(database: &Database) -> Result<PomodoroDto, IpcError> {
+    learnvault_core::pomodoro_state(database, LOCAL_OWNER_ID)
+        .map(PomodoroDto::from)
+        .map_err(pomodoro_error)
+}
+/// Inicia ou retoma a sessão Pomodoro local.
+pub fn start_pomodoro(database: &Database, duration_seconds: i64) -> Result<PomodoroDto, IpcError> {
+    learnvault_core::start_pomodoro(database, LOCAL_OWNER_ID, duration_seconds)
+        .map(PomodoroDto::from)
+        .map_err(pomodoro_error)
+}
+/// Pausa a sessão Pomodoro local.
+pub fn pause_pomodoro(database: &Database, elapsed_seconds: i64) -> Result<PomodoroDto, IpcError> {
+    learnvault_core::pause_pomodoro(database, LOCAL_OWNER_ID, elapsed_seconds)
+        .map(PomodoroDto::from)
+        .map_err(pomodoro_error)
+}
+/// Reinicia a sessão Pomodoro local.
+pub fn reset_pomodoro(database: &Database) -> Result<PomodoroDto, IpcError> {
+    learnvault_core::reset_pomodoro(database, LOCAL_OWNER_ID)
+        .map(PomodoroDto::from)
+        .map_err(pomodoro_error)
+}
+
 /// Traduz o erro do núcleo para o erro IPC estável, sem ecoar o identificador consultado.
 ///
 /// Uma mídia desconhecida e uma posição negativa são falhas de entrada com código próprio,
@@ -103,5 +128,17 @@ fn study_error(error: learnvault_core::Error) -> IpcError {
         Error::MediaNotFound { .. } => IpcError::media_not_found(),
         Error::InvalidStudyPosition { .. } => IpcError::invalid_position(),
         _ => IpcError::study_unavailable(),
+    }
+}
+
+fn pomodoro_error(error: learnvault_core::Error) -> IpcError {
+    if matches!(
+        error,
+        learnvault_core::Error::InvalidPomodoroDuration { .. }
+            | learnvault_core::Error::InvalidStudyPosition { .. }
+    ) {
+        IpcError::invalid_pomodoro()
+    } else {
+        IpcError::pomodoro_unavailable()
     }
 }

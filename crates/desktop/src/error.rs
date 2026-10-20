@@ -27,6 +27,10 @@ pub enum IpcErrorCode {
     RescanUnavailable,
     /// O progresso de estudo do dono local não pôde ser lido nem gravado.
     StudyUnavailable,
+    /// A sessão Pomodoro não pôde ser lida nem gravada.
+    PomodoroUnavailable,
+    /// A duração ou o tempo informado para o Pomodoro é inválido.
+    InvalidPomodoro,
     /// A mídia consultada não existe no catálogo local.
     MediaNotFound,
     /// A posição de retomada enviada é inválida.
@@ -110,6 +114,21 @@ impl IpcError {
         Self {
             code: IpcErrorCode::StudyUnavailable,
             message: "não foi possível sincronizar o progresso de estudo",
+        }
+    }
+
+    /// Pomodoro indisponível.
+    pub fn pomodoro_unavailable() -> Self {
+        Self {
+            code: IpcErrorCode::PomodoroUnavailable,
+            message: "não foi possível atualizar o Pomodoro",
+        }
+    }
+    /// Entrada inválida do Pomodoro.
+    pub fn invalid_pomodoro() -> Self {
+        Self {
+            code: IpcErrorCode::InvalidPomodoro,
+            message: "configuração do Pomodoro inválida",
         }
     }
 

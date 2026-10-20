@@ -387,6 +387,72 @@ async fn analytics_is_authenticated_and_aggregates_the_session_owner() {
 }
 
 #[tokio::test]
+async fn pomodoro_is_persistent_authenticated_and_csrf_protected() {
+    let temp = tempfile::tempdir().unwrap();
+    seed(&temp, &[], &[]);
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let cookie = login(&app, ADMIN, ADMIN_PASSWORD).await;
+
+    let initial = app
+        .clone()
+        .oneshot(get_with_cookie("/api/pomodoro", &cookie))
+        .await
+        .unwrap();
+    assert_eq!(initial.status(), StatusCode::OK);
+    assert_eq!(json_body(initial).await["status"], "idle");
+
+    let rejected = app
+        .clone()
+        .oneshot(
+            Request::post("/api/pomodoro")
+                .header("cookie", &cookie)
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"duration_seconds":59}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rejected.status(), StatusCode::FORBIDDEN);
+
+    let started = app
+        .clone()
+        .oneshot(post_json(
+            "/api/pomodoro",
+            &cookie,
+            r#"{"duration_seconds":120}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(started.status(), StatusCode::OK);
+    assert_eq!(json_body(started).await["status"], "running");
+
+    let paused = app
+        .clone()
+        .oneshot(post_json(
+            "/api/pomodoro/pause",
+            &cookie,
+            r#"{"elapsed_seconds":30}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(paused.status(), StatusCode::OK);
+    assert_eq!(json_body(paused).await["elapsed_seconds"], 30);
+
+    let reset = app
+        .oneshot(
+            Request::post("/api/pomodoro/reset")
+                .header("origin", "http://localhost")
+                .header("cookie", cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(reset.status(), StatusCode::OK);
+    assert_eq!(json_body(reset).await["status"], "idle");
+}
+
+#[tokio::test]
 async fn an_unknown_media_without_progress_is_absent_and_not_an_error() {
     let temp = tempfile::tempdir().unwrap();
     seed(&temp, &["m1"], &[]);
@@ -836,7 +902,10 @@ async fn an_existing_v4_database_already_carries_study_state_and_its_constraints
         .connection()
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 5, "o formato persistido permanece na versão 5");
+    assert_eq!(
+        version, 6,
+        "o formato persistido recebe a migração aditiva do Pomodoro"
+    );
     let present: i64 = db
         .connection()
         .query_row(
