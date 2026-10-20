@@ -78,10 +78,10 @@ pub fn validate_username(username: &str) -> Result<(), AuthError> {
     Ok(())
 }
 
-/// Valida o limite público da senha inicial ou de login.
+/// Valida o limite público de uma senha nova (login inicial, bootstrap e troca).
 pub fn validate_password(password: &str) -> Result<(), AuthError> {
     let length = password.chars().count();
-    if !(12..=1024).contains(&length) {
+    if !(8..=128).contains(&length) {
         return Err(AuthError::InvalidPassword);
     }
     Ok(())
@@ -508,10 +508,10 @@ mod tests {
         assert!(validate_username(&"a".repeat(64)).is_ok());
         assert!(validate_username("a").is_err());
         assert!(validate_username(&"a".repeat(65)).is_err());
-        assert!(validate_password(&"a".repeat(12)).is_ok());
-        assert!(validate_password(&"a".repeat(1024)).is_ok());
-        assert!(validate_password(&"a".repeat(11)).is_err());
-        assert!(validate_password(&"a".repeat(1025)).is_err());
+        assert!(validate_password(&"a".repeat(8)).is_ok());
+        assert!(validate_password(&"a".repeat(128)).is_ok());
+        assert!(validate_password(&"a".repeat(7)).is_err());
+        assert!(validate_password(&"a".repeat(129)).is_err());
     }
 
     #[test]
