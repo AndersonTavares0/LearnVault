@@ -216,6 +216,12 @@ a.course:hover{box-shadow:0 10px 24px #14232b14;transform:translateY(-2px)}
 .globalnav a.on{border-bottom-color:#5fbdb9}
 /* Curso literal */
 .course-admin{border-top:1px solid var(--line);padding:10px 16px}
+.course-hero .cover{width:300px}
+.course-hero .course-breadcrumb{margin:0;color:#afc1c6;font-size:12px;font-weight:650;line-height:1.45}
+.course-hero .course-breadcrumb a{color:inherit;text-decoration:none}
+.overview-grid>div>.row{align-items:center}
+.overview-grid>div>.row .section-head{display:block;margin:0 0 14px}
+.overview-grid>div>.row>.btn{margin-bottom:0}
 .course-admin summary{list-style:none;width:max-content;cursor:pointer}
 .course-admin summary::-webkit-details-marker{display:none}
 .course-admin .course-actions{display:flex;flex-wrap:wrap;gap:9px;align-items:center;margin-top:11px}
@@ -271,6 +277,8 @@ a.course:hover{box-shadow:0 10px 24px #14232b14;transform:translateY(-2px)}
 .player-screen .stage{padding:20px 24px;gap:12px}
 .player-screen .vtitle h2{margin:0 0 2px;color:#f0f5f6;font-size:16px;letter-spacing:-.02em;font-weight:650}
 .player-screen .stage>.error{display:grid;place-items:center;aspect-ratio:16/9;min-height:0;margin:0;padding:26px;border:1px solid #294048;border-radius:8px;background:#13272f;color:#f0b49e;font-size:13px;text-align:center}
+.player-screen .stage .video.unavailable{margin:0 auto;width:100%;max-width:1000px;aspect-ratio:16/9;position:relative}
+.player-screen .stage .video.unavailable .error{position:absolute;left:18px;right:18px;bottom:14px;margin:0;color:#f0b49e;font-size:12px;text-align:left}
 .player-screen .stage .study-bar{border-color:#293d45;margin:8px 0 0;padding:12px 0 0}
 .player-screen .stage .study-hint{color:#b5c6cc}
 .player-screen .stage .text-button{color:#8ed2c7}
@@ -337,3 +345,14 @@ a.course:hover{box-shadow:0 10px 24px #14232b14;transform:translateY(-2px)}
 [data-theme='dark'] .import-preview,[data-theme='dark'] .loose-files,[data-theme='dark'] .preview-tree,[data-theme='dark'] .preview-suggestions{background:var(--surface);border-color:var(--line)}
 [data-theme='dark'] .import-preview h2,[data-theme='dark'] .preview-columns h3,[data-theme='dark'] .loose-files>strong,[data-theme='dark'] .preview-summary strong{color:var(--ink)}
 @media(max-width:700px){.import-preview{padding:16px}.preview-columns{gap:14px}}
+
+/* Application frame: mirrors the approved board surface without exposing its
+   reference-only annotation label in the product UI. */
+body{background:#e8edf0}
+.app{width:calc(100% - 48px);max-width:1500px;min-height:calc(100svh - 48px);margin:24px auto;background:var(--bg);border:1px solid #d5dfe4;border-radius:13px;overflow:hidden;box-shadow:var(--shadow)}
+.app>.route{min-height:calc(100svh - 110px)}
+.app>.route{padding-top:34px}
+.route:has(.player-screen){padding-top:0}
+.app>.top{border-radius:12px 12px 0 0}
+.player-screen{min-height:calc(100svh - 48px)}
+@media(max-width:700px){.app{width:100%;min-height:100svh;margin:0;border:0;border-radius:0}.app>.route{min-height:calc(100svh - 56px);padding-top:34px}.route:has(.player-screen){padding-top:0}.player-screen{min-height:100svh}}

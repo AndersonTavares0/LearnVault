@@ -136,7 +136,7 @@
 		}
 	}
 </script>
-{#if mediaError}<p class="error" role="alert">{mediaError}</p>
+{#if mediaError}<div class="video unavailable"><div class="play" aria-hidden="true">▶</div><span class="mode-note">Área de vídeo · proporção 16:9</span><p class="error" role="alert">{mediaError}</p></div>
 {:else if source}
 	<div class="player-container {playbackKind === 'audio' ? 'audio-container' : 'video-container'}">
 		{#if playbackKind === 'audio'}
@@ -171,13 +171,13 @@
 	</div>
 {:else if availability === 'missing'}<p class="empty" role="status">A mídia desta aula não está no disco. A aula e o seu progresso foram preservados; indexe os cursos novamente depois de reconectar o disco ou repor o arquivo.</p>
 {:else}<p class="empty" role="status">Esta aula não possui mídia disponível.</p>{/if}
+<div class="vtitle"><h2>{lesson.title}</h2>{#if syncEnabled && showCompleted}<button class="btn" type="button" onclick={toggleCompleted} disabled={saving || saver.saving} aria-pressed={progress?.completed}>✓ {progress?.completed ? 'Marcar como não concluída' : 'Marcar como concluída'}</button>{/if}</div>
 {#if syncEnabled}
 	<div class="study-bar" role="group" aria-label="Progresso da aula">
 		{#if progressLoading}<span class="study-hint">Carregando progresso…</span>
 		{:else if progressError}<span class="study-hint error">{progressError}</span>
 		{:else if canResume}<button class="text-button" onclick={resume} type="button">Retomar de {formatDuration(progress?.positionSeconds ?? 0)}</button>
 		{:else if showCompleted}<span class="study-hint">{progress?.completed ? 'Concluído' : 'Não concluído'}</span>{/if}
-		{#if showCompleted}<button class="text-button" onclick={toggleCompleted} disabled={saving || saver.saving} type="button" aria-pressed={progress?.completed}>{progress?.completed ? 'Marcar como não concluído' : 'Marcar como concluído'}</button>{/if}
 	</div>
 {/if}
 {#if captionMessage}<p class="empty" role="status">{captionMessage}{#if captionDownload} <a href={captionDownload} download>Baixar legenda</a>{/if}</p>{/if}

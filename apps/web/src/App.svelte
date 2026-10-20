@@ -418,7 +418,7 @@
 			</form>
 		</section>
 	</main>
-{:else}<div class="app">{#if route !== 'player'}<header class="top"><a class="brand" href={href('home')}>Learn<i>Vault</i></a><nav class="globalnav" aria-label="Navegação principal"><a class:on={route === 'home' || route === 'course'} href={href('home')}>Aprender</a><a class:on={route === 'notes'} href={href('notes')}>Anotações</a><a class:on={route === 'analytics'} href={href('analytics')}>Estatísticas</a><a class:on={route === 'settings'} href={href('settings')}>Configurações</a></nav><form class="search-form" role="search" onsubmit={(event) => { event.preventDefault(); location.hash = href('home'); }}><span aria-hidden="true">⌕</span><input class="search" aria-label="Buscar cursos" placeholder="Buscar cursos" bind:value={catalogQuery} /></form>{#if studySyncSupported}<Pomodoro />{/if}{#if transportKind === 'http'}<button class="user" type="button" title="Sair" aria-label="Sair" onclick={logout}>{(user?.username ?? '?').slice(0, 1).toUpperCase()}</button>{:else}<span class="user" title={user?.username ?? 'Local'}>{(user?.username ?? '?').slice(0, 1).toUpperCase()}</span>{/if}</header>{/if}<main class="route">{#if error}<div class="wrap"><p class="error" role="alert">{error}</p></div>{/if}
+{:else}<div class="app">{#if route !== 'player'}<header class="top"><a class="brand" href={href('home')}>Learn<i>Vault</i></a><nav class="globalnav" aria-label="Navegação principal"><a class:on={route === 'home' || route === 'course'} href={href('home')}>Aprender</a><a class:on={route === 'notes'} href={href('notes')}>Anotações</a>{#if route === 'analytics'}<a class:on={route === 'analytics'} href={href('analytics')}>Estatísticas</a>{/if}<a class:on={route === 'settings'} href={href('settings')}>Configurações</a></nav><form class="search-form" role="search" onsubmit={(event) => { event.preventDefault(); location.hash = href('home'); }}><span aria-hidden="true">⌕</span><input class="search" aria-label="Buscar cursos" placeholder="Buscar cursos" bind:value={catalogQuery} /></form>{#if studySyncSupported}<Pomodoro />{/if}{#if transportKind === 'http'}<button class="user" type="button" title="Sair" aria-label="Sair" onclick={logout}>{(user?.username ?? '?').slice(0, 1).toUpperCase()}</button>{:else}<span class="user" title={user?.username ?? 'Local'}>{(user?.username ?? '?').slice(0, 1).toUpperCase()}</span>{/if}</header>{/if}<main class="route">{#if error}<div class="wrap"><p class="error" role="alert">{error}</p></div>{/if}
 {#if route === 'home'}
 <div class="wrap">
 	<div class="row"><div><div class="eyebrow">Seu espaço de estudo</div><h1 class="title">Meus cursos</h1><p class="sub">Retome uma aula diretamente ou escolha outro curso.</p></div><div class="tools"><button class="btn" type="button" onclick={() => (courseSort = courseSort === 'recent' ? 'title' : 'recent')} aria-label="Ordenar cursos">{courseSort === 'recent' ? 'Recentes' : 'Título'}⌄</button><button class="btn" type="button" onclick={() => (courseFilter = courseFilter === 'all' ? 'progress' : 'all')} aria-pressed={courseFilter === 'progress'}>Filtros</button></div></div>
@@ -448,8 +448,9 @@
 		<header class="course-hero">
 			<div class="wrap">
 				<div>
-					<p class="course-breadcrumb"><a href={href('home')}>Meus cursos</a><span aria-hidden="true"> / </span>{course.title}</p>
+					<div class="eyebrow course-breadcrumb"><a href={href('home')}>Meus cursos</a><span aria-hidden="true"> / </span>{course.title}</div>
 					<h1>{course.title}</h1>
+					<p>Curso local indexado no LearnVault; arquivos e materiais permanecem na origem.</p>
 					<div class="course-stats"><span>{courseCounts?.modules ?? 0} módulos</span><span>{courseCounts?.lessons ?? 0} aulas</span><span>{courseCounts?.materials ?? 0} materiais</span>{#if courseRecent}<span>Retomado recentemente</span>{/if}</div>
 				</div>
 				<div class="cover" style:--cover-from={courseCoverArt?.from ?? '#20343d'} style:--cover-to={courseCoverArt?.to ?? '#276f73'} aria-hidden="true">
@@ -499,7 +500,6 @@
 			</header>
 			<div class:collapsed={panelCollapsed} class="player-shell">
 			<section class="stage">
-				<div class="vtitle"><h2>{lesson.title}</h2></div>
 				<Player {lesson} courseId={courseId ?? ''} {mediaError} onMediaError={mediaFailed} {studyEnabled} materialsInPanel={!panelCollapsed} />
 				<nav class="lesson-nav" aria-label="Aulas vizinhas">{#if neighbors.previous}<a href={href('player', courseId ?? '', neighbors.previous.path)}>← Aula anterior</a>{/if}{#if neighbors.next}<a href={href('player', courseId ?? '', neighbors.next.path)}>Próxima aula →</a>{/if}</nav>
 				{#if panelCollapsed}<button class="panel-reopen secondary" type="button" onclick={() => (panelCollapsed = false)}>Mostrar painel</button>{/if}

@@ -1,6 +1,5 @@
 import { mount } from 'svelte';
 import App from './App.svelte';
-import './styles.css';
 import './reference.css';
 import { applyTheme, readThemeMode, resolveTheme } from './theme';
 
