@@ -4,8 +4,8 @@
 	import { countCatalogFiles, countCatalogNode, formatCourseMeta, formatLessonCounts, formatLessonMeta, isLessonMissing } from './catalog';
 	import CatalogOrderControls from './CatalogOrderControls.svelte';
 	import { canReorderCatalogSiblings, movedCatalogPaths } from './catalog-order';
-	import { href } from './router';
-	import type { CatalogNode } from './transport';
+ import { href } from './router';
+ import { isCoverFile, transport, type CatalogNode } from './transport';
 
 	// `expandAll` abre os módulos enquanto a busca está ativa, para que um resultado
 	// dentro de um módulo não fique escondido atrás do disclosure recolhido.
@@ -76,10 +76,12 @@
 		{/if}
 		{#if node.children.length}<div class="lesson-children">{#each node.children as child, childIndex (child.path)}<CatalogTree nodes={[child]} {courseId} {expandAll} {organizing} parentPath={node.path} siblings={node.children} siblingIndex={childIndex} {orderSaving} {onSaveOrder} {onResetOrder} />{/each}</div>{/if}
 	{:else}
+		{@const cover = node.looseFiles.find(isCoverFile)}
 		{@const meta = formatCourseMeta(countCatalogNode(node))}
 		<section class="course-block">
-			<header class="course-header">
-				<h2>{node.title}</h2>
+		<header class="course-header">
+			<h2>{node.title}</h2>
+			{#if cover && transport.mediaUrl(cover, courseId)}<img class="course-cover" src={transport.mediaUrl(cover, courseId) ?? ''} alt="" loading="lazy" />{/if}
 				{#if meta}<p class="course-meta">{meta}</p>{/if}
 			</header>
 			{#if node.files.length || node.looseFiles.length}<LooseFiles files={[...node.files, ...node.looseFiles]} heading="Arquivos soltos" {courseId} />{/if}

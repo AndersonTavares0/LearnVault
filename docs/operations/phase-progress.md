@@ -9,7 +9,7 @@ curso é usado durante o desenvolvimento.
 | 1 — Ordenação manual | Concluída | `feat/phase1-catalog-order` / `c0e92a2` | Ordenação por usuário, curso e grupo irmão; migração V4→V5 preservadora; testes core, servidor, desktop e web. |
 | 2 — Descoberta e prévia | Concluída | `feat/phase2-import-discovery` / `870642e` | Descoberta física somente leitura separada de interpretação heurística; prévia HTTP autenticada e confirmação explícita; testes Rust, servidor, desktop, frontend, build e auditoria passaram. |
 | 3 — Catálogo lógico e correções | Concluída | `feat/phase3-logical-catalog` / commit da branch | Corrige diretórios mistos: mídia direta vira aula explícita e subdiretórios permanecem módulos aninhados, sem alterar caminhos ou identidades. |
-| 4 — Materiais, capas e visualização segura | Pendente | — | Executar somente após o commit da Fase 3. |
+| 4 — Materiais, capas e visualização segura | Concluída | `feat/phase4-materials-safe-view` / `3761124` | Visualização inline somente para tipos allowlisted; capas derivadas de materiais de imagem; arquivos e raízes continuam somente leitura. |
 | 5 — Study Analytics | Pendente | — | Executar somente após o commit da Fase 4. |
 | 6 — Pomodoro persistente | Pendente | — | Executar somente após o commit da Fase 5. |
 | 7 — Redesign visual | Pendente | — | Auditar a implementação existente antes de alterar; executar somente após a Fase 6. |

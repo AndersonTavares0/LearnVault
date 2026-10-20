@@ -136,6 +136,22 @@ export function fileStatus(file: FileEntry): string {
 	return [file.availability === 'missing' ? 'ausente' : '', file.unverified ? 'não verificado' : ''].filter(Boolean).join(' · ');
 }
 
+export type MaterialPreviewKind = 'image' | 'pdf' | 'text';
+
+export function materialPreviewKind(name: string): MaterialPreviewKind | null {
+	const extension = name.split('.').pop()?.toLowerCase();
+	if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(extension ?? '')) return 'image';
+	if (extension === 'pdf') return 'pdf';
+	if (['txt', 'md', 'csv'].includes(extension ?? '')) return 'text';
+	return null;
+}
+
+export function isCoverFile(file: FileEntry): boolean {
+	if (file.kind !== 'material' || !materialPreviewKind(file.name) || materialPreviewKind(file.name) === 'text') return false;
+	const stem = file.name.split(/[\\/.]/).slice(-2, -1)[0]?.toLowerCase() ?? '';
+	return ['cover', 'capa', 'thumbnail', 'thumb'].some((marker) => stem === marker || stem.startsWith(`${marker}-`) || stem.startsWith(`${marker}_`));
+}
+
 /** Identidade de um curso no catálogo: a opaca do contrato ou o caminho do nó legado. */
 export function courseIdOf(node: CatalogNode): string {
 	return node.courseId ?? node.path;
