@@ -13,7 +13,6 @@
  import { courseIdOf, isCoverFile, transport, transportKind, STUDY_NOT_AVAILABLE, type Catalog, type CatalogNode, type Lesson, type StudyAnalytics, type StudyProgress, type User } from './transport';
 	import { defaultRoute, resolveSession } from './session';
 	import { formatDuration, studySyncSupported } from './player';
-	import Brand from './Brand.svelte';
 	import ImportPreview from './ImportPreview.svelte';
 	import { applyTheme, persistThemeMode, readThemeMode, resolveTheme, type ThemeMode } from './theme';
 	import { courseCover } from './cover';
@@ -403,21 +402,19 @@
 <svelte:head><title>LearnVault — sua biblioteca de estudos</title><meta name="description" content="Sua biblioteca pessoal de cursos." /></svelte:head>
 {#if loading}<div class="loading" aria-live="polite">Carregando seus cursos…</div>
 {:else if !user}
-	<main class="login-page" aria-labelledby="login-heading">
-		<section class="login-identity"><div class="brand"><Brand /> <span>LEARNVAULT</span></div><div><p class="login-eyebrow">Sua mesa de estudo</p><h1>Seu próximo capítulo começa de onde você parou.</h1><p>Entre no seu ambiente de aprendizagem local. Seus cursos permanecem no seu dispositivo ou servidor.</p></div><small>Estudo em primeiro plano.</small></section>
-		<section class="login-card">
-			<p class="login-eyebrow">Acesso</p><h1 id="login-heading">Entrar</h1>
-			<p class="intro">Use as credenciais da sua instalação.</p>
-			<form onsubmit={login}>
+<main class="board login-board" aria-labelledby="login-heading"><section class="screen active"><div class="login">
+<section class="login-identity"><div class="brand">Learn<i>Vault</i></div><div><h1>Seu próximo capítulo começa de onde você parou.</h1><p>Entre no seu ambiente de aprendizagem local.</p></div><span class="small">Seus cursos ficam no seu dispositivo ou servidor.</span></section>
+<form class="login-card" onsubmit={login}>
+<h2 id="login-heading">Entrar</h2>
+<p class="small">Use as credenciais da sua instalação.</p>
 				<fieldset class="auth-fields" disabled={authBusy}>
-					<label class="form-field" for="login-username">Usuário<input id="login-username" autocomplete="username" autocapitalize="none" spellcheck={false} bind:value={username} required /></label>
+<label for="login-username">Usuário<input class="field" id="login-username" autocomplete="username" autocapitalize="none" spellcheck={false} placeholder="Seu usuário" bind:value={username} required /></label>
 					<PasswordField id="login-password" label="Senha" autocomplete="current-password" bind:value={password} />
 					{#if error}<p class="error" role="alert">{error}</p>{/if}
-					<button type="submit" disabled={authBusy} aria-busy={authBusy}>{authBusy ? 'Entrando…' : 'Entrar'}</button>
+<button class="btn primary" type="submit" disabled={authBusy} aria-busy={authBusy}>{authBusy ? 'Entrando…' : 'Entrar no LearnVault'}</button>
 				</fieldset>
-			</form>
-		</section>
-	</main>
+</form>
+</div></section></main>
 {:else}<div class="app">{#if route !== 'player'}<header class="top"><a class="brand" href={href('home')}>Learn<i>Vault</i></a><nav class="globalnav" aria-label="Navegação principal"><a class:on={route === 'home' || route === 'course'} href={href('home')}>Aprender</a><a class:on={route === 'notes'} href={href('notes')}>Anotações</a>{#if route === 'analytics'}<a class:on={route === 'analytics'} href={href('analytics')}>Estatísticas</a>{/if}<a class:on={route === 'settings'} href={href('settings')}>Configurações</a></nav><form class="search-form" role="search" onsubmit={(event) => { event.preventDefault(); location.hash = href('home'); }}><span aria-hidden="true">⌕</span><input class="search" aria-label="Buscar cursos" placeholder="Buscar cursos" bind:value={catalogQuery} /></form>{#if studySyncSupported}<Pomodoro />{/if}{#if transportKind === 'http'}<button class="user" type="button" title="Sair" aria-label="Sair" onclick={logout}>{(user?.username ?? '?').slice(0, 1).toUpperCase()}</button>{:else}<span class="user" title={user?.username ?? 'Local'}>{(user?.username ?? '?').slice(0, 1).toUpperCase()}</span>{/if}</header>{/if}<main class="route">{#if error}<div class="wrap"><p class="error" role="alert">{error}</p></div>{/if}
 {#if route === 'home'}
 <div class="wrap">

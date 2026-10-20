@@ -346,6 +346,26 @@ a.course:hover{box-shadow:0 10px 24px #14232b14;transform:translateY(-2px)}
 [data-theme='dark'] .import-preview h2,[data-theme='dark'] .preview-columns h3,[data-theme='dark'] .loose-files>strong,[data-theme='dark'] .preview-summary strong{color:var(--ink)}
 @media(max-width:700px){.import-preview{padding:16px}.preview-columns{gap:14px}}
 
+/* Login: the approved 06-login composition, keeping auth behavior real. */
+.login-board{padding:24px}
+.login-board .screen{min-height:740px}
+.login-board .login-identity .brand{font-weight:800;font-size:19px;letter-spacing:-.04em;color:#fff}
+.login-board .login-identity .brand i{font-style:normal;color:#78c5bd}
+.login-board .login-identity .small{color:#9aafb5}
+.login-board .login-card{display:block;background:var(--surface);color:var(--ink)}
+.login-board .login-card .small{display:block;margin:0 0 16px}
+.login-board .login-card .auth-fields{display:grid;gap:0;border:0;padding:0;margin:0}
+.login-board .login-card label{display:block;margin:16px 0 6px;font-weight:650;font-size:12px;color:var(--ink)}
+.login-board .login-card .field,.login-board .login-card .password-input input{width:100%;min-height:40px;border:1px solid #bdc9cf;border-radius:6px;background:var(--surface);color:var(--ink);padding:10px 12px}
+.login-board .login-card .password-input{position:relative}
+.login-board .login-card .password-input input{padding-right:48px}
+.login-board .login-card .password-toggle{position:absolute;right:2px;top:50%;transform:translateY(-50%);width:38px;min-height:36px;padding:0;border:0;background:transparent;color:var(--muted);display:grid;place-items:center}
+.login-board .login-card .password-toggle:hover{background:var(--accent-soft);color:var(--accent)}
+.login-board .login-card .password-toggle svg{width:18px;height:18px}
+.login-board .login-card .error{margin:12px 0 0;color:#a65d20;font-size:12px}
+.login-board .login-card .btn{width:100%;margin-top:18px}
+@media(max-width:700px){.login-board{padding:10px}.login-board .screen{min-height:740px}.login-board .login{min-height:740px}.login-board .login-card{margin:18px;padding:22px}.login-board .login-identity{min-height:280px;padding:28px 23px}.login-board .login-identity h1{font-size:30px}}
+
 /* Application frame: mirrors the approved board surface without exposing its
    reference-only annotation label in the product UI. */
 body{background:#e8edf0}
