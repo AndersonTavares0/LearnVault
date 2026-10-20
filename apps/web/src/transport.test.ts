@@ -1,13 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { findLesson } from './router';
-import { desktopMediaUrl, DesktopStub, HttpTransport, lessonFromNode, normalizeCatalog, normalizeRecentStudy, normalizeStudyProgress, normalizeUser, STUDY_NOT_AVAILABLE, CATALOG_LIMITS, type Transport } from './transport';
+import { desktopMediaUrl, DesktopStub, HttpTransport, lessonFromNode, normalizeCatalog, normalizeImportPreview, normalizeRecentStudy, normalizeStudyProgress, normalizeUser, STUDY_NOT_AVAILABLE, CATALOG_LIMITS, type Transport } from './transport';
 
 // O Tauri só é carregado no desktop: fora dele o módulo é substituído pelo mock, de modo
 // que a suíte nunca toca `window.__TAURI_INTERNALS__`.
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 
 describe('transport contract', () => {
+	it('normalizes a physical import preview and rejects malformed trees', () => {
+		const preview = normalizeImportPreview({
+			discovery: {
+				root: { name: 'Curso', path: '.', entry_kind: 'directory', status: { status: 'found' }, children: [{ name: 'a.mp4', path: 'a.mp4', entry_kind: 'file', status: { status: 'found' }, file_kind: 'media', size: 3, children: [] }] },
+				summary: { found: 1, ignored: 0, inaccessible: 0, unsupported: 0 }
+			},
+			interpretation: { suggestions: [{ path: '.', proposed_role: 'possível curso', confidence: 'low', explanation: 'revisar', ambiguous: true }] }
+		});
+		expect(preview.discovery.root.children[0].fileKind).toBe('media');
+		expect(preview.interpretation.suggestions[0].ambiguous).toBe(true);
+		expect(() => normalizeImportPreview({ discovery: { root: {}, summary: { found: 0, ignored: 0, inaccessible: 0, unsupported: 0 } }, interpretation: { suggestions: [] } })).toThrow('Resposta inválida do servidor');
+	});
 	it('exposes the HTTP transport seam without routing assumptions', () => {
 		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'saveCatalogOrder', 'resetCatalogOrder', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'mediaUrl'];
 		expect(methods).toHaveLength(16);

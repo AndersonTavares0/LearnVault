@@ -13,6 +13,7 @@
 	import { defaultRoute, resolveSession } from './session';
 	import { formatDuration, studySyncSupported } from './player';
 	import Brand from './Brand.svelte';
+	import ImportPreview from './ImportPreview.svelte';
 	import { applyTheme, persistThemeMode, readThemeMode, resolveTheme, type ThemeMode } from './theme';
 
 	let themeMode: ThemeMode = readThemeMode(safeLocalStorage());
@@ -54,6 +55,8 @@
 	let importFormOpen = false;
 	let importPath = '';
 	let importError = '';
+	let importPreview: import('./transport').ImportPreview | null = null;
+	let previewingImport = false;
 	let removing = false;
 	let removeConfirm = false;
 	let removeError = '';
@@ -231,11 +234,28 @@
 	// servidor valida e registra; a indexação roda em seguida, como no desktop.
 	async function submitImport(event: SubmitEvent) {
 		event.preventDefault();
+		if (!importPath.trim()) return;
+		previewingImport = true;
+		importError = '';
+		try {
+			importPreview = await transport.previewImport(importPath.trim());
+		} catch (cause) {
+			importError = cause instanceof Error ? cause.message : 'Não foi possível importar o curso.';
+		} finally {
+			previewingImport = false;
+		}
+	}
+
+	function cancelImportPreview() { importPreview = null; }
+
+	async function confirmImport() {
+		if (!importPath.trim() || !importPreview) return;
 		importing = true;
 		importError = '';
 		try {
 			await transport.importCoursePath(importPath.trim());
 			importPath = '';
+			importPreview = null;
 			importFormOpen = false;
 			await transport.rescan();
 			syncCatalog(await transport.catalog());
@@ -375,7 +395,8 @@
 	{/if}
 	{#if studySyncSupported && recent.length}<section class="recent-study" aria-labelledby="recent-heading"><h2 id="recent-heading">Continuar assistindo</h2><ul>{#each recent as item}{@const location = findLessonLocation(catalog, item.mediaId)}<li>{#if location}<div class="recent-study-info"><a href={href('player', location.courseId, location.lesson.path)}>{location.lesson.title}</a><small title={formatLocationContext(location.courseTitle, location.moduleTitle)}>{formatLocationContext(location.courseTitle, location.moduleTitle)}</small></div><small>{item.completed ? 'Concluído' : `Parou em ${formatDuration(item.positionSeconds)}`}</small>{:else}<span>Mídia não disponível no catálogo</span>{/if}</li>{/each}</ul></section>{/if}
 	{#if !canManage && catalog && catalog.nodes.length === 0}<p class="empty" role="status">Nenhum curso disponível. Peça ao administrador para importar um curso.</p>{/if}
-	{#if user.role === 'admin' && importFormOpen}<form class="import-form" onsubmit={submitImport}><label for="import-path">Caminho da pasta do curso no servidor</label><input id="import-path" bind:value={importPath} placeholder="C:\cursos\Meu curso" required /><div class="import-form-actions"><button class="primary" disabled={importing} aria-busy={importing}>{importing ? 'Importando…' : 'Importar'}</button><button type="button" class="text-button" onclick={() => (importFormOpen = false)}>Cancelar</button></div></form>{/if}
+	{#if user.role === 'admin' && importFormOpen && !importPreview}<form class="import-form" onsubmit={submitImport}><label for="import-path">Caminho da pasta do curso no servidor</label><input id="import-path" bind:value={importPath} placeholder="C:\cursos\Meu curso" required /><div class="import-form-actions"><button class="primary" disabled={previewingImport || importing} aria-busy={previewingImport}>{previewingImport ? 'Analisando…' : 'Analisar pasta'}</button><button type="button" class="text-button" onclick={() => (importFormOpen = false)}>Cancelar</button></div></form>{/if}
+	{#if importPreview}<ImportPreview preview={importPreview} onCancel={cancelImportPreview} onConfirm={confirmImport} busy={importing} />{/if}
 	{#if importError}<p class="error" role="alert">{importError}</p>{/if}
 	{#if user.role === 'admin' && rescanMessage}<p class="catalog-message" aria-live="polite">{rescanMessage}</p>{/if}
 	{#if catalog && catalog.nodes.length}

@@ -70,6 +70,7 @@ pub fn build_router(state: AppState) -> Router {
                 .layer(DefaultBodyLimit::max(1024 * 1024)),
         )
         .route("/api/admin/catalog/rescan", post(catalog::rescan))
+        .route("/api/admin/courses/preview", post(courses::preview))
         .route("/api/admin/courses", post(courses::import))
         .route(
             "/api/admin/courses/{id}",

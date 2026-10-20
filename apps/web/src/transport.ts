@@ -15,6 +15,12 @@ export type Catalog = { complete: boolean; looseFiles: FileEntry[]; nodes: Catal
 export type TransportKind = 'http' | 'desktop';
 export type StudyProgress = { mediaId: string; positionSeconds: number; completed: boolean; updatedAt: number | null; recorded: boolean };
 export type RecentStudy = { items: StudyProgress[] };
+export type DiscoveryStatus = { status: 'found' } | { status: 'ignored' | 'inaccessible' | 'unsupported'; reason: string };
+export type DiscoveryNode = { name: string; path: string; entryKind: 'directory' | 'file'; status: DiscoveryStatus; fileKind?: 'media' | 'subtitle' | 'material'; size?: number; children: DiscoveryNode[] };
+export type ImportPreview = {
+	discovery: { root: DiscoveryNode; summary: { found: number; ignored: number; inaccessible: number; unsupported: number } };
+	interpretation: { suggestions: Array<{ path: string; proposedRole: string; confidence: 'high' | 'medium' | 'low'; explanation: string; ambiguous: boolean }> };
+};
 export const STUDY_NOT_AVAILABLE = 'study_not_available';
 
 // Protocolo customizado do desktop para mídia local. O webview aponta somente pelo
@@ -47,6 +53,7 @@ export interface Transport {
 	importCourse(): Promise<void>;
 	// Servidor: registra um curso pelo caminho informado pelo admin.
 	importCoursePath(path: string): Promise<void>;
+	previewImport(path: string): Promise<ImportPreview>;
 	// Remove um curso do registro, sem tocar nos arquivos.
 	removeCourse(courseId: string): Promise<void>;
 	rescan(): Promise<void>;
@@ -61,6 +68,44 @@ export interface Transport {
 type RustFile = { media_id?: string; name?: string; path?: string; size?: number; kind?: string; availability?: string; unverified?: boolean };
 type RustNode = { title?: string; path?: string; role?: string; course_id?: string; files?: RustFile[]; loose_files?: RustFile[]; children?: RustNode[] };
 type RustCatalog = { complete?: boolean; categories?: RustNode[]; nodes?: RustNode[]; loose_files?: RustFile[]; looseFiles?: RustFile[] };
+
+const PREVIEW_LIMITS = { depth: 32, nodes: 100_000 } as const;
+
+function normalizeDiscoveryStatus(value: unknown): DiscoveryStatus {
+	if (!value || typeof value !== 'object') throw invalidPayload('status da descoberta inválido.');
+	const status = value as { status?: unknown; reason?: unknown };
+	if (status.status === 'found') return { status: 'found' };
+	if (!['ignored', 'inaccessible', 'unsupported'].includes(String(status.status)) || typeof status.reason !== 'string') throw invalidPayload('status da descoberta inválido.');
+	return { status: status.status as 'ignored' | 'inaccessible' | 'unsupported', reason: status.reason };
+}
+
+function normalizeDiscoveryNode(value: unknown, depth: number, count: { value: number }): DiscoveryNode {
+	if (depth > PREVIEW_LIMITS.depth || count.value >= PREVIEW_LIMITS.nodes || !value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('árvore de descoberta inválida.');
+	count.value += 1;
+	const node = value as Record<string, unknown>;
+	if (typeof node.name !== 'string' || typeof node.path !== 'string' || !['directory', 'file'].includes(String(node.entry_kind)) || !Array.isArray(node.children)) throw invalidPayload('nó de descoberta incompleto.');
+	if (node.size !== undefined && (typeof node.size !== 'number' || !Number.isSafeInteger(node.size) || node.size < 0)) throw invalidPayload('tamanho de descoberta inválido.');
+	if (node.file_kind !== undefined && !['media', 'subtitle', 'material'].includes(String(node.file_kind))) throw invalidPayload('tipo de arquivo descoberto inválido.');
+	return { name: node.name, path: node.path, entryKind: node.entry_kind as 'directory' | 'file', status: normalizeDiscoveryStatus(node.status), fileKind: node.file_kind as DiscoveryNode['fileKind'], size: node.size as number | undefined, children: node.children.map((child) => normalizeDiscoveryNode(child, depth + 1, count)) };
+}
+
+export function normalizeImportPreview(value: unknown): ImportPreview {
+	if (!value || typeof value !== 'object') throw invalidPayload('prévia de importação inválida.');
+	const source = value as Record<string, unknown>;
+	const discovery = source.discovery as Record<string, unknown> | undefined;
+	const summary = discovery?.summary as Record<string, unknown> | undefined;
+	if (!discovery || !summary || !discovery.root || !['found', 'ignored', 'inaccessible', 'unsupported'].every((key) => typeof summary[key] === 'number' && Number.isSafeInteger(summary[key]) && summary[key] >= 0)) throw invalidPayload('resumo da descoberta inválido.');
+	const interpretation = source.interpretation as Record<string, unknown> | undefined;
+	if (!interpretation || !Array.isArray(interpretation.suggestions)) throw invalidPayload('interpretação inválida.');
+	const suggestions = interpretation.suggestions.map((item) => {
+		if (!item || typeof item !== 'object') throw invalidPayload('sugestão inválida.');
+		const suggestion = item as Record<string, unknown>;
+		if (typeof suggestion.path !== 'string' || typeof suggestion.proposed_role !== 'string' || typeof suggestion.explanation !== 'string' || typeof suggestion.ambiguous !== 'boolean' || !['high', 'medium', 'low'].includes(String(suggestion.confidence))) throw invalidPayload('sugestão incompleta.');
+		return { path: suggestion.path, proposedRole: suggestion.proposed_role, confidence: suggestion.confidence as 'high' | 'medium' | 'low', explanation: suggestion.explanation, ambiguous: suggestion.ambiguous };
+	});
+	const normalizedSummary = Object.fromEntries(['found', 'ignored', 'inaccessible', 'unsupported'].map((key) => [key, summary[key]])) as ImportPreview['discovery']['summary'];
+	return { discovery: { root: normalizeDiscoveryNode(discovery.root, 0, { value: 0 }), summary: normalizedSummary }, interpretation: { suggestions } };
+}
 
 function invalidPayload(message: string): Error { return new Error(`Resposta inválida do servidor: ${message}`); }
 
@@ -324,6 +369,11 @@ export class HttpTransport implements Transport {
 		const response = await fetch('/api/admin/courses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }) });
 		if (!response.ok) throw new Error(await importErrorMessage(response));
 	}
+	async previewImport(path: string) {
+		const response = await fetch('/api/admin/courses/preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }) });
+		if (!response.ok) throw new Error(response.status === 400 ? 'A pasta informada não existe ou não pode ser lida no servidor.' : response.status === 403 ? 'credentials_change_required' : 'Não foi possível analisar a pasta.');
+		return normalizeImportPreview(await response.json());
+	}
 	async removeCourse(courseId: string) {
 		const response = await fetch(`/api/admin/courses/${encodeURIComponent(courseId)}`, { method: 'DELETE' });
 		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível remover o curso.');
@@ -398,6 +448,7 @@ export class DesktopStub implements Transport {
 	// devolvido. Cancelar preserva a lista anterior de cursos.
 	async importCourse() { try { await invoke<unknown>('desktop_import_course'); } catch (cause) { throw desktopError(cause, 'Não foi possível importar o curso.'); } }
 	importCoursePath(_path: string) { return Promise.reject(new Error('No desktop a pasta é escolhida pelo seletor nativo do sistema.')); }
+	previewImport(_path: string) { return Promise.reject(new Error('A prévia por caminho está disponível no transporte do servidor.')); }
 	// A remoção envia somente a identidade opaca do curso, nunca um caminho.
 	async removeCourse(courseId: string) { try { await invoke<unknown>('desktop_remove_course', { courseId }); } catch (cause) { throw desktopError(cause, 'Não foi possível remover o curso.'); } }
 	// O rescan desktop é sempre explícito: o webview só o dispara a pedido do usuário. A

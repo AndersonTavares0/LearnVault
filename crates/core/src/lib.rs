@@ -18,8 +18,10 @@ pub mod catalog;
 pub mod catalog_order;
 pub mod courses;
 pub mod db;
+pub mod discovery;
 pub mod error;
 pub mod ids;
+pub mod interpretation;
 pub mod legacy_import;
 pub mod media;
 pub mod paths;
@@ -47,7 +49,14 @@ pub use courses::{
     CourseRoot, CourseRootError, LEGACY_LIBRARY_ID, course_id_from_path, course_title,
 };
 pub use db::Database;
+pub use discovery::{
+    DiscoveryEntryKind, DiscoveryFileKind, DiscoveryNode, DiscoveryReport, DiscoveryStatus,
+    DiscoverySummary, discover,
+};
 pub use error::{Error, Result};
+pub use interpretation::{
+    InterpretationPreview, OrganizationSuggestion, SuggestionConfidence, interpret,
+};
 pub use legacy_import::{LegacyImportOptions, LegacyImportReport, import_go_database};
 pub use media::{
     MediaReference, OpenMedia, find_media_by_path, find_media_library_id, open_media,

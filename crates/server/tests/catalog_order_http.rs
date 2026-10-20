@@ -277,3 +277,58 @@ async fn order_mutations_require_authentication_and_same_origin() {
         .unwrap();
     assert_eq!(cross_origin.status(), StatusCode::FORBIDDEN);
 }
+
+#[tokio::test]
+async fn import_preview_is_read_only_and_reports_physical_tree_and_suggestions() {
+    let temp = tempfile::tempdir().unwrap();
+    let course_path = temp.path().join("courses").join("Curso Prévia");
+    std::fs::create_dir_all(course_path.join("01 - Módulo").join("Aula 02")).unwrap();
+    std::fs::create_dir_all(course_path.join("temp_cache")).unwrap();
+    std::fs::write(
+        course_path
+            .join("01 - Módulo")
+            .join("Aula 02")
+            .join("video.mp4"),
+        b"video",
+    )
+    .unwrap();
+    std::fs::write(course_path.join("01 - Módulo").join("nota.pdf"), b"pdf").unwrap();
+    std::fs::write(course_path.join("README.xyz"), b"unknown").unwrap();
+
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let cookie = login(&app).await;
+    let catalog_before = request_catalog(&app, &cookie).await;
+    let preview = app
+        .clone()
+        .oneshot(
+            Request::post("/api/admin/courses/preview")
+                .header("origin", "http://localhost")
+                .header("cookie", &cookie)
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({ "path": course_path }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(preview.status(), StatusCode::OK);
+    let body = json_body(preview).await;
+    assert_eq!(body["discovery"]["summary"]["found"], 2);
+    assert_eq!(body["discovery"]["summary"]["ignored"], 1);
+    assert_eq!(body["discovery"]["summary"]["unsupported"], 1);
+    assert_eq!(body["discovery"]["root"]["path"], ".");
+    assert!(
+        body["interpretation"]["suggestions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["ambiguous"] == true)
+    );
+
+    let catalog_after = request_catalog(&app, &cookie).await;
+    assert_eq!(
+        catalog_after, catalog_before,
+        "a prévia não pode alterar o catálogo"
+    );
+}

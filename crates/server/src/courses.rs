@@ -23,7 +23,10 @@ use axum::{
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
-use learnvault_core::{CourseRoot, LEGACY_LIBRARY_ID, course_id_from_path, course_title};
+use learnvault_core::{
+    CourseRoot, DiscoveryReport, InterpretationPreview, LEGACY_LIBRARY_ID, course_id_from_path,
+    course_title, discover, interpret,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -277,6 +280,65 @@ pub(crate) async fn import(
         Ok(Err(ImportFailure::WriteFailed)) | Err(_) => {
             internal_error("course_registry_unavailable")
         }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PreviewRequest {
+    path: String,
+}
+
+#[derive(Serialize)]
+struct PreviewResponse {
+    discovery: DiscoveryReport,
+    interpretation: InterpretationPreview,
+}
+
+/// `POST /api/admin/courses/preview` — lê uma pasta explicitamente selecionada sem registrá-la.
+///
+/// A operação não grava configuração, banco ou classificação. O caminho é validado pela mesma
+/// política de raiz de curso da importação e o resultado contém apenas caminhos relativos.
+pub(crate) async fn preview(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<PreviewRequest>,
+) -> Response {
+    let user = match authenticated_user(&state, &headers).await {
+        Ok(Some(user)) => user,
+        Err(crate::StateError::Capacity) => return service_unavailable(),
+        Ok(None) | Err(_) => return status_private_no_store(StatusCode::UNAUTHORIZED),
+    };
+    if !same_origin(&headers) {
+        return csrf_failed();
+    }
+    if !user.is_admin {
+        return status_private_no_store(StatusCode::FORBIDDEN);
+    }
+    if user.must_change_credentials {
+        return credentials_required();
+    }
+    if request.path.len() > 32_768 {
+        return json_error(StatusCode::BAD_REQUEST, "invalid_course_path");
+    }
+    let Some(blocking_task) = state.try_acquire_blocking_task() else {
+        return service_unavailable();
+    };
+    let outcome = tokio::task::spawn_blocking(move || {
+        let _blocking_task = blocking_task;
+        let root = CourseRoot::resolve(Path::new(&request.path)).map_err(|_| ())?;
+        let discovery = discover(root.as_path()).map_err(|_| ())?;
+        let interpretation = interpret(&discovery);
+        Ok::<_, ()>(PreviewResponse {
+            discovery,
+            interpretation,
+        })
+    })
+    .await;
+
+    match outcome {
+        Ok(Ok(preview)) => private_no_store(Json(preview).into_response()),
+        Ok(Err(())) | Err(_) => json_error(StatusCode::BAD_REQUEST, "invalid_course_path"),
     }
 }
 

@@ -1980,6 +1980,7 @@ version = "0.0.0"
 dependencies = [
  "rusqlite",
  "rusqlite_migration",
+ "serde",
  "tempfile",
  "thiserror 2.0.21",
  "uuid",
