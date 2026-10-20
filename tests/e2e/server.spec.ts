@@ -403,13 +403,13 @@ test('creates, edits, reloads and deletes a personal note in the player', async 
 	await page.goto(`${server.baseURL}/#/notes`);
 	await expect(page.getByRole('heading', { name: 'Anotações', level: 1 })).toBeVisible();
 	await expect(page.getByText(texto).first()).toBeVisible();
-	const notesSearch = page.getByLabel('Buscar no texto');
 	const globalNotesSearch = page.getByLabel('Buscar anotações');
+	// Busca única: o termo entra pelo header; sem eco em segunda caixa.
 	await globalNotesSearch.fill('texto que não existe');
-	await expect(notesSearch).toHaveValue('texto que não existe');
-	await expect(page.getByRole('status')).toContainText('Nenhuma anotação corresponde aos filtros');
-	await notesSearch.fill(texto);
-	await expect(globalNotesSearch).toHaveValue(texto);
+	await expect(page.getByRole('status').filter({ hasText: 'Nenhuma anotação corresponde aos filtros' })).toBeVisible();
+	await globalNotesSearch.fill(texto);
+	await expect(page.getByText(texto).first()).toBeVisible();
+	await globalNotesSearch.fill('');
 	await expect(page.getByText(texto).first()).toBeVisible();
 	await expect(page.getByRole('button', { name: /Agrupar por curso/ })).toHaveAttribute('aria-pressed', 'true');
 	await expect(page.getByRole('heading', { level: 3 }).first()).toBeVisible();
