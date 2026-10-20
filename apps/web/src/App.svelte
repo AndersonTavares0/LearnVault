@@ -83,7 +83,7 @@
 			resolvedTheme = resolveTheme(themeMode, systemDark);
 			applyTheme(document.documentElement, resolvedTheme);
 			const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
-			if (themeColor) themeColor.content = resolvedTheme === 'dark' ? '#171c19' : '#f7f6f1';
+			if (themeColor) themeColor.content = resolvedTheme === 'dark' ? '#0d2528' : '#eef4f1';
 		}
 	};
 	scheme?.addEventListener('change', updateSystemTheme);
@@ -121,7 +121,7 @@
 		resolvedTheme = resolveTheme(mode, systemDark);
 		applyTheme(document.documentElement, resolvedTheme);
 		const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
-		if (themeColor) themeColor.content = resolvedTheme === 'dark' ? '#171c19' : '#f7f6f1';
+		if (themeColor) themeColor.content = resolvedTheme === 'dark' ? '#0d2528' : '#eef4f1';
 		persistThemeMode(safeLocalStorage(), mode);
 	}
 	async function initialize() {
@@ -383,7 +383,7 @@
 			</form>
 		</section>
 	</main>
-{:else}<div class="shell"><header><div class="brand"><Brand /> LEARNVAULT</div>{#if transportKind === 'http'}<button class="text-button" onclick={logout}>Sair</button>{/if}</header><div class="layout"><nav aria-label="Navegação principal"><a class:active={route === 'home'} href={href('home')}>Início</a><a class:active={route === 'settings'} href={href('settings')}>Configurações</a></nav><main class:home={route === 'home'}>{#if error}<p class="error" role="alert">{error}</p>{/if}
+{:else}<div class="shell"><header class="app-header"><div class="brand-lockup"><div class="brand"><Brand /> <span>LEARNVAULT</span></div><span class="header-kicker">MESA DE ESTUDO</span></div><div class="header-actions">{#if user}<span class="user-chip" title={user.username}>{user.username}</span>{/if}{#if transportKind === 'http'}<button class="text-button" onclick={logout}>Sair</button>{/if}</div></header><div class="layout"><nav aria-label="Navegação principal"><p class="nav-label">Workspace</p><a class:active={route === 'home'} href={href('home')}><span aria-hidden="true">⌂</span> Início</a><a class:active={route === 'settings'} href={href('settings')}><span aria-hidden="true">◌</span> Configurações</a><div class="nav-note"><span class="status-dot" aria-hidden="true"></span><span>{transportKind === 'desktop' ? 'Modo offline' : 'Servidor conectado'}</span></div></nav><main class:home={route === 'home'}>{#if error}<p class="error" role="alert">{error}</p>{/if}
 {#if route === 'home'}
 	<h1 class="visually-hidden">Início</h1>
 	{#if canManage || (catalog && catalog.nodes.length)}
