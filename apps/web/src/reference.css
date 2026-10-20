@@ -354,8 +354,9 @@ a.course:hover{box-shadow:0 10px 24px #14232b14;transform:translateY(-2px)}
 .login-board .login-identity .small{color:#9aafb5}
 .login-board .login-card{display:block;background:var(--surface);color:var(--ink)}
 .login-board .login-card .small{display:block;margin:0 0 16px}
-.login-board .login-card .auth-fields{display:grid;gap:0;border:0;padding:0;margin:0}
+.login-board .login-card .auth-fields{display:block;min-width:0;border:0;padding:0;margin:0}
 .login-board .login-card label{display:block;margin:16px 0 6px;font-weight:650;font-size:12px;color:var(--ink)}
+.login-board .login-card .password-field{display:block}
 .login-board .login-card .field,.login-board .login-card .password-input input{width:100%;min-height:40px;border:1px solid #bdc9cf;border-radius:6px;background:var(--surface);color:var(--ink);padding:10px 12px}
 .login-board .login-card .password-input{position:relative}
 .login-board .login-card .password-input input{padding-right:48px}

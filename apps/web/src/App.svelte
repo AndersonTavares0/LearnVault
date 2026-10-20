@@ -408,8 +408,8 @@
 <h2 id="login-heading">Entrar</h2>
 <p class="small">Use as credenciais da sua instalação.</p>
 				<fieldset class="auth-fields" disabled={authBusy}>
-<label for="login-username">Usuário<input class="field" id="login-username" autocomplete="username" autocapitalize="none" spellcheck={false} placeholder="Seu usuário" bind:value={username} required /></label>
-					<PasswordField id="login-password" label="Senha" autocomplete="current-password" bind:value={password} />
+<label for="login-username">Usuário</label><input class="field" id="login-username" autocomplete="username" autocapitalize="none" spellcheck={false} placeholder="Seu usuário" bind:value={username} required />
+					<PasswordField id="login-password" label="Senha" autocomplete="current-password" placeholder="Sua senha" bind:value={password} />
 					{#if error}<p class="error" role="alert">{error}</p>{/if}
 <button class="btn primary" type="submit" disabled={authBusy} aria-busy={authBusy}>{authBusy ? 'Entrando…' : 'Entrar no LearnVault'}</button>
 				</fieldset>

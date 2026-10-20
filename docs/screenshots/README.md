@@ -20,6 +20,9 @@ estados e responsividade.
 | `reference-pomodoro-light.png` | 1440×1000 | Claro, painel Pomodoro aberto sobre a biblioteca |
 | `reference-login-light.png` | 1440×1000 | Claro, login dividido |
 | `reference-login-mobile-dark.png` | 390×844 | Escuro, login mobile |
+| `phase7-login-reference-1440x1000.png` | 1440×1000 | Captura atual direta de `06-login.html` |
+| `phase7-login-spa-1440x1000-light.png` | 1440×1000 | SPA, Graphite claro, capturada via REA/Playwright |
+| `phase7-login-side-by-side-1440x1000.png` | 2880×1000 | Referência à esquerda; SPA à direita |
 
 As imagens documentam o shell aprovado do Graphite: barra petroleum com navegação
 horizontal, busca real, chip compacto de Pomodoro, biblioteca com "Continuar
@@ -49,3 +52,22 @@ mesma resolução das capturas do aplicativo, para comparação lado a lado:
 
 As demais pranchas são fluxos de importação/materiais já cobertos pelos componentes
 reais ou documentos de decisão, conforme a matriz.
+
+### Comparação direta — login (prancha 06)
+
+Capturas feitas na mesma sessão de validação, Chromium 155, 1440×1000, tema Graphite
+claro. Diferenças observadas e tratadas:
+
+- Removidos do login os elementos da versão anterior que não existem na prancha
+  (hexágono e marca em caixa alta); markup agora usa a composição `.login`,
+  `.login-identity` e `.login-card` da referência.
+- Restaurados placeholder e espaçamento do campo de senha conforme a prancha; o reset
+  de `.password-field` evita o gap extra herdado da folha legada.
+- A referência contém um título documental acima de `.screen`, ausente da SPA por não
+  fazer parte do produto. Por isso o quadro começa 33 px mais alto na captura da SPA;
+  os elementos internos têm o mesmo posicionamento relativo ao quadro.
+- A SPA mantém o botão acessível de mostrar/ocultar senha, necessário ao comportamento
+  real de autenticação; esse controle não está desenhado na referência e é a diferença
+  visual funcional restante. Erros e estado ocupado também permanecem funcionais.
+
+Evidência REA/Playwright da captura clara: `ev_bb6e2696598102f2ce2d84bfb59f7211ce6e127ef8254da45b283d8589a985cd`.

@@ -12,7 +12,7 @@ fictícios na aplicação: as fixtures sintéticas existem apenas para screensho
 | 03 | Player + currículo | `#/player/...`: topbar imersiva, palco, abas reais Currículo/Anotações/Materiais, recolher/restaurar | Entregue; controles nativos do elemento de mídia |
 | 04 | Anotações | `#/notes`: layout de filtros e lista, com indisponibilidade explícita | Estrutura entregue; persistência futura |
 | 05 | Preferências | `#/settings`: tema real, paleta Graphite e conta/segurança | Entregue; somente a paleta Graphite |
-| 06 | Acesso | Login dividido com painel petroleum e cartão de acesso | Entregue |
+| 06 | Acesso | `#/login`: composição dividida da prancha, com autenticação real | Comparado diretamente em Chromium 155/1440×1000; evidência e divergências em `docs/screenshots/README.md` |
 | 07 | Refinamentos | Decisões de foco, painel, tipografia e estados | Documento de decisão; aplicado onde há contrato |
 | 08 | Pomodoro | Chip compacto no topbar e painel sob demanda com transporte persistente | Entregue |
 | 09 | Estatísticas | `#/analytics`: faixa de métricas reais e indisponibilidade honesta de séries | Entregue parcialmente; sem histórico diário |
