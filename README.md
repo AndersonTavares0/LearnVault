@@ -12,6 +12,8 @@ Ele combina um núcleo de domínio em Rust (`crates/core`) e um servidor Axum (`
 com uma SPA em Svelte 5 + Vite em torno de cursos somente leitura, registrados individualmente,
 contas locais, indexação de catálogo e um fluxo de estudo focado.
 
+![Tela de Estatísticas no tema claro, com as métricas de estudo ao lado da Árvore do Conhecimento](docs/screenshots/app/analytics-light-blue-slate.png)
+
 ## Status
 
 A migração para a stack Rust foi consolidada (ADR 0001). `crates/core` (domínio, SQLite, catálogo, scanner,
@@ -20,6 +22,8 @@ com `Range`, registro de cursos e API de estudo) são a stack backend oficial, j
 builds. O desktop Tauri (`crates/desktop`) possui catálogo, importação e remoção de
 cursos pelo seletor nativo, rescan explícito e reprodução local de materiais, vídeo e áudio, além
 da entrega de legendas por protocolo customizado com faixas parciais. O serviço legado em Go foi descontinuado.
+
+A SPA usa Blue-slate como paleta padrão; Deep Petrol e Balanced Sage ficam disponíveis em Configurações. A tela de Estatísticas mostra a Árvore do Conhecimento, que cresce conforme as aulas concluídas e reage aos dias sem estudo.
 
 ## Comece aqui
 
@@ -35,6 +39,8 @@ pnpm verify                      # todos os checks de PR antes de enviar
 proxy de `/api` para o servidor. Para o desktop Tauri, use `pnpm dev:tauri`. Antes
 da pull request, `pnpm verify` reproduz os checks de PR (use `--fast` para pular builds e
 audit durante a iteração); os comandos individuais continuam em `.github/CONTRIBUTING.md`.
+
+Cada worktree cria o próprio `target/` do Cargo. Rode `pnpm worktree:gc` para apagar esse cache nos worktrees vinculados e liberar espaço; use `--dry-run` para ver o total antes.
 
 A SPA é construída a partir de `apps/web/src` e gravada em
 `crates/server/web/build`, que o servidor Rust serve com `--web-root` (`pnpm dev` dispensa esse

@@ -10,6 +10,7 @@ mod config;
 mod courses;
 mod health;
 mod media;
+mod notes;
 mod spa;
 mod state;
 mod stream;
@@ -74,6 +75,22 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/api/media", get(media::media).head(media::media))
         .route("/api/study/recent", get(study::recent))
+        .route("/api/study/analytics", get(study::analytics))
+        .route("/api/study/pomodoro", get(study::pomodoro).post(study::start_pomodoro).put(study::pause_pomodoro).delete(study::reset_pomodoro))
+        .route(
+            "/api/study/notes",
+            get(notes::list)
+                .post(notes::create)
+                .layer(DefaultBodyLimit::max(128 * 1024)),
+        )
+        .route("/api/study/notes/all", get(notes::list_all))
+        .route(
+            "/api/study/notes/{note_id}",
+            axum::routing::put(notes::update)
+                .delete(notes::delete)
+                .layer(DefaultBodyLimit::max(128 * 1024)),
+        )
+        .route("/api/study/summary", get(study::summary))
         .route("/api/study/progress", get(study::progress))
         .route("/api/study/position", post(study::record_position))
         .route("/api/study/completed", post(study::set_completed))
@@ -141,7 +158,7 @@ async fn security_headers(
         csp.push_str(hash);
         csp.push('\'');
     }
-    csp.push_str("; media-src 'self' data: blob:; frame-ancestors 'none'");
+	csp.push_str("; img-src 'self' data: blob:; media-src 'self' data: blob:; frame-ancestors 'none'");
     // Os hashes são base64 por construção, então a conversão é infalível na
     // prática; ainda assim, prefira responder sem CSP a travar o worker.
     if let Ok(csp) = csp.parse() {

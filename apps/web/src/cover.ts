@@ -1,14 +1,14 @@
 /**
  * Capa gerada de um curso, sem imagens: cor e tipografia derivadas do título.
  *
- * O visual parte da identidade editorial do LearnVault — papel quente, verde profundo e
- * terracota — restringindo o matiz a uma faixa terrosa e usando o monograma em serifa
- * como elemento gráfico. A função é determinística: o mesmo título produz sempre a mesma
+ * O visual parte da identidade Graphite do LearnVault — neutros frios e acento
+ * petróleo — restringindo o matiz a uma faixa fria e usando o monograma como
+ * elemento gráfico. A função é determinística: o mesmo título produz sempre a mesma
  * capa, e dois cursos com títulos diferentes quase sempre produzem capas distinguíveis.
  */
 
-/** Matizes canônicos da paleta do produto: verde, oliva, âmbar e terracota. */
-const HUES = [158, 130, 86, 40, 20];
+/** Matizes canônicos da paleta do produto: petróleo, turquesa e azul-acinzentado frio. */
+const HUES = [188, 196, 204, 182, 210];
 
 export type CourseCover = {
 	/** Cor inicial do gradiente. */

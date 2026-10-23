@@ -6,8 +6,8 @@
 
 use learnvault_core::paths::relative_path_key;
 use learnvault_core::{
-    Database, Error, KeyMode, MAX_RECENT_STUDY, recent_study, record_position, set_completed,
-    study_progress,
+    Database, Error, KeyMode, MAX_RECENT_STUDY, course_study_summary, recent_study, study_analytics,
+    record_position, set_completed, study_progress,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -362,6 +362,47 @@ fn study_progress_is_isolated_by_owner() -> TestResult {
         7,
         "cada dono vê o próprio progresso"
     );
+    Ok(())
+}
+
+#[test]
+fn course_study_summary_is_owner_scoped_and_ignores_unavailable_or_removed_media() -> TestResult {
+    let db = library_db()?;
+    insert_media(&db, "m1", "available")?;
+    insert_media(&db, "m2", "available")?;
+    insert_media(&db, "m3", "missing")?;
+    set_completed(&db, OWNER, "m1", true)?;
+    set_completed(&db, OTHER, "m2", true)?;
+    set_completed(&db, OWNER, "m3", true)?;
+    db.connection().execute(
+        "INSERT INTO media_removal (library_id, media_id, removed_at) VALUES (?1, ?2, ?3)",
+        rusqlite::params![LIB, "m2", SEEDED_AT],
+    )?;
+
+    assert_eq!(
+        course_study_summary(&db, OWNER)?,
+        [learnvault_core::CourseStudySummary {
+            course_id: LIB.to_owned(),
+            completed_media: 1,
+        }]
+    );
+    assert!(course_study_summary(&db, OTHER)?.is_empty());
+    Ok(())
+}
+
+#[test]
+fn analytics_are_owner_scoped_and_exclude_removed_media() -> TestResult {
+    let db = library_db()?;
+    for media in ["m1", "m2", "m3"] { insert_media(&db, media, "available")?; }
+    seed(&db, OWNER, "m1", 30, true, 100)?;
+    seed(&db, OWNER, "m2", 20, false, 200)?;
+    seed(&db, OTHER, "m3", 90, true, 300)?;
+    db.connection().execute("INSERT INTO media_removal (library_id, media_id, removed_at) VALUES (?1, ?2, ?3)", rusqlite::params![LIB, "m2", 400])?;
+    assert_eq!(study_analytics(&db, OWNER)?, learnvault_core::StudyAnalytics {
+        tracked_count: 1, completed_count: 1, total_position_seconds: 30, last_activity_at: Some(100),
+    });
+    assert_eq!(study_analytics(&db, OTHER)?.tracked_count, 1);
+    assert!(matches!(study_analytics(&db, ""), Err(Error::InvalidOwnerId)));
     Ok(())
 }
 

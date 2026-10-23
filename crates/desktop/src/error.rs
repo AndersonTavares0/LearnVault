@@ -31,6 +31,8 @@ pub enum IpcErrorCode {
     MediaNotFound,
     /// A posição de retomada enviada é inválida.
     InvalidPosition,
+    /// A duração solicitada para o Pomodoro está fora do intervalo permitido.
+    InvalidPomodoroDuration,
     /// A remoção exige confirmação porque existe progresso associado.
     MediaRemovalNeedsConfirmation,
     /// A remoção de mídia não pôde ser concluída.
@@ -125,6 +127,10 @@ impl IpcError {
             code: IpcErrorCode::InvalidPosition,
             message: "posição de retomada inválida",
         }
+    }
+
+    pub fn invalid_pomodoro_duration() -> Self {
+        Self { code: IpcErrorCode::InvalidPomodoroDuration, message: "duração do Pomodoro inválida" }
     }
 
     /// A remoção exige confirmação porque existe progresso associado.

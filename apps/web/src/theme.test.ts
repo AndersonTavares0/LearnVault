@@ -1,7 +1,26 @@
 import { describe, expect, it, vi } from 'vitest';
-import { applyTheme, persistThemeMode, readThemeMode, resolveTheme, THEME_STORAGE_KEY, type ThemeMode } from './theme';
+import { applyTheme, applyThemeColor, applyThemePalette, persistThemeMode, persistThemePalette, readThemeMode, readThemePalette, resolveTheme, THEME_PALETTE_STORAGE_KEY, THEME_STORAGE_KEY, type ThemeMode, type ThemePalette } from './theme';
 
 describe('theme preferences', () => {
+	it('defaults to Blue-slate and validates saved palettes', () => {
+		const getItem = vi.fn((key: string) => key === THEME_PALETTE_STORAGE_KEY ? 'deep-petrol' : null);
+		expect(readThemePalette(null)).toBe('blue-slate');
+		expect(readThemePalette({ getItem })).toBe('deep-petrol');
+		expect(readThemePalette({ getItem: () => 'unknown' })).toBe('blue-slate');
+		expect(readThemePalette({ getItem: () => { throw new Error('denied'); } })).toBe('blue-slate');
+	});
+
+	it('persists and applies palette changes safely', () => {
+		const setItem = vi.fn();
+		const root = { dataset: {} } as HTMLElement;
+		expect(persistThemePalette({ setItem }, 'balanced-sage')).toBe(true);
+		expect(setItem).toHaveBeenCalledWith(THEME_PALETTE_STORAGE_KEY, 'balanced-sage');
+		expect(persistThemePalette({ setItem: () => { throw new Error('denied'); } }, 'blue-slate')).toBe(false);
+		expect(persistThemePalette(null, 'blue-slate')).toBe(false);
+		applyThemePalette(root, 'deep-petrol');
+		expect(root.dataset.palette).toBe('deep-petrol');
+	});
+
 	it('resolves explicit modes and follows the current system preference', () => {
 		expect(resolveTheme('system', false)).toBe('light');
 		expect(resolveTheme('system', true)).toBe('dark');
@@ -29,6 +48,17 @@ describe('theme preferences', () => {
 		const root = { dataset: {} } as HTMLElement;
 		applyTheme(root, 'dark');
 		expect(root.dataset.theme).toBe('dark');
+	});
+
+	it('keeps browser chrome color in sync with the active palette and mode', () => {
+		const meta = { content: '' };
+		applyThemeColor(meta, 'blue-slate', 'dark');
+		expect(meta.content).toBe('#10161b');
+		applyThemeColor(meta, 'deep-petrol', 'light');
+		expect(meta.content).toBe('#edf3f1');
+		applyThemeColor(meta, 'balanced-sage', 'dark');
+		expect(meta.content).toBe('#222823');
+		applyThemeColor(null, 'blue-slate', 'light');
 	});
 
 	it('supports only the three preference modes', () => {

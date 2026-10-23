@@ -153,6 +153,12 @@ async fn study_requires_authentication() {
         Request::get("/api/study/recent")
             .body(Body::empty())
             .unwrap(),
+        Request::get("/api/study/analytics")
+            .body(Body::empty())
+            .unwrap(),
+        Request::get("/api/study/pomodoro")
+            .body(Body::empty())
+            .unwrap(),
         Request::get("/api/study/progress?media_id=m1")
             .body(Body::empty())
             .unwrap(),
@@ -176,6 +182,54 @@ async fn study_requires_authentication() {
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         assert_private_no_store(&response);
     }
+}
+
+#[tokio::test]
+async fn study_analytics_is_authenticated_private_and_owner_scoped() {
+    let temp = tempfile::tempdir().unwrap();
+    seed(&temp, &["m1", "m2"], &[(ADMIN_ID, "m1", 40, true, 100), (READER_ID, "m2", 90, true, 200)]);
+    seed_user(&temp, READER_ID, READER, READER_PASSWORD);
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let admin = login(&app, ADMIN, ADMIN_PASSWORD).await;
+    let response = app.clone().oneshot(get_with_cookie("/api/study/analytics", &admin)).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_private_no_store(&response);
+    assert_eq!(json_body(response).await, serde_json::json!({
+        "tracked_count": 1, "completed_count": 1, "total_position_seconds": 40, "last_activity_at": 100
+    }));
+}
+
+#[tokio::test]
+async fn pomodoro_persists_authenticated_state_and_validates_writes() {
+    let temp = tempfile::tempdir().unwrap();
+    seed(&temp, &["m1"], &[]);
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let cookie = login(&app, ADMIN, ADMIN_PASSWORD).await;
+
+    let initial = app.clone().oneshot(get_with_cookie("/api/study/pomodoro", &cookie)).await.unwrap();
+    assert_eq!(initial.status(), StatusCode::OK);
+    assert_private_no_store(&initial);
+    assert_eq!(json_body(initial).await["status"], "idle");
+
+    let started = app.clone().oneshot(post_json("/api/study/pomodoro", &cookie, r#"{"duration_seconds":120}"#)).await.unwrap();
+    assert_eq!(started.status(), StatusCode::OK);
+    assert_private_no_store(&started);
+    assert_eq!(json_body(started).await["duration_seconds"], 120);
+
+    let paused = app.clone().oneshot(Request::put("/api/study/pomodoro")
+        .header("origin", "http://localhost").header("cookie", &cookie)
+        .header("content-type", "application/json").body(Body::from(r#"{"elapsed_seconds":30}"#)).unwrap()).await.unwrap();
+    assert_eq!(paused.status(), StatusCode::OK);
+    assert_eq!(json_body(paused).await["elapsed_seconds"], 30);
+
+    let invalid = app.clone().oneshot(post_json("/api/study/pomodoro", &cookie, r#"{"duration_seconds":10}"#)).await.unwrap();
+    assert_eq!(invalid.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_private_no_store(&invalid);
+
+    let reset = app.oneshot(Request::delete("/api/study/pomodoro")
+        .header("origin", "http://localhost").header("cookie", &cookie).body(Body::empty()).unwrap()).await.unwrap();
+    assert_eq!(reset.status(), StatusCode::OK);
+    assert_eq!(json_body(reset).await["status"], "idle");
 }
 
 /// O endpoint de capacidades é o contrato explícito de detecção de recursos do Study. Ele
@@ -772,12 +826,12 @@ async fn credentials_pending_flag_blocks_study_until_changed() {
     );
 }
 
-/// Uma base persistida já sai da cadeia de migrações na versão 4 e **já contém**
+/// Uma base persistida já sai da cadeia de migrações na versão 6 e **já contém**
 /// `study_state`: a tabela nasce na migração V1 (a primeira da cadeia), então nenhuma
 /// migração nova é necessária para bancos existentes. Este teste prova isso no arquivo
 /// real (não em memória) e verifica as restrições que o adaptador HTTP depende.
 #[tokio::test]
-async fn an_existing_v4_database_already_carries_study_state_and_its_constraints() {
+async fn an_existing_database_migrates_notes_and_pomodoro_and_keeps_study_state_constraints() {
     let temp = tempfile::tempdir().unwrap();
     seed(&temp, &["m1"], &[]);
 
@@ -786,7 +840,7 @@ async fn an_existing_v4_database_already_carries_study_state_and_its_constraints
         .connection()
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 4, "o formato persistido permanece na versão 4");
+    assert_eq!(version, 6, "as migrações de notas e Pomodoro avançam o formato para a versão 6");
     let present: i64 = db
         .connection()
         .query_row(
@@ -846,7 +900,7 @@ async fn an_existing_v4_database_already_carries_study_state_and_its_constraints
     assert_eq!(rows, 1, "apenas a linha válida persiste");
     drop(db);
 
-    // O servidor sobre uma base v4 existente lê e grava progresso pela API.
+    // O servidor sobre uma base migrada lê e grava progresso pela API.
     let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
     let cookie = login(&app, ADMIN, ADMIN_PASSWORD).await;
     let written = app

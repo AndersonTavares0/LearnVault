@@ -8,9 +8,79 @@ import { desktopMediaUrl, DesktopStub, HttpTransport, lessonFromNode, normalizeC
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 
 describe('transport contract', () => {
-	it('exposes the HTTP transport seam without routing assumptions', () => {
-		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'mediaUrl'];
-		expect(methods).toHaveLength(14);
+  it('exposes the HTTP transport seam without routing assumptions', () => {
+    const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'listNotes', 'listAllNotes', 'createNote', 'updateNote', 'deleteNote', 'studyAnalytics', 'pomodoro', 'startPomodoro', 'pausePomodoro', 'resetPomodoro', 'studySummary', 'mediaUrl'];
+    expect(methods).toHaveLength(25);
+  });
+	  it('reads study analytics from HTTP', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ tracked_count: 4, completed_count: 2, total_position_seconds: 99, last_activity_at: 123 }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(new HttpTransport().studyAnalytics()).resolves.toEqual({ trackedCount: 4, completedCount: 2, totalPositionSeconds: 99, lastActivityAt: 123 });
+    expect(fetchMock).toHaveBeenCalledWith('/api/study/analytics');
+    vi.unstubAllGlobals();
+	  });
+	it('loads and persists Pomodoro state over HTTP', async () => {
+		const idle = { status: 'idle', duration_seconds: 1500, elapsed_seconds: 0, updated_at: 0 };
+		const fetchMock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(idle), { status: 200 }))
+			.mockResolvedValueOnce(new Response(JSON.stringify({ ...idle, status: 'running' }), { status: 200 }))
+			.mockResolvedValueOnce(new Response(JSON.stringify({ ...idle, status: 'paused', elapsed_seconds: 12 }), { status: 200 }))
+			.mockResolvedValueOnce(new Response(JSON.stringify(idle), { status: 200 }));
+		vi.stubGlobal('fetch', fetchMock);
+		const api = new HttpTransport();
+		await expect(api.pomodoro()).resolves.toMatchObject({ status: 'idle' });
+		await expect(api.startPomodoro(1500)).resolves.toMatchObject({ status: 'running' });
+		await expect(api.pausePomodoro(12)).resolves.toMatchObject({ status: 'paused', elapsedSeconds: 12 });
+		await expect(api.resetPomodoro()).resolves.toMatchObject({ status: 'idle' });
+		expect(fetchMock.mock.calls.map(([url, options]) => [url, options?.method])).toEqual([
+			['/api/study/pomodoro', undefined], ['/api/study/pomodoro', 'POST'], ['/api/study/pomodoro', 'PUT'], ['/api/study/pomodoro', 'DELETE']
+		]);
+		vi.unstubAllGlobals();
+	});
+  it('uses the desktop IPC commands for analytics, notes and Pomodoro', async () => {
+		const note = { note_id: 4, media_id: 'm1', text: 'nota', position_seconds: null, created_at: 10, updated_at: 10 };
+		vi.mocked(invoke).mockResolvedValueOnce({ tracked_count: 1, completed_count: 0, total_position_seconds: 5, last_activity_at: 10 })
+			.mockResolvedValueOnce({ items: [note], truncated: false })
+			.mockResolvedValueOnce(note)
+			.mockResolvedValueOnce(undefined)
+			.mockResolvedValueOnce({ status: 'idle', duration_seconds: 1500, elapsed_seconds: 0, updated_at: 0 })
+			.mockResolvedValueOnce({ status: 'running', duration_seconds: 1500, elapsed_seconds: 0, updated_at: 10 });
+		const transport = new DesktopStub();
+		await expect(transport.studyAnalytics()).resolves.toMatchObject({ trackedCount: 1 });
+		await expect(transport.listNotes('m1')).resolves.toMatchObject({ items: [{ noteId: 4 }] });
+		await expect(transport.createNote('m1', 'nota', null)).resolves.toMatchObject({ noteId: 4 });
+		await expect(transport.deleteNote(4)).resolves.toBeUndefined();
+		await expect(transport.pomodoro()).resolves.toMatchObject({ status: 'idle', durationSeconds: 1500 });
+		await expect(transport.startPomodoro(1500)).resolves.toMatchObject({ status: 'running' });
+		expect(invoke).toHaveBeenNthCalledWith(1, 'desktop_study_analytics');
+		expect(invoke).toHaveBeenNthCalledWith(2, 'desktop_list_notes', { mediaId: 'm1' });
+		expect(invoke).toHaveBeenNthCalledWith(3, 'desktop_create_note', { mediaId: 'm1', text: 'nota', positionSeconds: null });
+		expect(invoke).toHaveBeenNthCalledWith(4, 'desktop_delete_note', { noteId: 4 });
+		expect(invoke).toHaveBeenNthCalledWith(5, 'desktop_pomodoro');
+		expect(invoke).toHaveBeenNthCalledWith(6, 'desktop_start_pomodoro', { durationSeconds: 1500 });
+	  });
+	it('reads and mutates owner-scoped study notes through the HTTP API', async () => {
+		const note = { note_id: 9, media_id: 'm/1', text: 'nota', position_seconds: 12, created_at: 100, updated_at: 101 };
+		const fetchMock = vi.fn()
+			.mockResolvedValueOnce(new Response(JSON.stringify({ items: [note], truncated: false }), { status: 200 }))
+			.mockResolvedValueOnce(new Response(JSON.stringify({ items: [note], truncated: true }), { status: 200 }))
+			.mockResolvedValueOnce(new Response(JSON.stringify(note), { status: 201 }))
+			.mockResolvedValueOnce(new Response(JSON.stringify({ ...note, text: 'edit' }), { status: 200 }))
+			.mockResolvedValueOnce(new Response(null, { status: 204 }));
+		vi.stubGlobal('fetch', fetchMock);
+		const transport = new HttpTransport();
+		expect(await transport.listNotes('m/1')).toMatchObject({ items: [{ noteId: 9, mediaId: 'm/1' }], truncated: false });
+		expect(await transport.listAllNotes()).toMatchObject({ truncated: true });
+		expect(await transport.createNote('m/1', 'nota', 12)).toMatchObject({ noteId: 9 });
+		expect(await transport.updateNote(9, 'edit', null)).toMatchObject({ text: 'edit' });
+		await expect(transport.deleteNote(9)).resolves.toBeUndefined();
+		expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+			'/api/study/notes?media_id=m%2F1', '/api/study/notes/all', '/api/study/notes',
+			'/api/study/notes/9', '/api/study/notes/9'
+		]);
+		expect(fetchMock.mock.calls[2][1]).toMatchObject({ method: 'POST', body: JSON.stringify({ media_id: 'm/1', text: 'nota', position_seconds: 12 }) });
+		expect(fetchMock.mock.calls[3][1]).toMatchObject({ method: 'PUT', body: JSON.stringify({ text: 'edit', position_seconds: null }) });
+		expect(fetchMock.mock.calls[4][1]).toMatchObject({ method: 'DELETE' });
+		vi.unstubAllGlobals();
 	});
 	it('does not offer native folder selection over HTTP', async () => {
 		await expect(new HttpTransport().importCourse()).rejects.toThrow('desktop é quem escolhe pastas');

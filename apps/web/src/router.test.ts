@@ -54,6 +54,13 @@ describe('hash router', () => {
 		expect(locationFromHash('#/settings')).toEqual({ route: 'settings', courseId: null, lessonPath: null });
 		expect(destinationAfterLogin('#/settings')).toBe('#/settings');
 	});
+
+	it('preserves notes and analytics destinations after login', () => {
+		expect(locationFromHash('#/notes')).toEqual({ route: 'notes', courseId: null, lessonPath: null });
+		expect(locationFromHash('#/analytics')).toEqual({ route: 'analytics', courseId: null, lessonPath: null });
+		expect(destinationAfterLogin('#/notes')).toBe('#/notes');
+		expect(destinationAfterLogin('#/analytics')).toBe('#/analytics');
+	});
 	it('creates server-independent links with the course identity', () => {
 		expect(href('home')).toBe('#/home');
 		expect(href('course', 'course one')).toBe('#/course/course%20one');

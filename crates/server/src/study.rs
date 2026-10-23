@@ -17,7 +17,7 @@ use axum::{
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
-use learnvault_core::{AuthSession, Database, StudyProgress};
+use learnvault_core::{AuthSession, Database, PomodoroState, PomodoroStatus, StudyAnalytics, StudyProgress};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -74,6 +74,102 @@ struct ProgressResponse {
 #[derive(Serialize)]
 struct RecentResponse {
     items: Vec<ProgressResponse>,
+}
+
+#[derive(Serialize)]
+struct CourseSummary {
+    course_id: String,
+    completed_media: usize,
+}
+
+#[derive(Serialize)]
+struct SummaryResponse {
+    courses: Vec<CourseSummary>,
+}
+
+#[derive(Serialize)]
+struct AnalyticsResponse {
+    tracked_count: usize,
+    completed_count: usize,
+    total_position_seconds: i64,
+    last_activity_at: Option<i64>,
+}
+
+pub(crate) async fn analytics(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let owner = user.user_id;
+    match run_study(&state, move |db| learnvault_core::study_analytics(db, &owner)).await {
+        Ok(stats) => private_no_store(Json(AnalyticsResponse::from(stats)).into_response()),
+        Err(failure) => study_failure_response(failure),
+    }
+}
+
+impl From<StudyAnalytics> for AnalyticsResponse {
+    fn from(stats: StudyAnalytics) -> Self {
+        Self { tracked_count: stats.tracked_count, completed_count: stats.completed_count,
+            total_position_seconds: stats.total_position_seconds, last_activity_at: stats.last_activity_at }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct PomodoroRequest { duration_seconds: Option<i64>, elapsed_seconds: Option<i64> }
+
+#[derive(Serialize)]
+struct PomodoroResponse { status: &'static str, duration_seconds: i64, elapsed_seconds: i64, updated_at: i64 }
+
+impl From<PomodoroState> for PomodoroResponse {
+    fn from(state: PomodoroState) -> Self {
+        Self {
+            status: match state.status { PomodoroStatus::Idle => "idle", PomodoroStatus::Running => "running", PomodoroStatus::Paused => "paused" },
+            duration_seconds: state.duration_seconds,
+            elapsed_seconds: state.elapsed_seconds,
+            updated_at: state.updated_at,
+        }
+    }
+}
+
+pub(crate) async fn pomodoro(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let user = match user_or_response(&state, &headers).await { Ok(user) => user, Err(failure) => return failure.into_response() };
+    let owner = user.user_id;
+    match run_study(&state, move |db| learnvault_core::pomodoro_state(db, &owner)).await {
+        Ok(session) => private_no_store(Json(PomodoroResponse::from(session)).into_response()),
+        Err(failure) => study_failure_response(failure),
+    }
+}
+
+pub(crate) async fn start_pomodoro(State(state): State<AppState>, headers: HeaderMap, Json(request): Json<PomodoroRequest>) -> Response {
+    if !same_origin(&headers) { return csrf_failed(); }
+    let Some(duration) = request.duration_seconds else { return invalid_query(); };
+    let user = match user_or_response(&state, &headers).await { Ok(user) => user, Err(failure) => return failure.into_response() };
+    let owner = user.user_id;
+    match run_study(&state, move |db| learnvault_core::start_pomodoro(db, &owner, duration)).await {
+        Ok(session) => private_no_store(Json(PomodoroResponse::from(session)).into_response()),
+        Err(failure) => study_failure_response(failure),
+    }
+}
+
+pub(crate) async fn pause_pomodoro(State(state): State<AppState>, headers: HeaderMap, Json(request): Json<PomodoroRequest>) -> Response {
+    if !same_origin(&headers) { return csrf_failed(); }
+    let Some(elapsed) = request.elapsed_seconds else { return invalid_query(); };
+    let user = match user_or_response(&state, &headers).await { Ok(user) => user, Err(failure) => return failure.into_response() };
+    let owner = user.user_id;
+    match run_study(&state, move |db| learnvault_core::pause_pomodoro(db, &owner, elapsed)).await {
+        Ok(session) => private_no_store(Json(PomodoroResponse::from(session)).into_response()),
+        Err(failure) => study_failure_response(failure),
+    }
+}
+
+pub(crate) async fn reset_pomodoro(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    if !same_origin(&headers) { return csrf_failed(); }
+    let user = match user_or_response(&state, &headers).await { Ok(user) => user, Err(failure) => return failure.into_response() };
+    let owner = user.user_id;
+    match run_study(&state, move |db| learnvault_core::reset_pomodoro(db, &owner)).await {
+        Ok(session) => private_no_store(Json(PomodoroResponse::from(session)).into_response()),
+        Err(failure) => study_failure_response(failure),
+    }
 }
 
 /// Documento de capacidades do Study, o contrato explícito de detecção de recursos.
@@ -143,6 +239,34 @@ pub(crate) async fn recent(
         Ok(states) => private_no_store(
             Json(RecentResponse {
                 items: states.into_iter().map(ProgressResponse::recorded).collect(),
+            })
+            .into_response(),
+        ),
+        Err(failure) => study_failure_response(failure),
+    }
+}
+
+/// Resume conclusões por curso para a biblioteca do usuário autenticado.
+pub(crate) async fn summary(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let owner = user.user_id;
+    match run_study(&state, move |db| {
+        learnvault_core::course_study_summary(db, &owner)
+    })
+    .await
+    {
+        Ok(courses) => private_no_store(
+            Json(SummaryResponse {
+                courses: courses
+                    .into_iter()
+                    .map(|item| CourseSummary {
+                        course_id: item.course_id,
+                        completed_media: item.completed_media,
+                    })
+                    .collect(),
             })
             .into_response(),
         ),
@@ -312,6 +436,9 @@ fn study_failure_response(failure: StudyFailure) -> Response {
         }
         StudyFailure::Core(Error::InvalidStudyPosition { .. }) => {
             error_response(StatusCode::UNPROCESSABLE_ENTITY, "invalid_position")
+        }
+        StudyFailure::Core(Error::InvalidPomodoroDuration { .. }) => {
+            error_response(StatusCode::UNPROCESSABLE_ENTITY, "invalid_pomodoro_duration")
         }
         StudyFailure::Core(_) => internal_error("study unavailable"),
     }

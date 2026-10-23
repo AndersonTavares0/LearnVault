@@ -7,7 +7,7 @@
 
 use learnvault_core::{
     Availability, Catalog, CatalogFile, CatalogNode, MediaKind, NodeRole, RescanSummary,
-    StudyProgress,
+    PomodoroState, PomodoroStatus, StudyAnalytics, StudyNote, StudyProgress,
 };
 use serde::Serialize;
 
@@ -234,6 +234,69 @@ impl StudyProgressDto {
             completed: false,
             updated_at: None,
             recorded: false,
+        }
+    }
+}
+
+/// Resumo de mídias concluídas pelo dono local em um curso.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct CourseStudySummaryDto {
+    /// Identidade opaca do curso.
+    pub course_id: String,
+    /// Mídias concluídas e ainda disponíveis no catálogo.
+    pub completed_media: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct StudyAnalyticsDto {
+    pub tracked_count: usize,
+    pub completed_count: usize,
+    pub total_position_seconds: i64,
+    pub last_activity_at: Option<i64>,
+}
+
+impl From<StudyAnalytics> for StudyAnalyticsDto {
+    fn from(stats: StudyAnalytics) -> Self {
+        Self { tracked_count: stats.tracked_count, completed_count: stats.completed_count,
+            total_position_seconds: stats.total_position_seconds, last_activity_at: stats.last_activity_at }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct StudyNoteDto {
+    pub note_id: i64,
+    pub media_id: String,
+    pub text: String,
+    pub position_seconds: Option<i64>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+impl From<StudyNote> for StudyNoteDto {
+    fn from(note: StudyNote) -> Self {
+        Self { note_id: note.note_id, media_id: note.media_id, text: note.text,
+            position_seconds: note.position_seconds, created_at: note.created_at, updated_at: note.updated_at }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct StudyNotesDto { pub items: Vec<StudyNoteDto>, pub truncated: bool }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PomodoroDto {
+    pub status: &'static str,
+    pub duration_seconds: i64,
+    pub elapsed_seconds: i64,
+    pub updated_at: i64,
+}
+
+impl From<PomodoroState> for PomodoroDto {
+    fn from(state: PomodoroState) -> Self {
+        Self {
+            status: match state.status { PomodoroStatus::Idle => "idle", PomodoroStatus::Running => "running", PomodoroStatus::Paused => "paused" },
+            duration_seconds: state.duration_seconds,
+            elapsed_seconds: state.elapsed_seconds,
+            updated_at: state.updated_at,
         }
     }
 }

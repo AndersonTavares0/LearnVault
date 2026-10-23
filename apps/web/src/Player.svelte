@@ -1,5 +1,6 @@
 <script lang="ts">
 	import LooseFiles from './LooseFiles.svelte';
+	import StudyNotes from './StudyNotes.svelte';
 	import { clampSpeed, formatDuration, mediaAvailability, mediaPlaybackKind, PLAYBACK_SPEEDS, type PlaybackSpeed, selectPlayableMedia, selectPlayableSubtitle, srtConversionSupported, srtToWebVtt, studySyncEnabled, subtitleFormat } from './player';
 	import { createPositionSaver } from './study';
 	import { transport, type Lesson, type StudyProgress } from './transport';
@@ -182,3 +183,4 @@
 {/if}
 {#if captionMessage}<p class="empty" role="status">{captionMessage}{#if captionDownload} <a href={captionDownload} download>Baixar legenda</a>{/if}</p>{/if}
 <LooseFiles files={[...lesson.subtitles, ...lesson.materials]} heading="Materiais" {courseId} />
+{#if mediaId}<StudyNotes {mediaId} currentTime={media?.currentTime ?? currentTime} onSeek={(seconds) => { if (media) media.currentTime = seconds; }} />{/if}

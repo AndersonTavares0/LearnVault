@@ -21,6 +21,8 @@ pub mod error;
 pub mod ids;
 pub mod legacy_import;
 pub mod media;
+pub mod notes;
+pub mod pomodoro;
 pub mod paths;
 pub mod removal;
 pub mod rescan;
@@ -48,10 +50,19 @@ pub use media::{
     MediaReference, OpenMedia, find_media_by_path, find_media_library_id, open_media,
     open_media_reference,
 };
+pub use notes::{
+    MAX_NOTE_TEXT_CHARS, MAX_NOTES_PER_MEDIA, MAX_NOTES_PER_OWNER, StudyNote, create_note, delete_note, list_all_notes,
+    list_notes, update_note,
+};
+pub use pomodoro::{
+    DEFAULT_POMODORO_SECONDS, PomodoroState, PomodoroStatus, pomodoro_state, pause_pomodoro,
+    reset_pomodoro, start_pomodoro,
+};
 pub use paths::KeyMode;
 pub use removal::{MediaRemovalImpact, MediaRemovalOutcome, media_removal_impact, remove_media};
 pub use rescan::{RescanSummary, apply_scan, rescan};
 pub use scanner::{MediaKind, ScanOutcome, ScannedFile, scan};
 pub use study::{
-    MAX_RECENT_STUDY, StudyProgress, recent_study, record_position, set_completed, study_progress,
+    CourseStudySummary, MAX_RECENT_STUDY, StudyAnalytics, StudyProgress, course_study_summary, recent_study,
+    record_position, set_completed, study_analytics, study_progress,
 };

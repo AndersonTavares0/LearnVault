@@ -1,12 +1,13 @@
 import { mount } from 'svelte';
 import App from './App.svelte';
 import './styles.css';
-import { applyTheme, readThemeMode, resolveTheme } from './theme';
+import { applyTheme, applyThemeColor, applyThemePalette, readThemeMode, readThemePalette, resolveTheme } from './theme';
 
 const initialTheme = resolveTheme(readThemeMode(safeStorage()), window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false);
+const initialPalette = readThemePalette(safeStorage());
 applyTheme(document.documentElement, initialTheme);
-const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
-if (themeColor) themeColor.content = initialTheme === 'dark' ? '#171c19' : '#f7f6f1';
+applyThemePalette(document.documentElement, initialPalette);
+applyThemeColor(document.querySelector<HTMLMetaElement>('meta[name="theme-color"]'), initialPalette, initialTheme);
 
 function safeStorage(): Storage | null {
 	try {

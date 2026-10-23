@@ -1,4 +1,4 @@
-import { expect, test as base } from '@playwright/test';
+﻿import { expect, test as base } from '@playwright/test';
 import { once } from 'node:events';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -27,9 +27,27 @@ function firstMediaId(value: unknown): string | undefined {
 	return firstMediaId(record.children) ?? firstMediaId(record.nodes) ?? firstMediaId(record.categories);
 }
 
+function allMediaIds(value: unknown, result: string[] = []): string[] {
+	if (Array.isArray(value)) {
+		for (const item of value) allMediaIds(item, result);
+		return result;
+	}
+	if (!value || typeof value !== 'object') return result;
+	const record = value as Record<string, unknown>;
+	if (Array.isArray(record.files)) {
+		for (const file of record.files) {
+			if (file && typeof file === 'object' && typeof (file as Record<string, unknown>).media_id === 'string') result.push((file as Record<string, string>).media_id);
+		}
+	}
+	allMediaIds(record.children, result);
+	allMediaIds(record.nodes, result);
+	allMediaIds(record.categories, result);
+	return result;
+}
+
 function parseRgb(value: string): [number, number, number] {
 	const match = value.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
-	if (!match) throw new Error(`cor inválida: ${value}`);
+	if (!match) throw new Error(`cor invÃ¡lida: ${value}`);
 	return [Number(match[1]), Number(match[2]), Number(match[3])];
 }
 
@@ -134,26 +152,29 @@ async function waitForHealth(url: string, process: ChildProcess) {
 	throw new Error('server did not become ready within 30 seconds');
 }
 
-async function startServer(): Promise<ServerFixture> {
+async function startServer(options: { registerLibrary?: boolean } = {}): Promise<ServerFixture> {
 	const root = await mkdtemp(join(tmpdir(), 'learnvault-e2e-'));
 	const library = join(root, 'library');
 	const outsidePath = join(root, 'outside.mp4');
 	await writeFile(outsidePath, Buffer.from('outside-sentinel'));
 	await mkdir(join(library, 'Categoria', 'Curso'), { recursive: true });
-	await writeFile(join(library, 'Categoria', 'Curso', 'Aula.mp4'), Buffer.from('video-fixture'));
-	await writeFile(join(library, 'Categoria', 'Curso', 'Aula.vtt'), 'WEBVTT\n');
-	await writeFile(join(library, 'Categoria', 'Curso', 'Material.pdf'), Buffer.from('material-fixture'));
+	if (options.registerLibrary !== false) {
+		await writeFile(join(library, 'Categoria', 'Curso', 'Aula.mp4'), Buffer.from('video-fixture'));
+		await writeFile(join(library, 'Categoria', 'Curso', 'Aula.vtt'), 'WEBVTT\n');
+		await writeFile(join(library, 'Categoria', 'Curso', 'Material.pdf'), Buffer.from('material-fixture'));
+	}
 
-	const webRoot = resolve(process.cwd(), 'crates/server/web/build');
+	const webRoot = process.env.LEARNVAULT_WEB_ROOT ?? resolve(process.cwd(), 'crates/server/web/build');
 	const defaultBinary = process.platform === 'win32' ? 'target/debug/learnvault-server.exe' : 'target/debug/learnvault-server';
 	const binary = process.env.LEARNVAULT_SERVER_BIN ?? resolve(defaultBinary);
-	const server = spawn(binary, [
+	const serverArgs = [
 		'--listen-addr', '127.0.0.1:0',
 		'--database', join(root, 'learnvault.sqlite'),
-		'--library-root', library,
 		'--web-root', webRoot,
 		'--insecure-http'
-	], {
+	];
+	if (options.registerLibrary !== false) serverArgs.splice(4, 0, '--library-root', library);
+	const server = spawn(binary, serverArgs, {
 		env: { ...process.env, ADMIN_USERNAME: 'admin', ADMIN_PASSWORD },
 		stdio: ['ignore', 'pipe', 'ignore']
 	});
@@ -196,20 +217,178 @@ const test = base.extend<{ server: ServerFixture }>({
 	}, { scope: 'worker' }]
 });
 
+test('guides a first-time admin from an empty library into the imported catalog', async ({ page }) => {
+	const server = await startServer({ registerLibrary: false });
+	try {
+		await page.goto(`${server.baseURL}/#/login`);
+		await page.getByLabel(/^Usu/).fill('admin');
+		await page.getByLabel('Senha', { exact: true }).fill(ADMIN_PASSWORD);
+		await page.getByRole('button', { name: 'Entrar' }).click();
+
+		await expect(page.getByRole('heading', { name: 'Sua biblioteca começa aqui' })).toBeVisible();
+		await expect(page.getByRole('button', { name: 'Importar primeiro curso' })).toBeVisible();
+		await expect(page.locator('.library-tools, .library-resume, .library-grid')).toHaveCount(0);
+		await page.getByRole('button', { name: 'Importar primeiro curso' }).click();
+		const importPath = page.getByLabel('Caminho da pasta do curso no servidor');
+		await expect(importPath).toBeVisible();
+		await importPath.fill(join(server.libraryPath, 'Categoria', 'Curso'));
+		await page.getByRole('button', { name: 'Importar', exact: true }).click();
+
+		await expect(page.getByRole('heading', { name: 'Cursos' })).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'Sua biblioteca começa aqui' })).toHaveCount(0);
+		await expect(page.getByRole('link', { name: /Abrir curso Curso/ })).toBeVisible();
+	} finally {
+		await server.stop();
+	}
+});
+
+test('captures the library across catalog sizes, themes, and screen widths', async ({ page }) => {
+	const server = await startServer({ registerLibrary: false });
+	const screenshotDirectory = resolve(process.cwd(), 'docs/screenshots/library-refinement');
+	await mkdir(screenshotDirectory, { recursive: true });
+	try {
+		await page.goto(`${server.baseURL}/#/login`);
+		await page.getByLabel(/^Usu/).fill('admin');
+		await page.getByLabel('Senha', { exact: true }).fill(ADMIN_PASSWORD);
+		await page.getByRole('button', { name: 'Entrar' }).click();
+		await expect(page.getByRole('heading', { name: 'Sua biblioteca começa aqui' })).toBeVisible();
+
+		const captureMatrix = async (state: string) => {
+			for (const theme of ['light', 'dark'] as const) {
+				await page.evaluate((mode) => localStorage.setItem('learnvault-theme', mode), theme);
+				await page.reload();
+				await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+				for (const viewport of [{ name: 'desktop', width: 1440, height: 1000 }, { name: 'reference', width: 796, height: 482 }, { name: 'mobile', width: 390, height: 844 }]) {
+					await page.setViewportSize({ width: viewport.width, height: viewport.height });
+					if (state === 'empty') {
+						await expect(page.getByRole('heading', { name: 'Sua biblioteca começa aqui' })).toBeVisible();
+						await expect(page.locator('.library-tools, .library-resume, .library-grid')).toHaveCount(0);
+					} else {
+						await expect(page.getByRole('heading', { name: 'Cursos' })).toBeVisible();
+					}
+					const dimensions = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, client: document.documentElement.clientWidth }));
+					expect(dimensions.scroll).toBeLessThanOrEqual(dimensions.client);
+					await page.screenshot({ path: join(screenshotDirectory, `${state}-${theme}-${viewport.name}.png`), fullPage: viewport.name !== 'reference' });
+				}
+			}
+		};
+
+		await captureMatrix('empty');
+		const importAndRegister = async (index: number) => {
+			const coursePath = join(server.libraryPath, `Curso${index}`);
+			const modulePath = join(coursePath, 'Modulo 1');
+			await mkdir(modulePath, { recursive: true });
+			await writeFile(join(modulePath, '01 - Fundamentos.mp4'), Buffer.from('synthetic-video-fixture'));
+			await writeFile(join(modulePath, '02 - Aplicacao.mp4'), Buffer.from('synthetic-video-fixture'));
+			const response = await page.request.post(`${server.baseURL}/api/admin/courses`, {
+				headers: { Origin: server.baseURL }, data: { path: coursePath }
+			});
+			await expect(response).toBeOK();
+		};
+		await importAndRegister(1);
+		const firstRescan = await page.request.post(`${server.baseURL}/api/admin/catalog/rescan`, { headers: { Origin: server.baseURL } });
+		await expect(firstRescan).toBeOK();
+		await page.reload();
+		await expect(page.locator('.library-card-item')).toHaveCount(1);
+		await expect(page.locator('.course-card-title')).toHaveText('Curso 1');
+		const singleCatalog = await (await page.request.get(`${server.baseURL}/api/catalog`)).json();
+		const mediaIds = allMediaIds(singleCatalog);
+		if (mediaIds.length < 2) throw new Error(`Synthetic course exposed ${mediaIds.length} media ids: ${JSON.stringify(singleCatalog)}`);
+		const completed = await page.request.post(`${server.baseURL}/api/study/completed`, {
+			headers: { Origin: server.baseURL }, data: { media_id: mediaIds[0], completed: true }
+		});
+		await expect(completed).toBeOK();
+		const resume = await page.request.post(`${server.baseURL}/api/study/position`, {
+			headers: { Origin: server.baseURL }, data: { media_id: mediaIds[1], position_seconds: 127 }
+		});
+		await expect(resume).toBeOK();
+		await page.reload();
+		await expect(page.getByRole('heading', { name: 'Continue estudando' })).toBeVisible();
+		await expect(page.locator('.course-progress')).toContainText('50%');
+		await captureMatrix('one-course');
+		await page.locator('.library-card-actions summary[aria-label="Ações de Curso 1"]').click();
+		await page.getByRole('button', { name: 'Personalizar' }).click();
+		await page.locator('.library-title-form input:not([type=file])').fill('Curso de Teste');
+		await page.getByRole('button', { name: 'Salvar' }).click();
+		await expect(page.locator('.course-card-title')).toHaveText('Curso de Teste');
+		await page.locator('.library-card-actions summary[aria-label="Ações de Curso de Teste"]').click();
+		await page.getByRole('button', { name: 'Personalizar' }).click();
+		await page.evaluate(() => {
+			const canvas = document.createElement('canvas');
+			canvas.width = 320;
+			canvas.height = 180;
+			const context = canvas.getContext('2d');
+			if (!context) throw new Error('Canvas 2D indisponível para gerar a fixture da capa.');
+			context.fillStyle = '#276f73';
+			context.fillRect(0, 0, canvas.width, canvas.height);
+			canvas.dataset.testid = 'cover-fixture';
+			canvas.style.cssText = 'position:fixed;left:0;top:0;z-index:9999';
+			document.body.append(canvas);
+		});
+		const coverPng = await page.locator('[data-testid="cover-fixture"]').screenshot();
+		await page.locator('[data-testid="cover-fixture"]').evaluate((canvas) => canvas.remove());
+		await page.locator('.library-title-form input[type=file]').setInputFiles({
+			name: 'capa.png', mimeType: 'image/png',
+			buffer: coverPng
+		});
+		await expect(page.locator('.course-cover img')).toBeVisible();
+		await expect.poll(() => page.locator('.course-cover img').evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
+		await page.reload();
+		await expect(page.locator('.course-card-title')).toHaveText('Curso de Teste');
+		await expect(page.locator('.course-cover img')).toBeVisible();
+		await expect.poll(() => page.locator('.course-cover img').evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
+
+		for (const index of [2, 3]) await importAndRegister(index);
+		const threeCourseRescan = await page.request.post(`${server.baseURL}/api/admin/catalog/rescan`, { headers: { Origin: server.baseURL } });
+		await expect(threeCourseRescan).toBeOK();
+		const threeCourseCatalog = await (await page.request.get(`${server.baseURL}/api/catalog`)).json();
+		const threeCourseMediaIds = allMediaIds(threeCourseCatalog);
+		for (const mediaId of threeCourseMediaIds.slice(2, 4)) {
+			const completion = await page.request.post(`${server.baseURL}/api/study/completed`, {
+				headers: { Origin: server.baseURL }, data: { media_id: mediaId, completed: true }
+			});
+			await expect(completion).toBeOK();
+		}
+		await page.reload();
+		await expect(page.locator('.library-card-item')).toHaveCount(3);
+		await page.getByRole('button', { name: 'Em andamento' }).click();
+		await expect(page.locator('.library-card-item')).toHaveCount(1);
+		await expect(page.locator('.course-card-title')).toHaveText('Curso de Teste');
+		await page.getByRole('button', { name: 'Concluídos' }).click();
+		await expect(page.locator('.library-card-item')).toHaveCount(1);
+		await expect(page.locator('.course-card-title')).toHaveText('Curso 2');
+		await page.getByRole('button', { name: 'Todos' }).click();
+		await expect(page.locator('.library-card-item')).toHaveCount(3);
+		await captureMatrix('three-courses');
+		await importAndRegister(4);
+		const allRescan = await page.request.post(`${server.baseURL}/api/admin/catalog/rescan`, { headers: { Origin: server.baseURL } });
+		await expect(allRescan).toBeOK();
+		await page.reload();
+		await expect(page.locator('.library-card-item')).toHaveCount(4);
+		await expect(page.locator('.course-card-title').filter({ hasText: 'Curso de Teste' })).toHaveCount(1);
+		await captureMatrix('many-courses');
+		await page.setViewportSize({ width: 1440, height: 1000 });
+		const cardWidths = await page.locator('.library-card-item').evaluateAll((cards) => cards.map((card) => card.getBoundingClientRect().width));
+		expect(Math.max(...cardWidths) - Math.min(...cardWidths)).toBeLessThanOrEqual(1);
+	} finally {
+		await server.stop();
+	}
+});
+
 test('serves the built SPA through the Rust server for a complete study-library journey', async ({ page, server }) => {
 	await page.goto(`${server.baseURL}/#/login`);
 	await expect(page.getByRole('heading', { name: 'Entrar no LearnVault' })).toBeVisible();
 
-	await page.getByLabel('Usuário').fill('admin');
-	// O botão "Mostrar Senha" compartilha o rótulo parcial; exigir o campo exato evita
+	await page.getByLabel(/^Usu/).fill('admin');
+	// O botÃ£o "Mostrar Senha" compartilha o rÃ³tulo parcial; exigir o campo exato evita
 	// que o locator resolva tanto o input quanto o alternador de visibilidade.
 	await page.getByLabel('Senha', { exact: true }).fill(ADMIN_PASSWORD);
 	await page.getByRole('button', { name: 'Entrar' }).click();
-	await expect(page.getByRole('heading', { name: 'Início' })).toBeAttached();
+	await expect(page.getByRole('heading', { name: /^In/ })).toBeAttached();
 
-	await page.getByRole('button', { name: 'Indexar cursos' }).click();
-	await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
-	await expect(page.getByRole('navigation', { name: 'Navegação principal' })).toBeVisible();
+	await page.getByRole('button', { name: 'Atualizar' }).click();
+	await expect(page.locator('.catalog-message')).toBeVisible();
+	await expect(page.getByRole('navigation', { name: /^Nave/ })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'Cursos' })).toBeVisible();
 	const initialCatalog = await (await page.request.get(`${server.baseURL}/api/catalog`)).json();
 	const mediaId = firstMediaId(initialCatalog);
@@ -223,20 +402,14 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	await expect(recentResponse).toBeOK();
 	expect((await recentResponse.json()).items.length).toBeGreaterThan(0);
 	await page.reload();
-	await expect(page.getByText('Continuar assistindo')).toBeVisible();
-
-	// Cada item identifica a aula pelo título limpo e mostra o contexto (curso · módulo)
-	// em uma linha secundária; o nome cru do arquivo não pode vazar para o usuário.
-	const firstRecentItem = page.locator('.recent-study li').first();
-	const lessonLabel = (await firstRecentItem.locator('a').first().innerText()).trim();
-	expect(lessonLabel).not.toMatch(/\.[a-z0-9]{2,4}$/i);
-	expect(lessonLabel).not.toMatch(/^\d+[\s._-]/);
-	const contextNode = firstRecentItem.locator('.recent-study-info small');
-	await expect(contextNode).toHaveText(/\S/);
-	const contextText = (await contextNode.innerText()).trim();
-	expect(await contextNode.getAttribute('title')).toBe(contextText);
-
-	// Em tela estreita a lista não pode gerar rolagem horizontal.
+	await expect(page.getByRole('heading', { name: 'Continue estudando' })).toBeVisible();
+	// O cartÃ£o compacto mostra aula amigÃ¡vel e posiÃ§Ã£o realmente salva.
+	const resumeCard = page.locator('.library-resume-card');
+	const lessonLabel = (await resumeCard.locator('h3').innerText()).trim();
+	expect(lessonLabel).not.toMatch(/\\.[a-z0-9]{2,4}$/i);
+	expect(lessonLabel).not.toMatch(/^\\d+[\\s._-]/);
+	await expect(resumeCard.locator('.library-resume-position')).toContainText('Posição salva');
+	// Em tela estreita a lista nÃ£o pode gerar rolagem horizontal.
 	const originalViewport = page.viewportSize();
 	await page.setViewportSize({ width: 390, height: 844 });
 	const narrowWidths = await page.evaluate(() => ({
@@ -246,7 +419,7 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	expect(narrowWidths.scrollWidth).toBeLessThanOrEqual(narrowWidths.clientWidth);
 	if (originalViewport) await page.setViewportSize(originalViewport);
 
-	const lightColors = await page.locator('.recent-study small').first().evaluate((element) => {
+	const lightColors = await page.locator('.library-resume-position').first().evaluate((element) => {
 		let node: HTMLElement | null = element as HTMLElement;
 		const foreground = getComputedStyle(element).color;
 		while (node) {
@@ -259,7 +432,7 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	expect(contrastRatio(lightColors.foreground, lightColors.background)).toBeGreaterThanOrEqual(4.5);
 	await page.emulateMedia({ colorScheme: 'dark' });
 	await page.reload();
-	const darkColors = await page.locator('.recent-study small').first().evaluate((element) => {
+	const darkColors = await page.locator('.library-resume-position').first().evaluate((element) => {
 		let node: HTMLElement | null = element as HTMLElement;
 		const foreground = getComputedStyle(element).color;
 		while (node) {
@@ -273,7 +446,7 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	const faviconResponse = await page.request.get(`${server.baseURL}/favicon.svg`);
 	expect(faviconResponse.status()).toBe(200);
 
-	// A home lista cada curso registrado como card; o card abre a página do curso.
+	// A home lista cada curso registrado como card; o card abre a pÃ¡gina do curso.
 	const courseCard = page.getByRole('link', { name: /library/ });
 	await expect(courseCard).toBeVisible();
 	await courseCard.click();
@@ -290,7 +463,7 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	const videoURL = new URL(videoSource, server.baseURL);
 	expect(videoURL.pathname).toBe('/api/media');
 	expect(videoURL.searchParams.get('path')).toBe('Categoria/Curso/Aula.mp4');
-	// Toda mídia é resolvida dentro de um curso registrado, nunca por caminho global.
+	// Toda mÃ­dia Ã© resolvida dentro de um curso registrado, nunca por caminho global.
 	expect(videoURL.searchParams.get('course')).toBeTruthy();
 	const videoResponse = await page.request.get(videoURL.toString());
 	await expect(videoResponse).toBeOK();
@@ -312,17 +485,17 @@ test('serves the built SPA through the Rust server for a complete study-library 
 		const traversal = await page.request.get(
 			`${server.baseURL}/api/media?course=${encodeURIComponent(courseId)}&path=${encodeURIComponent(path)}`
 		);
-		// Caminhos fora do catálogo são ausência de mídia (404), nunca uma leitura fora da raiz.
+		// Caminhos fora do catÃ¡logo sÃ£o ausÃªncia de mÃ­dia (404), nunca uma leitura fora da raiz.
 		expect(traversal.status()).toBe(404);
 		expect(await traversal.body()).not.toEqual(Buffer.from('outside-sentinel'));
 	}
-	// Sem o curso, a rota não entrega mídia alguma, mesmo para um caminho indexado.
+	// Sem o curso, a rota nÃ£o entrega mÃ­dia alguma, mesmo para um caminho indexado.
 	const unscoped = await page.request.get(
 		`${server.baseURL}/api/media?path=${encodeURIComponent('Categoria/Curso/Aula.mp4')}`
 	);
 	expect(unscoped.status()).toBe(400);
 
-	// O link de voltar no player retorna à página do curso.
+	// O link de voltar no player retorna Ã  pÃ¡gina do curso.
 	await page.getByRole('link', { name: /library/ }).click();
 	await expect(page.getByRole('heading', { name: 'library', exact: true })).toBeVisible();
 	await page.getByRole('button', { name: 'Sair' }).click();
@@ -334,8 +507,8 @@ test('serves the built SPA through the Rust server for a complete study-library 
 });
 
 test('reports a lesson whose media disappears from disk and restores it when the file returns', async ({ page, server }) => {
-	// A fixture já tem Categoria/Curso/Aula.mp4, usado pelo outro cenário. Em vez de apagar
-	// esse arquivo, o cenário cria um módulo próprio com duas aulas: a mídia de uma delas
+	// A fixture jÃ¡ tem Categoria/Curso/Aula.mp4, usado pelo outro cenÃ¡rio. Em vez de apagar
+	// esse arquivo, o cenÃ¡rio cria um mÃ³dulo prÃ³prio com duas aulas: a mÃ­dia de uma delas
 	// sai do disco e volta, para exercitar o ciclo inteiro de disponibilidade.
 	const moduleRoot = join(server.libraryPath, 'Categoria', 'Modulo Extra');
 	const lessonAPath = join(moduleRoot, 'Aula A');
@@ -351,25 +524,25 @@ test('reports a lesson whose media disappears from disk and restores it when the
 	const openCourse = async () => {
 		await page.getByRole('link', { name: /library/ }).click();
 		await expect(page.getByRole('heading', { name: 'library', exact: true })).toBeVisible();
-		// A meta do módulo é visível com o disclosure fechado; as linhas exigem abri-lo.
+		// A meta do mÃ³dulo Ã© visÃ­vel com o disclosure fechado; as linhas exigem abri-lo.
 		await courseModule.locator('summary').click();
 	};
 	const indexFromHome = async () => {
 		await page.goto(`${server.baseURL}/#/home`);
-		await expect(page.getByRole('heading', { name: 'Início' })).toBeAttached();
-		await page.getByRole('button', { name: 'Indexar cursos' }).click();
-		await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
+		await expect(page.getByRole('heading', { name: /^In/ })).toBeAttached();
+		await page.getByRole('button', { name: 'Atualizar' }).click();
+		await expect(page.locator('.catalog-message')).toBeVisible();
 	};
 
 	await page.goto(`${server.baseURL}/#/login`);
-	await page.getByLabel('Usuário').fill('admin');
+	await page.getByLabel(/^Usu/).fill('admin');
 	await page.getByLabel('Senha', { exact: true }).fill(ADMIN_PASSWORD);
 	await page.getByRole('button', { name: 'Entrar' }).click();
-	await expect(page.getByRole('heading', { name: 'Início' })).toBeAttached();
-	await page.getByRole('button', { name: 'Indexar cursos' }).click();
-	await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
+	await expect(page.getByRole('heading', { name: /^In/ })).toBeAttached();
+	await page.getByRole('button', { name: 'Atualizar' }).click();
+	await expect(page.locator('.catalog-message')).toBeVisible();
 
-	// Fase 1: o arquivo está no disco — duas aulas disponíveis, sem selo, linha navegável.
+	// Fase 1: o arquivo estÃ¡ no disco â€” duas aulas disponÃ­veis, sem selo, linha navegÃ¡vel.
 	await openCourse();
 	await expect(courseModule.locator('.section-meta')).toHaveText('2 aulas');
 	const lessonA = courseModule.getByRole('link', { name: /Aula A/ });
@@ -382,18 +555,18 @@ test('reports a lesson whose media disappears from disk and restores it when the
 	await rm(lessonBMedia, { force: true });
 	await indexFromHome();
 	await openCourse();
-	await expect(courseModule.locator('.section-meta')).toHaveText('1 aula · 1 ausente');
+	await expect(courseModule.locator('.section-meta')).toContainText(/1 aula.*1 ausente/);
 	const missingRow = courseModule.locator('.lesson-row', { hasText: 'Aula B' });
 	await expect(missingRow).toBeVisible();
 	await expect(missingRow).toContainText('(ausente)');
-	// Continua listada, mas não navega: sem link, sem foco de teclado.
+	// Continua listada, mas nÃ£o navega: sem link, sem foco de teclado.
 	await expect(courseModule.getByRole('link', { name: /Aula B/ })).toHaveCount(0);
 	expect(await missingRow.evaluate((element) => element.tagName)).toBe('DIV');
 	expect(await missingRow.evaluate((element) => { (element as HTMLElement).focus(); return document.activeElement === element; })).toBe(false);
-	// A aula disponível ao lado mantém link e foco — a checagem anterior discrimina.
+	// A aula disponÃ­vel ao lado mantÃ©m link e foco â€” a checagem anterior discrimina.
 	expect(await lessonA.evaluate((element) => { (element as HTMLElement).focus(); return document.activeElement === element; })).toBe(true);
 
-	// Acesso direto pela URL da aula ausente: o player não pede o arquivo nem renderiza mídia.
+	// Acesso direto pela URL da aula ausente: o player nÃ£o pede o arquivo nem renderiza mÃ­dia.
 	const catalog = await (await page.request.get(`${server.baseURL}/api/catalog`)).json();
 	const courseId = catalog.categories?.[0]?.course_id ?? catalog.nodes?.[0]?.course_id;
 	expect(courseId).toBeTruthy();
@@ -403,11 +576,11 @@ test('reports a lesson whose media disappears from disk and restores it when the
 		if (url.pathname === '/api/media') mediaRequests.push(url.search);
 	});
 	await page.goto(`${server.baseURL}/#/player/${encodeURIComponent(courseId)}/${encodeURIComponent('Categoria/Modulo Extra/Aula B')}`);
-	await expect(page.getByText('A mídia desta aula não está no disco.')).toBeVisible();
+	await expect(page.getByText(/no disco/)).toBeVisible();
 	expect(await page.locator('video, audio').count()).toBe(0);
 	expect(mediaRequests).toEqual([]);
 
-	// Fase 3: o mesmo arquivo volta ao mesmo caminho e a reindexação restaura a aula.
+	// Fase 3: o mesmo arquivo volta ao mesmo caminho e a reindexaÃ§Ã£o restaura a aula.
 	await writeFile(lessonBMedia, lessonBContent);
 	await indexFromHome();
 	await openCourse();

@@ -33,6 +33,8 @@
 //!   o mesmo dono em todas as chamadas. A coluna compara bytes, então `"a"` e `"a "` seriam
 //!   donos diferentes.
 
+use std::collections::BTreeMap;
+
 use rusqlite::OptionalExtension;
 
 use crate::db::{Database, now_unix_seconds};
@@ -43,6 +45,39 @@ use crate::error::{Error, Result};
 /// É um limite fixo de proteção contra consultas ilimitadas, e não uma configuração: o
 /// valor acompanha o código e muda só com uma decisão de projeto.
 pub const MAX_RECENT_STUDY: usize = 100;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+/// Aggregate study totals for one owner, excluding removed catalog media.
+pub struct StudyAnalytics {
+    /// Number of media items with recorded progress.
+    pub tracked_count: usize,
+    /// Number of tracked media items marked complete.
+    pub completed_count: usize,
+    /// Sum of the latest saved playback positions.
+    pub total_position_seconds: i64,
+    /// Latest progress update timestamp, if any.
+    pub last_activity_at: Option<i64>,
+}
+
+/// Reads private study totals for the supplied owner.
+pub fn study_analytics(db: &Database, owner_id: &str) -> Result<StudyAnalytics> {
+	validate_owner(owner_id)?;
+	db.connection().query_row(
+		"SELECT COUNT(*), COALESCE(SUM(s.position_seconds), 0),
+		        COALESCE(SUM(CASE WHEN s.completed <> 0 THEN 1 ELSE 0 END), 0), MAX(s.updated_at)
+		   FROM study_state s WHERE s.owner_id = ?1
+		    AND NOT EXISTS (SELECT 1 FROM media_removal r JOIN media m
+		                     ON m.library_id = r.library_id AND m.media_id = r.media_id
+		                    WHERE m.media_id = s.media_id)",
+		[owner_id],
+		|row| Ok(StudyAnalytics {
+			tracked_count: usize::try_from(row.get::<_, i64>(0)?).unwrap_or(usize::MAX),
+			total_position_seconds: row.get(1)?,
+			completed_count: usize::try_from(row.get::<_, i64>(2)?).unwrap_or(usize::MAX),
+			last_activity_at: row.get(3)?,
+		}),
+	).map_err(Error::from)
+}
 
 /// Progresso de estudo de uma mídia para um dono.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -57,6 +92,55 @@ pub struct StudyProgress {
     ///
     /// Resolução de um segundo: duas alterações no mesmo segundo gravam o mesmo instante.
     pub updated_at: i64,
+}
+
+/// Quantidade de mídias concluídas pelo dono em cada curso registrado.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CourseStudySummary {
+    /// Identidade do curso (`library_id`).
+    pub course_id: String,
+    /// Mídias marcadas como concluídas e ainda disponíveis no catálogo.
+    pub completed_media: usize,
+}
+
+/// Resume conclusões por curso para o dono autenticado, sem alterar dados.
+///
+/// Arquivos removidos ou marcados como ausentes não contribuem para o resumo.
+pub fn course_study_summary(db: &Database, owner_id: &str) -> Result<Vec<CourseStudySummary>> {
+    validate_owner(owner_id)?;
+
+    let mut statement = db.connection().prepare(
+        "SELECT m.library_id, COUNT(*)
+           FROM study_state s
+           JOIN media m ON m.media_id = s.media_id
+          WHERE s.owner_id = ?1
+            AND s.completed = 1
+            AND m.availability = 'available'
+            AND NOT EXISTS (
+                SELECT 1 FROM media_removal r
+                 WHERE r.library_id = m.library_id AND r.media_id = m.media_id
+            )
+          GROUP BY m.library_id
+          ORDER BY m.library_id",
+    )?;
+    let rows = statement.query_map([owner_id], |row| {
+        let completed_media: i64 = row.get(1)?;
+        Ok((row.get::<_, String>(0)?, completed_media))
+    })?;
+
+    let mut summaries = BTreeMap::new();
+    for row in rows {
+        let (course_id, count) = row?;
+        summaries.insert(course_id, usize::try_from(count).unwrap_or(usize::MAX));
+    }
+
+    Ok(summaries
+        .into_iter()
+        .map(|(course_id, completed_media)| CourseStudySummary {
+            course_id,
+            completed_media,
+        })
+        .collect())
 }
 
 /// Lê o progresso registrado, se existir.

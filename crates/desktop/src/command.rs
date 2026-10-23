@@ -18,8 +18,9 @@ use tauri::State;
 use crate::config::DesktopConfigDto;
 use crate::courses::CourseEntry;
 use crate::dto::{
-    CatalogDto, CatalogNodeDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto, RecentStudyDto,
-    RescanSummaryDto, StudyProgressDto,
+    CatalogDto, CatalogNodeDto, CourseStudySummaryDto, MediaRemovalImpactDto,
+    MediaRemovalOutcomeDto, PomodoroDto, RecentStudyDto, RescanSummaryDto, StudyNoteDto,
+    StudyNotesDto, StudyProgressDto,
 };
 use crate::error::IpcError;
 use crate::state::DesktopState;
@@ -200,6 +201,81 @@ pub async fn desktop_recent_study(
     tauri::async_runtime::spawn_blocking(move || state.recent_study(limit))
         .await
         .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// Comando IPC: resume conclusões do dono local por curso.
+#[tauri::command]
+pub async fn desktop_study_summary(
+    state: State<'_, DesktopState>,
+) -> Result<Vec<CourseStudySummaryDto>, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.study_summary())
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+#[tauri::command]
+pub async fn desktop_study_analytics(
+    state: State<'_, DesktopState>,
+) -> Result<crate::dto::StudyAnalyticsDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.study_analytics())
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+#[tauri::command]
+pub async fn desktop_list_notes(state: State<'_, DesktopState>, media_id: String) -> Result<StudyNotesDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.list_notes(&media_id)).await.map_err(|_| IpcError::study_unavailable())?
+}
+
+#[tauri::command]
+pub async fn desktop_list_all_notes(state: State<'_, DesktopState>) -> Result<StudyNotesDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.list_all_notes()).await.map_err(|_| IpcError::study_unavailable())?
+}
+
+#[tauri::command]
+pub async fn desktop_create_note(state: State<'_, DesktopState>, media_id: String, text: String, position_seconds: Option<i64>) -> Result<StudyNoteDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.create_note(&media_id, &text, position_seconds)).await.map_err(|_| IpcError::study_unavailable())?
+}
+
+#[tauri::command]
+pub async fn desktop_update_note(state: State<'_, DesktopState>, note_id: i64, text: String, position_seconds: Option<i64>) -> Result<StudyNoteDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.update_note(note_id, &text, position_seconds)).await.map_err(|_| IpcError::study_unavailable())?
+}
+
+#[tauri::command]
+pub async fn desktop_delete_note(state: State<'_, DesktopState>, note_id: i64) -> Result<(), IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.delete_note(note_id)).await.map_err(|_| IpcError::study_unavailable())?
+}
+
+#[tauri::command]
+pub async fn desktop_pomodoro(state: State<'_, DesktopState>) -> Result<PomodoroDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.pomodoro()).await.map_err(|_| IpcError::study_unavailable())?
+}
+
+#[tauri::command]
+pub async fn desktop_start_pomodoro(state: State<'_, DesktopState>, duration_seconds: i64) -> Result<PomodoroDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.start_pomodoro(duration_seconds)).await.map_err(|_| IpcError::study_unavailable())?
+}
+
+#[tauri::command]
+pub async fn desktop_pause_pomodoro(state: State<'_, DesktopState>, elapsed_seconds: i64) -> Result<PomodoroDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.pause_pomodoro(elapsed_seconds)).await.map_err(|_| IpcError::study_unavailable())?
+}
+
+#[tauri::command]
+pub async fn desktop_reset_pomodoro(state: State<'_, DesktopState>) -> Result<PomodoroDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.reset_pomodoro()).await.map_err(|_| IpcError::study_unavailable())?
 }
 
 /// Comando IPC: consulta o impacto da remoção de uma mídia.

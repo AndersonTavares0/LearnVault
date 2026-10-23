@@ -15,6 +15,11 @@ export type Catalog = { complete: boolean; looseFiles: FileEntry[]; nodes: Catal
 export type TransportKind = 'http' | 'desktop';
 export type StudyProgress = { mediaId: string; positionSeconds: number; completed: boolean; updatedAt: number | null; recorded: boolean };
 export type RecentStudy = { items: StudyProgress[] };
+export type CourseStudySummary = { courseId: string; completedMedia: number };
+export type StudyAnalytics = { trackedCount: number; completedCount: number; totalPositionSeconds: number; lastActivityAt: number | null };
+export type StudyNote = { noteId: number; mediaId: string; text: string; positionSeconds: number | null; createdAt: number; updatedAt: number };
+export type StudyNotes = { items: StudyNote[]; truncated: boolean };
+export type Pomodoro = { status: 'idle' | 'running' | 'paused'; durationSeconds: number; elapsedSeconds: number; updatedAt: number };
 export const STUDY_NOT_AVAILABLE = 'study_not_available';
 
 // Protocolo customizado do desktop para mídia local. O webview aponta somente pelo
@@ -51,6 +56,17 @@ export interface Transport {
 	recordPosition(mediaId: string, positionSeconds: number): Promise<StudyProgress>;
 	setCompleted(mediaId: string, completed: boolean): Promise<StudyProgress>;
 	recentStudy(limit?: number): Promise<RecentStudy>;
+	listNotes(mediaId: string): Promise<StudyNotes>;
+	listAllNotes(): Promise<StudyNotes>;
+	createNote(mediaId: string, text: string, positionSeconds: number | null): Promise<StudyNote>;
+	updateNote(noteId: number, text: string, positionSeconds: number | null): Promise<StudyNote>;
+	deleteNote(noteId: number): Promise<void>;
+	studyAnalytics(): Promise<StudyAnalytics>;
+	pomodoro(): Promise<Pomodoro>;
+	startPomodoro(durationSeconds: number): Promise<Pomodoro>;
+	pausePomodoro(elapsedSeconds: number): Promise<Pomodoro>;
+	resetPomodoro(): Promise<Pomodoro>;
+	studySummary(): Promise<CourseStudySummary[]>;
 	mediaUrl(file: FileEntry, courseId?: string): string | null;
 }
 
@@ -248,6 +264,43 @@ export function normalizeRecentStudy(value: unknown): RecentStudy {
 	return { items: (value as { items: unknown[] }).items.map(normalizeStudyProgress) };
 }
 
+export function normalizeCourseStudySummary(value: unknown): CourseStudySummary[] {
+	if (!value || typeof value !== 'object' || !Array.isArray((value as { courses?: unknown }).courses)) throw invalidPayload('resumo de progresso inválido.');
+	return (value as { courses: unknown[] }).courses.map((item) => {
+		if (!item || typeof item !== 'object') throw invalidPayload('curso no resumo de progresso inválido.');
+		const row = item as { course_id?: unknown; completed_media?: unknown };
+		if (typeof row.course_id !== 'string' || typeof row.completed_media !== 'number' || !Number.isSafeInteger(row.completed_media) || row.completed_media < 0) throw invalidPayload('curso no resumo de progresso inválido.');
+		return { courseId: row.course_id, completedMedia: row.completed_media };
+	});
+}
+
+export function normalizeStudyNote(value: unknown): StudyNote {
+	if (!value || typeof value !== 'object') throw invalidPayload('nota ausente.');
+	const note = value as Record<string, unknown>;
+	if (typeof note.note_id !== 'number' || !Number.isSafeInteger(note.note_id) || note.note_id <= 0 || typeof note.media_id !== 'string' || typeof note.text !== 'string' || (note.position_seconds !== null && (typeof note.position_seconds !== 'number' || !Number.isSafeInteger(note.position_seconds) || note.position_seconds < 0)) || typeof note.created_at !== 'number' || typeof note.updated_at !== 'number') throw invalidPayload('nota inválida.');
+	return { noteId: note.note_id, mediaId: note.media_id, text: note.text, positionSeconds: note.position_seconds as number | null, createdAt: note.created_at, updatedAt: note.updated_at };
+}
+
+export function normalizeStudyNotes(value: unknown): StudyNotes {
+	if (!value || typeof value !== 'object' || !('items' in value) || !Array.isArray(value.items)) throw invalidPayload('lista de notas inválida.');
+	const payload = value as { items: unknown[]; truncated?: unknown };
+	return { items: payload.items.map(normalizeStudyNote), truncated: payload.truncated === true };
+}
+
+export function normalizeStudyAnalytics(value: unknown): StudyAnalytics {
+	if (!value || typeof value !== 'object') throw invalidPayload('estatísticas inválidas.');
+	const row = value as Record<string, unknown>;
+	if (!Number.isSafeInteger(row.tracked_count) || (row.tracked_count as number) < 0 || !Number.isSafeInteger(row.completed_count) || (row.completed_count as number) < 0 || typeof row.total_position_seconds !== 'number' || !Number.isSafeInteger(row.total_position_seconds) || row.total_position_seconds < 0 || (row.last_activity_at !== null && (typeof row.last_activity_at !== 'number' || !Number.isSafeInteger(row.last_activity_at)))) throw invalidPayload('estatísticas inválidas.');
+	return { trackedCount: row.tracked_count as number, completedCount: row.completed_count as number, totalPositionSeconds: row.total_position_seconds, lastActivityAt: row.last_activity_at as number | null };
+}
+
+export function normalizePomodoro(value: unknown): Pomodoro {
+	if (!value || typeof value !== 'object') throw invalidPayload('sessão Pomodoro inválida.');
+	const row = value as Record<string, unknown>;
+	if (!['idle', 'running', 'paused'].includes(String(row.status)) || !Number.isSafeInteger(row.duration_seconds) || (row.duration_seconds as number) <= 0 || !Number.isSafeInteger(row.elapsed_seconds) || (row.elapsed_seconds as number) < 0 || !Number.isSafeInteger(row.updated_at)) throw invalidPayload('sessão Pomodoro inválida.');
+	return { status: row.status as Pomodoro['status'], durationSeconds: row.duration_seconds as number, elapsedSeconds: row.elapsed_seconds as number, updatedAt: row.updated_at as number };
+}
+
 // Envelope de categoria da projeção de categorias: `{ children }`.
 function isCategoryEnvelope(item: unknown): boolean {
 	return item !== null && typeof item === 'object' && !Array.isArray(item) && 'children' in item;
@@ -331,6 +384,17 @@ export class HttpTransport implements Transport {
 	async recordPosition(mediaId: string, positionSeconds: number) { const response = await fetch('/api/study/position', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: mediaId, position_seconds: positionSeconds }) }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? 'Mídia não encontrada.' : response.status === 422 ? 'Posição inválida.' : 'Não foi possível salvar o progresso.'); return normalizeStudyProgress(await response.json()); }
 	async setCompleted(mediaId: string, completed: boolean) { const response = await fetch('/api/study/completed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: mediaId, completed }) }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? 'Mídia não encontrada.' : 'Não foi possível atualizar a conclusão.'); return normalizeStudyProgress(await response.json()); }
 	async recentStudy(limit?: number) { const url = limit === undefined ? '/api/study/recent' : `/api/study/recent?limit=${limit}`; const response = await fetch(url); if (!response.ok) throw response.status === 404 ? Object.assign(new Error('Estudo não disponível neste servidor.'), { code: STUDY_NOT_AVAILABLE }) : new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar o histórico.'); return normalizeRecentStudy(await response.json()); }
+	async listNotes(mediaId: string) { const response = await fetch(`/api/study/notes?media_id=${encodeURIComponent(mediaId)}`); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar as anotações.'); return normalizeStudyNotes(await response.json()); }
+	async listAllNotes() { const response = await fetch('/api/study/notes/all'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar as anotações.'); return normalizeStudyNotes(await response.json()); }
+	async createNote(mediaId: string, text: string, positionSeconds: number | null) { const response = await fetch('/api/study/notes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: mediaId, text, position_seconds: positionSeconds }) }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível salvar a anotação.'); return normalizeStudyNote(await response.json()); }
+	async updateNote(noteId: number, text: string, positionSeconds: number | null) { const response = await fetch(`/api/study/notes/${noteId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, position_seconds: positionSeconds }) }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível atualizar a anotação.'); return normalizeStudyNote(await response.json()); }
+	async deleteNote(noteId: number) { const response = await fetch(`/api/study/notes/${noteId}`, { method: 'DELETE' }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível excluir a anotação.'); }
+	async studyAnalytics() { const response = await fetch('/api/study/analytics'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar as estatísticas.'); return normalizeStudyAnalytics(await response.json()); }
+	async pomodoro() { const response = await fetch('/api/study/pomodoro'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar o Pomodoro.'); return normalizePomodoro(await response.json()); }
+	async startPomodoro(durationSeconds: number) { const response = await fetch('/api/study/pomodoro', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ duration_seconds: durationSeconds }) }); if (!response.ok) throw new Error(response.status === 422 ? 'Duração do Pomodoro inválida.' : 'Não foi possível iniciar o Pomodoro.'); return normalizePomodoro(await response.json()); }
+	async pausePomodoro(elapsedSeconds: number) { const response = await fetch('/api/study/pomodoro', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ elapsed_seconds: elapsedSeconds }) }); if (!response.ok) throw new Error(response.status === 422 ? 'Tempo decorrido inválido.' : 'Não foi possível pausar o Pomodoro.'); return normalizePomodoro(await response.json()); }
+	async resetPomodoro() { const response = await fetch('/api/study/pomodoro', { method: 'DELETE' }); if (!response.ok) throw new Error('Não foi possível reiniciar o Pomodoro.'); return normalizePomodoro(await response.json()); }
+	async studySummary() { const response = await fetch('/api/study/summary'); if (!response.ok) throw response.status === 404 ? Object.assign(new Error('Estudo não disponível neste servidor.'), { code: STUDY_NOT_AVAILABLE }) : new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar o progresso dos cursos.'); return normalizeCourseStudySummary(await response.json()); }
 	mediaUrl(file: FileEntry, courseId?: string) { return `/api/media?course=${encodeURIComponent(courseId ?? '')}&path=${encodeURIComponent(file.path)}`; }
 }
 
@@ -346,8 +410,10 @@ const DESKTOP_ERROR_MESSAGES: Record<string, string> = {
 	rescan_in_progress: 'Já existe uma indexação em andamento.',
 	rescan_unavailable: 'Não foi possível indexar os cursos.',
 	study_unavailable: 'Não foi possível sincronizar o progresso de estudo.',
+	study_note_unavailable: 'Não foi possível sincronizar as anotações.',
 	media_not_found: 'Mídia não encontrada.',
-	invalid_position: 'Posição inválida.'
+	invalid_position: 'Posição inválida.',
+	invalid_pomodoro_duration: 'Duração do Pomodoro inválida.'
 };
 
 // O comando devolve o erro como objeto serializado `{ code, message }`, não como `Error`.
@@ -385,6 +451,17 @@ export class DesktopStub implements Transport {
 	// Sem limite informado, o comando usa o padrão do contrato; por isso o argumento é
 	// omitido em vez de enviado como `undefined`.
 	async recentStudy(limit?: number) { try { return normalizeRecentStudy(await invoke<unknown>('desktop_recent_study', limit === undefined ? {} : { limit })); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar o histórico de estudo.'); } }
+	async studySummary() { try { return normalizeCourseStudySummary({ courses: await invoke<unknown>('desktop_study_summary') }); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar o progresso dos cursos.'); } }
+	async listNotes(mediaId: string) { try { return normalizeStudyNotes(await invoke<unknown>('desktop_list_notes', { mediaId })); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar as anotações.'); } }
+	async listAllNotes() { try { return normalizeStudyNotes(await invoke<unknown>('desktop_list_all_notes')); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar as anotações.'); } }
+	async createNote(mediaId: string, text: string, positionSeconds: number | null) { try { return normalizeStudyNote(await invoke<unknown>('desktop_create_note', { mediaId, text, positionSeconds })); } catch (cause) { throw desktopError(cause, 'Não foi possível salvar a anotação.'); } }
+	async updateNote(noteId: number, text: string, positionSeconds: number | null) { try { return normalizeStudyNote(await invoke<unknown>('desktop_update_note', { noteId, text, positionSeconds })); } catch (cause) { throw desktopError(cause, 'Não foi possível atualizar a anotação.'); } }
+	async deleteNote(noteId: number) { try { await invoke<unknown>('desktop_delete_note', { noteId }); } catch (cause) { throw desktopError(cause, 'Não foi possível excluir a anotação.'); } }
+	async studyAnalytics() { try { return normalizeStudyAnalytics(await invoke<unknown>('desktop_study_analytics')); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar as estatísticas.'); } }
+	async pomodoro() { try { return normalizePomodoro(await invoke<unknown>('desktop_pomodoro')); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar o Pomodoro.'); } }
+	async startPomodoro(durationSeconds: number) { try { return normalizePomodoro(await invoke<unknown>('desktop_start_pomodoro', { durationSeconds })); } catch (cause) { throw desktopError(cause, 'Não foi possível iniciar o Pomodoro.'); } }
+	async pausePomodoro(elapsedSeconds: number) { try { return normalizePomodoro(await invoke<unknown>('desktop_pause_pomodoro', { elapsedSeconds })); } catch (cause) { throw desktopError(cause, 'Não foi possível pausar o Pomodoro.'); } }
+	async resetPomodoro() { try { return normalizePomodoro(await invoke<unknown>('desktop_reset_pomodoro')); } catch (cause) { throw desktopError(cause, 'Não foi possível reiniciar o Pomodoro.'); } }
 	// Toda mídia entregue ao player usa a identidade autorizada. O caminho catalogado é
 	// deliberadamente ignorado, inclusive no desktop, para que ele nunca atravesse o webview.
 	mediaUrl(file: FileEntry, _courseId?: string) {
