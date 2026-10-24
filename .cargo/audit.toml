@@ -34,4 +34,11 @@ ignore = [
     # (Tauri/GTK) puder consumir glib >= 0.20.0, ou imediatamente se o
     # workspace passar a usar diretamente glib::VariantStrIter.
     "RUSTSEC-2024-0429",
+
+    # RUSTSEC-2026-0370 / RUSTSEC-2026-0372 (categoria: unmaintained)
+    # `zvariant`/`zvariant_derive` 5.15.1 são a última versão da série 5 e entram
+    # pelo zbus do Tauri no Linux. Não há versão corrigida publicada; revisar
+    # quando o Tauri migrar para uma série mantida do zbus/zvariant.
+    "RUSTSEC-2026-0370",
+    "RUSTSEC-2026-0372"
 ]

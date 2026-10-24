@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { basename, isAbsolute } from 'node:path';
 import { test } from 'node:test';
 import { formatBytes, parseWorktrees } from './worktree-gc.mjs';
 
@@ -13,10 +14,10 @@ test('parseWorktrees lê o caminho principal e os worktrees vinculados', () => {
 		'branch refs/heads/feat/x',
 		''
 	].join('\n');
-	assert.deepEqual(parseWorktrees(porcelain), [
-		'C:\\repo\\LearnVault',
-		'C:\\repo\\outra copia'
-	]);
+	const paths = parseWorktrees(porcelain);
+	// `resolve` muda o prefixo por plataforma; o nome final é o que importa aqui.
+	assert.ok(paths.every((path) => isAbsolute(path)));
+	assert.deepEqual(paths.map((path) => basename(path)), ['LearnVault', 'outra copia']);
 });
 
 test('parseWorktrees ignora blocos sem caminho', () => {
