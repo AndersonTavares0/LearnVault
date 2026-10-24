@@ -10,7 +10,7 @@
 //! Os comandos de estudo aceitam apenas dados do catálogo (`media_id`, posição, conclusão e
 //! limite). O dono do progresso é fixo no Rust: nenhum comando aceita `owner_id`.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use learnvault_core::Database;
 use tauri::State;
@@ -18,20 +18,40 @@ use tauri::State;
 use crate::config::DesktopConfigDto;
 use crate::courses::CourseEntry;
 use crate::dto::{
-    CatalogDto, CatalogNodeDto, CourseStudySummaryDto, MediaRemovalImpactDto,
-    MediaRemovalOutcomeDto, PomodoroDto, RecentStudyDto, RescanSummaryDto, StudyNoteDto,
-    StudyNotesDto, StudyProgressDto,
+    CatalogDto, CatalogNodeDto, CourseStudySummaryDto, CoverDto, CoverRemovalDto,
+    MediaRemovalImpactDto, MediaRemovalOutcomeDto, PomodoroDto, RecentStudyDto, RescanSummaryDto,
+    StudyNoteDto, StudyNotesDto, StudyProgressDto,
 };
 use crate::error::IpcError;
+use crate::ordering::CourseOrders;
 use crate::state::DesktopState;
 
 /// Constrói o DTO do catálogo agregado a partir dos dados persistidos no banco local.
 ///
 /// Função livre e testável: não conhece o Tauri e qualquer falha do núcleo é traduzida
 /// para um erro IPC sanitizado, sem ecoar o erro de `Display` do domínio. Cada curso
-/// registrado vira um nó de topo com identidade opaca e título derivado da pasta, exposto
-/// como `nodes` (árvore canônica) e como `categories` (lista de cursos de topo).
-pub fn catalog(database: &Database, courses: &[CourseEntry]) -> Result<CatalogDto, IpcError> {
+/// registrado vira um nó de topo com identidade opaca, título derivado da pasta e a versão
+/// da capa personalizada (derivada do diretório de capas, nunca de um caminho do curso),
+/// exposto como `nodes` (árvore canônica) e como `categories` (lista de cursos de topo).
+///
+/// A preferência de ordenação é aplicada por sobreposição sobre a ordem natural da
+/// subárvore de cada curso; um curso sem preferência permanece na ordem automática.
+pub fn catalog(
+    database: &Database,
+    courses: &[CourseEntry],
+    covers_dir: &Path,
+) -> Result<CatalogDto, IpcError> {
+    catalog_with_orders(database, courses, &CourseOrders::new(), covers_dir)
+}
+
+/// Como [`catalog`], aplicando as preferências de ordenação manual por curso.
+pub fn catalog_with_orders(
+    database: &Database,
+    courses: &[CourseEntry],
+    orders: &CourseOrders,
+    covers_dir: &Path,
+) -> Result<CatalogDto, IpcError> {
+    let empty = learnvault_core::CatalogOrder::new();
     let mut complete = true;
     let mut nodes = Vec::with_capacity(courses.len());
     let mut courses: Vec<_> = courses.iter().collect();
@@ -53,17 +73,24 @@ pub fn catalog(database: &Database, courses: &[CourseEntry]) -> Result<CatalogDt
     for course in courses {
         let inner = learnvault_core::build_catalog(database, &course.id)
             .map_err(|_| IpcError::catalog_unavailable())?;
+        let mut categories: Vec<learnvault_core::CatalogNode> = inner
+            .categories
+            .into_iter()
+            .map(learnvault_core::course_file_lessons)
+            .collect();
+        learnvault_core::apply_order(&mut categories, orders.get(&course.id).unwrap_or(&empty));
         let shaped = learnvault_core::Catalog {
             complete: inner.complete,
             loose_files: inner.loose_files,
-            categories: inner
-                .categories
-                .into_iter()
-                .map(learnvault_core::course_file_lessons)
-                .collect(),
+            categories,
         };
         complete = complete && shaped.complete;
-        nodes.push(CatalogNodeDto::course(&course.id, &course.title(), shaped));
+        nodes.push(CatalogNodeDto::course(
+            &course.id,
+            &course.title(),
+            shaped,
+            crate::covers::cover_version(covers_dir, &course.id),
+        ));
     }
     Ok(CatalogDto {
         complete,
@@ -105,6 +132,41 @@ pub async fn desktop_import_course(
         .map_err(|_| IpcError::courses_config_unavailable())?
 }
 
+/// Comando IPC: abre o seletor nativo de imagens e registra a capa de um curso.
+///
+/// O webview envia apenas a identidade opaca do curso — nunca um caminho. O seletor, a
+/// leitura e a gravação atômica rodam em `spawn_blocking` para não prender a main thread. O
+/// tipo (magic bytes) e o tamanho são validados no Rust: uma imagem fora do contrato vira
+/// `invalid_cover` e nada é gravado. Cancelar preserva a capa anterior.
+#[tauri::command]
+pub async fn desktop_import_course_cover(
+    app: tauri::AppHandle,
+    state: State<'_, DesktopState>,
+    course_id: String,
+) -> Result<CoverDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        state.import_course_cover(&course_id, || pick_cover(&app))
+    })
+    .await
+    .map_err(|_| IpcError::cover_unavailable())?
+}
+
+/// Comando IPC: remove a capa personalizada de um curso pela identidade opaca.
+///
+/// A remoção não toca na pasta do curso e é idempotente: um curso sem capa devolve
+/// `removed: false`. Nenhum caminho cruza o IPC em nenhuma direção.
+#[tauri::command]
+pub async fn desktop_remove_course_cover(
+    state: State<'_, DesktopState>,
+    course_id: String,
+) -> Result<CoverRemovalDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.remove_course_cover(&course_id))
+        .await
+        .map_err(|_| IpcError::cover_unavailable())?
+}
+
 /// Comando IPC: remove um curso do registro pela identidade opaca.
 ///
 /// A remoção não toca nos arquivos e é idempotente: uma identidade desconhecida apenas
@@ -118,6 +180,45 @@ pub async fn desktop_remove_course(
     tauri::async_runtime::spawn_blocking(move || state.remove_course(&course_id))
         .await
         .map_err(|_| IpcError::courses_config_unavailable())?
+}
+
+/// Comando IPC: define a ordem manual dos irmãos de um nó do curso.
+///
+/// O webview envia apenas a identidade opaca do curso, o caminho relativo do pai e a
+/// ordem desejada dos filhos (caminhos relativos). Nenhum caminho do sistema de arquivos
+/// cruza o IPC. A validação (permutação exata dos irmãos) e a gravação atômica rodam no
+/// Rust, em `spawn_blocking`; uma lista inválida vira `invalid_order` sem gravar nada.
+#[tauri::command]
+pub async fn desktop_set_course_order(
+    state: State<'_, DesktopState>,
+    course_id: String,
+    parent: String,
+    children: Vec<String>,
+) -> Result<(), IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        state.set_course_order(&course_id, &parent, &children)
+    })
+    .await
+    .map_err(|_| IpcError::order_unavailable())?
+}
+
+/// Comando IPC: restaura a ordem automática de um pai específico ou de todo o curso.
+///
+/// `parent` ausente restaura o curso inteiro. A resposta diz se havia uma preferência a
+/// remover, para que a interface seja idempotente sem tocar nos arquivos do curso.
+#[tauri::command]
+pub async fn desktop_reset_course_order(
+    state: State<'_, DesktopState>,
+    course_id: String,
+    parent: Option<String>,
+) -> Result<bool, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        state.reset_course_order(&course_id, parent.as_deref())
+    })
+    .await
+    .map_err(|_| IpcError::order_unavailable())?
 }
 
 /// Comando IPC: executa o rescan explícito da biblioteca configurada.
@@ -225,57 +326,105 @@ pub async fn desktop_study_analytics(
 }
 
 #[tauri::command]
-pub async fn desktop_list_notes(state: State<'_, DesktopState>, media_id: String) -> Result<StudyNotesDto, IpcError> {
+pub async fn desktop_list_notes(
+    state: State<'_, DesktopState>,
+    media_id: String,
+) -> Result<StudyNotesDto, IpcError> {
     let state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || state.list_notes(&media_id)).await.map_err(|_| IpcError::study_unavailable())?
+    tauri::async_runtime::spawn_blocking(move || state.list_notes(&media_id))
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
 }
 
 #[tauri::command]
-pub async fn desktop_list_all_notes(state: State<'_, DesktopState>) -> Result<StudyNotesDto, IpcError> {
+pub async fn desktop_list_all_notes(
+    state: State<'_, DesktopState>,
+) -> Result<StudyNotesDto, IpcError> {
     let state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || state.list_all_notes()).await.map_err(|_| IpcError::study_unavailable())?
+    tauri::async_runtime::spawn_blocking(move || state.list_all_notes())
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
 }
 
 #[tauri::command]
-pub async fn desktop_create_note(state: State<'_, DesktopState>, media_id: String, text: String, position_seconds: Option<i64>) -> Result<StudyNoteDto, IpcError> {
+pub async fn desktop_create_note(
+    state: State<'_, DesktopState>,
+    media_id: String,
+    text: String,
+    position_seconds: Option<i64>,
+) -> Result<StudyNoteDto, IpcError> {
     let state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || state.create_note(&media_id, &text, position_seconds)).await.map_err(|_| IpcError::study_unavailable())?
+    tauri::async_runtime::spawn_blocking(move || {
+        state.create_note(&media_id, &text, position_seconds)
+    })
+    .await
+    .map_err(|_| IpcError::study_unavailable())?
 }
 
 #[tauri::command]
-pub async fn desktop_update_note(state: State<'_, DesktopState>, note_id: i64, text: String, position_seconds: Option<i64>) -> Result<StudyNoteDto, IpcError> {
+pub async fn desktop_update_note(
+    state: State<'_, DesktopState>,
+    note_id: i64,
+    text: String,
+    position_seconds: Option<i64>,
+) -> Result<StudyNoteDto, IpcError> {
     let state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || state.update_note(note_id, &text, position_seconds)).await.map_err(|_| IpcError::study_unavailable())?
+    tauri::async_runtime::spawn_blocking(move || {
+        state.update_note(note_id, &text, position_seconds)
+    })
+    .await
+    .map_err(|_| IpcError::study_unavailable())?
 }
 
 #[tauri::command]
-pub async fn desktop_delete_note(state: State<'_, DesktopState>, note_id: i64) -> Result<(), IpcError> {
+pub async fn desktop_delete_note(
+    state: State<'_, DesktopState>,
+    note_id: i64,
+) -> Result<(), IpcError> {
     let state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || state.delete_note(note_id)).await.map_err(|_| IpcError::study_unavailable())?
+    tauri::async_runtime::spawn_blocking(move || state.delete_note(note_id))
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
 }
 
 #[tauri::command]
 pub async fn desktop_pomodoro(state: State<'_, DesktopState>) -> Result<PomodoroDto, IpcError> {
     let state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || state.pomodoro()).await.map_err(|_| IpcError::study_unavailable())?
+    tauri::async_runtime::spawn_blocking(move || state.pomodoro())
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
 }
 
 #[tauri::command]
-pub async fn desktop_start_pomodoro(state: State<'_, DesktopState>, duration_seconds: i64) -> Result<PomodoroDto, IpcError> {
+pub async fn desktop_start_pomodoro(
+    state: State<'_, DesktopState>,
+    duration_seconds: i64,
+) -> Result<PomodoroDto, IpcError> {
     let state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || state.start_pomodoro(duration_seconds)).await.map_err(|_| IpcError::study_unavailable())?
+    tauri::async_runtime::spawn_blocking(move || state.start_pomodoro(duration_seconds))
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
 }
 
 #[tauri::command]
-pub async fn desktop_pause_pomodoro(state: State<'_, DesktopState>, elapsed_seconds: i64) -> Result<PomodoroDto, IpcError> {
+pub async fn desktop_pause_pomodoro(
+    state: State<'_, DesktopState>,
+    elapsed_seconds: i64,
+) -> Result<PomodoroDto, IpcError> {
     let state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || state.pause_pomodoro(elapsed_seconds)).await.map_err(|_| IpcError::study_unavailable())?
+    tauri::async_runtime::spawn_blocking(move || state.pause_pomodoro(elapsed_seconds))
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
 }
 
 #[tauri::command]
-pub async fn desktop_reset_pomodoro(state: State<'_, DesktopState>) -> Result<PomodoroDto, IpcError> {
+pub async fn desktop_reset_pomodoro(
+    state: State<'_, DesktopState>,
+) -> Result<PomodoroDto, IpcError> {
     let state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || state.reset_pomodoro()).await.map_err(|_| IpcError::study_unavailable())?
+    tauri::async_runtime::spawn_blocking(move || state.reset_pomodoro())
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
 }
 
 /// Comando IPC: consulta o impacto da remoção de uma mídia.
@@ -313,5 +462,21 @@ fn pick_folder(app: &tauri::AppHandle) -> Option<PathBuf> {
     app.dialog()
         .file()
         .blocking_pick_folder()
+        .and_then(|path| path.into_path().ok())
+}
+
+/// Abre o seletor nativo de imagens e devolve o arquivo escolhido, se houver.
+///
+/// Filtro por extensão apenas para orientar o usuário: a decisão real do formato é dos
+/// bytes iniciais do arquivo ([`crate::covers::detect_image_type`]), nunca do nome. Como o
+/// seletor de pastas, o diálogo é interno ao Rust e não é exposto ao webview.
+fn pick_cover(app: &tauri::AppHandle) -> Option<PathBuf> {
+    use tauri_plugin_dialog::DialogExt;
+
+    app.dialog()
+        .file()
+        .set_title("Escolha a imagem da capa")
+        .add_filter("Imagem (PNG, JPEG, WebP)", &["png", "jpg", "jpeg", "webp"])
+        .blocking_pick_file()
         .and_then(|path| path.into_path().ok())
 }

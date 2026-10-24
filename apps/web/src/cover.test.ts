@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { courseCover, courseMonogram } from './cover';
+import { courseCover, courseMonogram, selectCourseCoverSource } from './cover';
 
 describe('generated course covers', () => {
 	it('is deterministic for the same title', () => {
@@ -28,5 +28,35 @@ describe('generated course covers', () => {
 			expect(color).toMatch(/^hsl\(\d+ \d+% \d+%\)$/);
 		}
 		expect(first).not.toEqual(second);
+	});
+
+	it('derives a deterministic gradient angle within a readable range', () => {
+		const titles = ['Física Quântica', 'História da Arte', 'Programação em Go', '   ', '--', 'Matemática'];
+		const angles = titles.map((title) => courseCover(title).angle);
+
+		for (const angle of angles) {
+			expect(Number.isInteger(angle)).toBe(true);
+			expect(angle).toBeGreaterThanOrEqual(95);
+			expect(angle).toBeLessThanOrEqual(200);
+		}
+		// O mesmo título produz sempre o mesmo ângulo, e títulos distintos variam.
+		expect(courseCover('Física Quântica').angle).toBe(courseCover('Física Quântica').angle);
+		expect(new Set(angles).size).toBeGreaterThan(1);
+	});
+});
+
+describe('course cover precedence', () => {
+	it('prefers a manual cover over an automatic thumbnail', () => {
+		expect(selectCourseCoverSource({ manualCoverUrl: 'cover://uploaded', thumbnailUrl: 'blob:frame' })).toBe('manual');
+	});
+
+	it('prefers the automatic thumbnail when no manual cover exists', () => {
+		expect(selectCourseCoverSource({ thumbnailUrl: 'blob:frame' })).toBe('thumbnail');
+	});
+
+	it('falls back to the generated title cover when neither source is present', () => {
+		expect(selectCourseCoverSource({})).toBe('generated');
+		expect(selectCourseCoverSource({ manualCoverUrl: null, thumbnailUrl: null })).toBe('generated');
+		expect(selectCourseCoverSource({ manualCoverUrl: '', thumbnailUrl: '' })).toBe('generated');
 	});
 });

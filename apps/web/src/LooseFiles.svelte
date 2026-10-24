@@ -12,7 +12,7 @@
 			<li>
 				{#if url && file.kind === 'media'}
 					{#if courseId}
-						<a href={href('player', courseId, file.path)}>Reproduzir {file.name}</a>
+						<a href={href('course', courseId, file.path)}>Reproduzir {file.name}</a>
 					{:else}
 						<a href={href('player', file.path)}>Reproduzir {file.name}</a>
 					{/if}

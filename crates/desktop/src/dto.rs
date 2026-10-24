@@ -6,8 +6,8 @@
 //! desktop sem alteração.
 
 use learnvault_core::{
-    Availability, Catalog, CatalogFile, CatalogNode, MediaKind, NodeRole, RescanSummary,
-    PomodoroState, PomodoroStatus, StudyAnalytics, StudyNote, StudyProgress,
+    Availability, Catalog, CatalogFile, CatalogNode, MediaKind, NodeRole, PomodoroState,
+    PomodoroStatus, RescanSummary, StudyAnalytics, StudyNote, StudyProgress,
 };
 use serde::Serialize;
 
@@ -37,6 +37,10 @@ pub struct CatalogNodeDto {
     /// Identidade do curso que contém o nó, presente apenas no nó de topo.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub course_id: Option<String>,
+    /// Segundos de modificação da capa personalizada do curso, quando existir. É a versão
+    /// usada pela SPA para invalidar a URL (`?v=`); ausente quando não há capa.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cover_version: Option<i64>,
     /// Arquivos da aula; vazio fora de nós `lesson`.
     pub files: Vec<CatalogFileDto>,
     /// Arquivos diretamente no nó, sem pertencer a uma aula.
@@ -56,6 +60,8 @@ pub struct CatalogFileDto {
     pub path: String,
     /// Tamanho em bytes na última observação.
     pub size: u64,
+    /// Modificação da mídia em segundos desde a época Unix na última observação.
+    pub mtime_seconds: i64,
     /// Tipo do arquivo: `media`, `subtitle` ou `material`.
     pub kind: &'static str,
     /// Disponibilidade na última varredura: `available` ou `missing`.
@@ -71,6 +77,7 @@ impl From<CatalogNode> for CatalogNodeDto {
             path: node.path,
             role: node_role(node.role),
             course_id: None,
+            cover_version: None,
             files: node.files.into_iter().map(CatalogFileDto::from).collect(),
             loose_files: node
                 .loose_files
@@ -87,14 +94,20 @@ impl From<CatalogNode> for CatalogNodeDto {
 }
 
 impl CatalogNodeDto {
-    /// Nó de topo de um curso registrado: identidade opaca, título da pasta e a
-    /// subárvore derivada dos dados persistidos.
-    pub fn course(course_id: &str, title: &str, catalog: Catalog) -> Self {
+    /// Nó de topo de um curso registrado: identidade opaca, título da pasta, a versão da
+    /// capa personalizada (quando existir) e a subárvore derivada dos dados persistidos.
+    pub fn course(
+        course_id: &str,
+        title: &str,
+        catalog: Catalog,
+        cover_version: Option<i64>,
+    ) -> Self {
         Self {
             title: title.to_owned(),
             path: String::new(),
             role: "course",
             course_id: Some(course_id.to_owned()),
+            cover_version,
             files: Vec::new(),
             loose_files: catalog
                 .loose_files
@@ -117,6 +130,7 @@ impl From<CatalogFile> for CatalogFileDto {
             name: file.name,
             path: file.path,
             size: file.size,
+            mtime_seconds: file.mtime_seconds,
             kind: media_kind(file.kind),
             availability: availability(file.availability),
             unverified: file.unverified,
@@ -257,8 +271,12 @@ pub struct StudyAnalyticsDto {
 
 impl From<StudyAnalytics> for StudyAnalyticsDto {
     fn from(stats: StudyAnalytics) -> Self {
-        Self { tracked_count: stats.tracked_count, completed_count: stats.completed_count,
-            total_position_seconds: stats.total_position_seconds, last_activity_at: stats.last_activity_at }
+        Self {
+            tracked_count: stats.tracked_count,
+            completed_count: stats.completed_count,
+            total_position_seconds: stats.total_position_seconds,
+            last_activity_at: stats.last_activity_at,
+        }
     }
 }
 
@@ -274,13 +292,22 @@ pub struct StudyNoteDto {
 
 impl From<StudyNote> for StudyNoteDto {
     fn from(note: StudyNote) -> Self {
-        Self { note_id: note.note_id, media_id: note.media_id, text: note.text,
-            position_seconds: note.position_seconds, created_at: note.created_at, updated_at: note.updated_at }
+        Self {
+            note_id: note.note_id,
+            media_id: note.media_id,
+            text: note.text,
+            position_seconds: note.position_seconds,
+            created_at: note.created_at,
+            updated_at: note.updated_at,
+        }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct StudyNotesDto { pub items: Vec<StudyNoteDto>, pub truncated: bool }
+pub struct StudyNotesDto {
+    pub items: Vec<StudyNoteDto>,
+    pub truncated: bool,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct PomodoroDto {
@@ -293,7 +320,11 @@ pub struct PomodoroDto {
 impl From<PomodoroState> for PomodoroDto {
     fn from(state: PomodoroState) -> Self {
         Self {
-            status: match state.status { PomodoroStatus::Idle => "idle", PomodoroStatus::Running => "running", PomodoroStatus::Paused => "paused" },
+            status: match state.status {
+                PomodoroStatus::Idle => "idle",
+                PomodoroStatus::Running => "running",
+                PomodoroStatus::Paused => "paused",
+            },
             duration_seconds: state.duration_seconds,
             elapsed_seconds: state.elapsed_seconds,
             updated_at: state.updated_at,
@@ -357,4 +388,22 @@ impl From<learnvault_core::MediaRemovalOutcome> for MediaRemovalOutcomeDto {
             preserved_owners: outcome.preserved_owners,
         }
     }
+}
+
+/// DTO da capa personalizada de um curso.
+///
+/// Carrega apenas a versão (segundos de modificação) que a SPA usa para invalidar a URL da
+/// imagem. Nem o caminho do arquivo nem o diretório de capas cruzam o IPC.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct CoverDto {
+    /// Versão da capa do curso; ausente quando o curso ainda não tem capa.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cover_version: Option<i64>,
+}
+
+/// DTO do resultado da remoção da capa.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct CoverRemovalDto {
+    /// Verdadeiro quando havia uma capa e ela foi removida agora.
+    pub removed: bool,
 }

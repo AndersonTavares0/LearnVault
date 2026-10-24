@@ -22,8 +22,9 @@ pub mod ids;
 pub mod legacy_import;
 pub mod media;
 pub mod notes;
-pub mod pomodoro;
+pub mod ordering;
 pub mod paths;
+pub mod pomodoro;
 pub mod removal;
 pub mod rescan;
 pub mod scanner;
@@ -51,18 +52,19 @@ pub use media::{
     open_media_reference,
 };
 pub use notes::{
-    MAX_NOTE_TEXT_CHARS, MAX_NOTES_PER_MEDIA, MAX_NOTES_PER_OWNER, StudyNote, create_note, delete_note, list_all_notes,
-    list_notes, update_note,
+    MAX_NOTE_TEXT_CHARS, MAX_NOTES_PER_MEDIA, MAX_NOTES_PER_OWNER, StudyNote, create_note,
+    delete_note, list_all_notes, list_notes, update_note,
 };
+pub use ordering::{CatalogOrder, apply_order, order_siblings, sibling_paths, validate_siblings};
+pub use paths::KeyMode;
 pub use pomodoro::{
-    DEFAULT_POMODORO_SECONDS, PomodoroState, PomodoroStatus, pomodoro_state, pause_pomodoro,
+    DEFAULT_POMODORO_SECONDS, PomodoroState, PomodoroStatus, pause_pomodoro, pomodoro_state,
     reset_pomodoro, start_pomodoro,
 };
-pub use paths::KeyMode;
 pub use removal::{MediaRemovalImpact, MediaRemovalOutcome, media_removal_impact, remove_media};
 pub use rescan::{RescanSummary, apply_scan, rescan};
 pub use scanner::{MediaKind, ScanOutcome, ScannedFile, scan};
 pub use study::{
-    CourseStudySummary, MAX_RECENT_STUDY, StudyAnalytics, StudyProgress, course_study_summary, recent_study,
-    record_position, set_completed, study_analytics, study_progress,
+    CourseStudySummary, MAX_RECENT_STUDY, StudyAnalytics, StudyProgress, course_study_summary,
+    recent_study, record_position, set_completed, study_analytics, study_progress,
 };

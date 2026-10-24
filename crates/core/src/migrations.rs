@@ -163,7 +163,14 @@ CREATE TABLE pomodoro_state (
 );
 ";
 
-const MIGRATIONS_SLICE: &[M<'static>] = &[M::up(V1), M::up(V2), M::up(V3), M::up(V4), M::up(V5), M::up(V6)];
+const MIGRATIONS_SLICE: &[M<'static>] = &[
+    M::up(V1),
+    M::up(V2),
+    M::up(V3),
+    M::up(V4),
+    M::up(V5),
+    M::up(V6),
+];
 
 /// Cadeia de migrações aplicada por [`crate::db::Database`].
 pub(crate) const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATIONS_SLICE);

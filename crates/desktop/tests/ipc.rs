@@ -53,6 +53,7 @@ fn file(
         name: "aula.mp4".to_owned(),
         path: "cat/aula.mp4".to_owned(),
         size: 10,
+        mtime_seconds: 1_760_000_000,
         kind,
         availability,
         unverified,
@@ -95,7 +96,7 @@ fn configuration_starts_unconfigured_without_exposing_a_path() {
 #[test]
 fn empty_database_produces_a_complete_empty_catalog() {
     let database = learnvault_core::Database::open_in_memory().unwrap();
-    let catalog = catalog(&database, &[]).unwrap();
+    let catalog = catalog(&database, &[], Path::new("covers")).unwrap();
 
     assert!(catalog.complete);
     assert!(catalog.loose_files.is_empty());
@@ -122,7 +123,7 @@ fn catalog_dto_uses_the_snake_case_spa_contract() {
         )],
     };
     let complete = source.complete;
-    let nodes = vec![CatalogNodeDto::course("course-42", "Curso", source)];
+    let nodes = vec![CatalogNodeDto::course("course-42", "Curso", source, None)];
     let dto = CatalogDto {
         complete,
         loose_files: Vec::new(),
@@ -145,6 +146,7 @@ fn catalog_dto_uses_the_snake_case_spa_contract() {
         "cat/aula.mp4"
     );
     assert_eq!(json["categories"][0]["loose_files"][0]["size"], 10);
+    assert!(json["categories"][0]["loose_files"][0]["mtime_seconds"].is_number());
     assert_eq!(json["categories"][0]["loose_files"][0]["kind"], "material");
     assert_eq!(
         json["categories"][0]["loose_files"][0]["availability"],
@@ -184,6 +186,7 @@ fn catalog_dto_uses_the_snake_case_spa_contract() {
     assert_eq!(node_file["name"], "aula.mp4");
     assert_eq!(node_file["path"], "cat/aula.mp4");
     assert_eq!(node_file["size"], 10);
+    assert!(node_file["mtime_seconds"].is_number());
     assert_eq!(node_file["kind"], "media");
     assert_eq!(node_file["availability"], "available");
     assert_eq!(node_file["unverified"], false);
@@ -235,6 +238,7 @@ fn every_core_enum_maps_to_a_stable_string() {
                 loose_files: vec![file("f", kind, Availability::Available, false)],
                 categories: Vec::new(),
             },
+            None,
         );
         let dto = CatalogDto {
             complete: true,
@@ -277,7 +281,7 @@ fn catalog_failure_is_a_stable_sanitized_error() {
         .unwrap();
 
     let courses = [entry("library-1", dir.path())];
-    let error = catalog(&database, &courses).unwrap_err();
+    let error = catalog(&database, &courses, Path::new("covers")).unwrap_err();
     assert_eq!(error.code, IpcErrorCode::CatalogUnavailable);
 
     let json = serde_json::to_value(&error).unwrap();

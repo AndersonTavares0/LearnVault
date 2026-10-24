@@ -11,7 +11,10 @@
  * do arquivo como um plugin e exige uma função, então um export a mais derruba o
  * carregamento inteiro.
  * Não substitui a branch protection do GitHub nem cobre todas as formas de escrita via
- * Bash — veja o README deste diretório.
+ * shell (`bash`/`shell`) — veja o README deste diretório.
+ * A guarda reconhece a ferramenta de shell pelos nomes `bash` e `shell`, e a de patch
+ * pelos nomes `apply_patch` e `patch`: o opencode v2 renomeou as duas e, sem os dois
+ * nomes, a proteção não dispararia.
  */
 
 import { execFile } from "node:child_process"
@@ -22,6 +25,12 @@ import path from "node:path"
 import type { Plugin } from "@opencode-ai/plugin"
 
 const PROTECTED_BRANCHES = new Set(["main", "master"])
+
+// Nomes das ferramentas no runtime. O opencode v2 chama a ferramenta de shell de
+// "shell" e a de patch de "patch"; os nomes antigos seguem reconhecidos porque
+// runtimes anteriores ainda os usam. Sem isso, a guarda nunca enxerga o comando.
+const SHELL_TOOLS = new Set(["bash", "shell"])
+const PATCH_TOOLS = new Set(["apply_patch", "patch"])
 
 const GIT_MUTATION =
   /\bgit(\s+-(C|c)\s+\S+)?\s+(commit|push|merge|rebase|reset|revert|cherry-pick|am|apply|clean|restore|stash|add|tag)\b/
@@ -68,12 +77,26 @@ function diagnose(lines: string[]): void {
   }
 }
 
+// Diz se um caminho está dentro de uma raiz. Só o primeiro segmento ".." tira o
+// arquivo do repositório: um nome que começa com dois pontos (ex.: "..env") continua
+// dentro e precisa ser bloqueado como qualquer outro arquivo.
+function isInside(base: string, target: string): boolean {
+  const relative = path.relative(base, target)
+  if (relative === "") return true
+  if (path.isAbsolute(relative)) return false
+  return relative.split(/[\\/]/)[0] !== ".."
+}
+
 export const MainBranchGuard: Plugin = async ({ directory, worktree }) => {
   const root = worktree || directory
+  // O caminho recebido do agente é relativo ao diretório do projeto: essa é a base
+  // correta para resolvê-lo, mesmo quando o worktree aponta para outro lugar.
+  const projectRoot = typeof directory === "string" && directory.length > 0 ? directory : root
   // Em uso normal `worktree` e `directory` são o mesmo repositório; tentar os dois
   // protege contra mudanças de valor entre versões do aplicativo.
   const roots = [worktree, directory].filter(
-    (value, index, all) => typeof value === "string" && value.length > 0 && all.indexOf(value) === index
+    (value, index, all): value is string =>
+      typeof value === "string" && value.length > 0 && all.indexOf(value) === index
   )
 
   const currentBranch = async (): Promise<string | null> => {
@@ -95,8 +118,12 @@ export const MainBranchGuard: Plugin = async ({ directory, worktree }) => {
 
   const touchesWorktree = (filePath: unknown): boolean => {
     if (typeof filePath !== "string" || filePath.length === 0) return true
-    const relative = path.relative(root, path.resolve(directory, filePath))
-    return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))
+    // O caminho recebido é resolvido a partir do diretório do projeto e comparado com
+    // as raízes conhecidas. Comparar contra uma raiz diferente da que resolve o
+    // caminho desligaria a proteção: no caso em que o worktree não é o repositório,
+    // todo caminho interno pareceria externo e a escrita passaria.
+    const target = path.resolve(projectRoot, filePath)
+    return roots.some((base) => isInside(base, target))
   }
 
   const patchTouchesWorktree = (patchText: unknown): boolean => {
@@ -107,13 +134,13 @@ export const MainBranchGuard: Plugin = async ({ directory, worktree }) => {
 
   const isMutating = (tool: string, args: Record<string, unknown> | undefined): boolean => {
     if (tool === "edit" || tool === "write") return touchesWorktree(args?.filePath)
-    if (tool === "apply_patch") return patchTouchesWorktree(args?.patchText)
-    if (tool !== "bash") return false
+    if (PATCH_TOOLS.has(tool)) return patchTouchesWorktree(args?.patchText)
+    if (!SHELL_TOOLS.has(tool)) return false
     const command = args?.command
-    return (
-      typeof command === "string" &&
-      (GIT_MUTATION.test(command) || GIT_BRANCH_SWITCH.test(command) || GITHUB_PR_MERGE.test(command))
-    )
+    // Comando ausente ou em formato inesperado é tratado como mutante: a guarda não pode
+    // falhar aberta quando não entende o que a ferramenta vai executar.
+    if (typeof command !== "string") return true
+    return GIT_MUTATION.test(command) || GIT_BRANCH_SWITCH.test(command) || GITHUB_PR_MERGE.test(command)
   }
 
   const deny = (reason: string): never => {

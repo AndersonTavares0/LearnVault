@@ -15,6 +15,8 @@ use crate::{
     Config,
     auth::hash_password,
     courses::{RegisteredCourse, legacy_seed, load_registry, registry_path},
+    ordering::{CourseOrders, load_orders, order_path},
+    update::{UpdateChecker, github_fetcher},
 };
 
 const SESSION_LIFETIME_SECONDS: i64 = 12 * 60 * 60;
@@ -36,11 +38,17 @@ pub struct AppState {
     pub(crate) courses: Arc<RwLock<Vec<RegisteredCourse>>>,
     /// Arquivo versionado do registro de cursos, ao lado do banco.
     pub(crate) courses_file: PathBuf,
+    /// Preferências de ordenação manual, por identidade opaca do curso.
+    pub(crate) orders: Arc<RwLock<CourseOrders>>,
+    /// Arquivo versionado das preferências de ordenação, ao lado do banco.
+    pub(crate) orders_file: PathBuf,
     pub(crate) database: Arc<Mutex<Database>>,
     pub(crate) login_attempts: Arc<Mutex<HashMap<String, (u32, Instant)>>>,
     pub(crate) rescan_lock: Arc<Mutex<()>>,
     pub(crate) inline_script_hashes: Arc<[String]>,
     pub(crate) inline_style_hashes: Arc<[String]>,
+    /// Checagem de atualização do produto, feita pelo servidor local.
+    pub(crate) update: UpdateChecker,
     spa_shell: Option<Arc<SpaShell>>,
     spa_shell_too_large: bool,
     blocking_tasks: Arc<Semaphore>,
@@ -80,13 +88,17 @@ impl AppState {
         let spa_shell = load_spa_shell(config.web_root.as_deref()).map(Arc::new);
         let (inline_script_hashes, inline_style_hashes) = shell_hashes(spa_shell.as_deref());
         let courses_file = registry_path(&config.database_path);
+        let update = UpdateChecker::new(config.update_check, github_fetcher());
         Self {
+            update,
             inline_script_hashes: inline_script_hashes.into(),
             inline_style_hashes: inline_style_hashes.into(),
             spa_shell,
             spa_shell_too_large,
             courses: Arc::new(RwLock::new(Vec::new())),
             courses_file,
+            orders: Arc::new(RwLock::new(CourseOrders::new())),
+            orders_file: order_path(&config.database_path),
             config,
             database: Arc::new(Mutex::new(database)),
             login_attempts: Arc::new(Mutex::new(HashMap::new())),
@@ -102,7 +114,7 @@ impl AppState {
     /// fora das threads Tokio.
     pub async fn initialize(config: Config) -> Result<Self, StateError> {
         let setup = config.clone();
-        let (database, spa_shell, spa_shell_too_large, courses, courses_file) =
+        let (database, spa_shell, spa_shell_too_large, courses, courses_file, orders) =
             tokio::task::spawn_blocking(move || {
                 let shell_too_large = shell_too_large(setup.web_root.as_deref());
                 let shell = load_spa_shell(setup.web_root.as_deref()).map(Arc::new);
@@ -123,12 +135,23 @@ impl AppState {
                 {
                     courses.push(seed);
                 }
+                // As preferências de ordenação vivem ao lado do banco, no arquivo de
+                // ordenação; um curso removido do catálogo mantém a preferência, que só
+                // volta a valer se o mesmo curso for reimportado.
+                let orders = load_orders(&order_path(&setup.database_path));
                 let mut database =
                     Database::open(&setup.database_path).map_err(StateError::Database)?;
                 let existing =
                     learnvault_core::has_admin(&database).map_err(StateError::Database)?;
                 if existing {
-                    return Ok((database, shell, shell_too_large, courses, courses_file));
+                    return Ok((
+                        database,
+                        shell,
+                        shell_too_large,
+                        courses,
+                        courses_file,
+                        orders,
+                    ));
                 }
                 let using_temporary_default =
                     setup.admin_username.is_none() && setup.admin_password.is_none();
@@ -153,13 +176,24 @@ impl AppState {
                     false,
                 )
                 .map_err(StateError::Database)?;
-                Ok((database, shell, shell_too_large, courses, courses_file))
+                Ok((
+                    database,
+                    shell,
+                    shell_too_large,
+                    courses,
+                    courses_file,
+                    orders,
+                ))
             })
             .await
             .map_err(StateError::Blocking)??;
         let (inline_script_hashes, inline_style_hashes) = shell_hashes(spa_shell.as_deref());
+        let update = UpdateChecker::new(config.update_check, github_fetcher());
         Ok(Self {
+            orders: Arc::new(RwLock::new(orders)),
+            orders_file: order_path(&config.database_path),
             config,
+            update,
             courses: Arc::new(RwLock::new(courses)),
             courses_file,
             database: Arc::new(Mutex::new(database)),
@@ -184,6 +218,17 @@ impl AppState {
         self.courses
             .read()
             .map(|courses| courses.clone())
+            .unwrap_or_default()
+    }
+
+    /// Fotografia imutável das preferências de ordenação.
+    ///
+    /// Uma leitura de catálogo usa a fotografia e nunca segura o cadeado de escrita durante
+    /// a leitura do banco ou a montagem da árvore.
+    pub(crate) fn orders_snapshot(&self) -> CourseOrders {
+        self.orders
+            .read()
+            .map(|orders| orders.clone())
             .unwrap_or_default()
     }
 
@@ -704,6 +749,7 @@ mod tests {
             admin_username: None,
             admin_password: None,
             cookie_secure: false,
+            update_check: true,
         }
     }
 

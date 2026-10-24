@@ -1,17 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { findLesson } from './router';
-import { desktopMediaUrl, DesktopStub, HttpTransport, lessonFromNode, normalizeCatalog, normalizeRecentStudy, normalizeStudyProgress, normalizeUser, STUDY_NOT_AVAILABLE, CATALOG_LIMITS, type Transport } from './transport';
+import { desktopCoverUrl, desktopMediaUrl, DesktopStub, HttpTransport, lessonFromNode, MAX_COVER_BYTES, normalizeCatalog, normalizeRecentStudy, normalizeStudyProgress, normalizeUpdateStatus, normalizeUser, STUDY_NOT_AVAILABLE, CATALOG_LIMITS, type Transport } from './transport';
 
 // O Tauri só é carregado no desktop: fora dele o módulo é substituído pelo mock, de modo
 // que a suíte nunca toca `window.__TAURI_INTERNALS__`.
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 
 describe('transport contract', () => {
-  it('exposes the HTTP transport seam without routing assumptions', () => {
-    const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'listNotes', 'listAllNotes', 'createNote', 'updateNote', 'deleteNote', 'studyAnalytics', 'pomodoro', 'startPomodoro', 'pausePomodoro', 'resetPomodoro', 'studySummary', 'mediaUrl'];
-    expect(methods).toHaveLength(25);
-  });
 	  it('reads study analytics from HTTP', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ tracked_count: 4, completed_count: 2, total_position_seconds: 99, last_activity_at: 123 }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
@@ -81,6 +77,10 @@ describe('transport contract', () => {
 		expect(fetchMock.mock.calls[3][1]).toMatchObject({ method: 'PUT', body: JSON.stringify({ text: 'edit', position_seconds: null }) });
 		expect(fetchMock.mock.calls[4][1]).toMatchObject({ method: 'DELETE' });
 		vi.unstubAllGlobals();
+	});
+	it('exposes the HTTP transport seam without routing assumptions', () => {
+		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'listNotes', 'listAllNotes', 'createNote', 'updateNote', 'deleteNote', 'studyAnalytics', 'pomodoro', 'startPomodoro', 'pausePomodoro', 'resetPomodoro', 'studySummary', 'checkUpdate', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover'];
+		expect(methods).toHaveLength(29);
 	});
 	it('does not offer native folder selection over HTTP', async () => {
 		await expect(new HttpTransport().importCourse()).rejects.toThrow('desktop é quem escolhe pastas');
@@ -186,15 +186,22 @@ describe('transport contract', () => {
 	});
 	it('normalizes the Rust user and recursive catalog contract', () => {
 		expect(normalizeUser({ user_id: 'u1', username: 'admin', is_admin: true, must_change_credentials: true })).toEqual({ userId: 'u1', username: 'admin', role: 'admin', isAdmin: true, mustChangeCredentials: true });
-		const catalog = normalizeCatalog({ complete: true, loose_files: [], categories: [{ title: 'Física', path: '', role: 'course', course_id: 'course-1', files: [], loose_files: [{ media_id: 'loose', name: 'nota.pdf', path: 'nota.pdf', size: 3, kind: 'material', availability: 'missing', unverified: true }], children: [{ title: 'Módulo', path: 'mod', role: 'module', files: [], loose_files: [], children: [{ title: 'Aula', path: 'mod/aula', role: 'lesson', files: [{ media_id: 'm1', name: 'aula.mp4', path: 'mod/aula.mp4', size: 10, kind: 'media', availability: 'available', unverified: false }, { media_id: 's1', name: 'aula.vtt', path: 'mod/aula.vtt', size: 2, kind: 'subtitle', availability: 'available', unverified: false }], loose_files: [], children: [] }] }] }] });
+		const catalog = normalizeCatalog({ complete: true, loose_files: [], categories: [{ title: 'Física', path: '', role: 'course', course_id: 'course-1', files: [], loose_files: [{ media_id: 'loose', name: 'nota.pdf', path: 'nota.pdf', size: 3, kind: 'material', availability: 'missing', unverified: true }], children: [{ title: 'Módulo', path: 'mod', role: 'module', files: [], loose_files: [], children: [{ title: 'Aula', path: 'mod/aula', role: 'lesson', files: [{ media_id: 'm1', name: 'aula.mp4', path: 'mod/aula.mp4', size: 10, mtime_seconds: 1_760_000_000, kind: 'media', availability: 'available', unverified: false }, { media_id: 's1', name: 'aula.vtt', path: 'mod/aula.vtt', size: 2, kind: 'subtitle', availability: 'available', unverified: false }], loose_files: [], children: [] }] }] }] });
 		expect(catalog.complete).toBe(true);
 		expect(catalog.nodes[0]).toMatchObject({ title: 'Física', role: 'course', courseId: 'course-1' });
 		expect(catalog.nodes[0].looseFiles[0]).toMatchObject({ mediaId: 'loose', path: 'nota.pdf', availability: 'missing', unverified: true });
 		expect(catalog.nodes[0].children[0].children[0].files[0].path).toBe('mod/aula.mp4');
 		expect(catalog.nodes[0].children[0].children[0].files[0].mediaId).toBe('m1');
+		expect(catalog.nodes[0].children[0].children[0].files[0].mtimeSeconds).toBe(1_760_000_000);
 		expect(catalog.nodes[0].children[0].children[0].files[1].kind).toBe('subtitle');
 		// Nós internos não carregam identidade de curso: ela vive apenas no topo.
 		expect(catalog.nodes[0].children[0].courseId).toBeUndefined();
+	});
+	it('rejects invalid media revision metadata when present', () => {
+		const file = { media_id: 'm1', name: 'aula.mp4', path: 'aula.mp4', size: 10, kind: 'media' };
+		for (const mtime_seconds of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1, '1760000000']) {
+			expect(() => normalizeCatalog({ complete: true, categories: [], loose_files: [{ ...file, mtime_seconds }] })).toThrow('Resposta inválida do servidor');
+		}
 	});
 	it('requires media_id on canonical root loose files and preserves them when present', () => {
 		// Um arquivo solto de raiz em payload canônico segue a mesma regra dos nós: identidade
@@ -533,6 +540,108 @@ describe('transport contract', () => {
 		await expect(new HttpTransport().recentStudy()).rejects.toMatchObject({ message: 'Estudo não disponível neste servidor.', code: STUDY_NOT_AVAILABLE });
 		vi.unstubAllGlobals();
 	});
+	it('builds the manual cover URL from the course identity and its version on HTTP', () => {
+		const transport = new HttpTransport();
+		expect(transport.coverUrl('course-1', 1_760_000_000)).toBe('/api/courses/course-1/cover?v=1760000000');
+		expect(transport.coverUrl('curso um', 42)).toBe('/api/courses/curso%20um/cover?v=42');
+		// Sem capa publicada não existe URL manual: a interface cai na miniatura ou na capa
+		// gerada pelo título em vez de apontar para uma imagem inexistente.
+		expect(transport.coverUrl('course-1')).toBeNull();
+		expect(transport.coverUrl('course-1', null)).toBeNull();
+	});
+	it('uploads the chosen cover to the admin endpoint as raw bytes', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ cover_version: 1_760_000_000 }), { status: 200 }));
+		vi.stubGlobal('fetch', fetchMock);
+		const file = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], 'capa.png', { type: 'image/png' });
+
+		await new HttpTransport().importCourseCover('course one', file);
+
+		const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+		expect(url).toBe('/api/admin/courses/course%20one/cover');
+		expect(init.method).toBe('PUT');
+		// O corpo é o arquivo cru: o tipo é decidido pelos bytes iniciais no servidor, então o
+		// cliente não negocia nem declara formato.
+		expect(init.body).toBe(file);
+		vi.unstubAllGlobals();
+	});
+	it('maps the stable cover upload failures to actionable messages', async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+		const file = new File([new Uint8Array([0x89])], 'capa.png', { type: 'image/png' });
+
+		for (const [status, message] of [[413, 'A imagem é maior que 4 MiB.'], [415, 'A capa precisa ser PNG, JPEG ou WebP.'], [404, 'Curso não encontrado.'], [503, 'O servidor está ocupado; tente de novo em instantes.'], [500, 'Não foi possível salvar a capa do curso.'], [403, 'credentials_change_required']] as const) {
+			fetchMock.mockResolvedValue(new Response(null, { status }));
+			await expect(new HttpTransport().importCourseCover('course-1', file)).rejects.toThrow(message);
+		}
+		vi.unstubAllGlobals();
+	});
+	it('refuses a missing or oversized cover before touching the network', async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+		await expect(new HttpTransport().importCourseCover('course-1')).rejects.toThrow('Escolha uma imagem para a capa.');
+		const oversized = new File([new Uint8Array(1)], 'grande.png', { type: 'image/png' });
+		Object.defineProperty(oversized, 'size', { value: MAX_COVER_BYTES + 1 });
+		await expect(new HttpTransport().importCourseCover('course-1', oversized)).rejects.toThrow('A imagem é maior que 4 MiB.');
+		expect(fetchMock).not.toHaveBeenCalled();
+		vi.unstubAllGlobals();
+	});
+	it('removes the cover and reports the server flag', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ removed: true }), { status: 200 }));
+		vi.stubGlobal('fetch', fetchMock);
+
+		await expect(new HttpTransport().removeCourseCover('course one')).resolves.toBe(true);
+		expect(fetchMock).toHaveBeenLastCalledWith('/api/admin/courses/course%20one/cover', { method: 'DELETE' });
+
+		fetchMock.mockResolvedValue(new Response(JSON.stringify({ removed: false }), { status: 200 }));
+		await expect(new HttpTransport().removeCourseCover('course one')).resolves.toBe(false);
+
+		// Uma resposta sem corpo JSON não pode ser confundida com uma remoção concluída.
+		fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+		await expect(new HttpTransport().removeCourseCover('course one')).resolves.toBe(false);
+
+		fetchMock.mockResolvedValue(new Response(null, { status: 403 }));
+		await expect(new HttpTransport().removeCourseCover('course one')).rejects.toThrow('credentials_change_required');
+		fetchMock.mockResolvedValue(new Response(null, { status: 404 }));
+		await expect(new HttpTransport().removeCourseCover('course one')).rejects.toThrow('Curso não encontrado.');
+		vi.unstubAllGlobals();
+	});
+	it('normalizes the cover version exposed for a course node', () => {
+		const catalog = normalizeCatalog({ complete: true, loose_files: [], nodes: [{ title: 'Curso', path: '', role: 'course', course_id: 'course-1', cover_version: 1_760_000_000, files: [], loose_files: [], children: [] }] });
+		expect(catalog.nodes[0].coverVersion).toBe(1_760_000_000);
+		// Um curso sem capa não declara o campo.
+		const without = normalizeCatalog({ complete: true, loose_files: [], nodes: [{ title: 'Curso', path: '', role: 'course', course_id: 'course-1', files: [], loose_files: [], children: [] }] });
+		expect(without.nodes[0].coverVersion).toBeUndefined();
+		// Um valor presente precisa ser um segundo Unix inteiro não negativo.
+		for (const cover_version of [-1, 1.5, '1760000000', Number.MAX_SAFE_INTEGER + 1, null]) {
+			expect(() => normalizeCatalog({ complete: true, loose_files: [], nodes: [{ title: 'Curso', path: '', role: 'course', course_id: 'course-1', cover_version, files: [], loose_files: [], children: [] }] })).toThrow('Resposta inválida do servidor');
+		}
+	});
+	it('normalizes the update status and keeps a nullable error', () => {
+		expect(normalizeUpdateStatus({ current: '0.3.0', enabled: true, available: true, latest: '0.4.0', releasedAt: '2026-10-17T12:00:00Z', url: 'https://github.com/AndersonTavares0/LearnVault/releases/tag/v0.4.0', checkedAt: '1760702400', error: null })).toEqual({
+			current: '0.3.0', enabled: true, available: true, latest: '0.4.0', releasedAt: '2026-10-17T12:00:00Z', url: 'https://github.com/AndersonTavares0/LearnVault/releases/tag/v0.4.0', checkedAt: '1760702400', error: null
+		});
+		// Uma falha chega como 200 com `error` preenchido e sem versão nova.
+		expect(normalizeUpdateStatus({ current: '0.3.0', enabled: true, available: false, latest: null, releasedAt: null, url: null, checkedAt: null, error: 'não foi possível contatar o GitHub' })).toMatchObject({ available: false, latest: null, error: 'não foi possível contatar o GitHub' });
+		// Um campo presente com tipo incorreto é recusado em vez de vazar para a interface.
+		expect(() => normalizeUpdateStatus({ current: '0.3.0', enabled: true, available: false, latest: 42 })).toThrow('Resposta inválida do servidor');
+		expect(() => normalizeUpdateStatus({ current: 0.3, enabled: true, available: false })).toThrow('Resposta inválida do servidor');
+		expect(() => normalizeUpdateStatus(null)).toThrow('Resposta inválida do servidor');
+	});
+	it('checks the update endpoint and only forces a fresh check when asked', async () => {
+		const fetchMock = vi.fn().mockImplementation(() => new Response(JSON.stringify({ current: '0.3.0', enabled: true, available: false, latest: null, releasedAt: null, url: null, checkedAt: '1', error: null }), { status: 200 }));
+		vi.stubGlobal('fetch', fetchMock);
+		await expect(new HttpTransport().checkUpdate()).resolves.toMatchObject({ current: '0.3.0', enabled: true, available: false });
+		expect(fetchMock).toHaveBeenLastCalledWith('/api/update');
+		await new HttpTransport().checkUpdate(true);
+		expect(fetchMock).toHaveBeenLastCalledWith('/api/update?force=1');
+		vi.unstubAllGlobals();
+	});
+	it('maps a rejected update check to an actionable message', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 403 }));
+		vi.stubGlobal('fetch', fetchMock);
+		await expect(new HttpTransport().checkUpdate()).rejects.toThrow('credentials_change_required');
+		vi.unstubAllGlobals();
+	});
 });
 
 describe('desktop transport over IPC', () => {
@@ -745,5 +854,70 @@ describe('desktop transport over IPC', () => {
 
 		vi.mocked(invoke).mockRejectedValue({ code: 'courses_config_unavailable', message: 'falha em C:\\segredo' });
 		await expect(new DesktopStub().removeCourse('course-1')).rejects.toThrow('Não foi possível salvar a configuração do aplicativo.');
+	});
+
+	it('builds the cover URL from the opaque course identity per platform', () => {
+		const linux = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko)';
+		const windows = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0';
+		expect(desktopCoverUrl('course-1', linux)).toBe('learnvault-cover://localhost/course-1');
+		expect(desktopCoverUrl('course-1', windows)).toBe('http://learnvault-cover.localhost/course-1');
+		expect(desktopCoverUrl('course um', linux)).toBe('learnvault-cover://localhost/course%20um');
+	});
+
+	it('addresses the desktop cover by identity and version, never by path', () => {
+		const transport = new DesktopStub();
+		vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko)' });
+		try {
+			const url = transport.coverUrl('course-1', 42)!;
+			expect(url).toBe('learnvault-cover://localhost/course-1?v=42');
+			expect(url).not.toContain('Acervo privado');
+			expect(transport.coverUrl('course-1')).toBeNull();
+			expect(transport.coverUrl('course-1', null)).toBeNull();
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
+	it('imports and removes the cover through the native picker commands without sending a file', async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+
+		vi.mocked(invoke).mockResolvedValue({ cover_version: 1_760_000_000 });
+		// O arquivo escolhido fica no Rust: nada é enviado pelo IPC.
+		await expect(new DesktopStub().importCourseCover('course-1', new File([new Uint8Array([0x89])], 'capa.png'))).resolves.toBeUndefined();
+		expect(invoke).toHaveBeenCalledWith('desktop_import_course_cover', { courseId: 'course-1' });
+		expect(fetchMock).not.toHaveBeenCalled();
+
+		vi.mocked(invoke).mockResolvedValue({ removed: true });
+		await expect(new DesktopStub().removeCourseCover('course-1')).resolves.toBe(true);
+		expect(invoke).toHaveBeenLastCalledWith('desktop_remove_course_cover', { courseId: 'course-1' });
+
+		vi.mocked(invoke).mockResolvedValue({ removed: false });
+		await expect(new DesktopStub().removeCourseCover('course-1')).resolves.toBe(false);
+		vi.mocked(invoke).mockResolvedValue(null);
+		await expect(new DesktopStub().removeCourseCover('course-1')).resolves.toBe(false);
+		vi.unstubAllGlobals();
+	});
+
+	it('maps the cover IPC errors to sanitized messages without the path', async () => {
+		vi.mocked(invoke).mockRejectedValue({ code: 'course_not_found', message: 'curso em /mnt/cursos não está registrado' });
+		await expect(new DesktopStub().importCourseCover('course-1')).rejects.toThrow('Curso não encontrado.');
+		vi.mocked(invoke).mockRejectedValue({ code: 'invalid_cover', message: 'arquivo /mnt/segredo/capa.bmp' });
+		await expect(new DesktopStub().importCourseCover('course-1')).rejects.toThrow('A capa precisa ser PNG, JPEG ou WebP de até 4 MiB.');
+		vi.mocked(invoke).mockRejectedValue({ code: 'cover_unavailable', message: 'falha ao gravar em C:\\segredo' });
+		await expect(new DesktopStub().removeCourseCover('course-1')).rejects.toThrow('Não foi possível atualizar a capa do curso.');
+		vi.mocked(invoke).mockRejectedValue({ code: 'algo_desconhecido', message: 'CAMINHO privado /mnt/cursos' });
+		await expect(new DesktopStub().removeCourseCover('course-1')).rejects.toThrow('Não foi possível remover a capa do curso.');
+		vi.mocked(invoke).mockRejectedValue({ message: 'sem código /etc/shadow' });
+		await expect(new DesktopStub().importCourseCover('course-1')).rejects.toThrow('Não foi possível salvar a capa do curso.');
+	});
+	it('reports the update check as disabled on the desktop without touching fetch', async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+		const desktop: Transport = new DesktopStub();
+		await expect(desktop.checkUpdate(true)).resolves.toMatchObject({ enabled: false, available: false, error: null });
+		expect(fetchMock).not.toHaveBeenCalled();
+		expect(invoke).not.toHaveBeenCalled();
+		vi.unstubAllGlobals();
 	});
 });

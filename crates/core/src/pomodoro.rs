@@ -53,7 +53,11 @@ pub fn pomodoro_state(db: &Database, owner_id: &str) -> Result<PomodoroState> {
 }
 
 /// Inicia ou retoma uma sessão com a duração escolhida.
-pub fn start_pomodoro(db: &Database, owner_id: &str, duration_seconds: i64) -> Result<PomodoroState> {
+pub fn start_pomodoro(
+    db: &Database,
+    owner_id: &str,
+    duration_seconds: i64,
+) -> Result<PomodoroState> {
     validate_owner(owner_id)?;
     if !(60..=86_400).contains(&duration_seconds) {
         return Err(Error::InvalidPomodoroDuration { duration_seconds });
@@ -69,10 +73,16 @@ pub fn start_pomodoro(db: &Database, owner_id: &str, duration_seconds: i64) -> R
 }
 
 /// Pausa a sessão e limita o tempo decorrido à duração configurada.
-pub fn pause_pomodoro(db: &Database, owner_id: &str, elapsed_seconds: i64) -> Result<PomodoroState> {
+pub fn pause_pomodoro(
+    db: &Database,
+    owner_id: &str,
+    elapsed_seconds: i64,
+) -> Result<PomodoroState> {
     validate_owner(owner_id)?;
     if elapsed_seconds < 0 {
-        return Err(Error::InvalidStudyPosition { position_seconds: elapsed_seconds });
+        return Err(Error::InvalidStudyPosition {
+            position_seconds: elapsed_seconds,
+        });
     }
     db.connection().execute(
         "UPDATE pomodoro_state SET status = 'paused', elapsed_seconds = MIN(?2, duration_seconds), updated_at = ?3 WHERE owner_id = ?1",
@@ -92,7 +102,11 @@ pub fn reset_pomodoro(db: &Database, owner_id: &str) -> Result<PomodoroState> {
 }
 
 fn validate_owner(owner_id: &str) -> Result<()> {
-    if owner_id.trim().is_empty() { Err(Error::InvalidOwnerId) } else { Ok(()) }
+    if owner_id.trim().is_empty() {
+        Err(Error::InvalidOwnerId)
+    } else {
+        Ok(())
+    }
 }
 
 fn state_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<PomodoroState> {
@@ -119,10 +133,19 @@ mod tests {
         let state = start_pomodoro(&db, "a", 120).unwrap();
         assert_eq!(state.status, PomodoroStatus::Running);
         let state = pause_pomodoro(&db, "a", 300).unwrap();
-        assert_eq!((state.status, state.elapsed_seconds), (PomodoroStatus::Paused, 120));
-        assert_eq!(pomodoro_state(&db, "b").unwrap().status, PomodoroStatus::Idle);
+        assert_eq!(
+            (state.status, state.elapsed_seconds),
+            (PomodoroStatus::Paused, 120)
+        );
+        assert_eq!(
+            pomodoro_state(&db, "b").unwrap().status,
+            PomodoroStatus::Idle
+        );
         let state = reset_pomodoro(&db, "a").unwrap();
-        assert_eq!((state.status, state.elapsed_seconds, state.duration_seconds), (PomodoroStatus::Idle, 0, 120));
+        assert_eq!(
+            (state.status, state.elapsed_seconds, state.duration_seconds),
+            (PomodoroStatus::Idle, 0, 120)
+        );
     }
 
     #[test]
@@ -140,7 +163,13 @@ mod tests {
     #[test]
     fn rejects_out_of_range_duration_without_creating_state() {
         let db = Database::open_in_memory().unwrap();
-        assert!(matches!(start_pomodoro(&db, "a", 59), Err(Error::InvalidPomodoroDuration { .. })));
-        assert_eq!(pomodoro_state(&db, "a").unwrap().status, PomodoroStatus::Idle);
+        assert!(matches!(
+            start_pomodoro(&db, "a", 59),
+            Err(Error::InvalidPomodoroDuration { .. })
+        ));
+        assert_eq!(
+            pomodoro_state(&db, "a").unwrap().status,
+            PomodoroStatus::Idle
+        );
     }
 }

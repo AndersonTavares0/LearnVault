@@ -37,6 +37,16 @@ pub enum IpcErrorCode {
     MediaRemovalNeedsConfirmation,
     /// A remoção de mídia não pôde ser concluída.
     MediaRemovalUnavailable,
+    /// O curso informado não está registrado no aplicativo.
+    CourseNotFound,
+    /// A imagem escolhida para a capa não é PNG, JPEG ou WebP, ou excede o limite.
+    InvalidCover,
+    /// A capa do curso não pôde ser gravada nem removida.
+    CoverUnavailable,
+    /// A ordem informada não é uma permutação válida dos irmãos.
+    InvalidOrder,
+    /// A ordem manual do curso não pôde ser gravada nem removida.
+    OrderUnavailable,
 }
 
 /// Erro IPC serializável devolvido ao webview.
@@ -130,7 +140,10 @@ impl IpcError {
     }
 
     pub fn invalid_pomodoro_duration() -> Self {
-        Self { code: IpcErrorCode::InvalidPomodoroDuration, message: "duração do Pomodoro inválida" }
+        Self {
+            code: IpcErrorCode::InvalidPomodoroDuration,
+            message: "duração do Pomodoro inválida",
+        }
     }
 
     /// A remoção exige confirmação porque existe progresso associado.
@@ -146,6 +159,46 @@ impl IpcError {
         Self {
             code: IpcErrorCode::MediaRemovalUnavailable,
             message: "não foi possível remover a mídia",
+        }
+    }
+
+    /// O curso informado não está registrado no aplicativo.
+    pub fn course_not_found() -> Self {
+        Self {
+            code: IpcErrorCode::CourseNotFound,
+            message: "curso não encontrado",
+        }
+    }
+
+    /// A imagem escolhida para a capa não é PNG, JPEG ou WebP, ou excede o limite.
+    pub fn invalid_cover() -> Self {
+        Self {
+            code: IpcErrorCode::InvalidCover,
+            message: "a capa precisa ser PNG, JPEG ou WebP de até 4 MiB",
+        }
+    }
+
+    /// A capa do curso não pôde ser gravada nem removida.
+    pub fn cover_unavailable() -> Self {
+        Self {
+            code: IpcErrorCode::CoverUnavailable,
+            message: "não foi possível atualizar a capa do curso",
+        }
+    }
+
+    /// A ordem informada não é uma permutação válida dos irmãos.
+    pub fn invalid_order() -> Self {
+        Self {
+            code: IpcErrorCode::InvalidOrder,
+            message: "a ordem informada não é válida",
+        }
+    }
+
+    /// A ordem manual do curso não pôde ser gravada nem removida.
+    pub fn order_unavailable() -> Self {
+        Self {
+            code: IpcErrorCode::OrderUnavailable,
+            message: "não foi possível salvar a ordem do curso",
         }
     }
 }

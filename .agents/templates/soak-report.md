@@ -60,6 +60,6 @@ status HTTP), sem incluir segredos ou dados privados:
 
 ## Limites
 
-Este relatório não prova produção. O artefato é não assinado e não é o release Linux
-estável suportado; os tarballs Rust são o release suportado. O registro também não
-substitui a revisão das demais evidências e gates da Fase 5.
+Este relatório não prova produção. O artefato avaliado pode ser não assinado ou uma build de
+teste, e não substitui uma release publicada; as releases publicadas são as versões
+suportadas. O registro também não substitui a revisão das demais evidências do projeto.

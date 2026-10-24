@@ -61,22 +61,26 @@ pub struct StudyAnalytics {
 
 /// Reads private study totals for the supplied owner.
 pub fn study_analytics(db: &Database, owner_id: &str) -> Result<StudyAnalytics> {
-	validate_owner(owner_id)?;
-	db.connection().query_row(
-		"SELECT COUNT(*), COALESCE(SUM(s.position_seconds), 0),
+    validate_owner(owner_id)?;
+    db.connection()
+        .query_row(
+            "SELECT COUNT(*), COALESCE(SUM(s.position_seconds), 0),
 		        COALESCE(SUM(CASE WHEN s.completed <> 0 THEN 1 ELSE 0 END), 0), MAX(s.updated_at)
 		   FROM study_state s WHERE s.owner_id = ?1
 		    AND NOT EXISTS (SELECT 1 FROM media_removal r JOIN media m
 		                     ON m.library_id = r.library_id AND m.media_id = r.media_id
 		                    WHERE m.media_id = s.media_id)",
-		[owner_id],
-		|row| Ok(StudyAnalytics {
-			tracked_count: usize::try_from(row.get::<_, i64>(0)?).unwrap_or(usize::MAX),
-			total_position_seconds: row.get(1)?,
-			completed_count: usize::try_from(row.get::<_, i64>(2)?).unwrap_or(usize::MAX),
-			last_activity_at: row.get(3)?,
-		}),
-	).map_err(Error::from)
+            [owner_id],
+            |row| {
+                Ok(StudyAnalytics {
+                    tracked_count: usize::try_from(row.get::<_, i64>(0)?).unwrap_or(usize::MAX),
+                    total_position_seconds: row.get(1)?,
+                    completed_count: usize::try_from(row.get::<_, i64>(2)?).unwrap_or(usize::MAX),
+                    last_activity_at: row.get(3)?,
+                })
+            },
+        )
+        .map_err(Error::from)
 }
 
 /// Progresso de estudo de uma mídia para um dono.

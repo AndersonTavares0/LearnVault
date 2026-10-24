@@ -1,11 +1,14 @@
-# Distribuição e alvos de release
+# Distribuição e operações
 
-A implementação atual é o servidor Rust (`crates/server`) com a SPA SvelteKit canônica, resultado
-da reescrita aprovada no [ADR 0001](../architecture/adr/0001-reescrita-em-rust.md); o serviço Go foi
-removido na Fase 5. Docker é um adaptador de deploy para servidores, não um requisito de runtime
-nem o modelo principal de desenvolvimento.
+**Para quem é:** quem vai publicar, instalar ou operar o LearnVault. Se você vai desenvolver, leia
+[Getting-Started](../wiki/getting-started.md); se quer entender o produto, leia
+[Home](../wiki/home.md).
 
-## Matriz de releases
+**Resumo:** o LearnVault publica um instalador Windows para o desktop, um tarball Linux para o
+servidor e uma imagem OCI opcional. O Flatpak ainda não está pronto. O servidor Rust substituiu o
+serviço Go na Fase 5, e Docker é um adaptador de deploy, não um requisito de runtime.
+
+## O que está disponível hoje
 
 | Alvo | Artefato | Uso | Status |
 | --- | --- | --- | --- |
@@ -16,6 +19,26 @@ nem o modelo principal de desenvolvimento.
 
 Não há `.deb` nem `.rpm` como artefatos públicos nesta fase. O instalador Windows NSIS continua
 habilitado no release automático; o Flatpak não é construído nem publicado automaticamente.
+
+## Como escolher o caminho
+
+- **Windows, uso local:** use o instalador NSIS. Ele instala só para o usuário atual e não pede
+  senha de administrador.
+- **Linux, servidor:** use o tarball `learnvault-linux-<arch>.tar.gz`.
+- **Self-hosted com container:** use o Compose como opt-in explícito. A imagem é construída
+  localmente e não é publicada.
+- **Linux, desktop:** o Flatpak é o formato preferencial, mas ainda depende de build e smoke test no
+  sandbox.
+
+### Aviso manual de atualização
+
+Quando habilitado nas configurações, o servidor consulta a API pública de releases do GitHub por
+HTTPS e compara a tag estável com a versão local usando SemVer estrito. A consulta tem timeout de
+5 segundos e aceita no máximo 64 KiB de resposta; há cache em processo de uma hora, ignorado pelo
+botão de verificação manual. O resultado exige sessão autenticada e não é armazenado por caches
+HTTP. O link exibido é construído para o repositório oficial, sem confiar no `html_url` retornado
+pela API. Nenhum arquivo é baixado ou instalado automaticamente. Builds locais com versão
+`0.0.0` não consultam a API, pois não possuem versão de release para comparar.
 
 ### Uso do tarball Linux
 
@@ -37,7 +60,7 @@ demais artefatos, conforme a matriz do [ADR 0001](../architecture/adr/0001-reesc
 Ele instala somente para o usuário atual (`currentUser`), em
 `%LOCALAPPDATA%\LearnVault`, sem exigir senha de administrador. Os textos do instalador estão em
 português (Brasil) e inglês, com seletor de idioma, e o WebView2 ausente é baixado pelo próprio
-instalador (`downloadBootstrapper`) — a internet só é necessária nesse caso.
+instalador (`downloadBootstrapper`). A internet só é necessária nesse caso.
 
 Para gerar o instalador localmente no Windows, usando o mesmo comando do workflow de release (sem
 o override de versão):
@@ -67,7 +90,7 @@ somente leitura e nunca é copiada.
 | `%LOCALAPPDATA%\app.learnvault.desktop\` | dados internos do WebView2, mantidos pelo próprio Windows |
 
 Atualizar o aplicativo por cima preserva esses dados. Na desinstalação, o desinstalador exibe uma
-caixa de seleção desmarcada por padrão — "Remover dados do programa" no idioma português e "Delete
+caixa de seleção desmarcada por padrão: "Remover dados do programa" no idioma português e "Delete
 the application data" no inglês: sem marcá-la, os dados permanecem; marcada, os diretórios
 `%APPDATA%\app.learnvault.desktop` e `%LOCALAPPDATA%\app.learnvault.desktop` são removidos.
 Nenhum instalador copia a biblioteca física para os dados da aplicação ou para backups.
@@ -144,8 +167,8 @@ COMPOSE="docker compose --env-file deploy/compose/.env.example -f deploy/compose
 
 ## Validação experimental da imagem Rust (OCI)
 
-Enquanto a reescrita em Rust avança, `deploy/container/Containerfile` e
-`scripts/verify-rust-oci.sh` permitem validar localmente que o servidor Rust (`crates/server`)
+O `deploy/container/Containerfile` e o `scripts/verify-rust-oci.sh` permitem validar localmente que
+o servidor Rust (`crates/server`)
 compila com a SPA canônica e roda em um contêiner. O caminho self-hosted do Compose constrói
 essa imagem Rust localmente; ela continua experimental, não publicada nem assinada e não é um
 artefato de release. O CI e o workflow de release constroem o servidor Rust a partir do mesmo
@@ -169,8 +192,8 @@ CONTAINER_ENGINE=podman ./scripts/verify-rust-oci.sh
 - O servidor Rust ainda não possui interface de cache (`CACHE_DIR`); não há diretório de
   cache para validar nesta fase.
 - Não faz parte do CI e não substitui `cargo fmt`, `cargo clippy` e `cargo test`.
-- A referência de imagem do Quadlet (`localhost/learnvault:latest`) continua sem origem
-  resolvida até a Fase 5.
+- A referência de imagem do Quadlet (`localhost/learnvault:latest`) ainda não tem uma origem
+  publicada; a imagem precisa ser construída localmente.
 
 ## Container Rust no Compose (opt-in explícito)
 
@@ -235,6 +258,56 @@ em `courses.json`, ao lado do banco. As pastas de curso permanecem externas e so
 todas as plataformas. Instaladores nunca devem copiar as pastas de curso para o diretório da
 aplicação ou para backups.
 
+### Credenciais iniciais por arquivo de segredo
+
+O bootstrap aceita `ADMIN_USERNAME` e `ADMIN_PASSWORD` diretamente, por compatibilidade, ou
+`ADMIN_USERNAME_FILE` e `ADMIN_PASSWORD_FILE`, apontando para arquivos de segredo. Para cada
+credencial, configure somente uma das duas origens; definir ambas é erro de configuração. Os arquivos
+devem ser UTF-8 e não vazios. Um único `LF` final (e o `CR` que o precede) é removido; outros espaços
+e quebras são preservados. Erros de leitura são genéricos e não exibem o valor nem o caminho.
+
+Essas credenciais são usadas apenas para criar o administrador quando o banco ainda não tem um. Não
+alteram uma conta existente. Sem credenciais configuradas, o fluxo atual de primeiro acesso permanece
+inalterado. O servidor não verifica o modo/permissões do arquivo: o operador deve restringir a leitura
+ao usuário/grupo do serviço e evitar diretórios ou backups acessíveis a outros usuários. O arquivo é
+lido na inicialização; para trocar credenciais existentes, use o fluxo autenticado de alteração de
+credenciais.
+
+#### Compose com secrets locais
+
+O arquivo de override `deploy/compose/compose.secrets.yaml` monta secrets de arquivos locais em
+`/run/secrets/` e aponta as variáveis `*_FILE` para eles. Crie `deploy/compose/secrets/admin_username`
+e `admin_password` fora do controle de versão (a pasta já está ignorada pelo Git), com conteúdo
+sintético apenas em testes. Em um host Linux, restrinja os arquivos ao UID não-root `10001`, usado
+pelo container, por exemplo com modo `0400`. O conteúdo não deve ser colocado em argumentos de
+comando, shell history ou arquivo `.env`.
+
+```sh
+docker compose --env-file deploy/compose/.env.example \
+  -f deploy/compose/compose.yaml \
+  -f deploy/compose/compose.secrets.yaml config
+docker compose --env-file deploy/compose/.env.example \
+  -f deploy/compose/compose.yaml \
+  -f deploy/compose/compose.secrets.yaml up -d --build
+```
+
+O override limpa as variáveis diretas do `.env.example`, evitando conflito com `*_FILE`. Os arquivos
+locais são bind mounts de segredo do Compose; proteja também a origem no host. Não adicione esses
+arquivos, valores reais ou caminhos privados a commits.
+
+#### Quadlet com credenciais systemd
+
+O exemplo `deploy/quadlet/learnvault.container` usa `LoadCredential=` e disponibiliza os arquivos
+protegidos pelo systemd ao processo via `%d/admin_username` e `%d/admin_password`. Coloque as fontes
+em `%h/stacks/learnvault/secrets/`, restrinja-as ao usuário do serviço (por exemplo, modo `0600`) e
+remova `ADMIN_USERNAME`/`ADMIN_PASSWORD` antigos de `learnvault.env`; mantenha ali apenas as demais
+configurações. O systemd prepara um diretório de credenciais privado para cada execução do serviço.
+
+Em instalações que preferem o armazenamento nativo de secrets do Podman, Quadlet também aceita
+`Secret=` (equivalente a `podman --secret`, montado em `/run/secrets/<nome>` por padrão). Nesse caso,
+use `ADMIN_USERNAME_FILE=/run/secrets/<nome>` e `ADMIN_PASSWORD_FILE=/run/secrets/<nome>` e não
+configure as variáveis diretas correspondentes.
+
 ## Proteção do listener HTTP
 
 O timeout de 30 segundos do serviço Rust é aplicado depois que a requisição HTTP foi aceita pelo
@@ -297,3 +370,62 @@ sendo o release suportado. Despache-o informando a versão, o run do build e a t
 gh workflow run "Rust server RC publish (draft)" --ref main \
   -f version=<v> -f run_id=<rust-server-rc-run-id> -f tag=rust-rc-<v>
 ```
+
+## Verificação de atualização
+
+O servidor Rust expõe `GET /api/update`, uma consulta autenticada (mesma proteção das rotas de
+estudo: sessão válida e sem troca de credenciais pendente) que informa se há uma release publicada
+mais nova. A resposta é sempre `private, no-store` e tem o formato:
+
+```json
+{ "current": "0.3.0", "enabled": true, "available": false, "latest": null, "releasedAt": null, "url": null, "checkedAt": "1760702400", "error": null }
+```
+
+- `current` é a versão em execução; `enabled` indica se a checagem está ligada.
+- `available` é `true` apenas quando a release publicada é mais nova que a versão em execução.
+  Nesse caso, `latest` traz a versão (sem o `v` inicial), `releasedAt` a data de publicação e
+  `url` o link da release. Fora disso, esses três campos vêm nulos.
+- Rascunhos (`draft`) e pré-lançamentos (`prerelease`) são ignorados: o canal estável só anuncia
+  releases publicados. A comparação é numérica por componente (`0.10.0` > `0.9.0`), com o `v`
+  inicial opcional e um pré-lançamento sempre abaixo do lançamento correspondente.
+- `?force=1` (ou `?force=true`) ignora o intervalo mínimo de cache. É o que o botão manual usa.
+
+A checagem acontece **no servidor local**, nunca no navegador. O servidor faz uma única
+requisição de saída, por HTTPS, para um destino fixo no código (não há URL vinda da requisição,
+o que evita SSRF):
+
+```text
+GET https://api.github.com/repos/AndersonTavares0/LearnVault/releases/latest
+Accept: application/vnd.github+json
+User-Agent: learnvault/<versão em execução>
+```
+
+O orçamento de rede é de 5 segundos. Uma falha de rede **nunca** vira erro HTTP: a resposta
+continua `200`, com `available: false`, `latest: null` e um `error` curto em português, e o
+último resultado bem-sucedido permanece em cache. Estar offline não quebra nem trava a tela de
+Configurações.
+
+Checagens externas respeitam um intervalo mínimo em processo, de **3600 segundos** (uma hora) por
+padrão, e requisições concorrentes são coalescidas em uma única chamada ao GitHub.
+
+### Como desligar
+
+- Flag de linha de comando: `--no-update-check`.
+- Variável de ambiente: `LEARNVAULT_UPDATE_CHECK=off` (aceita `off`/`false` para desligar e
+  `on`/`true` para ligar; qualquer outro valor é rejeitado). A flag tem precedência sobre a
+  variável.
+
+Desligada, a checagem responde com `enabled: false` e não faz **nenhuma** chamada de rede.
+
+### Sem download nem instalação automática
+
+O produto apenas **verifica e avisa**: a SPA mostra a versão atual e, quando há algo novo, o
+número da release e um link para a página do GitHub. Nada é baixado, verificado por checksum,
+instalado ou aplicado automaticamente. A atualização continua manual, pelo mesmo caminho de
+distribuição descrito neste documento (tarball Linux, instalador Windows ou Flatpak).
+
+## Próximos passos
+
+- [[Getting-Started]] para o ambiente de desenvolvimento.
+- [[Architecture]] para entender os limites do sistema.
+- [[Development-and-Governance]] para o fluxo de release e checks.

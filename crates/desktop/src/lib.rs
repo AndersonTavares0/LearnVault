@@ -17,6 +17,11 @@
 //! [`media`]). A entrega é por `media_id` opaco, justificada apenas no catálogo, com allowlist
 //! de tipo de conteúdo, suporte a faixas HTTP e limite explícito por resposta.
 //!
+//! As capas personalizadas dos cursos usam um segundo protocolo (`learnvault-cover://...`,
+//! ver [`covers`]): a imagem escolhida pelo usuário em um seletor nativo é validada pelos
+//! bytes iniciais, gravada atomicamente no diretório de dados do aplicativo e entregue por
+//! identidade opaca de curso, sem que nenhum caminho cruze o webview.
+//!
 //! Cada curso é escolhido por um seletor nativo acionado pelo Rust (`tauri-plugin-dialog`,
 //! interno e não concedido ao webview) e persistido de forma atômica e versionada no
 //! diretório de configuração do aplicativo — nunca dentro das pastas de curso nem no
@@ -39,29 +44,39 @@
 pub mod command;
 pub mod config;
 pub mod courses;
+pub mod covers;
 pub mod dto;
 pub mod error;
 pub mod media;
+pub mod ordering;
 pub mod state;
 pub mod study;
 
 pub use command::{
-    catalog, desktop_catalog, desktop_import_course, desktop_media_removal_impact,
-    desktop_recent_study, desktop_record_position, desktop_remove_course, desktop_remove_media,
-    desktop_rescan, desktop_set_completed, desktop_study_progress, desktop_study_summary,
-    desktop_study_analytics,
-    desktop_list_notes, desktop_list_all_notes, desktop_create_note, desktop_update_note, desktop_delete_note,
-    desktop_pomodoro, desktop_start_pomodoro, desktop_pause_pomodoro, desktop_reset_pomodoro,
+    catalog, catalog_with_orders, desktop_catalog, desktop_create_note, desktop_delete_note,
+    desktop_import_course, desktop_import_course_cover, desktop_list_all_notes, desktop_list_notes,
+    desktop_media_removal_impact, desktop_pause_pomodoro, desktop_pomodoro, desktop_recent_study,
+    desktop_record_position, desktop_remove_course, desktop_remove_course_cover,
+    desktop_remove_media, desktop_rescan, desktop_reset_course_order, desktop_reset_pomodoro,
+    desktop_set_completed, desktop_set_course_order, desktop_start_pomodoro,
+    desktop_study_analytics, desktop_study_progress, desktop_study_summary, desktop_update_note,
 };
 pub use config::{DATABASE_FILE_NAME, DesktopConfigDto, database_path};
 pub use courses::{
     CONFIG_FILE_NAME, CONFIG_VERSION, CourseEntry, LibraryError, load_courses, store_courses,
 };
+pub use covers::{
+    COVER_HOST, COVER_SCHEME, COVERS_DIR_NAME, CoverError, CoverMethod, CoverRejection,
+    CoverRequest, ImageType, MAX_COVER_BYTES, RawCoverRequest, detect_image_type,
+    parse_cover_request, valid_course_id,
+};
 pub use dto::{
-    CatalogDto, CatalogFileDto, CatalogNodeDto, CourseStudySummaryDto, MediaRemovalImpactDto,
-    MediaRemovalOutcomeDto, RecentStudyDto, RescanSummaryDto, StudyProgressDto,
+    CatalogDto, CatalogFileDto, CatalogNodeDto, CourseStudySummaryDto, CoverDto, CoverRemovalDto,
+    MediaRemovalImpactDto, MediaRemovalOutcomeDto, RecentStudyDto, RescanSummaryDto,
+    StudyProgressDto,
 };
 pub use error::{IpcError, IpcErrorCode};
+pub use ordering::{CourseOrders, OrderError, order_path};
 pub use state::{DesktopState, RescanGuard};
 pub use study::{DEFAULT_RECENT_LIMIT, LOCAL_OWNER_ID};
 
@@ -86,7 +101,7 @@ pub fn run() {
             app.manage(state);
             Ok(())
         });
-    media::register(builder)
+    covers::register(media::register(builder))
         .invoke_handler(tauri::generate_handler![
             command::desktop_catalog,
             command::desktop_import_course,
@@ -108,7 +123,11 @@ pub fn run() {
             command::desktop_pause_pomodoro,
             command::desktop_reset_pomodoro,
             command::desktop_media_removal_impact,
-            command::desktop_remove_media
+            command::desktop_remove_media,
+            command::desktop_import_course_cover,
+            command::desktop_remove_course_cover,
+            command::desktop_set_course_order,
+            command::desktop_reset_course_order
         ])
         .run(tauri::generate_context!())
         .expect("falha ao executar o aplicativo desktop do LearnVault");

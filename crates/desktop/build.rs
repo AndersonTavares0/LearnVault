@@ -3,9 +3,11 @@
 //! `try_build` lê `tauri.conf.json`, resolve o ACL a partir de `capabilities/` e, com
 //! [`tauri_build::AppManifest`], gera as permissões `allow-<comando>` dos comandos IPC do
 //! aplicativo (`desktop_catalog`, `desktop_import_course`, `desktop_remove_course`,
-//! `desktop_rescan`, `desktop_study_progress`, `desktop_record_position`,
-//! `desktop_set_completed` e `desktop_recent_study`). Ele não abre sockets nem depende de
-//! display; a validação de runtime pertence ao `tauri dev`/`tauri build`.
+//! `desktop_import_course_cover`, `desktop_remove_course_cover`, `desktop_rescan`,
+//! `desktop_study_progress`, `desktop_record_position`, `desktop_set_completed` e
+//! `desktop_recent_study`, `desktop_set_course_order` e `desktop_reset_course_order`). Ele
+//! não abre sockets nem depende de display; a validação de runtime pertence ao
+//! `tauri dev`/`tauri build`.
 
 fn main() {
     let attributes =
@@ -13,6 +15,8 @@ fn main() {
             "desktop_catalog",
             "desktop_import_course",
             "desktop_remove_course",
+            "desktop_import_course_cover",
+            "desktop_remove_course_cover",
             "desktop_rescan",
             "desktop_study_progress",
             "desktop_record_position",
@@ -20,6 +24,8 @@ fn main() {
             "desktop_recent_study",
             "desktop_media_removal_impact",
             "desktop_remove_media",
+            "desktop_set_course_order",
+            "desktop_reset_course_order",
         ]));
     tauri_build::try_build(attributes).expect("falha ao executar o tauri-build do LearnVault");
 }

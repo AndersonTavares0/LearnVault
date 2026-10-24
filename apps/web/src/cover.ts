@@ -17,6 +17,13 @@ export type CourseCover = {
 	to: string;
 	/** Iniciais exibidas na capa. */
 	monogram: string;
+	/**
+	 * Ângulo do gradiente em graus, determinístico por título.
+	 *
+	 * Varia entre 95° e 200° para que cada capa tenha uma inclinação própria e legível,
+	 * sem depender de aleatoriedade nem de ordem de renderização.
+	 */
+	angle: number;
 };
 
 /** Hash FNV-1a de 32 bits, estável entre execuções. */
@@ -47,14 +54,34 @@ export function courseMonogram(title: string): string {
 	return initials || '?';
 }
 
+/** Fonte efetiva da capa, na ordem de precedência definida na ADR 0002. */
+export type CourseCoverSource = 'manual' | 'thumbnail' | 'generated';
+
+/**
+ * Resolve a capa a exibir: capa personalizada tem precedência, seguida da miniatura
+ * automática e, como fallback, da capa gerada pelo título. Valores vazios contam como
+ * ausentes, então a futura fonte de upload (issue #237) só precisa informar uma URL.
+ */
+export function selectCourseCoverSource(input: {
+	manualCoverUrl?: string | null;
+	thumbnailUrl?: string | null;
+}): CourseCoverSource {
+	if (input.manualCoverUrl) return 'manual';
+	if (input.thumbnailUrl) return 'thumbnail';
+	return 'generated';
+}
+
 /** Capa determinística do curso. */
 export function courseCover(title: string): CourseCover {
 	const hash = hashTitle(normalize(title).toLowerCase());
 	const hue = HUES[hash % HUES.length];
 	const shift = 8 + (hash % 8);
+	// Bits altos do hash alimentam o ângulo, para que ele varie mesmo quando o matiz repete.
+	const angle = 95 + ((hash >>> 8) % 106);
 	return {
 		from: `hsl(${hue} 26% 31%)`,
 		to: `hsl(${(hue + shift) % 360} 32% 17%)`,
-		monogram: courseMonogram(title)
+		monogram: courseMonogram(title),
+		angle
 	};
 }

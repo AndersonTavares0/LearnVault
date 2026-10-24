@@ -6,8 +6,8 @@
 
 use learnvault_core::paths::relative_path_key;
 use learnvault_core::{
-    Database, Error, KeyMode, MAX_RECENT_STUDY, course_study_summary, recent_study, study_analytics,
-    record_position, set_completed, study_progress,
+    Database, Error, KeyMode, MAX_RECENT_STUDY, course_study_summary, recent_study,
+    record_position, set_completed, study_analytics, study_progress,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -393,16 +393,30 @@ fn course_study_summary_is_owner_scoped_and_ignores_unavailable_or_removed_media
 #[test]
 fn analytics_are_owner_scoped_and_exclude_removed_media() -> TestResult {
     let db = library_db()?;
-    for media in ["m1", "m2", "m3"] { insert_media(&db, media, "available")?; }
+    for media in ["m1", "m2", "m3"] {
+        insert_media(&db, media, "available")?;
+    }
     seed(&db, OWNER, "m1", 30, true, 100)?;
     seed(&db, OWNER, "m2", 20, false, 200)?;
     seed(&db, OTHER, "m3", 90, true, 300)?;
-    db.connection().execute("INSERT INTO media_removal (library_id, media_id, removed_at) VALUES (?1, ?2, ?3)", rusqlite::params![LIB, "m2", 400])?;
-    assert_eq!(study_analytics(&db, OWNER)?, learnvault_core::StudyAnalytics {
-        tracked_count: 1, completed_count: 1, total_position_seconds: 30, last_activity_at: Some(100),
-    });
+    db.connection().execute(
+        "INSERT INTO media_removal (library_id, media_id, removed_at) VALUES (?1, ?2, ?3)",
+        rusqlite::params![LIB, "m2", 400],
+    )?;
+    assert_eq!(
+        study_analytics(&db, OWNER)?,
+        learnvault_core::StudyAnalytics {
+            tracked_count: 1,
+            completed_count: 1,
+            total_position_seconds: 30,
+            last_activity_at: Some(100),
+        }
+    );
     assert_eq!(study_analytics(&db, OTHER)?.tracked_count, 1);
-    assert!(matches!(study_analytics(&db, ""), Err(Error::InvalidOwnerId)));
+    assert!(matches!(
+        study_analytics(&db, ""),
+        Err(Error::InvalidOwnerId)
+    ));
     Ok(())
 }
 

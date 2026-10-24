@@ -171,7 +171,11 @@ pub(crate) fn store_registry(
 }
 
 /// Troca o temporário pelo destino usando apenas APIs padrão.
-fn replace_file(source: &Path, dest: &Path) -> std::io::Result<()> {
+///
+/// Compartilhado com o armazenamento de capas ([`crate::covers`]) para que a troca atômica
+/// de um arquivo no diretório de dados tenha uma única implementação, com o mesmo cuidado
+/// no Windows (a API padrão não substitui um destino existente).
+pub(crate) fn replace_file(source: &Path, dest: &Path) -> std::io::Result<()> {
     #[cfg(windows)]
     {
         match fs::remove_file(dest) {

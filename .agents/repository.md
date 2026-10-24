@@ -11,10 +11,6 @@ that area.
 
 ## Product and architecture
 
-- LearnVault is a self-hosted study library. The approved architecture is a Rust
-  workspace with a shared `core`, an Axum server, a Tauri 2 desktop app, and SQLite.
-- The repository is a typed monorepo: Rust code in `crates/`, and the SPA in
-  `apps/web/` as a pnpm workspace member.
 - Read `docs/architecture/adr/0001-reescrita-em-rust.md` before architectural work.
 - Preserve the clean-room product policy: do not copy another product's code,
   assets, brand, proprietary text, or pixel-level layout.

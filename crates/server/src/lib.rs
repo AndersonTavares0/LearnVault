@@ -8,13 +8,16 @@ mod auth;
 mod catalog;
 mod config;
 mod courses;
+mod covers;
 mod health;
 mod media;
 mod notes;
+mod ordering;
 mod spa;
 mod state;
 mod stream;
 mod study;
+mod update;
 
 pub use auth::{
     AuthError, generate_session_token, hash_password, hash_session_token,
@@ -68,6 +71,17 @@ pub fn build_router(state: AppState) -> Router {
             "/api/admin/courses/{id}",
             axum::routing::delete(courses::remove),
         )
+        .route(
+            "/api/admin/courses/{id}/cover",
+            axum::routing::put(covers::put_cover).delete(covers::delete_cover),
+        )
+        .route(
+            "/api/admin/courses/{id}/order",
+            axum::routing::put(ordering::put_order)
+                .delete(ordering::reset_order)
+                .layer(DefaultBodyLimit::max(catalog::ORDER_BODY_LIMIT)),
+        )
+        .route("/api/courses/{id}/cover", get(covers::get_cover))
         .route("/api/admin/media/{id}/impact", get(media::impact))
         .route(
             "/api/admin/media/{id}",
@@ -76,7 +90,13 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/media", get(media::media).head(media::media))
         .route("/api/study/recent", get(study::recent))
         .route("/api/study/analytics", get(study::analytics))
-        .route("/api/study/pomodoro", get(study::pomodoro).post(study::start_pomodoro).put(study::pause_pomodoro).delete(study::reset_pomodoro))
+        .route(
+            "/api/study/pomodoro",
+            get(study::pomodoro)
+                .post(study::start_pomodoro)
+                .put(study::pause_pomodoro)
+                .delete(study::reset_pomodoro),
+        )
         .route(
             "/api/study/notes",
             get(notes::list)
@@ -95,6 +115,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/study/position", post(study::record_position))
         .route("/api/study/completed", post(study::set_completed))
         .route("/api/study/capabilities", get(study::capabilities))
+        .route("/api/update", get(update::update))
         .fallback(spa::serve)
         .layer(DefaultBodyLimit::max(8 * 1024))
         .layer(map_response(move |response| {
@@ -158,7 +179,9 @@ async fn security_headers(
         csp.push_str(hash);
         csp.push('\'');
     }
-	csp.push_str("; img-src 'self' data: blob:; media-src 'self' data: blob:; frame-ancestors 'none'");
+    csp.push_str(
+        "; img-src 'self' data: blob:; media-src 'self' data: blob:; frame-ancestors 'none'",
+    );
     // Os hashes são base64 por construção, então a conversão é infalível na
     // prática; ainda assim, prefira responder sem CSP a travar o worker.
     if let Ok(csp) = csp.parse() {
@@ -284,6 +307,9 @@ mod tests {
             temp.path().join("learnvault.sqlite").to_str().unwrap(),
             "--library-root",
             temp.path().to_str().unwrap(),
+            // Nenhum teste de rota pode sair para a rede: a verificação de atualização
+            // fica desligada por padrão nas fixtures.
+            "--no-update-check",
         ])
         .expect("configuração de teste válida");
         config.admin_username = Some("admin".to_owned());
@@ -329,6 +355,64 @@ mod tests {
                 .and_then(|value| value.to_str().ok()),
             Some("private, no-store")
         );
+    }
+
+    #[tokio::test]
+    async fn update_endpoint_requires_authentication() {
+        let temp = tempfile::tempdir().unwrap();
+        let app = build_router(AppState::new(config_fixture(&temp)));
+
+        let response = app
+            .oneshot(Request::get("/api/update").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            response
+                .headers()
+                .get("cache-control")
+                .and_then(|value| value.to_str().ok()),
+            Some("private, no-store")
+        );
+    }
+
+    #[tokio::test]
+    async fn update_endpoint_reports_the_check_as_disabled_without_network() {
+        let temp = tempfile::tempdir().unwrap();
+        let state = AppState::initialize(config_fixture(&temp)).await.unwrap();
+        let app = build_router(state);
+        let cookie = media_cookie(&app).await;
+
+        let response = app
+            .oneshot(
+                Request::get("/api/update")
+                    .header("cookie", cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()["content-type"], "application/json");
+        assert_eq!(
+            response
+                .headers()
+                .get("cache-control")
+                .and_then(|value| value.to_str().ok()),
+            Some("private, no-store")
+        );
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["current"], VERSION);
+        assert_eq!(json["enabled"], false);
+        assert_eq!(json["available"], false);
+        assert_eq!(json["latest"], serde_json::Value::Null);
+        assert_eq!(json["releasedAt"], serde_json::Value::Null);
+        assert_eq!(json["url"], serde_json::Value::Null);
+        assert_eq!(json["checkedAt"], serde_json::Value::Null);
+        assert_eq!(json["error"], serde_json::Value::Null);
     }
 
     #[tokio::test]
@@ -976,5 +1060,428 @@ mod tests {
             );
         }
         drop(idle_responses);
+    }
+
+    fn png_cover() -> Vec<u8> {
+        vec![0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0]
+    }
+
+    fn jpeg_cover() -> Vec<u8> {
+        vec![0xFF, 0xD8, 0xFF, 0xE0, 0, 0x10, b'J', b'F', b'I', b'F', 0]
+    }
+
+    fn webp_cover() -> Vec<u8> {
+        let mut bytes = b"RIFF".to_vec();
+        bytes.extend_from_slice(&[0x20, 0, 0, 0]);
+        bytes.extend_from_slice(b"WEBP");
+        bytes.push(0);
+        bytes
+    }
+
+    #[tokio::test]
+    async fn cover_endpoints_require_authentication() {
+        let (app, _temp, _state) = media_app().await;
+        for request in [
+            Request::put("/api/admin/courses/library-1/cover")
+                .header("origin", "http://localhost")
+                .body(Body::from(png_cover()))
+                .unwrap(),
+            Request::get("/api/courses/library-1/cover")
+                .body(Body::empty())
+                .unwrap(),
+            Request::delete("/api/admin/courses/library-1/cover")
+                .header("origin", "http://localhost")
+                .body(Body::empty())
+                .unwrap(),
+        ] {
+            let response = app.clone().oneshot(request).await.unwrap();
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        }
+    }
+
+    #[tokio::test]
+    async fn cover_upload_is_stored_served_in_the_catalog_and_removed() {
+        let (app, _temp, _state) = media_app().await;
+        let cookie = media_cookie(&app).await;
+
+        let put = app
+            .clone()
+            .oneshot(
+                Request::put("/api/admin/courses/library-1/cover")
+                    .header("origin", "http://localhost")
+                    .header("cookie", &cookie)
+                    .header("content-type", "image/png")
+                    .body(Body::from(png_cover()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(put.status(), StatusCode::OK);
+        assert_eq!(put.headers()["cache-control"], "private, no-store");
+        let put_json: serde_json::Value =
+            serde_json::from_slice(&put.into_body().collect().await.unwrap().to_bytes()).unwrap();
+        assert!(
+            put_json["cover_version"].is_i64(),
+            "a resposta expõe a versão da capa: {put_json}"
+        );
+
+        let get = app
+            .clone()
+            .oneshot(
+                Request::get("/api/courses/library-1/cover")
+                    .header("cookie", &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(get.status(), StatusCode::OK);
+        assert_eq!(get.headers()["content-type"], "image/png");
+        assert_eq!(get.headers()["cache-control"], "private, no-store");
+        assert_eq!(
+            get.into_body().collect().await.unwrap().to_bytes().to_vec(),
+            png_cover()
+        );
+
+        // O catálogo expõe a versão da capa para a SPA compor a URL `?v=`.
+        let catalog: serde_json::Value = serde_json::from_slice(
+            &app.clone()
+                .oneshot(
+                    Request::get("/api/catalog")
+                        .header("cookie", &cookie)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap()
+                .into_body()
+                .collect()
+                .await
+                .unwrap()
+                .to_bytes(),
+        )
+        .unwrap();
+        let node = catalog["categories"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|node| node["course_id"] == "library-1")
+            .unwrap();
+        assert!(node["cover_version"].is_i64(), "{node}");
+
+        let delete = app
+            .clone()
+            .oneshot(
+                Request::delete("/api/admin/courses/library-1/cover")
+                    .header("origin", "http://localhost")
+                    .header("cookie", &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(delete.status(), StatusCode::OK);
+        let delete_json: serde_json::Value =
+            serde_json::from_slice(&delete.into_body().collect().await.unwrap().to_bytes())
+                .unwrap();
+        assert_eq!(delete_json["removed"], true);
+
+        let missing = app
+            .clone()
+            .oneshot(
+                Request::get("/api/courses/library-1/cover")
+                    .header("cookie", &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+
+        let delete_again = app
+            .oneshot(
+                Request::delete("/api/admin/courses/library-1/cover")
+                    .header("origin", "http://localhost")
+                    .header("cookie", cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(delete_again.status(), StatusCode::OK);
+        let json: serde_json::Value =
+            serde_json::from_slice(&delete_again.into_body().collect().await.unwrap().to_bytes())
+                .unwrap();
+        assert_eq!(json["removed"], false);
+    }
+
+    #[tokio::test]
+    async fn cover_upload_serves_the_detected_content_type() {
+        let (app, _temp, _state) = media_app().await;
+        let cookie = media_cookie(&app).await;
+
+        for (bytes, expected) in [(jpeg_cover(), "image/jpeg"), (webp_cover(), "image/webp")] {
+            let put = app
+                .clone()
+                .oneshot(
+                    Request::put("/api/admin/courses/library-1/cover")
+                        .header("origin", "http://localhost")
+                        .header("cookie", &cookie)
+                        .body(Body::from(bytes))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(put.status(), StatusCode::OK);
+            let get = app
+                .clone()
+                .oneshot(
+                    Request::get("/api/courses/library-1/cover")
+                        .header("cookie", &cookie)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(get.status(), StatusCode::OK);
+            assert_eq!(get.headers()["content-type"], expected);
+        }
+    }
+
+    #[tokio::test]
+    async fn cover_upload_rejects_unsupported_and_oversized_payloads() {
+        let (app, _temp, _state) = media_app().await;
+        let cookie = media_cookie(&app).await;
+
+        let unsupported = app
+            .clone()
+            .oneshot(
+                Request::put("/api/admin/courses/library-1/cover")
+                    .header("origin", "http://localhost")
+                    .header("cookie", &cookie)
+                    .body(Body::from(b"not an image".to_vec()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(unsupported.status(), StatusCode::UNSUPPORTED_MEDIA_TYPE);
+
+        let oversized = app
+            .clone()
+            .oneshot(
+                Request::put("/api/admin/courses/library-1/cover")
+                    .header("origin", "http://localhost")
+                    .header("cookie", &cookie)
+                    .body(Body::from(vec![b'x'; crate::covers::MAX_COVER_BYTES + 1]))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(oversized.status(), StatusCode::PAYLOAD_TOO_LARGE);
+
+        // Nenhuma das duas tentativas pode ter gravado uma capa.
+        let get = app
+            .oneshot(
+                Request::get("/api/courses/library-1/cover")
+                    .header("cookie", cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(get.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn cover_mutations_require_same_origin_and_a_known_course() {
+        let (app, _temp, _state) = media_app().await;
+        let cookie = media_cookie(&app).await;
+
+        let no_origin = app
+            .clone()
+            .oneshot(
+                Request::put("/api/admin/courses/library-1/cover")
+                    .header("cookie", &cookie)
+                    .body(Body::from(png_cover()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(no_origin.status(), StatusCode::FORBIDDEN);
+
+        // `unknown-course` não existe; `%2e%2e` e `a%2fb` decodificam para segmentos
+        // inseguros e são recusados como se o curso fosse desconhecido, sem revelar nada.
+        for id in ["unknown-course", "%2e%2e", "a%2fb"] {
+            let put = app
+                .clone()
+                .oneshot(
+                    Request::put(format!("/api/admin/courses/{id}/cover"))
+                        .header("origin", "http://localhost")
+                        .header("cookie", &cookie)
+                        .body(Body::from(png_cover()))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(put.status(), StatusCode::NOT_FOUND, "put {id}");
+
+            let get = app
+                .clone()
+                .oneshot(
+                    Request::get(format!("/api/courses/{id}/cover"))
+                        .header("cookie", &cookie)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(get.status(), StatusCode::NOT_FOUND, "get {id}");
+
+            let delete = app
+                .clone()
+                .oneshot(
+                    Request::delete(format!("/api/admin/courses/{id}/cover"))
+                        .header("origin", "http://localhost")
+                        .header("cookie", &cookie)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(delete.status(), StatusCode::NOT_FOUND, "delete {id}");
+        }
+    }
+
+    #[tokio::test]
+    async fn cover_upload_rejects_when_blocking_capacity_is_saturated() {
+        let (app, _temp, state) = media_app().await;
+        let cookie = media_cookie(&app).await;
+        let _permits: Vec<_> = std::iter::from_fn(|| state.try_acquire_blocking_task()).collect();
+
+        let response = app
+            .oneshot(
+                Request::put("/api/admin/courses/library-1/cover")
+                    .header("origin", "http://localhost")
+                    .header("cookie", cookie)
+                    .body(Body::from(png_cover()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    /// Sessão de um usuário comum (não administrador), criada direto no banco: não existe
+    /// caminho de API para criar um leitor, e o objetivo do teste é a autorização da capa.
+    async fn reader_cookie(state: &AppState) -> String {
+        let token = "token-de-leitor-para-testes-de-capa";
+        let mut database = state.database.lock().await;
+        database
+            .connection()
+            .execute(
+                "INSERT INTO user (user_id, username, password_hash, is_admin, created_at, must_change_credentials)
+                 VALUES ('usr-reader', 'reader', 'phc-placeholder', 0, 0, 0)",
+                [],
+            )
+            .unwrap();
+        learnvault_core::create_session(
+            &mut database,
+            &super::hash_session_token(token),
+            "usr-reader",
+            i64::MAX,
+        )
+        .unwrap();
+        drop(database);
+        // Mesmo nome do cookie de sessão do servidor (`auth::COOKIE_NAME`).
+        format!("learnvault_session={token}")
+    }
+
+    #[tokio::test]
+    async fn cover_reads_are_authenticated_and_mutations_are_admin_only() {
+        let (app, _temp, state) = media_app().await;
+        let reader = reader_cookie(&state).await;
+
+        let put = app
+            .clone()
+            .oneshot(
+                Request::put("/api/admin/courses/library-1/cover")
+                    .header("origin", "http://localhost")
+                    .header("cookie", &reader)
+                    .body(Body::from(png_cover()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(put.status(), StatusCode::FORBIDDEN);
+        assert_eq!(
+            put.headers()
+                .get("cache-control")
+                .and_then(|value| value.to_str().ok()),
+            Some("private, no-store")
+        );
+
+        let delete = app
+            .clone()
+            .oneshot(
+                Request::delete("/api/admin/courses/library-1/cover")
+                    .header("origin", "http://localhost")
+                    .header("cookie", &reader)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(delete.status(), StatusCode::FORBIDDEN);
+
+        // A leitura é liberada para qualquer usuário autenticado; sem capa, é 404.
+        let get = app
+            .oneshot(
+                Request::get("/api/courses/library-1/cover")
+                    .header("cookie", reader)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(get.status(), StatusCode::NOT_FOUND);
+
+        // O leitor não conseguiu gravar nada.
+        assert!(
+            super::covers::cover_version(
+                &super::covers::covers_dir(&state.config.database_path),
+                "library-1",
+            )
+            .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn cover_upload_requires_settled_credentials() {
+        let (app, _temp, state) = media_app().await;
+        {
+            let database = state.database.lock().await;
+            database
+                .connection()
+                .execute("UPDATE user SET must_change_credentials = 1", [])
+                .unwrap();
+        }
+        let cookie = media_cookie(&app).await;
+
+        let response = app
+            .oneshot(
+                Request::put("/api/admin/courses/library-1/cover")
+                    .header("origin", "http://localhost")
+                    .header("cookie", cookie)
+                    .body(Body::from(png_cover()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&body).unwrap()["error"],
+            "credentials_change_required"
+        );
     }
 }

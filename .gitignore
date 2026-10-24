@@ -3,6 +3,7 @@
 .env.*
 !.env.example
 !.env.*.example
+deploy/compose/secrets/
 
 # SvelteKit and frontend dependencies/build output
 .svelte-kit/
@@ -45,6 +46,8 @@ tmp/
 
 # Local tooling, IDEs and OS metadata
 .playwright-mcp/
+test-results/
+playwright-report/
 .vscode/
 .idea/
 .DS_Store

@@ -15,14 +15,19 @@ use std::sync::{Arc, Mutex};
 
 use learnvault_core::{CourseRoot, Database};
 
-use crate::command::catalog;
+use crate::command::catalog_with_orders;
 use crate::config::{DesktopConfigDto, database_path};
 use crate::courses::{CourseEntry, load_courses, store_courses};
+use crate::covers::{
+    COVERS_DIR_NAME, CoverError, cover_version, read_picked_cover, remove_cover, store_cover,
+};
 use crate::dto::{
-    CatalogDto, CourseStudySummaryDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto, PomodoroDto, StudyAnalyticsDto,
-    RecentStudyDto, RescanSummaryDto, StudyNoteDto, StudyNotesDto, StudyProgressDto,
+    CatalogDto, CourseStudySummaryDto, CoverDto, CoverRemovalDto, MediaRemovalImpactDto,
+    MediaRemovalOutcomeDto, PomodoroDto, RecentStudyDto, RescanSummaryDto, StudyAnalyticsDto,
+    StudyNoteDto, StudyNotesDto, StudyProgressDto,
 };
 use crate::error::IpcError;
+use crate::ordering::{CourseOrders, load_orders, store_orders};
 use crate::study;
 
 /// Estado Tauri do desktop: banco local e cursos registrados.
@@ -30,7 +35,10 @@ use crate::study;
 pub struct DesktopState {
     database: Arc<Mutex<Database>>,
     config_dir: PathBuf,
+    covers_dir: PathBuf,
+    orders_dir: PathBuf,
     courses: Arc<Mutex<Vec<CourseEntry>>>,
+    orders: Arc<Mutex<CourseOrders>>,
     rescanning: Arc<AtomicBool>,
 }
 
@@ -40,18 +48,29 @@ impl DesktopState {
     /// O diretório de dados pertence ao aplicativo; as pastas de curso são externas e
     /// nunca são criadas, lidas nem escritas por esta operação. A configuração é
     /// revalidada: cursos com raiz removida ou inválida são descartados, sem falha fatal.
+    /// As capas personalizadas vivem em um subdiretório de capas do diretório de dados,
+    /// criado sob demanda na primeira gravação.
     pub fn open(data_dir: &Path, config_dir: &Path) -> Result<Self, IpcError> {
         std::fs::create_dir_all(data_dir).map_err(|_| IpcError::database_unavailable())?;
         let database = Database::open(database_path(data_dir))
             .map_err(|_| IpcError::database_unavailable())?;
         let courses = load_courses(config_dir);
+        let orders = load_orders(data_dir);
 
         Ok(Self {
             database: Arc::new(Mutex::new(database)),
             config_dir: config_dir.to_path_buf(),
+            covers_dir: data_dir.join(COVERS_DIR_NAME),
+            orders_dir: data_dir.to_path_buf(),
             courses: Arc::new(Mutex::new(courses)),
+            orders: Arc::new(Mutex::new(orders)),
             rescanning: Arc::new(AtomicBool::new(false)),
         })
+    }
+
+    /// Diretório das capas personalizadas. Uso interno do Rust: nunca cruza o IPC.
+    pub(crate) fn covers_dir(&self) -> PathBuf {
+        self.covers_dir.clone()
     }
 
     /// Constrói o catálogo a partir do banco local.
@@ -60,7 +79,150 @@ impl DesktopState {
             .database
             .lock()
             .map_err(|_| IpcError::database_unavailable())?;
-        catalog(&database, &self.courses())
+        catalog_with_orders(
+            &database,
+            &self.courses(),
+            &self.orders_snapshot(),
+            &self.covers_dir,
+        )
+    }
+
+    /// Fotografia imutável das preferências de ordenação. Uso interno do Rust.
+    fn orders_snapshot(&self) -> CourseOrders {
+        self.orders
+            .lock()
+            .map(|orders| orders.clone())
+            .unwrap_or_default()
+    }
+
+    /// Define a ordem manual dos irmãos de um nó do curso.
+    ///
+    /// A lista precisa ser uma permutação exata dos irmãos do caminho `parent` (vazio para
+    /// os módulos diretamente sob o curso): um caminho de fora ou uma lista parcial é
+    /// recusado com [`IpcError::invalid_order`]. O curso precisa estar registrado. A ordem
+    /// vive no diretório de dados; nenhum arquivo do curso é lido além do catálogo.
+    pub fn set_course_order(
+        &self,
+        course_id: &str,
+        parent: &str,
+        children: &[String],
+    ) -> Result<(), IpcError> {
+        let Some(course) = self.course(course_id) else {
+            return Err(IpcError::course_not_found());
+        };
+        let siblings = {
+            let database = self
+                .database
+                .lock()
+                .map_err(|_| IpcError::database_unavailable())?;
+            let catalog = learnvault_core::build_catalog(&database, &course.id)
+                .map_err(|_| IpcError::catalog_unavailable())?;
+            let shaped: Vec<learnvault_core::CatalogNode> = catalog
+                .categories
+                .into_iter()
+                .map(learnvault_core::course_file_lessons)
+                .collect();
+            learnvault_core::sibling_paths(&shaped, parent).ok_or_else(IpcError::invalid_order)?
+        };
+        if siblings.is_empty() || !learnvault_core::validate_siblings(&siblings, children) {
+            return Err(IpcError::invalid_order());
+        }
+
+        let mut guard = self
+            .orders
+            .lock()
+            .map_err(|_| IpcError::order_unavailable())?;
+        let mut next = guard.clone();
+        next.entry(course_id.to_owned())
+            .or_default()
+            .set_children(parent, children.to_vec());
+        store_orders(&self.orders_dir, &next).map_err(|_| IpcError::order_unavailable())?;
+        *guard = next;
+        Ok(())
+    }
+
+    /// Restaura a ordem automática de um pai específico (`Some`) ou de todo o curso (`None`).
+    ///
+    /// É idempotente: restaurar o que já estava automático devolve `false`.
+    pub fn reset_course_order(
+        &self,
+        course_id: &str,
+        parent: Option<&str>,
+    ) -> Result<bool, IpcError> {
+        if self.course(course_id).is_none() {
+            return Err(IpcError::course_not_found());
+        }
+        let mut guard = self
+            .orders
+            .lock()
+            .map_err(|_| IpcError::order_unavailable())?;
+        let mut next = guard.clone();
+        let removed = match parent {
+            Some(parent) => next
+                .get_mut(course_id)
+                .is_some_and(|order| order.remove(parent)),
+            None => next.remove(course_id).is_some(),
+        };
+        if !removed {
+            return Ok(false);
+        }
+        if next
+            .get(course_id)
+            .is_some_and(learnvault_core::CatalogOrder::is_empty)
+        {
+            next.remove(course_id);
+        }
+        store_orders(&self.orders_dir, &next).map_err(|_| IpcError::order_unavailable())?;
+        *guard = next;
+        Ok(true)
+    }
+
+    /// Executa o seletor nativo de imagens e grava a capa do curso escolhido.
+    ///
+    /// `pick` devolve o arquivo bruto escolhido pelo usuário ou `None` quando o seletor é
+    /// cancelado. O cancelamento preserva a capa anterior e devolve a versão atual. O curso
+    /// precisa estar registrado: uma identidade desconhecida ou insegura é recusada sem
+    /// tocar o disco nem o seletor. O arquivo é reaberto e revalidado no Rust (tipo pelos
+    /// magic bytes e limite de tamanho) antes da gravação atômica; nada é escrito dentro da
+    /// pasta do curso.
+    pub fn import_course_cover(
+        &self,
+        course_id: &str,
+        pick: impl FnOnce() -> Option<PathBuf>,
+    ) -> Result<CoverDto, IpcError> {
+        if self.course(course_id).is_none() {
+            return Err(IpcError::course_not_found());
+        }
+        let Some(picked) = pick() else {
+            return Ok(self.cover_status(course_id));
+        };
+        let bytes = read_picked_cover(&picked).map_err(|error| match error {
+            CoverError::Rejected => IpcError::invalid_cover(),
+            _ => IpcError::cover_unavailable(),
+        })?;
+        store_cover(&self.covers_dir, course_id, &bytes)
+            .map_err(|_| IpcError::cover_unavailable())?;
+        Ok(self.cover_status(course_id))
+    }
+
+    /// Remove a capa personalizada de um curso registrado.
+    ///
+    /// A remoção não toca na pasta do curso e é idempotente: um curso sem capa devolve
+    /// `removed: false`. Uma identidade desconhecida é recusada com um erro estável.
+    pub fn remove_course_cover(&self, course_id: &str) -> Result<CoverRemovalDto, IpcError> {
+        if self.course(course_id).is_none() {
+            return Err(IpcError::course_not_found());
+        }
+        let removed =
+            remove_cover(&self.covers_dir, course_id).map_err(|_| IpcError::cover_unavailable())?;
+        Ok(CoverRemovalDto { removed })
+    }
+
+    /// Situação atual da capa de um curso, sem caminho.
+    fn cover_status(&self, course_id: &str) -> CoverDto {
+        CoverDto {
+            cover_version: cover_version(&self.covers_dir, course_id),
+        }
     }
 
     /// Situação de configuração exposta ao webview: só o booleano, nunca um caminho.
@@ -232,52 +394,92 @@ impl DesktopState {
     }
 
     pub fn study_analytics(&self) -> Result<StudyAnalyticsDto, IpcError> {
-        let database = self.database.lock().map_err(|_| IpcError::database_unavailable())?;
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
         crate::study::analytics(&database)
     }
 
     pub fn list_notes(&self, media_id: &str) -> Result<StudyNotesDto, IpcError> {
-        let database = self.database.lock().map_err(|_| IpcError::database_unavailable())?;
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
         crate::study::list_notes(&database, media_id)
     }
 
     pub fn list_all_notes(&self) -> Result<StudyNotesDto, IpcError> {
-        let database = self.database.lock().map_err(|_| IpcError::database_unavailable())?;
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
         crate::study::list_all_notes(&database)
     }
 
-    pub fn create_note(&self, media_id: &str, text: &str, position: Option<i64>) -> Result<StudyNoteDto, IpcError> {
-        let database = self.database.lock().map_err(|_| IpcError::database_unavailable())?;
+    pub fn create_note(
+        &self,
+        media_id: &str,
+        text: &str,
+        position: Option<i64>,
+    ) -> Result<StudyNoteDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
         crate::study::create_note(&database, media_id, text, position)
     }
 
-    pub fn update_note(&self, note_id: i64, text: &str, position: Option<i64>) -> Result<StudyNoteDto, IpcError> {
-        let database = self.database.lock().map_err(|_| IpcError::database_unavailable())?;
+    pub fn update_note(
+        &self,
+        note_id: i64,
+        text: &str,
+        position: Option<i64>,
+    ) -> Result<StudyNoteDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
         crate::study::update_note(&database, note_id, text, position)
     }
 
     pub fn delete_note(&self, note_id: i64) -> Result<(), IpcError> {
-        let database = self.database.lock().map_err(|_| IpcError::database_unavailable())?;
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
         crate::study::delete_note(&database, note_id)
     }
 
     pub fn pomodoro(&self) -> Result<PomodoroDto, IpcError> {
-        let database = self.database.lock().map_err(|_| IpcError::database_unavailable())?;
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
         crate::study::pomodoro(&database)
     }
 
     pub fn start_pomodoro(&self, duration_seconds: i64) -> Result<PomodoroDto, IpcError> {
-        let database = self.database.lock().map_err(|_| IpcError::database_unavailable())?;
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
         crate::study::start_pomodoro(&database, duration_seconds)
     }
 
     pub fn pause_pomodoro(&self, elapsed_seconds: i64) -> Result<PomodoroDto, IpcError> {
-        let database = self.database.lock().map_err(|_| IpcError::database_unavailable())?;
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
         crate::study::pause_pomodoro(&database, elapsed_seconds)
     }
 
     pub fn reset_pomodoro(&self) -> Result<PomodoroDto, IpcError> {
-        let database = self.database.lock().map_err(|_| IpcError::database_unavailable())?;
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
         crate::study::reset_pomodoro(&database)
     }
 
