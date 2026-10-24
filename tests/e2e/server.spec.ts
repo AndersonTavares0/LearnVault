@@ -225,16 +225,13 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	await page.reload();
 	await expect(page.getByText('Continue estudando')).toBeVisible();
 
-	// Cada item identifica a aula pelo título limpo e mostra o contexto (curso · módulo)
+	// O card de retomada identifica a aula pelo título limpo e mostra a posição salva
 	// em uma linha secundária; o nome cru do arquivo não pode vazar para o usuário.
-	const firstRecentItem = page.locator('.recent-study li').first();
-	const lessonLabel = (await firstRecentItem.locator('a').first().innerText()).trim();
+	const firstRecentItem = page.locator('.library-resume-card').first();
+	const lessonLabel = (await firstRecentItem.locator('h3').first().innerText()).trim();
 	expect(lessonLabel).not.toMatch(/\.[a-z0-9]{2,4}$/i);
 	expect(lessonLabel).not.toMatch(/^\d+[\s._-]/);
-	const contextNode = firstRecentItem.locator('.recent-study-info small');
-	await expect(contextNode).toHaveText(/\S/);
-	const contextText = (await contextNode.innerText()).trim();
-	expect(await contextNode.getAttribute('title')).toBe(contextText);
+	await expect(firstRecentItem.locator('.library-resume-position')).toHaveText(/\S/);
 
 	// Em tela estreita a lista não pode gerar rolagem horizontal.
 	const originalViewport = page.viewportSize();
@@ -246,7 +243,7 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	expect(narrowWidths.scrollWidth).toBeLessThanOrEqual(narrowWidths.clientWidth);
 	if (originalViewport) await page.setViewportSize(originalViewport);
 
-	const lightColors = await page.locator('.recent-study small').first().evaluate((element) => {
+	const lightColors = await page.locator('.library-resume-position').first().evaluate((element) => {
 		let node: HTMLElement | null = element as HTMLElement;
 		const foreground = getComputedStyle(element).color;
 		while (node) {
@@ -259,7 +256,7 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	expect(contrastRatio(lightColors.foreground, lightColors.background)).toBeGreaterThanOrEqual(4.5);
 	await page.emulateMedia({ colorScheme: 'dark' });
 	await page.reload();
-	const darkColors = await page.locator('.recent-study small').first().evaluate((element) => {
+	const darkColors = await page.locator('.library-resume-position').first().evaluate((element) => {
 		let node: HTMLElement | null = element as HTMLElement;
 		const foreground = getComputedStyle(element).color;
 		while (node) {
@@ -350,7 +347,7 @@ test('reports a lesson whose media disappears from disk and restores it when the
 
 	const courseModule = page.locator('details.course-section').filter({ has: page.getByText('Modulo Extra', { exact: true }) });
 	const openCourse = async () => {
-		await page.getByRole('link', { name: 'Início' }).click();
+		await page.goto('/');
 		await expect(page.getByRole('heading', { name: 'Minha biblioteca' })).toBeVisible();
 		// O módulo da aula inicial pode já estar aberto; só clica quando precisa.
 		if (!(await courseModule.evaluate((element) => element.hasAttribute('open')))) {

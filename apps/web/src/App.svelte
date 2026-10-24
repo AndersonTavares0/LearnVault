@@ -14,7 +14,7 @@
 	import PasswordField from './PasswordField.svelte';
 	import { lessonSections, neighboringLessons, type LessonSection } from './navigation';
 	import { destinationAfterLogin, findCourse, findLesson, findLessonLocation, href, locationFromHash, type Route } from './router';
-	import { courseIdOf, transport, transportKind, STUDY_NOT_AVAILABLE, type Catalog, type CatalogNode, type CourseStudySummary, type Lesson, type StudyProgress, type User } from './transport';
+	import { COVER_ACCEPT, MAX_COVER_BYTES, courseIdOf, transport, transportKind, STUDY_NOT_AVAILABLE, type Catalog, type CatalogNode, type CourseStudySummary, type Lesson, type StudyProgress, type User } from './transport';
 	import { defaultRoute, resolveSession } from './session';
 	import { formatDuration, studySyncSupported } from './player';
 	import Brand from './Brand.svelte';
@@ -49,6 +49,11 @@
 	let titleDraft = '';
 	let titleError = '';
 	let coverError = '';
+	let coverBusy = false;
+	let coverMessage = '';
+	let coverTargetId: string | null = null;
+	let coverMenuId: string | null = null;
+	let coverInput: HTMLInputElement | null = null;
 	let libraryNotice = '';
 	let resumeItem: StudyProgress | null = null;
 	let resumeLocation: ReturnType<typeof findLessonLocation> = null;
@@ -128,37 +133,69 @@
 	function setLibraryView(view: LibraryView) {
 		if (libraryPreferences.view !== view) saveLibraryPreferences({ ...libraryPreferences, view });
 	}
-	async function updateLibraryCover(courseItem: CatalogNode, event: Event) {
-		const input = event.currentTarget;
-		if (!(input instanceof HTMLInputElement)) return;
-		const file = input.files?.[0];
-		if (!file || !user) return;
+	function closeCoverMenuOnEscape(event: KeyboardEvent) {
+		if (event.key === 'Escape' && coverMenuId) coverMenuId = null;
+	}
+	function toggleCoverMenu(courseItem: CatalogNode, open: boolean) {
+		coverMenuId = open && canManage ? courseIdOf(courseItem) : null;
+	}
+	function requestCourseCover(courseItem: CatalogNode) {
+		if (coverBusy) return;
+		coverMenuId = null;
+		coverTargetId = courseIdOf(courseItem);
 		coverError = '';
+		coverMessage = '';
+		// No desktop o seletor nativo roda no Rust; nenhum byte cruza o IPC.
+		if (transportKind === 'desktop') {
+			void submitCover(null);
+			return;
+		}
+		coverInput?.click();
+	}
+	async function submitCover(file: File | null) {
+		const target = coverTargetId;
+		if (!target || coverBusy) return;
+		coverBusy = true;
+		coverError = '';
+		coverMessage = '';
 		try {
-			await writeLibraryCover(user.userId, courseIdOf(courseItem), file);
-			const oldUrl = courseCovers[courseIdOf(courseItem)];
-			if (oldUrl) URL.revokeObjectURL(oldUrl);
-			courseCovers = { ...courseCovers, [courseIdOf(courseItem)]: URL.createObjectURL(file) };
-			libraryNotice = 'Capa salva neste dispositivo; o arquivo original permaneceu intacto.';
+			await transport.importCourseCover(target, file);
+			syncCatalog(await transport.catalog());
+			coverMessage = 'Capa atualizada.';
 		} catch (cause) {
-			coverError = cause instanceof Error ? cause.message : 'Não foi possível salvar a capa.';
+			coverError = cause instanceof Error ? cause.message : 'Não foi possível salvar a capa do curso.';
 		} finally {
-			input.value = '';
+			coverBusy = false;
+			coverTargetId = null;
 		}
 	}
-	async function resetLibraryCover(courseItem: CatalogNode) {
-		if (!user) return;
+	function pickCover(event: Event) {
+		const input = event.currentTarget;
+		if (!(input instanceof HTMLInputElement)) return;
+		const file = input.files?.[0] ?? null;
+		input.value = '';
+		if (file && file.size > MAX_COVER_BYTES) {
+			coverMessage = '';
+			coverError = 'A imagem é maior que 4 MiB.';
+			coverTargetId = null;
+			return;
+		}
+		void submitCover(file);
+	}
+	async function removeCover(courseItem: CatalogNode) {
+		if (coverBusy) return;
+		coverMenuId = null;
+		coverBusy = true;
 		coverError = '';
+		coverMessage = '';
 		try {
-			await removeLibraryCover(user.userId, courseIdOf(courseItem));
-			const oldUrl = courseCovers[courseIdOf(courseItem)];
-			if (oldUrl) URL.revokeObjectURL(oldUrl);
-			const covers = { ...courseCovers };
-			delete covers[courseIdOf(courseItem)];
-			courseCovers = covers;
-			libraryNotice = 'Capa personalizada removida; a capa do catálogo ou o padrão Graphite será usado.';
+			const removed = await transport.removeCourseCover(courseIdOf(courseItem));
+			syncCatalog(await transport.catalog());
+			coverMessage = removed ? 'Capa removida.' : 'Nenhuma capa personalizada para remover.';
 		} catch (cause) {
-			coverError = cause instanceof Error ? cause.message : 'Não foi possível remover a capa.';
+			coverError = cause instanceof Error ? cause.message : 'Não foi possível remover a capa do curso.';
+		} finally {
+			coverBusy = false;
 		}
 	}
 	let loading = true;
@@ -484,6 +521,7 @@
 		};
 	}
 </script>
+<svelte:window onkeydown={closeCoverMenuOnEscape} />
 <svelte:head><title>LearnVault — sua biblioteca de estudos</title><meta name="description" content="Sua biblioteca pessoal de cursos." /></svelte:head>
 {#if loading}<div class="loading" aria-live="polite">Carregando seus cursos…</div>
 {:else if !user}
@@ -591,27 +629,24 @@
 				</div>
 			</div>
 			{#if libraryNotice}<p class="library-notice" role="status">{libraryNotice}</p>{/if}
+			{#if canManage}<input class="visually-hidden course-cover-input" type="file" accept={COVER_ACCEPT} bind:this={coverInput} onchange={pickCover} tabindex="-1" aria-hidden="true" />{/if}
+			{#if coverError}<p class="error" role="alert">{coverError}</p>{/if}
+			{#if coverMessage}<p class="library-notice" role="status">{coverMessage}</p>{/if}
 			{#if filteredNodes.length}
 				<ul class="library-grid" class:list-mode={libraryPreferences.view === 'list'}>
 					{#each filteredNodes as courseItem (courseIdOf(courseItem))}
 						{@const courseItemId = courseIdOf(courseItem)}
 						{@const courseDisplayTitle = libraryPreferences.displayTitles[courseItemId] ?? displayTitleFor(courseItem.title)}
-						{@const courseCoverImage = preferredCourseCover(courseItem)}
-						{@const courseImageSrc = courseCovers[courseItemId] ?? (courseCoverImage ? transport.mediaUrl(courseCoverImage, courseItemId) ?? '' : '')}
 						{@const courseCompleted = studySummary.find((item) => item.courseId === courseItemId)?.completedMedia ?? 0}
 						{@const courseMediaTotal = countCatalogNode(courseItem).videos}
 						{@const coursePercent = studySummaryAvailable && courseCompleted > 0 && courseMediaTotal > 0 ? Math.min(100, Math.round((courseCompleted / courseMediaTotal) * 100)) : null}
 						<li class="library-card-item">
-							<CourseCard course={courseItem} displayTitle={courseDisplayTitle} layout={libraryPreferences.view} coverSrc={courseImageSrc} profile={user.userId} mediaUrl={transport.mediaUrl} progressPercent={coursePercent} progressLabel={inProgressCourseIds.has(courseItemId) ? 'Em andamento' : ''} />
+							<CourseCard course={courseItem} displayTitle={courseDisplayTitle} layout={libraryPreferences.view} profile={user.userId} mediaUrl={transport.mediaUrl} manualCoverUrl={transport.coverUrl(courseItemId, courseItem.coverVersion ?? null)} {canManage} menuOpen={coverMenuId === courseItemId} onMenuOpen={(open) => toggleCoverMenu(courseItem, open)} onChangeCover={requestCourseCover} onRemoveCover={removeCover} progressPercent={coursePercent} progressLabel={inProgressCourseIds.has(courseItemId) ? 'Em andamento' : ''} />
 							{#if titleEditingCourseId === courseItemId}
 								<form class="library-title-form" onsubmit={(event) => { event.preventDefault(); void saveCourseTitle(courseItem); }}>
 									<label for={`course-title-${courseItemId}`}>Título do curso</label>
 									<div><input id={`course-title-${courseItemId}`} bind:value={titleDraft} maxlength="120" required /><button type="submit">Salvar</button><button type="button" class="quiet-button" onclick={() => (titleEditingCourseId = null)}>Fechar</button></div>
 									{#if titleError}<small role="alert">{titleError}</small>{/if}
-									<label for={`course-cover-${courseItemId}`}>Capa personalizada</label>
-									<input id={`course-cover-${courseItemId}`} type="file" accept="image/*" onchange={(event) => { void updateLibraryCover(courseItem, event); }} />
-									{#if coverError}<small role="alert">{coverError}</small>{/if}
-									<button type="button" class="quiet-button" onclick={() => { void resetLibraryCover(courseItem); }}>Usar capa disponível do curso</button>
 								</form>
 							{:else}
 								<details class="library-card-actions"><summary aria-label={`Ações de ${courseDisplayTitle}`} title="Ações do curso">•••</summary><div><button onclick={(event) => { const menu = event.currentTarget.closest('details'); if (menu) menu.open = false; titleEditingCourseId = courseItemId; titleDraft = courseDisplayTitle; titleError = ''; coverError = ''; }}>Personalizar</button></div></details>
