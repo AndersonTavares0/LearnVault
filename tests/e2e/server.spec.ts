@@ -223,7 +223,7 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	await expect(recentResponse).toBeOK();
 	expect((await recentResponse.json()).items.length).toBeGreaterThan(0);
 	await page.reload();
-	await expect(page.getByText('Continuar assistindo')).toBeVisible();
+	await expect(page.getByText('Continue estudando')).toBeVisible();
 
 	// Cada item identifica a aula pelo título limpo e mostra o contexto (curso · módulo)
 	// em uma linha secundária; o nome cru do arquivo não pode vazar para o usuário.
@@ -282,7 +282,7 @@ test('serves the built SPA through the Rust server for a complete study-library 
 		return url.pathname === '/api/media' && url.searchParams.get('path') === 'Categoria/Curso/Aula.mp4';
 	});
 	await courseCard.click();
-	await expect(page.locator('.breadcrumb')).toContainText('library');
+	await expect(page.getByRole('heading', { name: 'Minha biblioteca' })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'Categoria' })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'Curso', exact: true })).toBeVisible();
 	// A aula inicial vem do histórico recente gravado acima.
@@ -350,8 +350,8 @@ test('reports a lesson whose media disappears from disk and restores it when the
 
 	const courseModule = page.locator('details.course-section').filter({ has: page.getByText('Modulo Extra', { exact: true }) });
 	const openCourse = async () => {
-		await page.getByRole('link', { name: /library/ }).click();
-		await expect(page.locator('.breadcrumb')).toContainText('library');
+		await page.getByRole('link', { name: 'Início' }).click();
+		await expect(page.getByRole('heading', { name: 'Minha biblioteca' })).toBeVisible();
 		// O módulo da aula inicial pode já estar aberto; só clica quando precisa.
 		if (!(await courseModule.evaluate((element) => element.hasAttribute('open')))) {
 			await courseModule.locator('summary').click();
@@ -541,7 +541,7 @@ test('moves the cover actions to the course card and keeps the course page clean
 
 	// A página do curso volta ao layout anterior, sem controles de capa.
 	await courseCard.click();
-	await expect(page.locator('.breadcrumb')).toContainText('library');
+	await expect(page.getByRole('heading', { name: 'Minha biblioteca' })).toBeVisible();
 	await expect(page.locator('.course-cover-actions')).toHaveCount(0);
 	await expect(page.getByText('Trocar capa')).toHaveCount(0);
 	await expect(page.getByText('Remover capa')).toHaveCount(0);
