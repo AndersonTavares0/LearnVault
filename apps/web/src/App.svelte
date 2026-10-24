@@ -602,7 +602,7 @@
 						{@const courseMediaTotal = countCatalogNode(courseItem).videos}
 						{@const coursePercent = studySummaryAvailable && courseCompleted > 0 && courseMediaTotal > 0 ? Math.min(100, Math.round((courseCompleted / courseMediaTotal) * 100)) : null}
 						<li class="library-card-item">
-							<CourseCard course={courseItem} displayTitle={courseDisplayTitle} layout={libraryPreferences.view} coverSrc={courseImageSrc} progressPercent={coursePercent} progressLabel={inProgressCourseIds.has(courseItemId) ? 'Em andamento' : ''} />
+							<CourseCard course={courseItem} displayTitle={courseDisplayTitle} layout={libraryPreferences.view} coverSrc={courseImageSrc} profile={user.userId} mediaUrl={transport.mediaUrl} progressPercent={coursePercent} progressLabel={inProgressCourseIds.has(courseItemId) ? 'Em andamento' : ''} />
 							{#if titleEditingCourseId === courseItemId}
 								<form class="library-title-form" onsubmit={(event) => { event.preventDefault(); void saveCourseTitle(courseItem); }}>
 									<label for={`course-title-${courseItemId}`}>Título do curso</label>
