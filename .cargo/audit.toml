@@ -40,6 +40,12 @@ ignore = [
     # pelo zbus do Tauri no Linux. Não há versão corrigida publicada; revisar
     # quando o Tauri migrar para uma série mantida do zbus/zvariant.
     "RUSTSEC-2026-0370",
+    # RUSTSEC-2026-0385 e RUSTSEC-2024-0370 (categoria: unmaintained)
+    # `ctutils` e `proc-macro-error` entram como dependências transitivas de build;
+    # não há versão corrigida publicada nas séries usadas. Revisar quando as crates
+    # que os trazem migrarem.
+    "RUSTSEC-2026-0385",
+    "RUSTSEC-2024-0370",
     "RUSTSEC-2026-0371",
     "RUSTSEC-2026-0372"
 ]
