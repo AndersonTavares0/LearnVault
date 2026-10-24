@@ -139,6 +139,7 @@ impl IpcError {
         }
     }
 
+    /// Erro estável para uma duração de Pomodoro fora do intervalo aceito.
     pub fn invalid_pomodoro_duration() -> Self {
         Self {
             code: IpcErrorCode::InvalidPomodoroDuration,

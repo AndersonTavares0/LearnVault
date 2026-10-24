@@ -198,14 +198,14 @@ const test = base.extend<{ server: ServerFixture }>({
 
 test('serves the built SPA through the Rust server for a complete study-library journey', async ({ page, server }) => {
 	await page.goto(`${server.baseURL}/#/login`);
-	await expect(page.getByRole('heading', { name: 'Entrar no LearnVault' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Boas-vindas de volta' })).toBeVisible();
 
 	await page.getByLabel('Usuário').fill('admin');
 	// O botão "Mostrar Senha" compartilha o rótulo parcial; exigir o campo exato evita
 	// que o locator resolva tanto o input quanto o alternador de visibilidade.
 	await page.getByLabel('Senha', { exact: true }).fill(ADMIN_PASSWORD);
 	await page.getByRole('button', { name: 'Entrar' }).click();
-	await expect(page.getByRole('heading', { name: 'Início' })).toBeAttached();
+	await expect(page.getByRole('heading', { name: 'Minha biblioteca' })).toBeAttached();
 
 	await page.getByRole('button', { name: 'Indexar cursos' }).click();
 	await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
@@ -359,7 +359,7 @@ test('reports a lesson whose media disappears from disk and restores it when the
 	};
 	const indexFromHome = async () => {
 		await page.goto(`${server.baseURL}/#/home`);
-		await expect(page.getByRole('heading', { name: 'Início' })).toBeAttached();
+		await expect(page.getByRole('heading', { name: 'Minha biblioteca' })).toBeAttached();
 		await page.getByRole('button', { name: 'Indexar cursos' }).click();
 		await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
 	};
@@ -368,7 +368,7 @@ test('reports a lesson whose media disappears from disk and restores it when the
 	await page.getByLabel('Usuário').fill('admin');
 	await page.getByLabel('Senha', { exact: true }).fill(ADMIN_PASSWORD);
 	await page.getByRole('button', { name: 'Entrar' }).click();
-	await expect(page.getByRole('heading', { name: 'Início' })).toBeAttached();
+	await expect(page.getByRole('heading', { name: 'Minha biblioteca' })).toBeAttached();
 	await page.getByRole('button', { name: 'Indexar cursos' }).click();
 	await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
 
@@ -424,7 +424,7 @@ test('renders an automatic video thumbnail in the built SPA without leaking libr
 	await page.getByLabel('Usuário').fill('admin');
 	await page.getByLabel('Senha', { exact: true }).fill(ADMIN_PASSWORD);
 	await page.getByRole('button', { name: 'Entrar' }).click();
-	await expect(page.getByRole('heading', { name: 'Início' })).toBeAttached();
+	await expect(page.getByRole('heading', { name: 'Minha biblioteca' })).toBeAttached();
 
 	// Grava um WebM sintético inteiramente no navegador e o entrega ao servidor como arquivo
 	// do curso. Nenhum vídeo real, asset externo ou dependência de codec entra no repositório:
@@ -496,7 +496,7 @@ test('moves the cover actions to the course card and keeps the course page clean
 	await page.getByLabel('Usuário').fill('admin');
 	await page.getByLabel('Senha', { exact: true }).fill(ADMIN_PASSWORD);
 	await page.getByRole('button', { name: 'Entrar' }).click();
-	await expect(page.getByRole('heading', { name: 'Início' })).toBeAttached();
+	await expect(page.getByRole('heading', { name: 'Minha biblioteca' })).toBeAttached();
 	await page.getByRole('button', { name: 'Indexar cursos' }).click();
 	await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
 
@@ -547,7 +547,7 @@ test('moves the cover actions to the course card and keeps the course page clean
 	await expect(page.getByText('Remover capa')).toHaveCount(0);
 
 	// A remoção também é feita pelo card.
-	await page.getByRole('link', { name: 'Início', exact: true }).click();
+	await page.getByRole('link', { name: 'Minha biblioteca', exact: true }).click();
 	await courseCard.click({ button: 'right' });
 	await page.getByRole('menuitem', { name: 'Remover capa' }).click();
 	await expect(page.getByText('Capa removida.')).toBeVisible();

@@ -316,6 +316,7 @@ pub async fn desktop_study_summary(
 }
 
 #[tauri::command]
+/// Resume as métricas de estudo do dono local (aulas acompanhadas, concluídas e tempo).
 pub async fn desktop_study_analytics(
     state: State<'_, DesktopState>,
 ) -> Result<crate::dto::StudyAnalyticsDto, IpcError> {
@@ -326,6 +327,7 @@ pub async fn desktop_study_analytics(
 }
 
 #[tauri::command]
+/// Lista as anotações de uma mídia do curso, da mais recente para a mais antiga.
 pub async fn desktop_list_notes(
     state: State<'_, DesktopState>,
     media_id: String,
@@ -337,6 +339,7 @@ pub async fn desktop_list_notes(
 }
 
 #[tauri::command]
+/// Lista todas as anotações do dono local, sem filtrar por mídia.
 pub async fn desktop_list_all_notes(
     state: State<'_, DesktopState>,
 ) -> Result<StudyNotesDto, IpcError> {
@@ -347,6 +350,7 @@ pub async fn desktop_list_all_notes(
 }
 
 #[tauri::command]
+/// Cria uma anotação vinculada a uma mídia; a posição no vídeo é opcional.
 pub async fn desktop_create_note(
     state: State<'_, DesktopState>,
     media_id: String,
@@ -362,6 +366,7 @@ pub async fn desktop_create_note(
 }
 
 #[tauri::command]
+/// Atualiza o texto e a posição de uma anotação existente do dono local.
 pub async fn desktop_update_note(
     state: State<'_, DesktopState>,
     note_id: i64,
@@ -377,6 +382,7 @@ pub async fn desktop_update_note(
 }
 
 #[tauri::command]
+/// Remove uma anotação do dono local; a operação é idempotente no banco.
 pub async fn desktop_delete_note(
     state: State<'_, DesktopState>,
     note_id: i64,
@@ -388,6 +394,7 @@ pub async fn desktop_delete_note(
 }
 
 #[tauri::command]
+/// Devolve o estado atual do Pomodoro do dono local.
 pub async fn desktop_pomodoro(state: State<'_, DesktopState>) -> Result<PomodoroDto, IpcError> {
     let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || state.pomodoro())
@@ -396,6 +403,7 @@ pub async fn desktop_pomodoro(state: State<'_, DesktopState>) -> Result<Pomodoro
 }
 
 #[tauri::command]
+/// Inicia um ciclo de Pomodoro com a duração pedida, em segundos.
 pub async fn desktop_start_pomodoro(
     state: State<'_, DesktopState>,
     duration_seconds: i64,
@@ -407,6 +415,7 @@ pub async fn desktop_start_pomodoro(
 }
 
 #[tauri::command]
+/// Pausa o ciclo em andamento preservando o tempo decorrido.
 pub async fn desktop_pause_pomodoro(
     state: State<'_, DesktopState>,
     elapsed_seconds: i64,
@@ -418,6 +427,7 @@ pub async fn desktop_pause_pomodoro(
 }
 
 #[tauri::command]
+/// Reinicia o ciclo do Pomodoro e devolve o estado ocioso.
 pub async fn desktop_reset_pomodoro(
     state: State<'_, DesktopState>,
 ) -> Result<PomodoroDto, IpcError> {

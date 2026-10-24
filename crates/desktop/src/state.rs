@@ -393,6 +393,7 @@ impl DesktopState {
         study::summary(&database)
     }
 
+    /// Agrega as métricas de estudo do dono local.
     pub fn study_analytics(&self) -> Result<StudyAnalyticsDto, IpcError> {
         let database = self
             .database
@@ -401,6 +402,7 @@ impl DesktopState {
         crate::study::analytics(&database)
     }
 
+    /// Lista as anotações de uma mídia do dono local.
     pub fn list_notes(&self, media_id: &str) -> Result<StudyNotesDto, IpcError> {
         let database = self
             .database
@@ -409,6 +411,7 @@ impl DesktopState {
         crate::study::list_notes(&database, media_id)
     }
 
+    /// Lista todas as anotações do dono local.
     pub fn list_all_notes(&self) -> Result<StudyNotesDto, IpcError> {
         let database = self
             .database
@@ -417,6 +420,7 @@ impl DesktopState {
         crate::study::list_all_notes(&database)
     }
 
+    /// Cria uma anotação vinculada a uma mídia do dono local.
     pub fn create_note(
         &self,
         media_id: &str,
@@ -430,6 +434,7 @@ impl DesktopState {
         crate::study::create_note(&database, media_id, text, position)
     }
 
+    /// Atualiza texto e posição de uma anotação existente.
     pub fn update_note(
         &self,
         note_id: i64,
@@ -443,6 +448,7 @@ impl DesktopState {
         crate::study::update_note(&database, note_id, text, position)
     }
 
+    /// Remove uma anotação do dono local.
     pub fn delete_note(&self, note_id: i64) -> Result<(), IpcError> {
         let database = self
             .database
@@ -451,6 +457,7 @@ impl DesktopState {
         crate::study::delete_note(&database, note_id)
     }
 
+    /// Devolve o estado atual do Pomodoro.
     pub fn pomodoro(&self) -> Result<PomodoroDto, IpcError> {
         let database = self
             .database
@@ -459,6 +466,7 @@ impl DesktopState {
         crate::study::pomodoro(&database)
     }
 
+    /// Inicia um ciclo de Pomodoro com a duração informada.
     pub fn start_pomodoro(&self, duration_seconds: i64) -> Result<PomodoroDto, IpcError> {
         let database = self
             .database
@@ -467,6 +475,7 @@ impl DesktopState {
         crate::study::start_pomodoro(&database, duration_seconds)
     }
 
+    /// Pausa o ciclo preservando o tempo decorrido.
     pub fn pause_pomodoro(&self, elapsed_seconds: i64) -> Result<PomodoroDto, IpcError> {
         let database = self
             .database
@@ -475,6 +484,7 @@ impl DesktopState {
         crate::study::pause_pomodoro(&database, elapsed_seconds)
     }
 
+    /// Reinicia o ciclo do Pomodoro.
     pub fn reset_pomodoro(&self) -> Result<PomodoroDto, IpcError> {
         let database = self
             .database

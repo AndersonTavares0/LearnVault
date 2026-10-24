@@ -40,5 +40,6 @@ ignore = [
     # pelo zbus do Tauri no Linux. Não há versão corrigida publicada; revisar
     # quando o Tauri migrar para uma série mantida do zbus/zvariant.
     "RUSTSEC-2026-0370",
+    "RUSTSEC-2026-0371",
     "RUSTSEC-2026-0372"
 ]
