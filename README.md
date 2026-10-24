@@ -21,12 +21,16 @@ O LearnVault organiza cursos que você já tem em pastas. Ele cria um catálogo 
 
 Você pode usar o servidor pela Web ou abrir a biblioteca no aplicativo desktop offline.
 
+![Tela de Estatísticas no tema claro: métricas de estudo ao lado da Árvore do Conhecimento](docs/screenshots/app/analytics-light-blue-slate.png)
+
 ## O que você pode fazer
 
 - Reunir cursos e materiais locais em um catálogo pesquisável.
 - Navegar por módulos e aulas e continuar de onde parou.
 - Reproduzir vídeos e áudios ou baixar materiais e legendas.
 - Manter os arquivos originais no lugar: o LearnVault lê a pasta do curso, mas não a altera.
+- Acompanhar as aulas e o tempo de estudo na Árvore do Conhecimento, que cresce a cada aula concluída.
+- Escolher a paleta da interface em Configurações: Blue-slate (padrão), Deep Petrol ou Balanced Sage.
 
 ## Escolha como usar
 
@@ -54,6 +58,8 @@ Rode esse comando uma vez por checkout. Ele não roda sozinho dentro de `pnpm de
 | `pnpm dev:tauri` | Aplicativo desktop Tauri |
 
 `pnpm dev` sobe a API em `http://127.0.0.1:8090` e a interface web com recarga automática. Na primeira execução, entre com `admin`/`admin`, importe uma pasta de curso e troque a senha. `pnpm dev:tauri` abre o desktop offline, sem login e sem portas de rede.
+
+Cada worktree cria o próprio `target/` do Cargo. Rode `pnpm worktree:gc` para apagar esse cache nos worktrees vinculados e liberar espaço; use `--dry-run` para ver o total antes.
 
 Antes de enviar uma mudança, rode:
 

@@ -16,7 +16,10 @@
 
 use learnvault_core::Database;
 
-use crate::dto::{RecentStudyDto, StudyProgressDto};
+use crate::dto::{
+    CourseStudySummaryDto, PomodoroDto, RecentStudyDto, StudyAnalyticsDto, StudyNoteDto,
+    StudyNotesDto, StudyProgressDto,
+};
 use crate::error::IpcError;
 
 /// Dono local fixo do progresso de estudo do desktop.
@@ -84,6 +87,105 @@ pub fn recent(database: &Database, limit: Option<usize>) -> Result<RecentStudyDt
     .map_err(study_error)
 }
 
+/// Resume conclusões por curso do dono local.
+pub fn summary(database: &Database) -> Result<Vec<CourseStudySummaryDto>, IpcError> {
+    learnvault_core::course_study_summary(database, LOCAL_OWNER_ID)
+        .map(|items| {
+            items
+                .into_iter()
+                .map(|item| CourseStudySummaryDto {
+                    course_id: item.course_id,
+                    completed_media: item.completed_media,
+                })
+                .collect()
+        })
+        .map_err(study_error)
+}
+
+/// Agrega as métricas de estudo do dono local.
+pub fn analytics(database: &Database) -> Result<StudyAnalyticsDto, IpcError> {
+    learnvault_core::study_analytics(database, LOCAL_OWNER_ID)
+        .map(Into::into)
+        .map_err(study_error)
+}
+
+/// Lista as anotações de uma mídia do dono local.
+pub fn list_notes(database: &Database, media_id: &str) -> Result<StudyNotesDto, IpcError> {
+    learnvault_core::list_notes(database, LOCAL_OWNER_ID, media_id)
+        .map(|items| StudyNotesDto {
+            items: items.into_iter().map(Into::into).collect(),
+            truncated: false,
+        })
+        .map_err(study_error)
+}
+
+/// Lista todas as anotações do dono local.
+pub fn list_all_notes(database: &Database) -> Result<StudyNotesDto, IpcError> {
+    learnvault_core::list_all_notes(database, LOCAL_OWNER_ID)
+        .map(|(items, truncated)| StudyNotesDto {
+            items: items.into_iter().map(Into::into).collect(),
+            truncated,
+        })
+        .map_err(study_error)
+}
+
+/// Cria uma anotação vinculada a uma mídia do dono local.
+pub fn create_note(
+    database: &Database,
+    media_id: &str,
+    text: &str,
+    position: Option<i64>,
+) -> Result<StudyNoteDto, IpcError> {
+    learnvault_core::create_note(database, LOCAL_OWNER_ID, media_id, text, position)
+        .map(Into::into)
+        .map_err(study_error)
+}
+
+/// Atualiza texto e posição de uma anotação existente.
+pub fn update_note(
+    database: &Database,
+    note_id: i64,
+    text: &str,
+    position: Option<i64>,
+) -> Result<StudyNoteDto, IpcError> {
+    learnvault_core::update_note(database, LOCAL_OWNER_ID, note_id, text, position)
+        .map(Into::into)
+        .map_err(study_error)
+}
+
+/// Remove uma anotação do dono local.
+pub fn delete_note(database: &Database, note_id: i64) -> Result<(), IpcError> {
+    learnvault_core::delete_note(database, LOCAL_OWNER_ID, note_id).map_err(study_error)
+}
+
+/// Devolve o estado atual do Pomodoro.
+pub fn pomodoro(database: &Database) -> Result<PomodoroDto, IpcError> {
+    learnvault_core::pomodoro_state(database, LOCAL_OWNER_ID)
+        .map(Into::into)
+        .map_err(study_error)
+}
+
+/// Inicia um ciclo de Pomodoro com a duração informada.
+pub fn start_pomodoro(database: &Database, duration: i64) -> Result<PomodoroDto, IpcError> {
+    learnvault_core::start_pomodoro(database, LOCAL_OWNER_ID, duration)
+        .map(Into::into)
+        .map_err(study_error)
+}
+
+/// Pausa o ciclo preservando o tempo decorrido.
+pub fn pause_pomodoro(database: &Database, elapsed: i64) -> Result<PomodoroDto, IpcError> {
+    learnvault_core::pause_pomodoro(database, LOCAL_OWNER_ID, elapsed)
+        .map(Into::into)
+        .map_err(study_error)
+}
+
+/// Reinicia o Pomodoro: zera o ciclo e devolve o estado ocioso.
+pub fn reset_pomodoro(database: &Database) -> Result<PomodoroDto, IpcError> {
+    learnvault_core::reset_pomodoro(database, LOCAL_OWNER_ID)
+        .map(Into::into)
+        .map_err(study_error)
+}
+
 /// Traduz o erro do núcleo para o erro IPC estável, sem ecoar o identificador consultado.
 ///
 /// Uma mídia desconhecida e uma posição negativa são falhas de entrada com código próprio,
@@ -95,6 +197,7 @@ fn study_error(error: learnvault_core::Error) -> IpcError {
     match error {
         Error::MediaNotFound { .. } => IpcError::media_not_found(),
         Error::InvalidStudyPosition { .. } => IpcError::invalid_position(),
+        Error::InvalidPomodoroDuration { .. } => IpcError::invalid_pomodoro_duration(),
         _ => IpcError::study_unavailable(),
     }
 }

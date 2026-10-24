@@ -3,6 +3,22 @@ import type { CatalogNode, FileEntry } from './transport';
 export type FileCounts = { videos: number; materials: number };
 export type CatalogCounts = FileCounts & { modules: number; lessons: number; missingLessons: number };
 
+const COURSE_COVER_NAMES = /^(?:cover|capa|thumbnail|thumb|poster|course[-_ ]cover|course[-_ ]thumbnail)\.(?:avif|jpe?g|png|webp)$/iu;
+
+/** Imagem explicitamente nomeada como capa no próprio curso; outras imagens não são inferidas. */
+export function preferredCourseCover(course: CatalogNode): FileEntry | null {
+	const pending = [course];
+	while (pending.length) {
+		const node = pending.shift()!;
+		const candidate = [...node.files, ...node.looseFiles].find((file) =>
+			file.kind === 'material' && isFileAvailable(file) && COURSE_COVER_NAMES.test(file.name)
+		);
+		if (candidate) return candidate;
+		pending.unshift(...node.children);
+	}
+	return null;
+}
+
 /**
  * Arquivo de mídia que a última varredura ainda encontra no disco.
  *

@@ -134,6 +134,7 @@ async fn spa_serves_existing_assets_with_mime_security_and_immutable_cache_heade
     )));
     assert!(csp.contains("img-src 'self' data: blob:"));
     assert!(csp.contains("media-src 'self' data: blob:"));
+    assert!(csp.contains("img-src 'self' data: blob:"));
     assert!(!csp.contains("unsafe-inline"));
     assert!(!csp.contains("unsafe-eval"));
     assert!(csp.contains("frame-ancestors 'none'"));

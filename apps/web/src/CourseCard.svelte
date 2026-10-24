@@ -20,18 +20,24 @@
 
 	let {
 		course,
-		profile,
-		mediaUrl,
+		profile = '',
+		mediaUrl = () => null,
+		coverSrc = '',
 		manualCoverUrl = null,
 		canManage = false,
 		menuOpen = false,
 		onMenuOpen,
 		onChangeCover,
-		onRemoveCover
+		onRemoveCover,
+		displayTitle = course.title,
+		layout = 'grid',
+		progressLabel = '',
+		progressPercent = null
 	}: {
 		course: CatalogNode;
-		profile: string;
-		mediaUrl: (file: FileEntry, courseId: string) => string | null;
+		profile?: string;
+		mediaUrl?: (file: FileEntry, courseId: string) => string | null;
+		coverSrc?: string;
 		/** Capa personalizada (upload da issue #237); tem precedência sobre a miniatura. */
 		manualCoverUrl?: string | null;
 		canManage?: boolean;
@@ -39,14 +45,19 @@
 		onMenuOpen?: (open: boolean) => void;
 		onChangeCover?: (course: CatalogNode) => void;
 		onRemoveCover?: (course: CatalogNode) => void;
+		displayTitle?: string;
+		layout?: 'grid' | 'list';
+		progressLabel?: string;
+		progressPercent?: number | null;
 	} = $props();
 	const counts = $derived(countCatalogNode(course));
 	const meta = $derived(formatCourseCardMeta(counts));
-	const cover = $derived(courseCover(course.title));
+	const cover = $derived(courseCover(displayTitle));
+	const courseLink = $derived(href('course', courseIdOf(course)));
 	let thumbnailUrl = $state<string | null>(null);
 	let objectUrl: string | null = null;
 	/** Capa efetiva: manual > miniatura automática > gerada pelo título. */
-	const coverSource = $derived(selectCourseCoverSource({ manualCoverUrl, thumbnailUrl }));
+	const coverSource = $derived(coverSrc ? 'external' : selectCourseCoverSource({ manualCoverUrl, thumbnailUrl }));
 
 	function openContextMenu(event: MouseEvent) {
 		if (!canManage) return;
@@ -113,15 +124,20 @@
 		};
 	}
 </script>
-<div class="course-card-shell">
-	<a class="course-card" href={href('course', courseIdOf(course))} oncontextmenu={openContextMenu}>
-		<span class="course-cover" use:cleanupThumbnail={{ course, profile, manualCover: manualCoverUrl }} style:--cover-from={cover.from} style:--cover-to={cover.to} style:--cover-angle={`${cover.angle}deg`} aria-hidden="true">
+<div class="course-card-shell" class:course-card-list={layout === 'list'}>
+	<a class="course-card" class:course-card-list={layout === 'list'} href={courseLink} aria-label={`Abrir curso ${displayTitle}`} oncontextmenu={openContextMenu}>
+		<span class="course-cover" class:has-image={coverSource !== 'generated'} use:cleanupThumbnail={{ course, profile, manualCover: manualCoverUrl }} style:--cover-from={cover.from} style:--cover-to={cover.to} style:--cover-angle={`${cover.angle}deg`} aria-hidden="true">
 			{#if coverSource === 'manual'}<img class="course-cover-image" src={manualCoverUrl ?? ''} alt="" />
+			{:else if coverSource === 'external'}<img class="course-cover-image" src={coverSrc} alt="" />
 			{:else if coverSource === 'thumbnail'}<img class="course-thumbnail" src={thumbnailUrl ?? ''} alt="" />{/if}
 			<span class="course-monogram">{cover.monogram}</span>
 		</span>
-		<span class="course-card-title">{course.title}</span>
-		{#if meta}<span class="course-card-meta">{meta}</span>{/if}
+		<span class="course-card-content">
+			<span class="course-card-title">{displayTitle}</span>
+			{#if meta}<span class="course-card-meta">{meta}</span>{/if}
+			{#if progressPercent !== null}<span class="course-progress" aria-label={`${progressPercent}% das aulas concluídas`}><span><i style:width={`${progressPercent}%`}></i></span><small>{progressPercent}% concluído</small></span>
+			{:else if progressLabel}<span class="course-progress-label">{progressLabel}</span>{/if}
+		</span>
 	</a>
 	{#if canManage}
 		<button

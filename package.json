@@ -13,6 +13,7 @@
     "dev:tauri": "node scripts/dev.mjs tauri",
     "verify": "node scripts/verify.mjs",
     "test:scripts": "node --test \"scripts/*.test.mjs\"",
+    "worktree:gc": "node scripts/worktree-gc.mjs",
     "e2e:server": "pnpm run build && cargo build -p learnvault-server && pnpm exec playwright test tests/e2e/server.spec.ts"
   },
   "devDependencies": {

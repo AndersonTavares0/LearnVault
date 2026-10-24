@@ -11,6 +11,7 @@ mod courses;
 mod covers;
 mod health;
 mod media;
+mod notes;
 mod ordering;
 mod spa;
 mod state;
@@ -88,6 +89,28 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/api/media", get(media::media).head(media::media))
         .route("/api/study/recent", get(study::recent))
+        .route("/api/study/analytics", get(study::analytics))
+        .route(
+            "/api/study/pomodoro",
+            get(study::pomodoro)
+                .post(study::start_pomodoro)
+                .put(study::pause_pomodoro)
+                .delete(study::reset_pomodoro),
+        )
+        .route(
+            "/api/study/notes",
+            get(notes::list)
+                .post(notes::create)
+                .layer(DefaultBodyLimit::max(128 * 1024)),
+        )
+        .route("/api/study/notes/all", get(notes::list_all))
+        .route(
+            "/api/study/notes/{note_id}",
+            axum::routing::put(notes::update)
+                .delete(notes::delete)
+                .layer(DefaultBodyLimit::max(128 * 1024)),
+        )
+        .route("/api/study/summary", get(study::summary))
         .route("/api/study/progress", get(study::progress))
         .route("/api/study/position", post(study::record_position))
         .route("/api/study/completed", post(study::set_completed))

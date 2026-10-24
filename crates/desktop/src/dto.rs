@@ -6,8 +6,8 @@
 //! desktop sem alteração.
 
 use learnvault_core::{
-    Availability, Catalog, CatalogFile, CatalogNode, MediaKind, NodeRole, RescanSummary,
-    StudyProgress,
+    Availability, Catalog, CatalogFile, CatalogNode, MediaKind, NodeRole, PomodoroState,
+    PomodoroStatus, RescanSummary, StudyAnalytics, StudyNote, StudyProgress,
 };
 use serde::Serialize;
 
@@ -248,6 +248,106 @@ impl StudyProgressDto {
             completed: false,
             updated_at: None,
             recorded: false,
+        }
+    }
+}
+
+/// Resumo de mídias concluídas pelo dono local em um curso.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct CourseStudySummaryDto {
+    /// Identidade opaca do curso.
+    pub course_id: String,
+    /// Mídias concluídas e ainda disponíveis no catálogo.
+    pub completed_media: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+/// Projeção das métricas de estudo exposta ao webview do desktop.
+pub struct StudyAnalyticsDto {
+    /// Quantidade de aulas com algum progresso registrado.
+    pub tracked_count: usize,
+    /// Quantidade de aulas marcadas como concluídas.
+    pub completed_count: usize,
+    /// Soma do tempo de reprodução registrado, em segundos.
+    pub total_position_seconds: i64,
+    /// Instante (ms) da última atividade de estudo, quando existir.
+    pub last_activity_at: Option<i64>,
+}
+
+impl From<StudyAnalytics> for StudyAnalyticsDto {
+    fn from(stats: StudyAnalytics) -> Self {
+        Self {
+            tracked_count: stats.tracked_count,
+            completed_count: stats.completed_count,
+            total_position_seconds: stats.total_position_seconds,
+            last_activity_at: stats.last_activity_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+/// Anotação de estudo vinculada a uma mídia do curso, exposta ao webview.
+pub struct StudyNoteDto {
+    /// Identidade estável da anotação.
+    pub note_id: i64,
+    /// Identidade opaca da mídia anotada.
+    pub media_id: String,
+    /// Texto livre escrito pelo usuário.
+    pub text: String,
+    /// Posição do vídeo (segundos) quando a nota foi criada.
+    pub position_seconds: Option<i64>,
+    /// Instante (ms) de criação.
+    pub created_at: i64,
+    /// Instante (ms) da última edição.
+    pub updated_at: i64,
+}
+
+impl From<StudyNote> for StudyNoteDto {
+    fn from(note: StudyNote) -> Self {
+        Self {
+            note_id: note.note_id,
+            media_id: note.media_id,
+            text: note.text,
+            position_seconds: note.position_seconds,
+            created_at: note.created_at,
+            updated_at: note.updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+/// Lista de anotações com indicação de corte por limite de itens.
+pub struct StudyNotesDto {
+    /// Anotações devolvidas, da mais recente para a mais antiga.
+    pub items: Vec<StudyNoteDto>,
+    /// Verdadeiro quando existiam mais anotações do que o limite devolvido.
+    pub truncated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+/// Estado do Pomodoro exposto ao webview do desktop.
+pub struct PomodoroDto {
+    /// Estado do ciclo: `idle`, `running` ou `paused`.
+    pub status: &'static str,
+    /// Duração configurada do ciclo, em segundos.
+    pub duration_seconds: i64,
+    /// Tempo já decorrido do ciclo, em segundos.
+    pub elapsed_seconds: i64,
+    /// Instante (ms) da última mudança de estado.
+    pub updated_at: i64,
+}
+
+impl From<PomodoroState> for PomodoroDto {
+    fn from(state: PomodoroState) -> Self {
+        Self {
+            status: match state.status {
+                PomodoroStatus::Idle => "idle",
+                PomodoroStatus::Running => "running",
+                PomodoroStatus::Paused => "paused",
+            },
+            duration_seconds: state.duration_seconds,
+            elapsed_seconds: state.elapsed_seconds,
+            updated_at: state.updated_at,
         }
     }
 }
