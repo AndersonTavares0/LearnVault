@@ -23,6 +23,7 @@ pub mod legacy_import;
 pub mod media;
 pub mod ordering;
 pub mod paths;
+pub mod pomodoro;
 pub mod removal;
 pub mod rescan;
 pub mod scanner;
@@ -51,9 +52,15 @@ pub use media::{
 };
 pub use ordering::{CatalogOrder, apply_order, order_siblings, sibling_paths, validate_siblings};
 pub use paths::KeyMode;
+pub use pomodoro::{
+    DailyMission, FocusDay, FocusKind, FocusSession, FocusSessionInput, FocusSummary,
+    RewardSummary, claim_daily_mission, claim_daily_mission_today, focus_summary, focus_summary_on,
+    record_focus_session, reward_summary, reward_summary_on, set_weekly_goal, weekly_goal,
+};
 pub use removal::{MediaRemovalImpact, MediaRemovalOutcome, media_removal_impact, remove_media};
 pub use rescan::{RescanSummary, apply_scan, rescan};
 pub use scanner::{MediaKind, ScanOutcome, ScannedFile, scan};
 pub use study::{
-    MAX_RECENT_STUDY, StudyProgress, recent_study, record_position, set_completed, study_progress,
+    MAX_RECENT_STUDY, StudyDay, StudyProgress, StudySummary, recent_study, record_position,
+    set_completed, study_progress, study_summary, study_summary_on,
 };

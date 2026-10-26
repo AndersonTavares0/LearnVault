@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countCatalogFiles, countCatalogNode, formatCount, formatCourseCardMeta, formatCourseMeta, formatLessonCounts, formatLessonMeta, isLessonMissing } from './catalog';
+import { collectMaterials, countCatalogFiles, countCatalogNode, formatCount, formatCourseCardMeta, formatCourseMeta, formatLessonCounts, formatLessonMeta, isLessonMissing } from './catalog';
 import type { CatalogCounts } from './catalog';
 import type { CatalogNode, FileEntry } from './transport';
 
@@ -161,6 +161,19 @@ describe('formatLessonMeta', () => {
 		expect(formatLessonMeta({ videos: 0, materials: 5 })).toBe('5 materiais');
 		expect(formatLessonMeta({ videos: 4, materials: 0 })).toBe('4 vídeos');
 		expect(formatLessonMeta({ videos: 0, materials: 0 })).toBe('');
+	});
+});
+
+describe('collectMaterials', () => {
+	it('collects non-media files from the whole course without duplicating paths', () => {
+		const lesson = node('lesson', 'Aula', [], [file('aula.mp4', 'media'), file('aula.pdf', 'material'), file('aula.srt', 'subtitle')]);
+		const module = node('module', 'Módulo', [lesson], [file('modulo.pdf', 'material')]);
+		const course = node('course', 'Curso', [module], [file('aula.pdf', 'material'), file('extra.zip', 'outro')]);
+		expect(collectMaterials(course).map((entry) => entry.path)).toEqual(['aula.pdf', 'extra.zip', 'modulo.pdf', 'aula.srt']);
+	});
+
+	it('returns an empty list when the course has no supporting files', () => {
+		expect(collectMaterials(node('course', 'Curso', [node('lesson', 'Aula', [], [file('aula.mp4', 'media')])]))).toEqual([]);
 	});
 });
 

@@ -65,9 +65,14 @@ O workspace Rust está completo: `crates/server` (Axum), `crates/desktop` (Tauri
 - **Capas:** cada curso pode ter um arquivo de até 4 MiB, com formato detectado pelos bytes
   iniciais, gravação atômica e `cover_version` no catálogo. A capa fica fora da pasta do curso; no
   desktop, usa o protocolo `learnvault-cover://` e comandos IPC dedicados.
-- **Estudo:** posição, conclusão e recentes funcionam do mesmo jeito no servidor, na SPA e no IPC
-  desktop. O player desktop reproduz mídia local, renderiza VTT e permite baixar SRT/ASS/SSA; o
-  build HTTP converte SRT sob demanda.
+- **Estudo e foco:** posição, conclusão, recentes, ofensiva, sessões Pomodoro e recompensas usam o
+  mesmo domínio SQLite em `crates/core`, com adaptadores HTTP autenticados e IPC desktop local. As
+  sessões são idempotentes por dono e identificador; o ledger de XP e os resgates diários impedem
+  duplicidade. O fuso da data é o local do servidor no modo HTTP e o do dispositivo no desktop; a
+  migração de sessões/recompensas antigas é uma reconstrução aproximada a partir do estado atual,
+  pois versões anteriores não guardavam o histórico completo de eventos. Timer e preferências de
+  interface continuam locais ao dispositivo. O player desktop reproduz mídia local, renderiza VTT
+  e permite baixar SRT/ASS/SSA; o build HTTP converte SRT sob demanda.
 - **Distribuição:** o instalador Windows NSIS está disponível; o pacote Linux/Flatpak ainda depende
   de validação em sandbox. Veja [distribuição](../operations/distribution.md).
 

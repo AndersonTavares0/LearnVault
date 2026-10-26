@@ -1,6 +1,6 @@
 import { courseIdOf, lessonFromNode, type Catalog, type CatalogNode, type FileEntry, type Lesson } from './transport';
 
-export type Route = 'login' | 'home' | 'course' | 'player' | 'settings';
+export type Route = 'login' | 'home' | 'course' | 'player' | 'settings' | 'statistics' | 'focus';
 export type HashLocation = { route: Route; courseId: string | null; lessonPath: string | null };
 
 function decodeSegment(value: string | undefined): string | null {
@@ -18,7 +18,8 @@ function decodeSegment(value: string | undefined): string | null {
  * `#/course/<id>` abre um curso e `#/course/<id>/<caminho>` abre a aula indicada dentro
  * dele: o caminho relativo da aula só é único por curso, então a identidade do curso faz
  * parte da rota. `#/player/<id>/<caminho>` é a forma legada da mesma tela e continua
- * aceita. `#/settings` abre as preferências locais e não identifica curso algum.
+ * aceita. `#/settings` abre as preferências locais e `#/statistics` o resumo do
+ * estudo; nenhum dos dois identifica curso.
  * `#/player/<caminho>` é a forma legada de um arquivo solto sem curso dono;
  * o caminho deve começar a busca global. Qualquer outro valor cai na rota padrão do build:
  * o login no servidor e a tela inicial no desktop, que não tem sessão.
@@ -26,7 +27,7 @@ function decodeSegment(value: string | undefined): string | null {
 export function locationFromHash(hash: string, fallback: Route = 'login'): HashLocation {
 	const value = hash.replace(/^#\/?/, '');
 	const [name, ...parts] = value.split('/');
-	const route = name === 'home' || name === 'course' || name === 'player' || name === 'settings' ? name : fallback;
+	const route = name === 'home' || name === 'course' || name === 'player' || name === 'settings' || name === 'statistics' || name === 'focus' ? name : fallback;
 	if (route === 'course') {
 		if (parts.length === 0) return { route, courseId: null, lessonPath: null };
 		const lessonString = parts.slice(1).join('/');
@@ -62,7 +63,7 @@ export function href(route: Route, courseId?: string, lessonPath?: string): stri
 /** Destino seguro depois do login, preservando uma rota já navegável. */
 export function destinationAfterLogin(hash: string): string {
 	const location = locationFromHash(hash);
-	if (location.route === 'home' || location.route === 'course' || location.route === 'settings') return href(location.route, location.courseId ?? undefined, location.lessonPath ?? undefined);
+	if (location.route === 'home' || location.route === 'course' || location.route === 'settings' || location.route === 'statistics' || location.route === 'focus') return href(location.route, location.courseId ?? undefined, location.lessonPath ?? undefined);
 	if (location.route === 'player') {
 		const parts = hash.replace(/^#\/?/, '').split('/');
 		if (parts.length === 1) {

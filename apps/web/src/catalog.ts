@@ -125,6 +125,25 @@ export function formatLessonMeta(counts: FileCounts): string {
 	]);
 }
 
+/**
+ * Materiais (não mídia) de um curso inteiro, sem repetir o mesmo caminho.
+ *
+ * A ficha do curso mostra tudo o que acompanha as aulas, inclusive o que está dentro de
+ * módulos, em uma lista única. Legendas e arquivos de apoio entram; os vídeos ficam de
+ * fora porque já são as aulas.
+ */
+export function collectMaterials(node: CatalogNode): FileEntry[] {
+	const byPath = new Map<string, FileEntry>();
+	function walk(current: CatalogNode): void {
+		for (const file of [...current.files, ...current.looseFiles]) {
+			if (file.kind !== 'media' && !byPath.has(file.path)) byPath.set(file.path, file);
+		}
+		for (const child of current.children) walk(child);
+	}
+	walk(node);
+	return [...byPath.values()];
+}
+
 /** Contexto de origem de um item recente: o curso e, quando houver, o módulo. */
 export function formatLocationContext(courseTitle: string, moduleTitle: string | null): string {
 	return joinParts([courseTitle, moduleTitle ?? '']);

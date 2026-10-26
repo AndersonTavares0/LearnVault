@@ -11,7 +11,7 @@ use rusqlite_migration::{M, Migrations};
 /// A recusa de um schema mais novo não depende desta constante — ela vem de
 /// `SchemaVersion::Outside` —, mas ela deve acompanhar a cadeia de migrações porque
 /// aparece na mensagem de diagnóstico de [`crate::Error::SchemaTooNew`].
-pub(crate) const SCHEMA_VERSION: usize = 4;
+pub(crate) const SCHEMA_VERSION: usize = 6;
 
 /// Versão 1: bibliotecas, mídia, varreduras e estado de estudo.
 ///
@@ -139,7 +139,259 @@ const V4: &str = "
 ALTER TABLE user ADD COLUMN must_change_credentials INTEGER NOT NULL DEFAULT 0 CHECK (must_change_credentials IN (0, 1));
 ";
 
-const MIGRATIONS_SLICE: &[M<'static>] = &[M::up(V1), M::up(V2), M::up(V3), M::up(V4)];
+// `study_state` guarda só a última interação por aula, então não serve para
+// reconstruir ofensiva. `study_day` agrega um registro por dono e dia local.
+const V5: &str = "
+CREATE TABLE study_day (
+    owner_id TEXT NOT NULL,
+    day TEXT NOT NULL,
+    last_at INTEGER NOT NULL,
+    PRIMARY KEY (owner_id, day)
+);
+
+INSERT INTO study_day (owner_id, day, last_at)
+SELECT owner_id, date(updated_at, 'unixepoch', 'localtime'), MAX(updated_at)
+FROM study_state
+GROUP BY owner_id, date(updated_at, 'unixepoch', 'localtime');
+
+CREATE TRIGGER study_state_activity_after_insert
+AFTER INSERT ON study_state
+BEGIN
+    INSERT INTO study_day (owner_id, day, last_at)
+    VALUES (NEW.owner_id, date(NEW.updated_at, 'unixepoch', 'localtime'), NEW.updated_at)
+    ON CONFLICT(owner_id, day) DO UPDATE SET last_at = MAX(study_day.last_at, excluded.last_at);
+END;
+
+CREATE TRIGGER study_state_activity_after_update
+AFTER UPDATE OF updated_at ON study_state
+WHEN NEW.updated_at > OLD.updated_at
+BEGIN
+    INSERT INTO study_day (owner_id, day, last_at)
+    VALUES (NEW.owner_id, date(NEW.updated_at, 'unixepoch', 'localtime'), NEW.updated_at)
+    ON CONFLICT(owner_id, day) DO UPDATE SET last_at = MAX(study_day.last_at, excluded.last_at);
+END;
+";
+
+// Sessões e recompensas são fatos imutáveis e idempotentes; `study_state` continua sendo
+// somente o estado atual de retomada/conclusão.
+const V6: &str = "
+CREATE TABLE focus_session (
+    owner_id TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('focus', 'short', 'long')),
+    planned_seconds INTEGER NOT NULL CHECK (planned_seconds BETWEEN 1 AND 7200),
+    actual_seconds INTEGER NOT NULL CHECK (actual_seconds BETWEEN 0 AND 7200),
+    completed INTEGER NOT NULL CHECK (completed IN (0, 1)),
+    started_at INTEGER NOT NULL,
+    ended_at INTEGER NOT NULL,
+    PRIMARY KEY (owner_id, session_id),
+    CHECK (ended_at >= started_at)
+);
+
+CREATE INDEX focus_session_owner_ended_idx ON focus_session (owner_id, ended_at);
+
+CREATE TABLE lesson_completion_event (
+    event_id INTEGER PRIMARY KEY,
+    owner_id TEXT NOT NULL,
+    media_id TEXT NOT NULL,
+    completed_at INTEGER NOT NULL
+);
+
+CREATE INDEX lesson_completion_owner_time_idx
+    ON lesson_completion_event (owner_id, completed_at);
+
+CREATE TABLE xp_event (
+    owner_id TEXT NOT NULL,
+    event_key TEXT NOT NULL,
+    source TEXT NOT NULL CHECK (source IN ('lesson', 'focus', 'weekly_goal', 'mission')),
+    source_id TEXT NOT NULL,
+    amount INTEGER NOT NULL CHECK (amount > 0),
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (owner_id, event_key)
+);
+
+CREATE TABLE daily_mission_claim (
+    owner_id TEXT NOT NULL,
+    day TEXT NOT NULL,
+    mission_id TEXT NOT NULL CHECK (mission_id IN ('lesson', 'focus-two', 'focus-fifty')),
+    claimed_at INTEGER NOT NULL,
+    PRIMARY KEY (owner_id, day, mission_id)
+);
+
+CREATE TABLE gamification_settings (
+    owner_id TEXT PRIMARY KEY NOT NULL,
+    weekly_goal INTEGER NOT NULL DEFAULT 3 CHECK (weekly_goal BETWEEN 1 AND 7)
+);
+
+-- Conclusão de uma aula rende XP uma única vez, mas cada nova conclusão é mantida para
+-- progresso diário das missões. A migração inicial é uma aproximação best-effort.
+INSERT INTO lesson_completion_event (owner_id, media_id, completed_at)
+SELECT owner_id, media_id, updated_at FROM study_state WHERE completed = 1;
+
+INSERT INTO xp_event (owner_id, event_key, source, source_id, amount, created_at)
+SELECT owner_id, 'lesson:' || media_id, 'lesson', media_id, 40, updated_at
+FROM study_state WHERE completed = 1;
+
+CREATE TRIGGER lesson_completion_after_insert
+AFTER INSERT ON study_state WHEN NEW.completed = 1
+BEGIN
+    INSERT INTO lesson_completion_event (owner_id, media_id, completed_at)
+    VALUES (NEW.owner_id, NEW.media_id, NEW.updated_at);
+    INSERT INTO xp_event (owner_id, event_key, source, source_id, amount, created_at)
+    SELECT NEW.owner_id, 'lesson:' || NEW.media_id, 'lesson', NEW.media_id, 40, NEW.updated_at
+    WHERE NOT EXISTS (SELECT 1 FROM xp_event WHERE owner_id = NEW.owner_id AND event_key = 'lesson:' || NEW.media_id);
+END;
+
+CREATE TRIGGER lesson_completion_after_update
+AFTER UPDATE OF completed ON study_state
+WHEN NEW.completed = 1 AND OLD.completed = 0
+BEGIN
+    INSERT INTO lesson_completion_event (owner_id, media_id, completed_at)
+    VALUES (NEW.owner_id, NEW.media_id, NEW.updated_at);
+    INSERT INTO xp_event (owner_id, event_key, source, source_id, amount, created_at)
+    SELECT NEW.owner_id, 'lesson:' || NEW.media_id, 'lesson', NEW.media_id, 40, NEW.updated_at
+    WHERE NOT EXISTS (SELECT 1 FROM xp_event WHERE owner_id = NEW.owner_id AND event_key = 'lesson:' || NEW.media_id);
+END;
+
+-- O trigger duplica o upsert de study_day da V5 de propósito: assim a regra semanal
+-- observa a atividade da mesma mutação, sem depender da ordem de execução dos triggers.
+CREATE TRIGGER weekly_goal_after_study_insert
+AFTER INSERT ON study_state
+BEGIN
+    INSERT INTO study_day (owner_id, day, last_at)
+    VALUES (NEW.owner_id, date(NEW.updated_at, 'unixepoch', 'localtime'), NEW.updated_at)
+    ON CONFLICT(owner_id, day) DO UPDATE SET last_at = MAX(study_day.last_at, excluded.last_at);
+    INSERT INTO xp_event (owner_id, event_key, source, source_id, amount, created_at)
+    SELECT NEW.owner_id,
+           'weekly:' || date(d.day, '-' || ((CAST(strftime('%w', d.day) AS INTEGER) + 6) % 7) || ' days'),
+           'weekly_goal',
+           date(d.day, '-' || ((CAST(strftime('%w', d.day) AS INTEGER) + 6) % 7) || ' days'),
+           50,
+           NEW.updated_at
+    FROM (SELECT date(NEW.updated_at, 'unixepoch', 'localtime') AS day) d
+    WHERE (SELECT COUNT(*) FROM study_day s
+           WHERE s.owner_id = NEW.owner_id
+             AND s.day BETWEEN date(d.day, '-' || ((CAST(strftime('%w', d.day) AS INTEGER) + 6) % 7) || ' days')
+                           AND date(date(d.day, '-' || ((CAST(strftime('%w', d.day) AS INTEGER) + 6) % 7) || ' days'), '+6 days'))
+          >= COALESCE((SELECT weekly_goal FROM gamification_settings WHERE owner_id = NEW.owner_id), 3)
+      AND NOT EXISTS (SELECT 1 FROM xp_event e WHERE e.owner_id = NEW.owner_id
+                      AND e.event_key = 'weekly:' || date(d.day, '-' || ((CAST(strftime('%w', d.day) AS INTEGER) + 6) % 7) || ' days'));
+END;
+
+CREATE TRIGGER weekly_goal_after_study_update
+AFTER UPDATE OF updated_at ON study_state
+WHEN NEW.updated_at > OLD.updated_at
+BEGIN
+    INSERT INTO study_day (owner_id, day, last_at)
+    VALUES (NEW.owner_id, date(NEW.updated_at, 'unixepoch', 'localtime'), NEW.updated_at)
+    ON CONFLICT(owner_id, day) DO UPDATE SET last_at = MAX(study_day.last_at, excluded.last_at);
+    INSERT INTO xp_event (owner_id, event_key, source, source_id, amount, created_at)
+    SELECT NEW.owner_id,
+           'weekly:' || date(d.day, '-' || ((CAST(strftime('%w', d.day) AS INTEGER) + 6) % 7) || ' days'),
+           'weekly_goal',
+           date(d.day, '-' || ((CAST(strftime('%w', d.day) AS INTEGER) + 6) % 7) || ' days'),
+           50,
+           NEW.updated_at
+    FROM (SELECT date(NEW.updated_at, 'unixepoch', 'localtime') AS day) d
+    WHERE (SELECT COUNT(*) FROM study_day s
+           WHERE s.owner_id = NEW.owner_id
+             AND s.day BETWEEN date(d.day, '-' || ((CAST(strftime('%w', d.day) AS INTEGER) + 6) % 7) || ' days')
+                           AND date(date(d.day, '-' || ((CAST(strftime('%w', d.day) AS INTEGER) + 6) % 7) || ' days'), '+6 days'))
+          >= COALESCE((SELECT weekly_goal FROM gamification_settings WHERE owner_id = NEW.owner_id), 3)
+      AND NOT EXISTS (SELECT 1 FROM xp_event e WHERE e.owner_id = NEW.owner_id
+                      AND e.event_key = 'weekly:' || date(d.day, '-' || ((CAST(strftime('%w', d.day) AS INTEGER) + 6) % 7) || ' days'));
+END;
+
+CREATE TRIGGER focus_session_rewards_after_insert
+AFTER INSERT ON focus_session
+WHEN NEW.kind = 'focus' AND NEW.completed = 1
+BEGIN
+    INSERT INTO study_day (owner_id, day, last_at)
+    VALUES (NEW.owner_id, date(NEW.ended_at, 'unixepoch', 'localtime'), NEW.ended_at)
+    ON CONFLICT(owner_id, day) DO UPDATE SET last_at = MAX(study_day.last_at, excluded.last_at);
+    INSERT INTO xp_event (owner_id, event_key, source, source_id, amount, created_at)
+    VALUES (NEW.owner_id, 'focus:' || NEW.session_id, 'focus', NEW.session_id, 20, NEW.ended_at);
+    INSERT OR IGNORE INTO xp_event (owner_id, event_key, source, source_id, amount, created_at)
+    SELECT NEW.owner_id,
+           'weekly:' || date(d.day, '-' || ((CAST(strftime('%w', d.day) AS INTEGER) + 6) % 7) || ' days'),
+           'weekly_goal',
+           date(d.day, '-' || ((CAST(strftime('%w', d.day) AS INTEGER) + 6) % 7) || ' days'),
+           50,
+           NEW.ended_at
+    FROM (SELECT date(NEW.ended_at, 'unixepoch', 'localtime') AS day) d
+    WHERE (SELECT COUNT(*) FROM study_day s
+           WHERE s.owner_id = NEW.owner_id
+             AND s.day BETWEEN date(d.day, '-' || ((CAST(strftime('%w', d.day) AS INTEGER) + 6) % 7) || ' days')
+                           AND date(date(d.day, '-' || ((CAST(strftime('%w', d.day) AS INTEGER) + 6) % 7) || ' days'), '+6 days'))
+          >= COALESCE((SELECT weekly_goal FROM gamification_settings WHERE owner_id = NEW.owner_id), 3)
+      AND NOT EXISTS (SELECT 1 FROM xp_event e WHERE e.owner_id = NEW.owner_id
+                      AND e.event_key = 'weekly:' || date(d.day, '-' || ((CAST(strftime('%w', d.day) AS INTEGER) + 6) % 7) || ' days'));
+END;
+
+CREATE TRIGGER weekly_goal_preference_after_insert
+AFTER INSERT ON gamification_settings
+BEGIN
+    INSERT INTO xp_event (owner_id, event_key, source, source_id, amount, created_at)
+    SELECT NEW.owner_id,
+           'weekly:' || date(d.day, '-' || ((CAST(strftime('%w', d.day) AS INTEGER) + 6) % 7) || ' days'),
+           'weekly_goal',
+           date(d.day, '-' || ((CAST(strftime('%w', d.day) AS INTEGER) + 6) % 7) || ' days'),
+           50,
+           unixepoch('now')
+    FROM (SELECT date('now', 'localtime') AS day) d
+    WHERE (SELECT COUNT(*) FROM study_day s
+           WHERE s.owner_id = NEW.owner_id
+             AND s.day BETWEEN date(d.day, '-' || ((CAST(strftime('%w', d.day) AS INTEGER) + 6) % 7) || ' days')
+                           AND date(date(d.day, '-' || ((CAST(strftime('%w', d.day) AS INTEGER) + 6) % 7) || ' days'), '+6 days'))
+          >= NEW.weekly_goal
+      AND NOT EXISTS (SELECT 1 FROM xp_event e WHERE e.owner_id = NEW.owner_id
+                      AND e.event_key = 'weekly:' || date(d.day, '-' || ((CAST(strftime('%w', d.day) AS INTEGER) + 6) % 7) || ' days'));
+END;
+
+CREATE TRIGGER weekly_goal_preference_after_update
+AFTER UPDATE OF weekly_goal ON gamification_settings
+WHEN NEW.weekly_goal <> OLD.weekly_goal
+BEGIN
+    INSERT INTO xp_event (owner_id, event_key, source, source_id, amount, created_at)
+    SELECT NEW.owner_id,
+           'weekly:' || date(d.day, '-' || ((CAST(strftime('%w', d.day) AS INTEGER) + 6) % 7) || ' days'),
+           'weekly_goal',
+           date(d.day, '-' || ((CAST(strftime('%w', d.day) AS INTEGER) + 6) % 7) || ' days'),
+           50,
+           unixepoch('now')
+    FROM (SELECT date('now', 'localtime') AS day) d
+    WHERE (SELECT COUNT(*) FROM study_day s
+           WHERE s.owner_id = NEW.owner_id
+             AND s.day BETWEEN date(d.day, '-' || ((CAST(strftime('%w', d.day) AS INTEGER) + 6) % 7) || ' days')
+                           AND date(date(d.day, '-' || ((CAST(strftime('%w', d.day) AS INTEGER) + 6) % 7) || ' days'), '+6 days'))
+          >= NEW.weekly_goal
+      AND NOT EXISTS (SELECT 1 FROM xp_event e WHERE e.owner_id = NEW.owner_id
+                      AND e.event_key = 'weekly:' || date(d.day, '-' || ((CAST(strftime('%w', d.day) AS INTEGER) + 6) % 7) || ' days'));
+END;
+
+CREATE TRIGGER mission_claim_rewards_after_insert
+AFTER INSERT ON daily_mission_claim
+BEGIN
+    INSERT INTO xp_event (owner_id, event_key, source, source_id, amount, created_at)
+    SELECT NEW.owner_id,
+           'mission:' || NEW.day || ':' || NEW.mission_id,
+           'mission',
+           NEW.day || ':' || NEW.mission_id,
+           30,
+           NEW.claimed_at
+    WHERE NOT EXISTS (SELECT 1 FROM xp_event e WHERE e.owner_id = NEW.owner_id
+                      AND e.event_key = 'mission:' || NEW.day || ':' || NEW.mission_id);
+END;
+";
+
+const MIGRATIONS_SLICE: &[M<'static>] = &[
+    M::up(V1),
+    M::up(V2),
+    M::up(V3),
+    M::up(V4),
+    M::up(V5),
+    M::up(V6),
+];
 
 /// Cadeia de migrações aplicada por [`crate::db::Database`].
 pub(crate) const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATIONS_SLICE);

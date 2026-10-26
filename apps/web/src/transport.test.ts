@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { findLesson } from './router';
-import { desktopCoverUrl, desktopMediaUrl, DesktopStub, HttpTransport, lessonFromNode, MAX_COVER_BYTES, normalizeCatalog, normalizeRecentStudy, normalizeStudyProgress, normalizeUpdateStatus, normalizeUser, STUDY_NOT_AVAILABLE, CATALOG_LIMITS, type Transport } from './transport';
+import { desktopCoverUrl, desktopMediaUrl, DesktopStub, HttpTransport, lessonFromNode, MAX_COVER_BYTES, normalizeCatalog, normalizeFocusSession, normalizeFocusSummary, normalizeRecentStudy, normalizeRewardSummary, normalizeStudyProgress, normalizeStudySummary, normalizeUpdateStatus, normalizeUser, STUDY_NOT_AVAILABLE, CATALOG_LIMITS, type Transport } from './transport';
 
 // O Tauri só é carregado no desktop: fora dele o módulo é substituído pelo mock, de modo
 // que a suíte nunca toca `window.__TAURI_INTERNALS__`.
@@ -9,8 +9,8 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 
 describe('transport contract', () => {
 	it('exposes the HTTP transport seam without routing assumptions', () => {
-		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'checkUpdate', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover'];
-		expect(methods).toHaveLength(18);
+		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'studySummary', 'recordFocusSession', 'focusSummary', 'rewardSummary', 'claimDailyMission', 'setWeeklyGoal', 'checkUpdate', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover'];
+		expect(methods).toHaveLength(24);
 	});
 	it('does not offer native folder selection over HTTP', async () => {
 		await expect(new HttpTransport().importCourse()).rejects.toThrow('desktop é quem escolhe pastas');
@@ -437,6 +437,51 @@ describe('transport contract', () => {
 		const recent = normalizeRecentStudy({ items: [{ media_id: 'm1', position_seconds: 10, completed: false, recorded: true }] });
 		expect(recent.items).toHaveLength(1);
 		expect(recent.items[0].mediaId).toBe('m1');
+	});
+	it('normalizes a study summary with a seven-day week', () => {
+		const days = ['2026-10-19', '2026-10-20', '2026-10-21', '2026-10-22', '2026-10-23', '2026-10-24', '2026-10-25'].map((day, index) => ({ day, active: index < 3 }));
+		const summary = normalizeStudySummary({ current_streak: 3, longest_streak: 9, today: '2026-10-21', today_active: true, at_risk: false, week_active_days: 3, completed_lessons: 12, days });
+		expect(summary).toMatchObject({ currentStreak: 3, longestStreak: 9, today: '2026-10-21', todayActive: true, atRisk: false, weekActiveDays: 3, completedLessons: 12 });
+		expect(summary.days).toHaveLength(7);
+		expect(() => normalizeStudySummary({ current_streak: 3, longest_streak: 9, today: '2026-10-21', today_active: true, at_risk: false, week_active_days: 3, days: days.slice(0, 6) })).toThrow('Resposta inválida do servidor');
+	});
+	it('reads the study summary from the HTTP endpoint', async () => {
+		const days = ['2026-10-19', '2026-10-20', '2026-10-21', '2026-10-22', '2026-10-23', '2026-10-24', '2026-10-25'].map((day) => ({ day, active: false }));
+		const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ current_streak: 0, longest_streak: 0, today: '2026-10-25', today_active: false, at_risk: false, week_active_days: 0, completed_lessons: 0, days }), { status: 200 }));
+		vi.stubGlobal('fetch', fetchMock);
+		await expect(new HttpTransport().studySummary()).resolves.toMatchObject({ currentStreak: 0, today: '2026-10-25' });
+		expect(fetchMock).toHaveBeenCalledWith('/api/study/summary');
+		vi.unstubAllGlobals();
+	});
+	it('normalizes persisted focus sessions, focus summaries and nested rewards strictly', () => {
+		const session = normalizeFocusSession({ id: 'session-1', kind: 'focus', planned_seconds: 1500, actual_seconds: 1500, completed: true, started_at: 100, ended_at: 1600 });
+		expect(session).toEqual({ id: 'session-1', kind: 'focus', plannedSeconds: 1500, actualSeconds: 1500, completed: true, startedAt: 100, endedAt: 1600 });
+		const days = ['2026-10-26', '2026-10-27', '2026-10-28', '2026-10-29', '2026-10-30', '2026-10-31', '2026-11-01'].map((day) => ({ day, minutes: 0, sessions: 0 }));
+		const focus = normalizeFocusSummary({ today_minutes: 0, week_minutes: 0, week_sessions: 0, total_minutes: 25, total_sessions: 1, completion_rate: 100, best_day: null, days });
+		expect(focus).toMatchObject({ totalMinutes: 25, totalSessions: 1, completionRate: 100 });
+		expect(focus.days[0]).toEqual({ day: '2026-10-26', minutes: 0, sessions: 0 });
+		const studyDays = days.map(({ day }) => ({ day, active: false }));
+		const rewards = normalizeRewardSummary({ xp: 20, completed_lessons: 0, weekly_goal: 3, missions: [{ id: 'lesson', progress: 0, target: 1, claimed: false }], study: { current_streak: 0, longest_streak: 0, today: '2026-10-26', today_active: false, at_risk: false, week_active_days: 0, completed_lessons: 0, days: studyDays } });
+		expect(rewards).toMatchObject({ xp: 20, weeklyGoal: 3, missions: [{ id: 'lesson', progress: 0, target: 1, claimed: false }], study: { completedLessons: 0 } });
+		expect(() => normalizeFocusSession({ ...session, kind: 'other' })).toThrow('Resposta inválida do servidor');
+		expect(() => normalizeRewardSummary({ xp: -1 })).toThrow('Resposta inválida do servidor');
+	});
+	it('uses the persisted focus and reward endpoints with idempotent payloads', async () => {
+		const payload = { id: 'session-1', kind: 'focus', planned_seconds: 1500, actual_seconds: 1500, completed: true, started_at: 100, ended_at: 1600 };
+		const response = { ...payload };
+		const fetchMock = vi.fn()
+			.mockResolvedValueOnce(new Response(JSON.stringify(response), { status: 200 }))
+			.mockResolvedValueOnce(new Response(JSON.stringify({ weekly_goal: 5 }), { status: 200 }))
+			.mockResolvedValueOnce(new Response(JSON.stringify({ claimed: true }), { status: 200 }));
+		vi.stubGlobal('fetch', fetchMock);
+		const transport = new HttpTransport();
+		await expect(transport.recordFocusSession({ id: 'session-1', kind: 'focus', plannedSeconds: 1500, actualSeconds: 1500, completed: true, startedAt: 100, endedAt: 1600 })).resolves.toMatchObject({ id: 'session-1', actualSeconds: 1500 });
+		await expect(transport.setWeeklyGoal(5)).resolves.toBe(5);
+		await expect(transport.claimDailyMission('lesson')).resolves.toBe(true);
+		expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/focus/sessions', '/api/rewards/weekly-goal', '/api/rewards/missions/lesson/claim']);
+		expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ method: 'POST', body: JSON.stringify(payload) });
+		expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ method: 'PUT', body: JSON.stringify({ weekly_goal: 5 }) });
+		vi.unstubAllGlobals();
 	});
 	it('reads study progress from the HTTP endpoint', async () => {
 		const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ media_id: 'm1', position_seconds: 42, completed: false, recorded: true }), { status: 200 }));

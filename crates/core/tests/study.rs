@@ -7,7 +7,7 @@
 use learnvault_core::paths::relative_path_key;
 use learnvault_core::{
     Database, Error, KeyMode, MAX_RECENT_STUDY, recent_study, record_position, set_completed,
-    study_progress,
+    study_progress, study_summary_on,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -61,6 +61,14 @@ fn seed(
             i64::from(completed),
             updated_at
         ],
+    )
+}
+
+/// Marca um dia ativo direto em `study_day`, sem depender do relógio do sistema.
+fn seed_day(db: &Database, owner_id: &str, day: &str) -> rusqlite::Result<usize> {
+    db.connection().execute(
+        "INSERT INTO study_day (owner_id, day, last_at) VALUES (?1, ?2, ?3)",
+        rusqlite::params![owner_id, day, SEEDED_AT],
     )
 }
 
@@ -676,5 +684,124 @@ fn set_completed_is_atomic_under_failure() -> TestResult {
         other => panic!("esperava a falha injetada no banco, obtive {other:?}"),
     }
     assert_eq!(row(&db, OWNER, "m1"), Some((10, 0, SEEDED_AT)));
+    Ok(())
+}
+
+#[test]
+fn study_summary_counts_streak_and_current_week() -> TestResult {
+    let db = library_db()?;
+    for day in ["2026-10-19", "2026-10-20", "2026-10-21"] {
+        seed_day(&db, OWNER, day)?;
+    }
+
+    let summary = study_summary_on(&db, OWNER, "2026-10-21")?;
+    assert_eq!(summary.current_streak, 3);
+    assert_eq!(summary.longest_streak, 3);
+    assert_eq!(summary.today, "2026-10-21");
+    assert!(summary.today_active);
+    assert!(!summary.at_risk);
+    assert_eq!(summary.week_active_days, 3);
+    assert_eq!(summary.days.len(), 7);
+    assert_eq!(summary.days[0].day, "2026-10-19");
+    assert_eq!(summary.days[6].day, "2026-10-25");
+    assert_eq!(summary.days.iter().filter(|day| day.active).count(), 3);
+    Ok(())
+}
+
+#[test]
+fn study_summary_counts_all_completed_lessons_for_progress_rewards() -> TestResult {
+    let db = library_db()?;
+    for id in ["done-1", "done-2", "open"] {
+        insert_media(&db, id, "available")?;
+    }
+    seed(&db, OWNER, "done-1", 10, true, SEEDED_AT)?;
+    seed(&db, OWNER, "done-2", 10, true, SEEDED_AT + 1)?;
+    seed(&db, OWNER, "open", 10, false, SEEDED_AT + 2)?;
+    seed(&db, OTHER, "open", 10, true, SEEDED_AT + 3)?;
+
+    let summary = study_summary_on(&db, OWNER, "2026-10-21")?;
+    assert_eq!(summary.completed_lessons, 2);
+    Ok(())
+}
+
+#[test]
+fn study_summary_keeps_yesterday_streak_at_risk() -> TestResult {
+    let db = library_db()?;
+    seed_day(&db, OWNER, "2026-10-20")?;
+    seed_day(&db, OWNER, "2026-10-21")?;
+
+    let summary = study_summary_on(&db, OWNER, "2026-10-22")?;
+    assert_eq!(summary.current_streak, 2);
+    assert!(!summary.today_active);
+    assert!(summary.at_risk);
+    Ok(())
+}
+
+#[test]
+fn study_summary_resets_after_a_gap_but_keeps_the_record() -> TestResult {
+    let db = library_db()?;
+    for day in [
+        "2026-09-01",
+        "2026-09-02",
+        "2026-09-03",
+        "2026-09-04",
+        "2026-09-05",
+    ] {
+        seed_day(&db, OWNER, day)?;
+    }
+
+    let summary = study_summary_on(&db, OWNER, "2026-10-22")?;
+    assert_eq!(summary.current_streak, 0);
+    assert!(!summary.at_risk);
+    assert_eq!(summary.longest_streak, 5);
+    Ok(())
+}
+
+#[test]
+fn study_summary_week_starts_on_monday() -> TestResult {
+    let db = library_db()?;
+    seed_day(&db, OWNER, "2026-10-18")?; // domingo anterior
+    seed_day(&db, OWNER, "2026-10-19")?; // segunda da semana corrente
+
+    let summary = study_summary_on(&db, OWNER, "2026-10-25")?;
+    assert_eq!(summary.days[0].day, "2026-10-19");
+    assert_eq!(summary.week_active_days, 1);
+    Ok(())
+}
+
+#[test]
+fn study_summary_rejects_invalid_day_and_isolates_owners() -> TestResult {
+    let db = library_db()?;
+    seed_day(&db, OWNER, "2026-10-21")?;
+    seed_day(&db, OTHER, "2026-10-20")?;
+
+    match study_summary_on(&db, OWNER, "2026-02-30") {
+        Err(Error::InvalidStudyDay { day }) => assert_eq!(day, "2026-02-30"),
+        other => panic!("esperava dia inválido, obtive {other:?}"),
+    }
+
+    assert_eq!(
+        study_summary_on(&db, OWNER, "2026-10-21")?.week_active_days,
+        1
+    );
+    let other = study_summary_on(&db, OTHER, "2026-10-21")?;
+    assert_eq!(other.week_active_days, 1);
+    assert_eq!(other.current_streak, 1);
+    assert!(other.at_risk);
+    Ok(())
+}
+
+#[test]
+fn study_day_is_filled_by_study_state_trigger() -> TestResult {
+    let db = library_db()?;
+    insert_media(&db, "m1", "available")?;
+    seed(&db, OWNER, "m1", 10, false, 1_760_000_000)?;
+
+    let rows: i64 = db.connection().query_row(
+        "SELECT COUNT(*) FROM study_day WHERE owner_id = ?1",
+        [OWNER],
+        |row| row.get(0),
+    )?;
+    assert_eq!(rows, 1, "a inserção em study_state marca o dia local");
     Ok(())
 }

@@ -30,6 +30,15 @@ describe('generated course covers', () => {
 		expect(first).not.toEqual(second);
 	});
 
+	it('derives a stable spine code and a known pattern', () => {
+		const first = courseCover('Física Quântica');
+		const second = courseCover('Física Quântica');
+		expect(first.code).toMatch(/^FQ \d{3}$/);
+		expect(second.code).toBe(first.code);
+		expect(['grid', 'arcs', 'lines', 'dots', 'blocks', 'wave']).toContain(first.pattern);
+		expect(courseCover('História da Arte').pattern).not.toBe('');
+	});
+
 	it('derives a deterministic gradient angle within a readable range', () => {
 		const titles = ['Física Quântica', 'História da Arte', 'Programação em Go', '   ', '--', 'Matemática'];
 		const angles = titles.map((title) => courseCover(title).angle);

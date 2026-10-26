@@ -10,6 +10,8 @@
 /** Matizes canônicos da paleta do produto: verde, oliva, âmbar e terracota. */
 const HUES = [158, 130, 86, 40, 20];
 
+export type CourseCoverPattern = 'grid' | 'arcs' | 'lines' | 'dots' | 'blocks' | 'wave';
+
 export type CourseCover = {
 	/** Cor inicial do gradiente. */
 	from: string;
@@ -24,6 +26,10 @@ export type CourseCover = {
 	 * sem depender de aleatoriedade nem de ordem de renderização.
 	 */
 	angle: number;
+	/** Código curto exibido na lombada, como `PG 482`. */
+	code: string;
+	/** Padrão geométrico da capa, determinístico por título. */
+	pattern: CourseCoverPattern;
 };
 
 /** Hash FNV-1a de 32 bits, estável entre execuções. */
@@ -71,6 +77,16 @@ export function selectCourseCoverSource(input: {
 	return 'generated';
 }
 
+const PATTERNS: CourseCoverPattern[] = ['grid', 'arcs', 'lines', 'dots', 'blocks', 'wave'];
+
+/**
+ * Código curto e estável para a lombada. As iniciais vêm do monograma e o número do hash
+ * separa cursos que compartilham as mesmas iniciais.
+ */
+export function courseCode(title: string, hash = hashTitle(normalize(title).toLowerCase())): string {
+	return `${courseMonogram(title)} ${100 + (hash % 900)}`;
+}
+
 /** Capa determinística do curso. */
 export function courseCover(title: string): CourseCover {
 	const hash = hashTitle(normalize(title).toLowerCase());
@@ -82,6 +98,8 @@ export function courseCover(title: string): CourseCover {
 		from: `hsl(${hue} 26% 31%)`,
 		to: `hsl(${(hue + shift) % 360} 32% 17%)`,
 		monogram: courseMonogram(title),
-		angle
+		angle,
+		code: courseCode(title, hash),
+		pattern: PATTERNS[(hash >>> 16) % PATTERNS.length]
 	};
 }

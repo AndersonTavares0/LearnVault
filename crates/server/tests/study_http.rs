@@ -169,6 +169,27 @@ async fn study_requires_authentication() {
         Request::get("/api/study/capabilities")
             .body(Body::empty())
             .unwrap(),
+        Request::get("/api/study/summary")
+            .body(Body::empty())
+            .unwrap(),
+        Request::get("/api/focus/summary")
+            .body(Body::empty())
+            .unwrap(),
+        Request::get("/api/rewards/summary")
+            .body(Body::empty())
+            .unwrap(),
+        Request::get("/api/rewards/weekly-goal")
+            .body(Body::empty())
+            .unwrap(),
+        Request::post("/api/focus/sessions")
+            .header("origin", "http://localhost")
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"id":"s1","kind":"focus","planned_seconds":60,"actual_seconds":60,"completed":true,"started_at":1,"ended_at":61}"#))
+            .unwrap(),
+        Request::post("/api/rewards/missions/lesson/claim")
+            .header("origin", "http://localhost")
+            .body(Body::empty())
+            .unwrap(),
     ];
 
     for request in requests {
@@ -772,12 +793,12 @@ async fn credentials_pending_flag_blocks_study_until_changed() {
     );
 }
 
-/// Uma base persistida já sai da cadeia de migrações na versão 4 e **já contém**
-/// `study_state`: a tabela nasce na migração V1 (a primeira da cadeia), então nenhuma
-/// migração nova é necessária para bancos existentes. Este teste prova isso no arquivo
-/// real (não em memória) e verifica as restrições que o adaptador HTTP depende.
+/// Uma base persistida já sai da cadeia de migrações na versão 6 e **já contém**
+/// `study_state` e `study_day`: a primeira nasce na V1 e a segunda na V5. Este teste
+/// prova isso no arquivo real (não em memória) e verifica as restrições que o adaptador
+/// HTTP depende.
 #[tokio::test]
-async fn an_existing_v4_database_already_carries_study_state_and_its_constraints() {
+async fn current_database_carries_study_tables_and_constraints() {
     let temp = tempfile::tempdir().unwrap();
     seed(&temp, &["m1"], &[]);
 
@@ -786,7 +807,7 @@ async fn an_existing_v4_database_already_carries_study_state_and_its_constraints
         .connection()
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 4, "o formato persistido permanece na versão 4");
+    assert_eq!(version, 6, "o formato persistido está na versão 6");
     let present: i64 = db
         .connection()
         .query_row(
@@ -795,10 +816,16 @@ async fn an_existing_v4_database_already_carries_study_state_and_its_constraints
             |row| row.get(0),
         )
         .unwrap();
-    assert_eq!(
-        present, 1,
-        "a versão 4 já contém study_state; nenhuma migração nova é necessária"
-    );
+    assert_eq!(present, 1, "a versão 5 contém study_state");
+    let day_present: i64 = db
+        .connection()
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'study_day'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(day_present, 1, "a versão 5 contém study_day");
 
     // Chave estrangeira: uma mídia inexistente é recusada e nada é gravado.
     assert!(
@@ -846,7 +873,7 @@ async fn an_existing_v4_database_already_carries_study_state_and_its_constraints
     assert_eq!(rows, 1, "apenas a linha válida persiste");
     drop(db);
 
-    // O servidor sobre uma base v4 existente lê e grava progresso pela API.
+    // O servidor sobre uma base persistida lê e grava progresso pela API.
     let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
     let cookie = login(&app, ADMIN, ADMIN_PASSWORD).await;
     let written = app
@@ -998,4 +1025,195 @@ async fn removed_catalog_media_keeps_progress_but_leaves_recent() {
             .is_empty(),
         "uma mídia removida sai dos recentes sem apagar o progresso"
     );
+}
+
+#[tokio::test]
+async fn study_summary_returns_today_and_the_week_for_the_authenticated_owner() {
+    let temp = tempfile::tempdir().unwrap();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    seed(&temp, &["m1"], &[(ADMIN_ID, "m1", 10, false, now)]);
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let cookie = login(&app, ADMIN, ADMIN_PASSWORD).await;
+
+    let response = app
+        .oneshot(get_with_cookie("/api/study/summary", &cookie))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_private_no_store(&response);
+    let summary = json_body(response).await;
+
+    assert_eq!(summary["today_active"], true);
+    assert_eq!(summary["current_streak"], 1);
+    assert_eq!(summary["longest_streak"], 1);
+    assert_eq!(summary["week_active_days"], 1);
+    assert_eq!(summary["completed_lessons"], 0);
+    assert_eq!(summary["days"].as_array().unwrap().len(), 7);
+    assert_eq!(summary["today"].as_str().unwrap().len(), 10);
+}
+
+#[tokio::test]
+async fn focus_and_reward_endpoints_persist_idempotent_sessions_and_weekly_goal() {
+    let temp = tempfile::tempdir().unwrap();
+    seed(&temp, &["m1"], &[]);
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let cookie = login(&app, ADMIN, ADMIN_PASSWORD).await;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    let payload = format!(
+        r#"{{"id":"focus-http-1","kind":"focus","planned_seconds":60,"actual_seconds":60,"completed":true,"started_at":{},"ended_at":{}}}"#,
+        now - 60,
+        now
+    );
+
+    for _ in 0..2 {
+        let response = app
+            .clone()
+            .oneshot(post_json("/api/focus/sessions", &cookie, &payload))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_private_no_store(&response);
+    }
+    let focus = app
+        .clone()
+        .oneshot(get_with_cookie("/api/focus/summary", &cookie))
+        .await
+        .unwrap();
+    let focus = json_body(focus).await;
+    assert_eq!(focus["total_sessions"], 1, "retry não duplica sessão");
+    assert_eq!(focus["today_minutes"], 1);
+
+    let rewards = app
+        .clone()
+        .oneshot(get_with_cookie("/api/rewards/summary", &cookie))
+        .await
+        .unwrap();
+    let rewards = json_body(rewards).await;
+    assert_eq!(rewards["xp"], 20);
+    assert_eq!(rewards["weekly_goal"], 3);
+    assert_eq!(rewards["missions"][1]["progress"], 1);
+    assert_eq!(rewards["study"]["today_active"], true);
+    assert_eq!(rewards["study"]["week_active_days"], 1);
+
+    let saved = app
+        .clone()
+        .oneshot(
+            Request::put("/api/rewards/weekly-goal")
+                .header("origin", "http://localhost")
+                .header("cookie", &cookie)
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"weekly_goal":5}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(saved.status(), StatusCode::OK);
+    assert_eq!(json_body(saved).await["weekly_goal"], 5);
+    let read = app
+        .oneshot(get_with_cookie("/api/rewards/weekly-goal", &cookie))
+        .await
+        .unwrap();
+    assert_eq!(json_body(read).await["weekly_goal"], 5);
+}
+
+#[tokio::test]
+async fn focus_endpoint_rejects_invalid_and_conflicting_sessions() {
+    let temp = tempfile::tempdir().unwrap();
+    seed(&temp, &[], &[]);
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let cookie = login(&app, ADMIN, ADMIN_PASSWORD).await;
+
+    let invalid = app
+        .clone()
+        .oneshot(post_json(
+            "/api/focus/sessions",
+            &cookie,
+            r#"{"id":"bad","kind":"focus","planned_seconds":60,"actual_seconds":2,"completed":true,"started_at":10,"ended_at":12}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(json_body(invalid).await["error"], "invalid_focus_session");
+
+    let conflict_a = r#"{"id":"same","kind":"short","planned_seconds":60,"actual_seconds":30,"completed":false,"started_at":10,"ended_at":40}"#;
+    let conflict_b = r#"{"id":"same","kind":"short","planned_seconds":60,"actual_seconds":20,"completed":false,"started_at":10,"ended_at":30}"#;
+    let first = app
+        .clone()
+        .oneshot(post_json("/api/focus/sessions", &cookie, conflict_a))
+        .await
+        .unwrap();
+    assert_eq!(first.status(), StatusCode::OK);
+    let conflict = app
+        .oneshot(post_json("/api/focus/sessions", &cookie, conflict_b))
+        .await
+        .unwrap();
+    assert_eq!(conflict.status(), StatusCode::CONFLICT);
+    assert_eq!(json_body(conflict).await["error"], "focus_session_conflict");
+}
+
+#[tokio::test]
+async fn mission_claim_requires_progress_and_same_origin() {
+    let temp = tempfile::tempdir().unwrap();
+    seed(&temp, &["m1"], &[]);
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let cookie = login(&app, ADMIN, ADMIN_PASSWORD).await;
+
+    let csrf = app
+        .clone()
+        .oneshot(
+            Request::post("/api/rewards/missions/lesson/claim")
+                .header("cookie", &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(csrf.status(), StatusCode::FORBIDDEN);
+
+    let incomplete = app
+        .clone()
+        .oneshot(post_json(
+            "/api/rewards/missions/lesson/claim",
+            &cookie,
+            "{}",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(incomplete.status(), StatusCode::CONFLICT);
+    assert_eq!(json_body(incomplete).await["error"], "mission_not_complete");
+
+    let done = app
+        .clone()
+        .oneshot(post_json(
+            "/api/study/completed",
+            &cookie,
+            r#"{"media_id":"m1","completed":true}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(done.status(), StatusCode::OK);
+    let claim = app
+        .clone()
+        .oneshot(post_json(
+            "/api/rewards/missions/lesson/claim",
+            &cookie,
+            "{}",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(claim.status(), StatusCode::OK);
+    assert_eq!(json_body(claim).await["claimed"], true);
+    let rewards = app
+        .oneshot(get_with_cookie("/api/rewards/summary", &cookie))
+        .await
+        .unwrap();
+    let rewards = json_body(rewards).await;
+    assert_eq!(rewards["xp"], 70, "40 XP da aula + 30 da missão");
+    assert_eq!(rewards["missions"][0]["claimed"], true);
 }
