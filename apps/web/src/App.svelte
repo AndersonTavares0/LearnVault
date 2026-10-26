@@ -696,7 +696,7 @@
 							{#if filteredNodes.length}
 								<ul class="lv-course-grid" data-view={libraryView} aria-label="Cursos na visualização {LIBRARY_VIEW_LABELS[libraryView]}">
 									{#each filteredNodes as courseItem (courseItem.courseId ?? courseItem.path)}
-										<li>
+										<li class:is-menu-open={coverMenuId === courseIdOf(courseItem)}>
 											<CourseCard course={courseItem} profile={user.userId} mediaUrl={(file, courseId) => transport.mediaUrl(file, courseId)} manualCoverUrl={transport.coverUrl(courseIdOf(courseItem), courseItem.coverVersion ?? null)} {canManage} menuOpen={coverMenuId === courseIdOf(courseItem)} onMenuOpen={(open) => toggleCoverMenu(courseItem, open)} onChangeCover={requestCourseCover} onRemoveCover={removeCover} />
 										</li>
 									{/each}

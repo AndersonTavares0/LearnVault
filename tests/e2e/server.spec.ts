@@ -1,4 +1,4 @@
-import { expect, test as base } from '@playwright/test';
+import { expect, test as base, type Page } from '@playwright/test';
 import { once } from 'node:events';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -42,6 +42,13 @@ function contrastRatio(foreground: string, background: string) {
 	const foregroundLuminance = luminance(foreground);
 	const backgroundLuminance = luminance(background);
 	return (Math.max(foregroundLuminance, backgroundLuminance) + 0.05) / (Math.min(foregroundLuminance, backgroundLuminance) + 0.05);
+}
+
+async function captureVisual(page: Page, filename: string) {
+	const directory = process.env.LEARNVAULT_VISUAL_CAPTURE_DIR;
+	if (!directory) return;
+	await mkdir(directory, { recursive: true });
+	await page.screenshot({ path: join(directory, filename), fullPage: true, animations: 'disabled' });
 }
 
 type ServerFixture = {
@@ -197,6 +204,7 @@ const test = base.extend<{ server: ServerFixture }>({
 });
 
 test('serves the built SPA through the Rust server for a complete study-library journey', async ({ page, server }) => {
+	if (process.env.LEARNVAULT_VISUAL_CAPTURE_DIR) await page.setViewportSize({ width: 1440, height: 900 });
 	await page.goto(`${server.baseURL}/#/login`);
 	await expect(page.getByRole('heading', { name: 'Entrar no LearnVault' })).toBeVisible();
 
@@ -205,12 +213,12 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	// que o locator resolva tanto o input quanto o alternador de visibilidade.
 	await page.getByLabel('Senha', { exact: true }).fill(ADMIN_PASSWORD);
 	await page.getByRole('button', { name: 'Entrar' }).click();
-	await expect(page.getByRole('heading', { name: 'Início' })).toBeAttached();
+	await expect(page.getByRole('heading', { name: 'Minha biblioteca' })).toBeAttached();
 
 	await page.getByRole('button', { name: 'Indexar cursos' }).click();
 	await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
-	await expect(page.getByRole('navigation', { name: 'Navegação principal' })).toBeVisible();
-	await expect(page.getByRole('heading', { name: 'Cursos' })).toBeVisible();
+	await expect(page.getByRole('complementary', { name: 'Navegação principal' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Todos os cursos' })).toBeVisible();
 	const initialCatalog = await (await page.request.get(`${server.baseURL}/api/catalog`)).json();
 	const mediaId = firstMediaId(initialCatalog);
 	expect(mediaId).toBeTruthy();
@@ -223,18 +231,19 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	await expect(recentResponse).toBeOK();
 	expect((await recentResponse.json()).items.length).toBeGreaterThan(0);
 	await page.reload();
-	await expect(page.getByText('Continuar assistindo')).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Continue estudando' })).toBeVisible();
+	await captureVisual(page, 'redesign-biblioteca-compacta-desktop.png');
 
 	// Cada item identifica a aula pelo título limpo e mostra o contexto (curso · módulo)
 	// em uma linha secundária; o nome cru do arquivo não pode vazar para o usuário.
-	const firstRecentItem = page.locator('.recent-study li').first();
-	const lessonLabel = (await firstRecentItem.locator('a').first().innerText()).trim();
+	const firstRecentItem = page.locator('.lv-resume li').first();
+	const lessonNode = firstRecentItem.locator('.lv-resume-card__lesson');
+	const lessonLabel = (await lessonNode.innerText()).trim();
 	expect(lessonLabel).not.toMatch(/\.[a-z0-9]{2,4}$/i);
 	expect(lessonLabel).not.toMatch(/^\d+[\s._-]/);
-	const contextNode = firstRecentItem.locator('.recent-study-info small');
+	const contextNode = firstRecentItem.locator('.lv-resume-card__course');
 	await expect(contextNode).toHaveText(/\S/);
-	const contextText = (await contextNode.innerText()).trim();
-	expect(await contextNode.getAttribute('title')).toBe(contextText);
+	expect((await contextNode.innerText()).trim()).toBe('library');
 
 	// Em tela estreita a lista não pode gerar rolagem horizontal.
 	const originalViewport = page.viewportSize();
@@ -246,7 +255,7 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	expect(narrowWidths.scrollWidth).toBeLessThanOrEqual(narrowWidths.clientWidth);
 	if (originalViewport) await page.setViewportSize(originalViewport);
 
-	const lightColors = await page.locator('.recent-study small').first().evaluate((element) => {
+	const lightColors = await page.locator('.lv-resume-card__meta').first().evaluate((element) => {
 		let node: HTMLElement | null = element as HTMLElement;
 		const foreground = getComputedStyle(element).color;
 		while (node) {
@@ -259,7 +268,7 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	expect(contrastRatio(lightColors.foreground, lightColors.background)).toBeGreaterThanOrEqual(4.5);
 	await page.emulateMedia({ colorScheme: 'dark' });
 	await page.reload();
-	const darkColors = await page.locator('.recent-study small').first().evaluate((element) => {
+	const darkColors = await page.locator('.lv-resume-card__meta').first().evaluate((element) => {
 		let node: HTMLElement | null = element as HTMLElement;
 		const foreground = getComputedStyle(element).color;
 		while (node) {
@@ -270,23 +279,33 @@ test('serves the built SPA through the Rust server for a complete study-library 
 		return { foreground, background: getComputedStyle(document.body).backgroundColor };
 	});
 	expect(contrastRatio(darkColors.foreground, darkColors.background)).toBeGreaterThanOrEqual(4.5);
+	await page.emulateMedia({ colorScheme: 'light' });
+	await page.reload();
+	await expect(page.getByRole('heading', { name: 'Minha biblioteca' })).toBeVisible();
 	const faviconResponse = await page.request.get(`${server.baseURL}/favicon.svg`);
 	expect(faviconResponse.status()).toBe(200);
 
 	// A home lista cada curso registrado como card; o card abre a tela de estudo já com o
 	// player na última aula assistida e a lista lateral de aulas.
-	const courseCard = page.getByRole('link', { name: /library/ });
+	const courseCard = page.getByRole('link', { name: 'library', exact: true });
 	await expect(courseCard).toBeVisible();
 	const videoRequest = page.waitForRequest((request) => {
 		const url = new URL(request.url());
 		return url.pathname === '/api/media' && url.searchParams.get('path') === 'Categoria/Curso/Aula.mp4';
 	});
 	await courseCard.click();
-	await expect(page.locator('.breadcrumb')).toContainText('library');
-	await expect(page.getByRole('heading', { name: 'Categoria' })).toBeVisible();
+	await expect(page.locator('.lv-breadcrumb')).toContainText('library');
+	await expect(page.getByRole('heading', { name: 'library', exact: true })).toBeVisible();
+	await captureVisual(page, 'redesign-curso-desktop.png');
+	await page.getByRole('link', { name: 'Continuar estudando' }).click();
 	await expect(page.getByRole('heading', { name: 'Curso', exact: true })).toBeVisible();
+	await captureVisual(page, 'redesign-player-desktop.png');
+	await page.getByRole('button', { name: /Abrir Pomodoro:/ }).click();
+	await expect(page.getByRole('group', { name: 'Modo do Pomodoro' })).toBeVisible();
+	await captureVisual(page, 'redesign-pomodoro-integrado-desktop.png');
+	await page.getByRole('button', { name: 'Recolher Pomodoro' }).click();
 	// A aula inicial vem do histórico recente gravado acima.
-	await expect(page.locator('.course-playlist-body .lesson-row.active .lesson-title')).toHaveText('Curso');
+	await expect(page.locator('.lv-curriculum__body .lesson-row.active .lesson-title')).toHaveText('Curso');
 	const videoSource = (await videoRequest).url();
 	const videoURL = new URL(videoSource, server.baseURL);
 	expect(videoURL.pathname).toBe('/api/media');
@@ -324,8 +343,61 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	expect(unscoped.status()).toBe(400);
 
 	// O caminho de volta para a biblioteca continua no breadcrumb da tela de estudo.
-	await page.getByRole('link', { name: 'Cursos', exact: true }).click();
-	await expect(page.getByRole('heading', { name: 'Cursos' })).toBeVisible();
+	await page.locator('.lv-breadcrumb').getByRole('link', { name: 'Biblioteca', exact: true }).click();
+	await expect(page.getByRole('heading', { name: 'Minha biblioteca' })).toBeVisible();
+	if (process.env.LEARNVAULT_VISUAL_CAPTURE_DIR) {
+		const origin = server.baseURL;
+		const completed = await page.request.post(`${origin}/api/study/completed`, {
+			headers: { Origin: origin },
+			data: { media_id: mediaId, completed: true }
+		});
+		await expect(completed).toBeOK();
+		const now = Math.floor(Date.now() / 1000);
+		for (const index of [1, 2]) {
+			const endedAt = now - (index - 1) * 1500;
+			const session = await page.request.post(`${origin}/api/focus/sessions`, {
+				headers: { Origin: origin },
+				data: {
+					id: `visual-session-${index}`, kind: 'focus', planned_seconds: 1500,
+					actual_seconds: 1500, completed: true, started_at: endedAt - 1500, ended_at: endedAt
+				}
+			});
+			await expect(session).toBeOK();
+		}
+		const oneDayGoal = await page.request.put(`${origin}/api/rewards/weekly-goal`, {
+			headers: { Origin: origin }, data: { weekly_goal: 1 }
+		});
+		await expect(oneDayGoal).toBeOK();
+		for (const mission of ['lesson', 'focus-two', 'focus-fifty']) {
+			const claim = await page.request.post(`${origin}/api/rewards/missions/${mission}/claim`, {
+				headers: { Origin: origin }
+			});
+			await expect(claim).toBeOK();
+		}
+		const defaultGoal = await page.request.put(`${origin}/api/rewards/weekly-goal`, {
+			headers: { Origin: origin }, data: { weekly_goal: 3 }
+		});
+		await expect(defaultGoal).toBeOK();
+		await page.goto(`${origin}/#/statistics`);
+		await expect(page.getByRole('heading', { name: 'Estatísticas' })).toBeVisible();
+		await page.emulateMedia({ colorScheme: 'light' });
+		await page.reload();
+		await expect(page.getByRole('heading', { name: 'Estatísticas' })).toBeVisible();
+		await expect(page.getByText('1 de 3 dias', { exact: true })).toBeVisible();
+		await captureVisual(page, 'redesign-estatisticas-desktop-claro.png');
+		await page.emulateMedia({ colorScheme: 'dark' });
+		await page.reload();
+		await expect(page.getByRole('heading', { name: 'Estatísticas' })).toBeVisible();
+		await captureVisual(page, 'redesign-estatisticas-desktop-escuro.png');
+		await page.setViewportSize({ width: 390, height: 844 });
+		await captureVisual(page, 'redesign-estatisticas-mobile-escuro.png');
+		await page.emulateMedia({ colorScheme: 'light' });
+		await page.reload();
+		await expect(page.getByRole('heading', { name: 'Estatísticas' })).toBeVisible();
+		await captureVisual(page, 'redesign-estatisticas-mobile-claro.png');
+	}
+	await page.getByRole('link', { name: 'Biblioteca', exact: true }).click();
+	await expect(page.getByRole('heading', { name: 'Minha biblioteca' })).toBeVisible();
 	await page.getByRole('button', { name: 'Sair' }).click();
 	await expect(page.getByRole('button', { name: 'Entrar' })).toBeVisible();
 	const afterLogoutMedia = await page.request.get(new URL(videoSource as string, server.baseURL).toString());
@@ -350,8 +422,8 @@ test('reports a lesson whose media disappears from disk and restores it when the
 
 	const courseModule = page.locator('details.course-section').filter({ has: page.getByText('Modulo Extra', { exact: true }) });
 	const openCourse = async () => {
-		await page.getByRole('link', { name: /library/ }).click();
-		await expect(page.locator('.breadcrumb')).toContainText('library');
+		await page.getByRole('link', { name: 'library', exact: true }).click();
+		await expect(page.locator('.lv-breadcrumb')).toContainText('library');
 		// O módulo da aula inicial pode já estar aberto; só clica quando precisa.
 		if (!(await courseModule.evaluate((element) => element.hasAttribute('open')))) {
 			await courseModule.locator('summary').click();
@@ -359,7 +431,7 @@ test('reports a lesson whose media disappears from disk and restores it when the
 	};
 	const indexFromHome = async () => {
 		await page.goto(`${server.baseURL}/#/home`);
-		await expect(page.getByRole('heading', { name: 'Início' })).toBeAttached();
+		await expect(page.getByRole('heading', { name: 'Minha biblioteca' })).toBeAttached();
 		await page.getByRole('button', { name: 'Indexar cursos' }).click();
 		await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
 	};
@@ -368,7 +440,7 @@ test('reports a lesson whose media disappears from disk and restores it when the
 	await page.getByLabel('Usuário').fill('admin');
 	await page.getByLabel('Senha', { exact: true }).fill(ADMIN_PASSWORD);
 	await page.getByRole('button', { name: 'Entrar' }).click();
-	await expect(page.getByRole('heading', { name: 'Início' })).toBeAttached();
+	await expect(page.getByRole('heading', { name: 'Minha biblioteca' })).toBeAttached();
 	await page.getByRole('button', { name: 'Indexar cursos' }).click();
 	await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
 
@@ -424,7 +496,7 @@ test('renders an automatic video thumbnail in the built SPA without leaking libr
 	await page.getByLabel('Usuário').fill('admin');
 	await page.getByLabel('Senha', { exact: true }).fill(ADMIN_PASSWORD);
 	await page.getByRole('button', { name: 'Entrar' }).click();
-	await expect(page.getByRole('heading', { name: 'Início' })).toBeAttached();
+	await expect(page.getByRole('heading', { name: 'Minha biblioteca' })).toBeAttached();
 
 	// Grava um WebM sintético inteiramente no navegador e o entrega ao servidor como arquivo
 	// do curso. Nenhum vídeo real, asset externo ou dependência de codec entra no repositório:
@@ -470,8 +542,9 @@ test('renders an automatic video thumbnail in the built SPA without leaking libr
 	await writeFile(join(lessonDir, 'Video.webm'), Buffer.from(recorded, 'base64'));
 	await page.getByRole('button', { name: 'Indexar cursos' }).click();
 	await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
+	await page.getByRole('button', { name: 'Capas' }).click();
 
-	const thumbnail = page.locator('.course-thumbnail').first();
+	const thumbnail = page.locator('.lv-cover__image').first();
 	await expect(thumbnail).toBeVisible({ timeout: 30_000 });
 	// `naturalWidth` só é positivo quando a CSP do servidor permite carregar o `blob:`; um
 	// bloqueio de imagem deixaria a capa gerada no lugar e este valor seria zero.
@@ -496,29 +569,29 @@ test('moves the cover actions to the course card and keeps the course page clean
 	await page.getByLabel('Usuário').fill('admin');
 	await page.getByLabel('Senha', { exact: true }).fill(ADMIN_PASSWORD);
 	await page.getByRole('button', { name: 'Entrar' }).click();
-	await expect(page.getByRole('heading', { name: 'Início' })).toBeAttached();
+	await expect(page.getByRole('heading', { name: 'Minha biblioteca' })).toBeAttached();
 	await page.getByRole('button', { name: 'Indexar cursos' }).click();
 	await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
 
-	const courseCard = page.getByRole('link', { name: /library/ });
+	const courseCard = page.getByRole('link', { name: 'library', exact: true });
 	await expect(courseCard).toBeVisible();
 
 	// O menu abre pelo clique direito e fecha com Escape.
 	await courseCard.click({ button: 'right' });
-	await expect(page.getByRole('menu', { name: 'Capa de library' })).toBeVisible();
+	await expect(page.getByRole('group', { name: 'Capa de library' })).toBeVisible();
 	await page.keyboard.press('Escape');
-	await expect(page.getByRole('menu', { name: 'Capa de library' })).toHaveCount(0);
+	await expect(page.getByRole('group', { name: 'Capa de library' })).toHaveCount(0);
 
 	// O botão de ações do card abre o mesmo menu.
 	await page.getByRole('button', { name: 'Ações de capa de library' }).click();
-	await page.getByRole('menuitem', { name: 'Adicionar capa' }).click();
 
 	// PNG 1x1: conteúdo válido para a validação por magic bytes e para o `<img>` carregar.
 	const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+	await page.getByRole('button', { name: 'Adicionar capa' }).dispatchEvent('click');
 	await page.locator('.course-cover-input').setInputFiles({ name: 'capa.png', mimeType: 'image/png', buffer: png });
 	await expect(page.getByText('Capa atualizada.')).toBeVisible();
 
-	const coverImage = page.locator('.course-grid .course-cover-image');
+	const coverImage = page.locator('.lv-course-grid .lv-cover__image');
 	await expect(coverImage).toHaveCount(1);
 	const coverSource = await coverImage.getAttribute('src');
 	expect(coverSource).toBeTruthy();
@@ -535,23 +608,25 @@ test('moves the cover actions to the course card and keeps the course page clean
 
 	// Com capa manual, o menu oferece trocar e remover.
 	await courseCard.click({ button: 'right' });
-	await expect(page.getByRole('menuitem', { name: 'Trocar capa' })).toBeVisible();
-	await expect(page.getByRole('menuitem', { name: 'Remover capa' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Trocar capa' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Remover capa' })).toBeVisible();
 	await page.keyboard.press('Escape');
 
 	// A página do curso volta ao layout anterior, sem controles de capa.
 	await courseCard.click();
-	await expect(page.locator('.breadcrumb')).toContainText('library');
-	await expect(page.locator('.course-cover-actions')).toHaveCount(0);
+	await expect(page.locator('.lv-breadcrumb')).toContainText('library');
+	await expect(page.getByRole('button', { name: /Ações de capa/ })).toHaveCount(0);
 	await expect(page.getByText('Trocar capa')).toHaveCount(0);
 	await expect(page.getByText('Remover capa')).toHaveCount(0);
 
 	// A remoção também é feita pelo card.
-	await page.getByRole('link', { name: 'Início', exact: true }).click();
+	await page.locator('.lv-breadcrumb').getByRole('link', { name: 'Biblioteca', exact: true }).click();
 	await courseCard.click({ button: 'right' });
-	await page.getByRole('menuitem', { name: 'Remover capa' }).click();
+	await page.getByRole('button', { name: 'Remover capa' }).click();
+	await expect(page.getByRole('alert')).toContainText('Remover a capa de “library”?');
+	await page.getByRole('button', { name: 'Remover capa' }).click();
 	await expect(page.getByText('Capa removida.')).toBeVisible();
-	await expect(page.locator('.course-grid .course-cover-image')).toHaveCount(0);
+	await expect(page.locator('.lv-course-grid .lv-cover__image[src*="/api/courses/"][src*="/cover"]')).toHaveCount(0);
 
 	const afterRemoval = await page.request.get(coverUrl.toString());
 	expect(afterRemoval.status()).toBe(404);

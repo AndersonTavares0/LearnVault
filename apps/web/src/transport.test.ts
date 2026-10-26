@@ -703,6 +703,14 @@ describe('desktop transport over IPC', () => {
 		expect(invoke).toHaveBeenCalledWith('desktop_set_completed', { mediaId: 'm1', completed: true });
 	});
 
+	it('sends persisted focus sessions as one structured desktop IPC argument', async () => {
+		const session = { id: 'session-1', kind: 'focus' as const, plannedSeconds: 1500, actualSeconds: 1500, completed: true, startedAt: 100, endedAt: 1600 };
+		vi.mocked(invoke).mockResolvedValue({ id: session.id, kind: session.kind, planned_seconds: 1500, actual_seconds: 1500, completed: true, started_at: 100, ended_at: 1600 });
+
+		await expect(new DesktopStub().recordFocusSession(session)).resolves.toMatchObject({ id: session.id, actualSeconds: 1500 });
+		expect(invoke).toHaveBeenCalledWith('desktop_record_focus_session', { session });
+	});
+
 	it('never sends an owner or a path to the study commands', async () => {
 		// O dono é fixo no Rust: o webview só envia dados da mídia. Nenhum argumento pode
 		// carregar `owner`/`ownerId`, um caminho ou uma biblioteca.

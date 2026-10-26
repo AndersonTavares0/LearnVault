@@ -756,7 +756,7 @@ svg {
 }
 
 .lv-resume-card__meta {
-	color: var(--faint);
+	color: var(--muted);
 	font-family: var(--mono);
 	font-size: 10px;
 }
@@ -879,6 +879,11 @@ svg {
 .lv-course-grid > li {
 	content-visibility: auto;
 	contain-intrinsic-size: auto 320px;
+}
+
+.lv-course-grid > li.is-menu-open {
+	content-visibility: visible;
+	contain: none;
 }
 
 .lv-course-card-shell {
@@ -1468,6 +1473,16 @@ svg {
 	font-family: var(--mono);
 	font-size: 10px;
 	white-space: nowrap;
+}
+
+.lv-panel .course-header h2,
+.lv-curriculum .course-header h2 {
+	margin: 0;
+	color: var(--ink);
+	font-family: var(--display);
+	font-size: 18px;
+	font-weight: 600;
+	line-height: 1.2;
 }
 
 .lv-panel .section-chevron,

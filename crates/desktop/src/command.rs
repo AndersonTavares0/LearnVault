@@ -26,6 +26,19 @@ use crate::error::IpcError;
 use crate::ordering::CourseOrders;
 use crate::state::DesktopState;
 
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+/// Camel-case IPC payload for recording one focus session.
+pub struct FocusSessionRequest {
+    id: String,
+    kind: String,
+    planned_seconds: i64,
+    actual_seconds: i64,
+    completed: bool,
+    started_at: i64,
+    ended_at: i64,
+}
+
 /// Constrói o DTO do catálogo agregado a partir dos dados persistidos no banco local.
 ///
 /// Função livre e testável: não conhece o Tauri e qualquer falha do núcleo é traduzida
@@ -322,28 +335,22 @@ pub async fn desktop_study_summary(
 #[tauri::command]
 pub async fn desktop_record_focus_session(
     state: State<'_, DesktopState>,
-    id: String,
-    kind: String,
-    planned_seconds: i64,
-    actual_seconds: i64,
-    completed: bool,
-    started_at: i64,
-    ended_at: i64,
+    session: FocusSessionRequest,
 ) -> Result<FocusSessionDto, IpcError> {
-    let kind = match kind.as_str() {
+    let kind = match session.kind.as_str() {
         "focus" => FocusKind::Focus,
         "short" => FocusKind::ShortBreak,
         "long" => FocusKind::LongBreak,
         _ => return Err(IpcError::invalid_focus_session()),
     };
     let input = FocusSessionInput {
-        id,
+        id: session.id,
         kind,
-        planned_seconds,
-        actual_seconds,
-        completed,
-        started_at,
-        ended_at,
+        planned_seconds: session.planned_seconds,
+        actual_seconds: session.actual_seconds,
+        completed: session.completed,
+        started_at: session.started_at,
+        ended_at: session.ended_at,
     };
     let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || state.record_focus_session(input))
