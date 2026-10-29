@@ -31,6 +31,14 @@ pub enum IpcErrorCode {
     MediaNotFound,
     /// A posição de retomada enviada é inválida.
     InvalidPosition,
+    /// Uma sessão Pomodoro enviada é inválida.
+    InvalidFocusSession,
+    /// A chave de uma sessão já foi usada com outro conteúdo.
+    FocusSessionConflict,
+    /// A missão diária ainda não está pronta para resgate.
+    MissionNotComplete,
+    /// A meta semanal está fora da faixa de 1 a 7 dias.
+    InvalidWeeklyGoal,
     /// A remoção exige confirmação porque existe progresso associado.
     MediaRemovalNeedsConfirmation,
     /// A remoção de mídia não pôde ser concluída.
@@ -134,6 +142,38 @@ impl IpcError {
         Self {
             code: IpcErrorCode::InvalidPosition,
             message: "posição de retomada inválida",
+        }
+    }
+
+    /// Dados inválidos de sessão Pomodoro.
+    pub fn invalid_focus_session() -> Self {
+        Self {
+            code: IpcErrorCode::InvalidFocusSession,
+            message: "sessão de foco inválida",
+        }
+    }
+
+    /// A mesma chave de sessão foi enviada com dados diferentes.
+    pub fn focus_session_conflict() -> Self {
+        Self {
+            code: IpcErrorCode::FocusSessionConflict,
+            message: "sessão de foco já registrada com outros dados",
+        }
+    }
+
+    /// A missão ainda não atingiu o progresso necessário.
+    pub fn mission_not_complete() -> Self {
+        Self {
+            code: IpcErrorCode::MissionNotComplete,
+            message: "missão diária ainda não concluída",
+        }
+    }
+
+    /// Meta semanal fora do intervalo aceito.
+    pub fn invalid_weekly_goal() -> Self {
+        Self {
+            code: IpcErrorCode::InvalidWeeklyGoal,
+            message: "meta semanal inválida",
         }
     }
 

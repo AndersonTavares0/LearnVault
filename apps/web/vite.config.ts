@@ -1,10 +1,11 @@
 import { svelte } from '@sveltejs/vite-plugin-svelte';
+import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
 
 export default defineConfig(({ mode }) => {
 	const desktop = mode === 'desktop' || process.env.VITE_TRANSPORT === 'desktop';
 	return {
-	plugins: [svelte(), {
+	plugins: [svelte(), tailwindcss(), {
 		name: 'learnvault-server-entry',
 		enforce: 'post',
 		generateBundle(_options, bundle) {

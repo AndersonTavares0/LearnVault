@@ -33,7 +33,8 @@
 //!   o mesmo dono em todas as chamadas. A coluna compara bytes, então `"a"` e `"a "` seriam
 //!   donos diferentes.
 
-use rusqlite::OptionalExtension;
+use rusqlite::{OptionalExtension, params};
+use std::collections::HashSet;
 
 use crate::db::{Database, now_unix_seconds};
 use crate::error::{Error, Result};
@@ -229,5 +230,152 @@ fn progress_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StudyProgress>
         position_seconds: row.get(1)?,
         completed: row.get::<_, i64>(2)? != 0,
         updated_at: row.get(3)?,
+    })
+}
+
+/// Um dia da semana corrente e se ele teve atividade.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StudyDay {
+    /// Data local no formato `YYYY-MM-DD`.
+    pub day: String,
+    /// `true` quando houve progresso ou conclusão nesse dia.
+    pub active: bool,
+}
+
+/// Resumo de ofensiva e da semana corrente.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StudySummary {
+    /// Dias consecutivos até hoje (ou até ontem, quando a ofensiva está em risco).
+    pub current_streak: i64,
+    /// Maior sequência já registrada.
+    pub longest_streak: i64,
+    /// Dia local usado como hoje, no formato `YYYY-MM-DD`.
+    pub today: String,
+    /// Se houve atividade hoje.
+    pub today_active: bool,
+    /// `true` quando hoje ainda não conta, mas a ofensiva de ontem segue viva.
+    pub at_risk: bool,
+    /// Dias ativos na semana corrente, de segunda a domingo.
+    pub week_active_days: i64,
+    /// Aulas atualmente marcadas como concluídas pelo dono.
+    pub completed_lessons: i64,
+    /// Os sete dias da semana corrente, de segunda a domingo.
+    pub days: Vec<StudyDay>,
+}
+
+/// Resumo usando o dia local atual do banco.
+pub fn study_summary(db: &Database, owner_id: &str) -> Result<StudySummary> {
+    validate_owner(owner_id)?;
+    let conn = db.connection();
+    let today: String = conn.query_row("SELECT date('now', 'localtime')", [], |row| row.get(0))?;
+    summary_for_connection(conn, owner_id, &today)
+}
+
+/// Resumo com um dia explícito, para testes determinísticos.
+///
+/// O dia precisa ser uma data ISO canônica (`YYYY-MM-DD`); datas ambíguas como
+/// `2026-1-5` são recusadas em vez de normalizadas silenciosamente.
+pub fn study_summary_on(db: &Database, owner_id: &str, today: &str) -> Result<StudySummary> {
+    validate_owner(owner_id)?;
+    let conn = db.connection();
+    let valid: i64 = conn.query_row(
+        "SELECT CASE WHEN date(?1) = ?1 THEN 1 ELSE 0 END",
+        [today],
+        |row| row.get(0),
+    )?;
+    if valid == 0 {
+        return Err(Error::InvalidStudyDay {
+            day: today.to_owned(),
+        });
+    }
+    summary_for_connection(conn, owner_id, today)
+}
+
+fn summary_for_connection(
+    conn: &rusqlite::Connection,
+    owner_id: &str,
+    today: &str,
+) -> Result<StudySummary> {
+    let mut statement = conn.prepare(
+        "SELECT CAST(julianday(day) + 0.5 AS INTEGER) AS day_number
+         FROM study_day
+         WHERE owner_id = ?1 AND day <= ?2
+         ORDER BY day ASC",
+    )?;
+    let active_days = statement
+        .query_map(params![owner_id, today], |row| row.get::<_, i64>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    drop(statement);
+
+    let active: HashSet<i64> = active_days.iter().copied().collect();
+    let today_number: i64 = conn.query_row(
+        "SELECT CAST(julianday(?1) + 0.5 AS INTEGER)",
+        [today],
+        |row| row.get(0),
+    )?;
+    let today_active = active.contains(&today_number);
+    let yesterday_number = today_number - 1;
+    let yesterday_active = active.contains(&yesterday_number);
+    let at_risk = !today_active && yesterday_active;
+
+    let mut current_streak = 0;
+    let mut cursor = if today_active {
+        today_number
+    } else if yesterday_active {
+        yesterday_number
+    } else {
+        0
+    };
+    if cursor != 0 {
+        while active.contains(&cursor) {
+            current_streak += 1;
+            cursor -= 1;
+        }
+    }
+
+    let mut longest_streak = 0;
+    let mut run = 0;
+    let mut previous = None;
+    for day in &active_days {
+        run = if previous.is_some_and(|value| value + 1 == *day) {
+            run + 1
+        } else {
+            1
+        };
+        longest_streak = longest_streak.max(run);
+        previous = Some(*day);
+    }
+
+    let weekday: i64 = conn.query_row(
+        "SELECT CAST(strftime('%w', ?1) AS INTEGER)",
+        [today],
+        |row| row.get(0),
+    )?;
+    let monday = today_number - (weekday + 6) % 7;
+    let mut days = Vec::with_capacity(7);
+    for offset in 0..7 {
+        let number = monday + offset;
+        let day: String = conn.query_row("SELECT date(?1)", [number], |row| row.get(0))?;
+        days.push(StudyDay {
+            day,
+            active: active.contains(&number),
+        });
+    }
+    let week_active_days = days.iter().filter(|day| day.active).count() as i64;
+    let completed_lessons: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM study_state WHERE owner_id = ?1 AND completed = 1",
+        [owner_id],
+        |row| row.get(0),
+    )?;
+
+    Ok(StudySummary {
+        current_streak,
+        longest_streak,
+        today: today.to_owned(),
+        today_active,
+        at_risk,
+        week_active_days,
+        completed_lessons,
+        days,
     })
 }

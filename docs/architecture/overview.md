@@ -57,19 +57,54 @@ O workspace Rust está completo: `crates/server` (Axum), `crates/desktop` (Tauri
   cursos fica em `courses.json` ao lado do banco SQLite; `LIBRARY_DIR`/`--library-root` serve
   apenas como semente do primeiro curso.
 - **Desktop offline:** abre a janela `main` definida em `crates/desktop/tauri.conf.json`, com a SPA
-  embutida por `frontendDist`. Importação, remoção, rescan e estudo passam por comandos IPC
-  explícitos; o webview recebe identificadores opacos e nunca caminhos.
+  embutida por `frontendDist`. A titlebar própria usa controles nativos Tauri para minimizar,
+  maximizar/restaurar e fechar; as permissões de janela são restritas à janela `main`.
+  Importação, remoção, rescan e estudo passam por comandos IPC explícitos; o webview recebe
+  identificadores opacos e nunca caminhos.
 - **Mídia:** o protocolo `learnvault-media://localhost/<media-id>` entrega imagens, materiais,
   vídeo, áudio e legendas com allowlist de tipo, faixas HTTP e limite de resposta. No Windows
   (WebView2), o webview usa `http://learnvault-media.localhost/<media-id>`.
 - **Capas:** cada curso pode ter um arquivo de até 4 MiB, com formato detectado pelos bytes
   iniciais, gravação atômica e `cover_version` no catálogo. A capa fica fora da pasta do curso; no
   desktop, usa o protocolo `learnvault-cover://` e comandos IPC dedicados.
-- **Estudo:** posição, conclusão e recentes funcionam do mesmo jeito no servidor, na SPA e no IPC
-  desktop. O player desktop reproduz mídia local, renderiza VTT e permite baixar SRT/ASS/SSA; o
-  build HTTP converte SRT sob demanda.
+- **Estudo e foco:** posição, conclusão, recentes, ofensiva, sessões Pomodoro e recompensas usam o
+  mesmo domínio SQLite em `crates/core`, com adaptadores HTTP autenticados e IPC desktop local. As
+  sessões são idempotentes por dono e identificador; o ledger de XP e os resgates diários impedem
+  duplicidade. O fuso da data é o local do servidor no modo HTTP e o do dispositivo no desktop; a
+  migração de sessões/recompensas antigas é uma reconstrução aproximada a partir do estado atual,
+  pois versões anteriores não guardavam o histórico completo de eventos. Timer e preferências de
+  interface continuam locais ao dispositivo. O player desktop reproduz mídia local, renderiza VTT
+  e permite baixar SRT/ASS/SSA; o build HTTP converte SRT sob demanda.
 - **Distribuição:** o instalador Windows NSIS está disponível; o pacote Linux/Flatpak ainda depende
   de validação em sandbox. Veja [distribuição](../operations/distribution.md).
+
+O frontend usa Svelte e componentes DaisyUI 5 selecionados, com prefixo `lvui-` e cores
+semânticas mapeadas aos tokens do LearnVault em `apps/web/src/ui-components.css`. O CSS do
+projeto mantém a identidade e o suporte aos temas claro/escuro; o build não carrega fontes,
+scripts ou folhas de estilo de terceiros pela rede.
+
+
+### Contrato de foco e recompensas
+
+- O núcleo valida `1 <= planned_seconds <= 7200`, `0 <= actual_seconds <= planned_seconds` e um intervalo
+  `0 <= ended_at - started_at <= 7200`, com início não negativo. O tempo efetivo não
+  pode superar esse intervalo; uma sessão concluída exige todo o tempo planejado.
+  Pausas podem tornar o intervalo maior que o tempo efetivo. HTTP e IPC desktop usam
+  a mesma validação do núcleo. Os tempos são declarados pelo cliente, não prova de foco.
+- Repetir dono, identificador e payload retorna a sessão existente sem novo XP.
+  Reutilizar o identificador com outro payload retorna HTTP `409 focus_session_conflict`.
+  Uma sessão inválida retorna `422 invalid_focus_session`.
+- A outbox é local e isolada por conta. Conflitos e validações recusadas são retirados da
+  fila somente depois de preservar payload e motivo na lista local de rejeições, exibida
+  na interface. Sem armazenamento disponível, a sessão permanece pendente. Falhas
+  transitórias aguardam nova tentativa explícita, sem repetir requisições continuamente.
+- Atividades concedem a meta semanal na semana da data local da atividade
+  (`updated_at` para aulas, `ended_at` para foco), de segunda a domingo. Alterar a
+  preferência reavalia somente a semana local atual. A concessão de 50 XP é única por
+  dono/semana; aumentar a meta depois não revoga XP já concedido.
+- Resgatar missão desconhecida retorna `404 mission_not_found`; missão conhecida sem
+  progresso suficiente retorna `409 mission_not_complete`. Repetir um resgate concluído
+  não duplica XP.
 
 ```text
 Proxy HTTPS local

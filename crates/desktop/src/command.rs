@@ -12,18 +12,32 @@
 
 use std::path::{Path, PathBuf};
 
-use learnvault_core::Database;
+use learnvault_core::{Database, FocusKind, FocusSessionInput};
 use tauri::State;
 
 use crate::config::DesktopConfigDto;
 use crate::courses::CourseEntry;
 use crate::dto::{
-    CatalogDto, CatalogNodeDto, CoverDto, CoverRemovalDto, MediaRemovalImpactDto,
-    MediaRemovalOutcomeDto, RecentStudyDto, RescanSummaryDto, StudyProgressDto,
+    CatalogDto, CatalogNodeDto, CoverDto, CoverRemovalDto, FocusSessionDto, FocusSummaryDto,
+    MediaRemovalImpactDto, MediaRemovalOutcomeDto, RecentStudyDto, RescanSummaryDto,
+    RewardSummaryDto, StudyProgressDto, StudySummaryDto,
 };
 use crate::error::IpcError;
 use crate::ordering::CourseOrders;
 use crate::state::DesktopState;
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+/// Camel-case IPC payload for recording one focus session.
+pub struct FocusSessionRequest {
+    id: String,
+    kind: String,
+    planned_seconds: i64,
+    actual_seconds: i64,
+    completed: bool,
+    started_at: i64,
+    ended_at: i64,
+}
 
 /// Constrói o DTO do catálogo agregado a partir dos dados persistidos no banco local.
 ///
@@ -299,6 +313,102 @@ pub async fn desktop_recent_study(
 ) -> Result<RecentStudyDto, IpcError> {
     let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || state.recent_study(limit))
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// Comando IPC: resumo de ofensiva e dias ativos do dono local.
+///
+/// O webview não envia `owner_id`; o resumo cobre todo o histórico local e a semana
+/// corrente, sempre no fuso do desktop.
+#[tauri::command]
+pub async fn desktop_study_summary(
+    state: State<'_, DesktopState>,
+) -> Result<StudySummaryDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.study_summary())
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// Persiste uma sessão Pomodoro idempotente para o perfil local.
+#[tauri::command]
+pub async fn desktop_record_focus_session(
+    state: State<'_, DesktopState>,
+    session: FocusSessionRequest,
+) -> Result<FocusSessionDto, IpcError> {
+    let kind = match session.kind.as_str() {
+        "focus" => FocusKind::Focus,
+        "short" => FocusKind::ShortBreak,
+        "long" => FocusKind::LongBreak,
+        _ => return Err(IpcError::invalid_focus_session()),
+    };
+    let input = FocusSessionInput {
+        id: session.id,
+        kind,
+        planned_seconds: session.planned_seconds,
+        actual_seconds: session.actual_seconds,
+        completed: session.completed,
+        started_at: session.started_at,
+        ended_at: session.ended_at,
+    };
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.record_focus_session(input))
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// Lê as métricas de foco persistidas no banco local.
+#[tauri::command]
+pub async fn desktop_focus_summary(
+    state: State<'_, DesktopState>,
+) -> Result<FocusSummaryDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.focus_summary())
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// Lê XP, metas e missões persistidos no banco local.
+#[tauri::command]
+pub async fn desktop_reward_summary(
+    state: State<'_, DesktopState>,
+) -> Result<RewardSummaryDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.reward_summary())
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// Resgata uma missão diária do perfil local.
+#[tauri::command]
+pub async fn desktop_claim_daily_mission(
+    state: State<'_, DesktopState>,
+    mission_id: String,
+) -> Result<bool, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.claim_daily_mission(&mission_id))
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// Lê a meta semanal do perfil local.
+#[tauri::command]
+pub async fn desktop_weekly_goal(state: State<'_, DesktopState>) -> Result<i64, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.weekly_goal())
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// Atualiza a meta semanal do perfil local.
+#[tauri::command]
+pub async fn desktop_set_weekly_goal(
+    state: State<'_, DesktopState>,
+    weekly_goal: i64,
+) -> Result<i64, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.set_weekly_goal(weekly_goal))
         .await
         .map_err(|_| IpcError::study_unavailable())?
 }

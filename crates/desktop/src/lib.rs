@@ -53,11 +53,13 @@ pub mod state;
 pub mod study;
 
 pub use command::{
-    catalog, catalog_with_orders, desktop_catalog, desktop_import_course,
-    desktop_import_course_cover, desktop_media_removal_impact, desktop_recent_study,
+    catalog, catalog_with_orders, desktop_catalog, desktop_claim_daily_mission,
+    desktop_focus_summary, desktop_import_course, desktop_import_course_cover,
+    desktop_media_removal_impact, desktop_recent_study, desktop_record_focus_session,
     desktop_record_position, desktop_remove_course, desktop_remove_course_cover,
-    desktop_remove_media, desktop_rescan, desktop_reset_course_order, desktop_set_completed,
-    desktop_set_course_order, desktop_study_progress,
+    desktop_remove_media, desktop_rescan, desktop_reset_course_order, desktop_reward_summary,
+    desktop_set_completed, desktop_set_course_order, desktop_set_weekly_goal,
+    desktop_study_progress, desktop_study_summary, desktop_weekly_goal,
 };
 pub use config::{DATABASE_FILE_NAME, DesktopConfigDto, database_path};
 pub use courses::{
@@ -69,8 +71,9 @@ pub use covers::{
     parse_cover_request, valid_course_id,
 };
 pub use dto::{
-    CatalogDto, CatalogFileDto, CatalogNodeDto, CoverDto, CoverRemovalDto, MediaRemovalImpactDto,
-    MediaRemovalOutcomeDto, RecentStudyDto, RescanSummaryDto, StudyProgressDto,
+    CatalogDto, CatalogFileDto, CatalogNodeDto, CoverDto, CoverRemovalDto, DailyMissionDto,
+    FocusDayDto, FocusSessionDto, FocusSummaryDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto,
+    RecentStudyDto, RescanSummaryDto, RewardSummaryDto, StudyProgressDto, StudySummaryDto,
 };
 pub use error::{IpcError, IpcErrorCode};
 pub use ordering::{CourseOrders, OrderError, order_path};
@@ -108,6 +111,13 @@ pub fn run() {
             command::desktop_record_position,
             command::desktop_set_completed,
             command::desktop_recent_study,
+            command::desktop_study_summary,
+            command::desktop_record_focus_session,
+            command::desktop_focus_summary,
+            command::desktop_reward_summary,
+            command::desktop_claim_daily_mission,
+            command::desktop_weekly_goal,
+            command::desktop_set_weekly_goal,
             command::desktop_media_removal_impact,
             command::desktop_remove_media,
             command::desktop_import_course_cover,

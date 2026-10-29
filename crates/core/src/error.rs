@@ -275,6 +275,42 @@ pub enum Error {
         /// Quantidade de donos distintos com progresso na mídia.
         progress_owners: usize,
     },
+
+    /// O dia usado no cálculo de ofensiva não é uma data ISO válida.
+    #[error("dia de estudo inválido: {day}")]
+    InvalidStudyDay {
+        /// Data recusada, no formato `YYYY-MM-DD`.
+        day: String,
+    },
+
+    /// A sessão de foco é inválida ou excede os limites do timer.
+    #[error("sessão de foco inválida: {reason}")]
+    InvalidFocusSession {
+        /// Motivo estável da rejeição.
+        reason: &'static str,
+    },
+
+    /// O mesmo identificador de sessão foi reenviado com conteúdo diferente.
+    #[error("o identificador da sessão já foi usado com outros dados")]
+    FocusSessionConflict,
+
+    /// O identificador da missão diária não é conhecido.
+    #[error("missão diária desconhecida: {mission_id}")]
+    InvalidMission {
+        /// Identificador recusado.
+        mission_id: String,
+    },
+
+    /// A missão ainda não atingiu o requisito necessário para resgate.
+    #[error("a missão diária ainda não foi concluída")]
+    MissionNotComplete,
+
+    /// Meta semanal fora da faixa suportada.
+    #[error("meta semanal inválida: {weekly_goal}")]
+    InvalidWeeklyGoal {
+        /// Valor recusado.
+        weekly_goal: i64,
+    },
 }
 
 /// Resultado das operações do domínio.

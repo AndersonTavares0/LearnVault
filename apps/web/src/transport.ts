@@ -15,6 +15,25 @@ export type Catalog = { complete: boolean; looseFiles: FileEntry[]; nodes: Catal
 export type TransportKind = 'http' | 'desktop';
 export type StudyProgress = { mediaId: string; positionSeconds: number; completed: boolean; updatedAt: number | null; recorded: boolean };
 export type RecentStudy = { items: StudyProgress[] };
+export type StudyDay = { day: string; active: boolean };
+export type StudySummary = {
+	currentStreak: number;
+	longestStreak: number;
+	today: string;
+	todayActive: boolean;
+	atRisk: boolean;
+	weekActiveDays: number;
+	completedLessons: number;
+	days: StudyDay[];
+};
+export type FocusKind = 'focus' | 'short' | 'long';
+export type FocusSessionInput = { id: string; kind: FocusKind; plannedSeconds: number; actualSeconds: number; completed: boolean; startedAt: number; endedAt: number };
+export type FocusSessionRecord = FocusSessionInput;
+export type FocusDaySummary = { day: string; minutes: number; sessions: number };
+export type FocusSummary = { todayMinutes: number; weekMinutes: number; weekSessions: number; totalMinutes: number; totalSessions: number; completionRate: number; bestDay: string | null; days: FocusDaySummary[] };
+export type MissionId = 'lesson' | 'focus-two' | 'focus-fifty';
+export type DailyMission = { id: MissionId; progress: number; target: number; claimed: boolean };
+export type RewardSummary = { xp: number; completedLessons: number; weeklyGoal: number; missions: DailyMission[]; study: StudySummary };
 // Estado da verificação de atualização, tal como o servidor local devolve em `/api/update`.
 // Uma falha de rede do servidor nunca vira erro HTTP: chega como `error` preenchido e
 // `available: false`. `enabled: false` significa que a checagem está desligada por
@@ -82,6 +101,12 @@ export interface Transport {
 	recordPosition(mediaId: string, positionSeconds: number): Promise<StudyProgress>;
 	setCompleted(mediaId: string, completed: boolean): Promise<StudyProgress>;
 	recentStudy(limit?: number): Promise<RecentStudy>;
+	studySummary(): Promise<StudySummary>;
+	recordFocusSession(session: FocusSessionInput): Promise<FocusSessionRecord>;
+	focusSummary(): Promise<FocusSummary>;
+	rewardSummary(): Promise<RewardSummary>;
+	claimDailyMission(missionId: MissionId): Promise<boolean>;
+	setWeeklyGoal(goal: number): Promise<number>;
 	// Verifica a atualização; `force` ignora o intervalo mínimo de cache do servidor.
 	checkUpdate(force?: boolean): Promise<UpdateStatus>;
 	mediaUrl(file: FileEntry, courseId?: string): string | null;
@@ -315,6 +340,104 @@ export function normalizeRecentStudy(value: unknown): RecentStudy {
 	return { items: (value as { items: unknown[] }).items.map(normalizeStudyProgress) };
 }
 
+export function normalizeStudySummary(value: unknown): StudySummary {
+	if (!value || typeof value !== 'object') throw invalidPayload('resumo de estudo ausente.');
+	const summary = value as {
+		current_streak?: unknown;
+		longest_streak?: unknown;
+		today?: unknown;
+		today_active?: unknown;
+		at_risk?: unknown;
+		week_active_days?: unknown;
+		completed_lessons?: unknown;
+		days?: unknown;
+	};
+	if (
+		!Number.isInteger(summary.current_streak) ||
+		!Number.isInteger(summary.longest_streak) ||
+		typeof summary.today !== 'string' ||
+		!/^\d{4}-\d{2}-\d{2}$/.test(summary.today) ||
+		!Number.isInteger(summary.week_active_days) ||
+		!Number.isInteger(summary.completed_lessons) ||
+		typeof summary.today_active !== 'boolean' ||
+		typeof summary.at_risk !== 'boolean' ||
+		!Array.isArray(summary.days) ||
+		summary.days.length !== 7
+	) throw invalidPayload('resumo de estudo incompleto.');
+	const days = summary.days.map((entry) => {
+		if (!entry || typeof entry !== 'object') throw invalidPayload('dia do resumo inválido.');
+		const day = entry as { day?: unknown; active?: unknown };
+		if (typeof day.day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day.day) || typeof day.active !== 'boolean') throw invalidPayload('dia do resumo inválido.');
+		return { day: day.day, active: day.active };
+	});
+	return {
+		currentStreak: summary.current_streak as number,
+		longestStreak: summary.longest_streak as number,
+		today: summary.today as string,
+		todayActive: summary.today_active as boolean,
+		atRisk: summary.at_risk as boolean,
+		weekActiveDays: summary.week_active_days as number,
+		completedLessons: summary.completed_lessons as number,
+		days
+	};
+}
+
+function safeInteger(value: unknown): value is number {
+	return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
+export class FocusSessionConflict extends Error {
+	constructor() { super('Esta sessão já foi registrada com outros dados.'); this.name = 'FocusSessionConflict'; }
+}
+
+export class InvalidFocusSession extends Error {
+	constructor() { super('Os dados da sessão de foco não são válidos.'); this.name = 'InvalidFocusSession'; }
+}
+
+export function normalizeFocusSession(value: unknown): FocusSessionRecord {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('sessão de foco ausente.');
+	const session = value as Record<string, unknown>;
+	if (typeof session.id !== 'string' || !session.id || !['focus', 'short', 'long'].includes(String(session.kind)) || !safeInteger(session.planned_seconds) || !safeInteger(session.actual_seconds) || typeof session.completed !== 'boolean' || !safeInteger(session.started_at) || !safeInteger(session.ended_at) || session.actual_seconds > session.planned_seconds || session.ended_at < session.started_at || session.actual_seconds > session.ended_at - session.started_at) throw invalidPayload('sessão de foco inválida.');
+	return { id: session.id, kind: session.kind as FocusKind, plannedSeconds: session.planned_seconds, actualSeconds: session.actual_seconds, completed: session.completed, startedAt: session.started_at, endedAt: session.ended_at };
+}
+
+export function normalizeFocusSummary(value: unknown): FocusSummary {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('resumo de foco ausente.');
+	const summary = value as Record<string, unknown>;
+	if (!safeInteger(summary.today_minutes) || !safeInteger(summary.week_minutes) || !safeInteger(summary.week_sessions) || !safeInteger(summary.total_minutes) || !safeInteger(summary.total_sessions) || !safeInteger(summary.completion_rate) || summary.completion_rate > 100 || !(summary.best_day === null || typeof summary.best_day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(summary.best_day)) || !Array.isArray(summary.days) || summary.days.length !== 7) throw invalidPayload('resumo de foco incompleto.');
+	const days = summary.days.map((value) => {
+		if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('dia de foco inválido.');
+		const day = value as Record<string, unknown>;
+		if (typeof day.day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day.day) || !safeInteger(day.minutes) || !safeInteger(day.sessions)) throw invalidPayload('dia de foco inválido.');
+		return { day: day.day, minutes: day.minutes, sessions: day.sessions };
+	});
+	return { todayMinutes: summary.today_minutes, weekMinutes: summary.week_minutes, weekSessions: summary.week_sessions, totalMinutes: summary.total_minutes, totalSessions: summary.total_sessions, completionRate: summary.completion_rate, bestDay: summary.best_day as string | null, days };
+}
+
+export function normalizeRewardSummary(value: unknown): RewardSummary {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('resumo de recompensas ausente.');
+	const summary = value as Record<string, unknown>;
+	if (!safeInteger(summary.xp) || !safeInteger(summary.completed_lessons) || !Number.isInteger(summary.weekly_goal) || (summary.weekly_goal as number) < 1 || (summary.weekly_goal as number) > 7 || !Array.isArray(summary.missions)) throw invalidPayload('resumo de recompensas incompleto.');
+	const missions = summary.missions.map((value) => {
+		if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('missão inválida.');
+		const mission = value as Record<string, unknown>;
+		if (!['lesson', 'focus-two', 'focus-fifty'].includes(String(mission.id)) || !safeInteger(mission.progress) || !safeInteger(mission.target) || mission.target === 0 || mission.progress > mission.target || typeof mission.claimed !== 'boolean') throw invalidPayload('missão inválida.');
+		return { id: mission.id as MissionId, progress: mission.progress, target: mission.target, claimed: mission.claimed };
+	});
+	if (!summary.study) throw invalidPayload('resumo de atividade ausente.');
+	return { xp: summary.xp, completedLessons: summary.completed_lessons, weeklyGoal: summary.weekly_goal as number, missions, study: normalizeStudySummary(summary.study) };
+}
+
+function normalizeWeeklyGoal(value: unknown): number {
+	if (!value || typeof value !== 'object' || !Number.isInteger((value as { weekly_goal?: unknown }).weekly_goal) || ((value as { weekly_goal: number }).weekly_goal < 1 || (value as { weekly_goal: number }).weekly_goal > 7)) throw invalidPayload('meta semanal inválida.');
+	return (value as { weekly_goal: number }).weekly_goal;
+}
+
+function normalizeClaim(value: unknown): boolean {
+	if (!value || typeof value !== 'object' || typeof (value as { claimed?: unknown }).claimed !== 'boolean') throw invalidPayload('resgate de missão inválido.');
+	return (value as { claimed: boolean }).claimed;
+}
+
 // Campo de atualização opcional: `null`/ausente valem como nulo; um tipo que não seja
 // string é recusado em vez de vazar para a interface.
 function optionalUpdateString(value: unknown, key: string): string | null {
@@ -450,6 +573,20 @@ export class HttpTransport implements Transport {
 	async recordPosition(mediaId: string, positionSeconds: number) { const response = await fetch('/api/study/position', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: mediaId, position_seconds: positionSeconds }) }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? 'Mídia não encontrada.' : response.status === 422 ? 'Posição inválida.' : 'Não foi possível salvar o progresso.'); return normalizeStudyProgress(await response.json()); }
 	async setCompleted(mediaId: string, completed: boolean) { const response = await fetch('/api/study/completed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: mediaId, completed }) }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? 'Mídia não encontrada.' : 'Não foi possível atualizar a conclusão.'); return normalizeStudyProgress(await response.json()); }
 	async recentStudy(limit?: number) { const url = limit === undefined ? '/api/study/recent' : `/api/study/recent?limit=${limit}`; const response = await fetch(url); if (!response.ok) throw response.status === 404 ? Object.assign(new Error('Estudo não disponível neste servidor.'), { code: STUDY_NOT_AVAILABLE }) : new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar o histórico.'); return normalizeRecentStudy(await response.json()); }
+	async studySummary() { const response = await fetch('/api/study/summary'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar sua evolução.'); return normalizeStudySummary(await response.json()); }
+	async recordFocusSession(session: FocusSessionInput) {
+		const response = await fetch('/api/focus/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: session.id, kind: session.kind, planned_seconds: session.plannedSeconds, actual_seconds: session.actualSeconds, completed: session.completed, started_at: session.startedAt, ended_at: session.endedAt }) });
+		if (!response.ok) {
+			if (response.status === 409) throw new FocusSessionConflict();
+			if (response.status === 422) throw new InvalidFocusSession();
+			throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível salvar a sessão de foco.');
+		}
+		return normalizeFocusSession(await response.json());
+	}
+	async focusSummary() { const response = await fetch('/api/focus/summary'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar as estatísticas de foco.'); return normalizeFocusSummary(await response.json()); }
+	async rewardSummary() { const response = await fetch('/api/rewards/summary'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar suas recompensas.'); return normalizeRewardSummary(await response.json()); }
+	async claimDailyMission(missionId: MissionId) { const response = await fetch(`/api/rewards/missions/${encodeURIComponent(missionId)}/claim`, { method: 'POST' }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 409 ? 'Conclua a missão antes de resgatá-la.' : 'Não foi possível resgatar a missão.'); return normalizeClaim(await response.json()); }
+	async setWeeklyGoal(goal: number) { if (!Number.isInteger(goal) || goal < 1 || goal > 7) throw new Error('A meta semanal precisa ser de 1 a 7 dias.'); const response = await fetch('/api/rewards/weekly-goal', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ weekly_goal: goal }) }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 422 ? 'A meta semanal precisa ser de 1 a 7 dias.' : 'Não foi possível salvar a meta semanal.'); return normalizeWeeklyGoal(await response.json()); }
 	// O servidor local faz a checagem por HTTPS e devolve o estado; o navegador só o exibe.
 	// `force=1` (checagem manual) ignora o intervalo mínimo de cache do servidor.
 	async checkUpdate(force = false) { const response = await fetch(force ? '/api/update?force=1' : '/api/update'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível verificar a atualização.'); return normalizeUpdateStatus(await response.json()); }
@@ -502,12 +639,18 @@ const DESKTOP_ERROR_MESSAGES: Record<string, string> = {
 	invalid_cover: 'A capa precisa ser PNG, JPEG ou WebP de até 4 MiB.',
 	cover_unavailable: 'Não foi possível atualizar a capa do curso.',
 	invalid_order: 'A ordem enviada não é válida; recarregue a página.',
-	order_unavailable: 'Não foi possível salvar a ordem do curso.'
+	order_unavailable: 'Não foi possível salvar a ordem do curso.',
+	invalid_focus_session: 'Os dados da sessão de foco não são válidos.',
+	focus_session_conflict: 'Esta sessão já foi registrada com outros dados.',
+	mission_not_complete: 'Conclua a missão antes de resgatá-la.',
+	invalid_weekly_goal: 'A meta semanal precisa ser de 1 a 7 dias.'
 };
 
 // O comando devolve o erro como objeto serializado `{ code, message }`, não como `Error`.
 function desktopError(cause: unknown, fallback: string): Error {
 	const payload = cause as { code?: unknown } | null;
+	if (payload && typeof payload === 'object' && payload.code === 'focus_session_conflict') return new FocusSessionConflict();
+	if (payload && typeof payload === 'object' && payload.code === 'invalid_focus_session') return new InvalidFocusSession();
 	if (payload && typeof payload === 'object' && typeof payload.code === 'string') {
 		const known = DESKTOP_ERROR_MESSAGES[payload.code];
 		if (known) return new Error(known);
@@ -540,6 +683,12 @@ export class DesktopStub implements Transport {
 	// Sem limite informado, o comando usa o padrão do contrato; por isso o argumento é
 	// omitido em vez de enviado como `undefined`.
 	async recentStudy(limit?: number) { try { return normalizeRecentStudy(await invoke<unknown>('desktop_recent_study', limit === undefined ? {} : { limit })); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar o histórico de estudo.'); } }
+	async studySummary() { try { return normalizeStudySummary(await invoke<unknown>('desktop_study_summary')); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar sua evolução.'); } }
+	async recordFocusSession(session: FocusSessionInput) { try { return normalizeFocusSession(await invoke<unknown>('desktop_record_focus_session', { session })); } catch (cause) { throw desktopError(cause, 'Não foi possível salvar a sessão de foco.'); } }
+	async focusSummary() { try { return normalizeFocusSummary(await invoke<unknown>('desktop_focus_summary')); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar as estatísticas de foco.'); } }
+	async rewardSummary() { try { return normalizeRewardSummary(await invoke<unknown>('desktop_reward_summary')); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar suas recompensas.'); } }
+	async claimDailyMission(missionId: MissionId) { try { return await invoke<boolean>('desktop_claim_daily_mission', { missionId }); } catch (cause) { throw desktopError(cause, 'Não foi possível resgatar a missão.'); } }
+	async setWeeklyGoal(goal: number) { try { if (!Number.isInteger(goal) || goal < 1 || goal > 7) throw new Error(); const saved = await invoke<unknown>('desktop_set_weekly_goal', { weeklyGoal: goal }); if (!Number.isInteger(saved) || (saved as number) < 1 || (saved as number) > 7) throw invalidPayload('meta semanal inválida.'); return saved as number; } catch (cause) { if (cause instanceof Error && cause.message.startsWith('Resposta inválida')) throw cause; throw desktopError(cause, 'Não foi possível salvar a meta semanal.'); } }
 	// O desktop não hospeda `crates/server` nem possui canal IPC de atualização: a
 	// checagem fica desligada, sem tocar a rede. Isso preserva a regra de que o bundle
 	// desktop não contém nenhum `fetch` do aplicativo.
