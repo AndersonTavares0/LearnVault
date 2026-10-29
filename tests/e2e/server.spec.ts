@@ -27,6 +27,27 @@ function firstMediaId(value: unknown): string | undefined {
 	return firstMediaId(record.children) ?? firstMediaId(record.nodes) ?? firstMediaId(record.categories);
 }
 
+function mediaIds(value: unknown, found: string[] = []): string[] {
+	if (Array.isArray(value)) {
+		for (const item of value) mediaIds(item, found);
+		return found;
+	}
+	if (!value || typeof value !== 'object') return found;
+	const record = value as Record<string, unknown>;
+	if (Array.isArray(record.files)) {
+		for (const file of record.files) {
+			if (file && typeof file === 'object' && typeof (file as Record<string, unknown>).media_id === 'string') {
+				const id = (file as Record<string, string>).media_id;
+				if (!found.includes(id)) found.push(id);
+			}
+		}
+	}
+	mediaIds(record.children, found);
+	mediaIds(record.nodes, found);
+	mediaIds(record.categories, found);
+	return found;
+}
+
 function parseRgb(value: string): [number, number, number] {
 	const rgb = value.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
 	if (rgb) return [Number(rgb[1]), Number(rgb[2]), Number(rgb[3])];
@@ -157,7 +178,7 @@ async function waitForHealth(url: string, process: ChildProcess) {
 	throw new Error('server did not become ready within 30 seconds');
 }
 
-async function startServer(libraryName = 'library'): Promise<ServerFixture> {
+async function startServer(libraryName = 'library', extraLessons: string[] = []): Promise<ServerFixture> {
 	const root = await mkdtemp(join(tmpdir(), 'learnvault-e2e-'));
 	const library = join(root, libraryName);
 	const outsidePath = join(root, 'outside.mp4');
@@ -166,6 +187,11 @@ async function startServer(libraryName = 'library'): Promise<ServerFixture> {
 	await writeFile(join(library, 'Categoria', 'Curso', 'Aula.mp4'), Buffer.from('video-fixture'));
 	await writeFile(join(library, 'Categoria', 'Curso', 'Aula.vtt'), 'WEBVTT\n');
 	await writeFile(join(library, 'Categoria', 'Curso', 'Material.pdf'), Buffer.from('material-fixture'));
+	for (const lesson of extraLessons) {
+		await mkdir(join(library, 'Categoria', lesson), { recursive: true });
+		await writeFile(join(library, 'Categoria', lesson, 'Aula.mp4'), Buffer.from('video-fixture'));
+		await writeFile(join(library, 'Categoria', lesson, 'Aula.vtt'), 'WEBVTT\n');
+	}
 
 	const webRoot = resolve(process.cwd(), 'crates/server/web/build');
 	const defaultBinary = process.platform === 'win32' ? 'target/debug/learnvault-server.exe' : 'target/debug/learnvault-server';
@@ -951,6 +977,94 @@ test('keeps long course titles readable in the mobile covers grid', async ({ pag
 		if (process.env.LEARNVAULT_VISUAL_CAPTURE_DIR) await captureVisual(page, 'mobile-library-long-title-390-light.png');
 		await longTitle.click();
 		await expect(page.getByRole('heading', { name: courseTitle, exact: true })).toBeVisible();
+	} finally {
+		await page.context().close();
+		await server.stop();
+	}
+});
+
+test('keeps every recent item reachable and aligned in the mobile carousel', async ({ page }) => {
+	const server = await startServer('library', ['Segundo curso']);
+	try {
+		await page.goto(`${server.baseURL}/#/login`);
+		await page.getByLabel('Usuário').fill('admin');
+		await page.getByLabel('Senha', { exact: true }).fill(ADMIN_PASSWORD);
+		await page.getByRole('button', { name: 'Entrar' }).click();
+		await expect(page.getByRole('heading', { name: 'Minha biblioteca' })).toBeAttached();
+		await page.getByRole('button', { name: 'Atualizar cursos' }).click();
+		await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
+
+		const catalog = await (await page.request.get(`${server.baseURL}/api/catalog`)).json();
+		const ids = mediaIds(catalog);
+		expect(ids.length).toBeGreaterThanOrEqual(2);
+		for (const [index, mediaId] of ids.entries()) {
+			const response = await page.request.post(`${server.baseURL}/api/study/position`, {
+				headers: { Origin: server.baseURL },
+				data: { media_id: mediaId, position_seconds: 5 + index }
+			});
+			await expect(response).toBeOK();
+		}
+		const recent = await (await page.request.get(`${server.baseURL}/api/study/recent?limit=6`)).json();
+		// A Biblioteca mostra no máximo quatro retomadas.
+		const expectedCards = Math.min(recent.items.length, 4);
+		expect(expectedCards).toBeGreaterThanOrEqual(2);
+
+		await page.setViewportSize({ width: 390, height: 844 });
+		await page.reload();
+		const strip = page.locator('.lv-library .lv-resume');
+		const items = page.locator('.lv-library .lv-resume > li');
+		await expect(items).toHaveCount(expectedCards);
+
+		// A faixa rola horizontalmente: nenhum cartão fica inalcançável.
+		const stripState = await strip.evaluate((element) => ({
+			scrollable: element.scrollWidth > element.clientWidth,
+			snapType: getComputedStyle(element).scrollSnapType
+		}));
+		expect(stripState.scrollable).toBe(true);
+
+		// Gesto real de rolagem horizontal: a faixa precisa responder ao input,
+		// não apenas à rolagem programática, e repousar alinhada a um cartão.
+		const startOffsets = () => strip.evaluate((element) => {
+			const container = element.getBoundingClientRect();
+			return Array.from(element.children).map((child) =>
+				child.getBoundingClientRect().left - container.left
+			);
+		});
+		const referenceOffset = (await startOffsets())[0];
+		const stripBox = await strip.boundingBox();
+		expect(stripBox).not.toBeNull();
+		await page.mouse.move(stripBox!.x + stripBox!.width / 2, stripBox!.y + stripBox!.height / 2);
+		await page.mouse.wheel(40, 0);
+		await expect.poll(async () => strip.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+		await expect.poll(async () => {
+			const offsets = await startOffsets();
+			return Math.min(...offsets.map((offset) => Math.abs(offset - referenceOffset)));
+		}).toBeLessThanOrEqual(1);
+
+		// Cada retomada é alcançável e nenhum cartão é cortado pela faixa.
+		const reach = await strip.evaluate((element) => {
+			const padLeft = Number.parseFloat(getComputedStyle(element).paddingLeft);
+			return Array.from(element.children).map((child, index, all) => {
+				child.scrollIntoView({ inline: 'start', block: 'nearest' });
+				const container = element.getBoundingClientRect();
+				const bounds = child.getBoundingClientRect();
+				return {
+					isLast: index === all.length - 1,
+					snapAlign: getComputedStyle(child).scrollSnapAlign,
+					outsideLeft: container.left - bounds.left,
+					outsideRight: bounds.right - container.right,
+					startOffset: Math.abs(bounds.left - (container.left + padLeft))
+				};
+			});
+		});
+		expect(reach).toHaveLength(expectedCards);
+		for (const card of reach) {
+			expect(card.snapAlign).toBe('start');
+			// Nenhum cartão é cortado pelas bordas da faixa ao ser alcançado.
+			expect(card.outsideLeft).toBeLessThanOrEqual(1);
+			expect(card.outsideRight).toBeLessThanOrEqual(1);
+		}
+		if (process.env.LEARNVAULT_VISUAL_CAPTURE_DIR) await captureVisual(page, 'mobile-library-resume-carousel-390-light.png');
 	} finally {
 		await page.context().close();
 		await server.stop();

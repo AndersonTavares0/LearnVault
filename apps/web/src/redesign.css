@@ -6974,7 +6974,7 @@ textarea {
 		gap: 10px;
 		overflow-x: auto;
 		padding: 3px 3px 8px;
-		scroll-snap-type: x proximity;
+		scroll-snap-type: x mandatory;
 	}
 
 	.lv-library .lv-resume > li {
@@ -7326,18 +7326,6 @@ textarea {
 
 .lv-view-switch .lvui-btn[aria-pressed="false"] {
 	color: var(--muted);
-}
-
-.lv-resume-card__action {
-	width: 44px;
-	height: 44px;
-	border-color: var(--accent);
-	background: var(--accent);
-	color: #fff;
-}
-
-.lv-library .lv-page__buttons .lvui-btn:not(.lvui-btn-primary) {
-	border-color: var(--line-strong);
 }
 
 @media (max-width: 820px) {

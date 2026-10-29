@@ -113,3 +113,28 @@ Um E2E com título português longo confirmou o tratamento atual: texto serifado
 - `pnpm exec playwright test tests/e2e/server.spec.ts --retries=0`: 6/6 cenários; inclui CTA sem overflow em 320/390 px, controles touch, título longo sem overflow e acesso ao título integral na tela de Curso.
 - As duas rodadas de crítica independente não encontraram P0/P1; os pontos P2 mensuráveis foram corrigidos e a hipótese sobre nomes longos foi reproduzida, mitigada e verificada.
 - A validação não cobre dados pessoais reais nem equivale a teste com usuários.
+
+## Terceira rodada de crítica e faixa de retomada — 2026-10-29
+
+Uma terceira leitura independente das mesmas capturas de 390×844 propôs catorze achados. Sete não se sustentaram na verificação do código:
+
+- **Contraste do seletor e das bordas no tema escuro:** os tokens `--blue-soft`, `--blue`, `--ink` e `--line` já entregam cerca de 13:1 para o texto selecionado e 7:1 para a borda; substituí-los por hex fixos teria saído da paleta. Nenhuma alteração aplicada.
+- **Escala tipográfica achatada:** o `h1` da página é 32 px e os `h2` de seção são 24 px no mobile; existe degrau. Nenhuma alteração aplicada.
+- **Título truncado em duas linhas:** é decisão registrada, com o título integral no cabeçalho do Curso e cobertura E2E. Mantido.
+- **Paridade de CTAs:** a alternância primário/secundário é intencional quando há retomada e é verificada por E2E. Mantida.
+- **Badge de status:** “Em andamento” e “Catálogo atualizado.” têm semânticas diferentes (estado persistente e aviso transitório); unificá-las seria abstração sem demanda.
+- **Busca fixa ao rolar:** o topbar quebra em duas linhas a ≤820 px com alturas mínimas diferentes, então qualquer `top` fixo esconde o campo atrás dele. Sem JS ou reorganização de layout, a alternativa seria uma sobreposição incorreta. Descartada.
+- **Esqueletos de carregamento:** o catálogo é carregado uma vez; não há caminho assíncrono que justifique shimmer.
+
+O achado que correspondia a uma lacuna real já documentada era a faixa de retomada no mobile: a rolagem horizontal nunca havia sido exercida. A correção foi `scroll-snap-type: x mandatory` (antes `proximity`), escolhida por comportamento determinístico entre Chromium e WebKit, e não por ganho medido no Chromium.
+
+O E2E novo usa fixture com duas aulas e quatro retomadas, faz um gesto real de roda horizontal sobre a faixa, confirma `scrollLeft > 0`, verifica que o repouso casa com o alinhamento de referência do primeiro cartão (≤1 px) e que cada cartão, ao ser alcançado, permanece dentro das bordas da faixa. Para provar que o teste não é vazio, a faixa foi temporariamente trocada para `overflow-x: visible`: o cenário falhou com `scrollLeft` em 0, como esperado.
+
+Limites desta verificação: o gesto é roda de mouse, não toque real; `proximity` também passa no mesmo desenho de teste, portanto a escolha por `mandatory` não tem evidência de superioridade no Chromium, apenas de determinismo entre engines. Captura: [faixa de retomada em 390×844](design/screenshots/mobile-density-iteration/mobile-library-resume-carousel-390-light.png).
+
+### Verificação
+
+- `pnpm --filter learnvault-web check`: 0 erros, 0 warnings.
+- `pnpm --filter learnvault-web test`: 22 arquivos, 313 testes.
+- `pnpm --filter learnvault-web build` e `build:desktop`: passaram.
+- `pnpm exec playwright test tests/e2e/server.spec.ts --retries=0`: 7/7 cenários.
