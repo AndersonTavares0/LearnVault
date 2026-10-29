@@ -552,9 +552,8 @@
 {#if loading}<div class="lv-loading" aria-live="polite">Carregando seus cursos…</div>
 {:else if !user}
 	<main class="login-page" aria-labelledby="login-heading">
-		<div class="brand"><Brand /> LEARNVAULT</div>
 		<section>
-			<h1 id="login-heading">Entrar no LearnVault</h1>
+			<div class="login-head"><Brand /><h1 id="login-heading">Entrar no LearnVault</h1></div>
 			<p class="intro">Acesse sua biblioteca de cursos.</p>
 			<form onsubmit={login}>
 				<fieldset class="auth-fields" disabled={authBusy}>

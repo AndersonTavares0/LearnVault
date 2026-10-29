@@ -4383,3 +4383,42 @@ svg {
 .login-page .brand {
 	justify-content: center;
 }
+
+.login-mark {
+	display: inline-grid;
+	place-items: center;
+	width: 44px;
+	height: 44px;
+	margin-bottom: 14px;
+	border: 1px solid var(--line);
+	border-radius: 10px;
+	background: var(--surface-2);
+	color: var(--accent);
+}
+
+.login-mark .brand-mark {
+	width: 26px;
+	height: 26px;
+}
+
+.login-head {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin-bottom: 8px;
+}
+
+.login-head .brand-mark {
+	width: 30px;
+	height: 30px;
+	flex: none;
+	color: var(--accent);
+}
+
+.login-head h1 {
+	margin: 0;
+}
+
+.login-mark {
+	display: none;
+}
