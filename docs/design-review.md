@@ -50,3 +50,28 @@ As capturas foram feitas no servidor real da aplicação, com biblioteca e mídi
 ## Limites
 
 Sem teste com usuários, certificação WCAG 2.2 AA, validação de mídia real, verificação de persistência em dados reais ou execução interativa nativa do binário desktop. A revisão especializada de screenshots não substitui esses testes.
+
+## Refinamento posterior — 2026-10-29
+
+### Crítica e decisão
+
+Uma revisão visual independente da captura de 390 px apontou catálogo abaixo da primeira dobra útil e a faixa horizontal de retomada parcialmente cortada. A decisão foi preservar a ordem de retomada → catálogo e as capas compactadas já existentes no mobile; tornar Compacto o padrão esconderia a identidade das capas sem aproximar o início do catálogo. O refinamento reduziu apenas o espaçamento vertical da introdução, busca e seções em até 620 px.
+
+A revisão de implementação encontrou uma regressão funcional confirmada: a regra `hover: none` que exibia as ações de capa era sobrescrita mais abaixo pela regra compartilhada de opacidade zero. O problema foi reproduzido no Playwright antes da correção (`opacity: 0`). A regra touch final agora mantém o controle visível e com alvo de 44×44 px; mouse e foco por teclado continuam com seus estados existentes.
+
+### Evidência visual e interação
+
+- Capturas reais do fluxo isolado em viewport de 390×844: [Biblioteca touch](design/screenshots/mobile-refinement/mobile-library-cover-actions-390-light.png) e [menu de capa aberto](design/screenshots/mobile-refinement/mobile-library-cover-actions-open-390-light.png).
+- O fixture deste smoke contém um curso e não tem retomadas; portanto, as capturas novas **não** são uma comparação pixel a pixel com a Biblioteca anterior de 12 cursos. Elas evidenciam o espaçamento reduzido e o controle touch visível/acionável. O baseline completo permanece em [`product-pass/`](design/screenshots/product-pass/).
+- O teste touch confirma `hover: none`, opacidade 1, alvo de 44 px e abertura do menu por toque.
+
+### Verificação
+
+- Falha reproduzida antes: Playwright esperava o controle touch visível e recebeu opacidade 0.
+- Após a correção: `pnpm exec playwright test tests/e2e/server.spec.ts --retries=0` passou, 5/5 cenários.
+- `pnpm --filter learnvault-web test`: 22 arquivos / 313 testes; `check`: 0 erros / 0 warnings; build web e build desktop passaram.
+- Impeccable detector executado em `src/redesign.css`. O relatório contém avisos legados de tokens/radii/tipografia em outras partes da folha; nenhum aviso aponta para as novas regras no final do arquivo. O CSS anterior não foi reformatado nem alterado fora do escopo.
+
+### Limitação de integração
+
+O Open Design MCP não está exposto como ferramenta utilizável neste runtime; não houve chamada nem avaliação atribuída a ele nesta iteração. A crítica independente veio de dois agentes separados e a validação visual/interativa veio do Playwright. Nenhuma avaliação de Open Design foi inventada.

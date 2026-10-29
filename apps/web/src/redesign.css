@@ -7245,3 +7245,31 @@ textarea {
 	font-size: 12px;
 	font-weight: 650;
 }
+/* Keep catalog management discoverable when hover is unavailable; this final
+   touch rule follows the shared course-card hover treatment. */
+@media (hover: none) {
+	.lv-course-card__menu-toggle {
+		width: 44px;
+		height: 44px;
+		opacity: 1;
+	}
+}
+
+@media (max-width: 620px) {
+	.lv-library .lv-page__head {
+		gap: 12px;
+		margin-bottom: 16px;
+	}
+
+	.lv-library .lv-library-search {
+		margin-top: 10px;
+	}
+
+	.lv-library .lv-section {
+		margin-top: 20px;
+	}
+
+	.lv-library .lv-section__head {
+		margin-bottom: 10px;
+	}
+}

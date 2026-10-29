@@ -640,3 +640,25 @@ test('moves the cover actions to the course card and keeps the course page clean
 	const catalogAfter = await (await page.request.get(`${server.baseURL}/api/catalog`)).json();
 	expect(catalogAfter.nodes[0].cover_version).toBeUndefined();
 });
+
+test.describe('touch course cover actions', () => {
+	test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+
+	test('keeps cover controls visible and usable without hover', async ({ page, server }) => {
+		await page.goto(`${server.baseURL}/#/login`);
+		await page.getByLabel('Usuário').fill('admin');
+		await page.getByLabel('Senha', { exact: true }).fill(ADMIN_PASSWORD);
+		await page.getByRole('button', { name: 'Entrar' }).click();
+		await expect(page.getByRole('heading', { name: 'Minha biblioteca' })).toBeAttached();
+
+		expect(await page.evaluate(() => matchMedia('(hover: none)').matches)).toBe(true);
+		const coverActions = page.getByRole('button', { name: 'Ações de capa de library' });
+		await expect(coverActions).toBeVisible();
+		await expect(coverActions).toHaveCSS('opacity', '1');
+		await expect(coverActions).toHaveCSS('width', '44px');
+		await captureVisual(page, 'mobile-library-cover-actions-390-light.png');
+		await coverActions.tap();
+		await expect(page.getByRole('group', { name: 'Capa de library' })).toBeVisible();
+		await captureVisual(page, 'mobile-library-cover-actions-open-390-light.png');
+	});
+});
