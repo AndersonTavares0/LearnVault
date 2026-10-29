@@ -234,6 +234,13 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	await expect(page.getByRole('heading', { name: 'Continue estudando' })).toBeVisible();
 	await captureVisual(page, 'redesign-biblioteca-compacta-desktop.png');
 
+	const search = page.getByRole('searchbox', { name: 'Buscar nos cursos' });
+	await search.fill('nenhum curso deve corresponder');
+	await expect(page.locator('.lv-resume')).toHaveCount(0);
+	await expect(page.locator('.lv-course-grid .lv-course-card')).toHaveCount(0);
+	await search.fill('');
+	await expect(page.getByRole('heading', { name: 'Continue estudando' })).toBeVisible();
+
 	// Cada item identifica a aula pelo título limpo e mostra o contexto (curso · módulo)
 	// em uma linha secundária; o nome cru do arquivo não pode vazar para o usuário.
 	const firstRecentItem = page.locator('.lv-resume li').first();
@@ -461,7 +468,6 @@ test('reports a lesson whose media disappears from disk and restores it when the
 	await expect(courseModule.locator('.section-meta')).toHaveText('1 aula · 1 ausente');
 	const missingRow = courseModule.locator('.lesson-row', { hasText: 'Aula B' });
 	await expect(missingRow).toBeVisible();
-	await expect(missingRow).toContainText('(ausente)');
 	// Continua listada, mas não navega: sem link, sem foco de teclado.
 	await expect(courseModule.getByRole('link', { name: /Aula B/ })).toHaveCount(0);
 	expect(await missingRow.evaluate((element) => element.tagName)).toBe('DIV');

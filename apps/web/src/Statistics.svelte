@@ -24,7 +24,8 @@
 		completionRate: 0, bestDay: null, days: weekDayKeys().map((day) => ({ day, minutes: 0, sessions: 0 }))
 	});
 	let summaryLoading = $state(true);
-	let summaryError = $state('');
+	let rewardError = $state('');
+	let focusError = $state('');
 	let weeklyGoal = $state(3);
 	let goalSaving = $state(false);
 	let goalError = $state('');
@@ -36,6 +37,11 @@
 	const today = $derived(summary?.today ?? localDayKey(new Date()));
 	const goalProgress = $derived(summary ? weeklyGoalProgress(summary.weekActiveDays, weeklyGoal) : 0);
 	const gamification = $derived(rewards ? buildGamification({ rewards }) : null);
+	const hasActivity = $derived(Boolean(
+		(summary && (summary.completedLessons > 0 || summary.currentStreak > 0 || summary.weekActiveDays > 0)) ||
+		focus.totalSessions > 0 ||
+		(gamification && gamification.xp > 0)
+	));
 
 	onMount(() => {
 		void loadSummary();
@@ -43,15 +49,13 @@
 
 	async function loadSummary() {
 		summaryLoading = true;
-		summaryError = '';
+		rewardError = '';
+		focusError = '';
 		const [rewardResult, focusResult] = await Promise.allSettled([transport.rewardSummary(), transport.focusSummary()]);
 		if (rewardResult.status === 'fulfilled') persistedRewardSummary.set(rewardResult.value);
+		else rewardError = rewardResult.reason instanceof Error ? rewardResult.reason.message : 'Não foi possível carregar seus dados de evolução.';
 		if (focusResult.status === 'fulfilled') persistedFocusSummary.set(focusResult.value);
-		const failures = [rewardResult, focusResult].filter((result) => result.status === 'rejected');
-		if (failures.length > 0) {
-			const cause = failures[0]!.status === 'rejected' ? failures[0]!.reason : null;
-			summaryError = cause instanceof Error ? cause.message : 'Não foi possível carregar seus dados de evolução.';
-		}
+		else focusError = focusResult.reason instanceof Error ? focusResult.reason.message : 'Não foi possível carregar as estatísticas de foco.';
 		summaryLoading = false;
 	}
 
@@ -107,7 +111,7 @@
 	<meta name="description" content="Seu estudo, seu foco e sua evolução no LearnVault." />
 </svelte:head>
 
-<div class="lv-page lv-stats">
+<div class="lv-page lv-stats" class:is-empty={!summaryLoading && !rewardError && !focusError && !!summary && !hasActivity}>
 	<header class="lv-page__head">
 		<div>
 			<h1>Estatísticas</h1>
@@ -122,15 +126,26 @@
 			<a class="lv-btn" href={href('home')}>Voltar à biblioteca</a>
 		</div>
 	{:else}
+		{#if !summaryLoading && !rewardError && !focusError && summary && !hasActivity}
+			<section class="lv-panel lv-stats-empty" aria-labelledby="start-heading">
+				<h2 id="start-heading">Seu histórico começa na primeira aula</h2>
+				<p>Conclua uma aula ou inicie uma sessão de foco pelo controle no topo. Os números aparecem aqui quando houver atividade.</p>
+				<a class="lv-btn lv-btn--primary" href={href('home')}>Abrir a biblioteca</a>
+			</section>
+		{/if}
 		<section class="lv-panel lv-personal" aria-labelledby="personal-heading">
-			<div class="lv-panel__head"><h2 id="personal-heading">Seu aprendizado</h2><span class="lv-count">dados da conta</span></div>
+			<div class="lv-panel__head"><h2 id="personal-heading">Seu aprendizado</h2></div>
 			{#if summaryLoading}
 				<p class="lv-stats__loading" aria-live="polite">Carregando seu progresso…</p>
-			{:else if summary && !summaryError}
+			{:else if summary && !rewardError}
 				<dl class="lv-personal__metrics">
-					<div><dt>Aulas concluídas</dt><dd>{summary.completedLessons}</dd><small>estado atual da conta</small></div>
-					<div><dt>Sessões de foco</dt><dd>{focus.totalSessions}</dd><small>registradas na conta</small></div>
-					<div><dt>Dias ativos na semana</dt><dd>{summary.weekActiveDays}</dd><small>de segunda a domingo</small></div>
+					<div><dt>Aulas concluídas</dt><dd>{summary.completedLessons}</dd></div>
+					<div><dt>Sessões de foco</dt><dd>{focusError ? '—' : focus.totalSessions}</dd></div>
+					<div>
+						<dt>Dias ativos na semana</dt>
+						<dd>{summary.weekActiveDays}</dd>
+						<small>de segunda a domingo</small>
+					</div>
 				</dl>
 			{:else}
 				<p class="lv-stats__note" role="status">Não foi possível carregar seu progresso. Tente novamente na seção Sua evolução.</p>
@@ -145,9 +160,9 @@
 
 				{#if summaryLoading}
 					<div class="lv-stats__loading" aria-live="polite">Carregando sua evolução…</div>
-				{:else if summaryError}
+				{:else if rewardError}
 					<div class="lv-stats__loading">
-						<p>{summaryError}</p>
+						<p>{rewardError}</p>
 						<button class="lv-btn" type="button" onclick={loadSummary}>Tentar de novo</button>
 					</div>
 				{:else if summary && gamification}
@@ -162,6 +177,25 @@
 							</div>
 						</div>
 
+						<div class="lv-goal">
+							<div class="lv-goal__header">
+								<label for="weekly-goal">Meta semanal</label>
+								<select class="lvui-select" id="weekly-goal" value={weeklyGoal} onchange={changeGoal} disabled={goalSaving}>
+									{#each [1, 2, 3, 4, 5, 6, 7] as option}
+										<option value={option}>{option} {option === 1 ? 'dia' : 'dias'}</option>
+									{/each}
+								</select>
+							</div>
+							<div class="lv-goal__progress">
+								<strong>{Math.min(summary.weekActiveDays, weeklyGoal)} de {weeklyGoal} dias</strong>
+								<span>{Math.round((goalProgress / Math.max(1, weeklyGoal)) * 100)}%</span>
+							</div>
+							<div class="lv-goal__track" role="progressbar" aria-label="Progresso da meta semanal" aria-valuemin="0" aria-valuemax={weeklyGoal} aria-valuenow={goalProgress}>
+								<span class="lv-goal__bar" style:width={`${(goalProgress / Math.max(1, weeklyGoal)) * 100}%`}></span>
+							</div>
+							<p>{summary.weekActiveDays >= weeklyGoal ? 'Meta fechada. Continue no ritmo.' : `Faltam ${weeklyGoal - summary.weekActiveDays} ${weeklyGoal - summary.weekActiveDays === 1 ? 'dia' : 'dias'} para fechar a semana.`}</p>
+							{#if goalError}<p class="lv-form-error" role="alert">{goalError}</p>{/if}
+						</div>
 						<div class="lv-streak">
 							<div class="lv-streak__top">
 								<div>
@@ -184,25 +218,6 @@
 							<p class="lv-streak__record">Recorde: {summary.longestStreak} {summary.longestStreak === 1 ? 'dia' : 'dias'}</p>
 						</div>
 
-						<div class="lv-goal">
-							<div class="lv-goal__header">
-								<label for="weekly-goal">Meta semanal</label>
-								<select class="lvui-select" id="weekly-goal" value={weeklyGoal} onchange={changeGoal} disabled={goalSaving}>
-									{#each [1, 2, 3, 4, 5, 6, 7] as option}
-										<option value={option}>{option} {option === 1 ? 'dia' : 'dias'}</option>
-									{/each}
-								</select>
-							</div>
-							<div class="lv-goal__progress">
-								<strong>{Math.min(summary.weekActiveDays, weeklyGoal)} de {weeklyGoal} dias</strong>
-								<span>{Math.round((goalProgress / Math.max(1, weeklyGoal)) * 100)}%</span>
-							</div>
-							<div class="lv-goal__track" role="progressbar" aria-label="Progresso da meta semanal" aria-valuemin="0" aria-valuemax={weeklyGoal} aria-valuenow={goalProgress}>
-								<span class="lv-goal__bar" style:width={`${goalProgress * 100}%`}></span>
-							</div>
-							<p>{summary.weekActiveDays >= weeklyGoal ? 'Meta fechada. Continue no ritmo.' : `Faltam ${weeklyGoal - summary.weekActiveDays} ${weeklyGoal - summary.weekActiveDays === 1 ? 'dia' : 'dias'} para fechar a semana.`}</p>
-							{#if goalError}<p class="lv-form-error" role="alert">{goalError}</p>{/if}
-						</div>
 					</div>
 				{/if}
 			</section>
@@ -213,6 +228,11 @@
 					<span class="lv-count">semana atual</span>
 				</div>
 				<div class="lv-focus__body">
+					{#if summaryLoading}
+						<p class="lv-stats__loading" aria-live="polite">Carregando estatísticas de foco…</p>
+					{:else if focusError}
+						<div class="lv-stats__loading"><p class="lv-stats__note" role="status">{focusError}</p><button class="lv-btn" type="button" onclick={loadSummary}>Tentar novamente</button></div>
+					{:else}
 					<div class="lv-focus__stats">
 						<div><strong>{focus.todayMinutes}</strong><span>min hoje</span></div>
 						<div><strong>{focus.weekMinutes}</strong><span>min na semana</span></div>
@@ -229,7 +249,7 @@
 						{/each}
 					</ol>
 					<p class="lv-focus__best">{bestFocusDay ? `Melhor dia: ${dayLabel(bestFocusDay.day)} · ${bestFocusDay.minutes} min` : 'Sem sessões nesta semana ainda.'}</p>
-					{#if summaryError}<p class="lv-stats__note" role="status">{summaryError}</p>{/if}
+					{/if}
 				</div>
 			</section>
 		</div>
@@ -259,7 +279,7 @@
 				</section>
 			</details>
 
-				<section class="lv-panel" aria-labelledby="activity-heading">
+				<section class="lv-panel lv-stats__recent-panel" aria-labelledby="activity-heading">
 					<div class="lv-panel__head"><h2 id="activity-heading">Atividade recente</h2><span class="lv-count">histórico recente</span></div>
 					<div class="lv-activity__summary">
 						<div><strong>{summary?.weekActiveDays ?? stats.recent.activeLast7Days}</strong><span>dias ativos</span></div>
@@ -286,7 +306,7 @@
 				</section>
 			</div>
 
-		<section class="lv-stats__section" aria-labelledby="achievements-heading">
+		<section class="lv-stats__section lv-stats__achievements-section" aria-labelledby="achievements-heading">
 			<div class="lv-section__head">
 				<div>
 					<h2 id="achievements-heading">Marcos de aprendizado</h2>
@@ -336,6 +356,6 @@
 			{/if}
 		</section>
 
-		<p class="lv-stats__foot">{formatCount(stats.courses.length, 'curso analisado', 'cursos analisados')} · XP, sessões de foco, missões e metas são persistidos na conta. Dias e ofensiva seguem o fuso local do servidor ou do dispositivo.</p>
+		<p class="lv-stats__foot">{formatCount(stats.courses.length, 'curso', 'cursos')} no acervo · Seu progresso é pessoal; dias ativos seguem o fuso local do servidor ou do dispositivo.</p>
 	{/if}
 </div>

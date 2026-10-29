@@ -68,8 +68,8 @@
 	function canResumeFrom(p: StudyProgress | null, total: number): boolean {
 		return syncEnabled && p !== null && p.recorded && p.positionSeconds > 5 && total > p.positionSeconds;
 	}
-	function showCompletedFrom(p: StudyProgress | null): boolean {
-		return syncEnabled && p !== null && p.recorded;
+	function showCompletedFrom(_p: StudyProgress | null): boolean {
+		return syncEnabled && mediaId !== null;
 	}
 	const canResume = $derived(canResumeFrom(progress, duration));
 	const showCompleted = $derived(showCompletedFrom(progress));
@@ -133,10 +133,10 @@
 	}
 
 	async function toggleCompleted() {
-		if (!syncEnabled || !mediaId || !progress?.recorded || saving || saver.saving) return;
+		if (!syncEnabled || !mediaId || saving || saver.saving) return;
 		saving = true;
 		try {
-			const next = await transport.setCompleted(mediaId, !progress.completed);
+			const next = await transport.setCompleted(mediaId, !(progress?.completed ?? false));
 			if (mediaId === (playable?.mediaId ?? null)) progress = next;
 		} catch (cause) {
 			progressError = cause instanceof Error ? cause.message : 'Erro ao atualizar conclusão.';
@@ -171,7 +171,7 @@
 {#snippet lessonHeading()}
 	{#if lessonTitle}<h2 class="player-lesson-title">{lessonTitle}</h2>{/if}
 {/snippet}
-{#if mediaError}<p class="error" role="alert">{mediaError}</p>{@render lessonHeading()}
+{#if mediaError}<div class="lv-player-error" role="alert"><strong>{mediaError}</strong><p>O arquivo local pode ter sido movido ou o disco pode estar desconectado. Reconecte a pasta e use “Atualizar cursos” na biblioteca; seu progresso permanece salvo.</p><a class="lv-btn lvui-btn" href="#/home">Ir à biblioteca para atualizar cursos</a></div>{@render lessonHeading()}
 {:else if source}
 	<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions (o grupo identificado do player recebe foco para ativar atalhos) -->
 	<div class="player-container {playbackKind === 'audio' ? 'audio-container' : 'video-container'}" role="group" tabindex="0" onkeydown={handleKeydown} aria-label="Player" aria-keyshortcuts="Space ArrowLeft ArrowRight">
@@ -197,19 +197,27 @@
 			</video>
 		{/if}
 		{@render lessonHeading()}
-		<div class="player-controls-bar" role="group" aria-label="Preferências de reprodução">
-			<label class="auto-next-toggle"><input type="checkbox" checked={autoNext} onchange={(event) => changeAutoNext(event.currentTarget.checked)} />Avançar automaticamente</label>
-		</div>
 	</div>
-{:else if availability === 'missing'}<p class="empty" role="status">A mídia desta aula não está no disco. A aula e o seu progresso foram preservados; indexe os cursos novamente depois de reconectar o disco ou repor o arquivo.</p>{@render lessonHeading()}
+{:else if availability === 'missing'}<div class="lv-player-error" role="status"><strong>Mídia indisponível</strong><p>A mídia desta aula não está no disco. A aula e o seu progresso foram preservados. Reconecte o disco ou reponha o arquivo e use “Atualizar cursos” na biblioteca.</p><a class="lv-btn lvui-btn" href="#/home">Ir à biblioteca para atualizar cursos</a></div>{@render lessonHeading()}
 {:else}<p class="empty" role="status">Esta aula não possui mídia disponível.</p>{@render lessonHeading()}{/if}
-{#if syncEnabled}
-	<div class="study-bar" role="group" aria-label="Progresso da aula">
-		{#if progressLoading}<span class="study-hint">Carregando progresso…</span>
-		{:else if progressError}<span class="study-hint error">{progressError}</span>
-		{:else if canResume}<button class="text-button" onclick={resume} type="button">Retomar de {formatDuration(progress?.positionSeconds ?? 0)}</button>
-		{:else if showCompleted}<span class="study-hint">{progress?.completed ? 'Concluído' : 'Não concluído'}</span>{/if}
-		{#if showCompleted}<button class="text-button" onclick={toggleCompleted} disabled={saving || saver.saving} type="button" aria-pressed={progress?.completed}>{progress?.completed ? 'Marcar como não concluído' : 'Marcar como concluído'}</button>{/if}
+{#if source || syncEnabled}
+	<div class="study-bar" role="group" aria-label="Controles da aula">
+		{#if source}
+			<label class="auto-next-toggle"><input type="checkbox" checked={autoNext} onchange={(event) => changeAutoNext(event.currentTarget.checked)} />Avançar automaticamente</label>
+		{/if}
+		{#if syncEnabled}
+			<div class="study-bar__actions">
+				{#if progressLoading}<span class="study-hint">Carregando progresso…</span>
+				{:else if progressError}<span class="study-hint error">{progressError}</span>
+				{:else if canResume}<button class="text-button" onclick={resume} type="button">Retomar de {formatDuration(progress?.positionSeconds ?? 0)}</button>
+				{:else if showCompleted}
+					<div class="study-completion" role="group" aria-label="Conclusão da aula">
+						<span class="study-hint">{progress?.completed ? 'Concluído' : 'Não concluído'}</span>
+						<button class="lv-btn lvui-btn" onclick={toggleCompleted} disabled={saving || saver.saving} type="button" aria-pressed={progress?.completed}>{progress?.completed ? 'Marcar como não concluído' : 'Marcar como concluído'}</button>
+					</div>
+				{/if}
+			</div>
+		{/if}
 	</div>
 {/if}
 {#if captionMessage}<p class="empty" role="status">{captionMessage}{#if captionDownload} <a href={captionDownload} download>Baixar legenda</a>{/if}</p>{/if}

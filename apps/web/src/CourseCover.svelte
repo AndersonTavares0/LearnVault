@@ -98,6 +98,8 @@
 <span
 	class="lv-cover lv-cover--{size}"
 	class:lv-cover--image={coverSource !== 'generated'}
+	class:lv-cover--thumbnail={coverSource === 'thumbnail'}
+	class:lv-cover--manual={coverSource === 'manual'}
 	use:cleanupThumbnail={{ course, profile, manualCover: manualCoverUrl }}
 	style:--cover-from={cover.from}
 	style:--cover-to={cover.to}
@@ -108,5 +110,5 @@
 	{:else if coverSource === 'thumbnail'}<img class="lv-cover__image" src={thumbnailUrl ?? ''} alt="" width="600" height="400" loading={size === 'hero' ? 'eager' : 'lazy'} decoding="async" />{/if}
 	<span class="lv-cover__pattern lv-cover__pattern--{cover.pattern}"></span>
 	<span class="lv-cover__spine"><span>{cover.code}</span></span>
-	{#if coverSource === 'generated'}<span class="lv-cover__monogram">{cover.monogram}</span>{/if}
+	{#if coverSource !== 'manual'}<span class="lv-cover__monogram">{cover.monogram}</span>{/if}
 </span>

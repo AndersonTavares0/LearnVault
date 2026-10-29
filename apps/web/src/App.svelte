@@ -241,7 +241,7 @@
 		shelf: 'Estante'
 	};
 	const LIBRARY_VIEW_DESCRIPTIONS: Record<LibraryView, string> = {
-		covers: 'Capas: destaque para a imagem de cada curso.',
+		covers: 'Grade: capas e progresso visíveis para escolher rapidamente.',
 		list: 'Lista: cursos em linhas com informações detalhadas.',
 		compact: 'Compacto: títulos e contagens em linhas curtas.',
 		shelf: 'Estante: cursos organizados como lombadas.'
@@ -603,7 +603,7 @@
 		<main id="main-content" class="lv-main">
 			{#if error}<p class="lv-alert" role="alert">{error}</p>{/if}
 			{#if route === 'home'}
-				<div class="lv-page">
+				<div class="lv-page lv-library">
 					<header class="lv-page__head">
 						<div>
 							<h1>Minha biblioteca</h1>
@@ -634,7 +634,7 @@
 						</form>
 					{/if}
 
-					{#if studySyncSupported && libraryRecent.length}
+					{#if studySyncSupported && libraryRecent.length && !catalogQuery.trim()}
 						<section class="lv-section" aria-labelledby="recent-heading">
 							<div class="lv-section__head">
 								<h2 id="recent-heading">Continue estudando</h2>
@@ -683,7 +683,7 @@
 							<h2 id="courses-heading">Todos os cursos</h2>
 							<div class="lv-section__tools">
 								{#if catalog && catalog.nodes.length}<span class="lv-count" aria-live="polite">{filteredNodes.length} de {catalog.nodes.length}</span>{/if}
-								<div class="lv-view-switch lvui-join" role="group" aria-label="Visualização dos cursos" aria-describedby="view-hint">
+								<div class="lv-view-switch lvui-join" role="group" aria-label="Visualização dos cursos">
 									{#each LIBRARY_VIEWS as view}
 										<button type="button" class={`lvui-join-item lvui-btn lvui-btn-sm${libraryView === view ? ' lvui-btn-active' : ''}`} aria-pressed={libraryView === view} onclick={() => changeLibraryView(view)}>
 											{#if view === 'covers'}<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="13" y="4" width="7" height="7" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="4" y="13" width="7" height="7" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="13" y="13" width="7" height="7" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>
@@ -696,7 +696,6 @@
 								</div>
 							</div>
 						</div>
-						<p id="view-hint" class="lv-view-hint">{LIBRARY_VIEW_DESCRIPTIONS[libraryView]}</p>
 						{#if catalog && catalog.nodes.length}
 							{#if filteredNodes.length}
 								<ul class="lv-course-grid" data-view={libraryView} aria-label="Cursos na visualização {LIBRARY_VIEW_LABELS[libraryView]}">
@@ -708,7 +707,8 @@
 								</ul>
 							{:else}
 								<div class="lv-empty-state">
-									<p class="lv-empty__title" role="status">Nenhum curso corresponde a “{catalogQuery.trim()}”.</p>
+									<p class="lv-empty__title" role="status">Nenhum resultado encontrado</p>
+									<p class="lv-lede">Nenhum curso ou aula corresponde a “{catalogQuery.trim()}”.</p>
 									<button class="lv-btn" type="button" onclick={() => (catalogQuery = '')}>Limpar busca</button>
 								</div>
 							{/if}
@@ -727,15 +727,16 @@
 			{:else if route === 'statistics'}
 				<Statistics {catalog} {recent} />
 			{:else if route === 'settings'}
-				<div class="lv-page lv-page--narrow lv-settings">
+				<div class="lv-page lv-settings">
 					<header class="lv-page__head">
 						<div>
 							<h1>Ajustes</h1>
-						<p class="lv-lede">Escolha como o LearnVault aparece neste dispositivo.</p>
+						<p class="lv-lede">Aparência, ritmo de foco e preferências deste dispositivo.</p>
 					</div>
 				</header>
+					<div class="lv-settings__grid">
 					<section class="lv-panel lv-settings__panel">
-						<div class="lv-panel__head"><h2>Tema</h2><span class="lv-count">Tema atual: {resolvedTheme === 'dark' ? 'escuro' : 'claro'}{themeMode === 'system' ? ' (sistema)' : ''}</span></div>
+						<div class="lv-panel__head"><h2>Tema</h2></div>
 						<fieldset class="theme-options">
 							<legend class="visually-hidden">Tema</legend>
 							<label><input type="radio" name="theme" value="system" checked={themeMode === 'system'} onchange={() => changeTheme('system')} />Sistema <span>Acompanha a preferência do sistema.</span></label>
@@ -781,6 +782,7 @@
 							</div>
 						</section>
 					{/if}
+					</div>
 				</div>
 			{:else if isCourseRoute}
 				{#if !course}
@@ -794,7 +796,7 @@
 					{@const meta = formatCourseMeta(counts)}
 					{@const cover = courseCover(course.title)}
 					{@const materials = collectMaterials(course)}
-					<div class="lv-page">
+					<div class="lv-page lv-course-overview">
 						<nav class="lv-breadcrumb" aria-label="Caminho do curso"><a href={href('home')}>Biblioteca</a><span aria-hidden="true">/</span><span>{course.title}</span></nav>
 						<header class="lv-course-hero">
 							<div class="lv-course-hero__cover">
@@ -803,35 +805,35 @@
 							<div class="lv-course-hero__main">
 								<h1>{course.title}</h1>
 								{#if meta}<p class="lv-course-hero__meta">{meta}</p>{/if}
-								<div class="lv-course-hero__actions">
-									{#if activePath}
-										<a class="lv-btn lv-btn--primary" href={href('course', courseIdOf(course), activePath)}>{courseRecent ? 'Continuar estudando' : 'Começar curso'}</a>
-									{:else}
-										<span class="lv-btn" aria-disabled="true">Nenhuma aula disponível</span>
-									{/if}
-									{#if canManage}
-										<div class="course-menu-wrap">
-											<button class="course-menu-toggle lv-btn" type="button" aria-expanded={courseMenuOpen} onclick={() => { courseMenuOpen = !courseMenuOpen; removeConfirm = false; }}>Gerenciar curso <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
-											{#if courseMenuOpen}
-												<div class="course-menu" role="group" aria-label="Gerenciar {course.title}">
-													{#if removeConfirm}
-														<p class="course-menu-question" role="alert">Remover “{course.title}” da biblioteca?</p>
-														<p class="course-menu-hint">Os arquivos não serão apagados.</p>
-														<div class="course-menu-actions">
-															<button class="text-button danger" type="button" onclick={removeCourse} disabled={removing} aria-busy={removing}>{removing ? 'Removendo…' : 'Remover curso'}</button>
-															<button class="text-button" type="button" onclick={() => (removeConfirm = false)} disabled={removing}>Cancelar</button>
-														</div>
-													{:else}
-														<button class="text-button" type="button" onclick={resetOrder} disabled={orderBusy} aria-busy={orderBusy}>{orderBusy ? 'Restaurando…' : 'Restaurar ordem'}</button>
-														<button class="text-button danger" type="button" onclick={() => (removeConfirm = true)}>Remover curso</button>
-													{/if}
-												</div>
-											{/if}
-										</div>
-									{/if}
-								</div>
-								{#if courseRecent}
-									<p class="lv-course-hero__resume">Última aula: {courseRecent.location.lesson.title} · {courseRecent.item.completed ? 'concluída' : `parou em ${formatDuration(courseRecent.item.positionSeconds)}`}</p>
+							</div>
+							{#if courseRecent}
+								<p class="lv-course-hero__resume">Última aula: {courseRecent.location.lesson.title} · {courseRecent.item.completed ? 'concluída' : `parou em ${formatDuration(courseRecent.item.positionSeconds)}`}</p>
+							{/if}
+							<div class="lv-course-hero__actions">
+								{#if activePath}
+									<a class="lv-btn lv-btn--primary" href={href('course', courseIdOf(course), activePath)}>{courseRecent ? 'Continuar estudando' : 'Começar curso'}</a>
+								{:else}
+									<span class="lv-btn" aria-disabled="true">Nenhuma aula disponível</span>
+								{/if}
+								{#if canManage}
+									<div class="course-menu-wrap">
+										<button class="course-menu-toggle lv-btn" type="button" aria-expanded={courseMenuOpen} onclick={() => { courseMenuOpen = !courseMenuOpen; removeConfirm = false; }}>Gerenciar curso <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
+										{#if courseMenuOpen}
+											<div class="course-menu" role="group" aria-label="Gerenciar {course.title}">
+												{#if removeConfirm}
+													<p class="course-menu-question" role="alert">Remover “{course.title}” da biblioteca?</p>
+													<p class="course-menu-hint">Os arquivos não serão apagados.</p>
+													<div class="course-menu-actions">
+														<button class="text-button danger" type="button" onclick={removeCourse} disabled={removing} aria-busy={removing}>{removing ? 'Removendo…' : 'Remover curso'}</button>
+														<button class="text-button" type="button" onclick={() => (removeConfirm = false)} disabled={removing}>Cancelar</button>
+													</div>
+												{:else}
+													<button class="text-button" type="button" onclick={resetOrder} disabled={orderBusy} aria-busy={orderBusy}>{orderBusy ? 'Restaurando…' : 'Restaurar ordem'}</button>
+													<button class="text-button danger" type="button" onclick={() => (removeConfirm = true)}>Remover curso</button>
+												{/if}
+											</div>
+										{/if}
+									</div>
 								{/if}
 							</div>
 						</header>
@@ -869,7 +871,7 @@
 									<dl>
 										<div><dt>Módulos</dt><dd>{counts.modules}</dd></div>
 										<div><dt>Aulas</dt><dd>{counts.lessons}{#if counts.missingLessons > 0}<span class="lv-meta__missing">{formatCount(counts.missingLessons, 'ausente', 'ausentes')}</span>{/if}</dd></div>
-										<div><dt>Vídeos</dt><dd>{counts.videos - missingVideos}{#if missingVideos > 0}<span class="lv-meta__missing">{formatCount(missingVideos, 'ausente', 'ausentes')}</span>{/if}</dd></div>
+										<div><dt>Vídeos</dt><dd>{formatCount(counts.videos - missingVideos, 'disponível', 'disponíveis')}{#if missingVideos > 0}<span class="lv-meta__missing">{formatCount(missingVideos, 'ausente', 'ausentes')}</span>{/if}</dd></div>
 										<div><dt>Materiais</dt><dd>{counts.materials}</dd></div>
 										<div><dt>Código</dt><dd class="lv-meta__code">{cover.code}</dd></div>
 									</dl>
@@ -890,7 +892,7 @@
 				{:else}
 					<div class="lv-page lv-player-page">
 						<div class="lv-player-top">
-							<nav class="lv-breadcrumb" aria-label="Caminho do curso"><a href={href('home')}>Biblioteca</a><span aria-hidden="true">/</span><a href={href('course', courseIdOf(course))}>{course.title}</a><span aria-hidden="true">/</span><span>{lesson?.title ?? 'Aula'}</span></nav>
+							<nav class="lv-breadcrumb" aria-label="Caminho do curso"><a href={href('home')}>Biblioteca</a><span aria-hidden="true">/</span><a href={href('course', courseIdOf(course))} aria-label={`Voltar ao curso ${course.title}`}><span class="lv-breadcrumb__back-label" aria-hidden="true">Voltar ao curso</span>{course.title}</a><span aria-hidden="true">/</span><span>{lesson?.title ?? 'Aula'}</span></nav>
 						</div>
 						{#if removeError}<p class="lv-alert" role="alert">{removeError}</p>{/if}
 						{#if orderError}<p class="lv-alert" role="alert">{orderError}</p>{/if}

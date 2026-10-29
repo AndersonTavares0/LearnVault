@@ -1,4 +1,4 @@
 <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true" focusable="false">
 	<path d="M20 2.5 36 11.75v16.5L20 37.5 4 28.25v-16.5L20 2.5Z" fill="currentColor" />
-	<path d="M11 26V14h3.05l5.95 7.75L25.95 14H29v12h-3v-7.18l-5.55 7.1h-.94L14 18.82V26h-3Z" fill="var(--brand-mark-ink, #fff)" />
+	<path d="M14 12h4v14h10v4H14Z" fill="var(--brand-mark-ink, #fff)" />
 </svg>

@@ -11,9 +11,9 @@ export function parseLibraryView(value: unknown): LibraryView | null {
 
 export function readLibraryView(storage: Pick<Storage, 'getItem'> | null | undefined): LibraryView {
 	try {
-		return parseLibraryView(storage?.getItem(LIBRARY_VIEW_STORAGE_KEY)) ?? 'compact';
+		return parseLibraryView(storage?.getItem(LIBRARY_VIEW_STORAGE_KEY)) ?? 'covers';
 	} catch {
-		return 'compact';
+		return 'covers';
 	}
 }
 

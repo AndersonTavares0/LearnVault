@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-07T00:00:00.000Z",
+  "title": "Design System: LearnVault",
+  "extensions": {
+    "colorMeta": {
+      "canvas": { "role": "neutral", "displayName": "Night canvas", "canonical": "#0b1220", "tonalRamp": ["#0b1220", "#111b2b", "#182438", "#2a3a52", "#52647e", "#7b8ca5", "#a8b5c7", "#f5f7fb"] },
+      "cobalt": { "role": "primary", "displayName": "Cobalt action", "canonical": "#1d5fd1", "tonalRamp": ["#102c63", "#17376f", "#1d5fd1", "#3975db", "#6594e5", "#8bb0ed", "#b7cef5", "#e7effd"] },
+      "saffron": { "role": "tertiary", "displayName": "Saffron bookmark", "canonical": "#e8b43c", "tonalRamp": ["#553d0c", "#846019", "#b28728", "#e8b43c", "#efc86b", "#f4d895", "#f8e8bc", "#fdf8e9"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Editorial serif", "purpose": "Library and course entry headings." },
+      "body": { "displayName": "Utility sans", "purpose": "Navigation, metadata, controls, and readable descriptions." }
+    },
+    "shadows": [
+      { "name": "menu-lift", "value": "0 14px 30px rgba(0,0,0,.34)", "purpose": "Transient menus and popovers." },
+      { "name": "cover-lift", "value": "0 10px 24px rgba(0,0,0,.22)", "purpose": "Course cover interaction only." }
+    ],
+    "motion": [
+      { "name": "standard", "value": "150ms cubic-bezier(.2,.8,.2,1)", "purpose": "Color, border, and transform state changes." },
+      { "name": "reduced", "value": "0ms", "purpose": "Preserve state changes without motion when requested." }
+    ],
+    "breakpoints": [
+      { "name": "mobile", "value": "820px" },
+      { "name": "wide", "value": "1280px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "One primary next action per group.",
+      "html": "<button class=\"ds-btn-primary\">Continuar estudando</button>",
+      "css": ".ds-btn-primary{background:#1d5fd1;color:#f5f7fb;border:1px solid #1d5fd1;border-radius:6px;padding:11px 16px;min-height:44px;font:700 15px Segoe UI,system-ui,sans-serif;transition:background 150ms,border-color 150ms}.ds-btn-primary:hover{background:#174da9;border-color:#174da9}.ds-btn-primary:focus-visible{outline:2px solid #8bb0ed;outline-offset:2px}"
+    },
+    {
+      "name": "Search field",
+      "kind": "input",
+      "refersTo": "search-field",
+      "description": "Global course and lesson discovery field.",
+      "html": "<label class=\"ds-search\"><span>Buscar</span><input placeholder=\"Buscar cursos ou aulas\"></label>",
+      "css": ".ds-search{display:flex;align-items:center;gap:10px;background:#111b2b;color:#a8b5c7;border:1px solid #2a3a52;border-radius:6px;padding:0 14px;height:46px}.ds-search span{font:700 11px Cascadia Mono,Consolas,monospace;text-transform:uppercase;letter-spacing:.06em}.ds-search input{min-width:0;flex:1;background:transparent;color:#f5f7fb;border:0;outline:0;font:400 15px Segoe UI,system-ui,sans-serif}.ds-search:focus-within{border-color:#1d5fd1;box-shadow:0 0 0 2px rgba(29,95,209,.35)}"
+    },
+    {
+      "name": "Course shelf",
+      "kind": "card",
+      "refersTo": "course-shelf",
+      "description": "Purposeful horizontal grouping of course rows.",
+      "html": "<article class=\"ds-shelf\"><p class=\"ds-label\">EM ANDAMENTO</p><h2>Continue estudando</h2><p>Uma linha curta de cursos, sem métricas decorativas.</p></article>",
+      "css": ".ds-shelf{background:#111b2b;color:#f5f7fb;border:1px solid #2a3a52;border-radius:10px;padding:16px}.ds-shelf h2{margin:4px 0;font:400 22px/1.12 Georgia,Cambria,serif}.ds-shelf p{color:#a8b5c7;font:400 14px/1.5 Segoe UI,system-ui,sans-serif}.ds-label{color:#a8b5c7;font:700 11px/1.35 Cascadia Mono,Consolas,monospace;letter-spacing:.06em}"
+    },
+    {
+      "name": "Active navigation",
+      "kind": "nav",
+      "refersTo": "navigation",
+      "description": "Compact topbar destination with explicit current-page state.",
+      "html": "<a class=\"ds-nav-active\" href=\"#library\" aria-current=\"page\">Biblioteca</a>",
+      "css": ".ds-nav-active{display:inline-flex;align-items:center;min-height:40px;padding:0 12px;color:#f5f7fb;background:#182438;border-bottom:2px solid #1d5fd1;border-radius:6px 6px 0 0;text-decoration:none;font:700 14px Segoe UI,system-ui,sans-serif}.ds-nav-active:focus-visible{outline:2px solid #8bb0ed;outline-offset:2px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "A private course shelf",
+    "overview": "LearnVault feels like a focused course platform with the calm authority of a personal archive. The interface makes course discovery, the next lesson, and saved progress visible without importing marketplace mechanics. The memorable move is the shelf: courses are grouped into purposeful horizontal study rows rather than a dashboard of identical cards.",
+    "keyCharacteristics": ["Course-first hierarchy", "Deep navy surfaces with restrained accents", "Explicit original-content boundary", "Progressive disclosure on mobile"],
+    "rules": [
+      { "name": "The Accent-Rarity Rule", "body": "Cobalt starts the next action; saffron explains saved state. Do not use either as decoration.", "section": "colors" },
+      { "name": "The Original-Content Rule", "body": "Interface chrome is Portuguese. Course titles and descriptions remain in the language supplied by local files, with a visible Conteúdo original marker.", "section": "typography" },
+      { "name": "The Flat-at-Rest Rule", "body": "A shelf is calm until the user selects, opens, or focuses it.", "section": "elevation" }
+    ],
+    "dos": ["Do lead with the next lesson or course, not generic metrics.", "Do keep the logo quiet and identical across themes, routes, and breakpoints.", "Do test 390px, 1280px, 1440px, and 1920px widths."],
+    "donts": ["Don't add marketplace affordances such as ratings, prices, enrollment, certificates, or cloud profiles.", "Don't use gradients, flashy logo colors, decorative badges, or a card inside a card without a clear information role.", "Don't truncate the only breadcrumb that tells the learner where they are."]
+  }
+}

@@ -22,10 +22,10 @@ describe('parseLibraryView', () => {
 });
 
 describe('readLibraryView / persistLibraryView', () => {
-	it('falls back to compact when storage is missing or invalid', () => {
-		expect(readLibraryView(null)).toBe('compact');
-		expect(readLibraryView({ getItem: () => 'invalid' })).toBe('compact');
-		expect(readLibraryView({ getItem: () => null })).toBe('compact');
+	it('falls back to the course grid when storage is missing or invalid', () => {
+		expect(readLibraryView(null)).toBe('covers');
+		expect(readLibraryView({ getItem: () => 'invalid' })).toBe('covers');
+		expect(readLibraryView({ getItem: () => null })).toBe('covers');
 	});
 
 	it('reads a persisted view', () => {
