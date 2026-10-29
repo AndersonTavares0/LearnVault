@@ -75,3 +75,13 @@ A revisão de implementação encontrou uma regressão funcional confirmada: a r
 ### Limitação de integração
 
 O Open Design MCP não está exposto como ferramenta utilizável neste runtime; não houve chamada nem avaliação atribuída a ele nesta iteração. A crítica independente veio de dois agentes separados e a validação visual/interativa veio do Playwright. Nenhuma avaliação de Open Design foi inventada.
+
+## Diagnóstico revisado do Open Design MCP — 2026-10-29
+
+A nota anterior descrevia corretamente que o runtime desta conversa não forneceu uma ferramenta MCP de topo, mas concluía incorretamente que a integração não estava utilizável. A configuração do usuário está ativa e o bridge STDIO real respondeu; nenhuma configuração ou credencial foi alterada.
+
+- `~/.omp/agent/mcp.json` contém `open-design` habilitado, transporte STDIO e timeout de 120 s. O processo do Open Design estava ativo e seu daemon local escutava na porta configurada.
+- O handshake MCP `2025-11-25` passou pelo comando configurado. `tools/list` retornou 22 ferramentas; `list_projects` e `get_project` responderam para `learnvault-concept-k-course-library-fresh-20261029`.
+- `get_active_context` informou que não havia projeto ativo naquele momento. O projeto pode ser selecionado explicitamente no argumento `project`, sem ativar ou alterar o canvas.
+- `mcp://opendesign` consulta recursos MCP, não a lista de ferramentas; a ausência de recursos é normal neste servidor e não indica falha de conexão.
+- Esta investigação não criou nem editou projetos ou artefatos.
