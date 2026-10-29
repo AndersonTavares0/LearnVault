@@ -4790,3 +4790,17 @@ input[type="radio"] {
 .login-head {
 	align-items: center;
 }
+
+.login-page h1 {
+	font-family: var(--serif);
+}
+
+.lv-streak__day {
+	border: 0;
+	background: transparent;
+}
+
+.lv-streak__day.is-today {
+	border-radius: 6px;
+	box-shadow: inset 0 0 0 1px var(--line-strong);
+}

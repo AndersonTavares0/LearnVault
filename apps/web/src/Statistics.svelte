@@ -187,7 +187,7 @@
 						<div class="lv-goal">
 							<div class="lv-goal__header">
 								<label for="weekly-goal">Meta semanal</label>
-								<select id="weekly-goal" value={weeklyGoal} onchange={changeGoal} disabled={goalSaving}>
+								<select class="lvui-select" id="weekly-goal" value={weeklyGoal} onchange={changeGoal} disabled={goalSaving}>
 									{#each [1, 2, 3, 4, 5, 6, 7] as option}
 										<option value={option}>{option} {option === 1 ? 'dia' : 'dias'}</option>
 									{/each}
