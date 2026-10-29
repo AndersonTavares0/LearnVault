@@ -8,8 +8,8 @@ import {
 	type PomodoroMode,
 	type PomodoroSettings
 } from './pomodoro';
-import { transport, type FocusSessionInput, type FocusSummary, type RewardSummary } from './transport';
-import { persistFocusOutbox, readFocusOutbox } from './focus-outbox';
+import { FocusSessionConflict, InvalidFocusSession, transport, type FocusSessionInput, type FocusSummary, type RewardSummary } from './transport';
+import { persistFocusOutbox, persistRejectedFocusSessions, readFocusOutbox, readRejectedFocusSessions, type RejectedFocusSession } from './focus-outbox';
 
 export type PomodoroStatus = 'idle' | 'running' | 'paused';
 
@@ -28,7 +28,7 @@ export type PomodoroState = StoredTimer & {
 	lastCompleted: { mode: PomodoroMode; at: number } | null;
 };
 
-export type FocusSyncState = { pending: FocusSessionInput[]; saving: boolean; error: string | null; savedAt: number | null };
+export type FocusSyncState = { pending: FocusSessionInput[]; rejected: RejectedFocusSession[]; saving: boolean; error: string | null; savedAt: number | null };
 
 function storage(): Storage | null {
 	try {
@@ -84,7 +84,7 @@ export const pomodoro = writable<PomodoroState>({
 	settings: initialSettings,
 	lastCompleted: null
 });
-export const focusSync = writable<FocusSyncState>({ pending: [], saving: false, error: null, savedAt: null });
+export const focusSync = writable<FocusSyncState>({ pending: [], rejected: [], saving: false, error: null, savedAt: null });
 export const persistedFocusSummary = writable<FocusSummary | null>(null);
 export const persistedRewardSummary = writable<RewardSummary | null>(null);
 let focusOutboxScope: string | null = null;
@@ -96,7 +96,8 @@ export function setFocusOutboxScope(scope: string | null): void {
 	focusOutboxScope = scope;
 	focusScopeRevision += 1;
 	const pending = scope ? readFocusOutbox(storage(), scope) : [];
-	focusSync.set({ pending, saving: false, error: null, savedAt: null });
+	const rejected = scope ? readRejectedFocusSessions(storage(), scope) : [];
+	focusSync.set({ pending, rejected, saving: false, error: null, savedAt: null });
 	persistedFocusSummary.set(null);
 	persistedRewardSummary.set(null);
 	if (pending.length > 0) void retryFocusSessions();
@@ -185,8 +186,22 @@ export function retryFocusSessions(): Promise<void> {
 				void refreshFocusData();
 			} catch (cause) {
 				if (scope !== focusOutboxScope || revision !== focusScopeRevision) break;
-				const durable = persistFocusOutbox(storage(), scope, get(focusSync).pending);
-				focusSync.update((current) => ({ ...current, error: durable ? (cause instanceof Error ? cause.message : 'Não foi possível salvar a sessão de foco.') : 'Não foi possível sincronizar; esta sessão ainda está somente nesta tela.' }));
+				const current = get(focusSync);
+				if (cause instanceof FocusSessionConflict || cause instanceof InvalidFocusSession) {
+					const reason = cause.message;
+					const rejected = [...current.rejected, { session, reason }];
+					const durable = persistRejectedFocusSessions(storage(), scope, rejected);
+					if (!durable) {
+						focusSync.update((state) => ({ ...state, error: `${reason} Não foi possível preservar a rejeição no armazenamento; a sessão continua pendente nesta tela.` }));
+						break;
+					}
+					const pending = current.pending.filter((entry) => entry.id !== session.id);
+					persistFocusOutbox(storage(), scope, pending);
+					focusSync.update((state) => ({ ...state, pending, rejected, error: null }));
+					continue;
+				}
+				const durable = persistFocusOutbox(storage(), scope, current.pending);
+				focusSync.update((state) => ({ ...state, error: durable ? (cause instanceof Error ? cause.message : 'Não foi possível salvar a sessão de foco.') : 'Não foi possível sincronizar; esta sessão ainda está somente nesta tela.' }));
 				break;
 			}
 		}
@@ -196,21 +211,33 @@ export function retryFocusSessions(): Promise<void> {
 	})();
 	activeRetry = task.finally(() => {
 		activeRetry = null;
-		if (focusOutboxScope && get(focusSync).pending.length > 0) void retryFocusSessions();
+		if ((scope !== focusOutboxScope || revision !== focusScopeRevision) && focusOutboxScope && get(focusSync).pending.length > 0) void retryFocusSessions();
 	});
 	return activeRetry;
 }
 
+function createFocusSessionId(): string {
+	if (typeof crypto === 'undefined') throw new Error('Não há gerador criptográfico disponível para identificar a sessão de foco.');
+	if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+	if (typeof crypto.getRandomValues !== 'function') throw new Error('Não há gerador criptográfico disponível para identificar a sessão de foco.');
+	const bytes = crypto.getRandomValues(new Uint8Array(16));
+	bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+	bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+	const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+	return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 function recordSession(state: PomodoroState, completed: boolean): FocusSessionInput | null {
 	if (state.mode !== 'focus' || state.startedAt === null) return null;
-	const endedAt = Math.floor(Date.now() / 1000);
+	const endedAt = Math.max(0, Math.floor(Date.now() / 1000));
 	const elapsed = Math.max(0, Math.min(state.totalSeconds, state.totalSeconds - state.remainingSeconds));
 	if (!completed && elapsed < 1) return null;
+	const actualSeconds = completed ? state.totalSeconds : elapsed;
 	const session: FocusSessionInput = {
-		id: typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${state.startedAt}-${endedAt}-${Math.random().toString(36).slice(2)}`,
+		id: createFocusSessionId(),
 		kind: 'focus',
 		plannedSeconds: state.totalSeconds,
-		actualSeconds: completed ? state.totalSeconds : elapsed,
+		actualSeconds,
 		completed,
 		startedAt: state.startedAt,
 		endedAt

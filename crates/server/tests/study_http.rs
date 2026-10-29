@@ -1100,6 +1100,25 @@ async fn focus_and_reward_endpoints_persist_idempotent_sessions_and_weekly_goal(
     assert_eq!(rewards["missions"][1]["progress"], 1);
     assert_eq!(rewards["study"]["today_active"], true);
     assert_eq!(rewards["study"]["week_active_days"], 1);
+    let persisted_db = Database::open(database_path(&temp)).unwrap();
+    let persisted = persisted_db.connection();
+    let (session_count, session_owner): (i64, String) = persisted
+        .query_row(
+            "SELECT COUNT(*), MIN(owner_id) FROM focus_session",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(session_count, 1, "retry persiste uma única sessão");
+    assert_eq!(session_owner, ADMIN_ID, "dono vem da sessão autenticada");
+    let (xp_count, xp_owner, xp_amount): (i64, String, i64) = persisted
+        .query_row(
+            "SELECT COUNT(*), MIN(owner_id), COALESCE(SUM(amount), 0) FROM xp_event WHERE source = 'focus'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!((xp_count, xp_owner.as_str(), xp_amount), (1, ADMIN_ID, 20));
 
     let saved = app
         .clone()

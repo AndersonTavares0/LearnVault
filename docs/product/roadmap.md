@@ -35,6 +35,27 @@ Detalhes de implementação ficam nas issues e pull requests.
 
 ## Agora: uma rotina de estudo completa
 
+### Goal do PR #281: confiabilidade e fechamento técnico
+
+Preparar o [redesenho da experiência de estudo](https://github.com/AndersonTavares0/LearnVault/pull/281)
+para revisão final, com o fluxo biblioteca → aula → foco → evolução consistente no Web e no
+desktop. Este objetivo complementa a [issue #280](https://github.com/AndersonTavares0/LearnVault/issues/280);
+não inclui outro redesign nem autoriza merge.
+
+Critérios de conclusão:
+
+- Sessões de foco respeitam o tempo decorrido, sem duplicar sessões ou XP em reenvios.
+- Falhas de sincronização não causam repetição contínua de requisições; conflitos têm
+  tratamento explícito, sem perder silenciosamente o payload nem bloquear sessões seguintes.
+- Migração V6 e persistência de foco/recompensas têm cobertura com bancos sintéticos.
+- Meta semanal e erros da API têm semântica documentada, compartilhada pelo núcleo.
+- Checks aplicáveis e smoke do fluxo alterado têm resultados registrados no PR, distinguindo
+  validação local de CI e Web de desktop.
+
+Fora deste ciclo: polimento visual subjetivo, titlebar personalizada e novas funcionalidades.
+Qualquer trabalho de design usa o MCP do OpenDesign.
+
+
 - [ ] Player direto com links para legendas e materiais.
 - [ ] Permissões de acesso a cursos para vários usuários locais.
 

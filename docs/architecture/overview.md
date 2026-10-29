@@ -76,6 +76,29 @@ O workspace Rust está completo: `crates/server` (Axum), `crates/desktop` (Tauri
 - **Distribuição:** o instalador Windows NSIS está disponível; o pacote Linux/Flatpak ainda depende
   de validação em sandbox. Veja [distribuição](../operations/distribution.md).
 
+
+### Contrato de foco e recompensas
+
+- O núcleo valida `1 <= planned_seconds <= 7200`, `0 <= actual_seconds <= planned_seconds` e um intervalo
+  `0 <= ended_at - started_at <= 7200`, com início não negativo. O tempo efetivo não
+  pode superar esse intervalo; uma sessão concluída exige todo o tempo planejado.
+  Pausas podem tornar o intervalo maior que o tempo efetivo. HTTP e IPC desktop usam
+  a mesma validação do núcleo. Os tempos são declarados pelo cliente, não prova de foco.
+- Repetir dono, identificador e payload retorna a sessão existente sem novo XP.
+  Reutilizar o identificador com outro payload retorna HTTP `409 focus_session_conflict`.
+  Uma sessão inválida retorna `422 invalid_focus_session`.
+- A outbox é local e isolada por conta. Conflitos e validações recusadas são retirados da
+  fila somente depois de preservar payload e motivo na lista local de rejeições, exibida
+  na interface. Sem armazenamento disponível, a sessão permanece pendente. Falhas
+  transitórias aguardam nova tentativa explícita, sem repetir requisições continuamente.
+- Atividades concedem a meta semanal na semana da data local da atividade
+  (`updated_at` para aulas, `ended_at` para foco), de segunda a domingo. Alterar a
+  preferência reavalia somente a semana local atual. A concessão de 50 XP é única por
+  dono/semana; aumentar a meta depois não revoga XP já concedido.
+- Resgatar missão desconhecida retorna `404 mission_not_found`; missão conhecida sem
+  progresso suficiente retorna `409 mission_not_complete`. Repetir um resgate concluído
+  não duplica XP.
+
 ```text
 Proxy HTTPS local
         |

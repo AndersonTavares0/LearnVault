@@ -99,6 +99,12 @@ import { focusSync, pauseTimer, pomodoro, refreshFocusData, resetTimer, retryFoc
 			{:else if $focusSync.pending.length > 0}
 				<p class="lv-pomo-dock__sync-note" role="status">{$focusSync.pending.length} sessão(ões) aguardando sincronização.</p>
 			{/if}
+			{#if $focusSync.rejected.length > 0}
+				<p class="lv-pomo-dock__sync-error" role="status">
+					{$focusSync.rejected.length} sessão(ões) rejeitada(s), preservada(s) para revisão.
+					{#each $focusSync.rejected as entry (entry.session.id)} <span>{entry.session.id}: {entry.reason}</span>{/each}
+				</p>
+			{/if}
 		</div>
 	{:else}
 		<div class="lv-pomo-dock__compact">

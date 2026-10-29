@@ -169,12 +169,17 @@ fn lesson_xp_is_one_time_but_completion_events_feed_the_daily_mission() -> TestR
     set_completed(&db, OWNER, "lesson-1", false)?;
     set_completed(&db, OWNER, "lesson-1", true)?;
 
-    let before_claim = reward_summary_on(&db, OWNER, TODAY)?;
+    let activity_day: String = db.connection().query_row(
+        "SELECT date(MAX(completed_at), 'unixepoch', 'localtime') FROM lesson_completion_event WHERE owner_id = ?1",
+        [OWNER],
+        |row| row.get(0),
+    )?;
+    let before_claim = reward_summary_on(&db, OWNER, &activity_day)?;
     assert_eq!(before_claim.xp, 40);
     assert_eq!(before_claim.completed_lessons, 1);
     assert_eq!(before_claim.missions[0].progress, 1);
-    assert!(claim_daily_mission(&db, OWNER, "lesson", TODAY)?);
-    assert_eq!(reward_summary_on(&db, OWNER, TODAY)?.xp, 70);
+    assert!(claim_daily_mission(&db, OWNER, "lesson", &activity_day)?);
+    assert_eq!(reward_summary_on(&db, OWNER, &activity_day)?.xp, 70);
     Ok(())
 }
 
@@ -208,6 +213,43 @@ fn weekly_goal_is_owner_scoped_and_awarded_only_once_per_week() -> TestResult {
         set_weekly_goal(&db, OWNER, 8),
         Err(Error::InvalidWeeklyGoal { weekly_goal: 8 })
     ));
+    Ok(())
+}
+
+#[test]
+fn actual_duration_cannot_exceed_elapsed_time_but_pauses_are_allowed() -> TestResult {
+    let db = db()?;
+    let mut impossible = session("impossible", FocusKind::Focus, false, TODAY, 600);
+    impossible.ended_at -= 1;
+    assert!(matches!(
+        record_focus_session(&db, OWNER, impossible),
+        Err(Error::InvalidFocusSession { .. })
+    ));
+
+    let mut paused = session("paused", FocusKind::Focus, false, TODAY, 600);
+    paused.ended_at += 300;
+    assert_eq!(
+        record_focus_session(&db, OWNER, paused.clone())?.actual_seconds,
+        600
+    );
+    assert_eq!(
+        record_focus_session(&db, OWNER, paused)?.actual_seconds,
+        600
+    );
+
+    let at_limit = FocusSessionInput {
+        id: "limit".to_owned(),
+        kind: FocusKind::ShortBreak,
+        planned_seconds: 7_200,
+        actual_seconds: 7_200,
+        completed: true,
+        started_at: 0,
+        ended_at: 7_200,
+    };
+    assert_eq!(
+        record_focus_session(&db, OWNER, at_limit)?.actual_seconds,
+        7_200
+    );
     Ok(())
 }
 

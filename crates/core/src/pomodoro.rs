@@ -480,6 +480,11 @@ fn validate_day_and_id(
             reason: "intervalo de tempo inválido",
         });
     }
+    if actual > ended - started {
+        return Err(Error::InvalidFocusSession {
+            reason: "duração efetiva maior que o intervalo da sessão",
+        });
+    }
     Ok(())
 }
 

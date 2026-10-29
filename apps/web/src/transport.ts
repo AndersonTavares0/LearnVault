@@ -386,10 +386,18 @@ function safeInteger(value: unknown): value is number {
 	return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
 
+export class FocusSessionConflict extends Error {
+	constructor() { super('Esta sessão já foi registrada com outros dados.'); this.name = 'FocusSessionConflict'; }
+}
+
+export class InvalidFocusSession extends Error {
+	constructor() { super('Os dados da sessão de foco não são válidos.'); this.name = 'InvalidFocusSession'; }
+}
+
 export function normalizeFocusSession(value: unknown): FocusSessionRecord {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('sessão de foco ausente.');
 	const session = value as Record<string, unknown>;
-	if (typeof session.id !== 'string' || !session.id || !['focus', 'short', 'long'].includes(String(session.kind)) || !safeInteger(session.planned_seconds) || !safeInteger(session.actual_seconds) || typeof session.completed !== 'boolean' || !safeInteger(session.started_at) || !safeInteger(session.ended_at) || session.actual_seconds > session.planned_seconds || session.ended_at < session.started_at) throw invalidPayload('sessão de foco inválida.');
+	if (typeof session.id !== 'string' || !session.id || !['focus', 'short', 'long'].includes(String(session.kind)) || !safeInteger(session.planned_seconds) || !safeInteger(session.actual_seconds) || typeof session.completed !== 'boolean' || !safeInteger(session.started_at) || !safeInteger(session.ended_at) || session.actual_seconds > session.planned_seconds || session.ended_at < session.started_at || session.actual_seconds > session.ended_at - session.started_at) throw invalidPayload('sessão de foco inválida.');
 	return { id: session.id, kind: session.kind as FocusKind, plannedSeconds: session.planned_seconds, actualSeconds: session.actual_seconds, completed: session.completed, startedAt: session.started_at, endedAt: session.ended_at };
 }
 
@@ -568,7 +576,11 @@ export class HttpTransport implements Transport {
 	async studySummary() { const response = await fetch('/api/study/summary'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar sua evolução.'); return normalizeStudySummary(await response.json()); }
 	async recordFocusSession(session: FocusSessionInput) {
 		const response = await fetch('/api/focus/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: session.id, kind: session.kind, planned_seconds: session.plannedSeconds, actual_seconds: session.actualSeconds, completed: session.completed, started_at: session.startedAt, ended_at: session.endedAt }) });
-		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 409 ? 'Esta sessão já foi registrada com outros dados.' : response.status === 422 ? 'Os dados da sessão de foco não são válidos.' : 'Não foi possível salvar a sessão de foco.');
+		if (!response.ok) {
+			if (response.status === 409) throw new FocusSessionConflict();
+			if (response.status === 422) throw new InvalidFocusSession();
+			throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível salvar a sessão de foco.');
+		}
 		return normalizeFocusSession(await response.json());
 	}
 	async focusSummary() { const response = await fetch('/api/focus/summary'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar as estatísticas de foco.'); return normalizeFocusSummary(await response.json()); }
@@ -637,6 +649,8 @@ const DESKTOP_ERROR_MESSAGES: Record<string, string> = {
 // O comando devolve o erro como objeto serializado `{ code, message }`, não como `Error`.
 function desktopError(cause: unknown, fallback: string): Error {
 	const payload = cause as { code?: unknown } | null;
+	if (payload && typeof payload === 'object' && payload.code === 'focus_session_conflict') return new FocusSessionConflict();
+	if (payload && typeof payload === 'object' && payload.code === 'invalid_focus_session') return new InvalidFocusSession();
 	if (payload && typeof payload === 'object' && typeof payload.code === 'string') {
 		const known = DESKTOP_ERROR_MESSAGES[payload.code];
 		if (known) return new Error(known);

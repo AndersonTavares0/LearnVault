@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { focusOutboxKey, persistFocusOutbox, readFocusOutbox } from './focus-outbox';
+import { focusOutboxKey, persistFocusOutbox, persistRejectedFocusSessions, readFocusOutbox, readRejectedFocusSessions } from './focus-outbox';
 
 const session = {
 	id: 'focus-1',
@@ -20,6 +20,20 @@ describe('focus session outbox', () => {
 	it('restores valid pending sessions and discards malformed entries', () => {
 		const storage = { getItem: () => JSON.stringify([session, { ...session, id: '' }, null]) };
 		expect(readFocusOutbox(storage, 'http:user-1')).toEqual([session]);
+	});
+	it('preserves legacy sessions with temporal mismatches for explicit server rejection handling', () => {
+		const legacy = { ...session, actualSeconds: 1_500, endedAt: 101 };
+		const storage = { getItem: () => JSON.stringify([legacy]) };
+		expect(readFocusOutbox(storage, 'http:user-1')).toEqual([legacy]);
+	});
+
+	it('persists rejected sessions and their reasons by account scope', () => {
+		const values = new Map<string, string>();
+		const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => values.set(key, value) };
+		const rejected = [{ session, reason: 'Esta sessão já foi registrada com outros dados.' }];
+		expect(persistRejectedFocusSessions(storage, 'http:user-1', rejected)).toBe(true);
+		expect(readRejectedFocusSessions(storage, 'http:user-1')).toEqual(rejected);
+		expect(readRejectedFocusSessions(storage, 'http:user-2')).toEqual([]);
 	});
 
 	it('returns an empty queue when storage is unavailable or malformed', () => {

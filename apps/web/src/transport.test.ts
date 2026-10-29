@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { findLesson } from './router';
-import { desktopCoverUrl, desktopMediaUrl, DesktopStub, HttpTransport, lessonFromNode, MAX_COVER_BYTES, normalizeCatalog, normalizeFocusSession, normalizeFocusSummary, normalizeRecentStudy, normalizeRewardSummary, normalizeStudyProgress, normalizeStudySummary, normalizeUpdateStatus, normalizeUser, STUDY_NOT_AVAILABLE, CATALOG_LIMITS, type Transport } from './transport';
+import { desktopCoverUrl, desktopMediaUrl, DesktopStub, FocusSessionConflict, HttpTransport, InvalidFocusSession, lessonFromNode, MAX_COVER_BYTES, normalizeCatalog, normalizeFocusSession, normalizeFocusSummary, normalizeRecentStudy, normalizeRewardSummary, normalizeStudyProgress, normalizeStudySummary, normalizeUpdateStatus, normalizeUser, STUDY_NOT_AVAILABLE, CATALOG_LIMITS, type Transport } from './transport';
 
 // O Tauri só é carregado no desktop: fora dele o módulo é substituído pelo mock, de modo
 // que a suíte nunca toca `window.__TAURI_INTERNALS__`.
@@ -464,6 +464,8 @@ describe('transport contract', () => {
 		const rewards = normalizeRewardSummary({ xp: 20, completed_lessons: 0, weekly_goal: 3, missions: [{ id: 'lesson', progress: 0, target: 1, claimed: false }], study: { current_streak: 0, longest_streak: 0, today: '2026-10-26', today_active: false, at_risk: false, week_active_days: 0, completed_lessons: 0, days: studyDays } });
 		expect(rewards).toMatchObject({ xp: 20, weeklyGoal: 3, missions: [{ id: 'lesson', progress: 0, target: 1, claimed: false }], study: { completedLessons: 0 } });
 		expect(() => normalizeFocusSession({ ...session, kind: 'other' })).toThrow('Resposta inválida do servidor');
+		expect(() => normalizeFocusSession({ id: 'session-1', kind: 'focus', planned_seconds: 1500, actual_seconds: 1501, completed: true, started_at: 100, ended_at: 1600 })).toThrow('Resposta inválida do servidor');
+		expect(() => normalizeFocusSession({ id: 'session-1', kind: 'focus', planned_seconds: 1500, actual_seconds: 2, completed: false, started_at: 100, ended_at: 101 })).toThrow('Resposta inválida do servidor');
 		expect(() => normalizeRewardSummary({ xp: -1 })).toThrow('Resposta inválida do servidor');
 	});
 	it('uses the persisted focus and reward endpoints with idempotent payloads', async () => {
@@ -481,6 +483,17 @@ describe('transport contract', () => {
 		expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/focus/sessions', '/api/rewards/weekly-goal', '/api/rewards/missions/lesson/claim']);
 		expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ method: 'POST', body: JSON.stringify(payload) });
 		expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ method: 'PUT', body: JSON.stringify({ weekly_goal: 5 }) });
+		vi.unstubAllGlobals();
+	});
+	it('exposes terminal focus-session errors by type', async () => {
+		const fetchMock = vi.fn()
+			.mockResolvedValueOnce(new Response(null, { status: 409 }))
+			.mockResolvedValueOnce(new Response(null, { status: 422 }));
+		vi.stubGlobal('fetch', fetchMock);
+		const transport = new HttpTransport();
+		const session = { id: 'session-1', kind: 'focus' as const, plannedSeconds: 1500, actualSeconds: 1500, completed: true, startedAt: 100, endedAt: 1600 };
+		await expect(transport.recordFocusSession(session)).rejects.toBeInstanceOf(FocusSessionConflict);
+		await expect(transport.recordFocusSession(session)).rejects.toBeInstanceOf(InvalidFocusSession);
 		vi.unstubAllGlobals();
 	});
 	it('reads study progress from the HTTP endpoint', async () => {

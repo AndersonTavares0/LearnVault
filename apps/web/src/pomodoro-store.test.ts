@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { get } from 'svelte/store';
-import { focusOutboxKey, persistFocusOutbox, readFocusOutbox } from './focus-outbox';
+import { persistFocusOutbox, readFocusOutbox, readRejectedFocusSessions } from './focus-outbox';
+import type * as TransportModule from './transport';
 
 const mocks = vi.hoisted(() => ({
 	recordFocusSession: vi.fn(),
@@ -8,9 +9,13 @@ const mocks = vi.hoisted(() => ({
 	rewardSummary: vi.fn()
 }));
 
-vi.mock('./transport', () => ({ transport: mocks }));
+vi.mock('./transport', async (importOriginal) => ({
+	...(await importOriginal<typeof TransportModule>()),
+	transport: mocks
+}));
 
-import { focusSync, setFocusOutboxScope } from './pomodoro-store';
+import { focusSync, retryFocusSessions, setFocusOutboxScope } from './pomodoro-store';
+import { FocusSessionConflict } from './transport';
 
 const sessionA = { id: 'a', kind: 'focus' as const, plannedSeconds: 1500, actualSeconds: 1500, completed: true, startedAt: 100, endedAt: 1600 };
 const sessionB = { ...sessionA, id: 'b' };
@@ -66,5 +71,29 @@ describe('Pomodoro sync scope changes', () => {
 		await vi.waitFor(() => expect(get(focusSync).pending).toEqual([]));
 		expect(readFocusOutbox(storage, 'http:user-a')).toEqual([sessionA]);
 		expect(readFocusOutbox(storage, 'http:user-b')).toEqual([]);
+	});
+	it('quarantines a conflict and continues saving the next session', async () => {
+		mocks.recordFocusSession
+			.mockRejectedValueOnce(new FocusSessionConflict())
+			.mockResolvedValueOnce({});
+		persistFocusOutbox(storage, 'http:user-a', [sessionA, sessionB]);
+		setFocusOutboxScope('http:user-a');
+
+		await vi.waitFor(() => expect(mocks.recordFocusSession).toHaveBeenCalledTimes(2));
+		expect(mocks.recordFocusSession).toHaveBeenNthCalledWith(1, sessionA);
+		expect(mocks.recordFocusSession).toHaveBeenNthCalledWith(2, sessionB);
+		expect(get(focusSync)).toMatchObject({ pending: [], saving: false });
+		expect(get(focusSync).rejected.map((entry) => entry.session)).toEqual([sessionA]);
+		expect(readRejectedFocusSessions(storage, 'http:user-a').map((entry) => entry.session)).toEqual([sessionA]);
+	});
+
+	it('stops after a transient failure instead of retrying forever', async () => {
+		mocks.recordFocusSession.mockRejectedValue(new Error('offline'));
+		persistFocusOutbox(storage, 'http:user-a', [sessionA]);
+		setFocusOutboxScope('http:user-a');
+		await retryFocusSessions();
+
+		expect(mocks.recordFocusSession).toHaveBeenCalledTimes(1);
+		expect(get(focusSync)).toMatchObject({ pending: [sessionA], error: 'offline', saving: false });
 	});
 });
