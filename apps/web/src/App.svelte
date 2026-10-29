@@ -25,7 +25,6 @@
 	import { LIBRARY_VIEWS, persistLibraryView, readLibraryView, type LibraryView } from './library-view';
 
 	let themeMode: ThemeMode = readThemeMode(safeLocalStorage());
-	let railCompact = readRailCompact();
 	let libraryView: LibraryView = readLibraryView(safeLocalStorage());
 	let systemDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
 	let resolvedTheme = resolveTheme(themeMode, systemDark);
@@ -207,24 +206,6 @@
 		}
 	}
 	const RAIL_COMPACT_KEY = 'learnvault-rail-compact';
-	function readRailCompact(): boolean {
-		try {
-			return safeLocalStorage()?.getItem(RAIL_COMPACT_KEY) === 'true';
-		} catch {
-			return false;
-		}
-	}
-	function setRailCompact(next: boolean) {
-		railCompact = next;
-		try {
-			safeLocalStorage()?.setItem(RAIL_COMPACT_KEY, String(next));
-		} catch {
-			// A preferência é local e não pode impedir a navegação.
-		}
-	}
-	function toggleRailCompact() {
-		setRailCompact(!railCompact);
-	}
 	function loadPlayerPreferences(currentUser: User | null) {
 		const scope = playerPreferencesScope(transportKind, currentUser?.userId);
 		playerPreferences = readPlayerPreferences(safeLocalStorage(), scope);
@@ -567,46 +548,37 @@
 	</main>
 {:else}
 	<a class="lv-skip" href="#main-content">Ir para o conteúdo</a>
-	<div class="lv-shell" class:is-focus={focusMode} class:is-compact={railCompact} class:is-desktop={transportKind === 'desktop'}>
-		<aside class="lv-rail" aria-label="Navegação principal">
-			<a class="lv-rail__brand" href={href('home')} aria-label="LearnVault, início">
+	<div class="lv-shell" class:is-focus={focusMode} class:is-desktop={transportKind === 'desktop'}>
+		<header class="lv-topbar flex flex-wrap items-center gap-5 min-h-14 px-4 lg:px-8">
+			<a class="lv-topbar__brand" href={href('home')} aria-label="LearnVault, início">
 				<Brand />
-				<span class="lv-rail__wordmark">LearnVault</span>
+				<span>LearnVault</span>
 			</a>
-			<nav class="lv-rail__nav" aria-label="Seções">
-				<a class="lv-rail__link" class:is-active={route === 'home'} aria-current={route === 'home' ? 'page' : undefined} href={href('home')} title="Biblioteca">
+			<nav class="lv-topbar__nav" aria-label="Seções">
+				<a class="lv-topbar__link" class:is-active={route === 'home'} aria-current={route === 'home' ? 'page' : undefined} href={href('home')}>
 					<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h6.5V19H4zM13.5 5.5H20V19h-6.5z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
 					<span>Biblioteca</span>
 				</a>
-				<a class="lv-rail__link" class:is-active={route === 'statistics'} aria-current={route === 'statistics' ? 'page' : undefined} href={href('statistics')} title="Estatísticas">
+				<a class="lv-topbar__link" class:is-active={route === 'statistics'} aria-current={route === 'statistics' ? 'page' : undefined} href={href('statistics')}>
 					<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5h16M7 19.5v-6M12 19.5V8M17 19.5V5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
 					<span>Estatísticas</span>
 				</a>
-				{#if course && isCourseRoute}
-					<a class="lv-rail__link" class:is-active={isCourseRoute} aria-current={isCourseRoute ? 'page' : undefined} href={href('course', courseIdOf(course))} title={course.title}>
-						<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5h11.5A2.5 2.5 0 0 1 19 7v12.5H7.5A2.5 2.5 0 0 1 5 17z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M8 8h7M8 11.5h7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-						<span>Curso</span>
-					</a>
-				{/if}
-				<a class="lv-rail__link" class:is-active={route === 'settings'} aria-current={route === 'settings' ? 'page' : undefined} href={href('settings')} title="Ajustes">
+				<a class="lv-topbar__link" class:is-active={route === 'settings'} aria-current={route === 'settings' ? 'page' : undefined} href={href('settings')}>
 					<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="9" cy="7" r="2.2" fill="var(--rail-bg)" stroke="currentColor" stroke-width="1.6"/><circle cx="15" cy="12" r="2.2" fill="var(--rail-bg)" stroke="currentColor" stroke-width="1.6"/><circle cx="9" cy="17" r="2.2" fill="var(--rail-bg)" stroke="currentColor" stroke-width="1.6"/></svg>
 					<span>Ajustes</span>
 				</a>
 			</nav>
-			<div class="lv-rail__foot">
+			<div class="lv-topbar__utils">
 				<FocusMenu />
-				<button class="lv-rail__compact" type="button" aria-pressed={railCompact} aria-label={railCompact ? 'Expandir barra lateral' : 'Compactar barra lateral'} title={railCompact ? 'Expandir barra lateral' : 'Compactar barra lateral'} onclick={toggleRailCompact}>
-					<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 6l-4 6 4 6M9 6l-4 6 4 6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-				</button>
-				<div class="lv-rail__user" title={user.username}>
+				<div class="lv-topbar__user" title={user.username}>
 					<span class="lv-avatar" aria-hidden="true">{userInitials}</span>
-					<span class="lv-rail__username">{user.username}</span>
+					<span class="lv-topbar__username">{user.username}</span>
 				</div>
 				{#if transportKind === 'http'}
-					<button class="lv-rail__logout" type="button" onclick={logout} aria-label="Sair" title="Sair">Sair</button>
+					<button class="lv-topbar__logout" type="button" onclick={logout} aria-label="Sair" title="Sair">Sair</button>
 				{/if}
 			</div>
-		</aside>
+		</header>
 		<main id="main-content" class="lv-main">
 			{#if error}<p class="lv-alert" role="alert">{error}</p>{/if}
 			{#if route === 'home'}
@@ -730,9 +702,9 @@
 					<header class="lv-page__head">
 						<div>
 							<h1>Ajustes</h1>
-							<p class="lv-lede">Escolha como o LearnVault aparece neste dispositivo.</p>
-						</div>
-					</header>
+						<p class="lv-lede">Escolha como o LearnVault aparece neste dispositivo.</p>
+					</div>
+				</header>
 					<section class="lv-panel lv-settings__panel">
 						<div class="lv-panel__head"><h2>Tema</h2><span class="lv-count">Tema atual: {resolvedTheme === 'dark' ? 'escuro' : 'claro'}{themeMode === 'system' ? ' (sistema)' : ''}</span></div>
 						<fieldset class="theme-options">
@@ -741,11 +713,6 @@
 							<label><input type="radio" name="theme" value="light" checked={themeMode === 'light'} onchange={() => changeTheme('light')} />Claro <span>Usa sempre o tema claro.</span></label>
 							<label><input type="radio" name="theme" value="dark" checked={themeMode === 'dark'} onchange={() => changeTheme('dark')} />Escuro <span>Usa sempre o tema escuro.</span></label>
 						</fieldset>
-						<label class="lv-compact-setting">
-							<input type="checkbox" checked={railCompact} onchange={(event) => setRailCompact(event.currentTarget.checked)} />
-							<span>Barra lateral compacta</span>
-							<small>Mostra apenas os ícones da navegação.</small>
-						</label>
 					</section>
 					<section class="lv-panel lv-settings__panel" aria-labelledby="timer-heading">
 						<div class="lv-panel__head"><h2 id="timer-heading">Pomodoro</h2><span class="lv-count">Tempo de foco e pausas</span></div>

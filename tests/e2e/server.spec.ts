@@ -217,7 +217,7 @@ test('serves the built SPA through the Rust server for a complete study-library 
 
 	await page.getByRole('button', { name: 'Atualizar cursos' }).click();
 	await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
-	await expect(page.getByRole('complementary', { name: 'Navegação principal' })).toBeVisible();
+	await expect(page.getByRole('navigation', { name: 'Seções' })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'Todos os cursos' })).toBeVisible();
 	const initialCatalog = await (await page.request.get(`${server.baseURL}/api/catalog`)).json();
 	const mediaId = firstMediaId(initialCatalog);
