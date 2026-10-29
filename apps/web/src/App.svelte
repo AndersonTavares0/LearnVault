@@ -607,15 +607,15 @@
 					<header class="lv-page__head">
 						<div>
 							<h1>Minha biblioteca</h1>
-							<p class="lv-lede">Seus cursos, reunidos em um só lugar. Os arquivos originais não são alterados.</p>
+							<p class="lv-lede">Cursos organizados. Arquivos originais intactos.</p>
 						</div>
 						<div class="lv-page__actions">
 							{#if canManage}
 								<div class="lv-page__buttons">
 									{#if transportKind === 'desktop'}
-										<button class="lvui-btn lvui-btn-primary" onclick={importCourse} disabled={importing} aria-busy={importing}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v10m-4-4 4 4 4-4M5 17v3h14v-3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>{importing ? 'Importando…' : 'Importar curso'}</button>
+										<button class={`lvui-btn${studySyncSupported && libraryRecent.length > 0 && !catalogQuery.trim() ? '' : ' lvui-btn-primary'}`} onclick={importCourse} disabled={importing} aria-busy={importing}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v10m-4-4 4 4 4-4M5 17v3h14v-3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>{importing ? 'Importando…' : 'Importar curso'}</button>
 									{:else}
-										<button class="lvui-btn lvui-btn-primary" onclick={() => (importFormOpen = !importFormOpen)} aria-expanded={importFormOpen}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v10m-4-4 4 4 4-4M5 17v3h14v-3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Importar curso</button>
+										<button class={`lvui-btn${studySyncSupported && libraryRecent.length > 0 && !catalogQuery.trim() ? '' : ' lvui-btn-primary'}`} onclick={() => (importFormOpen = !importFormOpen)} aria-expanded={importFormOpen}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v10m-4-4 4 4 4-4M5 17v3h14v-3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Importar curso</button>
 									{/if}
 									<button class="lvui-btn" onclick={rescan} disabled={rescanning || !catalog || !catalog.nodes.length}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v4h-4M4 17v-4h4M5.5 9a7 7 0 0 1 12-2L20 11M4 13l2.5 4a7 7 0 0 0 12-2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>{rescanning ? 'Atualizando…' : 'Atualizar cursos'}</button>
 								</div>
@@ -637,10 +637,12 @@
 					{#if studySyncSupported && libraryRecent.length && !catalogQuery.trim()}
 						<section class="lv-section" aria-labelledby="recent-heading">
 							<div class="lv-section__head">
-								<h2 id="recent-heading">Continue estudando</h2>
-								<span class="lv-count">{libraryRecent.length} {libraryRecent.length === 1 ? 'recente' : 'recentes'}</span>
+								<div class="lv-section__title flex min-w-0 items-baseline gap-2">
+									<h2 id="recent-heading">Continue estudando</h2>
+									<span class="lv-count">{libraryRecent.length} {libraryRecent.length === 1 ? 'recente' : 'recentes'}</span>
+								</div>
 							</div>
-							<ul class="lv-resume">
+							<ul class={`lv-resume${libraryRecent.length === 1 ? ' lv-resume--single' : ''}`}>
 								{#each libraryRecent as entry (entry.item.mediaId)}
 									{@const courseNode = findCourse(catalog, entry.location.courseId)}
 									{#if courseNode}
@@ -653,6 +655,9 @@
 													<span class="lv-resume-card__course">{entry.location.courseTitle}</span>
 													<span class="lv-resume-card__lesson">{entry.location.lesson.title}</span>
 													<span class="lv-resume-card__meta">{entry.item.completed ? 'Concluído' : `Parou em ${formatDuration(entry.item.positionSeconds)}`}</span>
+												</span>
+												<span class="lv-resume-card__action" aria-hidden="true">
+													<svg viewBox="0 0 16 16"><path d="m6 3.5 7 4.5-7 4.5z" fill="currentColor"/></svg>
 												</span>
 											</a>
 										</li>
@@ -680,9 +685,11 @@
 
 					<section class="lv-section" aria-labelledby="courses-heading">
 						<div class="lv-section__head lv-section__head--courses">
-							<h2 id="courses-heading">Todos os cursos</h2>
-							<div class="lv-section__tools">
+							<div class="lv-section__title flex min-w-0 items-baseline gap-2">
+								<h2 id="courses-heading">Todos os cursos</h2>
 								{#if catalog && catalog.nodes.length}<span class="lv-count" aria-live="polite">{filteredNodes.length} de {catalog.nodes.length}</span>{/if}
+							</div>
+							<div class="lv-section__tools">
 								<div class="lv-view-switch lvui-join" role="group" aria-label="Visualização dos cursos">
 									{#each LIBRARY_VIEWS as view}
 										<button type="button" class={`lvui-join-item lvui-btn lvui-btn-sm${libraryView === view ? ' lvui-btn-active' : ''}`} aria-pressed={libraryView === view} onclick={() => changeLibraryView(view)}>
@@ -701,7 +708,7 @@
 								<ul class="lv-course-grid" data-view={libraryView} aria-label="Cursos na visualização {LIBRARY_VIEW_LABELS[libraryView]}">
 									{#each filteredNodes as courseItem (courseItem.courseId ?? courseItem.path)}
 										<li class:is-menu-open={coverMenuId === courseIdOf(courseItem)}>
-											<CourseCard course={courseItem} profile={user.userId} mediaUrl={(file, courseId) => transport.mediaUrl(file, courseId)} manualCoverUrl={transport.coverUrl(courseIdOf(courseItem), courseItem.coverVersion ?? null)} {canManage} inProgress={locatedRecent.some((entry) => entry.location.courseId === courseIdOf(courseItem))} menuOpen={coverMenuId === courseIdOf(courseItem)} onMenuOpen={(open) => toggleCoverMenu(courseItem, open)} onChangeCover={requestCourseCover} onRemoveCover={removeCover} />
+											<CourseCard course={courseItem} profile={user.userId} mediaUrl={(file, courseId) => transport.mediaUrl(file, courseId)} manualCoverUrl={transport.coverUrl(courseIdOf(courseItem), courseItem.coverVersion ?? null)} {canManage} inProgress={locatedRecent.some((entry) => entry.location.courseId === courseIdOf(courseItem) && !entry.item.completed)} menuOpen={coverMenuId === courseIdOf(courseItem)} onMenuOpen={(open) => toggleCoverMenu(courseItem, open)} onChangeCover={requestCourseCover} onRemoveCover={removeCover} />
 										</li>
 									{/each}
 								</ul>

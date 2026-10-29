@@ -494,7 +494,7 @@ svg {
 }
 
 .lv-page__buttons .lvui-btn {
-	min-height: 40px;
+	min-height: 44px;
 	padding-inline: 15px;
 	font-size: 13px;
 }
@@ -655,7 +655,7 @@ svg {
 }
 
 .lv-view-switch .lvui-btn {
-	min-height: 30px;
+	min-height: 44px;
 	padding-inline: 10px;
 	font-size: 11px;
 }
@@ -4210,7 +4210,7 @@ svg {
 	align-items: center;
 	justify-content: center;
 	gap: 6px;
-	min-height: 40px;
+	min-height: 44px;
 	padding: 0 10px;
 	border: 1px solid rgba(238, 241, 243, 0.28);
 	border-radius: 999px;
@@ -4348,7 +4348,7 @@ svg {
 	}
 
 	.lv-focus-menu__trigger {
-		min-height: 40px;
+		min-height: 44px;
 		border-color: transparent;
 	}
 
@@ -5210,7 +5210,7 @@ textarea {
 }
 
 .lv-topbar__link.is-active {
-	background: var(--surface-2);
+	background: transparent;
 	color: var(--ink);
 }
 
@@ -5236,8 +5236,8 @@ textarea {
 .lv-topbar__logout {
 	display: inline-grid;
 	place-items: center;
-	min-width: 40px;
-	min-height: 40px;
+	min-width: 44px;
+	min-height: 44px;
 	padding: 0 10px;
 	border: 1px solid var(--line);
 	border-radius: 6px;
@@ -5423,6 +5423,7 @@ textarea {
 	transform: translateY(-50%);
 	color: var(--muted);
 	pointer-events: none;
+	z-index: 1;
 }
 
 .lv-search-kbd {
@@ -5449,7 +5450,7 @@ textarea {
 
 .lv-resume-card {
 	display: grid;
-	grid-template-columns: 112px minmax(0, 1fr);
+	grid-template-columns: 112px minmax(0, 1fr) 48px;
 	min-height: 106px;
 	overflow: hidden;
 	border: 1px solid var(--line);
@@ -5510,6 +5511,24 @@ textarea {
 	color: var(--warn);
 	font-family: var(--mono);
 	font-size: 11px;
+}
+
+.lv-resume-card__action {
+	display: grid;
+	place-items: center;
+	align-self: center;
+	justify-self: center;
+	width: 44px;
+	height: 44px;
+	border: 1px solid var(--accent);
+	border-radius: 50%;
+	background: var(--accent);
+	color: #fff;
+}
+
+.lv-resume-card__action svg {
+	width: 12px;
+	height: 12px;
 }
 
 .lv-course-grid {
@@ -6415,7 +6434,7 @@ textarea {
 }
 
 .lv-focus-menu__trigger {
-	min-height: 40px;
+	min-height: 44px;
 	padding: 0 10px;
 	border: 1px solid var(--line);
 	border-radius: 6px;
@@ -6657,7 +6676,8 @@ textarea {
 	}
 
 	.lv-topbar__logout {
-		min-width: 38px;
+		min-width: 44px;
+		min-height: 44px;
 		padding-inline: 7px;
 	}
 
@@ -6846,7 +6866,7 @@ textarea {
 	}
 
 	.lv-resume-card {
-		grid-template-columns: 88px minmax(0, 1fr);
+		grid-template-columns: 88px minmax(0, 1fr) 48px;
 		min-height: 82px;
 	}
 
@@ -6880,7 +6900,7 @@ textarea {
 	}
 
 	.lv-resume-card {
-		grid-template-columns: 84px minmax(0, 1fr);
+		grid-template-columns: 84px minmax(0, 1fr) 48px;
 		min-height: 72px;
 	}
 
@@ -7137,6 +7157,7 @@ textarea {
 
 	.lv-library .lv-resume {
 		grid-auto-columns: minmax(300px, 90%);
+		margin-inline: -3px;
 	}
 
 	.lv-topbar {
@@ -7146,8 +7167,12 @@ textarea {
 	}
 
 	.lv-topbar__nav {
-		min-height: 38px;
+		min-height: 44px;
 	}
+	.lv-topbar__link {
+		min-height: 44px;
+	}
+
 
 	.lv-lesson-actions {
 		flex-wrap: nowrap;
@@ -7257,19 +7282,138 @@ textarea {
 
 @media (max-width: 620px) {
 	.lv-library .lv-page__head {
-		gap: 12px;
-		margin-bottom: 16px;
+		gap: 8px;
+		margin-bottom: 12px;
 	}
 
 	.lv-library .lv-library-search {
-		margin-top: 10px;
+		margin-top: 8px;
 	}
 
 	.lv-library .lv-section {
-		margin-top: 20px;
+		margin-top: 16px;
 	}
 
 	.lv-library .lv-section__head {
-		margin-bottom: 10px;
+		align-items: baseline;
+		flex-direction: row;
+		gap: 10px;
+		margin-bottom: 8px;
+	}
+
+	.lv-library .lv-section__head--courses {
+		align-items: stretch;
+		flex-direction: column;
+		gap: 8px;
+	}
+	.lv-library .lv-resume--single {
+		grid-auto-columns: 100%;
+	}
+
+	.lv-view-switch .lvui-btn {
+		min-height: 44px;
+	}
+
+}
+
+/* The selected view leads with clear text contrast, while the resume cue is
+   prominent without inventing a second, nested interactive target. */
+.lv-view-switch .lvui-btn[aria-pressed="true"] {
+	background-color: var(--blue-soft);
+	border-color: var(--blue);
+	color: var(--ink);
+}
+
+.lv-view-switch .lvui-btn[aria-pressed="false"] {
+	color: var(--muted);
+}
+
+.lv-resume-card__action {
+	width: 44px;
+	height: 44px;
+	border-color: var(--accent);
+	background: var(--accent);
+	color: #fff;
+}
+
+.lv-library .lv-page__buttons .lvui-btn:not(.lvui-btn-primary) {
+	border-color: var(--line-strong);
+}
+
+@media (max-width: 820px) {
+	.lv-topbar .lv-topbar__icon {
+		display: grid;
+		min-width: 44px;
+		min-height: 44px;
+	}
+}
+
+@media (max-width: 420px) {
+	.lv-topbar__utils {
+		gap: 8px;
+	}
+}
+
+@media (min-width: 360px) and (max-width: 620px) {
+	.lv-library .lv-course-grid[data-view="covers"] {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 14px 10px;
+	}
+
+	.lv-library .lv-course-grid[data-view="covers"] .lv-course-card {
+		display: flex;
+		flex-direction: column;
+		align-items: stretch;
+		min-width: 0;
+		overflow: hidden;
+		border: 1px solid var(--line);
+		border-radius: 8px;
+		background: var(--surface);
+	}
+
+	.lv-library .lv-course-grid[data-view="covers"] .lv-course-card .lv-cover {
+		width: 100%;
+		height: auto;
+		aspect-ratio: 16 / 9;
+		min-height: 0;
+		margin: 0;
+		border-radius: 7px 7px 0 0;
+	}
+
+	.lv-library .lv-course-grid[data-view="covers"] .lv-course-card__body {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 6px;
+		padding: 10px 10px 12px;
+	}
+
+	.lv-library .lv-course-grid[data-view="covers"] .lv-course-card__title {
+		display: -webkit-box;
+		overflow: hidden;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 2;
+		font-size: 15px;
+		line-height: 1.25;
+	}
+}
+@media (max-width: 620px) {
+	.lv-library .lv-section__head--courses {
+		margin-bottom: 14px;
+	}
+
+	.lv-library .lv-page__buttons {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.lv-library .lv-page__buttons .lvui-btn {
+		min-width: 0;
+	}
+}
+
+@media (max-width: 340px) {
+	.lv-library .lv-page__buttons .lvui-btn {
+		gap: 6px;
+		padding-inline: 6px;
+		font-size: 12px;
 	}
 }

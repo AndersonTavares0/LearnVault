@@ -28,9 +28,25 @@ function firstMediaId(value: unknown): string | undefined {
 }
 
 function parseRgb(value: string): [number, number, number] {
-	const match = value.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
-	if (!match) throw new Error(`cor inválida: ${value}`);
-	return [Number(match[1]), Number(match[2]), Number(match[3])];
+	const rgb = value.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+	if (rgb) return [Number(rgb[1]), Number(rgb[2]), Number(rgb[3])];
+	const lab = value.match(/oklab\(\s*([+-]?(?:\d+\.?\d*|\.\d+))\s+([+-]?(?:\d+\.?\d*|\.\d+))\s+([+-]?(?:\d+\.?\d*|\.\d+))/);
+	if (!lab) throw new Error(`cor inválida: ${value}`);
+	const L = Number(lab[1]);
+	const a = Number(lab[2]);
+	const b = Number(lab[3]);
+	const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;
+	const m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
+	const s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
+	const encode = (linear: number) => {
+		const srgb = linear <= 0.0031308 ? 12.92 * linear : 1.055 * linear ** (1 / 2.4) - 0.055;
+		return Math.max(0, Math.min(1, srgb)) * 255;
+	};
+	return [
+		encode(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s),
+		encode(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s),
+		encode(-0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s)
+	];
 }
 
 function contrastRatio(foreground: string, background: string) {
@@ -141,9 +157,9 @@ async function waitForHealth(url: string, process: ChildProcess) {
 	throw new Error('server did not become ready within 30 seconds');
 }
 
-async function startServer(): Promise<ServerFixture> {
+async function startServer(libraryName = 'library'): Promise<ServerFixture> {
 	const root = await mkdtemp(join(tmpdir(), 'learnvault-e2e-'));
-	const library = join(root, 'library');
+	const library = join(root, libraryName);
 	const outsidePath = join(root, 'outside.mp4');
 	await writeFile(outsidePath, Buffer.from('outside-sentinel'));
 	await mkdir(join(library, 'Categoria', 'Curso'), { recursive: true });
@@ -222,6 +238,19 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	const initialCatalog = await (await page.request.get(`${server.baseURL}/api/catalog`)).json();
 	const mediaId = firstMediaId(initialCatalog);
 	expect(mediaId).toBeTruthy();
+	const completed = await page.request.post(`${server.baseURL}/api/study/completed`, {
+		headers: { Origin: server.baseURL },
+		data: { media_id: mediaId, completed: true }
+	});
+	await expect(completed).toBeOK();
+	await page.reload();
+	await expect(page.getByRole('heading', { name: 'Minha biblioteca' })).toBeVisible();
+	await expect(page.locator('.lv-course-grid .lv-course-card__state')).toHaveCount(0);
+	const reopened = await page.request.post(`${server.baseURL}/api/study/completed`, {
+		headers: { Origin: server.baseURL },
+		data: { media_id: mediaId, completed: false }
+	});
+	await expect(reopened).toBeOK();
 	const positionResponse = await page.request.post(`${server.baseURL}/api/study/position`, {
 		headers: { Origin: server.baseURL },
 		data: { media_id: mediaId, position_seconds: 5 }
@@ -232,14 +261,45 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	expect((await recentResponse.json()).items.length).toBeGreaterThan(0);
 	await page.reload();
 	await expect(page.getByRole('heading', { name: 'Continue estudando' })).toBeVisible();
+	const desktopResumeActionAlignment = await page.evaluate(() => {
+		const card = document.querySelector('.lv-resume-card')?.getBoundingClientRect();
+		const action = document.querySelector('.lv-resume-card__action')?.getBoundingClientRect();
+		if (!card || !action) return null;
+		return Math.abs(card.top + card.height / 2 - action.top - action.height / 2);
+	});
+	expect(desktopResumeActionAlignment).not.toBeNull();
+	expect(desktopResumeActionAlignment!).toBeLessThanOrEqual(4);
+	const desktopControlSizes = await page.evaluate(() => {
+		const size = (selector: string) => {
+			const bounds = document.querySelector(selector)?.getBoundingClientRect();
+			return bounds ? { width: bounds.width, height: bounds.height } : null;
+		};
+		return {
+			viewHeights: Array.from(document.querySelectorAll('.lv-view-switch button')).map((element) => element.getBoundingClientRect().height),
+			ctaHeights: Array.from(document.querySelectorAll('.lv-library .lv-page__buttons .lvui-btn')).map((element) => element.getBoundingClientRect().height),
+			theme: size('.lv-topbar__icon'),
+			logout: size('.lv-topbar__logout'),
+			resumeCue: size('.lv-resume-card__action')
+		};
+	});
+	expect(desktopControlSizes.viewHeights.every((height) => height >= 44)).toBe(true);
+	expect(desktopControlSizes.ctaHeights.every((height) => height >= 44)).toBe(true);
+	expect(desktopControlSizes.theme?.width).toBeGreaterThanOrEqual(44);
+	expect(desktopControlSizes.theme?.height).toBeGreaterThanOrEqual(44);
+	expect(desktopControlSizes.logout?.width).toBeGreaterThanOrEqual(44);
+	expect(desktopControlSizes.logout?.height).toBeGreaterThanOrEqual(44);
+	expect(desktopControlSizes.resumeCue?.width).toBeGreaterThanOrEqual(44);
+	expect(desktopControlSizes.resumeCue?.height).toBeGreaterThanOrEqual(44);
 	await captureVisual(page, 'redesign-biblioteca-compacta-desktop.png');
-
+	await expect(page.getByRole('button', { name: 'Importar curso' })).not.toHaveClass(/lvui-btn-primary/);
 	const search = page.getByRole('searchbox', { name: 'Buscar nos cursos' });
 	await search.fill('nenhum curso deve corresponder');
 	await expect(page.locator('.lv-resume')).toHaveCount(0);
 	await expect(page.locator('.lv-course-grid .lv-course-card')).toHaveCount(0);
+	await expect(page.getByRole('button', { name: 'Importar curso' })).toHaveClass(/lvui-btn-primary/);
 	await search.fill('');
 	await expect(page.getByRole('heading', { name: 'Continue estudando' })).toBeVisible();
+
 
 	// Cada item identifica a aula pelo título limpo e mostra o contexto (curso · módulo)
 	// em uma linha secundária; o nome cru do arquivo não pode vazar para o usuário.
@@ -406,6 +466,198 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	}
 	await page.getByRole('link', { name: 'Biblioteca', exact: true }).click();
 	await expect(page.getByRole('heading', { name: 'Minha biblioteca' })).toBeVisible();
+	await page.setViewportSize({ width: 390, height: 844 });
+	if (process.env.LEARNVAULT_VISUAL_CAPTURE_DIR) {
+		const activeRecent = await page.request.post(`${server.baseURL}/api/study/completed`, {
+			headers: { Origin: server.baseURL },
+			data: { media_id: mediaId, completed: false }
+		});
+		await expect(activeRecent).toBeOK();
+		await page.reload();
+		await expect(page.getByRole('heading', { name: 'Minha biblioteca' })).toBeVisible();
+		await expect(page.locator('.lv-course-grid .lv-course-card__state')).toHaveText('Em andamento');
+		await expect(page.locator('.lv-resume-card__meta')).toHaveText(/Parou em/);
+	}
+	const resumeGeometry = await page.evaluate(() => {
+		const resume = document.querySelector('.lv-resume');
+		const card = resume?.querySelector('.lv-resume-card');
+		const search = document.querySelector('.lv-library-search input');
+		const glyph = document.querySelector('.lv-library-search .search-glyph');
+		const glyphRect = glyph?.getBoundingClientRect();
+		const glyphStyle = glyph ? getComputedStyle(glyph) : null;
+		return {
+			container: resume?.getBoundingClientRect().width ?? null,
+			card: card?.getBoundingClientRect().width ?? null,
+			cardLeft: card?.getBoundingClientRect().left ?? null,
+			searchLeft: search?.getBoundingClientRect().left ?? null,
+			glyphWidth: glyphRect?.width ?? 0,
+			glyphHeight: glyphRect?.height ?? 0,
+			glyphVisibility: glyphStyle?.visibility ?? 'missing',
+			glyphOpacity: glyphStyle?.opacity ?? '0',
+			glyphColor: glyphStyle?.color ?? 'transparent',
+			glyphZIndex: glyphStyle?.zIndex ?? 'auto'
+		};
+	});
+	expect(resumeGeometry.container).not.toBeNull();
+	expect(resumeGeometry.card).not.toBeNull();
+	expect(resumeGeometry.card!).toBeGreaterThanOrEqual(resumeGeometry.container! - 8);
+	expect(resumeGeometry.cardLeft).not.toBeNull();
+	expect(resumeGeometry.searchLeft).not.toBeNull();
+	expect(Math.abs(resumeGeometry.cardLeft! - resumeGeometry.searchLeft!)).toBeLessThanOrEqual(1);
+	expect(resumeGeometry.glyphWidth).toBeGreaterThanOrEqual(16);
+	expect(resumeGeometry.glyphHeight).toBeGreaterThanOrEqual(16);
+	expect(resumeGeometry.glyphVisibility).toBe('visible');
+	expect(resumeGeometry.glyphOpacity).toBe('1');
+	expect(resumeGeometry.glyphColor).not.toBe('rgba(0, 0, 0, 0)');
+	expect(resumeGeometry.glyphZIndex).toBe('1');
+	const resumeAffordance = page.locator('.lv-resume-card__action');
+	await expect(resumeAffordance).toHaveCount(1);
+	const resumeAffordanceBox = await resumeAffordance.boundingBox();
+	expect(resumeAffordanceBox).not.toBeNull();
+	expect(resumeAffordanceBox!.width).toBeGreaterThanOrEqual(44);
+	expect(resumeAffordanceBox!.height).toBeGreaterThanOrEqual(44);
+	const mobileTargetSizes = await page.evaluate(() => {
+		const focusTrigger = document.querySelector('.lv-focus-menu__trigger');
+		const logout = document.querySelector('.lv-topbar__logout')?.getBoundingClientRect();
+		const theme = document.querySelector('.lv-topbar__icon')?.getBoundingClientRect();
+		const utils = document.querySelector('.lv-topbar__utils');
+		const secondaryCta = document.querySelector('.lv-library .lv-page__buttons .lvui-btn:not(.lvui-btn-primary)');
+		const secondaryCtaStyle = secondaryCta ? getComputedStyle(secondaryCta) : null;
+		return {
+			focusHeight: focusTrigger?.getBoundingClientRect().height ?? 0,
+			logoutWidth: logout?.width ?? 0,
+			logoutHeight: logout?.height ?? 0,
+			themeWidth: theme?.width ?? 0,
+			themeHeight: theme?.height ?? 0,
+			utilsGap: Number.parseFloat(utils ? getComputedStyle(utils).columnGap : '0'),
+			navHeights: Array.from(document.querySelectorAll('.lv-topbar__nav .lv-topbar__link')).map((element) => element.getBoundingClientRect().height),
+			viewHeights: Array.from(document.querySelectorAll('.lv-view-switch button')).map((element) => element.getBoundingClientRect().height),
+			ctaHeights: Array.from(document.querySelectorAll('.lv-library .lv-page__buttons .lvui-btn')).map((element) => element.getBoundingClientRect().height),
+			ctaWidths: Array.from(document.querySelectorAll('.lv-library .lv-page__buttons .lvui-btn')).map((element) => element.getBoundingClientRect().width),
+			ctaTextFits: Array.from(document.querySelectorAll('.lv-library .lv-page__buttons .lvui-btn')).map((element) => element.scrollWidth <= element.clientWidth),
+			secondaryCtaBorderWidth: Number.parseFloat(secondaryCtaStyle?.borderTopWidth ?? '0')
+		};
+	});
+	expect(mobileTargetSizes.focusHeight).toBeGreaterThanOrEqual(44);
+	expect(mobileTargetSizes.logoutWidth).toBeGreaterThanOrEqual(44);
+	expect(mobileTargetSizes.logoutHeight).toBeGreaterThanOrEqual(44);
+	expect(mobileTargetSizes.navHeights.every((height) => height >= 44)).toBe(true);
+	expect(mobileTargetSizes.viewHeights.every((height) => height >= 44)).toBe(true);
+	expect(mobileTargetSizes.ctaHeights.length).toBe(2);
+	expect(mobileTargetSizes.ctaHeights.every((height) => height >= 44)).toBe(true);
+	expect(Math.abs(mobileTargetSizes.ctaWidths[0] - mobileTargetSizes.ctaWidths[1])).toBeLessThanOrEqual(1);
+	expect(mobileTargetSizes.ctaTextFits.every(Boolean)).toBe(true);
+	expect(mobileTargetSizes.secondaryCtaBorderWidth).toBeGreaterThanOrEqual(1);
+	expect(mobileTargetSizes.themeWidth).toBeGreaterThanOrEqual(44);
+	expect(mobileTargetSizes.themeHeight).toBeGreaterThanOrEqual(44);
+	expect(mobileTargetSizes.utilsGap).toBeGreaterThanOrEqual(8);
+	await expect(page.getByRole('button', { name: /Mudar para tema/ })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Importar curso' })).not.toHaveClass(/lvui-btn-primary/);
+	await page.setViewportSize({ width: 320, height: 844 });
+	const narrowCtaTextFits = await page.locator('.lv-library .lv-page__buttons .lvui-btn').evaluateAll((buttons) => buttons.map((button) => button.scrollWidth <= button.clientWidth));
+	expect(narrowCtaTextFits).toHaveLength(2);
+	expect(narrowCtaTextFits.every(Boolean)).toBe(true);
+	await page.setViewportSize({ width: 390, height: 844 });
+	const coverColumnCount = () => page.locator('.lv-course-grid').evaluate((grid) => getComputedStyle(grid).gridTemplateColumns.trim().split(/\s+/).length);
+	expect(await coverColumnCount()).toBe(2);
+	const cardAlignment = await page.evaluate(() => {
+		const switcher = document.querySelector('.lv-view-switch');
+		const grid = document.querySelector('.lv-course-grid');
+		const body = grid?.querySelector('.lv-course-card__body');
+		const title = body?.querySelector('.lv-course-card__title');
+		if (!switcher || !grid || !body || !title) return null;
+		const range = document.createRange();
+		range.selectNodeContents(title);
+		return {
+			titleInset: range.getBoundingClientRect().left - body.getBoundingClientRect().left,
+			viewToGridGap: grid.getBoundingClientRect().top - switcher.getBoundingClientRect().bottom
+		};
+	});
+	expect(cardAlignment).not.toBeNull();
+	expect(cardAlignment!.titleInset).toBeLessThanOrEqual(16);
+	expect(cardAlignment!.viewToGridGap).toBeGreaterThanOrEqual(12);
+	await page.getByRole('button', { name: 'Lista' }).click();
+	expect(await coverColumnCount()).toBe(1);
+	await page.getByRole('button', { name: 'Capas' }).click();
+	expect(await coverColumnCount()).toBe(2);
+	const readLibraryStates = () => page.evaluate(() => {
+		const active = document.querySelector('.lv-view-switch button[aria-pressed="true"]');
+		const inactive = document.querySelector('.lv-view-switch button[aria-pressed="false"]');
+		const action = document.querySelector('.lv-resume-card__action');
+		if (!active || !inactive || !action) return null;
+		const surfaceFor = (element: Element) => {
+			for (let current: Element | null = element; current; current = current.parentElement) {
+				const color = getComputedStyle(current).backgroundColor;
+				if (color !== 'rgba(0, 0, 0, 0)' && color !== 'transparent') return color;
+			}
+			return getComputedStyle(document.body).backgroundColor;
+		};
+		const activeStyle = getComputedStyle(active);
+		const inactiveStyle = getComputedStyle(inactive);
+		const actionStyle = getComputedStyle(action);
+		return {
+			activeBorder: activeStyle.borderTopColor,
+			activeColor: activeStyle.color,
+			activeBackground: activeStyle.backgroundColor,
+			inactiveColor: inactiveStyle.color,
+			inactiveSurface: surfaceFor(inactive),
+			actionColor: actionStyle.color,
+			actionBackground: actionStyle.backgroundColor
+		};
+	});
+	await page.locator('.lv-view-switch button').evaluateAll(async (buttons) => {
+		await Promise.all(buttons.flatMap((button) => button.getAnimations().map((animation) => animation.finished.catch(() => undefined))));
+	});
+	const lightLibraryStates = await readLibraryStates();
+	expect(lightLibraryStates).not.toBeNull();
+	expect(contrastRatio(lightLibraryStates!.activeBorder, lightLibraryStates!.inactiveSurface)).toBeGreaterThanOrEqual(3);
+	expect(contrastRatio(lightLibraryStates!.activeColor, lightLibraryStates!.activeBackground)).toBeGreaterThanOrEqual(4.5);
+	expect(contrastRatio(lightLibraryStates!.inactiveColor, lightLibraryStates!.inactiveSurface)).toBeGreaterThanOrEqual(4.5);
+	expect(contrastRatio(lightLibraryStates!.activeColor, lightLibraryStates!.activeBackground)).toBeGreaterThan(contrastRatio(lightLibraryStates!.inactiveColor, lightLibraryStates!.inactiveSurface));
+	expect(contrastRatio(lightLibraryStates!.actionColor, lightLibraryStates!.actionBackground)).toBeGreaterThanOrEqual(3);
+	const recentCountGap = await page.evaluate(() => {
+		const heading = document.querySelector('#recent-heading');
+		const count = heading?.parentElement?.querySelector('.lv-count');
+		if (!heading || !count) return null;
+		return count.getBoundingClientRect().left - heading.getBoundingClientRect().right;
+	});
+	expect(recentCountGap).not.toBeNull();
+	expect(recentCountGap!).toBeLessThanOrEqual(12);
+	const titleCountRows = await page.evaluate(() => {
+		const recentHeading = document.querySelector('#recent-heading');
+		const catalogHeading = document.querySelector('#courses-heading');
+		return {
+			recentHeader: recentHeading?.parentElement?.getBoundingClientRect().height ?? null,
+			recentTitle: recentHeading?.getBoundingClientRect().height ?? null,
+			catalogHeader: catalogHeading?.parentElement?.getBoundingClientRect().height ?? null,
+			catalogTitle: catalogHeading?.getBoundingClientRect().height ?? null
+		};
+	});
+	expect(titleCountRows.recentHeader).not.toBeNull();
+	expect(titleCountRows.recentTitle).not.toBeNull();
+	expect(titleCountRows.catalogHeader).not.toBeNull();
+	expect(titleCountRows.catalogTitle).not.toBeNull();
+	expect(Math.abs(titleCountRows.recentHeader! - titleCountRows.recentTitle!)).toBeLessThan(3);
+	expect(Math.abs(titleCountRows.catalogHeader! - titleCountRows.catalogTitle!)).toBeLessThan(3);
+	await captureVisual(page, 'mobile-library-refinement-390-light.png');
+	await page.emulateMedia({ colorScheme: 'dark' });
+	await page.reload();
+	await expect(page.getByRole('heading', { name: 'Minha biblioteca' })).toBeVisible();
+	const darkLibraryStates = await readLibraryStates();
+	expect(darkLibraryStates).not.toBeNull();
+	expect(contrastRatio(darkLibraryStates!.activeBorder, darkLibraryStates!.inactiveSurface)).toBeGreaterThanOrEqual(3);
+	expect(contrastRatio(darkLibraryStates!.activeColor, darkLibraryStates!.activeBackground)).toBeGreaterThanOrEqual(4.5);
+	expect(contrastRatio(darkLibraryStates!.inactiveColor, darkLibraryStates!.inactiveSurface)).toBeGreaterThanOrEqual(4.5);
+	expect(contrastRatio(darkLibraryStates!.activeColor, darkLibraryStates!.activeBackground)).toBeGreaterThan(contrastRatio(darkLibraryStates!.inactiveColor, darkLibraryStates!.inactiveSurface));
+	expect(contrastRatio(darkLibraryStates!.actionColor, darkLibraryStates!.actionBackground)).toBeGreaterThanOrEqual(3);
+	await captureVisual(page, 'mobile-library-refinement-390-dark.png');
+
+	const mobileSearch = page.getByRole('searchbox', { name: 'Buscar nos cursos' });
+	await mobileSearch.fill('não existe curso com esse termo');
+	await expect(page.getByText('Nenhum resultado encontrado', { exact: true })).toBeVisible();
+	await expect(page.locator('.lv-resume')).toHaveCount(0);
+	await page.getByRole('button', { name: 'Limpar busca' }).click();
+	await expect(page.getByRole('heading', { name: 'Continue estudando' })).toBeVisible();
 	await page.getByRole('button', { name: 'Sair' }).click();
 	await expect(page.getByRole('button', { name: 'Entrar' })).toBeVisible();
 	const afterLogoutMedia = await page.request.get(new URL(videoSource as string, server.baseURL).toString());
@@ -661,4 +913,46 @@ test.describe('touch course cover actions', () => {
 		await expect(page.getByRole('group', { name: 'Capa de library' })).toBeVisible();
 		await captureVisual(page, 'mobile-library-cover-actions-open-390-light.png');
 	});
+});
+
+test('keeps long course titles readable in the mobile covers grid', async ({ page }) => {
+	const courseTitle = 'Aprendizagem Digital e Design Instrucional para Cursos Profissionais Avançados';
+	const server = await startServer(courseTitle);
+	try {
+
+		await page.goto(`${server.baseURL}/#/login`);
+		await page.getByLabel('Usuário').fill('admin');
+		await page.getByLabel('Senha', { exact: true }).fill(ADMIN_PASSWORD);
+		await page.getByRole('button', { name: 'Entrar' }).click();
+		await expect(page.getByRole('heading', { name: 'Minha biblioteca' })).toBeAttached();
+		await page.getByRole('button', { name: 'Atualizar cursos' }).click();
+		await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
+		await page.setViewportSize({ width: 390, height: 844 });
+		await page.getByRole('button', { name: 'Capas' }).click();
+
+		const longTitle = page.locator('.lv-course-grid .lv-course-card__title').filter({ hasText: courseTitle });
+		await expect(longTitle).toBeVisible();
+		const titleLayout = await longTitle.evaluate((element) => {
+			const rect = element.getBoundingClientRect();
+			const style = getComputedStyle(element);
+			return {
+				fontSize: style.fontSize,
+				lineHeight: Number.parseFloat(style.lineHeight),
+				height: rect.height,
+				cardScrollWidth: element.closest('.lv-course-card')?.scrollWidth ?? 0,
+				cardClientWidth: element.closest('.lv-course-card')?.clientWidth ?? 0
+			};
+		});
+		expect(titleLayout.fontSize).toBe('15px');
+		expect(titleLayout.height / titleLayout.lineHeight).toBeGreaterThan(1);
+		expect(titleLayout.height / titleLayout.lineHeight).toBeLessThanOrEqual(2);
+		expect(titleLayout.cardClientWidth).toBeGreaterThan(0);
+		expect(titleLayout.cardScrollWidth).toBeLessThanOrEqual(titleLayout.cardClientWidth);
+		if (process.env.LEARNVAULT_VISUAL_CAPTURE_DIR) await captureVisual(page, 'mobile-library-long-title-390-light.png');
+		await longTitle.click();
+		await expect(page.getByRole('heading', { name: courseTitle, exact: true })).toBeVisible();
+	} finally {
+		await page.context().close();
+		await server.stop();
+	}
 });

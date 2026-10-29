@@ -85,3 +85,31 @@ A nota anterior descrevia corretamente que o runtime desta conversa não fornece
 - `get_active_context` informou que não havia projeto ativo naquele momento. O projeto pode ser selecionado explicitamente no argumento `project`, sem ativar ou alterar o canvas.
 - `mcp://opendesign` consulta recursos MCP, não a lista de ferramentas; a ausência de recursos é normal neste servidor e não indica falha de conexão.
 - Esta investigação não criou nem editou projetos ou artefatos.
+
+## Refinamento da Biblioteca mobile — 2026-10-29
+
+A revisão independente das capturas reais (390×844 claro/escuro e 1440×900 claro; Open Design run `0a06d008-94e5-4c67-9e39-871a311c7798`) não encontrou P0/P1. Registrou três P2 observáveis: metadados da capa mobile visualmente recuados, 8 px entre seletor e grade, e CTAs ocupando 310 px de uma coluna útil de 366 px.
+
+Correções aplicadas:
+
+- Capas mobile agora esticam o conteúdo pela largura do cartão; título e metadados alinham com a capa e ganham espaço para nomes longos.
+- O intervalo entre seletor e grade sobe para 14 px.
+- Importar e Atualizar formam duas colunas iguais na largura disponível; abaixo de 340 px, padding e fonte diminuem, com os dois rótulos verificados em viewport de 320 px.
+- Importar mantém hierarquia secundária quando há retomada e volta a ser primário sem retomada ou durante uma busca.
+
+O E2E verifica o alinhamento do título (≤16 px), o intervalo (≥12 px), igualdade das colunas e texto sem overflow em viewports de 320/390 px; também aguarda o fim das transições CSS antes de medir contraste para não ler valores intermediários. Capturas após a correção: [Biblioteca mobile clara](design/screenshots/mobile-density-iteration/mobile-library-refinement-390-light.png), [escura](design/screenshots/mobile-density-iteration/mobile-library-refinement-390-dark.png) e [desktop](design/screenshots/mobile-density-iteration/redesign-biblioteca-compacta-desktop.png). São fixtures sintéticas de um curso; a captura mobile é full-page, viewport de 390×844.
+
+### Segunda crítica visual
+
+Reavaliação serial após as correções no Open Design run `3b1428ea-0000-48c3-8fb7-8d715b79987d`: aprovada, sem P0/P1. A segunda rodada confirmou CTAs em duas colunas de 179 px com 8 px de intervalo (antes 148/154 px), 14 px entre seletor e grade (antes 8 px) e conteúdo da capa alinhado com recuo interno de 11 px. A ressalva P2 sobre títulos longos foi tratada como hipótese a verificar, não como defeito confirmado.
+
+Um E2E com título português longo confirmou o tratamento atual: texto serifado de 15 px, limite de duas linhas com reticências e nenhuma largura excedente no cartão; ao abrir o curso, o título integral aparece no cabeçalho. A captura real de 390×844 está em [Biblioteca mobile com título longo](design/screenshots/mobile-density-iteration/mobile-library-long-title-390-light.png). A abreviação na capa é deliberada para manter a grade compacta; o conteúdo completo permanece acessível no fluxo de Curso.
+
+### Verificação final
+
+- `pnpm --filter learnvault-web check`: 0 erros, 0 warnings.
+- `pnpm --filter learnvault-web test`: 22 arquivos, 313 testes.
+- `pnpm --filter learnvault-web build` e `pnpm --filter learnvault-web build:desktop`: passaram.
+- `pnpm exec playwright test tests/e2e/server.spec.ts --retries=0`: 6/6 cenários; inclui CTA sem overflow em 320/390 px, controles touch, título longo sem overflow e acesso ao título integral na tela de Curso.
+- As duas rodadas de crítica independente não encontraram P0/P1; os pontos P2 mensuráveis foram corrigidos e a hipótese sobre nomes longos foi reproduzida, mitigada e verificada.
+- A validação não cobre dados pessoais reais nem equivale a teste com usuários.
