@@ -4604,3 +4604,189 @@ svg {
 .lvui-btn-primary:hover {
 	color: var(--accent-ink);
 }
+
+.lv-page__head > div:first-child {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.lv-page__actions {
+	flex: 0 0 auto;
+}
+
+.lv-lede {
+	max-width: 62ch;
+	text-wrap: pretty;
+}
+
+.lv-meta__missing {
+	margin-left: 6px;
+}
+
+.lv-meta__missing::before {
+	content: "·";
+	margin-right: 4px;
+}
+
+.lv-count {
+	font-size: 11px;
+}
+
+/* Identidade editorial: serifada nos títulos, brass para progresso, vermelho para ação. */
+:root {
+	--serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+	--brass: #9a6518;
+}
+
+:root[data-theme="dark"] {
+	--brass: #e3b56a;
+}
+
+.lv-page h1,
+.lv-page--narrow h1,
+.lv-course-hero h1,
+.lv-lesson-head h1,
+.lv-section__head h2,
+.lv-panel__head h2,
+.lv-empty__title,
+.lv-course-card__title {
+	font-family: var(--serif);
+	letter-spacing: -0.02em;
+}
+
+.lv-course-card__title {
+	font-weight: 600;
+	line-height: 1.12;
+}
+
+.lv-xp__fill,
+.lv-goal__bar,
+.lv-focus__bar,
+.lv-mission__track > span,
+.lv-volume__bar {
+	background: var(--brass);
+}
+
+.lv-streak__day.is-active .lv-streak__dot {
+	background: var(--brass);
+}
+
+.lv-course-grid .lv-cover {
+	aspect-ratio: 3 / 4;
+}
+
+.lv-library-search {
+	max-width: 620px;
+	margin: 18px 0 6px;
+}
+
+.lv-library-search .search-field input {
+	min-height: 48px;
+	font-size: 14px;
+}
+
+.lv-search-kbd {
+	position: absolute;
+	top: 50%;
+	right: 10px;
+	transform: translateY(-50%);
+	min-width: 20px;
+	padding: 1px 5px;
+	border: 1px solid var(--line);
+	border-radius: 4px;
+	color: var(--muted);
+	font-family: var(--mono);
+	font-size: 11px;
+	text-align: center;
+}
+
+.lv-topbar__icon {
+	display: grid;
+	place-items: center;
+	width: 36px;
+	height: 36px;
+	border: 1px solid rgba(238, 241, 243, 0.28);
+	border-radius: 50%;
+	background: transparent;
+	color: var(--rail-muted);
+}
+
+.lv-topbar__icon svg {
+	width: 18px;
+	height: 18px;
+}
+
+.lv-topbar__icon:hover {
+	background: rgba(238, 241, 243, 0.08);
+	color: var(--rail-ink);
+}
+
+.lv-course-card__state {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	margin-top: 4px;
+	color: var(--brass);
+	font-size: 11px;
+	font-weight: 600;
+}
+
+.lv-course-card__state > span {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--brass);
+}
+
+.lv-view-switch .lvui-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+}
+
+.lv-view-switch svg {
+	width: 15px;
+	height: 15px;
+}
+
+@media (max-width: 620px) {
+	.lv-library-search {
+		max-width: none;
+	}
+
+	.lv-search-kbd {
+		display: none;
+	}
+}
+
+.lv-course-grid[data-view="covers"] .lv-course-card .lv-cover {
+	aspect-ratio: 3 / 4;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+	accent-color: var(--accent);
+}
+
+.loose-files strong {
+	color: var(--ink);
+	font-family: var(--serif);
+	font-size: 16px;
+	font-weight: 600;
+	letter-spacing: 0;
+	text-transform: none;
+}
+
+.login-page section,
+.login-page > * {
+	max-width: 420px;
+}
+
+.login-page h1 {
+	font-size: clamp(28px, 3vw, 34px);
+	line-height: 1.15;
+}
+
+.login-head {
+	align-items: center;
+}

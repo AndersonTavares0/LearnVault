@@ -198,6 +198,20 @@
 		};
 	});
 
+	onMount(() => {
+		function onShortcut(event: KeyboardEvent) {
+			if (event.key !== '/' || event.ctrlKey || event.metaKey || event.altKey) return;
+			const target = event.target as HTMLElement | null;
+			if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
+			const input = document.getElementById('catalog-search-input');
+			if (!input) return;
+			event.preventDefault();
+			input.focus();
+		}
+		document.addEventListener('keydown', onShortcut);
+		return () => document.removeEventListener('keydown', onShortcut);
+	});
+
 	function safeLocalStorage(): Storage | null {
 		try {
 			return window.localStorage;
@@ -570,6 +584,13 @@
 			</nav>
 			<div class="lv-topbar__utils">
 				<FocusMenu />
+				<button class="lv-topbar__icon" type="button" aria-label={resolvedTheme === 'dark' ? 'Mudar para tema claro' : 'Mudar para tema escuro'} title={resolvedTheme === 'dark' ? 'Tema claro' : 'Tema escuro'} onclick={() => changeTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}>
+					{#if resolvedTheme === 'dark'}
+						<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+					{:else}
+						<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+					{/if}
+				</button>
 				<div class="lv-topbar__user" title={user.username}>
 					<span class="lv-avatar" aria-hidden="true">{userInitials}</span>
 					<span class="lv-topbar__username">{user.username}</span>
@@ -586,7 +607,7 @@
 					<header class="lv-page__head">
 						<div>
 							<h1>Minha biblioteca</h1>
-							<p class="lv-lede">Cursos que você já tem, reunidos em um só lugar. Nada é movido ou alterado.</p>
+							<p class="lv-lede">Seus cursos, reunidos em um só lugar. Os arquivos originais não são alterados.</p>
 						</div>
 						<div class="lv-page__actions">
 							{#if canManage}
@@ -601,6 +622,17 @@
 							{/if}
 						</div>
 					</header>
+
+					{#if catalog && catalog.nodes.length}
+						<form class="lv-library-search" role="search" onsubmit={(event) => event.preventDefault()}>
+							<label class="visually-hidden" for="catalog-search-input">Buscar nos cursos</label>
+							<div class="search-field">
+								<svg class="search-glyph" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"></circle><path d="m16.6 16.6 4.2 4.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>
+								<input class="lvui-input" id="catalog-search-input" name="q" type="search" placeholder="Buscar curso ou aula…" autocomplete="off" bind:value={catalogQuery} />
+								<kbd class="lv-search-kbd" aria-hidden="true">/</kbd>
+							</div>
+						</form>
+					{/if}
 
 					{#if studySyncSupported && libraryRecent.length}
 						<section class="lv-section" aria-labelledby="recent-heading">
@@ -649,20 +681,17 @@
 					<section class="lv-section" aria-labelledby="courses-heading">
 						<div class="lv-section__head lv-section__head--courses">
 							<h2 id="courses-heading">Todos os cursos</h2>
-							{#if catalog && catalog.nodes.length}
-								<form class="lv-search" role="search" onsubmit={(event) => event.preventDefault()}>
-									<label class="visually-hidden" for="catalog-search-input">Buscar nos cursos</label>
-									<div class="search-field">
-										<svg class="search-glyph" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"></circle><path d="m16.6 16.6 4.2 4.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>
-										<input class="lvui-input" id="catalog-search-input" name="q" type="search" placeholder="Buscar curso ou aula…" autocomplete="off" bind:value={catalogQuery} />
-									</div>
-								</form>
-							{/if}
 							<div class="lv-section__tools">
 								{#if catalog && catalog.nodes.length}<span class="lv-count" aria-live="polite">{filteredNodes.length} de {catalog.nodes.length}</span>{/if}
 								<div class="lv-view-switch lvui-join" role="group" aria-label="Visualização dos cursos" aria-describedby="view-hint">
 									{#each LIBRARY_VIEWS as view}
-										<button type="button" class={`lvui-join-item lvui-btn lvui-btn-sm${libraryView === view ? ' lvui-btn-active' : ''}`} aria-pressed={libraryView === view} onclick={() => changeLibraryView(view)}>{LIBRARY_VIEW_LABELS[view]}</button>
+										<button type="button" class={`lvui-join-item lvui-btn lvui-btn-sm${libraryView === view ? ' lvui-btn-active' : ''}`} aria-pressed={libraryView === view} onclick={() => changeLibraryView(view)}>
+											{#if view === 'covers'}<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="13" y="4" width="7" height="7" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="4" y="13" width="7" height="7" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="13" y="13" width="7" height="7" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>
+											{:else if view === 'list'}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+											{:else if view === 'compact'}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+											{:else}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5v14M9 5v14M13 5v14M17 5v14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>{/if}
+											<span>{LIBRARY_VIEW_LABELS[view]}</span>
+										</button>
 									{/each}
 								</div>
 							</div>
@@ -673,7 +702,7 @@
 								<ul class="lv-course-grid" data-view={libraryView} aria-label="Cursos na visualização {LIBRARY_VIEW_LABELS[libraryView]}">
 									{#each filteredNodes as courseItem (courseItem.courseId ?? courseItem.path)}
 										<li class:is-menu-open={coverMenuId === courseIdOf(courseItem)}>
-											<CourseCard course={courseItem} profile={user.userId} mediaUrl={(file, courseId) => transport.mediaUrl(file, courseId)} manualCoverUrl={transport.coverUrl(courseIdOf(courseItem), courseItem.coverVersion ?? null)} {canManage} menuOpen={coverMenuId === courseIdOf(courseItem)} onMenuOpen={(open) => toggleCoverMenu(courseItem, open)} onChangeCover={requestCourseCover} onRemoveCover={removeCover} />
+											<CourseCard course={courseItem} profile={user.userId} mediaUrl={(file, courseId) => transport.mediaUrl(file, courseId)} manualCoverUrl={transport.coverUrl(courseIdOf(courseItem), courseItem.coverVersion ?? null)} {canManage} inProgress={locatedRecent.some((entry) => entry.location.courseId === courseIdOf(courseItem))} menuOpen={coverMenuId === courseIdOf(courseItem)} onMenuOpen={(open) => toggleCoverMenu(courseItem, open)} onChangeCover={requestCourseCover} onRemoveCover={removeCover} />
 										</li>
 									{/each}
 								</ul>
@@ -839,8 +868,8 @@
 									<div class="lv-panel__head"><h2 id="course-meta-heading">Ficha do curso</h2></div>
 									<dl>
 										<div><dt>Módulos</dt><dd>{counts.modules}</dd></div>
-										<div><dt>Aulas</dt><dd>{counts.lessons}{#if counts.missingLessons > 0}<span class="lv-meta__missing"> · {formatCount(counts.missingLessons, 'ausente', 'ausentes')}</span>{/if}</dd></div>
-										<div><dt>Vídeos</dt><dd>{counts.videos - missingVideos}{#if missingVideos > 0}<span class="lv-meta__missing"> · {formatCount(missingVideos, 'ausente', 'ausentes')}</span>{/if}</dd></div>
+										<div><dt>Aulas</dt><dd>{counts.lessons}{#if counts.missingLessons > 0}<span class="lv-meta__missing">{formatCount(counts.missingLessons, 'ausente', 'ausentes')}</span>{/if}</dd></div>
+										<div><dt>Vídeos</dt><dd>{counts.videos - missingVideos}{#if missingVideos > 0}<span class="lv-meta__missing">{formatCount(missingVideos, 'ausente', 'ausentes')}</span>{/if}</dd></div>
 										<div><dt>Materiais</dt><dd>{counts.materials}</dd></div>
 										<div><dt>Código</dt><dd class="lv-meta__code">{cover.code}</dd></div>
 									</dl>
@@ -862,7 +891,6 @@
 					<div class="lv-page lv-player-page">
 						<div class="lv-player-top">
 							<nav class="lv-breadcrumb" aria-label="Caminho do curso"><a href={href('home')}>Biblioteca</a><span aria-hidden="true">/</span><a href={href('course', courseIdOf(course))}>{course.title}</a><span aria-hidden="true">/</span><span>{lesson?.title ?? 'Aula'}</span></nav>
-							<a class="lv-btn lv-btn--ghost" href={href('course', courseIdOf(course))}>Visão geral do curso</a>
 						</div>
 						{#if removeError}<p class="lv-alert" role="alert">{removeError}</p>{/if}
 						{#if orderError}<p class="lv-alert" role="alert">{orderError}</p>{/if}
@@ -875,6 +903,7 @@
 											<h1>{lesson.title}</h1>
 										</div>
 										<div class="lv-lesson-actions">
+											<a class="lv-btn lv-btn--ghost" href={href('course', courseIdOf(course))}>Visão geral</a>
 											{#if neighbors.previous}<a class="lv-btn" href={href('course', courseIdOf(course), neighbors.previous.path)}>Anterior</a>{/if}
 											{#if neighbors.next}<a class="lv-btn" href={href('course', courseIdOf(course), neighbors.next.path)}>Próxima</a>{/if}
 											<button class="lv-btn" type="button" aria-pressed={focusMode} onclick={() => (focusMode = !focusMode)}>{focusMode ? 'Sair do foco' : 'Modo foco'}</button>

@@ -13,7 +13,8 @@
 		menuOpen = false,
 		onMenuOpen,
 		onChangeCover,
-		onRemoveCover
+		onRemoveCover,
+		inProgress = false
 	}: {
 		course: CatalogNode;
 		profile: string;
@@ -25,6 +26,7 @@
 		onMenuOpen?: (open: boolean) => void;
 		onChangeCover?: (course: CatalogNode) => void;
 		onRemoveCover?: (course: CatalogNode) => void;
+		inProgress?: boolean;
 	} = $props();
 	const counts = $derived(countCatalogNode(course));
 	const meta = $derived(formatCourseCardMeta(counts));
@@ -46,6 +48,7 @@
 		<span class="lv-course-card__body">
 			<span class="lv-course-card__title">{course.title}</span>
 			{#if meta}<span class="lv-course-card__meta">{meta}</span>{/if}
+			{#if inProgress}<span class="lv-course-card__state"><span aria-hidden="true"></span>Em andamento</span>{/if}
 		</span>
 	</a>
 	{#if canManage}
