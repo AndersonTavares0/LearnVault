@@ -14,7 +14,15 @@ vi.mock('./transport', async (importOriginal) => ({
 	transport: mocks
 }));
 
-import { focusSync, retryFocusSessions, setFocusOutboxScope } from './pomodoro-store';
+import {
+	focusSync,
+	pomodoro,
+	pauseTimer,
+	resetTimer,
+	retryFocusSessions,
+	setFocusOutboxScope,
+	startTimer
+} from './pomodoro-store';
 import { FocusSessionConflict } from './transport';
 
 const sessionA = { id: 'a', kind: 'focus' as const, plannedSeconds: 1500, actualSeconds: 1500, completed: true, startedAt: 100, endedAt: 1600 };
@@ -95,5 +103,55 @@ describe('Pomodoro sync scope changes', () => {
 
 		expect(mocks.recordFocusSession).toHaveBeenCalledTimes(1);
 		expect(get(focusSync)).toMatchObject({ pending: [sessionA], error: 'offline', saving: false });
+	});
+});
+
+describe('Pomodoro timer controls', () => {
+	beforeEach(() => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-10-28T12:00:00.000Z'));
+		resetTimer();
+	});
+
+	afterEach(() => {
+		resetTimer();
+		vi.useRealTimers();
+	});
+
+	it('shows start, pause, and resume immediately without advancing time early', () => {
+		const initial = get(pomodoro);
+		startTimer();
+		const started = get(pomodoro);
+		expect(started).toMatchObject({
+			status: 'running',
+			remainingSeconds: initial.remainingSeconds
+		});
+		expect(started.startedAt).toBe(Math.floor(Date.now() / 1000));
+
+		vi.advanceTimersByTime(999);
+		expect(get(pomodoro).remainingSeconds).toBe(initial.remainingSeconds);
+		vi.advanceTimersByTime(1);
+		expect(get(pomodoro).remainingSeconds).toBe(initial.remainingSeconds - 1);
+
+		pauseTimer();
+		expect(get(pomodoro)).toMatchObject({
+			status: 'paused',
+			remainingSeconds: initial.remainingSeconds - 1,
+			startedAt: started.startedAt
+		});
+		vi.advanceTimersByTime(5_000);
+		expect(get(pomodoro).remainingSeconds).toBe(initial.remainingSeconds - 1);
+
+		startTimer();
+		expect(get(pomodoro)).toMatchObject({
+			status: 'running',
+			remainingSeconds: initial.remainingSeconds - 1,
+			startedAt: started.startedAt
+		});
+		vi.advanceTimersByTime(999);
+		expect(get(pomodoro).remainingSeconds).toBe(initial.remainingSeconds - 1);
+		vi.advanceTimersByTime(1);
+		expect(get(pomodoro).remainingSeconds).toBe(initial.remainingSeconds - 2);
+		expect(get(pomodoro).status).toBe('running');
 	});
 });

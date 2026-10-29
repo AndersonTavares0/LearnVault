@@ -109,9 +109,8 @@
 <div class="lv-page lv-stats">
 	<header class="lv-page__head">
 		<div>
-			<p class="lv-kicker">Seu estudo</p>
 			<h1>Estatísticas</h1>
-			<p class="lv-lede">Uma leitura do que você estudou, do tempo de foco e do ritmo que está construindo.</p>
+			<p class="lv-lede">Acompanhe suas aulas concluídas, sessões de foco e dias de estudo.</p>
 		</div>
 		<a class="lv-btn" href={href('focus')}>Abrir Pomodoro</a>
 	</header>
@@ -123,6 +122,20 @@
 			<a class="lv-btn" href={href('home')}>Voltar à biblioteca</a>
 		</div>
 	{:else}
+		<section class="lv-personal" aria-labelledby="personal-heading">
+			<h2 id="personal-heading">Seu progresso</h2>
+			{#if summaryLoading}
+				<p class="lv-stats__loading" aria-live="polite">Carregando seu progresso…</p>
+			{:else if summary && !summaryError}
+				<dl class="lv-personal__metrics">
+					<div><dt>Aulas concluídas</dt><dd>{summary.completedLessons}</dd><small>estado atual da conta</small></div>
+					<div><dt>Sessões de foco</dt><dd>{focus.totalSessions}</dd><small>registradas na conta</small></div>
+					<div><dt>Dias ativos na semana</dt><dd>{summary.weekActiveDays}</dd><small>de segunda a domingo</small></div>
+				</dl>
+			{:else}
+				<p class="lv-stats__note" role="status">Não foi possível carregar seu progresso. Tente novamente na seção Sua evolução.</p>
+			{/if}
+		</section>
 		<div class="lv-stats__overview">
 			<section class="lv-panel lv-evolution" aria-labelledby="evolution-heading">
 				<div class="lv-panel__head">
@@ -152,7 +165,7 @@
 						<div class="lv-streak">
 							<div class="lv-streak__top">
 								<div>
-									<p class="lv-kicker">Ofensiva</p>
+									<span>Ofensiva</span>
 									<strong class="lv-streak__value">{summary.currentStreak} {summary.currentStreak === 1 ? 'dia' : 'dias'}</strong>
 								</div>
 								<p class="lv-streak__status" class:is-risk={summary.atRisk}>
@@ -224,7 +237,6 @@
 		<section class="lv-stats__section" aria-labelledby="study-heading">
 			<div class="lv-section__head">
 				<div>
-					<p class="lv-kicker">Estudo</p>
 					<h2 id="study-heading">Sua biblioteca em números</h2>
 				</div>
 			</div>
@@ -281,7 +293,6 @@
 		<section class="lv-stats__section" aria-labelledby="achievements-heading">
 			<div class="lv-section__head">
 				<div>
-					<p class="lv-kicker">Conquistas</p>
 					<h2 id="achievements-heading">Marcos de aprendizado</h2>
 					<p class="lv-stats__section-intro">XP e selos acompanham aulas concluídas. Os passos diários são só um guia, sem bônus.</p>
 				</div>

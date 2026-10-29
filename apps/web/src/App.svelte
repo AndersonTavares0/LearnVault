@@ -8,6 +8,7 @@
 	import Statistics from './Statistics.svelte';
 	import Pomodoro from './Pomodoro.svelte';
 	import MiniPomodoro from './MiniPomodoro.svelte';
+	import DesktopTitlebar from './DesktopTitlebar.svelte';
 	import { filterCatalog } from './search';
 	import { collectMaterials, countCatalogNode, formatCourseMeta, formatLessonCounts, formatLocationContext } from './catalog';
 	import { courseCover } from './cover';
@@ -144,7 +145,7 @@
 			resolvedTheme = resolveTheme(themeMode, systemDark);
 			applyTheme(document.documentElement, resolvedTheme);
 			const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
-			if (themeColor) themeColor.content = resolvedTheme === 'dark' ? '#11161F' : '#ECEEEA';
+			if (themeColor) themeColor.content = resolvedTheme === 'dark' ? '#151b1d' : '#eceeea';
 		}
 	};
 	scheme?.addEventListener('change', updateSystemTheme);
@@ -244,6 +245,12 @@
 		compact: 'Compacto',
 		shelf: 'Estante'
 	};
+	const LIBRARY_VIEW_DESCRIPTIONS: Record<LibraryView, string> = {
+		covers: 'Capas: destaque para a imagem de cada curso.',
+		list: 'Lista: cursos em linhas com informações detalhadas.',
+		compact: 'Compacto: títulos e contagens em linhas curtas.',
+		shelf: 'Estante: cursos organizados como lombadas.'
+	};
 	function changeLibraryView(view: LibraryView) {
 		libraryView = view;
 		persistLibraryView(safeLocalStorage(), view);
@@ -253,7 +260,7 @@
 		resolvedTheme = resolveTheme(mode, systemDark);
 		applyTheme(document.documentElement, resolvedTheme);
 		const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
-		if (themeColor) themeColor.content = resolvedTheme === 'dark' ? '#11161F' : '#ECEEEA';
+		if (themeColor) themeColor.content = resolvedTheme === 'dark' ? '#151b1d' : '#eceeea';
 		persistThemeMode(safeLocalStorage(), mode);
 	}
 	async function initialize() {
@@ -541,6 +548,7 @@
 
 </script>
 <svelte:head><title>LearnVault — sua biblioteca de estudos</title><meta name="description" content="Sua biblioteca pessoal de cursos." /></svelte:head>
+{#if transportKind === 'desktop'}<DesktopTitlebar />{/if}
 {#if loading}<div class="lv-loading" aria-live="polite">Carregando seus cursos…</div>
 {:else if !user}
 	<main class="login-page" aria-labelledby="login-heading">
@@ -560,7 +568,7 @@
 	</main>
 {:else}
 	<a class="lv-skip" href="#main-content">Ir para o conteúdo</a>
-	<div class="lv-shell" class:is-focus={focusMode} class:is-compact={railCompact}>
+	<div class="lv-shell" class:is-focus={focusMode} class:is-compact={railCompact} class:is-desktop={transportKind === 'desktop'}>
 		<aside class="lv-rail" aria-label="Navegação principal">
 			<a class="lv-rail__brand" href={href('home')} aria-label="LearnVault, início">
 				<Brand />
@@ -609,28 +617,18 @@
 				<div class="lv-page">
 					<header class="lv-page__head">
 						<div>
-							<p class="lv-kicker">Sua biblioteca</p>
 							<h1>Minha biblioteca</h1>
 							<p class="lv-lede">Cursos que você já tem, reunidos em um só lugar. Nada é movido ou alterado.</p>
 						</div>
 						<div class="lv-page__actions">
-							{#if catalog && catalog.nodes.length}
-								<form class="lv-search" role="search" onsubmit={(event) => event.preventDefault()}>
-									<label class="visually-hidden" for="catalog-search-input">Buscar nos cursos</label>
-									<div class="search-field">
-										<svg class="search-glyph" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"></circle><path d="m16.6 16.6 4.2 4.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>
-										<input id="catalog-search-input" name="q" type="search" placeholder="Buscar curso ou aula…" autocomplete="off" bind:value={catalogQuery} />
-									</div>
-								</form>
-							{/if}
 							{#if canManage}
 								<div class="lv-page__buttons">
 									{#if transportKind === 'desktop'}
-										<button class="lv-btn lv-btn--primary" onclick={importCourse} disabled={importing} aria-busy={importing}>{importing ? 'Importando…' : 'Importar curso'}</button>
+										<button class="lv-btn lv-btn--primary lvui-btn lvui-btn-primary" onclick={importCourse} disabled={importing} aria-busy={importing}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v10m-4-4 4 4 4-4M5 17v3h14v-3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>{importing ? 'Importando…' : 'Importar curso'}</button>
 									{:else}
-										<button class="lv-btn lv-btn--primary" onclick={() => (importFormOpen = !importFormOpen)} aria-expanded={importFormOpen}>Importar curso</button>
+										<button class="lv-btn lv-btn--primary lvui-btn lvui-btn-primary" onclick={() => (importFormOpen = !importFormOpen)} aria-expanded={importFormOpen}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v10m-4-4 4 4 4-4M5 17v3h14v-3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Importar curso</button>
 									{/if}
-									<button class="lv-btn" onclick={rescan} disabled={rescanning || !catalog || !catalog.nodes.length}>{rescanning ? 'Indexando…' : 'Indexar cursos'}</button>
+									<button class="lv-btn lvui-btn" onclick={rescan} disabled={rescanning || !catalog || !catalog.nodes.length}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v4h-4M4 17v-4h4M5.5 9a7 7 0 0 1 12-2L20 11M4 13l2.5 4a7 7 0 0 0 12-2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>{rescanning ? 'Atualizando…' : 'Atualizar cursos'}</button>
 								</div>
 							{/if}
 						</div>
@@ -683,15 +681,25 @@
 					<section class="lv-section" aria-labelledby="courses-heading">
 						<div class="lv-section__head lv-section__head--courses">
 							<h2 id="courses-heading">Todos os cursos</h2>
+							{#if catalog && catalog.nodes.length}
+								<form class="lv-search" role="search" onsubmit={(event) => event.preventDefault()}>
+									<label class="visually-hidden" for="catalog-search-input">Buscar nos cursos</label>
+									<div class="search-field">
+										<svg class="search-glyph" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"></circle><path d="m16.6 16.6 4.2 4.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>
+										<input class="lvui-input" id="catalog-search-input" name="q" type="search" placeholder="Buscar curso ou aula…" autocomplete="off" bind:value={catalogQuery} />
+									</div>
+								</form>
+							{/if}
 							<div class="lv-section__tools">
 								{#if catalog && catalog.nodes.length}<span class="lv-count" aria-live="polite">{filteredNodes.length} de {catalog.nodes.length}</span>{/if}
-								<div class="lv-view-switch" role="group" aria-label="Visualização dos cursos">
+								<div class="lv-view-switch lvui-join" role="group" aria-label="Visualização dos cursos" aria-describedby="view-hint">
 									{#each LIBRARY_VIEWS as view}
-										<button type="button" class:is-active={libraryView === view} aria-pressed={libraryView === view} onclick={() => changeLibraryView(view)}>{LIBRARY_VIEW_LABELS[view]}</button>
+										<button type="button" class="lvui-join-item" class:is-active={libraryView === view} aria-pressed={libraryView === view} onclick={() => changeLibraryView(view)}>{LIBRARY_VIEW_LABELS[view]}</button>
 									{/each}
 								</div>
 							</div>
 						</div>
+						<p id="view-hint" class="lv-view-hint">{LIBRARY_VIEW_DESCRIPTIONS[libraryView]}</p>
 						{#if catalog && catalog.nodes.length}
 							{#if filteredNodes.length}
 								<ul class="lv-course-grid" data-view={libraryView} aria-label="Cursos na visualização {LIBRARY_VIEW_LABELS[libraryView]}">

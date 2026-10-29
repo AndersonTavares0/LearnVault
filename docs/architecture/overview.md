@@ -57,8 +57,10 @@ O workspace Rust está completo: `crates/server` (Axum), `crates/desktop` (Tauri
   cursos fica em `courses.json` ao lado do banco SQLite; `LIBRARY_DIR`/`--library-root` serve
   apenas como semente do primeiro curso.
 - **Desktop offline:** abre a janela `main` definida em `crates/desktop/tauri.conf.json`, com a SPA
-  embutida por `frontendDist`. Importação, remoção, rescan e estudo passam por comandos IPC
-  explícitos; o webview recebe identificadores opacos e nunca caminhos.
+  embutida por `frontendDist`. A titlebar própria usa controles nativos Tauri para minimizar,
+  maximizar/restaurar e fechar; as permissões de janela são restritas à janela `main`.
+  Importação, remoção, rescan e estudo passam por comandos IPC explícitos; o webview recebe
+  identificadores opacos e nunca caminhos.
 - **Mídia:** o protocolo `learnvault-media://localhost/<media-id>` entrega imagens, materiais,
   vídeo, áudio e legendas com allowlist de tipo, faixas HTTP e limite de resposta. No Windows
   (WebView2), o webview usa `http://learnvault-media.localhost/<media-id>`.
@@ -75,6 +77,11 @@ O workspace Rust está completo: `crates/server` (Axum), `crates/desktop` (Tauri
   e permite baixar SRT/ASS/SSA; o build HTTP converte SRT sob demanda.
 - **Distribuição:** o instalador Windows NSIS está disponível; o pacote Linux/Flatpak ainda depende
   de validação em sandbox. Veja [distribuição](../operations/distribution.md).
+
+O frontend usa Svelte e componentes DaisyUI 5 selecionados, com prefixo `lvui-` e cores
+semânticas mapeadas aos tokens do LearnVault em `apps/web/src/ui-components.css`. O CSS do
+projeto mantém a identidade e o suporte aos temas claro/escuro; o build não carrega fontes,
+scripts ou folhas de estilo de terceiros pela rede.
 
 
 ### Contrato de foco e recompensas

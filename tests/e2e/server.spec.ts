@@ -215,7 +215,7 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	await page.getByRole('button', { name: 'Entrar' }).click();
 	await expect(page.getByRole('heading', { name: 'Minha biblioteca' })).toBeAttached();
 
-	await page.getByRole('button', { name: 'Indexar cursos' }).click();
+	await page.getByRole('button', { name: 'Atualizar cursos' }).click();
 	await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
 	await expect(page.getByRole('complementary', { name: 'Navegação principal' })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'Todos os cursos' })).toBeVisible();
@@ -432,7 +432,7 @@ test('reports a lesson whose media disappears from disk and restores it when the
 	const indexFromHome = async () => {
 		await page.goto(`${server.baseURL}/#/home`);
 		await expect(page.getByRole('heading', { name: 'Minha biblioteca' })).toBeAttached();
-		await page.getByRole('button', { name: 'Indexar cursos' }).click();
+		await page.getByRole('button', { name: 'Atualizar cursos' }).click();
 		await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
 	};
 
@@ -441,7 +441,7 @@ test('reports a lesson whose media disappears from disk and restores it when the
 	await page.getByLabel('Senha', { exact: true }).fill(ADMIN_PASSWORD);
 	await page.getByRole('button', { name: 'Entrar' }).click();
 	await expect(page.getByRole('heading', { name: 'Minha biblioteca' })).toBeAttached();
-	await page.getByRole('button', { name: 'Indexar cursos' }).click();
+	await page.getByRole('button', { name: 'Atualizar cursos' }).click();
 	await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
 
 	// Fase 1: o arquivo está no disco — duas aulas disponíveis, sem selo, linha navegável.
@@ -540,7 +540,7 @@ test('renders an automatic video thumbnail in the built SPA without leaking libr
 	const lessonDir = join(server.libraryPath, 'Categoria', 'Aula zero');
 	await mkdir(lessonDir, { recursive: true });
 	await writeFile(join(lessonDir, 'Video.webm'), Buffer.from(recorded, 'base64'));
-	await page.getByRole('button', { name: 'Indexar cursos' }).click();
+	await page.getByRole('button', { name: 'Atualizar cursos' }).click();
 	await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
 	await page.getByRole('button', { name: 'Capas' }).click();
 
@@ -570,7 +570,7 @@ test('moves the cover actions to the course card and keeps the course page clean
 	await page.getByLabel('Senha', { exact: true }).fill(ADMIN_PASSWORD);
 	await page.getByRole('button', { name: 'Entrar' }).click();
 	await expect(page.getByRole('heading', { name: 'Minha biblioteca' })).toBeAttached();
-	await page.getByRole('button', { name: 'Indexar cursos' }).click();
+	await page.getByRole('button', { name: 'Atualizar cursos' }).click();
 	await expect(page.getByText('Catálogo atualizado.')).toBeVisible();
 
 	const courseCard = page.getByRole('link', { name: 'library', exact: true });

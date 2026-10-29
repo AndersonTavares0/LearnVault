@@ -128,7 +128,6 @@
 <div class="lv-page lv-pomodoro">
 	<header class="lv-page__head">
 		<div>
-			<p class="lv-kicker">Tempo de estudo</p>
 			<h1>Pomodoro</h1>
 			<p class="lv-lede">Sessões de foco com pausas no ritmo certo. O tempo concluído entra nas estatísticas de foco e no XP.</p>
 		</div>
@@ -200,7 +199,7 @@
 				<button class="lv-btn lv-btn--ghost" type="button" onclick={skipTimer}>Pular</button>
 			</div>
 			<p class="lv-pomodoro__hint" role="status" aria-live="polite">
-				{#if $pomodoro.status === 'running'}Concentre-se em uma coisa por vez.
+				{#if $pomodoro.status === 'running'}Timer em andamento.
 				{:else if $pomodoro.status === 'paused'}Timer pausado.
 				{:else if $pomodoro.lastCompleted}Pronto. {$pomodoro.lastCompleted.mode === 'focus' ? 'Faça uma pausa.' : 'Volte ao foco.'}
 				{:else}Escolha um modo e comece quando estiver pronto.{/if}
