@@ -48,6 +48,25 @@ export function countCatalogFiles(node: CatalogNode): FileCounts {
 }
 
 /**
+ * Mídias da subárvore que o último rescan marcou como ausentes.
+ *
+ * A contagem de vídeos inclui registros ausentes de propósito (o catálogo não os apaga),
+ * mas a ficha precisa dizer quantos realmente abrem — do contrário "2 vídeos" ao lado de
+ * "1 aula" parece um erro. As aulas já usam a mesma distinção.
+ */
+export function countMissingVideos(node: CatalogNode): number {
+	let missing = 0;
+	function walk(current: CatalogNode): void {
+		for (const file of [...current.files, ...current.looseFiles]) {
+			if (file.kind === 'media' && !isFileAvailable(file)) missing += 1;
+		}
+		for (const child of current.children) walk(child);
+	}
+	walk(node);
+	return missing;
+}
+
+/**
  * Contagens de um nó e de toda a sua subárvore.
  *
  * `modules` conta nós por papel; `videos` e `materials` somam os arquivos do nó e dos

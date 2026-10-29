@@ -5,7 +5,7 @@
 @plugin "daisyui" {
 	themes: false;
 	prefix: "lvui-";
-	include: button, input, join, stat, tab;
+	include: button, input, join, stat, tab, checkbox, select, range;
 	logs: false;
 }
 
@@ -16,9 +16,20 @@
 	--color-base-content: var(--ink);
 	--color-primary: var(--accent);
 	--color-primary-content: var(--accent-ink);
+	--color-secondary: var(--blue);
+	--color-secondary-content: var(--canvas);
+	--color-accent: var(--accent);
+	--color-accent-content: var(--accent-ink);
 	--color-neutral: var(--rail-bg);
 	--color-neutral-content: var(--rail-ink);
+	--color-info: var(--blue);
+	--color-info-content: var(--canvas);
+	--color-success: var(--ok);
+	--color-success-content: var(--canvas);
+	--color-warning: var(--warn);
+	--color-warning-content: var(--canvas);
 	--color-error: var(--danger);
+	--color-error-content: var(--canvas);
 	--radius-field: 0.375rem;
 	--radius-selector: 0.375rem;
 	--radius-box: 0.5rem;

@@ -300,10 +300,11 @@ test('serves the built SPA through the Rust server for a complete study-library 
 	await page.getByRole('link', { name: 'Continuar estudando' }).click();
 	await expect(page.getByRole('heading', { name: 'Curso', exact: true })).toBeVisible();
 	await captureVisual(page, 'redesign-player-desktop.png');
-	await page.getByRole('button', { name: /Abrir Pomodoro:/ }).click();
-	await expect(page.getByRole('group', { name: 'Modo do Pomodoro' })).toBeVisible();
+	await page.getByRole('button', { name: /^Pomodoro:/ }).click();
+	await expect(page.getByRole('dialog', { name: 'Pomodoro' })).toBeVisible();
+	await expect(page.getByRole('group', { name: 'Modo do timer' })).toBeVisible();
 	await captureVisual(page, 'redesign-pomodoro-integrado-desktop.png');
-	await page.getByRole('button', { name: 'Recolher Pomodoro' }).click();
+	await page.getByRole('button', { name: 'Fechar Pomodoro' }).click();
 	// A aula inicial vem do histórico recente gravado acima.
 	await expect(page.locator('.lv-curriculum__body .lesson-row.active .lesson-title')).toHaveText('Curso');
 	const videoSource = (await videoRequest).url();

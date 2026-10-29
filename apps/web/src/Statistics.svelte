@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { formatCount, formatLessonCounts } from './catalog';
+	import { formatCount, formatLessonCounts, countMissingVideos } from './catalog';
 	import { buildGamification } from './gamification';
 	import { localDayKey, weekDayKeys } from './pomodoro';
 	import { formatDuration } from './player';
@@ -13,6 +13,7 @@
 
 	const stats = $derived(buildStatistics(catalog, recent));
 	const maxLessons = $derived(Math.max(1, ...stats.courses.map((entry) => entry.counts.lessons)));
+	const missingVideos = $derived((catalog?.nodes ?? []).reduce((sum, node) => sum + countMissingVideos(node), 0));
 	const dateFormat = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' });
 	const weekLabels = ['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom'];
 
@@ -112,7 +113,6 @@
 			<h1>Estatísticas</h1>
 			<p class="lv-lede">Acompanhe suas aulas concluídas, sessões de foco e dias de estudo.</p>
 		</div>
-		<a class="lv-btn" href={href('focus')}>Abrir Pomodoro</a>
 	</header>
 
 	{#if !catalog || catalog.nodes.length === 0}
@@ -122,8 +122,8 @@
 			<a class="lv-btn" href={href('home')}>Voltar à biblioteca</a>
 		</div>
 	{:else}
-		<section class="lv-personal" aria-labelledby="personal-heading">
-			<h2 id="personal-heading">Seu progresso</h2>
+		<section class="lv-panel lv-personal" aria-labelledby="personal-heading">
+			<div class="lv-panel__head"><h2 id="personal-heading">Seu aprendizado</h2><span class="lv-count">dados da conta</span></div>
 			{#if summaryLoading}
 				<p class="lv-stats__loading" aria-live="polite">Carregando seu progresso…</p>
 			{:else if summary && !summaryError}
@@ -210,7 +210,7 @@
 			<section class="lv-panel lv-focus" aria-labelledby="focus-heading">
 				<div class="lv-panel__head">
 					<h2 id="focus-heading">Foco</h2>
-					<a class="lv-text-link" href={href('focus')}>Abrir Pomodoro</a>
+					<span class="lv-count">semana atual</span>
 				</div>
 				<div class="lv-focus__body">
 					<div class="lv-focus__stats">
@@ -234,21 +234,17 @@
 			</section>
 		</div>
 
-		<section class="lv-stats__section" aria-labelledby="study-heading">
-			<div class="lv-section__head">
-				<div>
-					<h2 id="study-heading">Sua biblioteca em números</h2>
-				</div>
-			</div>
-			<div class="lv-stats__metrics">
+		<div class="lv-stats__grid">
+			<details class="lv-panel lv-library-inventory">
+				<summary>Sua biblioteca em números</summary>
+				<div class="lv-stats__metrics">
 				<article class="lv-stat"><span>Cursos</span><strong>{stats.totals.courses}</strong><small>{formatCount(stats.totals.modules, 'módulo', 'módulos')}</small></article>
-				<article class="lv-stat"><span>Aulas</span><strong>{stats.totals.lessons}</strong><small>{stats.totals.missingLessons > 0 ? `${stats.totals.missingLessons} ausentes` : 'todas disponíveis'}</small></article>
-				<article class="lv-stat"><span>Vídeos</span><strong>{stats.totals.videos}</strong><small>mídias no catálogo</small></article>
+				<article class="lv-stat"><span>Aulas</span><strong>{stats.totals.lessons}</strong><small>{stats.totals.missingLessons > 0 ? formatCount(stats.totals.missingLessons, 'ausente', 'ausentes') : 'todas disponíveis'}</small></article>
+				<article class="lv-stat"><span>Vídeos</span><strong>{stats.totals.videos - missingVideos}</strong><small>{missingVideos > 0 ? `${missingVideos} sem arquivo` : 'mídias no catálogo'}</small></article>
 				<article class="lv-stat"><span>Materiais</span><strong>{stats.totals.materials}</strong><small>arquivos de apoio</small></article>
 			</div>
 
-			<div class="lv-stats__grid">
-				<section class="lv-panel" aria-labelledby="volume-heading">
+				<section class="lv-library-volume" aria-labelledby="volume-heading">
 					<div class="lv-panel__head"><h2 id="volume-heading">Cursos por volume</h2><span class="lv-count">aulas</span></div>
 					<ol class="lv-volume">
 						{#each stats.courses.slice(0, 6) as entry (courseIdOf(entry.course))}
@@ -261,6 +257,7 @@
 						{/each}
 					</ol>
 				</section>
+			</details>
 
 				<section class="lv-panel" aria-labelledby="activity-heading">
 					<div class="lv-panel__head"><h2 id="activity-heading">Atividade recente</h2><span class="lv-count">histórico recente</span></div>
@@ -288,7 +285,6 @@
 					{/if}
 				</section>
 			</div>
-		</section>
 
 		<section class="lv-stats__section" aria-labelledby="achievements-heading">
 			<div class="lv-section__head">

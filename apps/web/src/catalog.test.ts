@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { collectMaterials, countCatalogFiles, countCatalogNode, formatCount, formatCourseCardMeta, formatCourseMeta, formatLessonCounts, formatLessonMeta, isLessonMissing } from './catalog';
+import { collectMaterials, countCatalogFiles, countCatalogNode, countMissingVideos, formatCount, formatCourseCardMeta, formatCourseMeta, formatLessonCounts, formatLessonMeta, isLessonMissing } from './catalog';
 import type { CatalogCounts } from './catalog';
 import type { CatalogNode, FileEntry } from './transport';
 
@@ -46,6 +46,19 @@ describe('countCatalogNode', () => {
 
 	it('returns zeros for an empty node', () => {
 		expect(countCatalogNode(node('category', 'Vazia'))).toEqual({ modules: 0, lessons: 0, missingLessons: 0, videos: 0, materials: 0 });
+	});
+});
+
+describe('countMissingVideos', () => {
+	it('counts only media marked missing in the subtree', () => {
+		const course = node('course', 'Curso', [
+			node('module', 'Módulo', [
+				node('lesson', 'Aula', [], [file('a.mp4', 'media'), missing('antiga.mp4', 'media')]),
+				node('lesson', 'Sumida', [], [missing('b.mp4', 'media')])
+			])
+		]);
+		expect(countMissingVideos(course)).toBe(2);
+		expect(countMissingVideos(node('lesson', 'Íntegra', [], [file('c.mp4', 'media')]))).toBe(0);
 	});
 });
 

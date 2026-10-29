@@ -6,11 +6,11 @@
 	import CourseCover from './CourseCover.svelte';
 	import Player from './Player.svelte';
 	import Statistics from './Statistics.svelte';
-	import Pomodoro from './Pomodoro.svelte';
-	import MiniPomodoro from './MiniPomodoro.svelte';
+	import PomodoroSettings from './PomodoroSettings.svelte';
+	import FocusMenu from './FocusMenu.svelte';
 	import DesktopTitlebar from './DesktopTitlebar.svelte';
 	import { filterCatalog } from './search';
-	import { collectMaterials, countCatalogNode, formatCourseMeta, formatLessonCounts, formatLocationContext } from './catalog';
+	import { collectMaterials, countCatalogNode, countMissingVideos, formatCount, formatCourseMeta, formatLessonCounts, formatLocationContext } from './catalog';
 	import { courseCover } from './cover';
 	import PasswordField from './PasswordField.svelte';
 	import { defaultLessonPath, lessonContainer, neighboringLessons } from './navigation';
@@ -145,7 +145,7 @@
 			resolvedTheme = resolveTheme(themeMode, systemDark);
 			applyTheme(document.documentElement, resolvedTheme);
 			const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
-			if (themeColor) themeColor.content = resolvedTheme === 'dark' ? '#151b1d' : '#eceeea';
+			if (themeColor) themeColor.content = resolvedTheme === 'dark' ? '#10151b' : '#eef1f4';
 		}
 	};
 	scheme?.addEventListener('change', updateSystemTheme);
@@ -260,7 +260,7 @@
 		resolvedTheme = resolveTheme(mode, systemDark);
 		applyTheme(document.documentElement, resolvedTheme);
 		const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
-		if (themeColor) themeColor.content = resolvedTheme === 'dark' ? '#151b1d' : '#eceeea';
+		if (themeColor) themeColor.content = resolvedTheme === 'dark' ? '#10151b' : '#eef1f4';
 		persistThemeMode(safeLocalStorage(), mode);
 	}
 	async function initialize() {
@@ -583,10 +583,6 @@
 					<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5h16M7 19.5v-6M12 19.5V8M17 19.5V5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
 					<span>Estatísticas</span>
 				</a>
-				<a class="lv-rail__link" class:is-active={route === 'focus'} aria-current={route === 'focus' ? 'page' : undefined} href={href('focus')} title="Foco">
-					<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="7.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 9v4.5l3 1.8M9.5 2.5h5M12 2.5v3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
-					<span>Foco</span>
-				</a>
 				{#if course && isCourseRoute}
 					<a class="lv-rail__link" class:is-active={isCourseRoute} aria-current={isCourseRoute ? 'page' : undefined} href={href('course', courseIdOf(course))} title={course.title}>
 						<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5h11.5A2.5 2.5 0 0 1 19 7v12.5H7.5A2.5 2.5 0 0 1 5 17z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M8 8h7M8 11.5h7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
@@ -599,6 +595,7 @@
 				</a>
 			</nav>
 			<div class="lv-rail__foot">
+				<FocusMenu />
 				<button class="lv-rail__compact" type="button" aria-pressed={railCompact} aria-label={railCompact ? 'Expandir barra lateral' : 'Compactar barra lateral'} title={railCompact ? 'Expandir barra lateral' : 'Compactar barra lateral'} onclick={toggleRailCompact}>
 					<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 6l-4 6 4 6M9 6l-4 6 4 6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
 				</button>
@@ -624,11 +621,11 @@
 							{#if canManage}
 								<div class="lv-page__buttons">
 									{#if transportKind === 'desktop'}
-										<button class="lv-btn lv-btn--primary lvui-btn lvui-btn-primary" onclick={importCourse} disabled={importing} aria-busy={importing}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v10m-4-4 4 4 4-4M5 17v3h14v-3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>{importing ? 'Importando…' : 'Importar curso'}</button>
+										<button class="lvui-btn lvui-btn-primary" onclick={importCourse} disabled={importing} aria-busy={importing}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v10m-4-4 4 4 4-4M5 17v3h14v-3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>{importing ? 'Importando…' : 'Importar curso'}</button>
 									{:else}
-										<button class="lv-btn lv-btn--primary lvui-btn lvui-btn-primary" onclick={() => (importFormOpen = !importFormOpen)} aria-expanded={importFormOpen}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v10m-4-4 4 4 4-4M5 17v3h14v-3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Importar curso</button>
+										<button class="lvui-btn lvui-btn-primary" onclick={() => (importFormOpen = !importFormOpen)} aria-expanded={importFormOpen}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v10m-4-4 4 4 4-4M5 17v3h14v-3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Importar curso</button>
 									{/if}
-									<button class="lv-btn lvui-btn" onclick={rescan} disabled={rescanning || !catalog || !catalog.nodes.length}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v4h-4M4 17v-4h4M5.5 9a7 7 0 0 1 12-2L20 11M4 13l2.5 4a7 7 0 0 0 12-2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>{rescanning ? 'Atualizando…' : 'Atualizar cursos'}</button>
+									<button class="lvui-btn" onclick={rescan} disabled={rescanning || !catalog || !catalog.nodes.length}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v4h-4M4 17v-4h4M5.5 9a7 7 0 0 1 12-2L20 11M4 13l2.5 4a7 7 0 0 0 12-2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>{rescanning ? 'Atualizando…' : 'Atualizar cursos'}</button>
 								</div>
 							{/if}
 						</div>
@@ -694,7 +691,7 @@
 								{#if catalog && catalog.nodes.length}<span class="lv-count" aria-live="polite">{filteredNodes.length} de {catalog.nodes.length}</span>{/if}
 								<div class="lv-view-switch lvui-join" role="group" aria-label="Visualização dos cursos" aria-describedby="view-hint">
 									{#each LIBRARY_VIEWS as view}
-										<button type="button" class="lvui-join-item" class:is-active={libraryView === view} aria-pressed={libraryView === view} onclick={() => changeLibraryView(view)}>{LIBRARY_VIEW_LABELS[view]}</button>
+										<button type="button" class={`lvui-join-item lvui-btn lvui-btn-sm${libraryView === view ? ' lvui-btn-active' : ''}`} aria-pressed={libraryView === view} onclick={() => changeLibraryView(view)}>{LIBRARY_VIEW_LABELS[view]}</button>
 									{/each}
 								</div>
 							</div>
@@ -728,15 +725,12 @@
 
 					{#if catalog && catalog.looseFiles.length}<div class="lv-section"><LooseFiles files={catalog.looseFiles} heading="Arquivos soltos" /></div>{/if}
 				</div>
-			{:else if route === 'focus'}
-				<Pomodoro />
 			{:else if route === 'statistics'}
 				<Statistics {catalog} {recent} />
 			{:else if route === 'settings'}
 				<div class="lv-page lv-page--narrow lv-settings">
 					<header class="lv-page__head">
 						<div>
-							<p class="lv-kicker">Preferências</p>
 							<h1>Ajustes</h1>
 							<p class="lv-lede">Escolha como o LearnVault aparece neste dispositivo.</p>
 						</div>
@@ -754,6 +748,12 @@
 							<span>Barra lateral compacta</span>
 							<small>Mostra apenas os ícones da navegação.</small>
 						</label>
+					</section>
+					<section class="lv-panel lv-settings__panel" aria-labelledby="timer-heading">
+						<div class="lv-panel__head"><h2 id="timer-heading">Pomodoro</h2><span class="lv-count">Tempo de foco e pausas</span></div>
+						<div class="lv-settings__body">
+							<PomodoroSettings />
+						</div>
 					</section>
 					<section class="lv-panel lv-settings__panel" aria-labelledby="account-heading">
 						<div class="lv-panel__head"><h2 id="account-heading">Conta</h2><span class="lv-count">{user.isAdmin ? 'Administrador' : 'Estudante'}</span></div>
@@ -796,6 +796,7 @@
 					</div>
 				{:else if isOverview}
 					{@const counts = countCatalogNode(course)}
+					{@const missingVideos = countMissingVideos(course)}
 					{@const meta = formatCourseMeta(counts)}
 					{@const cover = courseCover(course.title)}
 					{@const materials = collectMaterials(course)}
@@ -806,7 +807,6 @@
 								<CourseCover course={course} profile={user.userId} mediaUrl={(file, courseId) => transport.mediaUrl(file, courseId)} manualCoverUrl={transport.coverUrl(courseIdOf(course), course.coverVersion ?? null)} size="hero" />
 							</div>
 							<div class="lv-course-hero__main">
-								<p class="lv-kicker">Curso · {cover.code}</p>
 								<h1>{course.title}</h1>
 								{#if meta}<p class="lv-course-hero__meta">{meta}</p>{/if}
 								<div class="lv-course-hero__actions">
@@ -874,25 +874,22 @@
 									<div class="lv-panel__head"><h2 id="course-meta-heading">Ficha do curso</h2></div>
 									<dl>
 										<div><dt>Módulos</dt><dd>{counts.modules}</dd></div>
-										<div><dt>Aulas</dt><dd>{counts.lessons}{#if counts.missingLessons > 0}<span class="lv-meta__missing"> · {counts.missingLessons} ausentes</span>{/if}</dd></div>
-										<div><dt>Vídeos</dt><dd>{counts.videos}</dd></div>
+										<div><dt>Aulas</dt><dd>{counts.lessons}{#if counts.missingLessons > 0}<span class="lv-meta__missing"> · {formatCount(counts.missingLessons, 'ausente', 'ausentes')}</span>{/if}</dd></div>
+										<div><dt>Vídeos</dt><dd>{counts.videos - missingVideos}{#if missingVideos > 0}<span class="lv-meta__missing"> · {formatCount(missingVideos, 'ausente', 'ausentes')}</span>{/if}</dd></div>
 										<div><dt>Materiais</dt><dd>{counts.materials}</dd></div>
 										<div><dt>Código</dt><dd class="lv-meta__code">{cover.code}</dd></div>
 									</dl>
 								</section>
+							{#if courseRecent}
 								<section class="lv-panel lv-resume-panel" aria-labelledby="course-resume-heading">
 									<div class="lv-panel__head"><h2 id="course-resume-heading">Continue de onde parou</h2></div>
 									<div class="lv-resume-panel__body">
-										{#if courseRecent}
-											<p class="lv-resume-panel__lesson">{courseRecent.location.lesson.title}</p>
-											<p class="lv-resume-panel__meta">{formatLocationContext(courseRecent.location.courseTitle, courseRecent.location.moduleTitle)}{#if !courseRecent.item.completed}{' · '}{formatDuration(courseRecent.item.positionSeconds)}{/if}</p>
-											<a class="lv-btn lv-btn--primary" href={href('course', courseIdOf(course), courseRecent.location.lesson.path)}>{courseRecent.item.completed ? 'Revisar aula' : 'Retomar aula'}</a>
-										{:else}
-											<p class="lv-empty">Você ainda não começou este curso.</p>
-											{#if activePath}<a class="lv-btn" href={href('course', courseIdOf(course), activePath)}>Começar curso</a>{/if}
-										{/if}
+										<p class="lv-resume-panel__lesson">{courseRecent.location.lesson.title}</p>
+										<p class="lv-resume-panel__meta">{formatLocationContext(courseRecent.location.courseTitle, courseRecent.location.moduleTitle)}{#if !courseRecent.item.completed}{' · '}{formatDuration(courseRecent.item.positionSeconds)}{/if}</p>
+										<a class="lv-btn lv-btn--primary" href={href('course', courseIdOf(course), courseRecent.location.lesson.path)}>{courseRecent.item.completed ? 'Revisar aula' : 'Retomar aula'}</a>
 									</div>
 								</section>
+							{/if}
 							</aside>
 						</div>
 					</div>
@@ -910,7 +907,6 @@
 								{#if lesson}
 									<div class="lv-lesson-head">
 										<div>
-											<p class="lv-kicker">{activeContainer?.title ?? course.title}</p>
 											<h1>{lesson.title}</h1>
 										</div>
 										<div class="lv-lesson-actions">
@@ -952,6 +948,5 @@
 				</div>
 			{/if}
 		</main>
-		<MiniPomodoro hiddenDock={route === 'focus' || focusMode} courseTitle={isCourseRoute ? course?.title ?? null : null} lessonTitle={isPlayer ? lesson?.title ?? null : null} syncScope={transportKind === 'desktop' ? 'desktop:local' : user ? `http:${user.userId}` : null} />
 	</div>
 {/if}

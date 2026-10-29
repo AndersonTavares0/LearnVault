@@ -187,12 +187,12 @@
 				<span class="audio-label">Faixa de áudio · {lesson.title}</span>
 			</div>
 			<!-- svelte-ignore a11y_media_has_caption -->
-			<audio class="player-media player-audio" controls preload="metadata" src={source} bind:this={media} bind:currentTime={currentTime} bind:duration={duration} ontimeupdate={handleTimeUpdate} onended={handleEnded} onerror={onMediaError}>
+			<audio class="player-media player-audio" controls preload="metadata" src={source} aria-label={`Player da aula${lessonTitle ? `: ${lessonTitle}` : ''}`} bind:this={media} bind:currentTime={currentTime} bind:duration={duration} ontimeupdate={handleTimeUpdate} onended={handleEnded} onerror={onMediaError}>
 				{#if captionSource}<track kind="captions" src={captionSource} label="Legenda" default />{/if}
 			</audio>
 		{:else}
 			<!-- svelte-ignore a11y_media_has_caption -->
-			<video class="player-media" controls preload="metadata" src={source} bind:this={media} bind:currentTime={currentTime} bind:duration={duration} ontimeupdate={handleTimeUpdate} onended={handleEnded} onerror={onMediaError}>
+			<video class="player-media" controls preload="metadata" src={source} aria-label={`Player da aula${lessonTitle ? `: ${lessonTitle}` : ''}`} bind:this={media} bind:currentTime={currentTime} bind:duration={duration} ontimeupdate={handleTimeUpdate} onended={handleEnded} onerror={onMediaError}>
 				{#if captionSource}<track kind="captions" src={captionSource} label="Legenda" default />{/if}
 			</video>
 		{/if}

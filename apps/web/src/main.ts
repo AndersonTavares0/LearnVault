@@ -8,7 +8,7 @@ import { applyTheme, readThemeMode, resolveTheme } from './theme';
 const initialTheme = resolveTheme(readThemeMode(safeStorage()), window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false);
 applyTheme(document.documentElement, initialTheme);
 const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
-if (themeColor) themeColor.content = initialTheme === 'dark' ? '#151b1d' : '#eceeea';
+if (themeColor) themeColor.content = initialTheme === 'dark' ? '#10151b' : '#eef1f4';
 
 function safeStorage(): Storage | null {
 	try {

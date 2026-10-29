@@ -65,11 +65,10 @@ describe('hash router', () => {
 		expect(href('statistics')).toBe('#/statistics');
 	});
 
-	it('supports focus as an authenticated destination', () => {
-		expect(locationFromHash('#/focus')).toEqual({ route: 'focus', courseId: null, lessonPath: null });
-		expect(routeFromHash('#/focus', 'home')).toBe('focus');
-		expect(destinationAfterLogin('#/focus')).toBe('#/focus');
-		expect(href('focus')).toBe('#/focus');
+	it('redirects the legacy focus route to statistics', () => {
+		expect(locationFromHash('#/focus')).toEqual({ route: 'statistics', courseId: null, lessonPath: null });
+		expect(routeFromHash('#/focus', 'home')).toBe('statistics');
+		expect(destinationAfterLogin('#/focus')).toBe('#/statistics');
 	});
 	it('creates server-independent links with the course identity', () => {
 		expect(href('home')).toBe('#/home');
