@@ -4350,3 +4350,36 @@ svg {
 		right: 0;
 	}
 }
+
+/* Login e formulários com o sistema de componentes do projeto. */
+.login-page section {
+	padding: 26px;
+	border: 1px solid var(--line);
+	border-radius: 12px;
+	background: var(--surface);
+}
+
+.login-page .brand {
+	margin-bottom: 2px;
+}
+
+.login-page .lvui-btn {
+	width: 100%;
+	margin-top: 4px;
+}
+
+.lv-pomodoro__settings-grid label {
+	display: grid;
+	gap: 6px;
+	color: var(--muted);
+	font-size: 12px;
+}
+
+.lv-pomodoro__settings-grid .lvui-input,
+.lv-pomodoro__settings-grid .lvui-select {
+	width: 100%;
+}
+
+.login-page .brand {
+	justify-content: center;
+}

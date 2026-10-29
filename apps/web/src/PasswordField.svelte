@@ -30,6 +30,7 @@
 	<label for={id}>{label}</label>
 	<div class="password-input">
 		<input
+			class="lvui-input"
 			{id}
 			name={id}
 			type={visible ? 'text' : 'password'}

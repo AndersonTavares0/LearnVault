@@ -5,7 +5,7 @@
 @plugin "daisyui" {
 	themes: false;
 	prefix: "lvui-";
-	include: button, input, join, stat, tab, checkbox, select, range;
+	include: button, input, join, checkbox, select, range;
 	logs: false;
 }
 

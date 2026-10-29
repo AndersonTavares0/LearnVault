@@ -68,22 +68,22 @@
 
 <form class="lv-pomodoro__settings" onsubmit={submit}>
 	<div class="lv-pomodoro__settings-grid">
-		<label>Foco (min)<input type="number" min="1" max="120" bind:value={draft.focusMinutes} /></label>
-		<label>Pausa curta (min)<input type="number" min="1" max="60" bind:value={draft.shortMinutes} /></label>
-		<label>Pausa longa (min)<input type="number" min="1" max="120" bind:value={draft.longMinutes} /></label>
-		<label>Pausa longa a cada<input type="number" min="2" max="12" bind:value={draft.longEvery} /></label>
+		<label>Foco (min)<input class="lvui-input" type="number" min="1" max="120" bind:value={draft.focusMinutes} /></label>
+		<label>Pausa curta (min)<input class="lvui-input" type="number" min="1" max="60" bind:value={draft.shortMinutes} /></label>
+		<label>Pausa longa (min)<input class="lvui-input" type="number" min="1" max="120" bind:value={draft.longMinutes} /></label>
+		<label>Pausa longa a cada<input class="lvui-input" type="number" min="2" max="12" bind:value={draft.longEvery} /></label>
 		<label>Som do alarme
-			<select bind:value={draft.alarmSound}>
+			<select class="lvui-select" bind:value={draft.alarmSound}>
 				<option value="sine">Suave</option>
 				<option value="triangle">Claro</option>
 				<option value="square">Marcante</option>
 			</select>
 		</label>
-		<label>Volume<input type="range" min="0" max="1" step="0.05" bind:value={draft.alarmVolume} /></label>
-		<label>Repetições<input type="number" min="1" max="5" bind:value={draft.alarmRepeats} /></label>
-		<label class="lv-pomodoro__check"><input type="checkbox" bind:checked={draft.autoStartNext} />Iniciar o próximo bloco automaticamente</label>
-		<label class="lv-pomodoro__check"><input type="checkbox" bind:checked={draft.alarmEnabled} />Tocar alarme ao terminar</label>
-		<label class="lv-pomodoro__check"><input type="checkbox" bind:checked={draft.notificationsEnabled} />Notificações do sistema</label>
+		<label>Volume<input class="lvui-range" type="range" min="0" max="1" step="0.05" bind:value={draft.alarmVolume} /></label>
+		<label>Repetições<input class="lvui-input" type="number" min="1" max="5" bind:value={draft.alarmRepeats} /></label>
+		<label class="lv-pomodoro__check"><input class="lvui-checkbox" type="checkbox" bind:checked={draft.autoStartNext} />Iniciar o próximo bloco automaticamente</label>
+		<label class="lv-pomodoro__check"><input class="lvui-checkbox" type="checkbox" bind:checked={draft.alarmEnabled} />Tocar alarme ao terminar</label>
+		<label class="lv-pomodoro__check"><input class="lvui-checkbox" type="checkbox" bind:checked={draft.notificationsEnabled} />Notificações do sistema</label>
 	</div>
 	<div class="lv-pomodoro__settings-actions">
 		<button class="lvui-btn lvui-btn-primary" type="submit">Salvar ajustes</button>

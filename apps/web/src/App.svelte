@@ -558,10 +558,10 @@
 			<p class="intro">Acesse sua biblioteca de cursos.</p>
 			<form onsubmit={login}>
 				<fieldset class="auth-fields" disabled={authBusy}>
-					<label class="form-field" for="login-username">Usuário<input id="login-username" name="username" autocomplete="username" autocapitalize="none" spellcheck={false} bind:value={username} required /></label>
+					<label class="form-field" for="login-username">Usuário<input class="lvui-input" id="login-username" name="username" autocomplete="username" autocapitalize="none" spellcheck={false} bind:value={username} required /></label>
 					<PasswordField id="login-password" label="Senha" autocomplete="current-password" bind:value={password} />
 					{#if error}<p class="error" role="alert">{error}</p>{/if}
-					<button type="submit" disabled={authBusy} aria-busy={authBusy}>{authBusy ? 'Entrando…' : 'Entrar'}</button>
+					<button class="lvui-btn lvui-btn-primary lvui-btn-block" type="submit" disabled={authBusy} aria-busy={authBusy}>{authBusy ? 'Entrando…' : 'Entrar'}</button>
 				</fieldset>
 			</form>
 		</section>
@@ -715,8 +715,7 @@
 						{:else if canManage}
 							<div class="lv-empty-state">
 								<p class="lv-empty__title">Sua biblioteca começa aqui</p>
-								<p class="lv-lede">Importe a pasta de um curso. Os arquivos permanecem somente leitura.</p>
-								{#if transportKind === 'desktop'}<button class="lv-btn lv-btn--primary" onclick={importCourse} disabled={importing} aria-busy={importing}>{importing ? 'Importando…' : 'Importar curso'}</button>{:else}<button class="lv-btn lv-btn--primary" onclick={() => (importFormOpen = true)}>Importar curso</button>{/if}
+								<p class="lv-lede">Use “Importar curso” acima para adicionar uma pasta. Os arquivos permanecem somente leitura.</p>
 							</div>
 						{:else}
 							<div class="lv-empty-state"><p class="lv-empty__title">Nenhum curso disponível</p><p class="lv-lede">Peça ao administrador para importar um curso.</p></div>
