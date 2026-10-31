@@ -16,7 +16,7 @@
     "e2e:server": "pnpm run build && cargo build -p learnvault-server && pnpm exec playwright test tests/e2e/server.spec.ts"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "2.12.3",
+    "@tauri-apps/cli": "2.12.4",
     "@playwright/test": "1.64.1"
   }
 }
