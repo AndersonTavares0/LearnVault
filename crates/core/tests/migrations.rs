@@ -83,6 +83,11 @@ fn all_domain_tables_are_created() -> TestResult {
         "study_state",
         "user",
         "session",
+        "focus_session",
+        "lesson_completion_event",
+        "xp_event",
+        "daily_mission_claim",
+        "gamification_settings",
     ] {
         let found: i64 = db.connection().query_row(
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",

@@ -1,195 +1,146 @@
 ---
 name: LearnVault
-description: Biblioteca local de cursos com descoberta clara e retomada sem atrito.
+description: Espaço de estudo auto-hospedado com descoberta clara, foco técnico e biblioteca intacta.
 colors:
-  canvas: "#0b1220"
-  surface: "#111b2b"
-  surface-raised: "#182438"
-  ink: "#f5f7fb"
-  muted: "#a8b5c7"
-  line: "#2a3a52"
-  cobalt: "#1d5fd1"
-  cobalt-soft: "#17376f"
-  saffron: "#e8b43c"
-  danger: "#e88478"
-  success: "#65bd91"
+  dark:
+    canvas: "#090d13"
+    surface: "#111722"
+    surface-raised: "#182230"
+    ink: "#f1f5f9"
+    muted: "#8e9ea9"
+    faint: "#5e6f80"
+    line: "#1c2736"
+    line-strong: "#2a3b4e"
+    accent: "#f59e0b"
+    accent-soft: "#261e0e"
+    focus: "#38bdf8"
+    success: "#10b981"
+    danger: "#f43f5e"
+  light:
+    canvas: "#f8fafc"
+    surface: "#ffffff"
+    surface-raised: "#f1f5f9"
+    ink: "#0f172a"
+    muted: "#64748b"
+    faint: "#94a3b8"
+    line: "#e2e8f0"
+    line-strong: "#cbd5e1"
+    accent: "#d97706"
+    accent-soft: "#fef3c7"
+    focus: "#0284c7"
+    success: "#059669"
+    danger: "#e11d48"
 typography:
   display:
-    fontFamily: "Georgia, Cambria, serif"
-    fontSize: "clamp(2rem, 4vw, 3.4rem)"
-    fontWeight: 400
-    lineHeight: 1.05
-    letterSpacing: "-0.035em"
-  headline:
-    fontFamily: "Georgia, Cambria, serif"
-    fontSize: "clamp(1.45rem, 2.4vw, 2.25rem)"
-    fontWeight: 400
-    lineHeight: 1.12
-  title:
-    fontFamily: "Segoe UI Variable Text, Segoe UI, system-ui, sans-serif"
-    fontSize: "1.05rem"
-    fontWeight: 700
-    lineHeight: 1.3
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", system-ui, sans-serif'
+    fontWeight: 600
+    letterSpacing: "-0.02em"
   body:
-    fontFamily: "Segoe UI Variable Text, Segoe UI, system-ui, sans-serif"
-    fontSize: "0.95rem"
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", "Helvetica Neue", system-ui, sans-serif'
     fontWeight: 400
-    lineHeight: 1.55
-  label:
-    fontFamily: "Cascadia Mono, Consolas, monospace"
-    fontSize: "0.68rem"
-    fontWeight: 700
-    lineHeight: 1.35
-    letterSpacing: "0.06em"
+    lineHeight: 1.5
+  mono:
+    fontFamily: '"Cascadia Code", "Cascadia Mono", "JetBrains Mono", Consolas, "SFMono-Regular", monospace'
+    fontWeight: 500
+    letterSpacing: "0.02em"
 rounded:
-  sm: "0.375rem"
-  md: "0.625rem"
-  lg: "0.875rem"
-spacing:
-  xs: "0.375rem"
-  sm: "0.625rem"
-  md: "1rem"
-  lg: "1.5rem"
-  xl: "2.5rem"
-components:
-  button-primary:
-    backgroundColor: "{colors.cobalt}"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.sm}"
-    padding: "0.7rem 1rem"
-    height: "2.75rem"
-  button-ghost:
-    backgroundColor: "transparent"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.sm}"
-    padding: "0.7rem 1rem"
-    height: "2.75rem"
-  search-field:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.sm}"
-    padding: "0.75rem 1rem"
-  course-shelf:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.md}"
-    padding: "1rem"
+  sm: "6px"
+  md: "8px"
+  lg: "10px"
 ---
 
-# Design System: LearnVault
+# Design System: LearnVault (Atelier Studio)
 
-## Overview
+## Visão Geral
 
-**Creative North Star: "A private course shelf"**
+**Norte Criativo: "Atelier Studio — Technical Learning Workspace"**
 
-LearnVault feels like a focused course platform with the calm authority of a personal archive. The interface makes course discovery, the next lesson, and saved progress visible without importing marketplace mechanics. The memorable move is the shelf: courses are grouped into purposeful horizontal study rows rather than a dashboard of identical cards.
+O LearnVault é um espaço de aprendizado técnico e auto-hospedado projetado para programadores, pesquisadores e estudantes avançados. A experiência combina a clareza de retomada de estudos da Udemy com a densidade informativa e a ergonomia de workstation do Frontend Masters e Linear.
 
-The shell is deep navy and quiet. Cobalt is reserved for the primary next action; saffron marks saved playback position and selected learning state. The LV mark is a small outlined monogram beside a restrained wordmark. Covers can carry authored color and typography, but the shell never competes with them.
+A interface prioriza o foco no conteúdo, a navegação ágil pelo currículo e a preservação estrita dos arquivos locais — que permanecem 100% somente leitura.
 
-**Key Characteristics:**
-- Course-first hierarchy: resume, shelves, course overview, then lesson.
-- Deep navy surfaces with warm editorial headings and restrained functional accents.
-- Content-original labels make local course language intentional, not accidental.
-- Progressive disclosure on mobile; no persistent rail inside the player.
+### Características Centrais
+- **Course-First & Zero Friction:** Retomada imediata da última aula assistida via card de destaque com timestamp exato (`00:14:22`).
+- **Paleta Obsidian & Âmbar:** Base escura profunda (`#090d13`), superfícies grafite estratificadas (`#111722` e `#182230`) e acento técnico em âmbar quente (`#f59e0b`), eliminando gradientes chamativos ou cores saturadas desconexas.
+- **Tipografia Técnica e Escaneável:** Sistema sans limpo e responsivo para títulos e corpo, com numerais e metadados estruturados em monospace de largura fixa para leitura rápida de tempos e contagens.
+- **Micro-interações Precisas:** Elevação sutil em hover (2px), anéis de foco de 2px acessíveis (WCAG 2.2 AA) e alvos de toque com área mínima de 44×44px.
+- **Desktop Integrado:** Barra de título frameless customizada para desktop Tauri 2 com drag region nativo e controles integrados ao tema.
 
-## Colors
+---
 
-The palette is dark, layered, and low-saturation except for two functional accents.
+## Paleta de Cores
 
-### Primary
-- **Cobalt action** (`#1d5fd1`): the single strongest action, used for Continue, Open course, and selected navigation.
-- **Saffron bookmark** (`#e8b43c`): saved playback position, never a primary CTA.
+A paleta foi desenhada para conforto visual durante longas sessões de estudo noturno ou diurno, sem fadiga ocular.
 
-### Neutral
-- **Night canvas** (`#0b1220`): page background and player surround.
-- **Course surface** (`#111b2b`): search, shelves, panels, and forms.
-- **Raised surface** (`#182438`): selected rows, metadata groups, and active curriculum items.
-- **Ink** (`#f5f7fb`): headings and primary text.
-- **Muted ink** (`#a8b5c7`): supporting copy and metadata.
-- **Quiet line** (`#2a3a52`): structural dividers; never a decorative border on every element.
+### Modo Escuro (Padrão)
+- **Canvas / Fundo:** `#090d13` (obsidian profundo, reduz emissão de luz azul)
+- **Surface / Cartões:** `#111722` (grafite refinado com borda sutil)
+- **Surface-2 / Destaque & Hover:** `#182230` (superfície elevada para seleção ativa)
+- **Linhas / Divisórias:** `#1c2736` (fronteiras calmas de 1px) e `#2a3b4e` (contornos de inputs e controles)
+- **Tipografia Primária (Ink):** `#f1f5f9` (alto contraste, taxa > 14:1)
+- **Tipografia Secundária (Muted):** `#8e9ea9` (legibilidade técnica, taxa > 4.5:1)
+- **Acento Âmbar:** `#f59e0b` (botões primários, destaque de progresso e XP)
+- **Acento Cyan / Foco:** `#38bdf8` (anéis de foco interativo)
+- **Status Sucesso:** `#10b981` (aulas concluídas, ofensiva ativa)
+- **Status Alerta / Erro:** `#f43f5e` (mídia ausente ou erro de disco)
 
-**The Accent-Rarity Rule.** Cobalt starts the next action; saffron explains saved state. Do not use either as decoration.
+### Modo Claro
+- **Canvas:** `#f8fafc` (slate muito suave, sem ofuscamento)
+- **Surface:** `#ffffff` (branco puro estruturado por linhas de 1px)
+- **Surface-2:** `#f1f5f9` (superfície de hover e estados selecionados)
+- **Linhas:** `#e2e8f0` e `#cbd5e1`
+- **Tipografia Primária:** `#0f172a` (slate escuro de alto contraste)
+- **Tipografia Secundária:** `#64748b`
+- **Acento Âmbar/Ocre:** `#d97706`
+- **Acento Cyan / Foco:** `#0284c7`
+- **Status Sucesso:** `#059669`
+- **Status Alerta / Erro:** `#e11d48`
 
-## Typography
+---
 
-**Display Font:** Georgia, Cambria, serif
-**Body Font:** Segoe UI Variable Text, Segoe UI, system-ui, sans-serif
-**Label/Mono Font:** Cascadia Mono, Consolas, monospace
+## Tipografia
 
-**Character:** Serif headings make course titles feel authored; the sans body keeps filters, metadata, and controls fast to scan. Mono is reserved for paths, saved positions, and system states.
+| Papel | Família | Peso | Aplicação |
+|---|---|---|---|
+| **Display / Títulos** | Sistema Sans (`-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Inter`) | 600 / 700 | Título da biblioteca, cabeçalhos de curso, títulos de cards (`line-height: 1.25`) |
+| **Corpo / Leitura** | Sistema Sans | 400 | Descrições, notas, mensagens de sistema (`line-height: 1.5`) |
+| **Técnico / Mono** | Cascadia Code, JetBrains Mono, Consolas, monospace | 500 / 600 | Duração de vídeos, posições salvas, contadores de aula, atalhos de teclado |
 
-### Hierarchy
-- **Display** (400, `clamp(2rem, 4vw, 3.4rem)`, 1.05): library and course entry points only.
-- **Headline** (400, `clamp(1.45rem, 2.4vw, 2.25rem)`, 1.12): course and lesson titles.
-- **Title** (700, 1.05rem, 1.3): shelf/course names and panel headings.
-- **Body** (400, 0.95rem, 1.55): descriptions, outcomes, and instructions; keep measures under 76ch.
-- **Label** (700, 0.68rem, 1.35, tracked): paths, status, and saved-position metadata only.
+---
 
-**The Original-Content Rule.** Interface chrome is Portuguese. Course titles and descriptions remain in the language supplied by local files, with a visible `Conteúdo original` marker.
+## Componentes Chave
 
-## Layout
+### 1. Brand Mark (Identidade)
+- Hexágono de bordas suaves em 120° com monograma vazado "L" e "V" em precisão técnica.
+- Inserido no topo esquerdo da barra de navegação com espaçamento proporcional (`gap: 10px`), sem parecer desconectado do nome LearnVault.
 
-The desktop shell uses a compact topbar and a centered content column capped near 1240px. The Library leads with a short resume row, then search/filter controls, then editorial shelves. Course detail is a full-width reading surface with cover, outcomes, metadata, and a module curriculum. The Player gives the stage the largest region; curriculum follows below or opens as a disclosure on narrow screens.
+### 2. Biblioteca e Modos de Visualização
+- **Continue Estudando:** Carrossel/linha horizontal de retomada imediata com miniatura 16:9, título da aula atual e botão de play rápido.
+- **Seletor de Visualização:** Quatro modos ergonômicos persistidos em `localStorage`:
+  - *Capas (Grade):* Miniaturas 16:9 com padrão generativo ou miniatura de vídeo extraída, indicador de "Em andamento" e badge de contagem.
+  - *Lista:* Linhas com título expandido, duração estimada e detalhes de aulas.
+  - *Compacto:* Máxima densidade para acervos com dezenas de cursos.
+  - *Estante:* Visualização visual inspirada em lombadas de biblioteca técnica.
+- **Busca Global:** Campo de busca com atalho `/` que filtra em tempo real por título do curso e nome das aulas.
 
-Spacing follows a 6/10/16/24/40px rhythm. Related metadata is tight; a new shelf or content mode earns 32–40px of separation. At 820px and below, utility controls wrap, shelves become vertical rows, and the player breadcrumb becomes `Voltar ao curso` plus the current lesson. No fixed text column may force horizontal scrolling.
+### 3. Player e Workstation de Estudo
+- **Split View:** Vídeo à esquerda/topo com proporção fixa 16:9; currículo navegável à direita com scroll independente.
+- **Barra de Aula:**
+  - Toggle de "Avançar automaticamente" para maratona de estudo.
+  - Botão de alternância de conclusão ("Marcar como concluído" / "Concluído").
+  - Botão "Retomar de MM:SS" quando houver progresso parcial registrado.
+- **Atalhos de Teclado:** `Espaço` para play/pause, setas para seek ±10 segundos, indicados discretamente na interface.
 
-## Elevation & Depth
+### 4. Estatísticas e Evolução
+- **Painel de Aprendizado:** Métricas de aulas concluídas, sessões de foco acumuladas e dias ativos na semana.
+- **Evolução & Gamificação:** Nível do aluno, barra de progresso de XP, seletor de meta semanal configurável (1 a 7 dias) e ofensiva (streak) com histórico visual diário.
+- **Sessões Pomodoro:** Relatório da semana com minutos de foco e taxa de conclusão.
 
-Depth comes from tonal layering and one-pixel structural lines, not omnipresent shadows. Raised surfaces distinguish selection and interaction; the player uses a dark stage inside a slightly raised shell. Shadows are reserved for menus and transient overlays.
+---
 
-### Shadow Vocabulary
-- **Menu lift** (`0 14px 30px rgba(0,0,0,.34)`): menus and popovers only.
-- **Cover lift** (`0 10px 24px rgba(0,0,0,.22)`): hover/focus on a course cover only.
+## Regras de Integridade e Acessibilidade
 
-**The Flat-at-Rest Rule.** A shelf is calm until the user selects, opens, or focuses it.
-
-## Shapes
-
-Use 6px fields/buttons, 10px panels, and 14px feature shells. Borders are quiet and structural. Avoid pill-shaped containers except status chips and compact selected filters. Course covers use an authored 3:4 or 16:9 ratio; do not let image treatment dictate the whole shell.
-
-## Components
-
-### Buttons
-- **Shape:** compact rectangular controls with 6px corners.
-- **Primary:** cobalt background, ink text, 44px minimum height; one primary action per visible group.
-- **Hover / Focus:** darken cobalt; preserve a 2px visible focus ring using the focus token.
-- **Ghost:** transparent or surface background with a quiet line; use for navigation and secondary actions.
-
-### Chips / Status
-- **Style:** small mono label or compact filter button; status colors carry meaning, not decoration.
-- **State:** selected filters use cobalt-soft plus ink; saved position uses saffron; missing media uses danger text and an explicit disabled state.
-
-### Cards / Shelves
-- **Corner Style:** 10px shelf shell, 6px course row.
-- **Background:** surface on canvas; raised surface for selected course or lesson.
-- **Shadow Strategy:** flat at rest; menu/cover lift only on interaction.
-- **Internal Padding:** 16px desktop, 12px mobile.
-
-### Inputs / Fields
-- **Style:** surface fill, quiet line, 6px corners, 44px minimum height.
-- **Focus:** cobalt/focus outline with 2px offset; never rely on placeholder alone.
-- **Error / Disabled:** retain text contrast and explain recovery; disabled media must not look playable.
-
-### Navigation
-- **Style:** compact topbar with the subdued LV logo, Library/Stats/Settings destinations, focus control, theme control, and user context.
-- **Player:** hide secondary shell navigation only in focus mode; show `Voltar ao curso` and current lesson context on mobile.
-- **Active:** cobalt underline or raised surface, not a filled dashboard tile.
-
-### Course stage
-The player stage is the signature component: 16:9, centered, with a restrained preview frame when paused and a single primary time readout. A missing local file replaces playback controls with an explanation and recovery instruction.
-
-## Do's and Don'ts
-
-### Do:
-- **Do** lead with the next lesson or course, not generic metrics.
-- **Do** use daisyUI primitives (`lvui-btn`, `lvui-input`, `lvui-join`, `lvui-range`) as accessible mechanics, then apply LearnVault tokens around them.
-- **Do** keep the logo quiet and identical across themes, routes, and breakpoints.
-- **Do** label source-language course metadata as `Conteúdo original`.
-- **Do** test 390px, 1280px, 1440px, and 1920px widths with long titles and missing media.
-
-### Don't:
-- **Don't** add marketplace affordances such as ratings, prices, enrollment, certificates, or cloud profiles.
-- **Don't** use gradients, flashy logo colors, decorative badges, or a card inside a card without a clear information role.
-- **Don't** turn every state into a border or every action into cobalt.
-- **Don't** truncate the only breadcrumb that tells the learner where they are.
-- **Don't** claim playback, persistence, folder scanning, or accessibility verification without evidence.
+1. **Biblioteca Somente Leitura:** A interface não oferece ações de mover, deletar ou alterar pastas físicas de cursos.
+2. **WCAG 2.2 AA:** Todos os textos respeitam contraste mínimo de 4.5:1; controles interativos possuem área de clique de no mínimo 44×44px.
+3. **Sem AI-Slop:** Ausência de gradientes multicoloridos artificiais, bordas duplas em cascata ou cartões aninhados desnecessários.
+4. **Resiliência Offline:** O player lida graciosamente com mídias ausentes ou discos desconectados, explicando como restabelecer a conexão sem perder o histórico do aluno.

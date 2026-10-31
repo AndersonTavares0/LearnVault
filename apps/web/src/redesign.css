@@ -4,31 +4,31 @@
 
 :root {
 	color-scheme: light;
-	--canvas: #eef1f4;
-	--surface: #f8fafb;
-	--surface-2: #e2e7ec;
-	--ink: #1b2430;
-	--muted: #53606e;
-	--faint: #5c6875;
-	--line: #c9d2db;
-	--line-strong: #a7b3bf;
-	--accent: #a72a22;
-	--accent-ink: #fff8f6;
-	--accent-soft: #f4dfdc;
-	--blue: #47617a;
-	--blue-soft: #e3eaf1;
-	--ok: #2f6a4a;
-	--warn: #8a5a12;
-	--danger: #a3261e;
-	--focus: #14508f;
-	--rail-bg: #1d2733;
-	--rail-ink: #eef2f7;
-	--rail-muted: #9fadbc;
-	--font: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
-	--display: "Bahnschrift", "DIN Alternate", "Franklin Gothic Medium", "Arial Narrow", sans-serif;
-	--mono: "Cascadia Mono", "Consolas", "SFMono-Regular", monospace;
+	--canvas: #f8fafc;
+	--surface: #ffffff;
+	--surface-2: #f1f5f9;
+	--ink: #0f172a;
+	--muted: #475569;
+	--faint: #64748b;
+	--line: #e2e8f0;
+	--line-strong: #cbd5e1;
+	--accent: #d97706;
+	--accent-ink: #ffffff;
+	--accent-soft: #fef3c7;
+	--blue: #0284c7;
+	--blue-soft: #e0f2fe;
+	--ok: #059669;
+	--warn: #b45309;
+	--danger: #e11d48;
+	--focus: #0284c7;
+	--rail-bg: #0f172a;
+	--rail-ink: #f8fafc;
+	--rail-muted: #94a3b8;
+	--font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", "Helvetica Neue", system-ui, sans-serif;
+	--display: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", system-ui, sans-serif;
+	--mono: "Cascadia Code", "Cascadia Mono", "JetBrains Mono", Consolas, "SFMono-Regular", monospace;
 	--radius: 8px;
-	--shadow: 0 14px 34px rgba(22, 35, 59, 0.08);
+	--shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
 
 	--page: var(--canvas);
 	--text: var(--ink);
@@ -38,33 +38,33 @@
 	--input: var(--surface);
 	--input-border: var(--line-strong);
 	--error: var(--danger);
-	--brand-mark-ink: #fff7f5;
+	--brand-mark-ink: #ffffff;
 }
 
 :root[data-theme="dark"] {
 	color-scheme: dark;
-	--canvas: #10151b;
-	--surface: #171e26;
-	--surface-2: #212a34;
-	--ink: #edf1f6;
-	--muted: #a9b5c2;
-	--faint: #97a4b2;
-	--line: #2f3b47;
-	--line-strong: #475565;
-	--accent: #ff8171;
-	--accent-ink: #2a0d09;
-	--accent-soft: #3a221f;
-	--blue: #93aecb;
-	--blue-soft: #223243;
-	--ok: #86c7a0;
-	--warn: #e3b56d;
-	--danger: #ff9387;
-	--focus: #8fc0f5;
-	--rail-bg: #0b1118;
-	--rail-ink: #edf1f6;
-	--rail-muted: #93a1b0;
-	--shadow: 0 14px 34px rgba(0, 0, 0, 0.3);
-	--brand-mark-ink: var(--rail-bg);
+	--canvas: #090d13;
+	--surface: #111722;
+	--surface-2: #182230;
+	--ink: #f1f5f9;
+	--muted: #8e9ea9;
+	--faint: #5e6f80;
+	--line: #1c2736;
+	--line-strong: #2a3b4e;
+	--accent: #f59e0b;
+	--accent-ink: #090d13;
+	--accent-soft: #261e0e;
+	--blue: #38bdf8;
+	--blue-soft: #0e2433;
+	--ok: #10b981;
+	--warn: #f59e0b;
+	--danger: #f43f5e;
+	--focus: #38bdf8;
+	--rail-bg: #0c1117;
+	--rail-ink: #f1f5f9;
+	--rail-muted: #8e9ea9;
+	--shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+	--brand-mark-ink: #0c1117;
 }
 
 html,
@@ -4661,7 +4661,7 @@ svg {
 
 /* Identidade editorial: serifada nos títulos, brass para progresso, vermelho para ação. */
 :root {
-	--serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+	--serif: var(--display);
 	--brass: #9a6518;
 }
 
@@ -5006,32 +5006,32 @@ input[type="radio"] {
    moves to the approved course-platform architecture. */
 :root {
 	color-scheme: light;
-	--canvas: #f4f6f9;
+	--canvas: #f8fafc;
 	--surface: #ffffff;
-	--surface-2: #edf1f6;
-	--ink: #152238;
-	--muted: #56657a;
-	--faint: #718096;
-	--line: #d7dee8;
-	--line-strong: #b9c5d4;
-	--accent: #1d5fd1;
+	--surface-2: #f1f5f9;
+	--ink: #0f172a;
+	--muted: #475569;
+	--faint: #64748b;
+	--line: #e2e8f0;
+	--line-strong: #cbd5e1;
+	--accent: #d97706;
 	--accent-ink: #ffffff;
-	--accent-soft: #e5eefc;
-	--blue: #42658f;
-	--blue-soft: #e7eef8;
-	--ok: #2e805c;
-	--warn: #8a5708;
-	--danger: #b84d42;
-	--focus: #0c55bf;
-	--rail-bg: #101a2c;
-	--rail-ink: #f5f7fb;
-	--rail-muted: #a8b5c7;
-	--font: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
-	--display: Georgia, Cambria, "Times New Roman", serif;
-	--serif: Georgia, Cambria, "Times New Roman", serif;
-	--mono: "Cascadia Mono", Consolas, "SFMono-Regular", monospace;
-	--radius: 10px;
-	--shadow: 0 14px 30px rgba(15, 29, 52, 0.12);
+	--accent-soft: #fef3c7;
+	--blue: #0284c7;
+	--blue-soft: #e0f2fe;
+	--ok: #059669;
+	--warn: #b45309;
+	--danger: #e11d48;
+	--focus: #0284c7;
+	--rail-bg: #0f172a;
+	--rail-ink: #f8fafc;
+	--rail-muted: #94a3b8;
+	--font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", "Helvetica Neue", system-ui, sans-serif;
+	--display: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", system-ui, sans-serif;
+	--serif: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", system-ui, sans-serif;
+	--mono: "Cascadia Code", "Cascadia Mono", "JetBrains Mono", Consolas, "SFMono-Regular", monospace;
+	--radius: 8px;
+	--shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
 	--page: var(--canvas);
 	--text: var(--ink);
 	--heading: var(--ink);
@@ -5045,28 +5045,28 @@ input[type="radio"] {
 
 :root[data-theme="dark"] {
 	color-scheme: dark;
-	--canvas: #0b1220;
-	--surface: #111b2b;
-	--surface-2: #182438;
-	--ink: #f5f7fb;
-	--muted: #a8b5c7;
-	--faint: #8e9db1;
-	--line: #2a3a52;
-	--line-strong: #41536d;
-	--accent: #1d5fd1;
-	--accent-ink: #ffffff;
-	--accent-soft: #17376f;
-	--blue: #91aed5;
-	--blue-soft: #213452;
-	--ok: #65bd91;
-	--warn: #e8b43c;
-	--danger: #e88478;
-	--focus: #8bb0ed;
-	--rail-bg: #08101d;
-	--rail-ink: #f5f7fb;
-	--rail-muted: #a8b5c7;
-	--shadow: 0 14px 30px rgba(0, 0, 0, 0.34);
-	--brand-mark-ink: #08101d;
+	--canvas: #090d13;
+	--surface: #111722;
+	--surface-2: #182230;
+	--ink: #f1f5f9;
+	--muted: #8e9ea9;
+	--faint: #5e6f80;
+	--line: #1c2736;
+	--line-strong: #2a3b4e;
+	--accent: #f59e0b;
+	--accent-ink: #090d13;
+	--accent-soft: #261e0e;
+	--blue: #38bdf8;
+	--blue-soft: #0e2433;
+	--ok: #10b981;
+	--warn: #f59e0b;
+	--danger: #f43f5e;
+	--focus: #38bdf8;
+	--rail-bg: #0c1117;
+	--rail-ink: #f1f5f9;
+	--rail-muted: #8e9ea9;
+	--shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+	--brand-mark-ink: #0c1117;
 }
 
 html,
@@ -5523,7 +5523,7 @@ textarea {
 	border: 1px solid var(--accent);
 	border-radius: 50%;
 	background: var(--accent);
-	color: #fff;
+	color: var(--accent-ink);
 }
 
 .lv-resume-card__action svg {
@@ -5581,10 +5581,10 @@ textarea {
 	-webkit-line-clamp: 2;
 	color: var(--ink);
 	font-family: var(--display);
-	font-size: 18px;
-	font-weight: 400;
-	letter-spacing: -0.015em;
-	line-height: 1.14;
+	font-size: 17px;
+	font-weight: 600;
+	letter-spacing: -0.01em;
+	line-height: 1.28;
 }
 
 .lv-course-card__meta {

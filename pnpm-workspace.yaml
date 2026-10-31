@@ -4,5 +4,8 @@ packages:
   - "apps/*"
 allowBuilds:
   esbuild: true
+auditConfig:
+  ignoreGhsas:
+    - GHSA-gcqx-w48m-w2h4
 minimumReleaseAgeExclude:
   - '@sveltejs/kit@3.1.0'

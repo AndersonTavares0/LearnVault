@@ -46,6 +46,8 @@ tmp/
 
 # Local tooling, IDEs and OS metadata
 .playwright-mcp/
+.corepack/
+.tmp-library-visual/
 test-results/
 playwright-report/
 .vscode/
