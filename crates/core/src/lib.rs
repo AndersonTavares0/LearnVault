@@ -61,6 +61,7 @@ pub use removal::{MediaRemovalImpact, MediaRemovalOutcome, media_removal_impact,
 pub use rescan::{RescanSummary, apply_scan, rescan};
 pub use scanner::{MediaKind, ScanOutcome, ScannedFile, scan};
 pub use study::{
-    MAX_RECENT_STUDY, StudyDay, StudyProgress, StudySummary, recent_study, record_position,
-    set_completed, study_progress, study_summary, study_summary_on,
+    MAX_RECENT_STUDY, StudyDay, StudyNote, StudyProgress, StudySummary, create_study_note,
+    delete_study_note, list_study_notes, recent_study, record_position, set_completed,
+    study_progress, study_summary, study_summary_on, update_study_note,
 };

@@ -72,6 +72,34 @@ pub enum Error {
         source: std::io::Error,
     },
 
+    /// Falha de entrada/saída durante backup ou restauração.
+    #[error("falha de {operation} em {path}")]
+    BackupIo {
+        /// Operação que falhou.
+        operation: String,
+        /// Caminho envolvido.
+        path: PathBuf,
+        /// Causa do sistema operacional.
+        #[source]
+        source: std::io::Error,
+    },
+
+    /// O arquivo de backup não foi encontrado.
+    #[error("arquivo de backup não encontrado em {0}")]
+    BackupFileNotFound(PathBuf),
+
+    /// A verificação de integridade do backup falhou.
+    #[error("falha na integridade do backup SQLite: {0}")]
+    BackupIntegrityFailed(String),
+
+    /// O banco permaneceu ocupado e o backup atingiu o tempo limite.
+    #[error("tempo limite excedido ao realizar o backup do banco de dados")]
+    BackupTimeout,
+
+    /// O processo de backup ou restauração falhou.
+    #[error("falha durante o backup: {0}")]
+    BackupFailed(String),
+
     /// Um valor do banco Go não satisfaz o contrato de migração.
     #[error("valor inválido na importação legada: {field} = {value}")]
     LegacyImportInvalidValue {
@@ -299,6 +327,17 @@ pub enum Error {
     InvalidMission {
         /// Identificador recusado.
         mission_id: String,
+    },
+
+    /// O conteúdo da anotação de estudo é inválido ou excede o limite.
+    #[error("conteúdo da anotação de estudo é inválido ou excede o limite")]
+    InvalidStudyNoteContent,
+
+    /// A anotação de estudo não foi encontrada.
+    #[error("anotação de estudo não encontrada: {note_id}")]
+    StudyNoteNotFound {
+        /// Identificador consultado.
+        note_id: String,
     },
 
     /// A missão ainda não atingiu o requisito necessário para resgate.

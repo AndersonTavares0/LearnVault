@@ -103,6 +103,17 @@ impl Database {
                 false,
                 &[("expires_at", "BINARY")],
             )?
+            || !index_matches(
+                &self.conn,
+                "study_note",
+                Some("study_note_owner_media_idx"),
+                false,
+                &[
+                    ("owner_id", "BINARY"),
+                    ("media_id", "BINARY"),
+                    ("position_seconds", "BINARY"),
+                ],
+            )?
         {
             return Ok(false);
         }
@@ -148,6 +159,205 @@ impl Database {
         MIGRATIONS.to_latest(&mut conn)?;
 
         Ok(Self { conn })
+    }
+
+    /// Cria uma cópia de segurança transacional e íntegra do banco de dados em `destination`.
+    ///
+    /// Utiliza a API de backup online do SQLite para capturar o estado atual da conexão,
+    /// incluindo páginas ativas do journal WAL, gravando atomicamente no destino final e
+    /// validando com `PRAGMA integrity_check`.
+    pub fn backup_to(&self, destination: impl AsRef<Path>) -> Result<()> {
+        let dest_path = destination.as_ref();
+        if let Some(parent) = dest_path.parent().filter(|p| !p.as_os_str().is_empty()) {
+            std::fs::create_dir_all(parent).map_err(|source| Error::BackupIo {
+                operation: "criar diretório de destino".to_owned(),
+                path: dest_path.to_path_buf(),
+                source,
+            })?;
+        }
+        let temp_path = dest_path.with_extension(format!("tmp.{}", std::process::id()));
+        let mut dest_conn = Connection::open(&temp_path).map_err(|source| Error::OpenDatabase {
+            path: temp_path.clone(),
+            source,
+        })?;
+        dest_conn.busy_timeout(Duration::from_secs(5))?;
+
+        let backup_job = rusqlite::backup::Backup::new(&self.conn, &mut dest_conn)?;
+        let mut retries = 0;
+        loop {
+            match backup_job.step(256)? {
+                rusqlite::backup::StepResult::Done => break,
+                rusqlite::backup::StepResult::More => continue,
+                rusqlite::backup::StepResult::Busy | rusqlite::backup::StepResult::Locked => {
+                    retries += 1;
+                    if retries > 300 {
+                        drop(backup_job);
+                        drop(dest_conn);
+                        let _ = std::fs::remove_file(&temp_path);
+                        return Err(Error::BackupTimeout);
+                    }
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                _ => {
+                    drop(backup_job);
+                    drop(dest_conn);
+                    let _ = std::fs::remove_file(&temp_path);
+                    return Err(Error::BackupFailed(
+                        "resultado inesperado do backup".to_owned(),
+                    ));
+                }
+            }
+        }
+        drop(backup_job);
+
+        let integrity: String =
+            dest_conn.query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
+        if integrity != "ok" {
+            drop(dest_conn);
+            let _ = std::fs::remove_file(&temp_path);
+            return Err(Error::BackupIntegrityFailed(integrity));
+        }
+        drop(dest_conn);
+
+        if dest_path.exists() {
+            let _ = std::fs::remove_file(dest_path);
+        }
+        std::fs::rename(&temp_path, dest_path).map_err(|source| Error::BackupIo {
+            operation: "renomear arquivo de backup para destino final".to_owned(),
+            path: dest_path.to_path_buf(),
+            source,
+        })?;
+
+        Ok(())
+    }
+
+    /// Restaura um banco de dados a partir de um arquivo de backup em `backup_path`.
+    ///
+    /// Valida a integridade (`PRAGMA integrity_check`) e o schema antes de aplicar,
+    /// cria uma cópia de segurança prévia se o banco de destino já existia, e substitui
+    /// atomicamente o banco alvo.
+    pub fn restore_from(
+        backup_path: impl AsRef<Path>,
+        target_path: impl AsRef<Path>,
+    ) -> Result<()> {
+        let backup_path = backup_path.as_ref();
+        let target_path = target_path.as_ref();
+
+        if !backup_path.is_file() {
+            return Err(Error::BackupFileNotFound(backup_path.to_path_buf()));
+        }
+
+        let backup_conn =
+            Connection::open_with_flags(backup_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .map_err(|source| Error::OpenDatabase {
+                    path: backup_path.to_path_buf(),
+                    source,
+                })?;
+        backup_conn.busy_timeout(Duration::from_secs(5))?;
+
+        let integrity: String =
+            backup_conn.query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
+        if integrity != "ok" {
+            return Err(Error::BackupIntegrityFailed(integrity));
+        }
+
+        if is_legacy_go_database(&backup_conn)? {
+            return Err(Error::LegacyGoDatabase);
+        }
+
+        if let SchemaVersion::Outside(found) = MIGRATIONS
+            .current_version(&backup_conn)
+            .map_err(read_schema_version)?
+        {
+            return Err(Error::SchemaTooNew {
+                found: found.get(),
+                known: SCHEMA_VERSION,
+            });
+        }
+
+        if let Some(parent) = target_path.parent().filter(|p| !p.as_os_str().is_empty()) {
+            std::fs::create_dir_all(parent).map_err(|source| Error::BackupIo {
+                operation: "criar diretório de destino".to_owned(),
+                path: target_path.to_path_buf(),
+                source,
+            })?;
+        }
+
+        let rollback_copy = if target_path.exists() {
+            let timestamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            let copy_path = target_path.with_extension(format!("rollback.{timestamp}.bak"));
+            std::fs::copy(target_path, &copy_path).map_err(|source| Error::BackupIo {
+                operation: "criar cópia de segurança antes do restore".to_owned(),
+                path: copy_path.clone(),
+                source,
+            })?;
+            Some(copy_path)
+        } else {
+            None
+        };
+
+        let temp_target = target_path.with_extension(format!("tmp.restore.{}", std::process::id()));
+        let mut dest_conn =
+            Connection::open(&temp_target).map_err(|source| Error::OpenDatabase {
+                path: temp_target.clone(),
+                source,
+            })?;
+        dest_conn.busy_timeout(Duration::from_secs(5))?;
+        dest_conn.pragma_update_and_check(None, "journal_mode", "WAL", |_| Ok(()))?;
+
+        let backup_job = rusqlite::backup::Backup::new(&backup_conn, &mut dest_conn)?;
+        let mut retries = 0;
+        loop {
+            match backup_job.step(256)? {
+                rusqlite::backup::StepResult::Done => break,
+                rusqlite::backup::StepResult::More => continue,
+                rusqlite::backup::StepResult::Busy | rusqlite::backup::StepResult::Locked => {
+                    retries += 1;
+                    if retries > 300 {
+                        drop(backup_job);
+                        drop(dest_conn);
+                        let _ = std::fs::remove_file(&temp_target);
+                        return Err(Error::BackupTimeout);
+                    }
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                _ => {
+                    drop(backup_job);
+                    drop(dest_conn);
+                    let _ = std::fs::remove_file(&temp_target);
+                    return Err(Error::BackupFailed(
+                        "falha inesperada na restauração".to_owned(),
+                    ));
+                }
+            }
+        }
+        drop(backup_job);
+        drop(backup_conn);
+        drop(dest_conn);
+
+        let wal = target_path.with_extension("sqlite-wal");
+        let shm = target_path.with_extension("sqlite-shm");
+        let _ = std::fs::remove_file(&wal);
+        let _ = std::fs::remove_file(&shm);
+
+        if target_path.exists() {
+            let _ = std::fs::remove_file(target_path);
+        }
+        if let Err(source) = std::fs::rename(&temp_target, target_path) {
+            if let Some(ref copy) = rollback_copy {
+                let _ = std::fs::copy(copy, target_path);
+            }
+            return Err(Error::BackupIo {
+                operation: "substituir banco com o arquivo restaurado".to_owned(),
+                path: target_path.to_path_buf(),
+                source,
+            });
+        }
+
+        Ok(())
     }
 }
 
@@ -287,6 +497,18 @@ const REQUIRED_TABLES: &[TableDefinition] = &[
             ("removed_at", "INTEGER", true, None, 0),
         ],
     },
+    TableDefinition {
+        name: "study_note",
+        columns: &[
+            ("note_id", "TEXT", true, None, 1),
+            ("owner_id", "TEXT", true, None, 0),
+            ("media_id", "TEXT", true, None, 0),
+            ("position_seconds", "INTEGER", true, None, 0),
+            ("content", "TEXT", true, None, 0),
+            ("created_at", "INTEGER", true, None, 0),
+            ("updated_at", "INTEGER", true, None, 0),
+        ],
+    },
 ];
 
 fn definition_matches(conn: &Connection, definition: &TableDefinition) -> Result<bool> {
@@ -409,6 +631,10 @@ fn expected_checks(table: &str) -> &'static [&'static str] {
         "daily_mission_claim" => &["mission_id in ('lesson', 'focus-two', 'focus-fifty')"],
         "gamification_settings" => &["weekly_goal between 1 and 7"],
         "user" => &["is_admin in (0, 1)", "must_change_credentials in (0, 1)"],
+        "study_note" => &[
+            "position_seconds >= 0",
+            "length(trim(content)) > 0 and length(content) <= 10000",
+        ],
         _ => &[],
     }
 }
@@ -429,6 +655,7 @@ fn expected_foreign_keys(
             ("media_id", "media", "media_id", "NO ACTION"),
             ("library_id", "library", "library_id", "NO ACTION"),
         ],
+        "study_note" => &[("media_id", "media", "media_id", "NO ACTION")],
         _ => &[],
     }
 }

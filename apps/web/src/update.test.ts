@@ -3,7 +3,7 @@ import type { UpdateStatus } from './transport';
 import { updateMessage, updateOutcome, updateReleaseUrl } from './update';
 
 function status(overrides: Partial<UpdateStatus> = {}): UpdateStatus {
-	return { current: '0.3.0', enabled: true, available: false, latest: null, releasedAt: null, url: null, checkedAt: '1', error: null, ...overrides };
+	return { current: '0.3.0', enabled: true, available: false, latest: null, releasedAt: null, url: null, changelog: null, checkedAt: '1', error: null, ...overrides };
 }
 
 describe('update presentation', () => {

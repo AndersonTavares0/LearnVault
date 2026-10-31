@@ -20,7 +20,7 @@ use std::{future::Future, pin::Pin, sync::Arc, sync::OnceLock, time::Duration};
 use axum::{
     Json,
     extract::{Query, State},
-    http::{HeaderMap, HeaderValue, header},
+    http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
@@ -51,6 +51,7 @@ pub(crate) struct ReleaseInfo {
     pub(crate) published_at: Option<String>,
     pub(crate) draft: bool,
     pub(crate) prerelease: bool,
+    pub(crate) changelog: Option<String>,
 }
 
 /// Busca a release mais recente. Devolve um motivo curto e sanitizado em pt-BR ao falhar.
@@ -71,6 +72,7 @@ pub(crate) struct UpdateResponse {
     latest: Option<String>,
     released_at: Option<String>,
     url: Option<String>,
+    changelog: Option<String>,
     checked_at: Option<String>,
     error: Option<String>,
 }
@@ -82,6 +84,7 @@ struct Success {
     latest: Option<String>,
     released_at: Option<String>,
     url: Option<String>,
+    changelog: Option<String>,
     /// Instante da checagem em segundos desde a época Unix, como string opaca.
     checked_at: String,
     checked_instant: Instant,
@@ -193,6 +196,51 @@ pub(crate) async fn update(
     private_no_store(Json(state.update.snapshot(query.force()).await).into_response())
 }
 
+/// Entrada de histórico de atualização (gerada pelo script autônomo de atualização).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct UpdateHistoryEntry {
+    pub(crate) timestamp: String,
+    pub(crate) status: String,
+    pub(crate) from: String,
+    pub(crate) to: String,
+    pub(crate) message: String,
+}
+
+/// Resposta da listagem do histórico de atualizações.
+#[derive(Debug, Serialize)]
+pub(crate) struct UpdateHistoryResponse {
+    pub(crate) items: Vec<UpdateHistoryEntry>,
+}
+
+/// Consulta autenticada (apenas administrador) do histórico de atualizações no volume de dados.
+pub(crate) async fn update_history(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let user = match crate::study::user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    if !user.is_admin {
+        return (StatusCode::FORBIDDEN, "admin required").into_response();
+    }
+    let data_dir = state
+        .config
+        .database_path
+        .parent()
+        .map(std::path::Path::to_path_buf)
+        .unwrap_or_else(|| std::path::PathBuf::from("."));
+    let history_file = data_dir.join("update-history.json");
+    let items = if history_file.is_file() {
+        match std::fs::read_to_string(&history_file) {
+            Ok(content) => {
+                serde_json::from_str::<Vec<UpdateHistoryEntry>>(&content).unwrap_or_default()
+            }
+            Err(_) => Vec::new(),
+        }
+    } else {
+        Vec::new()
+    };
+    private_no_store(Json(UpdateHistoryResponse { items }).into_response())
+}
+
 /// Consulta do endpoint. `force=1` (ou `force=true`) ignora o intervalo mínimo de cache.
 #[derive(Debug, Deserialize)]
 pub(crate) struct UpdateQuery {
@@ -217,6 +265,7 @@ impl UpdateResponse {
             latest: None,
             released_at: None,
             url: None,
+            changelog: None,
             checked_at: None,
             error: None,
         }
@@ -230,6 +279,7 @@ impl UpdateResponse {
             latest: None,
             released_at: None,
             url: None,
+            changelog: None,
             checked_at: None,
             error: Some(message),
         }
@@ -243,6 +293,7 @@ impl UpdateResponse {
             latest: success.latest,
             released_at: success.released_at,
             url: success.url,
+            changelog: success.changelog,
             checked_at: Some(success.checked_at),
             error: None,
         }
@@ -278,6 +329,11 @@ fn success_from(release: &ReleaseInfo, evaluation: Evaluation, checked_at: Strin
             None
         },
         url: if available { url } else { None },
+        changelog: if available {
+            release.changelog.clone()
+        } else {
+            None
+        },
         checked_at,
         checked_instant: Instant::now(),
     }
@@ -314,6 +370,8 @@ fn parse_release(body: &str) -> Result<ReleaseInfo, ()> {
         draft: bool,
         #[serde(default)]
         prerelease: bool,
+        #[serde(default)]
+        body: Option<String>,
     }
 
     let payload: Payload = serde_json::from_str(body).map_err(|_| ())?;
@@ -321,11 +379,24 @@ fn parse_release(body: &str) -> Result<ReleaseInfo, ()> {
         .tag_name
         .filter(|tag| !tag.trim().is_empty())
         .ok_or(())?;
+    let changelog = payload.body.and_then(|text| {
+        let trimmed = text.trim();
+        if trimmed.is_empty() {
+            None
+        } else if trimmed.len() > 16 * 1024 {
+            let mut truncated = trimmed[..16 * 1024].to_string();
+            truncated.push_str("\n\n...(conteúdo truncado)");
+            Some(truncated)
+        } else {
+            Some(trimmed.to_string())
+        }
+    });
     Ok(ReleaseInfo {
         tag_name,
         published_at: payload.published_at,
         draft: payload.draft,
         prerelease: payload.prerelease,
+        changelog,
     })
 }
 
@@ -582,6 +653,7 @@ mod tests {
             published_at: Some("2026-10-17T12:00:00Z".to_owned()),
             draft: false,
             prerelease: false,
+            changelog: None,
         }
     }
 
@@ -608,12 +680,16 @@ mod tests {
     #[test]
     fn parses_a_published_release_payload() {
         let parsed = parse_release(
-            r#"{"tag_name":"v0.4.0","published_at":"2026-10-17T12:00:00Z","html_url":"https://attacker.test/","draft":false,"prerelease":false}"#,
+            "{\"tag_name\":\"v0.4.0\",\"published_at\":\"2026-10-17T12:00:00Z\",\"html_url\":\"https://attacker.test/\",\"draft\":false,\"prerelease\":false,\"body\":\"### Funcionalidades\\n- Novo recurso\"}",
         )
         .unwrap();
         assert_eq!(parsed.tag_name, "v0.4.0");
         assert_eq!(parsed.published_at.as_deref(), Some("2026-10-17T12:00:00Z"));
         assert!(!parsed.draft && !parsed.prerelease);
+        assert_eq!(
+            parsed.changelog.as_deref(),
+            Some("### Funcionalidades\n- Novo recurso")
+        );
     }
 
     #[test]

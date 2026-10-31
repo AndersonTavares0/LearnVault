@@ -71,6 +71,51 @@ pub(crate) struct WeeklyGoalRequest {
     weekly_goal: i64,
 }
 
+#[derive(Debug, Deserialize)]
+pub(crate) struct NotesQuery {
+    media_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct CreateNoteRequest {
+    media_id: String,
+    position_seconds: i64,
+    content: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct UpdateNoteRequest {
+    content: String,
+}
+
+#[derive(Serialize)]
+pub(crate) struct StudyNoteResponse {
+    note_id: String,
+    media_id: String,
+    position_seconds: i64,
+    content: String,
+    created_at: i64,
+    updated_at: i64,
+}
+
+impl From<learnvault_core::StudyNote> for StudyNoteResponse {
+    fn from(note: learnvault_core::StudyNote) -> Self {
+        Self {
+            note_id: note.note_id,
+            media_id: note.media_id,
+            position_seconds: note.position_seconds,
+            content: note.content,
+            created_at: note.created_at,
+            updated_at: note.updated_at,
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct NotesResponse {
+    items: Vec<StudyNoteResponse>,
+}
+
 #[derive(Serialize)]
 struct ErrorResponse {
     error: &'static str,
@@ -561,6 +606,125 @@ pub(crate) async fn set_completed(
     }
 }
 
+/// Lista as anotações do usuário autenticado para a mídia solicitada.
+pub(crate) async fn list_notes(
+    State(state): State<AppState>,
+    RawQuery(raw): RawQuery,
+    headers: HeaderMap,
+) -> Response {
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let Some(query) =
+        serde_urlencoded::from_str::<NotesQuery>(raw.as_deref().unwrap_or_default()).ok()
+    else {
+        return invalid_query();
+    };
+    let owner = user.user_id;
+    let media_id = query.media_id;
+    match run_study(&state, move |db| {
+        learnvault_core::list_study_notes(db, &owner, &media_id)
+    })
+    .await
+    {
+        Ok(notes) => private_no_store(
+            Json(NotesResponse {
+                items: notes.into_iter().map(StudyNoteResponse::from).collect(),
+            })
+            .into_response(),
+        ),
+        Err(failure) => study_failure_response(failure),
+    }
+}
+
+/// Cria uma anotação de estudo vinculada à mídia e ao timestamp atual.
+pub(crate) async fn create_note(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<CreateNoteRequest>,
+) -> Response {
+    if !same_origin(&headers) {
+        return csrf_failed();
+    }
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let owner = user.user_id;
+    match run_study(&state, move |db| {
+        learnvault_core::create_study_note(
+            db,
+            &owner,
+            &request.media_id,
+            request.position_seconds,
+            &request.content,
+        )
+    })
+    .await
+    {
+        Ok(note) => private_no_store(
+            (StatusCode::CREATED, Json(StudyNoteResponse::from(note))).into_response(),
+        ),
+        Err(failure) => study_failure_response(failure),
+    }
+}
+
+/// Atualiza o conteúdo de uma anotação de estudo existente.
+pub(crate) async fn update_note(
+    State(state): State<AppState>,
+    Path(note_id): Path<String>,
+    headers: HeaderMap,
+    Json(request): Json<UpdateNoteRequest>,
+) -> Response {
+    if !same_origin(&headers) {
+        return csrf_failed();
+    }
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let owner = user.user_id;
+    match run_study(&state, move |db| {
+        learnvault_core::update_study_note(db, &owner, &note_id, &request.content)
+    })
+    .await
+    {
+        Ok(note) => private_no_store(Json(StudyNoteResponse::from(note)).into_response()),
+        Err(failure) => study_failure_response(failure),
+    }
+}
+
+/// Exclui uma anotação de estudo pertencente ao usuário.
+pub(crate) async fn delete_note(
+    State(state): State<AppState>,
+    Path(note_id): Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    if !same_origin(&headers) {
+        return csrf_failed();
+    }
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let owner = user.user_id;
+    match run_study(&state, move |db| {
+        learnvault_core::delete_study_note(db, &owner, &note_id)
+    })
+    .await
+    {
+        Ok(deleted) => {
+            if deleted {
+                status_private_no_store(StatusCode::NO_CONTENT)
+            } else {
+                error_response(StatusCode::NOT_FOUND, "note_not_found")
+            }
+        }
+        Err(failure) => study_failure_response(failure),
+    }
+}
+
 /// Responde o contrato de capacidades do Study.
 ///
 /// Exige a mesma sessão autenticada (e a mesma recusa à sessão temporária) das demais
@@ -635,6 +799,12 @@ fn study_failure_response(failure: StudyFailure) -> Response {
         }
         StudyFailure::Core(Error::InvalidStudyPosition { .. }) => {
             error_response(StatusCode::UNPROCESSABLE_ENTITY, "invalid_position")
+        }
+        StudyFailure::Core(Error::InvalidStudyNoteContent) => {
+            error_response(StatusCode::UNPROCESSABLE_ENTITY, "invalid_note_content")
+        }
+        StudyFailure::Core(Error::StudyNoteNotFound { .. }) => {
+            error_response(StatusCode::NOT_FOUND, "note_not_found")
         }
         StudyFailure::Core(_) => internal_error("study unavailable"),
     }

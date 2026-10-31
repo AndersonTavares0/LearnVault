@@ -6,8 +6,9 @@
 
 use learnvault_core::paths::relative_path_key;
 use learnvault_core::{
-    Database, Error, KeyMode, MAX_RECENT_STUDY, recent_study, record_position, set_completed,
-    study_progress, study_summary_on,
+    Database, Error, KeyMode, MAX_RECENT_STUDY, create_study_note, delete_study_note,
+    list_study_notes, recent_study, record_position, set_completed, study_progress,
+    study_summary_on, update_study_note,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -803,5 +804,88 @@ fn study_day_is_filled_by_study_state_trigger() -> TestResult {
         |row| row.get(0),
     )?;
     assert_eq!(rows, 1, "a inserção em study_state marca o dia local");
+    Ok(())
+}
+
+#[test]
+fn study_notes_crud_and_isolation() -> TestResult {
+    let db = library_db()?;
+    insert_media(&db, "m1", "available")?;
+    insert_media(&db, "m2", "available")?;
+
+    // Cria anotações fora de ordem temporal para validar ordenação
+    let note2 = create_study_note(&db, OWNER, "m1", 120, "Segundo ponto importante")?;
+    let note1 = create_study_note(&db, OWNER, "m1", 30, "Primeiro ponto da aula")?;
+
+    // Anotação para outro aluno
+    create_study_note(&db, OTHER, "m1", 45, "Nota do outro aluno")?;
+
+    // Anotação em outra mídia
+    create_study_note(&db, OWNER, "m2", 10, "Nota de outra aula")?;
+
+    let notes = list_study_notes(&db, OWNER, "m1")?;
+    assert_eq!(
+        notes.len(),
+        2,
+        "deve retornar apenas as notas do dono para a mídia"
+    );
+    assert_eq!(notes[0].note_id, note1.note_id);
+    assert_eq!(notes[0].position_seconds, 30);
+    assert_eq!(notes[0].content, "Primeiro ponto da aula");
+    assert_eq!(notes[1].note_id, note2.note_id);
+    assert_eq!(notes[1].position_seconds, 120);
+
+    // Atualização de anotação
+    let updated = update_study_note(&db, OWNER, &note1.note_id, "Primeiro ponto revisado")?;
+    assert_eq!(updated.content, "Primeiro ponto revisado");
+
+    // Outro dono não consegue atualizar a anotação
+    assert!(matches!(
+        update_study_note(&db, OTHER, &note1.note_id, "Tentativa indevida"),
+        Err(Error::StudyNoteNotFound { .. })
+    ));
+
+    // Exclusão de anotação
+    assert!(delete_study_note(&db, OWNER, &note2.note_id)?);
+    let remaining = list_study_notes(&db, OWNER, "m1")?;
+    assert_eq!(remaining.len(), 1);
+    assert_eq!(remaining[0].note_id, note1.note_id);
+
+    // Outro dono não consegue excluir a anotação remanescente
+    assert!(!delete_study_note(&db, OTHER, &note1.note_id)?);
+    assert_eq!(list_study_notes(&db, OWNER, "m1")?.len(), 1);
+
+    Ok(())
+}
+
+#[test]
+fn study_notes_validation_rules() -> TestResult {
+    let db = library_db()?;
+    insert_media(&db, "m1", "available")?;
+
+    // Posição negativa
+    assert!(matches!(
+        create_study_note(&db, OWNER, "m1", -1, "Conteúdo"),
+        Err(Error::InvalidStudyPosition { .. })
+    ));
+
+    // Conteúdo vazio ou apenas espaços
+    assert!(matches!(
+        create_study_note(&db, OWNER, "m1", 10, "   "),
+        Err(Error::InvalidStudyNoteContent)
+    ));
+
+    // Dono inválido
+    assert!(matches!(
+        create_study_note(&db, "   ", "m1", 10, "Conteúdo"),
+        Err(Error::InvalidOwnerId)
+    ));
+
+    // Mídia inexistente
+    assert!(matches!(
+        create_study_note(&db, OWNER, "m-inexistente", 10, "Conteúdo"),
+        Err(Error::MediaNotFound { .. })
+    ));
+
     Ok(())
 }

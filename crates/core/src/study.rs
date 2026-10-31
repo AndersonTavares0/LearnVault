@@ -379,3 +379,134 @@ fn summary_for_connection(
         days,
     })
 }
+
+/// Anotação de estudo associada a uma mídia e um ponto da linha do tempo.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StudyNote {
+    /// Identificador opaco da anotação (UUID v7).
+    pub note_id: String,
+    /// Identificador da mídia vinculada.
+    pub media_id: String,
+    /// Posição no player de vídeo em segundos.
+    pub position_seconds: i64,
+    /// Conteúdo textual da anotação.
+    pub content: String,
+    /// Instante de criação em segundos desde a época Unix.
+    pub created_at: i64,
+    /// Instante da última edição em segundos desde a época Unix.
+    pub updated_at: i64,
+}
+
+/// Lista as anotações do dono para uma mídia específica, ordenadas cronologicamente pelo timestamp da aula.
+pub fn list_study_notes(db: &Database, owner_id: &str, media_id: &str) -> Result<Vec<StudyNote>> {
+    validate_owner(owner_id)?;
+    let conn = db.connection();
+    require_media(conn, media_id)?;
+
+    let mut statement = conn.prepare(
+        "SELECT note_id, media_id, position_seconds, content, created_at, updated_at
+         FROM study_note
+         WHERE owner_id = ?1 AND media_id = ?2
+         ORDER BY position_seconds ASC, created_at ASC",
+    )?;
+    let rows = statement.query_map(rusqlite::params![owner_id, media_id], note_from_row)?;
+
+    let mut notes = Vec::new();
+    for note in rows {
+        notes.push(note?);
+    }
+    Ok(notes)
+}
+
+/// Cria uma nova anotação de estudo com marcador de tempo.
+pub fn create_study_note(
+    db: &Database,
+    owner_id: &str,
+    media_id: &str,
+    position_seconds: i64,
+    content: &str,
+) -> Result<StudyNote> {
+    validate_owner(owner_id)?;
+    if position_seconds < 0 {
+        return Err(Error::InvalidStudyPosition { position_seconds });
+    }
+    let trimmed = content.trim();
+    if trimmed.is_empty() || trimmed.len() > 10000 {
+        return Err(Error::InvalidStudyNoteContent);
+    }
+
+    let conn = db.connection();
+    require_media(conn, media_id)?;
+
+    let note_id = crate::ids::new_note_id();
+    let now = now_unix_seconds();
+
+    conn.execute(
+        "INSERT INTO study_note (note_id, owner_id, media_id, position_seconds, content, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        rusqlite::params![note_id, owner_id, media_id, position_seconds, trimmed, now, now],
+    )?;
+
+    Ok(StudyNote {
+        note_id,
+        media_id: media_id.to_owned(),
+        position_seconds,
+        content: trimmed.to_owned(),
+        created_at: now,
+        updated_at: now,
+    })
+}
+
+/// Atualiza o conteúdo de uma anotação existente do dono.
+pub fn update_study_note(
+    db: &Database,
+    owner_id: &str,
+    note_id: &str,
+    content: &str,
+) -> Result<StudyNote> {
+    validate_owner(owner_id)?;
+    let trimmed = content.trim();
+    if trimmed.is_empty() || trimmed.len() > 10000 {
+        return Err(Error::InvalidStudyNoteContent);
+    }
+
+    let conn = db.connection();
+    let now = now_unix_seconds();
+
+    let updated = conn
+        .query_row(
+            "UPDATE study_note
+         SET content = ?1, updated_at = ?2
+         WHERE owner_id = ?3 AND note_id = ?4
+         RETURNING note_id, media_id, position_seconds, content, created_at, updated_at",
+            rusqlite::params![trimmed, now, owner_id, note_id],
+            note_from_row,
+        )
+        .optional()?;
+
+    updated.ok_or_else(|| Error::StudyNoteNotFound {
+        note_id: note_id.to_owned(),
+    })
+}
+
+/// Remove uma anotação de estudo pertencente ao dono.
+pub fn delete_study_note(db: &Database, owner_id: &str, note_id: &str) -> Result<bool> {
+    validate_owner(owner_id)?;
+    let conn = db.connection();
+    let changes = conn.execute(
+        "DELETE FROM study_note WHERE owner_id = ?1 AND note_id = ?2",
+        rusqlite::params![owner_id, note_id],
+    )?;
+    Ok(changes > 0)
+}
+
+fn note_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StudyNote> {
+    Ok(StudyNote {
+        note_id: row.get(0)?,
+        media_id: row.get(1)?,
+        position_seconds: row.get(2)?,
+        content: row.get(3)?,
+        created_at: row.get(4)?,
+        updated_at: row.get(5)?,
+    })
+}

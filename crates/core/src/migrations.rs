@@ -11,7 +11,7 @@ use rusqlite_migration::{M, Migrations};
 /// A recusa de um schema mais novo não depende desta constante — ela vem de
 /// `SchemaVersion::Outside` —, mas ela deve acompanhar a cadeia de migrações porque
 /// aparece na mensagem de diagnóstico de [`crate::Error::SchemaTooNew`].
-pub(crate) const SCHEMA_VERSION: usize = 6;
+pub(crate) const SCHEMA_VERSION: usize = 7;
 
 /// Versão 1: bibliotecas, mídia, varreduras e estado de estudo.
 ///
@@ -384,6 +384,24 @@ BEGIN
 END;
 ";
 
+/// Versão 7: anotações de estudo na linha do tempo das aulas.
+///
+/// Permite ao aluno registrar anotações e marcadores temporais vinculados a uma mídia
+/// durante o estudo, ordenáveis pela posição do player em segundos.
+const V7: &str = "
+CREATE TABLE study_note (
+    note_id TEXT PRIMARY KEY NOT NULL,
+    owner_id TEXT NOT NULL,
+    media_id TEXT NOT NULL REFERENCES media (media_id) ON DELETE NO ACTION,
+    position_seconds INTEGER NOT NULL CHECK (position_seconds >= 0),
+    content TEXT NOT NULL CHECK (length(trim(content)) > 0 AND length(content) <= 10000),
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX study_note_owner_media_idx ON study_note (owner_id, media_id, position_seconds);
+";
+
 const MIGRATIONS_SLICE: &[M<'static>] = &[
     M::up(V1),
     M::up(V2),
@@ -391,6 +409,7 @@ const MIGRATIONS_SLICE: &[M<'static>] = &[
     M::up(V4),
     M::up(V5),
     M::up(V6),
+    M::up(V7),
 ];
 
 /// Cadeia de migrações aplicada por [`crate::db::Database`].

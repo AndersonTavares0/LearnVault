@@ -15,7 +15,7 @@
 	import PasswordField from './PasswordField.svelte';
 	import { defaultLessonPath, lessonContainer, neighboringLessons } from './navigation';
 	import { destinationAfterLogin, findCourse, findLesson, findLessonLocation, href, locationFromHash, type LessonLocation, type Route } from './router';
-	import { transport, transportKind, COVER_ACCEPT, MAX_COVER_BYTES, courseIdOf, STUDY_NOT_AVAILABLE, type Catalog, type CatalogNode, type Lesson, type StudyProgress, type UpdateStatus, type User } from './transport';
+	import { transport, transportKind, COVER_ACCEPT, MAX_COVER_BYTES, courseIdOf, STUDY_NOT_AVAILABLE, type Catalog, type CatalogNode, type Lesson, type StudyProgress, type UpdateStatus, type UpdateHistoryEntry, type User } from './transport';
 	import { updateOutcome, updateMessage, updateReleaseUrl } from './update';
 	import { defaultRoute, resolveSession } from './session';
 	import { formatDuration, studySyncSupported } from './player';
@@ -517,12 +517,24 @@
 	// O botão manual força a checagem; a abertura da tela usa a checagem não forçada. Uma
 	// falha só vira mensagem após a ação do usuário — abrir Configurações offline não
 	// incomoda. `updateManual` guarda qual foi a última tentativa.
+	let updateHistoryList: UpdateHistoryEntry[] = [];
+
+	async function loadUpdateHistory() {
+		if (transportKind !== 'http') return;
+		try {
+			updateHistoryList = await transport.updateHistory();
+		} catch {
+			updateHistoryList = [];
+		}
+	}
+
 	async function checkUpdate(manual: boolean) {
 		if (updateChecking) return;
 		updateChecking = true;
 		updateManual = manual;
 		try {
 			updateStatus = await transport.checkUpdate(manual);
+			void loadUpdateHistory();
 		} catch (cause) {
 			if (manual) {
 				updateStatus = {
@@ -532,6 +544,7 @@
 					latest: null,
 					releasedAt: null,
 					url: null,
+					changelog: null,
 					checkedAt: null,
 					error: cause instanceof Error ? cause.message : 'Não foi possível verificar a atualização.'
 				};
@@ -785,9 +798,41 @@
 									{@const releaseUrl = updateReleaseUrl(updateStatus)}
 									{#if outcome !== 'error' || updateManual}<p class="lv-notice" role="status">{updateMessage(updateStatus)}</p>{/if}
 									{#if outcome === 'available' && releaseUrl}<p class="lv-notice"><a href={releaseUrl} target="_blank" rel="noopener noreferrer">Ver a release</a></p>{/if}
+									{#if outcome === 'available' && updateStatus.changelog}
+										<details class="lv-update-changelog">
+											<summary class="lv-update-changelog__summary">Novidades desta versão (Changelog)</summary>
+											<pre class="lv-update-changelog__content">{updateStatus.changelog}</pre>
+										</details>
+									{/if}
+								{/if}
+								{#if updateHistoryList.length > 0}
+									<details class="lv-update-history">
+										<summary class="lv-update-history__summary">Histórico de atualizações ({updateHistoryList.length})</summary>
+										<ul class="lv-update-history__list">
+											{#each updateHistoryList as entry}
+												<li class="lv-update-history__item">
+													<div class="lv-update-history__header">
+														<span class="lv-update-history__status lv-update-history__status--{entry.status}">{entry.status === 'success' ? 'Sucesso' : entry.status === 'rollback' ? 'Reversão' : entry.status}</span>
+														<span class="lv-update-history__versions">{entry.from} → {entry.to}</span>
+														<time class="lv-update-history__time">{entry.timestamp}</time>
+													</div>
+													<p class="lv-update-history__msg">{entry.message}</p>
+												</li>
+											{/each}
+										</ul>
+									</details>
 								{/if}
 							</div>
 						</section>
+						{#if canManage}
+							<section class="lv-panel lv-settings__panel" aria-labelledby="backup-heading">
+								<div class="lv-panel__head"><h2 id="backup-heading">Backup do Banco de Dados</h2></div>
+								<div class="lv-settings__body">
+									<p class="lv-notice">Gere e baixe uma cópia transacional consistente do banco SQLite (verificada com integridade estrutural).</p>
+									<a class="lv-btn lv-btn--outline" href="/api/admin/backup" download>Baixar backup agora (.sqlite)</a>
+								</div>
+							</section>
+						{/if}
 					{/if}
 					</div>
 				</div>

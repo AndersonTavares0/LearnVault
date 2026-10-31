@@ -5,6 +5,7 @@
 use std::io::Write;
 
 mod auth;
+mod backup;
 mod catalog;
 mod config;
 mod courses;
@@ -22,7 +23,8 @@ pub use auth::{
     AuthError, generate_session_token, hash_password, hash_session_token,
     validate_current_password, validate_password, validate_username, verify_password,
 };
-pub use config::{Command, Config, ConfigError, parse_command};
+pub use backup::{execute_backup, execute_restore};
+pub use config::{BackupOptions, Command, Config, ConfigError, RestoreOptions, parse_command};
 pub use learnvault_core::{LegacyImportOptions, LegacyImportReport, import_go_database};
 pub use state::{AppState, StateError};
 
@@ -93,6 +95,18 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/study/position", post(study::record_position))
         .route("/api/study/completed", post(study::set_completed))
         .route("/api/study/capabilities", get(study::capabilities))
+        .route(
+            "/api/study/notes",
+            get(study::list_notes)
+                .post(study::create_note)
+                .layer(DefaultBodyLimit::max(16 * 1024)),
+        )
+        .route(
+            "/api/study/notes/{id}",
+            axum::routing::put(study::update_note)
+                .delete(study::delete_note)
+                .layer(DefaultBodyLimit::max(16 * 1024)),
+        )
         .route("/api/focus/sessions", post(study::record_focus_session))
         .route("/api/focus/summary", get(study::focus_summary))
         .route("/api/rewards/summary", get(study::reward_summary))
@@ -104,7 +118,9 @@ pub fn build_router(state: AppState) -> Router {
             "/api/rewards/weekly-goal",
             get(study::weekly_goal).put(study::set_weekly_goal),
         )
+        .route("/api/admin/backup", get(backup::download_backup))
         .route("/api/update", get(update::update))
+        .route("/api/update/history", get(update::update_history))
         .fallback(spa::serve)
         .layer(DefaultBodyLimit::max(8 * 1024))
         .layer(map_response(move |response| {
@@ -405,6 +421,52 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn update_history_endpoint_reads_entries_and_requires_auth() {
+        let temp = tempfile::tempdir().unwrap();
+        let unauth_app = build_router(AppState::new(config_fixture(&temp)));
+        let unauth_res = unauth_app
+            .oneshot(
+                Request::get("/api/update/history")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(unauth_res.status(), StatusCode::UNAUTHORIZED);
+
+        // Escreve histórico simulado
+        let history_file = temp.path().join("update-history.json");
+        std::fs::write(
+            &history_file,
+            r#"[{"timestamp":"2026-10-31T20:00:00Z","status":"success","from":"0.7.0","to":"0.8.0","message":"Atualizado com sucesso"}]"#,
+        )
+        .unwrap();
+
+        let state = AppState::initialize(config_fixture(&temp)).await.unwrap();
+        let app = build_router(state);
+        let cookie = media_cookie(&app).await;
+
+        let response = app
+            .oneshot(
+                Request::get("/api/update/history")
+                    .header("cookie", cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let items = json["items"].as_array().unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["status"], "success");
+        assert_eq!(items[0]["from"], "0.7.0");
+        assert_eq!(items[0]["to"], "0.8.0");
+    }
+
+    #[tokio::test]
     async fn healthz_is_public_and_returns_status_and_version() {
         let temp = tempfile::tempdir().unwrap();
         let app = build_router(AppState::new(config_fixture(&temp)));
@@ -463,7 +525,7 @@ mod tests {
         for (name, setup) in [
             ("missing", "PRAGMA user_version = 0"),
             ("older", "PRAGMA user_version = 3"),
-            ("newer", "PRAGMA user_version = 7"),
+            ("newer", "PRAGMA user_version = 8"),
             (
                 "missing required column",
                 "ALTER TABLE user RENAME COLUMN must_change_credentials TO changed",

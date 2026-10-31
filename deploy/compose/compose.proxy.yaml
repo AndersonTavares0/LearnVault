@@ -1,0 +1,35 @@
+# LearnVault - Proxy Reverso Caddy com HTTPS automático e cabeçalhos de segurança
+# Uso: docker compose -f compose.yaml -f compose.proxy.yaml up -d
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: learnvault-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - learnvault_net
+    depends_on:
+      - learnvault
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  caddy_data:
+  caddy_config:
