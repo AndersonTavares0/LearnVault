@@ -54,19 +54,24 @@ fi
 
 log "Versão atual instalada: ${CURRENT_VERSION}"
 
-# Se não foi fornecida versão alvo, consulta a API pública de releases do repositório
+# Se não foi fornecida versão alvo, consulta o endpoint interno ou o repositório oficial
 if [ -z "$TARGET_VERSION" ]; then
-    log "Consultando versão mais recente disponível no repositório..."
-    REPO="${LEARNVAULT_GITHUB_REPO:-AndersonTavares0/LearnVault}"
-    latest_release=$(wget -q -O - -U "LearnVault-Updater" "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null || true)
-    if [ -n "$latest_release" ]; then
-        TARGET_VERSION=$(printf "%s" "$latest_release" | grep -o '"tag_name":"[^"]*"' | cut -d'"' -f4 | sed 's/^v//' || true)
-        if [ -n "$TARGET_VERSION" ]; then
-            log "Nova versão identificada no repositório: ${TARGET_VERSION}"
-        fi
+    log "Consultando versão mais recente disponível..."
+    update_info=$(docker compose exec -T "$CONTAINER" wget -q -O - http://127.0.0.1:8090/api/update 2>/dev/null || true)
+    if [ -n "$update_info" ]; then
+        TARGET_VERSION=$(printf "%s" "$update_info" | grep -o '"latest":"[^"]*"' | cut -d'"' -f4 | sed 's/^v//' || true)
     fi
     if [ -z "$TARGET_VERSION" ]; then
-        log "Nenhuma nova versão identificada ou serviço de releases temporariamente indisponível."
+        REPO="${LEARNVAULT_GITHUB_REPO:-AndersonTavares0/LearnVault}"
+        latest_release=$(wget -q -O - -U "LearnVault-Updater" "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null || true)
+        if [ -n "$latest_release" ]; then
+            TARGET_VERSION=$(printf "%s" "$latest_release" | grep -o '"tag_name":"[^"]*"' | cut -d'"' -f4 | sed 's/^v//' || true)
+        fi
+    fi
+    if [ -n "$TARGET_VERSION" ]; then
+        log "Nova versão identificada: ${TARGET_VERSION}"
+    else
+        log "Nenhuma nova versão identificada ou serviço temporariamente indisponível."
         exit 0
     fi
 fi

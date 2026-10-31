@@ -17,7 +17,7 @@ services:
       AUTO_UPDATE_WINDOW: ${AUTO_UPDATE_WINDOW:-03:00-05:00}
       COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-learnvault}
       LEARNVAULT_CONTAINER: ${LEARNVAULT_CONTAINER:-learnvault}
-      LEARNVAULT_IMAGE_REPO: ${LEARNVAULT_IMAGE_REPO:-ghcr.io/andersontavares0/learnvault}
+      LEARNVAULT_IMAGE_REPO: ${LEARNVAULT_IMAGE_REPO:-ghcr.io/learnvault/learnvault}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - .:/compose:ro
