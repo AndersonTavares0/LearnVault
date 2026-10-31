@@ -1,12 +1,12 @@
-# Este arquivo constrói o servidor Rust com `Containerfile`. O tarball Rust é o release suportado.
-# Nunca aponte `DATA_DIR` para um
-# banco Go v7/v8 não migrado: o Rust falha fechado; migre antes com `learnvault-server migrate-go`.
+# LearnVault - Docker Compose para Self-Hosting
+# Imagem oficial OCI minimalista, segura e não-root (UID 10001).
+# A pasta de cursos (/library) é montada estritamente como somente leitura (:ro).
 services:
   learnvault:
     build:
       context: ../..
       dockerfile: deploy/container/Containerfile
-    image: learnvault-rust:local
+    image: ${LEARNVAULT_IMAGE:-learnvault-rust:local}
     container_name: learnvault
     restart: unless-stopped
     environment:
@@ -24,6 +24,8 @@ services:
       - ${DATA_DIR:-../../data}:/data:rw
       - ${CACHE_DIR:-../../cache}:/cache:rw
       - ${LIBRARY_DIR:-../../testdata/library}:/library:ro
+    networks:
+      - learnvault_net
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=16m
@@ -37,3 +39,12 @@ services:
       timeout: 3s
       start_period: 10s
       retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  learnvault_net:
+    driver: bridge

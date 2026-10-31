@@ -1,0 +1,27 @@
+{
+    # Desativa telemetria para maior privacidade
+    admin off
+}
+
+{$DOMAIN:localhost} {
+    encode zstd gzip
+
+    # Cabeçalhos de segurança OWASP recomendados para self-hosting
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+    }
+
+    # Proxy reverso para o container LearnVault
+    reverse_proxy learnvault:8090 {
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Forwarded-Host {host}
+        header_up X-Real-IP {remote_host}
+        
+        # Otimização de streaming para vídeos e requisições HTTP Range (206 Partial Content)
+        buffer_responses off
+    }
+}

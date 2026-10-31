@@ -1,0 +1,30 @@
+# LearnVault - Serviço Companion de Atualização Automática (Opt-in)
+# O container da aplicação LearnVault NUNCA monta o socket do Docker.
+# Este container isolado executa com permissões estritas e validação de healthcheck com rollback.
+#
+# Uso manual: docker compose -f compose.yaml -f compose.updater.yaml run --rm updater
+# Uso contínuo (agendado): docker compose -f compose.yaml -f compose.updater.yaml up -d updater
+services:
+  updater:
+    image: alpine:3.24
+    container_name: learnvault-updater
+    restart: unless-stopped
+    profiles:
+      - updater
+    environment:
+      AUTO_UPDATE: ${AUTO_UPDATE:-false}
+      AUTO_UPDATE_WINDOW: ${AUTO_UPDATE_WINDOW:-03:00-05:00}
+      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-learnvault}
+      LEARNVAULT_CONTAINER: ${LEARNVAULT_CONTAINER:-learnvault}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ../../deploy/scripts:/scripts:ro
+      - ${DATA_DIR:-../../data}:/data:rw
+    entrypoint: ["/bin/sh", "/scripts/updater-daemon.sh"]
+    networks:
+      - learnvault_net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
