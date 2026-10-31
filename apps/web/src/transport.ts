@@ -49,6 +49,13 @@ export type UpdateStatus = {
 	checkedAt: string | null;
 	error: string | null;
 };
+export type UpdateHistoryEntry = {
+	timestamp: string;
+	status: string;
+	from: string;
+	to: string;
+	message: string;
+};
 export type StudyNote = {
 	noteId: string;
 	mediaId: string;
@@ -122,6 +129,7 @@ export interface Transport {
 	setWeeklyGoal(goal: number): Promise<number>;
 	// Verifica a atualização; `force` ignora o intervalo mínimo de cache do servidor.
 	checkUpdate(force?: boolean): Promise<UpdateStatus>;
+	updateHistory(): Promise<UpdateHistoryEntry[]>;
 	mediaUrl(file: FileEntry, courseId?: string): string | null;
 	// URL da capa personalizada, derivada da versão exposta pelo catálogo. Sem versão (sem
 	// capa) devolve `null`, e a interface cai na miniatura ou na capa gerada.
@@ -647,6 +655,19 @@ export class HttpTransport implements Transport {
 	// O servidor local faz a checagem por HTTPS e devolve o estado; o navegador só o exibe.
 	// `force=1` (checagem manual) ignora o intervalo mínimo de cache do servidor.
 	async checkUpdate(force = false) { const response = await fetch(force ? '/api/update?force=1' : '/api/update'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível verificar a atualização.'); return normalizeUpdateStatus(await response.json()); }
+	async updateHistory(): Promise<UpdateHistoryEntry[]> {
+		const response = await fetch('/api/update/history');
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar o histórico de atualizações.');
+		const data = (await response.json()) as { items?: unknown };
+		if (!data || !Array.isArray(data.items)) return [];
+		return data.items.map((item: any) => ({
+			timestamp: typeof item?.timestamp === 'string' ? item.timestamp : '',
+			status: typeof item?.status === 'string' ? item.status : 'unknown',
+			from: typeof item?.from === 'string' ? item.from : '',
+			to: typeof item?.to === 'string' ? item.to : '',
+			message: typeof item?.message === 'string' ? item.message : ''
+		}));
+	}
 	mediaUrl(file: FileEntry, courseId?: string) { return `/api/media?course=${encodeURIComponent(courseId ?? '')}&path=${encodeURIComponent(file.path)}`; }
 	// A versão (mtime em segundos) exposta pelo catálogo entra como `?v=` para invalidar a
 	// imagem em cache do navegador quando a capa é trocada. Sem capa, não há URL manual.
@@ -758,6 +779,7 @@ export class DesktopStub implements Transport {
 	// checagem fica desligada, sem tocar a rede. Isso preserva a regra de que o bundle
 	// desktop não contém nenhum `fetch` do aplicativo.
 	checkUpdate() { return Promise.resolve({ current: '', enabled: false, available: false, latest: null, releasedAt: null, url: null, changelog: null, checkedAt: null, error: null } satisfies UpdateStatus); }
+	updateHistory(): Promise<UpdateHistoryEntry[]> { return Promise.resolve([]); }
 	// Toda mídia entregue ao player usa a identidade autorizada. O caminho catalogado é
 	// deliberadamente ignorado, inclusive no desktop, para que ele nunca atravesse o webview.
 	mediaUrl(file: FileEntry, _courseId?: string) {

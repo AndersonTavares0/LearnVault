@@ -116,6 +116,7 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/api/admin/backup", get(backup::download_backup))
         .route("/api/update", get(update::update))
+        .route("/api/update/history", get(update::update_history))
         .fallback(spa::serve)
         .layer(DefaultBodyLimit::max(8 * 1024))
         .layer(map_response(move |response| {
@@ -413,6 +414,52 @@ mod tests {
         assert_eq!(json["url"], serde_json::Value::Null);
         assert_eq!(json["checkedAt"], serde_json::Value::Null);
         assert_eq!(json["error"], serde_json::Value::Null);
+    }
+
+    #[tokio::test]
+    async fn update_history_endpoint_reads_entries_and_requires_auth() {
+        let temp = tempfile::tempdir().unwrap();
+        let unauth_app = build_router(AppState::new(config_fixture(&temp)));
+        let unauth_res = unauth_app
+            .oneshot(
+                Request::get("/api/update/history")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(unauth_res.status(), StatusCode::UNAUTHORIZED);
+
+        // Escreve histórico simulado
+        let history_file = temp.path().join("update-history.json");
+        std::fs::write(
+            &history_file,
+            r#"[{"timestamp":"2026-10-31T20:00:00Z","status":"success","from":"0.7.0","to":"0.8.0","message":"Atualizado com sucesso"}]"#,
+        )
+        .unwrap();
+
+        let state = AppState::initialize(config_fixture(&temp)).await.unwrap();
+        let app = build_router(state);
+        let cookie = media_cookie(&app).await;
+
+        let response = app
+            .oneshot(
+                Request::get("/api/update/history")
+                    .header("cookie", cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let items = json["items"].as_array().unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["status"], "success");
+        assert_eq!(items[0]["from"], "0.7.0");
+        assert_eq!(items[0]["to"], "0.8.0");
     }
 
     #[tokio::test]

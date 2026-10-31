@@ -9,8 +9,8 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 
 describe('transport contract', () => {
 	it('exposes the HTTP transport seam without routing assumptions', () => {
-		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'studySummary', 'listNotes', 'createNote', 'updateNote', 'deleteNote', 'recordFocusSession', 'focusSummary', 'rewardSummary', 'claimDailyMission', 'setWeeklyGoal', 'checkUpdate', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover'];
-		expect(methods).toHaveLength(28);
+		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'studySummary', 'listNotes', 'createNote', 'updateNote', 'deleteNote', 'recordFocusSession', 'focusSummary', 'rewardSummary', 'claimDailyMission', 'setWeeklyGoal', 'checkUpdate', 'updateHistory', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover'];
+		expect(methods).toHaveLength(29);
 	});
 	it('does not offer native folder selection over HTTP', async () => {
 		await expect(new HttpTransport().importCourse()).rejects.toThrow('desktop é quem escolhe pastas');
@@ -940,6 +940,26 @@ describe('desktop transport over IPC', () => {
 		await expect(desktop.checkUpdate(true)).resolves.toMatchObject({ enabled: false, available: false, error: null });
 		expect(fetchMock).not.toHaveBeenCalled();
 		expect(invoke).not.toHaveBeenCalled();
+		vi.unstubAllGlobals();
+	});
+	it('fetches update history over HTTP', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					items: [
+						{ timestamp: '2026-10-31T20:00:00Z', status: 'success', from: '0.7.0', to: '0.8.0', message: 'ok' }
+					]
+				}),
+				{ status: 200 }
+			)
+		);
+		vi.stubGlobal('fetch', fetchMock);
+		const http: Transport = new HttpTransport();
+		const history = await http.updateHistory();
+		expect(fetchMock).toHaveBeenCalledWith('/api/update/history');
+		expect(history).toEqual([
+			{ timestamp: '2026-10-31T20:00:00Z', status: 'success', from: '0.7.0', to: '0.8.0', message: 'ok' }
+		]);
 		vi.unstubAllGlobals();
 	});
 });

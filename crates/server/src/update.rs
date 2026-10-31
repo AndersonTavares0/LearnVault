@@ -196,6 +196,47 @@ pub(crate) async fn update(
     private_no_store(Json(state.update.snapshot(query.force()).await).into_response())
 }
 
+/// Entrada de histórico de atualização (gerada pelo script autônomo de atualização).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct UpdateHistoryEntry {
+    pub(crate) timestamp: String,
+    pub(crate) status: String,
+    pub(crate) from: String,
+    pub(crate) to: String,
+    pub(crate) message: String,
+}
+
+/// Resposta da listagem do histórico de atualizações.
+#[derive(Debug, Serialize)]
+pub(crate) struct UpdateHistoryResponse {
+    pub(crate) items: Vec<UpdateHistoryEntry>,
+}
+
+/// Consulta autenticada do histórico de atualizações registradas no volume de dados.
+pub(crate) async fn update_history(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    if let Err(failure) = crate::study::user_or_response(&state, &headers).await {
+        return failure.into_response();
+    }
+    let data_dir = state
+        .config
+        .database_path
+        .parent()
+        .map(std::path::Path::to_path_buf)
+        .unwrap_or_else(|| std::path::PathBuf::from("."));
+    let history_file = data_dir.join("update-history.json");
+    let items = if history_file.is_file() {
+        match std::fs::read_to_string(&history_file) {
+            Ok(content) => {
+                serde_json::from_str::<Vec<UpdateHistoryEntry>>(&content).unwrap_or_default()
+            }
+            Err(_) => Vec::new(),
+        }
+    } else {
+        Vec::new()
+    };
+    private_no_store(Json(UpdateHistoryResponse { items }).into_response())
+}
+
 /// Consulta do endpoint. `force=1` (ou `force=true`) ignora o intervalo mínimo de cache.
 #[derive(Debug, Deserialize)]
 pub(crate) struct UpdateQuery {
