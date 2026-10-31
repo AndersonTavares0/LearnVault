@@ -95,6 +95,14 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/study/position", post(study::record_position))
         .route("/api/study/completed", post(study::set_completed))
         .route("/api/study/capabilities", get(study::capabilities))
+        .route(
+            "/api/study/notes",
+            get(study::list_notes).post(study::create_note),
+        )
+        .route(
+            "/api/study/notes/{id}",
+            axum::routing::put(study::update_note).delete(study::delete_note),
+        )
         .route("/api/focus/sessions", post(study::record_focus_session))
         .route("/api/focus/summary", get(study::focus_summary))
         .route("/api/rewards/summary", get(study::reward_summary))
@@ -466,7 +474,7 @@ mod tests {
         for (name, setup) in [
             ("missing", "PRAGMA user_version = 0"),
             ("older", "PRAGMA user_version = 3"),
-            ("newer", "PRAGMA user_version = 7"),
+            ("newer", "PRAGMA user_version = 8"),
             (
                 "missing required column",
                 "ALTER TABLE user RENAME COLUMN must_change_credentials TO changed",

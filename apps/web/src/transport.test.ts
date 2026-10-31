@@ -9,8 +9,8 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 
 describe('transport contract', () => {
 	it('exposes the HTTP transport seam without routing assumptions', () => {
-		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'studySummary', 'recordFocusSession', 'focusSummary', 'rewardSummary', 'claimDailyMission', 'setWeeklyGoal', 'checkUpdate', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover'];
-		expect(methods).toHaveLength(24);
+		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'studySummary', 'listNotes', 'createNote', 'updateNote', 'deleteNote', 'recordFocusSession', 'focusSummary', 'rewardSummary', 'claimDailyMission', 'setWeeklyGoal', 'checkUpdate', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover'];
+		expect(methods).toHaveLength(28);
 	});
 	it('does not offer native folder selection over HTTP', async () => {
 		await expect(new HttpTransport().importCourse()).rejects.toThrow('desktop é quem escolhe pastas');
@@ -605,8 +605,8 @@ describe('transport contract', () => {
 		}
 	});
 	it('normalizes the update status and keeps a nullable error', () => {
-		expect(normalizeUpdateStatus({ current: '0.3.0', enabled: true, available: true, latest: '0.4.0', releasedAt: '2026-10-17T12:00:00Z', url: 'https://github.com/AndersonTavares0/LearnVault/releases/tag/v0.4.0', checkedAt: '1760702400', error: null })).toEqual({
-			current: '0.3.0', enabled: true, available: true, latest: '0.4.0', releasedAt: '2026-10-17T12:00:00Z', url: 'https://github.com/AndersonTavares0/LearnVault/releases/tag/v0.4.0', checkedAt: '1760702400', error: null
+		expect(normalizeUpdateStatus({ current: '0.3.0', enabled: true, available: true, latest: '0.4.0', releasedAt: '2026-10-17T12:00:00Z', url: 'https://github.com/AndersonTavares0/LearnVault/releases/tag/v0.4.0', changelog: null, checkedAt: '1760702400', error: null })).toEqual({
+			current: '0.3.0', enabled: true, available: true, latest: '0.4.0', releasedAt: '2026-10-17T12:00:00Z', url: 'https://github.com/AndersonTavares0/LearnVault/releases/tag/v0.4.0', changelog: null, checkedAt: '1760702400', error: null
 		});
 		// Uma falha chega como 200 com `error` preenchido e sem versão nova.
 		expect(normalizeUpdateStatus({ current: '0.3.0', enabled: true, available: false, latest: null, releasedAt: null, url: null, checkedAt: null, error: 'não foi possível contatar o GitHub' })).toMatchObject({ available: false, latest: null, error: 'não foi possível contatar o GitHub' });
@@ -628,6 +628,32 @@ describe('transport contract', () => {
 		const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 403 }));
 		vi.stubGlobal('fetch', fetchMock);
 		await expect(new HttpTransport().checkUpdate()).rejects.toThrow('credentials_change_required');
+		vi.unstubAllGlobals();
+	});
+	it('performs study notes CRUD operations over HTTP', async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+
+		fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ note_id: 'n1', media_id: 'm1', position_seconds: 45, content: 'Nota de teste', created_at: 100, updated_at: 100 }] }), { status: 200 }));
+		const notes = await new HttpTransport().listNotes('m1');
+		expect(fetchMock).toHaveBeenCalledWith('/api/study/notes?media_id=m1');
+		expect(notes).toHaveLength(1);
+		expect(notes[0].noteId).toBe('n1');
+		expect(notes[0].positionSeconds).toBe(45);
+
+		fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ note_id: 'n2', media_id: 'm1', position_seconds: 60, content: 'Nova nota', created_at: 101, updated_at: 101 }), { status: 201 }));
+		const created = await new HttpTransport().createNote('m1', 60, 'Nova nota');
+		expect(created.noteId).toBe('n2');
+		expect(created.content).toBe('Nova nota');
+
+		fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ note_id: 'n2', media_id: 'm1', position_seconds: 60, content: 'Nota editada', created_at: 101, updated_at: 102 }), { status: 200 }));
+		const updated = await new HttpTransport().updateNote('n2', 'Nota editada');
+		expect(updated.content).toBe('Nota editada');
+
+		fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+		await expect(new HttpTransport().deleteNote('n2')).resolves.toBeUndefined();
+		expect(fetchMock).toHaveBeenLastCalledWith('/api/study/notes/n2', { method: 'DELETE' });
+
 		vi.unstubAllGlobals();
 	});
 });

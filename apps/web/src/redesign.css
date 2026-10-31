@@ -604,6 +604,37 @@ svg {
 	font-weight: 600;
 }
 
+.lv-update-changelog {
+	margin-top: 12px;
+	padding: 10px 14px;
+	background: var(--surface-1);
+	border: 1px solid var(--border-subtle);
+	border-radius: var(--radius-md);
+}
+
+.lv-update-changelog__summary {
+	cursor: pointer;
+	font-weight: 600;
+	font-size: 13px;
+	color: var(--accent);
+	user-select: none;
+}
+
+.lv-update-changelog__content {
+	margin-top: 10px;
+	padding: 12px;
+	background: var(--surface-2);
+	border-radius: var(--radius-sm);
+	font-family: inherit;
+	font-size: 12.5px;
+	line-height: 1.5;
+	color: var(--fg);
+	white-space: pre-wrap;
+	word-break: break-word;
+	max-height: 240px;
+	overflow-y: auto;
+}
+
 .lv-section {
 	margin-top: 34px;
 }

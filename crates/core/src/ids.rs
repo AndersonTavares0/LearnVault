@@ -26,3 +26,8 @@ pub fn new_library_id() -> String {
 pub fn new_media_id() -> String {
     Uuid::now_v7().to_string()
 }
+
+/// Gera um identificador opaco de anotação de estudo.
+pub fn new_note_id() -> String {
+    Uuid::now_v7().to_string()
+}

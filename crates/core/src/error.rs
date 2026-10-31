@@ -329,6 +329,17 @@ pub enum Error {
         mission_id: String,
     },
 
+    /// O conteúdo da anotação de estudo é inválido ou excede o limite.
+    #[error("conteúdo da anotação de estudo é inválido ou excede o limite")]
+    InvalidStudyNoteContent,
+
+    /// A anotação de estudo não foi encontrada.
+    #[error("anotação de estudo não encontrada: {note_id}")]
+    StudyNoteNotFound {
+        /// Identificador consultado.
+        note_id: String,
+    },
+
     /// A missão ainda não atingiu o requisito necessário para resgate.
     #[error("a missão diária ainda não foi concluída")]
     MissionNotComplete,

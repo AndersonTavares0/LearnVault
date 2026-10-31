@@ -103,6 +103,17 @@ impl Database {
                 false,
                 &[("expires_at", "BINARY")],
             )?
+            || !index_matches(
+                &self.conn,
+                "study_note",
+                Some("study_note_owner_media_idx"),
+                false,
+                &[
+                    ("owner_id", "BINARY"),
+                    ("media_id", "BINARY"),
+                    ("position_seconds", "BINARY"),
+                ],
+            )?
         {
             return Ok(false);
         }
@@ -486,6 +497,18 @@ const REQUIRED_TABLES: &[TableDefinition] = &[
             ("removed_at", "INTEGER", true, None, 0),
         ],
     },
+    TableDefinition {
+        name: "study_note",
+        columns: &[
+            ("note_id", "TEXT", true, None, 1),
+            ("owner_id", "TEXT", true, None, 0),
+            ("media_id", "TEXT", true, None, 0),
+            ("position_seconds", "INTEGER", true, None, 0),
+            ("content", "TEXT", true, None, 0),
+            ("created_at", "INTEGER", true, None, 0),
+            ("updated_at", "INTEGER", true, None, 0),
+        ],
+    },
 ];
 
 fn definition_matches(conn: &Connection, definition: &TableDefinition) -> Result<bool> {
@@ -608,6 +631,10 @@ fn expected_checks(table: &str) -> &'static [&'static str] {
         "daily_mission_claim" => &["mission_id in ('lesson', 'focus-two', 'focus-fifty')"],
         "gamification_settings" => &["weekly_goal between 1 and 7"],
         "user" => &["is_admin in (0, 1)", "must_change_credentials in (0, 1)"],
+        "study_note" => &[
+            "position_seconds >= 0",
+            "length(trim(content)) > 0 and length(content) <= 10000",
+        ],
         _ => &[],
     }
 }
@@ -628,6 +655,7 @@ fn expected_foreign_keys(
             ("media_id", "media", "media_id", "NO ACTION"),
             ("library_id", "library", "library_id", "NO ACTION"),
         ],
+        "study_note" => &[("media_id", "media", "media_id", "NO ACTION")],
         _ => &[],
     }
 }

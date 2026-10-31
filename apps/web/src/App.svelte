@@ -532,6 +532,7 @@
 					latest: null,
 					releasedAt: null,
 					url: null,
+					changelog: null,
 					checkedAt: null,
 					error: cause instanceof Error ? cause.message : 'Não foi possível verificar a atualização.'
 				};
@@ -785,6 +786,12 @@
 									{@const releaseUrl = updateReleaseUrl(updateStatus)}
 									{#if outcome !== 'error' || updateManual}<p class="lv-notice" role="status">{updateMessage(updateStatus)}</p>{/if}
 									{#if outcome === 'available' && releaseUrl}<p class="lv-notice"><a href={releaseUrl} target="_blank" rel="noopener noreferrer">Ver a release</a></p>{/if}
+									{#if outcome === 'available' && updateStatus.changelog}
+										<details class="lv-update-changelog">
+											<summary class="lv-update-changelog__summary">Novidades desta versão (Changelog)</summary>
+											<pre class="lv-update-changelog__content">{updateStatus.changelog}</pre>
+										</details>
+									{/if}
 								{/if}
 							</div>
 						</section>

@@ -45,8 +45,17 @@ export type UpdateStatus = {
 	latest: string | null;
 	releasedAt: string | null;
 	url: string | null;
+	changelog: string | null;
 	checkedAt: string | null;
 	error: string | null;
+};
+export type StudyNote = {
+	noteId: string;
+	mediaId: string;
+	positionSeconds: number;
+	content: string;
+	createdAt: number;
+	updatedAt: number;
 };
 export const STUDY_NOT_AVAILABLE = 'study_not_available';
 
@@ -102,6 +111,10 @@ export interface Transport {
 	setCompleted(mediaId: string, completed: boolean): Promise<StudyProgress>;
 	recentStudy(limit?: number): Promise<RecentStudy>;
 	studySummary(): Promise<StudySummary>;
+	listNotes(mediaId: string): Promise<StudyNote[]>;
+	createNote(mediaId: string, positionSeconds: number, content: string): Promise<StudyNote>;
+	updateNote(noteId: string, content: string): Promise<StudyNote>;
+	deleteNote(noteId: string): Promise<void>;
 	recordFocusSession(session: FocusSessionInput): Promise<FocusSessionRecord>;
 	focusSummary(): Promise<FocusSummary>;
 	rewardSummary(): Promise<RewardSummary>;
@@ -448,7 +461,7 @@ function optionalUpdateString(value: unknown, key: string): string | null {
 
 export function normalizeUpdateStatus(value: unknown): UpdateStatus {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('estado de atualização ausente.');
-	const status = value as { current?: unknown; enabled?: unknown; available?: unknown; latest?: unknown; releasedAt?: unknown; url?: unknown; checkedAt?: unknown; error?: unknown };
+	const status = value as { current?: unknown; enabled?: unknown; available?: unknown; latest?: unknown; releasedAt?: unknown; url?: unknown; changelog?: unknown; checkedAt?: unknown; error?: unknown };
 	if (typeof status.current !== 'string' || typeof status.enabled !== 'boolean' || typeof status.available !== 'boolean') throw invalidPayload('estado de atualização incompleto.');
 	return {
 		current: status.current,
@@ -457,8 +470,22 @@ export function normalizeUpdateStatus(value: unknown): UpdateStatus {
 		latest: optionalUpdateString(status.latest, 'latest'),
 		releasedAt: optionalUpdateString(status.releasedAt, 'releasedAt'),
 		url: optionalUpdateString(status.url, 'url'),
+		changelog: optionalUpdateString(status.changelog, 'changelog'),
 		checkedAt: optionalUpdateString(status.checkedAt, 'checkedAt'),
 		error: optionalUpdateString(status.error, 'error')
+	};
+}
+
+export function normalizeStudyNote(raw: unknown): StudyNote {
+	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalidPayload('anotação de estudo inválida.');
+	const note = raw as Record<string, unknown>;
+	return {
+		noteId: String(note.note_id ?? note.noteId ?? ''),
+		mediaId: String(note.media_id ?? note.mediaId ?? ''),
+		positionSeconds: Number(note.position_seconds ?? note.positionSeconds ?? 0),
+		content: String(note.content ?? ''),
+		createdAt: Number(note.created_at ?? note.createdAt ?? 0),
+		updatedAt: Number(note.updated_at ?? note.updatedAt ?? 0)
 	};
 }
 
@@ -574,6 +601,36 @@ export class HttpTransport implements Transport {
 	async setCompleted(mediaId: string, completed: boolean) { const response = await fetch('/api/study/completed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: mediaId, completed }) }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? 'Mídia não encontrada.' : 'Não foi possível atualizar a conclusão.'); return normalizeStudyProgress(await response.json()); }
 	async recentStudy(limit?: number) { const url = limit === undefined ? '/api/study/recent' : `/api/study/recent?limit=${limit}`; const response = await fetch(url); if (!response.ok) throw response.status === 404 ? Object.assign(new Error('Estudo não disponível neste servidor.'), { code: STUDY_NOT_AVAILABLE }) : new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar o histórico.'); return normalizeRecentStudy(await response.json()); }
 	async studySummary() { const response = await fetch('/api/study/summary'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar sua evolução.'); return normalizeStudySummary(await response.json()); }
+	async listNotes(mediaId: string) {
+		const response = await fetch(`/api/study/notes?media_id=${encodeURIComponent(mediaId)}`);
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar as anotações.');
+		const data = await response.json();
+		return (Array.isArray(data.items) ? data.items : []).map(normalizeStudyNote);
+	}
+	async createNote(mediaId: string, positionSeconds: number, content: string) {
+		const response = await fetch('/api/study/notes', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ media_id: mediaId, position_seconds: positionSeconds, content })
+		});
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 422 ? 'Conteúdo da anotação inválido.' : 'Não foi possível salvar a anotação.');
+		return normalizeStudyNote(await response.json());
+	}
+	async updateNote(noteId: string, content: string) {
+		const response = await fetch(`/api/study/notes/${encodeURIComponent(noteId)}`, {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ content })
+		});
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível atualizar a anotação.');
+		return normalizeStudyNote(await response.json());
+	}
+	async deleteNote(noteId: string) {
+		const response = await fetch(`/api/study/notes/${encodeURIComponent(noteId)}`, {
+			method: 'DELETE'
+		});
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível excluir a anotação.');
+	}
 	async recordFocusSession(session: FocusSessionInput) {
 		const response = await fetch('/api/focus/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: session.id, kind: session.kind, planned_seconds: session.plannedSeconds, actual_seconds: session.actualSeconds, completed: session.completed, started_at: session.startedAt, ended_at: session.endedAt }) });
 		if (!response.ok) {
@@ -684,6 +741,14 @@ export class DesktopStub implements Transport {
 	// omitido em vez de enviado como `undefined`.
 	async recentStudy(limit?: number) { try { return normalizeRecentStudy(await invoke<unknown>('desktop_recent_study', limit === undefined ? {} : { limit })); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar o histórico de estudo.'); } }
 	async studySummary() { try { return normalizeStudySummary(await invoke<unknown>('desktop_study_summary')); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar sua evolução.'); } }
+	listNotes(_mediaId: string): Promise<StudyNote[]> { return Promise.resolve([]); }
+	createNote(mediaId: string, positionSeconds: number, content: string): Promise<StudyNote> {
+		return Promise.resolve({ noteId: 'desktop-stub', mediaId, positionSeconds, content, createdAt: 0, updatedAt: 0 });
+	}
+	updateNote(noteId: string, content: string): Promise<StudyNote> {
+		return Promise.resolve({ noteId, mediaId: '', positionSeconds: 0, content, createdAt: 0, updatedAt: 0 });
+	}
+	deleteNote(_noteId: string): Promise<void> { return Promise.resolve(); }
 	async recordFocusSession(session: FocusSessionInput) { try { return normalizeFocusSession(await invoke<unknown>('desktop_record_focus_session', { session })); } catch (cause) { throw desktopError(cause, 'Não foi possível salvar a sessão de foco.'); } }
 	async focusSummary() { try { return normalizeFocusSummary(await invoke<unknown>('desktop_focus_summary')); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar as estatísticas de foco.'); } }
 	async rewardSummary() { try { return normalizeRewardSummary(await invoke<unknown>('desktop_reward_summary')); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar suas recompensas.'); } }
@@ -692,7 +757,7 @@ export class DesktopStub implements Transport {
 	// O desktop não hospeda `crates/server` nem possui canal IPC de atualização: a
 	// checagem fica desligada, sem tocar a rede. Isso preserva a regra de que o bundle
 	// desktop não contém nenhum `fetch` do aplicativo.
-	checkUpdate() { return Promise.resolve({ current: '', enabled: false, available: false, latest: null, releasedAt: null, url: null, checkedAt: null, error: null } satisfies UpdateStatus); }
+	checkUpdate() { return Promise.resolve({ current: '', enabled: false, available: false, latest: null, releasedAt: null, url: null, changelog: null, checkedAt: null, error: null } satisfies UpdateStatus); }
 	// Toda mídia entregue ao player usa a identidade autorizada. O caminho catalogado é
 	// deliberadamente ignorado, inclusive no desktop, para que ele nunca atravesse o webview.
 	mediaUrl(file: FileEntry, _courseId?: string) {
