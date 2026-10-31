@@ -1113,6 +1113,98 @@ mod tests {
         drop(idle_responses);
     }
 
+    #[tokio::test]
+    async fn media_unreadable_or_missing_file_does_not_block_healthz_or_catalog() {
+        let (app, temp, _state) = media_app().await;
+        let cookie = media_cookie(&app).await;
+
+        // 1. Apaga o arquivo físico no disco após o scan para simular arquivo desaparecido ou ilegível
+        fs::remove_file(temp.path().join("lesson.mp4")).unwrap();
+
+        // 2. Requisição para a mídia deve devolver erro por arquivo (404 Not Found), nunca 503
+        let media_resp = app
+            .clone()
+            .oneshot(
+                Request::get("/api/media?course=library-1&path=lesson.mp4")
+                    .header("cookie", &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(media_resp.status(), StatusCode::NOT_FOUND);
+
+        // 3. /api/healthz deve continuar respondendo 200 OK sem ser afetado
+        let health_resp = app
+            .clone()
+            .oneshot(Request::get("/api/healthz").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(health_resp.status(), StatusCode::OK);
+
+        // 4. /api/catalog deve continuar respondendo 200 OK sem ser bloqueado
+        let catalog_resp = app
+            .clone()
+            .oneshot(
+                Request::get("/api/catalog")
+                    .header("cookie", &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(catalog_resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn media_in_flight_stream_does_not_lock_database_for_healthz_and_catalog() {
+        let (app, _temp, state) = media_app().await;
+        let cookie = media_cookie(&app).await;
+
+        // Inicia streaming de mídia
+        let media_resp = app
+            .clone()
+            .oneshot(
+                Request::get("/api/media?course=library-1&path=slow.mp4")
+                    .header("cookie", &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(media_resp.status(), StatusCode::OK);
+
+        // Enquanto o stream está ativo (corpo ainda retido), o mutex do banco DEVE
+        // estar imediatamente disponível (não bloqueado por I/O de arquivo):
+        assert!(
+            state.database.try_lock().is_ok(),
+            "database lock must not be held during media opening or streaming"
+        );
+
+        // /api/healthz responde 200 OK imediatamente:
+        let health_resp = app
+            .clone()
+            .oneshot(Request::get("/api/healthz").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(health_resp.status(), StatusCode::OK);
+
+        // /api/catalog responde 200 OK imediatamente:
+        let catalog_resp = app
+            .clone()
+            .oneshot(
+                Request::get("/api/catalog")
+                    .header("cookie", &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(catalog_resp.status(), StatusCode::OK);
+
+        drop(media_resp);
+    }
+
     fn png_cover() -> Vec<u8> {
         vec![0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0]
     }

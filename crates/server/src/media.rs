@@ -30,6 +30,7 @@ pub(crate) struct MediaQuery {
 }
 
 const MEDIA_STREAM_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
+const MEDIA_OPEN_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub(crate) async fn media(
     State(state): State<AppState>,
@@ -65,19 +66,23 @@ pub(crate) async fn media(
     let path = query.path;
     let lookup_path = path.clone();
     let library_id = course.id.clone();
-    // Evita segurar o mutex do banco só para devolver 503 sob saturação.
+    // Evita segurar recursos só para devolver 503 sob saturação.
     if !state.has_blocking_capacity() {
         return service_unavailable();
     }
-    let database = state.database.clone().lock_owned().await;
-    let Some(blocking_task) = state.try_acquire_blocking_task() else {
-        return service_unavailable();
+    // A validação de registro no banco ocorre em escopo restrito e libera o lock do
+    // SQLite imediatamente, antes de qualquer operação no sistema de arquivos.
+    let reference = {
+        let database = state.database.clone().lock_owned().await;
+        let Some(blocking_task) = state.try_acquire_blocking_task() else {
+            return service_unavailable();
+        };
+        tokio::task::spawn_blocking(move || {
+            let _blocking_task = blocking_task;
+            learnvault_core::find_media_by_path(&database, &library_id, &lookup_path)
+        })
+        .await
     };
-    let reference = tokio::task::spawn_blocking(move || {
-        let _blocking_task = blocking_task;
-        learnvault_core::find_media_by_path(&database, &library_id, &lookup_path)
-    })
-    .await;
     let reference = match reference {
         Ok(Ok(Some(reference))) => reference,
         Ok(Ok(None)) => return error_private_no_store(StatusCode::NOT_FOUND),
@@ -85,26 +90,7 @@ pub(crate) async fn media(
         // A tarefa abortada é uma indisponibilidade operacional, não ausência de mídia.
         Err(_) => return service_unavailable(),
     };
-    let Some(blocking_task) = state.try_acquire_blocking_task() else {
-        return service_unavailable();
-    };
-    let database = state.database.clone().lock_owned().await;
-    let opened = match tokio::task::spawn_blocking(move || {
-        let _blocking_task = blocking_task;
-        learnvault_core::open_media_reference(&database, &reference, root.as_path())
-    })
-    .await
-    {
-        Ok(Ok(opened)) => opened,
-        Ok(Err(error)) => return media_error_response(&error),
-        Err(_) => return service_unavailable(),
-    };
 
-    let Some((start, end)) = parse_range(headers.get(header::RANGE), opened.size) else {
-        return range_not_satisfiable(opened.size);
-    };
-    let partial = headers.get(header::RANGE).is_some();
-    let length = if opened.size == 0 { 0 } else { end - start + 1 };
     let stream_permit = if method == Method::HEAD {
         None
     } else {
@@ -113,6 +99,33 @@ pub(crate) async fn media(
             None => return service_unavailable(),
         }
     };
+
+    let Some(blocking_task) = state.try_acquire_blocking_task() else {
+        return service_unavailable();
+    };
+
+    // Abertura do arquivo físico FORA do lock do banco, com timeout delimitado para
+    // que discos lentos ou placeholders de nuvem não bloqueiem o processo indefinidamente.
+    let opened = match tokio::time::timeout(
+        MEDIA_OPEN_TIMEOUT,
+        tokio::task::spawn_blocking(move || {
+            let _blocking_task = blocking_task;
+            learnvault_core::open_media_file(&reference, root.as_path())
+        }),
+    )
+    .await
+    {
+        Ok(Ok(Ok(opened))) => opened,
+        Ok(Ok(Err(error))) => return media_error_response(&error),
+        Ok(Err(_join_err)) => return service_unavailable(),
+        Err(_timeout_err) => return error_private_no_store(StatusCode::INTERNAL_SERVER_ERROR),
+    };
+
+    let Some((start, end)) = parse_range(headers.get(header::RANGE), opened.size) else {
+        return range_not_satisfiable(opened.size);
+    };
+    let partial = headers.get(header::RANGE).is_some();
+    let length = if opened.size == 0 { 0 } else { end - start + 1 };
     let mut file = tokio::fs::File::from_std(opened.file);
     if file.seek(SeekFrom::Start(start)).await.is_err() {
         return error_private_no_store(StatusCode::INTERNAL_SERVER_ERROR);

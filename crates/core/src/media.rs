@@ -296,17 +296,10 @@ pub fn open_media(
     })
 }
 
-/// Abre uma referência recém-lida do catálogo.
+/// Valida a disponibilidade e o estado de uma referência de mídia no catálogo.
 ///
-/// O estado do catálogo é revalidado usando a identidade da referência imediatamente antes da
-/// validação do caminho e da abertura. O adaptador deve manter o lock da conexão durante esta
-/// chamada para serializar a revalidação com remoções concorrentes.
-pub fn open_media_reference(
-    db: &Database,
-    reference: &MediaReference,
-    root: &Path,
-) -> Result<OpenMedia> {
-    let canonical_root = canonical_root(root)?;
+/// Não acessa o sistema de arquivos nem abre descritores em disco.
+pub fn validate_media_reference(db: &Database, reference: &MediaReference) -> Result<()> {
     let media_id = &reference.media_id;
     let stored = media_row(db, &reference.library_id, media_id)?;
     if stored.availability != AVAILABLE {
@@ -324,6 +317,16 @@ pub fn open_media_reference(
             media_id: media_id.to_owned(),
         });
     }
+    Ok(())
+}
+
+/// Abre o arquivo físico no disco para uma referência de mídia previamente validada.
+///
+/// Não acessa o banco de dados nem exige lock sobre a conexão SQLite, permitindo que
+/// a abertura e o streaming ocorram de forma totalmente desacoplada da persistência.
+pub fn open_media_file(reference: &MediaReference, root: &Path) -> Result<OpenMedia> {
+    let canonical_root = canonical_root(root)?;
+    let media_id = &reference.media_id;
     let candidate = resolve_within(&canonical_root, &reference.relative_path)?;
     let on_path = std::fs::symlink_metadata(&candidate).map_err(|source| match source.kind() {
         io::ErrorKind::NotFound => Error::MediaMissingOnDisk {
@@ -386,6 +389,18 @@ pub fn open_media_reference(
         name,
         changed: size != reference.size || mtime != reference.mtime,
     })
+}
+
+/// Abre uma referência recém-lida do catálogo.
+///
+/// Revalida a referência no catálogo e abre o descritor no disco.
+pub fn open_media_reference(
+    db: &Database,
+    reference: &MediaReference,
+    root: &Path,
+) -> Result<OpenMedia> {
+    validate_media_reference(db, reference)?;
+    open_media_file(reference, root)
 }
 
 /// Estado de disponibilidade registrado pela última varredura.

@@ -48,7 +48,7 @@ pub use error::{Error, Result};
 pub use legacy_import::{LegacyImportOptions, LegacyImportReport, import_go_database};
 pub use media::{
     MediaReference, OpenMedia, find_media_by_path, find_media_library_id, open_media,
-    open_media_reference,
+    open_media_file, open_media_reference, validate_media_reference,
 };
 pub use ordering::{CatalogOrder, apply_order, order_siblings, sibling_paths, validate_siblings};
 pub use paths::KeyMode;
