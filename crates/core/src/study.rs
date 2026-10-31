@@ -510,3 +510,252 @@ fn note_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StudyNote> {
         updated_at: row.get(5)?,
     })
 }
+
+/// Avaliação de uma revisão de cartão de memorização.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReviewRating {
+    /// O aluno errou ou precisa repetir logo.
+    Again,
+    /// O aluno acertou e entendeu o conceito.
+    Good,
+}
+
+impl ReviewRating {
+    /// Converte de string ("again" ou "good"), case-insensitive.
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "again" => Some(Self::Again),
+            "good" => Some(Self::Good),
+            _ => None,
+        }
+    }
+
+    /// Retorna a representação estática em string.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Again => "again",
+            Self::Good => "good",
+        }
+    }
+}
+
+/// Cartão pessoal de estudo para repetição espaçada.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Flashcard {
+    /// Identificador opaco do cartão (UUID v7).
+    pub card_id: String,
+    /// Dono do cartão.
+    pub owner_id: String,
+    /// Mídia vinculada.
+    pub media_id: String,
+    /// Pergunta ou conteúdo da frente.
+    pub front: String,
+    /// Resposta ou conteúdo do verso.
+    pub back: String,
+    /// Intervalo atual de repetição em dias (0 a 365).
+    pub interval_days: i64,
+    /// Instante da próxima revisão em segundos Unix.
+    pub next_due: i64,
+    /// Instante de criação em segundos Unix.
+    pub created_at: i64,
+    /// Instante da última edição em segundos Unix.
+    pub updated_at: i64,
+}
+
+/// Valida o texto da frente ou do verso do cartão (1 a 4000 escalares Unicode, não-vazio).
+fn validate_card_text(text: &str) -> Result<String> {
+    let trimmed = text.trim();
+    if trimmed.is_empty() || trimmed.chars().count() > 4000 {
+        return Err(Error::InvalidFlashcardContent);
+    }
+    Ok(trimmed.to_owned())
+}
+
+/// Lista os cartões do dono para uma mídia específica, ordenados por vencimento (`next_due ASC, created_at ASC`).
+pub fn list_flashcards(db: &Database, owner_id: &str, media_id: &str) -> Result<Vec<Flashcard>> {
+    validate_owner(owner_id)?;
+    let conn = db.connection();
+    require_media(conn, media_id)?;
+
+    let mut statement = conn.prepare(
+        "SELECT card_id, owner_id, media_id, front, back, interval_days, next_due, created_at, updated_at
+         FROM flashcard
+         WHERE owner_id = ?1 AND media_id = ?2
+         ORDER BY next_due ASC, created_at ASC",
+    )?;
+    let rows = statement.query_map(rusqlite::params![owner_id, media_id], card_from_row)?;
+
+    let mut cards = Vec::new();
+    for card in rows {
+        cards.push(card?);
+    }
+    Ok(cards)
+}
+
+/// Cria um novo cartão de estudo vinculado à aula.
+///
+/// O cartão novo vence imediatamente (`next_due = now`, `interval_days = 0`).
+pub fn create_flashcard(
+    db: &Database,
+    owner_id: &str,
+    media_id: &str,
+    front: &str,
+    back: &str,
+) -> Result<Flashcard> {
+    validate_owner(owner_id)?;
+    let front_trimmed = validate_card_text(front)?;
+    let back_trimmed = validate_card_text(back)?;
+
+    let conn = db.connection();
+    require_media(conn, media_id)?;
+
+    let card_id = crate::ids::new_card_id();
+    let now = now_unix_seconds();
+    let interval_days = 0_i64;
+    let next_due = now;
+
+    conn.execute(
+        "INSERT INTO flashcard (card_id, owner_id, media_id, front, back, interval_days, next_due, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        rusqlite::params![
+            card_id,
+            owner_id,
+            media_id,
+            front_trimmed,
+            back_trimmed,
+            interval_days,
+            next_due,
+            now,
+            now
+        ],
+    )?;
+
+    Ok(Flashcard {
+        card_id,
+        owner_id: owner_id.to_owned(),
+        media_id: media_id.to_owned(),
+        front: front_trimmed,
+        back: back_trimmed,
+        interval_days,
+        next_due,
+        created_at: now,
+        updated_at: now,
+    })
+}
+
+/// Atualiza o texto da frente e/ou do verso de um cartão existente.
+///
+/// Preserva o agendamento (`next_due` e `interval_days`) e atualiza `updated_at`.
+pub fn update_flashcard(
+    db: &Database,
+    owner_id: &str,
+    card_id: &str,
+    front: &str,
+    back: &str,
+) -> Result<Flashcard> {
+    validate_owner(owner_id)?;
+    let front_trimmed = validate_card_text(front)?;
+    let back_trimmed = validate_card_text(back)?;
+
+    let conn = db.connection();
+    let now = now_unix_seconds();
+
+    let updated = conn
+        .query_row(
+            "UPDATE flashcard
+             SET front = ?1, back = ?2, updated_at = ?3
+             WHERE owner_id = ?4 AND card_id = ?5
+             RETURNING card_id, owner_id, media_id, front, back, interval_days, next_due, created_at, updated_at",
+            rusqlite::params![front_trimmed, back_trimmed, now, owner_id, card_id],
+            card_from_row,
+        )
+        .optional()?;
+
+    updated.ok_or_else(|| Error::FlashcardNotFound {
+        card_id: card_id.to_owned(),
+    })
+}
+
+/// Remove um cartão de estudo pertencente ao dono.
+pub fn delete_flashcard(db: &Database, owner_id: &str, card_id: &str) -> Result<bool> {
+    validate_owner(owner_id)?;
+    let conn = db.connection();
+    let changes = conn.execute(
+        "DELETE FROM flashcard WHERE owner_id = ?1 AND card_id = ?2",
+        rusqlite::params![owner_id, card_id],
+    )?;
+    Ok(changes > 0)
+}
+
+/// Registra uma revisão (Again ou Good) em um cartão existente.
+///
+/// Regras de agendamento:
+/// - `Again`: zera o intervalo (`interval_days = 0`) e agenda para daqui a 10 minutos (`next_due = now + 600`).
+/// - `Good`: se `interval_days == 0`, define 1 dia (`interval_days = 1`), caso contrário dobra o intervalo
+///   (`interval_days = min(interval_days * 2, 365)`), e agenda para `now + interval_days * 86400`.
+pub fn review_flashcard(
+    db: &Database,
+    owner_id: &str,
+    card_id: &str,
+    rating: ReviewRating,
+) -> Result<Flashcard> {
+    validate_owner(owner_id)?;
+    let conn = db.connection();
+    let now = now_unix_seconds();
+
+    // Consulta o cartão atual para obter o interval_days prévio
+    let current_interval: Option<i64> = conn
+        .query_row(
+            "SELECT interval_days FROM flashcard WHERE owner_id = ?1 AND card_id = ?2",
+            rusqlite::params![owner_id, card_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+
+    let Some(prev_interval) = current_interval else {
+        return Err(Error::FlashcardNotFound {
+            card_id: card_id.to_owned(),
+        });
+    };
+
+    let (new_interval, next_due) = match rating {
+        ReviewRating::Again => {
+            let next_due = now + 600; // 10 minutos
+            (0_i64, next_due)
+        }
+        ReviewRating::Good => {
+            let next_interval = if prev_interval == 0 {
+                1_i64
+            } else {
+                (prev_interval.saturating_mul(2)).min(365)
+            };
+            let next_due = now + next_interval.saturating_mul(86400);
+            (next_interval, next_due)
+        }
+    };
+
+    let updated = conn.query_row(
+        "UPDATE flashcard
+         SET interval_days = ?1, next_due = ?2, updated_at = ?3
+         WHERE owner_id = ?4 AND card_id = ?5
+         RETURNING card_id, owner_id, media_id, front, back, interval_days, next_due, created_at, updated_at",
+        rusqlite::params![new_interval, next_due, now, owner_id, card_id],
+        card_from_row,
+    )?;
+
+    Ok(updated)
+}
+
+fn card_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Flashcard> {
+    Ok(Flashcard {
+        card_id: row.get(0)?,
+        owner_id: row.get(1)?,
+        media_id: row.get(2)?,
+        front: row.get(3)?,
+        back: row.get(4)?,
+        interval_days: row.get(5)?,
+        next_due: row.get(6)?,
+        created_at: row.get(7)?,
+        updated_at: row.get(8)?,
+    })
+}

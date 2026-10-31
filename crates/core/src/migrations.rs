@@ -11,7 +11,7 @@ use rusqlite_migration::{M, Migrations};
 /// A recusa de um schema mais novo não depende desta constante — ela vem de
 /// `SchemaVersion::Outside` —, mas ela deve acompanhar a cadeia de migrações porque
 /// aparece na mensagem de diagnóstico de [`crate::Error::SchemaTooNew`].
-pub(crate) const SCHEMA_VERSION: usize = 7;
+pub(crate) const SCHEMA_VERSION: usize = 8;
 
 /// Versão 1: bibliotecas, mídia, varreduras e estado de estudo.
 ///
@@ -402,6 +402,26 @@ CREATE TABLE study_note (
 CREATE INDEX study_note_owner_media_idx ON study_note (owner_id, media_id, position_seconds);
 ";
 
+/// Versão 8: cartões pessoais de estudo com repetição espaçada.
+///
+/// Permite ao aluno criar cartões de memorização (flashcards) com frente e verso vinculados
+/// a uma aula, com agendamento de revisão espaçada (next_due e interval_days).
+const V8: &str = "
+CREATE TABLE flashcard (
+    card_id TEXT PRIMARY KEY NOT NULL,
+    owner_id TEXT NOT NULL,
+    media_id TEXT NOT NULL REFERENCES media (media_id) ON DELETE NO ACTION,
+    front TEXT NOT NULL CHECK (length(trim(front)) > 0 AND length(front) <= 4000),
+    back TEXT NOT NULL CHECK (length(trim(back)) > 0 AND length(back) <= 4000),
+    interval_days INTEGER NOT NULL CHECK (interval_days >= 0 AND interval_days <= 365),
+    next_due INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX flashcard_owner_media_due_idx ON flashcard (owner_id, media_id, next_due);
+";
+
 const MIGRATIONS_SLICE: &[M<'static>] = &[
     M::up(V1),
     M::up(V2),
@@ -410,6 +430,7 @@ const MIGRATIONS_SLICE: &[M<'static>] = &[
     M::up(V5),
     M::up(V6),
     M::up(V7),
+    M::up(V8),
 ];
 
 /// Cadeia de migrações aplicada por [`crate::db::Database`].

@@ -340,6 +340,21 @@ pub enum Error {
         note_id: String,
     },
 
+    /// O conteúdo da frente ou do verso do cartão é inválido ou excede o limite.
+    #[error("conteúdo do cartão é inválido ou excede o limite")]
+    InvalidFlashcardContent,
+
+    /// A avaliação de revisão do cartão é inválida.
+    #[error("avaliação de revisão do cartão é inválida")]
+    InvalidFlashcardRating,
+
+    /// O cartão não foi encontrado.
+    #[error("cartão não encontrado: {card_id}")]
+    FlashcardNotFound {
+        /// Identificador consultado.
+        card_id: String,
+    },
+
     /// A missão ainda não atingiu o requisito necessário para resgate.
     #[error("a missão diária ainda não foi concluída")]
     MissionNotComplete,

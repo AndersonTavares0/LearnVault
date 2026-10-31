@@ -962,4 +962,64 @@ describe('desktop transport over IPC', () => {
 		]);
 		vi.unstubAllGlobals();
 	});
+
+	it('normalizes flashcards and handles CRUD and review over HTTP', async () => {
+		const mockCard = {
+			card_id: 'card-1',
+			media_id: 'media-1',
+			front: 'Frente',
+			back: 'Verso',
+			interval_days: 1,
+			next_due: 1760000000,
+			created_at: 1750000000,
+			updated_at: 1750000000
+		};
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(new Response(JSON.stringify({ items: [mockCard] }), { status: 200 }))
+			.mockResolvedValueOnce(new Response(JSON.stringify(mockCard), { status: 201 }))
+			.mockResolvedValueOnce(new Response(JSON.stringify({ ...mockCard, front: 'Frente 2' }), { status: 200 }))
+			.mockResolvedValueOnce(new Response(null, { status: 204 }))
+			.mockResolvedValueOnce(new Response(JSON.stringify({ ...mockCard, interval_days: 2 }), { status: 200 }));
+
+		vi.stubGlobal('fetch', fetchMock);
+		const http: Transport = new HttpTransport();
+
+		const list = await http.listFlashcards('media-1');
+		expect(list).toEqual([{
+			cardId: 'card-1',
+			mediaId: 'media-1',
+			front: 'Frente',
+			back: 'Verso',
+			intervalDays: 1,
+			nextDue: 1760000000,
+			createdAt: 1750000000,
+			updatedAt: 1750000000
+		}]);
+
+		const created = await http.createFlashcard('media-1', 'Frente', 'Verso');
+		expect(created.cardId).toBe('card-1');
+
+		const updated = await http.updateFlashcard('card-1', 'Frente 2', 'Verso');
+		expect(updated.front).toBe('Frente 2');
+
+		await expect(http.deleteFlashcard('card-1')).resolves.toBeUndefined();
+
+		const reviewed = await http.reviewFlashcard('card-1', 'good');
+		expect(reviewed.intervalDays).toBe(2);
+
+		vi.unstubAllGlobals();
+	});
+
+	it('provides DesktopStub fallback for flashcards without throwing', async () => {
+		const desktop: Transport = new DesktopStub();
+		await expect(desktop.listFlashcards('media-1')).resolves.toEqual([]);
+		const created = await desktop.createFlashcard('media-1', 'F', 'V');
+		expect(created.cardId).toBe('desktop-stub');
+		const updated = await desktop.updateFlashcard('c-1', 'F2', 'V2');
+		expect(updated.front).toBe('F2');
+		await expect(desktop.deleteFlashcard('c-1')).resolves.toBeUndefined();
+		const reviewed = await desktop.reviewFlashcard('c-1', 'again');
+		expect(reviewed.cardId).toBe('c-1');
+	});
 });

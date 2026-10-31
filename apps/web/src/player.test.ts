@@ -194,4 +194,12 @@ describe('player preference controls', () => {
 
 		expect(body).toContain('<input type="checkbox" checked=""/>');
 	});
+
+	it('renders study tools tabs with notes and flashcards when study sync is active', () => {
+		const { body } = render(Player, { props: baseProps });
+
+		expect(body).toContain('aria-label="Ferramentas de estudo da aula"');
+		expect(body).toContain('Anotações da aula');
+		expect(body).toContain('Cartões de revisão');
+	});
 });

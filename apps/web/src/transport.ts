@@ -64,6 +64,17 @@ export type StudyNote = {
 	createdAt: number;
 	updatedAt: number;
 };
+export type Flashcard = {
+	cardId: string;
+	mediaId: string;
+	front: string;
+	back: string;
+	intervalDays: number;
+	nextDue: number;
+	createdAt: number;
+	updatedAt: number;
+};
+export type ReviewRating = 'again' | 'good';
 export const STUDY_NOT_AVAILABLE = 'study_not_available';
 
 // Protocolo customizado do desktop para mídia local. O webview aponta somente pelo
@@ -122,6 +133,11 @@ export interface Transport {
 	createNote(mediaId: string, positionSeconds: number, content: string): Promise<StudyNote>;
 	updateNote(noteId: string, content: string): Promise<StudyNote>;
 	deleteNote(noteId: string): Promise<void>;
+	listFlashcards(mediaId: string): Promise<Flashcard[]>;
+	createFlashcard(mediaId: string, front: string, back: string): Promise<Flashcard>;
+	updateFlashcard(cardId: string, front: string, back: string): Promise<Flashcard>;
+	deleteFlashcard(cardId: string): Promise<void>;
+	reviewFlashcard(cardId: string, rating: ReviewRating): Promise<Flashcard>;
 	recordFocusSession(session: FocusSessionInput): Promise<FocusSessionRecord>;
 	focusSummary(): Promise<FocusSummary>;
 	rewardSummary(): Promise<RewardSummary>;
@@ -497,6 +513,21 @@ export function normalizeStudyNote(raw: unknown): StudyNote {
 	};
 }
 
+export function normalizeFlashcard(raw: unknown): Flashcard {
+	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalidPayload('cartão de estudo inválido.');
+	const card = raw as Record<string, unknown>;
+	return {
+		cardId: String(card.card_id ?? card.cardId ?? ''),
+		mediaId: String(card.media_id ?? card.mediaId ?? ''),
+		front: String(card.front ?? ''),
+		back: String(card.back ?? ''),
+		intervalDays: Number(card.interval_days ?? card.intervalDays ?? 0),
+		nextDue: Number(card.next_due ?? card.nextDue ?? 0),
+		createdAt: Number(card.created_at ?? card.createdAt ?? 0),
+		updatedAt: Number(card.updated_at ?? card.updatedAt ?? 0)
+	};
+}
+
 // Envelope de categoria da projeção de categorias: `{ children }`.
 function isCategoryEnvelope(item: unknown): boolean {
 	return item !== null && typeof item === 'object' && !Array.isArray(item) && 'children' in item;
@@ -639,6 +670,45 @@ export class HttpTransport implements Transport {
 		});
 		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível excluir a anotação.');
 	}
+	async listFlashcards(mediaId: string): Promise<Flashcard[]> {
+		const response = await fetch(`/api/study/flashcards?media_id=${encodeURIComponent(mediaId)}`);
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar os cartões.');
+		const data = await response.json();
+		return (Array.isArray(data.items) ? data.items : []).map(normalizeFlashcard);
+	}
+	async createFlashcard(mediaId: string, front: string, back: string): Promise<Flashcard> {
+		const response = await fetch('/api/study/flashcards', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ media_id: mediaId, front, back })
+		});
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 422 ? 'Conteúdo do cartão inválido.' : 'Não foi possível salvar o cartão.');
+		return normalizeFlashcard(await response.json());
+	}
+	async updateFlashcard(cardId: string, front: string, back: string): Promise<Flashcard> {
+		const response = await fetch(`/api/study/flashcards/${encodeURIComponent(cardId)}`, {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ front, back })
+		});
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 422 ? 'Conteúdo do cartão inválido.' : 'Não foi possível atualizar o cartão.');
+		return normalizeFlashcard(await response.json());
+	}
+	async deleteFlashcard(cardId: string): Promise<void> {
+		const response = await fetch(`/api/study/flashcards/${encodeURIComponent(cardId)}`, {
+			method: 'DELETE'
+		});
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível excluir o cartão.');
+	}
+	async reviewFlashcard(cardId: string, rating: ReviewRating): Promise<Flashcard> {
+		const response = await fetch(`/api/study/flashcards/${encodeURIComponent(cardId)}/review`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ rating })
+		});
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 422 ? 'Avaliação inválida.' : 'Não foi possível registrar a revisão.');
+		return normalizeFlashcard(await response.json());
+	}
 	async recordFocusSession(session: FocusSessionInput) {
 		const response = await fetch('/api/focus/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: session.id, kind: session.kind, planned_seconds: session.plannedSeconds, actual_seconds: session.actualSeconds, completed: session.completed, started_at: session.startedAt, ended_at: session.endedAt }) });
 		if (!response.ok) {
@@ -770,6 +840,17 @@ export class DesktopStub implements Transport {
 		return Promise.resolve({ noteId, mediaId: '', positionSeconds: 0, content, createdAt: 0, updatedAt: 0 });
 	}
 	deleteNote(_noteId: string): Promise<void> { return Promise.resolve(); }
+	listFlashcards(_mediaId: string): Promise<Flashcard[]> { return Promise.resolve([]); }
+	createFlashcard(mediaId: string, front: string, back: string): Promise<Flashcard> {
+		return Promise.resolve({ cardId: 'desktop-stub', mediaId, front, back, intervalDays: 0, nextDue: 0, createdAt: 0, updatedAt: 0 });
+	}
+	updateFlashcard(cardId: string, front: string, back: string): Promise<Flashcard> {
+		return Promise.resolve({ cardId, mediaId: '', front, back, intervalDays: 0, nextDue: 0, createdAt: 0, updatedAt: 0 });
+	}
+	deleteFlashcard(_cardId: string): Promise<void> { return Promise.resolve(); }
+	reviewFlashcard(cardId: string, _rating: ReviewRating): Promise<Flashcard> {
+		return Promise.resolve({ cardId, mediaId: '', front: '', back: '', intervalDays: 0, nextDue: 0, createdAt: 0, updatedAt: 0 });
+	}
 	async recordFocusSession(session: FocusSessionInput) { try { return normalizeFocusSession(await invoke<unknown>('desktop_record_focus_session', { session })); } catch (cause) { throw desktopError(cause, 'Não foi possível salvar a sessão de foco.'); } }
 	async focusSummary() { try { return normalizeFocusSummary(await invoke<unknown>('desktop_focus_summary')); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar as estatísticas de foco.'); } }
 	async rewardSummary() { try { return normalizeRewardSummary(await invoke<unknown>('desktop_reward_summary')); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar suas recompensas.'); } }

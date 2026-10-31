@@ -1,6 +1,7 @@
 <script lang="ts">
 	import LooseFiles from './LooseFiles.svelte';
 	import StudyNotes from './StudyNotes.svelte';
+	import Flashcards from './Flashcards.svelte';
 	import { formatDuration, mediaAvailability, mediaPlaybackKind, playerShortcutAction, selectPlayableMedia, selectPlayableSubtitle, shouldAutoAdvance, srtConversionSupported, srtToWebVtt, studySyncEnabled, subtitleFormat } from './player';
 	import { createPositionSaver } from './study';
 	import { createDefaultPlayerPreferences, lessonPreferenceKey, updateLessonPreference, type PlayerPreferences } from './player-preferences';
@@ -32,6 +33,25 @@
 	let captionSource = $state<string | null>(null);
 	let captionDownload = $state<string | null>(null);
 	let captionMessage = $state('');
+
+	let studyTab: 'notes' | 'flashcards' = $state('notes');
+
+	function studyTabKey(event: KeyboardEvent) {
+		if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+			event.preventDefault();
+			const next = studyTab === 'notes' ? 'flashcards' : 'notes';
+			studyTab = next;
+			setTimeout(() => document.getElementById(`study-tab-${next}`)?.focus(), 0);
+		} else if (event.key === 'Home') {
+			event.preventDefault();
+			studyTab = 'notes';
+			setTimeout(() => document.getElementById('study-tab-notes')?.focus(), 0);
+		} else if (event.key === 'End') {
+			event.preventDefault();
+			studyTab = 'flashcards';
+			setTimeout(() => document.getElementById('study-tab-flashcards')?.focus(), 0);
+		}
+	}
 
 	const saver = createPositionSaver((id, position) => transport.recordPosition(id, position));
 
@@ -224,14 +244,70 @@
 {#if captionMessage}<p class="empty" role="status">{captionMessage}{#if captionDownload} <a href={captionDownload} download>Baixar legenda</a>{/if}</p>{/if}
 {#if lesson.subtitles.length || lesson.materials.length}<LooseFiles files={[...lesson.subtitles, ...lesson.materials]} heading="Materiais" {courseId} />{/if}
 {#if syncEnabled && mediaId}
-	<StudyNotes
-		{mediaId}
-		{currentTime}
-		onSeek={(targetSeconds) => {
-			if (media) {
-				media.currentTime = targetSeconds;
-				void media.play().catch(() => undefined);
-			}
-		}}
-	/>
+	<div class="player-study-section">
+		<div class="lv-tabs player-study-tabs" role="tablist" aria-label="Ferramentas de estudo da aula">
+			<button
+				class="lv-tab"
+				type="button"
+				role="tab"
+				id="study-tab-notes"
+				aria-controls="study-panel-notes"
+				aria-selected={studyTab === 'notes'}
+				tabindex={studyTab === 'notes' ? 0 : -1}
+				class:is-active={studyTab === 'notes'}
+				onclick={() => (studyTab = 'notes')}
+				onkeydown={studyTabKey}
+			>
+				Anotações da aula
+			</button>
+			<button
+				class="lv-tab"
+				type="button"
+				role="tab"
+				id="study-tab-flashcards"
+				aria-controls="study-panel-flashcards"
+				aria-selected={studyTab === 'flashcards'}
+				tabindex={studyTab === 'flashcards' ? 0 : -1}
+				class:is-active={studyTab === 'flashcards'}
+				onclick={() => (studyTab = 'flashcards')}
+				onkeydown={studyTabKey}
+			>
+				Cartões de revisão
+			</button>
+		</div>
+
+		{#if studyTab === 'notes'}
+			<div id="study-panel-notes" role="tabpanel" aria-labelledby="study-tab-notes">
+				<StudyNotes
+					{mediaId}
+					{currentTime}
+					onSeek={(targetSeconds) => {
+						if (media) {
+							media.currentTime = targetSeconds;
+							void media.play().catch(() => undefined);
+						}
+					}}
+				/>
+			</div>
+		{:else}
+			<div id="study-panel-flashcards" role="tabpanel" aria-labelledby="study-tab-flashcards">
+				<Flashcards {mediaId} />
+			</div>
+		{/if}
+	</div>
 {/if}
+
+<style>
+	.player-study-section {
+		margin-top: 1.5rem;
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+
+	.player-study-tabs {
+		background: transparent;
+		padding: 0;
+		border-bottom: 1px solid var(--line);
+	}
+</style>
