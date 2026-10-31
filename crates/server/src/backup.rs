@@ -40,8 +40,14 @@ pub(crate) async fn download_backup(State(state): State<AppState>, headers: Head
         .duration_since(std::time::UNIX_EPOCH)
         .map(|duration| duration.as_secs())
         .unwrap_or(0);
-    let backup_temp_file = std::env::temp_dir().join(format!(
-        "learnvault-backup-{}-{}-{}.sqlite",
+    let base_dir = state
+        .config
+        .database_path
+        .parent()
+        .map(std::path::Path::to_path_buf)
+        .unwrap_or_else(std::env::temp_dir);
+    let backup_temp_file = base_dir.join(format!(
+        ".learnvault-backup-{}-{}-{}.sqlite",
         std::process::id(),
         timestamp,
         getrandom::u32().unwrap_or(0)

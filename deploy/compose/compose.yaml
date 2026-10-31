@@ -19,7 +19,7 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       COOKIE_SECURE: ${COOKIE_SECURE:-true}
     ports:
-      - "${PORT:-8090}:${PORT:-8090}"
+      - "${BIND_ADDR:-127.0.0.1}:${PORT:-8090}:${PORT:-8090}"
     volumes:
       - ${DATA_DIR:-../../data}:/data:rw
       - ${CACHE_DIR:-../../cache}:/cache:rw

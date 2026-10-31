@@ -20,7 +20,7 @@ use std::{future::Future, pin::Pin, sync::Arc, sync::OnceLock, time::Duration};
 use axum::{
     Json,
     extract::{Query, State},
-    http::{HeaderMap, HeaderValue, header},
+    http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
@@ -212,10 +212,14 @@ pub(crate) struct UpdateHistoryResponse {
     pub(crate) items: Vec<UpdateHistoryEntry>,
 }
 
-/// Consulta autenticada do histórico de atualizações registradas no volume de dados.
+/// Consulta autenticada (apenas administrador) do histórico de atualizações no volume de dados.
 pub(crate) async fn update_history(State(state): State<AppState>, headers: HeaderMap) -> Response {
-    if let Err(failure) = crate::study::user_or_response(&state, &headers).await {
-        return failure.into_response();
+    let user = match crate::study::user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    if !user.is_admin {
+        return (StatusCode::FORBIDDEN, "admin required").into_response();
     }
     let data_dir = state
         .config

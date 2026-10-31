@@ -97,11 +97,15 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/study/capabilities", get(study::capabilities))
         .route(
             "/api/study/notes",
-            get(study::list_notes).post(study::create_note),
+            get(study::list_notes)
+                .post(study::create_note)
+                .layer(DefaultBodyLimit::max(16 * 1024)),
         )
         .route(
             "/api/study/notes/{id}",
-            axum::routing::put(study::update_note).delete(study::delete_note),
+            axum::routing::put(study::update_note)
+                .delete(study::delete_note)
+                .layer(DefaultBodyLimit::max(16 * 1024)),
         )
         .route("/api/focus/sessions", post(study::record_focus_session))
         .route("/api/focus/summary", get(study::focus_summary))
