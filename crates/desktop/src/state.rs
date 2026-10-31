@@ -22,8 +22,9 @@ use crate::covers::{
     COVERS_DIR_NAME, CoverError, cover_version, read_picked_cover, remove_cover, store_cover,
 };
 use crate::dto::{
-    CatalogDto, CoverDto, CoverRemovalDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto,
-    RecentStudyDto, RescanSummaryDto, StudyProgressDto,
+    CatalogDto, CoverDto, CoverRemovalDto, FocusSessionDto, FocusSummaryDto, MediaRemovalImpactDto,
+    MediaRemovalOutcomeDto, RecentStudyDto, RescanSummaryDto, RewardSummaryDto, StudyProgressDto,
+    StudySummaryDto,
 };
 use crate::error::IpcError;
 use crate::ordering::{CourseOrders, load_orders, store_orders};
@@ -381,6 +382,72 @@ impl DesktopState {
             .lock()
             .map_err(|_| IpcError::database_unavailable())?;
         study::recent(&database, limit)
+    }
+
+    /// Resume a ofensiva e a semana corrente do dono local.
+    pub fn study_summary(&self) -> Result<StudySummaryDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::summary(&database)
+    }
+
+    /// Persiste uma sessão Pomodoro do dono local.
+    pub fn record_focus_session(
+        &self,
+        input: learnvault_core::FocusSessionInput,
+    ) -> Result<FocusSessionDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::record_focus_session(&database, input)
+    }
+
+    /// Lê o resumo de foco persistido do dono local.
+    pub fn focus_summary(&self) -> Result<FocusSummaryDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::focus_summary(&database)
+    }
+
+    /// Lê o resumo de recompensas persistido do dono local.
+    pub fn reward_summary(&self) -> Result<RewardSummaryDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::reward_summary(&database)
+    }
+
+    /// Resgata uma missão diária do dono local.
+    pub fn claim_daily_mission(&self, mission_id: &str) -> Result<bool, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::claim_daily_mission(&database, mission_id)
+    }
+
+    /// Lê a meta semanal configurada do dono local.
+    pub fn weekly_goal(&self) -> Result<i64, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::weekly_goal(&database)
+    }
+
+    /// Salva a meta semanal configurada do dono local.
+    pub fn set_weekly_goal(&self, goal: i64) -> Result<i64, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::set_weekly_goal(&database, goal)
     }
 
     /// Consulta o impacto da remoção de uma mídia do catálogo local.

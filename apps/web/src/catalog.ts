@@ -48,6 +48,25 @@ export function countCatalogFiles(node: CatalogNode): FileCounts {
 }
 
 /**
+ * Mídias da subárvore que o último rescan marcou como ausentes.
+ *
+ * A contagem de vídeos inclui registros ausentes de propósito (o catálogo não os apaga),
+ * mas a ficha precisa dizer quantos realmente abrem — do contrário "2 vídeos" ao lado de
+ * "1 aula" parece um erro. As aulas já usam a mesma distinção.
+ */
+export function countMissingVideos(node: CatalogNode): number {
+	let missing = 0;
+	function walk(current: CatalogNode): void {
+		for (const file of [...current.files, ...current.looseFiles]) {
+			if (file.kind === 'media' && !isFileAvailable(file)) missing += 1;
+		}
+		for (const child of current.children) walk(child);
+	}
+	walk(node);
+	return missing;
+}
+
+/**
  * Contagens de um nó e de toda a sua subárvore.
  *
  * `modules` conta nós por papel; `videos` e `materials` somam os arquivos do nó e dos
@@ -123,6 +142,25 @@ export function formatLessonMeta(counts: FileCounts): string {
 		counts.videos > 0 ? formatCount(counts.videos, 'vídeo', 'vídeos') : '',
 		counts.materials > 0 ? formatCount(counts.materials, 'material', 'materiais') : ''
 	]);
+}
+
+/**
+ * Materiais (não mídia) de um curso inteiro, sem repetir o mesmo caminho.
+ *
+ * A ficha do curso mostra tudo o que acompanha as aulas, inclusive o que está dentro de
+ * módulos, em uma lista única. Legendas e arquivos de apoio entram; os vídeos ficam de
+ * fora porque já são as aulas.
+ */
+export function collectMaterials(node: CatalogNode): FileEntry[] {
+	const byPath = new Map<string, FileEntry>();
+	function walk(current: CatalogNode): void {
+		for (const file of [...current.files, ...current.looseFiles]) {
+			if (file.kind !== 'media' && !byPath.has(file.path)) byPath.set(file.path, file);
+		}
+		for (const child of current.children) walk(child);
+	}
+	walk(node);
+	return [...byPath.values()];
 }
 
 /** Contexto de origem de um item recente: o curso e, quando houver, o módulo. */

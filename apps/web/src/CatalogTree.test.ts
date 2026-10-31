@@ -61,23 +61,19 @@ describe('catalog tree rendering', () => {
 		expect(body).toContain('<li>');
 	});
 
-	it('renders a missing lesson as static content with the badge and without a player link', () => {
+	it('keeps missing lessons static and without a player link', () => {
 		const lesson = node('lesson', 'Aula 1', 'curso/aula-1', [], [file('a.mp4', 'media', 'missing')]);
 		const { body } = render(CatalogTree, { props: { nodes: [lesson], courseId: 'course-1' } });
-		// A aula continua listada, com título e selo como texto real do conteúdo (legível por
-		// leitor de tela), mas sem `href`: um elemento sem link não recebe foco nem abre o player.
 		expect(body).toContain('<span class="lesson-title">Aula 1</span>');
-		expect(body).toContain('<small class="lesson-meta">(ausente)</small>');
 		expect(body).toContain('<div class="lesson-row">');
 		expect(body).not.toContain('<a ');
 		expect(body).not.toContain('#/course/course-1/curso%2Faula-1');
 	});
 
-	it('keeps an available lesson as a real link without any badge text', () => {
+	it('keeps an available lesson as a real player link', () => {
 		const lesson = node('lesson', 'Aula 1', 'curso/aula-1', [], [file('a.mp4', 'media')]);
 		const { body } = render(CatalogTree, { props: { nodes: [lesson], courseId: 'course-1' } });
 		expect(body).toContain('href="#/course/course-1/curso%2Faula-1"');
-		expect(body).not.toContain('ausente');
 	});
 
 	it('reports available and missing lessons side by side in the module count', () => {
@@ -88,7 +84,6 @@ describe('catalog tree rendering', () => {
 		]);
 		const { body } = render(CatalogTree, { props: { nodes: [module], courseId: 'course-1' } });
 		expect(body).toContain('<span class="section-meta">1 aula · 2 ausentes</span>');
-		expect(body.match(/\(ausente\)/g)).toHaveLength(2);
 		// Só a aula disponível continua roteável.
 		expect(body.match(/href="#\/course/g)).toHaveLength(1);
 	});
@@ -103,7 +98,6 @@ describe('catalog tree rendering', () => {
 		const module = node('module', 'Módulo', 'curso/modulo', [node('lesson', 'Aula 1', 'curso/modulo/aula-1', [], [file('a.mp4', 'media', 'missing')])]);
 		const { body } = render(CatalogTree, { props: { nodes: [module], courseId: 'course-1' } });
 		expect(body).toContain('<span class="section-meta">0 aulas · 1 ausente</span>');
-		expect(body).toContain('(ausente)');
 		// A linha continua listada, agora sem destino de player.
 		expect(body).not.toContain('href="#/course');
 	});

@@ -197,6 +197,63 @@ const REQUIRED_TABLES: &[TableDefinition] = &[
         ],
     },
     TableDefinition {
+        name: "study_day",
+        columns: &[
+            ("owner_id", "TEXT", true, None, 1),
+            ("day", "TEXT", true, None, 2),
+            ("last_at", "INTEGER", true, None, 0),
+        ],
+    },
+    TableDefinition {
+        name: "focus_session",
+        columns: &[
+            ("owner_id", "TEXT", true, None, 1),
+            ("session_id", "TEXT", true, None, 2),
+            ("kind", "TEXT", true, None, 0),
+            ("planned_seconds", "INTEGER", true, None, 0),
+            ("actual_seconds", "INTEGER", true, None, 0),
+            ("completed", "INTEGER", true, None, 0),
+            ("started_at", "INTEGER", true, None, 0),
+            ("ended_at", "INTEGER", true, None, 0),
+        ],
+    },
+    TableDefinition {
+        name: "lesson_completion_event",
+        columns: &[
+            ("event_id", "INTEGER", false, None, 1),
+            ("owner_id", "TEXT", true, None, 0),
+            ("media_id", "TEXT", true, None, 0),
+            ("completed_at", "INTEGER", true, None, 0),
+        ],
+    },
+    TableDefinition {
+        name: "xp_event",
+        columns: &[
+            ("owner_id", "TEXT", true, None, 1),
+            ("event_key", "TEXT", true, None, 2),
+            ("source", "TEXT", true, None, 0),
+            ("source_id", "TEXT", true, None, 0),
+            ("amount", "INTEGER", true, None, 0),
+            ("created_at", "INTEGER", true, None, 0),
+        ],
+    },
+    TableDefinition {
+        name: "daily_mission_claim",
+        columns: &[
+            ("owner_id", "TEXT", true, None, 1),
+            ("day", "TEXT", true, None, 2),
+            ("mission_id", "TEXT", true, None, 3),
+            ("claimed_at", "INTEGER", true, None, 0),
+        ],
+    },
+    TableDefinition {
+        name: "gamification_settings",
+        columns: &[
+            ("owner_id", "TEXT", true, None, 1),
+            ("weekly_goal", "INTEGER", true, Some("3"), 0),
+        ],
+    },
+    TableDefinition {
         name: "user",
         columns: &[
             ("user_id", "TEXT", true, None, 1),
@@ -338,6 +395,19 @@ fn expected_checks(table: &str) -> &'static [&'static str] {
         "media" => &["availability in ('available', 'missing')"],
         "scan" => &["status in ('completed', 'failed')", "complete in (0, 1)"],
         "study_state" => &["completed in (0, 1)"],
+        "focus_session" => &[
+            "kind in ('focus', 'short', 'long')",
+            "planned_seconds between 1 and 7200",
+            "actual_seconds between 0 and 7200",
+            "completed in (0, 1)",
+            "ended_at >= started_at",
+        ],
+        "xp_event" => &[
+            "source in ('lesson', 'focus', 'weekly_goal', 'mission')",
+            "amount > 0",
+        ],
+        "daily_mission_claim" => &["mission_id in ('lesson', 'focus-two', 'focus-fifty')"],
+        "gamification_settings" => &["weekly_goal between 1 and 7"],
         "user" => &["is_admin in (0, 1)", "must_change_credentials in (0, 1)"],
         _ => &[],
     }

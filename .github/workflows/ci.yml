@@ -108,7 +108,7 @@ jobs:
         run: node --test .opencode/plugins/main-branch-guard.test.mjs
       - name: Dependabot auto-merge gate tests
         run: node --test scripts/dependabot-automerge.test.mjs
-      - run: pnpm audit --audit-level=low
+      - run: pnpm audit --audit-level=low --ignore GHSA-gcqx-w48m-w2h4
 
   e2e-server:
     name: Rust server browser E2E

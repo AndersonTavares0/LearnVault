@@ -88,10 +88,22 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/api/media", get(media::media).head(media::media))
         .route("/api/study/recent", get(study::recent))
+        .route("/api/study/summary", get(study::summary))
         .route("/api/study/progress", get(study::progress))
         .route("/api/study/position", post(study::record_position))
         .route("/api/study/completed", post(study::set_completed))
         .route("/api/study/capabilities", get(study::capabilities))
+        .route("/api/focus/sessions", post(study::record_focus_session))
+        .route("/api/focus/summary", get(study::focus_summary))
+        .route("/api/rewards/summary", get(study::reward_summary))
+        .route(
+            "/api/rewards/missions/{mission_id}/claim",
+            post(study::claim_mission),
+        )
+        .route(
+            "/api/rewards/weekly-goal",
+            get(study::weekly_goal).put(study::set_weekly_goal),
+        )
         .route("/api/update", get(update::update))
         .fallback(spa::serve)
         .layer(DefaultBodyLimit::max(8 * 1024))
@@ -451,7 +463,7 @@ mod tests {
         for (name, setup) in [
             ("missing", "PRAGMA user_version = 0"),
             ("older", "PRAGMA user_version = 3"),
-            ("newer", "PRAGMA user_version = 5"),
+            ("newer", "PRAGMA user_version = 7"),
             (
                 "missing required column",
                 "ALTER TABLE user RENAME COLUMN must_change_credentials TO changed",

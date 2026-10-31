@@ -10,6 +10,7 @@
 
 use std::path::{Path, PathBuf};
 
+use learnvault_core::{FocusKind, FocusSessionInput};
 use learnvault_desktop::{
     DEFAULT_RECENT_LIMIT, DesktopState, IpcErrorCode, LOCAL_OWNER_ID, RecentStudyDto,
     StudyProgressDto,
@@ -570,4 +571,98 @@ fn concurrent_reads_and_writes_do_not_corrupt_the_state() {
         );
     }
     assert_eq!(state_rows(dir.path()), 1);
+}
+
+#[test]
+fn summary_reports_the_local_owner_streak_and_week() {
+    let dir = tempfile::tempdir().unwrap();
+    let state = desktop(dir.path());
+    seed_media(dir.path(), "m1");
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    seed_state(dir.path(), LOCAL_OWNER_ID, "m1", 10, false, now);
+
+    let summary = state.study_summary().unwrap();
+    assert!(summary.today_active);
+    assert_eq!(summary.current_streak, 1);
+    assert_eq!(summary.longest_streak, 1);
+    assert_eq!(summary.week_active_days, 1);
+    assert_eq!(summary.completed_lessons, 0);
+    assert_eq!(summary.days.len(), 7);
+    assert_eq!(summary.today.len(), 10);
+}
+
+#[test]
+fn focus_rewards_and_mission_claims_persist_for_the_local_owner() {
+    let dir = tempfile::tempdir().unwrap();
+    let state = desktop(dir.path());
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    let session = FocusSessionInput {
+        id: "session-1".into(),
+        kind: FocusKind::Focus,
+        planned_seconds: 1_500,
+        actual_seconds: 1_500,
+        completed: true,
+        started_at: now - 1_500,
+        ended_at: now,
+    };
+
+    let first = state.record_focus_session(session.clone()).unwrap();
+    let duplicate = state.record_focus_session(session).unwrap();
+
+    assert_eq!(
+        first, duplicate,
+        "retries devem devolver a sessão existente"
+    );
+    assert_eq!(serde_json::to_value(&first).unwrap()["kind"], "focus");
+    let focus = state.focus_summary().unwrap();
+    assert_eq!(focus.total_sessions, 1);
+    assert_eq!(focus.total_minutes, 25);
+    assert_eq!(focus.completion_rate, 100);
+    assert_eq!(focus.week_sessions, 1);
+    let rewards = state.reward_summary().unwrap();
+    assert_eq!(rewards.xp, 20);
+    assert!(rewards.study.today_active);
+    assert_eq!(rewards.missions[1].progress, 1);
+
+    assert_eq!(state.set_weekly_goal(1).unwrap(), 1);
+    assert_eq!(state.reward_summary().unwrap().xp, 70);
+}
+
+#[test]
+fn desktop_mission_claim_is_one_time_and_reward_summary_uses_snake_case() {
+    let dir = tempfile::tempdir().unwrap();
+    let state = desktop(dir.path());
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    for index in 0..2 {
+        state
+            .record_focus_session(FocusSessionInput {
+                id: format!("mission-session-{index}"),
+                kind: FocusKind::Focus,
+                planned_seconds: 1_500,
+                actual_seconds: 1_500,
+                completed: true,
+                started_at: now - 3_000 + index * 1_500,
+                ended_at: now - 1_500 + index * 1_500,
+            })
+            .unwrap();
+    }
+
+    assert!(state.claim_daily_mission("focus-two").unwrap());
+    assert!(!state.claim_daily_mission("focus-two").unwrap());
+    let summary = state.reward_summary().unwrap();
+    assert_eq!(summary.xp, 70, "20 XP por sessão e 30 pelo resgate");
+    assert!(summary.missions[1].claimed);
+    let json = serde_json::to_value(summary).unwrap();
+    assert_eq!(json["weekly_goal"], 3);
+    assert_eq!(json["missions"][1]["claimed"], true);
+    assert!(json.get("study").is_some());
 }

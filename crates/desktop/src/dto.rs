@@ -6,8 +6,8 @@
 //! desktop sem alteração.
 
 use learnvault_core::{
-    Availability, Catalog, CatalogFile, CatalogNode, MediaKind, NodeRole, RescanSummary,
-    StudyProgress,
+    Availability, Catalog, CatalogFile, CatalogNode, FocusKind, FocusSession, FocusSummary,
+    MediaKind, NodeRole, RescanSummary, RewardSummary, StudyProgress,
 };
 use serde::Serialize;
 
@@ -260,6 +260,199 @@ impl StudyProgressDto {
 pub struct RecentStudyDto {
     /// Itens de progresso, já ordenados pelo núcleo.
     pub items: Vec<StudyProgressDto>,
+}
+
+/// Um dia da semana corrente na ofensiva de estudo.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct StudyDayDto {
+    /// Data local no formato `YYYY-MM-DD`.
+    pub day: String,
+    /// Indica que houve progresso real nesse dia.
+    pub active: bool,
+}
+
+/// Resumo de ofensiva e meta semanal do dono local do desktop.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct StudySummaryDto {
+    /// Dias consecutivos até hoje, ou até ontem quando `at_risk`.
+    pub current_streak: i64,
+    /// Maior sequência já registrada.
+    pub longest_streak: i64,
+    /// Dia local usado como hoje, no formato `YYYY-MM-DD`.
+    pub today: String,
+    /// Houve progresso real hoje.
+    pub today_active: bool,
+    /// A ofensiva ainda vale, mas depende de estudar hoje.
+    pub at_risk: bool,
+    /// Dias ativos na semana corrente (segunda a domingo).
+    pub week_active_days: i64,
+    /// Aulas atualmente concluídas pelo dono local.
+    pub completed_lessons: i64,
+    /// Os sete dias da semana corrente, de segunda a domingo.
+    pub days: Vec<StudyDayDto>,
+}
+
+impl From<learnvault_core::StudySummary> for StudySummaryDto {
+    fn from(summary: learnvault_core::StudySummary) -> Self {
+        Self {
+            current_streak: summary.current_streak,
+            longest_streak: summary.longest_streak,
+            today: summary.today,
+            today_active: summary.today_active,
+            at_risk: summary.at_risk,
+            week_active_days: summary.week_active_days,
+            completed_lessons: summary.completed_lessons,
+            days: summary
+                .days
+                .into_iter()
+                .map(|day| StudyDayDto {
+                    day: day.day,
+                    active: day.active,
+                })
+                .collect(),
+        }
+    }
+}
+
+/// Sessão Pomodoro persistida para o dono local.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct FocusSessionDto {
+    /// Chave idempotente do timer.
+    pub id: String,
+    /// Tipo: `focus`, `short` ou `long`.
+    pub kind: &'static str,
+    /// Duração planejada em segundos.
+    pub planned_seconds: i64,
+    /// Duração real em segundos.
+    pub actual_seconds: i64,
+    /// Se o timer concluiu normalmente.
+    pub completed: bool,
+    /// Início Unix.
+    pub started_at: i64,
+    /// Fim Unix.
+    pub ended_at: i64,
+}
+
+impl From<FocusSession> for FocusSessionDto {
+    fn from(session: FocusSession) -> Self {
+        Self {
+            id: session.id,
+            kind: match session.kind {
+                FocusKind::Focus => "focus",
+                FocusKind::ShortBreak => "short",
+                FocusKind::LongBreak => "long",
+            },
+            planned_seconds: session.planned_seconds,
+            actual_seconds: session.actual_seconds,
+            completed: session.completed,
+            started_at: session.started_at,
+            ended_at: session.ended_at,
+        }
+    }
+}
+
+/// Dia de foco dentro da semana atual.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct FocusDayDto {
+    /// Data local `YYYY-MM-DD`.
+    pub day: String,
+    /// Minutos focados concluídos.
+    pub minutes: i64,
+    /// Sessões concluídas.
+    pub sessions: i64,
+}
+
+/// Estatísticas persistidas do Pomodoro.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct FocusSummaryDto {
+    /// Minutos de foco concluídos hoje.
+    pub today_minutes: i64,
+    /// Minutos de foco na semana.
+    pub week_minutes: i64,
+    /// Sessões de foco concluídas na semana.
+    pub week_sessions: i64,
+    /// Minutos de foco acumulados no histórico.
+    pub total_minutes: i64,
+    /// Total histórico de sessões concluídas.
+    pub total_sessions: i64,
+    /// Taxa de conclusão em percentual.
+    pub completion_rate: i64,
+    /// Dia mais produtivo desta semana, se houver.
+    pub best_day: Option<String>,
+    /// Segunda a domingo.
+    pub days: Vec<FocusDayDto>,
+}
+
+impl From<FocusSummary> for FocusSummaryDto {
+    fn from(summary: FocusSummary) -> Self {
+        Self {
+            today_minutes: summary.today_minutes,
+            week_minutes: summary.week_minutes,
+            week_sessions: summary.week_sessions,
+            total_minutes: summary.total_minutes,
+            total_sessions: summary.total_sessions,
+            completion_rate: summary.completion_rate,
+            best_day: summary.best_day,
+            days: summary
+                .days
+                .into_iter()
+                .map(|day| FocusDayDto {
+                    day: day.day,
+                    minutes: day.minutes,
+                    sessions: day.sessions,
+                })
+                .collect(),
+        }
+    }
+}
+
+/// Progresso serializável de uma missão diária.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct DailyMissionDto {
+    /// Identificador estável.
+    pub id: String,
+    /// Progresso do dia.
+    pub progress: i64,
+    /// Alvo de conclusão.
+    pub target: i64,
+    /// Se o bônus já foi resgatado.
+    pub claimed: bool,
+}
+
+/// XP persistido, marcos e missões do dono local.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct RewardSummaryDto {
+    /// XP acumulado.
+    pub xp: i64,
+    /// Aulas concluídas ao menos uma vez.
+    pub completed_lessons: i64,
+    /// Meta semanal configurada.
+    pub weekly_goal: i64,
+    /// Missões do dia.
+    pub missions: Vec<DailyMissionDto>,
+    /// Ofensiva/atividade compartilhada com o resumo de estudo.
+    pub study: StudySummaryDto,
+}
+
+impl From<RewardSummary> for RewardSummaryDto {
+    fn from(summary: RewardSummary) -> Self {
+        Self {
+            xp: summary.xp,
+            completed_lessons: summary.completed_lessons,
+            weekly_goal: summary.weekly_goal,
+            missions: summary
+                .missions
+                .into_iter()
+                .map(|mission| DailyMissionDto {
+                    id: mission.id,
+                    progress: mission.progress,
+                    target: mission.target,
+                    claimed: mission.claimed,
+                })
+                .collect(),
+            study: summary.study.into(),
+        }
+    }
 }
 
 /// DTO do impacto de remoção de mídia.

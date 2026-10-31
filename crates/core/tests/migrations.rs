@@ -83,6 +83,11 @@ fn all_domain_tables_are_created() -> TestResult {
         "study_state",
         "user",
         "session",
+        "focus_session",
+        "lesson_completion_event",
+        "xp_event",
+        "daily_mission_claim",
+        "gamification_settings",
     ] {
         let found: i64 = db.connection().query_row(
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
@@ -481,5 +486,49 @@ fn media_removal_identity_is_the_pair_library_and_media() -> TestResult {
         "remoção repetida do mesmo par",
     );
     assert_eq!(count(&db, "media_removal"), 1);
+    Ok(())
+}
+
+#[test]
+fn v6_focus_session_trigger_persists_owner_scoped_activity_and_xp() -> TestResult {
+    let db = database();
+    for owner in ["owner-a", "owner-b"] {
+        db.connection().execute(
+            "INSERT INTO focus_session
+             (owner_id, session_id, kind, planned_seconds, actual_seconds, completed, started_at, ended_at)
+             VALUES (?1, 'same-session', 'focus', 60, 60, 1, 1_760_000_000, 1_760_000_060)",
+            [owner],
+        )?;
+    }
+
+    let sessions: i64 = db.connection().query_row(
+        "SELECT COUNT(*) FROM focus_session WHERE session_id = 'same-session'",
+        [],
+        |row| row.get(0),
+    )?;
+    let xp_events: i64 = db.connection().query_row(
+        "SELECT COUNT(*) FROM xp_event WHERE source = 'focus' AND source_id = 'same-session'",
+        [],
+        |row| row.get(0),
+    )?;
+    let activity_days: i64 = db.connection().query_row(
+        "SELECT COUNT(*) FROM study_day WHERE owner_id IN ('owner-a', 'owner-b')",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(sessions, 2, "idêntico session_id é permitido entre donos");
+    assert_eq!(xp_events, 2, "XP de foco é gerado por dono");
+    assert_eq!(activity_days, 2, "atividade é gerada por dono");
+
+    let invalid_interval = db.connection().execute(
+        "INSERT INTO focus_session
+         (owner_id, session_id, kind, planned_seconds, actual_seconds, completed, started_at, ended_at)
+         VALUES ('owner-a', 'invalid-interval', 'focus', 60, 60, 0, 160, 100)",
+        [],
+    );
+    assert_constraint_violation(
+        invalid_interval,
+        "o intervalo da sessão não pode ser negativo",
+    );
     Ok(())
 }

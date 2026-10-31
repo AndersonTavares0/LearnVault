@@ -75,6 +75,11 @@ fn config_embeds_frontend_for_production_without_dev_server() {
         config["build"].get("devUrl").is_none(),
         "devUrl não é necessário e não deve abrir porta em dev"
     );
+    assert_eq!(
+        config["app"]["windows"][0]["decorations"].as_bool(),
+        Some(false),
+        "a janela sem decoração exige a titlebar personalizada"
+    );
 
     let plugins_empty = config
         .get("plugins")
@@ -222,9 +227,8 @@ fn capability_is_deny_by_default_without_remote_sources() {
     for permission in permissions {
         let identifier = permission.as_str().unwrap_or_default();
         assert_ne!(identifier, "*", "curinga de permissão é proibido");
-        for forbidden in [
-            "shell", "process", "http", "updater", "fs:", ":all", "scope",
-        ] {
+        assert!(!identifier.ends_with(":all"), "permissão ampla é proibida");
+        for forbidden in ["shell", "process", "http", "updater", "fs:", "scope"] {
             assert!(
                 !identifier.contains(forbidden),
                 "permissão privilegiada '{identifier}' é proibida no desktop"
@@ -275,6 +279,11 @@ fn capability_grants_only_the_core_default_and_the_app_commands() {
         .map(|permission| permission.as_str().unwrap_or_default())
         .collect();
 
+    assert!(permissions.contains(&"core:window:allow-minimize"));
+    assert!(permissions.contains(&"core:window:allow-toggle-maximize"));
+    assert!(permissions.contains(&"core:window:allow-close"));
+    assert!(permissions.contains(&"core:window:allow-start-dragging"));
+    assert!(permissions.contains(&"core:window:allow-is-maximized"));
     assert!(permissions.contains(&"core:default"));
     assert!(permissions.contains(&"allow-desktop-import-course"));
     assert!(permissions.contains(&"allow-desktop-catalog"));
@@ -292,8 +301,8 @@ fn capability_grants_only_the_core_default_and_the_app_commands() {
     assert!(permissions.contains(&"allow-desktop-reset-course-order"));
     assert_eq!(
         permissions.len(),
-        15,
-        "a capability não pode ampliar além do núcleo e dos comandos do app: {permissions:?}"
+        20,
+        "a capability não pode ampliar além do núcleo, dos controles da titlebar e dos comandos do app: {permissions:?}"
     );
 }
 

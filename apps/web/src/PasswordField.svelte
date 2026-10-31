@@ -30,12 +30,15 @@
 	<label for={id}>{label}</label>
 	<div class="password-input">
 		<input
+			class="lvui-input"
 			{id}
+			name={id}
 			type={visible ? 'text' : 'password'}
 			{autocomplete}
 			bind:value
 			bind:this={input}
 			required
+			spellcheck="false"
 			aria-describedby={hint ? `${id}-hint` : undefined}
 		/>
 		<button

@@ -35,6 +35,54 @@ Detalhes de implementação ficam nas issues e pull requests.
 
 ## Agora: uma rotina de estudo completa
 
+### Goal do PR #281: confiabilidade e fechamento técnico
+
+Preparar o [redesenho da experiência de estudo](https://github.com/AndersonTavares0/LearnVault/pull/281)
+para revisão final, com o fluxo biblioteca → aula → foco → evolução consistente no Web e no
+desktop. Este objetivo complementa a [issue #280](https://github.com/AndersonTavares0/LearnVault/issues/280);
+não inclui outro redesign nem autoriza merge.
+
+Critérios de conclusão:
+
+- Sessões de foco respeitam o tempo decorrido, sem duplicar sessões ou XP em reenvios.
+- Falhas de sincronização não causam repetição contínua de requisições; conflitos têm
+  tratamento explícito, sem perder silenciosamente o payload nem bloquear sessões seguintes.
+- Migração V6 e persistência de foco/recompensas têm cobertura com bancos sintéticos.
+- Meta semanal e erros da API têm semântica documentada, compartilhada pelo núcleo.
+- Checks aplicáveis e smoke do fluxo alterado têm resultados registrados no PR, distinguindo
+  validação local de CI e Web de desktop.
+
+Fora deste ciclo: polimento visual subjetivo, titlebar personalizada e novas funcionalidades.
+Qualquer trabalho de design usa o MCP do OpenDesign.
+
+### Goal do PR #281: refinamento do design a partir da revisão do Wesley
+
+Aplicar o [feedback de UX/visual](https://github.com/AndersonTavares0/LearnVault/pull/281#issuecomment-6427774023)
+ao design já implementado. Preservar a identidade Catálogo, a área de continuar estudando e
+o fluxo interno dos cursos, elogiados na revisão.
+
+Critérios de conclusão:
+
+- Marca e navegação formam um grupo visual coeso, inclusive com a barra recolhida.
+- O desktop tem titlebar integrada, com arraste e controles reais de janela acessíveis.
+- Busca, ações administrativas e modos de visualização ficam próximos dos cursos;
+  importar e reler arquivos têm rótulos, ícones e hierarquia distintos.
+- Estatísticas priorizam o progresso pessoal persistido e identificam a origem/abrangência
+  dos dados, sem confundir o histórico recente com totais da conta.
+- O timer mostra o estado de execução imediatamente, sem antecipar tempo ou crédito de foco.
+- A paleta usa superfícies neutras e um acento coerente, sem competição decorativa entre
+  azul e vermelho; títulos dispensam rótulos e divisores redundantes.
+- Layout, contraste, foco de teclado, estados e controles são exercitados em temas claro/escuro,
+  tamanhos mobile/desktop e no aplicativo Tauri para a titlebar.
+- O MCP OpenDesign orienta o refinamento. As skills frontend-design, UI Humanizer,
+  Impeccable e DaisyUI apoiam a auditoria e o acabamento, preservando o sistema existente.
+  Capturas usam somente fixtures sintéticas e ficam anexadas ao PR, fora do código versionado.
+
+Este goal amplia o escopo visual autorizado do ciclo anterior; não elimina os gates técnicos
+nem autoriza merge com checks pendentes.
+
+
+
 - [ ] Player direto com links para legendas e materiais.
 - [ ] Permissões de acesso a cursos para vários usuários locais.
 

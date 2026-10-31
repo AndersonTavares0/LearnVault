@@ -13,11 +13,13 @@
 
 use axum::{
     Json,
-    extract::{RawQuery, State},
+    extract::{Path, RawQuery, State},
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
-use learnvault_core::{AuthSession, Database, StudyProgress};
+use learnvault_core::{
+    AuthSession, Database, FocusKind, FocusSessionInput, StudyProgress, StudySummary,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -53,6 +55,22 @@ struct ProgressQuery {
     media_id: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub(crate) struct FocusSessionRequest {
+    id: String,
+    kind: String,
+    planned_seconds: i64,
+    actual_seconds: i64,
+    completed: bool,
+    started_at: i64,
+    ended_at: i64,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct WeeklyGoalRequest {
+    weekly_goal: i64,
+}
+
 #[derive(Serialize)]
 struct ErrorResponse {
     error: &'static str,
@@ -74,6 +92,76 @@ struct ProgressResponse {
 #[derive(Serialize)]
 struct RecentResponse {
     items: Vec<ProgressResponse>,
+}
+
+#[derive(Serialize)]
+struct SummaryResponse {
+    current_streak: i64,
+    longest_streak: i64,
+    today: String,
+    today_active: bool,
+    at_risk: bool,
+    week_active_days: i64,
+    completed_lessons: i64,
+    days: Vec<SummaryDay>,
+}
+
+#[derive(Serialize)]
+struct SummaryDay {
+    day: String,
+    active: bool,
+}
+
+#[derive(Serialize)]
+struct FocusSessionResponse {
+    id: String,
+    kind: &'static str,
+    planned_seconds: i64,
+    actual_seconds: i64,
+    completed: bool,
+    started_at: i64,
+    ended_at: i64,
+}
+
+#[derive(Serialize)]
+struct FocusSummaryResponse {
+    today_minutes: i64,
+    week_minutes: i64,
+    week_sessions: i64,
+    total_minutes: i64,
+    total_sessions: i64,
+    completion_rate: i64,
+    best_day: Option<String>,
+    days: Vec<FocusDayResponse>,
+}
+
+#[derive(Serialize)]
+struct FocusDayResponse {
+    day: String,
+    minutes: i64,
+    sessions: i64,
+}
+
+#[derive(Serialize)]
+struct MissionResponse {
+    id: String,
+    progress: i64,
+    target: i64,
+    claimed: bool,
+}
+
+#[derive(Serialize)]
+struct RewardSummaryResponse {
+    xp: i64,
+    completed_lessons: i64,
+    weekly_goal: i64,
+    missions: Vec<MissionResponse>,
+    study: SummaryResponse,
+}
+
+#[derive(Serialize)]
+struct WeeklyGoalResponse {
+    weekly_goal: i64,
 }
 
 /// Documento de capacidades do Study, o contrato explícito de detecção de recursos.
@@ -147,6 +235,241 @@ pub(crate) async fn recent(
             .into_response(),
         ),
         Err(failure) => study_failure_response(failure),
+    }
+}
+
+impl From<StudySummary> for SummaryResponse {
+    fn from(summary: StudySummary) -> Self {
+        Self {
+            current_streak: summary.current_streak,
+            longest_streak: summary.longest_streak,
+            today: summary.today,
+            today_active: summary.today_active,
+            at_risk: summary.at_risk,
+            week_active_days: summary.week_active_days,
+            completed_lessons: summary.completed_lessons,
+            days: summary
+                .days
+                .into_iter()
+                .map(|day| SummaryDay {
+                    day: day.day,
+                    active: day.active,
+                })
+                .collect(),
+        }
+    }
+}
+
+impl From<learnvault_core::FocusSession> for FocusSessionResponse {
+    fn from(session: learnvault_core::FocusSession) -> Self {
+        Self {
+            id: session.id,
+            kind: match session.kind {
+                FocusKind::Focus => "focus",
+                FocusKind::ShortBreak => "short",
+                FocusKind::LongBreak => "long",
+            },
+            planned_seconds: session.planned_seconds,
+            actual_seconds: session.actual_seconds,
+            completed: session.completed,
+            started_at: session.started_at,
+            ended_at: session.ended_at,
+        }
+    }
+}
+
+impl From<learnvault_core::FocusSummary> for FocusSummaryResponse {
+    fn from(summary: learnvault_core::FocusSummary) -> Self {
+        Self {
+            today_minutes: summary.today_minutes,
+            week_minutes: summary.week_minutes,
+            week_sessions: summary.week_sessions,
+            total_minutes: summary.total_minutes,
+            total_sessions: summary.total_sessions,
+            completion_rate: summary.completion_rate,
+            best_day: summary.best_day,
+            days: summary
+                .days
+                .into_iter()
+                .map(|day| FocusDayResponse {
+                    day: day.day,
+                    minutes: day.minutes,
+                    sessions: day.sessions,
+                })
+                .collect(),
+        }
+    }
+}
+
+impl From<learnvault_core::RewardSummary> for RewardSummaryResponse {
+    fn from(summary: learnvault_core::RewardSummary) -> Self {
+        Self {
+            xp: summary.xp,
+            completed_lessons: summary.completed_lessons,
+            weekly_goal: summary.weekly_goal,
+            missions: summary
+                .missions
+                .into_iter()
+                .map(|mission| MissionResponse {
+                    id: mission.id,
+                    progress: mission.progress,
+                    target: mission.target,
+                    claimed: mission.claimed,
+                })
+                .collect(),
+            study: SummaryResponse::from(summary.study),
+        }
+    }
+}
+
+/// Resume a ofensiva e a semana atual do usuário autenticado.
+pub(crate) async fn summary(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let owner = user.user_id;
+    match run_study(&state, move |db| learnvault_core::study_summary(db, &owner)).await {
+        Ok(summary) => private_no_store(Json(SummaryResponse::from(summary)).into_response()),
+        Err(failure) => study_failure_response(failure),
+    }
+}
+
+/// Registra uma sessão Pomodoro no histórico do dono autenticado. O ID torna retries idempotentes.
+pub(crate) async fn record_focus_session(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<FocusSessionRequest>,
+) -> Response {
+    if !same_origin(&headers) {
+        return csrf_failed();
+    }
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let kind = match request.kind.as_str() {
+        "focus" => FocusKind::Focus,
+        "short" => FocusKind::ShortBreak,
+        "long" => FocusKind::LongBreak,
+        _ => {
+            return error_response(StatusCode::UNPROCESSABLE_ENTITY, "invalid_focus_session");
+        }
+    };
+    let owner = user.user_id;
+    let input = FocusSessionInput {
+        id: request.id,
+        kind,
+        planned_seconds: request.planned_seconds,
+        actual_seconds: request.actual_seconds,
+        completed: request.completed,
+        started_at: request.started_at,
+        ended_at: request.ended_at,
+    };
+    match run_study(&state, move |db| {
+        learnvault_core::record_focus_session(db, &owner, input)
+    })
+    .await
+    {
+        Ok(session) => private_no_store(Json(FocusSessionResponse::from(session)).into_response()),
+        Err(failure) => focus_failure_response(failure),
+    }
+}
+
+/// Resume as sessões de foco persistidas do dono autenticado.
+pub(crate) async fn focus_summary(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let owner = user.user_id;
+    match run_study(&state, move |db| learnvault_core::focus_summary(db, &owner)).await {
+        Ok(summary) => private_no_store(Json(FocusSummaryResponse::from(summary)).into_response()),
+        Err(failure) => focus_failure_response(failure),
+    }
+}
+
+/// Resume o ledger de XP e o progresso das missões diárias.
+pub(crate) async fn reward_summary(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let owner = user.user_id;
+    match run_study(&state, move |db| {
+        learnvault_core::reward_summary(db, &owner)
+    })
+    .await
+    {
+        Ok(summary) => private_no_store(Json(RewardSummaryResponse::from(summary)).into_response()),
+        Err(failure) => focus_failure_response(failure),
+    }
+}
+
+/// Resgata uma missão diária concluída, no máximo uma vez por dono e dia.
+pub(crate) async fn claim_mission(
+    State(state): State<AppState>,
+    Path(mission_id): Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    if !same_origin(&headers) {
+        return csrf_failed();
+    }
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let owner = user.user_id;
+    match run_study(&state, move |db| {
+        learnvault_core::claim_daily_mission_today(db, &owner, &mission_id)
+    })
+    .await
+    {
+        Ok(claimed) => {
+            private_no_store(Json(serde_json::json!({ "claimed": claimed })).into_response())
+        }
+        Err(failure) => focus_failure_response(failure),
+    }
+}
+
+/// Lê a meta semanal do dono autenticado.
+pub(crate) async fn weekly_goal(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let owner = user.user_id;
+    match run_study(&state, move |db| learnvault_core::weekly_goal(db, &owner)).await {
+        Ok(weekly_goal) => {
+            private_no_store(Json(WeeklyGoalResponse { weekly_goal }).into_response())
+        }
+        Err(failure) => focus_failure_response(failure),
+    }
+}
+
+/// Atualiza a meta semanal validada pelo núcleo e pelo dono autenticado.
+pub(crate) async fn set_weekly_goal(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<WeeklyGoalRequest>,
+) -> Response {
+    if !same_origin(&headers) {
+        return csrf_failed();
+    }
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let owner = user.user_id;
+    match run_study(&state, move |db| {
+        learnvault_core::set_weekly_goal(db, &owner, request.weekly_goal)
+    })
+    .await
+    {
+        Ok(weekly_goal) => {
+            private_no_store(Json(WeeklyGoalResponse { weekly_goal }).into_response())
+        }
+        Err(failure) => focus_failure_response(failure),
     }
 }
 
@@ -314,6 +637,31 @@ fn study_failure_response(failure: StudyFailure) -> Response {
             error_response(StatusCode::UNPROCESSABLE_ENTITY, "invalid_position")
         }
         StudyFailure::Core(_) => internal_error("study unavailable"),
+    }
+}
+
+fn focus_failure_response(failure: StudyFailure) -> Response {
+    use learnvault_core::Error;
+
+    match failure {
+        StudyFailure::Busy => service_unavailable(),
+        StudyFailure::Blocking => internal_error("focus unavailable"),
+        StudyFailure::Core(Error::InvalidFocusSession { .. }) => {
+            error_response(StatusCode::UNPROCESSABLE_ENTITY, "invalid_focus_session")
+        }
+        StudyFailure::Core(Error::FocusSessionConflict) => {
+            error_response(StatusCode::CONFLICT, "focus_session_conflict")
+        }
+        StudyFailure::Core(Error::InvalidMission { .. }) => {
+            error_response(StatusCode::NOT_FOUND, "mission_not_found")
+        }
+        StudyFailure::Core(Error::MissionNotComplete) => {
+            error_response(StatusCode::CONFLICT, "mission_not_complete")
+        }
+        StudyFailure::Core(Error::InvalidWeeklyGoal { .. }) => {
+            error_response(StatusCode::UNPROCESSABLE_ENTITY, "invalid_weekly_goal")
+        }
+        StudyFailure::Core(_) => internal_error("focus unavailable"),
     }
 }
 

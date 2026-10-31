@@ -78,7 +78,7 @@
 					{#if counts.videos > 0}<path d="M5.5 3.5l6.5 4.5-6.5 4.5z" />{:else}<path d="M4.5 2.5h7v11h-7z" fill="none" stroke="currentColor" stroke-width="1.4" />{/if}
 				</svg>
 				<span class="lesson-title">{node.title}</span>
-				<small class="lesson-meta">(ausente)</small>
+				<span class="lesson-meta lesson-meta--missing">Mídia ausente</span>
 				{#if meta}<span class="lesson-meta">{meta}</span>{/if}
 			</div>
 		{:else}

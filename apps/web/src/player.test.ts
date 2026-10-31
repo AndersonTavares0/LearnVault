@@ -176,7 +176,7 @@ describe('player preference controls', () => {
 
 		expect(body).toContain('<h2 class="player-lesson-title">Aula 1</h2>');
 		expect(body.indexOf('player-lesson-title')).toBeGreaterThan(body.indexOf('</video>'));
-		expect(body.indexOf('player-lesson-title')).toBeLessThan(body.indexOf('player-controls-bar'));
+		expect(body.indexOf('player-lesson-title')).toBeLessThan(body.indexOf('aria-label="Controles da aula"'));
 	});
 
 	it('keeps a single media choice simple and leaves auto-advance off by default', () => {

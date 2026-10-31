@@ -14,9 +14,12 @@
 //! locais e a seleção entre eles pertencem a uma fatia posterior — o núcleo já isola por
 //! dono, mas aqui não existe sessão nem seletor local.
 
-use learnvault_core::Database;
+use learnvault_core::{Database, FocusSessionInput};
 
-use crate::dto::{RecentStudyDto, StudyProgressDto};
+use crate::dto::{
+    FocusSessionDto, FocusSummaryDto, RecentStudyDto, RewardSummaryDto, StudyProgressDto,
+    StudySummaryDto,
+};
 use crate::error::IpcError;
 
 /// Dono local fixo do progresso de estudo do desktop.
@@ -84,6 +87,53 @@ pub fn recent(database: &Database, limit: Option<usize>) -> Result<RecentStudyDt
     .map_err(study_error)
 }
 
+/// Resumo de ofensiva e meta semanal do dono local.
+pub fn summary(database: &Database) -> Result<StudySummaryDto, IpcError> {
+    learnvault_core::study_summary(database, LOCAL_OWNER_ID)
+        .map(StudySummaryDto::from)
+        .map_err(study_error)
+}
+
+/// Grava sessão do timer de forma idempotente para o dono local.
+pub fn record_focus_session(
+    database: &Database,
+    input: FocusSessionInput,
+) -> Result<FocusSessionDto, IpcError> {
+    learnvault_core::record_focus_session(database, LOCAL_OWNER_ID, input)
+        .map(FocusSessionDto::from)
+        .map_err(focus_error)
+}
+
+/// Lê estatísticas persistidas do timer do dono local.
+pub fn focus_summary(database: &Database) -> Result<FocusSummaryDto, IpcError> {
+    learnvault_core::focus_summary(database, LOCAL_OWNER_ID)
+        .map(FocusSummaryDto::from)
+        .map_err(focus_error)
+}
+
+/// Lê XP e progresso de missões persistidos do dono local.
+pub fn reward_summary(database: &Database) -> Result<RewardSummaryDto, IpcError> {
+    learnvault_core::reward_summary(database, LOCAL_OWNER_ID)
+        .map(RewardSummaryDto::from)
+        .map_err(focus_error)
+}
+
+/// Resgata uma missão diária para o dono local.
+pub fn claim_daily_mission(database: &Database, mission_id: &str) -> Result<bool, IpcError> {
+    learnvault_core::claim_daily_mission_today(database, LOCAL_OWNER_ID, mission_id)
+        .map_err(focus_error)
+}
+
+/// Lê a meta semanal persistida do dono local.
+pub fn weekly_goal(database: &Database) -> Result<i64, IpcError> {
+    learnvault_core::weekly_goal(database, LOCAL_OWNER_ID).map_err(focus_error)
+}
+
+/// Atualiza a meta semanal persistida do dono local.
+pub fn set_weekly_goal(database: &Database, goal: i64) -> Result<i64, IpcError> {
+    learnvault_core::set_weekly_goal(database, LOCAL_OWNER_ID, goal).map_err(focus_error)
+}
+
 /// Traduz o erro do núcleo para o erro IPC estável, sem ecoar o identificador consultado.
 ///
 /// Uma mídia desconhecida e uma posição negativa são falhas de entrada com código próprio,
@@ -95,6 +145,18 @@ fn study_error(error: learnvault_core::Error) -> IpcError {
     match error {
         Error::MediaNotFound { .. } => IpcError::media_not_found(),
         Error::InvalidStudyPosition { .. } => IpcError::invalid_position(),
+        _ => IpcError::study_unavailable(),
+    }
+}
+
+fn focus_error(error: learnvault_core::Error) -> IpcError {
+    use learnvault_core::Error;
+
+    match error {
+        Error::InvalidFocusSession { .. } => IpcError::invalid_focus_session(),
+        Error::FocusSessionConflict => IpcError::focus_session_conflict(),
+        Error::MissionNotComplete => IpcError::mission_not_complete(),
+        Error::InvalidWeeklyGoal { .. } => IpcError::invalid_weekly_goal(),
         _ => IpcError::study_unavailable(),
     }
 }
