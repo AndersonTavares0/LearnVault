@@ -41,8 +41,30 @@ pub enum Command {
     Version,
     /// Importa um banco Go sem iniciar o servidor HTTP.
     MigrateGo(LegacyImportOptions),
+    /// Realiza o backup íntegro do banco SQLite.
+    Backup(BackupOptions),
+    /// Restaura o banco SQLite a partir de um backup.
+    Restore(RestoreOptions),
     /// Inicia o servidor com a configuração validada.
     Run(Config),
+}
+
+/// Opções para o comando de backup via linha de comando.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BackupOptions {
+    /// Caminho do banco SQLite a ser copiado.
+    pub database_path: PathBuf,
+    /// Caminho do arquivo de backup de saída.
+    pub output_path: PathBuf,
+}
+
+/// Opções para o comando de restauração via linha de comando.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RestoreOptions {
+    /// Caminho do arquivo de backup fonte.
+    pub backup_path: PathBuf,
+    /// Caminho do banco de destino onde restaurar.
+    pub database_path: PathBuf,
 }
 
 /// Erros seguros de configuração e argumentos.
@@ -90,7 +112,9 @@ impl Config {
         match parse_command(args)? {
             Command::Run(config) => Ok(config),
             Command::Version => Err(ConfigError::VersionRequested),
-            Command::MigrateGo(_) => Err(ConfigError::InvalidArgument),
+            Command::MigrateGo(_) | Command::Backup(_) | Command::Restore(_) => {
+                Err(ConfigError::InvalidArgument)
+            }
         }
     }
 }
@@ -113,12 +137,17 @@ where
     let mut args = args.into_iter();
     let _program = args.next();
     let first_argument = args.next();
-    if first_argument
+    let first_arg_str = first_argument
         .as_ref()
-        .and_then(|argument| argument.as_ref().to_str())
-        == Some("migrate-go")
-    {
+        .and_then(|argument| argument.as_ref().to_str());
+    if first_arg_str == Some("migrate-go") {
         return parse_migrate_go(args);
+    }
+    if first_arg_str == Some("backup") {
+        return parse_backup(args, &env);
+    }
+    if first_arg_str == Some("restore") {
+        return parse_restore(args, &env);
     }
     let mut args = first_argument.into_iter().chain(args);
     let env_listen_addr = env("LISTEN_ADDR").unwrap_or_else(|| "127.0.0.1".to_owned());
@@ -308,6 +337,108 @@ where
         output: PathBuf::from(output),
         backup: PathBuf::from(backup),
         library_id,
+    }))
+}
+
+fn parse_backup<I, S, F>(args: I, env: &F) -> Result<Command, ConfigError>
+where
+    I: Iterator<Item = S>,
+    S: AsRef<OsStr>,
+    F: Fn(&str) -> Option<String>,
+{
+    let data_dir = env("DATA_DIR").unwrap_or_else(|| "data".to_owned());
+    let default_database = PathBuf::from(data_dir).join("learnvault.sqlite");
+    let mut database_path = None;
+    let mut output_path = None;
+
+    let mut args = args;
+    while let Some(argument) = args.next() {
+        let argument = argument
+            .as_ref()
+            .to_str()
+            .ok_or(ConfigError::InvalidArgument)?;
+        match argument {
+            "--database" => {
+                if database_path.is_some() {
+                    return Err(ConfigError::InvalidArgument);
+                }
+                let value = next_value(&mut args)?;
+                if value.is_empty() {
+                    return Err(ConfigError::InvalidArgument);
+                }
+                database_path = Some(PathBuf::from(value));
+            }
+            "--output" => {
+                if output_path.is_some() {
+                    return Err(ConfigError::InvalidArgument);
+                }
+                let value = next_value(&mut args)?;
+                if value.is_empty() {
+                    return Err(ConfigError::InvalidArgument);
+                }
+                output_path = Some(PathBuf::from(value));
+            }
+            _ => return Err(ConfigError::UnknownArgument),
+        }
+    }
+
+    let database_path = database_path.unwrap_or(default_database);
+    let output_path = output_path.ok_or(ConfigError::InvalidArgument)?;
+
+    Ok(Command::Backup(BackupOptions {
+        database_path,
+        output_path,
+    }))
+}
+
+fn parse_restore<I, S, F>(args: I, env: &F) -> Result<Command, ConfigError>
+where
+    I: Iterator<Item = S>,
+    S: AsRef<OsStr>,
+    F: Fn(&str) -> Option<String>,
+{
+    let data_dir = env("DATA_DIR").unwrap_or_else(|| "data".to_owned());
+    let default_database = PathBuf::from(data_dir).join("learnvault.sqlite");
+    let mut backup_path = None;
+    let mut database_path = None;
+
+    let mut args = args;
+    while let Some(argument) = args.next() {
+        let argument = argument
+            .as_ref()
+            .to_str()
+            .ok_or(ConfigError::InvalidArgument)?;
+        match argument {
+            "--backup" => {
+                if backup_path.is_some() {
+                    return Err(ConfigError::InvalidArgument);
+                }
+                let value = next_value(&mut args)?;
+                if value.is_empty() {
+                    return Err(ConfigError::InvalidArgument);
+                }
+                backup_path = Some(PathBuf::from(value));
+            }
+            "--database" => {
+                if database_path.is_some() {
+                    return Err(ConfigError::InvalidArgument);
+                }
+                let value = next_value(&mut args)?;
+                if value.is_empty() {
+                    return Err(ConfigError::InvalidArgument);
+                }
+                database_path = Some(PathBuf::from(value));
+            }
+            _ => return Err(ConfigError::UnknownArgument),
+        }
+    }
+
+    let backup_path = backup_path.ok_or(ConfigError::InvalidArgument)?;
+    let database_path = database_path.unwrap_or(default_database);
+
+    Ok(Command::Restore(RestoreOptions {
+        backup_path,
+        database_path,
     }))
 }
 

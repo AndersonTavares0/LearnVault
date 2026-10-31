@@ -390,3 +390,79 @@ fn a_drifted_schema_is_not_reported_as_current() -> TestResult {
     );
     Ok(())
 }
+
+#[test]
+fn backup_to_creates_a_consistent_and_valid_snapshot() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let original_path = dir.path().join("original.sqlite");
+    let backup_path = dir.path().join("backups").join("backup.sqlite");
+
+    let db = Database::open(&original_path)?;
+    db.connection().execute(
+        "INSERT INTO library (library_id, available) VALUES (?1, 1)",
+        ["lib-backup-1"],
+    )?;
+
+    db.backup_to(&backup_path)?;
+    assert!(
+        backup_path.is_file(),
+        "arquivo de backup deve existir no destino"
+    );
+
+    let backup_db = Database::open(&backup_path)?;
+    assert!(backup_db.has_current_schema()?);
+
+    let count: i64 = backup_db.connection().query_row(
+        "SELECT COUNT(*) FROM library WHERE library_id = 'lib-backup-1'",
+        [],
+        |r| r.get(0),
+    )?;
+    assert_eq!(count, 1, "dados originais devem estar presentes no backup");
+    Ok(())
+}
+
+#[test]
+fn restore_from_recovers_database_and_preserves_schema() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let original_path = dir.path().join("original.sqlite");
+    let backup_path = dir.path().join("backup.sqlite");
+    let target_path = dir.path().join("restored.sqlite");
+
+    let db = Database::open(&original_path)?;
+    db.connection().execute(
+        "INSERT INTO library (library_id, available) VALUES (?1, 1)",
+        ["lib-restore-test"],
+    )?;
+    db.backup_to(&backup_path)?;
+
+    Database::restore_from(&backup_path, &target_path)?;
+    assert!(target_path.is_file());
+
+    let restored_db = Database::open(&target_path)?;
+    assert!(restored_db.has_current_schema()?);
+    let count: i64 = restored_db.connection().query_row(
+        "SELECT COUNT(*) FROM library WHERE library_id = 'lib-restore-test'",
+        [],
+        |r| r.get(0),
+    )?;
+    assert_eq!(count, 1);
+    Ok(())
+}
+
+#[test]
+fn restore_from_rejects_missing_or_corrupt_file() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let missing_path = dir.path().join("missing.sqlite");
+    let target_path = dir.path().join("target.sqlite");
+
+    assert!(matches!(
+        Database::restore_from(&missing_path, &target_path),
+        Err(Error::BackupFileNotFound(_))
+    ));
+
+    let corrupt_path = dir.path().join("corrupt.sqlite");
+    std::fs::write(&corrupt_path, b"not a valid sqlite database file")?;
+    assert!(Database::restore_from(&corrupt_path, &target_path).is_err());
+
+    Ok(())
+}

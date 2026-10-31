@@ -5,6 +5,7 @@
 use std::io::Write;
 
 mod auth;
+mod backup;
 mod catalog;
 mod config;
 mod courses;
@@ -22,7 +23,8 @@ pub use auth::{
     AuthError, generate_session_token, hash_password, hash_session_token,
     validate_current_password, validate_password, validate_username, verify_password,
 };
-pub use config::{Command, Config, ConfigError, parse_command};
+pub use backup::{execute_backup, execute_restore};
+pub use config::{BackupOptions, Command, Config, ConfigError, RestoreOptions, parse_command};
 pub use learnvault_core::{LegacyImportOptions, LegacyImportReport, import_go_database};
 pub use state::{AppState, StateError};
 
@@ -104,6 +106,7 @@ pub fn build_router(state: AppState) -> Router {
             "/api/rewards/weekly-goal",
             get(study::weekly_goal).put(study::set_weekly_goal),
         )
+        .route("/api/admin/backup", get(backup::download_backup))
         .route("/api/update", get(update::update))
         .fallback(spa::serve)
         .layer(DefaultBodyLimit::max(8 * 1024))

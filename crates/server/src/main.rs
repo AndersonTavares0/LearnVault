@@ -1,4 +1,6 @@
-use learnvault_server::{Command, VERSION, import_go_database, parse_command, serve};
+use learnvault_server::{
+    Command, VERSION, execute_backup, execute_restore, import_go_database, parse_command, serve,
+};
 
 fn main() {
     match parse_command(std::env::args()) {
@@ -10,6 +12,23 @@ fn main() {
             ),
             Err(error) => {
                 eprintln!("migration failed: {error}");
+                std::process::exit(1);
+            }
+        },
+        Ok(Command::Backup(options)) => match execute_backup(&options) {
+            Ok(output) => println!("backup created successfully: {}", output.display()),
+            Err(error) => {
+                eprintln!("backup failed: {error}");
+                std::process::exit(1);
+            }
+        },
+        Ok(Command::Restore(options)) => match execute_restore(&options) {
+            Ok(()) => println!(
+                "database restored successfully: {}",
+                options.database_path.display()
+            ),
+            Err(error) => {
+                eprintln!("restore failed: {error}");
                 std::process::exit(1);
             }
         },
