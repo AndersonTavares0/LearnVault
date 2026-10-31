@@ -4,6 +4,47 @@ Todas as mudanças relevantes do LearnVault são documentadas neste arquivo.
 
 O formato segue o Keep a Changelog e as versões usam Semantic Versioning.
 
+## [0.7.0](https://github.com/AndersonTavares0/LearnVault/compare/v0.6.1...v0.7.0) (2026-10-31)
+
+
+### Funcionalidades
+
+* capas de curso personalizadas por upload e capa gerada refinada ([#243](https://github.com/AndersonTavares0/LearnVault/issues/243)) ([be161d5](https://github.com/AndersonTavares0/LearnVault/commit/be161d5f8e0c0c8be537ecfe8e799be3e85b660e))
+* gerar miniaturas automáticas dos cursos ([#242](https://github.com/AndersonTavares0/LearnVault/issues/242)) ([01ac823](https://github.com/AndersonTavares0/LearnVault/commit/01ac82335c7563284dd7338ef92ca7bcb612647e))
+* melhorar a experiência inicial do app desktop ([#235](https://github.com/AndersonTavares0/LearnVault/issues/235)) ([60c42a8](https://github.com/AndersonTavares0/LearnVault/commit/60c42a860641ada9bf5b56fe32ded8f412124bba))
+* melhorar controles e preferências do player de estudo ([#245](https://github.com/AndersonTavares0/LearnVault/issues/245)) ([3b7a2be](https://github.com/AndersonTavares0/LearnVault/commit/3b7a2be1fa22560149e1671245148614f6dd5a1d))
+* organizar módulos e aulas sem alterar os cursos ([#244](https://github.com/AndersonTavares0/LearnVault/issues/244)) ([a7bdf2c](https://github.com/AndersonTavares0/LearnVault/commit/a7bdf2ce288a6a3e733cd15aaade2d360f70151d))
+* **security:** aceitar credenciais iniciais por arquivo ([#248](https://github.com/AndersonTavares0/LearnVault/issues/248)) ([7d2b7b7](https://github.com/AndersonTavares0/LearnVault/commit/7d2b7b769968a2c47f6a24b81dd65f5b0235ac5e))
+* **server:** verificar atualizacao pela api de releases ([#225](https://github.com/AndersonTavares0/LearnVault/issues/225)) ([29e842e](https://github.com/AndersonTavares0/LearnVault/commit/29e842e6a52d2be72cfd0b912bda68fe7c6bedf8))
+* **web:** adicionar controle de velocidade e aprimorar player de audio ([#217](https://github.com/AndersonTavares0/LearnVault/issues/217)) ([47d4f5b](https://github.com/AndersonTavares0/LearnVault/commit/47d4f5bec1391e2a2afb3ea11d9d77431a3086fd))
+* **web:** mover ações de capa para o card do curso ([#259](https://github.com/AndersonTavares0/LearnVault/issues/259)) ([5cf5ffc](https://github.com/AndersonTavares0/LearnVault/commit/5cf5ffcc57590d00953b092dff20c517e5daf4c1))
+* **web:** unificar a tela do curso com player e lista de aulas ([#269](https://github.com/AndersonTavares0/LearnVault/issues/269)) ([0c93dfd](https://github.com/AndersonTavares0/LearnVault/commit/0c93dfdb4f3e04a59c40d828d74dbdf09d1ef060))
+
+
+### Correções
+
+* **catalog:** recuperar modulos recolhiveis e ordenar conteudo naturalmente ([#211](https://github.com/AndersonTavares0/LearnVault/issues/211)) ([68e8d09](https://github.com/AndersonTavares0/LearnVault/commit/68e8d098994b8fe78e335d4bdbb0941473690f43))
+* **desktop:** aceitar a versão da capa na query do protocolo ([#262](https://github.com/AndersonTavares0/LearnVault/issues/262)) ([4cc34e0](https://github.com/AndersonTavares0/LearnVault/commit/4cc34e0b0599e674ad2ca494a5dc33425b218450))
+* **opencode:** exportar apenas a funcao do plugin na guarda ([#233](https://github.com/AndersonTavares0/LearnVault/issues/233)) ([fb2df35](https://github.com/AndersonTavares0/LearnVault/commit/fb2df35a9efff8fc6348629b124e685a1dc5af3b))
+* **opencode:** fechar bypasses de caminho, de comando e de raiz na guarda ([#268](https://github.com/AndersonTavares0/LearnVault/issues/268)) ([5c66f38](https://github.com/AndersonTavares0/LearnVault/commit/5c66f38c5cc20f27d449d2e9261aa48b3b306047))
+* **opencode:** ler a branch pelo node:child_process na guarda ([#231](https://github.com/AndersonTavares0/LearnVault/issues/231)) ([77829f2](https://github.com/AndersonTavares0/LearnVault/commit/77829f236510ca08f078affa8df62cc34f73ba4f))
+* **opencode:** reconhecer as ferramentas shell e patch na guarda ([#271](https://github.com/AndersonTavares0/LearnVault/issues/271)) ([278e228](https://github.com/AndersonTavares0/LearnVault/commit/278e2289c7359f7abe6bf1681925e538ecf45568))
+* **release:** alinhar estrategia do Release Please ([#226](https://github.com/AndersonTavares0/LearnVault/issues/226)) ([df936ad](https://github.com/AndersonTavares0/LearnVault/commit/df936adea2cf6d4344f3a2e9c1ec750f844cc2a8))
+* **release:** compilar o arm64 nativamente em runner arm64 ([#210](https://github.com/AndersonTavares0/LearnVault/issues/210)) ([33f53f3](https://github.com/AndersonTavares0/LearnVault/commit/33f53f3208d49f9f6f5de8d74826c10ac9e5c2fe))
+* **release:** cross-compilar o arm64 com toolchain musl ([#209](https://github.com/AndersonTavares0/LearnVault/issues/209)) ([31ad380](https://github.com/AndersonTavares0/LearnVault/commit/31ad38039f839b870fdeb79bc8a90153821c10cd))
+* **release:** empacotar a SPA nos tarballs Linux ([#212](https://github.com/AndersonTavares0/LearnVault/issues/212)) ([7757429](https://github.com/AndersonTavares0/LearnVault/commit/77574297030acb60c35ab526d6d782d39c374192))
+* **release:** verificar o conteudo do tarball sem pipe ([#215](https://github.com/AndersonTavares0/LearnVault/issues/215)) ([e408c92](https://github.com/AndersonTavares0/LearnVault/commit/e408c925190b554bf32206216847d46158df6ba9))
+* **web:** compactar e centralizar tela de login ([#213](https://github.com/AndersonTavares0/LearnVault/issues/213)) ([cc6c800](https://github.com/AndersonTavares0/LearnVault/commit/cc6c800a722cd90086e8204d1a5075c3f21dbcc5))
+* **web:** corrigir contraste do texto secundario e rotular a grade de cursos ([#218](https://github.com/AndersonTavares0/LearnVault/issues/218)) ([a879cc1](https://github.com/AndersonTavares0/LearnVault/commit/a879cc103331eb399716a142ce6008b5c52e2ee2))
+* **web:** identificar aula e contexto em continuar assistindo ([#221](https://github.com/AndersonTavares0/LearnVault/issues/221)) ([e66408d](https://github.com/AndersonTavares0/LearnVault/commit/e66408d256394c05564eba80013932d3ce7ba783))
+* **web:** remover sair e login do build desktop ([#229](https://github.com/AndersonTavares0/LearnVault/issues/229)) ([55403b8](https://github.com/AndersonTavares0/LearnVault/commit/55403b81d9bd78d3d5fb0b2a8a0ab2ff95b6730a))
+* **web:** sinalizar aulas com midia ausente ([#223](https://github.com/AndersonTavares0/LearnVault/issues/223)) ([183e0d0](https://github.com/AndersonTavares0/LearnVault/commit/183e0d05f851fe1425e8d7c75671e66020fb4da3))
+
+
+### Melhorias de desempenho
+
+* **ci:** publicar artefatos SPA em job independente ([#249](https://github.com/AndersonTavares0/LearnVault/issues/249)) ([8e9c711](https://github.com/AndersonTavares0/LearnVault/commit/8e9c7110862c5011c8ca31f2dabf42040e716dfc))
+
 ## [0.6.1](https://github.com/AndersonTavares0/LearnVault/compare/v0.6.0...v0.6.1) (2026-10-17)
 
 
