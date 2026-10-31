@@ -114,6 +114,17 @@ impl Database {
                     ("position_seconds", "BINARY"),
                 ],
             )?
+            || !index_matches(
+                &self.conn,
+                "flashcard",
+                Some("flashcard_owner_media_due_idx"),
+                false,
+                &[
+                    ("owner_id", "BINARY"),
+                    ("media_id", "BINARY"),
+                    ("next_due", "BINARY"),
+                ],
+            )?
         {
             return Ok(false);
         }
@@ -509,6 +520,20 @@ const REQUIRED_TABLES: &[TableDefinition] = &[
             ("updated_at", "INTEGER", true, None, 0),
         ],
     },
+    TableDefinition {
+        name: "flashcard",
+        columns: &[
+            ("card_id", "TEXT", true, None, 1),
+            ("owner_id", "TEXT", true, None, 0),
+            ("media_id", "TEXT", true, None, 0),
+            ("front", "TEXT", true, None, 0),
+            ("back", "TEXT", true, None, 0),
+            ("interval_days", "INTEGER", true, None, 0),
+            ("next_due", "INTEGER", true, None, 0),
+            ("created_at", "INTEGER", true, None, 0),
+            ("updated_at", "INTEGER", true, None, 0),
+        ],
+    },
 ];
 
 fn definition_matches(conn: &Connection, definition: &TableDefinition) -> Result<bool> {
@@ -635,6 +660,11 @@ fn expected_checks(table: &str) -> &'static [&'static str] {
             "position_seconds >= 0",
             "length(trim(content)) > 0 and length(content) <= 10000",
         ],
+        "flashcard" => &[
+            "length(trim(front)) > 0 and length(front) <= 4000",
+            "length(trim(back)) > 0 and length(back) <= 4000",
+            "interval_days >= 0 and interval_days <= 365",
+        ],
         _ => &[],
     }
 }
@@ -656,6 +686,7 @@ fn expected_foreign_keys(
             ("library_id", "library", "library_id", "NO ACTION"),
         ],
         "study_note" => &[("media_id", "media", "media_id", "NO ACTION")],
+        "flashcard" => &[("media_id", "media", "media_id", "NO ACTION")],
         _ => &[],
     }
 }

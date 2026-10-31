@@ -107,6 +107,22 @@ pub fn build_router(state: AppState) -> Router {
                 .delete(study::delete_note)
                 .layer(DefaultBodyLimit::max(16 * 1024)),
         )
+        .route(
+            "/api/study/flashcards",
+            get(study::list_flashcards)
+                .post(study::create_flashcard)
+                .layer(DefaultBodyLimit::max(16 * 1024)),
+        )
+        .route(
+            "/api/study/flashcards/{id}",
+            axum::routing::put(study::update_flashcard)
+                .delete(study::delete_flashcard)
+                .layer(DefaultBodyLimit::max(16 * 1024)),
+        )
+        .route(
+            "/api/study/flashcards/{id}/review",
+            post(study::review_flashcard).layer(DefaultBodyLimit::max(16 * 1024)),
+        )
         .route("/api/focus/sessions", post(study::record_focus_session))
         .route("/api/focus/summary", get(study::focus_summary))
         .route("/api/rewards/summary", get(study::reward_summary))
@@ -525,7 +541,7 @@ mod tests {
         for (name, setup) in [
             ("missing", "PRAGMA user_version = 0"),
             ("older", "PRAGMA user_version = 3"),
-            ("newer", "PRAGMA user_version = 8"),
+            ("newer", "PRAGMA user_version = 9"),
             (
                 "missing required column",
                 "ALTER TABLE user RENAME COLUMN must_change_credentials TO changed",

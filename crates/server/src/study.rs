@@ -116,6 +116,61 @@ struct NotesResponse {
     items: Vec<StudyNoteResponse>,
 }
 
+#[derive(Debug, Deserialize)]
+pub(crate) struct FlashcardsQuery {
+    media_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct CreateFlashcardRequest {
+    media_id: String,
+    front: String,
+    back: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct UpdateFlashcardRequest {
+    front: String,
+    back: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct ReviewFlashcardRequest {
+    rating: String,
+}
+
+#[derive(Serialize)]
+pub(crate) struct FlashcardResponse {
+    card_id: String,
+    media_id: String,
+    front: String,
+    back: String,
+    interval_days: i64,
+    next_due: i64,
+    created_at: i64,
+    updated_at: i64,
+}
+
+impl From<learnvault_core::Flashcard> for FlashcardResponse {
+    fn from(c: learnvault_core::Flashcard) -> Self {
+        Self {
+            card_id: c.card_id,
+            media_id: c.media_id,
+            front: c.front,
+            back: c.back,
+            interval_days: c.interval_days,
+            next_due: c.next_due,
+            created_at: c.created_at,
+            updated_at: c.updated_at,
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct FlashcardsResponse {
+    items: Vec<FlashcardResponse>,
+}
+
 #[derive(Serialize)]
 struct ErrorResponse {
     error: &'static str,
@@ -725,6 +780,153 @@ pub(crate) async fn delete_note(
     }
 }
 
+/// Lista os cartões de memorização do usuário para a aula.
+pub(crate) async fn list_flashcards(
+    State(state): State<AppState>,
+    RawQuery(raw): RawQuery,
+    headers: HeaderMap,
+) -> Response {
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let Some(query) =
+        serde_urlencoded::from_str::<FlashcardsQuery>(raw.as_deref().unwrap_or_default()).ok()
+    else {
+        return invalid_query();
+    };
+    let owner = user.user_id;
+    let media_id = query.media_id;
+    match run_study(&state, move |db| {
+        learnvault_core::list_flashcards(db, &owner, &media_id)
+    })
+    .await
+    {
+        Ok(cards) => private_no_store(
+            Json(FlashcardsResponse {
+                items: cards.into_iter().map(FlashcardResponse::from).collect(),
+            })
+            .into_response(),
+        ),
+        Err(failure) => study_failure_response(failure),
+    }
+}
+
+/// Cria um cartão de estudo vinculado à aula.
+pub(crate) async fn create_flashcard(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<CreateFlashcardRequest>,
+) -> Response {
+    if !same_origin(&headers) {
+        return csrf_failed();
+    }
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let owner = user.user_id;
+    match run_study(&state, move |db| {
+        learnvault_core::create_flashcard(
+            db,
+            &owner,
+            &request.media_id,
+            &request.front,
+            &request.back,
+        )
+    })
+    .await
+    {
+        Ok(card) => private_no_store(
+            (StatusCode::CREATED, Json(FlashcardResponse::from(card))).into_response(),
+        ),
+        Err(failure) => study_failure_response(failure),
+    }
+}
+
+/// Atualiza a frente e/ou verso de um cartão de estudo.
+pub(crate) async fn update_flashcard(
+    State(state): State<AppState>,
+    Path(card_id): Path<String>,
+    headers: HeaderMap,
+    Json(request): Json<UpdateFlashcardRequest>,
+) -> Response {
+    if !same_origin(&headers) {
+        return csrf_failed();
+    }
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let owner = user.user_id;
+    match run_study(&state, move |db| {
+        learnvault_core::update_flashcard(db, &owner, &card_id, &request.front, &request.back)
+    })
+    .await
+    {
+        Ok(card) => private_no_store(Json(FlashcardResponse::from(card)).into_response()),
+        Err(failure) => study_failure_response(failure),
+    }
+}
+
+/// Exclui um cartão de estudo do usuário.
+pub(crate) async fn delete_flashcard(
+    State(state): State<AppState>,
+    Path(card_id): Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    if !same_origin(&headers) {
+        return csrf_failed();
+    }
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let owner = user.user_id;
+    match run_study(&state, move |db| {
+        learnvault_core::delete_flashcard(db, &owner, &card_id)
+    })
+    .await
+    {
+        Ok(deleted) => {
+            if deleted {
+                status_private_no_store(StatusCode::NO_CONTENT)
+            } else {
+                error_response(StatusCode::NOT_FOUND, "flashcard_not_found")
+            }
+        }
+        Err(failure) => study_failure_response(failure),
+    }
+}
+
+/// Registra uma revisão de cartão (Again ou Good).
+pub(crate) async fn review_flashcard(
+    State(state): State<AppState>,
+    Path(card_id): Path<String>,
+    headers: HeaderMap,
+    Json(request): Json<ReviewFlashcardRequest>,
+) -> Response {
+    if !same_origin(&headers) {
+        return csrf_failed();
+    }
+    let Some(rating) = learnvault_core::ReviewRating::parse(&request.rating) else {
+        return error_response(StatusCode::UNPROCESSABLE_ENTITY, "invalid_flashcard_rating");
+    };
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let owner = user.user_id;
+    match run_study(&state, move |db| {
+        learnvault_core::review_flashcard(db, &owner, &card_id, rating)
+    })
+    .await
+    {
+        Ok(card) => private_no_store(Json(FlashcardResponse::from(card)).into_response()),
+        Err(failure) => study_failure_response(failure),
+    }
+}
+
 /// Responde o contrato de capacidades do Study.
 ///
 /// Exige a mesma sessão autenticada (e a mesma recusa à sessão temporária) das demais
@@ -805,6 +1007,16 @@ fn study_failure_response(failure: StudyFailure) -> Response {
         }
         StudyFailure::Core(Error::StudyNoteNotFound { .. }) => {
             error_response(StatusCode::NOT_FOUND, "note_not_found")
+        }
+        StudyFailure::Core(Error::InvalidFlashcardContent) => error_response(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "invalid_flashcard_content",
+        ),
+        StudyFailure::Core(Error::InvalidFlashcardRating) => {
+            error_response(StatusCode::UNPROCESSABLE_ENTITY, "invalid_flashcard_rating")
+        }
+        StudyFailure::Core(Error::FlashcardNotFound { .. }) => {
+            error_response(StatusCode::NOT_FOUND, "flashcard_not_found")
         }
         StudyFailure::Core(_) => internal_error("study unavailable"),
     }
