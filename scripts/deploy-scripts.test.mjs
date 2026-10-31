@@ -38,4 +38,11 @@ test('deploy scripts and configs exist and have proper security settings', () =>
 
     const daemonScript = resolve(root, 'deploy/scripts/updater-daemon.sh');
     assert.ok(existsSync(daemonScript), 'updater-daemon.sh deve existir');
+
+    const updaterComposePath = resolve(root, 'deploy/compose/compose.updater.yaml');
+    assert.ok(existsSync(updaterComposePath), 'compose.updater.yaml deve existir');
+    const updaterComposeContent = readFileSync(updaterComposePath, 'utf8');
+    assert.match(updaterComposeContent, /image:\s*docker:cli/, 'updater deve usar imagem docker:cli');
+    assert.match(updaterComposeContent, /working_dir:\s*\/compose/, 'updater deve ter working_dir /compose');
+    assert.match(updaterComposeContent, /\/var\/run\/docker\.sock/, 'updater companion deve ter acesso ao socket do docker');
 });

@@ -31,13 +31,13 @@ record_history() {
     mkdir -p "$(dirname "$HISTORY_FILE")"
     entry="{\"timestamp\":\"${timestamp}\",\"status\":\"${status}\",\"from\":\"${from_ver}\",\"to\":\"${to_ver}\",\"message\":\"${msg}\"}"
     
-    if [ ! -f "$HISTORY_FILE" ]; then
-        printf "[%s]\n" "$entry" > "$HISTORY_FILE"
+    if [ ! -f "$HISTORY_FILE" ] || [ ! -s "$HISTORY_FILE" ]; then
+        printf "[\n  %s\n]\n" "$entry" > "$HISTORY_FILE"
     else
-        # Remove colchete final, adiciona vírgula + entrada e fecha colchete
         tmp_history=$(mktemp)
-        sed '$d' "$HISTORY_FILE" > "$tmp_history" || true
-        printf ",%s]\n" "$entry" >> "$tmp_history"
+        # Remove a última linha que fecha o array ']'
+        sed '$d' "$HISTORY_FILE" > "$tmp_history"
+        printf "  ,%s\n]\n" "$entry" >> "$tmp_history"
         mv "$tmp_history" "$HISTORY_FILE"
     fi
 }
@@ -54,15 +54,19 @@ fi
 
 log "Versão atual instalada: ${CURRENT_VERSION}"
 
-# Se não foi fornecida versão alvo, consulta endpoint /api/update ou GitHub
+# Se não foi fornecida versão alvo, consulta a API pública de releases do repositório
 if [ -z "$TARGET_VERSION" ]; then
-    update_info=$(docker compose exec -T "$CONTAINER" wget -q -O - http://127.0.0.1:8090/api/update 2>/dev/null || true)
-    is_available=$(printf "%s" "$update_info" | grep -o '"available":true' || true)
-    if [ -n "$is_available" ]; then
-        TARGET_VERSION=$(printf "%s" "$update_info" | grep -o '"latest":"[^"]*"' | cut -d'"' -f4 || true)
-        log "Nova versão identificada pela API: ${TARGET_VERSION}"
-    else
-        log "Nenhuma atualização pendente ou endpoint indisponível. O sistema está na versão mais recente."
+    log "Consultando versão mais recente disponível no repositório..."
+    REPO="${LEARNVAULT_GITHUB_REPO:-AndersonTavares0/LearnVault}"
+    latest_release=$(wget -q -O - -U "LearnVault-Updater" "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null || true)
+    if [ -n "$latest_release" ]; then
+        TARGET_VERSION=$(printf "%s" "$latest_release" | grep -o '"tag_name":"[^"]*"' | cut -d'"' -f4 | sed 's/^v//' || true)
+        if [ -n "$TARGET_VERSION" ]; then
+            log "Nova versão identificada no repositório: ${TARGET_VERSION}"
+        fi
+    fi
+    if [ -z "$TARGET_VERSION" ]; then
+        log "Nenhuma nova versão identificada ou serviço de releases temporariamente indisponível."
         exit 0
     fi
 fi

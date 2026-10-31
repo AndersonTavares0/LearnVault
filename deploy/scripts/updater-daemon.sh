@@ -18,6 +18,14 @@ if [ "$AUTO_UPDATE" != "true" ]; then
     while true; do sleep 86400; done
 fi
 
+# Assegura que o plugin do docker compose está presente se executando em Alpine/docker:cli
+if ! docker compose version >/dev/null 2>&1; then
+    if command -v apk >/dev/null 2>&1; then
+        log "Instalando plugin do Docker Compose no container updater..."
+        apk add --no-cache docker-cli-compose >/dev/null 2>&1 || true
+    fi
+fi
+
 log "Iniciando daemon de atualização automática (Janela: ${AUTO_UPDATE_WINDOW}, Intervalo: ${CHECK_INTERVAL_SECONDS}s)..."
 
 in_window() {

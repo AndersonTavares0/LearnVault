@@ -6,9 +6,10 @@
 # Uso contínuo (agendado): docker compose -f compose.yaml -f compose.updater.yaml up -d updater
 services:
   updater:
-    image: alpine:3.24
+    image: docker:cli
     container_name: learnvault-updater
     restart: unless-stopped
+    working_dir: /compose
     profiles:
       - updater
     environment:
@@ -16,8 +17,10 @@ services:
       AUTO_UPDATE_WINDOW: ${AUTO_UPDATE_WINDOW:-03:00-05:00}
       COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-learnvault}
       LEARNVAULT_CONTAINER: ${LEARNVAULT_CONTAINER:-learnvault}
+      LEARNVAULT_IMAGE_REPO: ${LEARNVAULT_IMAGE_REPO:-ghcr.io/andersontavares0/learnvault}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - .:/compose:ro
       - ../../deploy/scripts:/scripts:ro
       - ${DATA_DIR:-../../data}:/data:rw
     entrypoint: ["/bin/sh", "/scripts/updater-daemon.sh"]
