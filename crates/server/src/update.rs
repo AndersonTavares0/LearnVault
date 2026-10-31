@@ -51,6 +51,7 @@ pub(crate) struct ReleaseInfo {
     pub(crate) published_at: Option<String>,
     pub(crate) draft: bool,
     pub(crate) prerelease: bool,
+    pub(crate) changelog: Option<String>,
 }
 
 /// Busca a release mais recente. Devolve um motivo curto e sanitizado em pt-BR ao falhar.
@@ -71,6 +72,7 @@ pub(crate) struct UpdateResponse {
     latest: Option<String>,
     released_at: Option<String>,
     url: Option<String>,
+    changelog: Option<String>,
     checked_at: Option<String>,
     error: Option<String>,
 }
@@ -82,6 +84,7 @@ struct Success {
     latest: Option<String>,
     released_at: Option<String>,
     url: Option<String>,
+    changelog: Option<String>,
     /// Instante da checagem em segundos desde a época Unix, como string opaca.
     checked_at: String,
     checked_instant: Instant,
@@ -217,6 +220,7 @@ impl UpdateResponse {
             latest: None,
             released_at: None,
             url: None,
+            changelog: None,
             checked_at: None,
             error: None,
         }
@@ -230,6 +234,7 @@ impl UpdateResponse {
             latest: None,
             released_at: None,
             url: None,
+            changelog: None,
             checked_at: None,
             error: Some(message),
         }
@@ -243,6 +248,7 @@ impl UpdateResponse {
             latest: success.latest,
             released_at: success.released_at,
             url: success.url,
+            changelog: success.changelog,
             checked_at: Some(success.checked_at),
             error: None,
         }
@@ -278,6 +284,11 @@ fn success_from(release: &ReleaseInfo, evaluation: Evaluation, checked_at: Strin
             None
         },
         url: if available { url } else { None },
+        changelog: if available {
+            release.changelog.clone()
+        } else {
+            None
+        },
         checked_at,
         checked_instant: Instant::now(),
     }
@@ -314,6 +325,8 @@ fn parse_release(body: &str) -> Result<ReleaseInfo, ()> {
         draft: bool,
         #[serde(default)]
         prerelease: bool,
+        #[serde(default)]
+        body: Option<String>,
     }
 
     let payload: Payload = serde_json::from_str(body).map_err(|_| ())?;
@@ -321,11 +334,24 @@ fn parse_release(body: &str) -> Result<ReleaseInfo, ()> {
         .tag_name
         .filter(|tag| !tag.trim().is_empty())
         .ok_or(())?;
+    let changelog = payload.body.and_then(|text| {
+        let trimmed = text.trim();
+        if trimmed.is_empty() {
+            None
+        } else if trimmed.len() > 16 * 1024 {
+            let mut truncated = trimmed[..16 * 1024].to_string();
+            truncated.push_str("\n\n...(conteúdo truncado)");
+            Some(truncated)
+        } else {
+            Some(trimmed.to_string())
+        }
+    });
     Ok(ReleaseInfo {
         tag_name,
         published_at: payload.published_at,
         draft: payload.draft,
         prerelease: payload.prerelease,
+        changelog,
     })
 }
 
@@ -582,6 +608,7 @@ mod tests {
             published_at: Some("2026-10-17T12:00:00Z".to_owned()),
             draft: false,
             prerelease: false,
+            changelog: None,
         }
     }
 
@@ -608,12 +635,16 @@ mod tests {
     #[test]
     fn parses_a_published_release_payload() {
         let parsed = parse_release(
-            r#"{"tag_name":"v0.4.0","published_at":"2026-10-17T12:00:00Z","html_url":"https://attacker.test/","draft":false,"prerelease":false}"#,
+            "{\"tag_name\":\"v0.4.0\",\"published_at\":\"2026-10-17T12:00:00Z\",\"html_url\":\"https://attacker.test/\",\"draft\":false,\"prerelease\":false,\"body\":\"### Funcionalidades\\n- Novo recurso\"}",
         )
         .unwrap();
         assert_eq!(parsed.tag_name, "v0.4.0");
         assert_eq!(parsed.published_at.as_deref(), Some("2026-10-17T12:00:00Z"));
         assert!(!parsed.draft && !parsed.prerelease);
+        assert_eq!(
+            parsed.changelog.as_deref(),
+            Some("### Funcionalidades\n- Novo recurso")
+        );
     }
 
     #[test]
