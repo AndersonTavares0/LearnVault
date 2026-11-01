@@ -42,6 +42,10 @@ A versão do Rust é garantida por `rust-toolchain.toml`; Node.js 24 e pnpm 11.2
 
 - Documentação, Wiki e textos editoriais em pt-BR; Conventional Commits com prefixo em
   inglês e descrição em pt-BR (ex.: `docs: ajustar README`).
+- **Uso obrigatório do Ponytail:** em todas as tarefas de desenvolvimento do LearnVault,
+  utilize sempre o Ponytail para escrever, modificar e refatorar código. Não utilize outros
+  métodos de edição quando o Ponytail estiver disponível. Mantenha o código limpo, consistente
+  com a arquitetura existente e focado em edições cirúrgicas, sem refatorações desnecessárias.
 - A biblioteca de cursos é somente leitura: nenhuma mudança pode escrever, mover ou
   copiar os arquivos de origem.
 - Nunca inclua segredos, dados de cursos, bancos de dados ou mídia gerada em commits,
