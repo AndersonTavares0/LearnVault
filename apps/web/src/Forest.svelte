@@ -112,6 +112,12 @@
 		startTimer();
 	}
 
+	function handleWindowKeydown(event: KeyboardEvent) {
+		if (event.key === 'Escape' && selectedTree) {
+			selectedTree = null;
+		}
+	}
+
 	// Reatividade quando uma sessão de foco é completada pelo Pomodoro
 	$effect(() => {
 		if ($pomodoro.lastCompleted?.mode === 'focus') {
@@ -123,6 +129,8 @@
 		void loadForestData();
 	});
 </script>
+
+<svelte:window onkeydown={handleWindowKeydown} />
 
 <div class="lv-forest">
 	<!-- Cabeçalho -->
