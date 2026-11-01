@@ -279,4 +279,43 @@ async fn notes_crud_and_isolation_flow() {
     let final_bytes = final_list.into_body().collect().await.unwrap().to_bytes();
     let final_json: serde_json::Value = serde_json::from_slice(&final_bytes).unwrap();
     assert_eq!(final_json["items"].as_array().unwrap().len(), 1);
+
+    // 8. Lista global de notas (sem media_id): deve retornar com relative_path
+    let global_list = app
+        .clone()
+        .oneshot(
+            Request::get("/api/study/notes")
+                .header("cookie", &admin_cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(global_list.status(), StatusCode::OK);
+    let global_bytes = global_list.into_body().collect().await.unwrap().to_bytes();
+    let global_json: serde_json::Value = serde_json::from_slice(&global_bytes).unwrap();
+    let global_items = global_json["items"].as_array().unwrap();
+    assert_eq!(global_items.len(), 1);
+    assert_eq!(global_items[0]["relative_path"], "curso/aula1.mp4");
+
+    // 9. Lista global do estudante continua isolada
+    let student_global = app
+        .clone()
+        .oneshot(
+            Request::get("/api/study/notes")
+                .header("cookie", &student_cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let student_global_bytes = student_global
+        .into_body()
+        .collect()
+        .await
+        .unwrap()
+        .to_bytes();
+    let student_global_json: serde_json::Value =
+        serde_json::from_slice(&student_global_bytes).unwrap();
+    assert_eq!(student_global_json["items"].as_array().unwrap().len(), 0);
 }

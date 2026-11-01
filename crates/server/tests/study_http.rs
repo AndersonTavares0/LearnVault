@@ -181,6 +181,9 @@ async fn study_requires_authentication() {
         Request::get("/api/rewards/weekly-goal")
             .body(Body::empty())
             .unwrap(),
+        Request::get("/api/focus/sessions")
+            .body(Body::empty())
+            .unwrap(),
         Request::post("/api/focus/sessions")
             .header("origin", "http://localhost")
             .header("content-type", "application/json")
@@ -1088,6 +1091,19 @@ async fn focus_and_reward_endpoints_persist_idempotent_sessions_and_weekly_goal(
     let focus = json_body(focus).await;
     assert_eq!(focus["total_sessions"], 1, "retry não duplica sessão");
     assert_eq!(focus["today_minutes"], 1);
+
+    let list_res = app
+        .clone()
+        .oneshot(get_with_cookie("/api/focus/sessions", &cookie))
+        .await
+        .unwrap();
+    assert_eq!(list_res.status(), StatusCode::OK);
+    let list_json = json_body(list_res).await;
+    let list_items = list_json["items"].as_array().unwrap();
+    assert_eq!(list_items.len(), 1);
+    assert_eq!(list_items[0]["id"], "focus-http-1");
+    assert_eq!(list_items[0]["kind"], "focus");
+    assert_eq!(list_items[0]["completed"], true);
 
     let rewards = app
         .clone()

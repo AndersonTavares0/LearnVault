@@ -241,7 +241,7 @@ pub(crate) fn remove_cover(covers_dir: &Path, course_id: &str) -> Result<bool, C
 }
 
 /// Segundos de modificação de um arquivo, quando representáveis.
-fn modified_seconds(metadata: &Metadata) -> Option<i64> {
+pub(crate) fn modified_seconds(metadata: &Metadata) -> Option<i64> {
     let modified = metadata.modified().ok()?;
     let seconds = modified.duration_since(UNIX_EPOCH).ok()?.as_secs();
     i64::try_from(seconds).ok()

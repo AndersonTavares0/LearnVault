@@ -5392,6 +5392,14 @@ textarea {
 	font-family: var(--mono);
 	font-size: 10px;
 	font-weight: 700;
+	overflow: hidden;
+}
+
+img.lv-avatar,
+.lv-avatar--img {
+	object-fit: cover;
+	display: block;
+	padding: 0;
 }
 
 .lv-main {

@@ -1,10 +1,20 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { formatClock, modeLabel, POMODORO_MODES } from './pomodoro';
-	import { focusSync, pauseTimer, pomodoro, resetTimer, retryFocusSessions, setMode, startTimer } from './pomodoro-store';
+	import {
+		abandonTimer,
+		focusSync,
+		pauseTimer,
+		pomodoro,
+		resetTimer,
+		retryFocusSessions,
+		setMode,
+		startTimer
+	} from './pomodoro-store';
 	import { href } from './router';
 
 	let open = $state(false);
+	let confirmAbandon = $state(false);
 	let trigger = $state<HTMLButtonElement | null>(null);
 	let popover = $state<HTMLDivElement | null>(null);
 
@@ -17,6 +27,7 @@
 
 	function close() {
 		open = false;
+		confirmAbandon = false;
 		trigger?.focus();
 	}
 
@@ -28,6 +39,11 @@
 	function toggleTimer() {
 		if (running) pauseTimer();
 		else startTimer();
+	}
+
+	function handleAbandon() {
+		abandonTimer();
+		confirmAbandon = false;
 	}
 
 	function onDocumentPointer(event: PointerEvent) {
@@ -89,7 +105,20 @@
 			<div class="lv-focus-menu__actions">
 				<button class="lvui-btn lvui-btn-primary" type="button" onclick={toggleTimer}>{running ? 'Pausar' : paused ? 'Retomar' : 'Iniciar foco'}</button>
 				<button class="lvui-btn" type="button" onclick={resetTimer}>Reiniciar</button>
+				{#if $pomodoro.mode === 'focus' && (running || paused) && !confirmAbandon}
+					<button class="lvui-btn lvui-btn-outline lvui-btn-danger" type="button" onclick={() => (confirmAbandon = true)}>Abandonar</button>
+				{/if}
 			</div>
+
+			{#if confirmAbandon}
+				<div class="lv-focus-menu__confirm-abandon" role="alert">
+					<p>Deseja desistir desta sessão de foco? A árvore cultivada nela secará.</p>
+					<div class="lv-focus-menu__confirm-actions">
+						<button class="lvui-btn lvui-btn-sm lvui-btn-danger" type="button" onclick={handleAbandon}>Desistir e secar árvore</button>
+						<button class="lvui-btn lvui-btn-sm" type="button" onclick={() => (confirmAbandon = false)}>Continuar focando</button>
+					</div>
+				</div>
+			{/if}
 			{#if $focusSync.error}
 				<p class="lv-focus-menu__note" role="status">{$focusSync.error} <button class="lv-text-link" type="button" disabled={$focusSync.saving} onclick={() => void retryFocusSessions()}>Tentar de novo</button></p>
 			{:else if $focusSync.pending.length > 0}

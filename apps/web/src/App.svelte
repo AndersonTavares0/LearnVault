@@ -6,6 +6,8 @@
 	import CourseCover from './CourseCover.svelte';
 	import Player from './Player.svelte';
 	import Statistics from './Statistics.svelte';
+	import AllNotes from './AllNotes.svelte';
+	import UserProfile from './UserProfile.svelte';
 	import PomodoroSettings from './PomodoroSettings.svelte';
 	import FocusMenu from './FocusMenu.svelte';
 	import DesktopTitlebar from './DesktopTitlebar.svelte';
@@ -35,6 +37,14 @@
 	let route: Route = initialLocation.route;
 	let courseId: string | null = initialLocation.courseId;
 	let lessonPath: string | null = initialLocation.lessonPath;
+	let positionSeconds: number | null = initialLocation.positionSeconds ?? null;
+	let avatarVersion = Date.now();
+	let topbarAvatarFailed = false;
+
+	function handleAvatarChanged() {
+		topbarAvatarFailed = false;
+		avatarVersion = Date.now();
+	}
 	let user: User | null = null;
 	let catalog: Catalog | null = null;
 	let lesson: Lesson | null = null;
@@ -155,6 +165,7 @@
 			route = next.route;
 			courseId = next.courseId;
 			lessonPath = next.lessonPath;
+			positionSeconds = next.positionSeconds ?? null;
 			courseMenuOpen = false;
 			removeConfirm = false;
 			removeError = '';
@@ -590,6 +601,10 @@
 					<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5h16M7 19.5v-6M12 19.5V8M17 19.5V5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
 					<span>Estatísticas</span>
 				</a>
+				<a class="lv-topbar__link" class:is-active={route === 'notes'} aria-current={route === 'notes' ? 'page' : undefined} href={href('notes')}>
+					<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zM7 7h10M7 12h10M7 17h7" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+					<span>Anotações</span>
+				</a>
 				<a class="lv-topbar__link" class:is-active={route === 'settings'} aria-current={route === 'settings' ? 'page' : undefined} href={href('settings')}>
 					<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="9" cy="7" r="2.2" fill="var(--rail-bg)" stroke="currentColor" stroke-width="1.6"/><circle cx="15" cy="12" r="2.2" fill="var(--rail-bg)" stroke="currentColor" stroke-width="1.6"/><circle cx="9" cy="17" r="2.2" fill="var(--rail-bg)" stroke="currentColor" stroke-width="1.6"/></svg>
 					<span>Ajustes</span>
@@ -605,7 +620,11 @@
 					{/if}
 				</button>
 				<div class="lv-topbar__user" title={user.username}>
-					<span class="lv-avatar" aria-hidden="true">{userInitials}</span>
+					{#if !topbarAvatarFailed && transport.userAvatarUrl(avatarVersion)}
+						<img class="lv-avatar lv-avatar--img" src={transport.userAvatarUrl(avatarVersion)} alt="Avatar de {user.username}" onerror={() => (topbarAvatarFailed = true)} />
+					{:else}
+						<span class="lv-avatar" aria-hidden="true">{userInitials}</span>
+					{/if}
 					<span class="lv-topbar__username">{user.username}</span>
 				</div>
 				{#if transportKind === 'http'}
@@ -746,6 +765,8 @@
 				</div>
 			{:else if route === 'statistics'}
 				<Statistics {catalog} {recent} />
+			{:else if route === 'notes'}
+				<AllNotes {catalog} />
 			{:else if route === 'settings'}
 				<div class="lv-page lv-settings">
 					<header class="lv-page__head">
@@ -763,6 +784,12 @@
 							<label><input type="radio" name="theme" value="light" checked={themeMode === 'light'} onchange={() => changeTheme('light')} />Claro <span>Usa sempre o tema claro.</span></label>
 							<label><input type="radio" name="theme" value="dark" checked={themeMode === 'dark'} onchange={() => changeTheme('dark')} />Escuro <span>Usa sempre o tema escuro.</span></label>
 						</fieldset>
+					</section>
+					<section class="lv-panel lv-settings__panel" aria-labelledby="profile-heading">
+						<div class="lv-panel__head"><h2 id="profile-heading">Perfil</h2><span class="lv-count">Foto e identidade</span></div>
+						<div class="lv-settings__body">
+							<UserProfile {user} {avatarVersion} onAvatarChange={handleAvatarChanged} />
+						</div>
 					</section>
 					<section class="lv-panel lv-settings__panel" aria-labelledby="timer-heading">
 						<div class="lv-panel__head"><h2 id="timer-heading">Pomodoro</h2><span class="lv-count">Tempo de foco e pausas</span></div>
@@ -963,7 +990,7 @@
 											<button class="lv-btn" type="button" aria-pressed={focusMode} onclick={() => (focusMode = !focusMode)}>{focusMode ? 'Sair do foco' : 'Modo foco'}</button>
 										</div>
 									</div>
-									<Player {lesson} courseId={courseIdOf(course)} lessonTitle={lesson.title} {mediaError} onMediaError={mediaFailed} {studyEnabled} preferences={playerPreferences}
+									<Player {lesson} courseId={courseIdOf(course)} lessonTitle={lesson.title} initialPosition={positionSeconds} {mediaError} onMediaError={mediaFailed} {studyEnabled} preferences={playerPreferences}
 										onPreferencesChange={savePlayerPreferences} autoNext={playerPreferences.autoNext}
 										hasNextLesson={neighbors.next !== null} onAutoNext={autoAdvance}
 										onAutoNextChange={(enabled) => savePlayerPreferences({ ...playerPreferences, autoNext: enabled })} />
@@ -987,7 +1014,7 @@
 					{#if !lesson}<div class="lv-empty-state"><p class="lv-empty__title">Aula não encontrada</p><a class="lv-btn" href={href('home')}>Voltar à biblioteca</a></div>{:else}
 						<a class="lv-back" href={href('home')}>← Biblioteca</a>
 						<h1 class="lv-standalone-title">{lesson.title}</h1>
-						<Player {lesson} courseId={courseId ?? ''} {mediaError} onMediaError={mediaFailed} {studyEnabled} preferences={playerPreferences}
+						<Player {lesson} courseId={courseId ?? ''} initialPosition={positionSeconds} {mediaError} onMediaError={mediaFailed} {studyEnabled} preferences={playerPreferences}
 							onPreferencesChange={savePlayerPreferences} autoNext={playerPreferences.autoNext}
 							hasNextLesson={neighbors.next !== null} onAutoNext={autoAdvance}
 							onAutoNextChange={(enabled) => savePlayerPreferences({ ...playerPreferences, autoNext: enabled })} />

@@ -8,6 +8,7 @@
 	import { buildStatistics, weeklyGoalProgress } from './statistics';
 	import { courseIdOf, transport, type Catalog, type DailyMission, type MissionId, type StudyProgress } from './transport';
 	import { persistedFocusSummary, persistedRewardSummary } from './pomodoro-store';
+	import Forest from './Forest.svelte';
 
 	let { catalog, recent }: { catalog: Catalog | null; recent: StudyProgress[] } = $props();
 
@@ -253,6 +254,8 @@
 				</div>
 			</section>
 		</div>
+
+		<Forest />
 
 		<div class="lv-stats__grid">
 			<details class="lv-panel lv-library-inventory">

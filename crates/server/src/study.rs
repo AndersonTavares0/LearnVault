@@ -73,7 +73,7 @@ pub(crate) struct WeeklyGoalRequest {
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct NotesQuery {
-    media_id: String,
+    pub(crate) media_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -92,6 +92,8 @@ pub(crate) struct UpdateNoteRequest {
 pub(crate) struct StudyNoteResponse {
     note_id: String,
     media_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    relative_path: Option<String>,
     position_seconds: i64,
     content: String,
     created_at: i64,
@@ -103,6 +105,21 @@ impl From<learnvault_core::StudyNote> for StudyNoteResponse {
         Self {
             note_id: note.note_id,
             media_id: note.media_id,
+            relative_path: None,
+            position_seconds: note.position_seconds,
+            content: note.content,
+            created_at: note.created_at,
+            updated_at: note.updated_at,
+        }
+    }
+}
+
+impl From<learnvault_core::GlobalStudyNote> for StudyNoteResponse {
+    fn from(note: learnvault_core::GlobalStudyNote) -> Self {
+        Self {
+            note_id: note.note_id,
+            media_id: note.media_id,
+            relative_path: Some(note.relative_path),
             position_seconds: note.position_seconds,
             content: note.content,
             created_at: note.created_at,
@@ -221,6 +238,16 @@ struct FocusSessionResponse {
     completed: bool,
     started_at: i64,
     ended_at: i64,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct FocusSessionsQuery {
+    limit: Option<usize>,
+}
+
+#[derive(Serialize)]
+struct FocusSessionsListResponse {
+    items: Vec<FocusSessionResponse>,
 }
 
 #[derive(Serialize)]
@@ -476,6 +503,38 @@ pub(crate) async fn record_focus_session(
     }
 }
 
+/// Lista o histórico de sessões de foco persistidas do dono autenticado.
+pub(crate) async fn list_focus_sessions(
+    State(state): State<AppState>,
+    RawQuery(raw): RawQuery,
+    headers: HeaderMap,
+) -> Response {
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let query =
+        serde_urlencoded::from_str::<FocusSessionsQuery>(raw.as_deref().unwrap_or_default()).ok();
+    let limit = query.and_then(|q| q.limit).unwrap_or(100);
+    let owner = user.user_id;
+    match run_study(&state, move |db| {
+        learnvault_core::list_focus_sessions(db, &owner, limit)
+    })
+    .await
+    {
+        Ok(sessions) => private_no_store(
+            Json(FocusSessionsListResponse {
+                items: sessions
+                    .into_iter()
+                    .map(FocusSessionResponse::from)
+                    .collect(),
+            })
+            .into_response(),
+        ),
+        Err(failure) => focus_failure_response(failure),
+    }
+}
+
 /// Resume as sessões de foco persistidas do dono autenticado.
 pub(crate) async fn focus_summary(State(state): State<AppState>, headers: HeaderMap) -> Response {
     let user = match user_or_response(&state, &headers).await {
@@ -677,19 +736,34 @@ pub(crate) async fn list_notes(
         return invalid_query();
     };
     let owner = user.user_id;
-    let media_id = query.media_id;
-    match run_study(&state, move |db| {
-        learnvault_core::list_study_notes(db, &owner, &media_id)
-    })
-    .await
-    {
-        Ok(notes) => private_no_store(
-            Json(NotesResponse {
-                items: notes.into_iter().map(StudyNoteResponse::from).collect(),
-            })
-            .into_response(),
-        ),
-        Err(failure) => study_failure_response(failure),
+    if let Some(media_id) = query.media_id.filter(|s| !s.trim().is_empty()) {
+        match run_study(&state, move |db| {
+            learnvault_core::list_study_notes(db, &owner, &media_id)
+        })
+        .await
+        {
+            Ok(notes) => private_no_store(
+                Json(NotesResponse {
+                    items: notes.into_iter().map(StudyNoteResponse::from).collect(),
+                })
+                .into_response(),
+            ),
+            Err(failure) => study_failure_response(failure),
+        }
+    } else {
+        match run_study(&state, move |db| {
+            learnvault_core::list_all_study_notes(db, &owner)
+        })
+        .await
+        {
+            Ok(notes) => private_no_store(
+                Json(NotesResponse {
+                    items: notes.into_iter().map(StudyNoteResponse::from).collect(),
+                })
+                .into_response(),
+            ),
+            Err(failure) => study_failure_response(failure),
+        }
     }
 }
 

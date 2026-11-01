@@ -4,6 +4,7 @@ import {
 	POMODORO_TIMER_KEY,
 	modeSeconds,
 	persistPomodoroSettings,
+	playPomodoroAlarm,
 	readPomodoroSettings,
 	type PomodoroMode,
 	type PomodoroSettings
@@ -250,6 +251,21 @@ function complete(): void {
 	const state = get(pomodoro);
 	if (state.status !== 'running') return;
 	recordSession(state, true);
+
+	// Notificação sonora e de navegador (opt-in)
+	if (state.settings.alarmEnabled) {
+		playPomodoroAlarm(state.settings.alarmSound, state.settings.alarmVolume, state.settings.alarmRepeats);
+	}
+	if (state.settings.notificationsEnabled && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+		try {
+			const title = state.mode === 'focus' ? 'Ciclo de foco concluído! 🎉' : 'Pausa finalizada! Pronto para focar?';
+			const body = state.mode === 'focus' ? 'Uma árvore saudável foi cultivada na sua floresta.' : 'Hora de retomar seus estudos.';
+			new Notification(title, { body });
+		} catch {
+			// Ignora falha de notificação do navegador
+		}
+	}
+
 	const next = nextMode(state);
 	const total = modeTotal(next.mode, state.settings);
 	const running = state.settings.autoStartNext;
@@ -299,6 +315,21 @@ export function pauseTimer(): void {
 
 export function resetTimer(): void {
 	const state = get(pomodoro);
+	const total = modeTotal(state.mode, state.settings);
+	setState({ ...state, status: 'idle', remainingSeconds: total, totalSeconds: total, startedAt: null, endAt: null });
+}
+
+/**
+ * Abandono explícito da sessão de foco ativa.
+ *
+ * Apenas esta ação deliberada de desistência gera uma sessão incompleta (árvore seca).
+ * Interrupções de rede, fechamento de aba, reinício ou pausas preservam a tentativa.
+ */
+export function abandonTimer(): void {
+	const state = get(pomodoro);
+	if (state.mode === 'focus' && state.startedAt !== null) {
+		recordSession(state, false);
+	}
 	const total = modeTotal(state.mode, state.settings);
 	setState({ ...state, status: 'idle', remainingSeconds: total, totalSeconds: total, startedAt: null, endAt: null });
 }

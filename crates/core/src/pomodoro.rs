@@ -173,6 +173,30 @@ pub fn record_focus_session(
     Ok(existing)
 }
 
+/// Lista as sessões de foco persistidas do dono, da mais recente para a mais antiga.
+pub fn list_focus_sessions(
+    db: &Database,
+    owner_id: &str,
+    limit: usize,
+) -> Result<Vec<FocusSession>> {
+    validate_owner(owner_id)?;
+    let conn = db.connection();
+    let limit = limit.clamp(1, 1000);
+    let mut statement = conn.prepare(
+        "SELECT session_id, kind, planned_seconds, actual_seconds, completed, started_at, ended_at
+         FROM focus_session
+         WHERE owner_id = ?1
+         ORDER BY ended_at DESC, started_at DESC
+         LIMIT ?2",
+    )?;
+    let rows = statement.query_map(params![owner_id, limit as i64], focus_session_from_row)?;
+    let mut sessions = Vec::new();
+    for session in rows {
+        sessions.push(session?);
+    }
+    Ok(sessions)
+}
+
 /// Resumo de foco para o dia local atual do banco.
 pub fn focus_summary(db: &Database, owner_id: &str) -> Result<FocusSummary> {
     let today: String =
