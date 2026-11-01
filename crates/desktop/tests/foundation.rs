@@ -25,12 +25,11 @@ const FORBIDDEN_SOURCE_TOKENS: [&str; 13] = [
     "tauri_plugin_fs",
 ];
 
-const FORBIDDEN_MANIFEST_DEPS: [&str; 10] = [
+const FORBIDDEN_MANIFEST_DEPS: [&str; 9] = [
     "tauri-plugin-http",
     "tauri-plugin-shell",
     "tauri-plugin-fs",
     "tauri-plugin-localhost",
-    "tauri-plugin-updater",
     "tauri-plugin-store",
     "tauri-plugin-persisted-scope",
     "tokio",
@@ -81,12 +80,15 @@ fn config_embeds_frontend_for_production_without_dev_server() {
         "a janela sem decoração exige a titlebar personalizada"
     );
 
-    let plugins_empty = config
-        .get("plugins")
-        .and_then(|value| value.as_object())
-        .map(|map| map.is_empty())
-        .unwrap_or(true);
-    assert!(plugins_empty, "nenhum plugin Tauri deve ser configurado");
+    let plugins = config.get("plugins").and_then(|value| value.as_object());
+    if let Some(plugins) = plugins {
+        for key in plugins.keys() {
+            assert_eq!(
+                key, "updater",
+                "apenas o plugin oficial de updater pode ser configurado"
+            );
+        }
+    }
 
     let csp = config["app"]["security"]["csp"]
         .as_str()
@@ -299,9 +301,11 @@ fn capability_grants_only_the_core_default_and_the_app_commands() {
     assert!(permissions.contains(&"allow-desktop-remove-media"));
     assert!(permissions.contains(&"allow-desktop-set-course-order"));
     assert!(permissions.contains(&"allow-desktop-reset-course-order"));
+    assert!(permissions.contains(&"allow-desktop-check-update"));
+    assert!(permissions.contains(&"allow-desktop-install-update"));
     assert_eq!(
         permissions.len(),
-        20,
+        22,
         "a capability não pode ampliar além do núcleo, dos controles da titlebar e dos comandos do app: {permissions:?}"
     );
 }

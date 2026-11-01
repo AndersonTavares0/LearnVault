@@ -189,12 +189,29 @@
 		cursor: pointer;
 		flex: 1;
 		outline: none;
-		color-scheme: light dark;
+	}
+
+	:global(:root[data-theme='dark']) .lv-focus-menu__seed-select {
+		color-scheme: dark;
+	}
+
+	:global(:root[data-theme='light']) .lv-focus-menu__seed-select {
+		color-scheme: light;
 	}
 
 	.lv-focus-menu__seed-select option {
 		background-color: var(--surface);
 		color: var(--ink);
+	}
+
+	:global(:root[data-theme='dark']) .lv-focus-menu__seed-select option {
+		background-color: #1e2124;
+		color: #e9ebeb;
+	}
+
+	:global(:root[data-theme='light']) .lv-focus-menu__seed-select option {
+		background-color: #ffffff;
+		color: #252923;
 	}
 
 	.lv-focus-menu__footer-links {

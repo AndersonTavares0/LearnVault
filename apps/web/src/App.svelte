@@ -565,6 +565,25 @@
 		}
 	}
 
+	let updateInstalling = false;
+	let updateInstallError: string | null = null;
+
+	async function installUpdate() {
+		if (updateInstalling || !transport.installUpdate) return;
+		updateInstalling = true;
+		updateInstallError = null;
+		try {
+			const installed = await transport.installUpdate();
+			if (!installed) {
+				updateInstallError = 'Nenhuma atualização disponível para instalação no momento.';
+			}
+		} catch (cause) {
+			updateInstallError = cause instanceof Error ? cause.message : 'Não foi possível instalar a atualização.';
+		} finally {
+			updateInstalling = false;
+		}
+	}
+
 </script>
 <svelte:head><title>LearnVault — sua biblioteca de estudos</title><meta name="description" content="Sua biblioteca pessoal de cursos." /></svelte:head>
 {#if transportKind === 'desktop'}<DesktopTitlebar />{/if}
@@ -815,51 +834,57 @@
 							{#if transportKind === 'http'}<button class="lv-btn lv-btn--ghost" type="button" onclick={logout}>Encerrar sessão</button>{:else}<p class="lv-notice">Biblioteca local neste dispositivo.</p>{/if}
 						</div>
 					</section>
-					{#if transportKind === 'http'}
-						<section class="lv-panel lv-settings__panel" aria-labelledby="update-heading">
-							<div class="lv-panel__head"><h2 id="update-heading">Atualização</h2>{#if updateStatus}<span class="lv-count">Versão {updateStatus.current}</span>{/if}</div>
-							<div class="lv-settings__body">
-								<button class="lv-btn" type="button" onclick={() => checkUpdate(true)} disabled={updateChecking} aria-busy={updateChecking}>{updateChecking ? 'Verificando…' : 'Verificar atualização'}</button>
-								{#if updateStatus}
-									{@const outcome = updateOutcome(updateStatus)}
-									{@const releaseUrl = updateReleaseUrl(updateStatus)}
-									{#if outcome !== 'error' || updateManual}<p class="lv-notice" role="status">{updateMessage(updateStatus)}</p>{/if}
-									{#if outcome === 'available' && releaseUrl}<p class="lv-notice"><a href={releaseUrl} target="_blank" rel="noopener noreferrer">Ver a release</a></p>{/if}
-									{#if outcome === 'available' && updateStatus.changelog}
-										<details class="lv-update-changelog">
-											<summary class="lv-update-changelog__summary">Novidades desta versão (Changelog)</summary>
-											<pre class="lv-update-changelog__content">{updateStatus.changelog}</pre>
-										</details>
-									{/if}
+					<section class="lv-panel lv-settings__panel" aria-labelledby="update-heading">
+						<div class="lv-panel__head"><h2 id="update-heading">Atualização</h2>{#if updateStatus}<span class="lv-count">Versão {updateStatus.current}</span>{/if}</div>
+						<div class="lv-settings__body">
+							<button class="lv-btn" type="button" onclick={() => checkUpdate(true)} disabled={updateChecking} aria-busy={updateChecking}>{updateChecking ? 'Verificando…' : 'Verificar atualização'}</button>
+							{#if updateStatus}
+								{@const outcome = updateOutcome(updateStatus)}
+								{@const releaseUrl = updateReleaseUrl(updateStatus)}
+								{#if outcome !== 'error' || updateManual}<p class="lv-notice" role="status">{updateMessage(updateStatus)}</p>{/if}
+								{#if outcome === 'available' && releaseUrl}<p class="lv-notice"><a href={releaseUrl} target="_blank" rel="noopener noreferrer">Ver a release</a></p>{/if}
+								{#if outcome === 'available' && transportKind === 'desktop'}
+									<div class="lv-update-actions" style="margin-top: 0.5rem;">
+										<button class="lv-btn lv-btn--primary" type="button" disabled={updateInstalling} onclick={installUpdate} aria-busy={updateInstalling}>
+											{updateInstalling ? 'Instalando atualização…' : 'Atualizar e reiniciar'}
+										</button>
+										{#if updateInstallError}<p class="error" role="alert" style="margin-top: 0.25rem;">{updateInstallError}</p>{/if}
+									</div>
 								{/if}
-								{#if updateHistoryList.length > 0}
-									<details class="lv-update-history">
-										<summary class="lv-update-history__summary">Histórico de atualizações ({updateHistoryList.length})</summary>
-										<ul class="lv-update-history__list">
-											{#each updateHistoryList as entry}
-												<li class="lv-update-history__item">
-													<div class="lv-update-history__header">
-														<span class="lv-update-history__status lv-update-history__status--{entry.status}">{entry.status === 'success' ? 'Sucesso' : entry.status === 'rollback' ? 'Reversão' : entry.status}</span>
-														<span class="lv-update-history__versions">{entry.from} → {entry.to}</span>
-														<time class="lv-update-history__time">{entry.timestamp}</time>
-													</div>
-													<p class="lv-update-history__msg">{entry.message}</p>
-												</li>
-											{/each}
-										</ul>
+								{#if outcome === 'available' && updateStatus.changelog}
+									<details class="lv-update-changelog">
+										<summary class="lv-update-changelog__summary">Novidades desta versão (Changelog)</summary>
+										<pre class="lv-update-changelog__content">{updateStatus.changelog}</pre>
 									</details>
 								{/if}
+							{/if}
+							{#if updateHistoryList.length > 0}
+								<details class="lv-update-history">
+									<summary class="lv-update-history__summary">Histórico de atualizações ({updateHistoryList.length})</summary>
+									<ul class="lv-update-history__list">
+										{#each updateHistoryList as entry}
+											<li class="lv-update-history__item">
+												<div class="lv-update-history__header">
+													<span class="lv-update-history__status lv-update-history__status--{entry.status}">{entry.status === 'success' ? 'Sucesso' : entry.status === 'rollback' ? 'Reversão' : entry.status}</span>
+													<span class="lv-update-history__versions">{entry.from} → {entry.to}</span>
+													<time class="lv-update-history__time">{entry.timestamp}</time>
+												</div>
+												<p class="lv-update-history__msg">{entry.message}</p>
+											</li>
+										{/each}
+									</ul>
+								</details>
+							{/if}
+						</div>
+					</section>
+					{#if transportKind === 'http' && canManage}
+						<section class="lv-panel lv-settings__panel" aria-labelledby="backup-heading">
+							<div class="lv-panel__head"><h2 id="backup-heading">Backup do Banco de Dados</h2></div>
+							<div class="lv-settings__body">
+								<p class="lv-notice">Gere e baixe uma cópia transacional consistente do banco SQLite (verificada com integridade estrutural).</p>
+								<a class="lv-btn lv-btn--outline" href="/api/admin/backup" download>Baixar backup agora (.sqlite)</a>
 							</div>
 						</section>
-						{#if canManage}
-							<section class="lv-panel lv-settings__panel" aria-labelledby="backup-heading">
-								<div class="lv-panel__head"><h2 id="backup-heading">Backup do Banco de Dados</h2></div>
-								<div class="lv-settings__body">
-									<p class="lv-notice">Gere e baixe uma cópia transacional consistente do banco SQLite (verificada com integridade estrutural).</p>
-									<a class="lv-btn lv-btn--outline" href="/api/admin/backup" download>Baixar backup agora (.sqlite)</a>
-								</div>
-							</section>
-						{/if}
 					{/if}
 					</div>
 				</div>

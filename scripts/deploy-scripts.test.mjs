@@ -45,4 +45,11 @@ test('deploy scripts and configs exist and have proper security settings', () =>
     assert.match(updaterComposeContent, /image:\s*docker:cli/, 'updater deve usar imagem docker:cli');
     assert.match(updaterComposeContent, /working_dir:\s*\/compose/, 'updater deve ter working_dir /compose');
     assert.match(updaterComposeContent, /\/var\/run\/docker\.sock/, 'updater companion deve ter acesso ao socket do docker');
+    assert.match(updaterComposeContent, /ghcr\.io\/andersontavares0\/learnvault/, 'updater deve usar o repositório correto no GHCR');
+
+    const envExamplePath = resolve(root, 'deploy/compose/.env.example');
+    assert.ok(existsSync(envExamplePath), '.env.example deve existir');
+    const envExampleContent = readFileSync(envExamplePath, 'utf8');
+    assert.match(envExampleContent, /ghcr\.io\/andersontavares0\/learnvault/, '.env.example deve documentar o repositório oficial no GHCR');
+    assert.match(updateContent, /ghcr\.io\/andersontavares0\/learnvault/, 'update.sh deve usar o repositório oficial no GHCR');
 });

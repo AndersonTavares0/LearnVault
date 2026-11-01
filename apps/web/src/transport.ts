@@ -150,6 +150,7 @@ export interface Transport {
 	deleteUserAvatar(): Promise<void>;
 	// Verifica a atualização; `force` ignora o intervalo mínimo de cache do servidor.
 	checkUpdate(force?: boolean): Promise<UpdateStatus>;
+	installUpdate?(): Promise<boolean>;
 	updateHistory(): Promise<UpdateHistoryEntry[]>;
 	mediaUrl(file: FileEntry, courseId?: string): string | null;
 	// URL da capa personalizada, derivada da versão exposta pelo catálogo. Sem versão (sem
@@ -769,6 +770,7 @@ export class HttpTransport implements Transport {
 	// O servidor local faz a checagem por HTTPS e devolve o estado; o navegador só o exibe.
 	// `force=1` (checagem manual) ignora o intervalo mínimo de cache do servidor.
 	async checkUpdate(force = false) { const response = await fetch(force ? '/api/update?force=1' : '/api/update'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível verificar a atualização.'); return normalizeUpdateStatus(await response.json()); }
+	async installUpdate(): Promise<boolean> { return Promise.resolve(false); }
 	async updateHistory(): Promise<UpdateHistoryEntry[]> {
 		const response = await fetch('/api/update/history');
 		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar o histórico de atualizações.');
@@ -904,10 +906,48 @@ export class DesktopStub implements Transport {
 	userAvatarUrl(_version?: number | null) { return ''; }
 	uploadUserAvatar(_file: File | Blob): Promise<{ version: number }> { return Promise.resolve({ version: 1 }); }
 	deleteUserAvatar(): Promise<void> { return Promise.resolve(); }
-	// O desktop não hospeda `crates/server` nem possui canal IPC de atualização: a
-	// checagem fica desligada, sem tocar a rede. Isso preserva a regra de que o bundle
-	// desktop não contém nenhum `fetch` do aplicativo.
-	checkUpdate() { return Promise.resolve({ current: '', enabled: false, available: false, latest: null, releasedAt: null, url: null, changelog: null, checkedAt: null, error: null } satisfies UpdateStatus); }
+	// O desktop verifica atualizações oficiais via plugin oficial do Tauri 2 e IPC nativo.
+	async checkUpdate(_force = false): Promise<UpdateStatus> {
+		try {
+			const info = await invoke<{
+				available: boolean;
+				currentVersion: string;
+				version: string | null;
+				body: string | null;
+				date: string | null;
+			}>('desktop_check_update');
+			return {
+				current: info.currentVersion,
+				enabled: true,
+				available: info.available,
+				latest: info.version ?? null,
+				releasedAt: info.date ?? null,
+				url: info.version ? `https://github.com/AndersonTavares0/LearnVault/releases/tag/v${info.version.replace(/^v/, '')}` : null,
+				changelog: info.body ?? null,
+				checkedAt: new Date().toISOString(),
+				error: null
+			};
+		} catch (cause) {
+			return {
+				current: '',
+				enabled: true,
+				available: false,
+				latest: null,
+				releasedAt: null,
+				url: null,
+				changelog: null,
+				checkedAt: new Date().toISOString(),
+				error: cause instanceof Error ? cause.message : 'Falha ao verificar atualização.'
+			};
+		}
+	}
+	async installUpdate(): Promise<boolean> {
+		try {
+			return await invoke<boolean>('desktop_install_update');
+		} catch (cause) {
+			throw desktopError(cause, 'Não foi possível instalar a atualização.');
+		}
+	}
 	updateHistory(): Promise<UpdateHistoryEntry[]> { return Promise.resolve([]); }
 	// Toda mídia entregue ao player usa a identidade autorizada. O caminho catalogado é
 	// deliberadamente ignorado, inclusive no desktop, para que ele nunca atravesse o webview.

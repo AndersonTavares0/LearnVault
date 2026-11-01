@@ -96,7 +96,7 @@ fi
 log "Backup preventivo criado com sucesso."
 
 # 3. Baixa imagem da nova versão
-NEW_IMAGE="${LEARNVAULT_IMAGE_REPO:-ghcr.io/learnvault/learnvault}:${TARGET_VERSION}"
+NEW_IMAGE="${LEARNVAULT_IMAGE_REPO:-ghcr.io/andersontavares0/learnvault}:${TARGET_VERSION}"
 log "Baixando nova imagem: ${NEW_IMAGE}..."
 
 if ! docker pull "$NEW_IMAGE" 2>/dev/null; then

@@ -53,6 +53,8 @@ pub enum IpcErrorCode {
     InvalidOrder,
     /// A ordem manual do curso não pôde ser gravada nem removida.
     OrderUnavailable,
+    /// A verificação ou instalação de atualização não pôde ser concluída.
+    UpdateUnavailable,
 }
 
 /// Erro IPC serializável devolvido ao webview.
@@ -230,6 +232,14 @@ impl IpcError {
         Self {
             code: IpcErrorCode::OrderUnavailable,
             message: "não foi possível salvar a ordem do curso",
+        }
+    }
+
+    /// A verificação ou instalação de atualização não pôde ser concluída.
+    pub fn update_unavailable() -> Self {
+        Self {
+            code: IpcErrorCode::UpdateUnavailable,
+            message: "não foi possível verificar ou aplicar a atualização",
         }
     }
 }

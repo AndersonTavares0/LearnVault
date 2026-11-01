@@ -9,7 +9,7 @@ use learnvault_core::{
     Availability, Catalog, CatalogFile, CatalogNode, FocusKind, FocusSession, FocusSummary,
     MediaKind, NodeRole, RescanSummary, RewardSummary, StudyProgress,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// Catálogo do desktop derivado do banco local.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -519,4 +519,23 @@ pub struct CoverDto {
 pub struct CoverRemovalDto {
     /// Verdadeiro quando havia uma capa e ela foi removida agora.
     pub removed: bool,
+}
+
+/// DTO informativo sobre atualizações do aplicativo desktop.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopUpdateInfoDto {
+    /// Se há uma atualização mais recente disponível para download.
+    pub available: bool,
+    /// Versão atualmente em execução no aplicativo.
+    pub current_version: String,
+    /// Nova versão disponível (se houver).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    /// Data de publicação da nova versão (se disponível).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub date: Option<String>,
+    /// Notas de lançamento / changelog (se disponível).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body: Option<String>,
 }

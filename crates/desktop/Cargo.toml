@@ -18,7 +18,9 @@ publish = false
 #
 # `tauri-plugin-dialog` fornece o seletor nativo de diretórios usado **internamente no
 # Rust**. Ele não é concedido ao webview em `capabilities/`, então não expõe diálogo nem
-# filesystem à SPA. Nenhum plugin de fs, store, shell, http, localhost ou updater entra.
+# filesystem à SPA.
+# `tauri-plugin-updater` fornece a verificação e instalação oficial de atualizações assinadas
+# (Ed25519) via GitHub Releases no Windows/Desktop.
 
 [dependencies]
 # Tauri 2.12.x. Os crates do Tauri não compartilham o número minor: `tauri` está em
@@ -27,6 +29,7 @@ publish = false
 # gerencia a lista `features` conforme o `tauri.conf.json` a cada `tauri dev`/`tauri build`;
 # mantê-la explícita evita que o manifesto seja reescrito no primeiro `pnpm dev:tauri`.
 tauri = { version = "2.12.4", features = [] }
+tauri-plugin-updater = "2"
 # Núcleo compartilhado: catálogo e banco SQLite do domínio.
 learnvault-core = { path = "../core" }
 serde = { version = "1", features = ["derive"] }
