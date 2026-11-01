@@ -72,6 +72,9 @@
 	$: availableSourceFolders = catalog
 		? Array.from(new Set(catalog.nodes.map((n) => n.sourceFolder).filter((f): f is string => Boolean(f)))).sort((a, b) => a.localeCompare(b))
 		: [];
+	$: if (sourceFolderFilter !== 'all' && !availableSourceFolders.includes(sourceFolderFilter)) {
+		sourceFolderFilter = 'all';
+	}
 	$: filteredNodes = (catalog ? filterCatalog(catalog.nodes, catalogQuery) : []).filter((node) => {
 		if (progressFilter !== 'all' && courseStatusMap.get(courseIdOf(node)) !== progressFilter) return false;
 		if (sourceFolderFilter !== 'all' && node.sourceFolder !== sourceFolderFilter) return false;
@@ -85,6 +88,9 @@
 		: [];
 	$: if (catalogQuery.trim() && !notesLoaded && user) {
 		void loadNotesForSearch();
+	}
+	$: if (route !== 'home' && notesLoaded) {
+		notesLoaded = false;
 	}
 	// `#/course/<id>` é a visão geral do curso; a aula só abre quando o caminho está na
 	// URL. O endereço legado `#/player/<curso>/<aula>` continua abrindo o player.
@@ -313,6 +319,8 @@
 		try {
 			const session = await resolveSession(() => transport.me(), transportKind);
 			user = session.user;
+			allNotesForSearch = [];
+			notesLoaded = false;
 			loadPlayerPreferences(session.user);
 			error = session.error;
 			if (user) {
@@ -335,6 +343,8 @@
 		const destination = location.hash;
 		try {
 			user = await transport.login(username, password);
+			allNotesForSearch = [];
+			notesLoaded = false;
 			loadPlayerPreferences(user);
 			password = '';
 			catalog = await transport.catalog();
