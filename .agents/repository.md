@@ -26,6 +26,7 @@ that area.
 ## Engineering workflow
 
 - Follow `.agents/playbooks/testing.md` and the appropriate change playbook.
+- Always use Ponytail to write, modify, and refactor code across all development tasks when available, keeping changes surgical, clean, and consistent with existing architecture.
 
 ## GitHub governance
 
