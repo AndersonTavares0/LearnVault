@@ -40,14 +40,25 @@ export function clampSpeed(speed: number): PlaybackSpeed {
 	return (PLAYBACK_SPEEDS as readonly number[]).includes(speed) ? (speed as PlaybackSpeed) : 1;
 }
 
+export function nextSpeed(current: number, direction: 'up' | 'down'): PlaybackSpeed {
+	const currentSpeed = clampSpeed(current);
+	const index = PLAYBACK_SPEEDS.indexOf(currentSpeed);
+	if (direction === 'up') {
+		const nextIndex = Math.min(PLAYBACK_SPEEDS.length - 1, index + 1);
+		return PLAYBACK_SPEEDS[nextIndex];
+	}
+	const prevIndex = Math.max(0, index - 1);
+	return PLAYBACK_SPEEDS[prevIndex];
+}
+
 export type PlayerShortcutAction = 'toggle-playback' | 'seek-backward' | 'seek-forward';
 
 /** Atalhos só são aplicados quando o contêiner do player, e não um controle interno, tem foco. */
 export function playerShortcutAction(key: string, playerRootHasFocus: boolean): PlayerShortcutAction | null {
 	if (!playerRootHasFocus) return null;
-	if (key === ' ' || key === 'Spacebar') return 'toggle-playback';
-	if (key === 'ArrowLeft') return 'seek-backward';
-	if (key === 'ArrowRight') return 'seek-forward';
+	if (key === ' ' || key === 'Spacebar' || key === 'k' || key === 'K') return 'toggle-playback';
+	if (key === 'ArrowLeft' || key === 'j' || key === 'J') return 'seek-backward';
+	if (key === 'ArrowRight' || key === 'l' || key === 'L') return 'seek-forward';
 	return null;
 }
 
@@ -110,11 +121,12 @@ export function mediaPlaybackKind(file: FileEntry): MediaPlaybackKind {
 	return extension && ['aac', 'flac', 'm4a', 'mp3', 'oga', 'ogg', 'opus', 'wav', 'weba', 'wma'].includes(extension) ? 'audio' : 'video';
 }
 
-export function subtitleFormat(path: string): 'vtt' | 'srt' | 'ass' | 'unsupported' {
+export function subtitleFormat(path: string): 'vtt' | 'srt' | 'ass' | 'sub' | 'unsupported' {
 	const extension = path.split(/[?#]/, 1)[0].split('.').pop()?.toLowerCase();
 	if (extension === 'vtt') return 'vtt';
 	if (extension === 'srt') return 'srt';
 	if (extension === 'ass' || extension === 'ssa') return 'ass';
+	if (extension === 'sub') return 'sub';
 	return 'unsupported';
 }
 

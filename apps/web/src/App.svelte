@@ -15,7 +15,7 @@
 	import { collectMaterials, countCatalogNode, countMissingVideos, formatCount, formatCourseMeta, formatLessonCounts, formatLocationContext } from './catalog';
 	import { courseCover } from './cover';
 	import PasswordField from './PasswordField.svelte';
-	import { defaultLessonPath, lessonContainer, neighboringLessons } from './navigation';
+	import { defaultLessonPath, firstAvailableLessonPath, lessonContainer, neighboringLessons } from './navigation';
 	import { destinationAfterLogin, findCourse, findLesson, findLessonLocation, href, locationFromHash, type LessonLocation, type Route } from './router';
 	import { transport, transportKind, COVER_ACCEPT, MAX_COVER_BYTES, courseIdOf, STUDY_NOT_AVAILABLE, type Catalog, type CatalogNode, type Lesson, type StudyProgress, type UpdateStatus, type UpdateHistoryEntry, type User } from './transport';
 	import { updateOutcome, updateMessage, updateReleaseUrl } from './update';
@@ -98,6 +98,12 @@
 	let importFormOpen = false;
 	let importPath = '';
 	let importError = '';
+	let importedSuccess: {
+		courseId: string;
+		title: string;
+		firstLessonPath: string | null;
+		lessonCount: number;
+	} | null = null;
 	let removing = false;
 	let removeConfirm = false;
 	let removeError = '';
@@ -364,11 +370,24 @@
 	async function importCourse() {
 		importing = true;
 		importError = '';
+		importedSuccess = null;
+		const previousCourseIds = new Set((catalog?.nodes ?? []).map(courseIdOf));
 		try {
 			await transport.importCourse();
 			await transport.rescan();
-			syncCatalog(await transport.catalog());
+			const nextCatalog = await transport.catalog();
+			syncCatalog(nextCatalog);
 			await loadRecent();
+			const newlyAdded = nextCatalog.nodes.find((c) => !previousCourseIds.has(courseIdOf(c)));
+			if (newlyAdded) {
+				const counts = countCatalogNode(newlyAdded);
+				importedSuccess = {
+					courseId: courseIdOf(newlyAdded),
+					title: newlyAdded.title,
+					firstLessonPath: firstAvailableLessonPath([newlyAdded]),
+					lessonCount: counts.lessons
+				};
+			}
 		} catch (cause) {
 			importError = cause instanceof Error ? cause.message : 'Não foi possível importar o curso.';
 		} finally {
@@ -382,13 +401,26 @@
 		event.preventDefault();
 		importing = true;
 		importError = '';
+		importedSuccess = null;
+		const previousCourseIds = new Set((catalog?.nodes ?? []).map(courseIdOf));
 		try {
 			await transport.importCoursePath(importPath.trim());
 			importPath = '';
 			importFormOpen = false;
 			await transport.rescan();
-			syncCatalog(await transport.catalog());
+			const nextCatalog = await transport.catalog();
+			syncCatalog(nextCatalog);
 			await loadRecent();
+			const newlyAdded = nextCatalog.nodes.find((c) => !previousCourseIds.has(courseIdOf(c)));
+			if (newlyAdded) {
+				const counts = countCatalogNode(newlyAdded);
+				importedSuccess = {
+					courseId: courseIdOf(newlyAdded),
+					title: newlyAdded.title,
+					firstLessonPath: firstAvailableLessonPath([newlyAdded]),
+					lessonCount: counts.lessons
+				};
+			}
 		} catch (cause) {
 			importError = cause instanceof Error ? cause.message : 'Não foi possível importar o curso.';
 		} finally {
@@ -434,8 +466,14 @@
 		}
 	}
 
-	function mediaFailed() {
-		mediaError = 'Não foi possível carregar esta mídia.';
+	function mediaFailed(code?: number) {
+		if (code === 4) {
+			mediaError = 'Codec ou formato de mídia incompatível.';
+		} else if (code === 3) {
+			mediaError = 'Falha na decodificação da mídia.';
+		} else {
+			mediaError = 'Não foi possível carregar esta mídia.';
+		}
 	}
 
 	// A capa é escolhida no card do curso. No desktop o seletor de imagens roda no Rust
@@ -698,7 +736,7 @@
 									{@const courseNode = findCourse(catalog, entry.location.courseId)}
 									{#if courseNode}
 										<li>
-											<a class="lv-resume-card" href={href('course', entry.location.courseId, entry.location.lesson.path)}>
+											<a class="lv-resume-card" href={href('course', entry.location.courseId, entry.location.lesson.path, entry.item.completed ? null : entry.item.positionSeconds)}>
 												<span class="lv-resume-card__cover">
 													<CourseCover course={courseNode} profile={user.userId} mediaUrl={(file, courseId) => transport.mediaUrl(file, courseId)} manualCoverUrl={transport.coverUrl(courseIdOf(courseNode), courseNode.coverVersion ?? null)} />
 												</span>
@@ -727,6 +765,37 @@
 								<button type="button" class="lv-btn lv-btn--ghost" onclick={() => (importFormOpen = false)}>Cancelar</button>
 							</div>
 						</form>
+					{/if}
+					{#if importedSuccess}
+						<div class="lv-import-success" role="status" aria-live="polite">
+							<div class="lv-import-success__info">
+								<svg class="lv-import-success__icon" viewBox="0 0 24 24" aria-hidden="true">
+									<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+									<polyline points="22 4 12 14.01 9 11.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+								</svg>
+								<div>
+									<p class="lv-import-success__title">Curso importado com sucesso: <strong>{importedSuccess.title}</strong></p>
+									<p class="lv-import-success__meta">
+										{importedSuccess.lessonCount} {importedSuccess.lessonCount === 1 ? 'aula detectada' : 'aulas detectadas'}.
+									</p>
+								</div>
+							</div>
+							<div class="lv-import-success__actions">
+								{#if importedSuccess.firstLessonPath}
+									<a class="lvui-btn lvui-btn-primary lvui-btn-sm" href={href('course', importedSuccess.courseId, importedSuccess.firstLessonPath)}>
+										<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><polygon points="6 4 20 12 6 20 6 4"/></svg>
+										Começar a estudar
+									</a>
+								{:else}
+									<a class="lvui-btn lvui-btn-primary lvui-btn-sm" href={href('course', importedSuccess.courseId)}>
+										Ver curso
+									</a>
+								{/if}
+								<button type="button" class="lvui-btn lvui-btn-ghost lvui-btn-sm" onclick={() => (importedSuccess = null)} aria-label="Fechar aviso">
+									Fechar
+								</button>
+							</div>
+						</div>
 					{/if}
 					{#if importError}<p class="lv-alert" role="alert">{importError}</p>{/if}
 					{#if user.role === 'admin' && rescanMessage}<p class="lv-notice" aria-live="polite">{rescanMessage}</p>{/if}
@@ -915,7 +984,7 @@
 							{/if}
 							<div class="lv-course-hero__actions">
 								{#if activePath}
-									<a class="lv-btn lv-btn--primary" href={href('course', courseIdOf(course), activePath)}>{courseRecent ? 'Continuar estudando' : 'Começar curso'}</a>
+									<a class="lv-btn lv-btn--primary" href={href('course', courseIdOf(course), courseRecent ? courseRecent.location.lesson.path : activePath, courseRecent && !courseRecent.item.completed ? courseRecent.item.positionSeconds : null)}>{courseRecent ? 'Continuar estudando' : 'Começar curso'}</a>
 								{:else}
 									<span class="lv-btn" aria-disabled="true">Nenhuma aula disponível</span>
 								{/if}
@@ -986,7 +1055,7 @@
 									<div class="lv-resume-panel__body">
 										<p class="lv-resume-panel__lesson">{courseRecent.location.lesson.title}</p>
 										<p class="lv-resume-panel__meta">{formatLocationContext(courseRecent.location.courseTitle, courseRecent.location.moduleTitle)}{#if !courseRecent.item.completed}{' · '}{formatDuration(courseRecent.item.positionSeconds)}{/if}</p>
-										<a class="lv-btn lv-btn--primary" href={href('course', courseIdOf(course), courseRecent.location.lesson.path)}>{courseRecent.item.completed ? 'Revisar aula' : 'Retomar aula'}</a>
+										<a class="lv-btn lv-btn--primary" href={href('course', courseIdOf(course), courseRecent.location.lesson.path, courseRecent.item.completed ? null : courseRecent.item.positionSeconds)}>{courseRecent.item.completed ? 'Revisar aula' : 'Retomar aula'}</a>
 									</div>
 								</section>
 							{/if}
@@ -1017,7 +1086,11 @@
 									</div>
 									<Player {lesson} courseId={courseIdOf(course)} lessonTitle={lesson.title} initialPosition={positionSeconds} {mediaError} onMediaError={mediaFailed} {studyEnabled} preferences={playerPreferences}
 										onPreferencesChange={savePlayerPreferences} autoNext={playerPreferences.autoNext}
-										hasNextLesson={neighbors.next !== null} onAutoNext={autoAdvance}
+										hasPreviousLesson={neighbors.previous !== null}
+										hasNextLesson={neighbors.next !== null}
+										onPreviousLesson={() => { if (neighbors.previous) location.hash = href('course', courseIdOf(course), neighbors.previous.path); }}
+										onNextLesson={() => { if (neighbors.next) location.hash = href('course', courseIdOf(course), neighbors.next.path); }}
+										onAutoNext={autoAdvance}
 										onAutoNextChange={(enabled) => savePlayerPreferences({ ...playerPreferences, autoNext: enabled })} />
 									{#if activeContainer && (activeContainer.files.length || activeContainer.looseFiles.length)}<div class="lv-player-materials"><LooseFiles files={[...activeContainer.files, ...activeContainer.looseFiles]} heading="Materiais do módulo" courseId={courseIdOf(course)} /></div>{/if}
 									{#if course.looseFiles.length}<div class="lv-player-materials"><LooseFiles files={course.looseFiles} heading="Arquivos soltos do curso" courseId={courseIdOf(course)} /></div>{/if}
@@ -1041,7 +1114,11 @@
 						<h1 class="lv-standalone-title">{lesson.title}</h1>
 						<Player {lesson} courseId={courseId ?? ''} initialPosition={positionSeconds} {mediaError} onMediaError={mediaFailed} {studyEnabled} preferences={playerPreferences}
 							onPreferencesChange={savePlayerPreferences} autoNext={playerPreferences.autoNext}
-							hasNextLesson={neighbors.next !== null} onAutoNext={autoAdvance}
+							hasPreviousLesson={neighbors.previous !== null}
+							hasNextLesson={neighbors.next !== null}
+							onPreviousLesson={() => { if (neighbors.previous) location.hash = href('player', courseId ?? '', neighbors.previous.path); }}
+							onNextLesson={() => { if (neighbors.next) location.hash = href('player', courseId ?? '', neighbors.next.path); }}
+							onAutoNext={autoAdvance}
 							onAutoNextChange={(enabled) => savePlayerPreferences({ ...playerPreferences, autoNext: enabled })} />
 						{#if neighbors.previous || neighbors.next}<nav class="lv-lesson-nav" aria-label="Aulas vizinhas">{#if neighbors.previous}<a href={href('player', courseId ?? '', neighbors.previous.path)}>← {neighbors.previous.title}</a>{/if}{#if neighbors.next}<a href={href('player', courseId ?? '', neighbors.next.path)}>{neighbors.next.title} →</a>{/if}</nav>{/if}
 					{/if}

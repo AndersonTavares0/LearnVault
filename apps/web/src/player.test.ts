@@ -1,7 +1,7 @@
 import { render } from 'svelte/server';
 import { describe, expect, it } from 'vitest';
 import Player from './Player.svelte';
-import { clampSpeed, formatDuration, mediaAvailability, mediaPlaybackKind, PLAYBACK_SPEEDS, playerShortcutAction, selectPlayableMedia, selectPlayableSubtitle, shouldAutoAdvance, srtConversionSupported, srtToWebVtt, studySyncEnabled, studySyncSupported, subtitleFormat } from './player';
+import { clampSpeed, formatDuration, mediaAvailability, mediaPlaybackKind, nextSpeed, PLAYBACK_SPEEDS, playerShortcutAction, selectPlayableMedia, selectPlayableSubtitle, shouldAutoAdvance, srtConversionSupported, srtToWebVtt, studySyncEnabled, studySyncSupported, subtitleFormat } from './player';
 import { createDefaultPlayerPreferences, updateLessonPreference } from './player-preferences';
 import type { FileEntry, Lesson } from './transport';
 
@@ -46,6 +46,7 @@ describe('player media and subtitles', () => {
 		expect(subtitleFormat('legenda.srt')).toBe('srt');
 		expect(subtitleFormat('legenda.ass')).toBe('ass');
 		expect(subtitleFormat('legenda.ssa')).toBe('ass');
+		expect(subtitleFormat('legenda.sub')).toBe('sub');
 	});
 	it('formats durations for resume labels', () => {
 		expect(formatDuration(0)).toBe('0:00');
@@ -76,11 +77,25 @@ describe('player media and subtitles', () => {
 		expect(clampSpeed(3)).toBe(1);
 		expect(clampSpeed(Number.NaN)).toBe(1);
 	});
-	it('handles only focused player shortcuts and never loops auto-next at the end', () => {
+	it('steps playback speed up and down within bounds', () => {
+		expect(nextSpeed(1, 'up')).toBe(1.25);
+		expect(nextSpeed(1.25, 'up')).toBe(1.5);
+		expect(nextSpeed(2, 'up')).toBe(2);
+		expect(nextSpeed(1, 'down')).toBe(0.75);
+		expect(nextSpeed(0.75, 'down')).toBe(0.75);
+	});
+	it('handles only focused player shortcuts including j, k, l and never loops auto-next at the end', () => {
 		expect(playerShortcutAction(' ', true)).toBe('toggle-playback');
+		expect(playerShortcutAction('k', true)).toBe('toggle-playback');
+		expect(playerShortcutAction('K', true)).toBe('toggle-playback');
 		expect(playerShortcutAction('ArrowLeft', true)).toBe('seek-backward');
+		expect(playerShortcutAction('j', true)).toBe('seek-backward');
+		expect(playerShortcutAction('J', true)).toBe('seek-backward');
 		expect(playerShortcutAction('ArrowRight', true)).toBe('seek-forward');
+		expect(playerShortcutAction('l', true)).toBe('seek-forward');
+		expect(playerShortcutAction('L', true)).toBe('seek-forward');
 		expect(playerShortcutAction(' ', false)).toBeNull();
+		expect(playerShortcutAction('k', false)).toBeNull();
 		expect(playerShortcutAction('Enter', true)).toBeNull();
 		expect(shouldAutoAdvance(true, true)).toBe(true);
 		expect(shouldAutoAdvance(false, true)).toBe(false);
@@ -167,7 +182,7 @@ describe('player preference controls', () => {
 	it('keeps the player shortcuts available without repeating the hint on screen', () => {
 		const { body } = render(Player, { props: baseProps });
 
-		expect(body).toContain('aria-keyshortcuts="Space ArrowLeft ArrowRight"');
+		expect(body).toContain('aria-keyshortcuts="Space ArrowLeft ArrowRight k j l [ ] f"');
 		expect(body).not.toContain('Atalhos:');
 	});
 
@@ -201,5 +216,11 @@ describe('player preference controls', () => {
 		expect(body).toContain('aria-label="Ferramentas de estudo da aula"');
 		expect(body).toContain('Anotações da aula');
 		expect(body).toContain('Cartões de revisão');
+	});
+
+	it('displays detailed explanation when mediaError is present', () => {
+		const { body } = render(Player, { props: { ...baseProps, mediaError: 'Não foi possível carregar esta mídia.' } });
+		expect(body).toContain('Não foi possível carregar esta mídia.');
+		expect(body).toContain('O arquivo local pode ter sido movido');
 	});
 });

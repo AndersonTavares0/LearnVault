@@ -2,12 +2,61 @@
 	import LooseFiles from './LooseFiles.svelte';
 	import StudyNotes from './StudyNotes.svelte';
 	import Flashcards from './Flashcards.svelte';
-	import { formatDuration, mediaAvailability, mediaPlaybackKind, playerShortcutAction, selectPlayableMedia, selectPlayableSubtitle, shouldAutoAdvance, srtConversionSupported, srtToWebVtt, studySyncEnabled, subtitleFormat } from './player';
+	import {
+		formatDuration,
+		mediaAvailability,
+		mediaPlaybackKind,
+		nextSpeed,
+		PLAYBACK_SPEEDS,
+		playerShortcutAction,
+		selectPlayableMedia,
+		selectPlayableSubtitle,
+		shouldAutoAdvance,
+		srtConversionSupported,
+		srtToWebVtt,
+		studySyncEnabled,
+		subtitleFormat,
+		type PlaybackSpeed
+	} from './player';
 	import { createPositionSaver } from './study';
 	import { createDefaultPlayerPreferences, lessonPreferenceKey, updateLessonPreference, type PlayerPreferences } from './player-preferences';
 	import { transport, type Lesson, type StudyProgress } from './transport';
 
-	let { lesson, courseId, mediaError, onMediaError, studyEnabled = true, preferences = createDefaultPlayerPreferences(), onPreferencesChange = () => true, autoNext = false, hasNextLesson = false, onAutoNext = () => undefined, onAutoNextChange = () => true, lessonTitle = null, initialPosition = null }: { lesson: Lesson; courseId: string; mediaError: string; onMediaError: () => void; studyEnabled?: boolean; preferences?: PlayerPreferences; onPreferencesChange?: (next: PlayerPreferences) => boolean; autoNext?: boolean; hasNextLesson?: boolean; onAutoNext?: () => void; onAutoNextChange?: (enabled: boolean) => boolean; lessonTitle?: string | null; initialPosition?: number | null } = $props();
+	let {
+		lesson,
+		courseId,
+		mediaError,
+		onMediaError,
+		studyEnabled = true,
+		preferences = createDefaultPlayerPreferences(),
+		onPreferencesChange = () => true,
+		autoNext = false,
+		hasNextLesson = false,
+		hasPreviousLesson = false,
+		onAutoNext = () => undefined,
+		onAutoNextChange = () => true,
+		onPreviousLesson = () => undefined,
+		onNextLesson = () => undefined,
+		lessonTitle = null,
+		initialPosition = null
+	}: {
+		lesson: Lesson;
+		courseId: string;
+		mediaError: string;
+		onMediaError: (code?: number) => void;
+		studyEnabled?: boolean;
+		preferences?: PlayerPreferences;
+		onPreferencesChange?: (next: PlayerPreferences) => boolean;
+		autoNext?: boolean;
+		hasNextLesson?: boolean;
+		hasPreviousLesson?: boolean;
+		onAutoNext?: () => void;
+		onAutoNextChange?: (enabled: boolean) => boolean;
+		onPreviousLesson?: () => void;
+		onNextLesson?: () => void;
+		lessonTitle?: string | null;
+		initialPosition?: number | null;
+	} = $props();
 
 	const lessonPreference = $derived(preferences.lessons[lessonPreferenceKey(courseId, lesson.path)] ?? {});
 	const availableMedia = $derived(lesson.media.filter((file) => file.availability?.trim().toLowerCase() !== 'missing'));
@@ -22,12 +71,16 @@
 	const syncEnabled = $derived(studySyncEnabled(studyEnabled, mediaId, source));
 
 	let media: HTMLMediaElement | null = $state(null);
+	let playerContainerRef: HTMLElement | null = $state(null);
 	let currentTime = $state(0);
 	let duration = $state(0);
 	let lastAppliedPosition = $state<number | null>(null);
 
 	$effect(() => {
-		if (source) lastAppliedPosition = null;
+		if (source) {
+			lastAppliedPosition = null;
+			playbackErrorCode = null;
+		}
 	});
 
 	$effect(() => {
@@ -45,6 +98,7 @@
 	let captionSource = $state<string | null>(null);
 	let captionDownload = $state<string | null>(null);
 	let captionMessage = $state('');
+	let playbackErrorCode: number | null = $state(null);
 
 	let studyTab: 'notes' | 'flashcards' = $state('notes');
 
@@ -85,8 +139,61 @@
 		onAutoNextChange(enabled);
 	}
 
+	function changeSpeed(speed: PlaybackSpeed) {
+		if (playbackKind === 'audio') {
+			onPreferencesChange({ ...preferences, audioSpeed: speed });
+		} else {
+			onPreferencesChange({ ...preferences, videoSpeed: speed });
+		}
+	}
+
+	function seekOffset(seconds: number) {
+		if (!media) return;
+		const target = media.currentTime + seconds;
+		media.currentTime = Math.max(0, Math.min(media.duration || Number.POSITIVE_INFINITY, target));
+	}
+
+	function toggleFullscreen() {
+		if (!playerContainerRef) return;
+		if (document.fullscreenElement) {
+			void document.exitFullscreen().catch(() => undefined);
+		} else {
+			void playerContainerRef.requestFullscreen().catch(() => undefined);
+		}
+	}
+
 	function handleKeydown(event: KeyboardEvent) {
-		const action = playerShortcutAction(event.key, event.target === event.currentTarget);
+		const target = event.target as HTMLElement | null;
+		if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)) {
+			return;
+		}
+
+		if (event.key === '[' || event.key === '{') {
+			event.preventDefault();
+			changeSpeed(nextSpeed(playbackSpeed, 'down'));
+			return;
+		}
+		if (event.key === ']' || event.key === '}') {
+			event.preventDefault();
+			changeSpeed(nextSpeed(playbackSpeed, 'up'));
+			return;
+		}
+		if ((event.key === 'f' || event.key === 'F') && playbackKind === 'video') {
+			event.preventDefault();
+			toggleFullscreen();
+			return;
+		}
+
+		const isInteractiveButton = target?.tagName === 'BUTTON';
+		if (isInteractiveButton && (event.key === ' ' || event.key === 'Spacebar')) {
+			return;
+		}
+
+		const isPlayerContext =
+			event.target === event.currentTarget ||
+			event.target === media ||
+			(playerContainerRef !== null && playerContainerRef.contains(target as Node));
+		const action = playerShortcutAction(event.key, isPlayerContext);
 		if (!action || !media) return;
 		event.preventDefault();
 		if (action === 'toggle-playback') {
@@ -94,7 +201,7 @@
 			else media.pause();
 		} else {
 			const offset = action === 'seek-backward' ? -10 : 10;
-			media.currentTime = Math.max(0, Math.min(media.duration || Number.POSITIVE_INFINITY, media.currentTime + offset));
+			seekOffset(offset);
 		}
 	}
 
@@ -120,7 +227,9 @@
 		if (format === 'vtt') {
 			captionSource = url;
 		} else if (format === 'ass') {
-			captionMessage = 'Legendas ASS/SSA não são compatíveis com <track>; baixe o arquivo para usar um conversor.';
+			captionMessage = 'Legendas ASS/SSA contêm estilos avançados não suportados nativamente pelo reprodutor; baixe o arquivo para usar externamente.';
+		} else if (format === 'sub') {
+			captionMessage = 'Legendas em formato .sub utilizam estrutura gráfica/MicroDVD não suportada nativamente; baixe o arquivo para uso externo.';
 		} else if (format === 'srt' && srtConversionSupported) {
 			void fetch(url).then((response) => {
 				if (!response.ok) throw new Error('Falha ao carregar legenda.');
@@ -163,6 +272,7 @@
 	function resume() {
 		if (!media || !progress?.recorded) return;
 		media.currentTime = progress.positionSeconds;
+		void media.play().catch(() => undefined);
 	}
 
 	async function toggleCompleted() {
@@ -200,16 +310,42 @@
 		}
 		if (shouldAutoAdvance(autoNext, hasNextLesson)) onAutoNext();
 	}
+
+	function handleMediaError() {
+		const code = media?.error?.code ?? null;
+		playbackErrorCode = code;
+		onMediaError(code ?? undefined);
+	}
+
+	function handleLoadedMetadata() {
+		if (initialPosition && initialPosition > 0 && media) {
+			media.currentTime = initialPosition;
+			lastAppliedPosition = initialPosition;
+		}
+	}
 </script>
 {#snippet lessonHeading()}
 	{#if lessonTitle}<h2 class="player-lesson-title">{lessonTitle}</h2>{/if}
 {/snippet}
-{#if mediaError}<div class="lv-player-error" role="alert"><strong>{mediaError}</strong><p>O arquivo local pode ter sido movido ou o disco pode estar desconectado. Reconecte a pasta e use “Atualizar cursos” na biblioteca; seu progresso permanece salvo.</p><a class="lv-btn lvui-btn" href="#/home">Ir à biblioteca para atualizar cursos</a></div>{@render lessonHeading()}
+{#if mediaError}
+	<div class="lv-player-error" role="alert">
+		<strong>{mediaError}</strong>
+		{#if playbackErrorCode === 4}
+			<p>O arquivo foi localizado, mas o formato ou codec desta mídia não é suportado pelo seu navegador/webview atual (ex.: HEVC/H.265, AC3 ou contêiner específico). É possível assistir com um reprodutor externo ou convertê-lo para MP4 (H.264 / AAC).</p>
+		{:else if playbackErrorCode === 3}
+			<p>A decodificação do áudio/vídeo falhou. O arquivo pode estar corrompido ou o codec não é suportado pelo hardware.</p>
+		{:else}
+			<p>O arquivo local pode ter sido movido ou o disco pode estar desconectado. Reconecte a pasta e use “Atualizar cursos” na biblioteca; seu progresso permanece salvo.</p>
+		{/if}
+		<a class="lv-btn lvui-btn" href="#/home">Ir à biblioteca para atualizar cursos</a>
+	</div>{@render lessonHeading()}
 {:else if source}
 	<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions (o grupo identificado do player recebe foco para ativar atalhos) -->
-	<div class="player-container {playbackKind === 'audio' ? 'audio-container' : 'video-container'}" role="group" tabindex="0" onkeydown={handleKeydown} aria-label="Player" aria-keyshortcuts="Space ArrowLeft ArrowRight">
-		{#if availableMedia.length > 1}<label class="player-select-label">Mídia da aula<select aria-label="Mídia da aula" value={playable?.mediaId ?? ''} onchange={selectMedia}>{#each availableMedia as item}<option value={item.mediaId ?? ''}>{item.name}</option>{/each}</select></label>{/if}
-		{#if availableSubtitles.length > 0}<label class="player-select-label">Legenda<select aria-label="Legenda da aula" value={lessonPreference.subtitleId === null ? '' : selectedSubtitle?.mediaId ?? ''} onchange={selectSubtitle}><option value="">Sem legendas</option>{#each availableSubtitles as item}<option value={item.mediaId ?? ''}>{item.name}</option>{/each}</select></label>{/if}
+	<div bind:this={playerContainerRef} class="player-container {playbackKind === 'audio' ? 'audio-container' : 'video-container'}" role="group" tabindex="0" onkeydown={handleKeydown} aria-label="Player" aria-keyshortcuts="Space ArrowLeft ArrowRight k j l [ ] f">
+		<div class="player-top-controls">
+			{#if availableMedia.length > 1}<label class="player-select-label">Mídia da aula<select aria-label="Mídia da aula" value={playable?.mediaId ?? ''} onchange={selectMedia}>{#each availableMedia as item}<option value={item.mediaId ?? ''}>{item.name}</option>{/each}</select></label>{/if}
+			{#if availableSubtitles.length > 0}<label class="player-select-label">Legenda<select aria-label="Legenda da aula" value={lessonPreference.subtitleId === null ? '' : selectedSubtitle?.mediaId ?? ''} onchange={selectSubtitle}><option value="">Sem legendas</option>{#each availableSubtitles as item}<option value={item.mediaId ?? ''}>{item.name}</option>{/each}</select></label>{/if}
+		</div>
 		{#if playbackKind === 'audio'}
 			<div class="audio-banner" aria-hidden="true">
 				<div class="audio-icon-wrap">
@@ -220,15 +356,88 @@
 				<span class="audio-label">Faixa de áudio · {lesson.title}</span>
 			</div>
 			<!-- svelte-ignore a11y_media_has_caption -->
-			<audio class="player-media player-audio" controls preload="metadata" src={source} aria-label={`Player da aula${lessonTitle ? `: ${lessonTitle}` : ''}`} bind:this={media} bind:currentTime={currentTime} bind:duration={duration} ontimeupdate={handleTimeUpdate} onended={handleEnded} onerror={onMediaError}>
+			<audio class="player-media player-audio" controls preload="metadata" src={source} aria-label={`Player da aula${lessonTitle ? `: ${lessonTitle}` : ''}`} bind:this={media} bind:currentTime={currentTime} bind:duration={duration} ontimeupdate={handleTimeUpdate} onended={handleEnded} onloadedmetadata={handleLoadedMetadata} onerror={handleMediaError}>
 				{#if captionSource}<track kind="captions" src={captionSource} label="Legenda" default />{/if}
 			</audio>
 		{:else}
 			<!-- svelte-ignore a11y_media_has_caption -->
-			<video class="player-media" controls preload="metadata" src={source} aria-label={`Player da aula${lessonTitle ? `: ${lessonTitle}` : ''}`} bind:this={media} bind:currentTime={currentTime} bind:duration={duration} ontimeupdate={handleTimeUpdate} onended={handleEnded} onerror={onMediaError}>
+			<video class="player-media" controls preload="metadata" src={source} aria-label={`Player da aula${lessonTitle ? `: ${lessonTitle}` : ''}`} bind:this={media} bind:currentTime={currentTime} bind:duration={duration} ontimeupdate={handleTimeUpdate} onended={handleEnded} onloadedmetadata={handleLoadedMetadata} onerror={handleMediaError}>
 				{#if captionSource}<track kind="captions" src={captionSource} label="Legenda" default />{/if}
 			</video>
 		{/if}
+
+		<!-- Barra de Controles Rápidos do Player -->
+		<div class="player-quick-bar" role="toolbar" aria-label="Controles rápidos do reprodutor">
+			<!-- Seek Rápido -->
+			<div class="player-btn-group" role="group" aria-label="Busca de tempo">
+				<button type="button" class="player-tool-btn" onclick={() => seekOffset(-10)} title="Voltar 10s (seta esquerda ou J)">
+					<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<path d="M11 17l-5-5 5-5M18 17l-5-5 5-5" />
+					</svg>
+					<span>-10s</span>
+				</button>
+				<button type="button" class="player-tool-btn" onclick={() => seekOffset(10)} title="Avançar 10s (seta direita ou L)">
+					<span>+10s</span>
+					<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<path d="M13 17l5-5-5-5M6 17l5-5-5-5" />
+					</svg>
+				</button>
+			</div>
+
+			<!-- Seletor de Velocidade -->
+			<div class="player-speed-selector" role="group" aria-label="Velocidade de reprodução">
+				<span class="player-tool-label">Velocidade:</span>
+				<div class="player-speed-pills">
+					{#each PLAYBACK_SPEEDS as sp (sp)}
+						<button
+							type="button"
+							class="player-speed-btn"
+							class:is-active={playbackSpeed === sp}
+							aria-pressed={playbackSpeed === sp}
+							onclick={() => changeSpeed(sp)}
+						>
+							{sp}×
+						</button>
+					{/each}
+				</div>
+			</div>
+
+			<!-- Navegação de Aulas e Tela Cheia -->
+			<div class="player-nav-group" role="group" aria-label="Navegação de aulas">
+				<button
+					type="button"
+					class="player-tool-btn player-nav-btn"
+					disabled={!hasPreviousLesson}
+					onclick={onPreviousLesson}
+					title="Ir para aula anterior"
+				>
+					← Anterior
+				</button>
+				<button
+					type="button"
+					class="player-tool-btn player-nav-btn"
+					disabled={!hasNextLesson}
+					onclick={onNextLesson}
+					title="Ir para próxima aula"
+				>
+					Próxima →
+				</button>
+				{#if playbackKind === 'video'}
+					<button
+						type="button"
+						class="player-tool-btn player-fullscreen-btn"
+						onclick={toggleFullscreen}
+						title="Alternar tela cheia (F)"
+						aria-label="Tela cheia"
+					>
+						<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+							<path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3" />
+						</svg>
+					</button>
+				{/if}
+			</div>
+		</div>
+
 		{@render lessonHeading()}
 	</div>
 {:else if availability === 'missing'}<div class="lv-player-error" role="status"><strong>Mídia indisponível</strong><p>A mídia desta aula não está no disco. A aula e o seu progresso foram preservados. Reconecte o disco ou reponha o arquivo e use “Atualizar cursos” na biblioteca.</p><a class="lv-btn lvui-btn" href="#/home">Ir à biblioteca para atualizar cursos</a></div>{@render lessonHeading()}
@@ -310,6 +519,132 @@
 {/if}
 
 <style>
+	.player-top-controls {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		flex-wrap: wrap;
+		margin-bottom: 0.5rem;
+	}
+
+	.player-quick-bar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+		flex-wrap: wrap;
+		padding: 0.5rem 0.75rem;
+		background: var(--surface-2);
+		border: 1px solid var(--line);
+		border-radius: var(--radius);
+		margin-top: 0.5rem;
+		font-size: 0.8125rem;
+	}
+
+	.player-btn-group,
+	.player-nav-group,
+	.player-speed-selector {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+	}
+
+	.player-tool-label {
+		color: var(--muted);
+		font-size: 0.75rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+		margin-right: 0.2rem;
+	}
+
+	.player-tool-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		background: var(--surface);
+		border: 1px solid var(--line);
+		color: var(--ink);
+		padding: 0.25rem 0.55rem;
+		border-radius: calc(var(--radius) - 2px);
+		font-size: 0.8125rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: background-color 0.15s ease, border-color 0.15s ease;
+	}
+
+	.player-tool-btn:hover:not(:disabled) {
+		background: var(--hover);
+		border-color: var(--line-strong);
+	}
+
+	.player-tool-btn:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
+
+	.player-speed-pills {
+		display: inline-flex;
+		align-items: center;
+		background: var(--surface);
+		border: 1px solid var(--line);
+		border-radius: calc(var(--radius) - 2px);
+		padding: 2px;
+		gap: 2px;
+	}
+
+	.player-speed-btn {
+		background: transparent;
+		border: 1px solid transparent;
+		color: var(--muted);
+		padding: 0.15rem 0.4rem;
+		font-size: 0.75rem;
+		font-weight: 600;
+		border-radius: 4px;
+		cursor: pointer;
+		transition: all 0.12s ease;
+	}
+
+	.player-speed-btn:hover {
+		color: var(--ink);
+	}
+
+	.player-speed-btn.is-active {
+		background: var(--surface-2);
+		color: var(--accent);
+		border-color: var(--line);
+		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+	}
+
+	.player-fullscreen-btn {
+		padding: 0.25rem 0.4rem;
+	}
+
+	:global(.player-container:fullscreen) {
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+		align-items: center;
+		background: #000000;
+		width: 100vw;
+		height: 100vh;
+		padding: 1rem;
+		box-sizing: border-box;
+	}
+
+	:global(.player-container:fullscreen .player-media) {
+		max-height: calc(100vh - 120px);
+		width: 100%;
+		object-fit: contain;
+	}
+
+	:global(.player-container:fullscreen .player-quick-bar) {
+		max-width: 900px;
+		width: 100%;
+		background: rgba(24, 34, 48, 0.95);
+		border-color: rgba(255, 255, 255, 0.15);
+	}
+
 	.player-study-section {
 		margin-top: 1.5rem;
 		display: flex;
@@ -321,5 +656,20 @@
 		background: transparent;
 		padding: 0;
 		border-bottom: 1px solid var(--line);
+	}
+
+	@media (max-width: 640px) {
+		.player-quick-bar {
+			flex-direction: column;
+			align-items: stretch;
+			gap: 0.65rem;
+		}
+
+		.player-btn-group,
+		.player-nav-group,
+		.player-speed-selector {
+			justify-content: space-between;
+			width: 100%;
+		}
 	}
 </style>

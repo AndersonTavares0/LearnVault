@@ -5,8 +5,8 @@
 
 use learnvault_core::paths::relative_path_key;
 use learnvault_core::{
-    Availability, CatalogFile, CatalogNode, Database, Error, KeyMode, MediaKind, NodeRole,
-    build_catalog, course_file_lessons,
+    Availability, Catalog, CatalogFile, CatalogNode, Database, Error, KeyMode, MediaKind, NodeRole,
+    build_catalog, course_file_lessons, shape_course_catalog,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -225,6 +225,17 @@ fn titles_are_cleaned_and_the_path_keeps_the_identity() -> TestResult {
         catalog.categories[0].children[0].path,
         catalog.categories[1].children[0].path
     );
+    Ok(())
+}
+
+#[test]
+fn purely_numeric_titles_preserve_number_as_title() -> TestResult {
+    let db = library_db()?;
+    media(&db, "m1", "2024/01/aula.mp4")?;
+
+    let catalog = build_catalog(&db, LIB)?;
+    assert_eq!(catalog.categories[0].title, "2024");
+    assert_eq!(catalog.categories[0].children[0].title, "01");
     Ok(())
 }
 
@@ -787,4 +798,55 @@ fn course_grouping_preserves_nested_modules_and_file_identities() {
     assert_eq!(grouped.children[0].files[0].media_id, "course-media");
     assert_eq!(grouped.children[1].path, "Curso/Modulo 2");
     assert_eq!(grouped.children[1].children[0].files[0].media_id, "nested");
+}
+
+#[test]
+fn flat_course_root_media_is_shaped_into_first_level_lessons() {
+    let catalog = Catalog {
+        complete: true,
+        loose_files: vec![
+            catalog_file("intro-vid", "01 - Intro.mp4", MediaKind::Media),
+            catalog_file("intro-sub", "01 - Intro.srt", MediaKind::Subtitle),
+            catalog_file("handout", "handout.pdf", MediaKind::Material),
+        ],
+        categories: Vec::new(),
+    };
+
+    let (children, loose) = shape_course_catalog(catalog);
+
+    assert_eq!(children.len(), 1);
+    assert_eq!(children[0].role, NodeRole::Lesson);
+    assert_eq!(children[0].title, "Intro");
+    assert_eq!(children[0].path, "01 - Intro.mp4");
+    assert_eq!(children[0].files.len(), 2);
+    assert_eq!(children[0].files[0].media_id, "intro-vid");
+    assert_eq!(children[0].files[1].media_id, "intro-sub");
+
+    assert_eq!(loose.len(), 1);
+    assert_eq!(loose[0].media_id, "handout");
+}
+
+#[test]
+fn large_directory_hierarchy_builds_fast_without_quadratic_slowdown() -> TestResult {
+    let db = library_db()?;
+    // Insere 300 pastas com 2 aulas cada em profundidade 3
+    for m in 1..=100 {
+        for l in 1..=3 {
+            let path = format!("Curso/Modulo {m:03}/Aula {l:02}/video.mp4");
+            media(&db, &format!("m-{m}-{l}"), &path)?;
+        }
+    }
+
+    let start = std::time::Instant::now();
+    let catalog = build_catalog(&db, LIB)?;
+    let elapsed = start.elapsed();
+
+    assert!(catalog.complete);
+    assert_eq!(catalog.categories.len(), 1);
+    // Deve concluir em bem menos de 1 segundo (tipicamente < 50ms)
+    assert!(
+        elapsed < std::time::Duration::from_millis(800),
+        "build_catalog demorou {elapsed:?}, indicando regressão quadrática"
+    );
+    Ok(())
 }

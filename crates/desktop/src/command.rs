@@ -86,15 +86,12 @@ pub fn catalog_with_orders(
     for course in courses {
         let inner = learnvault_core::build_catalog(database, &course.id)
             .map_err(|_| IpcError::catalog_unavailable())?;
-        let mut categories: Vec<learnvault_core::CatalogNode> = inner
-            .categories
-            .into_iter()
-            .map(learnvault_core::course_file_lessons)
-            .collect();
+        let is_complete = inner.complete;
+        let (mut categories, loose_files) = learnvault_core::shape_course_catalog(inner);
         learnvault_core::apply_order(&mut categories, orders.get(&course.id).unwrap_or(&empty));
         let shaped = learnvault_core::Catalog {
-            complete: inner.complete,
-            loose_files: inner.loose_files,
+            complete: is_complete,
+            loose_files,
             categories,
         };
         complete = complete && shaped.complete;

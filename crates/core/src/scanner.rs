@@ -26,12 +26,12 @@ use crate::paths::{KeyMode, relative_path_key};
 
 /// Extensões reconhecidas como mídia reproduzível.
 const MEDIA_EXTENSIONS: &[&str] = &[
-    "mp4", "webm", "mkv", "m3u8", "ts", "ogv", "mp3", "wav", "ogg", "oga", "m4a", "flac", "aac",
-    "opus", "weba", "wma",
+    "mp4", "m4v", "mov", "webm", "mkv", "m3u8", "ts", "ogv", "mp3", "wav", "ogg", "oga", "m4a",
+    "flac", "aac", "opus", "weba", "wma",
 ];
 
 /// Extensões reconhecidas como legenda.
-const SUBTITLE_EXTENSIONS: &[&str] = &["srt", "vtt", "ass", "ssa"];
+const SUBTITLE_EXTENSIONS: &[&str] = &["srt", "vtt", "ass", "ssa", "sub"];
 
 /// Tamanho mínimo para que um arquivo `.ts` seja tratado como mídia.
 ///
