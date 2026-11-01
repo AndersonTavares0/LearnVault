@@ -45,4 +45,22 @@ test('deploy scripts and configs exist and have proper security settings', () =>
     assert.match(updaterComposeContent, /image:\s*docker:cli/, 'updater deve usar imagem docker:cli');
     assert.match(updaterComposeContent, /working_dir:\s*\/compose/, 'updater deve ter working_dir /compose');
     assert.match(updaterComposeContent, /\/var\/run\/docker\.sock/, 'updater companion deve ter acesso ao socket do docker');
+    assert.match(updaterComposeContent, /ghcr\.io\/andersontavares0\/learnvault/, 'updater deve usar o repositório correto no GHCR');
+
+    const envExamplePath = resolve(root, 'deploy/compose/.env.example');
+    assert.ok(existsSync(envExamplePath), '.env.example deve existir');
+    const envExampleContent = readFileSync(envExamplePath, 'utf8');
+    assert.match(envExampleContent, /ghcr\.io\/andersontavares0\/learnvault/, '.env.example deve documentar o repositório oficial no GHCR');
+    assert.match(updateContent, /ghcr\.io\/andersontavares0\/learnvault/, 'update.sh deve usar o repositório oficial no GHCR');
+});
+
+test('release workflow mandates signed Windows updater assets and latest.json', () => {
+    const releaseWfPath = resolve(root, '.github/workflows/release.yml');
+    assert.ok(existsSync(releaseWfPath), 'release.yml deve existir');
+    const content = readFileSync(releaseWfPath, 'utf8');
+    assert.match(content, /TAURI_SIGNING_PRIVATE_KEY/, 'deve exigir a chave de assinatura');
+    assert.match(content, /learnvault-windows-\$\{RELEASE_TAG\}\.nsis\.zip/, 'deve incluir o bundle nsis.zip nos esperados');
+    assert.match(content, /learnvault-windows-\$\{RELEASE_TAG\}\.nsis\.zip\.sig/, 'deve incluir a assinatura .sig nos esperados');
+    assert.match(content, /latest\.json/, 'deve incluir latest.json nos esperados');
+    assert.match(content, /windows-x86_64-nsis/, 'manifesto latest.json deve incluir o alvo windows-x86_64-nsis');
 });

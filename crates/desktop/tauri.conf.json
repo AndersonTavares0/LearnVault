@@ -39,5 +39,13 @@
         "uninstallerIcon": "icons/icon.ico"
       }
     }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM4QTA1RDVDNzY4MTQ1NTQKUldSVVJZRjJYRjJnT0VwZG12RE9PdlpyRE04c1JuTUVNbHh1TEU1ZUprclVVZXYrWTh6TDV4Q1oK",
+      "endpoints": [
+        "https://github.com/AndersonTavares0/LearnVault/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

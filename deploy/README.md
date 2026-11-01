@@ -55,8 +55,14 @@ Edite o arquivo `.env` e defina suas credenciais de administrador e caminhos:
 
 ### 2. Executar com Docker Compose
 
+Você pode compilar localmente ou utilizar a imagem pré-compilada oficial publicada no GitHub Container Registry (GHCR):
+
 ```sh
-docker compose up -d
+# Opção A: Usando a imagem oficial do GHCR (recomendado para produção)
+LEARNVAULT_IMAGE=ghcr.io/andersontavares0/learnvault:latest docker compose up -d
+
+# Opção B: Compilar imagem local a partir do código fonte
+docker compose up -d --build
 ```
 
 Acesse no seu navegador: `http://localhost:8090`.

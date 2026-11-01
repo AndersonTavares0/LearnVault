@@ -193,7 +193,12 @@ jobs:
         shell: pwsh
         env:
           RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
+          if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
+            throw "A chave secreta TAURI_SIGNING_PRIVATE_KEY é obrigatória para assinar os artefatos de release do Windows"
+          }
           $releaseVersion = $env:RELEASE_TAG.Substring(1)
           $configPath = Join-Path $PWD "tauri.release.json"
           @{ version = $releaseVersion } | ConvertTo-Json -Compress | Set-Content -Path $configPath -NoNewline
@@ -202,6 +207,7 @@ jobs:
         shell: pwsh
         env:
           RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
           $installers = @(Get-ChildItem target/release/bundle/nsis -Filter *.exe -File)
@@ -209,15 +215,90 @@ jobs:
             throw "Expected exactly one NSIS installer, found $($installers.Count)"
           }
           Copy-Item $installers[0].FullName (Join-Path $PWD "dist/learnvault-windows-$env:RELEASE_TAG.exe")
+          $zips = @(Get-ChildItem target/release/bundle/nsis -Filter *.nsis.zip -File)
+          if ($zips.Count -ne 1) {
+            throw "Expected exactly one NSIS updater bundle, found $($zips.Count)"
+          }
+          Copy-Item $zips[0].FullName (Join-Path $PWD "dist/learnvault-windows-$env:RELEASE_TAG.nsis.zip")
+          $sigs = @(Get-ChildItem target/release/bundle/nsis -Filter *.nsis.zip.sig -File)
+          if ($sigs.Count -ne 1) {
+            throw "Expected exactly one NSIS updater signature, found $($sigs.Count)"
+          }
+          Copy-Item $sigs[0].FullName (Join-Path $PWD "dist/learnvault-windows-$env:RELEASE_TAG.nsis.zip.sig")
+          $sigContent = (Get-Content $sigs[0].FullName -Raw).Trim()
+          if ([string]::IsNullOrWhiteSpace($sigContent)) {
+            throw "A assinatura do updater gerada em $($sigs[0].FullName) está vazia"
+          }
+          $assetUrl = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:RELEASE_TAG/learnvault-windows-$env:RELEASE_TAG.nsis.zip"
+          $latest = @{
+            version = $env:RELEASE_TAG
+            notes = "LearnVault release $env:RELEASE_TAG"
+            pub_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+            platforms = @{
+              "windows-x86_64" = @{
+                signature = $sigContent
+                url = $assetUrl
+              }
+              "windows-x86_64-nsis" = @{
+                signature = $sigContent
+                url = $assetUrl
+              }
+            }
+          }
+          $latest | ConvertTo-Json -Depth 4 | Set-Content -Path (Join-Path $PWD "dist/latest.json") -Encoding UTF8
+          if (-not (Test-Path (Join-Path $PWD "dist/latest.json"))) {
+            throw "Falha ao gerar o manifesto dist/latest.json obrigatório"
+          }
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-windows
-          path: dist/*.exe
+          path: dist/*
           if-no-files-found: error
+
+  container:
+    name: Build and publish container image (GHCR)
+    needs: validate-tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ needs.validate-tag.outputs.tag }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@49b3bc8e6bdd4460bfa22da0201984444f8750d4 # v3.2.0
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@c47758b77c9736f4b2ef4073d4d51994fabfe349 # v3.7.1
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@369eb591f429131d688f8d6b76e9f6580a9f2118 # v5.6.1
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ needs.validate-tag.outputs.tag }}
+            type=raw,value=latest
+      - name: Build and push OCI image
+        uses: docker/build-push-action@4f58ea79222b3b9dc2c8bbdd6debcef730109a75 # v6.9.0
+        with:
+          context: .
+          file: deploy/container/Containerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
 
   publish:
     name: Publish release assets
-    needs: [validate-tag, linux, linux-arm64, windows]
+    needs: [validate-tag, linux, linux-arm64, windows, container]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -253,6 +334,9 @@ jobs:
             "learnvault-linux-amd64.tar.gz"
             "learnvault-linux-arm64.tar.gz"
             "learnvault-windows-${RELEASE_TAG}.exe"
+            "learnvault-windows-${RELEASE_TAG}.nsis.zip"
+            "learnvault-windows-${RELEASE_TAG}.nsis.zip.sig"
+            "latest.json"
           )
           mapfile -t actual < <(find dist -maxdepth 1 -type f -printf '%f\n' | sort)
           if (( ${#actual[@]} != ${#expected[@]} )); then
@@ -267,17 +351,28 @@ jobs:
           done
           printf '%s\n' "${actual[@]}" | sort | diff -u <(printf '%s\n' "${expected[@]}" | sort) -
           (cd dist && sha256sum "${expected[@]}" > SHA256SUMS)
+          (cd dist && sha256sum -c SHA256SUMS)
       - name: Upload assets to the published release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
         run: |
           set -euo pipefail
+          expected=(
+            "learnvault-linux-amd64.tar.gz"
+            "learnvault-linux-arm64.tar.gz"
+            "learnvault-windows-${RELEASE_TAG}.exe"
+            "learnvault-windows-${RELEASE_TAG}.nsis.zip"
+            "learnvault-windows-${RELEASE_TAG}.nsis.zip.sig"
+            "latest.json"
+          )
+          upload_args=()
+          for asset in "${expected[@]}"; do
+            upload_args+=("dist/$asset")
+          done
+          upload_args+=("dist/SHA256SUMS")
           gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-            "dist/learnvault-linux-amd64.tar.gz" \
-            "dist/learnvault-linux-arm64.tar.gz" \
-            "dist/learnvault-windows-${RELEASE_TAG}.exe" \
-            "dist/SHA256SUMS" \
+            "${upload_args[@]}" \
             --clobber
       - name: Attribute release contributors
         shell: bash

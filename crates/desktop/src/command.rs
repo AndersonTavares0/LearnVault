@@ -466,3 +466,66 @@ fn pick_cover(app: &tauri::AppHandle) -> Option<PathBuf> {
         .blocking_pick_file()
         .and_then(|path| path.into_path().ok())
 }
+
+/// Consulta a disponibilidade de nova versão via tauri-plugin-updater de forma não-bloqueante e segura.
+///
+/// Diferencia a ausência de atualização (`available: false`) de falhas de conexão/rede (`IpcError::update_check_failed()`),
+/// mantendo o aplicativo totalmente funcional em modo offline sem travar nem expor dados sensíveis.
+#[tauri::command]
+pub async fn desktop_check_update(
+    app: tauri::AppHandle,
+) -> Result<crate::dto::DesktopUpdateInfoDto, IpcError> {
+    use tauri_plugin_updater::UpdaterExt;
+
+    let current_version = app.package_info().version.to_string();
+    let updater = match app.updater() {
+        Ok(updater) => updater,
+        Err(_) => {
+            return Ok(crate::dto::DesktopUpdateInfoDto {
+                available: false,
+                current_version,
+                version: None,
+                date: None,
+                body: None,
+            });
+        }
+    };
+
+    match updater.check().await {
+        Ok(Some(update)) => Ok(crate::dto::DesktopUpdateInfoDto {
+            available: true,
+            current_version,
+            version: Some(update.version),
+            date: update.date.map(|d| d.to_string()),
+            body: update.body,
+        }),
+        Ok(None) => Ok(crate::dto::DesktopUpdateInfoDto {
+            available: false,
+            current_version,
+            version: None,
+            date: None,
+            body: None,
+        }),
+        Err(_) => Err(IpcError::update_check_failed()),
+    }
+}
+
+/// Baixa e aplica a atualização assinada (Ed25519) e reinicia o aplicativo.
+#[tauri::command]
+pub async fn desktop_install_update(app: tauri::AppHandle) -> Result<bool, IpcError> {
+    use tauri_plugin_updater::UpdaterExt;
+
+    let updater = app.updater().map_err(|_| IpcError::update_unavailable())?;
+    let update = match updater.check().await {
+        Ok(Some(update)) => update,
+        Ok(None) => return Ok(false),
+        Err(_) => return Err(IpcError::update_check_failed()),
+    };
+
+    update
+        .download_and_install(|_downloaded, _total| {}, || {})
+        .await
+        .map_err(|_| IpcError::update_unavailable())?;
+
+    app.restart();
+}

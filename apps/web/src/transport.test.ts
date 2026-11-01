@@ -9,8 +9,8 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 
 describe('transport contract', () => {
 	it('exposes the HTTP transport seam without routing assumptions', () => {
-		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'studySummary', 'listNotes', 'createNote', 'updateNote', 'deleteNote', 'recordFocusSession', 'listFocusSessions', 'focusSummary', 'rewardSummary', 'claimDailyMission', 'setWeeklyGoal', 'userAvatarUrl', 'uploadUserAvatar', 'deleteUserAvatar', 'checkUpdate', 'updateHistory', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover'];
-		expect(methods).toHaveLength(33);
+		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'studySummary', 'listNotes', 'createNote', 'updateNote', 'deleteNote', 'recordFocusSession', 'listFocusSessions', 'focusSummary', 'rewardSummary', 'claimDailyMission', 'setWeeklyGoal', 'userAvatarUrl', 'uploadUserAvatar', 'deleteUserAvatar', 'checkUpdate', 'installUpdate', 'updateHistory', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover'];
+		expect(methods).toHaveLength(34);
 	});
 	it('does not offer native folder selection over HTTP', async () => {
 		await expect(new HttpTransport().importCourse()).rejects.toThrow('desktop é quem escolhe pastas');
@@ -971,13 +971,61 @@ describe('desktop transport over IPC', () => {
 		vi.mocked(invoke).mockRejectedValue({ message: 'sem código /etc/shadow' });
 		await expect(new DesktopStub().importCourseCover('course-1')).rejects.toThrow('Não foi possível salvar a capa do curso.');
 	});
-	it('reports the update check as disabled on the desktop without touching fetch', async () => {
+	it('checks updates via desktop IPC without touching fetch', async () => {
 		const fetchMock = vi.fn();
 		vi.stubGlobal('fetch', fetchMock);
+		vi.mocked(invoke).mockResolvedValueOnce({
+			available: true,
+			currentVersion: '0.8.0',
+			version: '0.9.0',
+			body: 'Novos recursos botânicos',
+			date: '2026-11-01'
+		});
 		const desktop: Transport = new DesktopStub();
-		await expect(desktop.checkUpdate(true)).resolves.toMatchObject({ enabled: false, available: false, error: null });
+		const status = await desktop.checkUpdate(true);
+		expect(status).toMatchObject({
+			enabled: true,
+			available: true,
+			current: '0.8.0',
+			latest: '0.9.0',
+			changelog: 'Novos recursos botânicos'
+		});
 		expect(fetchMock).not.toHaveBeenCalled();
-		expect(invoke).not.toHaveBeenCalled();
+		expect(invoke).toHaveBeenCalledWith('desktop_check_update');
+
+		vi.mocked(invoke).mockResolvedValueOnce(true);
+		await expect(desktop.installUpdate?.()).resolves.toBe(true);
+		expect(invoke).toHaveBeenCalledWith('desktop_install_update');
+
+		// Ausência de atualização (up-to-date): available é false e error é null
+		vi.mocked(invoke).mockResolvedValueOnce({
+			available: false,
+			currentVersion: '0.8.0',
+			version: null,
+			body: null,
+			date: null
+		});
+		const upToDate = await desktop.checkUpdate(true);
+		expect(upToDate).toMatchObject({
+			enabled: true,
+			available: false,
+			current: '0.8.0',
+			latest: null,
+			error: null
+		});
+
+		// Falha de rede ou endpoint inacessível (offline): available é false e error contém a mensagem
+		vi.mocked(invoke).mockRejectedValueOnce({
+			code: 'update_check_failed',
+			message: 'ignorado_pelo_sanitizador'
+		});
+		const offlineStatus = await desktop.checkUpdate(true);
+		expect(offlineStatus).toMatchObject({
+			enabled: true,
+			available: false,
+			error: 'Não foi possível conectar ao servidor de atualizações.'
+		});
+
 		vi.unstubAllGlobals();
 	});
 	it('fetches update history over HTTP', async () => {
