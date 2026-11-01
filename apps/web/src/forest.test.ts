@@ -28,6 +28,9 @@ describe('forest logic', () => {
 		expect(treeStageName('sapling')).toBe('Brotinho');
 		expect(treeStageName('oak')).toBe('Carvalho Frondoso');
 		expect(treeStageName('pine')).toBe('Pinheiro Nobre');
+		expect(treeStageName('sakura')).toBe('Cerejeira em Flor');
+		expect(treeStageName('willow')).toBe('Salgueiro Chorão');
+		expect(treeStageName('ginkgo')).toBe('Ginkgo Dourado');
 		expect(treeStageName('ancient')).toBe('Árvore Ancestral');
 		expect(treeStageName('withered')).toBe('Árvore Seca');
 
@@ -93,6 +96,13 @@ describe('forest logic', () => {
 		expect(forest[0].stage).toBe('oak');
 		expect(forest[1].sessionId).toBe('s2');
 		expect(forest[1].stage).toBe('withered');
+
+		// With custom species seed
+		const forestWithSeed = buildForest(sessions, { s1: 'sakura', s2: 'ginkgo' });
+		expect(forestWithSeed[0].stage).toBe('sakura');
+		expect(forestWithSeed[0].stageName).toBe('Cerejeira em Flor');
+		// Uncompleted sessions remain withered regardless of seed choice
+		expect(forestWithSeed[1].stage).toBe('withered');
 	});
 
 	it('calculates correct forest statistics', () => {

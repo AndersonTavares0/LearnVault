@@ -18,10 +18,18 @@
 				return 'Ciclo padrão de foco concluído (21 a 40 minutos).';
 			case 'pine':
 				return 'Ciclo estendido de foco concluído (41 a 60 minutos).';
+			case 'sakura':
+				return 'Cerejeira cultivada com dedicação e harmonia visual.';
+			case 'willow':
+				return 'Salgueiro cultivado com resiliência e paciência nos estudos.';
+			case 'ginkgo':
+				return 'Ginkgo dourado cultivado para memorização profunda.';
 			case 'ancient':
 				return 'Ciclo de foco profundo e imersão (+60 minutos).';
 			case 'withered':
 				return 'Ciclo interrompido ou abandonado antes do término.';
+			default:
+				return 'Árvore cultivada na floresta de estudos.';
 		}
 	}
 

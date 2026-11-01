@@ -7,10 +7,14 @@
 		type ForestFilter,
 		type ForestTree
 	} from './forest';
-	import ForestBiomeCrest from './ForestBiomeCrest.svelte';
+	import ForestEcosystemBand from './ForestEcosystemBand.svelte';
+	import ForestGrowthStage from './ForestGrowthStage.svelte';
 	import ForestGuide from './ForestGuide.svelte';
 	import ForestInspector from './ForestInspector.svelte';
+	import ForestNursery from './ForestNursery.svelte';
 	import ForestTreeSvg from './ForestTreeSvg.svelte';
+	import { readSessionSeeds } from './forest-catalog';
+	import { nursery } from './nursery-store';
 	import { formatClock, readFocusSessions, type FocusSession } from './pomodoro';
 	import { focusSync, pomodoro, setMode, startTimer } from './pomodoro-store';
 	import { transport } from './transport';
@@ -19,11 +23,14 @@
 	let loading = $state(true);
 	let filter = $state<ForestFilter>('week');
 	let selectedTree = $state<ForestTree | null>(null);
+	let activeTab = $state<'forest' | 'nursery'>('forest');
 
 	const visibleTrees = $derived(filterForest(sessionsLoaded, filter));
 	const stats = $derived(calculateForestStats(visibleTrees));
 
 	const isRunning = $derived($pomodoro.status === 'running');
+	const isPaused = $derived($pomodoro.status === 'paused');
+	const hasActiveSession = $derived(isRunning || isPaused);
 	const clock = $derived(formatClock($pomodoro.remainingSeconds));
 
 	function storage(): Storage | null {
@@ -64,7 +71,8 @@
 			});
 		}
 
-		sessionsLoaded = buildForest(Array.from(sessionMap.values()));
+		const seeds = readSessionSeeds(storage());
+		sessionsLoaded = buildForest(Array.from(sessionMap.values()), seeds);
 		loading = false;
 	}
 
@@ -88,8 +96,12 @@
 		}
 	}
 
+	let lastLoadedCompletedAt = $state<number | null>(null);
+
 	$effect(() => {
-		if ($pomodoro.lastCompleted?.mode === 'focus') {
+		const completed = $pomodoro.lastCompleted;
+		if (completed?.mode === 'focus' && completed.at !== lastLoadedCompletedAt) {
+			lastLoadedCompletedAt = completed.at;
 			void loadForestData();
 		}
 	});
@@ -105,53 +117,77 @@
 	<div class="lv-panel__head">
 		<div class="lv-forest__head-title">
 			<h2 id="forest-heading">Floresta de Estudos</h2>
-			<span class="lv-count" aria-label="{visibleTrees.length} árvores no período">
-				{visibleTrees.length} {visibleTrees.length === 1 ? 'árvore' : 'árvores'}
-			</span>
+			<div class="lv-forest__nav-tabs" role="group" aria-label="Visualização da floresta">
+				<button
+					type="button"
+					class="lv-forest__nav-tab"
+					class:is-active={activeTab === 'forest'}
+					aria-pressed={activeTab === 'forest'}
+					onclick={() => (activeTab = 'forest')}
+				>
+					Meu Bosque
+					<span class="lv-count">{visibleTrees.length}</span>
+				</button>
+				<button
+					type="button"
+					class="lv-forest__nav-tab"
+					class:is-active={activeTab === 'nursery'}
+					aria-pressed={activeTab === 'nursery'}
+					onclick={() => (activeTab = 'nursery')}
+				>
+					Viveiro
+					<span class="lv-forest__drops-pill">{$nursery.dropsBalance} gotas</span>
+				</button>
+			</div>
 		</div>
 
-		<!-- Segmented Control de Período -->
-		<div class="lv-forest__filters" role="group" aria-label="Período da floresta">
-			<button
-				type="button"
-				class="lv-forest__filter-btn"
-				class:is-active={filter === 'today'}
-				aria-pressed={filter === 'today'}
-				onclick={() => setFilter('today')}
-			>
-				Hoje
-			</button>
-			<button
-				type="button"
-				class="lv-forest__filter-btn"
-				class:is-active={filter === 'week'}
-				aria-pressed={filter === 'week'}
-				onclick={() => setFilter('week')}
-			>
-				Esta semana
-			</button>
-			<button
-				type="button"
-				class="lv-forest__filter-btn"
-				class:is-active={filter === 'month'}
-				aria-pressed={filter === 'month'}
-				onclick={() => setFilter('month')}
-			>
-				Este mês
-			</button>
-			<button
-				type="button"
-				class="lv-forest__filter-btn"
-				class:is-active={filter === 'all'}
-				aria-pressed={filter === 'all'}
-				onclick={() => setFilter('all')}
-			>
-				Tudo
-			</button>
-		</div>
+		{#if activeTab === 'forest'}
+			<!-- Segmented Control de Período -->
+			<div class="lv-forest__filters" role="group" aria-label="Período da floresta">
+				<button
+					type="button"
+					class="lv-forest__filter-btn"
+					class:is-active={filter === 'today'}
+					aria-pressed={filter === 'today'}
+					onclick={() => setFilter('today')}
+				>
+					Hoje
+				</button>
+				<button
+					type="button"
+					class="lv-forest__filter-btn"
+					class:is-active={filter === 'week'}
+					aria-pressed={filter === 'week'}
+					onclick={() => setFilter('week')}
+				>
+					Esta semana
+				</button>
+				<button
+					type="button"
+					class="lv-forest__filter-btn"
+					class:is-active={filter === 'month'}
+					aria-pressed={filter === 'month'}
+					onclick={() => setFilter('month')}
+				>
+					Este mês
+				</button>
+				<button
+					type="button"
+					class="lv-forest__filter-btn"
+					class:is-active={filter === 'all'}
+					aria-pressed={filter === 'all'}
+					onclick={() => setFilter('all')}
+				>
+					Tudo
+				</button>
+			</div>
+		{/if}
 	</div>
 
-	<!-- Métricas editoriais da Floresta (Atelier design) -->
+	{#if activeTab === 'nursery'}
+		<ForestNursery onclose={() => (activeTab = 'forest')} />
+	{:else}
+		<!-- Métricas editoriais da Floresta (Atelier design) -->
 	<div class="lv-forest__stats">
 		<div>
 			<strong class="is-healthy">{stats.healthyTrees}</strong>
@@ -208,50 +244,15 @@
 			</div>
 		{:else}
 			<!-- Faixa de Evolução do Ecossistema da Floresta -->
-			<div class="lv-forest__ecosystem" role="status" aria-label="Ecossistema: {stats.ecosystem.name}">
-				<div class="lv-forest__ecosystem-left">
-					<ForestBiomeCrest level={stats.ecosystem.level} size={42} />
-					<div class="lv-forest__ecosystem-info">
-						<div class="lv-forest__ecosystem-badge">
-							<span class="lv-forest__ecosystem-tag">Nível {stats.ecosystem.level}</span>
-							<strong class="lv-forest__ecosystem-title">{stats.ecosystem.name}</strong>
-						</div>
-						<p class="lv-forest__ecosystem-desc">{stats.ecosystem.description}</p>
-					</div>
-				</div>
-				{#if stats.ecosystem.nextThreshold !== null}
-					<div class="lv-forest__ecosystem-progress">
-						<div class="lv-forest__ecosystem-labels">
-							<span>Próximo estágio: <strong>{stats.ecosystem.nextName}</strong></span>
-							<span class="lv-forest__ecosystem-count">{stats.healthyTrees} de {stats.ecosystem.nextThreshold} sadias</span>
-						</div>
-						<div
-							class="lv-forest__ecosystem-track"
-							role="progressbar"
-							aria-label="Progresso para {stats.ecosystem.nextName}"
-							aria-valuemin="0"
-							aria-valuemax="100"
-							aria-valuenow={Math.round(stats.ecosystem.progress * 100)}
-						>
-							<span
-								class="lv-forest__ecosystem-fill"
-								style:width={`${Math.round(stats.ecosystem.progress * 100)}%`}
-							></span>
-						</div>
-					</div>
-				{:else}
-					<div class="lv-forest__ecosystem-max">
-						<span aria-hidden="true">★</span>
-						<span>Ápice florestal alcançado</span>
-					</div>
-				{/if}
-			</div>
+			<ForestEcosystemBand ecosystem={stats.ecosystem} healthyTrees={stats.healthyTrees} />
 
-			{#if isRunning}
-				<div class="lv-forest__active-banner" role="status" aria-live="polite">
-					<span class="lv-forest__active-pulse" aria-hidden="true"></span>
-					<span>Ciclo de foco em andamento no Pomodoro: <strong>{clock} restantes</strong>. Mantenha o foco para florescer uma árvore sadia!</span>
-				</div>
+			{#if hasActiveSession && $pomodoro.mode === 'focus'}
+				<ForestGrowthStage
+					speciesId={$nursery.activeSeed}
+					remainingSeconds={$pomodoro.remainingSeconds}
+					totalSeconds={$pomodoro.totalSeconds}
+					{clock}
+				/>
 			{/if}
 
 			<!-- Grade de árvores (ESTÁVEL: NUNCA SE MOVE NO HOVER) -->
@@ -266,6 +267,9 @@
 							class:is-stage-sapling={tree.stage === 'sapling'}
 							class:is-stage-oak={tree.stage === 'oak'}
 							class:is-stage-pine={tree.stage === 'pine'}
+							class:is-stage-sakura={tree.stage === 'sakura'}
+							class:is-stage-willow={tree.stage === 'willow'}
+							class:is-stage-ginkgo={tree.stage === 'ginkgo'}
 							class:is-stage-ancient={tree.stage === 'ancient'}
 							class:is-stage-withered={tree.stage === 'withered'}
 							aria-pressed={selectedTree?.sessionId === tree.sessionId}
@@ -276,7 +280,7 @@
 							<div class="lv-forest__tree-visual" aria-hidden="true">
 								<ForestTreeSvg
 									stage={tree.stage}
-									size={tree.stage === 'sapling' ? 44 : tree.stage === 'oak' ? 50 : tree.stage === 'pine' ? 54 : tree.stage === 'ancient' ? 62 : 46}
+									size={tree.stage === 'sapling' ? 44 : tree.stage === 'ancient' ? 62 : tree.stage === 'withered' ? 46 : 52}
 								/>
 							</div>
 							<span class="lv-forest__tree-name">{tree.stageName}</span>
@@ -295,6 +299,7 @@
 
 	<!-- Guia de Espécies da Floresta -->
 	<ForestGuide speciesCounts={stats.speciesCounts} />
+{/if}
 </section>
 
 <style>
@@ -309,6 +314,45 @@
 		display: flex;
 		align-items: center;
 		gap: 0.75rem;
+		flex-wrap: wrap;
+	}
+
+	.lv-forest__nav-tabs {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+	}
+
+	.lv-forest__nav-tab {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		background: var(--surface-2);
+		border: 1px solid var(--line);
+		border-radius: var(--radius);
+		padding: 0.3rem 0.65rem;
+		font-size: 0.8125rem;
+		font-weight: 600;
+		color: var(--muted);
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.lv-forest__nav-tab.is-active {
+		background: var(--surface);
+		color: var(--ink);
+		border-color: var(--accent);
+	}
+
+	.lv-forest__drops-pill {
+		display: inline-flex;
+		align-items: center;
+		background: color-mix(in srgb, #0284c7 14%, transparent);
+		color: #0284c7;
+		font-size: 0.75rem;
+		padding: 0.1rem 0.4rem;
+		border-radius: 9999px;
+		font-weight: 700;
 	}
 
 	/* Segmented Control para Filtros */
@@ -494,154 +538,6 @@
 		color: var(--ok);
 	}
 
-	/* Faixa de Evolução do Ecossistema */
-	.lv-forest__ecosystem {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 1.25rem;
-		padding: 0.875rem 1rem;
-		background: var(--surface);
-		border: 1px solid var(--line);
-		border-radius: var(--radius);
-		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
-		flex-wrap: wrap;
-	}
-
-	.lv-forest__ecosystem-left {
-		display: flex;
-		align-items: center;
-		gap: 0.875rem;
-		min-width: 240px;
-		flex: 1;
-	}
-
-	.lv-forest__ecosystem-info {
-		display: flex;
-		flex-direction: column;
-		gap: 0.25rem;
-		min-width: 220px;
-		flex: 1;
-	}
-
-	.lv-forest__ecosystem-badge {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-	}
-
-	.lv-forest__ecosystem-tag {
-		font-size: 0.6875rem;
-		font-family: var(--mono);
-		font-weight: 700;
-		color: var(--accent);
-		background: var(--accent-soft);
-		padding: 0.1rem 0.45rem;
-		border-radius: 4px;
-	}
-
-	.lv-forest__ecosystem-title {
-		font-size: 0.9375rem;
-		font-weight: 700;
-		color: var(--ink);
-		letter-spacing: -0.01em;
-	}
-
-	.lv-forest__ecosystem-desc {
-		font-size: 0.8125rem;
-		color: var(--muted);
-		margin: 0;
-		line-height: 1.4;
-	}
-
-	.lv-forest__ecosystem-progress {
-		display: flex;
-		flex-direction: column;
-		gap: 0.35rem;
-		min-width: 220px;
-		flex: 0 1 280px;
-	}
-
-	.lv-forest__ecosystem-labels {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.5rem;
-		font-size: 0.75rem;
-		color: var(--muted);
-	}
-
-	.lv-forest__ecosystem-labels strong {
-		color: var(--ink);
-	}
-
-	.lv-forest__ecosystem-count {
-		font-family: var(--mono);
-		font-size: 0.6875rem;
-		color: var(--muted);
-	}
-
-	.lv-forest__ecosystem-track {
-		height: 6px;
-		background: var(--surface-2);
-		border-radius: 9999px;
-		overflow: hidden;
-		border: 1px solid var(--line);
-	}
-
-	.lv-forest__ecosystem-fill {
-		display: block;
-		height: 100%;
-		background: var(--ok);
-		border-radius: 9999px;
-		transition: width 0.3s ease;
-	}
-
-	.lv-forest__ecosystem-max {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		font-size: 0.8125rem;
-		font-weight: 600;
-		color: var(--ok);
-	}
-
-	.lv-forest__active-banner {
-		display: flex;
-		align-items: center;
-		gap: 0.625rem;
-		padding: 0.625rem 0.875rem;
-		background: color-mix(in srgb, var(--ok) 8%, var(--surface));
-		border: 1px solid color-mix(in srgb, var(--ok) 25%, transparent);
-		border-radius: var(--radius);
-		font-size: 0.8125rem;
-		color: var(--ink);
-	}
-
-	.lv-forest__active-pulse {
-		width: 8px;
-		height: 8px;
-		border-radius: 50%;
-		background: var(--ok);
-		box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
-		animation: lv-pulse 1.8s infinite;
-		flex-shrink: 0;
-	}
-
-	@keyframes lv-pulse {
-		0% {
-			transform: scale(0.95);
-			box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
-		}
-		70% {
-			transform: scale(1);
-			box-shadow: 0 0 0 8px rgba(16, 185, 129, 0);
-		}
-		100% {
-			transform: scale(0.95);
-			box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
-		}
-	}
 
 	/* Grade de Árvores (layout estável, sem salto) */
 	.lv-forest__grid {
@@ -710,6 +606,21 @@
 
 	.lv-forest__tree-item.is-stage-pine {
 		border-color: color-mix(in srgb, #059669 22%, var(--line));
+	}
+
+	.lv-forest__tree-item.is-stage-sakura {
+		border-color: color-mix(in srgb, #ec4899 30%, var(--line));
+		background: color-mix(in srgb, #ec4899 4%, var(--surface));
+	}
+
+	.lv-forest__tree-item.is-stage-willow {
+		border-color: color-mix(in srgb, #059669 28%, var(--line));
+		background: color-mix(in srgb, #059669 4%, var(--surface));
+	}
+
+	.lv-forest__tree-item.is-stage-ginkgo {
+		border-color: color-mix(in srgb, #eab308 32%, var(--line));
+		background: color-mix(in srgb, #eab308 4%, var(--surface));
 	}
 
 	.lv-forest__tree-item.is-stage-sapling {

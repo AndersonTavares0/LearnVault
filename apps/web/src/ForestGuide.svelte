@@ -51,6 +51,42 @@
 			{/if}
 		</div>
 		<div class="lv-forest__species-card">
+			<ForestTreeSvg stage="sakura" size={34} />
+			<div class="lv-forest__species-info">
+				<strong>Cerejeira em Flor</strong>
+				<span>Desbloqueável no Viveiro (80 gotas)</span>
+			</div>
+			{#if speciesCounts && speciesCounts.sakura > 0}
+				<span class="lv-forest__species-count" title="{speciesCounts.sakura} cultivadas no período">
+					{speciesCounts.sakura}
+				</span>
+			{/if}
+		</div>
+		<div class="lv-forest__species-card">
+			<ForestTreeSvg stage="willow" size={34} />
+			<div class="lv-forest__species-info">
+				<strong>Salgueiro Chorão</strong>
+				<span>Desbloqueável no Viveiro (120 gotas)</span>
+			</div>
+			{#if speciesCounts && speciesCounts.willow > 0}
+				<span class="lv-forest__species-count" title="{speciesCounts.willow} cultivados no período">
+					{speciesCounts.willow}
+				</span>
+			{/if}
+		</div>
+		<div class="lv-forest__species-card">
+			<ForestTreeSvg stage="ginkgo" size={34} />
+			<div class="lv-forest__species-info">
+				<strong>Ginkgo Dourado</strong>
+				<span>Desbloqueável no Viveiro (200 gotas)</span>
+			</div>
+			{#if speciesCounts && speciesCounts.ginkgo > 0}
+				<span class="lv-forest__species-count" title="{speciesCounts.ginkgo} cultivados no período">
+					{speciesCounts.ginkgo}
+				</span>
+			{/if}
+		</div>
+		<div class="lv-forest__species-card">
 			<ForestTreeSvg stage="ancient" size={34} />
 			<div class="lv-forest__species-info">
 				<strong>Árvore Ancestral</strong>

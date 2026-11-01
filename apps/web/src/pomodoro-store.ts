@@ -11,6 +11,8 @@ import {
 } from './pomodoro';
 import { FocusSessionConflict, InvalidFocusSession, transport, type FocusSessionInput, type FocusSummary, type RewardSummary } from './transport';
 import { persistFocusOutbox, persistRejectedFocusSessions, readFocusOutbox, readRejectedFocusSessions, type RejectedFocusSession } from './focus-outbox';
+import { calculateDropsEarned, recordSessionSeed } from './forest-catalog';
+import { awardDrops, nursery } from './nursery-store';
 
 export type PomodoroStatus = 'idle' | 'running' | 'paused';
 
@@ -244,6 +246,14 @@ function recordSession(state: PomodoroState, completed: boolean): FocusSessionIn
 		endedAt
 	};
 	queueFocusSession(session);
+	const activeSeed = get(nursery).activeSeed;
+	recordSessionSeed(storage(), session.id, activeSeed);
+	if (completed) {
+		const drops = calculateDropsEarned(actualSeconds, true);
+		if (drops > 0) {
+			awardDrops(drops);
+		}
+	}
 	return session;
 }
 

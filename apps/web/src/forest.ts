@@ -1,6 +1,14 @@
 import type { FocusSession } from './pomodoro';
 
-export type TreeStage = 'sapling' | 'oak' | 'pine' | 'ancient' | 'withered';
+export type TreeStage =
+	| 'sapling'
+	| 'oak'
+	| 'pine'
+	| 'sakura'
+	| 'willow'
+	| 'ginkgo'
+	| 'ancient'
+	| 'withered';
 
 export type ForestTree = {
 	sessionId: string;
@@ -139,6 +147,17 @@ export function deriveTreeStage(actualSeconds: number, completed: boolean): Tree
 	return 'ancient';
 }
 
+const VALID_TREE_STAGES: TreeStage[] = [
+	'sapling',
+	'oak',
+	'pine',
+	'sakura',
+	'willow',
+	'ginkgo',
+	'ancient',
+	'withered'
+];
+
 export function treeStageName(stage: TreeStage): string {
 	switch (stage) {
 		case 'sapling':
@@ -147,10 +166,18 @@ export function treeStageName(stage: TreeStage): string {
 			return 'Carvalho Frondoso';
 		case 'pine':
 			return 'Pinheiro Nobre';
+		case 'sakura':
+			return 'Cerejeira em Flor';
+		case 'willow':
+			return 'Salgueiro Chorão';
+		case 'ginkgo':
+			return 'Ginkgo Dourado';
 		case 'ancient':
 			return 'Árvore Ancestral';
 		case 'withered':
 			return 'Árvore Seca';
+		default:
+			return 'Carvalho Frondoso';
 	}
 }
 
@@ -162,11 +189,15 @@ export function formatTreeLabel(tree: Omit<ForestTree, 'label'>): string {
 	return `${tree.stageName}: ${tree.minutes} min de foco cultivados em ${date}`;
 }
 
-export function buildForest(sessions: FocusSession[]): ForestTree[] {
+export function buildForest(sessions: FocusSession[], sessionSeeds?: Record<string, string>): ForestTree[] {
 	// Apenas sessões de foco entram na floresta (pausas não cultivam árvores).
 	const focusSessions = sessions.filter((s) => s.kind === 'focus');
 	return focusSessions.map((session) => {
-		const stage = deriveTreeStage(session.actualSeconds, session.completed);
+		const rawSeed = sessionSeeds?.[session.id];
+		const validSeed = rawSeed && VALID_TREE_STAGES.includes(rawSeed as TreeStage) ? (rawSeed as TreeStage) : null;
+		const stage = !session.completed
+			? 'withered'
+			: validSeed ?? deriveTreeStage(session.actualSeconds, session.completed);
 		const stageName = treeStageName(stage);
 		const minutes = Math.max(1, Math.round(session.actualSeconds / 60));
 		const timestamp = session.endedAt;
@@ -218,6 +249,9 @@ export function calculateForestStats(trees: ForestTree[]): ForestStats {
 		sapling: 0,
 		oak: 0,
 		pine: 0,
+		sakura: 0,
+		willow: 0,
+		ginkgo: 0,
 		ancient: 0,
 		withered: 0
 	};
