@@ -1,7 +1,7 @@
 import { render } from 'svelte/server';
 import { describe, expect, it } from 'vitest';
 import Player from './Player.svelte';
-import { clampSpeed, formatDuration, mediaAvailability, mediaPlaybackKind, nextSpeed, PLAYBACK_SPEEDS, playerShortcutAction, selectPlayableMedia, selectPlayableSubtitle, shouldAutoAdvance, srtConversionSupported, srtToWebVtt, studySyncEnabled, studySyncSupported, subtitleFormat } from './player';
+import { clampSpeed, formatDuration, mediaAvailability, mediaPlaybackKind, nextSpeed, PLAYBACK_SPEEDS, playerShortcutAction, seekPercentPosition, selectPlayableMedia, selectPlayableSubtitle, shouldAutoAdvance, srtConversionSupported, srtToWebVtt, stepVolume, studySyncEnabled, studySyncSupported, subtitleFormat } from './player';
 import { createDefaultPlayerPreferences, updateLessonPreference } from './player-preferences';
 import type { FileEntry, Lesson } from './transport';
 
@@ -94,12 +94,34 @@ describe('player media and subtitles', () => {
 		expect(playerShortcutAction('ArrowRight', true)).toBe('seek-forward');
 		expect(playerShortcutAction('l', true)).toBe('seek-forward');
 		expect(playerShortcutAction('L', true)).toBe('seek-forward');
+		expect(playerShortcutAction('m', true)).toBe('toggle-mute');
+		expect(playerShortcutAction('M', true)).toBe('toggle-mute');
+		expect(playerShortcutAction('ArrowUp', true)).toBe('volume-up');
+		expect(playerShortcutAction('ArrowDown', true)).toBe('volume-down');
+		expect(playerShortcutAction('n', true)).toBe('open-notes');
+		expect(playerShortcutAction('N', true)).toBe('open-notes');
+		expect(playerShortcutAction('0', true)).toEqual({ type: 'seek-percent', percent: 0 });
+		expect(playerShortcutAction('5', true)).toEqual({ type: 'seek-percent', percent: 50 });
+		expect(playerShortcutAction('9', true)).toEqual({ type: 'seek-percent', percent: 90 });
 		expect(playerShortcutAction(' ', false)).toBeNull();
 		expect(playerShortcutAction('k', false)).toBeNull();
+		expect(playerShortcutAction('m', false)).toBeNull();
+		expect(playerShortcutAction('5', false)).toBeNull();
 		expect(playerShortcutAction('Enter', true)).toBeNull();
 		expect(shouldAutoAdvance(true, true)).toBe(true);
 		expect(shouldAutoAdvance(false, true)).toBe(false);
 		expect(shouldAutoAdvance(true, false)).toBe(false);
+	});
+	it('calculates volume stepping and percent seek positions', () => {
+		expect(stepVolume(0.5, 'up')).toBe(0.6);
+		expect(stepVolume(0.95, 'up')).toBe(1);
+		expect(stepVolume(1, 'up')).toBe(1);
+		expect(stepVolume(0.1, 'down')).toBe(0);
+		expect(stepVolume(0, 'down')).toBe(0);
+		expect(seekPercentPosition(100, 50)).toBe(50);
+		expect(seekPercentPosition(200, 10)).toBe(20);
+		expect(seekPercentPosition(0, 50)).toBe(0);
+		expect(seekPercentPosition(-10, 50)).toBe(0);
 	});
 });
 
@@ -182,7 +204,7 @@ describe('player preference controls', () => {
 	it('keeps the player shortcuts available without repeating the hint on screen', () => {
 		const { body } = render(Player, { props: baseProps });
 
-		expect(body).toContain('aria-keyshortcuts="Space ArrowLeft ArrowRight k j l [ ] f p"');
+		expect(body).toContain('aria-keyshortcuts="Space ArrowLeft ArrowRight ArrowUp ArrowDown k j l [ ] f p m n 0-9"');
 		expect(body).not.toContain('Atalhos:');
 	});
 

@@ -123,7 +123,13 @@ fn catalog_dto_uses_the_snake_case_spa_contract() {
         )],
     };
     let complete = source.complete;
-    let nodes = vec![CatalogNodeDto::course("course-42", "Curso", source, None)];
+    let nodes = vec![CatalogNodeDto::course(
+        "course-42",
+        "Curso",
+        source,
+        None,
+        Some("Cursos".to_owned()),
+    )];
     let dto = CatalogDto {
         complete,
         loose_files: Vec::new(),
@@ -172,6 +178,7 @@ fn catalog_dto_uses_the_snake_case_spa_contract() {
     assert_eq!(node["path"], "");
     assert_eq!(node["role"], "course");
     assert_eq!(node["course_id"], "course-42");
+    assert_eq!(node["source_folder"], "Cursos");
     assert_eq!(node["loose_files"][0]["media_id"], "loose");
     assert_eq!(node["loose_files"][0]["name"], "aula.mp4");
     assert_eq!(node["loose_files"][0]["path"], "cat/aula.mp4");
@@ -238,6 +245,7 @@ fn every_core_enum_maps_to_a_stable_string() {
                 loose_files: vec![file("f", kind, Availability::Available, false)],
                 categories: Vec::new(),
             },
+            None,
             None,
         );
         let dto = CatalogDto {

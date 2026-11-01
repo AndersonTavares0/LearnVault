@@ -666,3 +666,58 @@ fn desktop_mission_claim_is_one_time_and_reward_summary_uses_snake_case() {
     assert_eq!(json["missions"][1]["claimed"], true);
     assert!(json.get("study").is_some());
 }
+
+#[test]
+fn desktop_study_notes_crud_and_isolation() {
+    let dir = tempfile::tempdir().unwrap();
+    let state = desktop(dir.path());
+    seed_media(dir.path(), "m1");
+    seed_media(dir.path(), "m2");
+
+    // Cria anotações
+    let note1 = state
+        .create_note("m1", 45, "Primeira nota na aula 1")
+        .expect("criar nota 1 deve suceder");
+    assert_eq!(note1.media_id, "m1");
+    assert_eq!(note1.position_seconds, 45);
+    assert_eq!(note1.content, "Primeira nota na aula 1");
+
+    let note2 = state
+        .create_note("m1", 90, "Segunda nota na aula 1")
+        .expect("criar nota 2 deve suceder");
+
+    let _note3 = state
+        .create_note("m2", 15, "Nota na aula 2")
+        .expect("criar nota 3 deve suceder");
+
+    // Listar filtrado por mídia
+    let m1_notes = state.list_notes(Some("m1")).unwrap();
+    assert_eq!(m1_notes.len(), 2);
+    assert_eq!(m1_notes[0].note_id, note1.note_id);
+    assert_eq!(m1_notes[1].note_id, note2.note_id);
+
+    // Listagem global (busca global de anotações)
+    let all_notes = state.list_notes(None).unwrap();
+    assert_eq!(all_notes.len(), 3);
+    // Na listagem global, relative_path está preenchido
+    assert!(all_notes.iter().all(|n| n.relative_path.is_some()));
+
+    // Atualizar anotação
+    let updated = state
+        .update_note(&note1.note_id, "Conteúdo revisado")
+        .expect("atualizar nota deve suceder");
+    assert_eq!(updated.content, "Conteúdo revisado");
+    assert_eq!(updated.note_id, note1.note_id);
+
+    // Excluir anotação
+    state
+        .delete_note(&note2.note_id)
+        .expect("excluir nota deve suceder");
+    let remaining_m1 = state.list_notes(Some("m1")).unwrap();
+    assert_eq!(remaining_m1.len(), 1);
+    assert_eq!(remaining_m1[0].content, "Conteúdo revisado");
+
+    // Excluir nota inexistente retorna erro estável NoteNotFound
+    let err = state.delete_note("nota-inexistente").unwrap_err();
+    assert_eq!(err.code, learnvault_desktop::IpcErrorCode::NoteNotFound);
+}

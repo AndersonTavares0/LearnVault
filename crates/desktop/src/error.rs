@@ -57,6 +57,10 @@ pub enum IpcErrorCode {
     UpdateCheckFailed,
     /// A verificação ou instalação de atualização não pôde ser concluída.
     UpdateUnavailable,
+    /// A anotação solicitada não foi encontrada ou não pertence ao usuário.
+    NoteNotFound,
+    /// O conteúdo da anotação é inválido ou excede o limite aceito.
+    InvalidNote,
 }
 
 /// Erro IPC serializável devolvido ao webview.
@@ -250,6 +254,22 @@ impl IpcError {
         Self {
             code: IpcErrorCode::UpdateUnavailable,
             message: "não foi possível verificar ou aplicar a atualização",
+        }
+    }
+
+    /// A anotação solicitada não foi encontrada ou não pertence ao usuário.
+    pub fn note_not_found() -> Self {
+        Self {
+            code: IpcErrorCode::NoteNotFound,
+            message: "anotação não encontrada",
+        }
+    }
+
+    /// O conteúdo da anotação é inválido.
+    pub fn invalid_note() -> Self {
+        Self {
+            code: IpcErrorCode::InvalidNote,
+            message: "conteúdo da anotação inválido",
         }
     }
 }

@@ -41,6 +41,9 @@ pub struct CatalogNodeDto {
     /// usada pela SPA para invalidar a URL (`?v=`); ausente quando não há capa.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cover_version: Option<i64>,
+    /// Nome da pasta de origem do curso no disco (diretório pai), sem expor caminhos absolutos.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_folder: Option<String>,
     /// Arquivos da aula; vazio fora de nós `lesson`.
     pub files: Vec<CatalogFileDto>,
     /// Arquivos diretamente no nó, sem pertencer a uma aula.
@@ -78,6 +81,7 @@ impl From<CatalogNode> for CatalogNodeDto {
             role: node_role(node.role),
             course_id: None,
             cover_version: None,
+            source_folder: None,
             files: node.files.into_iter().map(CatalogFileDto::from).collect(),
             loose_files: node
                 .loose_files
@@ -101,6 +105,7 @@ impl CatalogNodeDto {
         title: &str,
         catalog: Catalog,
         cover_version: Option<i64>,
+        source_folder: Option<String>,
     ) -> Self {
         Self {
             title: title.to_owned(),
@@ -108,6 +113,7 @@ impl CatalogNodeDto {
             role: "course",
             course_id: Some(course_id.to_owned()),
             cover_version,
+            source_folder,
             files: Vec::new(),
             loose_files: catalog
                 .loose_files
@@ -260,6 +266,54 @@ impl StudyProgressDto {
 pub struct RecentStudyDto {
     /// Itens de progresso, já ordenados pelo núcleo.
     pub items: Vec<StudyProgressDto>,
+}
+
+/// Anotação de estudo associada a uma aula/mídia para o dono local.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StudyNoteDto {
+    /// Identidade estável da anotação.
+    pub note_id: String,
+    /// Identidade da mídia à qual a anotação pertence.
+    pub media_id: String,
+    /// Caminho relativo da mídia, presente apenas na listagem global de anotações.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub relative_path: Option<String>,
+    /// Ponto da mídia em segundos onde a anotação foi registrada.
+    pub position_seconds: i64,
+    /// Texto da anotação.
+    pub content: String,
+    /// Data de criação em segundos Unix.
+    pub created_at: i64,
+    /// Data da última alteração em segundos Unix.
+    pub updated_at: i64,
+}
+
+impl From<learnvault_core::StudyNote> for StudyNoteDto {
+    fn from(note: learnvault_core::StudyNote) -> Self {
+        Self {
+            note_id: note.note_id,
+            media_id: note.media_id,
+            relative_path: None,
+            position_seconds: note.position_seconds,
+            content: note.content,
+            created_at: note.created_at,
+            updated_at: note.updated_at,
+        }
+    }
+}
+
+impl From<learnvault_core::GlobalStudyNote> for StudyNoteDto {
+    fn from(note: learnvault_core::GlobalStudyNote) -> Self {
+        Self {
+            note_id: note.note_id,
+            media_id: note.media_id,
+            relative_path: Some(note.relative_path),
+            position_seconds: note.position_seconds,
+            content: note.content,
+            created_at: note.created_at,
+            updated_at: note.updated_at,
+        }
+    }
 }
 
 /// Um dia da semana corrente na ofensiva de estudo.
