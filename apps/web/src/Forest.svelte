@@ -11,6 +11,7 @@
 	import ForestGrowthStage from './ForestGrowthStage.svelte';
 	import ForestGuide from './ForestGuide.svelte';
 	import ForestInspector from './ForestInspector.svelte';
+	import ForestIsland2D5 from './ForestIsland2D5.svelte';
 	import ForestNursery from './ForestNursery.svelte';
 	import ForestTreeSvg from './ForestTreeSvg.svelte';
 	import { readSessionSeeds } from './forest-catalog';
@@ -22,6 +23,7 @@
 	let sessionsLoaded = $state<ForestTree[]>([]);
 	let loading = $state(true);
 	let filter = $state<ForestFilter>('week');
+	let viewMode = $state<'island' | 'grid'>('island');
 	let selectedTree = $state<ForestTree | null>(null);
 	let activeTab = $state<'forest' | 'nursery'>('forest');
 
@@ -142,44 +144,79 @@
 		</div>
 
 		{#if activeTab === 'forest'}
-			<!-- Segmented Control de Período -->
-			<div class="lv-forest__filters" role="group" aria-label="Período da floresta">
-				<button
-					type="button"
-					class="lv-forest__filter-btn"
-					class:is-active={filter === 'today'}
-					aria-pressed={filter === 'today'}
-					onclick={() => setFilter('today')}
-				>
-					Hoje
-				</button>
-				<button
-					type="button"
-					class="lv-forest__filter-btn"
-					class:is-active={filter === 'week'}
-					aria-pressed={filter === 'week'}
-					onclick={() => setFilter('week')}
-				>
-					Esta semana
-				</button>
-				<button
-					type="button"
-					class="lv-forest__filter-btn"
-					class:is-active={filter === 'month'}
-					aria-pressed={filter === 'month'}
-					onclick={() => setFilter('month')}
-				>
-					Este mês
-				</button>
-				<button
-					type="button"
-					class="lv-forest__filter-btn"
-					class:is-active={filter === 'all'}
-					aria-pressed={filter === 'all'}
-					onclick={() => setFilter('all')}
-				>
-					Tudo
-				</button>
+			<div class="lv-forest__toolbar">
+				<!-- Segmented Control de Período -->
+				<div class="lv-forest__filters" role="group" aria-label="Período da floresta">
+					<button
+						type="button"
+						class="lv-forest__filter-btn"
+						class:is-active={filter === 'today'}
+						aria-pressed={filter === 'today'}
+						onclick={() => setFilter('today')}
+					>
+						Hoje
+					</button>
+					<button
+						type="button"
+						class="lv-forest__filter-btn"
+						class:is-active={filter === 'week'}
+						aria-pressed={filter === 'week'}
+						onclick={() => setFilter('week')}
+					>
+						Esta semana
+					</button>
+					<button
+						type="button"
+						class="lv-forest__filter-btn"
+						class:is-active={filter === 'month'}
+						aria-pressed={filter === 'month'}
+						onclick={() => setFilter('month')}
+					>
+						Este mês
+					</button>
+					<button
+						type="button"
+						class="lv-forest__filter-btn"
+						class:is-active={filter === 'all'}
+						aria-pressed={filter === 'all'}
+						onclick={() => setFilter('all')}
+					>
+						Tudo
+					</button>
+				</div>
+
+				<!-- Toggle de Visualização: Ilha 2.5D vs Grade -->
+				<div class="lv-forest__view-toggle" role="group" aria-label="Modo de visualização">
+					<button
+						type="button"
+						class="lv-forest__filter-btn"
+						class:is-active={viewMode === 'island'}
+						aria-pressed={viewMode === 'island'}
+						onclick={() => (viewMode = 'island')}
+						title="Vista isométrica 2.5D em ilha flutuante"
+					>
+						<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+							<path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+						</svg>
+						Ilha 2.5D
+					</button>
+					<button
+						type="button"
+						class="lv-forest__filter-btn"
+						class:is-active={viewMode === 'grid'}
+						aria-pressed={viewMode === 'grid'}
+						onclick={() => (viewMode = 'grid')}
+						title="Vista em grade de catálogo"
+					>
+						<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+							<rect x="3" y="3" width="7" height="7" rx="1" />
+							<rect x="14" y="3" width="7" height="7" rx="1" />
+							<rect x="14" y="14" width="7" height="7" rx="1" />
+							<rect x="3" y="14" width="7" height="7" rx="1" />
+						</svg>
+						Grade
+					</button>
+				</div>
 			</div>
 		{/if}
 	</div>
@@ -255,40 +292,50 @@
 				/>
 			{/if}
 
-			<!-- Grade de árvores (ESTÁVEL: NUNCA SE MOVE NO HOVER) -->
-			<ul class="lv-forest__grid" role="list" aria-label="Árvores cultivadas">
-				{#each visibleTrees as tree (tree.sessionId)}
-					<li class="lv-forest__tree-wrapper">
-						<button
-							type="button"
-							class="lv-forest__tree-item"
-							class:is-withered={!tree.completed}
-							class:is-selected={selectedTree?.sessionId === tree.sessionId}
-							class:is-stage-sapling={tree.stage === 'sapling'}
-							class:is-stage-oak={tree.stage === 'oak'}
-							class:is-stage-pine={tree.stage === 'pine'}
-							class:is-stage-sakura={tree.stage === 'sakura'}
-							class:is-stage-willow={tree.stage === 'willow'}
-							class:is-stage-ginkgo={tree.stage === 'ginkgo'}
-							class:is-stage-ancient={tree.stage === 'ancient'}
-							class:is-stage-withered={tree.stage === 'withered'}
-							aria-pressed={selectedTree?.sessionId === tree.sessionId}
-							aria-label={tree.label}
-							title="{tree.stageName} · {tree.minutes} min · {tree.completed ? 'Sadia' : 'Seca'}"
-							onclick={() => (selectedTree = selectedTree?.sessionId === tree.sessionId ? null : tree)}
-						>
-							<div class="lv-forest__tree-visual" aria-hidden="true">
-								<ForestTreeSvg
-									stage={tree.stage}
-									size={tree.stage === 'sapling' ? 44 : tree.stage === 'ancient' ? 62 : tree.stage === 'withered' ? 46 : 52}
-								/>
-							</div>
-							<span class="lv-forest__tree-name">{tree.stageName}</span>
-							<span class="lv-forest__tree-time">{tree.minutes} min</span>
-						</button>
-					</li>
-				{/each}
-			</ul>
+			{#if viewMode === 'island'}
+				<!-- Ilha Isométrica 2.5D Estilo Forest App -->
+				<ForestIsland2D5
+					trees={visibleTrees}
+					{stats}
+					{selectedTree}
+					onselect={(tree) => (selectedTree = selectedTree?.sessionId === tree.sessionId ? null : tree)}
+				/>
+			{:else}
+				<!-- Grade de árvores (ESTÁVEL: NUNCA SE MOVE NO HOVER) -->
+				<ul class="lv-forest__grid" role="list" aria-label="Árvores cultivadas">
+					{#each visibleTrees as tree (tree.sessionId)}
+						<li class="lv-forest__tree-wrapper">
+							<button
+								type="button"
+								class="lv-forest__tree-item"
+								class:is-withered={!tree.completed}
+								class:is-selected={selectedTree?.sessionId === tree.sessionId}
+								class:is-stage-sapling={tree.stage === 'sapling'}
+								class:is-stage-oak={tree.stage === 'oak'}
+								class:is-stage-pine={tree.stage === 'pine'}
+								class:is-stage-sakura={tree.stage === 'sakura'}
+								class:is-stage-willow={tree.stage === 'willow'}
+								class:is-stage-ginkgo={tree.stage === 'ginkgo'}
+								class:is-stage-ancient={tree.stage === 'ancient'}
+								class:is-stage-withered={tree.stage === 'withered'}
+								aria-pressed={selectedTree?.sessionId === tree.sessionId}
+								aria-label={tree.label}
+								title="{tree.stageName} · {tree.minutes} min · {tree.completed ? 'Sadia' : 'Seca'}"
+								onclick={() => (selectedTree = selectedTree?.sessionId === tree.sessionId ? null : tree)}
+							>
+								<div class="lv-forest__tree-visual" aria-hidden="true">
+									<ForestTreeSvg
+										stage={tree.stage}
+										size={tree.stage === 'sapling' ? 44 : tree.stage === 'ancient' ? 62 : tree.stage === 'withered' ? 46 : 52}
+									/>
+								</div>
+								<span class="lv-forest__tree-name">{tree.stageName}</span>
+								<span class="lv-forest__tree-time">{tree.minutes} min</span>
+							</button>
+						</li>
+					{/each}
+				</ul>
+			{/if}
 
 			<!-- Painel de Inspeção Detalhada (Abaixo da Grade, SEM deslocamento das árvores) -->
 			{#if selectedTree}
@@ -355,8 +402,17 @@
 		font-weight: 700;
 	}
 
-	/* Segmented Control para Filtros */
-	.lv-forest__filters {
+	.lv-forest__toolbar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+		flex-wrap: wrap;
+	}
+
+	/* Segmented Control para Filtros e Modos de Vista */
+	.lv-forest__filters,
+	.lv-forest__view-toggle {
 		display: inline-flex;
 		align-items: center;
 		background: var(--surface-2);
