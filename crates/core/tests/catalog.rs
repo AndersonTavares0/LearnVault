@@ -229,6 +229,17 @@ fn titles_are_cleaned_and_the_path_keeps_the_identity() -> TestResult {
 }
 
 #[test]
+fn purely_numeric_titles_preserve_number_as_title() -> TestResult {
+    let db = library_db()?;
+    media(&db, "m1", "2024/01/aula.mp4")?;
+
+    let catalog = build_catalog(&db, LIB)?;
+    assert_eq!(catalog.categories[0].title, "2024");
+    assert_eq!(catalog.categories[0].children[0].title, "01");
+    Ok(())
+}
+
+#[test]
 fn missing_files_stay_in_the_catalog_with_their_identity() -> TestResult {
     let db = library_db()?;
     insert_media(&db, "m1", "Cat/Aula/aula.mp4", 1024, "missing")?;

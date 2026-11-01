@@ -201,7 +201,7 @@ fn ensure_node<'a>(
     path: &str,
 ) -> &'a mut PendingNode {
     nodes.entry(path.to_owned()).or_insert_with(|| PendingNode {
-        title: clean_title(last_segment(path)),
+        title: clean_node_title(last_segment(path)),
         files: Vec::new(),
         loose_files: Vec::new(),
     })
@@ -370,13 +370,32 @@ pub fn clean_title(name: &str) -> String {
         .to_owned()
 }
 
+/// Título apresentado de um nó do catálogo ou aula: se a limpeza remover todos os
+/// caracteres (como em pastas ou arquivos chamados "01" ou "2024"), preserva o número.
+pub fn clean_node_title(name: &str) -> String {
+    let cleaned = clean_title(name);
+    if cleaned.is_empty() {
+        let trimmed = name.trim();
+        let fallback = trimmed
+            .trim_end_matches(|character: char| "._- •\t".contains(character))
+            .trim();
+        if fallback.is_empty() {
+            trimmed.to_owned()
+        } else {
+            fallback.to_owned()
+        }
+    } else {
+        cleaned
+    }
+}
+
 /// Título de aula derivado de um arquivo: sem extensão e sem prefixo de ordenação.
 fn file_lesson_title(name: &str) -> String {
     let stem = match name.rfind('.') {
         Some(index) if index > 0 => &name[..index],
         _ => name,
     };
-    clean_title(stem)
+    clean_node_title(stem)
 }
 
 /// Recompõe cursos e módulos: arquivos de mídia diretamente no diretório viram aulas,

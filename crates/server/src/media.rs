@@ -260,7 +260,8 @@ fn content_type(path: &str) -> &'static str {
 
 fn playable_media_type(extension: &str) -> Option<&'static str> {
     Some(match extension {
-        "mp4" => "video/mp4",
+        "mp4" | "m4v" => "video/mp4",
+        "mov" => "video/quicktime",
         "webm" => "video/webm",
         "ogv" => "video/ogg",
         "mp3" => "audio/mpeg",
@@ -476,6 +477,8 @@ mod tests {
     fn go_playable_media_types_keep_their_mime_type_and_are_inline() {
         for (path, expected_type) in [
             ("lesson.mp4", "video/mp4"),
+            ("lesson.m4v", "video/mp4"),
+            ("lesson.mov", "video/quicktime"),
             ("lesson.webm", "video/webm"),
             ("lesson.ogv", "video/ogg"),
             ("lesson.mp3", "audio/mpeg"),
