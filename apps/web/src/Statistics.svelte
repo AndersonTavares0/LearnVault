@@ -156,7 +156,12 @@
 			<section class="lv-panel lv-evolution" aria-labelledby="evolution-heading">
 				<div class="lv-panel__head">
 					<h2 id="evolution-heading">Sua evolução</h2>
-					{#if gamification}<span class="lv-level-chip">Nível {gamification.level.level}</span>{/if}
+					{#if gamification}
+						<div class="lv-level-wrap">
+							<span class="lv-level-chip">Nível {gamification.level.level}</span>
+							<span class="lv-level-title">{gamification.level.title}</span>
+						</div>
+					{/if}
 				</div>
 
 				{#if summaryLoading}
@@ -170,8 +175,8 @@
 					<div class="lv-evolution__body">
 						<div class="lv-xp">
 							<div class="lv-xp__head">
-								<span><strong>{gamification.xp}</strong> XP</span>
-								<span>{gamification.level.xpToNext} XP para o próximo nível</span>
+								<span><strong>{gamification.xp}</strong> XP <small>({Math.round(gamification.level.progress * 100)}%)</small></span>
+								<span>{gamification.level.xpToNext} XP para o Nível {gamification.level.level + 1}</span>
 							</div>
 							<div class="lv-xp__track" role="progressbar" aria-label="Progresso para o próximo nível" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(gamification.level.progress * 100)}>
 								<span class="lv-xp__fill" style:width={`${gamification.level.progress * 100}%`}></span>
@@ -362,3 +367,18 @@
 		<p class="lv-stats__foot">{formatCount(stats.courses.length, 'curso', 'cursos')} no acervo · Seu progresso é pessoal; dias ativos seguem o fuso local do servidor ou do dispositivo.</p>
 	{/if}
 </div>
+
+<style>
+	.lv-level-wrap {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+
+	.lv-level-title {
+		font-size: 0.8125rem;
+		font-weight: 600;
+		color: var(--muted);
+	}
+</style>

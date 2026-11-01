@@ -5,10 +5,10 @@
 		calculateForestStats,
 		filterForest,
 		type ForestFilter,
-		type ForestTree,
-		type TreeStage
+		type ForestTree
 	} from './forest';
 	import ForestGuide from './ForestGuide.svelte';
+	import ForestInspector from './ForestInspector.svelte';
 	import ForestTreeSvg from './ForestTreeSvg.svelte';
 	import { formatClock, readFocusSessions, type FocusSession } from './pomodoro';
 	import { focusSync, pomodoro, setMode, startTimer } from './pomodoro-store';
@@ -65,35 +65,6 @@
 
 		sessionsLoaded = buildForest(Array.from(sessionMap.values()));
 		loading = false;
-	}
-
-	function stageDescription(stage: TreeStage): string {
-		switch (stage) {
-			case 'sapling':
-				return 'Ciclo rápido de foco concluído (até 20 minutos).';
-			case 'oak':
-				return 'Ciclo padrão de foco concluído (21 a 40 minutos).';
-			case 'pine':
-				return 'Ciclo estendido de foco concluído (41 a 60 minutos).';
-			case 'ancient':
-				return 'Ciclo de foco profundo e imersão (+60 minutos).';
-			case 'withered':
-				return 'Ciclo interrompido ou abandonado antes do término.';
-		}
-	}
-
-	function formatDateTime(timestamp: number): string {
-		try {
-			return new Date(timestamp * 1000).toLocaleString('pt-BR', {
-				day: '2-digit',
-				month: 'short',
-				year: 'numeric',
-				hour: '2-digit',
-				minute: '2-digit'
-			});
-		} catch {
-			return '';
-		}
 	}
 
 	function setFilter(next: ForestFilter) {
@@ -235,6 +206,43 @@
 				{/if}
 			</div>
 		{:else}
+			<!-- Faixa de Evolução do Ecossistema da Floresta -->
+			<div class="lv-forest__ecosystem" role="status" aria-label="Ecossistema: {stats.ecosystem.name}">
+				<div class="lv-forest__ecosystem-info">
+					<div class="lv-forest__ecosystem-badge">
+						<span class="lv-forest__ecosystem-tag">Nível {stats.ecosystem.level}</span>
+						<strong class="lv-forest__ecosystem-title">{stats.ecosystem.name}</strong>
+					</div>
+					<p class="lv-forest__ecosystem-desc">{stats.ecosystem.description}</p>
+				</div>
+				{#if stats.ecosystem.nextThreshold !== null}
+					<div class="lv-forest__ecosystem-progress">
+						<div class="lv-forest__ecosystem-labels">
+							<span>Próximo estágio: <strong>{stats.ecosystem.nextName}</strong></span>
+							<span class="lv-forest__ecosystem-count">{stats.healthyTrees} de {stats.ecosystem.nextThreshold} sadias</span>
+						</div>
+						<div
+							class="lv-forest__ecosystem-track"
+							role="progressbar"
+							aria-label="Progresso para {stats.ecosystem.nextName}"
+							aria-valuemin="0"
+							aria-valuemax="100"
+							aria-valuenow={Math.round(stats.ecosystem.progress * 100)}
+						>
+							<span
+								class="lv-forest__ecosystem-fill"
+								style:width={`${Math.round(stats.ecosystem.progress * 100)}%`}
+							></span>
+						</div>
+					</div>
+				{:else}
+					<div class="lv-forest__ecosystem-max">
+						<span aria-hidden="true">★</span>
+						<span>Ápice florestal alcançado</span>
+					</div>
+				{/if}
+			</div>
+
 			{#if isRunning}
 				<div class="lv-forest__active-banner" role="status" aria-live="polite">
 					<span class="lv-forest__active-pulse" aria-hidden="true"></span>
@@ -268,46 +276,13 @@
 
 			<!-- Painel de Inspeção Detalhada (Abaixo da Grade, SEM deslocamento das árvores) -->
 			{#if selectedTree}
-				<div class="lv-forest__inspector" role="status" aria-live="polite">
-					<div class="lv-forest__inspector-body">
-						<div class="lv-forest__inspector-visual" aria-hidden="true">
-							<ForestTreeSvg stage={selectedTree.stage} size={48} />
-						</div>
-						<div class="lv-forest__inspector-details">
-							<div class="lv-forest__inspector-head">
-								<strong class="lv-forest__inspector-title">{selectedTree.stageName}</strong>
-								<span
-									class="lv-forest__status-pill"
-									class:is-healthy={selectedTree.completed}
-									class:is-withered={!selectedTree.completed}
-								>
-									{selectedTree.completed ? 'Sadia' : 'Seca'}
-								</span>
-								<span class="lv-forest__inspector-time">{selectedTree.minutes} min de foco</span>
-							</div>
-							<p class="lv-forest__inspector-desc">
-								{stageDescription(selectedTree.stage)}
-								{#if selectedTree.timestamp}
-									<span class="lv-forest__inspector-date">· Cultivada em {formatDateTime(selectedTree.timestamp)}</span>
-								{/if}
-							</p>
-						</div>
-					</div>
-					<button
-						type="button"
-						class="lv-forest__inspector-close"
-						aria-label="Fechar detalhes da árvore"
-						onclick={() => (selectedTree = null)}
-					>
-						✕
-					</button>
-				</div>
+				<ForestInspector tree={selectedTree} onclose={() => (selectedTree = null)} />
 			{/if}
 		{/if}
 	</div>
 
 	<!-- Guia de Espécies da Floresta -->
-	<ForestGuide />
+	<ForestGuide speciesCounts={stats.speciesCounts} />
 </section>
 
 <style>
@@ -473,6 +448,110 @@
 		color: var(--ok);
 	}
 
+	/* Faixa de Evolução do Ecossistema */
+	.lv-forest__ecosystem {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1.25rem;
+		padding: 0.875rem 1rem;
+		background: var(--surface);
+		border: 1px solid var(--line);
+		border-radius: var(--radius);
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+		flex-wrap: wrap;
+	}
+
+	.lv-forest__ecosystem-info {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		min-width: 220px;
+		flex: 1;
+	}
+
+	.lv-forest__ecosystem-badge {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.lv-forest__ecosystem-tag {
+		font-size: 0.6875rem;
+		font-family: var(--mono);
+		font-weight: 700;
+		color: var(--accent);
+		background: var(--accent-soft);
+		padding: 0.1rem 0.45rem;
+		border-radius: 4px;
+	}
+
+	.lv-forest__ecosystem-title {
+		font-size: 0.9375rem;
+		font-weight: 700;
+		color: var(--ink);
+		letter-spacing: -0.01em;
+	}
+
+	.lv-forest__ecosystem-desc {
+		font-size: 0.8125rem;
+		color: var(--muted);
+		margin: 0;
+		line-height: 1.4;
+	}
+
+	.lv-forest__ecosystem-progress {
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+		min-width: 220px;
+		flex: 0 1 280px;
+	}
+
+	.lv-forest__ecosystem-labels {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+		font-size: 0.75rem;
+		color: var(--muted);
+	}
+
+	.lv-forest__ecosystem-labels strong {
+		color: var(--ink);
+	}
+
+	.lv-forest__ecosystem-count {
+		font-family: var(--mono);
+		font-size: 0.6875rem;
+		color: var(--muted);
+	}
+
+	.lv-forest__ecosystem-track {
+		height: 6px;
+		background: var(--surface-2);
+		border-radius: 9999px;
+		overflow: hidden;
+		border: 1px solid var(--line);
+	}
+
+	.lv-forest__ecosystem-fill {
+		display: block;
+		height: 100%;
+		background: var(--ok);
+		border-radius: 9999px;
+		transition: width 0.3s ease;
+	}
+
+	.lv-forest__ecosystem-max {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.8125rem;
+		font-weight: 600;
+		color: var(--ok);
+	}
+
 	.lv-forest__active-banner {
 		display: flex;
 		align-items: center;
@@ -590,119 +669,6 @@
 		font-family: var(--mono);
 		color: var(--muted);
 		margin-top: 0.15rem;
-	}
-
-	/* Painel de Inspeção (abaixo da grade) */
-	.lv-forest__inspector {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 1rem;
-		padding: 0.75rem 1rem;
-		background: var(--surface);
-		border: 1px solid var(--line-strong);
-		border-radius: var(--radius);
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-		animation: lv-fade-in 0.15s ease;
-	}
-
-	@keyframes lv-fade-in {
-		from {
-			opacity: 0;
-			transform: translateY(4px);
-		}
-		to {
-			opacity: 1;
-			transform: translateY(0);
-		}
-	}
-
-	.lv-forest__inspector-body {
-		display: flex;
-		align-items: center;
-		gap: 0.875rem;
-		min-width: 0;
-	}
-
-	.lv-forest__inspector-visual {
-		flex-shrink: 0;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-	}
-
-	.lv-forest__inspector-details {
-		display: flex;
-		flex-direction: column;
-		gap: 0.2rem;
-		min-width: 0;
-	}
-
-	.lv-forest__inspector-head {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		flex-wrap: wrap;
-	}
-
-	.lv-forest__inspector-title {
-		font-size: 0.875rem;
-		color: var(--ink);
-	}
-
-	.lv-forest__status-pill {
-		font-size: 0.6875rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.04em;
-		padding: 0.1rem 0.45rem;
-		border-radius: 9999px;
-	}
-
-	.lv-forest__status-pill.is-healthy {
-		background: color-mix(in srgb, var(--ok) 12%, transparent);
-		color: var(--ok);
-		border: 1px solid color-mix(in srgb, var(--ok) 28%, transparent);
-	}
-
-	.lv-forest__status-pill.is-withered {
-		background: color-mix(in srgb, var(--muted) 12%, transparent);
-		color: var(--muted);
-		border: 1px solid color-mix(in srgb, var(--muted) 28%, transparent);
-	}
-
-	.lv-forest__inspector-time {
-		font-size: 0.75rem;
-		font-family: var(--mono);
-		color: var(--muted);
-	}
-
-	.lv-forest__inspector-desc {
-		font-size: 0.8125rem;
-		color: var(--muted);
-		margin: 0;
-		line-height: 1.4;
-	}
-
-	.lv-forest__inspector-date {
-		color: var(--muted);
-		margin-left: 0.25rem;
-	}
-
-	.lv-forest__inspector-close {
-		background: transparent;
-		border: none;
-		color: var(--muted);
-		font-size: 1rem;
-		padding: 0.25rem 0.5rem;
-		border-radius: var(--radius);
-		cursor: pointer;
-		transition: color 0.15s ease, background 0.15s ease;
-	}
-
-	.lv-forest__inspector-close:hover {
-		color: var(--ink);
-		background: var(--surface-2);
 	}
 
 	@media (max-width: 640px) {

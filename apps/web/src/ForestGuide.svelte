@@ -1,5 +1,8 @@
 <script lang="ts">
+	import type { TreeStage } from './forest';
 	import ForestTreeSvg from './ForestTreeSvg.svelte';
+
+	let { speciesCounts }: { speciesCounts?: Record<TreeStage, number> } = $props();
 </script>
 
 <details class="lv-forest__guide">
@@ -17,6 +20,11 @@
 				<strong>Brotinho</strong>
 				<span>Sessão de foco de 1 a 20 min</span>
 			</div>
+			{#if speciesCounts && speciesCounts.sapling > 0}
+				<span class="lv-forest__species-count" title="{speciesCounts.sapling} cultivados no período">
+					{speciesCounts.sapling}
+				</span>
+			{/if}
 		</div>
 		<div class="lv-forest__species-card">
 			<ForestTreeSvg stage="oak" size={34} />
@@ -24,6 +32,11 @@
 				<strong>Carvalho Frondoso</strong>
 				<span>Sessão de foco de 21 a 40 min</span>
 			</div>
+			{#if speciesCounts && speciesCounts.oak > 0}
+				<span class="lv-forest__species-count" title="{speciesCounts.oak} cultivados no período">
+					{speciesCounts.oak}
+				</span>
+			{/if}
 		</div>
 		<div class="lv-forest__species-card">
 			<ForestTreeSvg stage="pine" size={34} />
@@ -31,6 +44,11 @@
 				<strong>Pinheiro Nobre</strong>
 				<span>Sessão de foco de 41 a 60 min</span>
 			</div>
+			{#if speciesCounts && speciesCounts.pine > 0}
+				<span class="lv-forest__species-count" title="{speciesCounts.pine} cultivados no período">
+					{speciesCounts.pine}
+				</span>
+			{/if}
 		</div>
 		<div class="lv-forest__species-card">
 			<ForestTreeSvg stage="ancient" size={34} />
@@ -38,6 +56,11 @@
 				<strong>Árvore Ancestral</strong>
 				<span>Sessão de foco profundo (+60 min)</span>
 			</div>
+			{#if speciesCounts && speciesCounts.ancient > 0}
+				<span class="lv-forest__species-count" title="{speciesCounts.ancient} cultivados no período">
+					{speciesCounts.ancient}
+				</span>
+			{/if}
 		</div>
 		<div class="lv-forest__species-card is-withered">
 			<ForestTreeSvg stage="withered" size={34} />
@@ -45,6 +68,11 @@
 				<strong>Árvore Seca</strong>
 				<span>Sessão abandonada antes do fim</span>
 			</div>
+			{#if speciesCounts && speciesCounts.withered > 0}
+				<span class="lv-forest__species-count is-withered" title="{speciesCounts.withered} interrompidas no período">
+					{speciesCounts.withered}
+				</span>
+			{/if}
 		</div>
 	</div>
 </details>
@@ -86,6 +114,7 @@
 		background: var(--surface-2);
 		border: 1px solid var(--line);
 		border-radius: var(--radius);
+		position: relative;
 	}
 
 	.lv-forest__species-card.is-withered {
@@ -97,6 +126,7 @@
 		flex-direction: column;
 		gap: 0.15rem;
 		min-width: 0;
+		flex: 1;
 	}
 
 	.lv-forest__species-info strong {
@@ -107,5 +137,23 @@
 	.lv-forest__species-info span {
 		font-size: 0.6875rem;
 		color: var(--muted);
+	}
+
+	.lv-forest__species-count {
+		font-size: 0.6875rem;
+		font-family: var(--mono);
+		font-weight: 700;
+		color: var(--ok);
+		background: color-mix(in srgb, var(--ok) 12%, transparent);
+		border: 1px solid color-mix(in srgb, var(--ok) 25%, transparent);
+		padding: 0.1rem 0.4rem;
+		border-radius: 9999px;
+		white-space: nowrap;
+	}
+
+	.lv-forest__species-count.is-withered {
+		color: var(--muted);
+		background: color-mix(in srgb, var(--muted) 12%, transparent);
+		border-color: color-mix(in srgb, var(--muted) 25%, transparent);
 	}
 </style>

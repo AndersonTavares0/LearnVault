@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	buildForest,
 	calculateForestStats,
+	deriveEcosystem,
 	deriveTreeStage,
 	filterForest,
 	formatTreeLabel,
@@ -134,6 +135,50 @@ describe('forest logic', () => {
 		expect(stats.witheredTrees).toBe(1);
 		expect(stats.successRate).toBe(67);
 		expect(stats.totalMinutes).toBe(75); // 25 + 50 (ignora minutos de árvores murchas)
+		expect(stats.ecosystem.name).toBe('Bosque Jovem');
+		expect(stats.longestSessionMinutes).toBe(50);
+		expect(stats.speciesCounts.oak).toBe(1);
+		expect(stats.speciesCounts.pine).toBe(1);
+		expect(stats.speciesCounts.withered).toBe(1);
+	});
+
+	it('derives ecosystem progression stages based on healthy trees count', () => {
+		expect(deriveEcosystem(0)).toMatchObject({
+			level: 0,
+			name: 'Clareira Inicial',
+			treesToNext: 1,
+			nextName: 'Bosque Jovem'
+		});
+		expect(deriveEcosystem(2)).toMatchObject({
+			level: 1,
+			name: 'Bosque Jovem',
+			treesToNext: 3,
+			nextName: 'Bosque Frondoso'
+		});
+		expect(deriveEcosystem(8)).toMatchObject({
+			level: 2,
+			name: 'Bosque Frondoso',
+			treesToNext: 4,
+			nextName: 'Floresta Verdejante'
+		});
+		expect(deriveEcosystem(15)).toMatchObject({
+			level: 3,
+			name: 'Floresta Verdejante',
+			treesToNext: 10,
+			nextName: 'Reserva Natural'
+		});
+		expect(deriveEcosystem(30)).toMatchObject({
+			level: 4,
+			name: 'Reserva Natural',
+			treesToNext: 20,
+			nextName: 'Santuário Ancestral'
+		});
+		expect(deriveEcosystem(60)).toMatchObject({
+			level: 5,
+			name: 'Santuário Ancestral',
+			treesToNext: 0,
+			nextName: null
+		});
 	});
 
 	it('filters trees by time range', () => {

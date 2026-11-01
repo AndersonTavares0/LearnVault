@@ -23,12 +23,29 @@ export type Mission = {
 
 export type Level = {
 	level: number;
+	title: string;
 	xp: number;
 	currentLevelXp: number;
 	nextLevelXp: number;
 	progress: number;
 	xpToNext: number;
 };
+
+const LEVEL_TITLES = [
+	'Aprendiz Curioso',
+	'Explorador do Acervo',
+	'Estudante Dedicado',
+	'Praticante Consistente',
+	'Artesão do Conhecimento',
+	'Mestre da Disciplina',
+	'Sábio da Biblioteca',
+	'Guardião do Conhecimento'
+];
+
+export function levelTitle(level: number): string {
+	const index = Math.max(0, level - 1);
+	return LEVEL_TITLES[Math.min(index, LEVEL_TITLES.length - 1)];
+}
 
 export type Gamification = {
 	xp: number;
@@ -46,6 +63,7 @@ export function levelForXp(xp: number): Level {
 	const span = Math.max(1, nextLevelXp - currentLevelXp);
 	return {
 		level,
+		title: levelTitle(level),
 		xp: safe,
 		currentLevelXp,
 		nextLevelXp,
