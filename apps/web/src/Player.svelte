@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onDestroy } from 'svelte';
 	import LooseFiles from './LooseFiles.svelte';
 	import StudyNotes from './StudyNotes.svelte';
 	import Flashcards from './Flashcards.svelte';
@@ -20,7 +21,7 @@
 	} from './player';
 	import { createPositionSaver } from './study';
 	import { createDefaultPlayerPreferences, lessonPreferenceKey, updateLessonPreference, type PlayerPreferences } from './player-preferences';
-	import { transport, type Lesson, type StudyProgress } from './transport';
+	import { transport, type Lesson, type StudyNote, type StudyProgress } from './transport';
 
 	let {
 		lesson,
@@ -76,11 +77,88 @@
 	let duration = $state(0);
 	let lastAppliedPosition = $state<number | null>(null);
 
+	const supportsPip = typeof document !== 'undefined' && 'pictureInPictureEnabled' in document && Boolean(document.pictureInPictureEnabled);
+	let isPipActive = $state(false);
+
+	let nextLessonCountdown = $state<number | null>(null);
+	let countdownInterval: ReturnType<typeof setInterval> | null = null;
+
+	let lessonNotes = $state<StudyNote[]>([]);
+
+	function cancelAutoNext() {
+		if (countdownInterval) {
+			clearInterval(countdownInterval);
+			countdownInterval = null;
+		}
+		nextLessonCountdown = null;
+	}
+
+	function proceedAutoNext() {
+		cancelAutoNext();
+		onAutoNext();
+	}
+
+	function startAutoNextCountdown() {
+		cancelAutoNext();
+		nextLessonCountdown = 5;
+		countdownInterval = setInterval(() => {
+			if (nextLessonCountdown !== null && nextLessonCountdown > 1) {
+				nextLessonCountdown -= 1;
+			} else {
+				proceedAutoNext();
+			}
+		}, 1000);
+	}
+
+	onDestroy(() => {
+		cancelAutoNext();
+	});
+
+	async function togglePictureInPicture() {
+		if (!media || !(media instanceof HTMLVideoElement)) return;
+		try {
+			if (document.pictureInPictureElement === media) {
+				await document.exitPictureInPicture();
+			} else {
+				await media.requestPictureInPicture();
+			}
+		} catch {
+			// Ignora recusa/erro de PiP
+		}
+	}
+
+	$effect(() => {
+		const el = media;
+		if (!el || !(el instanceof HTMLVideoElement)) return;
+		const handleEnterPip = () => { isPipActive = true; };
+		const handleLeavePip = () => { isPipActive = false; };
+		el.addEventListener('enterpictureinpicture', handleEnterPip);
+		el.addEventListener('leavepictureinpicture', handleLeavePip);
+		return () => {
+			el.removeEventListener('enterpictureinpicture', handleEnterPip);
+			el.removeEventListener('leavepictureinpicture', handleLeavePip);
+		};
+	});
+
 	$effect(() => {
 		if (source) {
 			lastAppliedPosition = null;
 			playbackErrorCode = null;
+			cancelAutoNext();
 		}
+	});
+
+	$effect(() => {
+		const id = mediaId;
+		if (!id || !syncEnabled) {
+			lessonNotes = [];
+			return;
+		}
+		let active = true;
+		transport.listNotes(id)
+			.then((items) => { if (active) lessonNotes = items; })
+			.catch(() => { if (active) lessonNotes = []; });
+		return () => { active = false; };
 	});
 
 	$effect(() => {
@@ -181,6 +259,11 @@
 		if ((event.key === 'f' || event.key === 'F') && playbackKind === 'video') {
 			event.preventDefault();
 			toggleFullscreen();
+			return;
+		}
+		if ((event.key === 'p' || event.key === 'P') && playbackKind === 'video' && supportsPip) {
+			event.preventDefault();
+			void togglePictureInPicture();
 			return;
 		}
 
@@ -308,7 +391,9 @@
 				// Ignora erros ao marcar conclusão automaticamente.
 			}
 		}
-		if (shouldAutoAdvance(autoNext, hasNextLesson)) onAutoNext();
+		if (shouldAutoAdvance(autoNext, hasNextLesson)) {
+			startAutoNextCountdown();
+		}
 	}
 
 	function handleMediaError() {
@@ -341,7 +426,7 @@
 	</div>{@render lessonHeading()}
 {:else if source}
 	<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions (o grupo identificado do player recebe foco para ativar atalhos) -->
-	<div bind:this={playerContainerRef} class="player-container {playbackKind === 'audio' ? 'audio-container' : 'video-container'}" role="group" tabindex="0" onkeydown={handleKeydown} aria-label="Player" aria-keyshortcuts="Space ArrowLeft ArrowRight k j l [ ] f">
+	<div bind:this={playerContainerRef} class="player-container {playbackKind === 'audio' ? 'audio-container' : 'video-container'}" role="group" tabindex="0" onkeydown={handleKeydown} aria-label="Player" aria-keyshortcuts="Space ArrowLeft ArrowRight k j l [ ] f p">
 		<div class="player-top-controls">
 			{#if availableMedia.length > 1}<label class="player-select-label">Mídia da aula<select aria-label="Mídia da aula" value={playable?.mediaId ?? ''} onchange={selectMedia}>{#each availableMedia as item}<option value={item.mediaId ?? ''}>{item.name}</option>{/each}</select></label>{/if}
 			{#if availableSubtitles.length > 0}<label class="player-select-label">Legenda<select aria-label="Legenda da aula" value={lessonPreference.subtitleId === null ? '' : selectedSubtitle?.mediaId ?? ''} onchange={selectSubtitle}><option value="">Sem legendas</option>{#each availableSubtitles as item}<option value={item.mediaId ?? ''}>{item.name}</option>{/each}</select></label>{/if}
@@ -356,14 +441,69 @@
 				<span class="audio-label">Faixa de áudio · {lesson.title}</span>
 			</div>
 			<!-- svelte-ignore a11y_media_has_caption -->
-			<audio class="player-media player-audio" controls preload="metadata" src={source} aria-label={`Player da aula${lessonTitle ? `: ${lessonTitle}` : ''}`} bind:this={media} bind:currentTime={currentTime} bind:duration={duration} ontimeupdate={handleTimeUpdate} onended={handleEnded} onloadedmetadata={handleLoadedMetadata} onerror={handleMediaError}>
+			<audio class="player-media player-audio" controls preload="metadata" src={source} aria-label={`Player da aula${lessonTitle ? `: ${lessonTitle}` : ''}`} bind:this={media} bind:currentTime={currentTime} bind:duration={duration} onplay={cancelAutoNext} ontimeupdate={handleTimeUpdate} onended={handleEnded} onloadedmetadata={handleLoadedMetadata} onerror={handleMediaError}>
 				{#if captionSource}<track kind="captions" src={captionSource} label="Legenda" default />{/if}
 			</audio>
 		{:else}
 			<!-- svelte-ignore a11y_media_has_caption -->
-			<video class="player-media" controls preload="metadata" src={source} aria-label={`Player da aula${lessonTitle ? `: ${lessonTitle}` : ''}`} bind:this={media} bind:currentTime={currentTime} bind:duration={duration} ontimeupdate={handleTimeUpdate} onended={handleEnded} onloadedmetadata={handleLoadedMetadata} onerror={handleMediaError}>
+			<video class="player-media" controls preload="metadata" src={source} aria-label={`Player da aula${lessonTitle ? `: ${lessonTitle}` : ''}`} bind:this={media} bind:currentTime={currentTime} bind:duration={duration} onplay={cancelAutoNext} ontimeupdate={handleTimeUpdate} onended={handleEnded} onloadedmetadata={handleLoadedMetadata} onerror={handleMediaError}>
 				{#if captionSource}<track kind="captions" src={captionSource} label="Legenda" default />{/if}
 			</video>
+		{/if}
+
+		{#if duration > 0 && lessonNotes.length > 0}
+			<div class="player-timeline-markers" role="region" aria-label="Anotações na linha do tempo">
+				<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+				<div class="timeline-track" onclick={(e) => {
+					const rect = e.currentTarget.getBoundingClientRect();
+					const fraction = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+					if (media) {
+						cancelAutoNext();
+						media.currentTime = fraction * duration;
+					}
+				}}>
+					<div class="timeline-progress" style="width: {Math.min(100, (currentTime / duration) * 100)}%;"></div>
+					{#each lessonNotes as note (note.noteId)}
+						{@const pct = Math.max(0, Math.min(100, (note.positionSeconds / duration) * 100))}
+						<button
+							type="button"
+							class="timeline-marker"
+							style="left: {pct}%;"
+							title="{formatDuration(note.positionSeconds)} · {note.content}"
+							aria-label="Ir para anotação em {formatDuration(note.positionSeconds)}: {note.content}"
+							onclick={(e) => {
+								e.stopPropagation();
+								if (media) {
+									cancelAutoNext();
+									media.currentTime = note.positionSeconds;
+									void media.play().catch(() => undefined);
+								}
+							}}
+						>
+							<span class="marker-dot"></span>
+						</button>
+					{/each}
+				</div>
+			</div>
+		{/if}
+
+		{#if nextLessonCountdown !== null}
+			<div class="player-countdown-overlay" role="alert" aria-live="assertive">
+				<div class="countdown-card">
+					<svg class="countdown-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<circle cx="12" cy="12" r="10"/>
+						<polyline points="12 6 12 12 16 14"/>
+					</svg>
+					<div class="countdown-text">
+						<strong>Próxima aula em {nextLessonCountdown}s</strong>
+						<span>Avançando automaticamente pelo curso</span>
+					</div>
+					<div class="countdown-actions">
+						<button type="button" class="player-tool-btn" onclick={cancelAutoNext}>Cancelar</button>
+						<button type="button" class="player-tool-btn lvui-btn-primary" onclick={proceedAutoNext}>Avançar agora</button>
+					</div>
+				</div>
+			</div>
 		{/if}
 
 		<!-- Barra de Controles Rápidos do Player -->
@@ -434,6 +574,23 @@
 							<path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3" />
 						</svg>
 					</button>
+					{#if supportsPip}
+						<button
+							type="button"
+							class="player-tool-btn player-pip-btn"
+							class:is-active={isPipActive}
+							onclick={togglePictureInPicture}
+							title={isPipActive ? "Sair de Picture-in-Picture (P)" : "Picture-in-Picture (P)"}
+							aria-label={isPipActive ? "Sair de Picture-in-Picture" : "Picture-in-Picture"}
+							aria-pressed={isPipActive}
+						>
+							<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+								<rect x="2" y="4" width="20" height="16" rx="2" />
+								<rect x="12" y="11" width="8" height="7" rx="1" fill={isPipActive ? "currentColor" : "none"} />
+							</svg>
+							<span>PiP</span>
+						</button>
+					{/if}
 				{/if}
 			</div>
 		</div>
@@ -504,9 +661,13 @@
 					{currentTime}
 					onSeek={(targetSeconds) => {
 						if (media) {
+							cancelAutoNext();
 							media.currentTime = targetSeconds;
 							void media.play().catch(() => undefined);
 						}
+					}}
+					onNotesChange={(notes) => {
+						lessonNotes = notes;
 					}}
 				/>
 			</div>

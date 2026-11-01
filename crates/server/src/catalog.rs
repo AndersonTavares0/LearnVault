@@ -211,6 +211,7 @@ pub(crate) async fn rescan(State(state): State<AppState>, headers: HeaderMap) ->
 
     let database = state.database.clone();
     let courses = state.courses_snapshot();
+    let covers_dir = crate::covers::covers_dir(&state.config.database_path);
     let lock_path = rescan_lock_path(&state.config.database_path);
     let mut database = database.lock_owned().await;
     let Some(blocking_task) = state.try_acquire_blocking_task() else {
@@ -241,6 +242,11 @@ pub(crate) async fn rescan(State(state): State<AppState>, headers: HeaderMap) ->
             };
             match learnvault_core::rescan(&mut database, &course.id, root.as_path()) {
                 Ok(summary) => {
+                    let _ = crate::covers::auto_detect_course_cover(
+                        &covers_dir,
+                        &course.id,
+                        root.as_path(),
+                    );
                     aggregate.scan_id = aggregate.scan_id.max(summary.scan_id);
                     aggregate.complete = aggregate.complete && summary.complete;
                     aggregate.inserted += summary.inserted;

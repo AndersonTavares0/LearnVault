@@ -17,13 +17,17 @@
 		courseId,
 		expandAll = false,
 		showFiles = true,
-		activePath = null
+		activePath = null,
+		completedMediaIds = undefined,
+		onToggleLessonCompleted = undefined
 	}: {
 		nodes: CatalogNode[];
 		courseId: string;
 		expandAll?: boolean;
 		showFiles?: boolean;
 		activePath?: string | null;
+		completedMediaIds?: Set<string>;
+		onToggleLessonCompleted?: (node: CatalogNode) => void;
 	} = $props();
 
 	// O nó contém a aula aberta quando é a própria aula ou um ancestral dela. Caminhos são
@@ -62,7 +66,7 @@
 				<svg class="section-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
 			</summary>
 			<ul class="lesson-list">
-				{#each node.children as child (child.path)}<li><CatalogTree nodes={[child]} {courseId} {expandAll} {showFiles} {activePath} /></li>{/each}
+				{#each node.children as child (child.path)}<li><CatalogTree nodes={[child]} {courseId} {expandAll} {showFiles} {activePath} {completedMediaIds} {onToggleLessonCompleted} /></li>{/each}
 			</ul>
 			{#if showFiles && (node.files.length || node.looseFiles.length)}<LooseFiles files={[...node.files, ...node.looseFiles]} heading="Materiais complementares" {courseId} />{/if}
 		</details>
@@ -70,6 +74,7 @@
 		{@const counts = countCatalogFiles(node)}
 		{@const meta = formatLessonMeta(counts)}
 		{@const missing = isLessonMissing(node)}
+		{@const mediaFile = [...node.files, ...node.looseFiles].find((f) => f.kind === 'media' && f.mediaId)}
 		{#if missing}
 			<!-- Aula sem mídia disponível: continua listada e legível, mas não abre o player,
 			     então a linha é conteúdo estático — sem link e fora da ordem de foco. -->
@@ -82,15 +87,38 @@
 				{#if meta}<span class="lesson-meta">{meta}</span>{/if}
 			</div>
 		{:else}
-			<a class="lesson-row" class:active={activePath === node.path} href={href('course', courseId, node.path)} aria-current={activePath === node.path ? 'page' : undefined} use:revealActive={activePath === node.path}>
-				<svg class="lesson-glyph" viewBox="0 0 16 16" aria-hidden="true">
-					{#if counts.videos > 0}<path d="M5.5 3.5l6.5 4.5-6.5 4.5z" />{:else}<path d="M4.5 2.5h7v11h-7z" fill="none" stroke="currentColor" stroke-width="1.4" />{/if}
-				</svg>
-				<span class="lesson-title">{node.title}</span>
-				{#if meta}<span class="lesson-meta">{meta}</span>{/if}
-			</a>
+			<div class="lesson-item-wrap" class:active={activePath === node.path}>
+				{#if onToggleLessonCompleted && mediaFile?.mediaId}
+					{@const isCompleted = completedMediaIds?.has(mediaFile.mediaId) ?? false}
+					<button
+						type="button"
+						class="lesson-check-btn"
+						class:is-completed={isCompleted}
+						onclick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleLessonCompleted(node); }}
+						title={isCompleted ? `Marcar "${node.title}" como não concluída` : `Marcar "${node.title}" como concluída`}
+						aria-label={isCompleted ? `Marcar "${node.title}" como não concluída` : `Marcar "${node.title}" como concluída`}
+					>
+						{#if isCompleted}
+							<svg class="lesson-check-icon check-filled" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+								<path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z" />
+							</svg>
+						{:else}
+							<svg class="lesson-check-icon check-empty" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+								<circle cx="8" cy="8" r="6" />
+							</svg>
+						{/if}
+					</button>
+				{/if}
+				<a class="lesson-row" class:active={activePath === node.path} href={href('course', courseId, node.path)} aria-current={activePath === node.path ? 'page' : undefined} use:revealActive={activePath === node.path}>
+					<svg class="lesson-glyph" viewBox="0 0 16 16" aria-hidden="true">
+						{#if counts.videos > 0}<path d="M5.5 3.5l6.5 4.5-6.5 4.5z" />{:else}<path d="M4.5 2.5h7v11h-7z" fill="none" stroke="currentColor" stroke-width="1.4" />{/if}
+					</svg>
+					<span class="lesson-title">{node.title}</span>
+					{#if meta}<span class="lesson-meta">{meta}</span>{/if}
+				</a>
+			</div>
 		{/if}
-		{#if node.children.length}<div class="lesson-children">{#each node.children as child (child.path)}<CatalogTree nodes={[child]} {courseId} {expandAll} {showFiles} {activePath} />{/each}</div>{/if}
+		{#if node.children.length}<div class="lesson-children">{#each node.children as child (child.path)}<CatalogTree nodes={[child]} {courseId} {expandAll} {showFiles} {activePath} {completedMediaIds} {onToggleLessonCompleted} />{/each}</div>{/if}
 	{:else}
 		{@const meta = formatCourseMeta(countCatalogNode(node))}
 		<section class="course-block">
@@ -99,7 +127,7 @@
 				{#if meta}<p class="course-meta">{meta}</p>{/if}
 			</header>
 			{#if showFiles && (node.files.length || node.looseFiles.length)}<LooseFiles files={[...node.files, ...node.looseFiles]} heading="Arquivos soltos" {courseId} />{/if}
-			{#if node.children.length}<div class="course-body">{#each node.children as child (child.path)}<CatalogTree nodes={[child]} {courseId} {expandAll} {showFiles} {activePath} />{/each}</div>{/if}
+			{#if node.children.length}<div class="course-body">{#each node.children as child (child.path)}<CatalogTree nodes={[child]} {courseId} {expandAll} {showFiles} {activePath} {completedMediaIds} {onToggleLessonCompleted} />{/each}</div>{/if}
 		</section>
 	{/if}
 {/each}

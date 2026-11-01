@@ -5,11 +5,13 @@
 	let {
 		mediaId,
 		currentTime = 0,
-		onSeek = () => undefined
+		onSeek = () => undefined,
+		onNotesChange
 	}: {
 		mediaId: string | null;
 		currentTime: number;
 		onSeek: (seconds: number) => void;
+		onNotesChange?: (notes: StudyNote[]) => void;
 	} = $props();
 
 	let notes: StudyNote[] = $state([]);
@@ -19,6 +21,10 @@
 	let noteContent = $state('');
 	let notePosition = $state(0);
 	let saving = $state(false);
+
+	$effect(() => {
+		onNotesChange?.(notes);
+	});
 
 	$effect(() => {
 		const id = mediaId;

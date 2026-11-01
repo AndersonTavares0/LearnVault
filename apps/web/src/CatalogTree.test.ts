@@ -114,4 +114,44 @@ describe('catalog tree rendering', () => {
 		expect(body.match(/course-section"[^>]* open/g)).toHaveLength(1);
 		expect(body).toContain('href="#/course/course-1/mod-1%2Faula-1"');
 	});
+
+	it('renders quick completion toggle button when handler is supplied and reflects completed state', () => {
+		const lesson = node('lesson', 'Aula Concluível', 'curso/aula-1', [], [file('a.mp4', 'media')]);
+		const uncompleted = render(CatalogTree, {
+			props: {
+				nodes: [lesson],
+				courseId: 'course-1',
+				completedMediaIds: new Set<string>(),
+				onToggleLessonCompleted: () => undefined,
+			}
+		});
+		expect(uncompleted.body).toContain('lesson-check-btn');
+		expect(uncompleted.body).toContain('aria-label="Marcar &quot;Aula Concluível&quot; como concluída"');
+		expect(uncompleted.body).not.toContain('is-completed');
+
+		const completed = render(CatalogTree, {
+			props: {
+				nodes: [lesson],
+				courseId: 'course-1',
+				completedMediaIds: new Set(['a.mp4']),
+				onToggleLessonCompleted: () => undefined,
+			}
+		});
+		expect(completed.body).toContain('lesson-check-btn is-completed');
+		expect(completed.body).toContain('aria-label="Marcar &quot;Aula Concluível&quot; como não concluída"');
+		expect(completed.body).toContain('check-filled');
+	});
+
+	it('does not render completion toggle button for non-media lessons', () => {
+		const readingLesson = node('lesson', 'Leitura', 'curso/slides', [], [file('slides.pdf', 'material')]);
+		const { body } = render(CatalogTree, {
+			props: {
+				nodes: [readingLesson],
+				courseId: 'course-1',
+				completedMediaIds: new Set<string>(),
+				onToggleLessonCompleted: () => undefined,
+			}
+		});
+		expect(body).not.toContain('lesson-check-btn');
+	});
 });

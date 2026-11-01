@@ -177,7 +177,9 @@ pub(crate) fn store_cover(
     fs::create_dir_all(covers_dir).map_err(|_| CoverError::WriteFailed)?;
 
     let destination = cover_file(covers_dir, course_id);
-    let temporary = covers_dir.join(format!(".{course_id}.{}.tmp", std::process::id()));
+    static ATOMIC_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let counter = ATOMIC_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let temporary = covers_dir.join(format!(".{course_id}.{}.{counter}.tmp", std::process::id()));
     let write_result = (|| -> std::io::Result<()> {
         let mut file = OpenOptions::new()
             .write(true)
@@ -245,6 +247,72 @@ pub(crate) fn modified_seconds(metadata: &Metadata) -> Option<i64> {
     let modified = metadata.modified().ok()?;
     let seconds = modified.duration_since(UNIX_EPOCH).ok()?.as_secs();
     i64::try_from(seconds).ok()
+}
+
+/// Detecta automaticamente uma capa local na raiz da pasta do curso e a armazena em `covers_dir`.
+///
+/// Não substitui capa já existente em `covers_dir`. Prioriza os nomes `cover.*`, `folder.*`,
+/// `poster.*`, `thumb.*` e `thumbnail.*` com extensões suportadas (`.jpg`, `.jpeg`, `.png`, `.webp`).
+/// O diretório do curso é lido de forma estritamente somente-leitura.
+pub(crate) fn auto_detect_course_cover(
+    covers_dir: &Path,
+    course_id: &str,
+    course_root: &Path,
+) -> Result<bool, CoverError> {
+    if !valid_course_id(course_id) {
+        return Ok(false);
+    }
+    if cover_version(covers_dir, course_id).is_some() {
+        return Ok(false);
+    }
+    let read_dir = match fs::read_dir(course_root) {
+        Ok(iter) => iter,
+        Err(_) => return Ok(false),
+    };
+
+    let priority_stems = ["cover", "folder", "poster", "thumb", "thumbnail"];
+    let allowed_exts = ["jpg", "jpeg", "png", "webp"];
+    let mut candidates: Vec<(usize, PathBuf)> = Vec::new();
+
+    for entry in read_dir.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        let lower = name.to_ascii_lowercase();
+        let Some((stem, ext)) = lower.rsplit_once('.') else {
+            continue;
+        };
+        if !allowed_exts.contains(&ext) {
+            continue;
+        }
+        if let Some(priority) = priority_stems.iter().position(|&s| s == stem) {
+            candidates.push((priority, path));
+        }
+    }
+
+    candidates.sort_by_key(|(p, _)| *p);
+
+    for (_, candidate_path) in candidates {
+        let Ok(meta) = fs::symlink_metadata(&candidate_path) else {
+            continue;
+        };
+        if !meta.is_file() || meta.len() > MAX_COVER_BYTES as u64 {
+            continue;
+        }
+        let Ok(bytes) = fs::read(&candidate_path) else {
+            continue;
+        };
+        if detect_image_type(&bytes).is_some() {
+            store_cover(covers_dir, course_id, &bytes)?;
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
 }
 
 /// Verdadeiro quando a identidade é segura e corresponde a um curso registrado.
@@ -664,5 +732,33 @@ mod tests {
         assert!(!remove_cover(&covers, "../library-9").unwrap());
         assert_eq!(read_cover(&covers, "../library-9").unwrap(), None);
         assert!(!outside.exists());
+    }
+
+    #[test]
+    fn auto_detect_course_cover_detects_local_cover_and_preserves_custom() {
+        use super::auto_detect_course_cover;
+        let temp = tempdir().unwrap();
+        let covers = covers_dir(&temp.path().join("learnvault.sqlite"));
+        let course_dir = temp.path().join("curso_web");
+        fs::create_dir_all(&course_dir).unwrap();
+
+        // 1. Sem imagens -> não detecta
+        assert!(!auto_detect_course_cover(&covers, "course-web", &course_dir).unwrap());
+        assert!(cover_version(&covers, "course-web").is_none());
+
+        // 2. Imagem poster.png -> detecta e salva
+        let png_bytes = png();
+        fs::write(course_dir.join("poster.png"), &png_bytes).unwrap();
+        assert!(auto_detect_course_cover(&covers, "course-web", &course_dir).unwrap());
+        assert!(cover_version(&covers, "course-web").is_some());
+        let (stored_bytes, image_type) = read_cover(&covers, "course-web").unwrap().unwrap();
+        assert_eq!(stored_bytes, png_bytes);
+        assert_eq!(image_type, ImageType::Png);
+
+        // 3. Imagem cover.jpg com prioridade mais alta adicionada depois -> não sobrescreve
+        fs::write(course_dir.join("cover.jpg"), jpeg()).unwrap();
+        assert!(!auto_detect_course_cover(&covers, "course-web", &course_dir).unwrap());
+        let (stored_bytes_after, _) = read_cover(&covers, "course-web").unwrap().unwrap();
+        assert_eq!(stored_bytes_after, png_bytes);
     }
 }

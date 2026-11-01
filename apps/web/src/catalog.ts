@@ -113,6 +113,45 @@ export function formatCount(value: number, singular: string, plural: string): st
 	return `${value} ${value === 1 ? singular : plural}`;
 }
 
+export type CourseProgressStatus = 'all' | 'in_progress' | 'not_started' | 'completed';
+
+/**
+ * Determina o status de estudo de um curso com base nas aulas concluídas e em andamento.
+ */
+export function getCourseProgressStatus(
+	courseNode: CatalogNode,
+	completedMediaIds: Set<string>,
+	inProgressMediaIds?: Set<string>
+): 'completed' | 'in_progress' | 'not_started' {
+	let totalLessons = 0;
+	let completedLessons = 0;
+	let hasInProgress = false;
+
+	function walk(current: CatalogNode): void {
+		if (current.role === 'lesson') {
+			if (!isLessonMissing(current)) {
+				const mediaFiles = [...current.files, ...current.looseFiles].filter((f) => f.kind === 'media' && f.mediaId);
+				if (mediaFiles.length > 0) {
+					totalLessons += 1;
+					const isCompleted = mediaFiles.some((f) => f.mediaId && completedMediaIds.has(f.mediaId));
+					if (isCompleted) {
+						completedLessons += 1;
+					} else if (inProgressMediaIds && mediaFiles.some((f) => f.mediaId && inProgressMediaIds.has(f.mediaId))) {
+						hasInProgress = true;
+					}
+				}
+			}
+		}
+		for (const child of current.children) walk(child);
+	}
+
+	walk(courseNode);
+
+	if (totalLessons > 0 && completedLessons === totalLessons) return 'completed';
+	if (completedLessons > 0 || hasInProgress) return 'in_progress';
+	return 'not_started';
+}
+
 function joinParts(parts: string[]): string {
 	return parts.filter(Boolean).join(' · ');
 }
