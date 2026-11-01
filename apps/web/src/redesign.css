@@ -96,6 +96,11 @@ select {
 	color: inherit;
 }
 
+option {
+	background-color: var(--surface);
+	color: var(--ink);
+}
+
 input::placeholder,
 textarea::placeholder {
 	color: var(--muted);
@@ -5205,6 +5210,11 @@ input,
 select,
 textarea {
 	font-family: inherit;
+}
+
+option {
+	background-color: var(--surface);
+	color: var(--ink);
 }
 
 :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {

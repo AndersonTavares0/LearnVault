@@ -183,12 +183,18 @@
 	.lv-focus-menu__seed-select {
 		background: transparent;
 		border: none;
-		color: var(--text);
+		color: var(--ink);
 		font-weight: 600;
 		font-size: 0.8125rem;
 		cursor: pointer;
 		flex: 1;
 		outline: none;
+		color-scheme: light dark;
+	}
+
+	.lv-focus-menu__seed-select option {
+		background-color: var(--surface);
+		color: var(--ink);
 	}
 
 	.lv-focus-menu__footer-links {
