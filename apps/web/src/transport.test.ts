@@ -604,6 +604,27 @@ describe('transport contract', () => {
 			expect(() => normalizeCatalog({ complete: true, loose_files: [], nodes: [{ title: 'Curso', path: '', role: 'course', course_id: 'course-1', cover_version, files: [], loose_files: [], children: [] }] })).toThrow('Resposta inválida do servidor');
 		}
 	});
+	it('normalizes the source folder exposed for a course node', () => {
+		const catalog = normalizeCatalog({
+			complete: true,
+			loose_files: [],
+			nodes: [{ title: 'Curso', path: '', role: 'course', course_id: 'course-1', source_folder: 'Meus Cursos', files: [], loose_files: [], children: [] }]
+		});
+		expect(catalog.nodes[0].sourceFolder).toBe('Meus Cursos');
+
+		const without = normalizeCatalog({
+			complete: true,
+			loose_files: [],
+			nodes: [{ title: 'Curso', path: '', role: 'course', course_id: 'course-1', files: [], loose_files: [], children: [] }]
+		});
+		expect(without.nodes[0].sourceFolder).toBeUndefined();
+
+		expect(() => normalizeCatalog({
+			complete: true,
+			loose_files: [],
+			nodes: [{ title: 'Curso', path: '', role: 'course', course_id: 'course-1', source_folder: 123, files: [], loose_files: [], children: [] }]
+		})).toThrow('Resposta inválida do servidor');
+	});
 	it('normalizes the update status and keeps a nullable error', () => {
 		expect(normalizeUpdateStatus({ current: '0.3.0', enabled: true, available: true, latest: '0.4.0', releasedAt: '2026-10-17T12:00:00Z', url: 'https://github.com/AndersonTavares0/LearnVault/releases/tag/v0.4.0', changelog: null, checkedAt: '1760702400', error: null })).toEqual({
 			current: '0.3.0', enabled: true, available: true, latest: '0.4.0', releasedAt: '2026-10-17T12:00:00Z', url: 'https://github.com/AndersonTavares0/LearnVault/releases/tag/v0.4.0', changelog: null, checkedAt: '1760702400', error: null
@@ -859,6 +880,57 @@ describe('desktop transport over IPC', () => {
 		// chamada: nada do conteúdo recebido chega à interface.
 		vi.mocked(invoke).mockResolvedValue({ media_id: 'm1', position_seconds: 'zero', completed: false, recorded: true });
 		await expect(new DesktopStub().studyProgress('m1')).rejects.toThrow('Não foi possível ler o progresso.');
+	});
+
+	it('manages study notes over desktop IPC with sanitized error handling', async () => {
+		const desktop = new DesktopStub();
+
+		// listNotes com mediaId
+		vi.mocked(invoke).mockResolvedValueOnce([
+			{ note_id: 'n1', media_id: 'm1', position_seconds: 45, content: 'Nota desktop', created_at: 100, updated_at: 100 }
+		]);
+		const notes = await desktop.listNotes('m1');
+		expect(invoke).toHaveBeenCalledWith('desktop_list_notes', { mediaId: 'm1' });
+		expect(notes).toHaveLength(1);
+		expect(notes[0].noteId).toBe('n1');
+		expect(notes[0].positionSeconds).toBe(45);
+
+		// listNotes sem mediaId (global)
+		vi.mocked(invoke).mockResolvedValueOnce([
+			{ note_id: 'n2', media_id: 'm2', relative_path: 'curso/aula.mp4', position_seconds: 12, content: 'Nota global', created_at: 101, updated_at: 101 }
+		]);
+		const allNotes = await desktop.listNotes();
+		expect(invoke).toHaveBeenCalledWith('desktop_list_notes', {});
+		expect(allNotes).toHaveLength(1);
+		expect(allNotes[0].relativePath).toBe('curso/aula.mp4');
+
+		// createNote
+		vi.mocked(invoke).mockResolvedValueOnce({
+			note_id: 'n3', media_id: 'm1', position_seconds: 60, content: 'Nova nota', created_at: 102, updated_at: 102
+		});
+		const created = await desktop.createNote('m1', 60, 'Nova nota');
+		expect(invoke).toHaveBeenCalledWith('desktop_create_note', { mediaId: 'm1', positionSeconds: 60, content: 'Nova nota' });
+		expect(created.noteId).toBe('n3');
+
+		// updateNote
+		vi.mocked(invoke).mockResolvedValueOnce({
+			note_id: 'n3', media_id: 'm1', position_seconds: 60, content: 'Nota alterada', created_at: 102, updated_at: 103
+		});
+		const updated = await desktop.updateNote('n3', 'Nota alterada');
+		expect(invoke).toHaveBeenCalledWith('desktop_update_note', { noteId: 'n3', content: 'Nota alterada' });
+		expect(updated.content).toBe('Nota alterada');
+
+		// deleteNote
+		vi.mocked(invoke).mockResolvedValueOnce(undefined);
+		await expect(desktop.deleteNote('n3')).resolves.toBeUndefined();
+		expect(invoke).toHaveBeenCalledWith('desktop_delete_note', { noteId: 'n3' });
+
+		// Erros mapeados
+		vi.mocked(invoke).mockRejectedValueOnce({ code: 'note_not_found', message: 'nota /segredo' });
+		await expect(desktop.deleteNote('n_inexistente')).rejects.toThrow('Anotação não encontrada.');
+
+		vi.mocked(invoke).mockRejectedValueOnce({ code: 'invalid_note', message: 'invalida' });
+		await expect(desktop.createNote('m1', 10, ' ')).rejects.toThrow('Conteúdo da anotação inválido.');
 	});
 
 	it('triggers an explicit desktop rescan through the command without touching fetch', async () => {

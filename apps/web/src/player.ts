@@ -51,7 +51,15 @@ export function nextSpeed(current: number, direction: 'up' | 'down'): PlaybackSp
 	return PLAYBACK_SPEEDS[prevIndex];
 }
 
-export type PlayerShortcutAction = 'toggle-playback' | 'seek-backward' | 'seek-forward';
+export type PlayerShortcutAction =
+	| 'toggle-playback'
+	| 'seek-backward'
+	| 'seek-forward'
+	| 'toggle-mute'
+	| 'volume-up'
+	| 'volume-down'
+	| 'open-notes'
+	| { type: 'seek-percent'; percent: number };
 
 /** Atalhos só são aplicados quando o contêiner do player, e não um controle interno, tem foco. */
 export function playerShortcutAction(key: string, playerRootHasFocus: boolean): PlayerShortcutAction | null {
@@ -59,7 +67,28 @@ export function playerShortcutAction(key: string, playerRootHasFocus: boolean): 
 	if (key === ' ' || key === 'Spacebar' || key === 'k' || key === 'K') return 'toggle-playback';
 	if (key === 'ArrowLeft' || key === 'j' || key === 'J') return 'seek-backward';
 	if (key === 'ArrowRight' || key === 'l' || key === 'L') return 'seek-forward';
+	if (key === 'm' || key === 'M') return 'toggle-mute';
+	if (key === 'ArrowUp') return 'volume-up';
+	if (key === 'ArrowDown') return 'volume-down';
+	if (key === 'n' || key === 'N') return 'open-notes';
+	if (key >= '0' && key <= '9') {
+		return { type: 'seek-percent', percent: parseInt(key, 10) * 10 };
+	}
 	return null;
+}
+
+/** Ajusta o volume em passos de 10% mantendo entre 0 e 1. */
+export function stepVolume(currentVolume: number, direction: 'up' | 'down'): number {
+	const step = direction === 'up' ? 0.1 : -0.1;
+	const next = Math.round((currentVolume + step) * 10) / 10;
+	return Math.max(0, Math.min(1, next));
+}
+
+/** Calcula a posição de reprodução a partir de uma porcentagem (0-100%). */
+export function seekPercentPosition(duration: number, percent: number): number {
+	if (!Number.isFinite(duration) || duration <= 0) return 0;
+	const clamped = Math.max(0, Math.min(100, percent));
+	return (clamped / 100) * duration;
 }
 
 /** Não há avanço automático se a preferência estiver desligada ou a sequência terminou. */

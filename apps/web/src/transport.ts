@@ -8,7 +8,7 @@ export type FileEntry = { name: string; path: string; size: number; mediaId?: st
 export type Lesson = { title: string; path: string; media: FileEntry[]; subtitles: FileEntry[]; materials: FileEntry[]; availability?: string; unverified?: boolean };
 // Cada nó de topo do catálogo é um curso com identidade opaca (`courseId`). Nós internos
 // não carregam a identidade: a árvore inteira pertence ao curso do topo.
-export type CatalogNode = { title: string; path: string; role: string; courseId?: string; coverVersion?: number; files: FileEntry[]; looseFiles: FileEntry[]; children: CatalogNode[] };
+export type CatalogNode = { title: string; path: string; role: string; courseId?: string; coverVersion?: number; sourceFolder?: string; files: FileEntry[]; looseFiles: FileEntry[]; children: CatalogNode[] };
 export type Catalog = { complete: boolean; looseFiles: FileEntry[]; nodes: CatalogNode[] };
 // A seleção nativa de uma pasta de curso é específica do desktop: no HTTP o servidor
 // registra cursos por caminho e nenhum caminho cruza o frontend.
@@ -170,7 +170,7 @@ export interface Transport {
 }
 
 type RustFile = { media_id?: string; name?: string; path?: string; size?: number; mtime_seconds?: number; kind?: string; availability?: string; unverified?: boolean };
-type RustNode = { title?: string; path?: string; role?: string; course_id?: string; cover_version?: number; files?: RustFile[]; loose_files?: RustFile[]; children?: RustNode[] };
+type RustNode = { title?: string; path?: string; role?: string; course_id?: string; cover_version?: number; source_folder?: string; files?: RustFile[]; loose_files?: RustFile[]; children?: RustNode[] };
 type RustCatalog = { complete?: boolean; categories?: RustNode[]; nodes?: RustNode[]; loose_files?: RustFile[]; looseFiles?: RustFile[] };
 
 function invalidPayload(message: string): Error { return new Error(`Resposta inválida do servidor: ${message}`); }
@@ -333,6 +333,7 @@ function normalizeRustNode(value: unknown, depth: number, budget: CatalogBudget)
 		role: node.role,
 		courseId: node.course_id,
 		coverVersion: optionalCoverVersion(node.cover_version),
+		sourceFolder: optionalFileString(node.source_folder, 'source_folder'),
 		files: optionalArray(value, 'files').map((file) => normalizeRustFile(file, budget)),
 		looseFiles: optionalArray(value, 'loose_files').map((file) => normalizeRustFile(file, budget)),
 		children: optionalArray(value, 'children').map((child) => normalizeRustNode(child, depth + 1, budget))
@@ -839,7 +840,9 @@ const DESKTOP_ERROR_MESSAGES: Record<string, string> = {
 	mission_not_complete: 'Conclua a missão antes de resgatá-la.',
 	invalid_weekly_goal: 'A meta semanal precisa ser de 1 a 7 dias.',
 	update_check_failed: 'Não foi possível conectar ao servidor de atualizações.',
-	update_unavailable: 'Não foi possível verificar ou aplicar a atualização.'
+	update_unavailable: 'Não foi possível verificar ou aplicar a atualização.',
+	note_not_found: 'Anotação não encontrada.',
+	invalid_note: 'Conteúdo da anotação inválido.'
 };
 
 // O comando devolve o erro como objeto serializado `{ code, message }`, não como `Error`.
@@ -880,14 +883,37 @@ export class DesktopStub implements Transport {
 	// omitido em vez de enviado como `undefined`.
 	async recentStudy(limit?: number) { try { return normalizeRecentStudy(await invoke<unknown>('desktop_recent_study', limit === undefined ? {} : { limit })); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar o histórico de estudo.'); } }
 	async studySummary() { try { return normalizeStudySummary(await invoke<unknown>('desktop_study_summary')); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar sua evolução.'); } }
-	listNotes(_mediaId?: string): Promise<StudyNote[]> { return Promise.resolve([]); }
-	createNote(mediaId: string, positionSeconds: number, content: string): Promise<StudyNote> {
-		return Promise.resolve({ noteId: 'desktop-stub', mediaId, positionSeconds, content, createdAt: 0, updatedAt: 0 });
+	async listNotes(mediaId?: string): Promise<StudyNote[]> {
+		try {
+			const res = await invoke<unknown>('desktop_list_notes', mediaId ? { mediaId } : {});
+			return (Array.isArray(res) ? res : []).map(normalizeStudyNote);
+		} catch (cause) {
+			throw desktopError(cause, 'Não foi possível carregar as anotações.');
+		}
 	}
-	updateNote(noteId: string, content: string): Promise<StudyNote> {
-		return Promise.resolve({ noteId, mediaId: '', positionSeconds: 0, content, createdAt: 0, updatedAt: 0 });
+	async createNote(mediaId: string, positionSeconds: number, content: string): Promise<StudyNote> {
+		try {
+			const res = await invoke<unknown>('desktop_create_note', { mediaId, positionSeconds, content });
+			return normalizeStudyNote(res);
+		} catch (cause) {
+			throw desktopError(cause, 'Não foi possível salvar a anotação.');
+		}
 	}
-	deleteNote(_noteId: string): Promise<void> { return Promise.resolve(); }
+	async updateNote(noteId: string, content: string): Promise<StudyNote> {
+		try {
+			const res = await invoke<unknown>('desktop_update_note', { noteId, content });
+			return normalizeStudyNote(res);
+		} catch (cause) {
+			throw desktopError(cause, 'Não foi possível atualizar a anotação.');
+		}
+	}
+	async deleteNote(noteId: string): Promise<void> {
+		try {
+			await invoke<unknown>('desktop_delete_note', { noteId });
+		} catch (cause) {
+			throw desktopError(cause, 'Não foi possível excluir a anotação.');
+		}
+	}
 	listFlashcards(_mediaId: string): Promise<Flashcard[]> { return Promise.resolve([]); }
 	createFlashcard(mediaId: string, front: string, back: string): Promise<Flashcard> {
 		return Promise.resolve({ cardId: 'desktop-stub', mediaId, front, back, intervalDays: 0, nextDue: 0, createdAt: 0, updatedAt: 0 });

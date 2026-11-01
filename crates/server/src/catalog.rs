@@ -61,6 +61,9 @@ struct CatalogNodeResponse {
     /// versão usada pela SPA para invalidar a URL (`?v=`); ausente quando não há capa.
     #[serde(skip_serializing_if = "Option::is_none")]
     cover_version: Option<i64>,
+    /// Nome da pasta de origem imediata do curso no disco (diretório pai), sem expor caminhos absolutos.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source_folder: Option<String>,
     files: Vec<CatalogFileResponse>,
     loose_files: Vec<CatalogFileResponse>,
     children: Vec<CatalogNodeResponse>,
@@ -165,12 +168,20 @@ fn build_course_catalog(
         complete = complete && catalog.complete;
         let (mut children, loose_files) = learnvault_core::shape_course_catalog(catalog);
         learnvault_core::apply_order(&mut children, orders.get(&course.id).unwrap_or(&empty));
+        let source_folder = course
+            .root
+            .as_path()
+            .parent()
+            .and_then(|p| p.file_name())
+            .and_then(|s| s.to_str())
+            .map(str::to_owned);
         nodes.push(CatalogNodeResponse {
             title: course.title.clone(),
             path: String::new(),
             role: "course",
             course_id: Some(course.id.clone()),
             cover_version: crate::covers::cover_version(covers_dir, &course.id),
+            source_folder,
             files: Vec::new(),
             loose_files: loose_files.into_iter().map(Into::into).collect(),
             children: children.into_iter().map(Into::into).collect(),
@@ -382,6 +393,7 @@ impl From<CatalogNode> for CatalogNodeResponse {
             role: node_role(node.role),
             course_id: None,
             cover_version: None,
+            source_folder: None,
             files: node.files.into_iter().map(Into::into).collect(),
             loose_files: node.loose_files.into_iter().map(Into::into).collect(),
             children: node.children.into_iter().map(Into::into).collect(),
@@ -472,5 +484,38 @@ mod tests {
             !rendered.contains("Cursos secretos") && !rendered.contains("aula.mp4"),
             "nenhum caminho relativo pode cruzar a API: {rendered}"
         );
+    }
+
+    #[test]
+    fn catalog_node_response_serializes_source_folder_when_present() {
+        let node = CatalogNodeResponse {
+            title: "Curso Teste".to_owned(),
+            path: String::new(),
+            role: "course",
+            course_id: Some("c1".to_owned()),
+            cover_version: None,
+            source_folder: Some("Cursos 2026".to_owned()),
+            files: Vec::new(),
+            loose_files: Vec::new(),
+            children: Vec::new(),
+        };
+
+        let json = serde_json::to_value(node).unwrap();
+        assert_eq!(json["source_folder"], "Cursos 2026");
+
+        let without = CatalogNodeResponse {
+            title: "Curso Sem Pasta".to_owned(),
+            path: String::new(),
+            role: "course",
+            course_id: Some("c2".to_owned()),
+            cover_version: None,
+            source_folder: None,
+            files: Vec::new(),
+            loose_files: Vec::new(),
+            children: Vec::new(),
+        };
+
+        let json_without = serde_json::to_value(without).unwrap();
+        assert!(json_without.get("source_folder").is_none());
     }
 }
