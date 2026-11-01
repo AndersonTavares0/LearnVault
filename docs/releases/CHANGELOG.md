@@ -4,6 +4,24 @@ Todas as mudanças relevantes do LearnVault são documentadas neste arquivo.
 
 O formato segue o Keep a Changelog e as versões usam Semantic Versioning.
 
+## [0.8.0](https://github.com/AndersonTavares0/LearnVault/compare/v0.7.0...v0.8.0) (2026-11-01)
+
+
+### Funcionalidades
+
+* aprimorar experiencia de importacao de pastas e reproducao de aulas ([#294](https://github.com/AndersonTavares0/LearnVault/issues/294)) ([c2807fa](https://github.com/AndersonTavares0/LearnVault/commit/c2807fac01d6dddbcedad20470859a0623d855c8))
+* autoatualizador Windows oficial (Tauri 2) e alinhamento OCI no GHCR ([#292](https://github.com/AndersonTavares0/LearnVault/issues/292)) ([e1184c9](https://github.com/AndersonTavares0/LearnVault/commit/e1184c9b75889b0791d92109c9df6ebe11ac3fc0))
+* **gamification:** floresta de estudos 2.5D, viveiro botanico, perfil e anotacoes globais ([#277](https://github.com/AndersonTavares0/LearnVault/issues/277)) ([#291](https://github.com/AndersonTavares0/LearnVault/issues/291)) ([0bdd52c](https://github.com/AndersonTavares0/LearnVault/commit/0bdd52c32bda9c93ce32504928de4645470f5528))
+* infraestrutura de self-hosting, atualizações seguras e anotações de estudo ([#183](https://github.com/AndersonTavares0/LearnVault/issues/183)) ([#287](https://github.com/AndersonTavares0/LearnVault/issues/287)) ([e153b10](https://github.com/AndersonTavares0/LearnVault/commit/e153b108e8e9c93833260a8d7c3c40a55db4ead5))
+* melhorias na experiencia de estudo (conclusao rapida, filtros, capas locais, PiP e timeline) ([#295](https://github.com/AndersonTavares0/LearnVault/issues/295)) ([0535912](https://github.com/AndersonTavares0/LearnVault/commit/0535912ef937e05552765ede508a93363dd9539a))
+* **study:** adicionar cartoes pessoais com revisao espacada ([#188](https://github.com/AndersonTavares0/LearnVault/issues/188)) ([#290](https://github.com/AndersonTavares0/LearnVault/issues/290)) ([4f39740](https://github.com/AndersonTavares0/LearnVault/commit/4f39740631d993ab576bae770ef9a2a379653d78))
+
+
+### Correções
+
+* dropdown acessivel de sementes, arvore seca organica e publicacao atomica de release ([#293](https://github.com/AndersonTavares0/LearnVault/issues/293)) ([92f983f](https://github.com/AndersonTavares0/LearnVault/commit/92f983fc582504e16cb81c25b56ffe102de65d24))
+* **server:** liberar lock do banco antes de abrir midia no disco ([#273](https://github.com/AndersonTavares0/LearnVault/issues/273)) ([#289](https://github.com/AndersonTavares0/LearnVault/issues/289)) ([3bd0183](https://github.com/AndersonTavares0/LearnVault/commit/3bd0183611cde102df0db43f820f59f1b9eb7b2c))
+
 ## [0.7.0](https://github.com/AndersonTavares0/LearnVault/compare/v0.6.1...v0.7.0) (2026-10-31)
 
 
