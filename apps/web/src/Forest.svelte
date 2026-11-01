@@ -7,6 +7,7 @@
 		type ForestFilter,
 		type ForestTree
 	} from './forest';
+	import ForestBiomeCrest from './ForestBiomeCrest.svelte';
 	import ForestGuide from './ForestGuide.svelte';
 	import ForestInspector from './ForestInspector.svelte';
 	import ForestTreeSvg from './ForestTreeSvg.svelte';
@@ -171,7 +172,7 @@
 	</div>
 
 	<!-- Bosque / Visualizador de Árvores -->
-	<div class="lv-forest__canvas" role="region" aria-label="Visualização do bosque">
+	<div class="lv-forest__canvas lv-forest__canvas--biome-{stats.ecosystem.level}" role="region" aria-label="Visualização do bosque">
 		{#if loading}
 			<p class="lv-forest__loading" aria-live="polite">Cultivando sua floresta…</p>
 		{:else if visibleTrees.length === 0}
@@ -208,12 +209,15 @@
 		{:else}
 			<!-- Faixa de Evolução do Ecossistema da Floresta -->
 			<div class="lv-forest__ecosystem" role="status" aria-label="Ecossistema: {stats.ecosystem.name}">
-				<div class="lv-forest__ecosystem-info">
-					<div class="lv-forest__ecosystem-badge">
-						<span class="lv-forest__ecosystem-tag">Nível {stats.ecosystem.level}</span>
-						<strong class="lv-forest__ecosystem-title">{stats.ecosystem.name}</strong>
+				<div class="lv-forest__ecosystem-left">
+					<ForestBiomeCrest level={stats.ecosystem.level} size={42} />
+					<div class="lv-forest__ecosystem-info">
+						<div class="lv-forest__ecosystem-badge">
+							<span class="lv-forest__ecosystem-tag">Nível {stats.ecosystem.level}</span>
+							<strong class="lv-forest__ecosystem-title">{stats.ecosystem.name}</strong>
+						</div>
+						<p class="lv-forest__ecosystem-desc">{stats.ecosystem.description}</p>
 					</div>
-					<p class="lv-forest__ecosystem-desc">{stats.ecosystem.description}</p>
 				</div>
 				{#if stats.ecosystem.nextThreshold !== null}
 					<div class="lv-forest__ecosystem-progress">
@@ -259,13 +263,21 @@
 							class="lv-forest__tree-item"
 							class:is-withered={!tree.completed}
 							class:is-selected={selectedTree?.sessionId === tree.sessionId}
+							class:is-stage-sapling={tree.stage === 'sapling'}
+							class:is-stage-oak={tree.stage === 'oak'}
+							class:is-stage-pine={tree.stage === 'pine'}
+							class:is-stage-ancient={tree.stage === 'ancient'}
+							class:is-stage-withered={tree.stage === 'withered'}
 							aria-pressed={selectedTree?.sessionId === tree.sessionId}
 							aria-label={tree.label}
 							title="{tree.stageName} · {tree.minutes} min · {tree.completed ? 'Sadia' : 'Seca'}"
 							onclick={() => (selectedTree = selectedTree?.sessionId === tree.sessionId ? null : tree)}
 						>
 							<div class="lv-forest__tree-visual" aria-hidden="true">
-								<ForestTreeSvg stage={tree.stage} size={50} />
+								<ForestTreeSvg
+									stage={tree.stage}
+									size={tree.stage === 'sapling' ? 44 : tree.stage === 'oak' ? 50 : tree.stage === 'pine' ? 54 : tree.stage === 'ancient' ? 62 : 46}
+								/>
 							</div>
 							<span class="lv-forest__tree-name">{tree.stageName}</span>
 							<span class="lv-forest__tree-time">{tree.minutes} min</span>
@@ -376,7 +388,7 @@
 		color: var(--muted);
 	}
 
-	/* Bosque Canvas */
+	/* Bosque Canvas & Ambiência dos Biomas */
 	.lv-forest__canvas {
 		background: var(--surface-2);
 		border: 1px solid var(--line);
@@ -386,6 +398,40 @@
 		flex-direction: column;
 		gap: 1.25rem;
 		min-height: 180px;
+		transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+	}
+
+	.lv-forest__canvas--biome-0 {
+		background: radial-gradient(ellipse at 50% 100%, color-mix(in srgb, #92400e 6%, var(--surface-2)) 0%, var(--surface-2) 80%);
+		border-color: color-mix(in srgb, #92400e 20%, var(--line));
+	}
+
+	.lv-forest__canvas--biome-1 {
+		background: radial-gradient(ellipse at 50% 100%, color-mix(in srgb, #16a34a 9%, var(--surface-2)) 0%, var(--surface-2) 80%);
+		border-color: color-mix(in srgb, #16a34a 24%, var(--line));
+	}
+
+	.lv-forest__canvas--biome-2 {
+		background: radial-gradient(ellipse at 50% 100%, color-mix(in srgb, #15803d 13%, var(--surface-2)) 0%, color-mix(in srgb, #059669 5%, var(--surface-2)) 60%, var(--surface-2) 100%);
+		border-color: color-mix(in srgb, #15803d 30%, var(--line));
+	}
+
+	.lv-forest__canvas--biome-3 {
+		background: radial-gradient(ellipse at 50% 100%, color-mix(in srgb, #047857 16%, var(--surface-2)) 0%, color-mix(in srgb, #0f766e 8%, var(--surface-2)) 65%, var(--surface-2) 100%);
+		border-color: color-mix(in srgb, #047857 36%, var(--line));
+		box-shadow: inset 0 0 40px color-mix(in srgb, #047857 8%, transparent);
+	}
+
+	.lv-forest__canvas--biome-4 {
+		background: radial-gradient(ellipse at 50% 90%, color-mix(in srgb, #065f46 20%, var(--surface-2)) 0%, color-mix(in srgb, #1e3a8a 6%, var(--surface-2)) 65%, var(--surface-2) 100%);
+		border-color: color-mix(in srgb, #059669 40%, var(--line));
+		box-shadow: inset 0 0 50px color-mix(in srgb, #059669 10%, transparent);
+	}
+
+	.lv-forest__canvas--biome-5 {
+		background: radial-gradient(ellipse at 50% 85%, color-mix(in srgb, #eab308 14%, color-mix(in srgb, #047857 24%, var(--surface-2))) 0%, color-mix(in srgb, #047857 14%, var(--surface-2)) 60%, var(--surface-2) 100%);
+		border-color: color-mix(in srgb, #eab308 45%, var(--line));
+		box-shadow: inset 0 0 60px color-mix(in srgb, #eab308 10%, transparent), 0 0 20px color-mix(in srgb, #eab308 8%, transparent);
 	}
 
 	.lv-forest__loading {
@@ -460,6 +506,14 @@
 		border-radius: var(--radius);
 		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
 		flex-wrap: wrap;
+	}
+
+	.lv-forest__ecosystem-left {
+		display: flex;
+		align-items: center;
+		gap: 0.875rem;
+		min-width: 240px;
+		flex: 1;
 	}
 
 	.lv-forest__ecosystem-info {
@@ -647,6 +701,19 @@
 	.lv-forest__tree-item.is-withered {
 		opacity: 0.85;
 		border-style: dashed;
+	}
+
+	.lv-forest__tree-item.is-stage-ancient {
+		border-color: color-mix(in srgb, #eab308 35%, var(--line));
+		background: color-mix(in srgb, #eab308 4%, var(--surface));
+	}
+
+	.lv-forest__tree-item.is-stage-pine {
+		border-color: color-mix(in srgb, #059669 22%, var(--line));
+	}
+
+	.lv-forest__tree-item.is-stage-sapling {
+		border-color: color-mix(in srgb, #65a30d 22%, var(--line));
 	}
 
 	.lv-forest__tree-visual {

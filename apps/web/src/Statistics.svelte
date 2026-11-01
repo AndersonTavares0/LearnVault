@@ -9,6 +9,7 @@
 	import { courseIdOf, transport, type Catalog, type DailyMission, type MissionId, type StudyProgress } from './transport';
 	import { persistedFocusSummary, persistedRewardSummary } from './pomodoro-store';
 	import Forest from './Forest.svelte';
+	import LevelCrest from './LevelCrest.svelte';
 
 	let { catalog, recent }: { catalog: Catalog | null; recent: StudyProgress[] } = $props();
 
@@ -158,6 +159,7 @@
 					<h2 id="evolution-heading">Sua evolução</h2>
 					{#if gamification}
 						<div class="lv-level-wrap">
+							<LevelCrest level={gamification.level.level} size={24} />
 							<span class="lv-level-chip">Nível {gamification.level.level}</span>
 							<span class="lv-level-title">{gamification.level.title}</span>
 						</div>
