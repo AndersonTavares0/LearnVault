@@ -18,8 +18,11 @@
 
 	let open = $state(false);
 	let confirmAbandon = $state(false);
+	let seedMenuOpen = $state(false);
 	let trigger = $state<HTMLButtonElement | null>(null);
 	let popover = $state<HTMLDivElement | null>(null);
+	let seedMenuRef = $state<HTMLDivElement | null>(null);
+	let seedBtnRef = $state<HTMLButtonElement | null>(null);
 
 	const running = $derived($pomodoro.status === 'running');
 	const paused = $derived($pomodoro.status === 'paused');
@@ -27,11 +30,23 @@
 	const status = $derived(running ? 'Em andamento' : paused ? 'Pausado' : 'Pronto');
 	const label = $derived(running || paused ? clock : 'Foco');
 	const announcement = $derived(`${status}. ${modeLabel($pomodoro.mode)}, ${clock}.`);
+	const currentSpecies = $derived(getSpeciesById($nursery.activeSeed));
 
 	function close() {
 		open = false;
+		seedMenuOpen = false;
 		confirmAbandon = false;
 		trigger?.focus();
+	}
+
+	function closeSeedMenu() {
+		seedMenuOpen = false;
+		seedBtnRef?.focus();
+	}
+
+	function selectSeed(id: BotanicalSpeciesId) {
+		setActiveSeed(id);
+		closeSeedMenu();
 	}
 
 	function toggle() {
@@ -50,16 +65,24 @@
 	}
 
 	function onDocumentPointer(event: PointerEvent) {
-		if (!open) return;
 		const target = event.target as Node;
+		if (seedMenuOpen && !seedMenuRef?.contains(target)) {
+			seedMenuOpen = false;
+		}
+		if (!open) return;
 		if (popover?.contains(target) || trigger?.contains(target)) return;
 		open = false;
+		seedMenuOpen = false;
 	}
 
 	function onKeydown(event: KeyboardEvent) {
 		if (open && event.key === 'Escape') {
 			event.preventDefault();
-			close();
+			if (seedMenuOpen) {
+				closeSeedMenu();
+			} else {
+				close();
+			}
 		}
 	}
 
@@ -118,17 +141,66 @@
 				{:else}
 					<div class="lv-focus-menu__seed-strip">
 						<span class="lv-focus-menu__seed-label">Plantar:</span>
-						<select
-							class="lv-focus-menu__seed-select"
-							value={$nursery.activeSeed}
-							onchange={(e) => setActiveSeed(e.currentTarget.value as BotanicalSpeciesId)}
-							aria-label="Espécie botânica a cultivar"
-						>
-							{#each $nursery.unlockedSpecies as id (id)}
-								{@const sp = getSpeciesById(id)}
-								<option value={id}>{sp.name}</option>
-							{/each}
-						</select>
+						<div class="lv-focus-menu__seed-dropdown" bind:this={seedMenuRef}>
+							<button
+								bind:this={seedBtnRef}
+								type="button"
+								class="lv-focus-menu__seed-btn"
+								aria-haspopup="listbox"
+								aria-expanded={seedMenuOpen}
+								aria-controls="lv-seed-listbox"
+								aria-label="Espécie botânica a cultivar, selecionado: {currentSpecies.name}"
+								onclick={() => (seedMenuOpen = !seedMenuOpen)}
+							>
+								<span class="lv-focus-menu__seed-name">{currentSpecies.name}</span>
+								<svg class="lv-focus-menu__seed-arrow" class:is-open={seedMenuOpen} viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
+									<path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+								</svg>
+							</button>
+							{#if seedMenuOpen}
+								<ul
+									id="lv-seed-listbox"
+									class="lv-focus-menu__seed-list"
+									role="listbox"
+									tabindex="-1"
+									aria-label="Espécies botânicas desbloqueadas"
+								>
+									{#each $nursery.unlockedSpecies as id (id)}
+										{@const sp = getSpeciesById(id)}
+										{@const isSelected = id === $nursery.activeSeed}
+										<li
+											role="option"
+											aria-selected={isSelected}
+											tabindex="0"
+											class="lv-focus-menu__seed-item"
+											class:is-active={isSelected}
+											onclick={() => selectSeed(id)}
+											onkeydown={(e) => {
+												if (e.key === 'Enter' || e.key === ' ') {
+													e.preventDefault();
+													selectSeed(id);
+												} else if (e.key === 'ArrowDown') {
+													e.preventDefault();
+													const next = (e.currentTarget as HTMLElement).nextElementSibling as HTMLElement | null;
+													next?.focus();
+												} else if (e.key === 'ArrowUp') {
+													e.preventDefault();
+													const prev = (e.currentTarget as HTMLElement).previousElementSibling as HTMLElement | null;
+													prev?.focus();
+												}
+											}}
+										>
+											<span class="lv-focus-menu__seed-item-name">{sp.name}</span>
+											{#if isSelected}
+												<svg class="lv-focus-menu__seed-item-check" viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
+													<path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+												</svg>
+											{/if}
+										</li>
+									{/each}
+								</ul>
+							{/if}
+						</div>
 					</div>
 				{/if}
 			{/if}
@@ -173,45 +245,107 @@
 		border-radius: 8px;
 		padding: 0.35rem 0.65rem;
 		font-size: 0.8125rem;
+		position: relative;
 	}
 
 	.lv-focus-menu__seed-label {
 		color: var(--muted);
 		font-weight: 600;
+		flex-shrink: 0;
 	}
 
-	.lv-focus-menu__seed-select {
+	.lv-focus-menu__seed-dropdown {
+		position: relative;
+		flex: 1;
+		min-width: 0;
+	}
+
+	.lv-focus-menu__seed-btn {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.35rem;
+		width: 100%;
 		background: transparent;
 		border: none;
 		color: var(--ink);
 		font-weight: 600;
 		font-size: 0.8125rem;
 		cursor: pointer;
-		flex: 1;
+		padding: 0.15rem 0.25rem;
+		border-radius: 4px;
+		text-align: left;
+	}
+
+	.lv-focus-menu__seed-btn:focus-visible {
+		outline: 2px solid var(--focus);
+		outline-offset: 1px;
+	}
+
+	.lv-focus-menu__seed-name {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.lv-focus-menu__seed-arrow {
+		flex-shrink: 0;
+		color: var(--muted);
+		transition: transform 0.15s ease;
+	}
+
+	.lv-focus-menu__seed-arrow.is-open {
+		transform: rotate(180deg);
+	}
+
+	.lv-focus-menu__seed-list {
+		position: absolute;
+		top: calc(100% + 6px);
+		left: 0;
+		right: 0;
+		min-width: 170px;
+		background: var(--surface);
+		border: 1px solid var(--line);
+		border-radius: 8px;
+		box-shadow: 0 10px 25px -4px rgba(0, 0, 0, 0.45);
+		padding: 0.25rem;
+		margin: 0;
+		list-style: none;
+		z-index: 60;
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+
+	.lv-focus-menu__seed-item {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0.45rem 0.6rem;
+		border-radius: 6px;
+		font-size: 0.8125rem;
+		font-weight: 500;
+		color: var(--ink);
+		cursor: pointer;
+		user-select: none;
 		outline: none;
+		transition: background 0.15s ease, color 0.15s ease;
 	}
 
-	:global(:root[data-theme='dark']) .lv-focus-menu__seed-select {
-		color-scheme: dark;
-	}
-
-	:global(:root[data-theme='light']) .lv-focus-menu__seed-select {
-		color-scheme: light;
-	}
-
-	.lv-focus-menu__seed-select option {
-		background-color: var(--surface);
+	.lv-focus-menu__seed-item:hover,
+	.lv-focus-menu__seed-item:focus-visible {
+		background: var(--hover);
 		color: var(--ink);
 	}
 
-	:global(:root[data-theme='dark']) .lv-focus-menu__seed-select option {
-		background-color: #1e2124;
-		color: #e9ebeb;
+	.lv-focus-menu__seed-item.is-active {
+		background: color-mix(in srgb, var(--accent) 15%, var(--surface));
+		color: var(--accent);
+		font-weight: 700;
 	}
 
-	:global(:root[data-theme='light']) .lv-focus-menu__seed-select option {
-		background-color: #ffffff;
-		color: #252923;
+	.lv-focus-menu__seed-item-check {
+		flex-shrink: 0;
 	}
 
 	.lv-focus-menu__footer-links {
