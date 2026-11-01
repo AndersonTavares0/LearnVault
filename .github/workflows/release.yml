@@ -196,6 +196,9 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
+          if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
+            throw "A chave secreta TAURI_SIGNING_PRIVATE_KEY é obrigatória para assinar os artefatos de release do Windows"
+          }
           $releaseVersion = $env:RELEASE_TAG.Substring(1)
           $configPath = Join-Path $PWD "tauri.release.json"
           @{ version = $releaseVersion } | ConvertTo-Json -Compress | Set-Content -Path $configPath -NoNewline
@@ -213,28 +216,38 @@ jobs:
           }
           Copy-Item $installers[0].FullName (Join-Path $PWD "dist/learnvault-windows-$env:RELEASE_TAG.exe")
           $zips = @(Get-ChildItem target/release/bundle/nsis -Filter *.nsis.zip -File)
-          if ($zips.Count -ge 1) {
-            Copy-Item $zips[0].FullName (Join-Path $PWD "dist/learnvault-windows-$env:RELEASE_TAG.nsis.zip")
+          if ($zips.Count -ne 1) {
+            throw "Expected exactly one NSIS updater bundle, found $($zips.Count)"
           }
+          Copy-Item $zips[0].FullName (Join-Path $PWD "dist/learnvault-windows-$env:RELEASE_TAG.nsis.zip")
           $sigs = @(Get-ChildItem target/release/bundle/nsis -Filter *.nsis.zip.sig -File)
-          if ($sigs.Count -ge 1) {
-            Copy-Item $sigs[0].FullName (Join-Path $PWD "dist/learnvault-windows-$env:RELEASE_TAG.nsis.zip.sig")
+          if ($sigs.Count -ne 1) {
+            throw "Expected exactly one NSIS updater signature, found $($sigs.Count)"
           }
-          if ($zips.Count -ge 1 -and $sigs.Count -ge 1) {
-            $sigContent = (Get-Content $sigs[0].FullName -Raw).Trim()
-            $assetUrl = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:RELEASE_TAG/learnvault-windows-$env:RELEASE_TAG.nsis.zip"
-            $latest = @{
-              version = $env:RELEASE_TAG
-              notes = "LearnVault release $env:RELEASE_TAG"
-              pub_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-              platforms = @{
-                "windows-x86_64" = @{
-                  signature = $sigContent
-                  url = $assetUrl
-                }
+          Copy-Item $sigs[0].FullName (Join-Path $PWD "dist/learnvault-windows-$env:RELEASE_TAG.nsis.zip.sig")
+          $sigContent = (Get-Content $sigs[0].FullName -Raw).Trim()
+          if ([string]::IsNullOrWhiteSpace($sigContent)) {
+            throw "A assinatura do updater gerada em $($sigs[0].FullName) está vazia"
+          }
+          $assetUrl = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:RELEASE_TAG/learnvault-windows-$env:RELEASE_TAG.nsis.zip"
+          $latest = @{
+            version = $env:RELEASE_TAG
+            notes = "LearnVault release $env:RELEASE_TAG"
+            pub_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+            platforms = @{
+              "windows-x86_64" = @{
+                signature = $sigContent
+                url = $assetUrl
+              }
+              "windows-x86_64-nsis" = @{
+                signature = $sigContent
+                url = $assetUrl
               }
             }
-            $latest | ConvertTo-Json -Depth 4 | Set-Content -Path (Join-Path $PWD "dist/latest.json") -Encoding UTF8
+          }
+          $latest | ConvertTo-Json -Depth 4 | Set-Content -Path (Join-Path $PWD "dist/latest.json") -Encoding UTF8
+          if (-not (Test-Path (Join-Path $PWD "dist/latest.json"))) {
+            throw "Falha ao gerar o manifesto dist/latest.json obrigatório"
           }
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -321,12 +334,10 @@ jobs:
             "learnvault-linux-amd64.tar.gz"
             "learnvault-linux-arm64.tar.gz"
             "learnvault-windows-${RELEASE_TAG}.exe"
+            "learnvault-windows-${RELEASE_TAG}.nsis.zip"
+            "learnvault-windows-${RELEASE_TAG}.nsis.zip.sig"
+            "latest.json"
           )
-          for optional in "learnvault-windows-${RELEASE_TAG}.nsis.zip" "learnvault-windows-${RELEASE_TAG}.nsis.zip.sig" "latest.json"; do
-            if [[ -f "dist/$optional" ]]; then
-              expected+=("$optional")
-            fi
-          done
           mapfile -t actual < <(find dist -maxdepth 1 -type f -printf '%f\n' | sort)
           if (( ${#actual[@]} != ${#expected[@]} )); then
             printf '::error::Unexpected release asset count (expected %d, found %d)\n' "${#expected[@]}" "${#actual[@]}" >&2
@@ -340,12 +351,21 @@ jobs:
           done
           printf '%s\n' "${actual[@]}" | sort | diff -u <(printf '%s\n' "${expected[@]}" | sort) -
           (cd dist && sha256sum "${expected[@]}" > SHA256SUMS)
+          (cd dist && sha256sum -c SHA256SUMS)
       - name: Upload assets to the published release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
         run: |
           set -euo pipefail
+          expected=(
+            "learnvault-linux-amd64.tar.gz"
+            "learnvault-linux-arm64.tar.gz"
+            "learnvault-windows-${RELEASE_TAG}.exe"
+            "learnvault-windows-${RELEASE_TAG}.nsis.zip"
+            "learnvault-windows-${RELEASE_TAG}.nsis.zip.sig"
+            "latest.json"
+          )
           upload_args=()
           for asset in "${expected[@]}"; do
             upload_args+=("dist/$asset")

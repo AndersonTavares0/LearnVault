@@ -53,6 +53,8 @@ pub enum IpcErrorCode {
     InvalidOrder,
     /// A ordem manual do curso não pôde ser gravada nem removida.
     OrderUnavailable,
+    /// A verificação de atualização falhou por erro de rede ou endpoint inacessível.
+    UpdateCheckFailed,
     /// A verificação ou instalação de atualização não pôde ser concluída.
     UpdateUnavailable,
 }
@@ -232,6 +234,14 @@ impl IpcError {
         Self {
             code: IpcErrorCode::OrderUnavailable,
             message: "não foi possível salvar a ordem do curso",
+        }
+    }
+
+    /// A verificação de atualização falhou por erro de rede ou endpoint inacessível.
+    pub fn update_check_failed() -> Self {
+        Self {
+            code: IpcErrorCode::UpdateCheckFailed,
+            message: "não foi possível conectar ao servidor de atualizações",
         }
     }
 

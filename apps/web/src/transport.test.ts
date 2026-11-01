@@ -997,6 +997,35 @@ describe('desktop transport over IPC', () => {
 		await expect(desktop.installUpdate?.()).resolves.toBe(true);
 		expect(invoke).toHaveBeenCalledWith('desktop_install_update');
 
+		// Ausência de atualização (up-to-date): available é false e error é null
+		vi.mocked(invoke).mockResolvedValueOnce({
+			available: false,
+			currentVersion: '0.8.0',
+			version: null,
+			body: null,
+			date: null
+		});
+		const upToDate = await desktop.checkUpdate(true);
+		expect(upToDate).toMatchObject({
+			enabled: true,
+			available: false,
+			current: '0.8.0',
+			latest: null,
+			error: null
+		});
+
+		// Falha de rede ou endpoint inacessível (offline): available é false e error contém a mensagem
+		vi.mocked(invoke).mockRejectedValueOnce({
+			code: 'update_check_failed',
+			message: 'ignorado_pelo_sanitizador'
+		});
+		const offlineStatus = await desktop.checkUpdate(true);
+		expect(offlineStatus).toMatchObject({
+			enabled: true,
+			available: false,
+			error: 'Não foi possível conectar ao servidor de atualizações.'
+		});
+
 		vi.unstubAllGlobals();
 	});
 	it('fetches update history over HTTP', async () => {

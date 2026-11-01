@@ -469,8 +469,8 @@ fn pick_cover(app: &tauri::AppHandle) -> Option<PathBuf> {
 
 /// Consulta a disponibilidade de nova versão via tauri-plugin-updater de forma não-bloqueante e segura.
 ///
-/// Em caso de falha de conexão ou modo offline, retorna `available: false` com a versão corrente
-/// sem emitir erros ou travar o funcionamento local.
+/// Diferencia a ausência de atualização (`available: false`) de falhas de conexão/rede (`IpcError::update_check_failed()`),
+/// mantendo o aplicativo totalmente funcional em modo offline sem travar nem expor dados sensíveis.
 #[tauri::command]
 pub async fn desktop_check_update(
     app: tauri::AppHandle,
@@ -506,13 +506,7 @@ pub async fn desktop_check_update(
             date: None,
             body: None,
         }),
-        Err(_) => Ok(crate::dto::DesktopUpdateInfoDto {
-            available: false,
-            current_version,
-            version: None,
-            date: None,
-            body: None,
-        }),
+        Err(_) => Err(IpcError::update_check_failed()),
     }
 }
 
@@ -524,7 +518,8 @@ pub async fn desktop_install_update(app: tauri::AppHandle) -> Result<bool, IpcEr
     let updater = app.updater().map_err(|_| IpcError::update_unavailable())?;
     let update = match updater.check().await {
         Ok(Some(update)) => update,
-        _ => return Ok(false),
+        Ok(None) => return Ok(false),
+        Err(_) => return Err(IpcError::update_check_failed()),
     };
 
     update

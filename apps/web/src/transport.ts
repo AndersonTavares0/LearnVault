@@ -837,7 +837,9 @@ const DESKTOP_ERROR_MESSAGES: Record<string, string> = {
 	invalid_focus_session: 'Os dados da sessão de foco não são válidos.',
 	focus_session_conflict: 'Esta sessão já foi registrada com outros dados.',
 	mission_not_complete: 'Conclua a missão antes de resgatá-la.',
-	invalid_weekly_goal: 'A meta semanal precisa ser de 1 a 7 dias.'
+	invalid_weekly_goal: 'A meta semanal precisa ser de 1 a 7 dias.',
+	update_check_failed: 'Não foi possível conectar ao servidor de atualizações.',
+	update_unavailable: 'Não foi possível verificar ou aplicar a atualização.'
 };
 
 // O comando devolve o erro como objeto serializado `{ code, message }`, não como `Error`.
@@ -922,12 +924,13 @@ export class DesktopStub implements Transport {
 				available: info.available,
 				latest: info.version ?? null,
 				releasedAt: info.date ?? null,
-				url: info.version ? `https://github.com/AndersonTavares0/LearnVault/releases/tag/v${info.version.replace(/^v/, '')}` : null,
+				url: info.version ? `https://github.com/AndersonTavares0/LearnVault/releases/tag/v${encodeURIComponent(info.version.replace(/^v/, ''))}` : null,
 				changelog: info.body ?? null,
 				checkedAt: new Date().toISOString(),
 				error: null
 			};
 		} catch (cause) {
+			const err = desktopError(cause, 'Falha ao verificar atualização.');
 			return {
 				current: '',
 				enabled: true,
@@ -937,7 +940,7 @@ export class DesktopStub implements Transport {
 				url: null,
 				changelog: null,
 				checkedAt: new Date().toISOString(),
-				error: cause instanceof Error ? cause.message : 'Falha ao verificar atualização.'
+				error: err.message
 			};
 		}
 	}
