@@ -20,7 +20,7 @@ use crate::courses::CourseEntry;
 use crate::dto::{
     CatalogDto, CatalogNodeDto, CoverDto, CoverRemovalDto, FocusSessionDto, FocusSummaryDto,
     MediaRemovalImpactDto, MediaRemovalOutcomeDto, RecentStudyDto, RescanSummaryDto,
-    RewardSummaryDto, StudyProgressDto, StudySummaryDto,
+    RewardSummaryDto, StudyNoteDto, StudyProgressDto, StudySummaryDto,
 };
 use crate::error::IpcError;
 use crate::ordering::CourseOrders;
@@ -95,11 +95,19 @@ pub fn catalog_with_orders(
             categories,
         };
         complete = complete && shaped.complete;
+        let source_folder = course
+            .root
+            .as_path()
+            .parent()
+            .and_then(|p| p.file_name())
+            .and_then(|s| s.to_str())
+            .map(str::to_owned);
         nodes.push(CatalogNodeDto::course(
             &course.id,
             &course.title(),
             shaped,
             crate::covers::cover_version(covers_dir, &course.id),
+            source_folder,
         ));
     }
     Ok(CatalogDto {
@@ -324,6 +332,62 @@ pub async fn desktop_study_summary(
 ) -> Result<StudySummaryDto, IpcError> {
     let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || state.study_summary())
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// Comando IPC: lista as anotações do dono local.
+///
+/// Se `mediaId` for informado, filtra por essa mídia; caso contrário, devolve todas
+/// as anotações registradas para busca global.
+#[tauri::command]
+pub async fn desktop_list_notes(
+    state: State<'_, DesktopState>,
+    media_id: Option<String>,
+) -> Result<Vec<StudyNoteDto>, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.list_notes(media_id.as_deref()))
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// Comando IPC: cria uma nova anotação de estudo para o dono local.
+#[tauri::command]
+pub async fn desktop_create_note(
+    state: State<'_, DesktopState>,
+    media_id: String,
+    position_seconds: i64,
+    content: String,
+) -> Result<StudyNoteDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        state.create_note(&media_id, position_seconds, &content)
+    })
+    .await
+    .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// Comando IPC: atualiza o texto de uma anotação pertencente ao dono local.
+#[tauri::command]
+pub async fn desktop_update_note(
+    state: State<'_, DesktopState>,
+    note_id: String,
+    content: String,
+) -> Result<StudyNoteDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.update_note(&note_id, &content))
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// Comando IPC: exclui uma anotação de estudo pertencente ao dono local.
+#[tauri::command]
+pub async fn desktop_delete_note(
+    state: State<'_, DesktopState>,
+    note_id: String,
+) -> Result<(), IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.delete_note(&note_id))
         .await
         .map_err(|_| IpcError::study_unavailable())?
 }

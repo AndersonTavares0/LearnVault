@@ -54,13 +54,13 @@ pub mod study;
 
 pub use command::{
     catalog, catalog_with_orders, desktop_catalog, desktop_check_update,
-    desktop_claim_daily_mission, desktop_focus_summary, desktop_import_course,
-    desktop_import_course_cover, desktop_install_update, desktop_media_removal_impact,
-    desktop_recent_study, desktop_record_focus_session, desktop_record_position,
-    desktop_remove_course, desktop_remove_course_cover, desktop_remove_media, desktop_rescan,
-    desktop_reset_course_order, desktop_reward_summary, desktop_set_completed,
-    desktop_set_course_order, desktop_set_weekly_goal, desktop_study_progress,
-    desktop_study_summary, desktop_weekly_goal,
+    desktop_claim_daily_mission, desktop_create_note, desktop_delete_note, desktop_focus_summary,
+    desktop_import_course, desktop_import_course_cover, desktop_install_update, desktop_list_notes,
+    desktop_media_removal_impact, desktop_recent_study, desktop_record_focus_session,
+    desktop_record_position, desktop_remove_course, desktop_remove_course_cover,
+    desktop_remove_media, desktop_rescan, desktop_reset_course_order, desktop_reward_summary,
+    desktop_set_completed, desktop_set_course_order, desktop_set_weekly_goal,
+    desktop_study_progress, desktop_study_summary, desktop_update_note, desktop_weekly_goal,
 };
 pub use config::{DATABASE_FILE_NAME, DesktopConfigDto, database_path};
 pub use courses::{
@@ -74,8 +74,8 @@ pub use covers::{
 pub use dto::{
     CatalogDto, CatalogFileDto, CatalogNodeDto, CoverDto, CoverRemovalDto, DailyMissionDto,
     DesktopUpdateInfoDto, FocusDayDto, FocusSessionDto, FocusSummaryDto, MediaRemovalImpactDto,
-    MediaRemovalOutcomeDto, RecentStudyDto, RescanSummaryDto, RewardSummaryDto, StudyProgressDto,
-    StudySummaryDto,
+    MediaRemovalOutcomeDto, RecentStudyDto, RescanSummaryDto, RewardSummaryDto, StudyNoteDto,
+    StudyProgressDto, StudySummaryDto,
 };
 pub use error::{IpcError, IpcErrorCode};
 pub use ordering::{CourseOrders, OrderError, order_path};
@@ -115,6 +115,10 @@ pub fn run() {
             command::desktop_set_completed,
             command::desktop_recent_study,
             command::desktop_study_summary,
+            command::desktop_list_notes,
+            command::desktop_create_note,
+            command::desktop_update_note,
+            command::desktop_delete_note,
             command::desktop_record_focus_session,
             command::desktop_focus_summary,
             command::desktop_reward_summary,

@@ -17,7 +17,7 @@
 	import PasswordField from './PasswordField.svelte';
 	import { defaultLessonPath, firstAvailableLessonPath, lessonContainer, neighboringLessons } from './navigation';
 	import { destinationAfterLogin, findCourse, findLesson, findLessonLocation, href, locationFromHash, type LessonLocation, type Route } from './router';
-	import { transport, transportKind, COVER_ACCEPT, MAX_COVER_BYTES, courseIdOf, STUDY_NOT_AVAILABLE, type Catalog, type CatalogNode, type Lesson, type StudyProgress, type UpdateStatus, type UpdateHistoryEntry, type User } from './transport';
+	import { transport, transportKind, COVER_ACCEPT, MAX_COVER_BYTES, courseIdOf, STUDY_NOT_AVAILABLE, type Catalog, type CatalogNode, type Lesson, type StudyNote, type StudyProgress, type UpdateStatus, type UpdateHistoryEntry, type User } from './transport';
 	import { updateOutcome, updateMessage, updateReleaseUrl } from './update';
 	import { defaultRoute, resolveSession } from './session';
 	import { formatDuration, studySyncSupported } from './player';
@@ -50,7 +50,10 @@
 	let lesson: Lesson | null = null;
 	let catalogQuery = '';
 	let progressFilter: CourseProgressStatus = 'all';
+	let sourceFolderFilter = 'all';
 	let filteredNodes: CatalogNode[] = [];
+	let allNotesForSearch: StudyNote[] = [];
+	let notesLoaded = false;
 	$: course = findCourse(catalog, courseId);
 	$: completedMediaIds = new Set(recent.filter((item) => item.completed).map((item) => item.mediaId));
 	$: inProgressMediaIds = new Set(recent.filter((item) => !item.completed && item.positionSeconds > 0).map((item) => item.mediaId));
@@ -66,10 +69,29 @@
 		not_started: (catalog?.nodes ?? []).filter((n) => courseStatusMap.get(courseIdOf(n)) === 'not_started').length,
 		completed: (catalog?.nodes ?? []).filter((n) => courseStatusMap.get(courseIdOf(n)) === 'completed').length
 	};
+	$: availableSourceFolders = catalog
+		? Array.from(new Set(catalog.nodes.map((n) => n.sourceFolder).filter((f): f is string => Boolean(f)))).sort((a, b) => a.localeCompare(b))
+		: [];
+	$: if (sourceFolderFilter !== 'all' && !availableSourceFolders.includes(sourceFolderFilter)) {
+		sourceFolderFilter = 'all';
+	}
 	$: filteredNodes = (catalog ? filterCatalog(catalog.nodes, catalogQuery) : []).filter((node) => {
-		if (progressFilter === 'all') return true;
-		return courseStatusMap.get(courseIdOf(node)) === progressFilter;
+		if (progressFilter !== 'all' && courseStatusMap.get(courseIdOf(node)) !== progressFilter) return false;
+		if (sourceFolderFilter !== 'all' && node.sourceFolder !== sourceFolderFilter) return false;
+		return true;
 	});
+	$: matchingNotes = catalogQuery.trim()
+		? allNotesForSearch.filter((note) => {
+				const q = catalogQuery.toLowerCase().trim();
+				return note.content.toLowerCase().includes(q) || (note.relativePath && note.relativePath.toLowerCase().includes(q));
+		  })
+		: [];
+	$: if (catalogQuery.trim() && !notesLoaded && user) {
+		void loadNotesForSearch();
+	}
+	$: if (route !== 'home' && notesLoaded) {
+		notesLoaded = false;
+	}
 	// `#/course/<id>` é a visão geral do curso; a aula só abre quando o caminho está na
 	// URL. O endereço legado `#/player/<curso>/<aula>` continua abrindo o player.
 	$: isOverview = route === 'course' && lessonPath === null;
@@ -297,6 +319,8 @@
 		try {
 			const session = await resolveSession(() => transport.me(), transportKind);
 			user = session.user;
+			allNotesForSearch = [];
+			notesLoaded = false;
 			loadPlayerPreferences(session.user);
 			error = session.error;
 			if (user) {
@@ -319,6 +343,8 @@
 		const destination = location.hash;
 		try {
 			user = await transport.login(username, password);
+			allNotesForSearch = [];
+			notesLoaded = false;
 			loadPlayerPreferences(user);
 			password = '';
 			catalog = await transport.catalog();
@@ -356,6 +382,8 @@
 		playerPreferences = createDefaultPlayerPreferences();
 		catalog = null;
 		recent = [];
+		allNotesForSearch = [];
+		notesLoaded = false;
 		username = '';
 		password = '';
 		currentPassword = '';
@@ -481,6 +509,15 @@
 			}
 		} finally {
 			recentLoading = false;
+		}
+	}
+
+	async function loadNotesForSearch() {
+		try {
+			allNotesForSearch = await transport.listNotes();
+			notesLoaded = true;
+		} catch {
+			allNotesForSearch = [];
 		}
 	}
 
@@ -774,6 +811,19 @@
 								Concluídos <span class="lv-filter-badge">{progressCounts.completed}</span>
 							</button>
 						</div>
+						{#if availableSourceFolders.length > 1}
+							<div class="lv-progress-filters lv-source-filters" role="group" aria-label="Filtrar cursos por pasta de origem">
+								<button type="button" class="lv-filter-pill" class:is-active={sourceFolderFilter === 'all'} aria-pressed={sourceFolderFilter === 'all'} onclick={() => (sourceFolderFilter = 'all')}>
+									Todas as pastas ({catalog?.nodes.length ?? 0})
+								</button>
+								{#each availableSourceFolders as folder}
+									{@const count = (catalog?.nodes ?? []).filter((n) => n.sourceFolder === folder).length}
+									<button type="button" class="lv-filter-pill" class:is-active={sourceFolderFilter === folder} aria-pressed={sourceFolderFilter === folder} onclick={() => (sourceFolderFilter = folder)}>
+										{folder} <span class="lv-filter-badge">{count}</span>
+									</button>
+								{/each}
+							</div>
+						{/if}
 					{/if}
 
 					{#if studySyncSupported && libraryRecent.length && !catalogQuery.trim()}
@@ -888,8 +938,8 @@
 							{:else}
 								<div class="lv-empty-state">
 									<p class="lv-empty__title" role="status">Nenhum resultado encontrado</p>
-									<p class="lv-lede">Nenhum curso ou aula corresponde a “{catalogQuery.trim()}”.</p>
-									<button class="lv-btn" type="button" onclick={() => (catalogQuery = '')}>Limpar busca</button>
+									<p class="lv-lede">Nenhum curso corresponde aos filtros ativos{catalogQuery.trim() ? ` ou à busca “${catalogQuery.trim()}”` : ''}.</p>
+									<button class="lv-btn" type="button" onclick={() => { catalogQuery = ''; progressFilter = 'all'; sourceFolderFilter = 'all'; }}>Limpar filtros e busca</button>
 								</div>
 							{/if}
 						{:else if canManage}
@@ -899,6 +949,40 @@
 							</div>
 						{:else}
 							<div class="lv-empty-state"><p class="lv-empty__title">Nenhum curso disponível</p><p class="lv-lede">Peça ao administrador para importar um curso.</p></div>
+						{/if}
+
+						{#if catalogQuery.trim() && matchingNotes.length > 0}
+							<div class="lv-matching-notes" role="region" aria-label="Anotações correspondentes">
+								<div class="lv-panel__head">
+									<h2>Anotações encontradas</h2>
+									<span class="lv-count">{matchingNotes.length} {matchingNotes.length === 1 ? 'anotação' : 'anotações'}</span>
+								</div>
+								<div class="lv-matching-notes__grid">
+									{#each matchingNotes as note (note.noteId)}
+										{@const location = findLessonLocation(catalog, note.mediaId)}
+										{@const targetHref = location?.courseId && location?.lesson.path ? href('course', location.courseId, location.lesson.path, note.positionSeconds) : null}
+										{#if targetHref}
+											<a class="lv-note-match-card" href={targetHref}>
+												<div class="lv-note-match-card__header">
+													<span class="lv-note-match-course">{location?.courseTitle ?? 'Curso'}</span>
+													<span class="lv-note-match-time">{formatDuration(note.positionSeconds)}</span>
+												</div>
+												<p class="lv-note-match-lesson">{location?.lesson.title ?? note.relativePath ?? 'Aula'}</p>
+												<p class="lv-note-match-content">{note.content}</p>
+											</a>
+										{:else}
+											<div class="lv-note-match-card lv-note-match-card--detached">
+												<div class="lv-note-match-card__header">
+													<span class="lv-note-match-course">{location?.courseTitle ?? 'Curso'}</span>
+													<span class="lv-note-match-time">{formatDuration(note.positionSeconds)}</span>
+												</div>
+												<p class="lv-note-match-lesson">{location?.lesson.title ?? note.relativePath ?? 'Aula'}</p>
+												<p class="lv-note-match-content">{note.content}</p>
+											</div>
+										{/if}
+									{/each}
+								</div>
+							</div>
 						{/if}
 					</section>
 

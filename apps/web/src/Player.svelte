@@ -10,11 +10,13 @@
 		nextSpeed,
 		PLAYBACK_SPEEDS,
 		playerShortcutAction,
+		seekPercentPosition,
 		selectPlayableMedia,
 		selectPlayableSubtitle,
 		shouldAutoAdvance,
 		srtConversionSupported,
 		srtToWebVtt,
+		stepVolume,
 		studySyncEnabled,
 		subtitleFormat,
 		type PlaybackSpeed
@@ -177,6 +179,8 @@
 	let captionDownload = $state<string | null>(null);
 	let captionMessage = $state('');
 	let playbackErrorCode: number | null = $state(null);
+	let hoverTime: number | null = $state(null);
+	let hoverPct: number = $state(0);
 
 	let studyTab: 'notes' | 'flashcards' = $state('notes');
 
@@ -241,6 +245,10 @@
 	}
 
 	function handleKeydown(event: KeyboardEvent) {
+		if (event.ctrlKey || event.metaKey || event.altKey) {
+			return;
+		}
+
 		const target = event.target as HTMLElement | null;
 		if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)) {
 			return;
@@ -282,9 +290,35 @@
 		if (action === 'toggle-playback') {
 			if (media.paused) void media.play().catch(() => undefined);
 			else media.pause();
-		} else {
-			const offset = action === 'seek-backward' ? -10 : 10;
-			seekOffset(offset);
+		} else if (action === 'seek-backward') {
+			seekOffset(-10);
+		} else if (action === 'seek-forward') {
+			seekOffset(10);
+		} else if (action === 'toggle-mute') {
+			media.muted = !media.muted;
+		} else if (action === 'volume-up') {
+			media.volume = stepVolume(media.volume, 'up');
+			if (media.muted) media.muted = false;
+		} else if (action === 'volume-down') {
+			media.volume = stepVolume(media.volume, 'down');
+		} else if (action === 'open-notes') {
+			if (studyEnabled && mediaId) {
+				studyTab = 'notes';
+				requestAnimationFrame(() => {
+					const btnOrInput = playerContainerRef?.parentElement?.querySelector<HTMLElement>(
+						'.study-notes-section .study-notes-input, .study-notes-section button.lv-btn'
+					);
+					btnOrInput?.focus();
+					if (btnOrInput instanceof HTMLButtonElement) {
+						btnOrInput.click();
+					}
+				});
+			}
+		} else if (typeof action === 'object' && action.type === 'seek-percent') {
+			if (duration > 0) {
+				cancelAutoNext();
+				media.currentTime = seekPercentPosition(duration, action.percent);
+			}
 		}
 	}
 
@@ -403,6 +437,9 @@
 	}
 
 	function handleLoadedMetadata() {
+		if (media) {
+			media.playbackRate = playbackSpeed;
+		}
 		if (initialPosition && initialPosition > 0 && media) {
 			media.currentTime = initialPosition;
 			lastAppliedPosition = initialPosition;
@@ -426,7 +463,7 @@
 	</div>{@render lessonHeading()}
 {:else if source}
 	<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions (o grupo identificado do player recebe foco para ativar atalhos) -->
-	<div bind:this={playerContainerRef} class="player-container {playbackKind === 'audio' ? 'audio-container' : 'video-container'}" role="group" tabindex="0" onkeydown={handleKeydown} aria-label="Player" aria-keyshortcuts="Space ArrowLeft ArrowRight k j l [ ] f p">
+	<div bind:this={playerContainerRef} class="player-container {playbackKind === 'audio' ? 'audio-container' : 'video-container'}" role="group" tabindex="0" onkeydown={handleKeydown} aria-label="Player" aria-keyshortcuts="Space ArrowLeft ArrowRight ArrowUp ArrowDown k j l [ ] f p m n 0-9">
 		<div class="player-top-controls">
 			{#if availableMedia.length > 1}<label class="player-select-label">Mídia da aula<select aria-label="Mídia da aula" value={playable?.mediaId ?? ''} onchange={selectMedia}>{#each availableMedia as item}<option value={item.mediaId ?? ''}>{item.name}</option>{/each}</select></label>{/if}
 			{#if availableSubtitles.length > 0}<label class="player-select-label">Legenda<select aria-label="Legenda da aula" value={lessonPreference.subtitleId === null ? '' : selectedSubtitle?.mediaId ?? ''} onchange={selectSubtitle}><option value="">Sem legendas</option>{#each availableSubtitles as item}<option value={item.mediaId ?? ''}>{item.name}</option>{/each}</select></label>{/if}
@@ -441,28 +478,47 @@
 				<span class="audio-label">Faixa de áudio · {lesson.title}</span>
 			</div>
 			<!-- svelte-ignore a11y_media_has_caption -->
-			<audio class="player-media player-audio" controls preload="metadata" src={source} aria-label={`Player da aula${lessonTitle ? `: ${lessonTitle}` : ''}`} bind:this={media} bind:currentTime={currentTime} bind:duration={duration} onplay={cancelAutoNext} ontimeupdate={handleTimeUpdate} onended={handleEnded} onloadedmetadata={handleLoadedMetadata} onerror={handleMediaError}>
+			<audio class="player-media player-audio" controls preload="metadata" src={source} aria-label={`Player da aula${lessonTitle ? `: ${lessonTitle}` : ''}`} bind:this={media} bind:currentTime={currentTime} bind:duration={duration} onplay={cancelAutoNext} ontimeupdate={handleTimeUpdate} onended={handleEnded} onloadedmetadata={handleLoadedMetadata} oncanplay={() => { if (media && media.playbackRate !== playbackSpeed) media.playbackRate = playbackSpeed; }} onerror={handleMediaError}>
 				{#if captionSource}<track kind="captions" src={captionSource} label="Legenda" default />{/if}
 			</audio>
 		{:else}
 			<!-- svelte-ignore a11y_media_has_caption -->
-			<video class="player-media" controls preload="metadata" src={source} aria-label={`Player da aula${lessonTitle ? `: ${lessonTitle}` : ''}`} bind:this={media} bind:currentTime={currentTime} bind:duration={duration} onplay={cancelAutoNext} ontimeupdate={handleTimeUpdate} onended={handleEnded} onloadedmetadata={handleLoadedMetadata} onerror={handleMediaError}>
+			<video class="player-media" controls preload="metadata" src={source} aria-label={`Player da aula${lessonTitle ? `: ${lessonTitle}` : ''}`} bind:this={media} bind:currentTime={currentTime} bind:duration={duration} onplay={cancelAutoNext} ontimeupdate={handleTimeUpdate} onended={handleEnded} onloadedmetadata={handleLoadedMetadata} oncanplay={() => { if (media && media.playbackRate !== playbackSpeed) media.playbackRate = playbackSpeed; }} onerror={handleMediaError}>
 				{#if captionSource}<track kind="captions" src={captionSource} label="Legenda" default />{/if}
 			</video>
 		{/if}
 
-		{#if duration > 0 && lessonNotes.length > 0}
-			<div class="player-timeline-markers" role="region" aria-label="Anotações na linha do tempo">
+		{#if duration > 0}
+			<div class="player-timeline-markers" role="region" aria-label="Linha do tempo interativa com marcações de estudo">
 				<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-				<div class="timeline-track" onclick={(e) => {
-					const rect = e.currentTarget.getBoundingClientRect();
-					const fraction = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-					if (media) {
-						cancelAutoNext();
-						media.currentTime = fraction * duration;
-					}
-				}}>
+				<div
+					class="timeline-track"
+					onclick={(e) => {
+						const rect = e.currentTarget.getBoundingClientRect();
+						const fraction = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+						if (media) {
+							cancelAutoNext();
+							media.currentTime = fraction * duration;
+						}
+					}}
+					onpointermove={(e) => {
+						const rect = e.currentTarget.getBoundingClientRect();
+						if (rect.width > 0) {
+							const fraction = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+							hoverTime = fraction * duration;
+							hoverPct = fraction * 100;
+						}
+					}}
+					onpointerleave={() => {
+						hoverTime = null;
+					}}
+				>
 					<div class="timeline-progress" style="width: {Math.min(100, (currentTime / duration) * 100)}%;"></div>
+					{#if hoverTime !== null}
+						<div class="timeline-hover-indicator" style="left: {hoverPct}%;">
+							<span class="timeline-hover-time">{formatDuration(hoverTime)}</span>
+						</div>
+					{/if}
 					{#each lessonNotes as note (note.noteId)}
 						{@const pct = Math.max(0, Math.min(100, (note.positionSeconds / duration) * 100))}
 						<button

@@ -17,8 +17,8 @@
 use learnvault_core::{Database, FocusSessionInput};
 
 use crate::dto::{
-    FocusSessionDto, FocusSummaryDto, RecentStudyDto, RewardSummaryDto, StudyProgressDto,
-    StudySummaryDto,
+    FocusSessionDto, FocusSummaryDto, RecentStudyDto, RewardSummaryDto, StudyNoteDto,
+    StudyProgressDto, StudySummaryDto,
 };
 use crate::error::IpcError;
 
@@ -134,6 +134,63 @@ pub fn set_weekly_goal(database: &Database, goal: i64) -> Result<i64, IpcError> 
     learnvault_core::set_weekly_goal(database, LOCAL_OWNER_ID, goal).map_err(focus_error)
 }
 
+/// Lista anotações do dono local. Quando `media_id` é fornecido, filtra pela mídia;
+/// caso contrário, devolve todas as anotações do usuário com caminhos relativos para busca global.
+pub fn list_notes(
+    database: &Database,
+    media_id: Option<&str>,
+) -> Result<Vec<StudyNoteDto>, IpcError> {
+    if let Some(id) = media_id.filter(|s| !s.trim().is_empty()) {
+        learnvault_core::list_study_notes(database, LOCAL_OWNER_ID, id)
+            .map(|notes| notes.into_iter().map(StudyNoteDto::from).collect())
+            .map_err(study_error)
+    } else {
+        learnvault_core::list_all_study_notes(database, LOCAL_OWNER_ID)
+            .map(|notes| notes.into_iter().map(StudyNoteDto::from).collect())
+            .map_err(study_error)
+    }
+}
+
+/// Cria uma anotação de estudo vinculada a uma mídia e timestamp para o dono local.
+pub fn create_note(
+    database: &Database,
+    media_id: &str,
+    position_seconds: i64,
+    content: &str,
+) -> Result<StudyNoteDto, IpcError> {
+    learnvault_core::create_study_note(
+        database,
+        LOCAL_OWNER_ID,
+        media_id,
+        position_seconds,
+        content,
+    )
+    .map(StudyNoteDto::from)
+    .map_err(study_error)
+}
+
+/// Atualiza o texto de uma anotação pertencente ao dono local.
+pub fn update_note(
+    database: &Database,
+    note_id: &str,
+    content: &str,
+) -> Result<StudyNoteDto, IpcError> {
+    learnvault_core::update_study_note(database, LOCAL_OWNER_ID, note_id, content)
+        .map(StudyNoteDto::from)
+        .map_err(study_error)
+}
+
+/// Exclui uma anotação de estudo do dono local. Devolve erro se a anotação não existir.
+pub fn delete_note(database: &Database, note_id: &str) -> Result<(), IpcError> {
+    let deleted = learnvault_core::delete_study_note(database, LOCAL_OWNER_ID, note_id)
+        .map_err(study_error)?;
+    if deleted {
+        Ok(())
+    } else {
+        Err(IpcError::note_not_found())
+    }
+}
+
 /// Traduz o erro do núcleo para o erro IPC estável, sem ecoar o identificador consultado.
 ///
 /// Uma mídia desconhecida e uma posição negativa são falhas de entrada com código próprio,
@@ -145,6 +202,8 @@ fn study_error(error: learnvault_core::Error) -> IpcError {
     match error {
         Error::MediaNotFound { .. } => IpcError::media_not_found(),
         Error::InvalidStudyPosition { .. } => IpcError::invalid_position(),
+        Error::StudyNoteNotFound { .. } => IpcError::note_not_found(),
+        Error::InvalidStudyNoteContent => IpcError::invalid_note(),
         _ => IpcError::study_unavailable(),
     }
 }
