@@ -158,10 +158,10 @@
 	>
 		<!-- Sombra do solo tênue -->
 		<ellipse cx="32" cy="57" rx="14" ry="3" fill="currentColor" opacity="0.12" />
-		<!-- Tronco seco e retorcido -->
+		<!-- Tronco seco e retorcido com contraste equilibrado -->
 		<path
 			d="M32 56L31 38C30 32 34 26 30 18M31 38L23 28M25 28L18 24M31 32L39 26M37 26L44 20M30 22L36 16"
-			stroke="#78909c"
+			stroke="#64748b"
 			stroke-width="2.5"
 			stroke-linecap="round"
 			stroke-linejoin="round"
