@@ -177,13 +177,20 @@
 		aria-hidden="true"
 		class="lv-forest-tree lv-forest-tree--withered"
 	>
-		<ellipse cx="32" cy="57" rx="14" ry="3" fill="currentColor" opacity="0.12" />
+		<ellipse cx="32" cy="57" rx="14" ry="3" fill="#1c130d" opacity="0.25" />
+		<!-- Tronco seco e retorcido em tons terrosos escuros -->
 		<path
-			d="M32 56L31 38C30 32 34 26 30 18M31 38L23 28M25 28L18 24M31 32L39 26M37 26L44 20M30 22L36 16"
-			stroke="#64748b"
-			stroke-width="2.5"
-			stroke-linecap="round"
-			stroke-linejoin="round"
+			d="M29 57 Q27 48 30 40 Q32 33 29 26 L33 26 Q35 33 33 40 Q31 48 34 57 Z"
+			fill="#3a2012"
 		/>
+		<path
+			d="M32 57 Q31 48 33 40 Q35 33 33 26 L35 26 Q37 34 35 40 Q33 48 36 57 Z"
+			fill="#52311b"
+		/>
+		<!-- Galhos secos quebrados sem folhas -->
+		<path d="M30 42 L22 35 L20 33 L23 32 L31 38 Z" fill="#3a2012" />
+		<path d="M32 40 Q38 38 42 41 L43 43 Q38 40 33 43 Z" fill="#31190c" />
+		<path d="M30 32 Q35 27 42 28 L43 26 Q34 25 29 30 Z" fill="#52311b" />
+		<path d="M30 29 Q24 25 22 18 L24 17.5 Q26 23 31 26 Z" fill="#422515" />
 	</svg>
 {/if}

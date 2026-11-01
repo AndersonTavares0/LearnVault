@@ -28,8 +28,8 @@ no repositório:
 
 1. Abra `Actions` → `Release` → `Run workflow`.
 2. Informe a tag exata, no formato `vX.Y.Z`, de uma release já publicada.
-3. O workflow valida a tag, confirma que a release existe e não é rascunho, reconstrói tudo a partir do commit da
-   tag, confere que a tag não se moveu durante o build, reenvia os quatro assets com `--clobber` e acrescenta a
+3. O workflow valida a tag, confirma ou inicializa a release (suportando rascunhos para publicação atômica), reconstrói tudo a partir do commit da
+   tag, confere que a tag não se moveu durante o build, reenvia os artefatos assinados com --clobber, publica a release e acrescenta a
    seção **Contribuidores**.
 
 O caminho de reparo nunca recria tag nem release: ele apenas reenvia assets para a mesma tag. A seção Contribuidores
