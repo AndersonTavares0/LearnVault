@@ -24,7 +24,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use learnvault_core::{
-    CatalogNode, CatalogOrder, build_catalog, course_file_lessons, sibling_paths, validate_siblings,
+    CatalogOrder, build_catalog, shape_course_catalog, sibling_paths, validate_siblings,
 };
 use serde::{Deserialize, Serialize};
 
@@ -300,11 +300,7 @@ fn set_course_order(
     children: &[String],
 ) -> Result<OrderResponse, OrderFailure> {
     let catalog = build_catalog(database, course_id).map_err(|_| OrderFailure::Core)?;
-    let shaped: Vec<CatalogNode> = catalog
-        .categories
-        .into_iter()
-        .map(course_file_lessons)
-        .collect();
+    let (shaped, _) = shape_course_catalog(catalog);
     let siblings = sibling_paths(&shaped, parent).ok_or(OrderFailure::UnknownParent)?;
     if siblings.is_empty() || !validate_siblings(&siblings, children) {
         return Err(OrderFailure::InvalidOrder);

@@ -117,11 +117,7 @@ impl DesktopState {
                 .map_err(|_| IpcError::database_unavailable())?;
             let catalog = learnvault_core::build_catalog(&database, &course.id)
                 .map_err(|_| IpcError::catalog_unavailable())?;
-            let shaped: Vec<learnvault_core::CatalogNode> = catalog
-                .categories
-                .into_iter()
-                .map(learnvault_core::course_file_lessons)
-                .collect();
+            let (shaped, _) = learnvault_core::shape_course_catalog(catalog);
             learnvault_core::sibling_paths(&shaped, parent).ok_or_else(IpcError::invalid_order)?
         };
         if siblings.is_empty() || !learnvault_core::validate_siblings(&siblings, children) {

@@ -43,7 +43,7 @@
 		lesson: Lesson;
 		courseId: string;
 		mediaError: string;
-		onMediaError: () => void;
+		onMediaError: (code?: number) => void;
 		studyEnabled?: boolean;
 		preferences?: PlayerPreferences;
 		onPreferencesChange?: (next: PlayerPreferences) => boolean;
@@ -77,7 +77,10 @@
 	let lastAppliedPosition = $state<number | null>(null);
 
 	$effect(() => {
-		if (source) lastAppliedPosition = null;
+		if (source) {
+			lastAppliedPosition = null;
+			playbackErrorCode = null;
+		}
 	});
 
 	$effect(() => {
@@ -95,6 +98,7 @@
 	let captionSource = $state<string | null>(null);
 	let captionDownload = $state<string | null>(null);
 	let captionMessage = $state('');
+	let playbackErrorCode: number | null = $state(null);
 
 	let studyTab: 'notes' | 'flashcards' = $state('notes');
 
@@ -223,7 +227,9 @@
 		if (format === 'vtt') {
 			captionSource = url;
 		} else if (format === 'ass') {
-			captionMessage = 'Legendas ASS/SSA não são compatíveis com <track>; baixe o arquivo para usar um conversor.';
+			captionMessage = 'Legendas ASS/SSA contêm estilos avançados não suportados nativamente pelo reprodutor; baixe o arquivo para usar externamente.';
+		} else if (format === 'sub') {
+			captionMessage = 'Legendas em formato .sub utilizam estrutura gráfica/MicroDVD não suportada nativamente; baixe o arquivo para uso externo.';
 		} else if (format === 'srt' && srtConversionSupported) {
 			void fetch(url).then((response) => {
 				if (!response.ok) throw new Error('Falha ao carregar legenda.');
@@ -304,11 +310,35 @@
 		}
 		if (shouldAutoAdvance(autoNext, hasNextLesson)) onAutoNext();
 	}
+
+	function handleMediaError() {
+		const code = media?.error?.code ?? null;
+		playbackErrorCode = code;
+		onMediaError(code ?? undefined);
+	}
+
+	function handleLoadedMetadata() {
+		if (initialPosition && initialPosition > 0 && media) {
+			media.currentTime = initialPosition;
+			lastAppliedPosition = initialPosition;
+		}
+	}
 </script>
 {#snippet lessonHeading()}
 	{#if lessonTitle}<h2 class="player-lesson-title">{lessonTitle}</h2>{/if}
 {/snippet}
-{#if mediaError}<div class="lv-player-error" role="alert"><strong>{mediaError}</strong><p>O arquivo local pode ter sido movido ou o disco pode estar desconectado. Reconecte a pasta e use “Atualizar cursos” na biblioteca; seu progresso permanece salvo.</p><a class="lv-btn lvui-btn" href="#/home">Ir à biblioteca para atualizar cursos</a></div>{@render lessonHeading()}
+{#if mediaError}
+	<div class="lv-player-error" role="alert">
+		<strong>{mediaError}</strong>
+		{#if playbackErrorCode === 4}
+			<p>O arquivo foi localizado, mas o formato ou codec desta mídia não é suportado pelo seu navegador/webview atual (ex.: HEVC/H.265, AC3 ou contêiner específico). É possível assistir com um reprodutor externo ou convertê-lo para MP4 (H.264 / AAC).</p>
+		{:else if playbackErrorCode === 3}
+			<p>A decodificação do áudio/vídeo falhou. O arquivo pode estar corrompido ou o codec não é suportado pelo hardware.</p>
+		{:else}
+			<p>O arquivo local pode ter sido movido ou o disco pode estar desconectado. Reconecte a pasta e use “Atualizar cursos” na biblioteca; seu progresso permanece salvo.</p>
+		{/if}
+		<a class="lv-btn lvui-btn" href="#/home">Ir à biblioteca para atualizar cursos</a>
+	</div>{@render lessonHeading()}
 {:else if source}
 	<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions (o grupo identificado do player recebe foco para ativar atalhos) -->
 	<div bind:this={playerContainerRef} class="player-container {playbackKind === 'audio' ? 'audio-container' : 'video-container'}" role="group" tabindex="0" onkeydown={handleKeydown} aria-label="Player" aria-keyshortcuts="Space ArrowLeft ArrowRight k j l [ ] f">
@@ -326,12 +356,12 @@
 				<span class="audio-label">Faixa de áudio · {lesson.title}</span>
 			</div>
 			<!-- svelte-ignore a11y_media_has_caption -->
-			<audio class="player-media player-audio" controls preload="metadata" src={source} aria-label={`Player da aula${lessonTitle ? `: ${lessonTitle}` : ''}`} bind:this={media} bind:currentTime={currentTime} bind:duration={duration} ontimeupdate={handleTimeUpdate} onended={handleEnded} onerror={onMediaError}>
+			<audio class="player-media player-audio" controls preload="metadata" src={source} aria-label={`Player da aula${lessonTitle ? `: ${lessonTitle}` : ''}`} bind:this={media} bind:currentTime={currentTime} bind:duration={duration} ontimeupdate={handleTimeUpdate} onended={handleEnded} onloadedmetadata={handleLoadedMetadata} onerror={handleMediaError}>
 				{#if captionSource}<track kind="captions" src={captionSource} label="Legenda" default />{/if}
 			</audio>
 		{:else}
 			<!-- svelte-ignore a11y_media_has_caption -->
-			<video class="player-media" controls preload="metadata" src={source} aria-label={`Player da aula${lessonTitle ? `: ${lessonTitle}` : ''}`} bind:this={media} bind:currentTime={currentTime} bind:duration={duration} ontimeupdate={handleTimeUpdate} onended={handleEnded} onerror={onMediaError}>
+			<video class="player-media" controls preload="metadata" src={source} aria-label={`Player da aula${lessonTitle ? `: ${lessonTitle}` : ''}`} bind:this={media} bind:currentTime={currentTime} bind:duration={duration} ontimeupdate={handleTimeUpdate} onended={handleEnded} onloadedmetadata={handleLoadedMetadata} onerror={handleMediaError}>
 				{#if captionSource}<track kind="captions" src={captionSource} label="Legenda" default />{/if}
 			</video>
 		{/if}

@@ -121,11 +121,12 @@ export function mediaPlaybackKind(file: FileEntry): MediaPlaybackKind {
 	return extension && ['aac', 'flac', 'm4a', 'mp3', 'oga', 'ogg', 'opus', 'wav', 'weba', 'wma'].includes(extension) ? 'audio' : 'video';
 }
 
-export function subtitleFormat(path: string): 'vtt' | 'srt' | 'ass' | 'unsupported' {
+export function subtitleFormat(path: string): 'vtt' | 'srt' | 'ass' | 'sub' | 'unsupported' {
 	const extension = path.split(/[?#]/, 1)[0].split('.').pop()?.toLowerCase();
 	if (extension === 'vtt') return 'vtt';
 	if (extension === 'srt') return 'srt';
 	if (extension === 'ass' || extension === 'ssa') return 'ass';
+	if (extension === 'sub') return 'sub';
 	return 'unsupported';
 }
 

@@ -466,8 +466,14 @@
 		}
 	}
 
-	function mediaFailed() {
-		mediaError = 'Não foi possível carregar esta mídia.';
+	function mediaFailed(code?: number) {
+		if (code === 4) {
+			mediaError = 'Codec ou formato de mídia incompatível.';
+		} else if (code === 3) {
+			mediaError = 'Falha na decodificação da mídia.';
+		} else {
+			mediaError = 'Não foi possível carregar esta mídia.';
+		}
 	}
 
 	// A capa é escolhida no card do curso. No desktop o seletor de imagens roda no Rust
@@ -730,7 +736,7 @@
 									{@const courseNode = findCourse(catalog, entry.location.courseId)}
 									{#if courseNode}
 										<li>
-											<a class="lv-resume-card" href={href('course', entry.location.courseId, entry.location.lesson.path)}>
+											<a class="lv-resume-card" href={href('course', entry.location.courseId, entry.location.lesson.path, entry.item.completed ? null : entry.item.positionSeconds)}>
 												<span class="lv-resume-card__cover">
 													<CourseCover course={courseNode} profile={user.userId} mediaUrl={(file, courseId) => transport.mediaUrl(file, courseId)} manualCoverUrl={transport.coverUrl(courseIdOf(courseNode), courseNode.coverVersion ?? null)} />
 												</span>
@@ -978,7 +984,7 @@
 							{/if}
 							<div class="lv-course-hero__actions">
 								{#if activePath}
-									<a class="lv-btn lv-btn--primary" href={href('course', courseIdOf(course), activePath)}>{courseRecent ? 'Continuar estudando' : 'Começar curso'}</a>
+									<a class="lv-btn lv-btn--primary" href={href('course', courseIdOf(course), courseRecent ? courseRecent.location.lesson.path : activePath, courseRecent && !courseRecent.item.completed ? courseRecent.item.positionSeconds : null)}>{courseRecent ? 'Continuar estudando' : 'Começar curso'}</a>
 								{:else}
 									<span class="lv-btn" aria-disabled="true">Nenhuma aula disponível</span>
 								{/if}
@@ -1049,7 +1055,7 @@
 									<div class="lv-resume-panel__body">
 										<p class="lv-resume-panel__lesson">{courseRecent.location.lesson.title}</p>
 										<p class="lv-resume-panel__meta">{formatLocationContext(courseRecent.location.courseTitle, courseRecent.location.moduleTitle)}{#if !courseRecent.item.completed}{' · '}{formatDuration(courseRecent.item.positionSeconds)}{/if}</p>
-										<a class="lv-btn lv-btn--primary" href={href('course', courseIdOf(course), courseRecent.location.lesson.path)}>{courseRecent.item.completed ? 'Revisar aula' : 'Retomar aula'}</a>
+										<a class="lv-btn lv-btn--primary" href={href('course', courseIdOf(course), courseRecent.location.lesson.path, courseRecent.item.completed ? null : courseRecent.item.positionSeconds)}>{courseRecent.item.completed ? 'Revisar aula' : 'Retomar aula'}</a>
 									</div>
 								</section>
 							{/if}

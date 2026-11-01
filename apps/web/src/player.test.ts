@@ -46,6 +46,7 @@ describe('player media and subtitles', () => {
 		expect(subtitleFormat('legenda.srt')).toBe('srt');
 		expect(subtitleFormat('legenda.ass')).toBe('ass');
 		expect(subtitleFormat('legenda.ssa')).toBe('ass');
+		expect(subtitleFormat('legenda.sub')).toBe('sub');
 	});
 	it('formats durations for resume labels', () => {
 		expect(formatDuration(0)).toBe('0:00');
@@ -215,5 +216,11 @@ describe('player preference controls', () => {
 		expect(body).toContain('aria-label="Ferramentas de estudo da aula"');
 		expect(body).toContain('Anotações da aula');
 		expect(body).toContain('Cartões de revisão');
+	});
+
+	it('displays detailed explanation when mediaError is present', () => {
+		const { body } = render(Player, { props: { ...baseProps, mediaError: 'Não foi possível carregar esta mídia.' } });
+		expect(body).toContain('Não foi possível carregar esta mídia.');
+		expect(body).toContain('O arquivo local pode ter sido movido');
 	});
 });

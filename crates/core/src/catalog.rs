@@ -342,17 +342,18 @@ fn compare_natural_segment(a: &str, b: &str) -> std::cmp::Ordering {
 }
 
 /// Ancestral existente mais profundo de um caminho, se houver.
+///
+/// O percurso busca o ancestral removendo segmentos do caminho a partir do mais profundo,
+/// reduzindo o custo de busca de O(N) para O(profundidade × log N).
 fn deepest_existing_ancestor(path: &str, nodes: &BTreeMap<String, PendingNode>) -> Option<String> {
-    let mut best: Option<&str> = None;
-    for candidate in nodes.keys() {
-        let is_ancestor = candidate.len() < path.len()
-            && path.starts_with(candidate.as_str())
-            && path.as_bytes()[candidate.len()] == b'/';
-        if is_ancestor && best.is_none_or(|current| candidate.len() > current.len()) {
-            best = Some(candidate);
+    let mut current = path;
+    while let Some((parent, _)) = current.rsplit_once('/') {
+        if nodes.contains_key(parent) {
+            return Some(parent.to_owned());
         }
+        current = parent;
     }
-    best.map(str::to_owned)
+    None
 }
 
 /// Último segmento de um caminho relativo.
@@ -414,6 +415,22 @@ pub fn course_file_lessons(node: CatalogNode) -> CatalogNode {
         children,
     } = node;
     let mut children: Vec<_> = children.into_iter().map(course_file_lessons).collect();
+    let (has_media, loose) = promote_loose_media_to_lessons(loose_files, &mut children);
+
+    CatalogNode {
+        title,
+        path,
+        role: if has_media { NodeRole::Module } else { role },
+        files,
+        loose_files: loose,
+        children,
+    }
+}
+
+fn promote_loose_media_to_lessons(
+    loose_files: Vec<CatalogFile>,
+    children: &mut Vec<CatalogNode>,
+) -> (bool, Vec<CatalogFile>) {
     let mut media = Vec::new();
     let mut loose = Vec::new();
     for file in loose_files {
@@ -425,19 +442,12 @@ pub fn course_file_lessons(node: CatalogNode) -> CatalogNode {
     }
 
     if media.is_empty() {
-        return CatalogNode {
-            title,
-            path,
-            role,
-            files,
-            loose_files: loose,
-            children,
-        };
+        return (false, loose);
     }
 
     for file in media {
-        let stem = file_stem(&file.name);
-        let mut lesson_files = Vec::new();
+        let stem = file_stem(&file.name).to_string();
+        let mut lesson_files = vec![file];
         let mut index = 0;
         while index < loose.len() {
             if loose[index].kind == MediaKind::Subtitle && file_stem(&loose[index].name) == stem {
@@ -446,7 +456,6 @@ pub fn course_file_lessons(node: CatalogNode) -> CatalogNode {
                 index += 1;
             }
         }
-        lesson_files.insert(0, file);
         let media_file = &lesson_files[0];
         children.push(CatalogNode {
             title: file_lesson_title(&media_file.name),
@@ -458,14 +467,24 @@ pub fn course_file_lessons(node: CatalogNode) -> CatalogNode {
         });
     }
     children.sort_by(|left, right| natural_cmp(&left.path, &right.path));
-    CatalogNode {
-        title,
-        path,
-        role: NodeRole::Module,
-        files,
-        loose_files: loose,
-        children,
-    }
+    (true, loose)
+}
+
+/// Prepara a subárvore e arquivos de um curso para apresentação uniforme:
+/// 1. Converte arquivos de mídia na raiz do curso em aulas de primeiro nível.
+/// 2. Associa legendas correspondentes a essas aulas.
+/// 3. Preserva materiais na raiz em `loose_files`.
+/// 4. Aplica recursivamente `course_file_lessons` a todas as categorias e módulos.
+/// 5. Devolve as aulas e módulos ordenados naturalmente e os materiais restantes.
+pub fn shape_course_catalog(catalog: Catalog) -> (Vec<CatalogNode>, Vec<CatalogFile>) {
+    let mut children: Vec<CatalogNode> = catalog
+        .categories
+        .into_iter()
+        .map(course_file_lessons)
+        .collect();
+
+    let (_, loose) = promote_loose_media_to_lessons(catalog.loose_files, &mut children);
+    (children, loose)
 }
 
 fn file_stem(name: &str) -> &str {

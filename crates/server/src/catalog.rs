@@ -163,11 +163,7 @@ fn build_course_catalog(
     for course in courses {
         let catalog = learnvault_core::build_catalog(database, &course.id)?;
         complete = complete && catalog.complete;
-        let mut children: Vec<learnvault_core::CatalogNode> = catalog
-            .categories
-            .into_iter()
-            .map(learnvault_core::course_file_lessons)
-            .collect();
+        let (mut children, loose_files) = learnvault_core::shape_course_catalog(catalog);
         learnvault_core::apply_order(&mut children, orders.get(&course.id).unwrap_or(&empty));
         nodes.push(CatalogNodeResponse {
             title: course.title.clone(),
@@ -176,7 +172,7 @@ fn build_course_catalog(
             course_id: Some(course.id.clone()),
             cover_version: crate::covers::cover_version(covers_dir, &course.id),
             files: Vec::new(),
-            loose_files: catalog.loose_files.into_iter().map(Into::into).collect(),
+            loose_files: loose_files.into_iter().map(Into::into).collect(),
             children: children.into_iter().map(Into::into).collect(),
         });
     }
