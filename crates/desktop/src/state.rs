@@ -550,6 +550,11 @@ impl DesktopState {
             };
             match learnvault_core::rescan(&mut database, &course.id, root.as_path()) {
                 Ok(course_summary) => {
+                    let _ = crate::covers::auto_detect_course_cover(
+                        &self.covers_dir,
+                        &course.id,
+                        root.as_path(),
+                    );
                     summary.complete = summary.complete && course_summary.complete;
                     summary.inserted += course_summary.inserted;
                     summary.updated += course_summary.updated;

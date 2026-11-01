@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { collectMaterials, countCatalogFiles, countCatalogNode, countMissingVideos, formatCount, formatCourseCardMeta, formatCourseMeta, formatLessonCounts, formatLessonMeta, isLessonMissing } from './catalog';
+import { collectMaterials, countCatalogFiles, countCatalogNode, countMissingVideos, formatCount, formatCourseCardMeta, formatCourseMeta, formatLessonCounts, formatLessonMeta, getCourseProgressStatus, isLessonMissing } from './catalog';
 import type { CatalogCounts } from './catalog';
 import type { CatalogNode, FileEntry } from './transport';
 
@@ -234,5 +234,36 @@ describe('lesson counting with missing media', () => {
 		expect(isLessonMissing(catalog.children[0].children[0])).toBe(false);
 		expect(countCatalogNode(catalog)).toMatchObject({ lessons: 1, missingLessons: 0 });
 		expect(formatLessonCounts(countCatalogNode(catalog))).toBe('1 aula');
+	});
+});
+
+describe('getCourseProgressStatus', () => {
+	it('classifies courses as not_started, in_progress, or completed accurately', () => {
+		const testCourse = node('course', 'Test', [
+			node('lesson', 'L1', [], [file('l1.mp4', 'media')]),
+			node('lesson', 'L2', [], [file('l2.mp4', 'media')]),
+		]);
+
+		// Nenhum concluído ou em andamento
+		expect(getCourseProgressStatus(testCourse, new Set())).toBe('not_started');
+
+		// 1 concluído, 1 pendente -> in_progress
+		expect(getCourseProgressStatus(testCourse, new Set(['l1.mp4']))).toBe('in_progress');
+
+		// Nenhum concluído, mas 1 em andamento com tempo assistido -> in_progress
+		expect(getCourseProgressStatus(testCourse, new Set(), new Set(['l1.mp4']))).toBe('in_progress');
+
+		// Todos concluídos -> completed
+		expect(getCourseProgressStatus(testCourse, new Set(['l1.mp4', 'l2.mp4']))).toBe('completed');
+	});
+
+	it('allows completion when course contains non-media material lessons', () => {
+		const mixedCourse = node('course', 'Mixed', [
+			node('lesson', 'Video Lesson', [], [file('v1.mp4', 'media')]),
+			node('lesson', 'Reading Lesson', [], [file('slides.pdf', 'material')]),
+		]);
+
+		expect(getCourseProgressStatus(mixedCourse, new Set())).toBe('not_started');
+		expect(getCourseProgressStatus(mixedCourse, new Set(['v1.mp4']))).toBe('completed');
 	});
 });

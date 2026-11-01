@@ -12,7 +12,7 @@
 	import FocusMenu from './FocusMenu.svelte';
 	import DesktopTitlebar from './DesktopTitlebar.svelte';
 	import { filterCatalog } from './search';
-	import { collectMaterials, countCatalogNode, countMissingVideos, formatCount, formatCourseMeta, formatLessonCounts, formatLocationContext } from './catalog';
+	import { collectMaterials, countCatalogNode, countMissingVideos, formatCount, formatCourseMeta, formatLessonCounts, formatLocationContext, getCourseProgressStatus, type CourseProgressStatus } from './catalog';
 	import { courseCover } from './cover';
 	import PasswordField from './PasswordField.svelte';
 	import { defaultLessonPath, firstAvailableLessonPath, lessonContainer, neighboringLessons } from './navigation';
@@ -49,9 +49,27 @@
 	let catalog: Catalog | null = null;
 	let lesson: Lesson | null = null;
 	let catalogQuery = '';
+	let progressFilter: CourseProgressStatus = 'all';
 	let filteredNodes: CatalogNode[] = [];
 	$: course = findCourse(catalog, courseId);
-	$: filteredNodes = catalog ? filterCatalog(catalog.nodes, catalogQuery) : [];
+	$: completedMediaIds = new Set(recent.filter((item) => item.completed).map((item) => item.mediaId));
+	$: inProgressMediaIds = new Set(recent.filter((item) => !item.completed && item.positionSeconds > 0).map((item) => item.mediaId));
+	$: courseStatusMap = new Map(
+		(catalog?.nodes ?? []).map((node) => [
+			courseIdOf(node),
+			getCourseProgressStatus(node, completedMediaIds, inProgressMediaIds)
+		])
+	);
+	$: progressCounts = {
+		all: catalog?.nodes.length ?? 0,
+		in_progress: (catalog?.nodes ?? []).filter((n) => courseStatusMap.get(courseIdOf(n)) === 'in_progress').length,
+		not_started: (catalog?.nodes ?? []).filter((n) => courseStatusMap.get(courseIdOf(n)) === 'not_started').length,
+		completed: (catalog?.nodes ?? []).filter((n) => courseStatusMap.get(courseIdOf(n)) === 'completed').length
+	};
+	$: filteredNodes = (catalog ? filterCatalog(catalog.nodes, catalogQuery) : []).filter((node) => {
+		if (progressFilter === 'all') return true;
+		return courseStatusMap.get(courseIdOf(node)) === progressFilter;
+	});
 	// `#/course/<id>` é a visão geral do curso; a aula só abre quando o caminho está na
 	// URL. O endereço legado `#/player/<curso>/<aula>` continua abrindo o player.
 	$: isOverview = route === 'course' && lessonPath === null;
@@ -466,6 +484,27 @@
 		}
 	}
 
+	async function handleToggleLessonCompleted(lessonNode: CatalogNode) {
+		if (!studySyncSupported) return;
+		const media = [...lessonNode.files, ...lessonNode.looseFiles].find((f) => f.kind === 'media' && f.mediaId);
+		if (!media || !media.mediaId) return;
+		const id = media.mediaId;
+		const currentCompleted = completedMediaIds.has(id);
+		try {
+			const updated = await transport.setCompleted(id, !currentCompleted);
+			const existingIndex = recent.findIndex((item) => item.mediaId === id);
+			if (existingIndex >= 0) {
+				const nextRecent = [...recent];
+				nextRecent[existingIndex] = updated;
+				recent = nextRecent;
+			} else {
+				recent = [updated, ...recent];
+			}
+		} catch {
+			// Ignora falha transitória
+		}
+	}
+
 	function mediaFailed(code?: number) {
 		if (code === 4) {
 			mediaError = 'Codec ou formato de mídia incompatível.';
@@ -721,6 +760,20 @@
 								<kbd class="lv-search-kbd" aria-hidden="true">/</kbd>
 							</div>
 						</form>
+						<div class="lv-progress-filters" role="group" aria-label="Filtrar cursos por progresso">
+							<button type="button" class="lv-filter-pill" class:is-active={progressFilter === 'all'} aria-pressed={progressFilter === 'all'} onclick={() => (progressFilter = 'all')}>
+								Todos <span class="lv-filter-badge">{progressCounts.all}</span>
+							</button>
+							<button type="button" class="lv-filter-pill" class:is-active={progressFilter === 'in_progress'} aria-pressed={progressFilter === 'in_progress'} onclick={() => (progressFilter = 'in_progress')}>
+								Em andamento <span class="lv-filter-badge">{progressCounts.in_progress}</span>
+							</button>
+							<button type="button" class="lv-filter-pill" class:is-active={progressFilter === 'not_started'} aria-pressed={progressFilter === 'not_started'} onclick={() => (progressFilter = 'not_started')}>
+								Não iniciados <span class="lv-filter-badge">{progressCounts.not_started}</span>
+							</button>
+							<button type="button" class="lv-filter-pill" class:is-active={progressFilter === 'completed'} aria-pressed={progressFilter === 'completed'} onclick={() => (progressFilter = 'completed')}>
+								Concluídos <span class="lv-filter-badge">{progressCounts.completed}</span>
+							</button>
+						</div>
 					{/if}
 
 					{#if studySyncSupported && libraryRecent.length && !catalogQuery.trim()}
@@ -1023,7 +1076,7 @@
 								{#if courseTab === 'content'}
 									<div id="course-panel-content" role="tabpanel" aria-labelledby="course-tab-content">
 										{#if course.children.length}
-											<CatalogTree nodes={course.children} courseId={courseIdOf(course)} activePath={activePath} showFiles={false} />
+											<CatalogTree nodes={course.children} courseId={courseIdOf(course)} activePath={activePath} showFiles={false} {completedMediaIds} onToggleLessonCompleted={handleToggleLessonCompleted} />
 										{:else}
 											<p class="lv-empty">Este curso ainda não foi indexado.</p>
 										{/if}
@@ -1101,7 +1154,7 @@
 							<aside class="lv-curriculum" aria-label="Aulas do curso">
 								<div class="lv-panel__head"><h2>Aulas do curso</h2><span class="lv-count">{formatLessonCounts(countCatalogNode(course))}</span></div>
 								<div class="lv-curriculum__body" data-playlist-body>
-									{#if course.children.length}<CatalogTree nodes={course.children} courseId={courseIdOf(course)} activePath={activePath} showFiles={false} />{:else}<p class="lv-empty">Este curso ainda não foi indexado.</p>{/if}
+									{#if course.children.length}<CatalogTree nodes={course.children} courseId={courseIdOf(course)} activePath={activePath} showFiles={false} {completedMediaIds} onToggleLessonCompleted={handleToggleLessonCompleted} />{:else}<p class="lv-empty">Este curso ainda não foi indexado.</p>{/if}
 								</div>
 							</aside>
 						</div>

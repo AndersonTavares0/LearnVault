@@ -182,7 +182,7 @@ describe('player preference controls', () => {
 	it('keeps the player shortcuts available without repeating the hint on screen', () => {
 		const { body } = render(Player, { props: baseProps });
 
-		expect(body).toContain('aria-keyshortcuts="Space ArrowLeft ArrowRight k j l [ ] f"');
+		expect(body).toContain('aria-keyshortcuts="Space ArrowLeft ArrowRight k j l [ ] f p"');
 		expect(body).not.toContain('Atalhos:');
 	});
 
@@ -222,5 +222,12 @@ describe('player preference controls', () => {
 		const { body } = render(Player, { props: { ...baseProps, mediaError: 'Não foi possível carregar esta mídia.' } });
 		expect(body).toContain('Não foi possível carregar esta mídia.');
 		expect(body).toContain('O arquivo local pode ter sido movido');
+	});
+
+	it('renders quick bar with speed options, navigation, and fullscreen', () => {
+		const { body } = render(Player, { props: baseProps });
+		expect(body).toContain('aria-label="Controles rápidos do reprodutor"');
+		expect(body).toContain('Alternar tela cheia (F)');
+		expect(body).toContain('Velocidade:');
 	});
 });
