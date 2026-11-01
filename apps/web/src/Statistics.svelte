@@ -455,22 +455,22 @@
 	/* Hero da Floresta em Destaque (Full Width Atelier) */
 	.lv-stats__hero-forest {
 		width: 100%;
-		margin-top: 0.5rem;
+		margin-top: 0.25rem;
 	}
 
 	/* Dashboard de Foco & Evolução em 2 Colunas */
 	.lv-stats__dashboard-grid {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
-		gap: 1.5rem;
+		gap: 1rem;
 		align-items: start;
-		margin-top: 1.5rem;
+		margin-top: 1rem;
 	}
 
 	.lv-stats__col {
 		display: flex;
 		flex-direction: column;
-		gap: 1.5rem;
+		gap: 1rem;
 		min-width: 0;
 	}
 

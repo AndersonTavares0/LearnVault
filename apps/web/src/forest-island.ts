@@ -37,7 +37,7 @@ export type IslandGeometry = {
 
 /** Lado máximo da ilha (16x16 = 256 árvores); acima disso o excedente é sinalizado na UI. */
 export const ISLAND_MAX_DIMENSION = 16;
-const ISLAND_MIN_DIMENSION = 4;
+export const ISLAND_MIN_DIMENSION = 7;
 
 export function calculateGridDimension(treeCount: number): number {
 	const count = Number.isFinite(treeCount) ? Math.max(0, treeCount) : 0;
@@ -47,9 +47,9 @@ export function calculateGridDimension(treeCount: number): number {
 
 export function calculateIslandGeometry(
 	dimension: number,
-	tileWidth = 64,
-	tileHeight = 32,
-	cliffHeight = 54
+	tileWidth = 56,
+	tileHeight = 28,
+	cliffHeight = 36
 ): IslandGeometry {
 	const dim = Math.max(3, dimension);
 	const halfW = tileWidth / 2;
@@ -72,9 +72,9 @@ export function calculateIslandGeometry(
 	const midRightY = (bottomVertex.y + rightVertex.y) / 2;
 	const rightCliffShadePath = `M ${bottomVertex.x} ${bottomVertex.y} L ${midRightX} ${midRightY} L ${midRightX} ${midRightY + cliffHeight} L ${bottomVertex.x} ${bottomVertex.y + cliffHeight} Z`;
 
-	const padX = 48;
-	const padTop = 90; // espaço para as copas das árvores na linha 0
-	const padBottom = 42; // espaço para sombra projetada no ar
+	const padX = 20;
+	const padTop = 38; // espaço proporcional para as copas das árvores na linha 0
+	const padBottom = 16; // espaço para sombra projetada no ar
 
 	const minX = leftVertex.x - padX;
 	const maxX = rightVertex.x + padX;

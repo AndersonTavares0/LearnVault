@@ -363,8 +363,8 @@
 	.lv-forest {
 		display: flex;
 		flex-direction: column;
-		gap: 1.25rem;
-		padding-bottom: 1.25rem;
+		gap: 0.875rem;
+		padding-bottom: 0.875rem;
 	}
 
 	.lv-forest__head-title {

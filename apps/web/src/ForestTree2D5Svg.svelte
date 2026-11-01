@@ -248,7 +248,8 @@
 		<circle cx="31.5" cy="48" r="3.5" fill="#4ade80" />
 	</svg>
 {:else}
-	<!-- Árvore Seca 2.5D (Galhos retorcidos desfolhados com contraste volumétrico) -->
+	<!-- Árvore Morta / Seca 2.5D Estilo Forest App -->
+	<!-- Tronco retorcido ressequido em tons terrosos escuros, galhos quebrados, estilhaços e solo árido -->
 	<svg
 		width={size}
 		height={size * 1.3}
@@ -258,19 +259,49 @@
 		aria-hidden="true"
 		class="lv-tree-2d5 lv-tree-2d5--withered"
 	>
-		<!-- Sombra seca cinzenta no solo -->
-		<ellipse cx="32" cy="74" rx="15" ry="6" fill="#1e293b" opacity="0.25" />
-		<!-- Tronco seco com lado de luz e sombra -->
-		<path d="M30 46L30 74H33L32 46Z" fill="#64748b" />
-		<path d="M32 46L33 74H35L34 46Z" fill="#334155" />
-		<!-- Galhos secos retorcidos -->
-		<path d="M31 52L21 40L23 38L32 48Z" fill="#64748b" />
-		<path d="M21 40L14 34L15 32L23 38Z" fill="#94a3b8" />
-		<path d="M33 48L43 38L45 40L34 52Z" fill="#475569" />
-		<path d="M43 38L50 30L52 32L45 40Z" fill="#334155" />
-		<path d="M31 46L31 30L33 30L33 46Z" fill="#64748b" />
-		<path d="M31 34L26 26L28 24L33 32Z" fill="#94a3b8" />
-		<path d="M33 32L39 26L41 28L33 34Z" fill="#475569" />
+		<!-- Sombra ressequida no solo -->
+		<ellipse cx="32" cy="74" rx="14" ry="5.5" fill="#1c130d" opacity="0.32" />
+
+		<!-- Rachaduras na terra sob o tronco seco -->
+		<path d="M26 73L23 75M32 75L35 77M38 73L42 74" stroke="#3b2314" stroke-width="1" stroke-linecap="round" opacity="0.7" />
+
+		<!-- Tronco seco e retorcido (Lado de Sombra / Marrom escuro) -->
+		<path
+			d="M29 74 Q27 64 30 54 Q32 46 29 38 L32 38 Q34 46 32 54 Q30 64 33 74 Z"
+			fill="#3a2012"
+		/>
+		<!-- Tronco seco e retorcido (Lado de Luz / Marrom seco desbotado) -->
+		<path
+			d="M32 74 Q30 64 32 54 Q34 46 32 38 L34 38 Q36 47 34 54 Q32 64 35 74 Z"
+			fill="#52311b"
+		/>
+
+		<!-- Fissura profunda na casca seca -->
+		<path d="M31 71 Q30 62 32 56 Q31 50 33 44" stroke="#1f0f07" stroke-width="1.2" stroke-linecap="round" />
+
+		<!-- Toco de galho esquerdo quebrado com interior exposto -->
+		<path d="M30 58 L20 50 L19 48 L22 47 L31 54 Z" fill="#3a2012" />
+		<path d="M20 50 L18 48 L21 47 L22 49 Z" fill="#784928" />
+
+		<!-- Galho inferior direito retorcido, caído e seco -->
+		<path d="M32 56 Q38 54 43 57 L44 59 Q38 56 33 59 Z" fill="#31190c" />
+		<path d="M43 57 L47 61 L46 62 L42 58 Z" fill="#241208" />
+
+		<!-- Galho principal curvado sem folhas -->
+		<path d="M30 46 Q35 40 44 41 L45 39 Q34 38 29 44 Z" fill="#52311b" />
+		<path d="M38 41 L43 33 L41.5 32.5 L37 39 Z" fill="#693e22" />
+		<path d="M43 33 L45 31.5 L44 31 L42 32.5 Z" fill="#8c5832" />
+
+		<!-- Galho secundário torto para a esquerda -->
+		<path d="M30 42 Q23 37 21 28 L23 27.5 Q25 35 31 39 Z" fill="#422515" />
+		<path d="M22 33 L16 31 L15.5 32 L21 35 Z" fill="#2e180d" />
+
+		<!-- Topo quebrado e estilhaçado da árvore -->
+		<path d="M29 38 L30.5 30 L32.5 33 L34 38 Z" fill="#52311b" />
+		<path d="M30.5 30 L31.5 28 L32 30 Z" fill="#8c5832" />
+
+		<!-- Graveto quebrado no chão -->
+		<path d="M37 74 L42 75 L44 74" stroke="#31190c" stroke-width="1.3" stroke-linecap="round" />
 	</svg>
 {/if}
 

@@ -11,17 +11,14 @@ import type { ForestTree } from './forest';
 
 describe('forest-island', () => {
 	it('calculates optimal island grid dimension based on tree count', () => {
-		// Minimum 4x4 for visual beauty even with 0-5 trees
-		expect(calculateGridDimension(0)).toBe(4);
-		expect(calculateGridDimension(3)).toBe(4);
-		expect(calculateGridDimension(12)).toBe(4); // 4x4 = 16 spots
-		// Expands to 5x5 for 17-25 trees
-		expect(calculateGridDimension(17)).toBe(5);
-		expect(calculateGridDimension(24)).toBe(5);
-		// Expands to 6x6 for 26-36 trees
-		expect(calculateGridDimension(28)).toBe(6);
-		// Grows as ceil(sqrt(n)) so no tree is hidden, capped at ISLAND_MAX_DIMENSION
+		// Minimum 7x7 (49 spots, matching Forest App) for visual beauty and abundant capacity
+		expect(calculateGridDimension(0)).toBe(7);
+		expect(calculateGridDimension(3)).toBe(7);
+		expect(calculateGridDimension(48)).toBe(7); // 7x7 = 49 spots
+		// Expands to 8x8 for 50-64 trees
 		expect(calculateGridDimension(50)).toBe(8);
+		expect(calculateGridDimension(64)).toBe(8);
+		// Expands to 10x10 for 100 trees
 		expect(calculateGridDimension(100)).toBe(10);
 		expect(calculateGridDimension(10_000)).toBe(ISLAND_MAX_DIMENSION);
 	});
@@ -139,7 +136,7 @@ describe('forest-island', () => {
 
 		// Viewbox includes padding for tree crowns and floating cliff shadow
 		expect(geo4.minX).toBeLessThan(geo4.leftVertex.x);
-		expect(geo4.minY).toBeLessThan(geo4.topVertex.y - 80);
+		expect(geo4.minY).toBeLessThan(geo4.topVertex.y);
 		expect(geo4.width).toBeGreaterThan(256);
 		expect(geo4.height).toBeGreaterThan(150);
 		expect(geo4.viewBox).toBe(`${geo4.minX} ${geo4.minY} ${geo4.width} ${geo4.height}`);

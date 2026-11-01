@@ -28,13 +28,13 @@
 
 	const dimension = $derived(calculateGridDimension(trees.length));
 
-	// Escala dinâmica generosa: em florestas jovens (4x4 ou 5x5), os tiles e árvores
-	// são amplos e monumentais como no Forest App, preenchendo o espaço com exuberância.
+	// Proporções botânicas equilibradas no estilo Forest App:
+	// A ilha possui capacidade generosa (mínimo 7x7 = 49 árvores) e as árvores
+	// são miniaturas botânicas delicadas e proporcionais (~32px), sem gigantismo.
 	const metrics = $derived.by(() => {
-		if (dimension <= 4) return { tileW: 124, tileH: 62, treeSize: 112, cliffH: 78 };
-		if (dimension === 5) return { tileW: 106, tileH: 53, treeSize: 96, cliffH: 66 };
-		if (dimension === 6) return { tileW: 90, tileH: 45, treeSize: 82, cliffH: 58 };
-		return { tileW: 76, tileH: 38, treeSize: 68, cliffH: 50 };
+		if (dimension <= 7) return { tileW: 56, tileH: 28, treeSize: 32, cliffH: 34 };
+		if (dimension <= 9) return { tileW: 46, tileH: 23, treeSize: 26, cliffH: 28 };
+		return { tileW: 38, tileH: 19, treeSize: 22, cliffH: 24 };
 	});
 
 	const geometry = $derived(calculateIslandGeometry(dimension, metrics.tileW, metrics.tileH, metrics.cliffH));
@@ -399,22 +399,24 @@
 		background: var(--lv-iso-card-bg);
 		border-radius: 1.25rem;
 		box-shadow:
-			0 16px 40px -8px rgba(0, 0, 0, 0.4),
-			inset 0 1px 0 rgba(255, 255, 255, 0.1);
+			0 12px 32px -6px rgba(0, 0, 0, 0.4),
+			inset 0 1px 0 rgba(255, 255, 255, 0.08);
 		overflow: hidden;
 		position: relative;
 		border: 1px solid rgba(255, 255, 255, 0.08);
 		width: 100%;
+		max-width: 680px;
+		margin: 0 auto;
 	}
 
 	.lv-island-sky {
 		position: relative;
 		width: 100%;
-		padding: 2.5rem 1.5rem 1.5rem;
+		padding: 1.15rem 0.75rem 0.5rem;
 		display: flex;
 		justify-content: center;
 		align-items: center;
-		min-height: 520px;
+		min-height: 290px;
 	}
 
 	.lv-island-orb {
@@ -427,24 +429,24 @@
 	.lv-island-orb--1 {
 		top: 8%;
 		left: 12%;
-		width: 220px;
-		height: 220px;
+		width: 180px;
+		height: 180px;
 		background: rgba(74, 222, 128, 0.09);
 	}
 
 	.lv-island-orb--2 {
 		bottom: 15%;
 		right: 10%;
-		width: 240px;
-		height: 240px;
+		width: 200px;
+		height: 200px;
 		background: rgba(45, 106, 79, 0.14);
 	}
 
 	.lv-island-svg {
 		width: 100%;
-		max-width: 960px;
+		max-width: 560px;
 		height: auto;
-		max-height: 600px;
+		max-height: 330px;
 		overflow: visible;
 		display: block;
 	}
