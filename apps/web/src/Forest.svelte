@@ -224,28 +224,35 @@
 	{#if activeTab === 'nursery'}
 		<ForestNursery onclose={() => (activeTab = 'forest')} />
 	{:else}
-		<!-- Métricas editoriais da Floresta (Atelier design) -->
-	<div class="lv-forest__stats">
-		<div>
-			<strong class="is-healthy">{stats.healthyTrees}</strong>
-			<span>Árvores sadias</span>
-		</div>
-		<div>
-			<strong class="is-withered">{stats.witheredTrees}</strong>
-			<span>Árvores secas</span>
-		</div>
-		<div>
-			<strong>{stats.successRate}%</strong>
-			<span>Taxa de florescimento</span>
-		</div>
-		<div>
-			<strong class="is-time">{stats.totalMinutes} min</strong>
-			<span>Tempo dedicado</span>
-		</div>
-	</div>
+		{#if viewMode === 'grid'}
+			<!-- Métricas editoriais da Floresta (Atelier design para modo Grade) -->
+			<div class="lv-forest__stats">
+				<div>
+					<strong class="is-healthy">{stats.healthyTrees}</strong>
+					<span>Árvores sadias</span>
+				</div>
+				<div>
+					<strong class="is-withered">{stats.witheredTrees}</strong>
+					<span>Árvores secas</span>
+				</div>
+				<div>
+					<strong>{stats.successRate}%</strong>
+					<span>Taxa de florescimento</span>
+				</div>
+				<div>
+					<strong class="is-time">{stats.totalMinutes} min</strong>
+					<span>Tempo dedicado</span>
+				</div>
+			</div>
+		{/if}
 
-	<!-- Bosque / Visualizador de Árvores -->
-	<div class="lv-forest__canvas lv-forest__canvas--biome-{stats.ecosystem.level}" role="region" aria-label="Visualização do bosque">
+		<!-- Bosque / Visualizador de Árvores -->
+		<div
+			class="lv-forest__canvas lv-forest__canvas--biome-{stats.ecosystem.level}"
+			class:is-island-mode={viewMode === 'island'}
+			role="region"
+			aria-label="Visualização do bosque"
+		>
 		{#if loading}
 			<p class="lv-forest__loading" aria-live="polite">Cultivando sua floresta…</p>
 		{:else if visibleTrees.length === 0}
@@ -280,9 +287,6 @@
 				{/if}
 			</div>
 		{:else}
-			<!-- Faixa de Evolução do Ecossistema da Floresta -->
-			<ForestEcosystemBand ecosystem={stats.ecosystem} healthyTrees={stats.healthyTrees} />
-
 			{#if hasActiveSession && $pomodoro.mode === 'focus'}
 				<ForestGrowthStage
 					speciesId={$nursery.activeSeed}
@@ -300,7 +304,13 @@
 					{selectedTree}
 					onselect={(tree) => (selectedTree = selectedTree?.sessionId === tree.sessionId ? null : tree)}
 				/>
+
+				<!-- Faixa de Evolução do Ecossistema da Floresta -->
+				<ForestEcosystemBand ecosystem={stats.ecosystem} healthyTrees={stats.healthyTrees} />
 			{:else}
+				<!-- Faixa de Evolução do Ecossistema da Floresta -->
+				<ForestEcosystemBand ecosystem={stats.ecosystem} healthyTrees={stats.healthyTrees} />
+
 				<!-- Grade de árvores (ESTÁVEL: NUNCA SE MOVE NO HOVER) -->
 				<ul class="lv-forest__grid" role="list" aria-label="Árvores cultivadas">
 					{#each visibleTrees as tree (tree.sessionId)}
@@ -499,6 +509,14 @@
 		gap: 1.25rem;
 		min-height: 180px;
 		transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+	}
+
+	.lv-forest__canvas.is-island-mode {
+		background: transparent;
+		border: none;
+		padding: 0;
+		box-shadow: none;
+		gap: 0.85rem;
 	}
 
 	.lv-forest__canvas--biome-0 {

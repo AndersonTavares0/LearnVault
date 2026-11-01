@@ -20,9 +20,6 @@
 		onselect?: (tree: ForestTree) => void;
 	} = $props();
 
-	const tileWidth = 64;
-	const tileHeight = 32;
-	const TREE_SIZE = 64;
 	// IDs únicos por instância para evitar colisão de gradientes SVG
 	const uid = $props.id();
 	const cliffLeftId = `lv-cliff-left-${uid}`;
@@ -30,8 +27,18 @@
 	const shadowId = `lv-island-shadow-${uid}`;
 
 	const dimension = $derived(calculateGridDimension(trees.length));
-	const geometry = $derived(calculateIslandGeometry(dimension, tileWidth, tileHeight, 52));
-	const placedTrees = $derived(layoutTreesOnIsland(trees, dimension, tileWidth, tileHeight));
+
+	// Escala dinâmica generosa: em florestas jovens (4x4 ou 5x5), os tiles e árvores
+	// são amplos e monumentais como no Forest App, preenchendo o espaço com exuberância.
+	const metrics = $derived.by(() => {
+		if (dimension <= 4) return { tileW: 124, tileH: 62, treeSize: 112, cliffH: 78 };
+		if (dimension === 5) return { tileW: 106, tileH: 53, treeSize: 96, cliffH: 66 };
+		if (dimension === 6) return { tileW: 90, tileH: 45, treeSize: 82, cliffH: 58 };
+		return { tileW: 76, tileH: 38, treeSize: 68, cliffH: 50 };
+	});
+
+	const geometry = $derived(calculateIslandGeometry(dimension, metrics.tileW, metrics.tileH, metrics.cliffH));
+	const placedTrees = $derived(layoutTreesOnIsland(trees, dimension, metrics.tileW, metrics.tileH));
 	const hiddenCount = $derived(Math.max(0, trees.length - placedTrees.length));
 
 	// Mapa de posições ocupadas para decorar tiles vazios com pequenas flores silvestres
@@ -42,7 +49,7 @@
 		const tiles = [];
 		for (let r = 0; r < dimension; r++) {
 			for (let c = 0; c < dimension; c++) {
-				const iso = gridToIso(r, c, tileWidth, tileHeight);
+				const iso = gridToIso(r, c, metrics.tileW, metrics.tileH);
 				const isOccupied = occupiedSpots.has(`${r},${c}`);
 				const isAlternate = (r + c) % 2 === 1;
 				// Determinismo pseudo-aleatório para pequenas flores em solo vazio
@@ -115,12 +122,12 @@
 				</radialGradient>
 			</defs>
 
-			<!-- 1. Sombra projetada no ar sob a ilha flutuante -->
+			<!-- 1. Sombra projetada no ar sob a ilha flutuante (proporcional à escala dinâmica) -->
 			<ellipse
 				cx="0"
-				cy={geometry.bottomVertex.y + geometry.cliffHeight + 20}
-				rx={dimension * 32}
-				ry={dimension * 10}
+				cy={geometry.bottomVertex.y + geometry.cliffHeight + 18}
+				rx={dimension * (metrics.tileW * 0.48)}
+				ry={dimension * (metrics.tileH * 0.3)}
 				fill="url(#{shadowId})"
 			/>
 
@@ -170,36 +177,49 @@
 				opacity="0.7"
 			/>
 
-			<!-- Franja orgânica de grama pendente nas bordas da falésia -->
+			<!-- Franja orgânica de grama pendente com múltiplos lóbulos ondulados (estilo Forest App) -->
 			{#each Array(dimension) as _, i}
-				<!-- Grama pendente na borda esquerda -->
-				{@const segStartX = geometry.leftVertex.x + (i * tileWidth) / 2}
-				{@const segStartY = geometry.leftVertex.y + (i * tileHeight) / 2}
-				{@const segMidX = segStartX + tileWidth / 4}
-				{@const segMidY = segStartY + tileHeight / 4 + 4}
-				{@const segEndX = segStartX + tileWidth / 2}
-				{@const segEndY = segStartY + tileHeight / 2}
+				<!-- Grama pendente na borda esquerda: 2 lóbulos por tile -->
+				{@const segStartX = geometry.leftVertex.x + (i * metrics.tileW) / 2}
+				{@const segStartY = geometry.leftVertex.y + (i * metrics.tileH) / 2}
+				{@const qW = metrics.tileW / 4}
+				{@const qH = metrics.tileH / 4}
+
 				<path
-					d="M {segStartX} {segStartY} Q {segMidX} {segMidY} {segEndX} {segEndY}"
+					d="M {segStartX} {segStartY} Q {segStartX + qW / 2} {segStartY + qH / 2 + 7} {segStartX + qW} {segStartY + qH} L {segStartX} {segStartY} Z"
+					fill="var(--lv-iso-grass-edge, #62a928)"
+					opacity="0.96"
+				/>
+				<path
+					d="M {segStartX + qW} {segStartY + qH} Q {segStartX + qW * 1.5} {segStartY + qH * 1.5 + 8} {segStartX + metrics.tileW / 2} {segStartY + metrics.tileH / 2} L {segStartX + qW} {segStartY + qH} Z"
+					fill="var(--lv-iso-grass-edge, #62a928)"
+					opacity="0.96"
+				/>
+				<path
+					d="M {segStartX} {segStartY} Q {segStartX + qW / 2} {segStartY + qH / 2 + 7} {segStartX + qW} {segStartY + qH} Q {segStartX + qW * 1.5} {segStartY + qH * 1.5 + 8} {segStartX + metrics.tileW / 2} {segStartY + metrics.tileH / 2}"
 					fill="none"
-					stroke="var(--lv-iso-grass-edge, #5da026)"
-					stroke-width="4"
-					stroke-linecap="round"
+					stroke="var(--lv-iso-grass-edge-shadow, #386315)"
+					stroke-width="1.8"
 				/>
 
-				<!-- Grama pendente na borda direita -->
-				{@const rSegStartX = geometry.bottomVertex.x + (i * tileWidth) / 2}
-				{@const rSegStartY = geometry.bottomVertex.y - (i * tileHeight) / 2}
-				{@const rSegMidX = rSegStartX + tileWidth / 4}
-				{@const rSegMidY = rSegStartY - tileHeight / 4 + 4}
-				{@const rSegEndX = rSegStartX + tileWidth / 2}
-				{@const rSegEndY = rSegStartY - tileHeight / 2}
+				<!-- Grama pendente na borda direita: 2 lóbulos por tile -->
+				{@const rSegStartX = geometry.bottomVertex.x + (i * metrics.tileW) / 2}
+				{@const rSegStartY = geometry.bottomVertex.y - (i * metrics.tileH) / 2}
 				<path
-					d="M {rSegStartX} {rSegStartY} Q {rSegMidX} {rSegMidY} {rSegEndX} {rSegEndY}"
+					d="M {rSegStartX} {rSegStartY} Q {rSegStartX + qW / 2} {rSegStartY - qH / 2 + 7} {rSegStartX + qW} {rSegStartY - qH} L {rSegStartX} {rSegStartY} Z"
+					fill="var(--lv-iso-grass-edge, #62a928)"
+					opacity="0.96"
+				/>
+				<path
+					d="M {rSegStartX + qW} {rSegStartY - qH} Q {rSegStartX + qW * 1.5} {rSegStartY - qH * 1.5 + 8} {rSegStartX + metrics.tileW / 2} {rSegStartY - metrics.tileH / 2} L {rSegStartX + qW} {rSegStartY - qH} Z"
+					fill="var(--lv-iso-grass-edge, #62a928)"
+					opacity="0.96"
+				/>
+				<path
+					d="M {rSegStartX} {rSegStartY} Q {rSegStartX + qW / 2} {rSegStartY - qH / 2 + 7} {rSegStartX + qW} {rSegStartY - qH} Q {rSegStartX + qW * 1.5} {rSegStartY - qH * 1.5 + 8} {rSegStartX + metrics.tileW / 2} {rSegStartY - metrics.tileH / 2}"
 					fill="none"
-					stroke="var(--lv-iso-grass-edge, #5da026)"
-					stroke-width="4"
-					stroke-linecap="round"
+					stroke="var(--lv-iso-grass-edge-shadow, #386315)"
+					stroke-width="1.8"
 				/>
 			{/each}
 
@@ -208,7 +228,7 @@
 				{#each allTiles as tile}
 					<!-- Losango do tile isométrico -->
 					<path
-						d="M {tile.x} {tile.y - tileHeight / 2} L {tile.x + tileWidth / 2} {tile.y} L {tile.x} {tile.y + tileHeight / 2} L {tile.x - tileWidth / 2} {tile.y} Z"
+						d="M {tile.x} {tile.y - metrics.tileH / 2} L {tile.x + metrics.tileW / 2} {tile.y} L {tile.x} {tile.y + metrics.tileH / 2} L {tile.x - metrics.tileW / 2} {tile.y} Z"
 						fill={tile.isAlternate ? 'var(--lv-iso-tile-b, #7bb934)' : 'var(--lv-iso-tile-a, #88c93b)'}
 						stroke="var(--lv-iso-tile-border, #9bd74e)"
 						stroke-width="0.8"
@@ -250,8 +270,8 @@
 							<ellipse
 								cx={placed.isoX}
 								cy={placed.isoY}
-								rx={tileWidth * 0.42}
-								ry={tileHeight * 0.42}
+								rx={metrics.tileW * 0.44}
+								ry={metrics.tileH * 0.44}
 								fill="var(--lv-iso-select-halo, rgba(250, 204, 21, 0.4))"
 								stroke="var(--lv-iso-select-border, #facc15)"
 								stroke-width="2.5"
@@ -259,17 +279,27 @@
 							/>
 						{/if}
 
+						<!-- Sombra de contato projetada no solo da árvore (2.5D anchor) -->
+						<ellipse
+							cx={placed.isoX}
+							cy={placed.isoY + 2}
+							rx={metrics.tileW * 0.28}
+							ry={metrics.tileH * 0.22}
+							fill="#142918"
+							opacity={placed.tree.completed ? 0.35 : 0.2}
+						/>
+
 						<!-- Área de foco/clique no tile (anel visível via teclado) -->
 						<path
 							class="lv-island-tree-hit"
-							d="M {placed.isoX} {placed.isoY - tileHeight / 2} L {placed.isoX + tileWidth / 2} {placed.isoY} L {placed.isoX} {placed.isoY + tileHeight / 2} L {placed.isoX - tileWidth / 2} {placed.isoY} Z"
+							d="M {placed.isoX} {placed.isoY - metrics.tileH / 2} L {placed.isoX + metrics.tileW / 2} {placed.isoY} L {placed.isoX} {placed.isoY + metrics.tileH / 2} L {placed.isoX - metrics.tileW / 2} {placed.isoY} Z"
 							fill="transparent"
 						/>
 
 						<!-- Vetor 2.5D alinhado ao ponto de apoio do tronco (32, 74 no viewBox 64x84) -->
-						<g transform="translate({placed.isoX - TREE_SIZE / 2}, {placed.isoY - (74 * TREE_SIZE * 1.3) / 84})">
+						<g transform="translate({placed.isoX - metrics.treeSize / 2}, {placed.isoY - (74 * metrics.treeSize * 1.3) / 84})">
 							<g class="lv-island-tree-lift">
-								<ForestTree2D5Svg stage={placed.tree.stage} size={TREE_SIZE} />
+								<ForestTree2D5Svg stage={placed.tree.stage} size={metrics.treeSize} />
 							</g>
 						</g>
 					</g>
@@ -292,6 +322,7 @@
 			<!-- Contador de Árvores Sadias com Emblema de Folha Verde -->
 			<div class="lv-island-badge lv-island-badge--healthy" title="{stats.healthyTrees} árvores sadias florescidas">
 				<span class="lv-island-badge__count">{stats.healthyTrees}</span>
+				<span class="visually-hidden">árvores sadias florescidas</span>
 				<span class="lv-island-badge__icon" aria-hidden="true">
 					<svg viewBox="0 0 24 24" width="22" height="22" fill="none">
 						<circle cx="12" cy="12" r="10.5" fill="#2d6a3f" stroke="#52b788" stroke-width="1.5" />
@@ -307,6 +338,7 @@
 			<!-- Contador de Árvores Secas com Emblema de Folha Seca -->
 			<div class="lv-island-badge lv-island-badge--withered" title="{stats.witheredTrees} árvores secas">
 				<span class="lv-island-badge__count">{stats.witheredTrees}</span>
+				<span class="visually-hidden">árvores secas</span>
 				<span class="lv-island-badge__icon" aria-hidden="true">
 					<svg viewBox="0 0 24 24" width="22" height="22" fill="none">
 						<circle cx="12" cy="12" r="10.5" fill="#78350f" stroke="#b45309" stroke-width="1.5" />
@@ -325,8 +357,8 @@
 <style>
 	:global(:root) {
 		/* Cores Tema Claro (Morning Forest) */
-		--lv-iso-card-bg: linear-gradient(180deg, #eaf5ec 0%, #d3e8d8 100%);
-		--lv-iso-footer-bg: rgba(255, 255, 255, 0.65);
+		--lv-iso-card-bg: linear-gradient(180deg, #eaf5ec 0%, #d4ead7 100%);
+		--lv-iso-footer-bg: rgba(255, 255, 255, 0.7);
 		--lv-iso-footer-ink: #14301f;
 		--lv-iso-footer-muted: #3d5a48;
 		--lv-iso-footer-line: rgba(20, 48, 31, 0.12);
@@ -334,25 +366,31 @@
 		--lv-iso-tile-b: #7cbe2d;
 		--lv-iso-tile-border: #99d84c;
 		--lv-iso-grass-edge: #5fa428;
-		--lv-iso-cliff-left-top: #4a2e1b;
-		--lv-iso-cliff-left-bot: #2c1a0e;
-		--lv-iso-cliff-right-top: #73482f;
-		--lv-iso-cliff-right-bot: #4f301d;
+		--lv-iso-grass-edge-shadow: #3b6b19;
+		--lv-iso-cliff-left-top: #52341e;
+		--lv-iso-cliff-left-bot: #331e11;
+		--lv-iso-cliff-right-top: #7d4f32;
+		--lv-iso-cliff-right-bot: #52321c;
 		--lv-iso-select-halo: rgba(250, 204, 21, 0.45);
 		--lv-iso-select-border: #facc15;
 	}
 
 	:global(:root[data-theme='dark']) {
-		/* Cores Tema Escuro (Twilight Sanctuary) */
-		--lv-iso-card-bg: linear-gradient(180deg, #183325 0%, #0e1e16 100%);
-		--lv-iso-footer-bg: rgba(0, 0, 0, 0.25);
+		/* Cores Tema Escuro (Twilight Sanctuary - Fiel ao App Forest) */
+		--lv-iso-card-bg: linear-gradient(180deg, #153828 0%, #0d2118 100%);
+		--lv-iso-footer-bg: rgba(10, 26, 19, 0.75);
 		--lv-iso-footer-ink: #ffffff;
 		--lv-iso-footer-muted: rgba(255, 255, 255, 0.8);
 		--lv-iso-footer-line: rgba(255, 255, 255, 0.08);
-		--lv-iso-tile-a: #7fbf35;
-		--lv-iso-tile-b: #72b02b;
-		--lv-iso-tile-border: #8fcb47;
-		--lv-iso-grass-edge: #56962a;
+		--lv-iso-tile-a: #82c237;
+		--lv-iso-tile-b: #74b32d;
+		--lv-iso-tile-border: #8fce43;
+		--lv-iso-grass-edge: #5ca026;
+		--lv-iso-grass-edge-shadow: #2f5614;
+		--lv-iso-cliff-left-top: #4a2d19;
+		--lv-iso-cliff-left-bot: #2c1a0e;
+		--lv-iso-cliff-right-top: #73482d;
+		--lv-iso-cliff-right-bot: #4d2f1b;
 	}
 
 	.lv-island-card {
@@ -361,21 +399,22 @@
 		background: var(--lv-iso-card-bg);
 		border-radius: 1.25rem;
 		box-shadow:
-			0 12px 32px -4px rgba(0, 0, 0, 0.35),
+			0 16px 40px -8px rgba(0, 0, 0, 0.4),
 			inset 0 1px 0 rgba(255, 255, 255, 0.1);
 		overflow: hidden;
 		position: relative;
 		border: 1px solid rgba(255, 255, 255, 0.08);
+		width: 100%;
 	}
 
 	.lv-island-sky {
 		position: relative;
 		width: 100%;
-		padding: 1.5rem 1rem 0.5rem;
+		padding: 2.5rem 1.5rem 1.5rem;
 		display: flex;
 		justify-content: center;
 		align-items: center;
-		min-height: 380px;
+		min-height: 520px;
 	}
 
 	.lv-island-orb {
@@ -386,26 +425,26 @@
 	}
 
 	.lv-island-orb--1 {
-		top: 10%;
-		left: 15%;
-		width: 160px;
-		height: 160px;
-		background: rgba(74, 222, 128, 0.08);
+		top: 8%;
+		left: 12%;
+		width: 220px;
+		height: 220px;
+		background: rgba(74, 222, 128, 0.09);
 	}
 
 	.lv-island-orb--2 {
-		bottom: 20%;
-		right: 12%;
-		width: 180px;
-		height: 180px;
-		background: rgba(45, 106, 79, 0.12);
+		bottom: 15%;
+		right: 10%;
+		width: 240px;
+		height: 240px;
+		background: rgba(45, 106, 79, 0.14);
 	}
 
 	.lv-island-svg {
 		width: 100%;
-		max-width: 720px;
+		max-width: 960px;
 		height: auto;
-		max-height: 520px;
+		max-height: 600px;
 		overflow: visible;
 		display: block;
 	}

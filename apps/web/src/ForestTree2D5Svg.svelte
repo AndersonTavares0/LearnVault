@@ -68,15 +68,41 @@
 		<circle cx="40" cy="34" r="12" fill="#15803d" />
 		<circle cx="32" cy="22" r="13" fill="#4ade80" />
 		<circle cx="30" cy="18" r="9" fill="#86efac" />
-		<!-- Flores e Frutos (estilo clássico Forest) -->
-		<circle cx="20" cy="30" r="2.5" fill="#ffffff" />
-		<circle cx="20" cy="30" r="1" fill="#facc15" />
-		<circle cx="28" cy="22" r="2.5" fill="#f43f5e" />
-		<circle cx="38" cy="20" r="2.5" fill="#ffffff" />
-		<circle cx="38" cy="20" r="1" fill="#facc15" />
-		<circle cx="44" cy="32" r="2.5" fill="#f43f5e" />
-		<circle cx="34" cy="34" r="2" fill="#ffffff" />
-		<circle cx="26" cy="40" r="2" fill="#f43f5e" />
+		<!-- Flores delicadas com pétalas brancas e miolo dourado -->
+		<g class="lv-tree-flower" opacity="0.95">
+			<circle cx="20" cy="30" r="1.3" fill="#facc15" />
+			<circle cx="18" cy="30" r="1.2" fill="#ffffff" />
+			<circle cx="22" cy="30" r="1.2" fill="#ffffff" />
+			<circle cx="20" cy="28" r="1.2" fill="#ffffff" />
+			<circle cx="20" cy="32" r="1.2" fill="#ffffff" />
+		</g>
+		<g class="lv-tree-flower" opacity="0.95">
+			<circle cx="38" cy="20" r="1.3" fill="#facc15" />
+			<circle cx="36" cy="20" r="1.2" fill="#ffffff" />
+			<circle cx="40" cy="20" r="1.2" fill="#ffffff" />
+			<circle cx="38" cy="18" r="1.2" fill="#ffffff" />
+			<circle cx="38" cy="22" r="1.2" fill="#ffffff" />
+		</g>
+		<g class="lv-tree-flower" opacity="0.95">
+			<circle cx="33" cy="34" r="1.3" fill="#facc15" />
+			<circle cx="31" cy="34" r="1.2" fill="#ffffff" />
+			<circle cx="35" cy="34" r="1.2" fill="#ffffff" />
+			<circle cx="33" cy="32" r="1.2" fill="#ffffff" />
+			<circle cx="33" cy="36" r="1.2" fill="#ffffff" />
+		</g>
+
+		<!-- Frutos/bagas vermelhas rubi com brilho especular -->
+		<circle cx="27" cy="23" r="3" fill="#ef4444" />
+		<circle cx="26" cy="22" r="1" fill="#fca5a5" />
+
+		<circle cx="44" cy="31" r="3" fill="#ef4444" />
+		<circle cx="43" cy="30" r="1" fill="#fca5a5" />
+
+		<circle cx="25" cy="40" r="2.8" fill="#ef4444" />
+		<circle cx="24" cy="39" r="0.9" fill="#fca5a5" />
+
+		<circle cx="38" cy="27" r="2.6" fill="#ef4444" />
+		<circle cx="37" cy="26" r="0.8" fill="#fca5a5" />
 	</svg>
 {:else if stage === 'sakura'}
 	<!-- Cerejeira em Flor (Sakura) 2.5D -->
