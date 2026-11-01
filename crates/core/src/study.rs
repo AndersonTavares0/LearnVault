@@ -397,6 +397,25 @@ pub struct StudyNote {
     pub updated_at: i64,
 }
 
+/// Anotação de estudo com metadados da mídia para navegação global.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GlobalStudyNote {
+    /// Identificador opaco da anotação (UUID v7).
+    pub note_id: String,
+    /// Identificador da mídia vinculada.
+    pub media_id: String,
+    /// Caminho relativo da mídia no catálogo.
+    pub relative_path: String,
+    /// Posição no player de vídeo em segundos.
+    pub position_seconds: i64,
+    /// Conteúdo textual da anotação.
+    pub content: String,
+    /// Instante de criação em segundos desde a época Unix.
+    pub created_at: i64,
+    /// Instante da última edição em segundos desde a época Unix.
+    pub updated_at: i64,
+}
+
 /// Lista as anotações do dono para uma mídia específica, ordenadas cronologicamente pelo timestamp da aula.
 pub fn list_study_notes(db: &Database, owner_id: &str, media_id: &str) -> Result<Vec<StudyNote>> {
     validate_owner(owner_id)?;
@@ -410,6 +429,37 @@ pub fn list_study_notes(db: &Database, owner_id: &str, media_id: &str) -> Result
          ORDER BY position_seconds ASC, created_at ASC",
     )?;
     let rows = statement.query_map(rusqlite::params![owner_id, media_id], note_from_row)?;
+
+    let mut notes = Vec::new();
+    for note in rows {
+        notes.push(note?);
+    }
+    Ok(notes)
+}
+
+/// Lista todas as anotações do dono em todo o catálogo, ordenadas da mais recente para a mais antiga.
+pub fn list_all_study_notes(db: &Database, owner_id: &str) -> Result<Vec<GlobalStudyNote>> {
+    validate_owner(owner_id)?;
+    let conn = db.connection();
+
+    let mut statement = conn.prepare(
+        "SELECT n.note_id, n.media_id, m.relative_path, n.position_seconds, n.content, n.created_at, n.updated_at
+         FROM study_note n
+         JOIN media m ON n.media_id = m.media_id
+         WHERE n.owner_id = ?1
+         ORDER BY n.updated_at DESC, n.created_at DESC",
+    )?;
+    let rows = statement.query_map(rusqlite::params![owner_id], |row| {
+        Ok(GlobalStudyNote {
+            note_id: row.get(0)?,
+            media_id: row.get(1)?,
+            relative_path: row.get(2)?,
+            position_seconds: row.get(3)?,
+            content: row.get(4)?,
+            created_at: row.get(5)?,
+            updated_at: row.get(6)?,
+        })
+    })?;
 
     let mut notes = Vec::new();
     for note in rows {

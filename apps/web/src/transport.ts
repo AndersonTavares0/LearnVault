@@ -59,6 +59,7 @@ export type UpdateHistoryEntry = {
 export type StudyNote = {
 	noteId: string;
 	mediaId: string;
+	relativePath?: string;
 	positionSeconds: number;
 	content: string;
 	createdAt: number;
@@ -129,7 +130,7 @@ export interface Transport {
 	setCompleted(mediaId: string, completed: boolean): Promise<StudyProgress>;
 	recentStudy(limit?: number): Promise<RecentStudy>;
 	studySummary(): Promise<StudySummary>;
-	listNotes(mediaId: string): Promise<StudyNote[]>;
+	listNotes(mediaId?: string): Promise<StudyNote[]>;
 	createNote(mediaId: string, positionSeconds: number, content: string): Promise<StudyNote>;
 	updateNote(noteId: string, content: string): Promise<StudyNote>;
 	deleteNote(noteId: string): Promise<void>;
@@ -139,10 +140,14 @@ export interface Transport {
 	deleteFlashcard(cardId: string): Promise<void>;
 	reviewFlashcard(cardId: string, rating: ReviewRating): Promise<Flashcard>;
 	recordFocusSession(session: FocusSessionInput): Promise<FocusSessionRecord>;
+	listFocusSessions(limit?: number): Promise<FocusSessionRecord[]>;
 	focusSummary(): Promise<FocusSummary>;
 	rewardSummary(): Promise<RewardSummary>;
 	claimDailyMission(missionId: MissionId): Promise<boolean>;
 	setWeeklyGoal(goal: number): Promise<number>;
+	userAvatarUrl(version?: number | null): string;
+	uploadUserAvatar(file: File | Blob): Promise<{ version: number }>;
+	deleteUserAvatar(): Promise<void>;
 	// Verifica a atualização; `force` ignora o intervalo mínimo de cache do servidor.
 	checkUpdate(force?: boolean): Promise<UpdateStatus>;
 	updateHistory(): Promise<UpdateHistoryEntry[]>;
@@ -503,7 +508,7 @@ export function normalizeUpdateStatus(value: unknown): UpdateStatus {
 export function normalizeStudyNote(raw: unknown): StudyNote {
 	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalidPayload('anotação de estudo inválida.');
 	const note = raw as Record<string, unknown>;
-	return {
+	const res: StudyNote = {
 		noteId: String(note.note_id ?? note.noteId ?? ''),
 		mediaId: String(note.media_id ?? note.mediaId ?? ''),
 		positionSeconds: Number(note.position_seconds ?? note.positionSeconds ?? 0),
@@ -511,6 +516,10 @@ export function normalizeStudyNote(raw: unknown): StudyNote {
 		createdAt: Number(note.created_at ?? note.createdAt ?? 0),
 		updatedAt: Number(note.updated_at ?? note.updatedAt ?? 0)
 	};
+	if (note.relative_path || note.relativePath) {
+		res.relativePath = String(note.relative_path ?? note.relativePath);
+	}
+	return res;
 }
 
 export function normalizeFlashcard(raw: unknown): Flashcard {
@@ -640,8 +649,9 @@ export class HttpTransport implements Transport {
 	async setCompleted(mediaId: string, completed: boolean) { const response = await fetch('/api/study/completed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: mediaId, completed }) }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? 'Mídia não encontrada.' : 'Não foi possível atualizar a conclusão.'); return normalizeStudyProgress(await response.json()); }
 	async recentStudy(limit?: number) { const url = limit === undefined ? '/api/study/recent' : `/api/study/recent?limit=${limit}`; const response = await fetch(url); if (!response.ok) throw response.status === 404 ? Object.assign(new Error('Estudo não disponível neste servidor.'), { code: STUDY_NOT_AVAILABLE }) : new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar o histórico.'); return normalizeRecentStudy(await response.json()); }
 	async studySummary() { const response = await fetch('/api/study/summary'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar sua evolução.'); return normalizeStudySummary(await response.json()); }
-	async listNotes(mediaId: string) {
-		const response = await fetch(`/api/study/notes?media_id=${encodeURIComponent(mediaId)}`);
+	async listNotes(mediaId?: string) {
+		const url = mediaId ? `/api/study/notes?media_id=${encodeURIComponent(mediaId)}` : '/api/study/notes';
+		const response = await fetch(url);
 		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar as anotações.');
 		const data = await response.json();
 		return (Array.isArray(data.items) ? data.items : []).map(normalizeStudyNote);
@@ -719,6 +729,40 @@ export class HttpTransport implements Transport {
 		return normalizeFocusSession(await response.json());
 	}
 	async focusSummary() { const response = await fetch('/api/focus/summary'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar as estatísticas de foco.'); return normalizeFocusSummary(await response.json()); }
+	async listFocusSessions(limit = 100): Promise<FocusSessionRecord[]> {
+		const response = await fetch(`/api/focus/sessions?limit=${limit}`);
+		if (!response.ok) return [];
+		const data = (await response.json()) as { items?: unknown };
+		if (!data || !Array.isArray(data.items)) return [];
+		return data.items.map((item: Record<string, unknown>) => ({
+			id: String(item.id ?? ''),
+			kind: item.kind === 'short' || item.kind === 'long' ? item.kind : 'focus',
+			plannedSeconds: Number(item.planned_seconds ?? item.plannedSeconds ?? 0),
+			actualSeconds: Number(item.actual_seconds ?? item.actualSeconds ?? 0),
+			completed: Boolean(item.completed),
+			startedAt: Number(item.started_at ?? item.startedAt ?? 0),
+			endedAt: Number(item.ended_at ?? item.endedAt ?? 0)
+		}));
+	}
+	userAvatarUrl(version?: number | null) {
+		return version ? `/api/user/avatar?v=${version}` : '/api/user/avatar';
+	}
+	async uploadUserAvatar(file: File | Blob): Promise<{ version: number }> {
+		if (!file) throw new Error('Escolha uma imagem para o avatar.');
+		if (file.size > 2 * 1024 * 1024) throw new Error('A imagem deve ter no máximo 2 MiB.');
+		const response = await fetch('/api/user/avatar', { method: 'PUT', body: file });
+		if (!response.ok) {
+			if (response.status === 413) throw new Error('A imagem é maior que 2 MiB.');
+			if (response.status === 415 || response.status === 422) throw new Error('Formato de imagem não suportado. Use PNG, JPEG ou WebP.');
+			throw new Error('Não foi possível salvar o avatar.');
+		}
+		const data = (await response.json()) as { version?: unknown };
+		return { version: Number(data.version ?? Date.now()) };
+	}
+	async deleteUserAvatar(): Promise<void> {
+		const response = await fetch('/api/user/avatar', { method: 'DELETE' });
+		if (!response.ok) throw new Error('Não foi possível remover o avatar.');
+	}
 	async rewardSummary() { const response = await fetch('/api/rewards/summary'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar suas recompensas.'); return normalizeRewardSummary(await response.json()); }
 	async claimDailyMission(missionId: MissionId) { const response = await fetch(`/api/rewards/missions/${encodeURIComponent(missionId)}/claim`, { method: 'POST' }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 409 ? 'Conclua a missão antes de resgatá-la.' : 'Não foi possível resgatar a missão.'); return normalizeClaim(await response.json()); }
 	async setWeeklyGoal(goal: number) { if (!Number.isInteger(goal) || goal < 1 || goal > 7) throw new Error('A meta semanal precisa ser de 1 a 7 dias.'); const response = await fetch('/api/rewards/weekly-goal', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ weekly_goal: goal }) }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 422 ? 'A meta semanal precisa ser de 1 a 7 dias.' : 'Não foi possível salvar a meta semanal.'); return normalizeWeeklyGoal(await response.json()); }
@@ -832,7 +876,7 @@ export class DesktopStub implements Transport {
 	// omitido em vez de enviado como `undefined`.
 	async recentStudy(limit?: number) { try { return normalizeRecentStudy(await invoke<unknown>('desktop_recent_study', limit === undefined ? {} : { limit })); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar o histórico de estudo.'); } }
 	async studySummary() { try { return normalizeStudySummary(await invoke<unknown>('desktop_study_summary')); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar sua evolução.'); } }
-	listNotes(_mediaId: string): Promise<StudyNote[]> { return Promise.resolve([]); }
+	listNotes(_mediaId?: string): Promise<StudyNote[]> { return Promise.resolve([]); }
 	createNote(mediaId: string, positionSeconds: number, content: string): Promise<StudyNote> {
 		return Promise.resolve({ noteId: 'desktop-stub', mediaId, positionSeconds, content, createdAt: 0, updatedAt: 0 });
 	}
@@ -852,10 +896,14 @@ export class DesktopStub implements Transport {
 		return Promise.resolve({ cardId, mediaId: '', front: '', back: '', intervalDays: 0, nextDue: 0, createdAt: 0, updatedAt: 0 });
 	}
 	async recordFocusSession(session: FocusSessionInput) { try { return normalizeFocusSession(await invoke<unknown>('desktop_record_focus_session', { session })); } catch (cause) { throw desktopError(cause, 'Não foi possível salvar a sessão de foco.'); } }
+	listFocusSessions(_limit?: number): Promise<FocusSessionRecord[]> { return Promise.resolve([]); }
 	async focusSummary() { try { return normalizeFocusSummary(await invoke<unknown>('desktop_focus_summary')); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar as estatísticas de foco.'); } }
 	async rewardSummary() { try { return normalizeRewardSummary(await invoke<unknown>('desktop_reward_summary')); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar suas recompensas.'); } }
 	async claimDailyMission(missionId: MissionId) { try { return await invoke<boolean>('desktop_claim_daily_mission', { missionId }); } catch (cause) { throw desktopError(cause, 'Não foi possível resgatar a missão.'); } }
 	async setWeeklyGoal(goal: number) { try { if (!Number.isInteger(goal) || goal < 1 || goal > 7) throw new Error(); const saved = await invoke<unknown>('desktop_set_weekly_goal', { weeklyGoal: goal }); if (!Number.isInteger(saved) || (saved as number) < 1 || (saved as number) > 7) throw invalidPayload('meta semanal inválida.'); return saved as number; } catch (cause) { if (cause instanceof Error && cause.message.startsWith('Resposta inválida')) throw cause; throw desktopError(cause, 'Não foi possível salvar a meta semanal.'); } }
+	userAvatarUrl(_version?: number | null) { return ''; }
+	uploadUserAvatar(_file: File | Blob): Promise<{ version: number }> { return Promise.resolve({ version: 1 }); }
+	deleteUserAvatar(): Promise<void> { return Promise.resolve(); }
 	// O desktop não hospeda `crates/server` nem possui canal IPC de atualização: a
 	// checagem fica desligada, sem tocar a rede. Isso preserva a regra de que o bundle
 	// desktop não contém nenhum `fetch` do aplicativo.

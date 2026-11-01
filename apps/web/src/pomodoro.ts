@@ -118,6 +118,29 @@ export function modeSeconds(mode: PomodoroMode, settings: PomodoroSettings): num
 	return settings.focusMinutes * 60;
 }
 
+export function playPomodoroAlarm(sound: AlarmSound, volume: number, repeats: number): void {
+	if (typeof window === 'undefined' || typeof AudioContext === 'undefined') return;
+	try {
+		const context = new AudioContext();
+		const now = context.currentTime;
+		for (let index = 0; index < repeats; index += 1) {
+			const start = now + index * 0.42;
+			const oscillator = context.createOscillator();
+			const gain = context.createGain();
+			oscillator.type = sound;
+			oscillator.frequency.setValueAtTime(660 + index * 70, start);
+			gain.gain.setValueAtTime(0, start);
+			gain.gain.linearRampToValueAtTime(volume * 0.18, start + 0.015);
+			gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.22);
+			oscillator.connect(gain).connect(context.destination);
+			oscillator.start(start);
+			oscillator.stop(start + 0.25);
+		}
+	} catch {
+		// Falha de áudio segura
+	}
+}
+
 export function modeLabel(mode: PomodoroMode): string {
 	if (mode === 'short') return 'Pausa curta';
 	if (mode === 'long') return 'Pausa longa';

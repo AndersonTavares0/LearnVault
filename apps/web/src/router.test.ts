@@ -41,6 +41,16 @@ describe('hash router', () => {
 		expect(locationFromHash('#/course/course-1/')).toEqual({ route: 'course', courseId: 'course-1', lessonPath: null });
 		expect(locationFromHash('#/player/course-1/modules/aula%20one')).toEqual({ route: 'player', courseId: 'course-1', lessonPath: 'modules/aula one' });
 		expect(locationFromHash('#/player/%E0%A4%A/aula')).toEqual({ route: 'player', courseId: null, lessonPath: 'aula' });
+
+		// Rota de anotações globais
+		expect(routeFromHash('#/notes')).toBe('notes');
+		expect(locationFromHash('#/notes')).toEqual({ route: 'notes', courseId: null, lessonPath: null });
+		expect(destinationAfterLogin('#/notes')).toBe('#/notes');
+
+		// Navegação com timestamp em query string ?t=
+		expect(locationFromHash('#/course/c1/aula?t=45')).toEqual({ route: 'course', courseId: 'c1', lessonPath: 'aula', positionSeconds: 45 });
+		expect(href('course', 'c1', 'aula', 45)).toBe('#/course/c1/aula?t=45');
+		expect(href('notes')).toBe('#/notes');
 	});
 
 	it('defaults unknown and login hashes to the fallback route of the build', () => {

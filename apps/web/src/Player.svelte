@@ -7,7 +7,7 @@
 	import { createDefaultPlayerPreferences, lessonPreferenceKey, updateLessonPreference, type PlayerPreferences } from './player-preferences';
 	import { transport, type Lesson, type StudyProgress } from './transport';
 
-	let { lesson, courseId, mediaError, onMediaError, studyEnabled = true, preferences = createDefaultPlayerPreferences(), onPreferencesChange = () => true, autoNext = false, hasNextLesson = false, onAutoNext = () => undefined, onAutoNextChange = () => true, lessonTitle = null }: { lesson: Lesson; courseId: string; mediaError: string; onMediaError: () => void; studyEnabled?: boolean; preferences?: PlayerPreferences; onPreferencesChange?: (next: PlayerPreferences) => boolean; autoNext?: boolean; hasNextLesson?: boolean; onAutoNext?: () => void; onAutoNextChange?: (enabled: boolean) => boolean; lessonTitle?: string | null } = $props();
+	let { lesson, courseId, mediaError, onMediaError, studyEnabled = true, preferences = createDefaultPlayerPreferences(), onPreferencesChange = () => true, autoNext = false, hasNextLesson = false, onAutoNext = () => undefined, onAutoNextChange = () => true, lessonTitle = null, initialPosition = null }: { lesson: Lesson; courseId: string; mediaError: string; onMediaError: () => void; studyEnabled?: boolean; preferences?: PlayerPreferences; onPreferencesChange?: (next: PlayerPreferences) => boolean; autoNext?: boolean; hasNextLesson?: boolean; onAutoNext?: () => void; onAutoNextChange?: (enabled: boolean) => boolean; lessonTitle?: string | null; initialPosition?: number | null } = $props();
 
 	const lessonPreference = $derived(preferences.lessons[lessonPreferenceKey(courseId, lesson.path)] ?? {});
 	const availableMedia = $derived(lesson.media.filter((file) => file.availability?.trim().toLowerCase() !== 'missing'));
@@ -24,6 +24,18 @@
 	let media: HTMLMediaElement | null = $state(null);
 	let currentTime = $state(0);
 	let duration = $state(0);
+	let lastAppliedPosition = $state<number | null>(null);
+
+	$effect(() => {
+		if (source) lastAppliedPosition = null;
+	});
+
+	$effect(() => {
+		if (initialPosition && initialPosition > 0 && media && initialPosition !== lastAppliedPosition) {
+			media.currentTime = initialPosition;
+			lastAppliedPosition = initialPosition;
+		}
+	});
 	let progress: StudyProgress | null = $state(null);
 	let progressLoading = $state(false);
 	let progressError = $state('');

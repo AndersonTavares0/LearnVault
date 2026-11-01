@@ -1,10 +1,23 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { formatClock, modeLabel, POMODORO_MODES } from './pomodoro';
-	import { focusSync, pauseTimer, pomodoro, resetTimer, retryFocusSessions, setMode, startTimer } from './pomodoro-store';
+	import {
+		abandonTimer,
+		focusSync,
+		pauseTimer,
+		pomodoro,
+		resetTimer,
+		retryFocusSessions,
+		setMode,
+		startTimer
+	} from './pomodoro-store';
 	import { href } from './router';
+	import { getSpeciesById, type BotanicalSpeciesId } from './forest-catalog';
+	import { nursery, setActiveSeed } from './nursery-store';
+	import ForestGrowthStage from './ForestGrowthStage.svelte';
 
 	let open = $state(false);
+	let confirmAbandon = $state(false);
 	let trigger = $state<HTMLButtonElement | null>(null);
 	let popover = $state<HTMLDivElement | null>(null);
 
@@ -17,6 +30,7 @@
 
 	function close() {
 		open = false;
+		confirmAbandon = false;
 		trigger?.focus();
 	}
 
@@ -28,6 +42,11 @@
 	function toggleTimer() {
 		if (running) pauseTimer();
 		else startTimer();
+	}
+
+	function handleAbandon() {
+		abandonTimer();
+		confirmAbandon = false;
 	}
 
 	function onDocumentPointer(event: PointerEvent) {
@@ -86,16 +105,105 @@
 			</div>
 			<div class="lv-focus-menu__clock" aria-hidden="true">{clock}</div>
 			<p class="visually-hidden" role="status" aria-live="polite">{announcement}</p>
+
+			{#if $pomodoro.mode === 'focus'}
+				{#if running || paused}
+					<ForestGrowthStage
+						compact={true}
+						speciesId={$nursery.activeSeed}
+						remainingSeconds={$pomodoro.remainingSeconds}
+						totalSeconds={$pomodoro.totalSeconds}
+						{clock}
+					/>
+				{:else}
+					<div class="lv-focus-menu__seed-strip">
+						<span class="lv-focus-menu__seed-label">Plantar:</span>
+						<select
+							class="lv-focus-menu__seed-select"
+							value={$nursery.activeSeed}
+							onchange={(e) => setActiveSeed(e.currentTarget.value as BotanicalSpeciesId)}
+							aria-label="Espécie botânica a cultivar"
+						>
+							{#each $nursery.unlockedSpecies as id (id)}
+								{@const sp = getSpeciesById(id)}
+								<option value={id}>{sp.name}</option>
+							{/each}
+						</select>
+					</div>
+				{/if}
+			{/if}
+
 			<div class="lv-focus-menu__actions">
 				<button class="lvui-btn lvui-btn-primary" type="button" onclick={toggleTimer}>{running ? 'Pausar' : paused ? 'Retomar' : 'Iniciar foco'}</button>
 				<button class="lvui-btn" type="button" onclick={resetTimer}>Reiniciar</button>
+				{#if $pomodoro.mode === 'focus' && (running || paused) && !confirmAbandon}
+					<button class="lvui-btn lvui-btn-outline lvui-btn-danger" type="button" onclick={() => (confirmAbandon = true)}>Abandonar</button>
+				{/if}
 			</div>
+
+			{#if confirmAbandon}
+				<div class="lv-focus-menu__confirm-abandon" role="alert">
+					<p>Deseja desistir desta sessão de foco? A árvore cultivada nela secará.</p>
+					<div class="lv-focus-menu__confirm-actions">
+						<button class="lvui-btn lvui-btn-sm lvui-btn-danger" type="button" onclick={handleAbandon}>Desistir e secar árvore</button>
+						<button class="lvui-btn lvui-btn-sm" type="button" onclick={() => (confirmAbandon = false)}>Continuar focando</button>
+					</div>
+				</div>
+			{/if}
 			{#if $focusSync.error}
 				<p class="lv-focus-menu__note" role="status">{$focusSync.error} <button class="lv-text-link" type="button" disabled={$focusSync.saving} onclick={() => void retryFocusSessions()}>Tentar de novo</button></p>
 			{:else if $focusSync.pending.length > 0}
 				<p class="lv-focus-menu__note" role="status">{$focusSync.pending.length} sessão(ões) aguardando sincronização.</p>
 			{/if}
-			<a class="lv-text-link lv-focus-menu__settings" href={href('settings')} onclick={() => (open = false)}>Ajustar tempos</a>
+			<div class="lv-focus-menu__footer-links">
+				<a class="lv-text-link" href={href('statistics')} onclick={() => (open = false)}>Ver Bosque e Viveiro</a>
+				<a class="lv-text-link lv-focus-menu__settings" href={href('settings')} onclick={() => (open = false)}>Ajustar tempos</a>
+			</div>
 		</div>
 	{/if}
 </div>
+
+<style>
+	.lv-focus-menu__seed-strip {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		background: color-mix(in srgb, var(--surface) 90%, transparent);
+		border: 1px solid var(--line);
+		border-radius: 8px;
+		padding: 0.35rem 0.65rem;
+		font-size: 0.8125rem;
+	}
+
+	.lv-focus-menu__seed-label {
+		color: var(--muted);
+		font-weight: 600;
+	}
+
+	.lv-focus-menu__seed-select {
+		background: transparent;
+		border: none;
+		color: var(--ink);
+		font-weight: 600;
+		font-size: 0.8125rem;
+		cursor: pointer;
+		flex: 1;
+		outline: none;
+		color-scheme: light dark;
+	}
+
+	.lv-focus-menu__seed-select option {
+		background-color: var(--surface);
+		color: var(--ink);
+	}
+
+	.lv-focus-menu__footer-links {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+		padding-top: 0.5rem;
+		border-top: 1px solid var(--line);
+		font-size: 0.75rem;
+	}
+</style>

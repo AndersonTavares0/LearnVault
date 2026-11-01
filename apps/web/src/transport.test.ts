@@ -9,8 +9,8 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 
 describe('transport contract', () => {
 	it('exposes the HTTP transport seam without routing assumptions', () => {
-		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'studySummary', 'listNotes', 'createNote', 'updateNote', 'deleteNote', 'recordFocusSession', 'focusSummary', 'rewardSummary', 'claimDailyMission', 'setWeeklyGoal', 'checkUpdate', 'updateHistory', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover'];
-		expect(methods).toHaveLength(29);
+		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'studySummary', 'listNotes', 'createNote', 'updateNote', 'deleteNote', 'recordFocusSession', 'listFocusSessions', 'focusSummary', 'rewardSummary', 'claimDailyMission', 'setWeeklyGoal', 'userAvatarUrl', 'uploadUserAvatar', 'deleteUserAvatar', 'checkUpdate', 'updateHistory', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover'];
+		expect(methods).toHaveLength(33);
 	});
 	it('does not offer native folder selection over HTTP', async () => {
 		await expect(new HttpTransport().importCourse()).rejects.toThrow('desktop é quem escolhe pastas');
@@ -653,6 +653,44 @@ describe('transport contract', () => {
 		fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
 		await expect(new HttpTransport().deleteNote('n2')).resolves.toBeUndefined();
 		expect(fetchMock).toHaveBeenLastCalledWith('/api/study/notes/n2', { method: 'DELETE' });
+
+		// Listagem global sem mediaId
+		fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ note_id: 'n1', media_id: 'm1', relative_path: 'curso/aula.mp4', position_seconds: 45, content: 'Nota global', created_at: 100, updated_at: 100 }] }), { status: 200 }));
+		const allNotes = await new HttpTransport().listNotes();
+		expect(fetchMock).toHaveBeenCalledWith('/api/study/notes');
+		expect(allNotes).toHaveLength(1);
+		expect(allNotes[0].relativePath).toBe('curso/aula.mp4');
+
+		vi.unstubAllGlobals();
+	});
+
+	it('handles focus sessions list and avatar operations over HTTP', async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+
+		// listFocusSessions
+		fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ id: 'f1', kind: 'focus', planned_seconds: 1500, actual_seconds: 1500, completed: true, started_at: 100, ended_at: 1600 }] }), { status: 200 }));
+		const sessions = await new HttpTransport().listFocusSessions(50);
+		expect(fetchMock).toHaveBeenCalledWith('/api/focus/sessions?limit=50');
+		expect(sessions).toHaveLength(1);
+		expect(sessions[0].completed).toBe(true);
+
+		// userAvatarUrl
+		const transport = new HttpTransport();
+		expect(transport.userAvatarUrl()).toBe('/api/user/avatar');
+		expect(transport.userAvatarUrl(12345)).toBe('/api/user/avatar?v=12345');
+
+		// uploadUserAvatar
+		fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ version: 999 }), { status: 200 }));
+		const blob = new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], { type: 'image/png' });
+		const result = await transport.uploadUserAvatar(blob);
+		expect(result.version).toBe(999);
+		expect(fetchMock).toHaveBeenCalledWith('/api/user/avatar', expect.objectContaining({ method: 'PUT' }));
+
+		// deleteUserAvatar
+		fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+		await expect(transport.deleteUserAvatar()).resolves.toBeUndefined();
+		expect(fetchMock).toHaveBeenCalledWith('/api/user/avatar', { method: 'DELETE' });
 
 		vi.unstubAllGlobals();
 	});

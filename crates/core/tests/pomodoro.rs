@@ -2,7 +2,7 @@
 
 use learnvault_core::{
     Database, Error, FocusKind, FocusSessionInput, claim_daily_mission, focus_summary_on,
-    record_focus_session, reward_summary_on, set_completed, set_weekly_goal,
+    list_focus_sessions, record_focus_session, reward_summary_on, set_completed, set_weekly_goal,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -265,5 +265,30 @@ fn invalid_focus_payload_is_rejected_before_persistence() -> TestResult {
         Err(Error::InvalidFocusSession { .. })
     ));
     assert_eq!(focus_summary_on(&db, OWNER, TODAY)?.week_sessions, 0);
+    Ok(())
+}
+
+#[test]
+fn listing_focus_sessions_is_ordered_and_isolated_by_owner() -> TestResult {
+    let db = db()?;
+    let s1 = session("s1", FocusKind::Focus, true, TODAY, 1_500);
+    let mut s2 = session("s2", FocusKind::Focus, false, TODAY, 600);
+    s2.ended_at = s1.ended_at + 1_000;
+    let s_other = session("s_other", FocusKind::Focus, true, TODAY, 1_500);
+
+    record_focus_session(&db, OWNER, s1)?;
+    record_focus_session(&db, OWNER, s2)?;
+    record_focus_session(&db, OTHER, s_other)?;
+
+    let sessions = list_focus_sessions(&db, OWNER, 10)?;
+    assert_eq!(sessions.len(), 2);
+    assert_eq!(sessions[0].id, "s2", "mais recente primeiro");
+    assert!(!sessions[0].completed);
+    assert_eq!(sessions[1].id, "s1");
+    assert!(sessions[1].completed);
+
+    let other_sessions = list_focus_sessions(&db, OTHER, 10)?;
+    assert_eq!(other_sessions.len(), 1);
+    assert_eq!(other_sessions[0].id, "s_other");
     Ok(())
 }

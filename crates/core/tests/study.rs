@@ -7,8 +7,8 @@
 use learnvault_core::paths::relative_path_key;
 use learnvault_core::{
     Database, Error, KeyMode, MAX_RECENT_STUDY, create_study_note, delete_study_note,
-    list_study_notes, recent_study, record_position, set_completed, study_progress,
-    study_summary_on, update_study_note,
+    list_all_study_notes, list_study_notes, recent_study, record_position, set_completed,
+    study_progress, study_summary_on, update_study_note,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -854,6 +854,23 @@ fn study_notes_crud_and_isolation() -> TestResult {
     // Outro dono não consegue excluir a anotação remanescente
     assert!(!delete_study_note(&db, OTHER, &note1.note_id)?);
     assert_eq!(list_study_notes(&db, OWNER, "m1")?.len(), 1);
+
+    // Listagem global de anotações do dono (m1 e m2) enriquecida com relative_path
+    let all_notes = list_all_study_notes(&db, OWNER)?;
+    assert_eq!(
+        all_notes.len(),
+        2,
+        "deve retornar todas as notas do dono (m1 e m2)"
+    );
+    assert_eq!(all_notes[0].note_id, note1.note_id);
+    assert_eq!(all_notes[0].relative_path, "curso/m1.mp4");
+    assert_eq!(all_notes[1].content, "Nota de outra aula");
+    assert_eq!(all_notes[1].relative_path, "curso/m2.mp4");
+
+    // Listagem global do outro aluno deve conter apenas a nota dele
+    let other_notes = list_all_study_notes(&db, OTHER)?;
+    assert_eq!(other_notes.len(), 1);
+    assert_eq!(other_notes[0].content, "Nota do outro aluno");
 
     Ok(())
 }

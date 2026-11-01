@@ -5,6 +5,7 @@
 use std::io::Write;
 
 mod auth;
+mod avatars;
 mod backup;
 mod catalog;
 mod config;
@@ -123,7 +124,10 @@ pub fn build_router(state: AppState) -> Router {
             "/api/study/flashcards/{id}/review",
             post(study::review_flashcard).layer(DefaultBodyLimit::max(16 * 1024)),
         )
-        .route("/api/focus/sessions", post(study::record_focus_session))
+        .route(
+            "/api/focus/sessions",
+            get(study::list_focus_sessions).post(study::record_focus_session),
+        )
         .route("/api/focus/summary", get(study::focus_summary))
         .route("/api/rewards/summary", get(study::reward_summary))
         .route(
@@ -133,6 +137,13 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/api/rewards/weekly-goal",
             get(study::weekly_goal).put(study::set_weekly_goal),
+        )
+        .route(
+            "/api/user/avatar",
+            get(avatars::get_avatar)
+                .put(avatars::put_avatar)
+                .delete(avatars::delete_avatar)
+                .layer(DefaultBodyLimit::max(avatars::MAX_AVATAR_BYTES)),
         )
         .route("/api/admin/backup", get(backup::download_backup))
         .route("/api/update", get(update::update))

@@ -55,14 +55,16 @@ pub use paths::KeyMode;
 pub use pomodoro::{
     DailyMission, FocusDay, FocusKind, FocusSession, FocusSessionInput, FocusSummary,
     RewardSummary, claim_daily_mission, claim_daily_mission_today, focus_summary, focus_summary_on,
-    record_focus_session, reward_summary, reward_summary_on, set_weekly_goal, weekly_goal,
+    list_focus_sessions, record_focus_session, reward_summary, reward_summary_on, set_weekly_goal,
+    weekly_goal,
 };
 pub use removal::{MediaRemovalImpact, MediaRemovalOutcome, media_removal_impact, remove_media};
 pub use rescan::{RescanSummary, apply_scan, rescan};
 pub use scanner::{MediaKind, ScanOutcome, ScannedFile, scan};
 pub use study::{
-    Flashcard, MAX_RECENT_STUDY, ReviewRating, StudyDay, StudyNote, StudyProgress, StudySummary,
-    create_flashcard, create_study_note, delete_flashcard, delete_study_note, list_flashcards,
-    list_study_notes, recent_study, record_position, review_flashcard, set_completed,
-    study_progress, study_summary, study_summary_on, update_flashcard, update_study_note,
+    Flashcard, GlobalStudyNote, MAX_RECENT_STUDY, ReviewRating, StudyDay, StudyNote, StudyProgress,
+    StudySummary, create_flashcard, create_study_note, delete_flashcard, delete_study_note,
+    list_all_study_notes, list_flashcards, list_study_notes, recent_study, record_position,
+    review_flashcard, set_completed, study_progress, study_summary, study_summary_on,
+    update_flashcard, update_study_note,
 };

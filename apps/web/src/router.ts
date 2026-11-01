@@ -1,7 +1,7 @@
 import { courseIdOf, lessonFromNode, type Catalog, type CatalogNode, type FileEntry, type Lesson } from './transport';
 
-export type Route = 'login' | 'home' | 'course' | 'player' | 'settings' | 'statistics';
-export type HashLocation = { route: Route; courseId: string | null; lessonPath: string | null };
+export type Route = 'login' | 'home' | 'course' | 'player' | 'settings' | 'statistics' | 'notes';
+export type HashLocation = { route: Route; courseId: string | null; lessonPath: string | null; positionSeconds?: number | null };
 
 function decodeSegment(value: string | undefined): string | null {
 	if (value === undefined) return null;
@@ -18,28 +18,67 @@ function decodeSegment(value: string | undefined): string | null {
  * `#/course/<id>` abre um curso e `#/course/<id>/<caminho>` abre a aula indicada dentro
  * dele: o caminho relativo da aula só é único por curso, então a identidade do curso faz
  * parte da rota. `#/player/<id>/<caminho>` é a forma legada da mesma tela e continua
- * aceita. `#/settings` abre as preferências locais e `#/statistics` o resumo do
- * estudo; nenhum dos dois identifica curso.
+ * aceita. `#/settings` abre as preferências locais, `#/statistics` o resumo do
+ * estudo e `#/notes` o painel global de anotações; nenhum deles identifica curso.
+ * Parâmetro opcional `?t=<segundos>` posiciona o player diretamente no timestamp da anotação.
  * `#/player/<caminho>` é a forma legada de um arquivo solto sem curso dono;
  * o caminho deve começar a busca global. Qualquer outro valor cai na rota padrão do build:
  * o login no servidor e a tela inicial no desktop, que não tem sessão.
  */
 export function locationFromHash(hash: string, fallback: Route = 'login'): HashLocation {
-	const value = hash.replace(/^#\/?/, '');
-	const [name, ...parts] = value.split('/');
-	if (name === 'focus') return { route: 'statistics', courseId: null, lessonPath: null };
-	const route = name === 'home' || name === 'course' || name === 'player' || name === 'settings' || name === 'statistics' ? name : fallback;
+	const [cleanHash, queryString] = hash.replace(/^#\/?/, '').split('?');
+	let positionSeconds: number | null = null;
+	if (queryString) {
+		const params = new URLSearchParams(queryString);
+		const t = params.get('t');
+		if (t !== null) {
+			const parsed = Number(t);
+			if (Number.isFinite(parsed) && parsed >= 0) {
+				positionSeconds = parsed;
+			}
+		}
+	}
+	const [name, ...parts] = cleanHash.split('/');
+	if (name === 'focus') {
+		const res: HashLocation = { route: 'statistics', courseId: null, lessonPath: null };
+		if (positionSeconds !== null) res.positionSeconds = positionSeconds;
+		return res;
+	}
+	if (name === 'notes') {
+		const res: HashLocation = { route: 'notes', courseId: null, lessonPath: null };
+		if (positionSeconds !== null) res.positionSeconds = positionSeconds;
+		return res;
+	}
+	const route = name === 'home' || name === 'course' || name === 'player' || name === 'settings' || name === 'statistics' || name === 'notes' ? name : fallback;
 	if (route === 'course') {
-		if (parts.length === 0) return { route, courseId: null, lessonPath: null };
+		if (parts.length === 0) {
+			const res: HashLocation = { route, courseId: null, lessonPath: null };
+			if (positionSeconds !== null) res.positionSeconds = positionSeconds;
+			return res;
+		}
 		const lessonString = parts.slice(1).join('/');
-		return { route, courseId: decodeSegment(parts[0]), lessonPath: lessonString === '' ? null : decodeSegment(lessonString) };
+		const res: HashLocation = { route, courseId: decodeSegment(parts[0]), lessonPath: lessonString === '' ? null : decodeSegment(lessonString) };
+		if (positionSeconds !== null) res.positionSeconds = positionSeconds;
+		return res;
 	}
 	if (route === 'player') {
-		if (parts.length === 0) return { route, courseId: null, lessonPath: null };
-		if (parts.length === 1) return { route, courseId: null, lessonPath: decodeSegment(parts[0]) };
-		return { route, courseId: decodeSegment(parts[0]), lessonPath: decodeSegment(parts.slice(1).join('/')) };
+		if (parts.length === 0) {
+			const res: HashLocation = { route, courseId: null, lessonPath: null };
+			if (positionSeconds !== null) res.positionSeconds = positionSeconds;
+			return res;
+		}
+		if (parts.length === 1) {
+			const res: HashLocation = { route, courseId: null, lessonPath: decodeSegment(parts[0]) };
+			if (positionSeconds !== null) res.positionSeconds = positionSeconds;
+			return res;
+		}
+		const res: HashLocation = { route, courseId: decodeSegment(parts[0]), lessonPath: decodeSegment(parts.slice(1).join('/')) };
+		if (positionSeconds !== null) res.positionSeconds = positionSeconds;
+		return res;
 	}
-	return { route, courseId: null, lessonPath: null };
+	const res: HashLocation = { route, courseId: null, lessonPath: null };
+	if (positionSeconds !== null) res.positionSeconds = positionSeconds;
+	return res;
 }
 
 export function routeFromHash(hash: string, fallback: Route = 'login'): Route {
@@ -47,24 +86,25 @@ export function routeFromHash(hash: string, fallback: Route = 'login'): Route {
 }
 
 /** Monta o hash canônico de uma rota. */
-export function href(route: Route, courseId?: string, lessonPath?: string): string {
+export function href(route: Route, courseId?: string, lessonPath?: string, positionSeconds?: number | null): string {
+	const query = positionSeconds !== undefined && positionSeconds !== null && positionSeconds >= 0 ? `?t=${Math.floor(positionSeconds)}` : '';
 	if (route === 'course' && courseId !== undefined) {
 		const base = `#/course/${encodeURIComponent(courseId)}`;
-		return lessonPath ? `${base}/${encodeURIComponent(lessonPath)}` : base;
+		return (lessonPath ? `${base}/${encodeURIComponent(lessonPath)}` : base) + query;
 	}
 	if (route === 'player' && courseId !== undefined && lessonPath !== undefined) {
-		return `#/player/${encodeURIComponent(courseId)}/${encodeURIComponent(lessonPath)}`;
+		return `#/player/${encodeURIComponent(courseId)}/${encodeURIComponent(lessonPath)}` + query;
 	}
 	if (route === 'player' && courseId !== undefined && lessonPath === undefined) {
-		return `#/player/${encodeURIComponent(courseId)}`;
+		return `#/player/${encodeURIComponent(courseId)}` + query;
 	}
-	return `#/${route}`;
+	return `#/${route}` + query;
 }
 
 /** Destino seguro depois do login, preservando uma rota já navegável. */
 export function destinationAfterLogin(hash: string): string {
 	const location = locationFromHash(hash);
-	if (location.route === 'home' || location.route === 'course' || location.route === 'settings' || location.route === 'statistics') return href(location.route, location.courseId ?? undefined, location.lessonPath ?? undefined);
+	if (location.route === 'home' || location.route === 'course' || location.route === 'settings' || location.route === 'statistics' || location.route === 'notes') return href(location.route, location.courseId ?? undefined, location.lessonPath ?? undefined);
 	if (location.route === 'player') {
 		const parts = hash.replace(/^#\/?/, '').split('/');
 		if (parts.length === 1) {

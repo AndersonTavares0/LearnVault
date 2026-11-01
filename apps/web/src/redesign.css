@@ -96,6 +96,11 @@ select {
 	color: inherit;
 }
 
+option {
+	background-color: var(--surface);
+	color: var(--ink);
+}
+
 input::placeholder,
 textarea::placeholder {
 	color: var(--muted);
@@ -4712,9 +4717,15 @@ svg {
 
 	.lv-topbar__link {
 		flex: 1;
+		min-width: 0;
 		justify-content: center;
 		min-height: 40px;
-		padding: 0 6px;
+		padding: 0 4px;
+		font-size: 11px;
+	}
+
+	.lv-topbar__link svg {
+		display: none;
 	}
 
 	.lv-topbar__username {
@@ -5201,6 +5212,11 @@ textarea {
 	font-family: inherit;
 }
 
+option {
+	background-color: var(--surface);
+	color: var(--ink);
+}
+
 :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
 	outline: 2px solid var(--focus);
 	outline-offset: 3px;
@@ -5392,6 +5408,14 @@ textarea {
 	font-family: var(--mono);
 	font-size: 10px;
 	font-weight: 700;
+	overflow: hidden;
+}
+
+img.lv-avatar,
+.lv-avatar--img {
+	object-fit: cover;
+	display: block;
+	padding: 0;
 }
 
 .lv-main {
@@ -6602,19 +6626,26 @@ textarea {
 		min-height: 42px;
 		justify-content: space-between;
 		border-top: 1px solid var(--line);
+		gap: 2px;
 	}
 
 	.lv-topbar__link {
 		flex: 1 1 0;
+		min-width: 0;
 		justify-content: center;
 		min-height: 40px;
-		font-size: 12px;
+		padding: 0 4px;
+		font-size: 11px;
+	}
+
+	.lv-topbar__link svg {
+		display: none;
 	}
 
 	.lv-topbar__link.is-active::after {
-		right: 18%;
+		right: 12%;
 		bottom: 0;
-		left: 18%;
+		left: 12%;
 	}
 
 	.lv-topbar__username,

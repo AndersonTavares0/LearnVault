@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildGamification, levelForXp } from './gamification';
+import { buildGamification, levelForXp, levelTitle } from './gamification';
 import type { StudySummary, RewardSummary } from './transport';
 
 const NOW = new Date(2026, 9, 26, 12);
@@ -34,6 +34,19 @@ function rewards(completedLessons: number, xp = completedLessons * 40): RewardSu
 }
 
 describe('levelForXp', () => {
+	it('assigns evocative progression titles to each level tier', () => {
+		expect(levelTitle(1)).toBe('Aprendiz Curioso');
+		expect(levelTitle(2)).toBe('Explorador do Acervo');
+		expect(levelTitle(3)).toBe('Estudante Dedicado');
+		expect(levelTitle(4)).toBe('Praticante Consistente');
+		expect(levelTitle(5)).toBe('Artesão do Conhecimento');
+		expect(levelTitle(6)).toBe('Mestre da Disciplina');
+		expect(levelTitle(7)).toBe('Sábio da Biblioteca');
+		expect(levelTitle(8)).toBe('Guardião do Conhecimento');
+		expect(levelTitle(99)).toBe('Guardião do Conhecimento');
+		expect(levelForXp(0).title).toBe('Aprendiz Curioso');
+	});
+
 	it('starts at level 1 and grows on the square curve', () => {
 		expect(levelForXp(0)).toMatchObject({ level: 1, currentLevelXp: 0, nextLevelXp: 100 });
 		expect(levelForXp(100)).toMatchObject({ level: 2, currentLevelXp: 100, nextLevelXp: 400 });
