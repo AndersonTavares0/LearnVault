@@ -4712,9 +4712,15 @@ svg {
 
 	.lv-topbar__link {
 		flex: 1;
+		min-width: 0;
 		justify-content: center;
 		min-height: 40px;
-		padding: 0 6px;
+		padding: 0 4px;
+		font-size: 11px;
+	}
+
+	.lv-topbar__link svg {
+		display: none;
 	}
 
 	.lv-topbar__username {
@@ -6610,19 +6616,26 @@ img.lv-avatar,
 		min-height: 42px;
 		justify-content: space-between;
 		border-top: 1px solid var(--line);
+		gap: 2px;
 	}
 
 	.lv-topbar__link {
 		flex: 1 1 0;
+		min-width: 0;
 		justify-content: center;
 		min-height: 40px;
-		font-size: 12px;
+		padding: 0 4px;
+		font-size: 11px;
+	}
+
+	.lv-topbar__link svg {
+		display: none;
 	}
 
 	.lv-topbar__link.is-active::after {
-		right: 18%;
+		right: 12%;
 		bottom: 0;
-		left: 18%;
+		left: 12%;
 	}
 
 	.lv-topbar__username,
