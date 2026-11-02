@@ -24,7 +24,7 @@ COPY --from=web-build /src/crates/server/web/build ./crates/server/web/build
 RUN cargo build --release --locked --package learnvault-server
 
 FROM alpine:3.24
-RUN apk add --no-cache ca-certificates wget \
+RUN apk add --no-cache ca-certificates wget ffmpeg \
     && addgroup -S -g 10001 learnvault \
     && adduser -S -D -H -u 10001 -G learnvault learnvault
 WORKDIR /app

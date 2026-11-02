@@ -35,6 +35,8 @@ fn main() {
             "desktop_reset_course_order",
             "desktop_check_update",
             "desktop_install_update",
+            "desktop_media_capabilities",
+            "desktop_open_in_system_player",
         ]));
     tauri_build::try_build(attributes).expect("falha ao executar o tauri-build do LearnVault");
 }

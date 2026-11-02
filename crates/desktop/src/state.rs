@@ -488,6 +488,16 @@ impl DesktopState {
         Ok(outcome.into())
     }
 
+    /// Abre a mídia especificada no reprodutor padrão do sistema operacional.
+    pub fn open_in_system_player(&self, media_id: &str) -> Result<bool, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        let courses = self.courses();
+        crate::command::open_in_system_player(&database, &courses, media_id)
+    }
+
     /// Reserva o estado de rescan, devolvendo um guarda que o libera no `Drop`.
     ///
     /// A troca é atômica: a primeira chamada vence e as concorrentes recebem
