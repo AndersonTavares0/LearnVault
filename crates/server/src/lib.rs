@@ -18,6 +18,7 @@ mod spa;
 mod state;
 mod stream;
 mod study;
+mod transcode;
 mod update;
 
 pub use auth::{
@@ -90,6 +91,14 @@ pub fn build_router(state: AppState) -> Router {
             axum::routing::delete(media::remove_media),
         )
         .route("/api/media", get(media::media).head(media::media))
+        .route(
+            "/api/media/capabilities",
+            get(transcode::media_capabilities),
+        )
+        .route(
+            "/api/media/transcode",
+            get(transcode::media_transcode).head(transcode::media_transcode),
+        )
         .route("/api/study/recent", get(study::recent))
         .route("/api/study/summary", get(study::summary))
         .route("/api/study/progress", get(study::progress))
@@ -1230,6 +1239,61 @@ mod tests {
         assert_eq!(catalog_resp.status(), StatusCode::OK);
 
         drop(media_resp);
+    }
+
+    #[tokio::test]
+    async fn media_capabilities_and_transcode_endpoints_require_authentication() {
+        let (app, _temp, _state) = media_app().await;
+
+        let unauth_caps = app
+            .clone()
+            .oneshot(
+                Request::get("/api/media/capabilities")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(unauth_caps.status(), StatusCode::UNAUTHORIZED);
+
+        let unauth_transcode = app
+            .clone()
+            .oneshot(
+                Request::get("/api/media/transcode?course=library-1&path=lesson.mp4")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(unauth_transcode.status(), StatusCode::UNAUTHORIZED);
+
+        let cookie = media_cookie(&app).await;
+        let caps = app
+            .clone()
+            .oneshot(
+                Request::get("/api/media/capabilities")
+                    .header("cookie", &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(caps.status(), StatusCode::OK);
+        assert_eq!(caps.headers()["content-type"], "application/json");
+
+        let head_transcode = app
+            .clone()
+            .oneshot(
+                Request::head("/api/media/transcode?course=library-1&path=lesson.mp4")
+                    .header("cookie", &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(head_transcode.status(), StatusCode::OK);
+        assert_eq!(head_transcode.headers()["content-type"], "video/mp4");
+        assert_eq!(head_transcode.headers()["accept-ranges"], "none");
     }
 
     fn png_cover() -> Vec<u8> {

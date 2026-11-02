@@ -526,3 +526,77 @@ pub async fn desktop_install_update(app: tauri::AppHandle) -> Result<bool, IpcEr
 
     app.restart();
 }
+
+/// Consulta capacidades nativas de reprodução no ambiente desktop.
+#[tauri::command]
+pub async fn desktop_media_capabilities()
+-> Result<crate::dto::DesktopMediaCapabilitiesDto, IpcError> {
+    Ok(crate::dto::DesktopMediaCapabilitiesDto {
+        transcoding: false,
+        system_player: true,
+    })
+}
+
+/// Abre o arquivo físico da mídia no player padrão do sistema operacional de forma desacoplada e somente-leitura.
+pub fn open_in_system_player(
+    database: &Database,
+    courses: &[CourseEntry],
+    media_id: &str,
+) -> Result<bool, IpcError> {
+    let Some(library_id) = learnvault_core::find_media_library_id(database, media_id)
+        .map_err(|_| IpcError::study_unavailable())?
+    else {
+        return Err(IpcError::media_not_found());
+    };
+    let Some(course) = courses.iter().find(|c| c.id == library_id) else {
+        return Err(IpcError::media_not_found());
+    };
+    let opened =
+        learnvault_core::open_media(database, &library_id, media_id, course.root.as_path())
+            .map_err(|_| IpcError::media_not_found())?;
+
+    if opened.kind != learnvault_core::MediaKind::Media {
+        return Err(IpcError::media_not_found());
+    }
+
+    let canonical_root = course
+        .root
+        .as_path()
+        .canonicalize()
+        .map_err(|_| IpcError::media_not_found())?;
+
+    let relative_path: String = database
+        .connection()
+        .query_row(
+            "SELECT relative_path FROM media WHERE media_id = ?1",
+            [media_id],
+            |row| row.get(0),
+        )
+        .map_err(|_| IpcError::media_not_found())?;
+
+    let full_path = learnvault_core::paths::resolve_within(&canonical_root, &relative_path)
+        .map_err(|_| IpcError::media_not_found())?;
+
+    #[cfg(target_os = "windows")]
+    let spawned = std::process::Command::new("rundll32.exe")
+        .args(["url.dll,FileProtocolHandler"])
+        .arg(&full_path)
+        .spawn();
+    #[cfg(target_os = "macos")]
+    let spawned = std::process::Command::new("open").arg(&full_path).spawn();
+    #[cfg(target_os = "linux")]
+    let spawned = std::process::Command::new("xdg-open")
+        .arg(&full_path)
+        .spawn();
+
+    Ok(spawned.map(|_| true).unwrap_or(false))
+}
+
+/// Comando IPC para abrir a mídia no player padrão do sistema operacional.
+#[tauri::command]
+pub async fn desktop_open_in_system_player(
+    state: State<'_, DesktopState>,
+    media_id: String,
+) -> Result<bool, IpcError> {
+    state.open_in_system_player(&media_id)
+}

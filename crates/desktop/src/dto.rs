@@ -539,3 +539,13 @@ pub struct DesktopUpdateInfoDto {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub body: Option<String>,
 }
+
+/// DTO com as capacidades de mídia e reprodução no ambiente desktop.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopMediaCapabilitiesDto {
+    /// Se há suporte a transcodificação local (ex.: FFmpeg detectado).
+    pub transcoding: bool,
+    /// Se há suporte a abertura no reprodutor padrão do sistema operacional.
+    pub system_player: bool,
+}

@@ -264,11 +264,21 @@ fn playable_media_type(extension: &str) -> Option<&'static str> {
         "mov" => "video/quicktime",
         "webm" => "video/webm",
         "ogv" => "video/ogg",
+        "mkv" => "video/x-matroska",
+        "avi" => "video/x-msvideo",
+        "wmv" => "video/x-ms-wmv",
+        "flv" => "video/x-flv",
+        "ts" => "video/mp2t",
+        "m3u8" => "application/vnd.apple.mpegurl",
         "mp3" => "audio/mpeg",
         "m4a" => "audio/mp4",
         "ogg" | "oga" => "audio/ogg",
         "wav" => "audio/wav",
         "flac" => "audio/flac",
+        "aac" => "audio/aac",
+        "opus" => "audio/opus",
+        "weba" => "audio/webm",
+        "wma" => "audio/x-ms-wma",
         "vtt" => "text/vtt",
         _ => return None,
     })
@@ -497,15 +507,26 @@ mod tests {
     #[test]
     fn non_playable_extensions_use_octet_stream_and_safe_attachment_basenames() {
         for path in [
-            "lesson.mkv",
-            "lesson.m3u8",
-            "lesson.ts",
             "subtitles.srt",
             "lesson.html",
             "lesson.svg",
+            "slides.pdf",
+            "archive.zip",
         ] {
             assert_eq!(content_type(path), "application/octet-stream", "{path}");
             assert!(content_disposition(path).is_some(), "{path}");
+        }
+
+        for (path, expected_type) in [
+            ("lesson.mkv", "video/x-matroska"),
+            ("lesson.avi", "video/x-msvideo"),
+            ("lesson.wmv", "video/x-ms-wmv"),
+            ("lesson.flv", "video/x-flv"),
+            ("lesson.ts", "video/mp2t"),
+            ("lesson.m3u8", "application/vnd.apple.mpegurl"),
+        ] {
+            assert_eq!(content_type(path), expected_type, "{path}");
+            assert!(content_disposition(path).is_none(), "{path}");
         }
 
         for (path, expected) in [

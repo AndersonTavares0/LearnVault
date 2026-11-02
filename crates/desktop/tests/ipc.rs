@@ -670,3 +670,40 @@ fn media_removal_impact_and_removal_flow_in_desktop() {
     assert!(progress.recorded);
     assert_eq!(progress.position_seconds, 25);
 }
+
+#[test]
+fn open_in_system_player_validates_media_id_and_rejects_unknown() {
+    let dir = tempfile::tempdir().unwrap();
+    let state = desktop(dir.path());
+
+    // Mídia desconhecida retorna erro de media_not_found
+    let err = state.open_in_system_player("unknown-media").unwrap_err();
+    assert_eq!(err.code, IpcErrorCode::MediaNotFound);
+
+    // Com curso importado e mídia real
+    let course_dir = make_course(dir.path());
+    let aula_dir = course_dir.join("Aula 1");
+    fs::create_dir_all(&aula_dir).unwrap();
+    fs::write(aula_dir.join("aula.mkv"), b"video content mkv").unwrap();
+    state.import_course(|| Some(course_dir.clone())).unwrap();
+    state.rescan().unwrap();
+    let cat = state.catalog().unwrap();
+    let media_id = &cat.categories[0].children[0].children[0].files[0].media_id;
+
+    let res = state.open_in_system_player(media_id);
+    assert!(res.is_ok());
+    assert_eq!(res.unwrap(), true);
+
+    // Arquivos que não são de mídia de áudio/vídeo (materiais) são categoricamente rejeitados
+    fs::write(aula_dir.join("material.pdf"), b"pdf content").unwrap();
+    state.rescan().unwrap();
+    let cat2 = state.catalog().unwrap();
+    let material = cat2.categories[0].children[0]
+        .loose_files
+        .iter()
+        .chain(cat2.categories[0].children[0].children[0].files.iter())
+        .find(|f| f.kind == "material")
+        .expect("material file should be in catalog");
+    let mat_err = state.open_in_system_player(&material.media_id).unwrap_err();
+    assert_eq!(mat_err.code, IpcErrorCode::MediaNotFound);
+}

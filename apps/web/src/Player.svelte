@@ -10,6 +10,7 @@
 		nextSpeed,
 		PLAYBACK_SPEEDS,
 		playerShortcutAction,
+		requiresTranscodingProbe,
 		selectPlayableMedia,
 		selectPlayableSubtitle,
 		shouldAutoAdvance,
@@ -21,7 +22,7 @@
 	} from './player';
 	import { createPositionSaver } from './study';
 	import { createDefaultPlayerPreferences, lessonPreferenceKey, updateLessonPreference, type PlayerPreferences } from './player-preferences';
-	import { transport, type Lesson, type StudyNote, type StudyProgress } from './transport';
+	import { transport, type Lesson, type MediaCapabilities, type StudyNote, type StudyProgress } from './transport';
 
 	let {
 		lesson,
@@ -67,13 +68,28 @@
 	const availability = $derived(mediaAvailability(lesson.media));
 	const mediaId = $derived(playable?.mediaId ?? null);
 	const source = $derived(playable ? transport.mediaUrl(playable, courseId) : null);
+	const formatLikelyRequiresTranscode = $derived(requiresTranscodingProbe(playable?.name ?? ''));
+	let capabilities = $state<MediaCapabilities>({ transcoding: false, systemPlayer: false });
+	let isTranscoding = $state(false);
+	let transcodeReencode = $state(false);
+	let seekStartSeconds = $state(0);
+	let systemPlayerMessage = $state<string | null>(null);
+
+	const activeSource = $derived.by(() => {
+		if (!playable) return null;
+		if (isTranscoding) {
+			return transport.transcodeUrl(playable, courseId, seekStartSeconds, transcodeReencode) ?? source;
+		}
+		return source;
+	});
 	const playbackKind = $derived(playable ? mediaPlaybackKind(playable) : 'video');
 	const playbackSpeed = $derived(playbackKind === 'audio' ? preferences.audioSpeed : preferences.videoSpeed);
 	const syncEnabled = $derived(studySyncEnabled(studyEnabled, mediaId, source));
 
 	let media: HTMLMediaElement | null = $state(null);
 	let playerContainerRef: HTMLElement | null = $state(null);
-	let currentTime = $state(0);
+	let rawMediaCurrentTime = $state(0);
+	const currentTime = $derived(isTranscoding ? (rawMediaCurrentTime + seekStartSeconds) : rawMediaCurrentTime);
 	let duration = $state(0);
 	let lastAppliedPosition = $state<number | null>(null);
 
@@ -141,9 +157,20 @@
 	});
 
 	$effect(() => {
+		let active = true;
+		transport.mediaCapabilities().then((caps) => {
+			if (active) capabilities = caps;
+		}).catch(() => undefined);
+		return () => { active = false; };
+	});
+
+	$effect(() => {
 		if (source) {
 			lastAppliedPosition = null;
 			playbackErrorCode = null;
+			isTranscoding = false;
+			transcodeReencode = false;
+			seekStartSeconds = 0;
 			cancelAutoNext();
 		}
 	});
@@ -225,10 +252,46 @@
 		}
 	}
 
+	function enableTranscoding(forceReencode = false) {
+		if (!playable) return;
+		transcodeReencode = forceReencode;
+		seekStartSeconds = currentTime > 0 ? currentTime : (progress?.positionSeconds ?? 0);
+		isTranscoding = true;
+		playbackErrorCode = null;
+		onMediaError(undefined);
+	}
+
+	function disableTranscoding() {
+		isTranscoding = false;
+		transcodeReencode = false;
+		seekStartSeconds = 0;
+	}
+
+	async function openExternalPlayer() {
+		if (!playable || !transport.openInSystemPlayer) return;
+		try {
+			const ok = await transport.openInSystemPlayer(playable);
+			if (ok) {
+				systemPlayerMessage = 'Mídia aberta no reprodutor padrão do seu sistema operacional.';
+				setTimeout(() => { systemPlayerMessage = null; }, 6000);
+			}
+		} catch {
+			systemPlayerMessage = 'Não foi possível acionar o reprodutor do sistema.';
+			setTimeout(() => { systemPlayerMessage = null; }, 6000);
+		}
+	}
+
 	function seekOffset(seconds: number) {
 		if (!media) return;
-		const target = media.currentTime + seconds;
-		media.currentTime = Math.max(0, Math.min(media.duration || Number.POSITIVE_INFINITY, target));
+		const baseTime = currentTime;
+		const target = Math.max(0, Math.min(duration || Number.POSITIVE_INFINITY, baseTime + seconds));
+		if (isTranscoding) {
+			seekStartSeconds = target;
+			rawMediaCurrentTime = 0;
+			if (media) media.currentTime = 0;
+		} else {
+			media.currentTime = target;
+		}
 	}
 
 	function toggleFullscreen() {
@@ -353,7 +416,14 @@
 	});
 
 	function resume() {
-		if (!media || !progress?.recorded) return;
+		if (!progress?.recorded) return;
+		if (isTranscoding) {
+			seekStartSeconds = progress.positionSeconds;
+			rawMediaCurrentTime = 0;
+			if (media) media.currentTime = 0;
+			return;
+		}
+		if (!media) return;
 		media.currentTime = progress.positionSeconds;
 		void media.play().catch(() => undefined);
 	}
@@ -375,7 +445,7 @@
 		if (!syncEnabled || !mediaId || !media || saving || saver.saving) return;
 		const now = performance.now();
 		if (now - lastSavedAt < 5000) return;
-		const position = Math.floor(media.currentTime);
+		const position = Math.floor(currentTime);
 		if (position <= 0) return;
 		lastSavedAt = now;
 		const result = await saver.request(mediaId, position);
@@ -403,6 +473,7 @@
 	}
 
 	function handleLoadedMetadata() {
+		if (isTranscoding) return;
 		if (initialPosition && initialPosition > 0 && media) {
 			media.currentTime = initialPosition;
 			lastAppliedPosition = initialPosition;
@@ -416,20 +487,70 @@
 	<div class="lv-player-error" role="alert">
 		<strong>{mediaError}</strong>
 		{#if playbackErrorCode === 4}
-			<p>O arquivo foi localizado, mas o formato ou codec desta mídia não é suportado pelo seu navegador/webview atual (ex.: HEVC/H.265, AC3 ou contêiner específico). É possível assistir com um reprodutor externo ou convertê-lo para MP4 (H.264 / AAC).</p>
+			<p>O arquivo foi localizado, mas o formato ou codec desta mídia não é suportado pelo seu navegador/webview atual (ex.: HEVC/H.265, AC3 ou contêiner específico).</p>
+			{#if formatLikelyRequiresTranscode}
+				<p style="font-size: 0.875rem; opacity: 0.85;">Este contêiner ({playable?.name.split('.').pop()?.toUpperCase() ?? 'específico'}) geralmente exige transcodificação sob demanda no servidor ou reprodução via reprodutor do sistema.</p>
+			{/if}
 		{:else if playbackErrorCode === 3}
 			<p>A decodificação do áudio/vídeo falhou. O arquivo pode estar corrompido ou o codec não é suportado pelo hardware.</p>
 		{:else}
 			<p>O arquivo local pode ter sido movido ou o disco pode estar desconectado. Reconecte a pasta e use “Atualizar cursos” na biblioteca; seu progresso permanece salvo.</p>
 		{/if}
-		<a class="lv-btn lvui-btn" href="#/home">Ir à biblioteca para atualizar cursos</a>
+
+		{#if capabilities.transcoding}
+			<div class="player-error-action-row" style="margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+				<button type="button" class="lv-btn lvui-btn-primary" onclick={() => enableTranscoding(false)}>
+					⚡ Reproduzir com transcodificação sob demanda
+				</button>
+				<button type="button" class="lv-btn lvui-btn" onclick={() => enableTranscoding(true)}>
+					Recodificar vídeo (H.264 compatível)
+				</button>
+			</div>
+		{/if}
+		{#if capabilities.systemPlayer}
+			<div class="player-error-action-row" style="margin-top: 0.5rem;">
+				<button type="button" class="lv-btn lvui-btn-secondary" onclick={openExternalPlayer}>
+					Abrir no reprodutor padrão do sistema
+				</button>
+			</div>
+		{/if}
+
+		<div style="margin-top: 1rem;">
+			<a class="lv-btn lvui-btn" href="#/home">Ir à biblioteca para atualizar cursos</a>
+		</div>
 	</div>{@render lessonHeading()}
-{:else if source}
+{:else if activeSource}
+	{#if systemPlayerMessage}
+		<div class="player-toast-notification" role="status" style="position: absolute; top: 1rem; right: 1rem; background: var(--bg-surface, #222); color: #fff; padding: 0.5rem 1rem; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 100;">
+			<span>{systemPlayerMessage}</span>
+		</div>
+	{/if}
 	<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions (o grupo identificado do player recebe foco para ativar atalhos) -->
 	<div bind:this={playerContainerRef} class="player-container {playbackKind === 'audio' ? 'audio-container' : 'video-container'}" role="group" tabindex="0" onkeydown={handleKeydown} aria-label="Player" aria-keyshortcuts="Space ArrowLeft ArrowRight k j l [ ] f p">
 		<div class="player-top-controls">
 			{#if availableMedia.length > 1}<label class="player-select-label">Mídia da aula<select aria-label="Mídia da aula" value={playable?.mediaId ?? ''} onchange={selectMedia}>{#each availableMedia as item}<option value={item.mediaId ?? ''}>{item.name}</option>{/each}</select></label>{/if}
 			{#if availableSubtitles.length > 0}<label class="player-select-label">Legenda<select aria-label="Legenda da aula" value={lessonPreference.subtitleId === null ? '' : selectedSubtitle?.mediaId ?? ''} onchange={selectSubtitle}><option value="">Sem legendas</option>{#each availableSubtitles as item}<option value={item.mediaId ?? ''}>{item.name}</option>{/each}</select></label>{/if}
+			{#if capabilities.transcoding}
+				<button
+					type="button"
+					class="player-tool-btn"
+					style={isTranscoding ? 'background: var(--accent, #6366f1); color: #fff;' : ''}
+					onclick={() => isTranscoding ? disableTranscoding() : enableTranscoding(false)}
+					title={isTranscoding ? 'Transcodificação sob demanda ativa. Clique para voltar à reprodução direta.' : 'Ativar transcodificação sob demanda via FFmpeg'}
+				>
+					<span>{isTranscoding ? '⚡ Transcodificado' : 'Direto'}</span>
+				</button>
+			{/if}
+			{#if capabilities.systemPlayer}
+				<button
+					type="button"
+					class="player-tool-btn"
+					onclick={openExternalPlayer}
+					title="Abrir no reprodutor de mídia padrão do seu sistema operacional"
+				>
+					<span>Player do sistema</span>
+				</button>
+			{/if}
 		</div>
 		{#if playbackKind === 'audio'}
 			<div class="audio-banner" aria-hidden="true">
@@ -441,12 +562,12 @@
 				<span class="audio-label">Faixa de áudio · {lesson.title}</span>
 			</div>
 			<!-- svelte-ignore a11y_media_has_caption -->
-			<audio class="player-media player-audio" controls preload="metadata" src={source} aria-label={`Player da aula${lessonTitle ? `: ${lessonTitle}` : ''}`} bind:this={media} bind:currentTime={currentTime} bind:duration={duration} onplay={cancelAutoNext} ontimeupdate={handleTimeUpdate} onended={handleEnded} onloadedmetadata={handleLoadedMetadata} onerror={handleMediaError}>
+			<audio class="player-media player-audio" controls preload="metadata" src={activeSource} aria-label={`Player da aula${lessonTitle ? `: ${lessonTitle}` : ''}`} bind:this={media} bind:currentTime={rawMediaCurrentTime} bind:duration={duration} onplay={cancelAutoNext} ontimeupdate={handleTimeUpdate} onended={handleEnded} onloadedmetadata={handleLoadedMetadata} onerror={handleMediaError}>
 				{#if captionSource}<track kind="captions" src={captionSource} label="Legenda" default />{/if}
 			</audio>
 		{:else}
 			<!-- svelte-ignore a11y_media_has_caption -->
-			<video class="player-media" controls preload="metadata" src={source} aria-label={`Player da aula${lessonTitle ? `: ${lessonTitle}` : ''}`} bind:this={media} bind:currentTime={currentTime} bind:duration={duration} onplay={cancelAutoNext} ontimeupdate={handleTimeUpdate} onended={handleEnded} onloadedmetadata={handleLoadedMetadata} onerror={handleMediaError}>
+			<video class="player-media" controls preload="metadata" src={activeSource} aria-label={`Player da aula${lessonTitle ? `: ${lessonTitle}` : ''}`} bind:this={media} bind:currentTime={rawMediaCurrentTime} bind:duration={duration} onplay={cancelAutoNext} ontimeupdate={handleTimeUpdate} onended={handleEnded} onloadedmetadata={handleLoadedMetadata} onerror={handleMediaError}>
 				{#if captionSource}<track kind="captions" src={captionSource} label="Legenda" default />{/if}
 			</video>
 		{/if}
@@ -457,7 +578,11 @@
 				<div class="timeline-track" onclick={(e) => {
 					const rect = e.currentTarget.getBoundingClientRect();
 					const fraction = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-					if (media) {
+					if (isTranscoding) {
+						seekStartSeconds = fraction * duration;
+						rawMediaCurrentTime = 0;
+						if (media) media.currentTime = 0;
+					} else if (media) {
 						cancelAutoNext();
 						media.currentTime = fraction * duration;
 					}
@@ -473,7 +598,11 @@
 							aria-label="Ir para anotação em {formatDuration(note.positionSeconds)}: {note.content}"
 							onclick={(e) => {
 								e.stopPropagation();
-								if (media) {
+								if (isTranscoding) {
+									seekStartSeconds = note.positionSeconds;
+									rawMediaCurrentTime = 0;
+									if (media) media.currentTime = 0;
+								} else if (media) {
 									cancelAutoNext();
 									media.currentTime = note.positionSeconds;
 									void media.play().catch(() => undefined);
@@ -660,7 +789,11 @@
 					{mediaId}
 					{currentTime}
 					onSeek={(targetSeconds) => {
-						if (media) {
+						if (isTranscoding) {
+							seekStartSeconds = targetSeconds;
+							rawMediaCurrentTime = 0;
+							if (media) media.currentTime = 0;
+						} else if (media) {
 							cancelAutoNext();
 							media.currentTime = targetSeconds;
 							void media.play().catch(() => undefined);

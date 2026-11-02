@@ -116,6 +116,15 @@ export function selectPlayableSubtitle(subtitles: FileEntry[], preferredSubtitle
 
 export type MediaPlaybackKind = 'video' | 'audio';
 
+/**
+ * Identifica formatos que comumente necessitam de compatibilidade ou transcodificação
+ * sob demanda quando o navegador não dispõe de decodificadores nativos.
+ */
+export function requiresTranscodingProbe(fileName: string): boolean {
+	const ext = fileName.split(/[?#]/, 1)[0].split('.').pop()?.toLowerCase() ?? '';
+	return ['mkv', 'avi', 'wmv', 'flv', 'ts'].includes(ext);
+}
+
 export function mediaPlaybackKind(file: FileEntry): MediaPlaybackKind {
 	const extension = file.name.split(/[?#]/, 1)[0].split('.').pop()?.toLowerCase();
 	return extension && ['aac', 'flac', 'm4a', 'mp3', 'oga', 'ogg', 'opus', 'wav', 'weba', 'wma'].includes(extension) ? 'audio' : 'video';

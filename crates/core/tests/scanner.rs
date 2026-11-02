@@ -127,8 +127,8 @@ fn known_media_and_subtitle_extensions_are_classified() {
     let directory = tempfile::tempdir().unwrap();
     let root = directory.path();
     let media = [
-        "mp4", "m4v", "mov", "webm", "mkv", "m3u8", "ogv", "mp3", "wav", "ogg", "oga", "m4a",
-        "flac", "aac", "opus", "weba", "wma",
+        "mp4", "m4v", "mov", "webm", "mkv", "m3u8", "ogv", "avi", "wmv", "flv", "mp3", "wav",
+        "ogg", "oga", "m4a", "flac", "aac", "opus", "weba", "wma",
     ];
     let subtitles = ["srt", "vtt", "ass", "ssa", "sub"];
 

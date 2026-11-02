@@ -78,6 +78,12 @@ export type Flashcard = {
 export type ReviewRating = 'again' | 'good';
 export const STUDY_NOT_AVAILABLE = 'study_not_available';
 
+export type MediaCapabilities = {
+	transcoding: boolean;
+	systemPlayer?: boolean;
+	supportedCodecs?: string[];
+};
+
 // Protocolo customizado do desktop para mídia local. O webview aponta somente pelo
 // `mediaId` autorizado; nenhum caminho cruza a fronteira do webview.
 export const DESKTOP_MEDIA_SCHEME = 'learnvault-media';
@@ -152,7 +158,10 @@ export interface Transport {
 	checkUpdate(force?: boolean): Promise<UpdateStatus>;
 	installUpdate?(): Promise<boolean>;
 	updateHistory(): Promise<UpdateHistoryEntry[]>;
+	mediaCapabilities(): Promise<MediaCapabilities>;
 	mediaUrl(file: FileEntry, courseId?: string): string | null;
+	transcodeUrl(file: FileEntry, courseId?: string, startSeconds?: number, reencode?: boolean): string | null;
+	openInSystemPlayer?(file: FileEntry): Promise<boolean>;
 	// URL da capa personalizada, derivada da versão exposta pelo catálogo. Sem versão (sem
 	// capa) devolve `null`, e a interface cai na miniatura ou na capa gerada.
 	coverUrl(courseId: string, coverVersion?: number | null): string | null;
@@ -784,7 +793,34 @@ export class HttpTransport implements Transport {
 			message: typeof item?.message === 'string' ? item.message : ''
 		}));
 	}
+	async mediaCapabilities(): Promise<MediaCapabilities> {
+		try {
+			const response = await fetch('/api/media/capabilities');
+			if (!response.ok) return { transcoding: false };
+			const data = await response.json();
+			return {
+				transcoding: Boolean(data?.transcoding),
+				supportedCodecs: Array.isArray(data?.supported_codecs) ? data.supported_codecs : []
+			};
+		} catch {
+			return { transcoding: false };
+		}
+	}
 	mediaUrl(file: FileEntry, courseId?: string) { return `/api/media?course=${encodeURIComponent(courseId ?? '')}&path=${encodeURIComponent(file.path)}`; }
+	transcodeUrl(file: FileEntry, courseId?: string, startSeconds: number = 0, reencode: boolean = false) {
+		const params = new URLSearchParams({
+			course: courseId ?? '',
+			path: file.path,
+			start: String(Math.max(0, startSeconds))
+		});
+		if (reencode) {
+			params.set('reencode', 'true');
+		}
+		return `/api/media/transcode?${params.toString()}`;
+	}
+	openInSystemPlayer(_file: FileEntry): Promise<boolean> {
+		return Promise.resolve(false);
+	}
 	// A versão (mtime em segundos) exposta pelo catálogo entra como `?v=` para invalidar a
 	// imagem em cache do navegador quando a capa é trocada. Sem capa, não há URL manual.
 	coverUrl(courseId: string, coverVersion?: number | null) {
@@ -952,11 +988,33 @@ export class DesktopStub implements Transport {
 		}
 	}
 	updateHistory(): Promise<UpdateHistoryEntry[]> { return Promise.resolve([]); }
+	async mediaCapabilities(): Promise<MediaCapabilities> {
+		try {
+			const res = await invoke<{ transcoding?: boolean; systemPlayer?: boolean }>('desktop_media_capabilities');
+			return {
+				transcoding: Boolean(res?.transcoding),
+				systemPlayer: Boolean(res?.systemPlayer ?? true)
+			};
+		} catch {
+			return { transcoding: false, systemPlayer: true };
+		}
+	}
 	// Toda mídia entregue ao player usa a identidade autorizada. O caminho catalogado é
 	// deliberadamente ignorado, inclusive no desktop, para que ele nunca atravesse o webview.
 	mediaUrl(file: FileEntry, _courseId?: string) {
 		if (!file.mediaId || !['media', 'subtitle', 'material'].includes(file.kind ?? '')) return null;
 		return desktopMediaUrl(file.mediaId, navigator.userAgent);
+	}
+	transcodeUrl(_file: FileEntry, _courseId?: string, _startSeconds: number = 0, _reencode: boolean = false) {
+		return null;
+	}
+	async openInSystemPlayer(file: FileEntry): Promise<boolean> {
+		if (!file.mediaId) return false;
+		try {
+			return await invoke<boolean>('desktop_open_in_system_player', { mediaId: file.mediaId });
+		} catch {
+			return false;
+		}
 	}
 	// A capa é endereçada pela identidade opaca do curso no protocolo `learnvault-cover://`,
 	// com a mesma inversão de prefixo por plataforma da mídia.

@@ -55,12 +55,13 @@ pub mod study;
 pub use command::{
     catalog, catalog_with_orders, desktop_catalog, desktop_check_update,
     desktop_claim_daily_mission, desktop_focus_summary, desktop_import_course,
-    desktop_import_course_cover, desktop_install_update, desktop_media_removal_impact,
-    desktop_recent_study, desktop_record_focus_session, desktop_record_position,
-    desktop_remove_course, desktop_remove_course_cover, desktop_remove_media, desktop_rescan,
-    desktop_reset_course_order, desktop_reward_summary, desktop_set_completed,
-    desktop_set_course_order, desktop_set_weekly_goal, desktop_study_progress,
-    desktop_study_summary, desktop_weekly_goal,
+    desktop_import_course_cover, desktop_install_update, desktop_media_capabilities,
+    desktop_media_removal_impact, desktop_open_in_system_player, desktop_recent_study,
+    desktop_record_focus_session, desktop_record_position, desktop_remove_course,
+    desktop_remove_course_cover, desktop_remove_media, desktop_rescan, desktop_reset_course_order,
+    desktop_reward_summary, desktop_set_completed, desktop_set_course_order,
+    desktop_set_weekly_goal, desktop_study_progress, desktop_study_summary, desktop_weekly_goal,
+    open_in_system_player,
 };
 pub use config::{DATABASE_FILE_NAME, DesktopConfigDto, database_path};
 pub use courses::{
@@ -73,9 +74,9 @@ pub use covers::{
 };
 pub use dto::{
     CatalogDto, CatalogFileDto, CatalogNodeDto, CoverDto, CoverRemovalDto, DailyMissionDto,
-    DesktopUpdateInfoDto, FocusDayDto, FocusSessionDto, FocusSummaryDto, MediaRemovalImpactDto,
-    MediaRemovalOutcomeDto, RecentStudyDto, RescanSummaryDto, RewardSummaryDto, StudyProgressDto,
-    StudySummaryDto,
+    DesktopMediaCapabilitiesDto, DesktopUpdateInfoDto, FocusDayDto, FocusSessionDto,
+    FocusSummaryDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto, RecentStudyDto,
+    RescanSummaryDto, RewardSummaryDto, StudyProgressDto, StudySummaryDto,
 };
 pub use error::{IpcError, IpcErrorCode};
 pub use ordering::{CourseOrders, OrderError, order_path};
@@ -128,7 +129,9 @@ pub fn run() {
             command::desktop_set_course_order,
             command::desktop_reset_course_order,
             command::desktop_check_update,
-            command::desktop_install_update
+            command::desktop_install_update,
+            command::desktop_media_capabilities,
+            command::desktop_open_in_system_player
         ])
         .run(tauri::generate_context!())
         .expect("falha ao executar o aplicativo desktop do LearnVault");

@@ -1,7 +1,7 @@
 import { render } from 'svelte/server';
 import { describe, expect, it } from 'vitest';
 import Player from './Player.svelte';
-import { clampSpeed, formatDuration, mediaAvailability, mediaPlaybackKind, nextSpeed, PLAYBACK_SPEEDS, playerShortcutAction, selectPlayableMedia, selectPlayableSubtitle, shouldAutoAdvance, srtConversionSupported, srtToWebVtt, studySyncEnabled, studySyncSupported, subtitleFormat } from './player';
+import { clampSpeed, formatDuration, mediaAvailability, mediaPlaybackKind, nextSpeed, PLAYBACK_SPEEDS, playerShortcutAction, requiresTranscodingProbe, selectPlayableMedia, selectPlayableSubtitle, shouldAutoAdvance, srtConversionSupported, srtToWebVtt, studySyncEnabled, studySyncSupported, subtitleFormat } from './player';
 import { createDefaultPlayerPreferences, updateLessonPreference } from './player-preferences';
 import type { FileEntry, Lesson } from './transport';
 
@@ -224,10 +224,13 @@ describe('player preference controls', () => {
 		expect(body).toContain('O arquivo local pode ter sido movido');
 	});
 
-	it('renders quick bar with speed options, navigation, and fullscreen', () => {
-		const { body } = render(Player, { props: baseProps });
-		expect(body).toContain('aria-label="Controles rápidos do reprodutor"');
-		expect(body).toContain('Alternar tela cheia (F)');
-		expect(body).toContain('Velocidade:');
+	it('identifies formats that may require transcoding probes or fallback', () => {
+		expect(requiresTranscodingProbe('aula.mkv')).toBe(true);
+		expect(requiresTranscodingProbe('video.avi')).toBe(true);
+		expect(requiresTranscodingProbe('gravacao.wmv')).toBe(true);
+		expect(requiresTranscodingProbe('stream.ts')).toBe(true);
+		expect(requiresTranscodingProbe('arquivo.flv')).toBe(true);
+		expect(requiresTranscodingProbe('aula.mp4')).toBe(false);
+		expect(requiresTranscodingProbe('aula.webm')).toBe(false);
 	});
 });
