@@ -311,9 +311,11 @@ fn capability_grants_only_the_core_default_and_the_app_commands() {
     assert!(permissions.contains(&"allow-desktop-reset-course-order"));
     assert!(permissions.contains(&"allow-desktop-check-update"));
     assert!(permissions.contains(&"allow-desktop-install-update"));
+    assert!(permissions.contains(&"allow-desktop-media-capabilities"));
+    assert!(permissions.contains(&"allow-desktop-open-in-system-player"));
     assert_eq!(
         permissions.len(),
-        26,
+        28,
         "a capability não pode ampliar além do núcleo, dos controles da titlebar e dos comandos do app: {permissions:?}"
     );
 }

@@ -9,8 +9,8 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 
 describe('transport contract', () => {
 	it('exposes the HTTP transport seam without routing assumptions', () => {
-		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'studySummary', 'listNotes', 'createNote', 'updateNote', 'deleteNote', 'recordFocusSession', 'listFocusSessions', 'focusSummary', 'rewardSummary', 'claimDailyMission', 'setWeeklyGoal', 'userAvatarUrl', 'uploadUserAvatar', 'deleteUserAvatar', 'checkUpdate', 'installUpdate', 'updateHistory', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover'];
-		expect(methods).toHaveLength(34);
+		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'studySummary', 'listNotes', 'createNote', 'updateNote', 'deleteNote', 'recordFocusSession', 'listFocusSessions', 'focusSummary', 'rewardSummary', 'claimDailyMission', 'setWeeklyGoal', 'userAvatarUrl', 'uploadUserAvatar', 'deleteUserAvatar', 'checkUpdate', 'installUpdate', 'updateHistory', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover', 'mediaCapabilities', 'transcodeUrl', 'openInSystemPlayer'];
+		expect(methods).toHaveLength(37);
 	});
 	it('does not offer native folder selection over HTTP', async () => {
 		await expect(new HttpTransport().importCourse()).rejects.toThrow('desktop é quem escolhe pastas');
@@ -50,6 +50,11 @@ describe('transport contract', () => {
 		const transport = new HttpTransport();
 		expect(transport.mediaUrl({ name: 'aula.mp4', path: 'módulo/aula.mp4', size: 1, kind: 'media', mediaId: 'm1' }, 'course-1')).toBe('/api/media?course=course-1&path=m%C3%B3dulo%2Faula.mp4');
 		expect(transport.mediaUrl({ name: 'aula.vtt', path: 'legendas/aula.vtt', size: 1, kind: 'subtitle', mediaId: 's1' }, 'course one')).toBe('/api/media?course=course%20one&path=legendas%2Faula.vtt');
+	});
+	it('builds on-demand transcoding URLs with seek start and reencode options on HTTP', () => {
+		const transport = new HttpTransport();
+		expect(transport.transcodeUrl({ name: 'aula.mkv', path: 'video/aula.mkv', size: 1, kind: 'media' }, 'c1', 12.5)).toBe('/api/media/transcode?course=c1&path=video%2Faula.mkv&start=12.5');
+		expect(transport.transcodeUrl({ name: 'aula.mkv', path: 'video/aula.mkv', size: 1, kind: 'media' }, 'c1', 0, true)).toBe('/api/media/transcode?course=c1&path=video%2Faula.mkv&start=0&reencode=true');
 	});
 	it('builds desktop media URLs from the authorized media id, never the raw path', () => {
 		const transport = new DesktopStub();
