@@ -816,7 +816,7 @@
 	.player-study-tabs {
 		background: transparent;
 		padding: 0;
-		border-bottom: 1px solid var(--line);
+		border-bottom: 0;
 	}
 
 	@media (max-width: 640px) {
