@@ -48,6 +48,7 @@
 		<span class="lv-course-card__body">
 			<span class="lv-course-card__title">{course.title}</span>
 			{#if meta}<span class="lv-course-card__meta">{meta}</span>{/if}
+			{#if course.sourceFolder}<span class="lv-course-source-badge" title="Pasta de origem: {course.sourceFolder}">{course.sourceFolder}</span>{/if}
 			{#if inProgress}<span class="lv-course-card__state"><span aria-hidden="true"></span>Em andamento</span>{/if}
 		</span>
 	</a>

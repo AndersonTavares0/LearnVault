@@ -23,8 +23,8 @@ use crate::covers::{
 };
 use crate::dto::{
     CatalogDto, CoverDto, CoverRemovalDto, FocusSessionDto, FocusSummaryDto, MediaRemovalImpactDto,
-    MediaRemovalOutcomeDto, RecentStudyDto, RescanSummaryDto, RewardSummaryDto, StudyProgressDto,
-    StudySummaryDto,
+    MediaRemovalOutcomeDto, RecentStudyDto, RescanSummaryDto, RewardSummaryDto, StudyNoteDto,
+    StudyProgressDto, StudySummaryDto,
 };
 use crate::error::IpcError;
 use crate::ordering::{CourseOrders, load_orders, store_orders};
@@ -387,6 +387,47 @@ impl DesktopState {
             .lock()
             .map_err(|_| IpcError::database_unavailable())?;
         study::summary(&database)
+    }
+
+    /// Lista anotações do dono local, filtrando por mídia ou trazendo todas com caminhos relativos.
+    pub fn list_notes(&self, media_id: Option<&str>) -> Result<Vec<StudyNoteDto>, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::list_notes(&database, media_id)
+    }
+
+    /// Cria uma nova anotação de estudo associada a uma mídia.
+    pub fn create_note(
+        &self,
+        media_id: &str,
+        position_seconds: i64,
+        content: &str,
+    ) -> Result<StudyNoteDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::create_note(&database, media_id, position_seconds, content)
+    }
+
+    /// Atualiza o conteúdo de uma anotação existente.
+    pub fn update_note(&self, note_id: &str, content: &str) -> Result<StudyNoteDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::update_note(&database, note_id, content)
+    }
+
+    /// Remove uma anotação de estudo do usuário local.
+    pub fn delete_note(&self, note_id: &str) -> Result<(), IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::delete_note(&database, note_id)
     }
 
     /// Persiste uma sessão Pomodoro do dono local.

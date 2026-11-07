@@ -122,6 +122,14 @@ pub fn course_title(root: &Path) -> String {
     }
 }
 
+/// Nome da pasta pai imediata de um curso no disco, sem expor caminhos completos.
+pub fn course_source_folder(root: &Path) -> Option<String> {
+    root.parent()
+        .and_then(|p| p.file_name())
+        .and_then(|s| s.to_str())
+        .map(str::to_owned)
+}
+
 /// Verdadeiro quando o metadado marca um ponto de reparse (junction ou symlink) no Windows.
 #[cfg(windows)]
 fn is_reparse_point(metadata: &std::fs::Metadata) -> bool {
