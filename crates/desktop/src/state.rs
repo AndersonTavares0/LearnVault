@@ -24,7 +24,7 @@ use crate::covers::{
 use crate::dto::{
     CatalogDto, CoverDto, CoverRemovalDto, FlashcardDto, FocusSessionDto, FocusSummaryDto,
     MediaRemovalImpactDto, MediaRemovalOutcomeDto, RecentStudyDto, RescanSummaryDto,
-    RewardSummaryDto, StudyNoteDto, StudyProgressDto, StudySummaryDto,
+    RewardSummaryDto, StudyFavoritesDto, StudyNoteDto, StudyProgressDto, StudySummaryDto,
 };
 use crate::error::IpcError;
 use crate::ordering::{CourseOrders, load_orders, store_orders};
@@ -483,6 +483,33 @@ impl DesktopState {
             .lock()
             .map_err(|_| IpcError::database_unavailable())?;
         study::review_flashcard(&database, card_id, rating)
+    }
+
+    /// Lista os cursos e aulas favoritados pelo dono local.
+    pub fn list_favorites(&self) -> Result<StudyFavoritesDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::list_favorites(&database)
+    }
+
+    /// Marca ou desmarca um curso como favorito para o dono local.
+    pub fn set_course_favorite(&self, course_id: &str, favorite: bool) -> Result<bool, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::set_course_favorite(&database, course_id, favorite)
+    }
+
+    /// Marca ou desmarca uma aula (mídia) como favorita para o dono local.
+    pub fn set_lesson_favorite(&self, media_id: &str, favorite: bool) -> Result<bool, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::set_lesson_favorite(&database, media_id, favorite)
     }
 
     /// Persiste uma sessão Pomodoro do dono local.

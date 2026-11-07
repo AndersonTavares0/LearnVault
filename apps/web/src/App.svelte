@@ -51,6 +51,9 @@
 	let catalogQuery = '';
 	let progressFilter: CourseProgressStatus = 'all';
 	let sourceFolderFilter = 'all';
+	let favoritesOnly = false;
+	let favoriteCourseIds: Set<string> = new Set();
+	let favoriteMediaIds: Set<string> = new Set();
 	let filteredNodes: CatalogNode[] = [];
 	let allNotesForSearch: StudyNote[] = [];
 	let notesLoaded = false;
@@ -67,7 +70,8 @@
 		all: catalog?.nodes.length ?? 0,
 		in_progress: (catalog?.nodes ?? []).filter((n) => courseStatusMap.get(courseIdOf(n)) === 'in_progress').length,
 		not_started: (catalog?.nodes ?? []).filter((n) => courseStatusMap.get(courseIdOf(n)) === 'not_started').length,
-		completed: (catalog?.nodes ?? []).filter((n) => courseStatusMap.get(courseIdOf(n)) === 'completed').length
+		completed: (catalog?.nodes ?? []).filter((n) => courseStatusMap.get(courseIdOf(n)) === 'completed').length,
+		favorites: (catalog?.nodes ?? []).filter((n) => favoriteCourseIds.has(courseIdOf(n))).length
 	};
 	$: availableSourceFolders = catalog
 		? Array.from(new Set(catalog.nodes.map((n) => n.sourceFolder).filter((f): f is string => Boolean(f)))).sort((a, b) => a.localeCompare(b))
@@ -76,6 +80,7 @@
 		sourceFolderFilter = 'all';
 	}
 	$: filteredNodes = (catalog ? filterCatalog(catalog.nodes, catalogQuery) : []).filter((node) => {
+		if (favoritesOnly && !favoriteCourseIds.has(courseIdOf(node))) return false;
 		if (progressFilter !== 'all' && courseStatusMap.get(courseIdOf(node)) !== progressFilter) return false;
 		if (sourceFolderFilter !== 'all' && node.sourceFolder !== sourceFolderFilter) return false;
 		return true;
@@ -104,6 +109,7 @@
 	$: requestedLessonPath = lessonPath !== null && findLesson(catalog, courseId, lessonPath) !== null ? lessonPath : null;
 	$: activePath = requestedLessonPath ?? (course ? defaultLessonPath([course], recentMediaIds) : null);
 	$: lesson = findLesson(catalog, courseId, activePath);
+	$: currentLessonMediaId = lesson?.media.find((f) => f.mediaId)?.mediaId ?? null;
 	$: activeContainer = course && activePath ? lessonContainer(course.children, activePath) : null;
 	$: locatedRecent = recent.flatMap((item) => {
 		const location = findLessonLocation(catalog, item.mediaId);
@@ -325,7 +331,7 @@
 			error = session.error;
 			if (user) {
 				catalog = await transport.catalog();
-				await loadRecent();
+				await Promise.all([loadRecent(), loadFavorites()]);
 				if (route === 'login') route = 'home';
 			}
 		} catch {
@@ -348,7 +354,7 @@
 			loadPlayerPreferences(user);
 			password = '';
 			catalog = await transport.catalog();
-			await loadRecent();
+			await Promise.all([loadRecent(), loadFavorites()]);
 			location.hash = destinationAfterLogin(destination);
 		} catch (cause) {
 			error = cause instanceof Error ? cause.message : 'Não foi possível entrar.';
@@ -382,6 +388,9 @@
 		playerPreferences = createDefaultPlayerPreferences();
 		catalog = null;
 		recent = [];
+		favoriteCourseIds = new Set();
+		favoriteMediaIds = new Set();
+		favoritesOnly = false;
 		allNotesForSearch = [];
 		notesLoaded = false;
 		username = '';
@@ -519,6 +528,53 @@
 		} catch {
 			allNotesForSearch = [];
 		}
+	}
+
+	async function loadFavorites() {
+		if (!studySyncSupported || typeof transport.listFavorites !== 'function') return;
+		try {
+			const favs = await transport.listFavorites();
+			favoriteCourseIds = new Set(favs.courseIds);
+			favoriteMediaIds = new Set(favs.mediaIds);
+		} catch {
+			favoriteCourseIds = new Set();
+			favoriteMediaIds = new Set();
+		}
+	}
+
+	async function handleToggleCourseFavorite(courseItem: CatalogNode) {
+		if (!studySyncSupported || typeof transport.setCourseFavorite !== 'function') return;
+		const id = courseIdOf(courseItem);
+		const nextFav = !favoriteCourseIds.has(id);
+		try {
+			const saved = await transport.setCourseFavorite(id, nextFav);
+			const nextSet = new Set(favoriteCourseIds);
+			if (saved) nextSet.add(id);
+			else nextSet.delete(id);
+			favoriteCourseIds = nextSet;
+		} catch {
+			// Ignora falha transitória
+		}
+	}
+
+	async function handleToggleLessonMediaFavorite(mediaId: string) {
+		if (!studySyncSupported || !mediaId || typeof transport.setLessonFavorite !== 'function') return;
+		const nextFav = !favoriteMediaIds.has(mediaId);
+		try {
+			const saved = await transport.setLessonFavorite(mediaId, nextFav);
+			const nextSet = new Set(favoriteMediaIds);
+			if (saved) nextSet.add(mediaId);
+			else nextSet.delete(mediaId);
+			favoriteMediaIds = nextSet;
+		} catch {
+			// Ignora falha transitória
+		}
+	}
+
+	async function handleToggleLessonFavorite(lessonNode: CatalogNode) {
+		const media = [...lessonNode.files, ...lessonNode.looseFiles].find((f) => f.kind === 'media' && f.mediaId);
+		if (!media?.mediaId) return;
+		await handleToggleLessonMediaFavorite(media.mediaId);
 	}
 
 	async function handleToggleLessonCompleted(lessonNode: CatalogNode) {
@@ -811,6 +867,11 @@
 							<button type="button" class="lv-filter-pill" class:is-active={progressFilter === 'completed'} aria-pressed={progressFilter === 'completed'} onclick={() => (progressFilter = 'completed')}>
 								Concluídos <span class="lv-filter-badge">{progressCounts.completed}</span>
 							</button>
+							{#if studySyncSupported}
+								<button type="button" class="lv-filter-pill" class:is-active={favoritesOnly} aria-pressed={favoritesOnly} onclick={() => (favoritesOnly = !favoritesOnly)}>
+									★ Favoritos <span class="lv-filter-badge">{progressCounts.favorites}</span>
+								</button>
+							{/if}
 						</div>
 						{#if availableSourceFolders.length > 1}
 							<div class="lv-progress-filters lv-source-filters" role="group" aria-label="Filtrar cursos por pasta de origem">
@@ -931,19 +992,19 @@
 								<ul class="lv-course-grid" data-view={libraryView} aria-label="Cursos na visualização {LIBRARY_VIEW_LABELS[libraryView]}">
 									{#each filteredNodes as courseItem (courseItem.courseId ?? courseItem.path)}
 										<li class:is-menu-open={coverMenuId === courseIdOf(courseItem)}>
-											<CourseCard course={courseItem} profile={user.userId} mediaUrl={(file, courseId) => transport.mediaUrl(file, courseId)} manualCoverUrl={transport.coverUrl(courseIdOf(courseItem), courseItem.coverVersion ?? null)} {canManage} inProgress={locatedRecent.some((entry) => entry.location.courseId === courseIdOf(courseItem) && !entry.item.completed)} menuOpen={coverMenuId === courseIdOf(courseItem)} onMenuOpen={(open) => toggleCoverMenu(courseItem, open)} onChangeCover={requestCourseCover} onRemoveCover={removeCover} />
+											<CourseCard course={courseItem} profile={user.userId} mediaUrl={(file, courseId) => transport.mediaUrl(file, courseId)} manualCoverUrl={transport.coverUrl(courseIdOf(courseItem), courseItem.coverVersion ?? null)} {canManage} inProgress={locatedRecent.some((entry) => entry.location.courseId === courseIdOf(courseItem) && !entry.item.completed)} favorite={favoriteCourseIds.has(courseIdOf(courseItem))} onToggleFavorite={studySyncSupported ? handleToggleCourseFavorite : undefined} menuOpen={coverMenuId === courseIdOf(courseItem)} onMenuOpen={(open) => toggleCoverMenu(courseItem, open)} onChangeCover={requestCourseCover} onRemoveCover={removeCover} />
 										</li>
 									{/each}
 								</ul>
 							{:else}
 								<div class="lv-empty-state">
 									<p class="lv-empty__title" role="status">Nenhum resultado encontrado</p>
-									{#if progressFilter === 'all' && sourceFolderFilter === 'all' && catalogQuery.trim()}
+									{#if !favoritesOnly && progressFilter === 'all' && sourceFolderFilter === 'all' && catalogQuery.trim()}
 										<p class="lv-lede">Nenhum curso ou aula corresponde a “{catalogQuery.trim()}”.</p>
 										<button class="lv-btn" type="button" onclick={() => (catalogQuery = '')}>Limpar busca</button>
 									{:else}
 										<p class="lv-lede">Nenhum curso corresponde aos filtros ativos{catalogQuery.trim() ? ` ou à busca “${catalogQuery.trim()}”` : ''}.</p>
-										<button class="lv-btn" type="button" onclick={() => { catalogQuery = ''; progressFilter = 'all'; sourceFolderFilter = 'all'; }}>Limpar filtros e busca</button>
+										<button class="lv-btn" type="button" onclick={() => { catalogQuery = ''; progressFilter = 'all'; sourceFolderFilter = 'all'; favoritesOnly = false; }}>Limpar filtros e busca</button>
 									{/if}
 								</div>
 							{/if}
@@ -1130,6 +1191,12 @@
 								{:else}
 									<span class="lv-btn" aria-disabled="true">Nenhuma aula disponível</span>
 								{/if}
+								{#if studySyncSupported}
+									{@const isCourseFav = favoriteCourseIds.has(courseIdOf(course))}
+									<button class="lv-btn" type="button" aria-pressed={isCourseFav} onclick={() => course && handleToggleCourseFavorite(course)}>
+										{isCourseFav ? '★ Favoritado' : '☆ Favoritar curso'}
+									</button>
+								{/if}
 								{#if canManage}
 									<div class="course-menu-wrap">
 										<button class="course-menu-toggle lv-btn" type="button" aria-expanded={courseMenuOpen} onclick={() => { courseMenuOpen = !courseMenuOpen; removeConfirm = false; }}>Gerenciar curso <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
@@ -1165,7 +1232,7 @@
 								{#if courseTab === 'content'}
 									<div id="course-panel-content" role="tabpanel" aria-labelledby="course-tab-content">
 										{#if course.children.length}
-											<CatalogTree nodes={course.children} courseId={courseIdOf(course)} activePath={activePath} showFiles={false} {completedMediaIds} onToggleLessonCompleted={handleToggleLessonCompleted} />
+											<CatalogTree nodes={course.children} courseId={courseIdOf(course)} activePath={activePath} showFiles={false} {completedMediaIds} onToggleLessonCompleted={handleToggleLessonCompleted} {favoriteMediaIds} onToggleLessonFavorite={studySyncSupported ? handleToggleLessonFavorite : undefined} />
 										{:else}
 											<p class="lv-empty">Este curso ainda não foi indexado.</p>
 										{/if}
@@ -1221,6 +1288,12 @@
 										</div>
 										<div class="lv-lesson-actions">
 											<a class="lv-btn lv-btn--ghost" href={href('course', courseIdOf(course))}>Visão geral</a>
+											{#if studySyncSupported && currentLessonMediaId}
+												{@const isLessonFav = favoriteMediaIds.has(currentLessonMediaId)}
+												<button class="lv-btn" type="button" aria-pressed={isLessonFav} onclick={() => currentLessonMediaId && handleToggleLessonMediaFavorite(currentLessonMediaId)}>
+													{isLessonFav ? '★ Aula favorita' : '☆ Favoritar aula'}
+												</button>
+											{/if}
 											{#if neighbors.previous}<a class="lv-btn" href={href('course', courseIdOf(course), neighbors.previous.path)}>Anterior</a>{/if}
 											{#if neighbors.next}<a class="lv-btn" href={href('course', courseIdOf(course), neighbors.next.path)}>Próxima</a>{/if}
 											<button class="lv-btn" type="button" aria-pressed={focusMode} onclick={() => (focusMode = !focusMode)}>{focusMode ? 'Sair do foco' : 'Modo foco'}</button>
@@ -1243,7 +1316,7 @@
 							<aside class="lv-curriculum" aria-label="Aulas do curso">
 								<div class="lv-panel__head"><h2>Aulas do curso</h2><span class="lv-count">{formatLessonCounts(countCatalogNode(course))}</span></div>
 								<div class="lv-curriculum__body" data-playlist-body>
-									{#if course.children.length}<CatalogTree nodes={course.children} courseId={courseIdOf(course)} activePath={activePath} showFiles={false} {completedMediaIds} onToggleLessonCompleted={handleToggleLessonCompleted} />{:else}<p class="lv-empty">Este curso ainda não foi indexado.</p>{/if}
+									{#if course.children.length}<CatalogTree nodes={course.children} courseId={courseIdOf(course)} activePath={activePath} showFiles={false} {completedMediaIds} onToggleLessonCompleted={handleToggleLessonCompleted} {favoriteMediaIds} onToggleLessonFavorite={studySyncSupported ? handleToggleLessonFavorite : undefined} />{:else}<p class="lv-empty">Este curso ainda não foi indexado.</p>{/if}
 								</div>
 							</aside>
 						</div>

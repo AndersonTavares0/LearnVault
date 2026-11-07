@@ -154,4 +154,30 @@ describe('catalog tree rendering', () => {
 		});
 		expect(body).not.toContain('lesson-check-btn');
 	});
+
+	it('renders favorite toggle button when handler is supplied and reflects favorite state', () => {
+		const lesson = node('lesson', 'Aula Favoritável', 'curso/aula-1', [], [file('a.mp4', 'media')]);
+		const unfav = render(CatalogTree, {
+			props: {
+				nodes: [lesson],
+				courseId: 'course-1',
+				favoriteMediaIds: new Set<string>(),
+				onToggleLessonFavorite: () => undefined,
+			}
+		});
+		expect(unfav.body).toContain('lesson-fav-btn');
+		expect(unfav.body).toContain('aria-label="Favoritar &quot;Aula Favoritável&quot;"');
+		expect(unfav.body).not.toContain('is-favorite');
+
+		const fav = render(CatalogTree, {
+			props: {
+				nodes: [lesson],
+				courseId: 'course-1',
+				favoriteMediaIds: new Set(['a.mp4']),
+				onToggleLessonFavorite: () => undefined,
+			}
+		});
+		expect(fav.body).toContain('lesson-fav-btn is-favorite');
+		expect(fav.body).toContain('aria-label="Remover &quot;Aula Favoritável&quot; dos favoritos"');
+	});
 });

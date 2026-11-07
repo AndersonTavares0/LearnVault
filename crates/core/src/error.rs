@@ -355,6 +355,10 @@ pub enum Error {
         card_id: String,
     },
 
+    /// O identificador do alvo de favorito (curso ou aula) é inválido.
+    #[error("identificador de favorito inválido")]
+    InvalidFavoriteTarget,
+
     /// A missão ainda não atingiu o requisito necessário para resgate.
     #[error("a missão diária ainda não foi concluída")]
     MissionNotComplete,

@@ -9,8 +9,8 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 
 describe('transport contract', () => {
 	it('exposes the HTTP transport seam without routing assumptions', () => {
-		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'studySummary', 'listNotes', 'createNote', 'updateNote', 'deleteNote', 'recordFocusSession', 'listFocusSessions', 'focusSummary', 'rewardSummary', 'claimDailyMission', 'setWeeklyGoal', 'userAvatarUrl', 'uploadUserAvatar', 'deleteUserAvatar', 'checkUpdate', 'installUpdate', 'updateHistory', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover', 'mediaCapabilities', 'transcodeUrl', 'openInSystemPlayer'];
-		expect(methods).toHaveLength(37);
+		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'studySummary', 'listNotes', 'createNote', 'updateNote', 'deleteNote', 'listFlashcards', 'createFlashcard', 'updateFlashcard', 'deleteFlashcard', 'reviewFlashcard', 'listFavorites', 'setCourseFavorite', 'setLessonFavorite', 'recordFocusSession', 'listFocusSessions', 'focusSummary', 'rewardSummary', 'claimDailyMission', 'setWeeklyGoal', 'userAvatarUrl', 'uploadUserAvatar', 'deleteUserAvatar', 'checkUpdate', 'installUpdate', 'updateHistory', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover', 'mediaCapabilities', 'transcodeUrl', 'openInSystemPlayer'];
+		expect(methods).toHaveLength(45);
 	});
 	it('does not offer native folder selection over HTTP', async () => {
 		await expect(new HttpTransport().importCourse()).rejects.toThrow('desktop é quem escolhe pastas');
@@ -1226,5 +1226,42 @@ describe('desktop transport over IPC', () => {
 		expect(reviewed.intervalDays).toBe(2);
 
 		vi.unstubAllGlobals();
+	});
+
+	it('executes favorites CRUD over HttpTransport and DesktopStub', async () => {
+		const fetchMock = vi.fn()
+			.mockResolvedValueOnce(new Response(JSON.stringify({ course_ids: ['c-1'], media_ids: ['m-1'] }), { status: 200 }))
+			.mockResolvedValueOnce(new Response(JSON.stringify({ favorite: true }), { status: 200 }))
+			.mockResolvedValueOnce(new Response(JSON.stringify({ favorite: false }), { status: 200 }));
+		vi.stubGlobal('fetch', fetchMock);
+		const http = new HttpTransport();
+
+		const favs = await http.listFavorites();
+		expect(favs).toEqual({ courseIds: ['c-1'], mediaIds: ['m-1'] });
+		expect(await http.setCourseFavorite('c-1', true)).toBe(true);
+		expect(fetchMock).toHaveBeenCalledWith('/api/study/favorites/course', expect.objectContaining({
+			method: 'POST',
+			body: JSON.stringify({ course_id: 'c-1', favorite: true })
+		}));
+		expect(await http.setLessonFavorite('m-1', false)).toBe(false);
+		expect(fetchMock).toHaveBeenLastCalledWith('/api/study/favorites/lesson', expect.objectContaining({
+			method: 'POST',
+			body: JSON.stringify({ media_id: 'm-1', favorite: false })
+		}));
+		vi.unstubAllGlobals();
+
+		const invokeMock = vi.mocked(invoke);
+		invokeMock.mockReset();
+		invokeMock
+			.mockResolvedValueOnce({ courseIds: ['c-2'], mediaIds: ['m-2'] })
+			.mockResolvedValueOnce(true)
+			.mockResolvedValueOnce(false);
+		const desktop = new DesktopStub();
+		expect(await desktop.listFavorites()).toEqual({ courseIds: ['c-2'], mediaIds: ['m-2'] });
+		expect(invokeMock).toHaveBeenCalledWith('desktop_list_favorites');
+		expect(await desktop.setCourseFavorite('c-2', true)).toBe(true);
+		expect(invokeMock).toHaveBeenCalledWith('desktop_set_course_favorite', { courseId: 'c-2', favorite: true });
+		expect(await desktop.setLessonFavorite('m-2', false)).toBe(false);
+		expect(invokeMock).toHaveBeenCalledWith('desktop_set_lesson_favorite', { mediaId: 'm-2', favorite: false });
 	});
 });

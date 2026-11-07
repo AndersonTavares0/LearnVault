@@ -7955,3 +7955,74 @@ body {
 	overflow: hidden;
 	line-height: 1.4;
 }
+
+/* Favoritos de cursos e aulas */
+.lv-course-card__favorite {
+	position: absolute;
+	top: 8px;
+	left: 8px;
+	z-index: 4;
+	display: grid;
+	place-items: center;
+	width: 34px;
+	height: 34px;
+	border: 1px solid rgba(255, 255, 255, 0.34);
+	border-radius: 6px;
+	background: rgba(8, 16, 29, 0.82);
+	color: #fff;
+	opacity: 0;
+	cursor: pointer;
+	transition: opacity 150ms ease, background-color 150ms ease, color 150ms ease;
+}
+
+.lv-course-card-shell:hover .lv-course-card__favorite,
+.lv-course-card-shell:focus-within .lv-course-card__favorite,
+.lv-course-card__favorite:focus-visible,
+.lv-course-card__favorite.is-favorite {
+	opacity: 1;
+}
+
+.lv-course-card__favorite.is-favorite {
+	color: #f59e0b;
+	border-color: rgba(245, 158, 11, 0.6);
+}
+
+.lv-course-card__favorite:hover {
+	background: var(--accent);
+	color: #fff;
+}
+
+.lesson-fav-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	background: transparent;
+	border: none;
+	padding: 4px;
+	color: var(--muted);
+	cursor: pointer;
+	border-radius: 4px;
+	flex-shrink: 0;
+	opacity: 0.35;
+	transition: color 0.15s ease, opacity 0.15s ease;
+}
+
+.lesson-item-wrap:hover .lesson-fav-btn,
+.lesson-item-wrap:focus-within .lesson-fav-btn,
+.lesson-fav-btn.is-favorite {
+	opacity: 1;
+}
+
+.lesson-fav-btn:hover {
+	color: var(--ink);
+	background: var(--hover);
+}
+
+.lesson-fav-btn.is-favorite {
+	color: #f59e0b;
+}
+
+.lesson-fav-icon {
+	width: 15px;
+	height: 15px;
+}

@@ -104,6 +104,15 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/study/progress", get(study::progress))
         .route("/api/study/position", post(study::record_position))
         .route("/api/study/completed", post(study::set_completed))
+        .route("/api/study/favorites", get(study::list_favorites))
+        .route(
+            "/api/study/favorites/course",
+            post(study::set_course_favorite),
+        )
+        .route(
+            "/api/study/favorites/lesson",
+            post(study::set_lesson_favorite),
+        )
         .route("/api/study/capabilities", get(study::capabilities))
         .route(
             "/api/study/notes",
@@ -561,7 +570,7 @@ mod tests {
         for (name, setup) in [
             ("missing", "PRAGMA user_version = 0"),
             ("older", "PRAGMA user_version = 3"),
-            ("newer", "PRAGMA user_version = 9"),
+            ("newer", "PRAGMA user_version = 99"),
             (
                 "missing required column",
                 "ALTER TABLE user RENAME COLUMN must_change_credentials TO changed",

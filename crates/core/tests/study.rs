@@ -906,3 +906,57 @@ fn study_notes_validation_rules() -> TestResult {
 
     Ok(())
 }
+
+#[test]
+fn study_favorites_courses_and_lessons_round_trip_and_isolate_owners() -> TestResult {
+    let db = library_db()?;
+    insert_media(&db, "m1", "available")?;
+    insert_media(&db, "m2", "available")?;
+
+    let initial = learnvault_core::list_favorites(&db, OWNER)?;
+    assert!(initial.course_ids.is_empty());
+    assert!(initial.media_ids.is_empty());
+
+    assert!(learnvault_core::set_course_favorite(
+        &db, OWNER, "course-1", true
+    )?);
+    assert!(learnvault_core::set_course_favorite(
+        &db, OWNER, "course-1", true
+    )?); // idempotente
+    assert!(learnvault_core::set_lesson_favorite(
+        &db, OWNER, "m1", true
+    )?);
+    assert!(learnvault_core::set_lesson_favorite(
+        &db, OTHER, "m2", true
+    )?);
+
+    let owner_favs = learnvault_core::list_favorites(&db, OWNER)?;
+    assert_eq!(owner_favs.course_ids, vec!["course-1"]);
+    assert_eq!(owner_favs.media_ids, vec!["m1"]);
+
+    let other_favs = learnvault_core::list_favorites(&db, OTHER)?;
+    assert!(other_favs.course_ids.is_empty());
+    assert_eq!(other_favs.media_ids, vec!["m2"]);
+
+    assert!(!learnvault_core::set_course_favorite(
+        &db, OWNER, "course-1", false
+    )?);
+    assert!(!learnvault_core::set_lesson_favorite(
+        &db, OWNER, "m1", false
+    )?);
+
+    let after = learnvault_core::list_favorites(&db, OWNER)?;
+    assert!(after.course_ids.is_empty());
+    assert!(after.media_ids.is_empty());
+
+    assert!(matches!(
+        learnvault_core::set_course_favorite(&db, OWNER, "   ", true),
+        Err(Error::InvalidFavoriteTarget)
+    ));
+    assert!(matches!(
+        learnvault_core::set_lesson_favorite(&db, OWNER, "inexistente", true),
+        Err(Error::MediaNotFound { .. })
+    ));
+
+    Ok(())
+}
