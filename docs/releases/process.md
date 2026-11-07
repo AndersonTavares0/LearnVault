@@ -1,80 +1,50 @@
-# Processo de release
+# Release Process
 
-O LearnVault usa Semantic Versioning: `MAJOR.MINOR.PATCH`.
+LearnVault adheres to Semantic Versioning: `MAJOR.MINOR.PATCH`.
 
-1. Faça merge das mudanças aprovadas com Conventional Commits na `main`.
-2. O Release Please abre ou atualiza uma PR de release com a versão e as entradas do `docs/releases/CHANGELOG.md`.
-3. Faça merge da PR de release; ela cria a tag semântica e o GitHub Release.
-4. O workflow de release publicado constrói os tarballs Linux suportados e o instalador Windows `.exe`, injeta a versão da tag, publica os três assets com `SHA256SUMS` e atribui os autores dos commits da versão.
-5. Verifique os assets, os checksums e a seção **Contribuidores** antes da distribuição.
+1. Merge approved changes using Conventional Commits into `main`.
+2. Release Please automatically opens or updates a release candidate PR with updated version files and `docs/releases/CHANGELOG.md`.
+3. Merge the release PR; this tags the commit and generates the GitHub Release.
+4. The published release workflow builds Linux server tarballs and the Windows desktop NSIS installer, verifies checksums with `SHA256SUMS`, and generates the contributors list.
+5. Verify assets, checksums, and the Contributors section before general distribution.
 
-O workflow de release recebe a tag publicada por variável de ambiente e valida que ela segue
-o formato `vMAJOR.MINOR.PATCH`, com componentes numéricos sem zeros à esquerda, antes de
-usá-la. A tag nunca é interpolada diretamente em comandos de shell.
+The release workflow receives the published tag via environment variables and validates that it strictly matches `vMAJOR.MINOR.PATCH` with non-negative numeric components and no leading zeros.
 
-## Staging da SPA canônica
+## Canonical SPA Bundling
 
-O binário Linux do servidor Rust (`crates/server`) embute os assets web estáticos diretamente
-a partir do diretório canônico `crates/server/web/build`, gerado pelo build da SPA (`apps/web`).
-O job `linux` do workflow de release compila `crates/server` para alvos Linux (`x86_64` e `aarch64`)
-com a SPA embutida nativamente, sem necessidade de cópias intermediárias.
+The Linux server binary (`crates/server`) embeds static web assets directly from the canonical build output directory `crates/server/web/build`, produced by the web SPA build (`apps/web`). The `linux` job in the release workflow compiles `crates/server` for target architectures (`x86_64` and `aarch64`) with embedded SPA assets.
 
-## Reparo de assets
+## Asset Repair & Manual Triggers
 
-Em evento `release`, o GitHub executa o arquivo de workflow **do commit da tag**, não o da `main`. Uma release
-publicada antes de o `release.yml` corrigido estar na `main` fica sem assets, e a correção só alcança as tags
-criadas depois dela. Para esses casos o workflow aceita disparo manual, restrito a quem tem permissão de escrita
-no repositório:
+On a GitHub `release` event, Actions executes the workflow definition from the **tagged commit**, not `main`. If a release was tagged before a workflow fix reached `main`, the workflow can be triggered manually by repository maintainers:
 
-1. Abra `Actions` → `Release` → `Run workflow`.
-2. Informe a tag exata, no formato `vX.Y.Z`, de uma release já publicada.
-3. O workflow valida a tag, confirma ou inicializa a release (suportando rascunhos para publicação atômica), reconstrói tudo a partir do commit da
-   tag, confere que a tag não se moveu durante o build, reenvia os artefatos assinados com --clobber, publica a release e acrescenta a
-   seção **Contribuidores**.
+1. Navigate to `Actions` → `Release` → `Run workflow`.
+2. Input the exact semantic tag (e.g. `v0.8.1`).
+3. The workflow validates the tag, confirms or initializes the release (supporting drafts for atomic publishing), rebuilds all platform assets from that tag, verifies that the tag has not moved, uploads signed artifacts with `--clobber`, publishes the release, and appends the Contributors section.
 
-O caminho de reparo nunca recria tag nem release: ele apenas reenvia assets para a mesma tag. A seção Contribuidores
-é idempotente pelo marcador `<!-- learnvault:contributors -->`, então repetir o disparo não duplica a lista.
+The repair workflow never moves or recreates tags. The Contributors section is idempotent via the `<!-- learnvault:contributors -->` comment marker.
 
-Evidência executada em 2026-10-17: o reparo foi usado nas releases `v0.3.0` e `v0.4.0` (runs `39006767838` e
-`39004818355`) e as releases `v0.5.0` e `v0.6.0` saíram pelo caminho normal do evento `release` (runs `39005054542`
-e `39006844672`). Nas quatro, o workflow anexou os quatro assets, o `SHA256SUMS` conferiu com o arquivo baixado e
-a seção **Contribuidores** apareceu uma única vez.
+## Published Release Assets
 
-## Convenção de nomes de assets
+Each release publishes seven files on GitHub Releases, alongside the OCI container image on GHCR (`ghcr.io/andersontavares0/learnvault`):
 
-Cada release publica exatamente sete arquivos na página de releases do GitHub, além da imagem OCI no GHCR (`ghcr.io/andersontavares0/learnvault`):
-
-| Asset | Nome |
+| Asset | File Name |
 | --- | --- |
-| Servidor Linux, x86-64 | `learnvault-linux-amd64.tar.gz` |
-| Servidor Linux, ARM64 | `learnvault-linux-arm64.tar.gz` |
-| Instalador Windows (NSIS) | `learnvault-windows-vMAJOR.MINOR.PATCH.exe` |
-| Bundle do Updater Windows | `learnvault-windows-vMAJOR.MINOR.PATCH.nsis.zip` |
-| Assinatura Ed25519 do Updater | `learnvault-windows-vMAJOR.MINOR.PATCH.nsis.zip.sig` |
-| Manifesto do Updater Tauri 2 | `latest.json` |
-| Checksums SHA-256 | `SHA256SUMS` |
+| Linux Server, x86-64 | `learnvault-linux-amd64.tar.gz` |
+| Linux Server, ARM64 | `learnvault-linux-arm64.tar.gz` |
+| Windows Installer (NSIS) | `learnvault-windows-vMAJOR.MINOR.PATCH.exe` |
+| Windows Updater Bundle | `learnvault-windows-vMAJOR.MINOR.PATCH.nsis.zip` |
+| Windows Updater Ed25519 Signature | `learnvault-windows-vMAJOR.MINOR.PATCH.nsis.zip.sig` |
+| Tauri 2 Updater Manifest | `latest.json` |
+| SHA-256 Checksums | `SHA256SUMS` |
 
-Regras que valem para qualquer ativo novo:
+Asset naming rules:
+- Prefix is always `learnvault-`; never use alternative suffixes or architecture aliases (`x64`, `win64`).
+- Architecture naming follows Go/Actions standards: `amd64` and `arm64`, never `x86_64` or `x64`.
+- The Windows installer includes the version in its filename because users download it standalone.
+- `SHA256SUMS` is generated automatically via `sha256sum`.
 
-- O prefixo é sempre `learnvault-`; não crie alias, sufixo alternativo de arquitetura (`x64`, `win64`) nem nome
-  comercial.
-- O vocabulário de arquitetura é o do Go e do GitHub Actions: `amd64` e `arm64`, nunca `x86_64` ou `x64`.
-- O instalador Windows carrega a tag no nome porque é o único arquivo que o usuário guarda fora da release; os
-  tarballs não carregam, porque o binário embutido reporta a versão em `--version`.
-- `SHA256SUMS` é sempre gerado pelo workflow com `sha256sum`, nunca à mão, e cobre exatamente os três assets
-  anexados.
-- O release candidate Rust mantém namespace separado (`rust-rc-vX.Y.Z-rc.N` e `SHA256SUMS.rust-rc`) porque é
-  artefato experimental e não é a distribuição suportada.
+Release Please is the single source of truth for `docs/releases/CHANGELOG.md`. After uploading assets, the release workflow appends an idempotent Contributors section. Dependabot identities are excluded. Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`) must be written in English to keep the generated changelog clean and consistent.
 
-O Release Please continua sendo a única fonte do `docs/releases/CHANGELOG.md` e do corpo de mudanças das notas. Depois de publicar os assets, o workflow acrescenta uma seção idempotente **Contribuidores**, derivada dos autores e coautores dos commits entre as tags verificadas. Identidades de commits do Dependabot são excluídas; nomes repetidos aparecem uma vez. O workflow não gera uma segunda lista de mudanças nem usa notas geradas pelo GitHub. Use prefixos como `feat:`, `fix:`, `docs:` e `chore:` com descrições em pt-BR para manter as versões previsíveis e o changelog consistente.
-
-O workflow exige o secret `RELEASE_PLEASE_TOKEN`; credenciais de automação devem ficar nos
-secrets do GitHub Actions, nunca em arquivos versionados. O token precisa abrir PRs de release
-e publicar tags/releases para que o workflow de artefatos reaja ao release publicado.
-
-A configuração fica em `.github/release-please/release-please-config.json` e o manifesto em
-`.github/release-please/release-please-manifest.json`. Em modo manifest, o config precisa
-declarar a chave `packages`; sem ela o Release Please não prepara nenhuma release.
-
-Migrações de banco devem ser documentadas nas notas de release. Releases nunca devem conter
-a biblioteca física, bancos locais, credenciais ou arquivos de cache.
+Configuration is defined in `.github/release-please/release-please-config.json` and manifest in `.github/release-please/release-please-manifest.json`.
+Database schema migrations must always be documented in release notes. Releases must never contain course files, local databases, secrets, or cache artifacts.

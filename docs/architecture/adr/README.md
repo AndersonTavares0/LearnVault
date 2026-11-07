@@ -1,12 +1,10 @@
 # Architecture Decision Records
 
-Decisões arquiteturais duráveis do LearnVault. Cada ADR registra o contexto, a decisão, as
-alternativas consideradas e as consequências.
+Durable architectural decisions for LearnVault. Each ADR records context, decisions taken, alternatives evaluated, and downstream consequences.
 
-O template reutilizável fica em [`.agents/templates/adr.md`](../../../.agents/templates/adr.md).
-Decisões entram por pull request; mudanças de escopo são discutidas no GitHub antes.
+The reusable template is located at [`.agents/templates/adr.md`](../../../.agents/templates/adr.md). Architectural changes are submitted via pull requests and discussed on GitHub beforehand.
 
-| ADR | Título | Status | Data |
+| ADR | Title | Status | Date |
 | --- | --- | --- | --- |
-| [0001](0001-reescrita-em-rust.md) | Reescrever o LearnVault em Rust com núcleo compartilhado | Accepted | 2026-10-14 |
-| [0002](0002-miniaturas-automaticas-de-cursos.md) | Gerar miniaturas de cursos no WebView | Accepted | 2026-10-18 |
+| [0001](0001-reescrita-em-rust.md) | Rewrite LearnVault in Rust with shared core domain | Accepted | 2026-10-14 |
+| [0002](0002-miniaturas-automaticas-de-cursos.md) | Generate course video thumbnails via client webview | Accepted | 2026-10-18 |

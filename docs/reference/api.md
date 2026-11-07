@@ -1,234 +1,91 @@
-# Referência da API
+# API Reference
 
-A implementação atual é o servidor Rust, que expõe as APIs abaixo, e a SPA web usa o mesmo contrato
-de Study nos dois transportes. Todas as rotas usam JSON, salvo
-indicação contrária. A autenticação usa um cookie de sessão HttpOnly com SameSite=Strict.
+The primary backend implementation is the Rust server (`crates/server`), exposing the HTTP endpoints below. The Svelte web SPA uses the same study and catalog contract across both HTTP and desktop IPC transports. All endpoints consume and produce JSON unless otherwise specified. Authentication is handled via an HttpOnly cookie session with `SameSite=Strict`.
 
-No servidor Rust, cada pasta de curso registrada deve permanecer sob controle confiável do
-processo entre as operações administrativas. O registro vive em `courses.json`, ao lado do
-banco, e os caminhos nunca cruzam a API: a interface conhece apenas a identidade opaca e o
-título de cada curso. O rescan revalida cada raiz e recusa mudanças detectáveis, mas trocas
-concorrentes de junctions, symlinks ou reparse points durante a abertura ainda dependem das
-garantias específicas do sistema operacional; essa limitação não deve ser tratada como
-isolamento absoluto contra um escritor local concorrente.
+In the Rust server, each registered course directory remains under strict filesystem integrity control between administrative operations. The course registry is stored in `courses.json` alongside the database, and raw filesystem paths never cross the API boundary: clients receive only opaque course identifiers and sanitized titles. Rescans revalidate each root and reject detected tampering; however, concurrent alterations of symlinks or junctions by local users still depend on OS-level permissions.
 
-Na implementação Rust, o cookie também recebe `Secure` por padrão e só é enviado pelo
-navegador em HTTPS. Para desenvolvimento local sem TLS, use explicitamente `--insecure-http`;
-esse modo não deve ser usado em uma instalação exposta na rede. Mutações de autenticação exigem
-uma origem HTTP(S) compatível, além de SameSite=Strict.
+The session cookie includes the `Secure` flag by default and is only transmitted over HTTPS. For local development without TLS, pass `--insecure-http`; this flag must never be used in production. State-mutating authentication endpoints require matching HTTP(S) Origin headers and `SameSite=Strict`.
 
-## Entrega da SPA no servidor Rust
+## SPA Delivery in Rust Server
 
-A entrega é opcional e fica desabilitada por padrão. Use `--web-root` apontando para o diretório
-gerado pelo build estático (`crates/server/web/build`), que contém o shell `200.html`. Arquivos
-existentes são servidos diretamente; caminhos sem extensão usam `200.html` como fallback; assets
-ausentes com extensão retornam 404, e caminhos `/api/*` nunca são convertidos em HTML. Se o shell
-não existir, o servidor retorna 503. O shell usa `Cache-Control: no-cache`; assets sob
-`_app/immutable/` usam cache imutável; respostas de erro da SPA usam `no-store`.
-A validação do diretório não expõe caminhos em respostas. O diretório web é um artefato
-de deploy confiável e somente leitura: publicar um shell novo exige reiniciar o processo.
+Static file serving is disabled by default. Pass `--web-root` pointing to the directory produced by the web build (`crates/server/web/build`), containing the `200.html` shell. Existing asset files are served directly; extensionless paths fall back to `200.html`; missing assets with file extensions return 404; `/api/*` endpoints never fall back to HTML. If the shell file is missing, the server returns 503. The shell is served with `Cache-Control: no-cache`; assets under `_app/immutable/` use immutable caching; SPA error responses use `no-store`. Directory validation never leaks local filesystem paths.
 
-## Saúde e sessão
+## Health & Authentication Endpoints
 
-| Método | Rota | Autenticação | Finalidade |
+| Method | Path | Auth | Purpose |
 | --- | --- | --- | --- |
-| `GET` | `/api/healthz` | Não | Saúde do processo e do banco, incluindo a versão em execução |
-| `POST` | `/api/login` | Não | Aceita `{ "username": "...", "password": "..." }` |
-| `POST` | `/api/logout` | Sessão | Invalida a sessão atual |
-| `GET` | `/api/me` | Sessão | Retorna a conta atual |
-| `POST` | `/api/account/credentials` | Sessão | Aceita `{ "current_password": "...", "username": "...", "password": "..." }`, troca as credenciais, invalida as sessões anteriores e emite uma nova |
+| `GET` | `/api/healthz` | Public | Process and database readiness, including running version |
+| `POST` | `/api/login` | Public | Authenticates `{ "username": "...", "password": "..." }` |
+| `POST` | `/api/logout` | Session | Invalidates the active session |
+| `GET` | `/api/me` | Session | Returns current authenticated account details |
+| `POST` | `/api/account/credentials` | Session | Accepts `{ "current_password": "...", "username": "...", "password": "..." }`, updates credentials, revokes older sessions, and issues a new session |
 
-O primeiro administrador temporário pode ser `admin/admin` somente no bootstrap; a resposta marca
-`must_change_credentials` e todos os endpoints protegidos recusam acesso com
-`403 credentials_change_required` até a troca. A senha atual é verificada antes da troca e os
-novos valores obedecem aos limites públicos. A operação é transacional: uma falha não substitui
-credenciais nem sessões.
+Initial bootstrap allows temporary credentials (`admin/admin`). The response marks `must_change_credentials: true`, and all protected endpoints return `403 credentials_change_required` until the password is changed.
 
-## Compatibilidade e migração do banco
+## Database Compatibility & Migration
 
-O servidor Rust detecta a assinatura do banco legado Go (`users`, `sessions` e
-`schema_migrations`) antes de aplicar qualquer bootstrap ou migração e encerra com a mensagem
-estável `legacy_go_database_requires_migration: back up the database and migrate it before using the Rust server`.
-Ele não cria `admin/admin` nem sobrescreve dados. A API de núcleo `legacy_import` e o comando
-`learnvault-server migrate-go` fazem a conversão explícita com backup-first, origem somente leitura
-e saída temporária validada; o subcomando não inicia o listener HTTP. Um banco novo vazio e um
-banco Rust existente continuam sendo abertos normalmente.
+The Rust server detects legacy database signatures (`users`, `sessions`, `schema_migrations`) before bootstrapping or running migrations. If detected, it exits with the message:
+`legacy_go_database_requires_migration: back up the database and migrate it before using the Rust server`.
+It never creates `admin/admin` or overwrites existing data in this scenario. The `learnvault-server migrate-go` subcommand converts legacy databases with backup-first verification.
 
-## Catálogo, cursos e mídia
+## Catalog, Courses & Media
 
-| Método | Rota | Autenticação | Finalidade |
+| Method | Path | Auth | Purpose |
 | --- | --- | --- | --- |
-| `GET` | `/api/catalog` | Sessão | Retorna um nó de topo por curso registrado (`role: course`, com `course_id` opaco e `title`), com a subárvore de módulos e aulas derivada dos dados persistidos, tanto na árvore canônica `nodes` quanto na lista de cursos de topo `categories` |
-| `POST` | `/api/admin/courses` | Sessão admin | Aceita `{ "path": "..." }` e registra a pasta como um curso; a pasta precisa existir, ser um diretório legível e não ser link/junction. Importar não indexa: a indexação é o `rescan` |
-| `DELETE` | `/api/admin/courses/{id}` | Sessão admin | Remove o curso do registro, sem apagar arquivos nem dados; remover um curso desconhecido responde `removed: false` |
-| `POST` | `/api/admin/catalog/rescan` | Sessão admin | Faz scan explícito de todos os cursos registrados e atualiza cada catálogo de forma preservadora: insere arquivos novos, reafirma os conhecidos e marca ausentes os que sumiram, sem excluir nenhum registro. Sem cursos registrados responde `400 no_courses_registered`; a resposta agrega `courses` e `failed_courses` |
-| `PUT` | `/api/admin/courses/{id}/cover` | Sessão admin | Grava a capa personalizada do curso. O corpo é a imagem crua (até 4 MiB) e o formato é decidido pelos bytes iniciais; outra assinatura responde `415 unsupported_cover_type` e um corpo acima do limite responde `413 cover_too_large`. A resposta `200` traz `{ "cover_version": <segundos> }` |
-| `DELETE` | `/api/admin/courses/{id}/cover` | Sessão admin | Remove a capa personalizada do curso, sem tocar em nenhum arquivo do curso; a resposta `200` traz `{ "removed": bool }` e repetir é idempotente |
-| `GET` | `/api/courses/{id}/cover` | Sessão | Serve a capa personalizada do curso com o `Content-Type` derivado dos bytes guardados e `Cache-Control: private, no-store`; sem capa responde `404` sem corpo |
-| `GET`, `HEAD` | `/api/media?course=...&path=...` | Sessão | Transmite um arquivo aprovado do curso indicado com suporte a HTTP Range; caminho relativo é interpretado dentro da pasta daquele curso |
-| `GET` | `/api/admin/media/{id}/impact` | Sessão admin | Consulta o impacto da remoção de uma mídia: retorna `{ media_id, relative_path, availability, progress_owners, already_removed }` |
-| `DELETE` | `/api/admin/media/{id}` | Sessão admin | Remove explicitamente a mídia do catálogo (tombstone persistente). Aceita `{ "confirm_progress": bool }`. Se houver progresso e `confirm_progress` for falso, responde `409 media_removal_needs_confirmation`. Repetir é idempotente |
+| `GET` | `/api/catalog` | Session | Returns top-level course nodes (`role: course` with opaque `course_id` and `title`), with modules, lessons, and materials |
+| `POST` | `/api/admin/courses` | Admin Session | Accepts `{ "path": "..." }` to register a course folder. Path must exist, be readable, and not be a symlink |
+| `DELETE` | `/api/admin/courses/{id}` | Admin Session | Unregisters a course folder without deleting course files or study progress |
+| `POST` | `/api/admin/catalog/rescan` | Admin Session | Explicitly rescans all registered courses in a preserving manner: registers new files, confirms known ones, marks missing ones without deleting records |
+| `PUT` | `/api/admin/courses/{id}/cover` | Admin Session | Saves custom course cover (raw image body up to 4 MiB; PNG/JPEG/WebP). Returns `{ "cover_version": <timestamp> }` |
+| `DELETE` | `/api/admin/courses/{id}/cover` | Admin Session | Removes custom cover image atomically without modifying course folder. Returns `{ "removed": bool }` |
+| `GET` | `/api/courses/{id}/cover` | Session | Serves custom course cover with appropriate `Content-Type` and `Cache-Control: private, no-store` |
+| `GET`, `HEAD` | `/api/media?course=...&path=...` | Session | Streams approved media file with HTTP Range support (`200`/`206`/`416`) |
+| `GET` | `/api/admin/media/{id}/impact` | Admin Session | Queries impact of removing media: `{ media_id, relative_path, availability, progress_owners, already_removed }` |
+| `DELETE` | `/api/admin/media/{id}` | Admin Session | Explicitly removes media from catalog (permanent tombstone). Requires `{ "confirm_progress": true }` if progress exists |
 
+### Catalog Organization
 
-### Organização dos cursos registrados
+Module directories containing video files are presented as collapsible modules with one lesson per video. Complementary materials remain available in the module and matching subtitles remain associated with the lesson video. Natural sorting is applied to course paths (`2` precedes `10`).
 
-Pastas de módulo contendo vídeos diretamente são apresentadas como módulos recolhíveis,
-com uma aula por vídeo, sem alterar caminhos, arquivos ou identidades de mídia.
-Materiais complementares continuam disponíveis no módulo e legendas correspondentes
-permanecem associadas à mídia. A árvore de diretórios já existente é preservada.
+Without registered courses, the catalog returns empty. `LIBRARY_DIR`/`--library-root` is accepted as an initial deployment seed: when no registry exists, the specified directory is registered as the first course with ID `library-1`.
 
-A sequência do catálogo usa ordenação natural dos caminhos originais: `2` precede `10`,
-inclusive em módulos, aulas e materiais. Os prefixos são usados na ordenação mesmo quando
-omitidos no título exibido. Essa organização é derivada na leitura: não renomeia arquivos
-nem modifica o progresso salvo.
+The scanner inspects directory metadata without traversing symbolic links. It ignores temporary download directories, detects media, subtitles, and documents, and only treats `.ts` files as video if their size exceeds 1 MiB (preventing collision with TypeScript files).
 
-Sem nenhum curso registrado o catálogo responde vazio. `LIBRARY_DIR`/`--library-root` continua
-aceito como semente de implantação: quando o registro ainda não existe, a pasta informada é
-registrada como o primeiro curso com a identidade histórica `library-1`, preservando mídias,
-varreduras e progresso de estudo já gravados; uma remoção explícita do curso semente não o
-traz de volta no próximo start.
+In the desktop app, `learnvault-media://localhost/<media-id>` delivers media and subtitle files using only opaque IDs. `GET` and `HEAD` support single ranges. On Windows, the SPA uses `http://learnvault-media.localhost/<media-id>`.
 
-O scanner lê somente entradas e metadados de diretórios. Links simbólicos não são seguidos — nem
-as raízes dos cursos, nem entradas internas. Ignora diretórios temporários de download, classifica
-mídias, legendas e materiais reconhecidos, e trata `.ts` como vídeo somente quando é maior que
-1 MiB para não confundir TypeScript com MPEG-TS. As pastas de curso são externas, montadas como
-somente leitura e nunca são modificadas.
+### Custom Covers
 
-No desktop, o protocolo `learnvault-media://localhost/<media-id>` entrega materiais, vídeo, áudio e arquivos de legenda para download usando somente o `media_id` opaco. `GET` e `HEAD` aceitam uma única faixa; respostas completas, parciais e recusadas usam, respectivamente, `200`, `206`, `413` (corpo acima do limite) ou `416` (faixa inválida ou múltipla), com `Content-Range` quando aplicável. No Windows, a SPA usa `http://learnvault-media.localhost/<media-id>` e o runtime reverte a origem antes do handler. O player desktop usa essa fonte local, renderiza legendas VTT e sincroniza posição e conclusão pelo IPC de Study; SRT, ASS e SSA ficam disponíveis para download, e o build HTTP pode converter SRT sob demanda.
+A custom cover is stored by the application—on the server in `covers/<id>.cover` (next to `courses.json`), and on desktop in the application data directory. Course folders remain read-only. Accepted formats are PNG, JPEG, and WebP, validated via magic bytes. Covers are written atomically via temporary files and `rename`.
 
-### Capas personalizadas
+Top-level course nodes include `cover_version` when a cover exists, prompting the SPA to bust client cache via `?v=`. Missing covers or unknown course IDs return `404` with an empty body.
 
-Uma capa personalizada é um arquivo único por curso, com no máximo 4 MiB, guardado pelo
-aplicativo — no servidor em `covers/<id>.cover`, no mesmo diretório de `courses.json`, e no
-desktop em `covers/`, um subdiretório do diretório de dados do aplicativo. Nada é escrito
-dentro da pasta do curso, que permanece externa e somente leitura. O formato é decidido
-apenas pelos bytes iniciais: PNG, JPEG e WebP são aceitos e nenhum decodificador de imagem
-é embarcado; o `Content-Type` servido vem sempre do arquivo guardado, nunca do pedido de
-upload. O nome do arquivo é apenas a identidade opaca do curso, validada como um segmento de
-caminho seguro, então nenhuma identidade recebida pela API escapa do diretório de capas. A
-gravação é atômica (arquivo temporário exclusivo e troca por `rename`), e uma leitura
-concorrente nunca observa uma capa truncada.
+## Study Progress, Focus & Gamification
 
-O nó de topo do curso expõe `cover_version` (segundos de modificação do arquivo) quando
-existe capa, no `GET /api/catalog` e no `desktop_catalog`. A SPA usa esse valor como `?v=` na
-URL da capa para invalidar a imagem já exibida; sem capa, o campo fica ausente e o card cai
-na miniatura automática ou na capa gerada pelo título. Um curso desconhecido, uma identidade
-insegura e uma capa ausente respondem como ausência (`404` sem corpo); uma capa guardada que
-deixou de ser uma imagem suportada responde `500` sem corpo. Nenhuma resposta carrega caminho
-do sistema de arquivos em corpo, cabeçalhos ou mensagem.
-
-No desktop, a capa é entregue pelo protocolo `learnvault-cover://localhost/<course-id>` (no
-Windows, `http://learnvault-cover.localhost/<course-id>`), com `GET`/`HEAD`, `Cache-Control:
-no-store` e o mesmo CORS da mídia: a origem exata da janela é refletida apenas em respostas
-`2xx` e toda requisição com `Origin` marca `Vary: Origin`, sem curinga e sem credenciais.
-
-### Cursos e mídia no desktop (IPC)
-
-O desktop não tem rotas para catálogo, cursos e remoção: a SPA chama comandos Tauri por `invoke`, sem
-`fetch`. O webview nunca envia nem recebe um caminho — só identidades opacas e o booleano
-`configured`. O seletor nativo de pastas (cursos) e de imagens (capas) roda internamente no Rust
-(`tauri-plugin-dialog`) e não é concedido ao webview pelo ACL.
-
-| Comando | Argumentos | Finalidade |
-| --- | --- | --- |
-| `desktop_catalog` | — | Catálogo agregado dos cursos registrados, um nó de topo por curso em `nodes` (árvore canônica) e em `categories` |
-| `desktop_import_course` | — | Abre o seletor nativo e registra a pasta escolhida como um curso; importar uma pasta já registrada é idempotente |
-| `desktop_remove_course` | `courseId` | Remove o curso do registro, sem tocar nos arquivos nem nos dados |
-| `desktop_import_course_cover` | `courseId` | Abre o seletor nativo de imagens e grava a capa daquele curso; o arquivo escolhido fica no Rust e não cruza o IPC |
-| `desktop_remove_course_cover` | `courseId` | Remove a capa do curso; um curso sem capa é idempotente (`removed: false`) |
-| `desktop_rescan` | — | Indexa explicitamente todos os cursos registrados; raízes removidas contam como falha agregada |
-| `desktop_media_removal_impact` | `mediaId` | Consulta o impacto da remoção de uma mídia (identidade, caminho, donos com progresso) |
-| `desktop_remove_media` | `mediaId`, `confirmProgress` | Remove explicitamente a mídia do catálogo local com confirmação de progresso |
-
-O registro fica em `library.json` (versão 2), no diretório de configuração do aplicativo, com
-caminhos canonicalizados e revalidados a cada carregamento. O formato anterior (versão 1, com uma
-única raiz de biblioteca) é migrado para um curso com a identidade histórica `library-1`.
-
-O rescan é uma atualização preservadora, não uma substituição: ele insere arquivos novos, atualiza
-os conhecidos no mesmo caminho (reutilizando o `media_id`, inclusive após um arquivo ausente
-reaparecer) e marca como ausentes os que deixaram de aparecer. Nenhum rescan exclui registros,
-reescreve a identidade de mídia ou apaga o estado associado. A resposta `200` devolve apenas o
-resumo sanitizado do núcleo — contagens, incluindo `ambiguous_count` — e nunca os caminhos
-relativos das chaves ambíguas, que exporiam a estrutura da biblioteca.
-No servidor Rust e no desktop, a remoção explícita de mídia é gravada como tombstone em
-`media_removal`, chaveado pela identidade de mídia `media_id`. Nenhum rescan cria, apaga ou reescreve esse
-registro, e o carimbo `removed_at` não é alterado por uma varredura. A leitura do catálogo
-filtra os itens removidos, então a mídia sai de `/api/catalog` (e do `desktop_catalog`) e
-`/api/media` responde 404, mesmo que o arquivo reapareça no disco depois. A remoção não apaga a
-linha de catálogo nem o progresso de estudo associado, e repetir a remoção é idempotente. Um arquivo
-que deixou de aparecer no scan também deixa de ser autorizado por `/api/media`, ainda que exista
-uma resposta ou referência antiga em cache.
-
-O `GET /api/catalog` do servidor Rust expõe a árvore recursiva canônica em `nodes` — o
-contrato preferido pela SPA, com `media_id` obrigatório em cada arquivo, caminho relativo
-completo, disponibilidade e verificação. Cada nó de topo é um curso registrado: papel `course`,
-`path` vazio e a identidade opaca em `course_id`, com a subárvore de categorias, módulos e aulas
-sob ele. Nenhuma aula e nenhum arquivo deixa de ser alcançável por `nodes`, inclusive os
-arquivos soltos diretamente numa categoria, num curso ou num módulo. `categories` traz a mesma
-lista de cursos de topo (`role: course`, `course_id` opaco e as mesmas subárvores), então um
-consumidor que só lê `categories` também encontra todos os cursos.
-O `desktop_catalog` expõe o mesmo par por IPC. O `complete: bool` do servidor Rust/desktop marca
-o contrato canônico: presente, precisa ser booleano — um
-`null`/string ou a ausência do campo é recusada — e o payload é normalizado estritamente pelo contrato Rust/desktop.
-Sem nós canônicos, um `categories[].courses` no formato legado do Go é recusado de forma fail-closed em vez de virar conteúdo vazio.
-Payloads sem o marcador `complete` são recusados como inválidos.
-
-Ao normalizar, a SPA exige `media_id` não vazio nos arquivos dos nós canônicos Rust/desktop,
-incluindo os arquivos soltos da raiz, e recusa de forma
-determinística um payload que ultrapasse os limites explícitos de profundidade, número de nós ou
-de arquivos — nunca truncando a árvore: o payload inteiro é rejeitado como inválido. Um `kind`
-que a SPA ainda não conhece é preservado como material (balde catch-all) na normalização, no
-roteador e na UI, de modo que abrir uma aula por deep-link ou pelo `media_id` nunca descarta o
-arquivo.
-
-## Estudo
-
-O progresso é sempre do usuário autenticado: nenhuma rota aceita um `owner_id` vindo do
-cliente, então uma sessão só lê e escreve o próprio progresso. Posição de retomada e
-conclusão são independentes — avançar não desfaz a conclusão e concluir não move o ponto de
-retomada — e reenviar um valor idêntico não altera o instante da última mudança.
-
-Este contrato está implementado no servidor Rust e na SPA web
-(paridade das entregas #86, #88, #90 e #91). O transporte desktop expõe o mesmo contrato por IPC,
-descrito ao final desta seção; ele não usa rotas HTTP.
-
-| Método | Rota | Autenticação | Finalidade |
+| Method | Path | Auth | Purpose |
 | --- | --- | --- | --- |
-| `GET` | `/api/study/recent?limit=N` | Sessão | Lista o progresso do usuário, do mais recente ao mais antigo (padrão 20, teto fixo de 100) |
-| `GET` | `/api/study/progress?media_id=...` | Sessão | Lê a posição e a conclusão do usuário em uma mídia conhecida |
-| `POST` | `/api/study/position` | Sessão | Aceita `{ "media_id": "...", "position_seconds": 0 }` e grava o ponto de retomada |
-| `POST` | `/api/study/completed` | Sessão | Aceita `{ "media_id": "...", "completed": true }` e marca ou desmarca a conclusão |
+| `GET` | `/api/study/capabilities` | Session | Returns supported study capabilities |
+| `GET` | `/api/study/recent` | Session | Returns recently studied lessons |
+| `GET` | `/api/study/progress/{course}/{lesson}` | Session | Returns `{ position_seconds, completed, updated_at }` |
+| `PUT` | `/api/study/progress/{course}/{lesson}` | Session | Updates playback position and completion status |
+| `GET` | `/api/study/summary` | Session | Returns daily study minutes, active streak, and weekly totals |
+| `POST` | `/api/study/focus` | Session | Records an idempotent focus session |
+| `POST` | `/api/study/rewards/claim` | Session | Claims daily mission or weekly goal XP rewards |
+| `GET` | `/api/study/rewards` | Session | Returns gamification state (XP ledger, level, streak, forest trees) |
+| `GET` | `/api/study/favorites` | Session | Lists bookmarked courses and lessons |
+| `PUT` | `/api/study/favorites/courses/{id}` | Session | Bookmarks a course |
+| `DELETE` | `/api/study/favorites/courses/{id}` | Session | Removes course bookmark |
+| `PUT` | `/api/study/favorites/lessons/{course}/{lesson}` | Session | Bookmarks a lesson |
+| `DELETE` | `/api/study/favorites/lessons/{course}/{lesson}` | Session | Removes lesson bookmark |
 
-Uma mídia conhecida sem progresso responde `200` com `recorded: false`; a ausência não é um
-erro. Uma mídia desconhecida no catálogo responde `404 media_not_found`, uma posição negativa
-responde `422 invalid_position` e uma consulta malformada responde `400 invalid_query`. As
-mutações exigem a mesma origem (CSRF) e uma sessão que ainda precise trocar as credenciais
-temporárias recebe `403 credentials_change_required`. Nenhuma rota grava `media`, `scan`,
-`library` ou a biblioteca física; a mídia marcada como ausente continua aceitando leitura e
-escrita de progresso. Uma mídia removida do catálogo também mantém a leitura e a escrita de
-progresso — a identidade sobrevive à remoção —, mas deixa de aparecer em
-`/api/study/recent`, como no núcleo de remoção.
+## Notes & Flashcards
 
-### Study no desktop (IPC)
-
-O desktop não tem rotas: a SPA chama comandos Tauri por `invoke`, sem `fetch`, e recebe o mesmo
-shape snake_case (`media_id`, `position_seconds`, `completed`, `updated_at`, `recorded`).
-
-| Comando | Argumentos | Finalidade |
-| --- | --- | --- |
-| `desktop_study_progress` | `mediaId` | Lê a posição e a conclusão do dono local em uma mídia conhecida |
-| `desktop_record_position` | `mediaId`, `positionSeconds` | Grava o ponto de retomada, preservando a conclusão |
-| `desktop_set_completed` | `mediaId`, `completed` | Marca ou desmarca a conclusão, preservando a posição |
-| `desktop_recent_study` | `limit` (opcional) | Lista o progresso do dono local, do mais recente ao mais antigo |
-
-O dono é um identificador local fixo resolvido no Rust: nenhum comando aceita `owner_id` como
-argumento, então o webview não escolhe nem conhece o dono. Uma mídia conhecida sem progresso
-responde com `recorded: false`; uma mídia desconhecida vira o erro estável `media_not_found`, uma
-posição negativa vira `invalid_position` e as demais falhas viram `study_unavailable` ou
-`database_unavailable`. Sem `limit`, o histórico usa o padrão do contrato e o teto do núcleo
-continua valendo. Os comandos não exigem nenhum curso registrado e nunca gravam `media`,
-`scan`, `library` nem as pastas de curso.
-
-Limitação desta fatia: o desktop atende um único dono local, sem sessão nem seletor de contas.
-
-Para limites de arquitetura e deploy, consulte a [visão de arquitetura](../architecture/overview.md).
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| `GET` | `/api/study/notes` | Session | Lists study notes with optional course or lesson filters |
+| `POST` | `/api/study/notes` | Session | Creates a timestamped study note |
+| `PUT` | `/api/study/notes/{id}` | Session | Updates note text |
+| `DELETE` | `/api/study/notes/{id}` | Session | Deletes a note |
+| `GET` | `/api/study/flashcards` | Session | Lists flashcard review deck |
+| `POST` | `/api/study/flashcards` | Session | Creates a spaced repetition flashcard |
+| `POST` | `/api/study/flashcards/{id}/review` | Session | Records flashcard review grade and calculates next interval |
+| `DELETE` | `/api/study/flashcards/{id}` | Session | Deletes a flashcard |

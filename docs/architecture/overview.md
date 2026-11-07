@@ -1,154 +1,148 @@
-# Arquitetura
+# Architecture
 
-**Para quem é:** engenheiros, revisores e mantenedores que precisam decidir onde uma mudança entra.
-Se você só quer usar o LearnVault, comece pelo [README](../../README.md).
+**Target audience:** engineers, reviewers, and maintainers deciding where a change belongs.
+If you just want to run LearnVault, start with the [README](../../README.md).
 
-**Resumo:** o LearnVault lê pastas de cursos que já existem, monta um catálogo em SQLite e serve
-uma interface web de página única (SPA). O servidor HTTP e o desktop offline compartilham o mesmo
-núcleo de domínio. Nenhum dos dois altera os arquivos da biblioteca.
+**Summary:** LearnVault reads existing course folders, builds a SQLite catalog, and serves
+a single-page application (SPA). The HTTP server and offline desktop application share the
+same domain core. Neither ever alters or mutates files in the course library.
 
-## Dois modos, um núcleo
+## Two Modes, One Core
 
-O produto atende dois cenários:
+The product serves two main scenarios:
 
-- **Servidor self-hosted:** uma pessoa administra a biblioteca e as contas; as demais acessam pela
-  rede com login.
-- **Desktop offline:** uma pessoa usa o aplicativo na própria máquina, sem login e sem abrir portas
-  de rede.
+- **Self-hosted server:** one administrator manages the library and accounts; other users access
+  over the network with authenticated sessions.
+- **Offline desktop:** a single user runs the app on their local machine without login and without
+  opening network ports.
 
-A divisão existe para não duplicar as regras de catálogo e estudo. `crates/core` concentra essas
-regras; `crates/server` e `crates/desktop` apenas conectam o núcleo ao HTTP ou ao IPC do Tauri.
-Assim, a mesma lógica roda nos dois modos e os testes de domínio não precisam de rede nem de
-webview.
+This separation prevents duplicating catalog and study business rules. `crates/core` encapsulates
+these rules; `crates/server` and `crates/desktop` connect the core to HTTP or Tauri IPC.
+Thus, identical logic runs across both modes, and domain tests require neither network sockets
+nor webviews.
 
 ```text
-Servidor self-hosted                    Desktop offline
-  navegador / WebUI                       webview embutido
+Self-hosted Server                       Offline Desktop
+  Browser / WebUI                          Embedded Webview
         |                                       |
         v                                       v
   crates/server (Axum)                 crates/desktop (Tauri 2)
-        |  HTTP, cookie, Range                |  IPC, protocolo de mídia
+        |  HTTP, cookie, Range                |  IPC, media protocol
         +-------------------+-----------------+
                             v
-                    crates/core (domínio, SQLite)
+                    crates/core (domain, SQLite)
                             |
         +-------------------+-------------------+
         v                                       v
-  biblioteca de cursos (:ro)              dados e cache locais
+  course library (:ro)                    local data & cache
 ```
 
-## O que cada parte faz
+## Component Responsibilities
 
-| Parte | Responsabilidade | Fronteira |
+| Component | Responsibility | Boundary |
 | --- | --- | --- |
-| `crates/core` | Domínio, catálogo, scanner, identidade de mídia, rescan, SQLite e estado de estudo | Não conhece HTTP nem Tauri; recebe cada raiz de curso já resolvida |
-| `crates/server` | Autenticação, sessões, `Range`, cabeçalhos de segurança, registro de cursos e entrega da SPA | Traduz o domínio para HTTP; não reimplementa regras |
-| `crates/desktop` | Janela Tauri, IPC de cursos, catálogo, capas, rescan e estudo, além de mídia local | Não tem autenticação nem portas de rede |
-| `apps/web` | SPA Svelte 5 + TypeScript + Vite, com roteamento por hash e dois builds | Escolhe o transporte em tempo de compilação; não acessa arquivos diretamente |
+| `crates/core` | Domain, catalog, scanner, media identity, rescan, SQLite, and study state | Has no HTTP or Tauri knowledge; receives pre-resolved course roots |
+| `crates/server` | Authentication, sessions, `Range`, security headers, course registry, and SPA delivery | Translates domain to HTTP; never reimplements domain rules |
+| `crates/desktop` | Tauri window, course IPC, catalog, covers, rescan, study, and local media streaming | Has no authentication and opens no network ports |
+| `apps/web` | Svelte 5 + TypeScript + Vite SPA, hash routing, dual transport builds | Chooses transport at compile time; never touches files directly |
 
-## Estado atual
+## Current State
 
-O workspace Rust está completo: `crates/server` (Axum), `crates/desktop` (Tauri 2) e `apps/web`
-(Svelte 5 + Vite), com o domínio compartilhado em `crates/core`. O backend Go foi removido na Fase
-5 (PR #206).
+The Rust workspace is complete: `crates/server` (Axum), `crates/desktop` (Tauri 2), and `apps/web`
+(Svelte 5 + Vite), with the shared domain in `crates/core`. The legacy Go backend was removed in Phase 5.
 
-- **Servidor self-hosted:** expõe a API HTTP, autentica usuários e entrega a SPA. O registro de
-  cursos fica em `courses.json` ao lado do banco SQLite; `LIBRARY_DIR`/`--library-root` serve
-  apenas como semente do primeiro curso.
-- **Desktop offline:** abre a janela `main` definida em `crates/desktop/tauri.conf.json`, com a SPA
-  embutida por `frontendDist`. A titlebar própria usa controles nativos Tauri para minimizar,
-  maximizar/restaurar e fechar; as permissões de janela são restritas à janela `main`.
-  Importação, remoção, rescan e estudo passam por comandos IPC explícitos; o webview recebe
-  identificadores opacos e nunca caminhos.
-- **Mídia:** o protocolo `learnvault-media://localhost/<media-id>` entrega imagens, materiais,
-  vídeo, áudio e legendas com allowlist de tipo, faixas HTTP e limite de resposta. No Windows
-  (WebView2), o webview usa `http://learnvault-media.localhost/<media-id>`.
-- **Capas:** cada curso pode ter um arquivo de até 4 MiB, com formato detectado pelos bytes
-  iniciais, gravação atômica e `cover_version` no catálogo. A capa fica fora da pasta do curso; no
-  desktop, usa o protocolo `learnvault-cover://` e comandos IPC dedicados.
-- **Estudo e foco:** posição, conclusão, recentes, ofensiva, sessões Pomodoro e recompensas usam o
-  mesmo domínio SQLite em `crates/core`, com adaptadores HTTP autenticados e IPC desktop local. As
-  sessões são idempotentes por dono e identificador; o ledger de XP e os resgates diários impedem
-  duplicidade. O fuso da data é o local do servidor no modo HTTP e o do dispositivo no desktop; a
-  migração de sessões/recompensas antigas é uma reconstrução aproximada a partir do estado atual,
-  pois versões anteriores não guardavam o histórico completo de eventos. Timer e preferências de
-  interface continuam locais ao dispositivo. O player desktop reproduz mídia local, renderiza VTT
-  e permite baixar SRT/ASS/SSA; o build HTTP converte SRT sob demanda.
-- **Distribuição:** o instalador Windows NSIS está disponível; o pacote Linux/Flatpak ainda depende
-  de validação em sandbox. Veja [distribuição](../operations/distribution.md).
+- **Self-hosted server:** exposes the HTTP API, authenticates users, and serves the SPA. Course
+  registrations live in `courses.json` alongside the SQLite database; `LIBRARY_DIR`/`--library-root`
+  serves only as a seed for the initial course.
+- **Offline desktop:** opens the `main` window defined in `crates/desktop/tauri.conf.json`, with the
+  embedded SPA via `frontendDist`. The custom titlebar uses native Tauri window controls for minimize,
+  maximize/restore, and close; window permissions are strictly scoped to the `main` window.
+  Import, removal, rescan, and study operations run through explicit IPC commands; the webview
+  receives opaque identifiers, never raw filesystem paths.
+- **Media:** the `learnvault-media://localhost/<media-id>` protocol serves images, materials,
+  video, audio, and subtitles with type allowlisting, HTTP range support, and response limits.
+  On Windows (WebView2), the webview uses `http://learnvault-media.localhost/<media-id>`.
+- **Covers:** each course can have an image up to 4 MiB, with format detected via magic bytes,
+  atomic file writing, and `cover_version` tracking in the catalog. Covers are stored outside
+  the course folder; in desktop mode, they use the `learnvault-cover://` protocol and dedicated IPC.
+- **Study & focus:** playback position, completion status, recents, streaks, Pomodoro sessions,
+  and rewards use the shared SQLite domain in `crates/core`, with authenticated HTTP and local
+  desktop IPC adapters. Sessions are idempotent by owner and ID; the XP ledger and daily claims
+  prevent duplication. Timers and UI preferences remain local to the device. The desktop player
+  plays local media, renders VTT subtitles, and offers SRT/ASS/SSA downloads; the HTTP build
+  transcodes and remuxes extended media formats on demand via FFmpeg.
+- **Distribution:** Windows NSIS installer is available; Linux/Flatpak packaging is in progress.
+  See [distribution](../operations/distribution.md).
 
-O frontend usa Svelte e componentes DaisyUI 5 selecionados, com prefixo `lvui-` e cores
-semânticas mapeadas aos tokens do LearnVault em `apps/web/src/ui-components.css`. O CSS do
-projeto mantém a identidade e o suporte aos temas claro/escuro; o build não carrega fontes,
-scripts ou folhas de estilo de terceiros pela rede.
+The frontend uses Svelte and selected DaisyUI 5 components, prefixed with `lvui-` and semantic
+colors mapped to LearnVault tokens in `apps/web/src/ui-components.css`. Project styling maintains
+light and dark theme support; builds never load fonts, scripts, or stylesheets over third-party CDNs.
 
+### Focus & Rewards Contract
 
-### Contrato de foco e recompensas
-
-- O núcleo valida `1 <= planned_seconds <= 7200`, `0 <= actual_seconds <= planned_seconds` e um intervalo
-  `0 <= ended_at - started_at <= 7200`, com início não negativo. O tempo efetivo não
-  pode superar esse intervalo; uma sessão concluída exige todo o tempo planejado.
-  Pausas podem tornar o intervalo maior que o tempo efetivo. HTTP e IPC desktop usam
-  a mesma validação do núcleo. Os tempos são declarados pelo cliente, não prova de foco.
-- Repetir dono, identificador e payload retorna a sessão existente sem novo XP.
-  Reutilizar o identificador com outro payload retorna HTTP `409 focus_session_conflict`.
-  Uma sessão inválida retorna `422 invalid_focus_session`.
-- A outbox é local e isolada por conta. Conflitos e validações recusadas são retirados da
-  fila somente depois de preservar payload e motivo na lista local de rejeições, exibida
-  na interface. Sem armazenamento disponível, a sessão permanece pendente. Falhas
-  transitórias aguardam nova tentativa explícita, sem repetir requisições continuamente.
-- Atividades concedem a meta semanal na semana da data local da atividade
-  (`updated_at` para aulas, `ended_at` para foco), de segunda a domingo. Alterar a
-  preferência reavalia somente a semana local atual. A concessão de 50 XP é única por
-  dono/semana; aumentar a meta depois não revoga XP já concedido.
-- Resgatar missão desconhecida retorna `404 mission_not_found`; missão conhecida sem
-  progresso suficiente retorna `409 mission_not_complete`. Repetir um resgate concluído
-  não duplica XP.
+- The core validates `1 <= planned_seconds <= 7200`, `0 <= actual_seconds <= planned_seconds`,
+  and `0 <= ended_at - started_at <= 7200`, with non-negative timestamps. Actual duration cannot
+  exceed elapsed time; completing a session requires the full planned duration. Pauses may cause
+  elapsed duration to exceed actual focus time. Both HTTP and desktop IPC enforce the same core
+  validations. Times are declared by the client, not cryptographic proof of focus.
+- Repeating an identical owner, ID, and payload returns the existing session without granting new XP.
+  Reusing an ID with a conflicting payload returns HTTP `409 focus_session_conflict`.
+  Invalid session parameters return `422 invalid_focus_session`.
+- The outbox is local and isolated per account. Conflicting and rejected sessions are dequeued
+  only after preserving the payload and rejection reason in the local rejection list shown in the UI.
+  If storage is unavailable, sessions remain pending. Transient network errors await explicit retry
+  without endless background polling loops.
+- Completed activities grant the weekly goal in the week of their local date (`updated_at` for lessons,
+  `ended_at` for focus), evaluated Monday through Sunday. Changing goal preferences re-evaluates only
+  the current local week. The 50 XP award is granted once per owner/week; subsequently increasing
+  the goal does not revoke already granted XP.
+- Claiming an unknown mission returns `404 mission_not_found`; claiming an incomplete mission returns
+  `409 mission_not_complete`. Repeating a completed claim does not duplicate XP.
 
 ```text
-Proxy HTTPS local
+Local HTTPS Reverse Proxy
         |
         v
-Serviço HTTP Rust -- SQLite + registro de cursos (/data)
-        |-- cache (/cache)
-        `-- pastas de curso (/courses/*:ro)
+Rust HTTP Server -- SQLite + Course Registry (/data)
+        |-- Cache (/cache)
+        `-- Course Folders (/courses/*:ro)
 ```
 
-## Regras que qualquer mudança deve respeitar
+## Invariants Every Change Must Respect
 
-Estas regras, ou invariantes, explicam decisões que já custaram discussão. Se uma mudança precisa
-quebrar uma delas, a conversa começa no GitHub, não no código.
+These invariants reflect architectural principles established through deliberate design. If a change
+requires modifying an invariant, discussion must happen on GitHub first, not directly in code.
 
-- A biblioteca física é externa e somente leitura. Cada pasta registrada vira um curso.
-- O SQLite guarda metadados e estado pessoal de estudo. A mídia dos cursos fica na biblioteca.
-- O rescan nunca exclui registros. Ele marca arquivos ausentes e reutiliza a identidade quando o
-  arquivo reaparece no mesmo caminho.
-- Remover uma mídia é uma ação explícita e persistente. O registro e o progresso continuam, e
-  nenhum rescan desfaz a remoção.
-- A pasta de cada curso é configuração da plataforma, não dado do catálogo. O registro fica ao lado
-  do banco no servidor ou no diretório de configuração do aplicativo no desktop.
-- Ações administrativas são explícitas. Não existe scan silencioso na inicialização nem importação
-  que indexe sem pedido.
-- Cache e mídia derivada são descartáveis e ficam separados dos dados duráveis.
-- Uma capa personalizada pertence ao aplicativo, não ao curso. Ela fica ao lado do banco no
-  servidor ou no diretório de dados do aplicativo no desktop, com no máximo 4 MiB, formato
-  decidido pelos bytes iniciais e gravação atômica. Nenhuma pasta de curso recebe arquivo.
-- Docker e Podman são adaptadores opcionais de deploy. O runtime não depende deles.
+- The physical course library is external and strictly read-only. Each registered directory is a course.
+- SQLite stores metadata and personal study state. Course media remains strictly in the library.
+- Rescan never deletes catalog records. It marks missing files and reuses identities when files reappear
+  at the same path.
+- Removing media is an explicit, permanent tombstone action. Records and progress persist, and rescans
+  never resurrect removed media.
+- The path to each course is platform configuration, not catalog content. The registry is stored alongside
+  the database on the server or in the desktop app's configuration directory.
+- Administrative actions are always explicit. There is no silent indexing on startup or unprompted imports.
+- Cache and derived media are ephemeral and kept strictly separated from durable database state.
+- Custom covers belong to the application, not the course folder. They are stored next to the database
+  on the server or in the desktop data directory, limited to 4 MiB, validated via magic bytes, and written
+  atomically. No course folder ever receives files.
+- Docker and Podman are optional deployment adapters. The runtime never depends on containers.
 
-## Importação de bancos antigos
+## Legacy Database Import
 
-O núcleo mantém `legacy_import` para quem vem da versão Go. A importação é explícita: a origem é
-somente leitura, recebe backup antes da operação e a saída só é promovida depois de transação,
-integridade, chaves estrangeiras e contagens. A biblioteca física não participa da migração.
+The core provides `legacy_import` for migrating from previous Go releases. Import is explicit:
+the source is read-only, backed up before execution, and the destination is promoted only after
+verifying transaction integrity, foreign keys, and row counts. The physical course library is
+never touched during migration.
 
-## Decisões e alternativas
+## Decisions & Alternatives
 
-A decisão pela reescrita em Rust e as alternativas consideradas estão no
-[ADR 0001](adr/0001-reescrita-em-rust.md). Consulte [distribuição](../operations/distribution.md)
-para executáveis e pacotes.
+The architectural rationale for the Rust rewrite and alternative designs considered are documented in
+[ADR 0001](adr/0001-reescrita-em-rust.md). See [distribution](../operations/distribution.md)
+for binary packages and deployment details.
 
-## Próximos passos
+## Related Documentation
 
-- [[Requirements]] para os requisitos numerados do produto.
-- [[Development-and-Governance]] para o fluxo de contribuição e CI.
-- [[Operations]] para distribuição e operação.
+- [Requirements](../product/requirements.md) for numbered functional and non-functional requirements.
+- [Governance](../governance/overview.md) for contribution guidelines, CI checks, and release policies.
+- [Distribution](../operations/distribution.md) for operations, packaging, and deployment setups.

@@ -1,91 +1,52 @@
-# Requisitos do produto
+# Product Requirements
 
-**Para quem é:** produto, QA, engenharia e qualquer pessoa que precise citar um requisito em uma
-issue ou revisão. Se você é novo no projeto, leia primeiro
-[README](../../README.md) e [Roadmap](roadmap.md).
+**Target audience:** product, QA, engineering, and anyone referencing a requirement in an issue or PR review.
+If you are new to the project, start with the [README](../../README.md) and [Roadmap](roadmap.md).
 
-**Como ler:** RF são requisitos funcionais, ou seja, o que o produto faz. RNF são requisitos não
-funcionais, ou seja, como ele deve se comportar. Os identificadores são estáveis e servem para
-citação. O [roadmap](roadmap.md) mostra o estado de entrega; as issues acompanham as pendências.
+**Conventions:** FR denotes functional requirements (what the product does). NFR denotes non-functional requirements
+(how the product behaves). Requirement IDs are stable and intended for cross-referencing. The [roadmap](roadmap.md)
+tracks delivery status; GitHub issues track in-flight implementation work.
 
-O LearnVault tem dois modos de uso, aprovados no
-[ADR 0001](../architecture/adr/0001-reescrita-em-rust.md): o **servidor self-hosted** com WebUI e o
-**desktop offline**.
+LearnVault has two deployment modes, defined in [ADR 0001](../architecture/adr/0001-reescrita-em-rust.md):
+the **self-hosted server** with WebUI, and the **offline desktop application**.
 
-## Modos de uso e atores
+## Modes of Operation
 
-| Modo | Quem usa | Autenticação |
+| Mode | User | Authentication |
 | --- | --- | --- |
-| Servidor self-hosted | Administrador e usuários locais, pela rede ou WebUI | Contas locais com sessão por cookie |
-| Desktop offline | Usuário único na própria máquina, sem rede | Sem login; dono local fixo resolvido no Rust |
+| Self-hosted server | Administrator and local users over the network or WebUI | Local accounts with cookie session |
+| Offline desktop | Single user on their local machine, offline | No login; fixed local user identity in Rust |
 
-Fonte: [visão de arquitetura](../architecture/overview.md); ADR 0001.
+Source: [Architecture Overview](../architecture/overview.md); ADR 0001.
 
-## Requisitos funcionais
+## Functional Requirements
 
-- **RF-01: Biblioteca somente leitura.** Indexar uma pasta de cursos existente sem mover, alterar ou
-  apagar nada na pasta física.
-- **RF-02: Catálogo.** Persistir e servir a árvore de categorias, cursos, módulos e aulas, com
-  materiais e arquivos soltos reconhecidos pelo scanner.
-- **RF-03: Identidade de mídia.** Cada arquivo tem um `media_id` opaco, separado do caminho físico;
-  um arquivo que reaparece no mesmo caminho reutiliza a identidade.
-- **RF-04: Rescan explícito e preservador.** O scan só roda por ação do usuário; insere novos,
-  reafirma conhecidos e marca ausentes, sem excluir registros nem progresso.
-- **RF-05: Remoção explícita de mídia.** A remoção é uma ação explícita e persistente (tombstone);
-  nenhum rescan a desfaz e o progresso associado sobrevive.
-- **RF-06: Contas e sessões no servidor.** Login, logout, leitura da conta atual e troca de
-  credenciais com invalidação das sessões anteriores; o primeiro acesso exige a troca.
-- **RF-07: Entrega de mídia autenticada.** Transmitir arquivos aprovados da biblioteca com suporte a
-  `Range` (`206`/`416`) e recusar mídia removida ou ausente.
-- **RF-08: Estudo.** Progresso por usuário com posição de retomada, conclusão independente da posição
-  e histórico recente com limites públicos.
-- **RF-09: Desktop offline.** Escolher a pasta da biblioteca por seletor nativo, indexar, navegar no
-  catálogo e registrar estudo por IPC, sem login, sem cookies e sem portas de rede.
-- **RF-10: Interface de estudo.** Navegação de cursos e aulas, player, retomada, estados vazios e de
-  erro, mantendo a identidade visual própria do projeto.
-- **RF-11: Distribuição.** Instalador NSIS no Windows, Flatpak como formato Linux preferencial
-  (sujeito a validação técnica), imagem OCI e binário nativo para instalação self-hosted, com uma
-  única versão por release.
+- **FR-01: Read-Only Course Library.** Index an existing course folder without moving, altering, renaming, or deleting any original files.
+- **FR-02: Catalog.** Persist and serve the hierarchical tree of categories, courses, modules, and lessons, with materials and loose files detected by the scanner.
+- **FR-03: Media Identity.** Each media item receives an opaque `media_id` decoupled from physical paths; files reappearing at the same relative path reuse their identity.
+- **FR-04: Explicit Preserving Rescan.** Scans execute only on explicit user request; scans register new items, confirm existing ones, and mark disappeared items as missing without deleting records or progress.
+- **FR-05: Explicit Media Removal.** Removing a media item is an explicit, permanent tombstone action; rescans never un-remove it, and study progress is preserved.
+- **FR-06: Server Accounts & Sessions.** Support login, logout, current account queries, and credential updates with invalidation of previous sessions; initial access requires setting a secure password.
+- **FR-07: Authenticated Media Streaming.** Stream approved library media with HTTP `Range` support (`206`/`416`), rejecting missing or tombstoned media.
+- **FR-08: Study Progress.** Track study progress per user with playback resume position, completion status decoupled from resume position, and recent history with public limits.
+- **FR-09: Offline Desktop.** Choose course library folder via native OS dialog, index courses, browse catalog, and record study progress over local IPC without network listeners or cookies.
+- **FR-10: Study Interface.** Provide course navigation, lesson player, resume playback, empty states, and error handling while maintaining consistent design identity.
+- **FR-11: Distribution.** Provide Windows NSIS installer, Linux Flatpak desktop package (pending sandbox verification), OCI container image, and native Linux server tarballs.
 
-Fontes: RF-01, RF-03, RF-04, RF-05, RF-06, RF-07, RF-09 e RF-11 vêm do ADR 0001 e dos invariantes da
-[visão de arquitetura](../architecture/overview.md); RF-02, RF-07 e RF-08 vêm da
-[referência da API](../reference/api.md); RF-10 vem das seções de Interface do [roadmap](roadmap.md);
-RF-11 também aparece na [distribuição](../operations/distribution.md).
+## Non-Functional Requirements
 
-## Requisitos não funcionais
+- **NFR-01: Data Safety.** The course library is external and strictly read-only; SQLite stores only metadata and study progress, never original media.
+- **NFR-02: Desktop Trust Boundary.** Webview never sends or receives arbitrary filesystem paths; directory selection uses native OS dialogs in Rust, and media is addressed by opaque `media_id` with minimal Tauri capabilities.
+- **NFR-03: Privacy & Network Security.** Desktop app exposes no network ports and uses no HTTP authentication. Self-hosted server uses HttpOnly cookies with `SameSite=Strict` and `Secure` by default (`--insecure-http` is restricted to local development).
+- **NFR-04: Streaming Performance.** Media plays with partial streaming and seeking without buffering entire files in memory; performance-sensitive changes include benchmark measurements.
+- **NFR-05: Operability.** Server exposes health and database readiness at `/api/healthz`; exposed deployments use HTTPS reverse proxy; data and cache directories are separated; rollbacks use verifiable checksums.
+- **NFR-06: Portability.** Core compiles without Docker or Podman; containerization is an optional deployment adapter.
+- **NFR-07: Quality.** Rust test coverage maintained with cargo tests and clippy warnings treated as errors (`-D warnings`).
+- **NFR-08: Accessibility.** Keyboard navigation, visible focus indicators, high contrast, reduced motion support, and screen reader labels.
+- **NFR-09: Language & Internationalization.** Canonical documentation, commit messages, and PRs are maintained in English (`en`); the application provides runtime internationalization (i18n) supporting English (default) and Brazilian Portuguese (`pt-BR`).
 
-- **RNF-01: Segurança dos dados.** A biblioteca fica externa ao aplicativo e é somente leitura; o
-  SQLite guarda apenas metadados e estado pessoal, nunca a mídia dos cursos.
-- **RNF-02: Fronteira de confiança do desktop.** O webview nunca envia nem recebe caminhos
-  arbitrários: a seleção usa o seletor nativo no Rust e a mídia é endereçada pelo `media_id`, com
-  capabilities mínimas e CSP explícita.
-- **RNF-03: Privacidade e rede.** O desktop não expõe portas de rede nem usa autenticação HTTP; o
-  servidor usa cookie HttpOnly `SameSite=Strict` e `Secure` por padrão, com `--insecure-http`
-  restrito ao desenvolvimento local.
-- **RNF-04: Desempenho de mídia.** Reprodução com streaming parcial e seek, sem carregar arquivos
-  inteiros em memória; mudanças sensíveis a desempenho incluem medições.
-- **RNF-05: Operação.** O servidor expõe a saúde do processo e a prontidão do banco em
-  `/api/healthz`; deploys expostos usam proxy HTTPS com limites de conexão; dados e cache ficam em
-  diretórios separados; o rollback reinstala a release anterior publicada, com artefatos e checksums
-  verificáveis. No cutover self-hosted, o rollback exige volumes pareados com RPO no instante do
-  backup da importação, um procedimento documentado e ainda não comprovado (G7).
-- **RNF-06: Portabilidade.** O núcleo compila sem Docker ou Podman; containers são adaptadores
-  opcionais; o CI constrói cada artefato de plataforma antes de montar instaladores.
-- **RNF-07: Qualidade.** Cobertura de testes Rust de pelo menos 80% medida com `cargo-llvm-cov`,
-  `fmt` e `clippy` sem avisos, e os passos do playbook de testes por tipo de mudança.
-- **RNF-08: Acessibilidade.** Navegação por teclado, foco visível, contraste, movimento reduzido e
-  rótulos para leitores de tela.
-- **RNF-09: Idioma e documentação.** Documentação editorial e commits em inglês; o produto suporta internacionalização (i18n) em inglês (padrão) e pt-BR. O repositório é a fonte canônica.
+## Related Documentation
 
-Fontes: RNF-01, RNF-03 e RNF-05 vêm da [visão de arquitetura](../architecture/overview.md), do ADR
-0001 e da [referência da API](../reference/api.md); RNF-02 vem dos riscos do plano da issue #69 e da
-visão de arquitetura; RNF-04 vem das regras de entrega do [roadmap](roadmap.md) e do plano da #69;
-RNF-06 vem da [distribuição](../operations/distribution.md) e do roadmap; RNF-07 vem do ADR 0001 e do
-[playbook de testes](../../.agents/playbooks/testing.md); RNF-08 vem do roadmap; RNF-09 vem de
-[`.agents/policies/governance.md`](../../.agents/policies/governance.md).
-
-## Próximos passos
-
-- [[Roadmap]] para o estado de entrega de cada requisito.
-- [[Architecture]] para as decisões técnicas que sustentam os requisitos.
-- [[Development-and-Governance]] para o fluxo de mudança e revisão.
+- [Roadmap](roadmap.md) for delivery status of each requirement.
+- [Architecture Overview](../architecture/overview.md) for technical decisions supporting these requirements.
+- [Governance](../governance/overview.md) for contribution and review workflows.

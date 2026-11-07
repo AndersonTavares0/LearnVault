@@ -1,101 +1,70 @@
-# Roadmap do LearnVault
+# LearnVault Roadmap
 
-**Para quem é:** qualquer pessoa que queira saber onde o produto está e para onde vai. Requisitos
-detalhados ficam em [requirements.md](requirements.md); decisões técnicas em
+**Target audience:** anyone wanting to understand the current product status and future direction.
+Detailed requirements are in [requirements.md](requirements.md); technical architecture is in
 [overview.md](../architecture/overview.md).
 
-## Como ler
+## Status Guide
 
-- **Entregue:** já está na `main` e disponível para uso.
-- **Agora:** o foco atual do time.
-- **Em seguida:** planejado, sem data fechada.
-- **Depois:** trabalho previsto para os próximos ciclos.
-- **Mais tarde:** ideias em avaliação, não compromisso.
+- **Delivered:** merged into `main` and available for use.
+- **In Progress:** active engineering focus.
+- **Next:** planned for upcoming iterations.
+- **Later:** backlog concepts under evaluation.
 
-Detalhes de implementação ficam nas issues e pull requests.
+## Delivered
 
-## Entregue
+- **Rust Core:** domain, SQLite, and catalog in `crates/core`; Axum HTTP server in `crates/server`; Svelte 5 + Vite web frontend in `apps/web`. The legacy Go service was fully replaced.
+- **Offline Desktop (Tauri 2):** catalog, native library folder picker, per-course import and removal, explicit library rescan, local media protocol by opaque ID, and study progress via internal IPC. The desktop app requires no authentication and opens no network ports.
+- **Study Rules Engine:** shared progress tracking, streaks, and gamification across server, web UI, and desktop.
+- **Video & Audio Player:** media and subtitle selection per lesson, keyboard shortcuts (`J`/`K`/`L`, `0-9`, `M`, `N`, `F`, `P`, `[`/`]`), persistent playback rate, Picture-in-Picture, interactive timeline with note markers, optional auto-advance, on-demand FFmpeg remuxing/transcoding for extended formats (`.mkv`, `.avi`, `.wmv`, `.ts`, HEVC, AC3), and opening in the default system media player on desktop.
+- **Course Study View:** integrated player and lesson playlist, resuming last watched lesson, quick lesson completion toggle in the course tree, active module auto-expansion, module materials separated from the video playlist, and course administration actions.
+- **Study Notes & Flashcards:** timestamped study notes with one-click seeking, global note search with course filtering, and spaced repetition flashcards per lesson on both Web and desktop.
+- **Focus, Habits & 2.5D Study Forest:** idempotent Pomodoro focus timer with offline queue, study streak tracking, daily missions, weekly focus goals, and a 2.5D isometric forest powered by completed focus sessions.
+- **Course Covers:** automatic title-based covers, root image detection (`cover.*`, `folder.*`, `poster.*`, `thumb.*`), and custom cover upload / native picker with PNG/JPEG/WebP validation, 4 MiB limit, and atomic file saving outside course folders.
+- **Administrative Backup & Restore:** secure SQLite database download and integrity-checked restore via the server admin interface.
+- **Multi-User Accounts & Course Access Permissions:** local student accounts, admin management, and granular course assignment.
+- **Internationalization (i18n):** runtime language switching supporting English (default) and Brazilian Portuguese (`pt-BR`) with persistence across reloads.
+- **Distribution:** Windows NSIS installer, signed updater (Ed25519), Linux server tarballs, and OCI container images with verifiable `SHA256SUMS`.
 
-- **Núcleo Rust:** domínio, SQLite e catálogo em `crates/core`; servidor Axum em `crates/server`;
-  interface web em Svelte 5 + Vite em `apps/web`. O serviço Go foi removido na PR #206; resta o
-  importador `migrate-go` para bancos SQLite antigos.
-- **Desktop offline (Tauri 2):** catálogo, seleção da biblioteca pelo seletor nativo, importação e
-  remoção por curso, releitura explícita da biblioteca, mídia local por identificador e progresso de
-  estudo por comandos internos (IPC). O desktop não tem autenticação e não abre portas de rede.
-- **Regras de estudo** compartilhadas entre servidor, interface web e desktop (#86, #88, #90, #91).
-- **Player** com seleção de mídia e legenda por aula, atalhos de teclado (`J`/`K`/`L`, `0-9`, `M`,
-  `N`, `F`, `P`, `[`/`]`), velocidade persistida, Picture-in-Picture, linha do tempo interativa com
-  marcações de anotações, avanço automático opcional, remux/transcodificação sob demanda via FFmpeg
-  no servidor para formatos estendidos (`.mkv`, `.avi`, `.wmv`, `.ts`, HEVC, AC3) e abertura no
-  reprodutor padrão do sistema no desktop.
-- **Tela de estudo do curso:** player e lista de aulas na mesma tela, retomada da última aula
-  assistida, conclusão rápida por aula na árvore do curso, módulo da aula atual aberto, materiais do
-  módulo fora da playlist e ações administrativas em um menu do curso.
-- **Anotações e cartões de revisão (Flashcards):** anotações com marcador de tempo clicável, busca
-  global por anotações com filtro por curso e cartões de repetição espaçada por aula no Web e no
-  desktop.
-- **Foco, evolução e Bosque de Estudo 2.5D:** timer Pomodoro idempotente com fila offline, ofensiva
-  de estudo, missões diárias, meta semanal e bosque isométrico 2.5D alimentado pelas sessões de foco
-  concluídas.
-- **Capas** geradas a partir do título, detecção automática de imagens locais na raiz do curso
-  (`cover.*`, `folder.*`, `poster.*`, `thumb.*`) e capas manuais por upload do admin ou seletor
-  nativo no desktop, com validação PNG/JPEG/WebP, limite de 4 MiB e gravação atômica fora das pastas
-  de curso.
-- **Backup e restauração administrativa:** download e restauração segura do banco SQLite com
-  validação de integridade pela interface administrativa do servidor.
-- **Distribuição** com instalador Windows NSIS, updater assinado (Ed25519), tarballs Linux do
-  servidor e `SHA256SUMS` em cada release.
+## In Progress: Polish & Production Quality
 
-## Agora: uma rotina de estudo completa
+- [x] Streamlined library → lesson → focus → habit loop on Web and desktop.
+- [x] "Continue studying" hero section on home screen with status filters.
+- [x] Timestamped notes, global notes search, and spaced repetition cards.
+- [x] Extended media format support, on-demand server transcoding, and desktop external player.
+- [x] Local multi-user student accounts with course access permissions.
+- [x] Course and lesson bookmarking / favorites (#304).
+- [x] Full i18n support (`en` default, `pt-BR` fully supported) and English canonical documentation (#306).
+- [ ] Continuous accessibility improvements: keyboard trap prevention, ARIA announcements, and screen reader testing.
 
-- [x] Fluxo biblioteca → aula → foco → evolução consistente no Web e no desktop (#281).
-- [x] "Continuar estudando" em destaque na tela inicial e filtros por estado e pasta de origem (#281, #297).
-- [x] Anotações com timestamp, busca global em anotações e cartões de memorização (#281, #290, #297).
-- [x] Suporte a formatos estendidos de mídia, transcodificação sob demanda no servidor e player do sistema no desktop (#298).
-- [x] Permissões de acesso a cursos para vários usuários locais.
+## Next: Study Desk Enhancements
 
-## Em seguida: uma mesa de estudo
+- [ ] On-demand remux persistent cache for incompatible media formats.
+- [ ] Full-text search inside course materials and subtitle tracks.
 
-- [ ] Acessibilidade contínua: teclado, foco, contraste, movimento reduzido e leitores de tela.
-- [x] Favoritos de cursos e aulas (#304).
+## Distribution & Packaging
 
-## Depois: uma biblioteca mais rica
+- [x] Maintain core compilation without Docker or Podman.
+- [x] Publish OCI container image and native server binaries for self-hosted deployment.
+- [x] Provide Docker Compose and Podman Quadlet deployment templates.
+- [ ] Package Linux Flatpak desktop app using `xdg-portal` file chooser in verified sandbox.
+- [ ] Sign Windows desktop binaries with code-signing certificates when available.
 
-- [ ] Cache persistente de remux sob demanda para mídias incompatíveis.
-- [ ] Busca textual dentro de materiais e legendas.
+## Long-term Explorations
 
-## Distribuição: portabilidade primeiro
+- [ ] Optional local Whisper integration for speech-to-text transcription.
+- [ ] Subtitle indexing and searchable transcripts.
+- [ ] Automated scheduled database backups with retention policies.
+- [ ] Native mobile companion client once desktop/web APIs stabilize.
 
-- [x] Manter o núcleo compilável sem Docker ou Podman.
-- [ ] Publicar Flatpak como formato Linux preferencial do desktop. A seleção de diretório usa o
-  backend `xdg-portal` e o manifesto não concede filesystem amplo; faltam build e smoke test reais
-  no sandbox, incluindo acesso persistente ao diretório escolhido e reprodução de mídia.
-- [x] Publicar imagem OCI e binário nativo para instalação self-hosted (#302).
-- [ ] Assinar artefatos desktop quando houver credenciais de plataforma.
-- [x] Manter Docker Compose e Podman rootless/Quadlet como adaptadores opcionais de servidor.
+## Delivery Invariants
 
-## Mais tarde: recursos opcionais
+- Every deliverable includes automated tests, documentation updates, and clear verification.
+- Distribution targets are additive: container build failures do not block native server packaging.
+- No feature ever modifies or copies the original physical course library.
+- Scope adjustments are coordinated through GitHub issues and pull requests.
 
-- [ ] Whisper como capacidade separada e opcional.
-- [ ] Indexação de transcrições e legendas pesquisáveis.
-- [ ] Backup automatizado com retenção e verificação de restauração.
-- [ ] Cliente mobile nativo quando a experiência web estiver estável.
+## Related Documentation
 
-## Regras de entrega
-
-- Cada marco precisa de resultado claro para o usuário, testes, documentação e rollback.
-- Alvos de distribuição são aditivos: uma falha de container não bloqueia o caminho nativo.
-- Nenhum item modifica ou copia a biblioteca física, que permanece externa e somente leitura.
-- Mudanças de escopo passam pelo GitHub e chegam aqui por pull request.
-
-## Decisões em aberto
-
-- [Escopo e prioridades das próximas versões](https://github.com/AndersonTavares0/LearnVault/discussions/32)
-- [Camada de análise e dados](https://github.com/AndersonTavares0/LearnVault/discussions/33)
-- [Artefatos Windows além do instalador padrão (`.msi`, portátil)](https://github.com/AndersonTavares0/LearnVault/discussions/131)
-
-## Próximos passos
-
-- [Requisitos](requirements.md) para os requisitos por trás dos itens.
-- [Arquitetura](../architecture/overview.md) para as decisões técnicas atuais.
-- [README](../../README.md) para visão geral e instruções de execução.
+- [Requirements](requirements.md) for functional and non-functional requirements.
+- [Architecture](../architecture/overview.md) for architectural boundaries and design decisions.
