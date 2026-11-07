@@ -67,6 +67,18 @@ pub fn build_router(state: AppState) -> Router {
             "/api/account/credentials",
             axum::routing::post(auth::credentials),
         )
+        .route(
+            "/api/admin/users",
+            get(auth::list_users).post(auth::create_user),
+        )
+        .route(
+            "/api/admin/users/{id}/courses",
+            axum::routing::put(auth::set_user_courses),
+        )
+        .route(
+            "/api/admin/users/{id}",
+            axum::routing::delete(auth::delete_user),
+        )
         .route("/api/catalog", get(catalog::catalog))
         .route("/api/admin/catalog/rescan", post(catalog::rescan))
         .route("/api/admin/courses", post(courses::import))

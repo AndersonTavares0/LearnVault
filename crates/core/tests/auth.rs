@@ -1,8 +1,9 @@
 //! Contratos de persistência tipada para autenticação e sessões.
 
 use learnvault_core::{
-    AuthSession, AuthUser, Database, bootstrap_admin, create_session, delete_session,
-    find_user_by_username, session_user, update_credentials,
+    AuthSession, AuthUser, Database, Error, bootstrap_admin, can_user_access_course,
+    create_session, create_user, delete_session, delete_user, find_user_by_username, list_users,
+    session_user, set_user_course_access, update_credentials,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -16,7 +17,7 @@ const TOKEN_HASH: &str = "token-hash-sha256";
 fn existing_auth_tables_are_available_without_a_new_migration() -> TestResult {
     let db = Database::open_in_memory()?;
 
-    assert_eq!(db.schema_version()?, 9);
+    assert_eq!(db.schema_version()?, 10);
     for table in ["user", "session"] {
         let exists: i64 = db.connection().query_row(
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
@@ -103,5 +104,81 @@ fn deleting_a_session_invalidates_it() -> TestResult {
     delete_session(&mut db, TOKEN_HASH)?;
 
     assert!(session_user(&db, TOKEN_HASH, 1_999)?.is_none());
+    Ok(())
+}
+
+#[test]
+fn local_users_and_course_permissions_lifecycle() -> TestResult {
+    let mut db = Database::open_in_memory()?;
+    bootstrap_admin(&mut db, USER_ID, USERNAME, PASSWORD_HASH, 1_700_000_000)?;
+
+    // Cria estudante com acesso irrestrito inicial (None)
+    let alice = create_user(
+        &mut db,
+        "usr-alice",
+        "alice",
+        PASSWORD_HASH,
+        1_700_000_100,
+        None,
+    )?;
+    assert_eq!(alice.username, "alice");
+    assert!(!alice.is_admin);
+    assert_eq!(alice.allowed_course_ids, None);
+    assert!(can_user_access_course(&db, "usr-alice", false, "course-a")?);
+    assert!(can_user_access_course(&db, "usr-alice", false, "course-b")?);
+
+    // Duplicidade case-insensitive é recusada
+    let dup = create_user(
+        &mut db,
+        "usr-alice-2",
+        "ALICE",
+        PASSWORD_HASH,
+        1_700_000_101,
+        None,
+    );
+    assert!(matches!(dup, Err(Error::UsernameTaken)));
+
+    // Restringe Alice apenas a course-a
+    let restricted = set_user_course_access(&mut db, "usr-alice", Some(&["course-a".to_owned()]))?;
+    assert_eq!(restricted, Some(vec!["course-a".to_owned()]));
+    assert!(can_user_access_course(&db, "usr-alice", false, "course-a")?);
+    assert!(!can_user_access_course(
+        &db,
+        "usr-alice",
+        false,
+        "course-b"
+    )?);
+
+    // Restringe Alice a zero cursos
+    let zero_courses = set_user_course_access(&mut db, "usr-alice", Some(&[]))?;
+    assert_eq!(zero_courses, Some(Vec::new()));
+    assert!(!can_user_access_course(
+        &db,
+        "usr-alice",
+        false,
+        "course-a"
+    )?);
+
+    // Restaura acesso irrestrito (None)
+    let unrestricted = set_user_course_access(&mut db, "usr-alice", None)?;
+    assert_eq!(unrestricted, None);
+    assert!(can_user_access_course(&db, "usr-alice", false, "course-b")?);
+
+    // Não permite restringir nem remover administrador
+    assert!(matches!(
+        set_user_course_access(&mut db, USER_ID, Some(&[])),
+        Err(Error::CannotModifyAdminUser)
+    ));
+    assert!(matches!(
+        delete_user(&mut db, USER_ID),
+        Err(Error::CannotModifyAdminUser)
+    ));
+
+    let users = list_users(&db)?;
+    assert_eq!(users.len(), 2);
+
+    assert!(delete_user(&mut db, "usr-alice")?);
+    assert!(!delete_user(&mut db, "usr-alice")?);
+    assert_eq!(list_users(&db)?.len(), 1);
     Ok(())
 }

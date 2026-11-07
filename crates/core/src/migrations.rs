@@ -11,7 +11,7 @@ use rusqlite_migration::{M, Migrations};
 /// A recusa de um schema mais novo não depende desta constante — ela vem de
 /// `SchemaVersion::Outside` —, mas ela deve acompanhar a cadeia de migrações porque
 /// aparece na mensagem de diagnóstico de [`crate::Error::SchemaTooNew`].
-pub(crate) const SCHEMA_VERSION: usize = 9;
+pub(crate) const SCHEMA_VERSION: usize = 10;
 
 /// Versão 1: bibliotecas, mídia, varreduras e estado de estudo.
 ///
@@ -438,6 +438,19 @@ CREATE TABLE study_favorite (
 CREATE INDEX study_favorite_owner_kind_idx ON study_favorite (owner_id, target_kind, created_at);
 ";
 
+/// Versão 10: permissões de acesso a cursos por usuário local.
+///
+/// Quando não há linhas para `user_id` em `user_course_access`, o usuário possui acesso
+/// irrestrito a todos os cursos. Quando há linhas, apenas os `course_id` listados são
+/// autorizados (usando a sentinela `__none__` quando restrito a zero cursos).
+const V10: &str = "
+CREATE TABLE user_course_access (
+    user_id TEXT NOT NULL REFERENCES user (user_id) ON DELETE CASCADE,
+    course_id TEXT NOT NULL CHECK (length(trim(course_id)) > 0 AND length(course_id) <= 256),
+    PRIMARY KEY (user_id, course_id)
+);
+";
+
 const MIGRATIONS_SLICE: &[M<'static>] = &[
     M::up(V1),
     M::up(V2),
@@ -448,6 +461,7 @@ const MIGRATIONS_SLICE: &[M<'static>] = &[
     M::up(V7),
     M::up(V8),
     M::up(V9),
+    M::up(V10),
 ];
 
 /// Cadeia de migrações aplicada por [`crate::db::Database`].

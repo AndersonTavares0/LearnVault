@@ -41,12 +41,12 @@ pub(crate) async fn media(
     let Some(token) = request_token(&headers) else {
         return error_private_no_store(StatusCode::UNAUTHORIZED);
     };
-    match state.session_user(hash_session_token(&token)).await {
-        Ok(Some(user)) if !user.must_change_credentials => {}
+    let user = match state.session_user(hash_session_token(&token)).await {
+        Ok(Some(user)) if !user.must_change_credentials => user,
         Ok(Some(_)) => return error_credentials_required(),
         Err(StateError::Capacity) => return service_unavailable(),
         Ok(None) | Err(_) => return error_private_no_store(StatusCode::UNAUTHORIZED),
-    }
+    };
     let query = match raw_query.0.as_deref() {
         Some(raw) => match serde_urlencoded::from_str::<MediaQuery>(raw) {
             Ok(query) => query,
@@ -79,6 +79,14 @@ pub(crate) async fn media(
         };
         tokio::task::spawn_blocking(move || {
             let _blocking_task = blocking_task;
+            if !learnvault_core::can_user_access_course(
+                &database,
+                &user.user_id,
+                user.is_admin,
+                &library_id,
+            )? {
+                return Ok(None);
+            }
             learnvault_core::find_media_by_path(&database, &library_id, &lookup_path)
         })
         .await

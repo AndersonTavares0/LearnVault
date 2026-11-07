@@ -359,6 +359,18 @@ pub enum Error {
     #[error("identificador de favorito inválido")]
     InvalidFavoriteTarget,
 
+    /// O usuário solicitado não existe no banco local.
+    #[error("usuário não encontrado")]
+    UserNotFound,
+
+    /// O nome de usuário informado já está em uso.
+    #[error("nome de usuário já em uso")]
+    UsernameTaken,
+
+    /// Uma operação restrita a contas de estudante tentou alterar ou remover um administrador.
+    #[error("não é permitido remover ou restringir uma conta de administrador")]
+    CannotModifyAdminUser,
+
     /// A missão ainda não atingiu o requisito necessário para resgate.
     #[error("a missão diária ainda não foi concluída")]
     MissionNotComplete,

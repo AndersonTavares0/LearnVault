@@ -11,6 +11,7 @@
 	import PomodoroSettings from './PomodoroSettings.svelte';
 	import FocusMenu from './FocusMenu.svelte';
 	import DesktopTitlebar from './DesktopTitlebar.svelte';
+	import AdminUsers from './AdminUsers.svelte';
 	import { filterCatalog } from './search';
 	import { collectMaterials, countCatalogNode, countMissingVideos, formatCount, formatCourseMeta, formatLessonCounts, formatLocationContext, getCourseProgressStatus, type CourseProgressStatus } from './catalog';
 	import { courseCover } from './cover';
@@ -1150,6 +1151,7 @@
 						</div>
 					</section>
 					{#if transportKind === 'http' && canManage}
+						<AdminUsers {transport} courses={catalog?.nodes ?? []} />
 						<section class="lv-panel lv-settings__panel" aria-labelledby="backup-heading">
 							<div class="lv-panel__head"><h2 id="backup-heading">Backup do Banco de Dados</h2></div>
 							<div class="lv-settings__body">

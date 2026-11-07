@@ -610,3 +610,207 @@ async fn media_removal_impact_and_removal_flow() {
     assert_eq!(progress_json["recorded"], true);
     assert_eq!(progress_json["position_seconds"], 30);
 }
+
+#[tokio::test]
+async fn local_users_course_permissions_enforce_catalog_and_media_access() {
+    let temp = tempfile::tempdir().unwrap();
+    let course_a = temp.path().join("01 - Álgebra");
+    let course_b = temp.path().join("02 - Biologia");
+    std::fs::create_dir_all(course_a.join("Aula 1")).unwrap();
+    std::fs::create_dir_all(course_b.join("Aula 1")).unwrap();
+    std::fs::write(course_a.join("Aula 1/video.mp4"), b"video-a").unwrap();
+    std::fs::write(course_b.join("Aula 1/video.mp4"), b"video-b").unwrap();
+
+    let server_config = config(&temp);
+    let state = AppState::initialize(server_config).await.unwrap();
+    let app = build_router(state);
+    let admin_cookie = login(&app).await;
+
+    let imported_a = json_body(import(&app, &admin_cookie, &course_a).await).await;
+    let imported_b = json_body(import(&app, &admin_cookie, &course_b).await).await;
+    let course_a_id = imported_a["course"]["id"].as_str().unwrap().to_owned();
+    let course_b_id = imported_b["course"]["id"].as_str().unwrap().to_owned();
+
+    let rescan = app
+        .clone()
+        .oneshot(
+            Request::post("/api/admin/catalog/rescan")
+                .header("origin", "http://localhost")
+                .header("cookie", &admin_cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rescan.status(), StatusCode::OK);
+
+    // 1. Admin cria uma estudante restrita apenas ao curso A
+    let create_res = app
+        .clone()
+        .oneshot(
+            Request::post("/api/admin/users")
+                .header("origin", "http://localhost")
+                .header("cookie", &admin_cookie)
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "username": "ana",
+                        "password": "senha-da-ana-muito-segura",
+                        "allowed_course_ids": [&course_a_id]
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_res.status(), StatusCode::CREATED);
+    let created_user = json_body(create_res).await;
+    let ana_id = created_user["user_id"].as_str().unwrap().to_owned();
+    assert_eq!(created_user["username"], "ana");
+    assert_eq!(created_user["is_admin"], false);
+    assert_eq!(
+        created_user["allowed_course_ids"],
+        serde_json::json!([&course_a_id])
+    );
+
+    // 2. Ana faz login
+    let ana_login = app
+        .clone()
+        .oneshot(
+            Request::post("/api/login")
+                .header("origin", "http://localhost")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    r#"{"username":"ana","password":"senha-da-ana-muito-segura"}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(ana_login.status(), StatusCode::OK);
+    let ana_cookie = ana_login.headers()["set-cookie"]
+        .to_str()
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap()
+        .to_owned();
+
+    // 3. Ana não pode acessar rotas administrativas de usuários
+    let forbidden_users = app
+        .clone()
+        .oneshot(
+            Request::get("/api/admin/users")
+                .header("cookie", &ana_cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(forbidden_users.status(), StatusCode::FORBIDDEN);
+
+    // 4. Catálogo da Ana contém apenas o curso A
+    let ana_catalog = app
+        .clone()
+        .oneshot(
+            Request::get("/api/catalog")
+                .header("cookie", &ana_cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(ana_catalog.status(), StatusCode::OK);
+    let ana_cat_json = json_body(ana_catalog).await;
+    let categories = ana_cat_json["categories"].as_array().unwrap();
+    assert_eq!(categories.len(), 1);
+    assert_eq!(categories[0]["course_id"], course_a_id);
+
+    // 5. Ana consegue acessar mídia do curso A (200), mas recebe 404 para mídia do curso B
+    let media_a = app
+        .clone()
+        .oneshot(
+            Request::get(format!(
+                "/api/media?course={course_a_id}&path=Aula%201/video.mp4"
+            ))
+            .header("cookie", &ana_cookie)
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(media_a.status(), StatusCode::OK);
+
+    let media_b = app
+        .clone()
+        .oneshot(
+            Request::get(format!(
+                "/api/media?course={course_b_id}&path=Aula%201/video.mp4"
+            ))
+            .header("cookie", &ana_cookie)
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(media_b.status(), StatusCode::NOT_FOUND);
+
+    // 6. Admin libera acesso irrestrito (allowed_course_ids: null) para Ana
+    let update_res = app
+        .clone()
+        .oneshot(
+            Request::put(format!("/api/admin/users/{ana_id}/courses"))
+                .header("origin", "http://localhost")
+                .header("cookie", &admin_cookie)
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({ "allowed_course_ids": null }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(update_res.status(), StatusCode::OK);
+
+    let ana_catalog_all = app
+        .clone()
+        .oneshot(
+            Request::get("/api/catalog")
+                .header("cookie", &ana_cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let ana_all_json = json_body(ana_catalog_all).await;
+    assert_eq!(ana_all_json["categories"].as_array().unwrap().len(), 2);
+
+    // 7. Admin remove a usuária Ana e a sessão dela deixa de funcionar
+    let delete_res = app
+        .clone()
+        .oneshot(
+            Request::delete(format!("/api/admin/users/{ana_id}"))
+                .header("origin", "http://localhost")
+                .header("cookie", &admin_cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(delete_res.status(), StatusCode::OK);
+    let delete_json = json_body(delete_res).await;
+    assert_eq!(delete_json["deleted"], true);
+
+    let ana_after_delete = app
+        .clone()
+        .oneshot(
+            Request::get("/api/catalog")
+                .header("cookie", &ana_cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(ana_after_delete.status(), StatusCode::UNAUTHORIZED);
+}

@@ -1,10 +1,13 @@
 //! Primitivas de autenticação do servidor.
 
-use crate::{AppState, StateError, catalog::service_unavailable};
+use crate::{
+    AppState, StateError,
+    catalog::{authenticated_user, credentials_required, internal_error, service_unavailable},
+};
 use argon2::{Algorithm, Argon2, Params, PasswordHash, PasswordHasher, PasswordVerifier, Version};
 use axum::{
     Json,
-    extract::State,
+    extract::{Path as AxumPath, State},
     http::{HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
@@ -384,6 +387,268 @@ pub(crate) async fn logout(State(state): State<AppState>, headers: HeaderMap) ->
     };
     response.headers_mut().insert("set-cookie", cookie);
     no_store(response)
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct LocalUserResponse {
+    user_id: String,
+    username: String,
+    is_admin: bool,
+    created_at: i64,
+    allowed_course_ids: Option<Vec<String>>,
+}
+
+impl From<learnvault_core::LocalUserSummary> for LocalUserResponse {
+    fn from(summary: learnvault_core::LocalUserSummary) -> Self {
+        Self {
+            user_id: summary.user_id,
+            username: summary.username,
+            is_admin: summary.is_admin,
+            created_at: summary.created_at,
+            allowed_course_ids: summary.allowed_course_ids,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct AdminUsersResponse {
+    items: Vec<LocalUserResponse>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct CreateUserRequest {
+    username: String,
+    password: String,
+    #[serde(default)]
+    allowed_course_ids: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct UpdateUserCoursesRequest {
+    allowed_course_ids: Option<Vec<String>>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct UpdateUserCoursesResponse {
+    user_id: String,
+    allowed_course_ids: Option<Vec<String>>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct DeleteUserResponse {
+    deleted: bool,
+}
+
+fn generate_user_id() -> Result<String, AuthError> {
+    let mut bytes = [0u8; 16];
+    getrandom::fill(&mut bytes).map_err(|_| AuthError::TokenGeneration)?;
+    Ok(format!("usr-{}", hex_encode(&bytes)))
+}
+
+async fn require_admin(state: &AppState, headers: &HeaderMap) -> Option<Response> {
+    let user = match authenticated_user(state, headers).await {
+        Ok(Some(user)) => user,
+        Err(StateError::Capacity) => return Some(private_no_store(service_unavailable())),
+        Ok(None) | Err(_) => {
+            return Some(private_no_store(StatusCode::UNAUTHORIZED.into_response()));
+        }
+    };
+    if !user.is_admin {
+        return Some(private_no_store(StatusCode::FORBIDDEN.into_response()));
+    }
+    if user.must_change_credentials {
+        return Some(credentials_required());
+    }
+    None
+}
+
+pub(crate) async fn list_users(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    if let Some(response) = require_admin(&state, &headers).await {
+        return response;
+    }
+    if !state.has_blocking_capacity() {
+        return private_no_store(service_unavailable());
+    }
+    let database = state.database.clone().lock_owned().await;
+    let Some(blocking_task) = state.try_acquire_blocking_task() else {
+        return private_no_store(service_unavailable());
+    };
+    match tokio::task::spawn_blocking(move || {
+        let _blocking_task = blocking_task;
+        learnvault_core::list_users(&database)
+    })
+    .await
+    {
+        Ok(Ok(items)) => private_no_store(
+            Json(AdminUsersResponse {
+                items: items.into_iter().map(Into::into).collect(),
+            })
+            .into_response(),
+        ),
+        Ok(Err(_)) | Err(_) => internal_error("users_unavailable"),
+    }
+}
+
+pub(crate) async fn create_user(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<CreateUserRequest>,
+) -> Response {
+    if !same_origin(&headers) {
+        return csrf_failed();
+    }
+    if let Some(response) = require_admin(&state, &headers).await {
+        return response;
+    }
+    if validate_username(&request.username).is_err()
+        || validate_password(&request.password).is_err()
+    {
+        return private_no_store(
+            (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(ErrorResponse {
+                    error: "invalid_credentials_format",
+                }),
+            )
+                .into_response(),
+        );
+    }
+    if !state.has_blocking_capacity() {
+        return private_no_store(service_unavailable());
+    }
+    let Ok(user_id) = generate_user_id() else {
+        return internal_error("user_create_failed");
+    };
+    let password = request.password;
+    let Some(permit) = state.try_acquire_blocking_task() else {
+        return private_no_store(service_unavailable());
+    };
+    let Ok(password_hash) = tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        hash_password(&password)
+    })
+    .await
+    .unwrap_or(Err(AuthError::PasswordHashing)) else {
+        return internal_error("user_create_failed");
+    };
+
+    let mut database = state.database.clone().lock_owned().await;
+    let Some(blocking_task) = state.try_acquire_blocking_task() else {
+        return private_no_store(service_unavailable());
+    };
+    let username = request.username;
+    let allowed_course_ids = request.allowed_course_ids;
+    let created_at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    match tokio::task::spawn_blocking(move || {
+        let _blocking_task = blocking_task;
+        learnvault_core::create_user(
+            &mut database,
+            &user_id,
+            &username,
+            &password_hash,
+            created_at,
+            allowed_course_ids.as_deref(),
+        )
+    })
+    .await
+    {
+        Ok(Ok(created)) => private_no_store(
+            (StatusCode::CREATED, Json(LocalUserResponse::from(created))).into_response(),
+        ),
+        Ok(Err(learnvault_core::Error::UsernameTaken)) => private_no_store(
+            (
+                StatusCode::CONFLICT,
+                Json(ErrorResponse {
+                    error: "username_taken",
+                }),
+            )
+                .into_response(),
+        ),
+        Ok(Err(_)) | Err(_) => internal_error("user_create_failed"),
+    }
+}
+
+pub(crate) async fn set_user_courses(
+    State(state): State<AppState>,
+    AxumPath(user_id): AxumPath<String>,
+    headers: HeaderMap,
+    Json(request): Json<UpdateUserCoursesRequest>,
+) -> Response {
+    if !same_origin(&headers) {
+        return csrf_failed();
+    }
+    if let Some(response) = require_admin(&state, &headers).await {
+        return response;
+    }
+    if !state.has_blocking_capacity() {
+        return private_no_store(service_unavailable());
+    }
+    let mut database = state.database.clone().lock_owned().await;
+    let Some(blocking_task) = state.try_acquire_blocking_task() else {
+        return private_no_store(service_unavailable());
+    };
+    let target_user_id = user_id.clone();
+    let allowed_course_ids = request.allowed_course_ids;
+    match tokio::task::spawn_blocking(move || {
+        let _blocking_task = blocking_task;
+        learnvault_core::set_user_course_access(
+            &mut database,
+            &target_user_id,
+            allowed_course_ids.as_deref(),
+        )
+    })
+    .await
+    {
+        Ok(Ok(allowed)) => private_no_store(
+            Json(UpdateUserCoursesResponse {
+                user_id,
+                allowed_course_ids: allowed,
+            })
+            .into_response(),
+        ),
+        Ok(Err(learnvault_core::Error::UserNotFound)) => {
+            private_no_store(StatusCode::NOT_FOUND.into_response())
+        }
+        Ok(Err(learnvault_core::Error::CannotModifyAdminUser)) => {
+            private_no_store(StatusCode::FORBIDDEN.into_response())
+        }
+        Ok(Err(_)) | Err(_) => internal_error("user_courses_update_failed"),
+    }
+}
+
+pub(crate) async fn delete_user(
+    State(state): State<AppState>,
+    AxumPath(user_id): AxumPath<String>,
+    headers: HeaderMap,
+) -> Response {
+    if !same_origin(&headers) {
+        return csrf_failed();
+    }
+    if let Some(response) = require_admin(&state, &headers).await {
+        return response;
+    }
+    if !state.has_blocking_capacity() {
+        return private_no_store(service_unavailable());
+    }
+    let mut database = state.database.clone().lock_owned().await;
+    let Some(blocking_task) = state.try_acquire_blocking_task() else {
+        return private_no_store(service_unavailable());
+    };
+    match tokio::task::spawn_blocking(move || {
+        let _blocking_task = blocking_task;
+        learnvault_core::delete_user(&mut database, &user_id)
+    })
+    .await
+    {
+        Ok(Ok(deleted)) => private_no_store(Json(DeleteUserResponse { deleted }).into_response()),
+        Ok(Err(learnvault_core::Error::CannotModifyAdminUser)) => {
+            private_no_store(StatusCode::FORBIDDEN.into_response())
+        }
+        Ok(Err(_)) | Err(_) => internal_error("user_delete_failed"),
+    }
 }
 
 fn no_store(mut response: Response) -> Response {

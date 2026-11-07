@@ -554,6 +554,13 @@ const REQUIRED_TABLES: &[TableDefinition] = &[
             ("created_at", "INTEGER", true, None, 0),
         ],
     },
+    TableDefinition {
+        name: "user_course_access",
+        columns: &[
+            ("user_id", "TEXT", true, None, 1),
+            ("course_id", "TEXT", true, None, 2),
+        ],
+    },
 ];
 
 fn definition_matches(conn: &Connection, definition: &TableDefinition) -> Result<bool> {
@@ -689,6 +696,7 @@ fn expected_checks(table: &str) -> &'static [&'static str] {
             "target_kind in ('course', 'lesson')",
             "length(trim(target_id)) > 0 and length(target_id) <= 256",
         ],
+        "user_course_access" => &["length(trim(course_id)) > 0 and length(course_id) <= 256"],
         _ => &[],
     }
 }
@@ -711,6 +719,7 @@ fn expected_foreign_keys(
         ],
         "study_note" => &[("media_id", "media", "media_id", "NO ACTION")],
         "flashcard" => &[("media_id", "media", "media_id", "NO ACTION")],
+        "user_course_access" => &[("user_id", "user", "user_id", "CASCADE")],
         _ => &[],
     }
 }

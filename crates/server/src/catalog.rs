@@ -98,12 +98,12 @@ struct RescanResponse {
 }
 
 pub(crate) async fn catalog(State(state): State<AppState>, headers: HeaderMap) -> Response {
-    match authenticated_user(&state, &headers).await {
-        Ok(Some(user)) if !user.must_change_credentials => {}
+    let user = match authenticated_user(&state, &headers).await {
+        Ok(Some(user)) if !user.must_change_credentials => user,
         Ok(Some(_)) => return credentials_required(),
         Err(StateError::Capacity) => return service_unavailable(),
         Ok(None) | Err(_) => return status_private_no_store(StatusCode::UNAUTHORIZED),
-    }
+    };
 
     // Evita segurar o mutex do banco só para devolver 503 sob saturação.
     if !state.has_blocking_capacity() {
@@ -118,7 +118,19 @@ pub(crate) async fn catalog(State(state): State<AppState>, headers: HeaderMap) -
     let covers = crate::covers::covers_dir(&state.config.database_path);
     match tokio::task::spawn_blocking(move || {
         let _blocking_task = blocking_task;
-        build_course_catalog(&database, &courses, &orders, &covers)
+        let filtered_courses: Vec<RegisteredCourse> = if user.is_admin {
+            courses
+        } else if let Some(allowed) =
+            learnvault_core::list_user_course_access(&database, &user.user_id)?
+        {
+            courses
+                .into_iter()
+                .filter(|course| allowed.iter().any(|id| id == &course.id))
+                .collect()
+        } else {
+            courses
+        };
+        build_course_catalog(&database, &filtered_courses, &orders, &covers)
     })
     .await
     {

@@ -52,12 +52,12 @@ Detalhes de implementação ficam nas issues e pull requests.
 - [x] "Continuar estudando" em destaque na tela inicial e filtros por estado e pasta de origem (#281, #297).
 - [x] Anotações com timestamp, busca global em anotações e cartões de memorização (#281, #290, #297).
 - [x] Suporte a formatos estendidos de mídia, transcodificação sob demanda no servidor e player do sistema no desktop (#298).
-- [ ] Permissões de acesso a cursos para vários usuários locais.
+- [x] Permissões de acesso a cursos para vários usuários locais.
 
 ## Em seguida: uma mesa de estudo
 
 - [ ] Acessibilidade contínua: teclado, foco, contraste, movimento reduzido e leitores de tela.
-- [x] Favoritos de cursos e aulas.
+- [x] Favoritos de cursos e aulas (#304).
 
 ## Depois: uma biblioteca mais rica
 
@@ -66,13 +66,13 @@ Detalhes de implementação ficam nas issues e pull requests.
 
 ## Distribuição: portabilidade primeiro
 
-- [ ] Manter o núcleo compilável sem Docker ou Podman.
+- [x] Manter o núcleo compilável sem Docker ou Podman.
 - [ ] Publicar Flatpak como formato Linux preferencial do desktop. A seleção de diretório usa o
   backend `xdg-portal` e o manifesto não concede filesystem amplo; faltam build e smoke test reais
   no sandbox, incluindo acesso persistente ao diretório escolhido e reprodução de mídia.
-- [ ] Publicar imagem OCI e binário nativo para instalação self-hosted.
+- [x] Publicar imagem OCI e binário nativo para instalação self-hosted (#302).
 - [ ] Assinar artefatos desktop quando houver credenciais de plataforma.
-- [ ] Manter Docker Compose e Podman rootless/Quadlet como adaptadores opcionais de servidor.
+- [x] Manter Docker Compose e Podman rootless/Quadlet como adaptadores opcionais de servidor.
 
 ## Mais tarde: recursos opcionais
 
