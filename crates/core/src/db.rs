@@ -125,6 +125,17 @@ impl Database {
                     ("next_due", "BINARY"),
                 ],
             )?
+            || !index_matches(
+                &self.conn,
+                "study_favorite",
+                Some("study_favorite_owner_kind_idx"),
+                false,
+                &[
+                    ("owner_id", "BINARY"),
+                    ("target_kind", "BINARY"),
+                    ("created_at", "BINARY"),
+                ],
+            )?
         {
             return Ok(false);
         }
@@ -534,6 +545,15 @@ const REQUIRED_TABLES: &[TableDefinition] = &[
             ("updated_at", "INTEGER", true, None, 0),
         ],
     },
+    TableDefinition {
+        name: "study_favorite",
+        columns: &[
+            ("owner_id", "TEXT", true, None, 1),
+            ("target_kind", "TEXT", true, None, 2),
+            ("target_id", "TEXT", true, None, 3),
+            ("created_at", "INTEGER", true, None, 0),
+        ],
+    },
 ];
 
 fn definition_matches(conn: &Connection, definition: &TableDefinition) -> Result<bool> {
@@ -664,6 +684,10 @@ fn expected_checks(table: &str) -> &'static [&'static str] {
             "length(trim(front)) > 0 and length(front) <= 4000",
             "length(trim(back)) > 0 and length(back) <= 4000",
             "interval_days >= 0 and interval_days <= 365",
+        ],
+        "study_favorite" => &[
+            "target_kind in ('course', 'lesson')",
+            "length(trim(target_id)) > 0 and length(target_id) <= 256",
         ],
         _ => &[],
     }

@@ -67,6 +67,8 @@ pub enum IpcErrorCode {
     InvalidFlashcard,
     /// A avaliação informada na revisão do cartão é inválida.
     InvalidReviewRating,
+    /// O alvo de favorito (curso ou mídia) é inválido.
+    InvalidFavoriteTarget,
 }
 
 /// Erro IPC serializável devolvido ao webview.
@@ -300,6 +302,14 @@ impl IpcError {
         Self {
             code: IpcErrorCode::InvalidReviewRating,
             message: "avaliação inválida",
+        }
+    }
+
+    /// O alvo de favorito (curso ou mídia) é inválido.
+    pub fn invalid_favorite_target() -> Self {
+        Self {
+            code: IpcErrorCode::InvalidFavoriteTarget,
+            message: "alvo de favorito inválido",
         }
     }
 }

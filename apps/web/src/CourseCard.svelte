@@ -14,7 +14,9 @@
 		onMenuOpen,
 		onChangeCover,
 		onRemoveCover,
-		inProgress = false
+		inProgress = false,
+		favorite = false,
+		onToggleFavorite
 	}: {
 		course: CatalogNode;
 		profile: string;
@@ -27,6 +29,8 @@
 		onChangeCover?: (course: CatalogNode) => void;
 		onRemoveCover?: (course: CatalogNode) => void;
 		inProgress?: boolean;
+		favorite?: boolean;
+		onToggleFavorite?: (course: CatalogNode) => void;
 	} = $props();
 	const counts = $derived(countCatalogNode(course));
 	const meta = $derived(formatCourseCardMeta(counts));
@@ -52,6 +56,21 @@
 			{#if inProgress}<span class="lv-course-card__state"><span aria-hidden="true"></span>Em andamento</span>{/if}
 		</span>
 	</a>
+	{#if onToggleFavorite}
+		<button
+			class="lv-course-card__favorite"
+			class:is-favorite={favorite}
+			type="button"
+			aria-pressed={favorite}
+			aria-label={favorite ? `Remover "${course.title}" dos favoritos` : `Favoritar curso "${course.title}"`}
+			title={favorite ? 'Remover dos favoritos' : 'Favoritar curso'}
+			onclick={() => onToggleFavorite(course)}
+		>
+			<svg viewBox="0 0 24 24" width="16" height="16" fill={favorite ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+				<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+			</svg>
+		</button>
+	{/if}
 	{#if canManage}
 		<button
 			class="lv-course-card__menu-toggle"

@@ -810,7 +810,7 @@ async fn current_database_carries_study_tables_and_constraints() {
         .connection()
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 8, "o formato persistido está na versão 8");
+    assert_eq!(version, 9, "o formato persistido está na versão 9");
     let present: i64 = db
         .connection()
         .query_row(
@@ -1251,4 +1251,115 @@ async fn mission_claim_requires_progress_and_same_origin() {
     let rewards = json_body(rewards).await;
     assert_eq!(rewards["xp"], 70, "40 XP da aula + 30 da missão");
     assert_eq!(rewards["missions"][0]["claimed"], true);
+}
+
+#[tokio::test]
+async fn favorites_endpoints_persist_courses_and_lessons_for_authenticated_user() {
+    let temp = tempfile::tempdir().unwrap();
+    seed_user(&temp, READER_ID, READER, READER_PASSWORD);
+    seed(&temp, &["m1"], &[]);
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let admin_cookie = login(&app, ADMIN, ADMIN_PASSWORD).await;
+    let reader_cookie = login(&app, READER, READER_PASSWORD).await;
+
+    let initial = app
+        .clone()
+        .oneshot(get_with_cookie("/api/study/favorites", &admin_cookie))
+        .await
+        .unwrap();
+    assert_eq!(initial.status(), StatusCode::OK);
+    let initial_body = json_body(initial).await;
+    assert_eq!(initial_body["course_ids"], serde_json::json!([]));
+    assert_eq!(initial_body["media_ids"], serde_json::json!([]));
+
+    let course_res = app
+        .clone()
+        .oneshot(post_json(
+            "/api/study/favorites/course",
+            &admin_cookie,
+            r#"{"course_id":"Curso Rust","favorite":true}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(course_res.status(), StatusCode::OK);
+    assert_eq!(json_body(course_res).await["favorite"], true);
+
+    let lesson_res = app
+        .clone()
+        .oneshot(post_json(
+            "/api/study/favorites/lesson",
+            &admin_cookie,
+            r#"{"media_id":"m1","favorite":true}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(lesson_res.status(), StatusCode::OK);
+    assert_eq!(json_body(lesson_res).await["favorite"], true);
+
+    let missing_lesson = app
+        .clone()
+        .oneshot(post_json(
+            "/api/study/favorites/lesson",
+            &admin_cookie,
+            r#"{"media_id":"mid-inexistente","favorite":true}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(missing_lesson.status(), StatusCode::NOT_FOUND);
+    assert_eq!(json_body(missing_lesson).await["error"], "media_not_found");
+
+    let empty_course = app
+        .clone()
+        .oneshot(post_json(
+            "/api/study/favorites/course",
+            &admin_cookie,
+            r#"{"course_id":"   ","favorite":true}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(empty_course.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        json_body(empty_course).await["error"],
+        "invalid_favorite_target"
+    );
+
+    let after = app
+        .clone()
+        .oneshot(get_with_cookie("/api/study/favorites", &admin_cookie))
+        .await
+        .unwrap();
+    let after_body = json_body(after).await;
+    assert_eq!(after_body["course_ids"], serde_json::json!(["Curso Rust"]));
+    assert_eq!(after_body["media_ids"], serde_json::json!(["m1"]));
+
+    // Isolamento entre usuários autenticados
+    let reader_favs = app
+        .clone()
+        .oneshot(get_with_cookie("/api/study/favorites", &reader_cookie))
+        .await
+        .unwrap();
+    let reader_body = json_body(reader_favs).await;
+    assert_eq!(reader_body["course_ids"], serde_json::json!([]));
+    assert_eq!(reader_body["media_ids"], serde_json::json!([]));
+
+    // Desfavoritar
+    let unfav_course = app
+        .clone()
+        .oneshot(post_json(
+            "/api/study/favorites/course",
+            &admin_cookie,
+            r#"{"course_id":"Curso Rust","favorite":false}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(unfav_course.status(), StatusCode::OK);
+    assert_eq!(json_body(unfav_course).await["favorite"], false);
+
+    let final_favs = app
+        .oneshot(get_with_cookie("/api/study/favorites", &admin_cookie))
+        .await
+        .unwrap();
+    let final_body = json_body(final_favs).await;
+    assert_eq!(final_body["course_ids"], serde_json::json!([]));
+    assert_eq!(final_body["media_ids"], serde_json::json!(["m1"]));
 }

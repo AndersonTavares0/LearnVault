@@ -11,7 +11,7 @@ use rusqlite_migration::{M, Migrations};
 /// A recusa de um schema mais novo não depende desta constante — ela vem de
 /// `SchemaVersion::Outside` —, mas ela deve acompanhar a cadeia de migrações porque
 /// aparece na mensagem de diagnóstico de [`crate::Error::SchemaTooNew`].
-pub(crate) const SCHEMA_VERSION: usize = 8;
+pub(crate) const SCHEMA_VERSION: usize = 9;
 
 /// Versão 1: bibliotecas, mídia, varreduras e estado de estudo.
 ///
@@ -422,6 +422,22 @@ CREATE TABLE flashcard (
 CREATE INDEX flashcard_owner_media_due_idx ON flashcard (owner_id, media_id, next_due);
 ";
 
+/// Versão 9: favoritos de cursos e aulas por dono.
+///
+/// Permite ao aluno marcar cursos (`course_id`) e aulas (`media_id`) como favoritos
+/// para filtragem rápida na biblioteca e no índice do curso.
+const V9: &str = "
+CREATE TABLE study_favorite (
+    owner_id TEXT NOT NULL,
+    target_kind TEXT NOT NULL CHECK (target_kind IN ('course', 'lesson')),
+    target_id TEXT NOT NULL CHECK (length(trim(target_id)) > 0 AND length(target_id) <= 256),
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (owner_id, target_kind, target_id)
+);
+
+CREATE INDEX study_favorite_owner_kind_idx ON study_favorite (owner_id, target_kind, created_at);
+";
+
 const MIGRATIONS_SLICE: &[M<'static>] = &[
     M::up(V1),
     M::up(V2),
@@ -431,6 +447,7 @@ const MIGRATIONS_SLICE: &[M<'static>] = &[
     M::up(V6),
     M::up(V7),
     M::up(V8),
+    M::up(V9),
 ];
 
 /// Cadeia de migrações aplicada por [`crate::db::Database`].

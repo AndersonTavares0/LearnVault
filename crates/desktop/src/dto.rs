@@ -7,7 +7,7 @@
 
 use learnvault_core::{
     Availability, Catalog, CatalogFile, CatalogNode, FocusKind, FocusSession, FocusSummary,
-    MediaKind, NodeRole, RescanSummary, RewardSummary, StudyProgress,
+    MediaKind, NodeRole, RescanSummary, RewardSummary, StudyFavorites, StudyProgress,
 };
 use serde::{Deserialize, Serialize};
 
@@ -638,4 +638,23 @@ pub struct DesktopMediaCapabilitiesDto {
     pub transcoding: bool,
     /// Se há suporte a abertura no reprodutor padrão do sistema operacional.
     pub system_player: bool,
+}
+
+/// DTO dos cursos e aulas favoritados pelo dono local.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StudyFavoritesDto {
+    /// Identificadores dos cursos favoritados.
+    pub course_ids: Vec<String>,
+    /// Identificadores das aulas (mídias) favoritadas.
+    pub media_ids: Vec<String>,
+}
+
+impl From<StudyFavorites> for StudyFavoritesDto {
+    fn from(favorites: StudyFavorites) -> Self {
+        Self {
+            course_ids: favorites.course_ids,
+            media_ids: favorites.media_ids,
+        }
+    }
 }

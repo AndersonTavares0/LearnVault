@@ -809,3 +809,118 @@ fn card_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Flashcard> {
         updated_at: row.get(8)?,
     })
 }
+
+/// Favoritos de cursos e aulas de um dono.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct StudyFavorites {
+    /// Identificadores de cursos favoritados, do mais recente ao mais antigo.
+    pub course_ids: Vec<String>,
+    /// Identificadores de mídias (aulas) favoritadas, do mais recente ao mais antigo.
+    pub media_ids: Vec<String>,
+}
+
+fn validate_favorite_target(target_id: &str) -> Result<String> {
+    let trimmed = target_id.trim();
+    if trimmed.is_empty() || trimmed.len() > 256 {
+        return Err(Error::InvalidFavoriteTarget);
+    }
+    Ok(trimmed.to_owned())
+}
+
+/// Lista todos os cursos e aulas favoritados pelo dono.
+///
+/// Aulas que foram explicitamente removidas do catálogo (`media_removal`) não aparecem.
+pub fn list_favorites(db: &Database, owner_id: &str) -> Result<StudyFavorites> {
+    validate_owner(owner_id)?;
+    let conn = db.connection();
+
+    let mut course_stmt = conn.prepare(
+        "SELECT target_id FROM study_favorite
+         WHERE owner_id = ?1 AND target_kind = 'course'
+         ORDER BY created_at DESC, target_id ASC",
+    )?;
+    let course_rows = course_stmt.query_map(params![owner_id], |row| row.get::<_, String>(0))?;
+    let mut course_ids = Vec::new();
+    for id in course_rows {
+        course_ids.push(id?);
+    }
+
+    let mut lesson_stmt = conn.prepare(
+        "SELECT f.target_id FROM study_favorite f
+         WHERE f.owner_id = ?1 AND f.target_kind = 'lesson'
+           AND NOT EXISTS (SELECT 1
+                             FROM media_removal r
+                             JOIN media m
+                               ON m.library_id = r.library_id
+                              AND m.media_id = r.media_id
+                            WHERE m.media_id = f.target_id)
+         ORDER BY f.created_at DESC, f.target_id ASC",
+    )?;
+    let lesson_rows = lesson_stmt.query_map(params![owner_id], |row| row.get::<_, String>(0))?;
+    let mut media_ids = Vec::new();
+    for id in lesson_rows {
+        media_ids.push(id?);
+    }
+
+    Ok(StudyFavorites {
+        course_ids,
+        media_ids,
+    })
+}
+
+/// Marca ou desmarca um curso (`course_id`) como favorito para o dono.
+pub fn set_course_favorite(
+    db: &Database,
+    owner_id: &str,
+    course_id: &str,
+    favorite: bool,
+) -> Result<bool> {
+    validate_owner(owner_id)?;
+    let target_id = validate_favorite_target(course_id)?;
+    let conn = db.connection();
+
+    if favorite {
+        conn.execute(
+            "INSERT INTO study_favorite (owner_id, target_kind, target_id, created_at)
+             VALUES (?1, 'course', ?2, ?3)
+             ON CONFLICT (owner_id, target_kind, target_id) DO NOTHING",
+            params![owner_id, target_id, now_unix_seconds()],
+        )?;
+        Ok(true)
+    } else {
+        conn.execute(
+            "DELETE FROM study_favorite WHERE owner_id = ?1 AND target_kind = 'course' AND target_id = ?2",
+            params![owner_id, target_id],
+        )?;
+        Ok(false)
+    }
+}
+
+/// Marca ou desmarca uma aula (`media_id`) como favorita para o dono.
+pub fn set_lesson_favorite(
+    db: &Database,
+    owner_id: &str,
+    media_id: &str,
+    favorite: bool,
+) -> Result<bool> {
+    validate_owner(owner_id)?;
+    let target_id = validate_favorite_target(media_id)?;
+    let conn = db.connection();
+
+    if favorite {
+        require_media(conn, &target_id)?;
+        conn.execute(
+            "INSERT INTO study_favorite (owner_id, target_kind, target_id, created_at)
+             VALUES (?1, 'lesson', ?2, ?3)
+             ON CONFLICT (owner_id, target_kind, target_id) DO NOTHING",
+            params![owner_id, target_id, now_unix_seconds()],
+        )?;
+        Ok(true)
+    } else {
+        conn.execute(
+            "DELETE FROM study_favorite WHERE owner_id = ?1 AND target_kind = 'lesson' AND target_id = ?2",
+            params![owner_id, target_id],
+        )?;
+        Ok(false)
+    }
+}

@@ -76,6 +76,10 @@ export type Flashcard = {
 	updatedAt: number;
 };
 export type ReviewRating = 'again' | 'good';
+export type StudyFavorites = {
+	courseIds: string[];
+	mediaIds: string[];
+};
 export const STUDY_NOT_AVAILABLE = 'study_not_available';
 
 export type MediaCapabilities = {
@@ -145,6 +149,9 @@ export interface Transport {
 	updateFlashcard(cardId: string, front: string, back: string): Promise<Flashcard>;
 	deleteFlashcard(cardId: string): Promise<void>;
 	reviewFlashcard(cardId: string, rating: ReviewRating): Promise<Flashcard>;
+	listFavorites(): Promise<StudyFavorites>;
+	setCourseFavorite(courseId: string, favorite: boolean): Promise<boolean>;
+	setLessonFavorite(mediaId: string, favorite: boolean): Promise<boolean>;
 	recordFocusSession(session: FocusSessionInput): Promise<FocusSessionRecord>;
 	listFocusSessions(limit?: number): Promise<FocusSessionRecord[]>;
 	focusSummary(): Promise<FocusSummary>;
@@ -548,6 +555,27 @@ export function normalizeFlashcard(raw: unknown): Flashcard {
 	};
 }
 
+export function normalizeStudyFavorites(raw: unknown): StudyFavorites {
+	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+		return { courseIds: [], mediaIds: [] };
+	}
+	const obj = raw as Record<string, unknown>;
+	const rawCourses = Array.isArray(obj.course_ids)
+		? obj.course_ids
+		: Array.isArray(obj.courseIds)
+			? obj.courseIds
+			: [];
+	const rawMedia = Array.isArray(obj.media_ids)
+		? obj.media_ids
+		: Array.isArray(obj.mediaIds)
+			? obj.mediaIds
+			: [];
+	return {
+		courseIds: rawCourses.filter((item): item is string => typeof item === 'string'),
+		mediaIds: rawMedia.filter((item): item is string => typeof item === 'string')
+	};
+}
+
 // Envelope de categoria da projeção de categorias: `{ children }`.
 function isCategoryEnvelope(item: unknown): boolean {
 	return item !== null && typeof item === 'object' && !Array.isArray(item) && 'children' in item;
@@ -730,6 +758,31 @@ export class HttpTransport implements Transport {
 		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 422 ? 'Avaliação inválida.' : 'Não foi possível registrar a revisão.');
 		return normalizeFlashcard(await response.json());
 	}
+	async listFavorites(): Promise<StudyFavorites> {
+		const response = await fetch('/api/study/favorites');
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar os favoritos.');
+		return normalizeStudyFavorites(await response.json());
+	}
+	async setCourseFavorite(courseId: string, favorite: boolean): Promise<boolean> {
+		const response = await fetch('/api/study/favorites/course', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ course_id: courseId, favorite })
+		});
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível atualizar o favorito.');
+		const data = (await response.json()) as { favorite?: unknown };
+		return Boolean(data?.favorite);
+	}
+	async setLessonFavorite(mediaId: string, favorite: boolean): Promise<boolean> {
+		const response = await fetch('/api/study/favorites/lesson', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ media_id: mediaId, favorite })
+		});
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível atualizar o favorito.');
+		const data = (await response.json()) as { favorite?: unknown };
+		return Boolean(data?.favorite);
+	}
 	async recordFocusSession(session: FocusSessionInput) {
 		const response = await fetch('/api/focus/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: session.id, kind: session.kind, planned_seconds: session.plannedSeconds, actual_seconds: session.actualSeconds, completed: session.completed, started_at: session.startedAt, ended_at: session.endedAt }) });
 		if (!response.ok) {
@@ -881,7 +934,8 @@ const DESKTOP_ERROR_MESSAGES: Record<string, string> = {
 	invalid_note: 'Conteúdo da anotação inválido.',
 	flashcard_not_found: 'Cartão não encontrado.',
 	invalid_flashcard: 'Conteúdo do cartão inválido.',
-	invalid_review_rating: 'Avaliação inválida.'
+	invalid_review_rating: 'Avaliação inválida.',
+	invalid_favorite_target: 'Alvo de favorito inválido.'
 };
 
 // O comando devolve o erro como objeto serializado `{ code, message }`, não como `Error`.
@@ -990,6 +1044,27 @@ export class DesktopStub implements Transport {
 			return normalizeFlashcard(res);
 		} catch (cause) {
 			throw desktopError(cause, 'Não foi possível registrar a revisão.');
+		}
+	}
+	async listFavorites(): Promise<StudyFavorites> {
+		try {
+			return normalizeStudyFavorites(await invoke<unknown>('desktop_list_favorites'));
+		} catch (cause) {
+			throw desktopError(cause, 'Não foi possível carregar os favoritos.');
+		}
+	}
+	async setCourseFavorite(courseId: string, favorite: boolean): Promise<boolean> {
+		try {
+			return Boolean(await invoke<boolean>('desktop_set_course_favorite', { courseId, favorite }));
+		} catch (cause) {
+			throw desktopError(cause, 'Não foi possível atualizar o favorito.');
+		}
+	}
+	async setLessonFavorite(mediaId: string, favorite: boolean): Promise<boolean> {
+		try {
+			return Boolean(await invoke<boolean>('desktop_set_lesson_favorite', { mediaId, favorite }));
+		} catch (cause) {
+			throw desktopError(cause, 'Não foi possível atualizar o favorito.');
 		}
 	}
 	async recordFocusSession(session: FocusSessionInput) { try { return normalizeFocusSession(await invoke<unknown>('desktop_record_focus_session', { session })); } catch (cause) { throw desktopError(cause, 'Não foi possível salvar a sessão de foco.'); } }

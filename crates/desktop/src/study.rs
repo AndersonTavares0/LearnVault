@@ -17,8 +17,8 @@
 use learnvault_core::{Database, FocusSessionInput, ReviewRating};
 
 use crate::dto::{
-    FlashcardDto, FocusSessionDto, FocusSummaryDto, RecentStudyDto, RewardSummaryDto, StudyNoteDto,
-    StudyProgressDto, StudySummaryDto,
+    FlashcardDto, FocusSessionDto, FocusSummaryDto, RecentStudyDto, RewardSummaryDto,
+    StudyFavoritesDto, StudyNoteDto, StudyProgressDto, StudySummaryDto,
 };
 use crate::error::IpcError;
 
@@ -257,6 +257,33 @@ pub fn review_flashcard(
         .map_err(study_error)
 }
 
+/// Lista os cursos e aulas favoritados pelo dono local.
+pub fn list_favorites(database: &Database) -> Result<StudyFavoritesDto, IpcError> {
+    learnvault_core::list_favorites(database, LOCAL_OWNER_ID)
+        .map(StudyFavoritesDto::from)
+        .map_err(study_error)
+}
+
+/// Marca ou desmarca um curso como favorito para o dono local.
+pub fn set_course_favorite(
+    database: &Database,
+    course_id: &str,
+    favorite: bool,
+) -> Result<bool, IpcError> {
+    learnvault_core::set_course_favorite(database, LOCAL_OWNER_ID, course_id, favorite)
+        .map_err(study_error)
+}
+
+/// Marca ou desmarca uma aula (mídia) como favorita para o dono local.
+pub fn set_lesson_favorite(
+    database: &Database,
+    media_id: &str,
+    favorite: bool,
+) -> Result<bool, IpcError> {
+    learnvault_core::set_lesson_favorite(database, LOCAL_OWNER_ID, media_id, favorite)
+        .map_err(study_error)
+}
+
 /// Traduz o erro do núcleo para o erro IPC estável, sem ecoar o identificador consultado.
 ///
 /// Uma mídia desconhecida e uma posição negativa são falhas de entrada com código próprio,
@@ -272,6 +299,7 @@ fn study_error(error: learnvault_core::Error) -> IpcError {
         Error::InvalidStudyNoteContent => IpcError::invalid_note(),
         Error::FlashcardNotFound { .. } => IpcError::flashcard_not_found(),
         Error::InvalidFlashcardContent => IpcError::invalid_flashcard(),
+        Error::InvalidFavoriteTarget => IpcError::invalid_favorite_target(),
         _ => IpcError::study_unavailable(),
     }
 }

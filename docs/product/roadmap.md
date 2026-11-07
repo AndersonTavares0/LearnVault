@@ -57,7 +57,7 @@ Detalhes de implementação ficam nas issues e pull requests.
 ## Em seguida: uma mesa de estudo
 
 - [ ] Acessibilidade contínua: teclado, foco, contraste, movimento reduzido e leitores de tela.
-- [ ] Favoritos de cursos e aulas.
+- [x] Favoritos de cursos e aulas.
 
 ## Depois: uma biblioteca mais rica
 

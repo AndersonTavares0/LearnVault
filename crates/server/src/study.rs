@@ -189,6 +189,36 @@ struct FlashcardsResponse {
 }
 
 #[derive(Serialize)]
+pub(crate) struct FavoritesResponse {
+    course_ids: Vec<String>,
+    media_ids: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct CourseFavoriteRequest {
+    course_id: String,
+    favorite: bool,
+}
+
+#[derive(Serialize)]
+pub(crate) struct CourseFavoriteResponse {
+    course_id: String,
+    favorite: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct LessonFavoriteRequest {
+    media_id: String,
+    favorite: bool,
+}
+
+#[derive(Serialize)]
+pub(crate) struct LessonFavoriteResponse {
+    media_id: String,
+    favorite: bool,
+}
+
+#[derive(Serialize)]
 struct ErrorResponse {
     error: &'static str,
 }
@@ -1001,6 +1031,95 @@ pub(crate) async fn review_flashcard(
     }
 }
 
+/// Lista todos os cursos e aulas favoritados pelo usuário autenticado.
+pub(crate) async fn list_favorites(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let owner = user.user_id;
+    match run_study(&state, move |db| {
+        learnvault_core::list_favorites(db, &owner)
+    })
+    .await
+    {
+        Ok(favs) => private_no_store(
+            Json(FavoritesResponse {
+                course_ids: favs.course_ids,
+                media_ids: favs.media_ids,
+            })
+            .into_response(),
+        ),
+        Err(failure) => study_failure_response(failure),
+    }
+}
+
+/// Marca ou desmarca um curso como favorito para o usuário autenticado.
+pub(crate) async fn set_course_favorite(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<CourseFavoriteRequest>,
+) -> Response {
+    if !same_origin(&headers) {
+        return csrf_failed();
+    }
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let owner = user.user_id;
+    let course_id = request.course_id.trim().to_owned();
+    let lookup_id = course_id.clone();
+    let favorite = request.favorite;
+    match run_study(&state, move |db| {
+        learnvault_core::set_course_favorite(db, &owner, &lookup_id, favorite)
+    })
+    .await
+    {
+        Ok(saved) => private_no_store(
+            Json(CourseFavoriteResponse {
+                course_id,
+                favorite: saved,
+            })
+            .into_response(),
+        ),
+        Err(failure) => study_failure_response(failure),
+    }
+}
+
+/// Marca ou desmarca uma aula como favorita para o usuário autenticado.
+pub(crate) async fn set_lesson_favorite(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<LessonFavoriteRequest>,
+) -> Response {
+    if !same_origin(&headers) {
+        return csrf_failed();
+    }
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let owner = user.user_id;
+    let media_id = request.media_id.trim().to_owned();
+    let lookup_id = media_id.clone();
+    let favorite = request.favorite;
+    match run_study(&state, move |db| {
+        learnvault_core::set_lesson_favorite(db, &owner, &lookup_id, favorite)
+    })
+    .await
+    {
+        Ok(saved) => private_no_store(
+            Json(LessonFavoriteResponse {
+                media_id,
+                favorite: saved,
+            })
+            .into_response(),
+        ),
+        Err(failure) => study_failure_response(failure),
+    }
+}
+
 /// Responde o contrato de capacidades do Study.
 ///
 /// Exige a mesma sessão autenticada (e a mesma recusa à sessão temporária) das demais
@@ -1091,6 +1210,9 @@ fn study_failure_response(failure: StudyFailure) -> Response {
         }
         StudyFailure::Core(Error::FlashcardNotFound { .. }) => {
             error_response(StatusCode::NOT_FOUND, "flashcard_not_found")
+        }
+        StudyFailure::Core(Error::InvalidFavoriteTarget) => {
+            error_response(StatusCode::UNPROCESSABLE_ENTITY, "invalid_favorite_target")
         }
         StudyFailure::Core(_) => internal_error("study unavailable"),
     }

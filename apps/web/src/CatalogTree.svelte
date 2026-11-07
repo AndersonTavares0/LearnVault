@@ -19,7 +19,9 @@
 		showFiles = true,
 		activePath = null,
 		completedMediaIds = undefined,
-		onToggleLessonCompleted = undefined
+		onToggleLessonCompleted = undefined,
+		favoriteMediaIds = undefined,
+		onToggleLessonFavorite = undefined
 	}: {
 		nodes: CatalogNode[];
 		courseId: string;
@@ -28,6 +30,8 @@
 		activePath?: string | null;
 		completedMediaIds?: Set<string>;
 		onToggleLessonCompleted?: (node: CatalogNode) => void;
+		favoriteMediaIds?: Set<string>;
+		onToggleLessonFavorite?: (node: CatalogNode) => void;
 	} = $props();
 
 	// O nó contém a aula aberta quando é a própria aula ou um ancestral dela. Caminhos são
@@ -66,7 +70,7 @@
 				<svg class="section-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
 			</summary>
 			<ul class="lesson-list">
-				{#each node.children as child (child.path)}<li><CatalogTree nodes={[child]} {courseId} {expandAll} {showFiles} {activePath} {completedMediaIds} {onToggleLessonCompleted} /></li>{/each}
+				{#each node.children as child (child.path)}<li><CatalogTree nodes={[child]} {courseId} {expandAll} {showFiles} {activePath} {completedMediaIds} {onToggleLessonCompleted} {favoriteMediaIds} {onToggleLessonFavorite} /></li>{/each}
 			</ul>
 			{#if showFiles && (node.files.length || node.looseFiles.length)}<LooseFiles files={[...node.files, ...node.looseFiles]} heading="Materiais complementares" {courseId} />{/if}
 		</details>
@@ -116,9 +120,25 @@
 					<span class="lesson-title">{node.title}</span>
 					{#if meta}<span class="lesson-meta">{meta}</span>{/if}
 				</a>
+				{#if onToggleLessonFavorite && mediaFile?.mediaId}
+					{@const isFavorite = favoriteMediaIds?.has(mediaFile.mediaId) ?? false}
+					<button
+						type="button"
+						class="lesson-fav-btn"
+						class:is-favorite={isFavorite}
+						aria-pressed={isFavorite}
+						onclick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleLessonFavorite(node); }}
+						title={isFavorite ? `Remover "${node.title}" dos favoritos` : `Favoritar "${node.title}"`}
+						aria-label={isFavorite ? `Remover "${node.title}" dos favoritos` : `Favoritar "${node.title}"`}
+					>
+						<svg class="lesson-fav-icon" viewBox="0 0 24 24" fill={isFavorite ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+							<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+						</svg>
+					</button>
+				{/if}
 			</div>
 		{/if}
-		{#if node.children.length}<div class="lesson-children">{#each node.children as child (child.path)}<CatalogTree nodes={[child]} {courseId} {expandAll} {showFiles} {activePath} {completedMediaIds} {onToggleLessonCompleted} />{/each}</div>{/if}
+		{#if node.children.length}<div class="lesson-children">{#each node.children as child (child.path)}<CatalogTree nodes={[child]} {courseId} {expandAll} {showFiles} {activePath} {completedMediaIds} {onToggleLessonCompleted} {favoriteMediaIds} {onToggleLessonFavorite} />{/each}</div>{/if}
 	{:else}
 		{@const meta = formatCourseMeta(countCatalogNode(node))}
 		<section class="course-block">
@@ -127,7 +147,7 @@
 				{#if meta}<p class="course-meta">{meta}</p>{/if}
 			</header>
 			{#if showFiles && (node.files.length || node.looseFiles.length)}<LooseFiles files={[...node.files, ...node.looseFiles]} heading="Arquivos soltos" {courseId} />{/if}
-			{#if node.children.length}<div class="course-body">{#each node.children as child (child.path)}<CatalogTree nodes={[child]} {courseId} {expandAll} {showFiles} {activePath} {completedMediaIds} {onToggleLessonCompleted} />{/each}</div>{/if}
+			{#if node.children.length}<div class="course-body">{#each node.children as child (child.path)}<CatalogTree nodes={[child]} {courseId} {expandAll} {showFiles} {activePath} {completedMediaIds} {onToggleLessonCompleted} {favoriteMediaIds} {onToggleLessonFavorite} />{/each}</div>{/if}
 		</section>
 	{/if}
 {/each}

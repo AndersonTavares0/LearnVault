@@ -784,4 +784,22 @@ fn flashcards_and_focus_sessions_work_over_desktop_state() {
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].id, "focus-1");
     assert!(listed[0].completed);
+
+    // 3. Favoritos de cursos e aulas
+    let favs0 = state.list_favorites().unwrap();
+    assert!(favs0.course_ids.is_empty());
+    assert!(favs0.media_ids.is_empty());
+
+    let course_id = cat.categories[0].course_id.as_deref().unwrap();
+    assert!(state.set_course_favorite(course_id, true).unwrap());
+    assert!(state.set_lesson_favorite(media_id, true).unwrap());
+
+    let favs1 = state.list_favorites().unwrap();
+    assert_eq!(favs1.course_ids, vec![course_id.to_owned()]);
+    assert_eq!(favs1.media_ids, vec![media_id.clone()]);
+
+    assert!(!state.set_course_favorite(course_id, false).unwrap());
+    let favs2 = state.list_favorites().unwrap();
+    assert!(favs2.course_ids.is_empty());
+    assert_eq!(favs2.media_ids, vec![media_id.clone()]);
 }

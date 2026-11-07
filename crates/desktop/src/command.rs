@@ -20,7 +20,8 @@ use crate::courses::CourseEntry;
 use crate::dto::{
     CatalogDto, CatalogNodeDto, CoverDto, CoverRemovalDto, FlashcardDto, FocusSessionDto,
     FocusSummaryDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto, RecentStudyDto,
-    RescanSummaryDto, RewardSummaryDto, StudyNoteDto, StudyProgressDto, StudySummaryDto,
+    RescanSummaryDto, RewardSummaryDto, StudyFavoritesDto, StudyNoteDto, StudyProgressDto,
+    StudySummaryDto,
 };
 use crate::error::IpcError;
 use crate::ordering::CourseOrders;
@@ -447,6 +448,43 @@ pub async fn desktop_review_flashcard(
 ) -> Result<FlashcardDto, IpcError> {
     let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || state.review_flashcard(&card_id, &rating))
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// Comando IPC: lista os cursos e aulas favoritados pelo dono local.
+#[tauri::command]
+pub async fn desktop_list_favorites(
+    state: State<'_, DesktopState>,
+) -> Result<StudyFavoritesDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.list_favorites())
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// Comando IPC: marca ou desmarca um curso como favorito para o dono local.
+#[tauri::command]
+pub async fn desktop_set_course_favorite(
+    state: State<'_, DesktopState>,
+    course_id: String,
+    favorite: bool,
+) -> Result<bool, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.set_course_favorite(&course_id, favorite))
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// Comando IPC: marca ou desmarca uma aula (mídia) como favorita para o dono local.
+#[tauri::command]
+pub async fn desktop_set_lesson_favorite(
+    state: State<'_, DesktopState>,
+    media_id: String,
+    favorite: bool,
+) -> Result<bool, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.set_lesson_favorite(&media_id, favorite))
         .await
         .map_err(|_| IpcError::study_unavailable())?
 }

@@ -272,6 +272,9 @@ fn build_registers_the_app_commands_in_the_acl_manifest() {
         "desktop_update_flashcard",
         "desktop_delete_flashcard",
         "desktop_review_flashcard",
+        "desktop_list_favorites",
+        "desktop_set_course_favorite",
+        "desktop_set_lesson_favorite",
         "desktop_record_focus_session",
         "desktop_list_focus_sessions",
         "desktop_focus_summary",
@@ -333,6 +336,9 @@ fn capability_grants_only_the_core_default_and_the_app_commands() {
     assert!(permissions.contains(&"allow-desktop-update-flashcard"));
     assert!(permissions.contains(&"allow-desktop-delete-flashcard"));
     assert!(permissions.contains(&"allow-desktop-review-flashcard"));
+    assert!(permissions.contains(&"allow-desktop-list-favorites"));
+    assert!(permissions.contains(&"allow-desktop-set-course-favorite"));
+    assert!(permissions.contains(&"allow-desktop-set-lesson-favorite"));
     assert!(permissions.contains(&"allow-desktop-record-focus-session"));
     assert!(permissions.contains(&"allow-desktop-list-focus-sessions"));
     assert!(permissions.contains(&"allow-desktop-focus-summary"));
@@ -350,7 +356,7 @@ fn capability_grants_only_the_core_default_and_the_app_commands() {
     assert!(permissions.contains(&"allow-desktop-open-in-system-player"));
     assert_eq!(
         permissions.len(),
-        41,
+        44,
         "a capability não pode ampliar além do núcleo, dos controles da titlebar e dos comandos do app: {permissions:?}"
     );
 }
@@ -507,6 +513,9 @@ fn invoke_handler_registers_only_the_desktop_commands() {
         "desktop_update_flashcard",
         "desktop_delete_flashcard",
         "desktop_review_flashcard",
+        "desktop_list_favorites",
+        "desktop_set_course_favorite",
+        "desktop_set_lesson_favorite",
         "desktop_list_focus_sessions",
         "desktop_media_removal_impact",
         "desktop_remove_media",
@@ -540,6 +549,9 @@ fn study_commands_are_async_blocking_and_never_accept_an_owner() {
         ("desktop_update_flashcard", "state.update_flashcard("),
         ("desktop_delete_flashcard", "state.delete_flashcard("),
         ("desktop_review_flashcard", "state.review_flashcard("),
+        ("desktop_list_favorites", "state.list_favorites("),
+        ("desktop_set_course_favorite", "state.set_course_favorite("),
+        ("desktop_set_lesson_favorite", "state.set_lesson_favorite("),
         ("desktop_list_focus_sessions", "state.list_focus_sessions("),
     ];
     for (name, delegation) in expected {
