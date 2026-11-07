@@ -21,12 +21,6 @@
 
 ---
 
-<div align="center">
-  <img src="docs/design/screenshots/product-pass/final-library-1440-dark.png" alt="LearnVault Course Library Interface" width="90%">
-</div>
-
----
-
 ## Overview
 
 LearnVault turns folders of video courses into a structured study environment. Instead of relying on proprietary cloud platforms or bare media player folders, it indexes existing directories on your disk, tracks your progress, links timestamped markdown notes to video moments, and generates spaced repetition flashcards.
@@ -49,10 +43,6 @@ LearnVault turns folders of video courses into a structured study environment. I
 - **Playback Controls:** Persistent speed selection, keyboard shortcuts (`J`/`K`/`L`, `0-9`, `M`, `N`, `F`, `P`, `[`/`]`), Picture-in-Picture, and automatic lesson advance.
 - **Timeline Markers:** Visual timeline pins for user notes directly on the scrubber.
 - **Format Handling:** Native playback with automated WebVTT conversion for SubRip (`.srt`) subtitles, plus on-demand FFmpeg remuxing for extended containers (`.mkv`, `.avi`, `.wmv`) and audio formats.
-
-<div align="center">
-  <img src="docs/design/screenshots/product-pass/final-player-1440-dark.png" alt="LearnVault Study Workspace &amp; Video Player" width="90%">
-</div>
 
 ### Timestamped Notes and Spaced Repetition
 
