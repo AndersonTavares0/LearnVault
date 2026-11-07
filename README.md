@@ -66,10 +66,6 @@ LearnVault turns folders of video courses into a structured study environment. I
 - **Study Analytics:** Track daily focus minutes, completion streaks, and weekly consistency metrics.
 - **Botanical Forest Nursery:** Successful study blocks cultivate trees in a personal 2.5D isometric forest garden.
 
-<div align="center">
-  <img src="docs/design/screenshots/product-pass/final-statistics-1440-dark.png" alt="LearnVault Focus Forest &amp; Study Analytics" width="90%">
-</div>
-
 ### Multi-User Accounts and Permissions
 
 - **Isolated Student Profiles:** Individual accounts maintain private progress records, personal notes, flashcard decks, and focus stats.
