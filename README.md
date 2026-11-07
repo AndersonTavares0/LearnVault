@@ -1,12 +1,12 @@
 <div align="center">
 
-  <img src="docs/design/branding/learnvault-banner.svg" alt="LearnVault — Self-Hosted Course Library & Offline Study Space" width="100%">
+  <img src="docs/design/branding/learnvault-banner.svg" alt="LearnVault — Self-Hosted Course Library and Offline Study Workspace" width="100%">
 
   <br>
 
   **A privacy-first, self-hosted course library and offline study workspace.**
 
-  Organize the course videos, audios, and materials you already own into a personal study space—without moving, renaming, or modifying a single file.
+  Organize the course videos, audios, and materials you already own into a personal study space without moving, renaming, or modifying a single file.
 
   [![CI Status](https://github.com/AndersonTavares0/LearnVault/actions/workflows/ci.yml/badge.svg)](https://github.com/AndersonTavares0/LearnVault/actions/workflows/ci.yml)
   [![Latest Release](https://img.shields.io/github/v/release/AndersonTavares0/LearnVault?include_prereleases&color=2563eb&label=release)](https://github.com/AndersonTavares0/LearnVault/releases)
@@ -15,7 +15,7 @@
   [![Svelte 5](https://img.shields.io/badge/svelte-5-ff3e00?logo=svelte)](https://svelte.dev)
   [![Tauri 2](https://img.shields.io/badge/tauri-2-24c8db?logo=tauri)](https://tauri.app)
 
-  [Features](#-key-features) • [Downloads & Deployment](#-downloads--deployment) • [Quickstart](#-quickstart) • [Development](#-development) • [Documentation](docs/README.md)
+  [Features](#features) • [Downloads &amp; Deployment](#downloads--deployment) • [Quickstart](#quickstart) • [Development](#development) • [Documentation](docs/README.md)
 
 </div>
 
@@ -27,66 +27,72 @@
 
 ---
 
-## 💡 Why LearnVault?
+## Overview
 
-Most course platforms either lock your media into proprietary clouds or force you to browse bare folders in a media player. **LearnVault gives you the best of both worlds:**
+LearnVault turns folders of video courses into a structured study environment. Instead of relying on proprietary cloud platforms or bare media player folders, it indexes existing directories on your disk, tracks your progress, links timestamped markdown notes to video moments, and generates spaced repetition flashcards.
 
-- 🛡️ **Zero File Mutation:** Your physical course library is strictly **read-only**. LearnVault never alters, renames, copies, or moves your original files.
-- 🚀 **Two Modes, One Unified Engine:**
-  - **Self-Hosted Server:** Axum HTTP backend + SQLite with multi-user accounts, secure cookie sessions, and on-demand transcoding for shared home servers or homelabs.
-  - **Offline Desktop Application:** Tauri 2 native desktop app with zero open network ports and instant offline access.
-- 🌐 **Full Internationalization (i18n):** Native support for **English** (`en`, default) and **Brazilian Portuguese** (`pt-BR`) with instant switching and persistent user preferences.
-- 🔒 **Private & Sustainable:** No telemetry, no third-party CDNs, and zero cloud lock-in.
+### Core Guarantees
 
----
-
-## ✨ Key Features
-
-### 📺 Integrated Video & Audio Player
-- **Smooth Playback:** Persistent playback speed, keyboard shortcuts (`J`/`K`/`L`, `0-9`, `M`, `N`, `F`, `P`, `[`/`]`), Picture-in-Picture, and automatic next-lesson advance.
-- **Timeline Note Markers:** Jump directly to key moments with visual bookmarks on the playback scrubber.
-- **Smart Transcoding & Subtitles:** Native VTT subtitles, automatic on-the-fly SRT conversion, and on-demand FFmpeg remuxing for extended formats (`.mkv`, `.avi`, `.wmv`, HEVC, AC3).
-
-<div align="center">
-  <img src="docs/design/screenshots/product-pass/final-player-1440-dark.png" alt="LearnVault Study Workspace & Video Player" width="90%">
-</div>
-
-### 📝 Notes & Spaced Repetition Flashcards
-- **Timestamped Notes:** Capture notes attached to exact timestamps; clicking any note instantly seeks the video to that moment.
-- **Global Search:** Search through lesson titles, course modules, and study notes in real-time.
-- **Spaced Repetition (Flashcards):** Review active recall flashcards per lesson with interval calculations powered by the SM-2 algorithm.
-
-### 🌲 2.5D Study Forest & Pomodoro Focus
-- **Offline-Resilient Timer:** Integrated Pomodoro timer with offline queue sync and conflict resolution.
-- **Habit Streaks & Goals:** Track daily focus minutes, weekly active streaks, and daily completion missions.
-- **Isometric Botanical Garden:** Completed focus sessions cultivate trees in your personal 2.5D isometric study forest.
-
-<div align="center">
-  <img src="docs/design/screenshots/product-pass/final-statistics-1440-dark.png" alt="LearnVault Focus Forest & Study Analytics" width="90%">
-</div>
-
-### 👥 Multi-User Accounts & Access Control
-- **Student Profiles:** Individual accounts with isolated progress, personal notes, flashcard decks, and focus stats.
-- **Granular Permissions:** Administrators can grant students access to specific courses or the entire catalog.
+- **Zero File Mutation:** The underlying course library is strictly read-only. LearnVault never modifies, renames, copies, or moves your media files.
+- **Two Delivery Targets, One Domain Engine:**
+  - **Self-Hosted Server:** Axum HTTP backend and SQLite database with multi-user accounts, secure cookie sessions, and on-demand transcoding for home servers or homelabs.
+  - **Offline Desktop Application:** Tauri 2 native desktop app with zero open network ports and complete offline capability.
+- **Full Internationalization (i18n):** Native runtime support for English (`en`, default) and Brazilian Portuguese (`pt-BR`), with instant locale switching and persistent preferences.
+- **Data Sovereignty:** No telemetry, no third-party CDNs, and zero cloud dependencies. All data resides in a local SQLite file.
 
 ---
 
-## 📦 Downloads & Deployment
+## Features
 
-LearnVault provides official release artifacts built directly by automated GitHub Actions CI:
+### Integrated Video and Audio Player
 
-| Platform | Deployment Target | Format | Status | Notes |
+- **Playback Controls:** Persistent speed selection, keyboard shortcuts (`J`/`K`/`L`, `0-9`, `M`, `N`, `F`, `P`, `[`/`]`), Picture-in-Picture, and automatic lesson advance.
+- **Timeline Markers:** Visual timeline pins for user notes directly on the scrubber.
+- **Format Handling:** Native playback with automated WebVTT conversion for SubRip (`.srt`) subtitles, plus on-demand FFmpeg remuxing for extended containers (`.mkv`, `.avi`, `.wmv`) and audio formats.
+
+<div align="center">
+  <img src="docs/design/screenshots/product-pass/final-player-1440-dark.png" alt="LearnVault Study Workspace &amp; Video Player" width="90%">
+</div>
+
+### Timestamped Notes and Spaced Repetition
+
+- **Timestamped Study Notes:** Capture markdown notes anchored to exact video timestamps; clicking a note seeks the player directly to that instant.
+- **Catalog-Wide Search:** Query lesson titles, module folders, and study notes in real-time.
+- **Flashcard Review (SM-2):** Generate and drill flashcards per lesson with interval calculations driven by the SuperMemo-2 spaced repetition algorithm.
+
+### Study Forest and Focus Timer
+
+- **Offline-Safe Pomodoro:** Built-in focus timer with local queuing and conflict-free state synchronization.
+- **Study Analytics:** Track daily focus minutes, completion streaks, and weekly consistency metrics.
+- **Botanical Forest Nursery:** Successful study blocks cultivate trees in a personal 2.5D isometric forest garden.
+
+<div align="center">
+  <img src="docs/design/screenshots/product-pass/final-statistics-1440-dark.png" alt="LearnVault Focus Forest &amp; Study Analytics" width="90%">
+</div>
+
+### Multi-User Accounts and Permissions
+
+- **Isolated Student Profiles:** Individual accounts maintain private progress records, personal notes, flashcard decks, and focus stats.
+- **Access Control:** Administrators can restrict or grant access to specific courses or the entire catalog per user.
+
+---
+
+## Downloads & Deployment
+
+Release assets are compiled automatically by GitHub Actions CI:
+
+| Platform | Target | Format | Status | Distribution Notes |
 | :--- | :--- | :--- | :--- | :--- |
-| **Windows** | Desktop App | Installer (`.exe`) | **Available** | Per-user NSIS installer with signed auto-updater |
-| **Linux** | Self-Hosted Server | Standalone Tarball (`.tar.gz`) | **Available** | `x86_64` & `aarch64` binaries with embedded SPA |
-| **Any OS** | Containerized Server | OCI Container Image | **Available** | Published on GHCR (`ghcr.io/andersontavares0/learnvault`) |
-| **Linux** | Desktop App | Flatpak | *In Development* | Desktop Linux Flatpak sandbox packaging is currently on roadmap |
+| **Windows** | Desktop Application | Installer (`.exe`) | **Available** | Per-user NSIS package with signed auto-updater |
+| **Linux** | Self-Hosted Server | Standalone Tarball (`.tar.gz`) | **Available** | `x86_64` and `aarch64` binaries with embedded web SPA |
+| **Any OS** | Containerized Server | OCI Image | **Available** | Published on GHCR (`ghcr.io/andersontavares0/learnvault`) |
+| **Linux** | Desktop Application | Flatpak | *In Development* | Desktop Linux Flatpak sandbox packaging is currently on roadmap |
 
-Verify integrity using the `SHA256SUMS` file published with each [GitHub Release](https://github.com/AndersonTavares0/LearnVault/releases).
+Release checksums are available in the `SHA256SUMS` file accompanying each [GitHub Release](https://github.com/AndersonTavares0/LearnVault/releases).
 
 ---
 
-## 🚀 Quickstart
+## Quickstart
 
 ### Option A: Docker Compose (Self-Hosted Server)
 
@@ -117,14 +123,14 @@ Run the container:
 docker compose up -d
 ```
 
-Open `http://localhost:8090`, log in with your configured admin credentials, and change your temporary password.
+Navigate to `http://localhost:8090`, sign in with the configured credentials, and update the administrator password in Account Settings.
 
 ---
 
 ### Option B: Linux Standalone Server
 
 1. Download the latest `learnvault-linux-amd64.tar.gz` from the [Releases page](https://github.com/AndersonTavares0/LearnVault/releases).
-2. Extract the archive and launch the server:
+2. Extract the archive and start the server:
 
 ```sh
 tar -xzf learnvault-linux-amd64.tar.gz
@@ -136,21 +142,28 @@ tar -xzf learnvault-linux-amd64.tar.gz
 ### Option C: Windows Desktop Application
 
 1. Download `learnvault-windows-vX.Y.Z.exe` from [Releases](https://github.com/AndersonTavares0/LearnVault/releases).
-2. Run the installer (installs per-user into `%LOCALAPPDATA%\LearnVault` without requiring admin rights).
-3. Select your course library folder via the native dialog and start studying offline.
+2. Run the installer (installs per-user into `%LOCALAPPDATA%\LearnVault` without requiring administrator privileges).
+3. Select your course library folder via the native dialog to start studying offline.
 
 ---
 
-## 🛠️ Development
+## Development
 
-LearnVault is written in **Rust** (backend/desktop) and **Svelte 5 + TypeScript** (frontend SPA).
+LearnVault is structured as a Rust workspace with a Svelte 5 frontend:
+
+- `crates/core`: Domain engine, catalog scanner, media identification, SQLite migrations.
+- `crates/server`: Axum HTTP server, session cookies, media streaming, and SPA delivery.
+- `crates/desktop`: Tauri 2 desktop shell with native IPC commands.
+- `apps/web`: Svelte 5 + TypeScript single-page application built with Vite.
 
 ### Prerequisites
+
 - **Rust:** 1.89+ (`rustup default stable`)
 - **Node.js:** 24+
-- **pnpm:** 11.28.5 (specified in `package.json`)
+- **pnpm:** 11.28.5 (specified via `packageManager` in `package.json`)
 
-### Setup
+### Workspace Setup
+
 ```sh
 git clone https://github.com/AndersonTavares0/LearnVault.git
 cd LearnVault
@@ -164,7 +177,7 @@ pnpm install --frozen-lockfile
 ```sh
 pnpm dev                     # Start Rust API server (8090) and Vite SPA (5173) with live reload
 pnpm dev:tauri               # Launch Tauri desktop application in development mode
-pnpm verify --fast           # Fast verification (Svelte check, Vitest unit tests, Cargo lints/tests)
+pnpm verify --fast           # Fast verification (Svelte check, Vitest unit tests, Cargo check/tests)
 pnpm exec playwright test    # Run Playwright end-to-end browser tests
 pnpm run build               # Build production SPA assets
 pnpm run build:desktop       # Build embedded desktop SPA bundle
@@ -174,32 +187,32 @@ cargo test --all
 
 ---
 
-## 📖 Canonical Documentation
+## Documentation
 
-For in-depth guides and architectural design records, consult the canonical documentation:
+Consult the canonical documentation for in-depth architecture and operational details:
 
-- [Documentation Guide](docs/README.md)
+- [Documentation Index](docs/README.md)
 - [Architecture Overview](docs/architecture/overview.md)
 - [API Reference](docs/reference/api.md)
 - [Product Requirements](docs/product/requirements.md)
 - [Product Roadmap](docs/product/roadmap.md)
-- [Distribution & Operations](docs/operations/distribution.md)
+- [Distribution and Operations](docs/operations/distribution.md)
 - [Architecture Decision Records (ADR)](docs/architecture/adr/README.md)
 - [Security Policy](.github/SECURITY.md)
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
-Contributions are welcome! Please read [`.github/CONTRIBUTING.md`](.github/CONTRIBUTING.md) and [`AGENTS.md`](AGENTS.md) before submitting pull requests.
+Please review [`.github/CONTRIBUTING.md`](.github/CONTRIBUTING.md) and [`AGENTS.md`](AGENTS.md) before submitting pull requests.
 
-1. Open an issue for proposed feature changes; use Discussions for design debates.
-2. Follow Conventional Commits in English (e.g. `feat(i18n): add language switcher`).
-3. Maintain the **read-only course library** invariant at all times.
-4. Verify your changes pass `pnpm verify --fast` before submitting.
+1. Open an issue for proposed feature changes; discuss technical design decisions beforehand.
+2. Follow Conventional Commits in English (e.g., `feat(i18n): add language switcher`).
+3. Maintain the **read-only course library** invariant across all code paths.
+4. Verify all tests pass locally via `pnpm verify --fast` before pushing.
 
 ---
 
-## 📄 License
+## License
 
 LearnVault is licensed under the [MIT License](LICENSE).

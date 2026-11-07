@@ -1,295 +1,103 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 460" width="1200" height="460">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320" width="1200" height="320">
   <defs>
-    <!-- Gradients -->
-    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#090d13" />
-      <stop offset="50%" stop-color="#0d141e" />
-      <stop offset="100%" stop-color="#070a0e" />
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#080c12" />
+      <stop offset="50%" stop-color="#0e1520" />
+      <stop offset="100%" stop-color="#06090e" />
     </linearGradient>
 
-    <radialGradient id="amberGlow" cx="20%" cy="30%" r="45%">
-      <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.14" />
-      <stop offset="100%" stop-color="#f59e0b" stop-opacity="0" />
+    <radialGradient id="glow-amber" cx="50%" cy="30%" r="50%">
+      <stop offset="0%" stop-color="#d97706" stop-opacity="0.16" />
+      <stop offset="100%" stop-color="#d97706" stop-opacity="0" />
     </radialGradient>
 
-    <radialGradient id="blueGlow" cx="80%" cy="40%" r="55%">
-      <stop offset="0%" stop-color="#0284c7" stop-opacity="0.12" />
+    <radialGradient id="glow-blue" cx="80%" cy="80%" r="45%">
+      <stop offset="0%" stop-color="#0284c7" stop-opacity="0.10" />
       <stop offset="100%" stop-color="#0284c7" stop-opacity="0" />
     </radialGradient>
 
-    <radialGradient id="emeraldGlow" cx="50%" cy="85%" r="40%">
-      <stop offset="0%" stop-color="#10b981" stop-opacity="0.08" />
-      <stop offset="100%" stop-color="#10b981" stop-opacity="0" />
-    </radialGradient>
-
-    <linearGradient id="borderGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#2a3b4e" stop-opacity="0.9" />
-      <stop offset="40%" stop-color="#1c2736" stop-opacity="0.4" />
-      <stop offset="80%" stop-color="#f59e0b" stop-opacity="0.6" />
-      <stop offset="100%" stop-color="#1c2736" stop-opacity="0.3" />
+    <linearGradient id="border" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#334155" stop-opacity="0.8" />
+      <stop offset="50%" stop-color="#1e293b" stop-opacity="0.3" />
+      <stop offset="100%" stop-color="#d97706" stop-opacity="0.5" />
     </linearGradient>
 
-    <linearGradient id="cardBg" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#141c28" stop-opacity="0.88" />
-      <stop offset="100%" stop-color="#0f1622" stop-opacity="0.94" />
+    <linearGradient id="shield" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2f493d" />
+      <stop offset="100%" stop-color="#192b23" />
     </linearGradient>
 
-    <linearGradient id="cardBorder" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.12" />
-      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.03" />
-    </linearGradient>
-
-    <linearGradient id="amberAccent" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#f59e0b" />
-      <stop offset="100%" stop-color="#fbbf24" />
-    </linearGradient>
-
-    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#3b5948" />
-      <stop offset="50%" stop-color="#233a2e" />
-      <stop offset="100%" stop-color="#14211a" />
-    </linearGradient>
-
-    <filter id="subtleShadow" x="-10%" y="-10%" width="120%" height="120%">
-      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.4" />
+    <filter id="mark-shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000000" flood-opacity="0.6" />
     </filter>
 
-    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="6" result="blur" />
-      <feComposite in="SourceGraphic" in2="blur" operator="over" />
-    </filter>
-
-    <!-- Background Pattern -->
-    <pattern id="dotGrid" width="24" height="24" patternUnits="userSpaceOnUse">
-      <circle cx="2" cy="2" r="1" fill="#2a3b4e" opacity="0.45" />
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1" fill="#1e293b" opacity="0.4" />
     </pattern>
   </defs>
 
   <style>
-    .font-base { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", "Helvetica Neue", sans-serif; }
+    .font-sans { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", "Helvetica Neue", system-ui, sans-serif; }
     .font-mono { font-family: "JetBrains Mono", "Cascadia Code", "SFMono-Regular", Consolas, monospace; }
   </style>
 
-  <!-- Background Base -->
-  <rect width="1200" height="460" rx="16" fill="url(#bgGrad)" />
-  <rect width="1200" height="460" rx="16" fill="url(#dotGrid)" />
-  <rect width="1200" height="460" rx="16" fill="url(#amberGlow)" />
-  <rect width="1200" height="460" rx="16" fill="url(#blueGlow)" />
-  <rect width="1200" height="460" rx="16" fill="url(#emeraldGlow)" />
+  <!-- Background Layer -->
+  <rect width="1200" height="320" rx="14" fill="url(#bg)" />
+  <rect width="1200" height="320" rx="14" fill="url(#grid)" />
+  <rect width="1200" height="320" rx="14" fill="url(#glow-amber)" />
+  <rect width="1200" height="320" rx="14" fill="url(#glow-blue)" />
+  <rect x="1" y="1" width="1198" height="318" rx="13" fill="none" stroke="url(#border)" stroke-width="1.2" />
 
-  <!-- Outer Border -->
-  <rect x="1" y="1" width="1198" height="458" rx="15" fill="none" stroke="url(#borderGrad)" stroke-width="1.5" />
-
-  <!-- ==================== LEFT COLUMN: BRAND LOCKUP ==================== -->
-  <g transform="translate(64, 52)">
-    <!-- Brand Icon (Shield) -->
-    <g transform="translate(0, 0)">
-      <g filter="url(#subtleShadow)">
-        <!-- Faceted Hexagonal Shield -->
-        <path d="M36 5.76 65.7 21.96v28.08L36 66.24 6.3 50.04V21.96L36 5.76Z" fill="url(#shieldGrad)" stroke="#4e735e" stroke-width="1.5" />
-        <!-- Shield Inner Highlight -->
-        <path d="M36 7.5 64 22.8v26.4L36 64.5 8 49.2V22.8L36 7.5Z" fill="none" stroke="#689d81" stroke-width="1" opacity="0.3" />
-        <!-- Monogram LV in Vault Style -->
-        <path d="M22.5 22.5h5.76v21.24h8.1v5.4h-13.86V22.5Zm16.56 0h6.12l5.58 17.64 5.58-17.64h6.12l-8.64 26.64h-6.12L39.06 22.5Z" fill="#ffffff" />
-      </g>
+  <!-- Center Brand Presentation -->
+  <g transform="translate(600, 140)" text-anchor="middle">
+    
+    <!-- Geometric Shield Mark -->
+    <g transform="translate(0, -72)" filter="url(#mark-shadow)">
+      <!-- Hexagonal Faceted Shield (From Brand.svelte) -->
+      <path d="M0 -34.8 L29.7 -18.6 V13.8 L0 30 L-29.7 13.8 V-18.6 Z" fill="url(#shield)" stroke="#4b735e" stroke-width="1.5" />
+      <!-- Inner Monogram LV -->
+      <path d="M-12.6 -12.6 h5.04 v18.58 h7.09 v4.73 h-12.13 V-12.6 Z M1.89 -12.6 h5.36 l4.88 15.44 4.88 -15.44 h5.36 l-7.56 23.31 h-5.36 L1.89 -12.6 Z" fill="#ffffff" />
     </g>
 
-    <!-- Main Title -->
-    <g transform="translate(90, 8)">
-      <text class="font-base" font-size="42" font-weight="800" fill="#f8fafc" letter-spacing="-0.035em">LearnVault</text>
-      <!-- Subtitle Badge -->
-      <g transform="translate(232, -26)">
-        <rect x="0" y="0" width="84" height="22" rx="6" fill="#f59e0b" fill-opacity="0.15" stroke="#f59e0b" stroke-opacity="0.4" stroke-width="1" />
-        <text class="font-mono" x="42" y="15" text-anchor="middle" font-size="11" font-weight="600" fill="#fbbf24">v0.8.1</text>
+    <!-- Wordmark -->
+    <text class="font-sans" y="24" font-size="38" font-weight="700" fill="#f8fafc" letter-spacing="-0.03em">LearnVault</text>
+
+    <!-- Core Tagline -->
+    <text class="font-sans" y="54" font-size="15" font-weight="500" fill="#cbd5e1" letter-spacing="-0.01em">Self-Hosted Course Library &amp; Offline Study Workspace</text>
+
+    <!-- Technical System Bar -->
+    <g transform="translate(0, 92)">
+      <!-- Technical Pill Elements -->
+      <g transform="translate(-315, 0)">
+        <rect x="0" y="0" width="105" height="26" rx="6" fill="#111722" stroke="#1e293b" stroke-width="1" />
+        <text class="font-mono" x="52.5" y="17" font-size="11" font-weight="600" fill="#94a3b8">Rust &amp; Axum</text>
       </g>
-      <text class="font-base" x="0" y="28" font-size="16" font-weight="600" fill="#f59e0b" letter-spacing="-0.01em">Self-Hosted Course Library &amp; Offline Study Space</text>
-    </g>
-
-    <!-- Value Proposition -->
-    <g transform="translate(0, 116)">
-      <text class="font-base" font-size="14.5" fill="#94a3b8" line-height="1.6">
-        <tspan x="0" y="0">Organize video courses directly from your disk without moving original files.</tspan>
-        <tspan x="0" y="24">Take timestamped markdown notes, train spaced repetition flashcards,</tspan>
-        <tspan x="0" y="48">and boost deep focus with the integrated Pomodoro study forest.</tspan>
-      </text>
-    </g>
-
-    <!-- Guarantee Badges / Pillars -->
-    <g transform="translate(0, 206)">
-      <!-- Pill 1: Read-Only Storage -->
-      <g transform="translate(0, 0)">
-        <rect width="186" height="34" rx="8" fill="#111722" stroke="#1c2736" stroke-width="1" />
-        <circle cx="16" cy="17" r="4.5" fill="#10b981" />
-        <text class="font-base" x="29" y="21.5" font-size="12" font-weight="600" fill="#e2e8f0">Read-Only Disk Scanner</text>
-      </g>
-
-      <!-- Pill 2: 100% Offline & Private -->
-      <g transform="translate(196, 0)">
-        <rect width="176" height="34" rx="8" fill="#111722" stroke="#1c2736" stroke-width="1" />
-        <circle cx="16" cy="17" r="4.5" fill="#38bdf8" />
-        <text class="font-base" x="29" y="21.5" font-size="12" font-weight="600" fill="#e2e8f0">100% Offline &amp; Private</text>
-      </g>
-
-      <!-- Pill 3: Embedded SQLite -->
-      <g transform="translate(382, 0)">
-        <rect width="128" height="34" rx="8" fill="#111722" stroke="#1c2736" stroke-width="1" />
-        <circle cx="16" cy="17" r="4.5" fill="#f59e0b" />
-        <text class="font-base" x="29" y="21.5" font-size="12" font-weight="600" fill="#e2e8f0">Local SQLite</text>
-      </g>
-    </g>
-
-    <!-- Architecture & Tech Stack Tags -->
-    <g transform="translate(0, 268)">
-      <text class="font-mono" x="0" y="14" font-size="11" font-weight="600" fill="#64748b" letter-spacing="0.08em">POWERED BY</text>
       
+      <g transform="translate(-195, 0)">
+        <rect x="0" y="0" width="85" height="26" rx="6" fill="#111722" stroke="#1e293b" stroke-width="1" />
+        <text class="font-mono" x="42.5" y="17" font-size="11" font-weight="600" fill="#94a3b8">Svelte 5</text>
+      </g>
+
+      <g transform="translate(-95, 0)">
+        <rect x="0" y="0" width="80" height="26" rx="6" fill="#111722" stroke="#1e293b" stroke-width="1" />
+        <text class="font-mono" x="40" y="17" font-size="11" font-weight="600" fill="#94a3b8">Tauri 2</text>
+      </g>
+
+      <g transform="translate(0, 0)">
+        <rect x="0" y="0" width="75" height="26" rx="6" fill="#111722" stroke="#1e293b" stroke-width="1" />
+        <text class="font-mono" x="37.5" y="17" font-size="11" font-weight="600" fill="#94a3b8">SQLite</text>
+      </g>
+
       <g transform="translate(90, 0)">
-        <!-- Rust -->
-        <rect x="0" y="0" width="82" height="22" rx="5" fill="#1e293b" stroke="#334155" stroke-width="0.8" />
-        <text class="font-mono" x="41" y="15" text-anchor="middle" font-size="11" fill="#cbd5e1">Rust 2024</text>
-
-        <!-- Axum -->
-        <rect x="90" y="0" width="56" height="22" rx="5" fill="#1e293b" stroke="#334155" stroke-width="0.8" />
-        <text class="font-mono" x="118" y="15" text-anchor="middle" font-size="11" fill="#cbd5e1">Axum</text>
-
-        <!-- Svelte 5 -->
-        <rect x="154" y="0" width="76" height="22" rx="5" fill="#1e293b" stroke="#334155" stroke-width="0.8" />
-        <text class="font-mono" x="192" y="15" text-anchor="middle" font-size="11" fill="#cbd5e1">Svelte 5</text>
-
-        <!-- Tauri 2 -->
-        <rect x="238" y="0" width="68" height="22" rx="5" fill="#1e293b" stroke="#334155" stroke-width="0.8" />
-        <text class="font-mono" x="272" y="15" text-anchor="middle" font-size="11" fill="#cbd5e1">Tauri 2</text>
-
-        <!-- TypeScript -->
-        <rect x="314" y="0" width="94" height="22" rx="5" fill="#1e293b" stroke="#334155" stroke-width="0.8" />
-        <text class="font-mono" x="361" y="15" text-anchor="middle" font-size="11" fill="#cbd5e1">TypeScript</text>
-      </g>
-    </g>
-  </g>
-
-  <!-- ==================== RIGHT COLUMN: BENTO UI SHOWCASE ==================== -->
-  <g transform="translate(636, 44)" filter="url(#subtleShadow)">
-
-    <!-- BENTO CARD 1: Video Player & Timestamp Scrubbing -->
-    <g transform="translate(0, 0)">
-      <rect width="500" height="154" rx="12" fill="url(#cardBg)" stroke="url(#cardBorder)" stroke-width="1.2" />
-      
-      <!-- Video Window Header -->
-      <g transform="translate(18, 18)">
-        <!-- Window Traffic Dots -->
-        <circle cx="0" cy="0" r="4.5" fill="#ef4444" opacity="0.8" />
-        <circle cx="14" cy="0" r="4.5" fill="#f59e0b" opacity="0.8" />
-        <circle cx="28" cy="0" r="4.5" fill="#10b981" opacity="0.8" />
-
-        <text class="font-base" x="48" y="4" font-size="12" font-weight="600" fill="#f1f5f9">Distributed Systems • Lesson 04: Raft Consensus</text>
-        <rect x="408" y="-10" width="46" height="20" rx="4" fill="#1e293b" stroke="#334155" stroke-width="0.8" />
-        <text class="font-mono" x="431" y="4" text-anchor="middle" font-size="10" font-weight="600" fill="#38bdf8">1.25×</text>
+        <rect x="0" y="0" width="105" height="26" rx="6" fill="#111722" stroke="#1e293b" stroke-width="1" />
+        <text class="font-mono" x="52.5" y="17" font-size="11" font-weight="600" fill="#10b981">Read-Only FS</text>
       </g>
 
-      <!-- Video Canvas Mockup Area -->
-      <g transform="translate(18, 42)">
-        <rect width="464" height="52" rx="8" fill="#080c12" stroke="#1c2736" stroke-width="1" />
-        
-        <!-- Video Center Play & Title Preview -->
-        <circle cx="34" cy="26" r="14" fill="#f59e0b" fill-opacity="0.18" stroke="#f59e0b" stroke-width="1" />
-        <polygon points="31,20 40,26 31,32" fill="#f59e0b" />
-        
-        <text class="font-mono" x="60" y="24" font-size="12" font-weight="600" fill="#e2e8f0">Leader Election &amp; Heartbeat RPCs</text>
-        <text class="font-mono" x="60" y="38" font-size="10" fill="#64748b">term: 4 • state: Follower → Candidate</text>
-
-        <!-- Timestamp Marker Flag -->
-        <rect x="362" y="16" width="90" height="20" rx="5" fill="#10b981" fill-opacity="0.15" stroke="#10b981" stroke-opacity="0.4" stroke-width="1" />
-        <text class="font-mono" x="407" y="29.5" text-anchor="middle" font-size="10" font-weight="600" fill="#34d399">📝 [14:32] Note</text>
-      </g>
-
-      <!-- Scrub Bar & Controls -->
-      <g transform="translate(18, 114)">
-        <!-- Progress track background -->
-        <rect width="464" height="6" rx="3" fill="#1e293b" />
-        <!-- Progress track active (amber) -->
-        <rect width="194" height="6" rx="3" fill="url(#amberAccent)" />
-        <!-- Scrub Head -->
-        <circle cx="194" cy="3" r="6" fill="#ffffff" stroke="#f59e0b" stroke-width="2" />
-        <!-- Timestamp Indicator at 14:32 -->
-        <circle cx="194" cy="3" r="2" fill="#f59e0b" />
-
-        <text class="font-mono" x="0" y="24" font-size="11" font-weight="500" fill="#94a3b8">14:32</text>
-        <text class="font-mono" x="464" y="24" text-anchor="end" font-size="11" font-weight="500" fill="#64748b">34:10</text>
+      <g transform="translate(210, 0)">
+        <rect x="0" y="0" width="105" height="26" rx="6" fill="#111722" stroke="#1e293b" stroke-width="1" />
+        <text class="font-mono" x="52.5" y="17" font-size="11" font-weight="600" fill="#f59e0b">Offline Ready</text>
       </g>
     </g>
 
-    <!-- BENTO ROW 2: Spaced Repetition + Pomodoro Timer -->
-    <g transform="translate(0, 168)">
-      
-      <!-- CARD 2A: Flashcard Spaced Repetition (SM-2) -->
-      <g transform="translate(0, 0)">
-        <rect width="288" height="196" rx="12" fill="url(#cardBg)" stroke="url(#cardBorder)" stroke-width="1.2" />
-        
-        <!-- Card Header -->
-        <g transform="translate(18, 22)">
-          <rect x="0" y="0" width="84" height="20" rx="5" fill="#38bdf8" fill-opacity="0.12" stroke="#38bdf8" stroke-opacity="0.3" stroke-width="0.8" />
-          <text class="font-mono" x="42" y="14" text-anchor="middle" font-size="10" font-weight="600" fill="#38bdf8">SM-2 REVIEW</text>
-          
-          <text class="font-mono" x="252" y="14" text-anchor="end" font-size="11" fill="#64748b">Card 7 / 18</text>
-        </g>
-
-        <!-- Question Prompt -->
-        <g transform="translate(18, 56)">
-          <text class="font-base" font-size="13" font-weight="600" fill="#f1f5f9" line-height="1.4">
-            <tspan x="0" y="0">Why does Raft require a quorum</tspan>
-            <tspan x="0" y="18">for log entry commitment?</tspan>
-          </text>
-          <text class="font-base" x="0" y="44" font-size="11.5" fill="#94a3b8">
-            Ensures intersection with next leader's
-          </text>
-          <text class="font-base" x="0" y="60" font-size="11.5" fill="#94a3b8">
-            voter set, preserving committed entries.
-          </text>
-        </g>
-
-        <!-- Recall Buttons -->
-        <g transform="translate(18, 146)">
-          <!-- Hard -->
-          <rect x="0" y="0" width="76" height="30" rx="6" fill="#1e293b" stroke="#e11d48" stroke-opacity="0.4" stroke-width="1" />
-          <text class="font-base" x="38" y="18.5" text-anchor="middle" font-size="11" font-weight="600" fill="#fb7185">Hard</text>
-
-          <!-- Good -->
-          <rect x="86" y="0" width="76" height="30" rx="6" fill="#1e293b" stroke="#f59e0b" stroke-opacity="0.4" stroke-width="1" />
-          <text class="font-base" x="124" y="18.5" text-anchor="middle" font-size="11" font-weight="600" fill="#fbbf24">Good</text>
-
-          <!-- Easy -->
-          <rect x="172" y="0" width="80" height="30" rx="6" fill="#10b981" fill-opacity="0.15" stroke="#10b981" stroke-opacity="0.5" stroke-width="1" />
-          <text class="font-base" x="212" y="18.5" text-anchor="middle" font-size="11" font-weight="600" fill="#34d399">Easy (4d)</text>
-        </g>
-      </g>
-
-      <!-- CARD 2B: Pomodoro Focus Timer & Forest Island Nursery -->
-      <g transform="translate(302, 0)">
-        <rect width="198" height="196" rx="12" fill="url(#cardBg)" stroke="url(#cardBorder)" stroke-width="1.2" />
-
-        <g transform="translate(16, 22)">
-          <text class="font-mono" font-size="10" font-weight="600" fill="#f59e0b" letter-spacing="0.06em">FOCUS SESSION</text>
-        </g>
-
-        <!-- Radial Countdown Display -->
-        <g transform="translate(99, 88)">
-          <!-- Outer Track -->
-          <circle cx="0" cy="0" r="38" fill="none" stroke="#1c2736" stroke-width="5" />
-          <!-- Active Progress Ring -->
-          <circle cx="0" cy="0" r="38" fill="none" stroke="url(#amberAccent)" stroke-width="5" stroke-dasharray="238.7" stroke-dashoffset="65" stroke-linecap="round" transform="rotate(-90)" />
-          
-          <!-- Countdown Digits -->
-          <text class="font-mono" x="0" y="7" text-anchor="middle" font-size="19" font-weight="800" fill="#f8fafc">25:00</text>
-        </g>
-
-        <!-- Status & Gamification Badge -->
-        <g transform="translate(14, 146)">
-          <rect width="170" height="30" rx="6" fill="#10b981" fill-opacity="0.12" stroke="#10b981" stroke-opacity="0.3" stroke-width="0.8" />
-          <!-- Mini Tree Glyph -->
-          <text class="font-base" x="12" y="19" font-size="12">🌲</text>
-          <text class="font-base" x="32" y="19" font-size="11" font-weight="600" fill="#6ee7b7">Island Nursery +1</text>
-        </g>
-      </g>
-
-    </g>
   </g>
 </svg>
