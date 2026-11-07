@@ -95,13 +95,7 @@ pub fn catalog_with_orders(
             categories,
         };
         complete = complete && shaped.complete;
-        let source_folder = course
-            .root
-            .as_path()
-            .parent()
-            .and_then(|p| p.file_name())
-            .and_then(|s| s.to_str())
-            .map(str::to_owned);
+        let source_folder = learnvault_core::course_source_folder(course.root.as_path());
         nodes.push(CatalogNodeDto::course(
             &course.id,
             &course.title(),

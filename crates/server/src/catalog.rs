@@ -168,13 +168,7 @@ fn build_course_catalog(
         complete = complete && catalog.complete;
         let (mut children, loose_files) = learnvault_core::shape_course_catalog(catalog);
         learnvault_core::apply_order(&mut children, orders.get(&course.id).unwrap_or(&empty));
-        let source_folder = course
-            .root
-            .as_path()
-            .parent()
-            .and_then(|p| p.file_name())
-            .and_then(|s| s.to_str())
-            .map(str::to_owned);
+        let source_folder = learnvault_core::course_source_folder(course.root.as_path());
         nodes.push(CatalogNodeResponse {
             title: course.title.clone(),
             path: String::new(),

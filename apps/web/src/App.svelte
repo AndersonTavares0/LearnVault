@@ -938,8 +938,13 @@
 							{:else}
 								<div class="lv-empty-state">
 									<p class="lv-empty__title" role="status">Nenhum resultado encontrado</p>
-									<p class="lv-lede">Nenhum curso corresponde aos filtros ativos{catalogQuery.trim() ? ` ou à busca “${catalogQuery.trim()}”` : ''}.</p>
-									<button class="lv-btn" type="button" onclick={() => { catalogQuery = ''; progressFilter = 'all'; sourceFolderFilter = 'all'; }}>Limpar filtros e busca</button>
+									{#if progressFilter === 'all' && sourceFolderFilter === 'all' && catalogQuery.trim()}
+										<p class="lv-lede">Nenhum curso ou aula corresponde a “{catalogQuery.trim()}”.</p>
+										<button class="lv-btn" type="button" onclick={() => (catalogQuery = '')}>Limpar busca</button>
+									{:else}
+										<p class="lv-lede">Nenhum curso corresponde aos filtros ativos{catalogQuery.trim() ? ` ou à busca “${catalogQuery.trim()}”` : ''}.</p>
+										<button class="lv-btn" type="button" onclick={() => { catalogQuery = ''; progressFilter = 'all'; sourceFolderFilter = 'all'; }}>Limpar filtros e busca</button>
+									{/if}
 								</div>
 							{/if}
 						{:else if canManage}
