@@ -1,8 +1,8 @@
 <div align="center">
 
-  <img src="apps/web/public/favicon.svg" alt="LearnVault Logo" width="80" height="80">
+  <img src="docs/design/branding/learnvault-banner.jpg" alt="LearnVault — Your Personal Study Vault" width="100%">
 
-  # LearnVault
+  <br>
 
   **A privacy-first, self-hosted course library and offline study workspace.**
 
