@@ -4,6 +4,7 @@
 import { invoke } from '@tauri-apps/api/core';
 
 export type User = { userId: string; username: string; role: string; isAdmin: boolean; mustChangeCredentials: boolean };
+export type LocalUser = { userId: string; username: string; isAdmin: boolean; createdAt: number; allowedCourseIds: string[] | null };
 export type FileEntry = { name: string; path: string; size: number; mediaId?: string; mtimeSeconds?: number; kind?: string; availability?: string; unverified?: boolean };
 export type Lesson = { title: string; path: string; media: FileEntry[]; subtitles: FileEntry[]; materials: FileEntry[]; availability?: string; unverified?: boolean };
 // Cada nó de topo do catálogo é um curso com identidade opaca (`courseId`). Nós internos
@@ -135,6 +136,10 @@ export interface Transport {
 	removeCourse(courseId: string): Promise<void>;
 	rescan(): Promise<void>;
 	updateCredentials(username: string, password: string, currentPassword?: string): Promise<User>;
+	listUsers?(): Promise<LocalUser[]>;
+	createUser?(username: string, password: string, allowedCourseIds?: string[] | null): Promise<LocalUser>;
+	setUserCourseAccess?(userId: string, allowedCourseIds: string[] | null): Promise<string[] | null>;
+	deleteUser?(userId: string): Promise<boolean>;
 	studyProgress(mediaId: string): Promise<StudyProgress>;
 	recordPosition(mediaId: string, positionSeconds: number): Promise<StudyProgress>;
 	setCompleted(mediaId: string, completed: boolean): Promise<StudyProgress>;
@@ -386,6 +391,22 @@ export function normalizeUser(value: unknown): User {
 	if (!value || typeof value !== 'object' || typeof (value as { username?: unknown }).username !== 'string') throw invalidPayload('usuário sem username.');
 	const user = value as { user_id?: unknown; username: string; role?: unknown; is_admin?: unknown; must_change_credentials?: unknown };
 	return { userId: typeof user.user_id === 'string' || typeof user.user_id === 'number' ? String(user.user_id) : '', username: user.username, isAdmin: user.is_admin === true || user.role === 'admin', role: user.is_admin === true || user.role === 'admin' ? 'admin' : 'user', mustChangeCredentials: user.must_change_credentials === true };
+}
+
+export function normalizeLocalUser(value: unknown): LocalUser {
+	if (!value || typeof value !== 'object') throw invalidPayload('usuário local ausente.');
+	const raw = value as { user_id?: unknown; username?: unknown; is_admin?: unknown; created_at?: unknown; allowed_course_ids?: unknown };
+	if (typeof raw.user_id !== 'string' || typeof raw.username !== 'string') throw invalidPayload('usuário local inválido.');
+	const allowed = Array.isArray(raw.allowed_course_ids)
+		? raw.allowed_course_ids.filter((id): id is string => typeof id === 'string')
+		: null;
+	return {
+		userId: raw.user_id,
+		username: raw.username,
+		isAdmin: raw.is_admin === true,
+		createdAt: typeof raw.created_at === 'number' ? raw.created_at : 0,
+		allowedCourseIds: allowed
+	};
 }
 
 export function normalizeStudyProgress(value: unknown): StudyProgress {
@@ -683,6 +704,47 @@ export class HttpTransport implements Transport {
 	async catalog() { const response = await fetch('/api/catalog'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar o catálogo.'); return normalizeCatalog(await response.json()); }
 	async rescan() { const response = await fetch('/api/admin/catalog/rescan', { method: 'POST' }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 409 ? 'Já existe um rescan em andamento.' : response.status === 400 ? 'Nenhum curso foi importado ainda.' : 'Não foi possível indexar os cursos.'); }
 	async updateCredentials(username: string, password: string, currentPassword = password) { const response = await fetch('/api/account/credentials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ current_password: currentPassword, username, password }) }); if (!response.ok) throw new Error(response.status === 422 ? 'Usuário ou senha inválidos.' : response.status === 401 ? 'Senha atual incorreta.' : 'Não foi possível atualizar as credenciais.'); return normalizeUser(await response.json()); }
+	async listUsers(): Promise<LocalUser[]> {
+		const response = await fetch('/api/admin/users');
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar os usuários locais.');
+		const data = await response.json();
+		return (Array.isArray(data?.items) ? data.items : []).map(normalizeLocalUser);
+	}
+	async createUser(username: string, password: string, allowedCourseIds: string[] | null = null): Promise<LocalUser> {
+		const response = await fetch('/api/admin/users', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ username, password, allowed_course_ids: allowedCourseIds })
+		});
+		if (!response.ok) {
+			throw new Error(
+				response.status === 409
+					? 'Já existe um usuário com este nome.'
+					: response.status === 422
+						? 'Nome de usuário (2–64 caracteres) ou senha (mínimo 12 caracteres) inválidos.'
+						: 'Não foi possível criar o usuário.'
+			);
+		}
+		return normalizeLocalUser(await response.json());
+	}
+	async setUserCourseAccess(userId: string, allowedCourseIds: string[] | null): Promise<string[] | null> {
+		const response = await fetch(`/api/admin/users/${encodeURIComponent(userId)}/courses`, {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ allowed_course_ids: allowedCourseIds })
+		});
+		if (!response.ok) throw new Error('Não foi possível atualizar as permissões de cursos.');
+		const data = await response.json();
+		return Array.isArray(data?.allowed_course_ids)
+			? data.allowed_course_ids.filter((id: unknown): id is string => typeof id === 'string')
+			: null;
+	}
+	async deleteUser(userId: string): Promise<boolean> {
+		const response = await fetch(`/api/admin/users/${encodeURIComponent(userId)}`, { method: 'DELETE' });
+		if (!response.ok) throw new Error('Não foi possível remover o usuário.');
+		const data = await response.json();
+		return data?.deleted === true;
+	}
 	async studyProgress(mediaId: string) { const response = await fetch(`/api/study/progress?media_id=${encodeURIComponent(mediaId)}`); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? 'Mídia não encontrada.' : 'Não foi possível ler o progresso.'); return normalizeStudyProgress(await response.json()); }
 	async recordPosition(mediaId: string, positionSeconds: number) { const response = await fetch('/api/study/position', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: mediaId, position_seconds: positionSeconds }) }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? 'Mídia não encontrada.' : response.status === 422 ? 'Posição inválida.' : 'Não foi possível salvar o progresso.'); return normalizeStudyProgress(await response.json()); }
 	async setCompleted(mediaId: string, completed: boolean) { const response = await fetch('/api/study/completed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: mediaId, completed }) }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? 'Mídia não encontrada.' : 'Não foi possível atualizar a conclusão.'); return normalizeStudyProgress(await response.json()); }

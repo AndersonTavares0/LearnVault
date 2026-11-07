@@ -1264,4 +1264,43 @@ describe('desktop transport over IPC', () => {
 		expect(await desktop.setLessonFavorite('m-2', false)).toBe(false);
 		expect(invokeMock).toHaveBeenCalledWith('desktop_set_lesson_favorite', { mediaId: 'm-2', favorite: false });
 	});
+
+	it('manages local users and course access over HttpTransport', async () => {
+		const fetchMock = vi.fn()
+			.mockResolvedValueOnce(new Response(JSON.stringify({
+				items: [
+					{ user_id: 'admin-1', username: 'admin', is_admin: true, created_at: 100, allowed_course_ids: null },
+					{ user_id: 'usr-1', username: 'ana', is_admin: false, created_at: 200, allowed_course_ids: ['c-1'] }
+				]
+			}), { status: 200 }))
+			.mockResolvedValueOnce(new Response(JSON.stringify({
+				user_id: 'usr-2', username: 'bruno', is_admin: false, created_at: 300, allowed_course_ids: ['c-1', 'c-2']
+			}), { status: 201 }))
+			.mockResolvedValueOnce(new Response(JSON.stringify({
+				user_id: 'usr-2', allowed_course_ids: null
+			}), { status: 200 }))
+			.mockResolvedValueOnce(new Response(JSON.stringify({ deleted: true }), { status: 200 }));
+		vi.stubGlobal('fetch', fetchMock);
+		const http = new HttpTransport();
+
+		const users = await http.listUsers();
+		expect(users).toHaveLength(2);
+		expect(users[1]).toEqual({
+			userId: 'usr-1',
+			username: 'ana',
+			isAdmin: false,
+			createdAt: 200,
+			allowedCourseIds: ['c-1']
+		});
+
+		const created = await http.createUser('bruno', 'senha-segura-123', ['c-1', 'c-2']);
+		expect(created.username).toBe('bruno');
+		expect(created.allowedCourseIds).toEqual(['c-1', 'c-2']);
+
+		const updated = await http.setUserCourseAccess('usr-2', null);
+		expect(updated).toBeNull();
+
+		expect(await http.deleteUser('usr-2')).toBe(true);
+		vi.unstubAllGlobals();
+	});
 });

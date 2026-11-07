@@ -505,17 +505,39 @@ pub(crate) async fn get_cover(
     AxumPath(course_id): AxumPath<String>,
     headers: HeaderMap,
 ) -> Response {
-    match authenticated_user(&state, &headers).await {
-        Ok(Some(user)) if !user.must_change_credentials => {}
+    let user = match authenticated_user(&state, &headers).await {
+        Ok(Some(user)) if !user.must_change_credentials => user,
         Ok(Some(_)) => return credentials_required(),
         Err(StateError::Capacity) => return service_unavailable(),
         Ok(None) | Err(_) => return status_private_no_store(StatusCode::UNAUTHORIZED),
-    }
+    };
     if !course_is_registered(&state, &course_id) {
         return status_private_no_store(StatusCode::NOT_FOUND);
     }
     if !state.has_blocking_capacity() {
         return service_unavailable();
+    }
+    if !user.is_admin {
+        let database = state.database.clone().lock_owned().await;
+        let Some(blocking_task) = state.try_acquire_blocking_task() else {
+            return service_unavailable();
+        };
+        let check_course_id = course_id.clone();
+        let allowed = tokio::task::spawn_blocking(move || {
+            let _blocking_task = blocking_task;
+            learnvault_core::can_user_access_course(
+                &database,
+                &user.user_id,
+                false,
+                &check_course_id,
+            )
+        })
+        .await;
+        match allowed {
+            Ok(Ok(true)) => {}
+            Ok(Ok(false)) => return status_private_no_store(StatusCode::NOT_FOUND),
+            Ok(Err(_)) | Err(_) => return internal_error("cover_unavailable"),
+        }
     }
 
     let Some(blocking_task) = state.try_acquire_blocking_task() else {

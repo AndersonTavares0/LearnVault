@@ -810,7 +810,7 @@ async fn current_database_carries_study_tables_and_constraints() {
         .connection()
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 9, "o formato persistido está na versão 9");
+    assert_eq!(version, 10, "o formato persistido está na versão 10");
     let present: i64 = db
         .connection()
         .query_row(
