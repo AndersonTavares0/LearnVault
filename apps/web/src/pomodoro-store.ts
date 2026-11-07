@@ -13,6 +13,7 @@ import { FocusSessionConflict, InvalidFocusSession, transport, type FocusSession
 import { persistFocusOutbox, persistRejectedFocusSessions, readFocusOutbox, readRejectedFocusSessions, type RejectedFocusSession } from './focus-outbox';
 import { calculateDropsEarned, recordSessionSeed } from './forest-catalog';
 import { awardDrops, nursery } from './nursery-store';
+import { tr } from './i18n.svelte';
 
 export type PomodoroStatus = 'idle' | 'running' | 'paused';
 
@@ -204,7 +205,12 @@ export function retryFocusSessions(): Promise<void> {
 					continue;
 				}
 				const durable = persistFocusOutbox(storage(), scope, current.pending);
-				focusSync.update((state) => ({ ...state, error: durable ? (cause instanceof Error ? cause.message : 'Não foi possível salvar a sessão de foco.') : 'Não foi possível sincronizar; esta sessão ainda está somente nesta tela.' }));
+				focusSync.update((state) => ({
+					...state,
+					error: durable
+						? (cause instanceof Error ? cause.message : tr('Could not save focus session.', 'Não foi possível salvar a sessão de foco.'))
+						: tr('Could not sync; this session is only on this screen.', 'Não foi possível sincronizar; esta sessão ainda está somente nesta tela.')
+				}));
 				break;
 			}
 		}

@@ -294,7 +294,7 @@ pub(crate) async fn media_transcode(
             ],
             Json(serde_json::json!({
                 "error": "transcoding_unavailable",
-                "message": "FFmpeg não está disponível no servidor para transcodificação sob demanda"
+                "message": "FFmpeg is not available on the server for on-demand transcoding"
             })),
         )
             .into_response();

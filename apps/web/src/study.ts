@@ -1,4 +1,5 @@
 import type { StudyProgress } from './transport';
+import { tr } from './i18n.svelte';
 
 export type SaveResult =
 	| { kind: 'saved'; progress: StudyProgress }
@@ -37,7 +38,7 @@ export function createPositionSaver(save: (mediaId: string, position: number) =>
 			return { kind: 'saved', progress };
 		} catch (cause) {
 			if (id < applied) return { kind: 'stale' };
-			return { kind: 'error', message: cause instanceof Error ? cause.message : 'Erro ao salvar progresso.' };
+			return { kind: 'error', message: cause instanceof Error ? cause.message : tr('Error saving progress.', 'Erro ao salvar progresso.') };
 		} finally {
 			saving = false;
 			if (queued !== null && (queued.mediaId !== mediaId || queued.position !== position)) {
