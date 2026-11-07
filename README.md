@@ -1,6 +1,6 @@
 <div align="center">
 
-  <img src="docs/design/branding/learnvault-banner.jpg" alt="LearnVault — Your Personal Study Vault" width="100%">
+  <img src="docs/design/branding/learnvault-banner.svg" alt="LearnVault — Self-Hosted Course Library & Offline Study Space" width="100%">
 
   <br>
 
