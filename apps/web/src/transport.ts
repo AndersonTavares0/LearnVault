@@ -878,7 +878,10 @@ const DESKTOP_ERROR_MESSAGES: Record<string, string> = {
 	update_check_failed: 'Não foi possível conectar ao servidor de atualizações.',
 	update_unavailable: 'Não foi possível verificar ou aplicar a atualização.',
 	note_not_found: 'Anotação não encontrada.',
-	invalid_note: 'Conteúdo da anotação inválido.'
+	invalid_note: 'Conteúdo da anotação inválido.',
+	flashcard_not_found: 'Cartão não encontrado.',
+	invalid_flashcard: 'Conteúdo do cartão inválido.',
+	invalid_review_rating: 'Avaliação inválida.'
 };
 
 // O comando devolve o erro como objeto serializado `{ code, message }`, não como `Error`.
@@ -950,19 +953,54 @@ export class DesktopStub implements Transport {
 			throw desktopError(cause, 'Não foi possível excluir a anotação.');
 		}
 	}
-	listFlashcards(_mediaId: string): Promise<Flashcard[]> { return Promise.resolve([]); }
-	createFlashcard(mediaId: string, front: string, back: string): Promise<Flashcard> {
-		return Promise.resolve({ cardId: 'desktop-stub', mediaId, front, back, intervalDays: 0, nextDue: 0, createdAt: 0, updatedAt: 0 });
+	async listFlashcards(mediaId: string): Promise<Flashcard[]> {
+		try {
+			const res = await invoke<unknown>('desktop_list_flashcards', { mediaId });
+			return (Array.isArray(res) ? res : []).map(normalizeFlashcard);
+		} catch (cause) {
+			throw desktopError(cause, 'Não foi possível carregar os cartões.');
+		}
 	}
-	updateFlashcard(cardId: string, front: string, back: string): Promise<Flashcard> {
-		return Promise.resolve({ cardId, mediaId: '', front, back, intervalDays: 0, nextDue: 0, createdAt: 0, updatedAt: 0 });
+	async createFlashcard(mediaId: string, front: string, back: string): Promise<Flashcard> {
+		try {
+			const res = await invoke<unknown>('desktop_create_flashcard', { mediaId, front, back });
+			return normalizeFlashcard(res);
+		} catch (cause) {
+			throw desktopError(cause, 'Não foi possível salvar o cartão.');
+		}
 	}
-	deleteFlashcard(_cardId: string): Promise<void> { return Promise.resolve(); }
-	reviewFlashcard(cardId: string, _rating: ReviewRating): Promise<Flashcard> {
-		return Promise.resolve({ cardId, mediaId: '', front: '', back: '', intervalDays: 0, nextDue: 0, createdAt: 0, updatedAt: 0 });
+	async updateFlashcard(cardId: string, front: string, back: string): Promise<Flashcard> {
+		try {
+			const res = await invoke<unknown>('desktop_update_flashcard', { cardId, front, back });
+			return normalizeFlashcard(res);
+		} catch (cause) {
+			throw desktopError(cause, 'Não foi possível atualizar o cartão.');
+		}
+	}
+	async deleteFlashcard(cardId: string): Promise<void> {
+		try {
+			await invoke<unknown>('desktop_delete_flashcard', { cardId });
+		} catch (cause) {
+			throw desktopError(cause, 'Não foi possível excluir o cartão.');
+		}
+	}
+	async reviewFlashcard(cardId: string, rating: ReviewRating): Promise<Flashcard> {
+		try {
+			const res = await invoke<unknown>('desktop_review_flashcard', { cardId, rating });
+			return normalizeFlashcard(res);
+		} catch (cause) {
+			throw desktopError(cause, 'Não foi possível registrar a revisão.');
+		}
 	}
 	async recordFocusSession(session: FocusSessionInput) { try { return normalizeFocusSession(await invoke<unknown>('desktop_record_focus_session', { session })); } catch (cause) { throw desktopError(cause, 'Não foi possível salvar a sessão de foco.'); } }
-	listFocusSessions(_limit?: number): Promise<FocusSessionRecord[]> { return Promise.resolve([]); }
+	async listFocusSessions(limit?: number): Promise<FocusSessionRecord[]> {
+		try {
+			const res = await invoke<unknown>('desktop_list_focus_sessions', limit === undefined ? {} : { limit });
+			return (Array.isArray(res) ? res : []).map(normalizeFocusSession);
+		} catch {
+			return [];
+		}
+	}
 	async focusSummary() { try { return normalizeFocusSummary(await invoke<unknown>('desktop_focus_summary')); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar as estatísticas de foco.'); } }
 	async rewardSummary() { try { return normalizeRewardSummary(await invoke<unknown>('desktop_reward_summary')); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar suas recompensas.'); } }
 	async claimDailyMission(missionId: MissionId) { try { return await invoke<boolean>('desktop_claim_daily_mission', { missionId }); } catch (cause) { throw desktopError(cause, 'Não foi possível resgatar a missão.'); } }

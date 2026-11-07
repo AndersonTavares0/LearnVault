@@ -938,6 +938,60 @@ describe('desktop transport over IPC', () => {
 		await expect(desktop.createNote('m1', 10, ' ')).rejects.toThrow('Conteúdo da anotação inválido.');
 	});
 
+	it('manages flashcards and focus sessions list over desktop IPC with sanitized error handling', async () => {
+		const desktop = new DesktopStub();
+
+		vi.mocked(invoke).mockResolvedValueOnce([
+			{ card_id: 'c1', media_id: 'm1', front: 'Pergunta', back: 'Resposta', interval_days: 0, next_due: 100, created_at: 100, updated_at: 100 }
+		]);
+		const cards = await desktop.listFlashcards('m1');
+		expect(invoke).toHaveBeenCalledWith('desktop_list_flashcards', { mediaId: 'm1' });
+		expect(cards).toHaveLength(1);
+		expect(cards[0].cardId).toBe('c1');
+
+		vi.mocked(invoke).mockResolvedValueOnce({
+			card_id: 'c2', media_id: 'm1', front: 'Frente', back: 'Verso', interval_days: 0, next_due: 101, created_at: 101, updated_at: 101
+		});
+		const created = await desktop.createFlashcard('m1', 'Frente', 'Verso');
+		expect(invoke).toHaveBeenCalledWith('desktop_create_flashcard', { mediaId: 'm1', front: 'Frente', back: 'Verso' });
+		expect(created.cardId).toBe('c2');
+
+		vi.mocked(invoke).mockResolvedValueOnce({
+			card_id: 'c2', media_id: 'm1', front: 'Frente 2', back: 'Verso 2', interval_days: 0, next_due: 101, created_at: 101, updated_at: 102
+		});
+		const updated = await desktop.updateFlashcard('c2', 'Frente 2', 'Verso 2');
+		expect(invoke).toHaveBeenCalledWith('desktop_update_flashcard', { cardId: 'c2', front: 'Frente 2', back: 'Verso 2' });
+		expect(updated.front).toBe('Frente 2');
+
+		vi.mocked(invoke).mockResolvedValueOnce({
+			card_id: 'c2', media_id: 'm1', front: 'Frente 2', back: 'Verso 2', interval_days: 1, next_due: 86502, created_at: 101, updated_at: 103
+		});
+		const reviewed = await desktop.reviewFlashcard('c2', 'good');
+		expect(invoke).toHaveBeenCalledWith('desktop_review_flashcard', { cardId: 'c2', rating: 'good' });
+		expect(reviewed.intervalDays).toBe(1);
+
+		vi.mocked(invoke).mockResolvedValueOnce(undefined);
+		await expect(desktop.deleteFlashcard('c2')).resolves.toBeUndefined();
+		expect(invoke).toHaveBeenCalledWith('desktop_delete_flashcard', { cardId: 'c2' });
+
+		vi.mocked(invoke).mockRejectedValueOnce({ code: 'flashcard_not_found', message: 'cartao /segredo' });
+		await expect(desktop.deleteFlashcard('c_inexistente')).rejects.toThrow('Cartão não encontrado.');
+
+		vi.mocked(invoke).mockRejectedValueOnce({ code: 'invalid_flashcard', message: 'invalido' });
+		await expect(desktop.createFlashcard('m1', '', 'Verso')).rejects.toThrow('Conteúdo do cartão inválido.');
+
+		vi.mocked(invoke).mockRejectedValueOnce({ code: 'invalid_review_rating', message: 'invalido' });
+		await expect(desktop.reviewFlashcard('c2', 'good')).rejects.toThrow('Avaliação inválida.');
+
+		vi.mocked(invoke).mockResolvedValueOnce([
+			{ id: 'f1', kind: 'focus', planned_seconds: 1500, actual_seconds: 1500, completed: true, started_at: 100, ended_at: 1600 }
+		]);
+		const sessions = await desktop.listFocusSessions(25);
+		expect(invoke).toHaveBeenCalledWith('desktop_list_focus_sessions', { limit: 25 });
+		expect(sessions).toHaveLength(1);
+		expect(sessions[0].id).toBe('f1');
+	});
+
 	it('triggers an explicit desktop rescan through the command without touching fetch', async () => {
 		const fetchMock = vi.fn();
 		vi.stubGlobal('fetch', fetchMock);
@@ -1172,17 +1226,5 @@ describe('desktop transport over IPC', () => {
 		expect(reviewed.intervalDays).toBe(2);
 
 		vi.unstubAllGlobals();
-	});
-
-	it('provides DesktopStub fallback for flashcards without throwing', async () => {
-		const desktop: Transport = new DesktopStub();
-		await expect(desktop.listFlashcards('media-1')).resolves.toEqual([]);
-		const created = await desktop.createFlashcard('media-1', 'F', 'V');
-		expect(created.cardId).toBe('desktop-stub');
-		const updated = await desktop.updateFlashcard('c-1', 'F2', 'V2');
-		expect(updated.front).toBe('F2');
-		await expect(desktop.deleteFlashcard('c-1')).resolves.toBeUndefined();
-		const reviewed = await desktop.reviewFlashcard('c-1', 'again');
-		expect(reviewed.cardId).toBe('c-1');
 	});
 });

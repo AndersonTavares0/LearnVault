@@ -316,6 +316,42 @@ impl From<learnvault_core::GlobalStudyNote> for StudyNoteDto {
     }
 }
 
+/// Cartão de memorização (flashcard) associado a uma aula/mídia para o dono local.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FlashcardDto {
+    /// Identidade estável do cartão.
+    pub card_id: String,
+    /// Identidade da mídia à qual o cartão pertence.
+    pub media_id: String,
+    /// Pergunta ou frente do cartão.
+    pub front: String,
+    /// Resposta ou verso do cartão.
+    pub back: String,
+    /// Intervalo atual de repetição em dias (0 a 365).
+    pub interval_days: i64,
+    /// Instante da próxima revisão em segundos Unix.
+    pub next_due: i64,
+    /// Data de criação em segundos Unix.
+    pub created_at: i64,
+    /// Data da última alteração em segundos Unix.
+    pub updated_at: i64,
+}
+
+impl From<learnvault_core::Flashcard> for FlashcardDto {
+    fn from(card: learnvault_core::Flashcard) -> Self {
+        Self {
+            card_id: card.card_id,
+            media_id: card.media_id,
+            front: card.front,
+            back: card.back,
+            interval_days: card.interval_days,
+            next_due: card.next_due,
+            created_at: card.created_at,
+            updated_at: card.updated_at,
+        }
+    }
+}
+
 /// Um dia da semana corrente na ofensiva de estudo.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct StudyDayDto {

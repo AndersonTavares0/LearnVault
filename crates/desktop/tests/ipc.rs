@@ -715,3 +715,73 @@ fn open_in_system_player_validates_media_id_and_rejects_unknown() {
     let mat_err = state.open_in_system_player(&material.media_id).unwrap_err();
     assert_eq!(mat_err.code, IpcErrorCode::MediaNotFound);
 }
+
+#[test]
+fn flashcards_and_focus_sessions_work_over_desktop_state() {
+    let dir = tempfile::tempdir().unwrap();
+    let state = desktop(dir.path());
+    let course_dir = make_course(dir.path());
+    let aula_dir = course_dir.join("Aula 1");
+    fs::create_dir_all(&aula_dir).unwrap();
+    fs::write(aula_dir.join("aula.mp4"), b"video").unwrap();
+    state.import_course(|| Some(course_dir.clone())).unwrap();
+    state.rescan().unwrap();
+
+    let cat = state.catalog().unwrap();
+    let media_id = &cat.categories[0].children[0].children[0].files[0].media_id;
+
+    // 1. Flashcards CRUD + revisão
+    assert!(state.list_flashcards(media_id).unwrap().is_empty());
+
+    let card = state
+        .create_flashcard(media_id, "O que é Rust?", "Linguagem segura")
+        .unwrap();
+    assert_eq!(card.media_id, *media_id);
+    assert_eq!(card.front, "O que é Rust?");
+    assert_eq!(card.back, "Linguagem segura");
+    assert_eq!(card.interval_days, 0);
+
+    let updated = state
+        .update_flashcard(
+            &card.card_id,
+            "O que é Rust?",
+            "Linguagem de sistemas segura",
+        )
+        .unwrap();
+    assert_eq!(updated.back, "Linguagem de sistemas segura");
+
+    let reviewed = state.review_flashcard(&card.card_id, "good").unwrap();
+    assert_eq!(reviewed.interval_days, 1);
+
+    let bad_rating = state
+        .review_flashcard(&card.card_id, "invalid")
+        .unwrap_err();
+    assert_eq!(bad_rating.code, IpcErrorCode::InvalidReviewRating);
+
+    let cards = state.list_flashcards(media_id).unwrap();
+    assert_eq!(cards.len(), 1);
+
+    state.delete_flashcard(&card.card_id).unwrap();
+    assert!(state.list_flashcards(media_id).unwrap().is_empty());
+    let missing_del = state.delete_flashcard(&card.card_id).unwrap_err();
+    assert_eq!(missing_del.code, IpcErrorCode::FlashcardNotFound);
+
+    // 2. list_focus_sessions
+    assert!(state.list_focus_sessions(Some(10)).unwrap().is_empty());
+    let session = state
+        .record_focus_session(learnvault_core::FocusSessionInput {
+            id: "focus-1".to_owned(),
+            kind: learnvault_core::FocusKind::Focus,
+            planned_seconds: 1500,
+            actual_seconds: 1500,
+            completed: true,
+            started_at: 1000,
+            ended_at: 2500,
+        })
+        .unwrap();
+    assert_eq!(session.id, "focus-1");
+    let listed = state.list_focus_sessions(Some(10)).unwrap();
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].id, "focus-1");
+    assert!(listed[0].completed);
+}
