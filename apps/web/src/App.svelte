@@ -747,6 +747,7 @@
 									{/if}
 									<button class="lvui-btn" onclick={rescan} disabled={rescanning || !catalog || !catalog.nodes.length}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v4h-4M4 17v-4h4M5.5 9a7 7 0 0 1 12-2L20 11M4 13l2.5 4a7 7 0 0 0 12-2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>{rescanning ? 'Atualizando…' : 'Atualizar cursos'}</button>
 								</div>
+								{#if rescanMessage}<p class="lv-page__status" aria-live="polite">{rescanMessage}</p>{/if}
 							{/if}
 						</div>
 					</header>
@@ -851,7 +852,6 @@
 						</div>
 					{/if}
 					{#if importError}<p class="lv-alert" role="alert">{importError}</p>{/if}
-					{#if user.role === 'admin' && rescanMessage}<p class="lv-notice" aria-live="polite">{rescanMessage}</p>{/if}
 					{#if canManage}<input class="visually-hidden course-cover-input" type="file" accept={COVER_ACCEPT} bind:this={coverInput} onchange={pickCover} tabindex="-1" aria-hidden="true" />{/if}
 					{#if coverError}<p class="lv-alert" role="alert">{coverError}</p>{/if}
 					{#if coverMessage}<p class="lv-notice" role="status" aria-live="polite">{coverMessage}</p>{/if}
@@ -1071,7 +1071,7 @@
 								<div class="lv-panel__head"><h2 id="course-content-heading">Conteúdo do curso</h2><span class="lv-count">{formatLessonCounts(counts)}</span></div>
 								<div class="lv-tabs" role="tablist" aria-label="Conteúdo do curso">
 									<button class="lv-tab" type="button" role="tab" id="course-tab-content" aria-controls="course-panel-content" aria-selected={courseTab === 'content'} tabindex={courseTab === 'content' ? 0 : -1} class:is-active={courseTab === 'content'} onclick={() => (courseTab = 'content')} onkeydown={courseTabKey}>Conteúdo</button>
-									<button class="lv-tab" type="button" role="tab" id="course-tab-materials" aria-controls="course-panel-materials" aria-selected={courseTab === 'materials'} tabindex={courseTab === 'materials' ? 0 : -1} class:is-active={courseTab === 'materials'} onclick={() => (courseTab = 'materials')} onkeydown={courseTabKey}>Materiais {#if materials.length}<span class="lv-badge">{materials.length}</span>{/if}</button>
+									<button class="lv-tab" type="button" role="tab" id="course-tab-materials" aria-controls="course-panel-materials" aria-selected={courseTab === 'materials'} tabindex={courseTab === 'materials' ? 0 : -1} class:is-active={courseTab === 'materials'} onclick={() => (courseTab = 'materials')} onkeydown={courseTabKey}>Materiais {#if materials.length}<span class="lv-tab__count">{materials.length}</span>{/if}</button>
 								</div>
 								{#if courseTab === 'content'}
 									<div id="course-panel-content" role="tabpanel" aria-labelledby="course-tab-content">

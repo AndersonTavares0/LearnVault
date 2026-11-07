@@ -1522,7 +1522,7 @@ svg {
 	background: var(--accent);
 }
 
-.lv-badge {
+.lv-tab__count {
 	display: inline-grid;
 	place-items: center;
 	min-width: 20px;
@@ -1881,7 +1881,6 @@ svg {
 .lv-player-main .study-bar {
 	margin: 14px 0;
 	padding: 10px 0;
-	border-bottom: 1px solid var(--line);
 }
 
 .lv-player-materials {
@@ -5099,7 +5098,6 @@ input[type="radio"] {
 	gap: 12px;
 	margin: 8px 0 0;
 	padding: 10px 0;
-	border-top: 1px solid var(--line);
 }
 
 .study-bar__actions {
@@ -6194,7 +6192,7 @@ img.lv-avatar,
 	color: var(--ink);
 }
 
-.lv-badge,
+.lv-tab__count,
 .lv-level-chip {
 	display: inline-flex;
 	align-items: center;
@@ -6337,7 +6335,6 @@ img.lv-avatar,
 	gap: 12px;
 	margin: 10px 0 0;
 	padding: 12px 0;
-	border-top: 1px solid var(--line);
 }
 
 .study-bar__actions {
@@ -7775,4 +7772,78 @@ img.lv-avatar,
 .timeline-marker:focus-visible .marker-dot {
 	transform: scale(1.4);
 	background: #fbbf24;
+}
+/* Rolagem restrita ao conteúdo: a barra começa abaixo da barra de título e da
+   barra superior, sem cobrir os controles da janela. */
+html,
+body,
+#app {
+	height: 100%;
+}
+
+body {
+	overflow: hidden;
+}
+
+#app {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+}
+
+.lv-shell {
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	min-height: 0;
+}
+
+.lv-topbar {
+	position: relative;
+	top: auto;
+	flex: 0 0 auto;
+}
+
+.lv-main {
+	flex: 1 1 auto;
+	width: 100%;
+	max-width: none;
+	min-height: 0;
+	margin: 0;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	scrollbar-gutter: stable;
+}
+
+.login-page,
+.lv-loading {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+}
+
+.lv-page__status {
+	margin: 6px 0 0;
+	color: var(--muted);
+	font-size: 12px;
+	text-align: right;
+}
+
+.lv-page__actions {
+	flex-direction: column;
+	align-items: flex-end;
+}
+
+@media (max-width: 820px) {
+	.lv-page__actions {
+		align-items: flex-start;
+	}
+
+	.lv-page__status {
+		text-align: left;
+	}
+}
+
+.lv-curriculum {
+	top: 16px;
 }
