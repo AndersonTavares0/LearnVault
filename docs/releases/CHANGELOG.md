@@ -4,6 +4,20 @@ Todas as mudanças relevantes do LearnVault são documentadas neste arquivo.
 
 O formato segue o Keep a Changelog e as versões usam Semantic Versioning.
 
+## [0.9.0](https://github.com/AndersonTavares0/LearnVault/compare/v0.8.0...v0.9.0) (2026-11-07)
+
+
+### Features
+
+* contas locais de estudantes e permissoes de acesso a cursos ([#305](https://github.com/AndersonTavares0/LearnVault/issues/305)) ([2e0072b](https://github.com/AndersonTavares0/LearnVault/commit/2e0072b96bbdb2e630d49b58f1b7d271971dd127))
+* favoritos de cursos e aulas no núcleo, servidor, desktop e SPA ([#304](https://github.com/AndersonTavares0/LearnVault/issues/304)) ([11907b5](https://github.com/AndersonTavares0/LearnVault/commit/11907b52065856fc08dc0e8f9dc28df1219ba69f))
+* **i18n:** add en/pt-BR internationalization, set English default, and remove wiki ([#306](https://github.com/AndersonTavares0/LearnVault/issues/306)) ([b1a2da7](https://github.com/AndersonTavares0/LearnVault/commit/b1a2da71c1c4e9e7972aa0041e85cd85269a8fc8)), closes [#303](https://github.com/AndersonTavares0/LearnVault/issues/303)
+
+
+### Bug Fixes
+
+* **release:** corrigir SHAs do GHCR, createUpdaterArtifacts e chave Ed25519 ([#302](https://github.com/AndersonTavares0/LearnVault/issues/302)) ([324ecda](https://github.com/AndersonTavares0/LearnVault/commit/324ecda68bb83d73d5a02db2a4a65fc2e98b8989))
+
 ## [0.8.0](https://github.com/AndersonTavares0/LearnVault/compare/v0.7.0...v0.8.0) (2026-11-07)
 
 
