@@ -27,6 +27,7 @@ that area.
 
 - Follow `.agents/playbooks/testing.md` and the appropriate change playbook.
 - Always use Ponytail to write, modify, and refactor code across all development tasks when available, keeping changes surgical, clean, and consistent with existing architecture.
+- Ensure all user-facing strings (UI, modals, alerts, error fallbacks, and transport errors) use `tr(en, ptBr)` from `apps/web/src/i18n.svelte.ts`.
 
 ## GitHub governance
 
@@ -36,13 +37,12 @@ that area.
 
 ### GitHub Discussions
 
-- Consulte Discussions relevantes quando a tarefa envolver decisões arquiteturais, mudanças
-  de produto ou funcionalidades previamente debatidas; priorize as diretamente relacionadas
-  ao escopo atual.
-- Trate Discussions como contexto, não como requisitos aprovados. Registre decisões
-  consolidadas no ADR, roadmap ou Issue correspondente.
-- Evite duplicar Issues ou implementar propostas sem confirmar que foram aprovadas.
-- Não encerre nem modifique Discussions sem autorização do mantenedor.
+- Consult relevant Discussions when tasks involve architectural decisions, product changes,
+  or previously debated functionality; prioritize discussions directly related to the active scope.
+- Treat Discussions as background context, not approved specifications. Record accepted decisions
+  in the corresponding ADR, roadmap, or GitHub Issue.
+- Avoid duplicate issues or implementing unapproved proposals.
+- Do not close or alter Discussions without explicit maintainer authorization.
 
 ## Canonical documentation
 
@@ -50,3 +50,5 @@ that area.
 - Use GitHub Discussions for unresolved questions; use Issues for features and behavior changes.
 - `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, and documentation are in English. The application provides built-in internationalization (i18n) supporting English as default and Brazilian Portuguese (`pt-BR`).
 - Conventional Commits and descriptions are written in English for Release Please.
+- Pre-major releases are paced through Release Please with `"bump-minor-pre-major": true` and `"bump-patch-for-minor-pre-major": true`.
+- GitHub Wiki is permanently removed; do not recreate wiki sync scripts or workflows.
