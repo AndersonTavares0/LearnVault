@@ -257,14 +257,31 @@ fn build_registers_the_app_commands_in_the_acl_manifest() {
         "desktop_record_position",
         "desktop_set_completed",
         "desktop_recent_study",
+        "desktop_study_summary",
         "desktop_list_notes",
         "desktop_create_note",
         "desktop_update_note",
         "desktop_delete_note",
+        "desktop_list_flashcards",
+        "desktop_create_flashcard",
+        "desktop_update_flashcard",
+        "desktop_delete_flashcard",
+        "desktop_review_flashcard",
+        "desktop_record_focus_session",
+        "desktop_list_focus_sessions",
+        "desktop_focus_summary",
+        "desktop_reward_summary",
+        "desktop_claim_daily_mission",
+        "desktop_weekly_goal",
+        "desktop_set_weekly_goal",
         "desktop_media_removal_impact",
         "desktop_remove_media",
         "desktop_set_course_order",
         "desktop_reset_course_order",
+        "desktop_check_update",
+        "desktop_install_update",
+        "desktop_media_capabilities",
+        "desktop_open_in_system_player",
     ] {
         assert!(
             build.contains(command),
@@ -301,10 +318,23 @@ fn capability_grants_only_the_core_default_and_the_app_commands() {
     assert!(permissions.contains(&"allow-desktop-record-position"));
     assert!(permissions.contains(&"allow-desktop-set-completed"));
     assert!(permissions.contains(&"allow-desktop-recent-study"));
+    assert!(permissions.contains(&"allow-desktop-study-summary"));
     assert!(permissions.contains(&"allow-desktop-list-notes"));
     assert!(permissions.contains(&"allow-desktop-create-note"));
     assert!(permissions.contains(&"allow-desktop-update-note"));
     assert!(permissions.contains(&"allow-desktop-delete-note"));
+    assert!(permissions.contains(&"allow-desktop-list-flashcards"));
+    assert!(permissions.contains(&"allow-desktop-create-flashcard"));
+    assert!(permissions.contains(&"allow-desktop-update-flashcard"));
+    assert!(permissions.contains(&"allow-desktop-delete-flashcard"));
+    assert!(permissions.contains(&"allow-desktop-review-flashcard"));
+    assert!(permissions.contains(&"allow-desktop-record-focus-session"));
+    assert!(permissions.contains(&"allow-desktop-list-focus-sessions"));
+    assert!(permissions.contains(&"allow-desktop-focus-summary"));
+    assert!(permissions.contains(&"allow-desktop-reward-summary"));
+    assert!(permissions.contains(&"allow-desktop-claim-daily-mission"));
+    assert!(permissions.contains(&"allow-desktop-weekly-goal"));
+    assert!(permissions.contains(&"allow-desktop-set-weekly-goal"));
     assert!(permissions.contains(&"allow-desktop-media-removal-impact"));
     assert!(permissions.contains(&"allow-desktop-remove-media"));
     assert!(permissions.contains(&"allow-desktop-set-course-order"));
@@ -315,7 +345,7 @@ fn capability_grants_only_the_core_default_and_the_app_commands() {
     assert!(permissions.contains(&"allow-desktop-open-in-system-player"));
     assert_eq!(
         permissions.len(),
-        28,
+        41,
         "a capability não pode ampliar além do núcleo, dos controles da titlebar e dos comandos do app: {permissions:?}"
     );
 }
@@ -467,6 +497,12 @@ fn invoke_handler_registers_only_the_desktop_commands() {
         "desktop_create_note",
         "desktop_update_note",
         "desktop_delete_note",
+        "desktop_list_flashcards",
+        "desktop_create_flashcard",
+        "desktop_update_flashcard",
+        "desktop_delete_flashcard",
+        "desktop_review_flashcard",
+        "desktop_list_focus_sessions",
         "desktop_media_removal_impact",
         "desktop_remove_media",
         "desktop_import_course_cover",
@@ -494,6 +530,12 @@ fn study_commands_are_async_blocking_and_never_accept_an_owner() {
         ("desktop_create_note", "state.create_note("),
         ("desktop_update_note", "state.update_note("),
         ("desktop_delete_note", "state.delete_note("),
+        ("desktop_list_flashcards", "state.list_flashcards("),
+        ("desktop_create_flashcard", "state.create_flashcard("),
+        ("desktop_update_flashcard", "state.update_flashcard("),
+        ("desktop_delete_flashcard", "state.delete_flashcard("),
+        ("desktop_review_flashcard", "state.review_flashcard("),
+        ("desktop_list_focus_sessions", "state.list_focus_sessions("),
     ];
     for (name, delegation) in expected {
         assert!(

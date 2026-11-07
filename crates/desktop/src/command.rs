@@ -18,9 +18,9 @@ use tauri::State;
 use crate::config::DesktopConfigDto;
 use crate::courses::CourseEntry;
 use crate::dto::{
-    CatalogDto, CatalogNodeDto, CoverDto, CoverRemovalDto, FocusSessionDto, FocusSummaryDto,
-    MediaRemovalImpactDto, MediaRemovalOutcomeDto, RecentStudyDto, RescanSummaryDto,
-    RewardSummaryDto, StudyNoteDto, StudyProgressDto, StudySummaryDto,
+    CatalogDto, CatalogNodeDto, CoverDto, CoverRemovalDto, FlashcardDto, FocusSessionDto,
+    FocusSummaryDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto, RecentStudyDto,
+    RescanSummaryDto, RewardSummaryDto, StudyNoteDto, StudyProgressDto, StudySummaryDto,
 };
 use crate::error::IpcError;
 use crate::ordering::CourseOrders;
@@ -386,6 +386,71 @@ pub async fn desktop_delete_note(
         .map_err(|_| IpcError::study_unavailable())?
 }
 
+/// Comando IPC: lista os cartões de memorização do dono local para uma mídia específica.
+#[tauri::command]
+pub async fn desktop_list_flashcards(
+    state: State<'_, DesktopState>,
+    media_id: String,
+) -> Result<Vec<FlashcardDto>, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.list_flashcards(&media_id))
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// Comando IPC: cria um novo cartão de memorização para o dono local.
+#[tauri::command]
+pub async fn desktop_create_flashcard(
+    state: State<'_, DesktopState>,
+    media_id: String,
+    front: String,
+    back: String,
+) -> Result<FlashcardDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.create_flashcard(&media_id, &front, &back))
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// Comando IPC: atualiza o texto da frente e do verso de um cartão pertencente ao dono local.
+#[tauri::command]
+pub async fn desktop_update_flashcard(
+    state: State<'_, DesktopState>,
+    card_id: String,
+    front: String,
+    back: String,
+) -> Result<FlashcardDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.update_flashcard(&card_id, &front, &back))
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// Comando IPC: exclui um cartão de memorização pertencente ao dono local.
+#[tauri::command]
+pub async fn desktop_delete_flashcard(
+    state: State<'_, DesktopState>,
+    card_id: String,
+) -> Result<(), IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.delete_flashcard(&card_id))
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// Comando IPC: registra uma revisão ("again" ou "good") em um cartão pertencente ao dono local.
+#[tauri::command]
+pub async fn desktop_review_flashcard(
+    state: State<'_, DesktopState>,
+    card_id: String,
+    rating: String,
+) -> Result<FlashcardDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.review_flashcard(&card_id, &rating))
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
 /// Persiste uma sessão Pomodoro idempotente para o perfil local.
 #[tauri::command]
 pub async fn desktop_record_focus_session(
@@ -409,6 +474,18 @@ pub async fn desktop_record_focus_session(
     };
     let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || state.record_focus_session(input))
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// Lista as sessões de foco persistidas no banco local, da mais recente para a mais antiga.
+#[tauri::command]
+pub async fn desktop_list_focus_sessions(
+    state: State<'_, DesktopState>,
+    limit: Option<usize>,
+) -> Result<Vec<FocusSessionDto>, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.list_focus_sessions(limit))
         .await
         .map_err(|_| IpcError::study_unavailable())?
 }

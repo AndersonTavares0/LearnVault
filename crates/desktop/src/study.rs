@@ -14,10 +14,10 @@
 //! locais e a seleção entre eles pertencem a uma fatia posterior — o núcleo já isola por
 //! dono, mas aqui não existe sessão nem seletor local.
 
-use learnvault_core::{Database, FocusSessionInput};
+use learnvault_core::{Database, FocusSessionInput, ReviewRating};
 
 use crate::dto::{
-    FocusSessionDto, FocusSummaryDto, RecentStudyDto, RewardSummaryDto, StudyNoteDto,
+    FlashcardDto, FocusSessionDto, FocusSummaryDto, RecentStudyDto, RewardSummaryDto, StudyNoteDto,
     StudyProgressDto, StudySummaryDto,
 };
 use crate::error::IpcError;
@@ -101,6 +101,16 @@ pub fn record_focus_session(
 ) -> Result<FocusSessionDto, IpcError> {
     learnvault_core::record_focus_session(database, LOCAL_OWNER_ID, input)
         .map(FocusSessionDto::from)
+        .map_err(focus_error)
+}
+
+/// Lista sessões de foco persistidas do dono local, da mais recente para a mais antiga.
+pub fn list_focus_sessions(
+    database: &Database,
+    limit: Option<usize>,
+) -> Result<Vec<FocusSessionDto>, IpcError> {
+    learnvault_core::list_focus_sessions(database, LOCAL_OWNER_ID, limit.unwrap_or(100))
+        .map(|sessions| sessions.into_iter().map(FocusSessionDto::from).collect())
         .map_err(focus_error)
 }
 
@@ -191,6 +201,62 @@ pub fn delete_note(database: &Database, note_id: &str) -> Result<(), IpcError> {
     }
 }
 
+/// Lista os cartões de memorização do dono local para uma mídia específica.
+pub fn list_flashcards(database: &Database, media_id: &str) -> Result<Vec<FlashcardDto>, IpcError> {
+    learnvault_core::list_flashcards(database, LOCAL_OWNER_ID, media_id)
+        .map(|cards| cards.into_iter().map(FlashcardDto::from).collect())
+        .map_err(study_error)
+}
+
+/// Cria um novo cartão de memorização para o dono local.
+pub fn create_flashcard(
+    database: &Database,
+    media_id: &str,
+    front: &str,
+    back: &str,
+) -> Result<FlashcardDto, IpcError> {
+    learnvault_core::create_flashcard(database, LOCAL_OWNER_ID, media_id, front, back)
+        .map(FlashcardDto::from)
+        .map_err(study_error)
+}
+
+/// Atualiza a frente e o verso de um cartão de memorização do dono local.
+pub fn update_flashcard(
+    database: &Database,
+    card_id: &str,
+    front: &str,
+    back: &str,
+) -> Result<FlashcardDto, IpcError> {
+    learnvault_core::update_flashcard(database, LOCAL_OWNER_ID, card_id, front, back)
+        .map(FlashcardDto::from)
+        .map_err(study_error)
+}
+
+/// Exclui um cartão de memorização pertencente ao dono local.
+pub fn delete_flashcard(database: &Database, card_id: &str) -> Result<(), IpcError> {
+    let deleted = learnvault_core::delete_flashcard(database, LOCAL_OWNER_ID, card_id)
+        .map_err(study_error)?;
+    if deleted {
+        Ok(())
+    } else {
+        Err(IpcError::flashcard_not_found())
+    }
+}
+
+/// Registra uma revisão ("again" ou "good") em um cartão de memorização do dono local.
+pub fn review_flashcard(
+    database: &Database,
+    card_id: &str,
+    rating: &str,
+) -> Result<FlashcardDto, IpcError> {
+    let Some(parsed) = ReviewRating::parse(rating) else {
+        return Err(IpcError::invalid_review_rating());
+    };
+    learnvault_core::review_flashcard(database, LOCAL_OWNER_ID, card_id, parsed)
+        .map(FlashcardDto::from)
+        .map_err(study_error)
+}
+
 /// Traduz o erro do núcleo para o erro IPC estável, sem ecoar o identificador consultado.
 ///
 /// Uma mídia desconhecida e uma posição negativa são falhas de entrada com código próprio,
@@ -204,6 +270,8 @@ fn study_error(error: learnvault_core::Error) -> IpcError {
         Error::InvalidStudyPosition { .. } => IpcError::invalid_position(),
         Error::StudyNoteNotFound { .. } => IpcError::note_not_found(),
         Error::InvalidStudyNoteContent => IpcError::invalid_note(),
+        Error::FlashcardNotFound { .. } => IpcError::flashcard_not_found(),
+        Error::InvalidFlashcardContent => IpcError::invalid_flashcard(),
         _ => IpcError::study_unavailable(),
     }
 }

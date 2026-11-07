@@ -61,6 +61,12 @@ pub enum IpcErrorCode {
     NoteNotFound,
     /// O conteúdo da anotação é inválido ou excede o limite aceito.
     InvalidNote,
+    /// O cartão de memorização solicitado não foi encontrado ou não pertence ao usuário.
+    FlashcardNotFound,
+    /// O conteúdo do cartão de memorização é inválido ou excede o limite aceito.
+    InvalidFlashcard,
+    /// A avaliação informada na revisão do cartão é inválida.
+    InvalidReviewRating,
 }
 
 /// Erro IPC serializável devolvido ao webview.
@@ -270,6 +276,30 @@ impl IpcError {
         Self {
             code: IpcErrorCode::InvalidNote,
             message: "conteúdo da anotação inválido",
+        }
+    }
+
+    /// O cartão de memorização solicitado não foi encontrado.
+    pub fn flashcard_not_found() -> Self {
+        Self {
+            code: IpcErrorCode::FlashcardNotFound,
+            message: "cartão não encontrado",
+        }
+    }
+
+    /// O conteúdo do cartão de memorização é inválido.
+    pub fn invalid_flashcard() -> Self {
+        Self {
+            code: IpcErrorCode::InvalidFlashcard,
+            message: "conteúdo do cartão inválido",
+        }
+    }
+
+    /// A avaliação da revisão do cartão é inválida.
+    pub fn invalid_review_rating() -> Self {
+        Self {
+            code: IpcErrorCode::InvalidReviewRating,
+            message: "avaliação inválida",
         }
     }
 }

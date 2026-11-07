@@ -23,82 +23,46 @@ Detalhes de implementação ficam nas issues e pull requests.
   remoção por curso, releitura explícita da biblioteca, mídia local por identificador e progresso de
   estudo por comandos internos (IPC). O desktop não tem autenticação e não abre portas de rede.
 - **Regras de estudo** compartilhadas entre servidor, interface web e desktop (#86, #88, #90, #91).
-- **Player** com seleção de mídia e legenda por aula, atalhos limitados ao foco e avanço
-  automático opcional.
+- **Player** com seleção de mídia e legenda por aula, atalhos de teclado (`J`/`K`/`L`, `0-9`, `M`,
+  `N`, `F`, `P`, `[`/`]`), velocidade persistida, Picture-in-Picture, linha do tempo interativa com
+  marcações de anotações, avanço automático opcional, remux/transcodificação sob demanda via FFmpeg
+  no servidor para formatos estendidos (`.mkv`, `.avi`, `.wmv`, `.ts`, HEVC, AC3) e abertura no
+  reprodutor padrão do sistema no desktop.
 - **Tela de estudo do curso:** player e lista de aulas na mesma tela, retomada da última aula
-  assistida, módulo da aula atual aberto, materiais do módulo fora da playlist e ações
-  administrativas em um menu do curso.
-- **Capas** geradas a partir do título e capas manuais por upload do admin ou seletor nativo no
-  desktop, com validação PNG/JPEG/WebP, limite de 4 MiB e gravação atômica fora das pastas de curso.
-- **Distribuição** com instalador Windows NSIS, tarballs Linux do servidor e `SHA256SUMS` em cada
-  release.
+  assistida, conclusão rápida por aula na árvore do curso, módulo da aula atual aberto, materiais do
+  módulo fora da playlist e ações administrativas em um menu do curso.
+- **Anotações e cartões de revisão (Flashcards):** anotações com marcador de tempo clicável, busca
+  global por anotações com filtro por curso e cartões de repetição espaçada por aula no Web e no
+  desktop.
+- **Foco, evolução e Bosque de Estudo 2.5D:** timer Pomodoro idempotente com fila offline, ofensiva
+  de estudo, missões diárias, meta semanal e bosque isométrico 2.5D alimentado pelas sessões de foco
+  concluídas.
+- **Capas** geradas a partir do título, detecção automática de imagens locais na raiz do curso
+  (`cover.*`, `folder.*`, `poster.*`, `thumb.*`) e capas manuais por upload do admin ou seletor
+  nativo no desktop, com validação PNG/JPEG/WebP, limite de 4 MiB e gravação atômica fora das pastas
+  de curso.
+- **Backup e restauração administrativa:** download e restauração segura do banco SQLite com
+  validação de integridade pela interface administrativa do servidor.
+- **Distribuição** com instalador Windows NSIS, updater assinado (Ed25519), tarballs Linux do
+  servidor e `SHA256SUMS` em cada release.
 
 ## Agora: uma rotina de estudo completa
 
-### Goal do PR #281: confiabilidade e fechamento técnico
-
-Preparar o [redesenho da experiência de estudo](https://github.com/AndersonTavares0/LearnVault/pull/281)
-para revisão final, com o fluxo biblioteca → aula → foco → evolução consistente no Web e no
-desktop. Este objetivo complementa a [issue #280](https://github.com/AndersonTavares0/LearnVault/issues/280);
-não inclui outro redesign nem autoriza merge.
-
-Critérios de conclusão:
-
-- Sessões de foco respeitam o tempo decorrido, sem duplicar sessões ou XP em reenvios.
-- Falhas de sincronização não causam repetição contínua de requisições; conflitos têm
-  tratamento explícito, sem perder silenciosamente o payload nem bloquear sessões seguintes.
-- Migração V6 e persistência de foco/recompensas têm cobertura com bancos sintéticos.
-- Meta semanal e erros da API têm semântica documentada, compartilhada pelo núcleo.
-- Checks aplicáveis e smoke do fluxo alterado têm resultados registrados no PR, distinguindo
-  validação local de CI e Web de desktop.
-
-Fora deste ciclo: polimento visual subjetivo, titlebar personalizada e novas funcionalidades.
-Qualquer trabalho de design usa o MCP do OpenDesign.
-
-### Goal do PR #281: refinamento do design a partir da revisão do Wesley
-
-Aplicar o [feedback de UX/visual](https://github.com/AndersonTavares0/LearnVault/pull/281#issuecomment-6427774023)
-ao design já implementado. Preservar a identidade Catálogo, a área de continuar estudando e
-o fluxo interno dos cursos, elogiados na revisão.
-
-Critérios de conclusão:
-
-- Marca e navegação formam um grupo visual coeso, inclusive com a barra recolhida.
-- O desktop tem titlebar integrada, com arraste e controles reais de janela acessíveis.
-- Busca, ações administrativas e modos de visualização ficam próximos dos cursos;
-  importar e reler arquivos têm rótulos, ícones e hierarquia distintos.
-- Estatísticas priorizam o progresso pessoal persistido e identificam a origem/abrangência
-  dos dados, sem confundir o histórico recente com totais da conta.
-- O timer mostra o estado de execução imediatamente, sem antecipar tempo ou crédito de foco.
-- A paleta usa superfícies neutras e um acento coerente, sem competição decorativa entre
-  azul e vermelho; títulos dispensam rótulos e divisores redundantes.
-- Layout, contraste, foco de teclado, estados e controles são exercitados em temas claro/escuro,
-  tamanhos mobile/desktop e no aplicativo Tauri para a titlebar.
-- O MCP OpenDesign orienta o refinamento. As skills frontend-design, UI Humanizer,
-  Impeccable e DaisyUI apoiam a auditoria e o acabamento, preservando o sistema existente.
-  Capturas usam somente fixtures sintéticas e ficam anexadas ao PR, fora do código versionado.
-
-Este goal amplia o escopo visual autorizado do ciclo anterior; não elimina os gates técnicos
-nem autoriza merge com checks pendentes.
-
-
-
-- [ ] Player direto com links para legendas e materiais.
+- [x] Fluxo biblioteca → aula → foco → evolução consistente no Web e no desktop (#281).
+- [x] "Continuar estudando" em destaque na tela inicial e filtros por estado e pasta de origem (#281, #297).
+- [x] Anotações com timestamp, busca global em anotações e cartões de memorização (#281, #290, #297).
+- [x] Suporte a formatos estendidos de mídia, transcodificação sob demanda no servidor e player do sistema no desktop (#298).
 - [ ] Permissões de acesso a cursos para vários usuários locais.
 
 ## Em seguida: uma mesa de estudo
 
-- [ ] "Continuar estudando" em destaque na tela inicial.
-- [ ] Acessibilidade: teclado, foco, contraste, movimento reduzido e leitores de tela.
-- [ ] Manter a identidade visual original do projeto.
+- [ ] Acessibilidade contínua: teclado, foco, contraste, movimento reduzido e leitores de tela.
+- [ ] Favoritos de cursos e aulas.
 
 ## Depois: uma biblioteca mais rica
 
-- [ ] Capas por imagem dentro da pasta do curso.
-- [ ] Cache de remux sob demanda para mídias incompatíveis.
-- [ ] Busca no catálogo, nos materiais e nas notas.
-- [ ] Favoritos e notas com timestamp.
-- [ ] Navegação responsiva.
+- [ ] Cache persistente de remux sob demanda para mídias incompatíveis.
+- [ ] Busca textual dentro de materiais e legendas.
 
 ## Distribuição: portabilidade primeiro
 

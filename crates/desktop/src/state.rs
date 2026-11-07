@@ -22,9 +22,9 @@ use crate::covers::{
     COVERS_DIR_NAME, CoverError, cover_version, read_picked_cover, remove_cover, store_cover,
 };
 use crate::dto::{
-    CatalogDto, CoverDto, CoverRemovalDto, FocusSessionDto, FocusSummaryDto, MediaRemovalImpactDto,
-    MediaRemovalOutcomeDto, RecentStudyDto, RescanSummaryDto, RewardSummaryDto, StudyNoteDto,
-    StudyProgressDto, StudySummaryDto,
+    CatalogDto, CoverDto, CoverRemovalDto, FlashcardDto, FocusSessionDto, FocusSummaryDto,
+    MediaRemovalImpactDto, MediaRemovalOutcomeDto, RecentStudyDto, RescanSummaryDto,
+    RewardSummaryDto, StudyNoteDto, StudyProgressDto, StudySummaryDto,
 };
 use crate::error::IpcError;
 use crate::ordering::{CourseOrders, load_orders, store_orders};
@@ -430,6 +430,61 @@ impl DesktopState {
         study::delete_note(&database, note_id)
     }
 
+    /// Lista os cartões de memorização do dono local para uma mídia específica.
+    pub fn list_flashcards(&self, media_id: &str) -> Result<Vec<FlashcardDto>, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::list_flashcards(&database, media_id)
+    }
+
+    /// Cria um novo cartão de memorização associado a uma mídia.
+    pub fn create_flashcard(
+        &self,
+        media_id: &str,
+        front: &str,
+        back: &str,
+    ) -> Result<FlashcardDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::create_flashcard(&database, media_id, front, back)
+    }
+
+    /// Atualiza a frente e o verso de um cartão de memorização existente.
+    pub fn update_flashcard(
+        &self,
+        card_id: &str,
+        front: &str,
+        back: &str,
+    ) -> Result<FlashcardDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::update_flashcard(&database, card_id, front, back)
+    }
+
+    /// Remove um cartão de memorização pertencente ao usuário local.
+    pub fn delete_flashcard(&self, card_id: &str) -> Result<(), IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::delete_flashcard(&database, card_id)
+    }
+
+    /// Registra uma revisão em um cartão de memorização pertencente ao usuário local.
+    pub fn review_flashcard(&self, card_id: &str, rating: &str) -> Result<FlashcardDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::review_flashcard(&database, card_id, rating)
+    }
+
     /// Persiste uma sessão Pomodoro do dono local.
     pub fn record_focus_session(
         &self,
@@ -440,6 +495,18 @@ impl DesktopState {
             .lock()
             .map_err(|_| IpcError::database_unavailable())?;
         study::record_focus_session(&database, input)
+    }
+
+    /// Lista as sessões de foco persistidas do dono local, da mais recente para a mais antiga.
+    pub fn list_focus_sessions(
+        &self,
+        limit: Option<usize>,
+    ) -> Result<Vec<FocusSessionDto>, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::list_focus_sessions(&database, limit)
     }
 
     /// Lê o resumo de foco persistido do dono local.
