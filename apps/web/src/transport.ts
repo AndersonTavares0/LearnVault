@@ -2,6 +2,7 @@
 // eliminado por dead-code elimination junto com este import, de modo que nem o Tauri entra
 // na SPA web nem um `fetch` entra no desktop.
 import { invoke } from '@tauri-apps/api/core';
+import { tr } from './i18n.svelte';
 
 export type User = { userId: string; username: string; role: string; isAdmin: boolean; mustChangeCredentials: boolean };
 export type LocalUser = { userId: string; username: string; isAdmin: boolean; createdAt: number; allowedCourseIds: string[] | null };
@@ -220,7 +221,10 @@ function countFile(budget: CatalogBudget): void {
 }
 
 export function fileStatus(file: FileEntry): string {
-	return [file.availability === 'missing' ? 'ausente' : '', file.unverified ? 'não verificado' : ''].filter(Boolean).join(' · ');
+	return [
+		file.availability === 'missing' ? tr('missing', 'ausente') : '',
+		file.unverified ? tr('unverified', 'não verificado') : ''
+	].filter(Boolean).join(' · ');
 }
 
 /** Identidade de um curso no catálogo: a opaca do contrato ou o caminho do nó legado. */

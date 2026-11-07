@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { setLocale } from './i18n.svelte';
 import {
 	DEFAULT_POMODORO_SETTINGS,
 	FOCUS_SESSIONS_KEY,
@@ -82,10 +83,17 @@ describe('pomodoro modes', () => {
 		expect(modeSeconds('long', DEFAULT_POMODORO_SETTINGS)).toBe(15 * 60);
 	});
 
-	it('labels each mode in pt-BR', () => {
+	it('labels each mode in English by default and pt-BR when requested', () => {
+		setLocale('en');
+		expect(modeLabel('focus')).toBe('Focus');
+		expect(modeLabel('short')).toBe('Short break');
+		expect(modeLabel('long')).toBe('Long break');
+
+		setLocale('pt-BR');
 		expect(modeLabel('focus')).toBe('Foco');
 		expect(modeLabel('short')).toBe('Pausa curta');
 		expect(modeLabel('long')).toBe('Pausa longa');
+		setLocale('en');
 	});
 });
 

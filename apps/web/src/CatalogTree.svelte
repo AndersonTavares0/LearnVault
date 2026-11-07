@@ -2,6 +2,7 @@
 	import CatalogTree from './CatalogTree.svelte';
 	import LooseFiles from './LooseFiles.svelte';
 	import { countCatalogFiles, countCatalogNode, formatCourseMeta, formatLessonCounts, formatLessonMeta, isLessonMissing } from './catalog';
+	import { tr } from './i18n.svelte';
 	import { href } from './router';
 	import type { CatalogNode } from './transport';
 
@@ -72,7 +73,7 @@
 			<ul class="lesson-list">
 				{#each node.children as child (child.path)}<li><CatalogTree nodes={[child]} {courseId} {expandAll} {showFiles} {activePath} {completedMediaIds} {onToggleLessonCompleted} {favoriteMediaIds} {onToggleLessonFavorite} /></li>{/each}
 			</ul>
-			{#if showFiles && (node.files.length || node.looseFiles.length)}<LooseFiles files={[...node.files, ...node.looseFiles]} heading="Materiais complementares" {courseId} />{/if}
+			{#if showFiles && (node.files.length || node.looseFiles.length)}<LooseFiles files={[...node.files, ...node.looseFiles]} heading={tr('Supplementary materials', 'Materiais complementares')} {courseId} />{/if}
 		</details>
 	{:else if node.role === 'lesson'}
 		{@const counts = countCatalogFiles(node)}
@@ -80,14 +81,12 @@
 		{@const missing = isLessonMissing(node)}
 		{@const mediaFile = [...node.files, ...node.looseFiles].find((f) => f.kind === 'media' && f.mediaId)}
 		{#if missing}
-			<!-- Aula sem mídia disponível: continua listada e legível, mas não abre o player,
-			     então a linha é conteúdo estático — sem link e fora da ordem de foco. -->
 			<div class="lesson-row">
 				<svg class="lesson-glyph" viewBox="0 0 16 16" aria-hidden="true">
 					{#if counts.videos > 0}<path d="M5.5 3.5l6.5 4.5-6.5 4.5z" />{:else}<path d="M4.5 2.5h7v11h-7z" fill="none" stroke="currentColor" stroke-width="1.4" />{/if}
 				</svg>
 				<span class="lesson-title">{node.title}</span>
-				<span class="lesson-meta lesson-meta--missing">Mídia ausente</span>
+				<span class="lesson-meta lesson-meta--missing">{tr('Missing media', 'Mídia ausente')}</span>
 				{#if meta}<span class="lesson-meta">{meta}</span>{/if}
 			</div>
 		{:else}
@@ -99,8 +98,8 @@
 						class="lesson-check-btn"
 						class:is-completed={isCompleted}
 						onclick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleLessonCompleted(node); }}
-						title={isCompleted ? `Marcar "${node.title}" como não concluída` : `Marcar "${node.title}" como concluída`}
-						aria-label={isCompleted ? `Marcar "${node.title}" como não concluída` : `Marcar "${node.title}" como concluída`}
+						title={isCompleted ? tr(`Mark "${node.title}" as incomplete`, `Marcar "${node.title}" como não concluída`) : tr(`Mark "${node.title}" as completed`, `Marcar "${node.title}" como concluída`)}
+						aria-label={isCompleted ? tr(`Mark "${node.title}" as incomplete`, `Marcar "${node.title}" como não concluída`) : tr(`Mark "${node.title}" as completed`, `Marcar "${node.title}" como concluída`)}
 					>
 						{#if isCompleted}
 							<svg class="lesson-check-icon check-filled" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
@@ -128,8 +127,8 @@
 						class:is-favorite={isFavorite}
 						aria-pressed={isFavorite}
 						onclick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleLessonFavorite(node); }}
-						title={isFavorite ? `Remover "${node.title}" dos favoritos` : `Favoritar "${node.title}"`}
-						aria-label={isFavorite ? `Remover "${node.title}" dos favoritos` : `Favoritar "${node.title}"`}
+						title={isFavorite ? tr(`Remove "${node.title}" from favorites`, `Remover "${node.title}" dos favoritos`) : tr(`Favorite "${node.title}"`, `Favoritar "${node.title}"`)}
+						aria-label={isFavorite ? tr(`Remove "${node.title}" from favorites`, `Remover "${node.title}" dos favoritos`) : tr(`Favorite "${node.title}"`, `Favoritar "${node.title}"`)}
 					>
 						<svg class="lesson-fav-icon" viewBox="0 0 24 24" fill={isFavorite ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 							<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
@@ -146,7 +145,7 @@
 				<h2>{node.title}</h2>
 				{#if meta}<p class="course-meta">{meta}</p>{/if}
 			</header>
-			{#if showFiles && (node.files.length || node.looseFiles.length)}<LooseFiles files={[...node.files, ...node.looseFiles]} heading="Arquivos soltos" {courseId} />{/if}
+			{#if showFiles && (node.files.length || node.looseFiles.length)}<LooseFiles files={[...node.files, ...node.looseFiles]} heading={tr('Loose files', 'Arquivos soltos')} {courseId} />{/if}
 			{#if node.children.length}<div class="course-body">{#each node.children as child (child.path)}<CatalogTree nodes={[child]} {courseId} {expandAll} {showFiles} {activePath} {completedMediaIds} {onToggleLessonCompleted} {favoriteMediaIds} {onToggleLessonFavorite} />{/each}</div>{/if}
 		</section>
 	{/if}

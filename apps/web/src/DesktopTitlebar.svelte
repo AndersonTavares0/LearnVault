@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import Brand from './Brand.svelte';
+	import { tr } from './i18n.svelte';
 
 	let maximized = $state(false);
 	let error = $state('');
@@ -23,7 +24,7 @@
 				if (disposed) unlisten();
 				else unlistenResize = unlisten;
 			} catch (cause) {
-				if (!disposed) error = `Não foi possível conectar aos controles da janela: ${message(cause)}`;
+				if (!disposed) error = tr(`Could not connect to window controls: ${message(cause)}`, `Não foi possível conectar aos controles da janela: ${message(cause)}`);
 			}
 		})();
 
@@ -46,7 +47,7 @@
 				maximized = await appWindow.isMaximized();
 			}
 		} catch (cause) {
-			error = `A ação da janela falhou: ${message(cause)}`;
+			error = tr(`Window action failed: ${message(cause)}`, `A ação da janela falhou: ${message(cause)}`);
 		}
 	}
 
@@ -55,17 +56,17 @@
 	}
 </script>
 
-<div class="titlebar" role="group" aria-label="Controles da janela" data-tauri-drag-region>
+<div class="titlebar" role="group" aria-label={tr('Window controls', 'Controles da janela')} data-tauri-drag-region>
 	<div class="brand" data-tauri-drag-region aria-hidden="true"><Brand /><span data-tauri-drag-region>LearnVault</span></div>
 	<div class="window-controls">
-		<button type="button" aria-label="Minimizar janela" title="Minimizar" onclick={() => perform('minimize')}>
+		<button type="button" aria-label={tr('Minimize window', 'Minimizar janela')} title={tr('Minimize', 'Minimizar')} onclick={() => perform('minimize')}>
 			<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 8.5h8" /></svg>
 		</button>
-		<button type="button" aria-label={maximized ? 'Restaurar janela' : 'Maximizar janela'} title={maximized ? 'Restaurar' : 'Maximizar'} onclick={() => perform('toggleMaximize')}>
+		<button type="button" aria-label={maximized ? tr('Restore window', 'Restaurar janela') : tr('Maximize window', 'Maximizar janela')} title={maximized ? tr('Restore', 'Restaurar') : tr('Maximize', 'Maximizar')} onclick={() => perform('toggleMaximize')}>
 			{#if maximized}<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M4 2.5h5.5V8M8 4H2.5v5.5H8z" /></svg>
 			{:else}<svg viewBox="0 0 12 12" aria-hidden="true"><rect x="2.5" y="2.5" width="7" height="7" /></svg>{/if}
 		</button>
-		<button class="close" type="button" aria-label="Fechar janela" title="Fechar" onclick={() => perform('close')}>
+		<button class="close" type="button" aria-label={tr('Close window', 'Fechar janela')} title={tr('Close', 'Fechar')} onclick={() => perform('close')}>
 			<svg viewBox="0 0 12 12" aria-hidden="true"><path d="m3 3 6 6m0-6L3 9" /></svg>
 		</button>
 	</div>

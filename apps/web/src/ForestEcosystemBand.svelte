@@ -1,16 +1,17 @@
 <script lang="ts">
 	import type { ForestEcosystem } from './forest';
 	import ForestBiomeCrest from './ForestBiomeCrest.svelte';
+	import { tr } from './i18n.svelte';
 
 	let { ecosystem, healthyTrees }: { ecosystem: ForestEcosystem; healthyTrees: number } = $props();
 </script>
 
-<div class="lv-ecosystem-band" role="status" aria-label="Ecossistema: {ecosystem.name}">
+<div class="lv-ecosystem-band" role="status" aria-label="{tr('Ecosystem:', 'Ecossistema:')} {ecosystem.name}">
 	<div class="lv-ecosystem-band__left">
 		<ForestBiomeCrest level={ecosystem.level} size={42} />
 		<div class="lv-ecosystem-band__info">
 			<div class="lv-ecosystem-band__badge">
-				<span class="lv-ecosystem-band__tag">Nível {ecosystem.level}</span>
+				<span class="lv-ecosystem-band__tag">{tr('Level', 'Nível')} {ecosystem.level}</span>
 				<strong class="lv-ecosystem-band__title">{ecosystem.name}</strong>
 			</div>
 			<p class="lv-ecosystem-band__desc">{ecosystem.description}</p>
@@ -20,13 +21,13 @@
 	{#if ecosystem.nextThreshold !== null}
 		<div class="lv-ecosystem-band__progress">
 			<div class="lv-ecosystem-band__labels">
-				<span>Próximo estágio: <strong>{ecosystem.nextName}</strong></span>
-				<span class="lv-ecosystem-band__count">{healthyTrees} de {ecosystem.nextThreshold} sadias</span>
+				<span>{tr('Next stage:', 'Próximo estágio:')} <strong>{ecosystem.nextName}</strong></span>
+				<span class="lv-ecosystem-band__count">{tr(`${healthyTrees} of ${ecosystem.nextThreshold} healthy`, `${healthyTrees} de ${ecosystem.nextThreshold} sadias`)}</span>
 			</div>
 			<div
 				class="lv-ecosystem-band__track"
 				role="progressbar"
-				aria-label="Progresso para {ecosystem.nextName}"
+				aria-label="{tr('Progress to', 'Progresso para')} {ecosystem.nextName}"
 				aria-valuemin="0"
 				aria-valuemax="100"
 				aria-valuenow={Math.round(ecosystem.progress * 100)}
@@ -40,7 +41,7 @@
 	{:else}
 		<div class="lv-ecosystem-band__max">
 			<span aria-hidden="true">★</span>
-			<span>Ápice florestal alcançado</span>
+			<span>{tr('Forest apex reached', 'Ápice florestal alcançado')}</span>
 		</div>
 	{/if}
 </div>

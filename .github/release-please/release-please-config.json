@@ -8,20 +8,21 @@
       "changelog-path": "docs/releases/CHANGELOG.md",
       "include-v-in-tag": true,
       "include-v-in-release-name": true,
+      "bump-minor-pre-major": false,
       "pull-request-title-pattern": "chore: release ${version}",
-      "pull-request-header": "O Release Please gerou esta proposta de release a partir dos Conventional Commits.",
+      "pull-request-header": "Release Please generated this release candidate from Conventional Commits.",
       "changelog-sections": [
-        { "type": "feat", "section": "Funcionalidades" },
-        { "type": "fix", "section": "Correções" },
-        { "type": "perf", "section": "Melhorias de desempenho" },
-        { "type": "revert", "section": "Reversões" },
-        { "type": "docs", "section": "Documentação", "hidden": true },
-        { "type": "style", "section": "Estilo", "hidden": true },
-        { "type": "chore", "section": "Manutenção", "hidden": true },
-        { "type": "refactor", "section": "Refatoração", "hidden": true },
-        { "type": "test", "section": "Testes", "hidden": true },
+        { "type": "feat", "section": "Features" },
+        { "type": "fix", "section": "Bug Fixes" },
+        { "type": "perf", "section": "Performance Improvements" },
+        { "type": "revert", "section": "Reverts" },
+        { "type": "docs", "section": "Documentation", "hidden": true },
+        { "type": "style", "section": "Styles", "hidden": true },
+        { "type": "chore", "section": "Maintenance", "hidden": true },
+        { "type": "refactor", "section": "Refactoring", "hidden": true },
+        { "type": "test", "section": "Tests", "hidden": true },
         { "type": "build", "section": "Build", "hidden": true },
-        { "type": "ci", "section": "Integração contínua", "hidden": true }
+        { "type": "ci", "section": "Continuous Integration", "hidden": true }
       ]
     }
   }

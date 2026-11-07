@@ -1,25 +1,18 @@
-# Guia de documentação
+# Documentation Guide
 
-O repositório é a fonte canônica da documentação revisada. Comece aqui quando não souber
-onde uma decisão ou procedimento deve ficar.
+The repository is the canonical source for all reviewed project documentation. Start here when looking for architecture decisions, operational guides, or governance rules.
 
-| Área | Use para |
+| Section | Purpose |
 | --- | --- |
-| [`architecture/`](architecture/) | Limites do sistema, fluxo de dados e ADRs |
-| [`governance/`](governance/) | Regras do repositório, ownership e política de CI |
-| [`operations/`](operations/) | Deploy e alvos de distribuição |
-| [`product/`](product/) | Roadmap, requisitos e direção do produto |
-| [`releases/`](releases/) | Versionamento e procedimentos de release |
-| [`reference/`](reference/) | API e referências técnicas estáveis |
-| [`wiki/`](wiki/) | Fontes e mapeamento das páginas gerenciadas da Wiki |
+| [`architecture/`](architecture/) | System boundaries, data flow, IPC contracts, and ADRs |
+| [`governance/`](governance/) | Repository policies, ownership, code conventions, and CI gates |
+| [`operations/`](operations/) | Deployment, container adapters, and release distribution targets |
+| [`product/`](product/) | Product roadmap, requirements, and design philosophies |
+| [`releases/`](releases/) | Versioning schemes, changelog, and release procedures |
+| [`reference/`](reference/) | Stable API specifications and schemas |
 
-A Wiki do GitHub é uma superfície derivada de leitura. Somente as sete páginas listadas em
-[`wiki/mapping.md`](wiki/mapping.md) são sincronizadas automaticamente; edite as fontes do
-repositório, não a Wiki diretamente.
+## Contribution & Language Standards
 
-Para o fluxo de contribuição, leia [`CONTRIBUTING.md`](../.github/CONTRIBUTING.md) e o
-[guia de governança](governance/overview.md).
-
-`README.md`, `docs/releases/CHANGELOG.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` e
-`SECURITY.md` são mantidos em pt-BR, junto com a documentação editorial deste diretório,
-preservando comandos, identificadores e nomes técnicos. Apenas a `LICENSE` permanece em inglês.
+- Read [`CONTRIBUTING.md`](../.github/CONTRIBUTING.md) and the [Governance Guide](governance/overview.md) for contribution workflows.
+- `README.md`, `docs/releases/CHANGELOG.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, code comments, PRs, and editorial documentation are maintained in English (`en`).
+- The user-facing application features built-in internationalization (i18n) supporting both English (`en`, default) and Brazilian Portuguese (`pt-BR`).

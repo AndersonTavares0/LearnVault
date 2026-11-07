@@ -4,6 +4,7 @@
 		type BotanicalSpecies,
 		type BotanicalSpeciesId
 	} from './forest-catalog';
+	import { tr } from './i18n.svelte';
 	import {
 		nursery,
 		setActiveSeed,
@@ -19,41 +20,49 @@
 		const ok = setActiveSeed(speciesId);
 		if (ok) {
 			const s = BOTANICAL_SPECIES.find((item) => item.id === speciesId);
-			notification = `Semente de ${s?.name ?? speciesId} selecionada para os próximos ciclos de foco!`;
+			notification = tr(
+				`${s?.name ?? speciesId} seed selected for upcoming focus cycles!`,
+				`Semente de ${s?.name ?? speciesId} selecionada para os próximos ciclos de foco!`
+			);
 		}
 	}
 
 	function handleUnlock(species: BotanicalSpecies) {
 		const ok = unlockBotanicalSpecies(species.id);
 		if (ok) {
-			notification = `Parabéns! Você desbloqueou o ${species.name} com sucesso.`;
+			notification = tr(
+				`Congratulations! You unlocked ${species.name} successfully.`,
+				`Parabéns! Você desbloqueou o ${species.name} com sucesso.`
+			);
 		}
 	}
 </script>
 
-<div class="lv-nursery" role="region" aria-label="Viveiro Botânico de Espécies">
+<div class="lv-nursery" role="region" aria-label={tr('Botanical Species Nursery', 'Viveiro Botânico de Espécies')}>
 	<!-- Cabeçalho do Viveiro -->
 	<div class="lv-nursery__head">
 		<div class="lv-nursery__titles">
 			<div class="lv-nursery__badge-strip">
-				<span class="lv-nursery__chip">Viveiro Botânico</span>
-				<div class="lv-nursery__balance" aria-label="Saldo atual: {$nursery.dropsBalance} gotas de foco">
+				<span class="lv-nursery__chip">{tr('Botanical Nursery', 'Viveiro Botânico')}</span>
+				<div class="lv-nursery__balance" aria-label={tr(`Current balance: ${$nursery.dropsBalance} focus drops`, `Saldo atual: ${$nursery.dropsBalance} gotas de foco`)}>
 					<svg class="lv-nursery__drop-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
 						<path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
 					</svg>
 					<strong>{$nursery.dropsBalance}</strong>
-					<span>Gotas de Foco</span>
+					<span>{tr('Focus Drops', 'Gotas de Foco')}</span>
 				</div>
 			</div>
-			<h2 class="lv-nursery__title">Cultive Espécies Únicas</h2>
+			<h2 class="lv-nursery__title">{tr('Grow Unique Species', 'Cultive Espécies Únicas')}</h2>
 			<p class="lv-nursery__desc">
-				Cada ciclo de foco concluído sem interrupção rende gotas de orvalho. Use suas gotas para
-				desbloquear espécies raras e enriquecer seu bosque pessoal.
+				{tr(
+					'Each uninterrupted focus cycle earns dew drops. Use your drops to unlock rare species and enrich your personal grove.',
+					'Cada ciclo de foco concluído sem interrupção rende gotas de orvalho. Use suas gotas para desbloquear espécies raras e enriquecer seu bosque pessoal.'
+				)}
 			</p>
 		</div>
 		{#if onclose}
 			<button type="button" class="lvui-btn lvui-btn-outline" onclick={onclose}>
-				Voltar ao Bosque
+				{tr('Back to Grove', 'Voltar ao Bosque')}
 			</button>
 		{/if}
 	</div>
@@ -61,7 +70,7 @@
 	{#if notification}
 		<div class="lv-nursery__alert" role="status" aria-live="polite">
 			<span>{notification}</span>
-			<button type="button" class="lv-nursery__alert-close" aria-label="Fechar aviso" onclick={() => (notification = null)}>×</button>
+			<button type="button" class="lv-nursery__alert-close" aria-label={tr('Close notice', 'Fechar aviso')} onclick={() => (notification = null)}>×</button>
 		</div>
 	{/if}
 
@@ -83,14 +92,14 @@
 				<div class="lv-nursery__card-visual">
 					<ForestTreeSvg stage={species.id} size={64} />
 					{#if isActive}
-						<span class="lv-nursery__active-tag">Ativa no Pomodoro</span>
+						<span class="lv-nursery__active-tag">{tr('Active in Pomodoro', 'Ativa no Pomodoro')}</span>
 					{/if}
 				</div>
 
 				<div class="lv-nursery__card-body">
 					<div class="lv-nursery__card-header">
 						<h3 class="lv-nursery__species-name">{species.name}</h3>
-						<span class="lv-nursery__species-minutes">{species.minMinutes} min recomendados</span>
+						<span class="lv-nursery__species-minutes">{tr(`${species.minMinutes} min recommended`, `${species.minMinutes} min recomendados`)}</span>
 					</div>
 
 					<p class="lv-nursery__species-lore">{species.lore}</p>
@@ -99,26 +108,26 @@
 						{#if isUnlocked}
 							{#if isActive}
 								<button class="lvui-btn lvui-btn-sm" type="button" disabled aria-pressed="true">
-									✓ Semente Selecionada
+									{tr('✓ Selected Seed', '✓ Semente Selecionada')}
 								</button>
 							{:else}
 								<button class="lvui-btn lvui-btn-sm lvui-btn-outline" type="button" onclick={() => handleSelect(species.id)}>
-									Plantar no próximo foco
+									{tr('Plant in next focus', 'Plantar no próximo foco')}
 								</button>
 							{/if}
 						{:else}
 							<div class="lv-nursery__cost-info">
 								<span class="lv-nursery__cost-value">
 									<svg class="lv-nursery__cost-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>
-									{species.cost} gotas
+									{species.cost} {tr('drops', 'gotas')}
 								</span>
 								{#if canAfford}
 									<button class="lvui-btn lvui-btn-sm lvui-btn-primary" type="button" onclick={() => handleUnlock(species)}>
-										Desbloquear
+										{tr('Unlock', 'Desbloquear')}
 									</button>
 								{:else}
-									<button class="lvui-btn lvui-btn-sm" type="button" disabled title="Faltam {deficit} gotas">
-										Faltam {deficit} gotas
+									<button class="lvui-btn lvui-btn-sm" type="button" disabled title={tr(`${deficit} drops needed`, `Faltam ${deficit} gotas`)}>
+										{tr(`${deficit} drops needed`, `Faltam ${deficit} gotas`)}
 									</button>
 								{/if}
 							</div>

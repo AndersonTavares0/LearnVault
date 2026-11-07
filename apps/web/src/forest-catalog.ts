@@ -1,3 +1,5 @@
+import { tr } from './i18n.svelte';
+
 export const FOREST_NURSERY_STORAGE_KEY = 'learnvault-forest-nursery';
 export const FOREST_SESSION_SEEDS_KEY = 'learnvault-forest-session-seeds';
 
@@ -16,66 +18,66 @@ export type BotanicalSpecies = {
 export const BOTANICAL_SPECIES: BotanicalSpecies[] = [
 	{
 		id: 'sapling',
-		name: 'Brotinho Silvestre',
-		description: 'Pequena muda resiliente. Ideal para blocos rápidos e revisões pontuais.',
+		get name() { return tr('Wild Sapling', 'Brotinho Silvestre'); },
+		get description() { return tr('Small resilient sprout. Ideal for quick blocks and focused reviews.', 'Pequena muda resiliente. Ideal para blocos rápidos e revisões pontuais.'); },
 		cost: 0,
 		minMinutes: 15,
 		accentColor: '#65a30d',
-		lore: 'Todo carvalho ancestral um dia foi apenas um pequeno broto que se recusou a desistir.'
+		get lore() { return tr('Every ancient oak was once just a small sprout that refused to give up.', 'Todo carvalho ancestral um dia foi apenas um pequeno broto que se recusou a desistir.'); }
 	},
 	{
 		id: 'oak',
-		name: 'Carvalho Frondoso',
-		description: 'A clássica árvore da disciplina. Equilíbrio perfeito entre foco e consistência.',
+		get name() { return tr('Leafy Oak', 'Carvalho Frondoso'); },
+		get description() { return tr('The classic tree of discipline. Perfect balance between focus and consistency.', 'A clássica árvore da disciplina. Equilíbrio perfeito entre foco e consistência.'); },
 		cost: 0,
 		minMinutes: 25,
 		accentColor: '#16a34a',
-		lore: 'Símbolo da perseverança e da clareza mental nos estudos diários.'
+		get lore() { return tr('Symbol of perseverance and mental clarity in daily study.', 'Símbolo da perseverança e da clareza mental nos estudos diários.'); }
 	},
 	{
 		id: 'pine',
-		name: 'Pinheiro Nobre',
-		description: 'Esguio e forte, resiste a invernos e noites densas de estudo aprofundado.',
+		get name() { return tr('Noble Pine', 'Pinheiro Nobre'); },
+		get description() { return tr('Slender and strong, withstands winters and deep study nights.', 'Esguio e forte, resiste a invernos e noites densas de estudo aprofundado.'); },
 		cost: 40,
 		minMinutes: 45,
 		accentColor: '#0d9488',
-		lore: 'Cresce alto buscando a luz do conhecimento, indiferente aos ventos e tempestades.'
+		get lore() { return tr('Grows tall seeking the light of knowledge, unmoved by winds and storms.', 'Cresce alto buscando a luz do conhecimento, indiferente aos ventos e tempestades.'); }
 	},
 	{
 		id: 'sakura',
-		name: 'Cerejeira em Flor',
-		description: 'Florescimento espetacular e efêmero. Coroa a dedicação com pétalas rosadas.',
+		get name() { return tr('Blooming Cherry', 'Cerejeira em Flor'); },
+		get description() { return tr('Spectacular and fleeting bloom. Crowns dedication with pink petals.', 'Florescimento espetacular e efêmero. Coroa a dedicação com pétalas rosadas.'); },
 		cost: 80,
 		minMinutes: 30,
 		accentColor: '#ec4899',
-		lore: 'Lembra que o aprendizado é um ato de delicada beleza e renovação constante.'
+		get lore() { return tr('Reminds us that learning is an act of delicate beauty and constant renewal.', 'Lembra que o aprendizado é um ato de delicada beleza e renovação constante.'); }
 	},
 	{
 		id: 'willow',
-		name: 'Salgueiro Chorão',
-		description: 'Galhos flexíveis que dançam com a brisa. Representa adaptação e paciência.',
+		get name() { return tr('Weeping Willow', 'Salgueiro Chorão'); },
+		get description() { return tr('Flexible branches dancing in the breeze. Represents adaptation and patience.', 'Galhos flexíveis que dançam com a brisa. Representa adaptação e paciência.'); },
 		cost: 120,
 		minMinutes: 40,
 		accentColor: '#059669',
-		lore: 'A flexibilidade de raciocínio supera qualquer obstáculo ou conteúdo difícil.'
+		get lore() { return tr('Flexible thinking overcomes any obstacle or difficult subject.', 'A flexibilidade de raciocínio supera qualquer obstáculo ou conteúdo difícil.'); }
 	},
 	{
 		id: 'ginkgo',
-		name: 'Ginkgo Dourado',
-		description: 'Fóssil vivo de folhas douradas em leque. Monumento à memória duradoura.',
+		get name() { return tr('Golden Ginkgo', 'Ginkgo Dourado'); },
+		get description() { return tr('Living fossil with golden fan-shaped leaves. Monument to lasting memory.', 'Fóssil vivo de folhas douradas em leque. Monumento à memória duradoura.'); },
 		cost: 200,
 		minMinutes: 50,
 		accentColor: '#eab308',
-		lore: 'Preserva sabedorias milenares; suas folhas douradas simbolizam a retenção profunda.'
+		get lore() { return tr('Preserves ancient wisdom; its golden leaves symbolize deep retention.', 'Preserva sabedorias milenares; suas folhas douradas simbolizam a retenção profunda.'); }
 	},
 	{
 		id: 'ancient',
-		name: 'Árvore Ancestral',
-		description: 'Titã da floresta com aura dourada e raízes que abraçam a terra inteira.',
+		get name() { return tr('Ancient Tree', 'Árvore Ancestral'); },
+		get description() { return tr('Titan of the forest with a golden aura and roots embracing the earth.', 'Titã da floresta com aura dourada e raízes que abraçam a terra inteira.'); },
 		cost: 350,
 		minMinutes: 60,
 		accentColor: '#ca8a04',
-		lore: 'O ápice da imersão e maestria. Um monumento vivo erguido por horas de dedicação ininterrupta.'
+		get lore() { return tr('The pinnacle of immersion and mastery. A living monument built by hours of uninterrupted dedication.', 'O ápice da imersão e maestria. Um monumento vivo erguido por horas de dedicação ininterrupta.'); }
 	}
 ];
 
@@ -250,37 +252,48 @@ export function recordSessionSeed(
 }
 
 export const FOCUS_GUARDIAN_PHRASES: Record<number, string[]> = {
-	0: [
-		'Sua semente fincou raízes na terra fértil. Mantenha os olhos na aula!',
-		'Início de jornada. Resista à tentação de mudar de janela!',
-		'A concentração começa no primeiro minuto. Deixe a mente serenar.',
-		'Uma gota de disciplina agora nutre uma árvore amanhã.'
-	],
-	1: [
-		'O primeiro broto rompeu o solo! Continue acompanhando o raciocínio.',
-		'Suas raízes estão se aprofundando. Não se distraia com notificações.',
-		'O conteúdo está se fixando. Cada minuto investido conta!',
-		'Caule firme e foco inabalável. Continue no fluxo de aprendizado.'
-	],
-	2: [
-		'Galhos fortes se abrindo! Mais da metade do caminho percorrido.',
-		'A copa está tomando forma. Respire fundo e mantenha o ritmo.',
-		'Excelente consistência! A distração perdeu a vez para o estudo.',
-		'Sua árvore já se destaca no bosque. Falta pouco para o florescer!'
-	],
-	3: [
-		'Reta final! As folhas estão vibrantes e prontas para desabrochar.',
-		'Últimos minutos! Mantenha a imersão até o relógio zerar.',
-		'Vitória à vista! Sua árvore está prestes a completar seu ciclo.',
-		'Quase lá! Prepare-se para colher suas gotas de foco!'
-	]
+	get 0() {
+		return [
+			tr('Your seed has taken root in fertile soil. Keep your eyes on the lesson!', 'Sua semente fincou raízes na terra fértil. Mantenha os olhos na aula!'),
+			tr('Journey started. Resist the urge to switch windows!', 'Início de jornada. Resista à tentação de mudar de janela!'),
+			tr('Focus begins in the first minute. Let your mind settle.', 'A concentração começa no primeiro minuto. Deixe a mente serenar.'),
+			tr('A drop of discipline now nourishes a tree tomorrow.', 'Uma gota de disciplina agora nutre uma árvore amanhã.')
+		];
+	},
+	get 1() {
+		return [
+			tr('The first sprout broke through the soil! Keep following the reasoning.', 'O primeiro broto rompeu o solo! Continue acompanhando o raciocínio.'),
+			tr('Your roots are growing deeper. Do not get distracted by notifications.', 'Suas raízes estão se aprofundando. Não se distraia com notificações.'),
+			tr('The content is sinking in. Every minute invested counts!', 'O conteúdo está se fixando. Cada minuto investido conta!'),
+			tr('Steady stem and unwavering focus. Stay in the learning flow.', 'Caule firme e foco inabalável. Continue no fluxo de aprendizado.')
+		];
+	},
+	get 2() {
+		return [
+			tr('Strong branches opening up! More than halfway there.', 'Galhos fortes se abrindo! Mais da metade do caminho percorrido.'),
+			tr('The canopy is taking shape. Take a deep breath and keep the pace.', 'A copa está tomando forma. Respire fundo e mantenha o ritmo.'),
+			tr('Excellent consistency! Distraction lost its turn to study.', 'Excelente consistência! A distração perdeu a vez para o estudo.'),
+			tr('Your tree already stands out in the grove. Almost ready to bloom!', 'Sua árvore já se destaca no bosque. Falta pouco para o florescer!')
+		];
+	},
+	get 3() {
+		return [
+			tr('Final stretch! The leaves are vibrant and ready to unfold.', 'Reta final! As folhas estão vibrantes e prontas para desabrochar.'),
+			tr('Last minutes! Keep your immersion until the timer hits zero.', 'Últimos minutos! Mantenha a imersão até o relógio zerar.'),
+			tr('Victory in sight! Your tree is about to complete its cycle.', 'Vitória à vista! Sua árvore está prestes a completar seu ciclo.'),
+			tr('Almost there! Get ready to harvest your focus drops!', 'Quase lá! Prepare-se para colher suas gotas de foco!')
+		];
+	}
 };
 
 export function getGuardianPhrase(speciesId: string, phase: 0 | 1 | 2 | 3): string {
 	const phrases = FOCUS_GUARDIAN_PHRASES[phase] ?? FOCUS_GUARDIAN_PHRASES[0];
 	const species = getSpeciesById(speciesId);
 	if (phase === 3) {
-		return `Quase lá! Seu ${species.name} está prestes a florescer!`;
+		return tr(
+			`Almost there! Your ${species.name} is about to bloom!`,
+			`Quase lá! Seu ${species.name} está prestes a florescer!`
+		);
 	}
 	const index = (speciesId.length + phase) % phrases.length;
 	return phrases[index];

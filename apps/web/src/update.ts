@@ -1,12 +1,8 @@
-// Rótulos da verificação de atualização. A decisão é pura e testável; a interface só
-// exibe o resultado. Nada é baixado nem instalado automaticamente: no máximo um aviso e
-// um link para a release publicada.
+import { tr } from './i18n.svelte';
 import type { UpdateStatus } from './transport';
 
 export type UpdateOutcome = 'disabled' | 'available' | 'current' | 'error';
 
-// Desligado tem prioridade: quando a checagem está desabilitada por configuração, não há
-// erro a mostrar mesmo que a resposta traga um campo `error` residual.
 export function updateOutcome(status: UpdateStatus): UpdateOutcome {
 	if (!status.enabled) return 'disabled';
 	if (status.error) return 'error';
@@ -14,13 +10,19 @@ export function updateOutcome(status: UpdateStatus): UpdateOutcome {
 	return 'current';
 }
 
-// Uma única linha para cada desfecho, em pt-BR e sem emojis.
 export function updateMessage(status: UpdateStatus): string {
 	switch (updateOutcome(status)) {
-		case 'disabled': return 'A verificação de atualização está desligada neste servidor.';
-		case 'available': return `Nova versão disponível: ${status.latest ?? 'desconhecida'}.`;
-		case 'error': return status.error ?? 'Não foi possível verificar a atualização.';
-		case 'current': return 'Você está usando a versão mais recente.';
+		case 'disabled':
+			return tr('Update checks are disabled on this server.', 'A verificação de atualização está desligada neste servidor.');
+		case 'available':
+			return tr(
+				`New version available: ${status.latest ?? 'unknown'}.`,
+				`Nova versão disponível: ${status.latest ?? 'desconhecida'}.`
+			);
+		case 'error':
+			return status.error ?? tr('Could not check for updates.', 'Não foi possível verificar a atualização.');
+		case 'current':
+			return tr('You are using the latest version.', 'Você está usando a versão mais recente.');
 	}
 }
 

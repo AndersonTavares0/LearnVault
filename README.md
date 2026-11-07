@@ -1,85 +1,86 @@
 <div align="center">
-  <img src="apps/web/public/favicon.svg" alt="" width="64" height="64">
+  <img src="apps/web/public/favicon.svg" alt="LearnVault Logo" width="64" height="64">
   <h1>LearnVault</h1>
-  <p>Seus cursos, organizados em um espaço de estudo que você controla.</p>
+  <p>Your courses, organized in a personal study space you control.</p>
   <p>
     <a href="https://github.com/AndersonTavares0/LearnVault/actions/workflows/ci.yml"><img src="https://github.com/AndersonTavares0/LearnVault/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-    <a href="LICENSE"><img src="https://img.shields.io/badge/licen%C3%A7a-MIT-4f8f68.svg" alt="Licença MIT"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-4f8f68.svg" alt="MIT License"></a>
   </p>
   <p>
-    <a href="https://github.com/AndersonTavares0/LearnVault/releases/latest">Baixar</a> ·
-    <a href="#o-que-voc%C3%AA-pode-fazer">Conhecer o app</a> ·
-    <a href="#contribuir">Contribuir</a>
+    <a href="https://github.com/AndersonTavares0/LearnVault/releases/latest">Download</a> ·
+    <a href="#what-you-can-do">Explore Features</a> ·
+    <a href="#contributing">Contributing</a>
   </p>
 </div>
 
-> **Fase inicial.** O LearnVault está em desenvolvimento ativo, antes da versão 1.0. Espere mudanças entre versões nas funcionalidades e na organização dos dados; não use como único repositório de materiais que você não pode perder.
+> **Early Stage.** LearnVault is under active development ahead of version 1.0. Changes between releases may affect features and data schemas; always maintain your own course folder backups.
 
-## Estude no seu ritmo
+---
 
-O LearnVault organiza cursos que você já tem em pastas. Ele cria um catálogo para encontrar aulas, assistir a vídeos, ouvir áudios e acompanhar seu progresso, sem mover nem alterar os arquivos originais.
+## Study at your own pace
 
-Você pode usar o servidor pela Web ou abrir a biblioteca no aplicativo desktop offline.
+LearnVault indexes course folders that you already own on your disk. It builds a structured study space where you can track progress, watch videos, listen to audios, take timestamps notes, practice flashcards, and cultivate focus—all without moving or modifying your original files.
 
-## O que você pode fazer
+You can run LearnVault as a self-hosted server accessed from any web browser or open it directly as a 100% offline desktop application.
 
-- Reunir cursos e materiais locais em um catálogo pesquisável.
-- Navegar por módulos e aulas e continuar de onde parou.
-- Reproduzir vídeos e áudios ou baixar materiais e legendas.
-- Manter os arquivos originais no lugar: o LearnVault lê a pasta do curso, mas não a altera.
+## What you can do
 
-## Escolha como usar
+- **Preserve original files:** The course library is strictly read-only. Your directory structure and filenames remain completely intact.
+- **Searchable catalog:** Quickly search across courses, modules, lessons, notes, and materials.
+- **Video & audio player:** Playback speed controls, auto-advance, resume position tracking, subtitles (SRT/VTT) with on-the-fly conversion, and on-demand FFmpeg transcoding fallback.
+- **Study tools:** Spaced repetition flashcards (SM-2 algorithm) and lesson notes synchronized with playback.
+- **Gamification & Focus Forest:** Built-in Pomodoro timer with an evolving botanical study forest and weekly streak rewards.
+- **Multi-user access:** Local student accounts and granular per-course access controls for household or lab servers.
+- **Internationalization (i18n):** Native support for English (`en`, default) and Brazilian Portuguese (`pt-BR`), selectable directly from the interface.
 
-| | Servidor + Web | Desktop offline |
+## Choose how to use
+
+| Feature | Server + Web SPA | Desktop Offline (Tauri 2) |
 | --- | --- | --- |
-| Para quem | Quer acessar pelo navegador ou hospedar na própria rede | Quer estudar localmente, sem conta ou servidor |
-| Disponibilidade | Tarballs Linux para x86-64 e ARM64 | Instalador Windows `.exe` |
-| Linux desktop | Não há pacote publicado | Flatpak continua em validação |
+| **Best for** | Hosting on a home server/NAS and accessing from any device | Personal offline study without open network ports or credentials |
+| **Availability** | Linux x86-64 / ARM64 tarballs, Docker/Podman | Windows installer (`.exe`), Linux bundle |
+| **Auth** | Multi-user login with admin dashboard | Instant single-user local access |
 
-Baixe os arquivos disponíveis na [página de releases](https://github.com/AndersonTavares0/LearnVault/releases/latest). A distribuição Flatpak e a publicação OCI para instalação self-hosted ainda não estão disponíveis. Consulte o [guia de distribuição](docs/operations/distribution.md) antes de instalar ou atualizar.
+Check out the latest builds on the [Releases page](https://github.com/AndersonTavares0/LearnVault/releases/latest) and read the [Distribution Guide](docs/operations/distribution.md) for details.
 
-## Começar a desenvolver
+## Development setup
 
-O LearnVault está em desenvolvimento ativo. Para rodar a versão local, instale Rust 1.99, Node.js 24 e pnpm 11.28.5. Docker é opcional.
+Requirements:
+- **Rust:** 1.99+ (enforced by `rust-toolchain.toml`)
+- **Node.js:** 24+
+- **pnpm:** 11.28.5 (specified in `package.json`)
+
+Install workspace dependencies:
 
 ```sh
 pnpm install --frozen-lockfile
 ```
 
-Rode esse comando uma vez por checkout. Ele não roda sozinho dentro de `pnpm dev` nem de `pnpm dev:tauri`.
+### Running locally
 
-| Comando | O que abre |
+| Command | Description |
 | --- | --- |
-| `pnpm dev` | Servidor Rust e interface web em `http://localhost:5173` |
-| `pnpm dev:tauri` | Aplicativo desktop Tauri |
+| `pnpm dev` | Starts the Rust API server at `http://127.0.0.1:8090` and Vite dev server at `http://localhost:5173` |
+| `pnpm dev:tauri` | Launches the desktop application with hot reload |
+| `pnpm verify` | Runs all PR validation checks (Rust format/clippy/tests + Web checks + scripts) |
+| `pnpm verify --fast` | Runs fast checks skipping desktop bundles and security audits |
 
-`pnpm dev` sobe a API em `http://127.0.0.1:8090` e a interface web com recarga automática. Na primeira execução, entre com `admin`/`admin`, importe uma pasta de curso e troque a senha. `pnpm dev:tauri` abre o desktop offline, sem login e sem portas de rede.
+On your first web launch, sign in with default credentials `admin` / `admin`, import your course directories, and update your password.
 
-Antes de enviar uma mudança, rode:
+## Contributing
 
-```sh
-pnpm verify
-```
+We welcome contributions! Please review our [Contributing Guide](.github/CONTRIBUTING.md) and [Governance Policy](docs/governance/overview.md) before submitting pull requests.
 
-Para a instalação das ferramentas e o primeiro acesso passo a passo, consulte
-[Primeiros passos](docs/wiki/getting-started.md). Veja o [guia de
-contribuição](.github/CONTRIBUTING.md) para os checks, convenções de PR, segurança
-dos dados e configuração completa.
+1. Pick or open an Issue for proposed feature changes; use Discussions for design debates.
+2. Follow Conventional Commits in English (e.g., `feat(i18n): add language selector`).
+3. Never include proprietary course files, database binaries, or private media in commits or pull requests.
+4. Verify your branch with `pnpm verify` before opening a pull request.
 
-## Contribuir
+## Documentation
 
-1. Procure uma issue ou Discussion existente. Abra uma issue antes de propor mudança de comportamento; use Discussion quando a solução ainda estiver em debate.
-2. Faça uma alteração focada e teste o fluxo afetado. Para mudanças de interface, inclua uma captura de tela na pull request.
-3. Não envie cursos, credenciais, dados pessoais, bancos locais ou arquivos gerados.
-4. Abra uma pull request com o problema, a solução e os testes executados. Aguarde a revisão e os checks obrigatórios.
-
-O projeto usa `pnpm` para dependências do frontend e Conventional Commits para títulos e commits. Consulte [CONTRIBUTING.md](.github/CONTRIBUTING.md) antes de começar.
-
-## Mais informações
-
-- [Guia de início e uso](docs/wiki/getting-started.md)
-- [Documentação do projeto](docs/README.md)
-- [Arquitetura](docs/architecture/overview.md)
-- [Roadmap](docs/product/roadmap.md)
-- [Reportar vulnerabilidade](.github/SECURITY.md)
-- [Licença MIT](LICENSE)
+- [Documentation Index](docs/README.md)
+- [Architecture Overview](docs/architecture/overview.md)
+- [Governance & Guidelines](docs/governance/overview.md)
+- [Product Roadmap](docs/product/roadmap.md)
+- [Security Policy](.github/SECURITY.md)
+- [MIT License](LICENSE)

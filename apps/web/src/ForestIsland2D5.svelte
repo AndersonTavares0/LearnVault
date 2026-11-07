@@ -7,6 +7,7 @@
 	} from './forest-island';
 	import ForestTree2D5Svg from './ForestTree2D5Svg.svelte';
 	import type { ForestStats, ForestTree } from './forest';
+	import { tr } from './i18n.svelte';
 
 	let {
 		trees = [],
@@ -86,7 +87,7 @@
 	}
 </script>
 
-<div class="lv-island-card" role="region" aria-label="Ilha 2.5D do bosque">
+<div class="lv-island-card" role="region" aria-label={tr('2.5D grove island', 'Ilha 2.5D do bosque')}>
 	<div class="lv-island-sky">
 		<!-- Partículas atmosféricas suaves -->
 		<div class="lv-island-orb lv-island-orb--1" aria-hidden="true"></div>
@@ -99,7 +100,7 @@
 			fill="none"
 			xmlns="http://www.w3.org/2000/svg"
 			role="group"
-			aria-label="Ilha isométrica com {trees.length} árvores"
+			aria-label={tr(`Isometric island with ${trees.length} trees`, `Ilha isométrica com ${trees.length} árvores`)}
 		>
 			<defs>
 				<!-- Gradiente Falésia Esquerda (Sombra/Terra rochosa) -->
@@ -260,7 +261,7 @@
 						class:is-withered={!placed.tree.completed}
 						role="button"
 						tabindex="0"
-						aria-label="{placed.tree.stageName}, {placed.tree.minutes} minutos, {placed.tree.completed ? 'sadia' : 'seca'}"
+						aria-label="{placed.tree.stageName}, {placed.tree.minutes} {tr('minutes', 'minutos')}, {placed.tree.completed ? tr('healthy', 'sadia') : tr('withered', 'seca')}"
 						aria-pressed={isSelected}
 						onclick={() => handleTreeClick(placed.tree)}
 						onkeydown={(e) => handleKeydown(e, placed.tree)}
@@ -307,12 +308,12 @@
 			</g>
 		</svg>
 		{#if hiddenCount > 0}
-			<p class="lv-island-overflow">+{hiddenCount} árvores além da ilha — veja todas na Grade</p>
+			<p class="lv-island-overflow">{tr(`+${hiddenCount} more trees beyond the island — view all in Grid`, `+${hiddenCount} árvores além da ilha — veja todas na Grade`)}</p>
 		{/if}
 	</div>
 
 	<!-- 5. Barra Inferior de Métricas (Fiel ao App Forest) -->
-	<footer class="lv-island-footer" aria-label="Resumo do bosque">
+	<footer class="lv-island-footer" aria-label={tr('Grove summary', 'Resumo do bosque')}>
 		<div class="lv-island-footer__time">
 			<span class="lv-island-footer__time-value">{stats.totalMinutes}</span>
 			<span class="lv-island-footer__time-unit">mins</span>
@@ -320,9 +321,9 @@
 
 		<div class="lv-island-footer__badges">
 			<!-- Contador de Árvores Sadias com Emblema de Folha Verde -->
-			<div class="lv-island-badge lv-island-badge--healthy" title="{stats.healthyTrees} árvores sadias florescidas">
+			<div class="lv-island-badge lv-island-badge--healthy" title={tr(`${stats.healthyTrees} healthy blossomed trees`, `${stats.healthyTrees} árvores sadias florescidas`)}>
 				<span class="lv-island-badge__count">{stats.healthyTrees}</span>
-				<span class="visually-hidden">árvores sadias florescidas</span>
+				<span class="visually-hidden">{tr('healthy blossomed trees', 'árvores sadias florescidas')}</span>
 				<span class="lv-island-badge__icon" aria-hidden="true">
 					<svg viewBox="0 0 24 24" width="22" height="22" fill="none">
 						<circle cx="12" cy="12" r="10.5" fill="#2d6a3f" stroke="#52b788" stroke-width="1.5" />
@@ -336,9 +337,9 @@
 			</div>
 
 			<!-- Contador de Árvores Secas com Emblema de Folha Seca -->
-			<div class="lv-island-badge lv-island-badge--withered" title="{stats.witheredTrees} árvores secas">
+			<div class="lv-island-badge lv-island-badge--withered" title={tr(`${stats.witheredTrees} withered trees`, `${stats.witheredTrees} árvores secas`)}>
 				<span class="lv-island-badge__count">{stats.witheredTrees}</span>
-				<span class="visually-hidden">árvores secas</span>
+				<span class="visually-hidden">{tr('withered trees', 'árvores secas')}</span>
 				<span class="lv-island-badge__icon" aria-hidden="true">
 					<svg viewBox="0 0 24 24" width="22" height="22" fill="none">
 						<circle cx="12" cy="12" r="10.5" fill="#78350f" stroke="#b45309" stroke-width="1.5" />

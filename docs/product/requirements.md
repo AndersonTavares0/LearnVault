@@ -2,7 +2,7 @@
 
 **Para quem é:** produto, QA, engenharia e qualquer pessoa que precise citar um requisito em uma
 issue ou revisão. Se você é novo no projeto, leia primeiro
-[Home](../wiki/home.md) e [Roadmap](roadmap.md).
+[README](../../README.md) e [Roadmap](roadmap.md).
 
 **Como ler:** RF são requisitos funcionais, ou seja, o que o produto faz. RNF são requisitos não
 funcionais, ou seja, como ele deve se comportar. Os identificadores são estáveis e servem para
@@ -75,8 +75,7 @@ RF-11 também aparece na [distribuição](../operations/distribution.md).
   `fmt` e `clippy` sem avisos, e os passos do playbook de testes por tipo de mudança.
 - **RNF-08: Acessibilidade.** Navegação por teclado, foco visível, contraste, movimento reduzido e
   rótulos para leitores de tela.
-- **RNF-09: Idioma e documentação.** Produto e documentação editorial em pt-BR; o repositório é a
-  fonte canônica e a Wiki é uma superfície derivada de leitura.
+- **RNF-09: Idioma e documentação.** Documentação editorial e commits em inglês; o produto suporta internacionalização (i18n) em inglês (padrão) e pt-BR. O repositório é a fonte canônica.
 
 Fontes: RNF-01, RNF-03 e RNF-05 vêm da [visão de arquitetura](../architecture/overview.md), do ADR
 0001 e da [referência da API](../reference/api.md); RNF-02 vem dos riscos do plano da issue #69 e da

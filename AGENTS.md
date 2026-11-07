@@ -1,11 +1,10 @@
 # LearnVault agent instructions
 
-LearnVault organiza pastas de cursos que o usuário já possui em um espaço de estudo
-auto-hospedado, sem mover nem alterar os arquivos originais. O produto é pequeno,
-sustentável e autocontido: servidor Rust (`crates/server`, Axum, SQLite), SPA Svelte
-(`apps/web`), núcleo de domínio compartilhado (`crates/core`) e aplicativo desktop
-offline Tauri 2 (`crates/desktop`). Docker/Podman são adaptadores opcionais de deploy,
-não requisitos de runtime.
+LearnVault organizes course folders that the user already owns into a self-hosted study space,
+without moving or altering the original files. The product is small, sustainable, and self-contained:
+Rust server (`crates/server`, Axum, SQLite), Svelte SPA (`apps/web`), shared core domain
+(`crates/core`), and offline desktop application Tauri 2 (`crates/desktop`). Docker/Podman are
+optional deployment adapters, not runtime requirements.
 
 ## Mandatory rule for every agent
 
@@ -23,33 +22,33 @@ OpenCode loads this file automatically. Project-specific reviewer profiles live 
 
 ```sh
 pnpm install --frozen-lockfile   # once per checkout
-pnpm dev                         # API Rust em http://127.0.0.1:8090 + SPA com recarga
-pnpm dev:tauri                   # aplicativo desktop (Tauri) durante o desenvolvimento
-pnpm verify                      # checks de PR (SPA + Rust + desktop); --fast pula builds e audit
-pnpm run check                   # lints/types da SPA
-pnpm run test:scripts            # node --test scripts/*.test.mjs (roda na CI em todo PR)
-pnpm run build / build:desktop   # builds da SPA e do bundle desktop
-pnpm audit --audit-level=low     # auditoria de dependências
-cargo fmt --all -- --check       # formatação Rust
+pnpm dev                         # Rust API at http://127.0.0.1:8090 + live reload SPA
+pnpm dev:tauri                   # desktop application (Tauri) during development
+pnpm verify                      # PR checks (SPA + Rust + desktop); --fast skips builds and audit
+pnpm run check                   # SPA linting and type checking
+pnpm run test:scripts            # node --test scripts/*.test.mjs (runs in CI on every PR)
+pnpm run build / build:desktop   # SPA and desktop bundle builds
+pnpm audit --audit-level=low     # dependency audit
+cargo fmt --all -- --check       # Rust code formatting
 cargo clippy --all-targets -- -D warnings
 cargo test --all
 ```
 
-A versão do Rust é garantida por `rust-toolchain.toml`; Node.js 24 e pnpm 11.28.5 vêm de
-`packageManager` em `package.json`. Docker é opcional.
+Rust version is pinned by `rust-toolchain.toml`; Node.js 24 and pnpm 11.28.5 come from
+`packageManager` in `package.json`. Docker is optional.
 
 ## Conventions
 
-- Documentação, Wiki e textos editoriais em pt-BR; Conventional Commits com prefixo em
-  inglês e descrição em pt-BR (ex.: `docs: ajustar README`).
-- **Uso obrigatório do Ponytail:** em todas as tarefas de desenvolvimento do LearnVault,
-  utilize sempre o Ponytail para escrever, modificar e refatorar código. Não utilize outros
-  métodos de edição quando o Ponytail estiver disponível. Mantenha o código limpo, consistente
-  com a arquitetura existente e focado em edições cirúrgicas, sem refatorações desnecessárias.
-- A biblioteca de cursos é somente leitura: nenhuma mudança pode escrever, mover ou
-  copiar os arquivos de origem.
-- Nunca inclua segredos, dados de cursos, bancos de dados ou mídia gerada em commits,
-  logs ou prompts. Testes usam diretórios temporários e fixtures sintéticas.
+- Documentation, code comments, pull requests, and commit messages are in English (`en`).
+  Conventional Commits format is required (e.g., `feat(i18n): set English as project default`).
+- The application supports internationalization (i18n) with English (`en`) as the default language
+  and Brazilian Portuguese (`pt-BR`) fully supported.
+- **Mandatory use of Ponytail:** on all LearnVault development tasks, always use Ponytail to write,
+  modify, and refactor code. Keep code clean, consistent with existing architecture, and focused on
+  surgical changes without unnecessary refactorings or bloat.
+- The course library is strictly read-only: no change may write, move, or copy original course files.
+- Never include secrets, personal course data, database files, or generated media in commits,
+  logs, or prompts. Tests use temporary directories and synthetic fixtures.
 
 ## Multi-agent collaboration
 

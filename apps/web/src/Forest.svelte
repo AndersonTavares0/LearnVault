@@ -15,6 +15,7 @@
 	import ForestNursery from './ForestNursery.svelte';
 	import ForestTreeSvg from './ForestTreeSvg.svelte';
 	import { readSessionSeeds } from './forest-catalog';
+	import { tr } from './i18n.svelte';
 	import { nursery } from './nursery-store';
 	import { formatClock, readFocusSessions, type FocusSession } from './pomodoro';
 	import { focusSync, pomodoro, setMode, startTimer } from './pomodoro-store';
@@ -118,8 +119,8 @@
 <section class="lv-panel lv-forest" aria-labelledby="forest-heading">
 	<div class="lv-panel__head">
 		<div class="lv-forest__head-title">
-			<h2 id="forest-heading">Floresta de Estudos</h2>
-			<div class="lv-forest__nav-tabs" role="group" aria-label="Visualização da floresta">
+			<h2 id="forest-heading">{tr('Study Forest', 'Floresta de Estudos')}</h2>
+			<div class="lv-forest__nav-tabs" role="group" aria-label={tr('Forest view', 'Visualização da floresta')}>
 				<button
 					type="button"
 					class="lv-forest__nav-tab"
@@ -127,7 +128,7 @@
 					aria-pressed={activeTab === 'forest'}
 					onclick={() => (activeTab = 'forest')}
 				>
-					Meu Bosque
+					{tr('My Grove', 'Meu Bosque')}
 					<span class="lv-count">{visibleTrees.length}</span>
 				</button>
 				<button
@@ -137,8 +138,8 @@
 					aria-pressed={activeTab === 'nursery'}
 					onclick={() => (activeTab = 'nursery')}
 				>
-					Viveiro
-					<span class="lv-forest__drops-pill">{$nursery.dropsBalance} gotas</span>
+					{tr('Nursery', 'Viveiro')}
+					<span class="lv-forest__drops-pill">{$nursery.dropsBalance} {tr('drops', 'gotas')}</span>
 				</button>
 			</div>
 		</div>
@@ -146,7 +147,7 @@
 		{#if activeTab === 'forest'}
 			<div class="lv-forest__toolbar">
 				<!-- Segmented Control de Período -->
-				<div class="lv-forest__filters" role="group" aria-label="Período da floresta">
+				<div class="lv-forest__filters" role="group" aria-label={tr('Forest period', 'Período da floresta')}>
 					<button
 						type="button"
 						class="lv-forest__filter-btn"
@@ -154,7 +155,7 @@
 						aria-pressed={filter === 'today'}
 						onclick={() => setFilter('today')}
 					>
-						Hoje
+						{tr('Today', 'Hoje')}
 					</button>
 					<button
 						type="button"
@@ -163,7 +164,7 @@
 						aria-pressed={filter === 'week'}
 						onclick={() => setFilter('week')}
 					>
-						Esta semana
+						{tr('This week', 'Esta semana')}
 					</button>
 					<button
 						type="button"
@@ -172,7 +173,7 @@
 						aria-pressed={filter === 'month'}
 						onclick={() => setFilter('month')}
 					>
-						Este mês
+						{tr('This month', 'Este mês')}
 					</button>
 					<button
 						type="button"
@@ -181,24 +182,24 @@
 						aria-pressed={filter === 'all'}
 						onclick={() => setFilter('all')}
 					>
-						Tudo
+						{tr('All time', 'Tudo')}
 					</button>
 				</div>
 
 				<!-- Toggle de Visualização: Ilha 2.5D vs Grade -->
-				<div class="lv-forest__view-toggle" role="group" aria-label="Modo de visualização">
+				<div class="lv-forest__view-toggle" role="group" aria-label={tr('View mode', 'Modo de visualização')}>
 					<button
 						type="button"
 						class="lv-forest__filter-btn"
 						class:is-active={viewMode === 'island'}
 						aria-pressed={viewMode === 'island'}
 						onclick={() => (viewMode = 'island')}
-						title="Vista isométrica 2.5D em ilha flutuante"
+						title={tr('2.5D isometric floating island view', 'Vista isométrica 2.5D em ilha flutuante')}
 					>
 						<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
 							<path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
 						</svg>
-						Ilha 2.5D
+						{tr('2.5D Island', 'Ilha 2.5D')}
 					</button>
 					<button
 						type="button"
@@ -206,7 +207,7 @@
 						class:is-active={viewMode === 'grid'}
 						aria-pressed={viewMode === 'grid'}
 						onclick={() => (viewMode = 'grid')}
-						title="Vista em grade de catálogo"
+						title={tr('Catalog grid view', 'Vista em grade de catálogo')}
 					>
 						<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
 							<rect x="3" y="3" width="7" height="7" rx="1" />
@@ -214,7 +215,7 @@
 							<rect x="14" y="14" width="7" height="7" rx="1" />
 							<rect x="3" y="14" width="7" height="7" rx="1" />
 						</svg>
-						Grade
+						{tr('Grid', 'Grade')}
 					</button>
 				</div>
 			</div>
@@ -229,19 +230,19 @@
 			<div class="lv-forest__stats">
 				<div>
 					<strong class="is-healthy">{stats.healthyTrees}</strong>
-					<span>Árvores sadias</span>
+					<span>{tr('Healthy trees', 'Árvores sadias')}</span>
 				</div>
 				<div>
 					<strong class="is-withered">{stats.witheredTrees}</strong>
-					<span>Árvores secas</span>
+					<span>{tr('Withered trees', 'Árvores secas')}</span>
 				</div>
 				<div>
 					<strong>{stats.successRate}%</strong>
-					<span>Taxa de florescimento</span>
+					<span>{tr('Blossoming rate', 'Taxa de florescimento')}</span>
 				</div>
 				<div>
 					<strong class="is-time">{stats.totalMinutes} min</strong>
-					<span>Tempo dedicado</span>
+					<span>{tr('Dedicated time', 'Tempo dedicado')}</span>
 				</div>
 			</div>
 		{/if}
@@ -251,10 +252,10 @@
 			class="lv-forest__canvas lv-forest__canvas--biome-{stats.ecosystem.level}"
 			class:is-island-mode={viewMode === 'island'}
 			role="region"
-			aria-label="Visualização do bosque"
+			aria-label={tr('Grove visualization', 'Visualização do bosque')}
 		>
 		{#if loading}
-			<p class="lv-forest__loading" aria-live="polite">Cultivando sua floresta…</p>
+			<p class="lv-forest__loading" aria-live="polite">{tr('Growing your forest…', 'Cultivando sua floresta…')}</p>
 		{:else if visibleTrees.length === 0}
 			<div class="lv-forest__empty">
 				<div class="lv-forest__empty-icon" aria-hidden="true">
@@ -268,21 +269,24 @@
 						/>
 					</svg>
 				</div>
-				<p class="lv-forest__empty-title">Nenhuma árvore cultivada neste período</p>
+				<p class="lv-forest__empty-title">{tr('No trees grown in this period', 'Nenhuma árvore cultivada neste período')}</p>
 				<span class="lv-forest__empty-desc">
-					Cada ciclo de foco concluído floresce uma nova árvore. Inicie uma sessão de foco no Pomodoro para plantar sua primeira muda!
+					{tr(
+						'Each completed focus cycle blossoms a new tree. Start a focus session in the Pomodoro timer to plant your first sapling!',
+						'Cada ciclo de foco concluído floresce uma nova árvore. Inicie uma sessão de foco no Pomodoro para plantar sua primeira muda!'
+					)}
 				</span>
 				{#if !isRunning}
 					<button class="lv-btn lv-btn--primary lv-forest__cta-btn" type="button" onclick={handleStartFocus}>
 						<svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16">
 							<path d="M8 5v14l11-7z" fill="currentColor" />
 						</svg>
-						Iniciar foco no Pomodoro
+						{tr('Start focus in Pomodoro', 'Iniciar foco no Pomodoro')}
 					</button>
 				{:else}
 					<p class="lv-forest__active-cue">
 						<span class="lv-forest__active-pulse" aria-hidden="true"></span>
-						Ciclo em andamento no Pomodoro ({clock}) — sua muda está crescendo!
+						{tr(`Cycle running in Pomodoro (${clock}) — your sapling is growing!`, `Ciclo em andamento no Pomodoro (${clock}) — sua muda está crescendo!`)}
 					</p>
 				{/if}
 			</div>
@@ -312,7 +316,7 @@
 				<ForestEcosystemBand ecosystem={stats.ecosystem} healthyTrees={stats.healthyTrees} />
 
 				<!-- Grade de árvores (ESTÁVEL: NUNCA SE MOVE NO HOVER) -->
-				<ul class="lv-forest__grid" role="list" aria-label="Árvores cultivadas">
+				<ul class="lv-forest__grid" role="list" aria-label={tr('Grown trees', 'Árvores cultivadas')}>
 					{#each visibleTrees as tree (tree.sessionId)}
 						<li class="lv-forest__tree-wrapper">
 							<button
@@ -330,7 +334,7 @@
 								class:is-stage-withered={tree.stage === 'withered'}
 								aria-pressed={selectedTree?.sessionId === tree.sessionId}
 								aria-label={tree.label}
-								title="{tree.stageName} · {tree.minutes} min · {tree.completed ? 'Sadia' : 'Seca'}"
+								title="{tree.stageName} · {tree.minutes} min · {tree.completed ? tr('Healthy', 'Sadia') : tr('Withered', 'Seca')}"
 								onclick={() => (selectedTree = selectedTree?.sessionId === tree.sessionId ? null : tree)}
 							>
 								<div class="lv-forest__tree-visual" aria-hidden="true">

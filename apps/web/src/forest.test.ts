@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { setLocale } from './i18n.svelte';
 import {
 	buildForest,
 	calculateForestStats,
@@ -11,6 +12,8 @@ import {
 import type { FocusSession } from './pomodoro';
 
 describe('forest logic', () => {
+	beforeEach(() => setLocale('pt-BR'));
+	afterEach(() => setLocale('en'));
 	it('derives tree stages according to focus duration and completion', () => {
 		expect(deriveTreeStage(600, false)).toBe('withered');
 		expect(deriveTreeStage(1500, false)).toBe('withered');
@@ -24,7 +27,42 @@ describe('forest logic', () => {
 		expect(deriveTreeStage(4500, true)).toBe('ancient'); // 75 min
 	});
 
-	it('formats tree names and accessible labels', () => {
+	it('formats tree names and accessible labels in English and pt-BR', () => {
+		setLocale('en');
+		expect(treeStageName('sapling')).toBe('Sapling');
+		expect(treeStageName('oak')).toBe('Leafy Oak');
+		expect(treeStageName('pine')).toBe('Noble Pine');
+		expect(treeStageName('sakura')).toBe('Blooming Cherry');
+		expect(treeStageName('willow')).toBe('Weeping Willow');
+		expect(treeStageName('ginkgo')).toBe('Golden Ginkgo');
+		expect(treeStageName('ancient')).toBe('Ancient Tree');
+		expect(treeStageName('withered')).toBe('Withered Tree');
+
+		const enLabel = formatTreeLabel({
+			sessionId: '1',
+			stage: 'oak',
+			stageName: 'Leafy Oak',
+			minutes: 25,
+			completed: true,
+			timestamp: 1761926400,
+			dateIso: '2025-10-31'
+		});
+		expect(enLabel).toContain('Leafy Oak');
+		expect(enLabel).toContain('25 min of focus cultivated');
+
+		const enWitheredLabel = formatTreeLabel({
+			sessionId: '2',
+			stage: 'withered',
+			stageName: 'Withered Tree',
+			minutes: 10,
+			completed: false,
+			timestamp: 1761926400,
+			dateIso: '2025-10-31'
+		});
+		expect(enWitheredLabel).toContain('Withered Tree');
+		expect(enWitheredLabel).toContain('interrupted');
+
+		setLocale('pt-BR');
 		expect(treeStageName('sapling')).toBe('Brotinho');
 		expect(treeStageName('oak')).toBe('Carvalho Frondoso');
 		expect(treeStageName('pine')).toBe('Pinheiro Nobre');
@@ -57,6 +95,7 @@ describe('forest logic', () => {
 		});
 		expect(witheredLabel).toContain('Árvore Seca');
 		expect(witheredLabel).toContain('interrompida');
+		setLocale('en');
 	});
 
 	it('builds forest only from focus sessions and filters out breaks', () => {

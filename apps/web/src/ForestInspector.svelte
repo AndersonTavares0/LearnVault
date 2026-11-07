@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { ForestTree, TreeStage } from './forest';
 	import ForestTreeSvg from './ForestTreeSvg.svelte';
+	import { getLocale, tr } from './i18n.svelte';
 
 	let {
 		tree,
@@ -13,29 +14,29 @@
 	function stageDescription(stage: TreeStage): string {
 		switch (stage) {
 			case 'sapling':
-				return 'Ciclo rápido de foco concluído (até 20 minutos).';
+				return tr('Quick focus cycle completed (up to 20 minutes).', 'Ciclo rápido de foco concluído (até 20 minutos).');
 			case 'oak':
-				return 'Ciclo padrão de foco concluído (21 a 40 minutos).';
+				return tr('Standard focus cycle completed (21 to 40 minutes).', 'Ciclo padrão de foco concluído (21 a 40 minutos).');
 			case 'pine':
-				return 'Ciclo estendido de foco concluído (41 a 60 minutos).';
+				return tr('Extended focus cycle completed (41 to 60 minutes).', 'Ciclo estendido de foco concluído (41 a 60 minutos).');
 			case 'sakura':
-				return 'Cerejeira cultivada com dedicação e harmonia visual.';
+				return tr('Cherry blossom grown with dedication and visual harmony.', 'Cerejeira cultivada com dedicação e harmonia visual.');
 			case 'willow':
-				return 'Salgueiro cultivado com resiliência e paciência nos estudos.';
+				return tr('Willow grown with resilience and patience in study.', 'Salgueiro cultivado com resiliência e paciência nos estudos.');
 			case 'ginkgo':
-				return 'Ginkgo dourado cultivado para memorização profunda.';
+				return tr('Golden ginkgo grown for deep memorization.', 'Ginkgo dourado cultivado para memorização profunda.');
 			case 'ancient':
-				return 'Ciclo de foco profundo e imersão (+60 minutos).';
+				return tr('Deep focus and immersion cycle (+60 minutes).', 'Ciclo de foco profundo e imersão (+60 minutos).');
 			case 'withered':
-				return 'Ciclo interrompido ou abandonado antes do término.';
+				return tr('Cycle interrupted or abandoned before completion.', 'Ciclo interrompido ou abandonado antes do término.');
 			default:
-				return 'Árvore cultivada na floresta de estudos.';
+				return tr('Tree grown in the study forest.', 'Árvore cultivada na floresta de estudos.');
 		}
 	}
 
 	function formatDateTime(timestamp: number): string {
 		try {
-			return new Date(timestamp * 1000).toLocaleString('pt-BR', {
+			return new Date(timestamp * 1000).toLocaleString(getLocale(), {
 				day: '2-digit',
 				month: 'short',
 				year: 'numeric',
@@ -61,14 +62,14 @@
 					class:is-healthy={tree.completed}
 					class:is-withered={!tree.completed}
 				>
-					{tree.completed ? 'Sadia' : 'Seca'}
+					{tree.completed ? tr('Healthy', 'Sadia') : tr('Withered', 'Seca')}
 				</span>
-				<span class="lv-forest__inspector-time">{tree.minutes} min de foco</span>
+				<span class="lv-forest__inspector-time">{tr(`${tree.minutes} min of focus`, `${tree.minutes} min de foco`)}</span>
 			</div>
 			<p class="lv-forest__inspector-desc">
 				{stageDescription(tree.stage)}
 				{#if tree.timestamp}
-					<span class="lv-forest__inspector-date">· Cultivada em {formatDateTime(tree.timestamp)}</span>
+					<span class="lv-forest__inspector-date">· {tr('Grown on', 'Cultivada em')} {formatDateTime(tree.timestamp)}</span>
 				{/if}
 			</p>
 		</div>
@@ -76,7 +77,7 @@
 	<button
 		type="button"
 		class="lv-forest__inspector-close"
-		aria-label="Fechar detalhes da árvore"
+		aria-label={tr('Close tree details', 'Fechar detalhes da árvore')}
 		onclick={onclose}
 	>
 		✕

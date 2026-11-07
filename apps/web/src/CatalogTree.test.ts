@@ -1,5 +1,6 @@
 import { render } from 'svelte/server';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { setLocale } from './i18n.svelte';
 import CatalogTree from './CatalogTree.svelte';
 import type { CatalogNode, FileEntry } from './transport';
 
@@ -12,6 +13,15 @@ function node(role: string, title: string, path: string, children: CatalogNode[]
 }
 
 describe('catalog tree rendering', () => {
+	beforeEach(() => setLocale('pt-BR'));
+	afterEach(() => setLocale('en'));
+
+	it('renders lessons with English labels when locale is English', () => {
+		setLocale('en');
+		const lesson = node('lesson', 'Lesson 1', 'course/lesson-1', [], [file('a.mp4', 'media'), file('b.pdf', 'material')]);
+		const { body } = render(CatalogTree, { props: { nodes: [lesson], courseId: 'course-1' } });
+		expect(body).toContain('1 video · 1 material');
+	});
 	it('renders a lesson as a real link to the player inside its course with counts', () => {
 		const lesson = node('lesson', 'Aula 1', 'curso/aula-1', [], [file('a.mp4', 'media'), file('b.pdf', 'material'), file('b.srt', 'subtitle')]);
 		const { body } = render(CatalogTree, { props: { nodes: [lesson], courseId: 'course-1' } });

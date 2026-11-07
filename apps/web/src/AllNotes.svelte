@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { getLocale, tr } from './i18n.svelte';
 	import { formatClock } from './pomodoro';
 	import { findLessonLocation, href } from './router';
 	import { transport, type Catalog, type StudyNote } from './transport';
@@ -17,8 +18,8 @@
 	const enrichedNotes = $derived(
 		notes.map((note) => {
 			const location = findLessonLocation(catalog, note.mediaId);
-			const courseTitle = location?.courseTitle ?? 'Curso';
-			const lessonTitle = location?.lesson.title ?? note.relativePath ?? 'Aula';
+			const courseTitle = location?.courseTitle ?? tr('Course', 'Curso');
+			const lessonTitle = location?.lesson.title ?? note.relativePath ?? tr('Lesson', 'Aula');
 			const courseId = location?.courseId ?? null;
 			const lessonPath = location?.lesson.path ?? null;
 			const targetHref = courseId && lessonPath ? href('course', courseId, lessonPath, note.positionSeconds) : null;
@@ -51,7 +52,7 @@
 		try {
 			notes = await transport.listNotes();
 		} catch (cause) {
-			error = cause instanceof Error ? cause.message : 'Não foi possível carregar as anotações.';
+			error = cause instanceof Error ? cause.message : tr('Could not load notes.', 'Não foi possível carregar as anotações.');
 		} finally {
 			loading = false;
 		}
@@ -77,7 +78,7 @@
 			editingId = null;
 			editContent = '';
 		} catch (cause) {
-			error = cause instanceof Error ? cause.message : 'Não foi possível atualizar a anotação.';
+			error = cause instanceof Error ? cause.message : tr('Could not update note.', 'Não foi possível atualizar a anotação.');
 		} finally {
 			saving = false;
 		}
@@ -90,7 +91,7 @@
 			await transport.deleteNote(noteId);
 			notes = notes.filter((n) => n.noteId !== noteId);
 		} catch (cause) {
-			error = cause instanceof Error ? cause.message : 'Não foi possível excluir a anotação.';
+			error = cause instanceof Error ? cause.message : tr('Could not delete note.', 'Não foi possível excluir a anotação.');
 		} finally {
 			saving = false;
 		}
@@ -98,7 +99,7 @@
 
 	function formatDate(timestampSeconds: number): string {
 		if (!timestampSeconds) return '';
-		return new Date(timestampSeconds * 1000).toLocaleDateString('pt-BR', {
+		return new Date(timestampSeconds * 1000).toLocaleDateString(getLocale(), {
 			day: '2-digit',
 			month: 'short',
 			year: 'numeric'
@@ -110,18 +111,18 @@
 	});
 </script>
 
-<div class="lv-all-notes" role="region" aria-label="Todas as anotações">
+<div class="lv-all-notes" role="region" aria-label={tr('All notes', 'Todas as anotações')}>
 	<header class="lv-all-notes__header">
 		<div>
-			<h1 class="lv-all-notes__title">Minhas Anotações</h1>
-			<p class="lv-all-notes__subtitle">Anotações salvas durante suas aulas em todos os cursos.</p>
+			<h1 class="lv-all-notes__title">{tr('My Notes', 'Minhas Anotações')}</h1>
+			<p class="lv-all-notes__subtitle">{tr('Notes saved during your lessons across all courses.', 'Anotações salvas durante suas aulas em todos os cursos.')}</p>
 		</div>
 		<div class="lv-all-notes__search">
 			<input
 				class="lvui-input"
 				type="search"
-				placeholder="Buscar em anotações, cursos ou aulas…"
-				aria-label="Buscar anotações"
+				placeholder={tr('Search in notes, courses, or lessons…', 'Buscar em anotações, cursos ou aulas…')}
+				aria-label={tr('Search notes', 'Buscar anotações')}
 				bind:value={query}
 			/>
 		</div>
@@ -132,14 +133,14 @@
 	{/if}
 
 	{#if loading}
-		<p class="lv-all-notes__loading" aria-live="polite">Carregando suas anotações…</p>
+		<p class="lv-all-notes__loading" aria-live="polite">{tr('Loading your notes…', 'Carregando suas anotações…')}</p>
 	{:else if filteredNotes.length === 0}
 		<div class="lv-all-notes__empty">
 			{#if query.trim()}
-				<p>Nenhuma anotação encontrada para "{query}".</p>
+				<p>{tr(`No notes found for "${query}".`, `Nenhuma anotação encontrada para "${query}".`)}</p>
 			{:else}
-				<p>Você ainda não possui anotações registradas.</p>
-				<span>Assista a uma aula no player e adicione anotações vinculadas aos momentos importantes do vídeo.</span>
+				<p>{tr('You have not recorded any notes yet.', 'Você ainda não possui anotações registradas.')}</p>
+				<span>{tr('Watch a lesson in the player and add notes linked to key moments in the video.', 'Assista a uma aula no player e adicione anotações vinculadas aos momentos importantes do vídeo.')}</span>
 			{/if}
 		</div>
 	{:else}
@@ -153,7 +154,7 @@
 							<span class="lv-all-notes__lesson">{note.lessonTitle}</span>
 						</div>
 						<div class="lv-all-notes__card-meta">
-							<span class="lv-all-notes__timestamp" title="Posição no vídeo">{formatClock(note.positionSeconds)}</span>
+							<span class="lv-all-notes__timestamp" title={tr('Video timestamp', 'Posição no vídeo')}>{formatClock(note.positionSeconds)}</span>
 							<span class="lv-all-notes__date">{formatDate(note.updatedAt || note.createdAt)}</span>
 						</div>
 					</div>
@@ -163,7 +164,7 @@
 							<textarea
 								class="lvui-input lv-all-notes__textarea"
 								rows="3"
-								aria-label="Editar anotação"
+								aria-label={tr('Edit note', 'Editar anotação')}
 								bind:value={editContent}
 								disabled={saving}
 							></textarea>
@@ -174,7 +175,7 @@
 									disabled={saving || !editContent.trim()}
 									onclick={() => saveEdit(note.noteId)}
 								>
-									Salvar
+									{tr('Save', 'Salvar')}
 								</button>
 								<button
 									class="lvui-btn lvui-btn-sm"
@@ -182,7 +183,7 @@
 									disabled={saving}
 									onclick={cancelEdit}
 								>
-									Cancelar
+									{tr('Cancel', 'Cancelar')}
 								</button>
 							</div>
 						</div>
@@ -195,9 +196,9 @@
 							<a
 								class="lvui-btn lvui-btn-sm lvui-btn-primary"
 								href={note.targetHref}
-								title="Abrir aula e posicionar player nesta anotação"
+								title={tr('Open lesson and seek player to this note', 'Abrir aula e posicionar player nesta anotação')}
 							>
-								Ir para a aula ({formatClock(note.positionSeconds)})
+								{tr(`Go to lesson (${formatClock(note.positionSeconds)})`, `Ir para a aula (${formatClock(note.positionSeconds)})`)}
 							</a>
 						{/if}
 						<div class="lv-all-notes__card-buttons">
@@ -206,17 +207,17 @@
 									class="lvui-btn lvui-btn-sm"
 									type="button"
 									onclick={() => startEdit(note)}
-									aria-label="Editar anotação"
+									aria-label={tr('Edit note', 'Editar anotação')}
 								>
-									Editar
+									{tr('Edit', 'Editar')}
 								</button>
 								<button
 									class="lvui-btn lvui-btn-sm lvui-btn-danger"
 									type="button"
 									onclick={() => deleteNote(note.noteId)}
-									aria-label="Excluir anotação"
+									aria-label={tr('Delete note', 'Excluir anotação')}
 								>
-									Excluir
+									{tr('Delete', 'Excluir')}
 								</button>
 							{/if}
 						</div>
