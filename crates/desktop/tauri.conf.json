@@ -25,6 +25,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": "v1Compatible",
     "targets": ["nsis"],
     "icon": ["icons/icon.png", "icons/icon.ico"],
     "windows": {
@@ -42,7 +43,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM4QTA1RDVDNzY4MTQ1NTQKUldSVVJZRjJYRjJnT0VwZG12RE9PdlpyRE04c1JuTUVNbHh1TEU1ZUprclVVZXYrWTh6TDV4Q1oK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNEREJGRDk1RkFEOEUzOTQKUldTVTQ5ajZsZjNiUFVoM2YrTkd1VW16VkkvSUZaMmZjcUY3Zmw0clZ3blRwUVd5a052M0pFcWYK",
       "endpoints": [
         "https://github.com/AndersonTavares0/LearnVault/releases/latest/download/latest.json"
       ]
