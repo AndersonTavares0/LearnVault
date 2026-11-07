@@ -146,6 +146,11 @@ fn windows_bundle_is_nsis_per_user_with_pt_br_and_english() {
         Some(true),
         "o bundle precisa estar ativo para gerar o instalador"
     );
+    assert_eq!(
+        config["bundle"]["createUpdaterArtifacts"].as_str(),
+        Some("v1Compatible"),
+        "o bundle precisa ativar createUpdaterArtifacts para gerar .nsis.zip e .sig"
+    );
     let targets = config["bundle"]["targets"]
         .as_array()
         .expect("o bundle precisa declarar targets");

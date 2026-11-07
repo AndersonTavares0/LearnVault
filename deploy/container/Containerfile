@@ -21,6 +21,8 @@ WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
 COPY --from=web-build /src/crates/server/web/build ./crates/server/web/build
+ARG LEARNVAULT_BUILD_VERSION=""
+ENV LEARNVAULT_BUILD_VERSION=${LEARNVAULT_BUILD_VERSION}
 RUN cargo build --release --locked --package learnvault-server
 
 FROM alpine:3.24

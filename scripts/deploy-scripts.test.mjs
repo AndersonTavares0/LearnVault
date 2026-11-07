@@ -59,10 +59,15 @@ test('release workflow mandates signed Windows updater assets and latest.json', 
     assert.ok(existsSync(releaseWfPath), 'release.yml deve existir');
     const content = readFileSync(releaseWfPath, 'utf8');
     assert.match(content, /TAURI_SIGNING_PRIVATE_KEY/, 'deve exigir a chave de assinatura');
+    assert.match(content, /createUpdaterArtifacts\s*=\s*"v1Compatible"/, 'deve habilitar createUpdaterArtifacts v1Compatible no release');
     assert.match(content, /learnvault-windows-\$\{RELEASE_TAG\}\.nsis\.zip/, 'deve incluir o bundle nsis.zip nos esperados');
     assert.match(content, /learnvault-windows-\$\{RELEASE_TAG\}\.nsis\.zip\.sig/, 'deve incluir a assinatura .sig nos esperados');
     assert.match(content, /latest\.json/, 'deve incluir latest.json nos esperados');
     assert.match(content, /windows-x86_64-nsis/, 'manifesto latest.json deve incluir o alvo windows-x86_64-nsis');
     assert.match(content, /is_draft/, 'deve propagar is_draft para publicação atômica');
     assert.match(content, /--draft=false/, 'deve publicar release apenas após upload e validação completa');
+    assert.match(content, /docker\/setup-buildx-action@[0-9a-f]{40}/, 'setup-buildx-action deve usar commit SHA completo');
+    assert.match(content, /docker\/login-action@[0-9a-f]{40}/, 'login-action deve usar commit SHA completo');
+    assert.match(content, /docker\/metadata-action@[0-9a-f]{40}/, 'metadata-action deve usar commit SHA completo');
+    assert.match(content, /docker\/build-push-action@[0-9a-f]{40}/, 'build-push-action deve usar commit SHA completo');
 });

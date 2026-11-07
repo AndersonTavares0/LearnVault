@@ -42,13 +42,16 @@ a seção **Contribuidores** apareceu uma única vez.
 
 ## Convenção de nomes de assets
 
-Cada release publica exatamente quatro arquivos, sempre com os mesmos nomes:
+Cada release publica exatamente sete arquivos na página de releases do GitHub, além da imagem OCI no GHCR (`ghcr.io/andersontavares0/learnvault`):
 
 | Asset | Nome |
 | --- | --- |
 | Servidor Linux, x86-64 | `learnvault-linux-amd64.tar.gz` |
 | Servidor Linux, ARM64 | `learnvault-linux-arm64.tar.gz` |
-| Instalador Windows | `learnvault-windows-vMAJOR.MINOR.PATCH.exe` |
+| Instalador Windows (NSIS) | `learnvault-windows-vMAJOR.MINOR.PATCH.exe` |
+| Bundle do Updater Windows | `learnvault-windows-vMAJOR.MINOR.PATCH.nsis.zip` |
+| Assinatura Ed25519 do Updater | `learnvault-windows-vMAJOR.MINOR.PATCH.nsis.zip.sig` |
+| Manifesto do Updater Tauri 2 | `latest.json` |
 | Checksums SHA-256 | `SHA256SUMS` |
 
 Regras que valem para qualquer ativo novo:
