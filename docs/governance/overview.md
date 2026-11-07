@@ -1,202 +1,142 @@
-# Governança do repositório
+# Repository Governance
 
-**Para quem é:** qualquer pessoa que abra issue, pull request, release ou mexa na CI. Se você só
-quer rodar o projeto, comece pelo [README](../../README.md).
+**Target audience:** anyone opening an issue, pull request, release, or modifying CI.
+If you just want to run the project, start with the [README](../../README.md).
 
-**Resumo:** o repositório usa GitHub Flow. Mudanças de comportamento começam em uma issue ou
-Discussion, todo código entra por branch e pull request, e `main` só recebe squash merge depois dos
-checks e da revisão.
+**Summary:** LearnVault follows GitHub Flow. Feature changes start in an issue or Discussion,
+all code enters via topic branches and pull requests, and `main` receives squash merges only
+after all checks and reviews pass.
 
-## Fluxo de contribuição
+## Contribution Workflow
 
-1. Abra uma Discussion quando o design ainda tiver dúvida ou alternativas.
-2. Abra uma issue para uma feature ou mudança de comportamento.
-3. Para typo, dependência ou ajuste simples de CI, a issue é opcional.
-4. Crie uma branch focada a partir de `main`.
-5. Abra uma pull request usando o template do repositório.
-6. Passe pelos checks obrigatórios e obtenha a revisão necessária.
-7. Resolva as conversas e faça squash merge (um único commit) pelo GitHub.
+1. Open a Discussion when design questions or alternative solutions need consensus.
+2. Open an issue for a feature, bug report, or behavioral change.
+3. For typos, routine dependency bumps, or simple CI fixes, an issue is optional.
+4. Create a focused topic branch from `main`.
+5. Open a pull request using the repository template.
+6. Pass all required automated checks and obtain needed code review.
+7. Resolve all review discussions and squash-merge (single commit) via GitHub.
 
 ```text
-Discussion (se necessário) → issue (quando necessário) → branch → PR → revisão → squash merge
+Discussion (if needed) → Issue (when needed) → Branch → PR → Review → Squash Merge
 ```
 
-Push direto, force-push e exclusão de branch em `main` não são permitidos. O GitHub aplica a
-proteção da branch; este documento registra a regra do projeto.
+Direct pushes, force pushes, and branch deletions on `main` are strictly disallowed.
+GitHub enforces branch protection; this document records the project policy.
 
-Forks não fazem parte do fluxo atual. Quem tem permissão de escrita trabalha em branches neste
-repositório. O `.github/CODEOWNERS` indica ownership, mas não é uma aprovação obrigatória para
-merge. Toda issue precisa de uma pessoa responsável no `assignee`.
+Forks are not part of the standard maintainer flow. Contributors with write access work on topic
+branches within this repository. `.github/CODEOWNERS` indicates subsystem ownership. Every open
+issue must have an assigned owner.
 
-## Qual template usar
+## Issue Templates
 
-| Situação | Onde registrar |
+| Scenario | Location |
 | --- | --- |
 | Bug | `.github/ISSUE_TEMPLATE/bug.yml` |
 | Feature | `.github/ISSUE_TEMPLATE/feature.yml` |
-| Documentação ou typo | `.github/ISSUE_TEMPLATE/documentation.yml` |
-| Dependência ou CI | `.github/ISSUE_TEMPLATE/maintenance.yml` |
-| Planejamento | `.github/ISSUE_TEMPLATE/planning.yml`, com a label `planning` |
-| Vulnerabilidade | Política privada de segurança, nunca uma issue pública |
-| Dúvida ou decisão aberta | GitHub Discussions |
+| Documentation or typo | `.github/ISSUE_TEMPLATE/documentation.yml` |
+| Dependency or CI | `.github/ISSUE_TEMPLATE/maintenance.yml` |
+| Planning | `.github/ISSUE_TEMPLATE/planning.yml`, with label `planning` |
+| Security vulnerability | Private security advisory report, never a public issue |
+| Open question or design debate | GitHub Discussions |
 | Pull request | `.github/pull_request_template.md` |
 
-Issues em branco estão desabilitadas.
+Blank issues are disabled.
 
-## Organização do código
+## Code Organization
 
-Mantenha a raiz limitada a configurações de ferramentas, políticas do projeto e pontos de entrada de
-deploy. O código da aplicação fica nestas pastas:
+Keep the root directory limited to project configurations, tool settings, and deployment entry points.
+Application code is organized in these directories:
 
-| Caminho | Responsabilidade |
+| Path | Responsibility |
 | --- | --- |
-| `crates/` | Workspace Rust. `crates/core` concentra o domínio compartilhado (SQLite, catálogo, scanner, identidade de mídia e estado de estudo); `crates/server` concentra o servidor Axum |
-| `apps/web/` | Código-fonte e configuração da SPA Svelte 5 + Vite (`src/`, `vite.config.ts`, `tsconfig.json`, `package.json`) |
-| `testdata/` | Fixtures sintéticas pequenas |
-| `deploy/container/` | Definição da imagem OCI |
-| `deploy/compose/` | Stack Docker Compose e exemplo de ambiente |
-| `deploy/quadlet/` | Unidade systemd para Podman rootless |
-| `scripts/` | Scripts de verificação local |
-| `docs/` | Arquitetura, governança, operações, produto e releases |
-| `.github/` | Actions, configuração do Release Please e arquivos de comunidade |
-| `.agents/` | Políticas, playbooks, checklists e templates para agentes |
-| `.opencode/` | Perfis específicos do OpenCode (somente leitura) |
+| `crates/` | Rust workspace. `crates/core` contains the shared domain (SQLite, catalog, scanner, media identity, and study state); `crates/server` contains the Axum HTTP server; `crates/desktop` contains Tauri 2 desktop app |
+| `apps/web/` | Svelte 5 + TypeScript + Vite SPA (`src/`, `vite.config.ts`, `tsconfig.json`, `package.json`) |
+| `testdata/` | Small synthetic test fixtures |
+| `deploy/container/` | Containerfile / OCI image definition |
+| `deploy/compose/` | Docker Compose stack and environment examples |
+| `deploy/quadlet/` | Systemd Quadlet unit for rootless Podman |
+| `scripts/` | Local verification and CI automation scripts |
+| `docs/` | Canonical documentation: architecture, governance, operations, product, and releases |
+| `.github/` | Workflows, Release Please configuration, and community health files |
+| `.agents/` | Shared policies, playbooks, checklists, and templates for autonomous and human agents |
+| `.opencode/` | OpenCode-specific agent review profiles |
 
-Arquivos de comunidade (`CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`) ficam em
-`.github/`. O changelog fica em `docs/releases/CHANGELOG.md`. A configuração do Release Please fica
-em `.github/release-please/`.
+Community health files (`CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`) live in `.github/`.
+The changelog lives in `docs/releases/CHANGELOG.md`. Release Please configuration lives in
+`.github/release-please/`.
 
-A raiz mantém apenas `AGENTS.md`, `README.md`, `LICENSE`, `.dockerignore`, `.gitignore`, `Cargo.toml`,
-`Cargo.lock`, `rust-toolchain.toml`, `package.json`, `pnpm-lock.yaml` e `pnpm-workspace.yaml`.
+The repository root contains only `AGENTS.md`, `README.md`, `LICENSE`, `.dockerignore`, `.gitignore`,
+`Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, `package.json`, `pnpm-lock.yaml`, and `pnpm-workspace.yaml`.
 
-O crate `desktop` (Tauri) entrega a Fase 4: janela real, IPC, biblioteca somente leitura e
-reprodução local, sem autenticação nem listener de rede por decisão de arquitetura. O serviço Go foi
-removido na Fase 5 (PR #206). A distribuição Linux desktop/Flatpak ainda depende de validação; o
-estado dos pacotes está em [`docs/operations/distribution.md`](../operations/distribution.md).
+Generated output (`crates/server/web/build`, `crates/desktop/frontend-dist`, `target`, `node_modules`,
+and local data/cache directories) is strictly gitignored and must never be committed.
 
-Saída gerada (`crates/server/web/build`, `crates/desktop/frontend-dist`, `target`, `node_modules` e
-dados/cache locais) deve permanecer ignorada e não pode ser commitada.
+## Repository Boundaries
 
-## Limites do repositório
+- Never commit course media, secrets, private addresses, SQLite database files, or build artifacts.
+- Changes to security, storage persistence, deployment, database migrations, or UX architecture require explicit review.
+- Clean-room design research may guide behavior, but code, assets, trademarks, copy, or UI layouts must never be copied.
+- Docker and Podman are optional deployment adapters. All functionality must remain fully testable without container runtimes.
 
-- Nunca faça commit de mídia de cursos, credenciais, endereços privados, bancos de dados ou saída
-  gerada.
-- Mudanças de segurança, armazenamento, deploy, migrações ou arquitetura de UX exigem revisão
-  explícita.
-- Pesquisa clean-room pode orientar comportamento, mas não código, assets, marca, texto ou layout
-  copiado.
-- Docker e Podman são adaptadores opcionais. O comportamento deve continuar testável sem runtime de
-  container.
+## Documentation Standards
 
-## Fontes documentais
+The repository is the single source of truth. The index in [`docs/README.md`](../README.md) describes the structure.
 
-O repositório é a fonte canônica. O índice em [`docs/README.md`](../README.md) explica onde cada
-material deve ser colocado.
+`README.md`, `AGENTS.md`, canonical docs (`docs/`), `CHANGELOG.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`,
+and `SECURITY.md` are maintained in English. The application provides full runtime internationalization (i18n)
+with English as the default and Brazilian Portuguese (`pt-BR`) fully supported.
+Conventional Commits and PR titles/descriptions are written in English to keep Release Please changelog generation consistent.
 
-`README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` e `SECURITY.md` são mantidos em
-inglês, com a aplicação fornecendo internacionalização nativa (i18n) em inglês (padrão) e português
-do Brasil (`pt-BR`). Conventional Commits e descrições de PRs são mantidos em inglês para manter o
-Release Please consistente.
+## Releases & CI
 
-## Releases e CI
+Release Please automates semantic versioning, changelog entries, tags, and GitHub Releases. Artifact publication
+runs in a dedicated release workflow.
 
-O Release Please controla versão, changelog, tags e metadados do GitHub Release. A publicação de
-artefatos acontece em um workflow separado.
+LearnVault code and documentation are distributed under the MIT license ([`LICENSE`](../../LICENSE)).
+Cargo workspace metadata, npm package metadata, and desktop metainfo must remain aligned with this license.
 
-O código e a documentação do LearnVault são distribuídos sob a licença MIT, conforme o arquivo
-[`LICENSE`](../../LICENSE). Os metadados do workspace Rust, do pacote npm e do metainfo desktop
-devem permanecer alinhados com essa licença. Registros no changelog descrevem o estado histórico das
-versões e não substituem a licença vigente.
+### Dependabot Safe Auto-Merge
 
-### Automação segura do Dependabot
+The `Dependabot safe auto-merge` workflow enables Dependabot to update low-risk dependencies without
+requiring manual merges on every routine PR. It executes in the base repository context via `pull_request_target`,
+without checking out or running untrusted PR code.
 
-O workflow `Dependabot safe auto-merge` existe para deixar o Dependabot atualizar dependências de
-baixo risco sem transformar cada PR em trabalho manual. A automação roda no contexto da base por
-`pull_request_target`, sem checkout, instalação de dependências ou execução de código da pull
-request.
+It processes PRs authored by `dependabot[bot]` targeting `main`, within the same repository, for single
+patch/minor updates where security alerts are explicitly `null` and the head SHA is verified.
 
-Ela só considera PRs do `dependabot[bot]` para `main`, no mesmo repositório, com uma atualização
-individual patch/minor, alerta de segurança explicitamente `null` e head confirmado pela API.
+The alert gate fails closed. If alert status is missing, empty, or unknown, the PR is disqualified.
+Major updates, security updates, bundled PRs, and conflicting branches require human review.
 
-O gate de alerta falha fechado. Se o estado do alerta estiver ausente, vazio ou desconhecido, a PR
-fica de fora; o workflow nunca trata um dado ausente como "sem alerta". Atualizações major, de
-segurança, agrupadas, conflitantes ou desatualizadas permanecem para análise humana.
+Eligible PRs are submitted for squash auto-merge via the GitHub API without bypassing branch protection or checks.
 
-Quando a PR é elegível, o workflow apenas solicita o auto-merge nativo com squash. Ele não aprova
-PRs, não usa `--admin`, não faz force-push, rebase ou fechamento automático. A proteção da branch
-define reviews e checks, e o GitHub reavalia a solicitação quando o head ou os checks mudam.
+### Automated Checks
 
-O workflow não concede permissões ao `GITHUB_TOKEN` (`permissions: {}`). Para consultar alertas com
-`alert-lookup`, ele exige o segredo `DEPENDABOT_AUTOMERGE_TOKEN`, um fine-grained PAT ou token de
-GitHub App com `Dependabot alerts: read`, `Contents: write` e `Pull requests: write`. Sem esse
-segredo, o job falha fechado e nenhum auto-merge é solicitado.
+Mandatory check names are stable: `SPA checks`, `Rust tests and lints`, `Desktop crate compile and guards`,
+`Container build (Rust)`, and `CI gate`.
 
-Workflows disparados diretamente por PRs do Dependabot recebem `GITHUB_TOKEN` somente leitura e não
-devem receber segredos. Por isso esta automação usa a base confiável, o token dedicado e uma chamada
-de API sem executar o conteúdo da PR.
+CI runs on pull requests, cancels superseded runs, builds the SPA once for the Rust container and desktop app,
+uses caching, and enforces short timeouts. For documentation-only or release metadata changes, heavy jobs
+(E2E, Rust, desktop, container, dependency audit) skip gracefully. The `CI gate` fails on unexpected skips,
+cancellations, or test failures.
 
-Só são elegíveis alterações nos manifests e lockfiles aprovados (`package.json`,
-`apps/web/package.json`, `pnpm-lock.yaml`, `Cargo.toml`, manifests de crates e `Cargo.lock`).
-Workflows, scripts, Containerfiles, Compose e outros caminhos permanecem manuais. A automação
-confirma o SHA da base e do head e rejeita PRs que ficaram atrás da base, sem polling, rebase ou
-checkout.
+- `Rust tests and lints`: checks formatting, clippy lints, unit tests, and coverage in Rust crates.
+- `Desktop crate compile and guards`: compiles `crates/desktop` and runs desktop-specific tests.
+- `Container build (Rust)`: builds and validates the OCI container image.
+- `Rust dependency audit`: audits `Cargo.lock` with `cargo audit --deny unsound`. There is one narrow,
+  documented exception in `.cargo/audit.toml` (`RUSTSEC-2024-0429`, `glib`).
 
-Para rollback, desabilite o workflow e cancele auto-merges pendentes. Se a proteção de branch mudar
-ou uma merge queue for adotada, os gates devem ser reavaliados antes de manter a automação ativa.
+Promoting any check to mandatory requires an explicit maintainer decision.
 
-### Checks e CI
+## Automatic Labeling
 
-Os nomes dos jobs obrigatórios são estáveis: `SPA checks`, `Rust tests and lints`,
-`Desktop crate compile and guards`, `Container build (Rust)` e `CI gate`.
+`.github/labeler.yml` and the `Labeler` workflow classify PRs by touched paths:
+`area:web`, `area:rust`, `area:desktop`, `area:docs`, `area:ci`, `area:deploy`, as well as `tests` and `dependencies`.
 
-O CI roda em pull requests, cancela execuções obsoletas, constrói a SPA uma vez para a imagem Rust e
-o desktop, usa cache e mantém timeouts curtos. Para alterações exclusivamente em documentação ou
-metadados de release, os jobs E2E, Rust, desktop, container e auditoria de dependências podem ser
-ignorados. O `CI gate` permanece estável e reprova falhas, cancelamentos e skips inesperados.
+Labels are informational and never block merges. Work type (`bug`, `enhancement`, `documentation`) remains a human decision.
 
-- `Rust tests and lints` verifica formatação, lints, testes e a cobertura do núcleo em Rust.
-- `Desktop crate compile and guards` compila o crate desktop e roda seus testes.
-- `Container build (Rust)` constrói e valida a imagem OCI Rust.
-- `Rust dependency audit` audita o `Cargo.lock` com `cargo audit --deny unsound` e reprova
-  vulnerabilidades e advisories `unsound`. Há uma única exceção estreita e documentada em
-  `.cargo/audit.toml` (`RUSTSEC-2024-0429`, `glib`).
+## Related Documentation
 
-Toda promoção de check a obrigatório exige decisão explícita do mantenedor. Os checks acoplados ao Go
-foram removidos na Fase 5 (PR #206).
-
-## Labels automáticas
-
-`.github/labeler.yml` e o workflow `Labeler` classificam pull requests pelos arquivos alterados:
-`area:web`, `area:rust`, `area:desktop`, `area:docs`, `area:ci` e `area:deploy`, além de `tests` e
-`dependencies`.
-
-O workflow usa `actions/labeler` fixado em SHA completo, roda em `pull_request_target`, não faz
-checkout, não usa segredos e não executa código da pull request. Ele lê a configuração da base
-confiável e ignora execuções vindas de forks.
-
-Limites explícitos:
-
-- A classificação é informacional. Não é check obrigatório, não aprova e não bloqueia merge.
-- Tipo de trabalho (`bug`, `enhancement`, `documentation`) e segurança continuam decisões humanas. A
-  automação não infere essas categorias por nome de arquivo ou de branch.
-- `sync-labels: false`: nenhuma label é removida automaticamente. Correções manuais seguem
-  permitidas, inclusive para labels antigas que deixarem de corresponder aos arquivos atuais.
-- As labels referenciadas precisam existir no repositório. O workflow tem apenas
-  `pull-requests: write`, não cria labels e falha ao tentar aplicar uma label inexistente.
-- Testes unitários inline em Rust (`#[cfg(test)]` dentro de `src/`) não são detectáveis por caminho
-  e podem não receber `tests`.
-
-## Dependências e testes
-
-O Dependabot segue o calendário e os grupos de `.github/dependabot.yml` para npm, Cargo, GitHub
-Actions, Docker e Docker Compose. Atualizações minor e patch são agrupadas; atualizações major ficam
-individuais e exigem revisão de compatibilidade e checks atuais.
-
-Os testes mantêm cobertura real de Argon2id e autenticação. Fixtures são isoladas e não acessam dados
-externos.
-
-## Próximos passos
-
-- [[Getting-Started]] para rodar o projeto.
-- [[Architecture]] para a divisão entre núcleo, servidor e desktop.
-- [[Operations]] para publicação e operação.
+- [Architecture](../architecture/overview.md) for core, server, and desktop boundaries.
+- [Requirements](../product/requirements.md) for functional and non-functional requirements.
+- [Distribution](../operations/distribution.md) for build artifacts and deployment.
