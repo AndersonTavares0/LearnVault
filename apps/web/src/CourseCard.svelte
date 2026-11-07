@@ -1,6 +1,7 @@
 <script lang="ts">
 	import CourseCover from './CourseCover.svelte';
 	import { countCatalogNode, formatCourseCardMeta } from './catalog';
+	import { tr } from './i18n.svelte';
 	import { href } from './router';
 	import { courseIdOf, type CatalogNode, type FileEntry } from './transport';
 
@@ -52,8 +53,8 @@
 		<span class="lv-course-card__body">
 			<span class="lv-course-card__title">{course.title}</span>
 			{#if meta}<span class="lv-course-card__meta">{meta}</span>{/if}
-			{#if course.sourceFolder}<span class="lv-course-source-badge" title="Pasta de origem: {course.sourceFolder}">{course.sourceFolder}</span>{/if}
-			{#if inProgress}<span class="lv-course-card__state"><span aria-hidden="true"></span>Em andamento</span>{/if}
+			{#if course.sourceFolder}<span class="lv-course-source-badge" title={tr(`Source folder: ${course.sourceFolder}`, `Pasta de origem: ${course.sourceFolder}`)}>{course.sourceFolder}</span>{/if}
+			{#if inProgress}<span class="lv-course-card__state"><span aria-hidden="true"></span>{tr('In progress', 'Em andamento')}</span>{/if}
 		</span>
 	</a>
 	{#if onToggleFavorite}
@@ -62,8 +63,8 @@
 			class:is-favorite={favorite}
 			type="button"
 			aria-pressed={favorite}
-			aria-label={favorite ? `Remover "${course.title}" dos favoritos` : `Favoritar curso "${course.title}"`}
-			title={favorite ? 'Remover dos favoritos' : 'Favoritar curso'}
+			aria-label={favorite ? tr(`Remove "${course.title}" from favorites`, `Remover "${course.title}" dos favoritos`) : tr(`Favorite course "${course.title}"`, `Favoritar curso "${course.title}"`)}
+			title={favorite ? tr('Remove from favorites', 'Remover dos favoritos') : tr('Favorite course', 'Favoritar curso')}
 			onclick={() => onToggleFavorite(course)}
 		>
 			<svg viewBox="0 0 24 24" width="16" height="16" fill={favorite ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -75,24 +76,24 @@
 		<button
 			class="lv-course-card__menu-toggle"
 			type="button"
-			aria-label="Ações de capa de {course.title}"
+			aria-label={tr(`Cover actions for ${course.title}`, `Ações de capa de ${course.title}`)}
 			aria-expanded={menuOpen}
 			onclick={() => onMenuOpen?.(!menuOpen)}
 		>
 			<span aria-hidden="true">⋯</span>
 		</button>
 		{#if menuOpen}
-			<div class="lv-course-card__menu" role="group" aria-label="Capa de {course.title}">
+			<div class="lv-course-card__menu" role="group" aria-label={tr(`Cover of ${course.title}`, `Capa de ${course.title}`)}>
 				{#if confirmRemove}
-					<p class="lv-course-card__confirm" role="alert">Remover a capa de “{course.title}”?</p>
-					<button type="button" onclick={() => { confirmRemove = false; onRemoveCover?.(course); }}>Remover capa</button>
-					<button type="button" onclick={() => (confirmRemove = false)}>Cancelar</button>
+					<p class="lv-course-card__confirm" role="alert">{tr(`Remove the cover of “${course.title}”?`, `Remover a capa de “${course.title}”?`)}</p>
+					<button type="button" onclick={() => { confirmRemove = false; onRemoveCover?.(course); }}>{tr('Remove cover', 'Remover capa')}</button>
+					<button type="button" onclick={() => (confirmRemove = false)}>{tr('Cancel', 'Cancelar')}</button>
 				{:else}
 					<button type="button" onclick={() => onChangeCover?.(course)}>
-						{manualCoverUrl ? 'Trocar capa' : 'Adicionar capa'}
+						{manualCoverUrl ? tr('Change cover', 'Trocar capa') : tr('Add cover', 'Adicionar capa')}
 					</button>
 					{#if manualCoverUrl}
-						<button type="button" onclick={() => (confirmRemove = true)}>Remover capa</button>
+						<button type="button" onclick={() => (confirmRemove = true)}>{tr('Remove cover', 'Remover capa')}</button>
 					{/if}
 				{/if}
 			</div>

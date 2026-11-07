@@ -1,3 +1,4 @@
+import { getLocale } from './i18n.svelte';
 import { countCatalogNode, type CatalogCounts } from './catalog';
 import { findLessonLocation, type LessonLocation } from './router';
 import type { Catalog, CatalogNode, StudyProgress } from './transport';
@@ -43,7 +44,7 @@ export function buildStatistics(catalog: Catalog | null, recent: StudyProgress[]
 		activeLast7Days: activity.filter((entry) => entry.progress.updatedAt !== null && entry.progress.updatedAt >= since).length
 	};
 
-	courses.sort((left, right) => right.counts.lessons - left.counts.lessons || left.course.title.localeCompare(right.course.title, 'pt-BR'));
+	courses.sort((left, right) => right.counts.lessons - left.counts.lessons || left.course.title.localeCompare(right.course.title, getLocale()));
 
 	return { totals, courses, recent: recentStats, activity };
 }

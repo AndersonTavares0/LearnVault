@@ -1,3 +1,5 @@
+import { tr } from './i18n.svelte';
+
 export const POMODORO_SETTINGS_KEY = 'learnvault-pomodoro-settings';
 export const FOCUS_SESSIONS_KEY = 'learnvault-focus-sessions';
 export const POMODORO_TIMER_KEY = 'learnvault-pomodoro-timer';
@@ -142,9 +144,9 @@ export function playPomodoroAlarm(sound: AlarmSound, volume: number, repeats: nu
 }
 
 export function modeLabel(mode: PomodoroMode): string {
-	if (mode === 'short') return 'Pausa curta';
-	if (mode === 'long') return 'Pausa longa';
-	return 'Foco';
+	if (mode === 'short') return tr('Short break', 'Pausa curta');
+	if (mode === 'long') return tr('Long break', 'Pausa longa');
+	return tr('Focus', 'Foco');
 }
 
 export function formatClock(totalSeconds: number): string {

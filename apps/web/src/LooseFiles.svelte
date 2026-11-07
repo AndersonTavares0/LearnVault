@@ -1,4 +1,5 @@
 <script lang="ts">
+ import { tr } from './i18n.svelte';
  import { fileStatus, transport, type FileEntry } from './transport';
  import { href } from './router';
  let { files, heading, courseId }: { files: FileEntry[]; heading: string; courseId?: string } = $props();
@@ -12,12 +13,12 @@
 			<li>
 				{#if url && file.kind === 'media'}
 					{#if courseId}
-						<a href={href('course', courseId, file.path)}>Reproduzir {file.name}</a>
+						<a href={href('course', courseId, file.path)}>{tr(`Play ${file.name}`, `Reproduzir ${file.name}`)}</a>
 					{:else}
-						<a href={href('player', file.path)}>Reproduzir {file.name}</a>
+						<a href={href('player', file.path)}>{tr(`Play ${file.name}`, `Reproduzir ${file.name}`)}</a>
 					{/if}
 				{:else if url}
-					<a href={url} download={file.name} target="_blank" rel="noopener noreferrer">Baixar {file.name}</a>
+					<a href={url} download={file.name} target="_blank" rel="noopener noreferrer">{tr(`Download ${file.name}`, `Baixar ${file.name}`)}</a>
 				{:else}
 					<span>{file.name}</span>
 				{/if}

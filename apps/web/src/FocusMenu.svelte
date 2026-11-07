@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { tr } from './i18n.svelte';
 	import { formatClock, modeLabel, POMODORO_MODES } from './pomodoro';
 	import {
 		abandonTimer,
@@ -27,8 +28,8 @@
 	const running = $derived($pomodoro.status === 'running');
 	const paused = $derived($pomodoro.status === 'paused');
 	const clock = $derived(formatClock($pomodoro.remainingSeconds));
-	const status = $derived(running ? 'Em andamento' : paused ? 'Pausado' : 'Pronto');
-	const label = $derived(running || paused ? clock : 'Foco');
+	const status = $derived(running ? tr('Running', 'Em andamento') : paused ? tr('Paused', 'Pausado') : tr('Ready', 'Pronto'));
+	const label = $derived(running || paused ? clock : tr('Focus', 'Foco'));
 	const announcement = $derived(`${status}. ${modeLabel($pomodoro.mode)}, ${clock}.`);
 	const currentSpecies = $derived(getSpeciesById($nursery.activeSeed));
 
@@ -116,12 +117,12 @@
 		<div class="lv-focus-menu__popover" id="focus-menu-popover" bind:this={popover} role="dialog" aria-label="Pomodoro">
 			<div class="lv-focus-menu__head">
 				<div>
-					<strong>Foco</strong>
-					<span>{status} · Ciclo {$pomodoro.cycle + 1}</span>
+					<strong>{tr('Focus', 'Foco')}</strong>
+					<span>{status} · {tr('Cycle', 'Ciclo')} {$pomodoro.cycle + 1}</span>
 				</div>
-				<button type="button" class="lv-focus-menu__close" aria-label="Fechar Pomodoro" onclick={close}>×</button>
+				<button type="button" class="lv-focus-menu__close" aria-label={tr('Close Pomodoro', 'Fechar Pomodoro')} onclick={close}>×</button>
 			</div>
-			<div class="lv-focus-menu__modes" role="group" aria-label="Modo do timer">
+			<div class="lv-focus-menu__modes" role="group" aria-label={tr('Timer mode', 'Modo do timer')}>
 				{#each POMODORO_MODES as mode (mode)}
 					<button class="lvui-btn lvui-btn-sm" type="button" aria-pressed={$pomodoro.mode === mode} class:is-active={$pomodoro.mode === mode} onclick={() => setMode(mode)}>{modeLabel(mode)}</button>
 				{/each}
@@ -140,7 +141,7 @@
 					/>
 				{:else}
 					<div class="lv-focus-menu__seed-strip">
-						<span class="lv-focus-menu__seed-label">Plantar:</span>
+						<span class="lv-focus-menu__seed-label">{tr('Plant:', 'Plantar:')}</span>
 						<div class="lv-focus-menu__seed-dropdown" bind:this={seedMenuRef}>
 							<button
 								bind:this={seedBtnRef}
@@ -149,7 +150,7 @@
 								aria-haspopup="listbox"
 								aria-expanded={seedMenuOpen}
 								aria-controls="lv-seed-listbox"
-								aria-label="Espécie botânica a cultivar, selecionado: {currentSpecies.name}"
+								aria-label={tr(`Botanical species to grow, selected: ${currentSpecies.name}`, `Espécie botânica a cultivar, selecionado: ${currentSpecies.name}`)}
 								onclick={() => (seedMenuOpen = !seedMenuOpen)}
 							>
 								<span class="lv-focus-menu__seed-name">{currentSpecies.name}</span>
@@ -163,7 +164,7 @@
 									class="lv-focus-menu__seed-list"
 									role="listbox"
 									tabindex="-1"
-									aria-label="Espécies botânicas desbloqueadas"
+									aria-label={tr('Unlocked botanical species', 'Espécies botânicas desbloqueadas')}
 								>
 									{#each $nursery.unlockedSpecies as id (id)}
 										{@const sp = getSpeciesById(id)}
@@ -206,30 +207,30 @@
 			{/if}
 
 			<div class="lv-focus-menu__actions">
-				<button class="lvui-btn lvui-btn-primary" type="button" onclick={toggleTimer}>{running ? 'Pausar' : paused ? 'Retomar' : 'Iniciar foco'}</button>
-				<button class="lvui-btn" type="button" onclick={resetTimer}>Reiniciar</button>
+				<button class="lvui-btn lvui-btn-primary" type="button" onclick={toggleTimer}>{running ? tr('Pause', 'Pausar') : paused ? tr('Resume', 'Retomar') : tr('Start focus', 'Iniciar foco')}</button>
+				<button class="lvui-btn" type="button" onclick={resetTimer}>{tr('Reset', 'Reiniciar')}</button>
 				{#if $pomodoro.mode === 'focus' && (running || paused) && !confirmAbandon}
-					<button class="lvui-btn lvui-btn-outline lvui-btn-danger" type="button" onclick={() => (confirmAbandon = true)}>Abandonar</button>
+					<button class="lvui-btn lvui-btn-outline lvui-btn-danger" type="button" onclick={() => (confirmAbandon = true)}>{tr('Abandon', 'Abandonar')}</button>
 				{/if}
 			</div>
 
 			{#if confirmAbandon}
 				<div class="lv-focus-menu__confirm-abandon" role="alert">
-					<p>Deseja desistir desta sessão de foco? A árvore cultivada nela secará.</p>
+					<p>{tr('Give up on this focus session? The tree grown in it will wither.', 'Deseja desistir desta sessão de foco? A árvore cultivada nela secará.')}</p>
 					<div class="lv-focus-menu__confirm-actions">
-						<button class="lvui-btn lvui-btn-sm lvui-btn-danger" type="button" onclick={handleAbandon}>Desistir e secar árvore</button>
-						<button class="lvui-btn lvui-btn-sm" type="button" onclick={() => (confirmAbandon = false)}>Continuar focando</button>
+						<button class="lvui-btn lvui-btn-sm lvui-btn-danger" type="button" onclick={handleAbandon}>{tr('Give up and wither tree', 'Desistir e secar árvore')}</button>
+						<button class="lvui-btn lvui-btn-sm" type="button" onclick={() => (confirmAbandon = false)}>{tr('Keep focusing', 'Continuar focando')}</button>
 					</div>
 				</div>
 			{/if}
 			{#if $focusSync.error}
-				<p class="lv-focus-menu__note" role="status">{$focusSync.error} <button class="lv-text-link" type="button" disabled={$focusSync.saving} onclick={() => void retryFocusSessions()}>Tentar de novo</button></p>
+				<p class="lv-focus-menu__note" role="status">{$focusSync.error} <button class="lv-text-link" type="button" disabled={$focusSync.saving} onclick={() => void retryFocusSessions()}>{tr('Try again', 'Tentar de novo')}</button></p>
 			{:else if $focusSync.pending.length > 0}
-				<p class="lv-focus-menu__note" role="status">{$focusSync.pending.length} sessão(ões) aguardando sincronização.</p>
+				<p class="lv-focus-menu__note" role="status">{tr(`${$focusSync.pending.length} session(s) awaiting sync.`, `${$focusSync.pending.length} sessão(ões) aguardando sincronização.`)}</p>
 			{/if}
 			<div class="lv-focus-menu__footer-links">
-				<a class="lv-text-link" href={href('statistics')} onclick={() => (open = false)}>Ver Bosque e Viveiro</a>
-				<a class="lv-text-link lv-focus-menu__settings" href={href('settings')} onclick={() => (open = false)}>Ajustar tempos</a>
+				<a class="lv-text-link" href={href('statistics')} onclick={() => (open = false)}>{tr('View Forest & Nursery', 'Ver Bosque e Viveiro')}</a>
+				<a class="lv-text-link lv-focus-menu__settings" href={href('settings')} onclick={() => (open = false)}>{tr('Adjust timers', 'Ajustar tempos')}</a>
 			</div>
 		</div>
 	{/if}

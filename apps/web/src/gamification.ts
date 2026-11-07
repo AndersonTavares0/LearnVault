@@ -1,3 +1,4 @@
+import { tr } from './i18n.svelte';
 import type { RewardSummary } from './transport';
 
 export type Badge = {
@@ -31,20 +32,21 @@ export type Level = {
 	xpToNext: number;
 };
 
-const LEVEL_TITLES = [
-	'Aprendiz Curioso',
-	'Explorador do Acervo',
-	'Estudante Dedicado',
-	'Praticante Consistente',
-	'Artesão do Conhecimento',
-	'Mestre da Disciplina',
-	'Sábio da Biblioteca',
-	'Guardião do Conhecimento'
+const LEVEL_TITLES: Array<[string, string]> = [
+	['Curious Apprentice', 'Aprendiz Curioso'],
+	['Archive Explorer', 'Explorador do Acervo'],
+	['Dedicated Student', 'Estudante Dedicado'],
+	['Consistent Practitioner', 'Praticante Consistente'],
+	['Knowledge Artisan', 'Artesão do Conhecimento'],
+	['Master of Discipline', 'Mestre da Disciplina'],
+	['Library Sage', 'Sábio da Biblioteca'],
+	['Guardian of Knowledge', 'Guardião do Conhecimento']
 ];
 
 export function levelTitle(level: number): string {
 	const index = Math.max(0, level - 1);
-	return LEVEL_TITLES[Math.min(index, LEVEL_TITLES.length - 1)];
+	const [en, pt] = LEVEL_TITLES[Math.min(index, LEVEL_TITLES.length - 1)];
+	return tr(en, pt);
 }
 
 export type Gamification = {
@@ -80,9 +82,18 @@ export function buildGamification(input: {
 	rewards: RewardSummary;
 }): Gamification {
 	const descriptions: Record<MissionId, { title: string; description: string }> = {
-		lesson: { title: 'Conclua uma aula', description: 'Feche uma aula hoje, mesmo que seja curta.' },
-		'focus-two': { title: 'Dois blocos de foco', description: 'Conclua dois Pomodoros de foco hoje.' },
-		'focus-fifty': { title: 'Cinquenta minutos', description: 'Some 50 minutos de foco no dia.' }
+		lesson: {
+			title: tr('Complete a lesson', 'Conclua uma aula'),
+			description: tr('Finish one lesson today, even a short one.', 'Feche uma aula hoje, mesmo que seja curta.')
+		},
+		'focus-two': {
+			title: tr('Two focus blocks', 'Dois blocos de foco'),
+			description: tr('Complete two focus Pomodoros today.', 'Conclua dois Pomodoros de foco hoje.')
+		},
+		'focus-fifty': {
+			title: tr('Fifty minutes', 'Cinquenta minutos'),
+			description: tr('Accumulate 50 focus minutes today.', 'Some 50 minutos de foco no dia.')
+		}
 	};
 	const missions = input.rewards.missions.map((mission) => ({
 		...descriptions[mission.id],
@@ -95,10 +106,10 @@ export function buildGamification(input: {
 	const completedLessons = input.rewards.completedLessons;
 
 	const badges: Badge[] = [
-		badge('first-lesson', 'Primeira aula', 'Uma aula concluída já conta.', completedLessons, 1),
-		badge('five-lessons', 'Cinco aulas', 'Cinco aulas concluídas.', completedLessons, 5),
-		badge('twenty-five-lessons', 'Vinte e cinco aulas', 'Um curso inteiro cabe aqui.', completedLessons, 25),
-		badge('hundred-lessons', 'Cem aulas', 'Cem aulas concluídas.', completedLessons, 100)
+		badge('first-lesson', tr('First lesson', 'Primeira aula'), tr('One completed lesson already counts.', 'Uma aula concluída já conta.'), completedLessons, 1),
+		badge('five-lessons', tr('Five lessons', 'Cinco aulas'), tr('Five lessons completed.', 'Cinco aulas concluídas.'), completedLessons, 5),
+		badge('twenty-five-lessons', tr('Twenty-five lessons', 'Vinte e cinco aulas'), tr('A whole course fits in here.', 'Um curso inteiro cabe aqui.'), completedLessons, 25),
+		badge('hundred-lessons', tr('One hundred lessons', 'Cem aulas'), tr('One hundred lessons completed.', 'Cem aulas concluídas.'), completedLessons, 100)
 	];
 	badges.sort((a, b) => Number(b.earned) - Number(a.earned) || a.target - b.target);
 

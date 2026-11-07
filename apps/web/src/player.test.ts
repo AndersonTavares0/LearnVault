@@ -1,5 +1,6 @@
 import { render } from 'svelte/server';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { setLocale } from './i18n.svelte';
 import Player from './Player.svelte';
 import { clampSpeed, formatDuration, mediaAvailability, mediaPlaybackKind, nextSpeed, PLAYBACK_SPEEDS, playerShortcutAction, requiresTranscodingProbe, seekPercentPosition, selectPlayableMedia, selectPlayableSubtitle, shouldAutoAdvance, srtConversionSupported, srtToWebVtt, stepVolume, studySyncEnabled, studySyncSupported, subtitleFormat } from './player';
 import { createDefaultPlayerPreferences, updateLessonPreference } from './player-preferences';
@@ -147,6 +148,8 @@ describe('mediaAvailability', () => {
 });
 
 describe('player without playable media', () => {
+	beforeEach(() => setLocale('pt-BR'));
+	afterEach(() => setLocale('en'));
 	it('renders no media element and no media URL when the file is gone from disk', () => {
 		// Acesso direto pela URL da aula: o player não pode pedir um arquivo que a varredura
 		// marcou como ausente — sem `<video>`, sem `<audio>` e sem URL de mídia no HTML.
@@ -171,6 +174,8 @@ describe('player without playable media', () => {
 });
 
 describe('player preference controls', () => {
+	beforeEach(() => setLocale('pt-BR'));
+	afterEach(() => setLocale('en'));
 	const baseProps = {
 		lesson: lesson([media('a.mp4'), media('b.mp4')]),
 		courseId: 'course-1',

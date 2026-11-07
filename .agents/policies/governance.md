@@ -10,10 +10,9 @@
   security or work type. Labels referenced by the configuration must already exist in the
   repository.
 - Use `.github/pull_request_template.md` and replace every prompt with factual content.
-- The repository is canonical for policy and documentation. Managed Wiki pages are derived
-  after merge and must not be edited manually.
+- The repository is canonical for policy and documentation.
 - Keep the root limited to tool-required manifests, project policy, and common entrypoints.
-  Rust code lives in `crates/` (shared domain in `crates/core`, Axum server em `crates/server`, desktop em `crates/desktop`). The SPA lives
+  Rust code lives in `crates/` (shared domain in `crates/core`, Axum server in `crates/server`, desktop in `crates/desktop`). The SPA lives
   in `apps/web/` as a pnpm workspace member. Deployment lives in `deploy/`; scripts in
   `scripts/`; fixtures in `testdata/`; and reviewed documentation in `docs/`. Community files
   (`CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`) live in `.github/`, the changelog
@@ -29,7 +28,8 @@
 - Use Discussions for unresolved questions and design alternatives. Features and behavior
   changes require an issue; typos, dependency updates, and simple CI changes do not.
 - Keep `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`,
-  the Wiki, and editorial documentation in Brazilian Portuguese. Only `LICENSE` stays in
-  English. Community files live in `.github/`; the changelog lives in
-  `docs/releases/CHANGELOG.md`. Conventional Commit prefixes remain in English while
-  descriptions are written in Brazilian Portuguese for Release Please consistency.
+  code comments, and editorial documentation in English. The application provides
+  built-in internationalization (i18n) supporting English as default and Brazilian Portuguese (`pt-BR`).
+  Community files live in `.github/`; the changelog lives in
+  `docs/releases/CHANGELOG.md`. Conventional Commits and PR descriptions are written in
+  English for Release Please consistency.

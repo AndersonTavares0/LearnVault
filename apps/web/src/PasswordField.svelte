@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { HTMLInputAttributes } from 'svelte/elements';
+	import { tr } from './i18n.svelte';
 
 	type Props = {
 		id: string;
@@ -22,7 +23,11 @@
 				if (length >= minLength) break;
 			}
 		}
-		input?.setCustomValidity(value && minLength !== undefined && length < minLength ? `Use ao menos ${minLength} caracteres.` : '');
+		input?.setCustomValidity(
+			value && minLength !== undefined && length < minLength
+				? tr(`Use at least ${minLength} characters.`, `Use ao menos ${minLength} caracteres.`)
+				: ''
+		);
 	});
 </script>
 
@@ -45,7 +50,7 @@
 			type="button"
 			class="password-toggle"
 			aria-pressed={visible}
-			aria-label={visible ? `Ocultar ${label}` : `Mostrar ${label}`}
+			aria-label={visible ? tr(`Hide ${label}`, `Ocultar ${label}`) : tr(`Show ${label}`, `Mostrar ${label}`)}
 			aria-controls={id}
 			onclick={() => (visible = !visible)}
 		>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from './i18n.svelte';
 	import { transport, type User } from './transport';
 
 	let {
@@ -56,14 +57,14 @@
 
 		const validTypes = ['image/png', 'image/jpeg', 'image/webp'];
 		if (!validTypes.includes(file.type.toLowerCase())) {
-			error = 'Formato de imagem não suportado. Escolha um arquivo PNG, JPEG ou WebP.';
+			error = tr('Unsupported image format. Choose a PNG, JPEG, or WebP file.', 'Formato de imagem não suportado. Escolha um arquivo PNG, JPEG ou WebP.');
 			input.value = '';
 			return;
 		}
 
 		const MAX_SIZE = 2 * 1024 * 1024;
 		if (file.size > MAX_SIZE) {
-			error = 'A imagem é maior que 2 MiB. Escolha uma foto menor.';
+			error = tr('Image is larger than 2 MiB. Choose a smaller photo.', 'A imagem é maior que 2 MiB. Escolha uma foto menor.');
 			input.value = '';
 			return;
 		}
@@ -94,10 +95,10 @@
 			selectedFile = null;
 			if (fileInput) fileInput.value = '';
 			avatarFailed = false;
-			message = 'Foto de perfil atualizada com sucesso.';
+			message = tr('Profile photo updated successfully.', 'Foto de perfil atualizada com sucesso.');
 			onAvatarChange();
 		} catch (cause) {
-			error = cause instanceof Error ? cause.message : 'Não foi possível salvar o avatar.';
+			error = cause instanceof Error ? cause.message : tr('Could not save avatar.', 'Não foi possível salvar o avatar.');
 		} finally {
 			busy = false;
 		}
@@ -112,10 +113,10 @@
 			await transport.deleteUserAvatar();
 			cancelSelection();
 			avatarFailed = true;
-			message = 'Foto de perfil removida com sucesso.';
+			message = tr('Profile photo removed successfully.', 'Foto de perfil removida com sucesso.');
 			onAvatarChange();
 		} catch (cause) {
-			error = cause instanceof Error ? cause.message : 'Não foi possível remover o avatar.';
+			error = cause instanceof Error ? cause.message : tr('Could not remove avatar.', 'Não foi possível remover o avatar.');
 		} finally {
 			busy = false;
 		}
@@ -129,7 +130,7 @@
 				<img
 					class="lv-user-profile__img"
 					src={avatarSrc}
-					alt="Avatar de {user.username}"
+					alt={tr(`Avatar of ${user.username}`, `Avatar de ${user.username}`)}
 					onerror={() => (avatarFailed = true)}
 				/>
 			{:else}
@@ -138,8 +139,8 @@
 		</div>
 		<div class="lv-user-profile__details">
 			<div class="lv-user-profile__name">{user.username}</div>
-			<div class="lv-user-profile__role">{user.isAdmin ? 'Administrador' : 'Estudante'}</div>
-			<div class="lv-user-profile__hint">Formatos suportados: PNG, JPEG ou WebP (máx. 2 MiB).</div>
+			<div class="lv-user-profile__role">{user.isAdmin ? tr('Administrator', 'Administrador') : tr('Student', 'Estudante')}</div>
+			<div class="lv-user-profile__hint">{tr('Supported formats: PNG, JPEG, or WebP (max. 2 MiB).', 'Formatos suportados: PNG, JPEG ou WebP (máx. 2 MiB).')}</div>
 		</div>
 	</div>
 
@@ -157,10 +158,10 @@
 	<div class="lv-user-profile__actions">
 		{#if selectedFile}
 			<button class="lvui-btn lvui-btn-primary" type="button" onclick={saveAvatar} disabled={busy} aria-busy={busy}>
-				{busy ? 'Salvando…' : 'Salvar nova foto'}
+				{busy ? tr('Saving…', 'Salvando…') : tr('Save new photo', 'Salvar nova foto')}
 			</button>
 			<button class="lvui-btn lvui-btn-ghost" type="button" onclick={cancelSelection} disabled={busy}>
-				Cancelar
+				{tr('Cancel', 'Cancelar')}
 			</button>
 		{:else}
 			<button class="lvui-btn" type="button" onclick={() => fileInput?.click()} disabled={busy}>
@@ -168,11 +169,11 @@
 					<path d="M4 7h4l2-3h4l2 3h4a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
 					<circle cx="12" cy="13" r="3.5" fill="none" stroke="currentColor" stroke-width="1.8"/>
 				</svg>
-				Escolher foto
+				{tr('Choose photo', 'Escolher foto')}
 			</button>
 			{#if hasCustomAvatar}
 				<button class="lvui-btn lvui-btn-ghost" type="button" onclick={removeAvatar} disabled={busy} aria-busy={busy}>
-					Remover foto
+					{tr('Remove photo', 'Remover foto')}
 				</button>
 			{/if}
 		{/if}

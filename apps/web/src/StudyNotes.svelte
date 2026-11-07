@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tr } from './i18n.svelte';
 	import { formatDuration } from './player';
 	import { transport, type StudyNote } from './transport';
 
@@ -42,7 +43,7 @@
 				if (active) notes = items;
 			})
 			.catch((cause) => {
-				if (active) error = cause instanceof Error ? cause.message : 'Erro ao carregar anotações.';
+				if (active) error = cause instanceof Error ? cause.message : tr('Error loading notes.', 'Erro ao carregar anotações.');
 			})
 			.finally(() => {
 				if (active) loading = false;
@@ -77,7 +78,7 @@
 			isAdding = false;
 			noteContent = '';
 		} catch (cause) {
-			error = cause instanceof Error ? cause.message : 'Falha ao salvar anotação.';
+			error = cause instanceof Error ? cause.message : tr('Failed to save note.', 'Falha ao salvar anotação.');
 		} finally {
 			saving = false;
 		}
@@ -89,7 +90,7 @@
 			await transport.deleteNote(noteId);
 			notes = notes.filter((n) => n.noteId !== noteId);
 		} catch (cause) {
-			error = cause instanceof Error ? cause.message : 'Falha ao remover anotação.';
+			error = cause instanceof Error ? cause.message : tr('Failed to remove note.', 'Falha ao remover anotação.');
 		}
 	}
 
@@ -101,7 +102,7 @@
 	}
 </script>
 
-<section class="study-notes-section" aria-label="Anotações e marcadores de estudo">
+<section class="study-notes-section" aria-label={tr('Study notes and bookmarks', 'Anotações e marcadores de estudo')}>
 	<div class="study-notes-header">
 		<div class="study-notes-title-group">
 			<h3 class="study-notes-title">
@@ -109,7 +110,7 @@
 					<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
 					<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
 				</svg>
-				Anotações da aula
+				{tr('Lesson notes', 'Anotações da aula')}
 			</h3>
 			<span class="study-notes-count">{notes.length}</span>
 		</div>
@@ -120,7 +121,7 @@
 					<line x1="12" y1="5" x2="12" y2="19" />
 					<line x1="5" y1="12" x2="19" y2="12" />
 				</svg>
-				Anotar em {formatDuration(Math.floor(currentTime))}
+				{tr(`Add note at ${formatDuration(Math.floor(currentTime))}`, `Anotar em ${formatDuration(Math.floor(currentTime))}`)}
 			</button>
 		{/if}
 	</div>
@@ -132,13 +133,13 @@
 	{#if isAdding}
 		<div class="study-notes-form">
 			<div class="form-header">
-				<span class="timestamp-badge">Marcador: {formatDuration(notePosition)}</span>
-				<span class="form-hint">Dica: pressione Ctrl+Enter para salvar</span>
+				<span class="timestamp-badge">{tr('Bookmark:', 'Marcador:')} {formatDuration(notePosition)}</span>
+				<span class="form-hint">{tr('Tip: press Ctrl+Enter to save', 'Dica: pressione Ctrl+Enter para salvar')}</span>
 			</div>
 			<!-- svelte-ignore a11y_autofocus -->
 			<textarea
 				class="study-notes-input"
-				placeholder="Digite sua reflexão, dúvida ou resumo para este momento do vídeo..."
+				placeholder={tr('Write your reflection, question, or summary for this moment in the video...', 'Digite sua reflexão, dúvida ou resumo para este momento do vídeo...')}
 				rows="3"
 				maxlength="10000"
 				autofocus
@@ -147,21 +148,21 @@
 			></textarea>
 			<div class="form-actions">
 				<button class="lv-btn lvui-btn lv-btn--outline" type="button" onclick={cancelAdding} disabled={saving}>
-					Cancelar
+					{tr('Cancel', 'Cancelar')}
 				</button>
 				<button class="lv-btn lvui-btn" type="button" onclick={saveNote} disabled={saving || !noteContent.trim()}>
-					{saving ? 'Salvando…' : 'Salvar anotação'}
+					{saving ? tr('Saving…', 'Salvando…') : tr('Save note', 'Salvar anotação')}
 				</button>
 			</div>
 		</div>
 	{/if}
 
 	{#if loading}
-		<p class="study-notes-empty" role="status">Carregando anotações…</p>
+		<p class="study-notes-empty" role="status">{tr('Loading notes…', 'Carregando anotações…')}</p>
 	{:else if notes.length === 0 && !isAdding}
 		<div class="study-notes-empty">
-			<p>Nenhuma anotação nesta aula.</p>
-			<small>Salve anotações vinculadas aos minutos da aula para revisar conceitos com facilidade.</small>
+			<p>{tr('No notes in this lesson.', 'Nenhuma anotação nesta aula.')}</p>
+			<small>{tr('Save timestamped notes during the lesson to review key concepts easily.', 'Salve anotações vinculadas aos minutos da aula para revisar conceitos com facilidade.')}</small>
 		</div>
 	{:else if notes.length > 0}
 		<ul class="study-notes-list">
@@ -171,7 +172,7 @@
 						class="timestamp-pill"
 						type="button"
 						onclick={() => onSeek(note.positionSeconds)}
-						aria-label={`Pular vídeo para ${formatDuration(note.positionSeconds)}`}
+						aria-label={tr(`Seek video to ${formatDuration(note.positionSeconds)}`, `Pular vídeo para ${formatDuration(note.positionSeconds)}`)}
 					>
 						<svg class="pill-play-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
 							<polygon points="5 3 19 12 5 21 5 3" />
@@ -187,8 +188,8 @@
 						class="delete-note-btn"
 						type="button"
 						onclick={() => deleteNote(note.noteId)}
-						aria-label="Excluir anotação"
-						title="Excluir anotação"
+						aria-label={tr('Delete note', 'Excluir anotação')}
+						title={tr('Delete note', 'Excluir anotação')}
 					>
 						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 							<polyline points="3 6 5 6 21 6" />

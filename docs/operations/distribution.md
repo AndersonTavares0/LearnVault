@@ -1,8 +1,6 @@
 # Distribuição e operações
 
-**Para quem é:** quem vai publicar, instalar ou operar o LearnVault. Se você vai desenvolver, leia
-[Getting-Started](../wiki/getting-started.md); se quer entender o produto, leia
-[Home](../wiki/home.md).
+**Para quem é:** quem vai publicar, instalar ou operar o LearnVault. Se você vai desenvolver ou quer entender o produto, leia o [README](../../README.md).
 
 **Resumo:** o LearnVault publica um instalador Windows para o desktop, um tarball Linux para o
 servidor e uma imagem OCI opcional. O Flatpak ainda não está pronto. O servidor Rust substituiu o

@@ -1,8 +1,7 @@
 # Arquitetura
 
 **Para quem é:** engenheiros, revisores e mantenedores que precisam decidir onde uma mudança entra.
-Se você só quer usar o LearnVault, comece por
-[Getting-Started](../wiki/getting-started.md).
+Se você só quer usar o LearnVault, comece pelo [README](../../README.md).
 
 **Resumo:** o LearnVault lê pastas de cursos que já existem, monta um catálogo em SQLite e serve
 uma interface web de página única (SPA). O servidor HTTP e o desktop offline compartilham o mesmo

@@ -1,6 +1,7 @@
 <script lang="ts">
-	import type { TreeStage } from './forest';
+	import { treeStageName, type TreeStage } from './forest';
 	import ForestTreeSvg from './ForestTreeSvg.svelte';
+	import { tr } from './i18n.svelte';
 
 	let { speciesCounts }: { speciesCounts?: Record<TreeStage, number> } = $props();
 </script>
@@ -11,17 +12,17 @@
 			<circle cx="12" cy="12" r="10" stroke-width="1.8" />
 			<path d="M12 16v-4M12 8h.01" stroke-width="2" stroke-linecap="round" />
 		</svg>
-		<span>Como florescer espécies na floresta de estudos</span>
+		<span>{tr('How to blossom species in the study forest', 'Como florescer espécies na floresta de estudos')}</span>
 	</summary>
 	<div class="lv-forest__guide-content">
 		<div class="lv-forest__species-card">
 			<ForestTreeSvg stage="sapling" size={34} />
 			<div class="lv-forest__species-info">
-				<strong>Brotinho</strong>
-				<span>Sessão de foco de 1 a 20 min</span>
+				<strong>{treeStageName('sapling')}</strong>
+				<span>{tr('Focus session of 1 to 20 min', 'Sessão de foco de 1 a 20 min')}</span>
 			</div>
 			{#if speciesCounts && speciesCounts.sapling > 0}
-				<span class="lv-forest__species-count" title="{speciesCounts.sapling} cultivados no período">
+				<span class="lv-forest__species-count" title={tr(`${speciesCounts.sapling} grown in period`, `${speciesCounts.sapling} cultivados no período`)}>
 					{speciesCounts.sapling}
 				</span>
 			{/if}
@@ -29,11 +30,11 @@
 		<div class="lv-forest__species-card">
 			<ForestTreeSvg stage="oak" size={34} />
 			<div class="lv-forest__species-info">
-				<strong>Carvalho Frondoso</strong>
-				<span>Sessão de foco de 21 a 40 min</span>
+				<strong>{treeStageName('oak')}</strong>
+				<span>{tr('Focus session of 21 to 40 min', 'Sessão de foco de 21 a 40 min')}</span>
 			</div>
 			{#if speciesCounts && speciesCounts.oak > 0}
-				<span class="lv-forest__species-count" title="{speciesCounts.oak} cultivados no período">
+				<span class="lv-forest__species-count" title={tr(`${speciesCounts.oak} grown in period`, `${speciesCounts.oak} cultivados no período`)}>
 					{speciesCounts.oak}
 				</span>
 			{/if}
@@ -41,11 +42,11 @@
 		<div class="lv-forest__species-card">
 			<ForestTreeSvg stage="pine" size={34} />
 			<div class="lv-forest__species-info">
-				<strong>Pinheiro Nobre</strong>
-				<span>Sessão de foco de 41 a 60 min</span>
+				<strong>{treeStageName('pine')}</strong>
+				<span>{tr('Focus session of 41 to 60 min', 'Sessão de foco de 41 a 60 min')}</span>
 			</div>
 			{#if speciesCounts && speciesCounts.pine > 0}
-				<span class="lv-forest__species-count" title="{speciesCounts.pine} cultivados no período">
+				<span class="lv-forest__species-count" title={tr(`${speciesCounts.pine} grown in period`, `${speciesCounts.pine} cultivados no período`)}>
 					{speciesCounts.pine}
 				</span>
 			{/if}
@@ -53,11 +54,11 @@
 		<div class="lv-forest__species-card">
 			<ForestTreeSvg stage="sakura" size={34} />
 			<div class="lv-forest__species-info">
-				<strong>Cerejeira em Flor</strong>
-				<span>Desbloqueável no Viveiro (80 gotas)</span>
+				<strong>{treeStageName('sakura')}</strong>
+				<span>{tr('Unlockable in Nursery (80 drops)', 'Desbloqueável no Viveiro (80 gotas)')}</span>
 			</div>
 			{#if speciesCounts && speciesCounts.sakura > 0}
-				<span class="lv-forest__species-count" title="{speciesCounts.sakura} cultivadas no período">
+				<span class="lv-forest__species-count" title={tr(`${speciesCounts.sakura} grown in period`, `${speciesCounts.sakura} cultivadas no período`)}>
 					{speciesCounts.sakura}
 				</span>
 			{/if}
@@ -65,11 +66,11 @@
 		<div class="lv-forest__species-card">
 			<ForestTreeSvg stage="willow" size={34} />
 			<div class="lv-forest__species-info">
-				<strong>Salgueiro Chorão</strong>
-				<span>Desbloqueável no Viveiro (120 gotas)</span>
+				<strong>{treeStageName('willow')}</strong>
+				<span>{tr('Unlockable in Nursery (120 drops)', 'Desbloqueável no Viveiro (120 gotas)')}</span>
 			</div>
 			{#if speciesCounts && speciesCounts.willow > 0}
-				<span class="lv-forest__species-count" title="{speciesCounts.willow} cultivados no período">
+				<span class="lv-forest__species-count" title={tr(`${speciesCounts.willow} grown in period`, `${speciesCounts.willow} cultivados no período`)}>
 					{speciesCounts.willow}
 				</span>
 			{/if}
@@ -77,11 +78,11 @@
 		<div class="lv-forest__species-card">
 			<ForestTreeSvg stage="ginkgo" size={34} />
 			<div class="lv-forest__species-info">
-				<strong>Ginkgo Dourado</strong>
-				<span>Desbloqueável no Viveiro (200 gotas)</span>
+				<strong>{treeStageName('ginkgo')}</strong>
+				<span>{tr('Unlockable in Nursery (200 drops)', 'Desbloqueável no Viveiro (200 gotas)')}</span>
 			</div>
 			{#if speciesCounts && speciesCounts.ginkgo > 0}
-				<span class="lv-forest__species-count" title="{speciesCounts.ginkgo} cultivados no período">
+				<span class="lv-forest__species-count" title={tr(`${speciesCounts.ginkgo} grown in period`, `${speciesCounts.ginkgo} cultivados no período`)}>
 					{speciesCounts.ginkgo}
 				</span>
 			{/if}
@@ -89,11 +90,11 @@
 		<div class="lv-forest__species-card">
 			<ForestTreeSvg stage="ancient" size={34} />
 			<div class="lv-forest__species-info">
-				<strong>Árvore Ancestral</strong>
-				<span>Sessão de foco profundo (+60 min)</span>
+				<strong>{treeStageName('ancient')}</strong>
+				<span>{tr('Deep focus session (+60 min)', 'Sessão de foco profundo (+60 min)')}</span>
 			</div>
 			{#if speciesCounts && speciesCounts.ancient > 0}
-				<span class="lv-forest__species-count" title="{speciesCounts.ancient} cultivados no período">
+				<span class="lv-forest__species-count" title={tr(`${speciesCounts.ancient} grown in period`, `${speciesCounts.ancient} cultivados no período`)}>
 					{speciesCounts.ancient}
 				</span>
 			{/if}
@@ -101,11 +102,11 @@
 		<div class="lv-forest__species-card is-withered">
 			<ForestTreeSvg stage="withered" size={34} />
 			<div class="lv-forest__species-info">
-				<strong>Árvore Seca</strong>
-				<span>Sessão abandonada antes do fim</span>
+				<strong>{treeStageName('withered')}</strong>
+				<span>{tr('Session abandoned before completion', 'Sessão abandonada antes do fim')}</span>
 			</div>
 			{#if speciesCounts && speciesCounts.withered > 0}
-				<span class="lv-forest__species-count is-withered" title="{speciesCounts.withered} interrompidas no período">
+				<span class="lv-forest__species-count is-withered" title={tr(`${speciesCounts.withered} interrupted in period`, `${speciesCounts.withered} interrompidas no período`)}>
 					{speciesCounts.withered}
 				</span>
 			{/if}

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { tr } from './i18n.svelte';
 	import PasswordField from './PasswordField.svelte';
 	import { courseIdOf, type CatalogNode, type LocalUser, type Transport } from './transport';
 
@@ -50,7 +51,7 @@
 			users = list;
 			syncDrafts(list);
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Não foi possível carregar os usuários locais.';
+			error = e instanceof Error ? e.message : tr('Could not load local users.', 'Não foi possível carregar os usuários locais.');
 		} finally {
 			loading = false;
 		}
@@ -96,9 +97,9 @@
 			newPassword = '';
 			newUnrestricted = true;
 			newSelectedCourses = [];
-			statusMessage = `Conta "${created.username}" criada com sucesso.`;
+			statusMessage = tr(`Account "${created.username}" created successfully.`, `Conta "${created.username}" criada com sucesso.`);
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Não foi possível criar o usuário.';
+			error = e instanceof Error ? e.message : tr('Could not create user.', 'Não foi possível criar o usuário.');
 		} finally {
 			creating = false;
 		}
@@ -116,9 +117,9 @@
 			users = users.map((item) =>
 				item.userId === user.userId ? { ...item, allowedCourseIds: saved } : item
 			);
-			statusMessage = `Permissões de "${user.username}" atualizadas.`;
+			statusMessage = tr(`Permissions for "${user.username}" updated.`, `Permissões de "${user.username}" atualizadas.`);
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Não foi possível salvar as permissões.';
+			error = e instanceof Error ? e.message : tr('Could not save permissions.', 'Não foi possível salvar as permissões.');
 		} finally {
 			busyUserId = null;
 		}
@@ -133,9 +134,9 @@
 			await transport.deleteUser(user.userId);
 			users = users.filter((item) => item.userId !== user.userId);
 			confirmDeleteUserId = null;
-			statusMessage = `Conta "${user.username}" removida.`;
+			statusMessage = tr(`Account "${user.username}" removed.`, `Conta "${user.username}" removida.`);
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Não foi possível remover o usuário.';
+			error = e instanceof Error ? e.message : tr('Could not remove user.', 'Não foi possível remover o usuário.');
 		} finally {
 			busyUserId = null;
 		}
@@ -144,34 +145,37 @@
 
 <section class="lv-panel lv-settings__panel" aria-labelledby="users-heading">
 	<div class="lv-panel__head">
-		<h2 id="users-heading">Usuários locais e permissões de cursos</h2>
-		<span class="lv-count">{users.length} {users.length === 1 ? 'conta' : 'contas'}</span>
+		<h2 id="users-heading">{tr('Local users and course permissions', 'Usuários locais e permissões de cursos')}</h2>
+		<span class="lv-count">{users.length} {users.length === 1 ? tr('account', 'conta') : tr('accounts', 'contas')}</span>
 	</div>
 	<div class="lv-settings__body lv-admin-users">
 		<p class="lv-notice">
-			Crie contas locais para estudantes e defina quais cursos cada pessoa pode acessar. O progresso, anotações, flashcards e favoritos ficam isolados por conta.
+			{tr(
+				'Create local student accounts and choose which courses each person can access. Progress, notes, flashcards, and favorites remain isolated per account.',
+				'Crie contas locais para estudantes e defina quais cursos cada pessoa pode acessar. O progresso, anotações, flashcards e favoritos ficam isolados por conta.'
+			)}
 		</p>
 
 		{#if error}<p class="error" role="alert">{error}</p>{/if}
 		{#if statusMessage}<p class="lv-notice" role="status">{statusMessage}</p>{/if}
 
 		{#if loading}
-			<p class="lv-notice">Carregando usuários…</p>
+			<p class="lv-notice">{tr('Loading users…', 'Carregando usuários…')}</p>
 		{:else}
-			<ul class="lv-admin-users__list" aria-label="Contas locais cadastradas">
+			<ul class="lv-admin-users__list" aria-label={tr('Registered local accounts', 'Contas locais cadastradas')}>
 				{#each users as item (item.userId)}
 					<li class="lv-admin-users__item">
 						<div class="lv-admin-users__row">
 							<div class="lv-admin-users__identity">
 								<strong>{item.username}</strong>
 								<span class="lv-admin-users__badge" class:is-admin={item.isAdmin}>
-									{item.isAdmin ? 'Administrador' : 'Estudante'}
+									{item.isAdmin ? tr('Administrator', 'Administrador') : tr('Student', 'Estudante')}
 								</span>
 								{#if !item.isAdmin}
 									<span class="lv-admin-users__access">
 										{item.allowedCourseIds === null
-											? 'Todos os cursos'
-											: `${item.allowedCourseIds.length} ${item.allowedCourseIds.length === 1 ? 'curso liberado' : 'cursos liberados'}`}
+											? tr('All courses', 'Todos os cursos')
+											: `${item.allowedCourseIds.length} ${item.allowedCourseIds.length === 1 ? tr('course allowed', 'curso liberado') : tr('courses allowed', 'cursos liberados')}`}
 									</span>
 								{/if}
 							</div>
@@ -184,7 +188,7 @@
 											disabled={busyUserId === item.userId}
 											onclick={() => handleDeleteUser(item)}
 										>
-											Confirmar remoção
+											{tr('Confirm removal', 'Confirmar remoção')}
 										</button>
 										<button
 											class="text-button"
@@ -192,7 +196,7 @@
 											disabled={busyUserId === item.userId}
 											onclick={() => (confirmDeleteUserId = null)}
 										>
-											Cancelar
+											{tr('Cancel', 'Cancelar')}
 										</button>
 									{:else}
 										<button
@@ -201,7 +205,7 @@
 											disabled={busyUserId === item.userId}
 											onclick={() => (confirmDeleteUserId = item.userId)}
 										>
-											Remover conta
+											{tr('Remove account', 'Remover conta')}
 										</button>
 									{/if}
 								</div>
@@ -210,7 +214,7 @@
 
 						{#if !item.isAdmin}
 							<details class="lv-admin-users__permissions">
-								<summary>Configurar acesso a cursos</summary>
+								<summary>{tr('Configure course access', 'Configurar acesso a cursos')}</summary>
 								<div class="lv-admin-users__perm-body">
 									<label class="lv-admin-users__check">
 										<input
@@ -223,14 +227,14 @@
 												};
 											}}
 										/>
-										<span>Liberar acesso a todos os cursos</span>
+										<span>{tr('Grant access to all courses', 'Liberar acesso a todos os cursos')}</span>
 									</label>
 
 									{#if !(draftUnrestricted[item.userId] ?? true)}
 										{#if courses.length === 0}
-											<p class="lv-notice">Nenhum curso importado na biblioteca no momento.</p>
+											<p class="lv-notice">{tr('No courses imported in the library right now.', 'Nenhum curso importado na biblioteca no momento.')}</p>
 										{:else}
-											<div class="lv-admin-users__courses" role="group" aria-label={`Cursos permitidos para ${item.username}`}>
+											<div class="lv-admin-users__courses" role="group" aria-label={tr(`Allowed courses for ${item.username}`, `Cursos permitidos para ${item.username}`)}>
 												{#each courses as c (courseIdOf(c))}
 													{@const cid = courseIdOf(c)}
 													<label class="lv-admin-users__check">
@@ -258,7 +262,7 @@
 											disabled={busyUserId === item.userId}
 											onclick={() => handleSavePermissions(item)}
 										>
-											{busyUserId === item.userId ? 'Salvando…' : 'Salvar permissões'}
+											{busyUserId === item.userId ? tr('Saving…', 'Salvando…') : tr('Save permissions', 'Salvar permissões')}
 										</button>
 									</div>
 								</div>
@@ -271,9 +275,9 @@
 
 		<form class="lv-form lv-admin-users__create" onsubmit={handleCreateUser}>
 			<fieldset class="lv-fieldset" disabled={creating}>
-				<legend class="lv-admin-users__legend">Nova conta de estudante</legend>
+				<legend class="lv-admin-users__legend">{tr('New student account', 'Nova conta de estudante')}</legend>
 				<label for="new-student-username">
-					<span>Nome de usuário</span>
+					<span>{tr('Username', 'Nome de usuário')}</span>
 					<input
 						id="new-student-username"
 						name="new-student-username"
@@ -286,21 +290,21 @@
 				</label>
 				<PasswordField
 					id="new-student-password"
-					label="Senha inicial"
+					label={tr('Initial password', 'Senha inicial')}
 					autocomplete="new-password"
 					bind:value={newPassword}
 					minLength={12}
-					hint="Mínimo de 12 caracteres."
+					hint={tr('Minimum of 12 characters.', 'Mínimo de 12 caracteres.')}
 				/>
 				<label class="lv-admin-users__check">
 					<input type="checkbox" bind:checked={newUnrestricted} />
-					<span>Liberar acesso a todos os cursos</span>
+					<span>{tr('Grant access to all courses', 'Liberar acesso a todos os cursos')}</span>
 				</label>
 				{#if !newUnrestricted}
 					{#if courses.length === 0}
-						<p class="lv-notice">Nenhum curso importado ainda.</p>
+						<p class="lv-notice">{tr('No courses imported yet.', 'Nenhum curso importado ainda.')}</p>
 					{:else}
-						<div class="lv-admin-users__courses" role="group" aria-label="Cursos liberados para a nova conta">
+						<div class="lv-admin-users__courses" role="group" aria-label={tr('Allowed courses for the new account', 'Cursos liberados para a nova conta')}>
 							{#each courses as c (courseIdOf(c))}
 								{@const cid = courseIdOf(c)}
 								<label class="lv-admin-users__check">
@@ -317,7 +321,7 @@
 					{/if}
 				{/if}
 				<button class="lv-btn lv-btn--primary" type="submit" disabled={creating} aria-busy={creating}>
-					{creating ? 'Criando conta…' : 'Criar conta de estudante'}
+					{creating ? tr('Creating account…', 'Criando conta…') : tr('Create student account', 'Criar conta de estudante')}
 				</button>
 			</fieldset>
 		</form>

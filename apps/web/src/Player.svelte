@@ -3,6 +3,7 @@
 	import LooseFiles from './LooseFiles.svelte';
 	import StudyNotes from './StudyNotes.svelte';
 	import Flashcards from './Flashcards.svelte';
+	import { tr } from './i18n.svelte';
 	import {
 		formatDuration,
 		mediaAvailability,
@@ -276,11 +277,11 @@
 		try {
 			const ok = await transport.openInSystemPlayer(playable);
 			if (ok) {
-				systemPlayerMessage = 'Mídia aberta no reprodutor padrão do seu sistema operacional.';
+				systemPlayerMessage = tr('Media opened in your operating system default player.', 'Mídia aberta no reprodutor padrão do seu sistema operacional.');
 				setTimeout(() => { systemPlayerMessage = null; }, 6000);
 			}
 		} catch {
-			systemPlayerMessage = 'Não foi possível acionar o reprodutor do sistema.';
+			systemPlayerMessage = tr('Could not launch the system player.', 'Não foi possível acionar o reprodutor do sistema.');
 			setTimeout(() => { systemPlayerMessage = null; }, 6000);
 		}
 	}
@@ -414,24 +415,36 @@
 		if (format === 'vtt') {
 			captionSource = url;
 		} else if (format === 'ass') {
-			captionMessage = 'Legendas ASS/SSA contêm estilos avançados não suportados nativamente pelo reprodutor; baixe o arquivo para usar externamente.';
+			captionMessage = tr(
+				'ASS/SSA subtitles contain advanced styles not natively supported by the player; download the file for external use.',
+				'Legendas ASS/SSA contêm estilos avançados não suportados nativamente pelo reprodutor; baixe o arquivo para usar externamente.'
+			);
 		} else if (format === 'sub') {
-			captionMessage = 'Legendas em formato .sub utilizam estrutura gráfica/MicroDVD não suportada nativamente; baixe o arquivo para uso externo.';
+			captionMessage = tr(
+				'Subtitles in .sub format use bitmap/MicroDVD structures not natively supported; download the file for external use.',
+				'Legendas em formato .sub utilizam estrutura gráfica/MicroDVD não suportada nativamente; baixe o arquivo para uso externo.'
+			);
 		} else if (format === 'srt' && srtConversionSupported) {
 			void fetch(url).then((response) => {
-				if (!response.ok) throw new Error('Falha ao carregar legenda.');
+				if (!response.ok) throw new Error(tr('Failed to load subtitle.', 'Falha ao carregar legenda.'));
 				return response.text();
 			}).then((text) => {
 				if (active) {
 					objectUrl = URL.createObjectURL(new Blob([srtToWebVtt(text)], { type: 'text/vtt' }));
 					captionSource = objectUrl;
 				}
-			}).catch(() => { if (active) captionMessage = 'Não foi possível converter a legenda SRT.'; });
+			}).catch(() => { if (active) captionMessage = tr('Could not convert SRT subtitle.', 'Não foi possível converter a legenda SRT.'); });
 		} else if (format === 'srt') {
 			// O build desktop não faz rede: a conversão sob demanda só existe no build HTTP.
-			captionMessage = 'A conversão de legendas SRT exige o servidor HTTP; baixe o arquivo para uso externo.';
+			captionMessage = tr(
+				'SRT subtitle conversion requires the HTTP server; download the file for external use.',
+				'A conversão de legendas SRT exige o servidor HTTP; baixe o arquivo para uso externo.'
+			);
 		} else {
-			captionMessage = 'Formato de legenda não suportado; baixe o arquivo para uso externo.';
+			captionMessage = tr(
+				'Unsupported subtitle format; download the file for external use.',
+				'Formato de legenda não suportado; baixe o arquivo para uso externo.'
+			);
 		}
 		return () => { active = false; if (objectUrl) URL.revokeObjectURL(objectUrl); };
 	});
@@ -445,7 +458,7 @@
 		const currentId = mediaId!;
 		transport.studyProgress(currentId)
 			.then((value) => { if (active) progress = value; })
-			.catch((cause) => { if (active) progressError = cause instanceof Error ? cause.message : 'Erro ao ler progresso.'; })
+			.catch((cause) => { if (active) progressError = cause instanceof Error ? cause.message : tr('Error reading progress.', 'Erro ao ler progresso.'); })
 			.finally(() => { if (active) progressLoading = false; });
 		return () => { active = false; saver.reset(); };
 	});
@@ -476,7 +489,7 @@
 			const next = await transport.setCompleted(mediaId, !(progress?.completed ?? false));
 			if (mediaId === (playable?.mediaId ?? null)) progress = next;
 		} catch (cause) {
-			progressError = cause instanceof Error ? cause.message : 'Erro ao atualizar conclusão.';
+			progressError = cause instanceof Error ? cause.message : tr('Error updating completion.', 'Erro ao atualizar conclusão.');
 		} finally {
 			saving = false;
 		}
@@ -531,36 +544,48 @@
 	<div class="lv-player-error" role="alert">
 		<strong>{mediaError}</strong>
 		{#if playbackErrorCode === 4}
-			<p>O arquivo foi localizado, mas o formato ou codec desta mídia não é suportado pelo seu navegador/webview atual (ex.: HEVC/H.265, AC3 ou contêiner específico).</p>
+			<p>{tr(
+				'The file was found, but this media format or codec is not supported by your current browser/webview (e.g., HEVC/H.265, AC3, or specific container).',
+				'O arquivo foi localizado, mas o formato ou codec desta mídia não é suportado pelo seu navegador/webview atual (ex.: HEVC/H.265, AC3 ou contêiner específico).'
+			)}</p>
 			{#if formatLikelyRequiresTranscode}
-				<p style="font-size: 0.875rem; opacity: 0.85;">Este contêiner ({playable?.name.split('.').pop()?.toUpperCase() ?? 'específico'}) geralmente exige transcodificação sob demanda no servidor ou reprodução via reprodutor do sistema.</p>
+				<p style="font-size: 0.875rem; opacity: 0.85;">{tr(
+					`This container (${playable?.name.split('.').pop()?.toUpperCase() ?? 'specific'}) usually requires on-demand server transcoding or playback via your system player.`,
+					`Este contêiner (${playable?.name.split('.').pop()?.toUpperCase() ?? 'específico'}) geralmente exige transcodificação sob demanda no servidor ou reprodução via reprodutor do sistema.`
+				)}</p>
 			{/if}
 		{:else if playbackErrorCode === 3}
-			<p>A decodificação do áudio/vídeo falhou. O arquivo pode estar corrompido ou o codec não é suportado pelo hardware.</p>
+			<p>{tr(
+				'Audio/video decoding failed. The file may be corrupted or the codec is not supported by hardware.',
+				'A decodificação do áudio/vídeo falhou. O arquivo pode estar corrompido ou o codec não é suportado pelo hardware.'
+			)}</p>
 		{:else}
-			<p>O arquivo local pode ter sido movido ou o disco pode estar desconectado. Reconecte a pasta e use “Atualizar cursos” na biblioteca; seu progresso permanece salvo.</p>
+			<p>{tr(
+				'The local file may have been moved or the drive may be disconnected. Reconnect the folder and use “Refresh courses” in the library; your progress remains saved.',
+				'O arquivo local pode ter sido movido ou o disco pode estar desconectado. Reconecte a pasta e use “Atualizar cursos” na biblioteca; seu progresso permanece salvo.'
+			)}</p>
 		{/if}
 
 		{#if capabilities.transcoding}
 			<div class="player-error-action-row" style="margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
 				<button type="button" class="lv-btn lvui-btn-primary" onclick={() => enableTranscoding(false)}>
-					⚡ Reproduzir com transcodificação sob demanda
+					{tr('⚡ Play with on-demand transcoding', '⚡ Reproduzir com transcodificação sob demanda')}
 				</button>
 				<button type="button" class="lv-btn lvui-btn" onclick={() => enableTranscoding(true)}>
-					Recodificar vídeo (H.264 compatível)
+					{tr('Re-encode video (H.264 compatible)', 'Recodificar vídeo (H.264 compatível)')}
 				</button>
 			</div>
 		{/if}
 		{#if capabilities.systemPlayer}
 			<div class="player-error-action-row" style="margin-top: 0.5rem;">
 				<button type="button" class="lv-btn lvui-btn-secondary" onclick={openExternalPlayer}>
-					Abrir no reprodutor padrão do sistema
+					{tr('Open in default system player', 'Abrir no reprodutor padrão do sistema')}
 				</button>
 			</div>
 		{/if}
 
 		<div style="margin-top: 1rem;">
-			<a class="lv-btn lvui-btn" href="#/home">Ir à biblioteca para atualizar cursos</a>
+			<a class="lv-btn lvui-btn" href="#/home">{tr('Go to library to refresh courses', 'Ir à biblioteca para atualizar cursos')}</a>
 		</div>
 	</div>{@render lessonHeading()}
 {:else if activeSource}
@@ -572,17 +597,17 @@
 	<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions (o grupo identificado do player recebe foco para ativar atalhos) -->
 	<div bind:this={playerContainerRef} class="player-container {playbackKind === 'audio' ? 'audio-container' : 'video-container'}" role="group" tabindex="0" onkeydown={handleKeydown} aria-label="Player" aria-keyshortcuts="Space ArrowLeft ArrowRight ArrowUp ArrowDown k j l [ ] f p m n 0-9">
 		<div class="player-top-controls">
-			{#if availableMedia.length > 1}<label class="player-select-label">Mídia da aula<select aria-label="Mídia da aula" value={playable?.mediaId ?? ''} onchange={selectMedia}>{#each availableMedia as item}<option value={item.mediaId ?? ''}>{item.name}</option>{/each}</select></label>{/if}
-			{#if availableSubtitles.length > 0}<label class="player-select-label">Legenda<select aria-label="Legenda da aula" value={lessonPreference.subtitleId === null ? '' : selectedSubtitle?.mediaId ?? ''} onchange={selectSubtitle}><option value="">Sem legendas</option>{#each availableSubtitles as item}<option value={item.mediaId ?? ''}>{item.name}</option>{/each}</select></label>{/if}
+			{#if availableMedia.length > 1}<label class="player-select-label">{tr('Lesson media', 'Mídia da aula')}<select aria-label={tr('Lesson media', 'Mídia da aula')} value={playable?.mediaId ?? ''} onchange={selectMedia}>{#each availableMedia as item}<option value={item.mediaId ?? ''}>{item.name}</option>{/each}</select></label>{/if}
+			{#if availableSubtitles.length > 0}<label class="player-select-label">{tr('Subtitles', 'Legenda')}<select aria-label={tr('Lesson subtitles', 'Legenda da aula')} value={lessonPreference.subtitleId === null ? '' : selectedSubtitle?.mediaId ?? ''} onchange={selectSubtitle}><option value="">{tr('No subtitles', 'Sem legendas')}</option>{#each availableSubtitles as item}<option value={item.mediaId ?? ''}>{item.name}</option>{/each}</select></label>{/if}
 			{#if capabilities.transcoding}
 				<button
 					type="button"
 					class="player-tool-btn"
 					style={isTranscoding ? 'background: var(--accent, #6366f1); color: #fff;' : ''}
 					onclick={() => isTranscoding ? disableTranscoding() : enableTranscoding(false)}
-					title={isTranscoding ? 'Transcodificação sob demanda ativa. Clique para voltar à reprodução direta.' : 'Ativar transcodificação sob demanda via FFmpeg'}
+					title={isTranscoding ? tr('On-demand transcoding active. Click to switch back to direct playback.', 'Transcodificação sob demanda ativa. Clique para voltar à reprodução direta.') : tr('Enable on-demand transcoding via FFmpeg', 'Ativar transcodificação sob demanda via FFmpeg')}
 				>
-					<span>{isTranscoding ? '⚡ Transcodificado' : 'Direto'}</span>
+					<span>{isTranscoding ? tr('⚡ Transcoded', '⚡ Transcodificado') : tr('Direct', 'Direto')}</span>
 				</button>
 			{/if}
 			{#if capabilities.systemPlayer}
@@ -590,9 +615,9 @@
 					type="button"
 					class="player-tool-btn"
 					onclick={openExternalPlayer}
-					title="Abrir no reprodutor de mídia padrão do seu sistema operacional"
+					title={tr('Open in your operating system default media player', 'Abrir no reprodutor de mídia padrão do seu sistema operacional')}
 				>
-					<span>Player do sistema</span>
+					<span>{tr('System player', 'Player do sistema')}</span>
 				</button>
 			{/if}
 		</div>
@@ -603,21 +628,21 @@
 						<path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
 					</svg>
 				</div>
-				<span class="audio-label">Faixa de áudio · {lesson.title}</span>
+				<span class="audio-label">{tr('Audio track', 'Faixa de áudio')} · {lesson.title}</span>
 			</div>
 			<!-- svelte-ignore a11y_media_has_caption -->
-			<audio class="player-media player-audio" controls preload="metadata" src={activeSource} aria-label={`Player da aula${lessonTitle ? `: ${lessonTitle}` : ''}`} bind:this={media} bind:currentTime={rawMediaCurrentTime} bind:duration={duration} onplay={cancelAutoNext} ontimeupdate={handleTimeUpdate} onended={handleEnded} onloadedmetadata={handleLoadedMetadata} oncanplay={() => { if (media && media.playbackRate !== playbackSpeed) media.playbackRate = playbackSpeed; }} onerror={handleMediaError}>
-				{#if captionSource}<track kind="captions" src={captionSource} label="Legenda" default />{/if}
+			<audio class="player-media player-audio" controls preload="metadata" src={activeSource} aria-label={`${tr('Lesson player', 'Player da aula')}${lessonTitle ? `: ${lessonTitle}` : ''}`} bind:this={media} bind:currentTime={rawMediaCurrentTime} bind:duration={duration} onplay={cancelAutoNext} ontimeupdate={handleTimeUpdate} onended={handleEnded} onloadedmetadata={handleLoadedMetadata} oncanplay={() => { if (media && media.playbackRate !== playbackSpeed) media.playbackRate = playbackSpeed; }} onerror={handleMediaError}>
+				{#if captionSource}<track kind="captions" src={captionSource} label={tr('Subtitles', 'Legenda')} default />{/if}
 			</audio>
 		{:else}
 			<!-- svelte-ignore a11y_media_has_caption -->
-			<video class="player-media" controls preload="metadata" src={activeSource} aria-label={`Player da aula${lessonTitle ? `: ${lessonTitle}` : ''}`} bind:this={media} bind:currentTime={rawMediaCurrentTime} bind:duration={duration} onplay={cancelAutoNext} ontimeupdate={handleTimeUpdate} onended={handleEnded} onloadedmetadata={handleLoadedMetadata} oncanplay={() => { if (media && media.playbackRate !== playbackSpeed) media.playbackRate = playbackSpeed; }} onerror={handleMediaError}>
-				{#if captionSource}<track kind="captions" src={captionSource} label="Legenda" default />{/if}
+			<video class="player-media" controls preload="metadata" src={activeSource} aria-label={`${tr('Lesson player', 'Player da aula')}${lessonTitle ? `: ${lessonTitle}` : ''}`} bind:this={media} bind:currentTime={rawMediaCurrentTime} bind:duration={duration} onplay={cancelAutoNext} ontimeupdate={handleTimeUpdate} onended={handleEnded} onloadedmetadata={handleLoadedMetadata} oncanplay={() => { if (media && media.playbackRate !== playbackSpeed) media.playbackRate = playbackSpeed; }} onerror={handleMediaError}>
+				{#if captionSource}<track kind="captions" src={captionSource} label={tr('Subtitles', 'Legenda')} default />{/if}
 			</video>
 		{/if}
 
 		{#if duration > 0}
-			<div class="player-timeline-markers" role="region" aria-label="Linha do tempo interativa com marcações de estudo">
+			<div class="player-timeline-markers" role="region" aria-label={tr('Interactive timeline with study bookmarks', 'Linha do tempo interativa com marcações de estudo')}>
 				<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 				<div
 					class="timeline-track"
@@ -659,7 +684,7 @@
 							class="timeline-marker"
 							style="left: {pct}%;"
 							title="{formatDuration(note.positionSeconds)} · {note.content}"
-							aria-label="Ir para anotação em {formatDuration(note.positionSeconds)}: {note.content}"
+							aria-label={tr(`Seek to note at ${formatDuration(note.positionSeconds)}: ${note.content}`, `Ir para anotação em ${formatDuration(note.positionSeconds)}: ${note.content}`)}
 							onclick={(e) => {
 								e.stopPropagation();
 								if (isTranscoding) {
@@ -688,28 +713,28 @@
 						<polyline points="12 6 12 12 16 14"/>
 					</svg>
 					<div class="countdown-text">
-						<strong>Próxima aula em {nextLessonCountdown}s</strong>
-						<span>Avançando automaticamente pelo curso</span>
+						<strong>{tr(`Next lesson in ${nextLessonCountdown}s`, `Próxima aula em ${nextLessonCountdown}s`)}</strong>
+						<span>{tr('Advancing automatically through the course', 'Avançando automaticamente pelo curso')}</span>
 					</div>
 					<div class="countdown-actions">
-						<button type="button" class="player-tool-btn" onclick={cancelAutoNext}>Cancelar</button>
-						<button type="button" class="player-tool-btn lvui-btn-primary" onclick={proceedAutoNext}>Avançar agora</button>
+						<button type="button" class="player-tool-btn" onclick={cancelAutoNext}>{tr('Cancel', 'Cancelar')}</button>
+						<button type="button" class="player-tool-btn lvui-btn-primary" onclick={proceedAutoNext}>{tr('Advance now', 'Avançar agora')}</button>
 					</div>
 				</div>
 			</div>
 		{/if}
 
 		<!-- Barra de Controles Rápidos do Player -->
-		<div class="player-quick-bar" role="toolbar" aria-label="Controles rápidos do reprodutor">
+		<div class="player-quick-bar" role="toolbar" aria-label={tr('Player quick controls', 'Controles rápidos do reprodutor')}>
 			<!-- Seek Rápido -->
-			<div class="player-btn-group" role="group" aria-label="Busca de tempo">
-				<button type="button" class="player-tool-btn" onclick={() => seekOffset(-10)} title="Voltar 10s (seta esquerda ou J)">
+			<div class="player-btn-group" role="group" aria-label={tr('Time seek', 'Busca de tempo')}>
+				<button type="button" class="player-tool-btn" onclick={() => seekOffset(-10)} title={tr('Rewind 10s (Left Arrow or J)', 'Voltar 10s (seta esquerda ou J)')}>
 					<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 						<path d="M11 17l-5-5 5-5M18 17l-5-5 5-5" />
 					</svg>
 					<span>-10s</span>
 				</button>
-				<button type="button" class="player-tool-btn" onclick={() => seekOffset(10)} title="Avançar 10s (seta direita ou L)">
+				<button type="button" class="player-tool-btn" onclick={() => seekOffset(10)} title={tr('Forward 10s (Right Arrow or L)', 'Avançar 10s (seta direita ou L)')}>
 					<span>+10s</span>
 					<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 						<path d="M13 17l5-5-5-5M6 17l5-5-5-5" />
@@ -718,8 +743,8 @@
 			</div>
 
 			<!-- Seletor de Velocidade -->
-			<div class="player-speed-selector" role="group" aria-label="Velocidade de reprodução">
-				<span class="player-tool-label">Velocidade:</span>
+			<div class="player-speed-selector" role="group" aria-label={tr('Playback speed', 'Velocidade de reprodução')}>
+				<span class="player-tool-label">{tr('Speed:', 'Velocidade:')}</span>
 				<div class="player-speed-pills">
 					{#each PLAYBACK_SPEEDS as sp (sp)}
 						<button
@@ -736,32 +761,32 @@
 			</div>
 
 			<!-- Navegação de Aulas e Tela Cheia -->
-			<div class="player-nav-group" role="group" aria-label="Navegação de aulas">
+			<div class="player-nav-group" role="group" aria-label={tr('Lesson navigation', 'Navegação de aulas')}>
 				<button
 					type="button"
 					class="player-tool-btn player-nav-btn"
 					disabled={!hasPreviousLesson}
 					onclick={onPreviousLesson}
-					title="Ir para aula anterior"
+					title={tr('Go to previous lesson', 'Ir para aula anterior')}
 				>
-					← Anterior
+					{tr('← Previous', '← Anterior')}
 				</button>
 				<button
 					type="button"
 					class="player-tool-btn player-nav-btn"
 					disabled={!hasNextLesson}
 					onclick={onNextLesson}
-					title="Ir para próxima aula"
+					title={tr('Go to next lesson', 'Ir para próxima aula')}
 				>
-					Próxima →
+					{tr('Next →', 'Próxima →')}
 				</button>
 				{#if playbackKind === 'video'}
 					<button
 						type="button"
 						class="player-tool-btn player-fullscreen-btn"
 						onclick={toggleFullscreen}
-						title="Alternar tela cheia (F)"
-						aria-label="Tela cheia"
+						title={tr('Toggle fullscreen (F)', 'Alternar tela cheia (F)')}
+						aria-label={tr('Fullscreen', 'Tela cheia')}
 					>
 						<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 							<path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3" />
@@ -773,8 +798,8 @@
 							class="player-tool-btn player-pip-btn"
 							class:is-active={isPipActive}
 							onclick={togglePictureInPicture}
-							title={isPipActive ? "Sair de Picture-in-Picture (P)" : "Picture-in-Picture (P)"}
-							aria-label={isPipActive ? "Sair de Picture-in-Picture" : "Picture-in-Picture"}
+							title={isPipActive ? tr('Exit Picture-in-Picture (P)', 'Sair de Picture-in-Picture (P)') : 'Picture-in-Picture (P)'}
+							aria-label={isPipActive ? tr('Exit Picture-in-Picture', 'Sair de Picture-in-Picture') : 'Picture-in-Picture'}
 							aria-pressed={isPipActive}
 						>
 							<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -790,33 +815,33 @@
 
 		{@render lessonHeading()}
 	</div>
-{:else if availability === 'missing'}<div class="lv-player-error" role="status"><strong>Mídia indisponível</strong><p>A mídia desta aula não está no disco. A aula e o seu progresso foram preservados. Reconecte o disco ou reponha o arquivo e use “Atualizar cursos” na biblioteca.</p><a class="lv-btn lvui-btn" href="#/home">Ir à biblioteca para atualizar cursos</a></div>{@render lessonHeading()}
-{:else}<p class="empty" role="status">Esta aula não possui mídia disponível.</p>{@render lessonHeading()}{/if}
+{:else if availability === 'missing'}<div class="lv-player-error" role="status"><strong>{tr('Media unavailable', 'Mídia indisponível')}</strong><p>{tr('The media for this lesson is not on disk. The lesson and your progress have been preserved. Reconnect the drive or restore the file and use “Refresh courses” in the library.', 'A mídia desta aula não está no disco. A aula e o seu progresso foram preservados. Reconecte o disco ou reponha o arquivo e use “Atualizar cursos” na biblioteca.')}</p><a class="lv-btn lvui-btn" href="#/home">{tr('Go to library to refresh courses', 'Ir à biblioteca para atualizar cursos')}</a></div>{@render lessonHeading()}
+{:else}<p class="empty" role="status">{tr('This lesson has no available media.', 'Esta aula não possui mídia disponível.')}</p>{@render lessonHeading()}{/if}
 {#if source || syncEnabled}
-	<div class="study-bar" role="group" aria-label="Controles da aula">
+	<div class="study-bar" role="group" aria-label={tr('Lesson controls', 'Controles da aula')}>
 		{#if source}
-			<label class="auto-next-toggle"><input type="checkbox" checked={autoNext} onchange={(event) => changeAutoNext(event.currentTarget.checked)} />Avançar automaticamente</label>
+			<label class="auto-next-toggle"><input type="checkbox" checked={autoNext} onchange={(event) => changeAutoNext(event.currentTarget.checked)} />{tr('Auto-advance', 'Avançar automaticamente')}</label>
 		{/if}
 		{#if syncEnabled}
 			<div class="study-bar__actions">
-				{#if progressLoading}<span class="study-hint">Carregando progresso…</span>
+				{#if progressLoading}<span class="study-hint">{tr('Loading progress…', 'Carregando progresso…')}</span>
 				{:else if progressError}<span class="study-hint error">{progressError}</span>
-				{:else if canResume}<button class="text-button" onclick={resume} type="button">Retomar de {formatDuration(progress?.positionSeconds ?? 0)}</button>
+				{:else if canResume}<button class="text-button" onclick={resume} type="button">{tr(`Resume from ${formatDuration(progress?.positionSeconds ?? 0)}`, `Retomar de ${formatDuration(progress?.positionSeconds ?? 0)}`)}</button>
 				{:else if showCompleted}
-					<div class="study-completion" role="group" aria-label="Conclusão da aula">
-						<span class="study-hint">{progress?.completed ? 'Concluído' : 'Não concluído'}</span>
-						<button class="lv-btn lvui-btn" onclick={toggleCompleted} disabled={saving || saver.saving} type="button" aria-pressed={progress?.completed}>{progress?.completed ? 'Marcar como não concluído' : 'Marcar como concluído'}</button>
+					<div class="study-completion" role="group" aria-label={tr('Lesson completion', 'Conclusão da aula')}>
+						<span class="study-hint">{progress?.completed ? tr('Completed', 'Concluído') : tr('Not completed', 'Não concluído')}</span>
+						<button class="lv-btn lvui-btn" onclick={toggleCompleted} disabled={saving || saver.saving} type="button" aria-pressed={progress?.completed}>{progress?.completed ? tr('Mark as not completed', 'Marcar como não concluído') : tr('Mark as completed', 'Marcar como concluído')}</button>
 					</div>
 				{/if}
 			</div>
 		{/if}
 	</div>
 {/if}
-{#if captionMessage}<p class="empty" role="status">{captionMessage}{#if captionDownload} <a href={captionDownload} download>Baixar legenda</a>{/if}</p>{/if}
-{#if lesson.subtitles.length || lesson.materials.length}<LooseFiles files={[...lesson.subtitles, ...lesson.materials]} heading="Materiais" {courseId} />{/if}
+{#if captionMessage}<p class="empty" role="status">{captionMessage}{#if captionDownload} <a href={captionDownload} download>{tr('Download subtitle', 'Baixar legenda')}</a>{/if}</p>{/if}
+{#if lesson.subtitles.length || lesson.materials.length}<LooseFiles files={[...lesson.subtitles, ...lesson.materials]} heading={tr('Materials', 'Materiais')} {courseId} />{/if}
 {#if syncEnabled && mediaId}
 	<div class="player-study-section">
-		<div class="lv-tabs player-study-tabs" role="tablist" aria-label="Ferramentas de estudo da aula">
+		<div class="lv-tabs player-study-tabs" role="tablist" aria-label={tr('Lesson study tools', 'Ferramentas de estudo da aula')}>
 			<button
 				class="lv-tab"
 				type="button"
@@ -829,7 +854,7 @@
 				onclick={() => (studyTab = 'notes')}
 				onkeydown={studyTabKey}
 			>
-				Anotações da aula
+				{tr('Lesson notes', 'Anotações da aula')}
 			</button>
 			<button
 				class="lv-tab"
@@ -843,7 +868,7 @@
 				onclick={() => (studyTab = 'flashcards')}
 				onkeydown={studyTabKey}
 			>
-				Cartões de revisão
+				{tr('Review flashcards', 'Cartões de revisão')}
 			</button>
 		</div>
 

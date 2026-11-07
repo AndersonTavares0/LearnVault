@@ -1,3 +1,4 @@
+import { getLocale, tr } from './i18n.svelte';
 import type { FocusSession } from './pomodoro';
 
 export type TreeStage =
@@ -48,53 +49,53 @@ export const ECOSYSTEM_STAGES = [
 		min: 0,
 		max: 0,
 		level: 0,
-		name: 'Clareira Inicial',
-		description: 'Sua jornada de foco está pronta para fincar as primeiras raízes.',
-		nextName: 'Bosque Jovem',
+		get name() { return tr('Initial Clearing', 'Clareira Inicial'); },
+		get description() { return tr('Your focus journey is ready to put down its first roots.', 'Sua jornada de foco está pronta para fincar as primeiras raízes.'); },
+		get nextName() { return tr('Young Grove', 'Bosque Jovem'); },
 		nextThreshold: 1
 	},
 	{
 		min: 1,
 		max: 4,
 		level: 1,
-		name: 'Bosque Jovem',
-		description: 'Primeiras mudas florescendo. O hábito de foco diário começa a ganhar forma.',
-		nextName: 'Bosque Frondoso',
+		get name() { return tr('Young Grove', 'Bosque Jovem'); },
+		get description() { return tr('First saplings flourishing. Daily focus habit is taking shape.', 'Primeiras mudas florescendo. O hábito de foco diário começa a ganhar forma.'); },
+		get nextName() { return tr('Leafy Grove', 'Bosque Frondoso'); },
 		nextThreshold: 5
 	},
 	{
 		min: 5,
 		max: 11,
 		level: 2,
-		name: 'Bosque Frondoso',
-		description: 'Copas se entrelaçando. A disciplina diária ganha consistência e maturidade.',
-		nextName: 'Floresta Verdejante',
+		get name() { return tr('Leafy Grove', 'Bosque Frondoso'); },
+		get description() { return tr('Canopies intertwining. Daily discipline gains consistency and maturity.', 'Copas se entrelaçando. A disciplina diária ganha consistência e maturidade.'); },
+		get nextName() { return tr('Verdant Forest', 'Floresta Verdejante'); },
 		nextThreshold: 12
 	},
 	{
 		min: 12,
 		max: 24,
 		level: 3,
-		name: 'Floresta Verdejante',
-		description: 'Um refúgio verde abundante nutrido por horas regulares de dedicação.',
-		nextName: 'Reserva Natural',
+		get name() { return tr('Verdant Forest', 'Floresta Verdejante'); },
+		get description() { return tr('An abundant green sanctuary nourished by regular hours of dedication.', 'Um refúgio verde abundante nutrido por horas regulares de dedicação.'); },
+		get nextName() { return tr('Nature Reserve', 'Reserva Natural'); },
 		nextThreshold: 25
 	},
 	{
 		min: 25,
 		max: 49,
 		level: 4,
-		name: 'Reserva Natural',
-		description: 'Ecossistema resiliente e diversificado, fruto de foco profundo continuado.',
-		nextName: 'Santuário Ancestral',
+		get name() { return tr('Nature Reserve', 'Reserva Natural'); },
+		get description() { return tr('Resilient and diverse ecosystem, fruit of continued deep focus.', 'Ecossistema resiliente e diversificado, fruto de foco profundo continuado.'); },
+		get nextName() { return tr('Ancient Sanctuary', 'Santuário Ancestral'); },
 		nextThreshold: 50
 	},
 	{
 		min: 50,
 		max: Infinity,
 		level: 5,
-		name: 'Santuário Ancestral',
-		description: 'Mestria suprema de concentração. Um monumento vivo ao conhecimento acumulado.',
+		get name() { return tr('Ancient Sanctuary', 'Santuário Ancestral'); },
+		get description() { return tr('Supreme mastery of concentration. A living monument to accumulated knowledge.', 'Mestria suprema de concentração. Um monumento vivo ao conhecimento acumulado.'); },
 		nextName: null,
 		nextThreshold: null
 	}
@@ -161,32 +162,38 @@ const VALID_TREE_STAGES: TreeStage[] = [
 export function treeStageName(stage: TreeStage): string {
 	switch (stage) {
 		case 'sapling':
-			return 'Brotinho';
+			return tr('Sapling', 'Brotinho');
 		case 'oak':
-			return 'Carvalho Frondoso';
+			return tr('Leafy Oak', 'Carvalho Frondoso');
 		case 'pine':
-			return 'Pinheiro Nobre';
+			return tr('Noble Pine', 'Pinheiro Nobre');
 		case 'sakura':
-			return 'Cerejeira em Flor';
+			return tr('Blooming Cherry', 'Cerejeira em Flor');
 		case 'willow':
-			return 'Salgueiro Chorão';
+			return tr('Weeping Willow', 'Salgueiro Chorão');
 		case 'ginkgo':
-			return 'Ginkgo Dourado';
+			return tr('Golden Ginkgo', 'Ginkgo Dourado');
 		case 'ancient':
-			return 'Árvore Ancestral';
+			return tr('Ancient Tree', 'Árvore Ancestral');
 		case 'withered':
-			return 'Árvore Seca';
+			return tr('Withered Tree', 'Árvore Seca');
 		default:
-			return 'Carvalho Frondoso';
+			return tr('Leafy Oak', 'Carvalho Frondoso');
 	}
 }
 
 export function formatTreeLabel(tree: Omit<ForestTree, 'label'>): string {
-	const date = new Date(tree.timestamp * 1000).toLocaleDateString('pt-BR');
+	const date = new Date(tree.timestamp * 1000).toLocaleDateString(getLocale());
 	if (!tree.completed) {
-		return `${tree.stageName}: sessão de ${tree.minutes} min interrompida em ${date}`;
+		return tr(
+			`${tree.stageName}: ${tree.minutes} min session interrupted on ${date}`,
+			`${tree.stageName}: sessão de ${tree.minutes} min interrompida em ${date}`
+		);
 	}
-	return `${tree.stageName}: ${tree.minutes} min de foco cultivados em ${date}`;
+	return tr(
+		`${tree.stageName}: ${tree.minutes} min of focus cultivated on ${date}`,
+		`${tree.stageName}: ${tree.minutes} min de foco cultivados em ${date}`
+	);
 }
 
 export function buildForest(sessions: FocusSession[], sessionSeeds?: Record<string, string>): ForestTree[] {

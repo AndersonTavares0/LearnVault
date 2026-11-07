@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { setLocale } from './i18n.svelte';
 import { buildGamification, levelForXp, levelTitle } from './gamification';
 import type { StudySummary, RewardSummary } from './transport';
 
@@ -34,7 +35,20 @@ function rewards(completedLessons: number, xp = completedLessons * 40): RewardSu
 }
 
 describe('levelForXp', () => {
-	it('assigns evocative progression titles to each level tier', () => {
+	it('assigns evocative progression titles to each level tier in English and pt-BR', () => {
+		setLocale('en');
+		expect(levelTitle(1)).toBe('Curious Apprentice');
+		expect(levelTitle(2)).toBe('Archive Explorer');
+		expect(levelTitle(3)).toBe('Dedicated Student');
+		expect(levelTitle(4)).toBe('Consistent Practitioner');
+		expect(levelTitle(5)).toBe('Knowledge Artisan');
+		expect(levelTitle(6)).toBe('Master of Discipline');
+		expect(levelTitle(7)).toBe('Library Sage');
+		expect(levelTitle(8)).toBe('Guardian of Knowledge');
+		expect(levelTitle(99)).toBe('Guardian of Knowledge');
+		expect(levelForXp(0).title).toBe('Curious Apprentice');
+
+		setLocale('pt-BR');
 		expect(levelTitle(1)).toBe('Aprendiz Curioso');
 		expect(levelTitle(2)).toBe('Explorador do Acervo');
 		expect(levelTitle(3)).toBe('Estudante Dedicado');
@@ -45,6 +59,7 @@ describe('levelForXp', () => {
 		expect(levelTitle(8)).toBe('Guardião do Conhecimento');
 		expect(levelTitle(99)).toBe('Guardião do Conhecimento');
 		expect(levelForXp(0).title).toBe('Aprendiz Curioso');
+		setLocale('en');
 	});
 
 	it('starts at level 1 and grows on the square curve', () => {

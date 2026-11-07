@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { setLocale } from './i18n.svelte';
 import { collectMaterials, countCatalogFiles, countCatalogNode, countMissingVideos, formatCount, formatCourseCardMeta, formatCourseMeta, formatLessonCounts, formatLessonMeta, getCourseProgressStatus, isLessonMissing } from './catalog';
 import type { CatalogCounts } from './catalog';
 import type { CatalogNode, FileEntry } from './transport';
@@ -114,13 +115,26 @@ describe('formatCount', () => {
 });
 
 describe('formatLessonCounts', () => {
+	beforeEach(() => setLocale('en'));
+	afterEach(() => setLocale('en'));
+
 	it('shows the available lessons and appends the missing ones when they exist', () => {
+		expect(formatLessonCounts(tally(4, 0))).toBe('4 lessons');
+		expect(formatLessonCounts(tally(4, 4))).toBe('4 lessons · 4 missing');
+		expect(formatLessonCounts(tally(1, 3))).toBe('1 lesson · 3 missing');
+
+		setLocale('pt-BR');
 		expect(formatLessonCounts(tally(4, 0))).toBe('4 aulas');
 		expect(formatLessonCounts(tally(4, 4))).toBe('4 aulas · 4 ausentes');
 		expect(formatLessonCounts(tally(1, 3))).toBe('1 aula · 3 ausentes');
 	});
 
 	it('keeps the available count at zero instead of hiding a fully missing module', () => {
+		expect(formatLessonCounts(tally(0, 4))).toBe('0 lessons · 4 missing');
+		expect(formatLessonCounts(tally(0, 1))).toBe('0 lessons · 1 missing');
+		expect(formatLessonCounts(tally(0, 0))).toBe('0 lessons');
+
+		setLocale('pt-BR');
 		expect(formatLessonCounts(tally(0, 4))).toBe('0 aulas · 4 ausentes');
 		expect(formatLessonCounts(tally(0, 1))).toBe('0 aulas · 1 ausente');
 		expect(formatLessonCounts(tally(0, 0))).toBe('0 aulas');
@@ -128,16 +142,30 @@ describe('formatLessonCounts', () => {
 });
 
 describe('formatCourseMeta', () => {
+	beforeEach(() => setLocale('en'));
+	afterEach(() => setLocale('en'));
+
 	it('joins every non-zero count in a stable order', () => {
+		expect(formatCourseMeta({ modules: 3, lessons: 12, missingLessons: 0, videos: 20, materials: 4 })).toBe('3 modules · 12 lessons · 4 materials');
+
+		setLocale('pt-BR');
 		expect(formatCourseMeta({ modules: 3, lessons: 12, missingLessons: 0, videos: 20, materials: 4 })).toBe('3 módulos · 12 aulas · 4 materiais');
 	});
 
 	it('omits zero parts and uses the singular for one', () => {
+		expect(formatCourseMeta({ modules: 1, lessons: 1, missingLessons: 0, videos: 0, materials: 1 })).toBe('1 module · 1 lesson · 1 material');
+		expect(formatCourseMeta({ modules: 0, lessons: 25, missingLessons: 0, videos: 25, materials: 180 })).toBe('25 lessons · 180 materials');
+
+		setLocale('pt-BR');
 		expect(formatCourseMeta({ modules: 1, lessons: 1, missingLessons: 0, videos: 0, materials: 1 })).toBe('1 módulo · 1 aula · 1 material');
 		expect(formatCourseMeta({ modules: 0, lessons: 25, missingLessons: 0, videos: 25, materials: 180 })).toBe('25 aulas · 180 materiais');
 	});
 
 	it('reports available and missing lessons side by side', () => {
+		expect(formatCourseMeta({ modules: 2, lessons: 4, missingLessons: 4, videos: 8, materials: 3 })).toBe('2 modules · 4 lessons · 4 missing · 3 materials');
+		expect(formatCourseMeta({ modules: 1, lessons: 0, missingLessons: 3, videos: 3, materials: 0 })).toBe('1 module · 0 lessons · 3 missing');
+
+		setLocale('pt-BR');
 		expect(formatCourseMeta({ modules: 2, lessons: 4, missingLessons: 4, videos: 8, materials: 3 })).toBe('2 módulos · 4 aulas · 4 ausentes · 3 materiais');
 		expect(formatCourseMeta({ modules: 1, lessons: 0, missingLessons: 3, videos: 3, materials: 0 })).toBe('1 módulo · 0 aulas · 3 ausentes');
 	});
@@ -148,13 +176,25 @@ describe('formatCourseMeta', () => {
 });
 
 describe('formatCourseCardMeta', () => {
+	beforeEach(() => setLocale('en'));
+	afterEach(() => setLocale('en'));
+
 	it('keeps only modules and lessons for the card caption', () => {
+		expect(formatCourseCardMeta({ modules: 3, lessons: 12, missingLessons: 0, videos: 20, materials: 4 })).toBe('3 modules · 12 lessons');
+		expect(formatCourseCardMeta({ modules: 0, lessons: 25, missingLessons: 0, videos: 25, materials: 180 })).toBe('25 lessons');
+		expect(formatCourseCardMeta({ modules: 2, lessons: 0, missingLessons: 0, videos: 0, materials: 9 })).toBe('2 modules');
+
+		setLocale('pt-BR');
 		expect(formatCourseCardMeta({ modules: 3, lessons: 12, missingLessons: 0, videos: 20, materials: 4 })).toBe('3 módulos · 12 aulas');
 		expect(formatCourseCardMeta({ modules: 0, lessons: 25, missingLessons: 0, videos: 25, materials: 180 })).toBe('25 aulas');
 		expect(formatCourseCardMeta({ modules: 2, lessons: 0, missingLessons: 0, videos: 0, materials: 9 })).toBe('2 módulos');
 	});
 
 	it('shows the missing lessons on the card instead of dropping them', () => {
+		expect(formatCourseCardMeta({ modules: 2, lessons: 4, missingLessons: 4, videos: 0, materials: 0 })).toBe('2 modules · 4 lessons · 4 missing');
+		expect(formatCourseCardMeta({ modules: 0, lessons: 0, missingLessons: 2, videos: 0, materials: 0 })).toBe('0 lessons · 2 missing');
+
+		setLocale('pt-BR');
 		expect(formatCourseCardMeta({ modules: 2, lessons: 4, missingLessons: 4, videos: 0, materials: 0 })).toBe('2 módulos · 4 aulas · 4 ausentes');
 		expect(formatCourseCardMeta({ modules: 0, lessons: 0, missingLessons: 2, videos: 0, materials: 0 })).toBe('0 aulas · 2 ausentes');
 	});
@@ -165,12 +205,24 @@ describe('formatCourseCardMeta', () => {
 });
 
 describe('formatLessonMeta', () => {
+	beforeEach(() => setLocale('en'));
+	afterEach(() => setLocale('en'));
+
 	it('shows videos and materials with correct plurals', () => {
+		expect(formatLessonMeta({ videos: 2, materials: 3 })).toBe('2 videos · 3 materials');
+		expect(formatLessonMeta({ videos: 1, materials: 1 })).toBe('1 video · 1 material');
+
+		setLocale('pt-BR');
 		expect(formatLessonMeta({ videos: 2, materials: 3 })).toBe('2 vídeos · 3 materiais');
 		expect(formatLessonMeta({ videos: 1, materials: 1 })).toBe('1 vídeo · 1 material');
 	});
 
 	it('omits zero parts and returns an empty string when silent', () => {
+		expect(formatLessonMeta({ videos: 0, materials: 5 })).toBe('5 materials');
+		expect(formatLessonMeta({ videos: 4, materials: 0 })).toBe('4 videos');
+		expect(formatLessonMeta({ videos: 0, materials: 0 })).toBe('');
+
+		setLocale('pt-BR');
 		expect(formatLessonMeta({ videos: 0, materials: 5 })).toBe('5 materiais');
 		expect(formatLessonMeta({ videos: 4, materials: 0 })).toBe('4 vídeos');
 		expect(formatLessonMeta({ videos: 0, materials: 0 })).toBe('');
@@ -191,6 +243,8 @@ describe('collectMaterials', () => {
 });
 
 describe('lesson counting with missing media', () => {
+	beforeEach(() => setLocale('pt-BR'));
+	afterEach(() => setLocale('en'));
 	const mixedModule = node('module', 'Módulo 1', [
 		node('lesson', 'Aula 1', [], [file('aula-1.mp4', 'media')]),
 		node('lesson', 'Aula 2', [], [file('aula-2.mp4', 'media')]),

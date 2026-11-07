@@ -1,7 +1,7 @@
 # Governança do repositório
 
 **Para quem é:** qualquer pessoa que abra issue, pull request, release ou mexa na CI. Se você só
-quer rodar o projeto, comece por [Getting-Started](../wiki/getting-started.md).
+quer rodar o projeto, comece pelo [README](../../README.md).
 
 **Resumo:** o repositório usa GitHub Flow. Mudanças de comportamento começam em uma issue ou
 Discussion, todo código entra por branch e pull request, e `main` só recebe squash merge depois dos
@@ -57,7 +57,7 @@ deploy. O código da aplicação fica nestas pastas:
 | `deploy/compose/` | Stack Docker Compose e exemplo de ambiente |
 | `deploy/quadlet/` | Unidade systemd para Podman rootless |
 | `scripts/` | Scripts de verificação local |
-| `docs/` | Arquitetura, governança, operações, produto, releases e Wiki |
+| `docs/` | Arquitetura, governança, operações, produto e releases |
 | `.github/` | Actions, configuração do Release Please e arquivos de comunidade |
 | `.agents/` | Políticas, playbooks, checklists e templates para agentes |
 | `.opencode/` | Perfis específicos do OpenCode (somente leitura) |
@@ -91,13 +91,12 @@ dados/cache locais) deve permanecer ignorada e não pode ser commitada.
 ## Fontes documentais
 
 O repositório é a fonte canônica. O índice em [`docs/README.md`](../README.md) explica onde cada
-material deve ser colocado. A Wiki é uma superfície derivada; apenas as páginas listadas em
-`docs/wiki/mapping.md` são sincronizadas automaticamente.
+material deve ser colocado.
 
 `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` e `SECURITY.md` são mantidos em
-pt-BR, assim como a governança, os templates, a Wiki e a documentação editorial. Apenas a `LICENSE`
-permanece em inglês. Prefixos de Conventional Commits permanecem em inglês; as descrições ficam em
-pt-BR para manter o Release Please consistente.
+inglês, com a aplicação fornecendo internacionalização nativa (i18n) em inglês (padrão) e português
+do Brasil (`pt-BR`). Conventional Commits e descrições de PRs são mantidos em inglês para manter o
+Release Please consistente.
 
 ## Releases e CI
 
@@ -164,10 +163,6 @@ ignorados. O `CI gate` permanece estável e reprova falhas, cancelamentos e skip
 
 Toda promoção de check a obrigatório exige decisão explícita do mantenedor. Os checks acoplados ao Go
 foram removidos na Fase 5 (PR #206).
-
-O workflow `Wiki sync` não é check obrigatório. Ele roda depois que mudanças mapeadas chegam à `main`
-ou por execução manual, escreve somente as páginas gerenciadas e não reage a eventos da própria
-Wiki.
 
 ## Labels automáticas
 

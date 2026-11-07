@@ -96,6 +96,6 @@ Detalhes de implementação ficam nas issues e pull requests.
 
 ## Próximos passos
 
-- [[Requirements]] para os requisitos por trás dos itens.
-- [[Architecture]] para as decisões técnicas atuais.
-- [[Home]] para voltar ao índice da Wiki.
+- [Requisitos](requirements.md) para os requisitos por trás dos itens.
+- [Arquitetura](../architecture/overview.md) para as decisões técnicas atuais.
+- [README](../../README.md) para visão geral e instruções de execução.

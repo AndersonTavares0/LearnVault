@@ -1,3 +1,4 @@
+import { tr } from './i18n.svelte';
 import type { CatalogNode, FileEntry } from './transport';
 
 export type FileCounts = { videos: number; materials: number };
@@ -104,8 +105,8 @@ export function countCatalogNode(node: CatalogNode): CatalogCounts {
  */
 export function formatLessonCounts(counts: CatalogCounts): string {
 	return joinParts([
-		formatCount(counts.lessons, 'aula', 'aulas'),
-		counts.missingLessons > 0 ? formatCount(counts.missingLessons, 'ausente', 'ausentes') : ''
+		formatCount(counts.lessons, tr('lesson', 'aula'), tr('lessons', 'aulas')),
+		counts.missingLessons > 0 ? formatCount(counts.missingLessons, tr('missing', 'ausente'), tr('missing', 'ausentes')) : ''
 	]);
 }
 
@@ -156,30 +157,28 @@ function joinParts(parts: string[]): string {
 	return parts.filter(Boolean).join(' · ');
 }
 
-/** Meta de um curso: módulos, aulas (disponíveis e ausentes) e materiais; partes zeradas somem. */
+/** Course metadata: modules, lessons (available and missing), and materials; zero counts are omitted. */
 export function formatCourseMeta(counts: CatalogCounts): string {
 	return joinParts([
-		counts.modules > 0 ? formatCount(counts.modules, 'módulo', 'módulos') : '',
-		// Aulas ausentes mantêm a parte visível mesmo sem nenhuma disponível (`0 aulas · 4 ausentes`):
-		// um curso inteiramente fora do disco não pode parecer um curso sem aulas.
+		counts.modules > 0 ? formatCount(counts.modules, tr('module', 'módulo'), tr('modules', 'módulos')) : '',
 		counts.lessons > 0 || counts.missingLessons > 0 ? formatLessonCounts(counts) : '',
-		counts.materials > 0 ? formatCount(counts.materials, 'material', 'materiais') : ''
+		counts.materials > 0 ? formatCount(counts.materials, tr('material', 'material'), tr('materials', 'materiais')) : ''
 	]);
 }
 
-/** Meta curta do card de um curso: o essencial para escolher o que estudar. */
+/** Short metadata for a course card: the essentials for choosing what to study. */
 export function formatCourseCardMeta(counts: CatalogCounts): string {
 	return joinParts([
-		counts.modules > 0 ? formatCount(counts.modules, 'módulo', 'módulos') : '',
+		counts.modules > 0 ? formatCount(counts.modules, tr('module', 'módulo'), tr('modules', 'módulos')) : '',
 		counts.lessons > 0 || counts.missingLessons > 0 ? formatLessonCounts(counts) : ''
 	]);
 }
 
-/** Meta de uma linha de aula: vídeos e materiais do próprio nó, omitindo as partes zeradas. */
+/** Lesson row metadata: videos and materials in the node itself, omitting zero counts. */
 export function formatLessonMeta(counts: FileCounts): string {
 	return joinParts([
-		counts.videos > 0 ? formatCount(counts.videos, 'vídeo', 'vídeos') : '',
-		counts.materials > 0 ? formatCount(counts.materials, 'material', 'materiais') : ''
+		counts.videos > 0 ? formatCount(counts.videos, tr('video', 'vídeo'), tr('videos', 'vídeos')) : '',
+		counts.materials > 0 ? formatCount(counts.materials, tr('material', 'material'), tr('materials', 'materiais')) : ''
 	]);
 }
 

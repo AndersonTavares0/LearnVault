@@ -6,6 +6,7 @@
 		type BotanicalSpeciesId
 	} from './forest-catalog';
 	import ForestTreeSvg from './ForestTreeSvg.svelte';
+	import { tr } from './i18n.svelte';
 
 	let {
 		speciesId = 'oak',
@@ -28,19 +29,19 @@
 	const progressPercent = $derived(Math.round(progressRatio * 100));
 	const guardianPhrase = $derived(getGuardianPhrase(speciesId, phase));
 
-	const phaseLabels = [
-		'Semente no solo',
-		'Broto rompendo a terra',
-		'Copa jovem se ramificando',
-		'Árvore madura florescendo'
-	];
+	const phaseLabels = $derived([
+		tr('Seed in the soil', 'Semente no solo'),
+		tr('Sprout breaking through soil', 'Broto rompendo a terra'),
+		tr('Young canopy branching out', 'Copa jovem se ramificando'),
+		tr('Mature tree blossoming', 'Árvore madura florescendo')
+	]);
 </script>
 
 <div
 	class="lv-growth-stage"
 	class:is-compact={compact}
 	role="region"
-	aria-label="Crescimento em tempo real: {species.name}"
+	aria-label={tr(`Live growth: ${species.name}`, `Crescimento em tempo real: ${species.name}`)}
 >
 	<!-- Visual Botânico Animado -->
 	<div class="lv-growth-stage__visual-wrap">
@@ -96,7 +97,7 @@
 				aria-valuenow={progressPercent}
 				aria-valuemin={0}
 				aria-valuemax={100}
-				aria-valuetext="{progressPercent}% concluído · {phaseLabels[phase]}"
+				aria-valuetext="{progressPercent}% {tr('completed', 'concluído')} · {phaseLabels[phase]}"
 			>
 				<div class="lv-growth-stage__fill" style="width: {progressPercent}%; --species-color: {species.accentColor}"></div>
 			</div>

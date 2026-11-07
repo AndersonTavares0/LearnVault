@@ -1,9 +1,13 @@
 import { render } from 'svelte/server';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { setLocale } from './i18n.svelte';
 import UserProfile from './UserProfile.svelte';
 import { transport, type User } from './transport';
 
 describe('UserProfile component', () => {
+	beforeEach(() => setLocale('en'));
+	afterEach(() => setLocale('en'));
+
 	const mockUser: User = {
 		userId: 'user-123',
 		username: 'ander.silva',
@@ -15,9 +19,15 @@ describe('UserProfile component', () => {
 	it('renders user details, avatar image and file upload button', () => {
 		const { body } = render(UserProfile, { props: { user: mockUser } });
 		expect(body).toContain('ander.silva');
-		expect(body).toContain('Administrador');
-		expect(body).toContain('alt="Avatar de ander.silva"');
-		expect(body).toContain('Escolher foto');
+		expect(body).toContain('Administrator');
+		expect(body).toContain('alt="Avatar of ander.silva"');
+		expect(body).toContain('Choose photo');
+
+		setLocale('pt-BR');
+		const ptRender = render(UserProfile, { props: { user: mockUser } });
+		expect(ptRender.body).toContain('Administrador');
+		expect(ptRender.body).toContain('alt="Avatar de ander.silva"');
+		expect(ptRender.body).toContain('Escolher foto');
 	});
 
 	it('renders initials when no avatar url is available', () => {
@@ -37,6 +47,10 @@ describe('UserProfile component', () => {
 		};
 		const { body } = render(UserProfile, { props: { user: studentUser } });
 		expect(body).toContain('mariana');
-		expect(body).toContain('Estudante');
+		expect(body).toContain('Student');
+
+		setLocale('pt-BR');
+		const ptRender = render(UserProfile, { props: { user: studentUser } });
+		expect(ptRender.body).toContain('Estudante');
 	});
 });
