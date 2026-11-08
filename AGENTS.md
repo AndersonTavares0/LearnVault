@@ -59,6 +59,10 @@ Rust version is pinned by `rust-toolchain.toml`; Node.js 24 and pnpm 11.28.5 com
 - Never include secrets, personal course data, database files, or generated media in commits,
   logs, or prompts. Tests use temporary directories (`tempfile::TempDir`, `Database::open_in_memory()`)
   and synthetic fixtures.
+- **Repository hygiene and zero media bloat:** Never commit screenshots, prototypes, binary mockups,
+  or AI tool configurations (`.impeccable/`, `.claude/`, etc.) to the repository. Visual review artifacts
+  belong in PR comments/descriptions, never in git tracking. Vector branding is maintained strictly in
+  SVG format under `docs/design/branding/`. Every PR runs automated hygiene validation in CI (`scripts/repo-hygiene.mjs`).
 
 ## Multi-agent collaboration
 

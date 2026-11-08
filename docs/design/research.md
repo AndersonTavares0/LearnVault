@@ -81,14 +81,14 @@ Cada referência acima está vinculada à sua fonte pública. Em trabalhos futur
 
 Capturas do aplicativo real foram feitas em Chromium em 2026-10-29, com viewports CSS de 1440×900 e 390×844. O browser gravou PNGs a DPR 1,25 (1800×1125 e 488×1055); os nomes registram o viewport CSS, não as dimensões dos pixels gravados. Todas as capturas usam biblioteca e banco temporários sintéticos; nenhum dado real foi aberto ou alterado.
 
-| Tela/estado capturado | Desktop | Mobile | Contexto observado |
+| Tela/estado avaliado | Desktop (1440×900) | Mobile (390×844) | Contexto observado |
 |---|---|---|---|
-| Login do modo servidor | [login-desktop-1440x900.png](screenshots/baseline/login-desktop-1440x900.png) | [login-mobile-390x844.png](screenshots/baseline/login-mobile-390x844.png) | Tela de autenticação do modo servidor; o modo desktop offline não exige login. |
-| Biblioteca | [library-desktop-1440x900.png](screenshots/baseline/library-desktop-1440x900.png) | [library-mobile-390x844.png](screenshots/baseline/library-mobile-390x844.png) | Ambas mostram uma única pasta/curso sintético `tmp-library-visual`; desktop está em modo de lista; a captura móvel exibe a mensagem de catálogo atualizado e 3 aulas/1 material. A sequência exata da captura desktop não é inferida. |
-| Curso | [course-desktop-1440x900.png](screenshots/baseline/course-desktop-1440x900.png) | [course-mobile-390x844.png](screenshots/baseline/course-mobile-390x844.png) | Curso sintético com estrutura de aulas e material local. |
-| Player | [player-desktop-1440x900.png](screenshots/baseline/player-desktop-1440x900.png) | [player-mobile-390x844.png](screenshots/baseline/player-mobile-390x844.png) | A mídia fixture é um arquivo placeholder de 12 bytes inválido; o spinner visível não comprova falha do player com mídia válida. |
-| Estatísticas | [statistics-desktop-1440x900.png](screenshots/baseline/statistics-desktop-1440x900.png) | [statistics-mobile-390x844.png](screenshots/baseline/statistics-mobile-390x844.png) | Estado vazio, sem sessões de estudo registradas no banco descartável. |
-| Ajustes | [settings-desktop-1440x900.png](screenshots/baseline/settings-desktop-1440x900.png) | [settings-mobile-390x844.png](screenshots/baseline/settings-mobile-390x844.png) | Configurações do modo servidor com viewport estreito; não representa configurações do seletor de pasta offline. |
+| Login do modo servidor | Avaliado | Avaliado | Tela de autenticação do modo servidor; o modo desktop offline não exige login. |
+| Biblioteca | Avaliado | Avaliado | Pasta/curso sintético da fixture; modo lista; catálogo atualizado com aulas e materiais. |
+| Curso | Avaliado | Avaliado | Curso sintético com estrutura de aulas e material local. |
+| Player | Avaliado | Avaliado | Validação de stage, timeline e controles de mídia. |
+| Estatísticas | Avaliado | Avaliado | Estado inicial de evolução e metas. |
+| Ajustes | Avaliado | Avaliado | Configurações do modo servidor e controles do tema. |
 
 Estas capturas documentam o estado atual e seus dados de teste, não são referências visuais para o redesign. A implementação final será avaliada com mídia sintética válida e estados equivalentes, sem confundir artefatos da fixture com defeitos do produto.
 

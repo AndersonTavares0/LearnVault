@@ -1,65 +1,49 @@
-# Relatório de soak do artefato Rust (G2)
+# Rust Artifact Soak Report (G2)
 
-> Registro factual de uma execução. Não inclua credenciais, tokens, cookies, bancos de
-> dados, mídia ou outros dados privados neste relatório.
+> Factual record of an execution. Never include credentials, tokens, cookies, database
+> dumps, course media, or other private data in this report.
 
-## Identificação
+## Identification
 
-- Versão reportada pelo binário: `______________________________`
-- Tag da draft: `______________________________`
-- `run_id` de origem: `______________________________`
-- SHA-256 declarado: `______________________________`
-- SHA-256 conferido: `______________________________`
-- Data/hora de início (com fuso): `______________________________`
-- Duração total: `______________________________`
-- Host / SO / arquitetura: `______________________________`
-- Como o artefato foi obtido: `______________________________`
+- Version reported by binary: `______________________________`
+- Draft tag: `______________________________`
+- Source `run_id`: `______________________________`
+- Declared SHA-256: `______________________________`
+- Verified SHA-256: `______________________________`
+- Start timestamp (with timezone): `______________________________`
+- Total duration: `______________________________`
+- Host / OS / architecture: `______________________________`
+- Artifact acquisition method: `______________________________`
 
-## Origem dos dados
+## Data Provenance
 
-- Biblioteca sintética ou cópia de biblioteca real usada (sem anexar dados):
+- Synthetic library or copy of real library used (do not attach data):
   `____________________________________________________________`
-- Houve importação `migrate-go`? `sim / não`
-- Se sim, caminhos usados (somente registre os caminhos; não anexe os arquivos):
+- Was `migrate-go` executed? `yes / no`
+- If yes, paths used (record paths only; do not attach files):
   - input: `__________________________________________________`
   - backup: `________________________________________________`
   - output: `________________________________________________`
 
-## Verificações
+## Verification Checklist
 
-| Verificação | Resultado observado | Resultado esperado | Passou? |
+| Check | Observed Result | Expected Result | Passed? |
 | --- | --- | --- | --- |
-| Health HTTP 200, `cache-control: no-store` e versão correta | | 200; `no-store`; versão igual à identificada acima | | |
-| Login | | Login concluído e sessão aceita nas chamadas seguintes | | |
-| Catálogo | | Catálogo retornado sem erro inesperado | | |
-| Reprodução de mídia com `Range` | | Resposta parcial `206` para o intervalo solicitado | | |
-| Persistência após reinício | | Dados e sessão/estado verificável continuam disponíveis conforme o cenário | | |
-| Ausência de 4xx/5xx inesperado | | Nenhum 4xx/5xx fora dos resultados esperados e registrados | | |
+| Health HTTP 200, `cache-control: no-store`, correct version | | 200; `no-store`; version matches ID above | |
+| Authentication | | Login succeeds and session cookie persists across requests | |
+| Catalog | | Hierarchical course catalog returned without errors | |
+| Media Streaming with `Range` | | Partial content `206` for requested byte range | |
+| Persistence across restart | | Data, progress, and sessions persist across restarts | |
+| Absence of unexpected 4xx/5xx | | Zero unexpected error responses | |
 
-## Recursos
+## Resource Utilization
 
-- CPU aproximada: `______________________________`
-- RSS aproximado: `______________________________`
-- Reinícios do processo (quantidade e horários): `______________________________`
+- Approximate CPU: `______________________________`
+- Approximate RSS: `______________________________`
+- Process restarts (count and timestamps): `______________________________`
 
-## Falhas e anomalias
+## Failures and Anomalies
 
-Liste cada ocorrência com horário e evidência observável (por exemplo, saída de comando ou
-status HTTP), sem incluir segredos ou dados privados:
+List each occurrence with timestamp and observable evidence (e.g. command output or HTTP status), without secrets or private data:
 
 1. `__________________________________________________________________________`
-2. `__________________________________________________________________________`
-3. `__________________________________________________________________________`
-
-## Parecer final do operador
-
-- Parecer: `aceito / aceito com ressalvas / rejeitado`
-- Justificativa: `____________________________________________________________`
-- Nome de quem assina: `______________________________`
-- Data/hora da assinatura (com fuso): `______________________________`
-
-## Limites
-
-Este relatório não prova produção. O artefato avaliado pode ser não assinado ou uma build de
-teste, e não substitui uma release publicada; as releases publicadas são as versões
-suportadas. O registro também não substitui a revisão das demais evidências do projeto.

@@ -5,6 +5,7 @@ The repository is the canonical source for all reviewed project documentation. S
 | Section | Purpose |
 | --- | --- |
 | [`architecture/`](architecture/) | System boundaries, data flow, IPC contracts, and ADRs |
+| [`design/`](design/) | Design system, visual tokens, and brand identity |
 | [`governance/`](governance/) | Repository policies, ownership, code conventions, and CI gates |
 | [`operations/`](operations/) | Deployment, container adapters, and release distribution targets |
 | [`product/`](product/) | Product roadmap, requirements, and design philosophies |

@@ -33,3 +33,7 @@
   Community files live in `.github/`; the changelog lives in
   `docs/releases/CHANGELOG.md`. Conventional Commits and PR descriptions are written in
   English for Release Please consistency.
+- Maintain repository hygiene and zero media bloat: never commit screenshots, prototypes, binary
+  mockups, or AI tool configurations (`.impeccable/`, `.claude/`, etc.) to source control. Visual review
+  artifacts belong in PR comments and descriptions. Branding is kept strictly vector (`.svg`) under
+  `docs/design/branding/`. Every PR runs automated repository hygiene checks in CI (`scripts/repo-hygiene.mjs`).
