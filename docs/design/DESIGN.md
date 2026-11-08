@@ -1,47 +1,59 @@
-# LearnVault — design system de produção
+# LearnVault — Production Design System
 
-A fonte normativa completa está em [`/DESIGN.md`](../../DESIGN.md), escrita no formato DESIGN.md do Impeccable. Este documento fixa a aplicação da direção K escolhida no produto real.
+The canonical specification for LearnVault's visual identity, layout architecture, and component tokens.
 
-## Direção concluída
+---
 
-**A private course shelf.** O LearnVault usa descoberta de cursos e retomada como eixo da experiência: topbar compacta, busca ampla, linha curta de continuidade, catálogo de cursos e detalhe com currículo. O player dá prioridade ao estágio de mídia e move o currículo para uma coluna contextual no desktop e uma seção posterior no mobile.
+## Visual Direction
 
-## Tokens implementados
+**A private course shelf.** LearnVault anchors user experience around rapid course discovery and immediate resume affordances:
+- A compact, non-intrusive topbar with clear page state.
+- Global instant search accessible via `/` hotkey.
+- A prominent "Continue studying" row with timestamped progress.
+- A structured course catalog supporting four persistent views: Covers, List, Compact, and Shelf.
+- A media player centered around an uncompromised 16:9 stage with an attached contextual curriculum column.
 
-| Papel | Claro | Escuro | Uso |
-| --- | --- | --- | --- |
-| Canvas | `#f4f6f9` | `#0b1220` | Fundo de página |
-| Surface | `#ffffff` | `#111b2b` | Campos, painéis, shelves |
-| Raised | `#edf1f6` | `#182438` | Seleção, navegação ativa, hover |
-| Ink | `#152238` | `#f5f7fb` | Texto principal |
-| Muted | `#56657a` | `#a8b5c7` | Metadata e orientação |
-| Cobalt | `#1d5fd1` | `#1d5fd1` | Próxima ação e seleção |
-| Saffron | `#8a5708` | `#e8b43c` | Posição salva e estado em andamento |
-| Line | `#d7dee8` | `#2a3a52` | Divisão estrutural |
+---
 
-A implementação reside em `apps/web/src/redesign.css`; o plugin daisyUI é carregado em `apps/web/src/ui-components.css` com prefixo `lvui-`, evitando colisão com o CSS do produto. Botões, inputs, joins, selects, ranges e checkboxes usam primitives daisyUI; a camada K fornece forma, ritmo e contexto.
+## Production Color Tokens
 
-## Tipografia e composição
+The design system is implemented in `apps/web/src/redesign.css` and `apps/web/src/ui-components.css` (using daisyUI primitives scoped under the `lvui-` prefix to prevent style collisions):
 
-- Headings de entrada e títulos de curso: Georgia/Cambria, peso 400, escala fluida.
-- Interface, metadata e controles: Segoe UI Variable/Segoe UI, peso 400–700.
-- Medidas, caminhos e estados técnicos: Cascadia Mono/Consolas, somente onde existe informação técnica.
-- Desktop: conteúdo central com limite de 1240–1380px e topbar sticky compacta.
-- Mobile (`≤820px`): navegação passa para segunda linha, cards viram linhas ou uma coluna, currículo perde sticky e breadcrumbs reduzem apenas contexto redundante.
-- Estados vazios, erro, loading e mídia ausente continuam explícitos e acionáveis.
+| Token | Light | Dark | Semantic Purpose |
+| :--- | :--- | :--- | :--- |
+| **Canvas** | `#f4f6f9` | `#0b1220` | Full-page background canvas |
+| **Surface** | `#ffffff` | `#111b2b` | Cards, panels, inputs, shelves |
+| **Raised** | `#edf1f6` | `#182230` | Selected state, active tab, hover highlights |
+| **Ink** | `#152238` | `#f5f7fb` | Primary headings, titles, high-contrast text |
+| **Muted** | `#56657a` | `#a8b5c7` | Secondary metadata, timestamps, subtle guidance |
+| **Cobalt** | `#1d5fd1` | `#1d5fd1` | Primary action triggers and active selections |
+| **Saffron** | `#8a5708` | `#e8b43c` | Saved progress, resume position, active streaks |
+| **Line** | `#d7dee8` | `#2a3a52` | Structural borders and container outlines |
 
-## Componentes e interação
+---
 
-- `lvui-btn lvui-btn-primary`: uma ação dominante por grupo.
-- `lvui-input`, `lvui-select`, `lvui-range`, `lvui-checkbox`: controls semânticos com foco visível.
-- `.lv-panel`: superfície tonal sem sombra em repouso.
-- `.lv-course-card`, `.lv-resume-card`: conteúdo acionável, capas com razão controlada e títulos com clamp seguro.
-- `.player-container`: stage 16:9/áudio com um único estado primário de progresso; mídia ausente desativa reprodução e explica recuperação.
-- Cobalt é funcional; saffron é estado. Nenhum dos dois é decoração.
-- O monograma LV e o wordmark são discretos, monocromáticos e não competem com as capas.
+## Typography & Composition
 
-## Estados e qualidade
+- **Editorial Headings:** `Georgia`, `Cambria`, serif, weight 400, fluid scale for library section entries and course titles.
+- **Interface & Controls:** `Segoe UI Variable`, `Segoe UI`, `-apple-system`, `Inter`, sans-serif, weight 400–700 for buttons, navigation, and descriptions.
+- **Technical Metas:** `Cascadia Mono`, `Consolas`, monospace for timestamps, shortcuts, and counters.
+- **Desktop Viewport:** Centered layout constrained to 1240–1380px with sticky topbar.
+- **Mobile Viewport (`≤820px`):** Single-column layout, full-width CTA buttons, touch targets meeting 44×44px minimums.
 
-A validação real usa o servidor Rust com biblioteca temporária, sem modificar dados pessoais: login, biblioteca, retomada, detalhe, player, mídia ausente, capa/thumbnail, estatísticas, Pomodoro, temas claro/escuro, viewport mobile e desktop. Evidências ficam em `docs/design/screenshots/implementation-e2e/`.
+---
 
-Contraste e overflow são verificados pelo E2E existente; foco, navegação sem mouse e estados de erro usam elementos semânticos e `:focus-visible`. O sistema reduz transições sob `prefers-reduced-motion` e não usa gradientes, blur decorativo ou cartões aninhados como estrutura.
+## Core Brand Mark
+
+The official visual brand mark is a geometric Shield with centered 3D depth lines:
+- Monochromatic, clean-room design.
+- Quiet presence that does not compete with user course covers.
+- Located in `Brand.svelte` and vector SVG at `docs/design/branding/learnvault-banner.svg`.
+
+---
+
+## Accessibility & Interaction Invariants
+
+- **Contrast:** Strict compliance with WCAG 2.2 AA (minimum 4.5:1 text contrast).
+- **Focus Indicators:** High-visibility 2px focus ring (`:focus-visible`).
+- **Motion:** Full respect for `prefers-reduced-motion: reduce`.
+- **Read-Only Invariant:** No UI affords moving, renaming, writing, or deleting original files on disk.

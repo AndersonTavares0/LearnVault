@@ -39,17 +39,30 @@ tmp/
 *.sqlite-shm
 *.sqlite-wal
 
-# OpenCode local plugin dependencies
+# OpenCode local plugin dependencies and runtime cache
 .opencode/bun.lock
 .opencode/bun.lockb
 .opencode/package-lock.json
+.opencode/node_modules/
+.opencode/dist/
+.opencode/.cache/
 
-# Local tooling, IDEs and OS metadata
+# Local AI tooling, IDEs and OS metadata
+.impeccable/
+.claude/
+.gemini/
+.cursor/
+.windsurf/
 .playwright-mcp/
 .corepack/
 .tmp-library-visual/
 test-results/
 playwright-report/
+.vitest-cache/
+coverage/
+*.orig
+*.rej
+*learnvault-main-branch-guard.log
 .vscode/
 .idea/
 .DS_Store

@@ -27,15 +27,13 @@ A revisão final serial das capturas reais identificou concorrência entre títu
 
 O gate visual final não encontrou P0/P1. Partes abaixo da dobra nas telas Course/Estatísticas não foram avaliadas pelas capturas; o cartão seguinte da faixa de retomada aparece parcialmente cortado por rolagem horizontal, mas o gesto não foi testado. Isso é limite de evidência, não alegação de comportamento validado.
 
-## Evidências
+## Evidências e Validação
 
-As capturas foram feitas no servidor real da aplicação, com biblioteca e mídia sintéticas isoladas; não foi aberto banco ou arquivo real do usuário.
-
-- [`docs/design/screenshots/product-pass/`](design/screenshots/product-pass/): 40 capturas — Biblioteca, Curso, Player, Estatísticas e Ajustes, em 390/1280/1440/1920 px e temas claro/escuro; inclui pares antes/depois para cinco superfícies.
-- Estados adicionais: [Login](design/screenshots/product-pass/final-login-390-dark.png), [Player sem mídia](design/screenshots/product-pass/state-player-missing-390-dark.png) e busca vazia em [390×844 escuro](design/screenshots/product-pass/state-library-empty-search-390-dark.png) e [1440×900 claro](design/screenshots/product-pass/state-library-empty-search-1440-light.png).
-- Nas 40 capturas de matriz não houve overflow horizontal. Verificação direta do estado vazio: 0 cards, 0 recents não relacionados, ação “Limpar busca” visível, largura excedente 0 px.
-- Player de smoke carregou mídia sintética com dimensões 640×360; isso não valida reprodução de conteúdo real.
-- As capturas comparativas dos conceitos A/B/C e o baseline estão em [`docs/design/screenshots/`](design/screenshots/); protótipos HTML selecionados estão em [`docs/design/prototypes/`](design/prototypes/).
+As verificações visuais da direção K foram realizadas em ambiente de homologação com biblioteca e mídia sintéticas isoladas, cobrindo:
+- Biblioteca, Curso, Player, Estatísticas e Ajustes em 390px, 1280px, 1440px e 1920px nos temas claro e escuro.
+- Estados de login, mídia ausente e busca sem resultados (sem cards órfãos e com ação de limpar busca visível).
+- Ausência de overflow horizontal e cumprimento dos alvos mínimos de 44×44px.
+- Evidências e capturas comparativas registradas no histórico de PRs; a identidade vetorial oficial de produção está fixada em `docs/design/branding/learnvault-banner.svg`.
 
 ## Verificações
 
@@ -61,8 +59,8 @@ A revisão de implementação encontrou uma regressão funcional confirmada: a r
 
 ### Evidência visual e interação
 
-- Capturas reais do fluxo isolado em viewport de 390×844: [Biblioteca touch](design/screenshots/mobile-refinement/mobile-library-cover-actions-390-light.png) e [menu de capa aberto](design/screenshots/mobile-refinement/mobile-library-cover-actions-open-390-light.png).
-- O fixture deste smoke contém um curso e não tem retomadas; portanto, as capturas novas **não** são uma comparação pixel a pixel com a Biblioteca anterior de 12 cursos. Elas evidenciam o espaçamento reduzido e o controle touch visível/acionável. O baseline completo permanece em [`product-pass/`](design/screenshots/product-pass/).
+- Validações do fluxo isolado em viewport móvel de 390×844: controle touch de capa visível e menu de capa acionável.
+- O fixture deste smoke contém um curso e não tem retomadas; o teste evidencia o espaçamento reduzido e o controle touch visível e acionável.
 - O teste touch confirma `hover: none`, opacidade 1, alvo de 44 px e abertura do menu por toque.
 
 ### Verificação
@@ -97,13 +95,13 @@ Correções aplicadas:
 - Importar e Atualizar formam duas colunas iguais na largura disponível; abaixo de 340 px, padding e fonte diminuem, com os dois rótulos verificados em viewport de 320 px.
 - Importar mantém hierarquia secundária quando há retomada e volta a ser primário sem retomada ou durante uma busca.
 
-O E2E verifica o alinhamento do título (≤16 px), o intervalo (≥12 px), igualdade das colunas e texto sem overflow em viewports de 320/390 px; também aguarda o fim das transições CSS antes de medir contraste para não ler valores intermediários. Capturas após a correção: [Biblioteca mobile clara](design/screenshots/mobile-density-iteration/mobile-library-refinement-390-light.png), [escura](design/screenshots/mobile-density-iteration/mobile-library-refinement-390-dark.png) e [desktop](design/screenshots/mobile-density-iteration/redesign-biblioteca-compacta-desktop.png). São fixtures sintéticas de um curso; a captura mobile é full-page, viewport de 390×844.
+O E2E verifica o alinhamento do título (≤16 px), o intervalo (≥12 px), igualdade das colunas e texto sem overflow em viewports de 320/390 px; também aguarda o fim das transições CSS antes de medir contraste para não ler valores intermediários. Verificado em fixtures sintéticas com capturas registradas no histórico de PRs.
 
 ### Segunda crítica visual
 
 Reavaliação serial após as correções no Open Design run `3b1428ea-0000-48c3-8fb7-8d715b79987d`: aprovada, sem P0/P1. A segunda rodada confirmou CTAs em duas colunas de 179 px com 8 px de intervalo (antes 148/154 px), 14 px entre seletor e grade (antes 8 px) e conteúdo da capa alinhado com recuo interno de 11 px. A ressalva P2 sobre títulos longos foi tratada como hipótese a verificar, não como defeito confirmado.
 
-Um E2E com título português longo confirmou o tratamento atual: texto serifado de 15 px, limite de duas linhas com reticências e nenhuma largura excedente no cartão; ao abrir o curso, o título integral aparece no cabeçalho. A captura real de 390×844 está em [Biblioteca mobile com título longo](design/screenshots/mobile-density-iteration/mobile-library-long-title-390-light.png). A abreviação na capa é deliberada para manter a grade compacta; o conteúdo completo permanece acessível no fluxo de Curso.
+Um E2E com título português longo confirmou o tratamento atual: texto serifado de 15 px, limite de duas linhas com reticências e nenhuma largura excedente no cartão; ao abrir o curso, o título integral aparece no cabeçalho. A abreviação na capa é deliberada para manter a grade compacta; o conteúdo completo permanece acessível no fluxo de Curso.
 
 ### Verificação final
 
@@ -130,7 +128,7 @@ O achado que correspondia a uma lacuna real já documentada era a faixa de retom
 
 O E2E novo usa fixture com duas aulas e quatro retomadas, faz um gesto real de roda horizontal sobre a faixa, confirma `scrollLeft > 0`, verifica que o repouso casa com o alinhamento de referência do primeiro cartão (≤1 px) e que cada cartão, ao ser alcançado, permanece dentro das bordas da faixa. Para provar que o teste não é vazio, a faixa foi temporariamente trocada para `overflow-x: visible`: o cenário falhou com `scrollLeft` em 0, como esperado.
 
-Limites desta verificação: o gesto é roda de mouse, não toque real; `proximity` também passa no mesmo desenho de teste, portanto a escolha por `mandatory` não tem evidência de superioridade no Chromium, apenas de determinismo entre engines. Captura: [faixa de retomada em 390×844](design/screenshots/mobile-density-iteration/mobile-library-resume-carousel-390-light.png).
+Limites desta verificação: o gesto é roda de mouse, não toque real; `proximity` também passa no mesmo desenho de teste, portanto a escolha por `mandatory` não tem evidência de superioridade no Chromium, apenas de determinismo entre engines. Evidência registrada no histórico de testes E2E.
 
 ### Verificação
 

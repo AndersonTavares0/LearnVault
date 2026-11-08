@@ -45,7 +45,7 @@ A crítica independente da candidatura K v5 pontuou:
 - Coloca próximo passo e retomada antes de métricas, preserva o contexto curso → aula → progresso e mantém o stage 16:9 como área principal do Player.
 - Cobalto indica ação; saffron indica posição/estado. Wordmark LV é monocromático e discreto.
 - Interface em pt-BR; títulos e descrições fornecidos pelos arquivos mantêm idioma original e recebem rótulo contextual.
-- A implementação K v7 e o sistema de tokens estão em [DESIGN.md](DESIGN.md); evidências reais desktop/mobile, claro/escuro, vazios e falha de mídia estão em [`screenshots/product-pass/`](screenshots/product-pass/).
+- A implementação K v7 e o sistema de tokens estão formalizados em [DESIGN.md](DESIGN.md); as evidências do review final estão registradas em [final-review.md](final-review.md).
 
 ## Riscos e limites aceitos
 

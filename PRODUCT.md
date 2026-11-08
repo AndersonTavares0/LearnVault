@@ -1,36 +1,47 @@
-# LearnVault — contexto de produto
+# LearnVault — Product Context & Invariants
 
-## Público e objetivo
+## Purpose & Target Audience
 
-Pessoas que estudam com cursos armazenados em pastas próprias precisam encontrar uma aula, reproduzi-la e retomar o estudo sem reorganizar os arquivos. O LearnVault atende tanto quem usa o servidor self-hosted no navegador quanto quem usa o aplicativo desktop offline, sem conta ou servidor.
+People who study with course folders they already own need a clean, structured workspace to discover lessons, stream video/audio, and resume their studies without reorganizing or altering physical files.
 
-## Jornadas prioritárias
+LearnVault serves two primary workflows:
+1. **Self-Hosted Server:** Multi-user web application with local session authentication, accessible across home or private networks.
+2. **Offline Desktop Application:** Native Tauri 2 desktop vault running entirely offline with zero network listeners, accounts, or cloud dependencies.
 
-1. Selecionar ou importar uma biblioteca e localizar um curso ou aula.
-2. Entender o conteúdo do curso, reproduzir a aula e registrar a conclusão.
-3. Retomar o estudo, iniciar uma sessão de foco e consultar a evolução pessoal.
-4. Ajustar aparência e foco sem perder o contexto da tarefa.
+---
 
-## Limites do produto
+## Core User Journeys
 
-A biblioteca original é somente leitura. Rescan é explícito e preserva registros e progresso; mídias ausentes precisam ser identificadas sem insinuar que o arquivo foi apagado. O desktop funciona offline; a interface não deve pressupor serviços em nuvem. A conclusão da aula é independente da posição de reprodução.
+1. **Import & Discover:** Select or register a course directory and browse categories, courses, and lessons with instant live search (`/`).
+2. **Study & Progress:** Stream media with partial-content seeking (`206`), take timestamped notes, review spaced-repetition flashcards, and mark lessons complete independently of seek position.
+3. **Resume & Retain:** Pick up immediately from the last studied lesson via the "Continue studying" row, track weekly goals, and view visual study streaks.
+4. **Focused Sessions:** Plant trees and grow a 2.5D island grove in the Study Forest while maintaining focus through integrated Pomodoro cycles.
 
-## Princípios de experiência
+---
 
-- Orientar a próxima ação, especialmente em estados vazios, erros e mídia ausente.
-- Mostrar progresso pessoal com escopo e significado claros, sem confundi-lo com contagens do acervo.
-- Preservar navegação por teclado, foco visível, contraste, movimento reduzido e rótulos acessíveis.
-- Trabalhar em janelas desktop e telas menores, nos temas claro e escuro.
-- Não substituir evidência de funcionamento por protótipos ou dados fictícios.
+## Non-Negotiable Product Invariants
 
-Requisitos completos e invariantes: [requisitos do produto](docs/product/requirements.md). Estado de entrega: [roadmap](docs/product/roadmap.md). O redesign e suas evidências são acompanhados em [design review](docs/design-review.md).
+1. **Read-Only Library:** The course library on the host filesystem is strictly read-only. LearnVault never modifies, moves, deletes, renames, or copies original course files.
+2. **Explicit, Preserving Rescan:** Catalog scans execute only on explicit user request. Rescans register new items, confirm existing ones, and mark disappeared items as missing without erasing study history or notes.
+3. **Zero Cloud Lock-In & Zero Marketplace Mechanics:** No payment systems, subscription gates, course marketplaces, certificate counters, cloud tracking, or mandatory telemetry.
+4. **Independent Completion & Playback Position:** Marking a lesson completed is independent of its playback resume position.
+5. **Runtime Internationalization (i18n):** User-facing UI, alerts, errors, and menus fully support English (`en`, default) and Brazilian Portuguese (`pt-BR`). Raw untranslated strings are forbidden.
+6. **Data Privacy:** SQLite stores metadata, progress, and user notes locally. Passwords use Argon2id with salted hashes; sessions use cryptographically secure tokens.
 
-## Preferência visual declarada
+---
 
-Para este redesign, o usuário quer uma apresentação mais próxima de plataformas de aprendizagem como Udemy e Coursera: descoberta de cursos clara, cursos visualmente identificáveis, resumo e currículo legíveis e progresso fácil de entender. São referências de qualidade e padrões familiares, não interfaces a copiar. O LearnVault permanece uma biblioteca local-first; não importar compra, preço, matrícula, assinatura, rating ou sincronização em nuvem sem suporte real do produto.
+## Technical Architecture Overview
 
-## Compromisso de marca
+- **Core (`crates/core`):** Shared Rust domain logic, filesystem scanner, media identity resolution, and SQLite database migrations.
+- **Server (`crates/server`):** Axum HTTP API, cookie-based authentication, partial media streaming, and embedded SPA delivery.
+- **Desktop (`crates/desktop`):** Tauri 2 desktop wrapper with native OS folder picker and local IPC commands.
+- **Web SPA (`apps/web`):** Svelte 5 + TypeScript + Vite responsive frontend bundle.
 
-- A marca deve incluir uma logo própria, discreta e reconhecível em tamanhos pequenos. Evitar cores chamativas, arco-íris, gradientes, brilho, mascotes decorativos e wordmarks excessivamente promocionais.
-- Preferir uma marca tipográfica ou símbolo monocromático/duotônico de baixa saturação, com boa leitura no shell desktop, favicon e tema escuro. O símbolo deve sugerir guardar, organizar ou retomar conhecimento sem ilustrar literalmente uma “biblioteca” genérica.
-- A logo não deve competir com capas, títulos ou a ação de continuar estudando; ela é infraestrutura de orientação, não o elemento de destaque da Biblioteca.
+---
+
+## Related Documentation
+
+- Detailed functional and non-functional requirements: [`docs/product/requirements.md`](docs/product/requirements.md)
+- Delivery status and planned milestones: [`docs/product/roadmap.md`](docs/product/roadmap.md)
+- System architecture and ADRs: [`docs/architecture/overview.md`](docs/architecture/overview.md)
+- Design system and visual tokens: [`DESIGN.md`](DESIGN.md) and [`docs/design/DESIGN.md`](docs/design/DESIGN.md)

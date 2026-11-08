@@ -14,22 +14,12 @@ A direção K foi encerrada e implementada no aplicativo real. O resultado não 
 - Ajustes com grupos alinhados Tema/Conta e Pomodoro/Atualização; slider de volume fino, checkboxes compactos e rótulos explícitos para blocos e repetições.
 - Login centrado, sem distrações, com rótulos visíveis e logo monocromática.
 - Tema claro/escuro, focos visíveis, redução de movimento e regras de overflow responsivo.
-- Tokens documentados em `DESIGN.md`, `.impeccable/design.json` e `docs/design/DESIGN.md`.
+- Tokens documentados em `DESIGN.md` e `docs/design/DESIGN.md`.
 - daisyUI permanece integrado com prefixo `lvui-`; a camada visual K personaliza os primitives e evita aparência genérica.
 
-## Evidências visuais reais
+## Evidências visuais e verificação
 
-| Superfície | Evidência |
-| --- | --- |
-| Login 390×844 escuro | [`final-login-390-dark.png`](screenshots/product-pass/final-login-390-dark.png) |
-| Biblioteca 1440×900 claro / 390×844 escuro | [`final-library-1440-light.png`](screenshots/product-pass/final-library-1440-light.png), [`final-library-390-dark.png`](screenshots/product-pass/final-library-390-dark.png) |
-| Curso 1440×900 claro / 390×844 escuro | [`final-course-1440-light.png`](screenshots/product-pass/final-course-1440-light.png), [`final-course-390-dark.png`](screenshots/product-pass/final-course-390-dark.png) |
-| Player 1440×900 claro / 390×844 escuro | [`final-player-1440-light.png`](screenshots/product-pass/final-player-1440-light.png), [`final-player-390-dark.png`](screenshots/product-pass/final-player-390-dark.png) |
-| Estatísticas 1440×900 claro e escuro | [`final-statistics-1440-light.png`](screenshots/product-pass/final-statistics-1440-light.png), [`final-statistics-1440-dark.png`](screenshots/product-pass/final-statistics-1440-dark.png) |
-| Ajustes 1280×800 claro / 1920×1080 escuro | [`final-settings-1280-light.png`](screenshots/product-pass/final-settings-1280-light.png), [`final-settings-1920-dark.png`](screenshots/product-pass/final-settings-1920-dark.png) |
-| Busca vazia e mídia ausente | [`state-library-empty-search-390-dark.png`](screenshots/product-pass/state-library-empty-search-390-dark.png), [`state-library-empty-search-1440-light.png`](screenshots/product-pass/state-library-empty-search-1440-light.png), [`state-player-missing-390-dark.png`](screenshots/product-pass/state-player-missing-390-dark.png) |
-
-A biblioteca temporária do E2E também cobre retomada, marcação de conclusão, mídia que desaparece, thumbnail de vídeo e gerenciamento de capa; os testes usam screenshots de 1440×900 e estados específicos.
+As verificações visuais cobriram todas as superfícies da aplicação no servidor Rust com biblioteca temporária de fixtures (Login, Biblioteca, Curso, Player, Estatísticas, Ajustes, Busca Vazia e Mídia Ausente). As evidências e capturas comparativas foram arquivadas no histórico de PRs, e os requisitos visuais e tokens canônicos estão formalizados em `DESIGN.md` e `docs/design/DESIGN.md`. A marca vetorial oficial está fixada em `docs/design/branding/learnvault-banner.svg`.
 
 ## Verificação funcional
 
@@ -67,10 +57,10 @@ O fluxo de exploração foi encerrado na direção K; não serão abertas novas 
 
 Atualização após a revisão visual serial mais recente. A implementação course-first reorganiza o cabeçalho do Curso móvel, reduz a barra de ações do Player, aproxima estado de conclusão e controle, move a meta semanal para antes do histórico, aumenta o limite da busca e usa grade desktop de quatro colunas. A busca ativa agora recolhe a retomada não relacionada para que a mensagem de resultado vazio não contradiga itens acima.
 
-Evidências atualizadas em [`screenshots/product-pass/`](screenshots/product-pass/):
+Evidências e validações atualizadas:
 
-- Matriz real de 40 capturas, cinco telas (Biblioteca, Curso, Player, Estatísticas, Ajustes), quatro larguras (390, 1280, 1440, 1920) e dois temas.
-- [Player sem mídia](screenshots/product-pass/state-player-missing-390-dark.png), [busca sem correspondências em dois viewports](screenshots/product-pass/state-library-empty-search-390-dark.png) e [`state-library-empty-search-1440-light.png`](screenshots/product-pass/state-library-empty-search-1440-light.png); também há captura de [Login](screenshots/product-pass/final-login-390-dark.png).
-- Todos os viewports capturados sem overflow horizontal; vídeo sintético de smoke carregou `640×360`. O catálogo e usuário usados foram temporários.
+- Matriz de testes cobrindo cinco telas (Biblioteca, Curso, Player, Estatísticas, Ajustes), quatro larguras (390, 1280, 1440, 1920) e dois temas.
+- Validação de estados especiais: Player sem mídia, busca sem correspondências em dois viewports e tela de Login.
+- Todos os viewports avaliados sem overflow horizontal; vídeo sintético de smoke carregou `640×360`. O catálogo e usuário usados foram temporários.
 
 Resultados finais no estado local: `svelte-check` 0 erros/0 warnings, 22 arquivos / 313 testes Vitest, 4/4 testes E2E, build web, build desktop e `git diff --check` passaram. A avaliação visual das capturas não encontrou P0/P1; P2 restante é apenas uma questão de densidade/área abaixo ou na borda dos screenshots, sem teste de gesto real do carrossel. Sem teste com usuários, certificação WCAG 2.2 AA, arquivos reais de mídia ou execução nativa do binário desktop.
