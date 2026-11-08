@@ -114,7 +114,7 @@
 	</button>
 
 	{#if open}
-		<div class="lv-focus-menu__popover" id="focus-menu-popover" bind:this={popover} role="dialog" aria-label="Pomodoro">
+		<div class="lv-focus-menu__popover" id="focus-menu-popover" bind:this={popover} role="dialog" aria-label={tr('Pomodoro timer', 'Timer Pomodoro')}>
 			<div class="lv-focus-menu__head">
 				<div>
 					<strong>{tr('Focus', 'Foco')}</strong>

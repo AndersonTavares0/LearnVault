@@ -241,7 +241,7 @@
 					<span>{tr('Blossoming rate', 'Taxa de florescimento')}</span>
 				</div>
 				<div>
-					<strong class="is-time">{stats.totalMinutes} min</strong>
+					<strong class="is-time">{stats.totalMinutes} {tr('min', 'min')}</strong>
 					<span>{tr('Dedicated time', 'Tempo dedicado')}</span>
 				</div>
 			</div>

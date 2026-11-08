@@ -55,7 +55,7 @@ function safeStorage(): Storage | null {
 	}
 }
 
-let currentLocale: Locale = readLocale(safeStorage());
+let currentLocale: Locale = $state(readLocale(safeStorage()));
 
 export function getLocale(): Locale {
 	return currentLocale;

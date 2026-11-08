@@ -316,7 +316,7 @@
 	<footer class="lv-island-footer" aria-label={tr('Grove summary', 'Resumo do bosque')}>
 		<div class="lv-island-footer__time">
 			<span class="lv-island-footer__time-value">{stats.totalMinutes}</span>
-			<span class="lv-island-footer__time-unit">mins</span>
+			<span class="lv-island-footer__time-unit">{tr('mins', 'min')}</span>
 		</div>
 
 		<div class="lv-island-footer__badges">

@@ -413,7 +413,7 @@
 								title={tr('Press 1 to repeat', 'Pressione 1 para repetir')}
 							>
 								<span class="rating-label">{tr('Missed / Again', 'Errei / Repetir')}</span>
-								<span class="rating-sub">+10 min <span class="shortcut-tag">[1]</span></span>
+								<span class="rating-sub">{tr('+10 min', '+10 min')} <span class="shortcut-tag">[1]</span></span>
 							</button>
 
 							<button

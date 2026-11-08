@@ -595,7 +595,7 @@
 		</div>
 	{/if}
 	<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions (o grupo identificado do player recebe foco para ativar atalhos) -->
-	<div bind:this={playerContainerRef} class="player-container {playbackKind === 'audio' ? 'audio-container' : 'video-container'}" role="group" tabindex="0" onkeydown={handleKeydown} aria-label="Player" aria-keyshortcuts="Space ArrowLeft ArrowRight ArrowUp ArrowDown k j l [ ] f p m n 0-9">
+	<div bind:this={playerContainerRef} class="player-container {playbackKind === 'audio' ? 'audio-container' : 'video-container'}" role="group" tabindex="0" onkeydown={handleKeydown} aria-label={tr('Media player', 'Player de mídia')} aria-keyshortcuts="Space ArrowLeft ArrowRight ArrowUp ArrowDown k j l [ ] f p m n 0-9">
 		<div class="player-top-controls">
 			{#if availableMedia.length > 1}<label class="player-select-label">{tr('Lesson media', 'Mídia da aula')}<select aria-label={tr('Lesson media', 'Mídia da aula')} value={playable?.mediaId ?? ''} onchange={selectMedia}>{#each availableMedia as item}<option value={item.mediaId ?? ''}>{item.name}</option>{/each}</select></label>{/if}
 			{#if availableSubtitles.length > 0}<label class="player-select-label">{tr('Subtitles', 'Legenda')}<select aria-label={tr('Lesson subtitles', 'Legenda da aula')} value={lessonPreference.subtitleId === null ? '' : selectedSubtitle?.mediaId ?? ''} onchange={selectSubtitle}><option value="">{tr('No subtitles', 'Sem legendas')}</option>{#each availableSubtitles as item}<option value={item.mediaId ?? ''}>{item.name}</option>{/each}</select></label>{/if}
@@ -798,8 +798,8 @@
 							class="player-tool-btn player-pip-btn"
 							class:is-active={isPipActive}
 							onclick={togglePictureInPicture}
-							title={isPipActive ? tr('Exit Picture-in-Picture (P)', 'Sair de Picture-in-Picture (P)') : 'Picture-in-Picture (P)'}
-							aria-label={isPipActive ? tr('Exit Picture-in-Picture', 'Sair de Picture-in-Picture') : 'Picture-in-Picture'}
+							title={isPipActive ? tr('Exit Picture-in-Picture (P)', 'Sair de Picture-in-Picture (P)') : tr('Picture-in-Picture (P)', 'Picture-in-Picture (P)')}
+							aria-label={isPipActive ? tr('Exit Picture-in-Picture', 'Sair de Picture-in-Picture') : tr('Picture-in-Picture', 'Picture-in-Picture')}
 							aria-pressed={isPipActive}
 						>
 							<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
