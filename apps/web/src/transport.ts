@@ -472,11 +472,11 @@ function safeInteger(value: unknown): value is number {
 }
 
 export class FocusSessionConflict extends Error {
-	constructor() { super('Esta sessão já foi registrada com outros dados.'); this.name = 'FocusSessionConflict'; }
+	constructor() { super(tr('This session was already recorded with different data.', 'Esta sessão já foi registrada com outros dados.')); this.name = 'FocusSessionConflict'; }
 }
 
 export class InvalidFocusSession extends Error {
-	constructor() { super('Os dados da sessão de foco não são válidos.'); this.name = 'InvalidFocusSession'; }
+	constructor() { super(tr('Invalid focus session data.', 'Os dados da sessão de foco não são válidos.')); this.name = 'InvalidFocusSession'; }
 }
 
 export function normalizeFocusSession(value: unknown): FocusSessionRecord {
@@ -654,9 +654,9 @@ async function responseError(response: Response): Promise<string | null> {
 
 async function importErrorMessage(response: Response): Promise<string> {
 	switch (await responseError(response)) {
-		case 'invalid_course_path': return 'A pasta informada não existe ou não pode ser lida no servidor.';
-		case 'course_already_registered': return 'Este curso já está importado.';
-		default: return response.status === 503 ? 'O servidor está ocupado; tente de novo em instantes.' : 'Não foi possível importar o curso.';
+		case 'invalid_course_path': return tr('The specified folder does not exist or cannot be read on the server.', 'A pasta informada não existe ou não pode ser lida no servidor.');
+		case 'course_already_registered': return tr('This course is already imported.', 'Este curso já está importado.');
+		default: return response.status === 503 ? tr('The server is busy; please try again in a moment.', 'O servidor está ocupado; tente de novo em instantes.') : tr('Could not import course.', 'Não foi possível importar o curso.');
 	}
 }
 
@@ -664,11 +664,11 @@ async function importErrorMessage(response: Response): Promise<string> {
 // então `415` cobre também o arquivo renomeado com uma extensão de imagem.
 function coverUploadErrorMessage(status: number): string {
 	if (status === 403) return 'credentials_change_required';
-	if (status === 404) return 'Curso não encontrado.';
-	if (status === 413) return 'A imagem é maior que 4 MiB.';
-	if (status === 415) return 'A capa precisa ser PNG, JPEG ou WebP.';
-	if (status === 503) return 'O servidor está ocupado; tente de novo em instantes.';
-	return 'Não foi possível salvar a capa do curso.';
+	if (status === 404) return tr('Course not found.', 'Curso não encontrado.');
+	if (status === 413) return tr('The image is larger than 4 MiB.', 'A imagem é maior que 4 MiB.');
+	if (status === 415) return tr('The cover must be PNG, JPEG or WebP.', 'A capa precisa ser PNG, JPEG ou WebP.');
+	if (status === 503) return tr('The server is busy; please try again in a moment.', 'O servidor está ocupado; tente de novo em instantes.');
+	return tr('Could not save course cover.', 'Não foi possível salvar a capa do curso.');
 }
 
 // O valor de `removed` vem do corpo JSON; uma resposta sem corpo válido vale como `false`,
@@ -682,35 +682,35 @@ async function removalFlag(response: Response): Promise<boolean> {
 // (não é mais uma permutação dos irmãos), então a interface precisa recarregar.
 function orderErrorMessage(status: number): string {
 	if (status === 403) return 'credentials_change_required';
-	if (status === 404) return 'Curso não encontrado.';
-	if (status === 422) return 'A ordem enviada não é válida; recarregue a página.';
-	if (status === 503) return 'O servidor está ocupado; tente de novo em instantes.';
-	return 'Não foi possível salvar a ordem.';
+	if (status === 404) return tr('Course not found.', 'Curso não encontrado.');
+	if (status === 422) return tr('The submitted order is not valid; reload the page.', 'A ordem enviada não é válida; recarregue a página.');
+	if (status === 503) return tr('The server is busy; please try again in a moment.', 'O servidor está ocupado; tente de novo em instantes.');
+	return tr('Could not save order.', 'Não foi possível salvar a ordem.');
 }
 
 export class HttpTransport implements Transport {
 	async me() { const response = await fetch('/api/me'); return response.ok ? normalizeUser(await response.json()) : null; }
 	async login(username: string, password: string) {
 		const response = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
-		if (!response.ok) throw new Error(response.status === 401 ? 'Usuário ou senha incorretos.' : 'Não foi possível entrar.');
+		if (!response.ok) throw new Error(response.status === 401 ? tr('Incorrect username or password.', 'Usuário ou senha incorretos.') : tr('Could not sign in.', 'Não foi possível entrar.'));
 		return normalizeUser(await response.json());
 	}
 	async logout() { await fetch('/api/logout', { method: 'POST' }); }
-	importCourse() { return Promise.reject(new Error('O desktop é quem escolhe pastas no disco; no servidor informe o caminho do curso.')); }
+	importCourse() { return Promise.reject(new Error(tr('The desktop application selects folders on disk; on the server provide the course path.', 'O desktop é quem escolhe pastas no disco; no servidor informe o caminho do curso.'))); }
 	async importCoursePath(path: string) {
 		const response = await fetch('/api/admin/courses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }) });
 		if (!response.ok) throw new Error(await importErrorMessage(response));
 	}
 	async removeCourse(courseId: string) {
 		const response = await fetch(`/api/admin/courses/${encodeURIComponent(courseId)}`, { method: 'DELETE' });
-		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível remover o curso.');
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not remove course.', 'Não foi possível remover o curso.'));
 	}
-	async catalog() { const response = await fetch('/api/catalog'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar o catálogo.'); return normalizeCatalog(await response.json()); }
-	async rescan() { const response = await fetch('/api/admin/catalog/rescan', { method: 'POST' }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 409 ? 'Já existe um rescan em andamento.' : response.status === 400 ? 'Nenhum curso foi importado ainda.' : 'Não foi possível indexar os cursos.'); }
-	async updateCredentials(username: string, password: string, currentPassword = password) { const response = await fetch('/api/account/credentials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ current_password: currentPassword, username, password }) }); if (!response.ok) throw new Error(response.status === 422 ? 'Usuário ou senha inválidos.' : response.status === 401 ? 'Senha atual incorreta.' : 'Não foi possível atualizar as credenciais.'); return normalizeUser(await response.json()); }
+	async catalog() { const response = await fetch('/api/catalog'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not load catalog.', 'Não foi possível carregar o catálogo.')); return normalizeCatalog(await response.json()); }
+	async rescan() { const response = await fetch('/api/admin/catalog/rescan', { method: 'POST' }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 409 ? tr('A rescan is already in progress.', 'Já existe um rescan em andamento.') : response.status === 400 ? tr('No courses imported yet.', 'Nenhum curso foi importado ainda.') : tr('Could not index courses.', 'Não foi possível indexar os cursos.')); }
+	async updateCredentials(username: string, password: string, currentPassword = password) { const response = await fetch('/api/account/credentials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ current_password: currentPassword, username, password }) }); if (!response.ok) throw new Error(response.status === 422 ? tr('Invalid username or password.', 'Usuário ou senha inválidos.') : response.status === 401 ? tr('Current password incorrect.', 'Senha atual incorreta.') : tr('Could not update credentials.', 'Não foi possível atualizar as credenciais.')); return normalizeUser(await response.json()); }
 	async listUsers(): Promise<LocalUser[]> {
 		const response = await fetch('/api/admin/users');
-		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar os usuários locais.');
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not load local users.', 'Não foi possível carregar os usuários locais.'));
 		const data = await response.json();
 		return (Array.isArray(data?.items) ? data.items : []).map(normalizeLocalUser);
 	}
@@ -723,10 +723,10 @@ export class HttpTransport implements Transport {
 		if (!response.ok) {
 			throw new Error(
 				response.status === 409
-					? 'Já existe um usuário com este nome.'
+					? tr('A user with this username already exists.', 'Já existe um usuário com este nome.')
 					: response.status === 422
-						? 'Nome de usuário (2–64 caracteres) ou senha (mínimo 12 caracteres) inválidos.'
-						: 'Não foi possível criar o usuário.'
+						? tr('Invalid username (2–64 characters) or password (minimum 12 characters).', 'Nome de usuário (2–64 caracteres) ou senha (mínimo 12 caracteres) inválidos.')
+						: tr('Could not create user.', 'Não foi possível criar o usuário.')
 			);
 		}
 		return normalizeLocalUser(await response.json());
@@ -737,7 +737,7 @@ export class HttpTransport implements Transport {
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ allowed_course_ids: allowedCourseIds })
 		});
-		if (!response.ok) throw new Error('Não foi possível atualizar as permissões de cursos.');
+		if (!response.ok) throw new Error(tr('Could not update course permissions.', 'Não foi possível atualizar as permissões de cursos.'));
 		const data = await response.json();
 		return Array.isArray(data?.allowed_course_ids)
 			? data.allowed_course_ids.filter((id: unknown): id is string => typeof id === 'string')
@@ -745,19 +745,19 @@ export class HttpTransport implements Transport {
 	}
 	async deleteUser(userId: string): Promise<boolean> {
 		const response = await fetch(`/api/admin/users/${encodeURIComponent(userId)}`, { method: 'DELETE' });
-		if (!response.ok) throw new Error('Não foi possível remover o usuário.');
+		if (!response.ok) throw new Error(tr('Could not remove user.', 'Não foi possível remover o usuário.'));
 		const data = await response.json();
 		return data?.deleted === true;
 	}
-	async studyProgress(mediaId: string) { const response = await fetch(`/api/study/progress?media_id=${encodeURIComponent(mediaId)}`); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? 'Mídia não encontrada.' : 'Não foi possível ler o progresso.'); return normalizeStudyProgress(await response.json()); }
-	async recordPosition(mediaId: string, positionSeconds: number) { const response = await fetch('/api/study/position', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: mediaId, position_seconds: positionSeconds }) }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? 'Mídia não encontrada.' : response.status === 422 ? 'Posição inválida.' : 'Não foi possível salvar o progresso.'); return normalizeStudyProgress(await response.json()); }
-	async setCompleted(mediaId: string, completed: boolean) { const response = await fetch('/api/study/completed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: mediaId, completed }) }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? 'Mídia não encontrada.' : 'Não foi possível atualizar a conclusão.'); return normalizeStudyProgress(await response.json()); }
-	async recentStudy(limit?: number) { const url = limit === undefined ? '/api/study/recent' : `/api/study/recent?limit=${limit}`; const response = await fetch(url); if (!response.ok) throw response.status === 404 ? Object.assign(new Error('Estudo não disponível neste servidor.'), { code: STUDY_NOT_AVAILABLE }) : new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar o histórico.'); return normalizeRecentStudy(await response.json()); }
-	async studySummary() { const response = await fetch('/api/study/summary'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar sua evolução.'); return normalizeStudySummary(await response.json()); }
+	async studyProgress(mediaId: string) { const response = await fetch(`/api/study/progress?media_id=${encodeURIComponent(mediaId)}`); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? tr('Media not found.', 'Mídia não encontrada.') : tr('Could not read progress.', 'Não foi possível ler o progresso.')); return normalizeStudyProgress(await response.json()); }
+	async recordPosition(mediaId: string, positionSeconds: number) { const response = await fetch('/api/study/position', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: mediaId, position_seconds: positionSeconds }) }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? tr('Media not found.', 'Mídia não encontrada.') : response.status === 422 ? tr('Invalid position.', 'Posição inválida.') : tr('Could not save progress.', 'Não foi possível salvar o progresso.')); return normalizeStudyProgress(await response.json()); }
+	async setCompleted(mediaId: string, completed: boolean) { const response = await fetch('/api/study/completed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: mediaId, completed }) }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? tr('Media not found.', 'Mídia não encontrada.') : tr('Could not update completion.', 'Não foi possível atualizar a conclusão.')); return normalizeStudyProgress(await response.json()); }
+	async recentStudy(limit?: number) { const url = limit === undefined ? '/api/study/recent' : `/api/study/recent?limit=${limit}`; const response = await fetch(url); if (!response.ok) throw response.status === 404 ? Object.assign(new Error(tr('Study not available on this server.', 'Estudo não disponível neste servidor.')), { code: STUDY_NOT_AVAILABLE }) : new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not load history.', 'Não foi possível carregar o histórico.')); return normalizeRecentStudy(await response.json()); }
+	async studySummary() { const response = await fetch('/api/study/summary'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not load your evolution.', 'Não foi possível carregar sua evolução.')); return normalizeStudySummary(await response.json()); }
 	async listNotes(mediaId?: string) {
 		const url = mediaId ? `/api/study/notes?media_id=${encodeURIComponent(mediaId)}` : '/api/study/notes';
 		const response = await fetch(url);
-		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar as anotações.');
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not load notes.', 'Não foi possível carregar as anotações.'));
 		const data = await response.json();
 		return (Array.isArray(data.items) ? data.items : []).map(normalizeStudyNote);
 	}
@@ -767,7 +767,7 @@ export class HttpTransport implements Transport {
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ media_id: mediaId, position_seconds: positionSeconds, content })
 		});
-		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 422 ? 'Conteúdo da anotação inválido.' : 'Não foi possível salvar a anotação.');
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 422 ? tr('Invalid note content.', 'Conteúdo da anotação inválido.') : tr('Could not save note.', 'Não foi possível salvar a anotação.'));
 		return normalizeStudyNote(await response.json());
 	}
 	async updateNote(noteId: string, content: string) {
@@ -776,18 +776,18 @@ export class HttpTransport implements Transport {
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ content })
 		});
-		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível atualizar a anotação.');
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not update note.', 'Não foi possível atualizar a anotação.'));
 		return normalizeStudyNote(await response.json());
 	}
 	async deleteNote(noteId: string) {
 		const response = await fetch(`/api/study/notes/${encodeURIComponent(noteId)}`, {
 			method: 'DELETE'
 		});
-		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível excluir a anotação.');
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not delete note.', 'Não foi possível excluir a anotação.'));
 	}
 	async listFlashcards(mediaId: string): Promise<Flashcard[]> {
 		const response = await fetch(`/api/study/flashcards?media_id=${encodeURIComponent(mediaId)}`);
-		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar os cartões.');
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not load flashcards.', 'Não foi possível carregar os cartões.'));
 		const data = await response.json();
 		return (Array.isArray(data.items) ? data.items : []).map(normalizeFlashcard);
 	}
@@ -797,7 +797,7 @@ export class HttpTransport implements Transport {
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ media_id: mediaId, front, back })
 		});
-		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 422 ? 'Conteúdo do cartão inválido.' : 'Não foi possível salvar o cartão.');
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 422 ? tr('Invalid flashcard content.', 'Conteúdo do cartão inválido.') : tr('Could not save flashcard.', 'Não foi possível salvar o cartão.'));
 		return normalizeFlashcard(await response.json());
 	}
 	async updateFlashcard(cardId: string, front: string, back: string): Promise<Flashcard> {
@@ -806,14 +806,14 @@ export class HttpTransport implements Transport {
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ front, back })
 		});
-		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 422 ? 'Conteúdo do cartão inválido.' : 'Não foi possível atualizar o cartão.');
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 422 ? tr('Invalid flashcard content.', 'Conteúdo do cartão inválido.') : tr('Could not update flashcard.', 'Não foi possível atualizar o cartão.'));
 		return normalizeFlashcard(await response.json());
 	}
 	async deleteFlashcard(cardId: string): Promise<void> {
 		const response = await fetch(`/api/study/flashcards/${encodeURIComponent(cardId)}`, {
 			method: 'DELETE'
 		});
-		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível excluir o cartão.');
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not delete flashcard.', 'Não foi possível excluir o cartão.'));
 	}
 	async reviewFlashcard(cardId: string, rating: ReviewRating): Promise<Flashcard> {
 		const response = await fetch(`/api/study/flashcards/${encodeURIComponent(cardId)}/review`, {
@@ -821,12 +821,12 @@ export class HttpTransport implements Transport {
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ rating })
 		});
-		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 422 ? 'Avaliação inválida.' : 'Não foi possível registrar a revisão.');
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 422 ? tr('Invalid review rating.', 'Avaliação inválida.') : tr('Could not record review.', 'Não foi possível registrar a revisão.'));
 		return normalizeFlashcard(await response.json());
 	}
 	async listFavorites(): Promise<StudyFavorites> {
 		const response = await fetch('/api/study/favorites');
-		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar os favoritos.');
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not load favorites.', 'Não foi possível carregar os favoritos.'));
 		return normalizeStudyFavorites(await response.json());
 	}
 	async setCourseFavorite(courseId: string, favorite: boolean): Promise<boolean> {
@@ -835,7 +835,7 @@ export class HttpTransport implements Transport {
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ course_id: courseId, favorite })
 		});
-		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível atualizar o favorito.');
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not update favorite.', 'Não foi possível atualizar o favorito.'));
 		const data = (await response.json()) as { favorite?: unknown };
 		return Boolean(data?.favorite);
 	}
@@ -845,7 +845,7 @@ export class HttpTransport implements Transport {
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ media_id: mediaId, favorite })
 		});
-		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível atualizar o favorito.');
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not update favorite.', 'Não foi possível atualizar o favorito.'));
 		const data = (await response.json()) as { favorite?: unknown };
 		return Boolean(data?.favorite);
 	}
@@ -854,11 +854,11 @@ export class HttpTransport implements Transport {
 		if (!response.ok) {
 			if (response.status === 409) throw new FocusSessionConflict();
 			if (response.status === 422) throw new InvalidFocusSession();
-			throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível salvar a sessão de foco.');
+			throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not save focus session.', 'Não foi possível salvar a sessão de foco.'));
 		}
 		return normalizeFocusSession(await response.json());
 	}
-	async focusSummary() { const response = await fetch('/api/focus/summary'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar as estatísticas de foco.'); return normalizeFocusSummary(await response.json()); }
+	async focusSummary() { const response = await fetch('/api/focus/summary'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not load focus statistics.', 'Não foi possível carregar as estatísticas de foco.')); return normalizeFocusSummary(await response.json()); }
 	async listFocusSessions(limit = 100): Promise<FocusSessionRecord[]> {
 		const response = await fetch(`/api/focus/sessions?limit=${limit}`);
 		if (!response.ok) return [];
@@ -878,31 +878,31 @@ export class HttpTransport implements Transport {
 		return version ? `/api/user/avatar?v=${version}` : '/api/user/avatar';
 	}
 	async uploadUserAvatar(file: File | Blob): Promise<{ version: number }> {
-		if (!file) throw new Error('Escolha uma imagem para o avatar.');
-		if (file.size > 2 * 1024 * 1024) throw new Error('A imagem deve ter no máximo 2 MiB.');
+		if (!file) throw new Error(tr('Choose an image for the avatar.', 'Escolha uma imagem para o avatar.'));
+		if (file.size > 2 * 1024 * 1024) throw new Error(tr('The image must be at most 2 MiB.', 'A imagem deve ter no máximo 2 MiB.'));
 		const response = await fetch('/api/user/avatar', { method: 'PUT', body: file });
 		if (!response.ok) {
-			if (response.status === 413) throw new Error('A imagem é maior que 2 MiB.');
-			if (response.status === 415 || response.status === 422) throw new Error('Formato de imagem não suportado. Use PNG, JPEG ou WebP.');
-			throw new Error('Não foi possível salvar o avatar.');
+			if (response.status === 413) throw new Error(tr('The image is larger than 2 MiB.', 'A imagem é maior que 2 MiB.'));
+			if (response.status === 415 || response.status === 422) throw new Error(tr('Unsupported image format. Use PNG, JPEG or WebP.', 'Formato de imagem não suportado. Use PNG, JPEG ou WebP.'));
+			throw new Error(tr('Could not save avatar.', 'Não foi possível salvar o avatar.'));
 		}
 		const data = (await response.json()) as { version?: unknown };
 		return { version: Number(data.version ?? Date.now()) };
 	}
 	async deleteUserAvatar(): Promise<void> {
 		const response = await fetch('/api/user/avatar', { method: 'DELETE' });
-		if (!response.ok) throw new Error('Não foi possível remover o avatar.');
+		if (!response.ok) throw new Error(tr('Could not remove avatar.', 'Não foi possível remover o avatar.'));
 	}
-	async rewardSummary() { const response = await fetch('/api/rewards/summary'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar suas recompensas.'); return normalizeRewardSummary(await response.json()); }
-	async claimDailyMission(missionId: MissionId) { const response = await fetch(`/api/rewards/missions/${encodeURIComponent(missionId)}/claim`, { method: 'POST' }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 409 ? 'Conclua a missão antes de resgatá-la.' : 'Não foi possível resgatar a missão.'); return normalizeClaim(await response.json()); }
-	async setWeeklyGoal(goal: number) { if (!Number.isInteger(goal) || goal < 1 || goal > 7) throw new Error('A meta semanal precisa ser de 1 a 7 dias.'); const response = await fetch('/api/rewards/weekly-goal', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ weekly_goal: goal }) }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 422 ? 'A meta semanal precisa ser de 1 a 7 dias.' : 'Não foi possível salvar a meta semanal.'); return normalizeWeeklyGoal(await response.json()); }
+	async rewardSummary() { const response = await fetch('/api/rewards/summary'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not load your rewards.', 'Não foi possível carregar suas recompensas.')); return normalizeRewardSummary(await response.json()); }
+	async claimDailyMission(missionId: MissionId) { const response = await fetch(`/api/rewards/missions/${encodeURIComponent(missionId)}/claim`, { method: 'POST' }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 409 ? tr('Complete the mission before claiming it.', 'Conclua a missão antes de resgatá-la.') : tr('Could not claim mission.', 'Não foi possível resgatar a missão.')); return normalizeClaim(await response.json()); }
+	async setWeeklyGoal(goal: number) { if (!Number.isInteger(goal) || goal < 1 || goal > 7) throw new Error(tr('Weekly goal must be between 1 and 7 days.', 'A meta semanal precisa ser de 1 a 7 dias.')); const response = await fetch('/api/rewards/weekly-goal', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ weekly_goal: goal }) }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 422 ? tr('Weekly goal must be between 1 and 7 days.', 'A meta semanal precisa ser de 1 a 7 dias.') : tr('Could not save weekly goal.', 'Não foi possível salvar a meta semanal.')); return normalizeWeeklyGoal(await response.json()); }
 	// O servidor local faz a checagem por HTTPS e devolve o estado; o navegador só o exibe.
 	// `force=1` (checagem manual) ignora o intervalo mínimo de cache do servidor.
-	async checkUpdate(force = false) { const response = await fetch(force ? '/api/update?force=1' : '/api/update'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível verificar a atualização.'); return normalizeUpdateStatus(await response.json()); }
+	async checkUpdate(force = false) { const response = await fetch(force ? '/api/update?force=1' : '/api/update'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not check for updates.', 'Não foi possível verificar a atualização.')); return normalizeUpdateStatus(await response.json()); }
 	async installUpdate(): Promise<boolean> { return Promise.resolve(false); }
 	async updateHistory(): Promise<UpdateHistoryEntry[]> {
 		const response = await fetch('/api/update/history');
-		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : 'Não foi possível carregar o histórico de atualizações.');
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not load update history.', 'Não foi possível carregar o histórico de atualizações.'));
 		const data = (await response.json()) as { items?: unknown };
 		if (!data || !Array.isArray(data.items)) return [];
 		return data.items.map((item: any) => ({
@@ -948,15 +948,15 @@ export class HttpTransport implements Transport {
 		return `/api/courses/${encodeURIComponent(courseId)}/cover?v=${coverVersion}`;
 	}
 	async importCourseCover(courseId: string, file?: File | null) {
-		if (!file) throw new Error('Escolha uma imagem para a capa.');
+		if (!file) throw new Error(tr('Choose an image for the cover.', 'Escolha uma imagem para a capa.'));
 		// O limite é verificado antes de enviar: um arquivo grande demais nunca ocupa a rede.
-		if (file.size > MAX_COVER_BYTES) throw new Error('A imagem é maior que 4 MiB.');
+		if (file.size > MAX_COVER_BYTES) throw new Error(tr('The image is larger than 4 MiB.', 'A imagem é maior que 4 MiB.'));
 		const response = await fetch(`/api/admin/courses/${encodeURIComponent(courseId)}/cover`, { method: 'PUT', body: file });
 		if (!response.ok) throw new Error(coverUploadErrorMessage(response.status));
 	}
 	async removeCourseCover(courseId: string) {
 		const response = await fetch(`/api/admin/courses/${encodeURIComponent(courseId)}/cover`, { method: 'DELETE' });
-		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? 'Curso não encontrado.' : 'Não foi possível remover a capa do curso.');
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? tr('Course not found.', 'Curso não encontrado.') : tr('Could not remove course cover.', 'Não foi possível remover a capa do curso.'));
 		return removalFlag(response);
 	}
 	async setCourseOrder(courseId: string, parent: string, children: string[]) {
@@ -974,35 +974,38 @@ export class HttpTransport implements Transport {
 // Códigos estáveis de erro IPC e a mensagem sanitizada correspondente. Um código
 // desconhecido ou ausente nunca repassa o texto recebido: cai no fallback da chamada,
 // para que nenhuma mensagem arbitrária (potencialmente com caminhos) chegue à interface.
-const DESKTOP_ERROR_MESSAGES: Record<string, string> = {
-	catalog_unavailable: 'catálogo indisponível',
-	database_unavailable: 'banco de dados local indisponível',
-	course_path_invalid: 'A pasta escolhida não é um curso válido.',
-	courses_config_unavailable: 'Não foi possível salvar a configuração do aplicativo.',
-	no_courses_registered: 'Nenhum curso foi importado ainda.',
-	rescan_in_progress: 'Já existe uma indexação em andamento.',
-	rescan_unavailable: 'Não foi possível indexar os cursos.',
-	study_unavailable: 'Não foi possível sincronizar o progresso de estudo.',
-	media_not_found: 'Mídia não encontrada.',
-	invalid_position: 'Posição inválida.',
-	course_not_found: 'Curso não encontrado.',
-	invalid_cover: 'A capa precisa ser PNG, JPEG ou WebP de até 4 MiB.',
-	cover_unavailable: 'Não foi possível atualizar a capa do curso.',
-	invalid_order: 'A ordem enviada não é válida; recarregue a página.',
-	order_unavailable: 'Não foi possível salvar a ordem do curso.',
-	invalid_focus_session: 'Os dados da sessão de foco não são válidos.',
-	focus_session_conflict: 'Esta sessão já foi registrada com outros dados.',
-	mission_not_complete: 'Conclua a missão antes de resgatá-la.',
-	invalid_weekly_goal: 'A meta semanal precisa ser de 1 a 7 dias.',
-	update_check_failed: 'Não foi possível conectar ao servidor de atualizações.',
-	update_unavailable: 'Não foi possível verificar ou aplicar a atualização.',
-	note_not_found: 'Anotação não encontrada.',
-	invalid_note: 'Conteúdo da anotação inválido.',
-	flashcard_not_found: 'Cartão não encontrado.',
-	invalid_flashcard: 'Conteúdo do cartão inválido.',
-	invalid_review_rating: 'Avaliação inválida.',
-	invalid_favorite_target: 'Alvo de favorito inválido.'
-};
+function desktopErrorMessage(code: string): string | null {
+	switch (code) {
+		case 'catalog_unavailable': return tr('Catalog unavailable.', 'catálogo indisponível');
+		case 'database_unavailable': return tr('Local database unavailable.', 'banco de dados local indisponível');
+		case 'course_path_invalid': return tr('The selected folder is not a valid course.', 'A pasta escolhida não é um curso válido.');
+		case 'courses_config_unavailable': return tr('Could not save application configuration.', 'Não foi possível salvar a configuração do aplicativo.');
+		case 'no_courses_registered': return tr('No courses have been imported yet.', 'Nenhum curso foi importado ainda.');
+		case 'rescan_in_progress': return tr('Indexing already in progress.', 'Já existe uma indexação em andamento.');
+		case 'rescan_unavailable': return tr('Could not index courses.', 'Não foi possível indexar os cursos.');
+		case 'study_unavailable': return tr('Could not synchronize study progress.', 'Não foi possível sincronizar o progresso de estudo.');
+		case 'media_not_found': return tr('Media not found.', 'Mídia não encontrada.');
+		case 'invalid_position': return tr('Invalid position.', 'Posição inválida.');
+		case 'course_not_found': return tr('Course not found.', 'Curso não encontrado.');
+		case 'invalid_cover': return tr('The cover must be PNG, JPEG or WebP up to 4 MiB.', 'A capa precisa ser PNG, JPEG ou WebP de até 4 MiB.');
+		case 'cover_unavailable': return tr('Could not update course cover.', 'Não foi possível atualizar a capa do curso.');
+		case 'invalid_order': return tr('The submitted order is not valid; reload the page.', 'A ordem enviada não é válida; recarregue a página.');
+		case 'order_unavailable': return tr('Could not save course order.', 'Não foi possível salvar a ordem do curso.');
+		case 'invalid_focus_session': return tr('Invalid focus session data.', 'Os dados da sessão de foco não são válidos.');
+		case 'focus_session_conflict': return tr('This session was already recorded with different data.', 'Esta sessão já foi registrada com outros dados.');
+		case 'mission_not_complete': return tr('Complete the mission before claiming it.', 'Conclua a missão antes de resgatá-la.');
+		case 'invalid_weekly_goal': return tr('Weekly goal must be between 1 and 7 days.', 'A meta semanal precisa ser de 1 a 7 dias.');
+		case 'update_check_failed': return tr('Could not connect to update server.', 'Não foi possível conectar ao servidor de atualizações.');
+		case 'update_unavailable': return tr('Could not check or apply update.', 'Não foi possível verificar ou aplicar a atualização.');
+		case 'note_not_found': return tr('Note not found.', 'Anotação não encontrada.');
+		case 'invalid_note': return tr('Invalid note content.', 'Conteúdo da anotação inválido.');
+		case 'flashcard_not_found': return tr('Card not found.', 'Cartão não encontrado.');
+		case 'invalid_flashcard': return tr('Invalid card content.', 'Conteúdo do cartão inválido.');
+		case 'invalid_review_rating': return tr('Invalid review rating.', 'Avaliação inválida.');
+		case 'invalid_favorite_target': return tr('Invalid favorite target.', 'Alvo de favorito inválido.');
+		default: return null;
+	}
+}
 
 // O comando devolve o erro como objeto serializado `{ code, message }`, não como `Error`.
 function desktopError(cause: unknown, fallback: string): Error {
@@ -1010,7 +1013,7 @@ function desktopError(cause: unknown, fallback: string): Error {
 	if (payload && typeof payload === 'object' && payload.code === 'focus_session_conflict') return new FocusSessionConflict();
 	if (payload && typeof payload === 'object' && payload.code === 'invalid_focus_session') return new InvalidFocusSession();
 	if (payload && typeof payload === 'object' && typeof payload.code === 'string') {
-		const known = DESKTOP_ERROR_MESSAGES[payload.code];
+		const known = desktopErrorMessage(payload.code);
 		if (known) return new Error(known);
 	}
 	return new Error(fallback);
@@ -1018,36 +1021,36 @@ function desktopError(cause: unknown, fallback: string): Error {
 
 export class DesktopStub implements Transport {
 	me() { return Promise.resolve(null); }
-	login() { return Promise.reject(new Error('Transporte desktop ainda não implementado.')); }
+	login() { return Promise.reject(new Error(tr('Desktop transport not yet implemented.', 'Transporte desktop ainda não implementado.'))); }
 	logout() { return Promise.resolve(); }
-	async catalog() { try { return normalizeCatalog(await invoke<unknown>('desktop_catalog')); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar o catálogo.'); } }
+	async catalog() { try { return normalizeCatalog(await invoke<unknown>('desktop_catalog')); } catch (cause) { throw desktopError(cause, tr('Could not load catalog.', 'Não foi possível carregar o catálogo.')); } }
 	// O webview apenas dispara o seletor nativo no Rust; nenhum caminho é enviado nem
 	// devolvido. Cancelar preserva a lista anterior de cursos.
-	async importCourse() { try { await invoke<unknown>('desktop_import_course'); } catch (cause) { throw desktopError(cause, 'Não foi possível importar o curso.'); } }
-	importCoursePath(_path: string) { return Promise.reject(new Error('No desktop a pasta é escolhida pelo seletor nativo do sistema.')); }
+	async importCourse() { try { await invoke<unknown>('desktop_import_course'); } catch (cause) { throw desktopError(cause, tr('Could not import course.', 'Não foi possível importar o curso.')); } }
+	importCoursePath(_path: string) { return Promise.reject(new Error(tr('On desktop the folder is chosen by the native system picker.', 'No desktop a pasta é escolhida pelo seletor nativo do sistema.'))); }
 	// A remoção envia somente a identidade opaca do curso, nunca um caminho.
-	async removeCourse(courseId: string) { try { await invoke<unknown>('desktop_remove_course', { courseId }); } catch (cause) { throw desktopError(cause, 'Não foi possível remover o curso.'); } }
+	async removeCourse(courseId: string) { try { await invoke<unknown>('desktop_remove_course', { courseId }); } catch (cause) { throw desktopError(cause, tr('Could not remove course.', 'Não foi possível remover o curso.')); } }
 	// O rescan desktop é sempre explícito: o webview só o dispara a pedido do usuário. A
 	// resposta é um resumo sanitizado que não interessa ao shell, que recarrega o catálogo.
-	async rescan() { try { await invoke<unknown>('desktop_rescan'); } catch (cause) { throw desktopError(cause, 'Não foi possível indexar os cursos.'); } }
-	updateCredentials() { return Promise.reject(new Error('Transporte desktop ainda não implementado.')); }
+	async rescan() { try { await invoke<unknown>('desktop_rescan'); } catch (cause) { throw desktopError(cause, tr('Could not index courses.', 'Não foi possível indexar os cursos.')); } }
+	updateCredentials() { return Promise.reject(new Error(tr('Desktop transport not yet implemented.', 'Transporte desktop ainda não implementado.'))); }
 	// O progresso de estudo do desktop é o do dono local fixo, escolhido no Rust: o webview
 	// envia apenas o `mediaId`, a posição, a conclusão e o limite, e nunca um `owner_id` nem
 	// qualquer caminho. Os comandos devolvem o mesmo contrato snake_case do HTTP, então a
 	// normalização é a mesma e nenhum `fetch` entra no bundle desktop.
-	async studyProgress(mediaId: string) { try { return normalizeStudyProgress(await invoke<unknown>('desktop_study_progress', { mediaId })); } catch (cause) { throw desktopError(cause, 'Não foi possível ler o progresso.'); } }
-	async recordPosition(mediaId: string, positionSeconds: number) { try { return normalizeStudyProgress(await invoke<unknown>('desktop_record_position', { mediaId, positionSeconds })); } catch (cause) { throw desktopError(cause, 'Não foi possível salvar o progresso.'); } }
-	async setCompleted(mediaId: string, completed: boolean) { try { return normalizeStudyProgress(await invoke<unknown>('desktop_set_completed', { mediaId, completed })); } catch (cause) { throw desktopError(cause, 'Não foi possível atualizar a conclusão.'); } }
+	async studyProgress(mediaId: string) { try { return normalizeStudyProgress(await invoke<unknown>('desktop_study_progress', { mediaId })); } catch (cause) { throw desktopError(cause, tr('Could not read progress.', 'Não foi possível ler o progresso.')); } }
+	async recordPosition(mediaId: string, positionSeconds: number) { try { return normalizeStudyProgress(await invoke<unknown>('desktop_record_position', { mediaId, positionSeconds })); } catch (cause) { throw desktopError(cause, tr('Could not save progress.', 'Não foi possível salvar o progresso.')); } }
+	async setCompleted(mediaId: string, completed: boolean) { try { return normalizeStudyProgress(await invoke<unknown>('desktop_set_completed', { mediaId, completed })); } catch (cause) { throw desktopError(cause, tr('Could not update completion status.', 'Não foi possível atualizar a conclusão.')); } }
 	// Sem limite informado, o comando usa o padrão do contrato; por isso o argumento é
 	// omitido em vez de enviado como `undefined`.
-	async recentStudy(limit?: number) { try { return normalizeRecentStudy(await invoke<unknown>('desktop_recent_study', limit === undefined ? {} : { limit })); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar o histórico de estudo.'); } }
-	async studySummary() { try { return normalizeStudySummary(await invoke<unknown>('desktop_study_summary')); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar sua evolução.'); } }
+	async recentStudy(limit?: number) { try { return normalizeRecentStudy(await invoke<unknown>('desktop_recent_study', limit === undefined ? {} : { limit })); } catch (cause) { throw desktopError(cause, tr('Could not load study history.', 'Não foi possível carregar o histórico de estudo.')); } }
+	async studySummary() { try { return normalizeStudySummary(await invoke<unknown>('desktop_study_summary')); } catch (cause) { throw desktopError(cause, tr('Could not load your progress summary.', 'Não foi possível carregar sua evolução.')); } }
 	async listNotes(mediaId?: string): Promise<StudyNote[]> {
 		try {
 			const res = await invoke<unknown>('desktop_list_notes', mediaId ? { mediaId } : {});
 			return (Array.isArray(res) ? res : []).map(normalizeStudyNote);
 		} catch (cause) {
-			throw desktopError(cause, 'Não foi possível carregar as anotações.');
+			throw desktopError(cause, tr('Could not load notes.', 'Não foi possível carregar as anotações.'));
 		}
 	}
 	async createNote(mediaId: string, positionSeconds: number, content: string): Promise<StudyNote> {
@@ -1055,7 +1058,7 @@ export class DesktopStub implements Transport {
 			const res = await invoke<unknown>('desktop_create_note', { mediaId, positionSeconds, content });
 			return normalizeStudyNote(res);
 		} catch (cause) {
-			throw desktopError(cause, 'Não foi possível salvar a anotação.');
+			throw desktopError(cause, tr('Could not save note.', 'Não foi possível salvar a anotação.'));
 		}
 	}
 	async updateNote(noteId: string, content: string): Promise<StudyNote> {
@@ -1063,14 +1066,14 @@ export class DesktopStub implements Transport {
 			const res = await invoke<unknown>('desktop_update_note', { noteId, content });
 			return normalizeStudyNote(res);
 		} catch (cause) {
-			throw desktopError(cause, 'Não foi possível atualizar a anotação.');
+			throw desktopError(cause, tr('Could not update note.', 'Não foi possível atualizar a anotação.'));
 		}
 	}
 	async deleteNote(noteId: string): Promise<void> {
 		try {
 			await invoke<unknown>('desktop_delete_note', { noteId });
 		} catch (cause) {
-			throw desktopError(cause, 'Não foi possível excluir a anotação.');
+			throw desktopError(cause, tr('Could not delete note.', 'Não foi possível excluir a anotação.'));
 		}
 	}
 	async listFlashcards(mediaId: string): Promise<Flashcard[]> {
@@ -1078,7 +1081,7 @@ export class DesktopStub implements Transport {
 			const res = await invoke<unknown>('desktop_list_flashcards', { mediaId });
 			return (Array.isArray(res) ? res : []).map(normalizeFlashcard);
 		} catch (cause) {
-			throw desktopError(cause, 'Não foi possível carregar os cartões.');
+			throw desktopError(cause, tr('Could not load cards.', 'Não foi possível carregar os cartões.'));
 		}
 	}
 	async createFlashcard(mediaId: string, front: string, back: string): Promise<Flashcard> {
@@ -1086,7 +1089,7 @@ export class DesktopStub implements Transport {
 			const res = await invoke<unknown>('desktop_create_flashcard', { mediaId, front, back });
 			return normalizeFlashcard(res);
 		} catch (cause) {
-			throw desktopError(cause, 'Não foi possível salvar o cartão.');
+			throw desktopError(cause, tr('Could not save card.', 'Não foi possível salvar o cartão.'));
 		}
 	}
 	async updateFlashcard(cardId: string, front: string, back: string): Promise<Flashcard> {
@@ -1094,14 +1097,14 @@ export class DesktopStub implements Transport {
 			const res = await invoke<unknown>('desktop_update_flashcard', { cardId, front, back });
 			return normalizeFlashcard(res);
 		} catch (cause) {
-			throw desktopError(cause, 'Não foi possível atualizar o cartão.');
+			throw desktopError(cause, tr('Could not update card.', 'Não foi possível atualizar o cartão.'));
 		}
 	}
 	async deleteFlashcard(cardId: string): Promise<void> {
 		try {
 			await invoke<unknown>('desktop_delete_flashcard', { cardId });
 		} catch (cause) {
-			throw desktopError(cause, 'Não foi possível excluir o cartão.');
+			throw desktopError(cause, tr('Could not delete card.', 'Não foi possível excluir o cartão.'));
 		}
 	}
 	async reviewFlashcard(cardId: string, rating: ReviewRating): Promise<Flashcard> {
@@ -1109,31 +1112,31 @@ export class DesktopStub implements Transport {
 			const res = await invoke<unknown>('desktop_review_flashcard', { cardId, rating });
 			return normalizeFlashcard(res);
 		} catch (cause) {
-			throw desktopError(cause, 'Não foi possível registrar a revisão.');
+			throw desktopError(cause, tr('Could not record review.', 'Não foi possível registrar a revisão.'));
 		}
 	}
 	async listFavorites(): Promise<StudyFavorites> {
 		try {
 			return normalizeStudyFavorites(await invoke<unknown>('desktop_list_favorites'));
 		} catch (cause) {
-			throw desktopError(cause, 'Não foi possível carregar os favoritos.');
+			throw desktopError(cause, tr('Could not load favorites.', 'Não foi possível carregar os favoritos.'));
 		}
 	}
 	async setCourseFavorite(courseId: string, favorite: boolean): Promise<boolean> {
 		try {
 			return Boolean(await invoke<boolean>('desktop_set_course_favorite', { courseId, favorite }));
 		} catch (cause) {
-			throw desktopError(cause, 'Não foi possível atualizar o favorito.');
+			throw desktopError(cause, tr('Could not update favorite.', 'Não foi possível atualizar o favorito.'));
 		}
 	}
 	async setLessonFavorite(mediaId: string, favorite: boolean): Promise<boolean> {
 		try {
 			return Boolean(await invoke<boolean>('desktop_set_lesson_favorite', { mediaId, favorite }));
 		} catch (cause) {
-			throw desktopError(cause, 'Não foi possível atualizar o favorito.');
+			throw desktopError(cause, tr('Could not update favorite.', 'Não foi possível atualizar o favorito.'));
 		}
 	}
-	async recordFocusSession(session: FocusSessionInput) { try { return normalizeFocusSession(await invoke<unknown>('desktop_record_focus_session', { session })); } catch (cause) { throw desktopError(cause, 'Não foi possível salvar a sessão de foco.'); } }
+	async recordFocusSession(session: FocusSessionInput) { try { return normalizeFocusSession(await invoke<unknown>('desktop_record_focus_session', { session })); } catch (cause) { throw desktopError(cause, tr('Could not save focus session.', 'Não foi possível salvar a sessão de foco.')); } }
 	async listFocusSessions(limit?: number): Promise<FocusSessionRecord[]> {
 		try {
 			const res = await invoke<unknown>('desktop_list_focus_sessions', limit === undefined ? {} : { limit });
@@ -1142,10 +1145,10 @@ export class DesktopStub implements Transport {
 			return [];
 		}
 	}
-	async focusSummary() { try { return normalizeFocusSummary(await invoke<unknown>('desktop_focus_summary')); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar as estatísticas de foco.'); } }
-	async rewardSummary() { try { return normalizeRewardSummary(await invoke<unknown>('desktop_reward_summary')); } catch (cause) { throw desktopError(cause, 'Não foi possível carregar suas recompensas.'); } }
-	async claimDailyMission(missionId: MissionId) { try { return await invoke<boolean>('desktop_claim_daily_mission', { missionId }); } catch (cause) { throw desktopError(cause, 'Não foi possível resgatar a missão.'); } }
-	async setWeeklyGoal(goal: number) { try { if (!Number.isInteger(goal) || goal < 1 || goal > 7) throw new Error(); const saved = await invoke<unknown>('desktop_set_weekly_goal', { weeklyGoal: goal }); if (!Number.isInteger(saved) || (saved as number) < 1 || (saved as number) > 7) throw invalidPayload('meta semanal inválida.'); return saved as number; } catch (cause) { if (cause instanceof Error && cause.message.startsWith('Resposta inválida')) throw cause; throw desktopError(cause, 'Não foi possível salvar a meta semanal.'); } }
+	async focusSummary() { try { return normalizeFocusSummary(await invoke<unknown>('desktop_focus_summary')); } catch (cause) { throw desktopError(cause, tr('Could not load focus statistics.', 'Não foi possível carregar as estatísticas de foco.')); } }
+	async rewardSummary() { try { return normalizeRewardSummary(await invoke<unknown>('desktop_reward_summary')); } catch (cause) { throw desktopError(cause, tr('Could not load your rewards.', 'Não foi possível carregar suas recompensas.')); } }
+	async claimDailyMission(missionId: MissionId) { try { return await invoke<boolean>('desktop_claim_daily_mission', { missionId }); } catch (cause) { throw desktopError(cause, tr('Could not claim mission.', 'Não foi possível resgatar a missão.')); } }
+	async setWeeklyGoal(goal: number) { try { if (!Number.isInteger(goal) || goal < 1 || goal > 7) throw new Error(); const saved = await invoke<unknown>('desktop_set_weekly_goal', { weeklyGoal: goal }); if (!Number.isInteger(saved) || (saved as number) < 1 || (saved as number) > 7) throw invalidPayload('meta semanal inválida.'); return saved as number; } catch (cause) { if (cause instanceof Error && cause.message.startsWith('Resposta inválida')) throw cause; throw desktopError(cause, tr('Could not save weekly goal.', 'Não foi possível salvar a meta semanal.')); } }
 	userAvatarUrl(_version?: number | null) { return ''; }
 	uploadUserAvatar(_file: File | Blob): Promise<{ version: number }> { return Promise.resolve({ version: 1 }); }
 	deleteUserAvatar(): Promise<void> { return Promise.resolve(); }
@@ -1171,7 +1174,7 @@ export class DesktopStub implements Transport {
 				error: null
 			};
 		} catch (cause) {
-			const err = desktopError(cause, 'Falha ao verificar atualização.');
+			const err = desktopError(cause, tr('Failed to check for updates.', 'Falha ao verificar atualização.'));
 			return {
 				current: '',
 				enabled: true,
@@ -1189,7 +1192,7 @@ export class DesktopStub implements Transport {
 		try {
 			return await invoke<boolean>('desktop_install_update');
 		} catch (cause) {
-			throw desktopError(cause, 'Não foi possível instalar a atualização.');
+			throw desktopError(cause, tr('Could not install update.', 'Não foi possível instalar a atualização.'));
 		}
 	}
 	updateHistory(): Promise<UpdateHistoryEntry[]> { return Promise.resolve([]); }
@@ -1229,14 +1232,14 @@ export class DesktopStub implements Transport {
 	}
 	// O seletor nativo roda no Rust: o webview envia apenas a identidade do curso e nenhum
 	// byte de arquivo cruza o IPC. O parâmetro é mantido para o contrato comum dos transportes.
-	async importCourseCover(courseId: string, _file?: File | null) { try { await invoke<unknown>('desktop_import_course_cover', { courseId }); } catch (cause) { throw desktopError(cause, 'Não foi possível salvar a capa do curso.'); } }
-	async removeCourseCover(courseId: string) { try { const result = await invoke<{ removed?: unknown } | null>('desktop_remove_course_cover', { courseId }); return result?.removed === true; } catch (cause) { throw desktopError(cause, 'Não foi possível remover a capa do curso.'); } }
+	async importCourseCover(courseId: string, _file?: File | null) { try { await invoke<unknown>('desktop_import_course_cover', { courseId }); } catch (cause) { throw desktopError(cause, tr('Could not save course cover.', 'Não foi possível salvar a capa do curso.')); } }
+	async removeCourseCover(courseId: string) { try { const result = await invoke<{ removed?: unknown } | null>('desktop_remove_course_cover', { courseId }); return result?.removed === true; } catch (cause) { throw desktopError(cause, tr('Could not remove course cover.', 'Não foi possível remover a capa do curso.')); } }
 	// A ordem é endereçada pela identidade opaca do curso e por caminhos relativos já
 	// catalogados; nenhum caminho do sistema de arquivos cruza o IPC.
-	async setCourseOrder(courseId: string, parent: string, children: string[]) { try { await invoke<unknown>('desktop_set_course_order', { courseId, parent, children }); } catch (cause) { throw desktopError(cause, 'Não foi possível salvar a ordem.'); } }
+	async setCourseOrder(courseId: string, parent: string, children: string[]) { try { await invoke<unknown>('desktop_set_course_order', { courseId, parent, children }); } catch (cause) { throw desktopError(cause, tr('Could not save order.', 'Não foi possível salvar a ordem.')); } }
 	// Sem `parent`, o comando restaura o curso inteiro; o argumento é omitido em vez de
 	// enviado como `undefined`.
-	async resetCourseOrder(courseId: string, parent?: string) { try { const result = await invoke<boolean | null>('desktop_reset_course_order', parent === undefined ? { courseId } : { courseId, parent }); return result === true; } catch (cause) { throw desktopError(cause, 'Não foi possível restaurar a ordem.'); } }
+	async resetCourseOrder(courseId: string, parent?: string) { try { const result = await invoke<boolean | null>('desktop_reset_course_order', parent === undefined ? { courseId } : { courseId, parent }); return result === true; } catch (cause) { throw desktopError(cause, tr('Could not restore order.', 'Não foi possível restaurar a ordem.')); } }
 }
 
 export const transportKind: TransportKind = __LEARNVAULT_TRANSPORT__ === 'desktop' ? 'desktop' : 'http';

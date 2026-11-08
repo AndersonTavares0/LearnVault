@@ -1,11 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
+import { setLocale } from './i18n.svelte';
 import { findLesson } from './router';
 import { desktopCoverUrl, desktopMediaUrl, DesktopStub, FocusSessionConflict, HttpTransport, InvalidFocusSession, lessonFromNode, MAX_COVER_BYTES, normalizeCatalog, normalizeFocusSession, normalizeFocusSummary, normalizeRecentStudy, normalizeRewardSummary, normalizeStudyProgress, normalizeStudySummary, normalizeUpdateStatus, normalizeUser, STUDY_NOT_AVAILABLE, CATALOG_LIMITS, type Transport } from './transport';
 
 // O Tauri só é carregado no desktop: fora dele o módulo é substituído pelo mock, de modo
 // que a suíte nunca toca `window.__TAURI_INTERNALS__`.
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
+
+beforeEach(() => {
+	setLocale('pt-BR');
+});
 
 describe('transport contract', () => {
 	it('exposes the HTTP transport seam without routing assumptions', () => {
@@ -1301,6 +1306,18 @@ describe('desktop transport over IPC', () => {
 		expect(updated).toBeNull();
 
 		expect(await http.deleteUser('usr-2')).toBe(true);
+		vi.unstubAllGlobals();
+	});
+
+	it('localizes transport error messages to English when locale is en', async () => {
+		setLocale('en');
+		const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: 'course_already_registered' }), { status: 400 }));
+		vi.stubGlobal('fetch', fetchMock);
+		await expect(new HttpTransport().importCoursePath('C:\\courses')).rejects.toThrow('This course is already imported.');
+
+		vi.mocked(invoke).mockRejectedValueOnce({ code: 'catalog_unavailable', message: 'internal' });
+		await expect(new DesktopStub().catalog()).rejects.toThrow('Catalog unavailable.');
+
 		vi.unstubAllGlobals();
 	});
 });
