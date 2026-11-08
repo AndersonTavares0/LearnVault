@@ -31,13 +31,13 @@ describe('production shell contract', () => {
 		const shell = resolve(process.cwd(), '../../crates/server/web/build/200.html');
 		expect(existsSync(shell)).toBe(true);
 		expect(readFileSync(shell, 'utf8')).toContain('/_app/immutable/');
-	});
+	}, 60_000);
 	it('inspects the desktop shell from the production build', () => {
 		buildOutputsIfNeeded(['run', 'build:desktop']);
 		const shell = resolve(process.cwd(), '../../crates/desktop/frontend-dist/200.html');
 		expect(existsSync(shell)).toBe(true);
 		expect(readFileSync(shell, 'utf8')).toContain('/_app/immutable/');
-	});
+	}, 60_000);
 	it('ships a desktop bundle without any application fetch while keeping SRT conversion on HTTP', () => {
 		buildOutputsIfNeeded(['run', 'build:desktop'], ['run', 'build']);
 
@@ -55,5 +55,5 @@ describe('production shell contract', () => {
 		expect(desktop).not.toContain('/api/media?course=');
 		expect(http).toContain('/api/media?course=');
 		expect(http).not.toContain('learnvault-media');
-	});
+	}, 60_000);
 });

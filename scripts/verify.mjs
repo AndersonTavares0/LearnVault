@@ -82,7 +82,7 @@ if (isMain) {
 	}
 
 	console.log(`Verificação LearnVault (${fast ? 'rápida: sem builds e sem audit' : 'completa'})`);
-	console.log('Go e desktop ficam de fora; use os comandos dedicados quando a mudança os tocar.\n');
+	console.log('O crate desktop fica de fora por requerer dependências nativas (WebKit/GTK); use os comandos dedicados quando a mudança o tocar.\n');
 
 	const code = await runSteps(steps);
 

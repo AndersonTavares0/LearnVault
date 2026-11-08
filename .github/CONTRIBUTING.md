@@ -1,103 +1,99 @@
-# Contribuindo com o LearnVault
+# Contributing to LearnVault
 
-Obrigado por contribuir com o LearnVault. As contribuições devem preservar o foco do
-projeto: uma biblioteca de estudos pequena, sustentável e autocontida, que nunca modifica
-a biblioteca de cursos de origem.
+Thank you for contributing to LearnVault. Contributions must preserve the project's focus: a small, sustainable, self-contained study library that never alters the original host course directory.
 
-## Antes de abrir uma pull request
+---
 
-1. Procure issues, Discussions e pull requests existentes.
-2. Use uma Discussion quando ainda houver dúvida ou alternativas de design.
-3. Abra uma issue antes de uma feature ou mudança de comportamento.
-4. Para typo, dependência ou ajuste simples de CI, a issue é opcional.
-5. Mantenha a mudança focada e explique o comportamento afetado.
-6. Nunca inclua arquivos de cursos, credenciais, endereços privados, bancos de dados ou mídia gerada.
+## Before Opening a Pull Request
 
-## Checks de desenvolvimento
+1. Search existing issues, Discussions, and pull requests.
+2. Open a Discussion if there is an architectural question or multiple design alternatives.
+3. Open an issue before implementing a new feature or substantial behavior change.
+4. For typos, small dependency updates, or straightforward CI fixes, an issue is optional.
+5. Keep changes focused and clearly explain the behavior affected.
+6. **Strict Invariant:** Never include original course files, credentials, private paths, database files, or generated media.
 
-Instale as dependências uma vez e use os atalhos:
+---
+
+## Development & Verification Checks
+
+Install dependencies once and use the provided scripts:
 
 ```sh
-pnpm install --frozen-lockfile   # uma vez por checkout
-pnpm dev                         # API Rust + SPA com recarga automática
-pnpm verify                      # todos os checks de PR (--fast pula builds e audit)
+pnpm install --frozen-lockfile   # Once per checkout
+pnpm dev                         # Rust API (8090) + live reload SPA (5173)
+pnpm verify                      # Run all PR checks (--fast skips builds and audit)
 ```
 
-`pnpm dev` sobe a API em `http://127.0.0.1:8090` e a SPA em `http://localhost:5173`. Se a
-porta estiver ocupada, defina `LEARNVAULT_LISTEN_ADDR`; o proxy da SPA acompanha.
+- `pnpm dev` starts the Rust API at `http://127.0.0.1:8090` and the Vite SPA at `http://localhost:5173`.
+- `pnpm verify` executes:
+  1. `pnpm run check` (SvelteKit type and component check)
+  2. `pnpm run build` (production SPA build)
+  3. `pnpm run build:desktop` (embedded desktop SPA build)
+  4. `pnpm --filter learnvault-web test` (Vitest unit tests)
+  5. `pnpm run test:scripts` (scripts and plugin verification tests)
+  6. `pnpm audit --audit-level=low` (dependency security check)
+  7. `cargo fmt --all -- --check` (Rust code formatting)
+  8. `cargo clippy --all-targets -- -D warnings` (Rust lints)
+  9. `cargo test` (core and server workspace test suite)
 
-`pnpm verify` roda, nesta ordem: `pnpm run check`, `pnpm run build`,
-`pnpm run build:desktop`, `pnpm --filter learnvault-web test`, `pnpm audit --audit-level=low`,
-`cargo fmt --all -- --check`, `cargo clippy --all-targets -- -D warnings` e `cargo test`
-(núcleo e servidor). O crate desktop fica fora dos membros padrão do workspace; use
-`cargo test -p learnvault-desktop` ou `pnpm dev:tauri` quando for o caso.
+> **Note:** The desktop Tauri crate is tested separately (`cargo test -p learnvault-desktop` or `pnpm dev:tauri`) because it requires native WebKit/GTK system libraries.
 
-`pnpm verify --list` mostra os comandos sem executá-los. `pnpm test:scripts` cobre o próprio
-atalho: garante que `pnpm verify` resolve para `scripts/verify.mjs` (e não para o builtin
-`verify` do `cmd.exe`, que sai com código 0 sem verificar nada) e que uma falha propaga código
-de saída não zero.
+Tests must use synthetic fixtures and temporary directories; they must never access external networks or real course media.
 
-O desenvolvimento do desktop Tauri usa `pnpm dev:tauri` (frontend em watch e `tauri dev`,
-sem portas de rede).
+---
 
-A distribuição por plataforma e o empacotamento (Fase 5) ainda não estão concluídos; por
-isso não há checks de pacote no repositório.
+## Pull Requests
 
-Os testes devem usar fixtures e diretórios temporários; não devem acessar dados externos.
+- Use a clear title following Conventional Commits in English (e.g., `feat(player): add lesson progress persistence`).
+- Describe the problem, solution, and validations executed.
+- For UI changes, include visual evidence or screenshots **in the PR description/comments only**—never commit binary mockups or screenshots to Git tracking.
+- Document database migrations and deployment adjustments when applicable.
+- Add or update tests for any new or modified behavior.
+- Link the corresponding issue (`Closes #<number>`) when applicable.
 
-## Pull requests
+---
 
-- Use um título claro, como `feat: adicionar persistência de progresso da aula`.
-- Descreva o problema, a solução e a validação realizada.
-- Inclua screenshots para mudanças de interface.
-- Documente migrações e mudanças de deploy.
-- Adicione ou atualize testes para mudanças de comportamento.
-- Relacione a issue quando ela existir.
-
-## Fluxo de colaboração
+## Collaboration Workflow
 
 ```text
-Discussion (se houver dúvida)
+Discussion (if design decisions are open)
         ↓
-Issue (feature ou mudança de comportamento)
+Issue (feature or behavior change)
         ↓
-Branch no mesmo repositório
+Feature Branch in the repository
         ↓
-Pull request
+Pull Request
         ↓
-Revisão e checks
+Review & CI Automated Checks
         ↓
-Squash merge em main
+Squash Merge into main
 ```
 
-Forks não fazem parte do fluxo atual. A equipe trabalha em branches dentro do mesmo
-repositório; essa decisão pode ser revista quando a equipe crescer.
+1. Assign the issue to yourself before starting.
+2. Create a branch from `main` (e.g., `feat/lesson-progress` or `fix/catalog-scan`).
+3. Implement changes, verify locally with `pnpm verify`, and push your branch.
+4. Open a pull request and link the relevant issue.
+5. Ensure all CI checks are green and resolve any reviewer comments.
+6. Squash merge into `main`; never push directly to `main`.
 
-1. Assuma a issue adicionando seu usuário como `assignee`; cada issue deve ter uma pessoa responsável.
-2. Crie uma branch a partir de `main`, por exemplo `feat/lesson-progress` ou `fix/catalog-scan`.
-3. Faça a mudança e envie a branch para este repositório.
-4. Abra a pull request e relacione a issue com `Closes #<número>` quando aplicável.
-5. Aguarde o CI, responda aos comentários e mantenha a branch focada.
-6. Resolva as conversas e mantenha todos os checks obrigatórios verdes.
-7. Faça o merge pelo GitHub usando squash merge; nunca envie diretamente para `main`.
+---
 
-## Estilo de commits
+## Commit Message Style
 
-Use Conventional Commits. Os prefixos são fixos em inglês e as descrições devem ser escritas
-em pt-BR, mantendo o `CHANGELOG.md` consistente com o Release Please:
+Follow Conventional Commits in English. Prefixes and descriptions are written in English to ensure clear release notes via Release Please:
 
 ```text
-feat: adicionar persistência de progresso da aula
-fix: tratar sessões expiradas
-docs: atualizar guia de contribuição
-chore: atualizar dependências
+feat(player): add lesson progress persistence
+fix(auth): handle expired session tokens gracefully
+docs: update contribution guide
+chore: update dependencies
 ```
 
-O `pnpm` é o gerenciador oficial do frontend. Não use `npm` para alterar dependências ou
-o lockfile.
+`pnpm` is the required package manager. Do not use `npm` or `yarn` to modify dependencies or lockfiles.
 
-## Política clean-room
+---
 
-Pesquisas em plataformas de cursos podem orientar padrões gerais de produto, mas não copie
-código, assets, marca, textos proprietários ou layouts em nível de pixel. A interface do
-LearnVault deve manter identidade visual própria.
+## Clean-Room Policy
+
+Research into external platforms may inform general product ergonomics, but never copy code, proprietary assets, branding, or pixel-level layouts. LearnVault maintains an original, calm, content-first visual identity and architecture.

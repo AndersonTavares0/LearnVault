@@ -11,7 +11,7 @@
   [![CI Status](https://github.com/AndersonTavares0/LearnVault/actions/workflows/ci.yml/badge.svg)](https://github.com/AndersonTavares0/LearnVault/actions/workflows/ci.yml)
   [![Latest Release](https://img.shields.io/github/v/release/AndersonTavares0/LearnVault?include_prereleases&color=2563eb&label=release)](https://github.com/AndersonTavares0/LearnVault/releases)
   [![License](https://img.shields.io/badge/license-MIT-4f8f68.svg)](LICENSE)
-  [![Rust](https://img.shields.io/badge/rust-1.89+-black?logo=rust)](https://www.rust-lang.org)
+  [![Rust](https://img.shields.io/badge/rust-1.99.0-black?logo=rust)](https://www.rust-lang.org)
   [![Svelte 5](https://img.shields.io/badge/svelte-5-ff3e00?logo=svelte)](https://svelte.dev)
   [![Tauri 2](https://img.shields.io/badge/tauri-2-24c8db?logo=tauri)](https://tauri.app)
 
@@ -144,7 +144,7 @@ LearnVault is structured as a Rust workspace with a Svelte 5 frontend:
 
 ### Prerequisites
 
-- **Rust:** 1.89+ (`rustup default stable`)
+- **Rust:** 1.99.0 (pinned via `rust-toolchain.toml`)
 - **Node.js:** 24+
 - **pnpm:** 11.28.5 (specified via `packageManager` in `package.json`)
 
@@ -168,7 +168,7 @@ pnpm exec playwright test    # Run Playwright end-to-end browser tests
 pnpm run build               # Build production SPA assets
 pnpm run build:desktop       # Build embedded desktop SPA bundle
 cargo clippy --all-targets -- -D warnings
-cargo test --all
+cargo test                   # Core and server workspace members (desktop tested via cargo test -p learnvault-desktop)
 ```
 
 ---

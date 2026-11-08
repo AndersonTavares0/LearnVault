@@ -53,7 +53,7 @@ The official visual brand mark is a geometric Shield with centered 3D depth line
 
 ## Accessibility & Interaction Invariants
 
-- **Contrast:** Strict compliance with WCAG 2.2 AA (minimum 4.5:1 text contrast).
+- **Contrast:** High-contrast design tokens targeted for WCAG 2.2 AA (minimum 4.5:1 body text contrast, > 14:1 primary headings; formal certification pending external audit).
 - **Focus Indicators:** High-visibility 2px focus ring (`:focus-visible`).
 - **Motion:** Full respect for `prefers-reduced-motion: reduce`.
 - **Read-Only Invariant:** No UI affords moving, renaming, writing, or deleting original files on disk.
