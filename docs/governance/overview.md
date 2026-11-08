@@ -22,7 +22,7 @@ Discussion (if needed) → Issue (when needed) → Branch → PR → Review → 
 ```
 
 Direct pushes, force pushes, and branch deletions on `main` are strictly disallowed.
-GitHub enforces branch protection; this document records the project policy.
+GitHub enforces branch protection via [Repository Rulesets](rulesets.md); this document records the project policy.
 
 Forks are not part of the standard maintainer flow. Contributors with write access work on topic
 branches within this repository. `.github/CODEOWNERS` indicates subsystem ownership. Every open
