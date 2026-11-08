@@ -91,7 +91,7 @@ Color tokens are defined in `apps/web/src/redesign.css` and use semantic roles:
 ## Design Invariants & Accessibility
 
 1. **Host Library is Strictly Read-Only:** The interface never provides actions to move, rename, delete, or write original course files on disk.
-2. **WCAG 2.2 AA Compliance:** All text meets or exceeds 4.5:1 contrast; interactive controls provide minimum 44×44px click targets.
+2. **WCAG 2.2 AA Target Ratios:** All production tokens are designed to meet or exceed 4.5:1 contrast (> 14:1 for primary ink), and interactive controls maintain minimum 44×44px click targets (formal assistive-technology certification pending external audit).
 3. **Reduced Motion:** All transitions, rotations, and animations respect `prefers-reduced-motion: reduce`.
 4. **Resilient Offline States:** Missing media or disconnected disks are communicated with clear recovery instructions without discarding progress records.
 5. **Zero AI-Slop & Clutter:** No decorative drop-shadows, nested multi-card wrappers, or saturated background gradients.

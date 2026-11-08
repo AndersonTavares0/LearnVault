@@ -53,6 +53,7 @@ tmp/
 .gemini/
 .cursor/
 .windsurf/
+.copilot/
 .playwright-mcp/
 .corepack/
 .tmp-library-visual/
