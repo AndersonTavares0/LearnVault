@@ -1,9 +1,14 @@
-/** LV monogram (docs/design/branding/learnvault-mark.svg), drawn in the current text color. */
+/**
+ * LV monogram (docs/design/branding/learnvault-mark.svg): the project's initials as one shape,
+ * the foot of the L running under the V. The tile takes the text color (use `text-primary`), so
+ * it follows the palette; the letters are the primary foreground, the V one step softer.
+ */
 export function BrandMark({ className }: { className?: string }) {
 	return (
 		<svg className={className} viewBox="0 0 128 128" aria-hidden="true" focusable="false">
-			<path d="M18 25H35L49 83H68L61 101H37C31 101 27 97 25 91L18 25Z" fill="currentColor" />
-			<path d="M43 25H61L79 75L98 25H116L88 94C86 99 82 102 76 102H72C66 102 62 99 60 94L43 47H61L74 83L91 40L79 75L61 25H43Z" fill="currentColor" />
+			<rect width="128" height="128" rx="30" fill="currentColor" />
+			<path d="M20 30H38V84H62V100H20Z" fill="var(--primary-foreground)" />
+			<path d="M56 30H75L87 76L99 30H118L97 100H77Z" fill="var(--primary-foreground)" fillOpacity="0.75" />
 		</svg>
 	);
 }
