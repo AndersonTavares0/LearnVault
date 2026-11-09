@@ -55,6 +55,6 @@ A crítica independente da candidatura K v5 pontuou:
 
 **Decisão:** manter K como direção final e não abrir outra exploração visual sem falha funcional ou bloqueio de acessibilidade confirmado.
 
-## Revisão pós-K (reabertura, ver #330)
+## Post-K review (reopening, see #330)
 
-Três falhas funcionais/de acessibilidade confirmadas pelo mantenedor satisfazem a cláusula de reabertura acima: #317 (overflow de layout em ~1270px), #319 (alternador de idioma inacessível em larguras de desktop) e #324 (27 elementos interativos abaixo do alvo de 44×44px do WCAG). Isso autoriza uma revisão de composição dentro de K — biblioteca, página de curso e Player — usando plataformas de cursos como referência estrutural, nunca como fonte de código, assets ou layout pixel a pixel (política *clean-room*, [`.github/CONTRIBUTING.md`](../../.github/CONTRIBUTING.md)). A avaliação A/B/C/K original acima permanece como registro histórico e não é refeita.
+Three maintainer-confirmed functional/accessibility failures satisfy the reopening clause above: #317 (layout overflow at ~1270px), #319 (language toggle unreachable at desktop widths), and #324 (27 interactive elements below the WCAG 44×44px target). This authorizes a composition revision within K — library, course page, and Player — using course platforms as a structural reference only, never as a source of code, assets, or pixel-level layout (clean-room policy, [`.github/CONTRIBUTING.md`](../../.github/CONTRIBUTING.md)). The original A/B/C/K evaluation above remains a historical record and is not redone.
