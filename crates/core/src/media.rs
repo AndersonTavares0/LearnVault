@@ -1,52 +1,20 @@
-//! Resolução segura de mídia.
+//! Safe media resolution.
 //!
-//! O núcleo recebe `library_id` e `media_id` — nunca um caminho fornecido pelo cliente. O
-//! caminho relativo é lido do banco, revalidado, canonicalizado e confinado sob a raiz da
-//! biblioteca, e o arquivo é devolvido **já aberto** em modo somente leitura, com os
-//! metadados lidos do próprio descritor. Devolver o descritor evita que o adaptador abra
-//! de novo um caminho que pode ter mudado entre a validação e o uso.
+//! The core accepts a `library_id` and `media_id`, never a client-supplied path. It
+//! revalidates the relative path stored in the database, confines it to the library root,
+//! and returns an already-open read-only file with metadata from that descriptor. Returning
+//! the descriptor prevents adapters from reopening a path that may have changed.
 //!
-//! # O que esta resolução garante
+//! Unix opens every path component relative to its parent directory descriptor and refuses
+//! symlinks, closing the intermediate-directory symlink race. Windows refuses a reparse point
+//! at the final component, but stable `std` does not provide equivalent handle-relative
+//! traversal for parent directories; concurrent replacement of an intermediate directory
+//! remains a limitation. Hard links to files outside the root are indistinguishable from
+//! ordinary files. The library is never written by this code, though another process may
+//! still change its contents.
 //!
-//! - o caminho persistido é revalidado a cada chamada; nada é confiado ao banco;
-//! - a raiz precisa estar estritamente sob a forma canônica já validada: um componente
-//!   final que virou link simbólico, junction ou ponto de reparse é recusado, nunca seguido;
-//! - o caminho resolvido precisa estar estritamente sob a raiz da biblioteca;
-//! - o componente final não pode ser um link simbólico nem, no Windows, um ponto de reparse;
-//! - o resultado precisa ser um arquivo comum;
-//! - no Unix, o arquivo aberto é comparado com o caminho validado pela identidade do
-//!   descritor (`dev` e `ino`), de modo que uma troca nesse intervalo é detectada;
-//! - no Windows, o componente final é aberto **sem seguir** um ponto de reparse, e o
-//!   descritor resultante é recusado se for um link/junction, de modo que uma troca do
-//!   componente final nesse intervalo é detectada no próprio descritor;
-//! - a biblioteca nunca é escrita: a única operação sobre ela é abrir para leitura.
-//!
-//! # Limitações conhecidas
-//!
-//! Esta verificação **não elimina** a janela entre a validação e a abertura. No Unix, uma
-//! troca nesse intervalo é detectada pela comparação de identidade; no Windows, a troca do
-//! **componente final** é detectada pelo atributo de reparse do descritor aberto, mas o
-//! `std` estável não expõe `dev`/`ino` nem a identidade do diretório pai. A própria raiz
-//! substituída por link/junction é recusada. Componentes **intermediários** — inclusive
-//! ancestrais da própria raiz — que sejam links simbólicos, junctions ou outros reparse
-//! points dependem da canonicalização e do confinamento resultante; uma troca desses
-//! componentes entre a validação e a abertura **não** é detectada em nenhuma plataforma,
-//! porque a proteção completa exigiria resolução relativa a um descritor de diretório
-//! (`openat`/`RESOLVE_BENEATH` no Linux, handles relativos no Windows) e está fora desta
-//! fatia. Uma troca do arquivo por um **hardlink** para fora também é indistinguível de um
-//! arquivo comum. Esses dois limites são residuais e registrados aqui.
-//!
-//! A aplicação opera em modo somente leitura, mas **não** presume que a biblioteca esteja
-//! montada como somente leitura: outro processo pode alterar o diretório. Fechar essa
-//! lacuna exigiria APIs específicas de plataforma e não se justifica no modelo de ameaça
-//! atual; fica registrada como endurecimento futuro, condicionado a necessidade real.
-//!
-//! # Responsabilidade de quem chama
-//!
-//! A raiz é um parâmetro explícito e precisa ser a raiz da biblioteca indicada. Este
-//! núcleo confina o arquivo sob a raiz recebida, mas não tem como saber se ela pertence
-//! ao `library_id` informado: manter esse vínculo é responsabilidade da integração. O
-//! adaptador HTTP ou Tauri resolve o mapa `library_id` → raiz antes de chamar.
+//! The platform adapter is responsible for pairing the supplied root with the `library_id`.
+//! This module confines the file to the root it receives but cannot verify that association.
 
 use std::fs::{File, Metadata};
 use std::io;
@@ -263,7 +231,7 @@ pub fn open_media(
         });
     }
 
-    let file = open_readonly(&resolved, media_id)?;
+    let file = open_readonly(&canonical_root, &stored.relative_path, &resolved, media_id)?;
 
     // Os metadados e a classificação vêm do descritor aberto, nunca do caminho.
     let metadata = file.metadata().map_err(|source| Error::MediaUnreadable {
@@ -366,7 +334,12 @@ pub fn open_media_file(reference: &MediaReference, root: &Path) -> Result<OpenMe
             media_id: media_id.to_owned(),
         });
     }
-    let file = open_readonly(&resolved, media_id)?;
+    let file = open_readonly(
+        &canonical_root,
+        &reference.relative_path,
+        &resolved,
+        media_id,
+    )?;
     let metadata = file.metadata().map_err(|source| Error::MediaUnreadable {
         media_id: media_id.to_owned(),
         source,
@@ -526,24 +499,81 @@ fn verify_identity(_resolved: &Path, opened: &Metadata, media_id: &str) -> Resul
     Ok(())
 }
 
-/// Abre o arquivo validado somente para leitura.
-///
-/// No Windows o componente final é aberto sem seguir um ponto de reparse
-/// (`FILE_FLAG_OPEN_REPARSE_POINT`), de modo que uma troca por link/junction entre a
-/// canonicalização e a abertura é observável no próprio descritor e recusada em
-/// [`verify_identity`]. A flag é ignorada para arquivos comuns.
-fn open_readonly(path: &Path, media_id: &str) -> Result<File> {
-    let mut options = std::fs::OpenOptions::new();
-    options.read(true);
-    #[cfg(windows)]
+/// Opens the validated file read-only. Unix resolves every component through an open
+/// directory descriptor with symlink following disabled. Windows opens the final component
+/// without following reparse points and rejects a reparse-point descriptor afterward.
+fn open_readonly(root: &Path, relative_path: &str, path: &Path, media_id: &str) -> Result<File> {
+    #[cfg(unix)]
     {
-        use std::os::windows::fs::OpenOptionsExt;
-        options.custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
+        use rustix::fs::{CWD, Mode, OFlags, openat};
+
+        let directory_flags =
+            OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC | OFlags::NOFOLLOW;
+        let mut directory = openat(CWD, "/", directory_flags, Mode::empty()).map_err(|error| {
+            Error::MediaUnreadable {
+                media_id: media_id.to_owned(),
+                source: io::Error::other(error),
+            }
+        })?;
+        for component in root.components().skip(1) {
+            let std::path::Component::Normal(name) = component else {
+                return Err(Error::MediaOutsideLibrary {
+                    media_id: media_id.to_owned(),
+                });
+            };
+            directory =
+                openat(&directory, name, directory_flags, Mode::empty()).map_err(|error| {
+                    Error::MediaUnreadable {
+                        media_id: media_id.to_owned(),
+                        source: io::Error::other(error),
+                    }
+                })?;
+        }
+        let components: Vec<_> = Path::new(relative_path).components().collect();
+        let mut file = None;
+        for (index, component) in components.iter().enumerate() {
+            let std::path::Component::Normal(name) = component else {
+                return Err(Error::MediaOutsideLibrary {
+                    media_id: media_id.to_owned(),
+                });
+            };
+            let final_component = index + 1 == components.len();
+            let flags = if final_component {
+                OFlags::RDONLY | OFlags::CLOEXEC | OFlags::NOFOLLOW
+            } else {
+                OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC | OFlags::NOFOLLOW
+            };
+            let opened = openat(&directory, *name, flags, Mode::empty()).map_err(|error| {
+                Error::MediaUnreadable {
+                    media_id: media_id.to_owned(),
+                    source: io::Error::other(error),
+                }
+            })?;
+            if final_component {
+                file = Some(File::from(opened));
+            } else {
+                directory = opened;
+            }
+        }
+        file.ok_or_else(|| Error::MediaOutsideLibrary {
+            media_id: media_id.to_owned(),
+        })
     }
-    options.open(path).map_err(|source| Error::MediaUnreadable {
-        media_id: media_id.to_owned(),
-        source,
-    })
+
+    #[cfg(not(unix))]
+    {
+        let mut options = std::fs::OpenOptions::new();
+        options.read(true);
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::OpenOptionsExt;
+            options.custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
+        }
+        options.open(path).map_err(|source| Error::MediaUnreadable {
+            media_id: media_id.to_owned(),
+            source,
+        })
+    }
 }
 
 /// Verdadeiro quando o metadado marca um ponto de reparse (symlink ou junction) no Windows.

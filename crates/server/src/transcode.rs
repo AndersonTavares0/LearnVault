@@ -19,7 +19,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
-use tokio::io::{AsyncRead, ReadBuf};
+use tokio::io::{AsyncRead, AsyncWriteExt, ReadBuf};
 
 use crate::{
     AppState, StateError,
@@ -30,6 +30,7 @@ use crate::{
 
 const TRANSCODE_STREAM_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
 const MEDIA_OPEN_TIMEOUT: Duration = Duration::from_secs(5);
+const FFMPEG_INPUT_PROTOCOL_WHITELIST: &str = "pipe,crypto,data";
 
 static FFMPEG_AVAILABLE: OnceLock<bool> = OnceLock::new();
 
@@ -242,27 +243,17 @@ pub(crate) async fn media_transcode(
 
     let open_root = root.clone();
     let open_reference = reference.clone();
-    let (opened, canonical_path) = match tokio::time::timeout(
+    let opened = match tokio::time::timeout(
         MEDIA_OPEN_TIMEOUT,
         tokio::task::spawn_blocking(move || {
             let _blocking_task = blocking_task;
             let opened = learnvault_core::open_media_file(&open_reference, open_root.as_path())?;
-            let canonical_root = open_root.as_path().canonicalize().map_err(|source| {
-                learnvault_core::Error::LibraryRootUnreadable {
-                    path: open_root.as_path().to_path_buf(),
-                    source,
-                }
-            })?;
-            let canonical_path = learnvault_core::paths::resolve_within(
-                &canonical_root,
-                &open_reference.relative_path,
-            )?;
-            Ok::<_, learnvault_core::Error>((opened, canonical_path))
+            Ok::<_, learnvault_core::Error>(opened)
         }),
     )
     .await
     {
-        Ok(Ok(Ok(pair))) => pair,
+        Ok(Ok(Ok(opened))) => opened,
         Ok(Ok(Err(error))) => return media_error_response(&error),
         Ok(Err(_join_err)) => return service_unavailable(),
         Err(_timeout_err) => return error_private_no_store(StatusCode::INTERNAL_SERVER_ERROR),
@@ -309,7 +300,7 @@ pub(crate) async fn media_transcode(
         .arg("-loglevel")
         .arg("error")
         .arg("-nostdin")
-        .args(["-protocol_whitelist", "file,crypto,data"]);
+        .args(["-protocol_whitelist", FFMPEG_INPUT_PROTOCOL_WHITELIST]);
 
     let start = query.start.unwrap_or(0.0);
     let start = if start.is_finite() && start > 0.0 {
@@ -317,11 +308,11 @@ pub(crate) async fn media_transcode(
     } else {
         0.0
     };
+    cmd.args(["-i", "pipe:0"]);
     if start > 0.0 {
+        // Output-side seeking preserves resume behavior for the non-seekable input pipe.
         cmd.arg("-ss").arg(format!("{start:.3}"));
     }
-
-    cmd.arg("-i").arg(canonical_path);
 
     let reencode = query.reencode.unwrap_or(false);
     if reencode {
@@ -341,7 +332,7 @@ pub(crate) async fn media_transcode(
         "pipe:1",
     ]);
 
-    cmd.stdin(std::process::Stdio::null());
+    cmd.stdin(std::process::Stdio::piped());
     cmd.stdout(std::process::Stdio::piped());
     cmd.stderr(std::process::Stdio::null());
     cmd.kill_on_drop(true);
@@ -350,6 +341,16 @@ pub(crate) async fn media_transcode(
         Ok(child) => child,
         Err(_) => return error_private_no_store(StatusCode::INTERNAL_SERVER_ERROR),
     };
+
+    let Some(mut child_stdin) = child.stdin.take() else {
+        return error_private_no_store(StatusCode::INTERNAL_SERVER_ERROR);
+    };
+    let input_file = tokio::fs::File::from_std(opened.file);
+    tokio::spawn(async move {
+        let mut input_file = input_file;
+        let _ = tokio::io::copy(&mut input_file, &mut child_stdin).await;
+        let _ = child_stdin.shutdown().await;
+    });
 
     let stdout = match child.stdout.take() {
         Some(stdout) => stdout,
@@ -408,5 +409,24 @@ fn media_error_status(error: &learnvault_core::Error) -> StatusCode {
         | Error::MediaMissingOnDisk { .. }
         | Error::MediaRemoved { .. } => StatusCode::NOT_FOUND,
         _ => StatusCode::INTERNAL_SERVER_ERROR,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::FFMPEG_INPUT_PROTOCOL_WHITELIST;
+
+    #[test]
+    fn ffmpeg_input_protocols_cannot_open_local_files() {
+        assert!(
+            FFMPEG_INPUT_PROTOCOL_WHITELIST
+                .split(',')
+                .any(|p| p == "pipe")
+        );
+        assert!(
+            !FFMPEG_INPUT_PROTOCOL_WHITELIST
+                .split(',')
+                .any(|protocol| protocol == "file")
+        );
     }
 }
