@@ -6,6 +6,7 @@ import test from 'node:test';
 const root = resolve(import.meta.dirname, '..');
 const config = JSON.parse(readFileSync(resolve(root, '.github/release-please/release-please-config.json'), 'utf8'));
 const release = config.packages['.'];
+const workflow = readFileSync(resolve(root, '.github/workflows/release-please.yml'), 'utf8');
 
 test('Release Please uses SemVer pre-major bumps, generated names, and categorized notes', () => {
     assert.equal(release['bump-minor-pre-major'], true);
@@ -22,4 +23,11 @@ test('Release Please uses SemVer pre-major bumps, generated names, and categoriz
             ['revert', 'Reverts']
         ]
     );
+});
+
+test('Release Please prepares releases monthly and publishes merged release PRs immediately', () => {
+    assert.match(workflow, /schedule:\n\s+- cron: '0 12 1 \* \*'/);
+    assert.match(workflow, /push:\n\s+branches: \[main\]/);
+    assert.match(workflow, /skip-github-release: \$\{\{ github\.event_name == 'schedule' \}\}/);
+    assert.match(workflow, /skip-github-pull-request: \$\{\{ github\.event_name == 'push' \}\}/);
 });
