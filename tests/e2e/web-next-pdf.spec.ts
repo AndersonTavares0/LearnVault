@@ -96,6 +96,17 @@ test('reads a PDF lesson in the page, with its text selectable and its page reme
 	// pdf.js drew the page and laid real text over it.
 	await expect(page.locator('.pdf-text-layer')).toContainText('Ownership moves values.', { timeout: 15_000 });
 	await expect(page.getByLabel('Page', { exact: true })).toHaveValue('1');
+	// Select the first line of text and highlight it. The mark is saved, drawn over the page, and listed.
+	await page.evaluate(() => {
+		const line = document.querySelector('.pdf-text-layer span');
+		const range = document.createRange();
+		range.selectNodeContents(line!);
+		const selection = window.getSelection();
+		selection?.removeAllRanges();
+		selection?.addRange(range);
+	});
+	await page.getByRole('button', { name: 'Highlight' }).click();
+	await expect(page.getByRole('list').getByText('Ownership moves values.')).toBeVisible({ timeout: 10_000 });
 	await expectNoAxeViolations(page, 'pdf lesson');
 
 	await page.getByRole('button', { name: 'Next page' }).click();
@@ -107,5 +118,7 @@ test('reads a PDF lesson in the page, with its text selectable and its page reme
 	await page.waitForTimeout(1500);
 	await page.reload();
 	await expect(page.getByLabel('Page', { exact: true })).toHaveValue('2');
+	await page.getByRole('button', { name: 'Page 1', exact: true }).click();
+	await expect(page.getByRole('list').getByText('Ownership moves values.')).toBeVisible();
 	expect(violations).toEqual([]);
 });

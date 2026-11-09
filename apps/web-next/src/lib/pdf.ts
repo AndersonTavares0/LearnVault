@@ -61,3 +61,30 @@ export function formatFileSize(bytes: number): string {
 	while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit += 1; }
 	return `${value.toLocaleString(getLocale(), { maximumFractionDigits: value < 10 ? 1 : 0 })} ${units[unit]}`;
 }
+
+/** Marker colors, as CSS backgrounds for highlights (the server accepts only these four names). */
+export const PDF_MARK_COLORS = {
+	yellow: '#fde047',
+	green: '#86efac',
+	blue: '#93c5fd',
+	pink: '#f9a8d4'
+} as const;
+
+const unit = (value: number) => Math.min(1, Math.max(0, value));
+
+/**
+ * Client rectangles of a text selection, as fractions of the page box. Each one is clipped to
+ * the page and kept inside it (x + width <= 1), because the server refuses anything outside.
+ */
+export function selectionBoxes(rects: ArrayLike<DOMRect>, page: DOMRect): { x: number; y: number; width: number; height: number }[] {
+	if (page.width <= 0 || page.height <= 0) return [];
+	const boxes: { x: number; y: number; width: number; height: number }[] = [];
+	for (const rect of Array.from(rects)) {
+		const x = unit((rect.left - page.left) / page.width);
+		const y = unit((rect.top - page.top) / page.height);
+		const width = Math.min(unit(rect.width / page.width), 1 - x);
+		const height = Math.min(unit(rect.height / page.height), 1 - y);
+		if (width > 0 && height > 0) boxes.push({ x, y, width, height });
+	}
+	return boxes;
+}

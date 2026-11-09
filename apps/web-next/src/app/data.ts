@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { resolveSession } from '@/lib/session';
 import { studySyncSupported } from '@/lib/player';
-import { STUDY_NOT_AVAILABLE, transport, transportKind, type MissionId, type StudyFavorites, type StudyProgress } from '@/lib/transport';
+import { STUDY_NOT_AVAILABLE, transport, transportKind, type MissionId, type NewPdfAnnotation, type StudyFavorites, type StudyProgress } from '@/lib/transport';
 
 /** Query keys shared by every screen; invalidating one refreshes all its readers. */
 export const keys = {
@@ -170,5 +170,19 @@ export function useCourseCover() {
 	return {
 		change: useMutation({ mutationFn: ({ courseId, file }: { courseId: string; file?: File }) => transport.importCourseCover(courseId, file), onSuccess: refresh }),
 		remove: useMutation({ mutationFn: (courseId: string) => transport.removeCourseCover(courseId), onSuccess: refresh })
+	};
+}
+
+/** The reader's marks on one PDF; they are per owner, so the key includes the media. */
+export function usePdfAnnotations(mediaId: string | null) {
+	return useQuery({ queryKey: ['pdf-annotations', mediaId], enabled: Boolean(mediaId) && studySyncSupported, queryFn: () => transport.listPdfAnnotations(mediaId!) });
+}
+
+export function usePdfAnnotationMutations(mediaId: string | null) {
+	const client = useQueryClient();
+	const refresh = () => client.invalidateQueries({ queryKey: ['pdf-annotations', mediaId] });
+	return {
+		create: useMutation({ mutationFn: (input: NewPdfAnnotation) => transport.createPdfAnnotation(mediaId!, input), onSuccess: refresh }),
+		remove: useMutation({ mutationFn: (annotationId: string) => transport.deletePdfAnnotation(annotationId), onSuccess: refresh })
 	};
 }

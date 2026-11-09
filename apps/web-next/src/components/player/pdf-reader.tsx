@@ -1,12 +1,16 @@
 import { ExternalLink, Maximize2, Minus, Plus } from 'lucide-react';
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
+import { usePdfAnnotationMutations, usePdfAnnotations } from '@/app/data';
+import { PdfMarks } from '@/components/player/pdf-marks';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { studySyncSupported } from '@/lib/player';
 import { tr } from '@/lib/i18n';
-import { clampPage, loadPdfJs, stepZoom } from '@/lib/pdf';
-import { transport, type FileEntry } from '@/lib/transport';
+import { clampPage, loadPdfJs, PDF_MARK_COLORS, selectionBoxes, stepZoom } from '@/lib/pdf';
+import { transport, type FileEntry, type PdfAnnotationColor } from '@/lib/transport';
+import { cn } from '@/lib/utils';
 
 type Props = {
 	file: FileEntry;
@@ -16,6 +20,13 @@ type Props = {
 	/** Called with the page whenever it changes, so reading progress can be saved. */
 	onPage: (page: number, pages: number) => void;
 };
+
+/** The selected range when it sits inside the given text layer; anything else is not markable. */
+function selectionIn(layer: HTMLElement | null): Range | null {
+	const selection = window.getSelection();
+	const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+	return range && !range.collapsed && layer?.contains(range.commonAncestorContainer) ? range : null;
+}
 
 type Load = { state: 'loading' } | { state: 'ready'; doc: PDFDocumentProxy } | { state: 'error'; message: string };
 
@@ -28,6 +39,11 @@ export function PdfReader({ file, courseId, initialPage, onPage }: Props) {
 	const [load, setLoad] = useState<Load>({ state: 'loading' });
 	const [page, setPage] = useState(() => Math.max(1, initialPage ?? 1));
 	const [zoom, setZoom] = useState<number | 'fit'>('fit');
+	const [markColor, setMarkColor] = useState<PdfAnnotationColor>('yellow');
+	const [hasSelection, setHasSelection] = useState(false);
+	const mediaId = file.mediaId ?? null;
+	const marks = usePdfAnnotations(mediaId);
+	const { create, remove } = usePdfAnnotationMutations(mediaId);
 	const [width, setWidth] = useState(0);
 	const stage = useRef<HTMLDivElement>(null);
 	const canvas = useRef<HTMLCanvasElement>(null);
@@ -52,6 +68,13 @@ export function PdfReader({ file, courseId, initialPage, onPage }: Props) {
 	}, [url]);
 
 	const pages = load.state === 'ready' ? load.doc.numPages : 0;
+
+	// Mark buttons enable only while a selection sits in this page's text.
+	useEffect(() => {
+		const update = () => setHasSelection(Boolean(selectionIn(textLayer.current)));
+		document.addEventListener('selectionchange', update);
+		return () => document.removeEventListener('selectionchange', update);
+	}, []);
 	const current = pages ? clampPage(page, pages) : page;
 
 	useEffect(() => {
@@ -101,9 +124,18 @@ export function PdfReader({ file, courseId, initialPage, onPage }: Props) {
 
 	if (!loadPdfJs) return <ViewerFallback file={file} />;
 
+	const mark = (kind: 'highlight' | 'underline') => {
+		const range = selectionIn(textLayer.current);
+		if (!range || !canvas.current || !mediaId) return;
+		const rects = selectionBoxes(range.getClientRects(), canvas.current.getBoundingClientRect());
+		const quote = range.toString().trim().slice(0, 4000);
+		if (rects.length > 0) create.mutate({ page: current, kind, color: markColor, rects, quote });
+		window.getSelection()?.removeAllRanges();
+	};
+
 	const go = (next: number) => { if (pages) setPage(clampPage(next, pages)); };
 	const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-		if ((event.target as HTMLElement).closest('input')) return;
+		if ((event.target as HTMLElement).closest('input, select, textarea')) return;
 		const actions: Record<string, () => void> = {
 			ArrowLeft: () => go(current - 1), PageUp: () => go(current - 1), ArrowRight: () => go(current + 1), PageDown: () => go(current + 1),
 			Home: () => go(1), End: () => go(pages), '+': () => setZoom(stepZoom(zoom, 1)), '-': () => setZoom(stepZoom(zoom, -1))
@@ -128,6 +160,22 @@ export function PdfReader({ file, courseId, initialPage, onPage }: Props) {
 				</div>
 			</div>
 
+			{studySyncSupported && mediaId && load.state === 'ready' && (
+				<div role="toolbar" aria-label={tr('Mark the selected text', 'Marcar o texto selecionado')} className="flex flex-wrap items-center gap-2">
+					<Label htmlFor="pdf-mark-color" className="text-sm">{tr('Color', 'Cor')}</Label>
+					<select id="pdf-mark-color" value={markColor} onChange={(event) => setMarkColor(event.target.value as PdfAnnotationColor)} className="h-9 rounded-lg border border-input bg-background px-2 text-sm">
+						<option value="yellow">{tr('Yellow', 'Amarelo')}</option>
+						<option value="green">{tr('Green', 'Verde')}</option>
+						<option value="blue">{tr('Blue', 'Azul')}</option>
+						<option value="pink">{tr('Pink', 'Rosa')}</option>
+					</select>
+					{/* Mouse-down is cancelled so pressing a mark button keeps the text selected. */}
+					<Button variant="outline" size="sm" disabled={!hasSelection || create.isPending} onMouseDown={(event: MouseEvent) => event.preventDefault()} onClick={() => mark('highlight')}>{tr('Highlight', 'Destacar')}</Button>
+					<Button variant="outline" size="sm" disabled={!hasSelection || create.isPending} onMouseDown={(event: MouseEvent) => event.preventDefault()} onClick={() => mark('underline')}>{tr('Underline', 'Sublinhar')}</Button>
+					{(create.error || remove.error) && <p role="alert" className="text-sm text-destructive">{(create.error ?? remove.error)?.message}</p>}
+				</div>
+			)}
+
 			{load.state === 'error' ? (
 				<p role="alert" className="rounded-xl border border-destructive/50 p-4 text-destructive">{load.message}</p>
 			) : (
@@ -138,12 +186,22 @@ export function PdfReader({ file, courseId, initialPage, onPage }: Props) {
 						{load.state === 'loading' && <p role="status" className="p-8 text-center text-muted-foreground">{tr('Opening the PDF…', 'Abrindo o PDF…')}</p>}
 						<div className="relative mx-auto w-fit bg-white shadow-sm" hidden={load.state !== 'ready'}>
 							<canvas ref={canvas} role="img" aria-label={tr(`Page ${current} of ${pages}`, `Página ${current} de ${pages}`)} className="block" />
+							{(marks.data ?? []).filter((item) => item.page === current).flatMap((item) => item.rects.map((rect, index) => (
+								<span key={`${item.annotationId}-${index}`} aria-hidden="true" className={cn('pointer-events-none absolute', item.kind === 'highlight' ? 'mix-blend-multiply' : 'border-b-2')}
+									style={{ left: `${rect.x * 100}%`, top: `${rect.y * 100}%`, width: `${rect.width * 100}%`, height: `${rect.height * 100}%`, ...(item.kind === 'highlight' ? { backgroundColor: PDF_MARK_COLORS[item.color] } : { borderColor: PDF_MARK_COLORS[item.color] }) }} />
+							)))}
 							<div ref={textLayer} className="pdf-text-layer" />
 						</div>
 					</div>
 				</div>
 			)}
 			<p role="status" aria-live="polite" className="sr-only">{pages ? tr(`Page ${current} of ${pages}`, `Página ${current} de ${pages}`) : ''}</p>
+			{studySyncSupported && mediaId && (
+				<section aria-labelledby="pdf-marks-heading" className="space-y-2">
+					<h2 id="pdf-marks-heading" className="font-semibold">{tr('Marks in this document', 'Marcações neste documento')}</h2>
+					<PdfMarks items={marks.data ?? []} onGo={go} onDelete={(annotationId) => remove.mutate(annotationId)} pending={remove.isPending} />
+				</section>
+			)}
 		</div>
 	);
 }
