@@ -106,6 +106,16 @@ describe('lesson page', () => {
 			expect(screen.queryByRole('region', { name: 'Break' })).toBeNull();
 		});
 
+		it('closes the break screen when the next focus round starts elsewhere', async () => {
+			vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
+			renderApp('/course/c/c%2FOne', { catalog });
+			await screen.findByRole('heading', { level: 1, name: 'One' });
+			finishRound('focus', Date.now() + 1);
+			await screen.findByRole('region', { name: 'Break' });
+			act(() => { pomodoro.update((state) => ({ ...state, mode: 'focus', status: 'running' })); });
+			expect(screen.queryByRole('region', { name: 'Break' })).toBeNull();
+		});
+
 		it('leaves the lesson playing when the pause setting is off', async () => {
 			pomodoro.update((state) => ({ ...state, settings: { ...state.settings, pauseVideoOnRoundEnd: false } }));
 			renderApp('/course/c/c%2FOne', { catalog });

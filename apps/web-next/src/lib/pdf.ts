@@ -72,9 +72,14 @@ export const PDF_MARK_COLORS = {
 
 const unit = (value: number) => Math.min(1, Math.max(0, value));
 
+/** Most rectangles the server accepts for one mark. */
+const MAX_MARK_RECTS = 200;
+
 /**
  * Client rectangles of a text selection, as fractions of the page box. Each one is clipped to
  * the page and kept inside it (x + width <= 1), because the server refuses anything outside.
+ * The browser returns one rectangle per text fragment, so fragments on the same line are merged
+ * into one box; a long selection then stays under the server's limit.
  */
 export function selectionBoxes(rects: ArrayLike<DOMRect>, page: DOMRect): { x: number; y: number; width: number; height: number }[] {
 	if (page.width <= 0 || page.height <= 0) return [];
@@ -86,5 +91,21 @@ export function selectionBoxes(rects: ArrayLike<DOMRect>, page: DOMRect): { x: n
 		const height = Math.min(unit(rect.height / page.height), 1 - y);
 		if (width > 0 && height > 0) boxes.push({ x, y, width, height });
 	}
-	return boxes;
+	boxes.sort((a, b) => a.y - b.y || a.x - b.x);
+	const lines: typeof boxes = [];
+	for (const box of boxes) {
+		const last = lines.at(-1);
+		// Same line: the tops are within half a line of each other.
+		if (last && Math.abs(box.y - last.y) < Math.min(box.height, last.height) / 2) {
+			const right = Math.max(last.x + last.width, box.x + box.width);
+			const bottom = Math.max(last.y + last.height, box.y + box.height);
+			last.x = Math.min(last.x, box.x);
+			last.y = Math.min(last.y, box.y);
+			last.width = right - last.x;
+			last.height = bottom - last.y;
+		} else {
+			lines.push({ ...box });
+		}
+	}
+	return lines.slice(0, MAX_MARK_RECTS);
 }

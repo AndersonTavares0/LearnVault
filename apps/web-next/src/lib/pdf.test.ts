@@ -74,6 +74,16 @@ describe('selection boxes', () => {
 		expect(selectionBoxes([box(200, 130, 0, 40)], page)).toEqual([]);
 	});
 
+	it('merges fragments on one line and keeps a long selection under the server limit', () => {
+		const line = selectionBoxes([box(200, 130, 40, 20), box(260, 131, 40, 20), box(200, 170, 80, 20)], page);
+		expect(line).toHaveLength(2);
+		expect(line[0].x).toBeCloseTo(0.25);
+		expect(line[0].width).toBeCloseTo(0.25);
+		expect(line[0].height).toBeCloseTo(0.02625);
+		const many = selectionBoxes(Array.from({ length: 900 }, (_, index) => box(120 + (index % 3) * 50, 60 + Math.floor(index / 3) * 2.5, 40, 2)), page);
+		expect(many.length).toBeLessThanOrEqual(200);
+	});
+
 	it('returns nothing for a page with no size', () => {
 		expect(selectionBoxes([box(200, 130, 100, 40)], { ...page, width: 0 } as DOMRect)).toEqual([]);
 	});
