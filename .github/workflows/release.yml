@@ -293,6 +293,8 @@ jobs:
           images: ghcr.io/${{ github.repository }}
           tags: |
             type=semver,pattern={{version}},value=${{ needs.validate-tag.outputs.tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.validate-tag.outputs.tag }}
+            type=raw,value=stable
             type=raw,value=latest
       - name: Build and push OCI image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -303,6 +305,10 @@ jobs:
           build-args: |
             LEARNVAULT_BUILD_VERSION=${{ needs.validate-tag.outputs.tag }}
           push: true
+          # Provenance and SBOM attestations are pushed with the image, so the updater can
+          # verify what it pulls (#342).
+          provenance: mode=max
+          sbom: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
