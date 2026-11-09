@@ -6,10 +6,10 @@
 //! the descriptor prevents adapters from reopening a path that may have changed.
 //!
 //! Unix opens every path component relative to its parent directory descriptor and refuses
-//! symlinks, closing the intermediate-directory symlink race. Windows refuses reparse points
-//! at the final component and checks the normalized paths returned for the opened root and
-//! media handles. Hard links to files outside the root are indistinguishable from ordinary
-//! files. The library is never written by this code, though another process may still change
+//! symlinks. Windows opens files relative to a directory capability, preventing an
+//! intermediate junction from redirecting access outside the root. Hard links to files
+//! outside the root are indistinguishable from ordinary files. The library is never written
+//! by this code, though another process may still change
 //! its contents.
 //!
 //! The platform adapter is responsible for pairing the supplied root with the `library_id`.
@@ -481,10 +481,6 @@ fn verify_identity(resolved: &Path, opened: &Metadata, media_id: &str) -> Result
 }
 
 /// Outside Unix, stable `std` does not expose descriptor identity.
-///
-/// Windows also compares normalized paths from the root and media handles in
-/// [`open_readonly`], so an intermediate junction replacement cannot redirect the open
-/// file outside the validated root.
 #[cfg(not(unix))]
 fn verify_identity(_resolved: &Path, opened: &Metadata, media_id: &str) -> Result<()> {
     if is_reparse_point(opened) {
@@ -495,9 +491,7 @@ fn verify_identity(_resolved: &Path, opened: &Metadata, media_id: &str) -> Resul
     Ok(())
 }
 
-/// Opens the validated file read-only. Unix resolves every component through an open
-/// directory descriptor with symlink following disabled. Windows opens the final component
-/// without following reparse points and rejects a reparse-point descriptor afterward.
+/// Opens the validated file read-only without allowing path components to escape the root.
 fn open_readonly(_root: &Path, _relative_path: &str, _path: &Path, media_id: &str) -> Result<File> {
     #[cfg(unix)]
     {
@@ -558,57 +552,13 @@ fn open_readonly(_root: &Path, _relative_path: &str, _path: &Path, media_id: &st
 
     #[cfg(windows)]
     {
-        use std::os::windows::fs::OpenOptionsExt;
-
-        let mut root_options = std::fs::OpenOptions::new();
-        root_options
-            .read(true)
-            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT);
-        let root = root_options
-            .open(_root)
+        cap_std::fs::Dir::open_ambient_dir(_root, cap_std::ambient_authority())
+            .and_then(|directory| directory.open(_relative_path))
+            .map(cap_std::fs::File::into_std)
             .map_err(|source| Error::MediaUnreadable {
                 media_id: media_id.to_owned(),
                 source,
-            })?;
-        let root_metadata = root.metadata().map_err(|source| Error::MediaUnreadable {
-            media_id: media_id.to_owned(),
-            source,
-        })?;
-        if !root_metadata.is_dir() || is_reparse_point(&root_metadata) {
-            return Err(Error::MediaOutsideLibrary {
-                media_id: media_id.to_owned(),
-            });
-        }
-
-        let mut options = std::fs::OpenOptions::new();
-        options
-            .read(true)
-            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
-        let file = options
-            .open(_path)
-            .map_err(|source| Error::MediaUnreadable {
-                media_id: media_id.to_owned(),
-                source,
-            })?;
-        let root_path = final_handle_path(&root).map_err(|source| Error::MediaUnreadable {
-            media_id: media_id.to_owned(),
-            source,
-        })?;
-        if root_path != _root {
-            return Err(Error::MediaOutsideLibrary {
-                media_id: media_id.to_owned(),
-            });
-        }
-        let opened_path = final_handle_path(&file).map_err(|source| Error::MediaUnreadable {
-            media_id: media_id.to_owned(),
-            source,
-        })?;
-        if opened_path == root_path || !opened_path.starts_with(&root_path) {
-            return Err(Error::MediaOutsideLibrary {
-                media_id: media_id.to_owned(),
-            });
-        }
-        Ok(file)
+            })
     }
 
     #[cfg(not(any(unix, windows)))]
@@ -621,30 +571,6 @@ fn open_readonly(_root: &Path, _relative_path: &str, _path: &Path, media_id: &st
                 source,
             })
     }
-}
-
-#[cfg(windows)]
-fn final_handle_path(file: &File) -> io::Result<PathBuf> {
-    use std::{
-        ffi::OsString,
-        os::windows::{ffi::OsStringExt, io::AsRawHandle},
-    };
-    use windows_sys::Win32::Storage::FileSystem::GetFinalPathNameByHandleW;
-
-    let handle = file.as_raw_handle();
-    let required = unsafe { GetFinalPathNameByHandleW(handle, std::ptr::null_mut(), 0, 0) };
-    if required == 0 {
-        return Err(io::Error::last_os_error());
-    }
-    let mut buffer = vec![0_u16; required as usize];
-    let length =
-        unsafe { GetFinalPathNameByHandleW(handle, buffer.as_mut_ptr(), buffer.len() as u32, 0) };
-    if length == 0 || length as usize >= buffer.len() {
-        return Err(io::Error::last_os_error());
-    }
-    Ok(PathBuf::from(OsString::from_wide(
-        &buffer[..length as usize],
-    )))
 }
 
 /// Verdadeiro quando o metadado marca um ponto de reparse (symlink ou junction) no Windows.
@@ -661,18 +587,6 @@ fn is_reparse_point(_metadata: &Metadata) -> bool {
     false
 }
 
-/// Atributo de arquivo que marca um ponto de reparse no Windows.
-#[cfg(windows)]
-const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
-
-/// Flag necessária para abrir um diretório no Windows.
-#[cfg(windows)]
-const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
-
-/// Flag de abertura que não segue o componente final de reparse no Windows.
-#[cfg(windows)]
-const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
-
 /// Nome do arquivo no fim do caminho, para a classificação por extensão.
 fn file_name(path: &Path) -> String {
     path.file_name()
@@ -681,7 +595,7 @@ fn file_name(path: &Path) -> String {
 }
 #[cfg(all(test, windows))]
 mod windows_open_tests {
-    use super::{Error, open_readonly};
+    use super::open_readonly;
     #[test]
     fn an_intermediate_directory_link_cannot_escape_the_open_root()
     -> Result<(), Box<dyn std::error::Error>> {
@@ -697,14 +611,13 @@ mod windows_open_tests {
             return Ok(());
         }
 
-        match open_readonly(
+        let result = open_readonly(
             &root,
             "Course/Alias/video.mp4",
             &root.join("Course/Alias/video.mp4"),
             "media-1",
-        ) {
-            Err(Error::MediaOutsideLibrary { .. }) => Ok(()),
-            other => panic!("expected an out-of-library error, got {other:?}"),
-        }
+        );
+        assert!(result.is_err(), "directory links must not escape the root");
+        Ok(())
     }
 }

@@ -20,4 +20,4 @@ rusqlite = { version = "0.40", features = ["backup", "bundled"] }
 tempfile = "3"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
+cap-std = "4.0.3"
