@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { resolveSession } from '@/lib/session';
 import { studySyncSupported } from '@/lib/player';
-import { STUDY_NOT_AVAILABLE, transport, transportKind, type StudyFavorites, type StudyProgress } from '@/lib/transport';
+import { STUDY_NOT_AVAILABLE, transport, transportKind, type MissionId, type StudyFavorites, type StudyProgress } from '@/lib/transport';
 
 /** Query keys shared by every screen; invalidating one refreshes all its readers. */
 export const keys = {
@@ -147,4 +147,18 @@ export function useResetCourseOrder() {
 
 export function useNotes(enabled = true) {
 	return useQuery({ queryKey: ['notes'], enabled: enabled && studySyncSupported, queryFn: () => transport.listNotes() });
+}
+
+export function useFocusSummary(enabled = true) {
+	return useQuery({ queryKey: ['focus-summary'], enabled: enabled && studySyncSupported, queryFn: () => transport.focusSummary() });
+}
+
+export function useClaimMission() {
+	const client = useQueryClient();
+	return useMutation({ mutationFn: (missionId: MissionId) => transport.claimDailyMission(missionId), onSuccess: () => client.invalidateQueries({ queryKey: keys.rewards }) });
+}
+
+export function useSetWeeklyGoal() {
+	const client = useQueryClient();
+	return useMutation({ mutationFn: (goal: number) => transport.setWeeklyGoal(goal), onSuccess: () => client.invalidateQueries({ queryKey: keys.rewards }) });
 }

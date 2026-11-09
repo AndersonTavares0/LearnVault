@@ -15,7 +15,6 @@ function Placeholder({ title, issue }: { title: string; issue: number }) {
 	);
 }
 
-export const ProgressPage = () => <Placeholder title={tr('Progress', 'Progresso')} issue={339} />;
 export const NotesPage = () => <Placeholder title={tr('Notes', 'Notas')} issue={339} />;
 
 const paletteLabels: Record<Palette, string> = { emerald: 'Stone + Emerald', teal: 'Zinc + Teal', indigo: 'Zinc + Indigo' };
