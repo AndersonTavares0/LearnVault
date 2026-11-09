@@ -36,7 +36,7 @@ describe('routes', () => {
 
 	it('maps a legacy player link to the course route and keeps the timestamp', async () => {
 		const { router } = renderApp('/player/course-1/module%2Flesson.mp4?t=42');
-		expect(await screen.findByRole('heading', { name: 'Course' })).toBeTruthy();
+		expect(await screen.findByRole('heading', { name: 'Course not found' })).toBeTruthy();
 		expect(router.state.location.pathname).toBe('/course/course-1/module%2Flesson.mp4');
 		expect(router.state.location.search).toBe('?t=42');
 	});

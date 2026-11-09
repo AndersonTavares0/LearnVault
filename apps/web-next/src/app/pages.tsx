@@ -1,4 +1,3 @@
-import { useParams } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { useLocale } from '@/hooks/use-locale';
 import { LOCALE_LABELS, LOCALES, setLocale, tr } from '@/lib/i18n';
@@ -18,18 +17,6 @@ function Placeholder({ title, issue }: { title: string; issue: number }) {
 
 export const ProgressPage = () => <Placeholder title={tr('Progress', 'Progresso')} issue={339} />;
 export const NotesPage = () => <Placeholder title={tr('Notes', 'Notas')} issue={339} />;
-
-export function CoursePage() {
-	const { courseId, '*': lessonPath } = useParams();
-	useLocale();
-	return (
-		<section className="space-y-2">
-			<h1 className="text-2xl font-semibold">{tr('Course', 'Curso')}</h1>
-			<p className="text-muted-foreground">{courseId}{lessonPath ? ` / ${lessonPath}` : ''}</p>
-			<p className="text-muted-foreground">{tr('This screen is being rebuilt (#337).', 'Esta tela está sendo refeita (#337).')}</p>
-		</section>
-	);
-}
 
 const paletteLabels: Record<Palette, string> = { emerald: 'Stone + Emerald', teal: 'Zinc + Teal', indigo: 'Zinc + Indigo' };
 const themeLabels = (): Record<ThemeMode, string> => ({ system: tr('System', 'Sistema'), light: tr('Light', 'Claro'), dark: tr('Dark', 'Escuro') });
