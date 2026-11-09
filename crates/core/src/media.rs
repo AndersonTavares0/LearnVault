@@ -584,10 +584,12 @@ fn open_readonly(_root: &Path, _relative_path: &str, _path: &Path, media_id: &st
         options
             .read(true)
             .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
-        let file = options.open(_path).map_err(|source| Error::MediaUnreadable {
-            media_id: media_id.to_owned(),
-            source,
-        })?;
+        let file = options
+            .open(_path)
+            .map_err(|source| Error::MediaUnreadable {
+                media_id: media_id.to_owned(),
+                source,
+            })?;
         let root_path = final_handle_path(&root).map_err(|source| Error::MediaUnreadable {
             media_id: media_id.to_owned(),
             source,
@@ -623,7 +625,10 @@ fn open_readonly(_root: &Path, _relative_path: &str, _path: &Path, media_id: &st
 
 #[cfg(windows)]
 fn final_handle_path(file: &File) -> io::Result<PathBuf> {
-    use std::{ffi::OsString, os::windows::{ffi::OsStringExt, io::AsRawHandle}};
+    use std::{
+        ffi::OsString,
+        os::windows::{ffi::OsStringExt, io::AsRawHandle},
+    };
     use windows_sys::Win32::Storage::FileSystem::GetFinalPathNameByHandleW;
 
     let handle = file.as_raw_handle();
@@ -632,9 +637,8 @@ fn final_handle_path(file: &File) -> io::Result<PathBuf> {
         return Err(io::Error::last_os_error());
     }
     let mut buffer = vec![0_u16; required as usize];
-    let length = unsafe {
-        GetFinalPathNameByHandleW(handle, buffer.as_mut_ptr(), buffer.len() as u32, 0)
-    };
+    let length =
+        unsafe { GetFinalPathNameByHandleW(handle, buffer.as_mut_ptr(), buffer.len() as u32, 0) };
     if length == 0 || length as usize >= buffer.len() {
         return Err(io::Error::last_os_error());
     }
@@ -704,4 +708,3 @@ mod windows_open_tests {
         }
     }
 }
-
