@@ -7,7 +7,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useLocale } from '@/hooks/use-locale';
 import { LOCALE_LABELS, setLocale, tr } from '@/lib/i18n';
+import { cn } from '@/lib/utils';
 import { useSession, useSignIn } from '@/app/data';
+
+// Fields are ruled lines on a library card: serif values, mono labels. The ring stays for focus.
+const field = 'rounded-none border-0 border-b-[1.5px] border-foreground bg-transparent px-0 font-serif text-2xl md:text-2xl dark:bg-transparent';
+const fieldLabel = 'font-mono text-xs tracking-widest text-muted-foreground uppercase';
 
 /** Returns a same-app path only, never an external URL (open-redirect guard). */
 function safeDestination(state: unknown): string {
@@ -40,19 +45,24 @@ export function LoginPage() {
 	const error = signIn.error?.message || session.data?.error;
 	return (
 		<main id="main" className="grid min-h-dvh place-items-center px-4 py-10">
-			<div className="w-full max-w-sm space-y-6">
-				<div className="flex flex-col items-center gap-3 text-center">
-					<BrandMark className="size-12 text-primary" />
-					<h1 className="text-2xl font-semibold tracking-tight">{tr('Sign in to LearnVault', 'Entrar no LearnVault')}</h1>
-				</div>
-				<form onSubmit={submit} className="space-y-4 rounded-xl border bg-card p-6" noValidate={false}>
-					<div className="space-y-2">
-						<Label htmlFor="username">{tr('Username', 'Usuário')}</Label>
-						<Input id="username" name="username" autoComplete="username" autoCapitalize="none" spellCheck={false} required value={username} onChange={(event) => setUsername(event.target.value)} aria-describedby={error ? 'login-error' : undefined} />
+			<div className="w-full max-w-md space-y-6">
+				{/* Light: a dashed library card with a folded corner. Dark: the card chrome drops away. */}
+				<form onSubmit={submit} className="relative space-y-6 rounded-lg border-[1.5px] border-dashed border-muted-foreground/50 bg-card p-8 dark:border-transparent dark:bg-transparent" noValidate={false}>
+					<span aria-hidden="true" className="absolute -top-px -left-px size-0 rounded-tl-lg border-t-[26px] border-r-[26px] border-t-primary border-r-transparent dark:hidden" />
+					<div className="flex items-center justify-between gap-3">
+						<div className="flex items-center gap-3">
+							<BrandMark className="size-9 text-primary" />
+							<h1 className="font-serif text-xl font-bold tracking-tight sm:text-2xl">{tr('Sign in to LearnVault', 'Entrar no LearnVault')}</h1>
+						</div>
+						<span aria-hidden="true" className="hidden font-mono text-[0.7rem] tracking-widest whitespace-nowrap text-muted-foreground uppercase md:inline dark:hidden">{tr('Study card', 'Ficha de estudo')}</span>
 					</div>
-					<PasswordField id="password" label={tr('Password', 'Senha')} autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} aria-describedby={error ? 'login-error' : undefined} />
+					<div className="space-y-1.5">
+						<Label htmlFor="username" className={fieldLabel}>{tr('Username', 'Usuário')}</Label>
+						<Input id="username" name="username" autoComplete="username" autoCapitalize="none" spellCheck={false} required value={username} onChange={(event) => setUsername(event.target.value)} aria-describedby={error ? 'login-error' : undefined} className={cn(field)} />
+					</div>
+					<PasswordField id="password" label={tr('Password', 'Senha')} labelClassName={fieldLabel} className={field} autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} aria-describedby={error ? 'login-error' : undefined} />
 					<p id="login-error" role="alert" className="min-h-5 text-sm text-destructive">{error}</p>
-					<Button type="submit" className="w-full" disabled={signIn.isPending}>
+					<Button type="submit" size="lg" className="w-full" disabled={signIn.isPending}>
 						{signIn.isPending ? tr('Signing in…', 'Entrando…') : tr('Sign in', 'Entrar')}
 					</Button>
 				</form>
