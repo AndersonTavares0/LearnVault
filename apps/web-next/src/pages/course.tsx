@@ -1,4 +1,4 @@
-import { Star } from 'lucide-react';
+import { ChevronLeft, Star } from 'lucide-react';
 import { useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { CourseCover } from '@/components/course-cover';
@@ -20,6 +20,8 @@ import { LessonPage } from './lesson';
 import { useCatalog, useCourseCover, useFavorites, useNotes, useRecent, useRemoveCourse, useResetCourseOrder, useSession, useToggleCourseFavorite } from '@/app/data';
 
 const path = (hash: string) => hash.replace(/^#/, '');
+/** Buttons that sit on the dark course header. */
+const onInk = 'border-white/30 bg-transparent text-ink-foreground hover:bg-white/10 hover:text-ink-foreground dark:border-white/30 dark:bg-transparent dark:hover:bg-white/10';
 
 export function CourseRoute() {
 	useLocale();
@@ -49,6 +51,7 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 	const favorites = useFavorites();
 	const toggleFavorite = useToggleCourseFavorite();
 	const user = session.data?.user;
+	const [signal, setSignal] = useState({ open: false, n: 0 });
 
 	const completed = useMemo(() => new Set((recent.data ?? []).filter((item) => item.completed).map((item) => item.mediaId)), [recent.data]);
 	const favoriteMedia = useMemo(() => new Set(favorites.data?.mediaIds ?? []), [favorites.data]);
@@ -65,55 +68,69 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 
 	return (
 		<div className="space-y-8">
-			<header className="grid gap-6 md:grid-cols-[minmax(0,20rem)_1fr] md:items-center">
-				<CourseCover course={course} profile={user?.userId ?? ''} eager />
-				<div className="min-w-0 space-y-4">
-					<div className="space-y-1">
-						<h1 className="text-3xl font-semibold tracking-tight text-balance">{course.title}</h1>
-						<p className="text-muted-foreground">{formatCourseMeta(counts)}</p>
-					</div>
-					{entry && entry.total > 0 && (
-						<div className="max-w-md space-y-1">
-							<div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-labelledby="course-progress" className="h-2 overflow-hidden rounded-full bg-muted">
-								<div className="h-full bg-primary" style={{ width: `${percent}%` }} />
-							</div>
-							<p id="course-progress" className="text-sm text-muted-foreground">{tr(`${entry.done} of ${entry.total} lessons completed (${percent}%)`, `${entry.done} de ${entry.total} aulas concluídas (${percent}%)`)}</p>
+			<header className="rounded-2xl bg-ink p-5 text-ink-foreground sm:p-8">
+				<Link to="/" className="mb-4 inline-flex min-h-11 items-center gap-1 text-sm text-ink-muted hover:text-ink-foreground focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none">
+					<ChevronLeft className="size-4" aria-hidden="true" />{tr('My learning', 'Meu aprendizado')}
+				</Link>
+				<div className="grid gap-8 md:grid-cols-[1fr_minmax(0,22rem)] md:items-center">
+					<div className="order-2 min-w-0 space-y-5 md:order-1">
+						<div className="space-y-2">
+							<h1 className="text-4xl leading-tight font-semibold text-balance">{course.title}</h1>
+							<p className="text-ink-muted">{formatCourseMeta(counts)}</p>
 						</div>
-					)}
-					{lastStudied?.location && (
-						<p className="text-sm">
-							{tr('Last lesson:', 'Última aula:')} {lastStudied.location.lesson.title} · {lastStudied.item.completed ? tr('completed', 'concluída') : tr(`stopped at ${formatDuration(lastStudied.item.positionSeconds)}`, `parou em ${formatDuration(lastStudied.item.positionSeconds)}`)}
-						</p>
-					)}
-					<div className="flex flex-wrap gap-2">
-						{continuePath ? (
-							<Link to={path(href('course', courseId, continuePath, resumeAt))} className={buttonVariants({ size: 'lg' })}>
-								{lastStudied ? tr('Continue studying', 'Continuar estudando') : tr('Start course', 'Começar curso')}
-							</Link>
-						) : (
-							<p className="text-sm text-muted-foreground">{tr('No lessons available', 'Nenhuma aula disponível')}</p>
+						{entry && entry.total > 0 && (
+							<div className="max-w-md space-y-1">
+								<div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-labelledby="course-progress" className="h-2 overflow-hidden rounded-full bg-white/20">
+									<div className="h-full bg-[var(--a-soft)]" style={{ width: `${percent}%` }} />
+								</div>
+								<p id="course-progress" className="text-sm text-ink-muted">{tr(`${entry.done} of ${entry.total} lessons completed (${percent}%)`, `${entry.done} de ${entry.total} aulas concluídas (${percent}%)`)}</p>
+							</div>
 						)}
-						{studySyncSupported && entry && (
-							<Button variant="outline" size="lg" aria-pressed={entry.favorite} disabled={toggleFavorite.isPending} onClick={() => toggleFavorite.mutate({ courseId, favorite: !entry.favorite })}>
-								<Star className={cn(entry.favorite && 'fill-primary text-primary')} />
-								{entry.favorite ? tr('Favorited', 'Favoritado') : tr('Favorite course', 'Favoritar curso')}
-							</Button>
+						{lastStudied?.location && (
+							<p className="text-sm text-ink-muted">
+								{tr('Last lesson:', 'Última aula:')} <span className="text-ink-foreground">{lastStudied.location.lesson.title}</span>, {lastStudied.item.completed ? tr('completed', 'concluída') : tr(`stopped at ${formatDuration(lastStudied.item.positionSeconds)}`, `parou em ${formatDuration(lastStudied.item.positionSeconds)}`)}
+							</p>
 						)}
-						{user?.isAdmin && <ManageCourse course={course} courseId={courseId} lessons={counts.lessons} />}
+						<div className="flex flex-wrap gap-2">
+							{continuePath ? (
+								<Link to={path(href('course', courseId, continuePath, resumeAt))} className="inline-flex h-12 items-center justify-center rounded-lg bg-[var(--a-soft)] px-6 text-sm font-semibold text-stone-950 hover:bg-white focus-visible:ring-3 focus-visible:ring-white/60 focus-visible:outline-none">
+									{lastStudied ? tr('Continue studying', 'Continuar estudando') : tr('Start course', 'Começar curso')}
+								</Link>
+							) : (
+								<p className="text-sm text-ink-muted">{tr('No lessons available', 'Nenhuma aula disponível')}</p>
+							)}
+							{studySyncSupported && entry && (
+								<Button variant="outline" size="lg" className={onInk} aria-pressed={entry.favorite} disabled={toggleFavorite.isPending} onClick={() => toggleFavorite.mutate({ courseId, favorite: !entry.favorite })}>
+									<Star className={cn(entry.favorite && 'fill-current')} />
+									{entry.favorite ? tr('Favorited', 'Favoritado') : tr('Favorite course', 'Favoritar curso')}
+								</Button>
+							)}
+							{user?.isAdmin && <ManageCourse course={course} courseId={courseId} lessons={counts.lessons} buttonClassName={onInk} />}
+						</div>
 					</div>
+					<div className="order-1 md:order-2"><CourseCover course={course} profile={user?.userId ?? ''} eager done={entry?.done ?? 0} total={entry?.total ?? 0} map /></div>
 				</div>
 			</header>
 
 			<Tabs defaultValue="content">
-				<TabsList aria-label={tr('Course sections', 'Seções do curso')}>
+				<TabsList variant="line" aria-label={tr('Course sections', 'Seções do curso')}>
 					<TabsTrigger value="content">{tr('Content', 'Conteúdo')}</TabsTrigger>
 					<TabsTrigger value="materials">{tr('Materials', 'Materiais')}{materials.length > 0 && <span className="tabular-nums">{materials.length}</span>}</TabsTrigger>
 					{studySyncSupported && <TabsTrigger value="notes">{tr('Notes', 'Notas')}</TabsTrigger>}
 				</TabsList>
 				<TabsContent value="content" className="pt-4">
-					{course.children.length > 0
-						? <Curriculum nodes={course.children} courseId={courseId} completed={completed} favorites={favoriteMedia} activePath={continuePath} />
-						: <p className="text-muted-foreground">{tr('This course has not been indexed yet.', 'Este curso ainda não foi indexado.')}</p>}
+					{course.children.length > 0 ? (
+						<div className="space-y-3">
+							<div className="flex flex-wrap items-center justify-between gap-2">
+								<p className="text-sm text-muted-foreground">{formatCourseMeta(counts)}</p>
+								<span className="flex gap-1">
+									<Button variant="ghost" size="sm" onClick={() => setSignal(({ n }) => ({ open: true, n: n + 1 }))}>{tr('Expand all', 'Expandir tudo')}</Button>
+									<Button variant="ghost" size="sm" onClick={() => setSignal(({ n }) => ({ open: false, n: n + 1 }))}>{tr('Collapse all', 'Recolher tudo')}</Button>
+								</span>
+							</div>
+							<Curriculum nodes={course.children} courseId={courseId} completed={completed} favorites={favoriteMedia} activePath={continuePath} signal={signal} />
+						</div>
+					) : <p className="text-muted-foreground">{tr('This course has not been indexed yet.', 'Este curso ainda não foi indexado.')}</p>}
 				</TabsContent>
 				<TabsContent value="materials" className="pt-4">
 					<Materials files={materials} courseId={courseId} />
@@ -151,7 +168,7 @@ function CourseNotes({ course, courseId }: { course: CatalogNode; courseId: stri
 }
 
 /** Admin actions. Removing only unregisters the course; the dialog states the impact first. */
-function ManageCourse({ course, courseId, lessons }: { course: CatalogNode; courseId: string; lessons: number }) {
+function ManageCourse({ course, courseId, lessons, buttonClassName }: { course: CatalogNode; courseId: string; lessons: number; buttonClassName?: string }) {
 	const remove = useRemoveCourse();
 	const reset = useResetCourseOrder();
 	const navigate = useNavigate();
@@ -174,7 +191,7 @@ function ManageCourse({ course, courseId, lessons }: { course: CatalogNode; cour
 		<>
 			<input ref={fileInput} type="file" accept={COVER_ACCEPT} onChange={pickFile} className="sr-only" tabIndex={-1} aria-hidden="true" />
 			<DropdownMenu>
-				<DropdownMenuTrigger render={<Button variant="outline" size="lg" />}>{tr('Manage course', 'Gerenciar curso')}</DropdownMenuTrigger>
+				<DropdownMenuTrigger render={<Button variant="outline" size="lg" className={buttonClassName} />}>{tr('Manage course', 'Gerenciar curso')}</DropdownMenuTrigger>
 				<DropdownMenuContent align="end">
 					<DropdownMenuItem disabled={reset.isPending} onClick={() => reset.mutate(courseId, { onSuccess: () => setMessage(tr('Lesson order restored.', 'Ordem das aulas restaurada.')), onError: (error) => setMessage(error.message) })}>
 						{tr('Restore lesson order', 'Restaurar ordem das aulas')}

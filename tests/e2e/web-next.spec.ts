@@ -81,7 +81,8 @@ test('signs in, indexes the library and resumes a lesson from My learning', asyn
 	await page.getByRole('button', { name: 'Refresh courses' }).click();
 	await expect(page.getByText('Catalog updated.')).toBeVisible();
 	// The library root registers as one course; its folders become modules.
-	await expect(page.getByRole('heading', { name: 'library', level: 3 })).toBeVisible();
+	// The generated cover draws the title, so the heading beside it is collapsed but still named.
+	await expect(page.getByRole('heading', { name: 'library', level: 3 })).toHaveCount(1);
 	await expectNoAxeViolations(page, 'home');
 
 	const catalog = await (await page.request.get(`${origin}/api/catalog`)).json();
@@ -106,7 +107,7 @@ test('signs in, indexes the library and resumes a lesson from My learning', asyn
 	await expectNoAxeViolations(page, 'lesson');
 
 	await page.goto(`${origin}/#/progress`);
-	await expect(page.getByRole('heading', { name: 'Weekly goal' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: /studied this week/ })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'Your courses' })).toBeVisible();
 	await expectNoAxeViolations(page, 'progress');
 

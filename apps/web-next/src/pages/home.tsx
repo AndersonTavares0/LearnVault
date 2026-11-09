@@ -1,8 +1,10 @@
-import { Flame, FolderPlus, LayoutGrid, List, RefreshCw, Search, Star } from 'lucide-react';
-import { useId, useMemo, useState, type FormEvent } from 'react';
+import { Flame, FolderPlus, LayoutGrid, List, RefreshCw, Search } from 'lucide-react';
+import { useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
+import { BrandMark } from '@/components/brand';
+import { CourseCard, CourseRow, ProgressBar, routerPath } from '@/components/course-card';
 import { CourseCover } from '@/components/course-cover';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useLocale } from '@/hooks/use-locale';
@@ -14,13 +16,9 @@ import { studySyncSupported } from '@/lib/player';
 import { href } from '@/lib/router';
 import { transportKind } from '@/lib/transport';
 import { cn } from '@/lib/utils';
-import { useCatalog, useFavorites, useImportCourse, useRecent, useRescan, useRewards, useSession, useToggleCourseFavorite } from '@/app/data';
+import { useCatalog, useFavorites, useImportCourse, useRecent, useRescan, useRewards, useSession } from '@/app/data';
 import { safeStorage } from '@/app/preferences';
 import { PageHeader } from '@/app/shell';
-
-/** Router paths drop the leading `#` of the canonical hash links built by `href()`. */
-const path = (hash: string) => hash.replace(/^#/, '');
-const percent = (done: number, total: number) => (total ? Math.round((done / total) * 100) : 0);
 
 type View = 'grid' | 'list';
 // The four legacy views collapse into two (docs/design/parity.md).
@@ -61,50 +59,64 @@ export function HomePage() {
 	if (catalog.isPending) return <p role="status" className="text-muted-foreground">{tr('Loading your courses…', 'Carregando seus cursos…')}</p>;
 	if (catalog.isError) return <p role="alert" className="text-destructive">{catalog.error.message}</p>;
 
+	const profile = user?.userId ?? '';
 	const filtered = Boolean(query || filter !== 'all' || category);
+	const inProgress = library.entries.filter((entry) => entry.status === 'in_progress');
+	const resumeCourseId = library.resume[0]?.location.courseId;
+	const alsoInProgress = inProgress.filter((entry) => entry.courseId !== resumeCourseId).slice(0, 4);
+	const streak = rewards.data?.study;
+
 	return (
-		<div className="space-y-10">
+		<div className="space-y-12">
 			<PageHeader
 				title={tr('My learning', 'Meu aprendizado')}
-				description={formatCount(library.entries.length, tr('course', 'curso'), tr('courses', 'cursos'))}
-				actions={user?.isAdmin && <LibraryActions onMessage={setMessage} />}
-			/>
-			<p role="status" aria-live="polite" className="-mt-6 text-sm text-muted-foreground empty:hidden">{message}</p>
-
-			{library.resume.length > 0 && !filtered && <ContinueLearning items={library.resume} profile={user?.userId ?? ''} />}
-
-			{studySyncSupported && rewards.data && !filtered && (
-				<section aria-labelledby="today-heading" className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg border bg-card px-4 py-3 text-sm">
-					<h2 id="today-heading" className="sr-only">{tr('Today', 'Hoje')}</h2>
-					<span className="flex items-center gap-2">
-						<Flame className={cn('size-4', rewards.data.study.currentStreak > 0 ? 'text-primary' : 'text-muted-foreground')} aria-hidden="true" />
-						{formatCount(rewards.data.study.currentStreak, tr('day streak', 'dia seguido'), tr('day streak', 'dias seguidos'))}
+				description={
+					<span className="flex flex-wrap items-center gap-x-4 gap-y-1">
+						<span>{formatCount(library.entries.length, tr('course', 'curso'), tr('courses', 'cursos'))}</span>
+						{studySyncSupported && streak && (
+							<Link to="/progress" className="inline-flex min-h-11 items-center gap-1.5 hover:text-foreground">
+								<Flame className={cn('size-4', streak.currentStreak > 0 && 'text-primary')} aria-hidden="true" />
+								{formatCount(streak.currentStreak, tr('day streak', 'dia seguido'), tr('day streak', 'dias seguidos'))}
+								{', '}{tr(`${streak.weekActiveDays} of ${rewards.data!.weeklyGoal} days this week`, `${streak.weekActiveDays} de ${rewards.data!.weeklyGoal} dias nesta semana`)}
+							</Link>
+						)}
 					</span>
-					<span>{tr(`${rewards.data.study.weekActiveDays} of ${rewards.data.weeklyGoal} days this week`, `${rewards.data.study.weekActiveDays} de ${rewards.data.weeklyGoal} dias nesta semana`)}</span>
-					<Link to="/progress" className="ml-auto inline-flex min-h-11 items-center font-medium text-primary underline-offset-4 hover:underline">{tr('See progress', 'Ver progresso')}</Link>
+				}
+				actions={user?.isAdmin && library.entries.length > 0 && <LibraryActions onMessage={setMessage} />}
+			/>
+			<p role="status" aria-live="polite" className="-mt-10 text-sm text-muted-foreground empty:hidden">{message}</p>
+
+			{library.resume.length > 0 && !filtered && <ContinueLearning items={library.resume} entries={library.entries} profile={profile} />}
+
+			{!filtered && alsoInProgress.length > 0 && (
+				<section aria-labelledby="also-heading">
+					<h2 id="also-heading" className="mb-1 text-lg font-semibold">{tr('Also in progress', 'Também em andamento')}</h2>
+					<ul className="grid gap-x-10 md:grid-cols-2">{alsoInProgress.map((entry) => <CourseRow key={entry.courseId} entry={entry} profile={profile} />)}</ul>
 				</section>
 			)}
 
-			<section aria-labelledby="courses-heading" className="space-y-4">
-				<h2 id="courses-heading" className="text-lg font-semibold">{tr('All courses', 'Todos os cursos')}</h2>
-				<div role="search" className="relative md:hidden">
-					<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-					<Input type="search" value={query} onChange={(event) => setParam('q', event.target.value || null)} placeholder={tr('Search courses and lessons', 'Buscar cursos e aulas')} aria-label={tr('Search courses', 'Buscar cursos')} className="pl-9" />
-				</div>
-				<Filters counts={library.counts} filter={filter} onFilter={(value) => setParam('filter', value === 'all' ? null : value)} categories={library.categories} category={category} onCategory={(value) => setParam('category', value)} view={view} onView={changeView} />
+			<section aria-labelledby="courses-heading" className="space-y-5">
+				<h2 id="courses-heading" className="text-2xl font-semibold">{tr('All courses', 'Todos os cursos')}</h2>
+				{library.entries.length > 0 && (
+					<>
+						<div role="search" className="relative md:hidden">
+							<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+							<Input type="search" value={query} onChange={(event) => setParam('q', event.target.value || null)} placeholder={tr('Search courses and lessons', 'Buscar cursos e aulas')} aria-label={tr('Search courses', 'Buscar cursos')} className="pl-9" />
+						</div>
+						<Filters counts={library.counts} filter={filter} onFilter={(value) => setParam('filter', value === 'all' ? null : value)} categories={library.categories} category={category} onCategory={(value) => setParam('category', value)} view={view} onView={changeView} />
+					</>
+				)}
 
 				{library.entries.length === 0 ? (
-					<EmptyLibrary isAdmin={Boolean(user?.isAdmin)} />
+					<EmptyLibrary isAdmin={Boolean(user?.isAdmin)} onMessage={setMessage} />
 				) : library.visible.length === 0 ? (
 					<div className="rounded-lg border border-dashed p-8 text-center">
 						<p className="font-medium">{tr('No results found', 'Nenhum resultado encontrado')}</p>
 						<Button variant="outline" className="mt-4" onClick={() => setParams({}, { replace: true })}>{tr('Clear filters and search', 'Limpar filtros e busca')}</Button>
 					</div>
 				) : (
-					<ul className={view === 'grid' ? 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3' : 'divide-y rounded-lg border'}>
-						{library.visible.map((entry) => (
-							<CourseItem key={entry.courseId} entry={entry} view={view} profile={user?.userId ?? ''} />
-						))}
+					<ul className={view === 'grid' ? 'grid grid-cols-1 gap-x-6 gap-y-10 sm:grid-cols-2 lg:grid-cols-3' : 'divide-y border-y'}>
+						{library.visible.map((entry) => <CourseCard key={entry.courseId} entry={entry} profile={profile} variant={view === 'grid' ? 'grid' : 'list'} />)}
 					</ul>
 				)}
 			</section>
@@ -112,29 +124,29 @@ export function HomePage() {
 	);
 }
 
-function ContinueLearning({ items, profile }: { items: ResumeEntry[]; profile: string }) {
+function ContinueLearning({ items, entries, profile }: { items: ResumeEntry[]; entries: CourseEntry[]; profile: string }) {
 	const [first, ...rest] = items;
-	const link = (entry: ResumeEntry) => path(href('course', entry.location.courseId, entry.location.lesson.path, entry.progress.positionSeconds));
+	const link = (entry: ResumeEntry) => routerPath(href('course', entry.location.courseId, entry.location.lesson.path, entry.progress.positionSeconds));
 	return (
-		<section aria-labelledby="continue-heading" className="space-y-4">
-			<h2 id="continue-heading" className="text-lg font-semibold">{tr('Continue studying', 'Continuar estudando')}</h2>
-			<article className="grid gap-4 rounded-xl border bg-card p-4 sm:grid-cols-[minmax(0,16rem)_1fr] sm:items-center">
-				<CourseCoverFor courseId={first.location.courseId} profile={profile} eager />
-				<div className="min-w-0 space-y-3">
+		<section aria-labelledby="continue-heading" className="rounded-2xl bg-ink p-5 text-ink-foreground sm:p-8">
+			<h2 id="continue-heading" className="sr-only">{tr('Continue studying', 'Continuar estudando')}</h2>
+			<article className="grid items-center gap-6 md:grid-cols-[minmax(0,20rem)_1fr]">
+				<CourseCoverFor entry={entries.find((entry) => entry.courseId === first.location.courseId)} profile={profile} eager />
+				<div className="min-w-0 space-y-4">
 					<div className="min-w-0">
-						<p className="truncate text-sm text-muted-foreground">{first.location.courseTitle}{first.location.moduleTitle ? ` · ${first.location.moduleTitle}` : ''}</p>
-						<h3 className="text-xl font-semibold text-balance">{first.location.lesson.title}</h3>
+						<p className="truncate text-ink-muted">{first.location.courseTitle}{first.location.moduleTitle ? `, ${first.location.moduleTitle}` : ''}</p>
+						<h3 className="font-serif text-3xl leading-tight font-semibold text-balance">{first.location.lesson.title}</h3>
 					</div>
-					<ProgressBar value={first.courseProgress * 100} label={tr(`${Math.round(first.courseProgress * 100)}% of the course complete`, `${Math.round(first.courseProgress * 100)}% do curso concluído`)} />
-					<Link to={link(first)} className={buttonVariants()}>{tr('Resume lesson', 'Retomar aula')}</Link>
+					<ProgressBar value={first.courseProgress} label={tr(`${Math.round(first.courseProgress * 100)}% of the course complete`, `${Math.round(first.courseProgress * 100)}% do curso concluído`)} className="max-w-md [&_[role=progressbar]]:bg-white/20 [&_[role=progressbar]>div]:bg-[var(--a-soft)] [&_p]:text-ink-muted" />
+					<Link to={link(first)} className="inline-flex h-12 items-center justify-center rounded-lg bg-[var(--a-soft)] px-6 text-sm font-semibold text-stone-950 hover:bg-white focus-visible:ring-3 focus-visible:ring-white/60 focus-visible:outline-none">{tr('Resume lesson', 'Retomar aula')}</Link>
 				</div>
 			</article>
 			{rest.length > 0 && (
-				<ul className="grid gap-3 sm:grid-cols-3">
+				<ul className="mt-6 grid gap-2 border-t border-white/15 pt-4 sm:grid-cols-3">
 					{rest.map((entry) => (
 						<li key={entry.progress.mediaId}>
-							<Link to={link(entry)} className="flex min-h-11 flex-col rounded-lg border bg-card p-3 hover:bg-muted">
-								<span className="truncate text-xs text-muted-foreground">{entry.location.courseTitle}</span>
+							<Link to={link(entry)} className="flex min-h-11 flex-col rounded-lg px-3 py-2 hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none">
+								<span className="truncate text-sm text-ink-muted">{entry.location.courseTitle}</span>
 								<span className="line-clamp-2 font-medium">{entry.location.lesson.title}</span>
 							</Link>
 						</li>
@@ -145,23 +157,9 @@ function ContinueLearning({ items, profile }: { items: ResumeEntry[]; profile: s
 	);
 }
 
-/** Looks the course up in the cached catalog so resume cards share the same cover. */
-function CourseCoverFor({ courseId, profile, eager }: { courseId: string; profile: string; eager?: boolean }) {
-	const catalog = useCatalog();
-	const course = catalog.data?.nodes.find((node) => node.courseId === courseId);
-	return course ? <CourseCover course={course} profile={profile} eager={eager} /> : null;
-}
-
-function ProgressBar({ value, label }: { value: number; label: string }) {
-	const id = useId();
-	return (
-		<div className="space-y-1">
-			<div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(value)} aria-labelledby={id} className="h-2 overflow-hidden rounded-full bg-muted">
-				<div className="h-full rounded-full bg-primary" style={{ width: `${value}%` }} />
-			</div>
-			<p id={id} className="text-xs text-muted-foreground">{label}</p>
-		</div>
-	);
+/** The resume band shows the same cover as the course card, with its lesson bar. */
+function CourseCoverFor({ entry, profile, eager }: { entry?: CourseEntry; profile: string; eager?: boolean }) {
+	return entry ? <CourseCover course={entry.course} profile={profile} eager={eager} done={entry.done} total={entry.total} /> : null;
 }
 
 function Filters(props: { counts: Record<LibraryFilter, number>; filter: LibraryFilter; onFilter: (value: LibraryFilter) => void; categories: string[]; category: string | null; onCategory: (value: string | null) => void; view: View; onView: (view: View) => void }) {
@@ -198,34 +196,7 @@ function Filters(props: { counts: Record<LibraryFilter, number>; filter: Library
 	);
 }
 
-function CourseItem({ entry, view, profile }: { entry: CourseEntry; view: View; profile: string }) {
-	const toggle = useToggleCourseFavorite();
-	const value = percent(entry.done, entry.total);
-	const progressLabel = entry.status === 'completed' ? tr('Completed', 'Concluído') : entry.status === 'not_started' ? tr('Not started', 'Não iniciado') : tr(`${value}% complete`, `${value}% concluído`);
-	const lessonsLeft = formatCount(entry.total - entry.done, tr('lesson left', 'aula restante'), tr('lessons left', 'aulas restantes'));
-	const favorite = studySyncSupported && (
-		<Button variant="ghost" size="icon" aria-pressed={entry.favorite} aria-label={entry.favorite ? tr(`Remove ${entry.course.title} from favorites`, `Remover ${entry.course.title} dos favoritos`) : tr(`Add ${entry.course.title} to favorites`, `Adicionar ${entry.course.title} aos favoritos`)} onClick={() => toggle.mutate({ courseId: entry.courseId, favorite: !entry.favorite })} disabled={toggle.isPending}>
-			<Star className={cn(entry.favorite && 'fill-primary text-primary')} />
-		</Button>
-	);
-	// shortcut: content-visibility skips layout of off-screen cards; virtualize (@tanstack/react-virtual) if catalogs past ~2k courses feel slow.
-	return (
-		<li className={cn('relative [content-visibility:auto]', view === 'grid' ? 'flex flex-col rounded-xl border bg-card' : 'flex items-center gap-4 p-3')}>
-			<CourseCover course={entry.course} profile={profile} className={view === 'grid' ? 'rounded-b-none' : 'w-28 shrink-0'} />
-			<div className={cn('flex min-w-0 flex-1 flex-col gap-2', view === 'grid' && 'p-4')}>
-				<h3 className="font-semibold text-balance">
-					<Link to={path(href('course', entry.courseId))} className="after:absolute after:inset-0 after:content-[''] hover:underline">{entry.course.title}</Link>
-				</h3>
-				{entry.course.sourceFolder && <p className="text-xs text-muted-foreground">{entry.course.sourceFolder}</p>}
-				{entry.total > 0 && <ProgressBar value={value} label={`${progressLabel} · ${lessonsLeft}`} />}
-				{entry.next && entry.status !== 'completed' && <p className="truncate text-sm text-muted-foreground">{tr('Next:', 'Próxima:')} {entry.next.title}</p>}
-			</div>
-			{favorite && <div className={cn('relative z-10', view === 'grid' ? 'absolute top-2 right-2 rounded-full bg-background/90' : '')}>{favorite}</div>}
-		</li>
-	);
-}
-
-function LibraryActions({ onMessage }: { onMessage: (message: string) => void }) {
+export function LibraryActions({ onMessage }: { onMessage: (message: string) => void }) {
 	const rescan = useRescan();
 	const importCourse = useImportCourse();
 	const navigate = useNavigate();
@@ -268,13 +239,18 @@ function LibraryActions({ onMessage }: { onMessage: (message: string) => void })
 	);
 }
 
-function EmptyLibrary({ isAdmin }: { isAdmin: boolean }) {
+/** First run: say what the app does, and put the one action that matters right here. */
+function EmptyLibrary({ isAdmin, onMessage }: { isAdmin: boolean; onMessage: (message: string) => void }) {
 	return (
-		<div className="rounded-lg border border-dashed p-8 text-center">
-			<p className="font-medium">{tr('No courses yet', 'Nenhum curso ainda')}</p>
-			<p className="mt-1 text-sm text-muted-foreground">
-				{isAdmin ? tr('Use Import course to add a folder from your library. Files are never moved or changed.', 'Use Importar curso para adicionar uma pasta da sua biblioteca. Os arquivos nunca são movidos nem alterados.') : tr('Ask an administrator to give you access to a course.', 'Peça a um administrador acesso a um curso.')}
+		<div className="mx-auto max-w-xl space-y-5 rounded-2xl border border-dashed p-8 text-center sm:p-12">
+			<BrandMark className="mx-auto size-12 text-primary" />
+			<p className="font-serif text-2xl font-semibold text-balance">{tr('No courses yet', 'Nenhum curso ainda')}</p>
+			<p className="text-muted-foreground">
+				{isAdmin
+					? tr('Import a folder of lessons and it becomes a course with progress, notes and flashcards. Your files are never moved, renamed or changed.', 'Importe uma pasta de aulas e ela vira um curso com progresso, notas e flashcards. Seus arquivos nunca são movidos, renomeados ou alterados.')
+					: tr('Ask an administrator to give you access to a course.', 'Peça a um administrador acesso a um curso.')}
 			</p>
+			{isAdmin && <div className="flex flex-wrap justify-center gap-2"><LibraryActions onMessage={onMessage} /></div>}
 		</div>
 	);
 }

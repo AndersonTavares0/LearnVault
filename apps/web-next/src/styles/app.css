@@ -3,15 +3,23 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
 @import "@fontsource-variable/jetbrains-mono";
+@import "@fontsource-variable/literata/opsz.css";
 
 /* Theme and palette come from `data-theme` / `data-palette` on <html> (src/lib/theme.ts). */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 @theme inline {
-  --font-heading: var(--font-sans);
+  /* Literata is drawn for long reading: titles feel like book spines, the interface stays in Geist. */
+  --font-heading: "Literata Variable", ui-serif, Georgia, serif;
   --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, "Cascadia Code", monospace;
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-panel: var(--panel);
+  --color-panel-edge: var(--panel-edge);
+  --color-ink: var(--ink);
+  --color-ink-foreground: var(--ink-foreground);
+  --color-ink-muted: var(--ink-muted);
+  --font-serif: var(--font-heading);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-accent: var(--sidebar-accent);
@@ -94,7 +102,7 @@
 
 :root {
   --radius: 0.625rem;
-  --background: var(--n-50);
+  --background: var(--n-100);
   --foreground: var(--n-950);
   --card: oklch(1 0 0);
   --card-foreground: var(--n-950);
@@ -102,11 +110,11 @@
   --popover-foreground: var(--n-950);
   --primary: var(--a-strong);
   --primary-foreground: oklch(1 0 0);
-  --secondary: var(--n-100);
+  --secondary: var(--n-200);
   --secondary-foreground: var(--n-900);
-  --muted: var(--n-100);
+  --muted: var(--n-200);
   --muted-foreground: var(--n-600);
-  --accent: var(--n-100);
+  --accent: var(--n-200);
   --accent-foreground: var(--n-900);
   --destructive: oklch(50.5% 0.213 27.518); /* red-700: AA as text on n-100 and under white labels */
   --destructive-foreground: oklch(1 0 0);
@@ -159,7 +167,29 @@
   --sidebar-ring: var(--a-soft);
 }
 
+/* A panel is the palette's tint at page scale: white cards sit inside it (Coursera-style shelves). */
+:root {
+  --panel: color-mix(in oklch, var(--a-strong) 9%, var(--n-100));
+  --panel-edge: color-mix(in oklch, var(--a-strong) 18%, var(--n-200));
+}
+:root[data-theme="dark"] {
+  --panel: color-mix(in oklch, var(--a-soft) 11%, var(--n-900));
+  --panel-edge: color-mix(in oklch, var(--a-soft) 20%, var(--n-800));
+}
+
+/* An ink band (course header, resume card) stays dark in both themes, like a reading lamp. */
+:root {
+  --ink: oklch(19% 0.012 160);
+  --ink-foreground: oklch(97% 0.004 160);
+  --ink-muted: oklch(78% 0.012 160);
+}
+
 @layer base {
+  h1, h2 {
+    font-family: var(--font-heading);
+    font-optical-sizing: auto;
+    letter-spacing: -0.01em;
+  }
   * {
     @apply border-border outline-ring/50;
   }

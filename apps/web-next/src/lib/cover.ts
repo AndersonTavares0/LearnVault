@@ -7,8 +7,8 @@
  * capa, e dois cursos com títulos diferentes quase sempre produzem capas distinguíveis.
  */
 
-/** Matizes canônicos da paleta do produto: verde, oliva, âmbar e terracota. */
-const HUES = [158, 130, 86, 40, 20];
+/** Cloth colors for generated covers: moss, olive, ochre, brick, ink blue, slate teal and plum. */
+const HUES = [158, 130, 86, 20, 215, 190, 320];
 
 export type CourseCoverPattern = 'grid' | 'arcs' | 'lines' | 'dots' | 'blocks' | 'wave';
 
