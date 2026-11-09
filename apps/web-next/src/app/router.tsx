@@ -3,7 +3,9 @@ import { href, locationFromHash } from '@/lib/router';
 import { defaultRoute } from '@/lib/session';
 import { transportKind } from '@/lib/transport';
 import { AppShell } from './shell';
-import { CoursePage, HomePage, LoginPage, NotesPage, ProgressPage, SettingsPage } from './pages';
+import { HomePage } from '@/pages/home';
+import { LoginPage } from '@/pages/login';
+import { CoursePage, NotesPage, ProgressPage, SettingsPage } from './pages';
 
 /** Strips the leading `#` so a legacy hash can be used as a router path. */
 const toPath = (hash: string) => hash.replace(/^#/, '');

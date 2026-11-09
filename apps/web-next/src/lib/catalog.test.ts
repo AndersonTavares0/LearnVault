@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { setLocale } from './i18n';
-import { collectMaterials, countCatalogFiles, countCatalogNode, countMissingVideos, formatCategoryName, formatCount, formatCourseCardMeta, formatCourseMeta, formatLessonCounts, formatLessonMeta, getCourseProgressStatus, isLessonMissing } from './catalog';
+import { collectMaterials, countCatalogFiles, countCatalogNode, countMissingVideos, courseProgress, formatCategoryName, formatCount, formatCourseCardMeta, formatCourseMeta, formatLessonCounts, formatLessonMeta, getCourseProgressStatus, isLessonMissing } from './catalog';
 import type { CatalogCounts } from './catalog';
 import type { CatalogNode, FileEntry } from './transport';
 
@@ -346,3 +346,19 @@ describe('formatCategoryName', () => {
 	});
 });
 
+
+describe('courseProgress', () => {
+	it('counts playable lessons once and ignores missing or media-less lessons', () => {
+		const progressCourse = node('course', 'P', [
+			node('module', 'M', [
+				node('lesson', 'Two videos', [], [file('a.mp4', 'media'), file('b.mp4', 'media')]),
+				node('lesson', 'Slides', [], [file('s.pdf', 'material')]),
+				node('lesson', 'Gone', [], [missing('g.mp4', 'media')])
+			]),
+			node('lesson', 'Last', [], [file('c.mp4', 'media')])
+		]);
+		expect(courseProgress(progressCourse, new Set())).toEqual({ done: 0, total: 2 });
+		expect(courseProgress(progressCourse, new Set(['b.mp4']))).toEqual({ done: 1, total: 2 });
+		expect(courseProgress(progressCourse, new Set(['b.mp4', 'c.mp4', 'g.mp4']))).toEqual({ done: 2, total: 2 });
+	});
+});

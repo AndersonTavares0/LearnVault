@@ -162,6 +162,24 @@ export function getCourseProgressStatus(
 	return 'not_started';
 }
 
+/** Completed and total playable lessons of a course; a lesson counts once even with several videos. */
+export function courseProgress(courseNode: CatalogNode, completedMediaIds: Set<string>): { done: number; total: number } {
+	let done = 0;
+	let total = 0;
+	const walk = (current: CatalogNode): void => {
+		if (current.role === 'lesson' && !isLessonMissing(current)) {
+			const ids = [...current.files, ...current.looseFiles].flatMap((file) => (file.kind === 'media' && file.mediaId ? [file.mediaId] : []));
+			if (ids.length > 0) {
+				total += 1;
+				if (ids.some((id) => completedMediaIds.has(id))) done += 1;
+			}
+		}
+		current.children.forEach(walk);
+	};
+	walk(courseNode);
+	return { done, total };
+}
+
 function joinParts(parts: string[]): string {
 	return parts.filter(Boolean).join(' · ');
 }

@@ -1,21 +1,45 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test as base } from '@playwright/test';
+import { expect, test as base, type Page } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 // Runs the React app (apps/web-next, epic #347) behind the real Rust server and its CSP.
 // Folded into server.spec.ts at cutover (#340).
+const PASSWORD = 'uma senha local muito segura';
+
+async function signIn(page: Page, origin: string) {
+	await page.goto(`${origin}/#/login`);
+	await page.getByLabel('Username').fill('admin');
+	await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
+	await page.getByRole('button', { name: 'Sign in' }).click();
+	await expect(page.getByRole('heading', { name: 'My learning' })).toBeVisible();
+}
+
+/** Fails on any WCAG 2.2 AA issue axe can detect on the current page. */
+async function expectNoAxeViolations(page: Page, context: string) {
+	const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze();
+	expect(results.violations.flatMap((violation) => violation.nodes.map((node) => `${context}: ${violation.id} ${node.target.join(' ')} ${node.failureSummary ?? ''}`))).toEqual([]);
+}
+
+function collectCspViolations(page: Page): string[] {
+	const violations: string[] = [];
+	page.on('console', (message) => { if (message.type() === 'error' && /Content Security Policy/.test(message.text())) violations.push(message.text()); });
+	return violations;
+}
 const test = base.extend<object, { origin: string }>({
 	origin: [async ({}, use) => {
 		const root = await mkdtemp(join(tmpdir(), 'learnvault-web-next-'));
 		const library = join(root, 'library');
-		await mkdir(library, { recursive: true });
+		for (const lesson of ['01 Ownership', '02 Borrowing']) {
+			await mkdir(join(library, 'Rust from zero', lesson), { recursive: true });
+			await writeFile(join(library, 'Rust from zero', lesson, 'Lesson.mp4'), Buffer.from('video-fixture'));
+		}
 		const binary = process.env.LEARNVAULT_SERVER_BIN ?? resolve(process.platform === 'win32' ? 'target/debug/learnvault-server.exe' : 'target/debug/learnvault-server');
 		const server = spawn(binary, ['--listen-addr', '127.0.0.1:0', '--database', join(root, 'db.sqlite'), '--library-root', library, '--web-root', resolve('apps/web-next/dist'), '--insecure-http'], {
-			env: { ...process.env, ADMIN_USERNAME: 'admin', ADMIN_PASSWORD: 'uma senha local muito segura' },
+			env: { ...process.env, ADMIN_USERNAME: 'admin', ADMIN_PASSWORD: PASSWORD },
 			stdio: ['ignore', 'pipe', 'ignore']
 		});
 		const closed = once(server, 'close');
@@ -38,11 +62,49 @@ const test = base.extend<object, { origin: string }>({
 	}, { scope: 'worker' }]
 });
 
-test('serves the React shell with no CSP violations or axe issues in every palette and theme', async ({ page, origin }) => {
-	const violations: string[] = [];
-	page.on('console', (message) => { if (message.type() === 'error' && /Content Security Policy/.test(message.text())) violations.push(message.text()); });
+test('signs in, indexes the library and resumes a lesson from My learning', async ({ page, origin }) => {
+	const violations = collectCspViolations(page);
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	await page.goto(`${origin}/#/notes`);
+	await expect(page.getByRole('heading', { name: 'Sign in to LearnVault' })).toBeVisible();
+	await expectNoAxeViolations(page, 'login');
+	await page.getByLabel('Username').fill('admin');
+	await page.getByLabel('Password', { exact: true }).fill('wrong password');
+	await page.getByRole('button', { name: 'Sign in' }).click();
+	await expect(page.getByRole('alert')).toHaveText('Incorrect username or password.');
+	await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
+	await page.getByRole('button', { name: 'Sign in' }).click();
+	// Sign-in returns to the page that asked for it.
+	await expect(page.getByRole('heading', { name: 'Notes' })).toBeVisible();
+
+	await page.getByRole('link', { name: 'My learning' }).first().click();
+	await page.getByRole('button', { name: 'Refresh courses' }).click();
+	await expect(page.getByText('Catalog updated.')).toBeVisible();
+	// The library root registers as one course; its folders become modules.
+	await expect(page.getByRole('heading', { name: 'library', level: 3 })).toBeVisible();
+	await expectNoAxeViolations(page, 'home');
+
+	const catalog = await (await page.request.get(`${origin}/api/catalog`)).json();
+	const mediaId = JSON.stringify(catalog).match(/"media_id":"([^"]+)"/)?.[1];
+	expect(mediaId).toBeTruthy();
+	await expect(await page.request.post(`${origin}/api/study/position`, { headers: { Origin: origin }, data: { media_id: mediaId, position_seconds: 5 } })).toBeOK();
+	await page.reload();
+	const resume = page.getByRole('region', { name: 'Continue studying' });
+	await expect(resume.getByRole('link', { name: 'Resume lesson' })).toHaveAttribute('href', /#\/course\/.+\?t=5$/);
+	await expectNoAxeViolations(page, 'home with resume');
+
+	await page.setViewportSize({ width: 375, height: 800 });
+	await expect(page.getByRole('navigation', { name: 'Sections' })).toBeVisible();
+	await expect(page.getByRole('navigation', { name: 'Main' })).toBeHidden();
+	await expectNoAxeViolations(page, 'home mobile');
+	expect(violations).toEqual([]);
+});
+
+test('switches palette and theme with no CSP violations or axe issues', async ({ page, origin }) => {
+	const violations = collectCspViolations(page);
 	// Reduced motion disables transitions, so axe measures settled colors, not mid-fade ones.
 	await page.emulateMedia({ reducedMotion: 'reduce' });
+	await signIn(page, origin);
 	await page.goto(`${origin}/#/settings`);
 	await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
 
@@ -52,8 +114,7 @@ test('serves the React shell with no CSP violations or axe issues in every palet
 		for (const theme of ['Light', 'Dark']) {
 			await page.getByRole('button', { name: theme, exact: true }).click();
 			primary.add(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--primary')));
-			const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze();
-			expect(results.violations.flatMap((violation) => violation.nodes.map((node) => `${palette}/${theme}: ${violation.id} ${node.target.join(" ")} ${node.failureSummary ?? ""}`))).toEqual([]);
+			await expectNoAxeViolations(page, `${palette}/${theme}`);
 		}
 	}
 	expect(primary.size).toBe(6);
@@ -65,6 +126,7 @@ test('serves the React shell with no CSP violations or axe issues in every palet
 });
 
 test('keeps legacy links working', async ({ page, origin }) => {
+	await signIn(page, origin);
 	await page.goto(`${origin}/#/statistics`);
 	await expect(page).toHaveURL(/#\/progress$/);
 	await expect(page.getByRole('heading', { name: 'Progress' })).toBeVisible();

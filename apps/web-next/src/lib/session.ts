@@ -1,3 +1,4 @@
+import { tr } from './i18n';
 import type { Route } from './router';
 import type { TransportKind, User } from './transport';
 
@@ -46,6 +47,6 @@ export async function resolveSession(
 	try {
 		return { user: await readSession(), error: '' };
 	} catch {
-		return { user: null, error: 'Não foi possível conectar ao serviço.' };
+		return { user: null, error: tr('Could not connect to the service.', 'Não foi possível conectar ao serviço.') };
 	}
 }
