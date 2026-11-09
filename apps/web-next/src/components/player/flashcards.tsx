@@ -17,7 +17,7 @@ function dueLabel(nextDue: number, now: number): string {
 }
 
 /** Spaced-repetition cards for one lesson: review what is due, or manage the deck. */
-export function Flashcards({ mediaId }: { mediaId: string }) {
+export function Flashcards({ mediaId, addRequest = 0 }: { mediaId: string; addRequest?: number }) {
 	const client = useQueryClient();
 	const key = ['flashcards', mediaId] as const;
 	const cards = useQuery({ queryKey: key, queryFn: () => transport.listFlashcards(mediaId) });
@@ -25,6 +25,13 @@ export function Flashcards({ mediaId }: { mediaId: string }) {
 	const [revealed, setRevealed] = useState(false);
 	const [form, setForm] = useState<{ cardId: string | null; front: string; back: string } | null>(null);
 	const [now, setNow] = useState(nowSeconds);
+	// The lesson's "Make card" button asks this panel to open a blank card.
+	const [lastRequest, setLastRequest] = useState(addRequest);
+	if (addRequest !== lastRequest) {
+		setLastRequest(addRequest);
+		setMode('manage');
+		setForm({ cardId: null, front: '', back: '' });
+	}
 	useEffect(() => {
 		const timer = setInterval(() => setNow(nowSeconds()), 10_000);
 		return () => clearInterval(timer);

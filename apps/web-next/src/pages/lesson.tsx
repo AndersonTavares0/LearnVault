@@ -1,21 +1,25 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, CircleCheck, Circle, PanelRightClose, PanelRightOpen } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CircleCheck, Circle, PenLine, SquarePlus } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Curriculum } from '@/components/curriculum';
 import { Materials } from '@/components/materials';
+import { BreakOverlay } from '@/components/player/break-overlay';
+import { FocusCard } from '@/components/player/focus-card';
 import { Flashcards } from '@/components/player/flashcards';
 import { MediaPlayer, type PlayerHandle } from '@/components/player/media-player';
-import { StudyNotes } from '@/components/player/study-notes';
+import { StudyNotes, useLessonNotes } from '@/components/player/study-notes';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { usePlayerPreferences } from '@/hooks/use-player-preferences';
 import { useLocale } from '@/hooks/use-locale';
+import { useStore } from '@/hooks/use-store';
 import { courseProgress } from '@/lib/catalog';
 import { tr } from '@/lib/i18n';
-import { neighboringLessons } from '@/lib/navigation';
+import { lessonSequence, neighboringLessons } from '@/lib/navigation';
 import { formatDuration, selectPlayableMedia, shouldAutoAdvance, studySyncSupported } from '@/lib/player';
 import { lessonPreferenceKey } from '@/lib/player-preferences';
+import { pomodoro, resetTimer, skipTimer, startTimer } from '@/lib/pomodoro-store';
 import { findLesson, findLessonLocation, href } from '@/lib/router';
 import { createPositionSaver } from '@/lib/study';
 import { transport, type CatalogNode, type StudyProgress } from '@/lib/transport';
@@ -26,9 +30,10 @@ const path = (hash: string) => hash.replace(/^#/, '');
 const AUTO_NEXT_SECONDS = 5;
 
 /**
- * Lesson player page (docs/design/redesign.md, "Player"): media first, the curriculum in a
- * collapsible sidebar, completion and lesson navigation, then Overview, Notes, Flashcards
- * and Materials.
+ * Lesson page, laid out as a study workspace: the media on the left; on the right the focus
+ * timer and a panel with Notes, Cards, Lessons and Materials, so what you write and the
+ * course map stay beside the video. When a focus block ends the lesson pauses and a break
+ * screen covers the video (docs/design/redesign.md, "Player").
  */
 export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNode; courseId: string; lessonPath: string }) {
 	useLocale();
@@ -43,9 +48,12 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 	const setCompleted = useSetLessonCompleted();
 	const player = useRef<PlayerHandle | null>(null);
 	const [time, setTime] = useState(0);
-	const [tab, setTab] = useState('overview');
+	const [tab, setTab] = useState(studySyncSupported ? 'notes' : 'lessons');
 	const [noteRequest, setNoteRequest] = useState(0);
-	const [sidebar, setSidebar] = useState(true);
+	const [cardRequest, setCardRequest] = useState(0);
+	const [breakPhase, setBreakPhase] = useState<'break' | 'over' | null>(null);
+	const timer = useStore(pomodoro);
+	const [seenRound, setSeenRound] = useState(timer.lastCompleted?.at ?? 0);
 	const [countdown, setCountdown] = useState<number | null>(null);
 
 	const lesson = findLesson(catalog.data ?? null, courseId, lessonPath);
@@ -73,6 +81,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 		if (result.kind === 'saved') client.setQueryData<StudyProgress[]>(keys.recent, (items = []) => [result.progress, ...items.filter((item) => item.mediaId !== id)]);
 	};
 
+	const noteCount = useLessonNotes(mediaId).data?.length ?? 0;
 	const goTo = (target: string) => navigate(path(href('course', courseId, target)));
 	const finished = (id: string) => {
 		if (studySyncSupported) setCompleted.mutate({ mediaId: id, completed: true }, { onSuccess: (updated) => client.setQueryData(['progress', id], updated) });
@@ -97,6 +106,21 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 		return () => clearTimeout(timer);
 	});
 
+	// A finished focus block pauses the lesson (if the setting is on); a finished break offers to resume.
+	// Derived while rendering, like the per-lesson reset above; the effect below only pauses the media.
+	const finishedRound = timer.lastCompleted;
+	if (finishedRound && finishedRound.at !== seenRound) {
+		setSeenRound(finishedRound.at);
+		if (finishedRound.mode === 'focus') {
+			if (timer.settings.pauseVideoOnRoundEnd) setBreakPhase('break');
+		} else if (breakPhase === 'break') {
+			setBreakPhase('over');
+		}
+	}
+	useEffect(() => {
+		if (breakPhase === 'break') player.current?.pause();
+	}, [breakPhase]);
+
 	useEffect(() => {
 		document.title = lesson ? `${lesson.title} · ${course.title} · LearnVault` : 'LearnVault';
 	}, [lesson, course.title]);
@@ -111,29 +135,55 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 		);
 	}
 
-	return (
-		<div className={cn('grid gap-6', sidebar && 'lg:grid-cols-[minmax(0,1fr)_22rem]')}>
-			<div className="min-w-0 space-y-4">
-				<div className="flex items-center justify-between gap-2">
-					<BackLink course={course} courseId={courseId} />
-					<Button variant="ghost" size="sm" className="hidden lg:inline-flex" aria-expanded={sidebar} aria-controls="lesson-curriculum" onClick={() => setSidebar((open) => !open)}>
-						{sidebar ? <PanelRightClose /> : <PanelRightOpen />}{sidebar ? tr('Hide course content', 'Ocultar conteúdo do curso') : tr('Show course content', 'Mostrar conteúdo do curso')}
-					</Button>
-				</div>
+	const sequence = lessonSequence([course]);
+	const position = sequence.findIndex((item) => item.path === lessonPath);
+	const hasNotes = studySyncSupported && Boolean(mediaId);
+	const activeTab = (tab === 'notes' || tab === 'cards') && !hasNotes ? 'lessons' : tab;
+	const openNotes = () => { setTab('notes'); setNoteRequest((value) => value + 1); };
+	const closeBreak = () => setBreakPhase(null);
 
-				<MediaPlayer
-					key={`${courseId}/${lessonPath}`}
-					lesson={lesson}
-					courseId={courseId}
-					initialPosition={initialPosition}
-					preferences={preferences}
-					onPreferencesChange={savePreferences}
-					onPosition={recordPosition}
-					onEnded={finished}
-					onTime={setTime}
-					onOpenNotes={() => { setTab('notes'); setNoteRequest((value) => value + 1); }}
-					handle={(value) => { player.current = value; }}
-				/>
+	return (
+		<div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem]">
+			<div className="min-w-0 space-y-4">
+				<div className="flex flex-wrap items-center justify-between gap-2">
+					<BackLink course={course} courseId={courseId} />
+					<div className="flex items-center gap-2">
+						<Button variant="outline" disabled={!previous} onClick={() => previous && goTo(previous.path)}><ChevronLeft />{tr('Previous', 'Anterior')}</Button>
+						{position >= 0 && <span className="text-sm text-muted-foreground tabular-nums">{tr(`Lesson ${position + 1} of ${sequence.length}`, `Aula ${position + 1} de ${sequence.length}`)}</span>}
+						<Button variant="outline" disabled={!next} onClick={() => next && goTo(next.path)}>{tr('Next', 'Próxima')}<ChevronRight /></Button>
+					</div>
+				</div>
+				<LessonRail sequence={sequence} current={position} isDone={(path) => findLesson(catalog.data ?? null, courseId, path)?.media.some((file) => file.mediaId && completed.has(file.mediaId)) ?? false} />
+
+				<div className="relative">
+					<MediaPlayer
+						key={`${courseId}/${lessonPath}`}
+						lesson={lesson}
+						courseId={courseId}
+						initialPosition={initialPosition}
+						preferences={preferences}
+						onPreferencesChange={savePreferences}
+						onPosition={recordPosition}
+						onEnded={finished}
+						onTime={setTime}
+						onOpenNotes={openNotes}
+						handle={(value) => { player.current = value; }}
+					/>
+					{breakPhase && (
+						<BreakOverlay
+							phase={breakPhase}
+							mode={timer.mode}
+							remainingSeconds={timer.remainingSeconds}
+							running={timer.status === 'running'}
+							notes={noteCount}
+							onStart={startTimer}
+							onOpenNotes={() => { openNotes(); closeBreak(); }}
+							onSkip={() => { skipTimer(); closeBreak(); player.current?.play(); }}
+							onEnd={() => { resetTimer(); closeBreak(); }}
+							onResume={() => { closeBreak(); player.current?.play(); }}
+						/>
+					)}
+				</div>
 
 				{countdown !== null && next && (
 					<div role="status" aria-live="polite" className="flex flex-wrap items-center gap-3 rounded-lg border bg-card p-4">
@@ -143,8 +193,18 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 					</div>
 				)}
 
+				{hasNotes && (
+					<div className="flex flex-wrap gap-2">
+						<Button variant="outline" onClick={() => { player.current?.pause(); openNotes(); }} aria-keyshortcuts="n"><PenLine />{tr('Pause and note', 'Pausar e anotar')}<kbd aria-hidden="true" className="ml-1 rounded border px-1.5 text-xs text-muted-foreground">N</kbd></Button>
+						<Button variant="outline" onClick={() => { player.current?.pause(); setTab('cards'); setCardRequest((value) => value + 1); }}><SquarePlus />{tr('Make card', 'Criar cartão')}</Button>
+					</div>
+				)}
+
 				<div className="flex flex-wrap items-center gap-2">
-					<h1 className="mr-auto min-w-0 text-2xl font-semibold tracking-tight text-balance">{lesson.title}</h1>
+					<div className="mr-auto min-w-0">
+						<h1 className="text-2xl font-semibold tracking-tight text-balance">{lesson.title}</h1>
+						<p className="text-sm text-muted-foreground">{location?.moduleTitle ? `${course.title} · ${location.moduleTitle}` : course.title}</p>
+					</div>
 					{studySyncSupported && mediaId && (
 						<Button variant={isDone ? 'secondary' : 'default'} aria-pressed={isDone} disabled={setCompleted.isPending} onClick={() => setCompleted.mutate({ mediaId, completed: !isDone }, { onSuccess: (updated) => client.setQueryData(['progress', mediaId], updated) })}>
 							{isDone ? <CircleCheck /> : <Circle />}{isDone ? tr('Completed', 'Concluída') : tr('Mark as completed', 'Marcar como concluída')}
@@ -152,51 +212,54 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 					)}
 				</div>
 				<div className="flex flex-wrap items-center gap-2">
-					<Button variant="outline" disabled={!previous} onClick={() => previous && goTo(previous.path)}><ChevronLeft />{tr('Previous', 'Anterior')}</Button>
-					<Button variant="outline" disabled={!next} onClick={() => next && goTo(next.path)}>{tr('Next', 'Próxima')}<ChevronRight /></Button>
 					{savedPosition !== null && time < savedPosition && (
 						<Button variant="secondary" onClick={() => player.current?.seek(savedPosition)}>{tr(`Resume from ${formatDuration(savedPosition)}`, `Retomar de ${formatDuration(savedPosition)}`)}</Button>
 					)}
-					<label className="ml-auto flex min-h-11 items-center gap-2 text-sm">
+					<label className="flex min-h-11 items-center gap-2 text-sm">
 						<input type="checkbox" className="size-5 accent-[var(--primary)]" checked={preferences.autoNext} onChange={(event) => savePreferences({ ...preferences, autoNext: event.target.checked })} />
 						{tr('Play the next lesson automatically', 'Reproduzir a próxima aula automaticamente')}
 					</label>
 				</div>
+			</div>
 
-				<Tabs value={tab} onValueChange={(value) => setTab(String(value))}>
+			<aside aria-label={tr('Study panel', 'Painel de estudo')} className="min-w-0 space-y-4 lg:sticky lg:top-20 lg:max-h-[calc(100dvh-6rem)] lg:self-start lg:overflow-y-auto">
+				<FocusCard />
+				<Tabs value={activeTab} onValueChange={(value) => setTab(String(value))}>
 					<TabsList aria-label={tr('Lesson tools', 'Ferramentas da aula')}>
-						<TabsTrigger value="overview">{tr('Overview', 'Visão geral')}</TabsTrigger>
-						{studySyncSupported && mediaId && <TabsTrigger value="notes">{tr('Notes', 'Notas')}</TabsTrigger>}
-						{studySyncSupported && mediaId && <TabsTrigger value="flashcards">{tr('Flashcards', 'Flashcards')}</TabsTrigger>}
+						{hasNotes && <TabsTrigger value="notes">{tr('Notes', 'Notas')}</TabsTrigger>}
+						{hasNotes && <TabsTrigger value="cards">{tr('Cards', 'Cartões')}</TabsTrigger>}
+						<TabsTrigger value="lessons">{tr('Lessons', 'Aulas')}</TabsTrigger>
 						<TabsTrigger value="materials">{tr('Materials', 'Materiais')}</TabsTrigger>
 					</TabsList>
-					<TabsContent value="overview" className="space-y-2 pt-4">
-						<p>{location?.moduleTitle ? `${course.title} · ${location.moduleTitle}` : course.title}</p>
-						<p className="text-muted-foreground">{tr(`${overall.done} of ${overall.total} lessons of this course completed.`, `${overall.done} de ${overall.total} aulas deste curso concluídas.`)}</p>
-					</TabsContent>
-					{studySyncSupported && mediaId && (
+					{hasNotes && mediaId && (
 						<TabsContent value="notes" keepMounted className="pt-4">
 							<StudyNotes mediaId={mediaId} currentTime={time} onSeek={(seconds) => player.current?.seek(seconds)} addRequest={noteRequest} />
 						</TabsContent>
 					)}
-					{studySyncSupported && mediaId && (
-						<TabsContent value="flashcards" className="pt-4">
-							<Flashcards mediaId={mediaId} />
+					{hasNotes && mediaId && (
+						<TabsContent value="cards" keepMounted className="pt-4">
+							<Flashcards mediaId={mediaId} addRequest={cardRequest} />
 						</TabsContent>
 					)}
+					<TabsContent value="lessons" className="space-y-3 pt-4">
+						<p className="text-sm text-muted-foreground">{tr(`${overall.done} of ${overall.total} lessons of this course completed.`, `${overall.done} de ${overall.total} aulas deste curso concluídas.`)}</p>
+						<Curriculum nodes={course.children} courseId={courseId} completed={completed} favorites={favoriteMedia} activePath={lessonPath} />
+					</TabsContent>
 					<TabsContent value="materials" className="pt-4">
 						<Materials files={[...lesson.subtitles, ...lesson.materials]} courseId={courseId} />
 					</TabsContent>
 				</Tabs>
-			</div>
+			</aside>
+		</div>
+	);
+}
 
-			{sidebar && (
-				<aside id="lesson-curriculum" aria-labelledby="curriculum-heading" className="min-w-0 space-y-3 lg:sticky lg:top-20 lg:max-h-[calc(100dvh-6rem)] lg:overflow-y-auto">
-					<h2 id="curriculum-heading" className="font-semibold">{tr('Course content', 'Conteúdo do curso')}</h2>
-					<p className="text-sm text-muted-foreground">{tr(`${overall.done} of ${overall.total} completed`, `${overall.done} de ${overall.total} concluídas`)}</p>
-					<Curriculum nodes={course.children} courseId={courseId} completed={completed} favorites={favoriteMedia} activePath={lessonPath} />
-				</aside>
-			)}
+/** One segment per lesson: done, the current one, or still to come. Decorative; the text names the position. */
+function LessonRail({ sequence, current, isDone }: { sequence: { path: string }[]; current: number; isDone: (path: string) => boolean }) {
+	if (sequence.length < 2 || sequence.length > 60) return null;
+	return (
+		<div aria-hidden="true" className="flex gap-1">
+			{sequence.map((item, index) => <span key={item.path} className={cn('h-1.5 flex-1 rounded-full', isDone(item.path) ? 'bg-primary' : index === current ? 'bg-amber-500' : 'bg-muted')} />)}
 		</div>
 	);
 }

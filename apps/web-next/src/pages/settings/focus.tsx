@@ -55,7 +55,7 @@ export function FocusSettings() {
 					<input id="timer-volume" type="range" min={0} max={1} step={0.05} value={draft.alarmVolume} onChange={(event) => set('alarmVolume', Number(event.target.value))} className="h-11 w-full accent-[var(--primary)]" />
 				</div>
 			</div>
-			{([['autoStartNext', tr('Start the next block automatically', 'Iniciar o próximo bloco automaticamente')], ['alarmEnabled', tr('Play the alarm when a block ends', 'Tocar o alarme ao fim do bloco')], ['notificationsEnabled', tr('Show a system notification', 'Mostrar notificação do sistema')]] as const).map(([key, label]) => (
+			{([['autoStartNext', tr('Start the next block automatically', 'Iniciar o próximo bloco automaticamente')], ['pauseVideoOnRoundEnd', tr('Pause the lesson when a focus block ends', 'Pausar a aula quando um bloco de foco termina')], ['alarmEnabled', tr('Play the alarm when a block ends', 'Tocar o alarme ao fim do bloco')], ['notificationsEnabled', tr('Show a system notification', 'Mostrar notificação do sistema')]] as const).map(([key, label]) => (
 				<label key={key} className="flex min-h-11 items-center gap-3 text-sm">
 					<input type="checkbox" className="size-5 accent-[var(--primary)]" checked={draft[key]} onChange={(event) => set(key, event.target.checked)} />
 					{label}

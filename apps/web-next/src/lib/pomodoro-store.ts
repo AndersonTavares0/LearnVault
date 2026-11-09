@@ -254,8 +254,8 @@ function complete(): void {
 	}
 	if (state.settings.notificationsEnabled && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
 		try {
-			const title = state.mode === 'focus' ? 'Ciclo de foco concluído! 🎉' : 'Pausa finalizada! Pronto para focar?';
-			const body = state.mode === 'focus' ? 'Uma árvore saudável foi cultivada na sua floresta.' : 'Hora de retomar seus estudos.';
+			const title = state.mode === 'focus' ? tr('Focus block done', 'Bloco de foco concluído') : tr('Break over', 'Pausa encerrada');
+			const body = state.mode === 'focus' ? tr('Time for a break. Your lesson is paused.', 'Hora da pausa. Sua aula está pausada.') : tr('Ready to pick the lesson back up?', 'Pronto para retomar a aula?');
 			new Notification(title, { body });
 		} catch {
 			// Ignora falha de notificação do navegador

@@ -12,7 +12,7 @@ import {
 import { lessonPreferenceKey, updateLessonPreference, type PlayerPreferences } from '@/lib/player-preferences';
 import { transport, type FileEntry, type Lesson } from '@/lib/transport';
 
-export type PlayerHandle = { seek: (seconds: number) => void };
+export type PlayerHandle = { seek: (seconds: number) => void; pause: () => void; play: () => void };
 
 type Props = {
 	lesson: Lesson;
@@ -106,7 +106,11 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 		else element.currentTime = target;
 	};
 	useEffect(() => {
-		handle({ seek: (seconds) => { seek(seconds); void media.current?.play().catch(() => undefined); } });
+		handle({
+			seek: (seconds) => { seek(seconds); void media.current?.play().catch(() => undefined); },
+			pause: () => media.current?.pause(),
+			play: () => { void media.current?.play().catch(() => undefined); }
+		});
 		return () => handle(null);
 	});
 

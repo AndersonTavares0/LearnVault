@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { pomodoro } from '@/lib/pomodoro-store';
 import { transport, type Catalog, type CatalogNode, type FileEntry, type StudyProgress } from '@/lib/transport';
 import { renderApp } from '@/test/render-app';
 
@@ -13,6 +14,7 @@ const catalog: Catalog = {
 		children: [lesson('One', [media('one.mp4')]), lesson('Two', [media('two.mp4')]), lesson('Gone', [media('gone.mp4', 'missing')])]
 	}]
 };
+const initialTimer = pomodoro.get();
 const progress = (mediaId: string, completed = false): StudyProgress => ({ mediaId, positionSeconds: 0, completed, updatedAt: 1, recorded: false });
 
 beforeEach(() => {
@@ -24,6 +26,7 @@ beforeEach(() => {
 	vi.spyOn(transport, 'rewardSummary').mockRejectedValue(new Error('not needed'));
 });
 afterEach(() => {
+	pomodoro.set(initialTimer);
 	cleanup();
 	vi.restoreAllMocks();
 });
@@ -35,7 +38,10 @@ describe('lesson page', () => {
 		expect(screen.getByLabelText('Lesson player: One').getAttribute('src')).toBe('/api/media?course=c&path=c%2Fone.mp4');
 		expect((screen.getByRole('button', { name: /Previous/ }) as HTMLButtonElement).disabled).toBe(true);
 		expect((screen.getByRole('button', { name: /Next/ }) as HTMLButtonElement).disabled).toBe(false);
-		expect(screen.getByRole('complementary', { name: 'Course content' })).toBeTruthy();
+		expect(screen.getByRole('complementary', { name: 'Study panel' })).toBeTruthy();
+		expect(screen.getByText('Lesson 1 of 3')).toBeTruthy();
+		fireEvent.click(screen.getByRole('tab', { name: 'Lessons' }));
+		expect(await screen.findByRole('link', { name: /Two/ })).toBeTruthy();
 	});
 
 	it('marks the lesson completed from the page', async () => {
@@ -68,5 +74,53 @@ describe('lesson page', () => {
 		renderApp('/course/c/c%2FGone', { catalog });
 		expect(await screen.findByText('Media unavailable')).toBeTruthy();
 		expect(screen.getByRole('heading', { level: 1, name: 'Gone' })).toBeTruthy();
+	});
+
+	describe('study workspace', () => {
+		const finishRound = (mode: 'focus' | 'short', at: number) => act(() => { pomodoro.update((state) => ({ ...state, mode: mode === 'focus' ? 'short' : 'focus', status: 'idle', remainingSeconds: 300, totalSeconds: 300, lastCompleted: { mode, at } })); });
+
+		it('pauses the lesson and covers it with a break when a focus block ends', async () => {
+			const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
+			renderApp('/course/c/c%2FOne', { catalog });
+			await screen.findByRole('heading', { level: 1, name: 'One' });
+			finishRound('focus', Date.now() + 1);
+			const region = await screen.findByRole('region', { name: 'Break' });
+			expect(region.textContent).toContain('Round done.');
+			expect(pause).toHaveBeenCalled();
+			fireEvent.click(screen.getByRole('button', { name: 'End session' }));
+			expect(screen.queryByRole('region', { name: 'Break' })).toBeNull();
+		});
+
+		it('offers to resume when the break is over, and does not resume by itself', async () => {
+			vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
+			const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+			renderApp('/course/c/c%2FOne', { catalog });
+			await screen.findByRole('heading', { level: 1, name: 'One' });
+			finishRound('focus', Date.now() + 1);
+			await screen.findByRole('region', { name: 'Break' });
+			finishRound('short', Date.now() + 2);
+			expect(await screen.findByRole('heading', { name: 'Break over' })).toBeTruthy();
+			expect(play).not.toHaveBeenCalled();
+			fireEvent.click(screen.getByRole('button', { name: 'Resume lesson' }));
+			expect(play).toHaveBeenCalled();
+			expect(screen.queryByRole('region', { name: 'Break' })).toBeNull();
+		});
+
+		it('leaves the lesson playing when the pause setting is off', async () => {
+			pomodoro.update((state) => ({ ...state, settings: { ...state.settings, pauseVideoOnRoundEnd: false } }));
+			renderApp('/course/c/c%2FOne', { catalog });
+			await screen.findByRole('heading', { level: 1, name: 'One' });
+			finishRound('focus', Date.now() + 1);
+			expect(screen.queryByRole('region', { name: 'Break' })).toBeNull();
+		});
+
+		it('opens a note draft and a blank card from the tools under the video', async () => {
+			vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
+			renderApp('/course/c/c%2FOne', { catalog });
+			fireEvent.click(await screen.findByRole('button', { name: /Pause and note/ }));
+			expect(await screen.findByLabelText('Note at 0:00')).toBeTruthy();
+			fireEvent.click(screen.getByRole('button', { name: 'Make card' }));
+			expect(await screen.findByRole('form', { name: 'New card' })).toBeTruthy();
+		});
 	});
 });
