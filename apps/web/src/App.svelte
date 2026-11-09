@@ -13,7 +13,7 @@
 	import DesktopTitlebar from './DesktopTitlebar.svelte';
 	import AdminUsers from './AdminUsers.svelte';
 	import { filterCatalog } from './search';
-	import { collectMaterials, countCatalogNode, countMissingVideos, formatCount, formatCourseMeta, formatLessonCounts, formatLocationContext, getCourseProgressStatus, type CourseProgressStatus } from './catalog';
+	import { collectMaterials, countCatalogNode, countMissingVideos, formatCategoryName, formatCount, formatCourseMeta, formatLessonCounts, formatLocationContext, getCourseProgressStatus, type CourseProgressStatus } from './catalog';
 	import { courseCover } from './cover';
 	import PasswordField from './PasswordField.svelte';
 	import { defaultLessonPath, firstAvailableLessonPath, lessonContainer, neighboringLessons } from './navigation';
@@ -42,12 +42,17 @@
 	let courseId: string | null = initialLocation.courseId;
 	let lessonPath: string | null = initialLocation.lessonPath;
 	let positionSeconds: number | null = initialLocation.positionSeconds ?? null;
-	let avatarVersion = Date.now();
+	let avatarVersion = 0;
 	let topbarAvatarFailed = false;
 
 	function handleAvatarChanged() {
 		topbarAvatarFailed = false;
 		avatarVersion = Date.now();
+		try {
+			if (user?.userId) localStorage.setItem('learnvault_avatar_' + user.userId, String(avatarVersion));
+		} catch {
+			// localStorage unavailable
+		}
 	}
 	let user: User | null = null;
 	let catalog: Catalog | null = null;
@@ -119,7 +124,18 @@
 		const location = findLessonLocation(catalog, item.mediaId);
 		return location ? [{ item, location }] : [];
 	});
-	$: libraryRecent = locatedRecent.slice(0, 4);
+	$: libraryRecent = (() => {
+		const seen = new Set<string>();
+		const list: typeof locatedRecent = [];
+		for (const entry of locatedRecent) {
+			if (!seen.has(entry.location.courseId)) {
+				seen.add(entry.location.courseId);
+				list.push(entry);
+				if (list.length >= 4) break;
+			}
+		}
+		return list;
+	})();
 	$: courseRecent = course ? locatedRecent.find((entry) => entry.location.courseId === courseIdOf(course)) ?? null : null;
 	$: userInitials = user
 		? user.username
@@ -340,6 +356,12 @@
 			loadPlayerPreferences(session.user);
 			error = session.error;
 			if (user) {
+				try {
+					const stored = localStorage.getItem('learnvault_avatar_' + user.userId);
+					if (stored) avatarVersion = Number(stored);
+				} catch {
+					avatarVersion = 0;
+				}
 				catalog = await transport.catalog();
 				await Promise.all([loadRecent(), loadFavorites()]);
 				if (route === 'login') route = 'home';
@@ -359,6 +381,12 @@
 		const destination = location.hash;
 		try {
 			user = await transport.login(username, password);
+			try {
+				const stored = localStorage.getItem('learnvault_avatar_' + user.userId);
+				avatarVersion = stored ? Number(stored) : 0;
+			} catch {
+				avatarVersion = 0;
+			}
 			allNotesForSearch = [];
 			notesLoaded = false;
 			loadPlayerPreferences(user);
@@ -776,9 +804,8 @@
 				<Brand />
 				<h1 id="login-heading">{tr('Sign in to LearnVault', 'Entrar no LearnVault')}</h1>
 				<button
-					class="lvui-btn lvui-btn-ghost lvui-btn-sm"
+					class="lvui-btn lvui-btn-ghost lvui-btn-sm login-head__locale"
 					type="button"
-					style="margin-left: auto;"
 					aria-label={tr('Switch language to Português (Brasil)', 'Mudar idioma para English')}
 					title={tr('Português (Brasil)', 'English')}
 					onclick={toggleLocale}
@@ -832,7 +859,7 @@
 					title={tr('Language: English (click for Português)', 'Idioma: Português (clique para English)')}
 					onclick={toggleLocale}
 				>
-					<span style="font-size: 0.72rem; font-weight: 700; letter-spacing: 0.03em;">{locale === 'en' ? 'EN' : 'PT'}</span>
+					<span class="lv-topbar__locale">{locale === 'en' ? 'EN' : 'PT'}</span>
 				</button>
 				<button class="lv-topbar__icon" type="button" aria-label={resolvedTheme === 'dark' ? tr('Switch to light theme', 'Mudar para tema claro') : tr('Switch to dark theme', 'Mudar para tema escuro')} title={resolvedTheme === 'dark' ? tr('Light theme', 'Tema claro') : tr('Dark theme', 'Tema escuro')} onclick={() => changeTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}>
 					{#if resolvedTheme === 'dark'}
@@ -842,7 +869,7 @@
 					{/if}
 				</button>
 				<div class="lv-topbar__user" title={user.username}>
-					{#if !topbarAvatarFailed && transport.userAvatarUrl(avatarVersion)}
+					{#if !topbarAvatarFailed && Boolean(avatarVersion) && transport.userAvatarUrl(avatarVersion)}
 						<img class="lv-avatar lv-avatar--img" src={transport.userAvatarUrl(avatarVersion)} alt={tr(`Avatar of ${user.username}`, `Avatar de ${user.username}`)} onerror={() => (topbarAvatarFailed = true)} />
 					{:else}
 						<span class="lv-avatar" aria-hidden="true">{userInitials}</span>
@@ -887,38 +914,46 @@
 								<kbd class="lv-search-kbd" aria-hidden="true">/</kbd>
 							</div>
 						</form>
-						<div class="lv-progress-filters" role="group" aria-label={tr('Filter courses by progress', 'Filtrar cursos por progresso')}>
-							<button type="button" class="lv-filter-pill" class:is-active={progressFilter === 'all'} aria-pressed={progressFilter === 'all'} onclick={() => (progressFilter = 'all')}>
-								{tr('All', 'Todos')} <span class="lv-filter-badge">{progressCounts.all}</span>
-							</button>
-							<button type="button" class="lv-filter-pill" class:is-active={progressFilter === 'in_progress'} aria-pressed={progressFilter === 'in_progress'} onclick={() => (progressFilter = 'in_progress')}>
-								{tr('In progress', 'Em andamento')} <span class="lv-filter-badge">{progressCounts.in_progress}</span>
-							</button>
-							<button type="button" class="lv-filter-pill" class:is-active={progressFilter === 'not_started'} aria-pressed={progressFilter === 'not_started'} onclick={() => (progressFilter = 'not_started')}>
-								{tr('Not started', 'Não iniciados')} <span class="lv-filter-badge">{progressCounts.not_started}</span>
-							</button>
-							<button type="button" class="lv-filter-pill" class:is-active={progressFilter === 'completed'} aria-pressed={progressFilter === 'completed'} onclick={() => (progressFilter = 'completed')}>
-								{tr('Completed', 'Concluídos')} <span class="lv-filter-badge">{progressCounts.completed}</span>
-							</button>
-							{#if studySyncSupported}
-								<button type="button" class="lv-filter-pill" class:is-active={favoritesOnly} aria-pressed={favoritesOnly} onclick={() => (favoritesOnly = !favoritesOnly)}>
-									{tr('★ Favorites', '★ Favoritos')} <span class="lv-filter-badge">{progressCounts.favorites}</span>
-								</button>
+						<div class="lv-library-filters">
+							<div class="lv-filter-group">
+								<span class="lv-filter-group__label">{tr('Status', 'Status')}</span>
+								<div class="lv-progress-filters" role="group" aria-label={tr('Filter courses by progress', 'Filtrar cursos por progresso')}>
+									<button type="button" class="lv-filter-pill" class:is-active={progressFilter === 'all'} aria-pressed={progressFilter === 'all'} onclick={() => (progressFilter = 'all')}>
+										{tr('All', 'Todos')} <span class="lv-filter-badge">{progressCounts.all}</span>
+									</button>
+									<button type="button" class="lv-filter-pill" class:is-active={progressFilter === 'in_progress'} aria-pressed={progressFilter === 'in_progress'} onclick={() => (progressFilter = 'in_progress')}>
+										{tr('In progress', 'Em andamento')} <span class="lv-filter-badge">{progressCounts.in_progress}</span>
+									</button>
+									<button type="button" class="lv-filter-pill" class:is-active={progressFilter === 'not_started'} aria-pressed={progressFilter === 'not_started'} onclick={() => (progressFilter = 'not_started')}>
+										{tr('Not started', 'Não iniciados')} <span class="lv-filter-badge">{progressCounts.not_started}</span>
+									</button>
+									<button type="button" class="lv-filter-pill" class:is-active={progressFilter === 'completed'} aria-pressed={progressFilter === 'completed'} onclick={() => (progressFilter = 'completed')}>
+										{tr('Completed', 'Concluídos')} <span class="lv-filter-badge">{progressCounts.completed}</span>
+									</button>
+									{#if studySyncSupported}
+										<button type="button" class="lv-filter-pill" class:is-active={favoritesOnly} aria-pressed={favoritesOnly} onclick={() => (favoritesOnly = !favoritesOnly)}>
+											{tr('★ Favorites', '★ Favoritos')} <span class="lv-filter-badge">{progressCounts.favorites}</span>
+										</button>
+									{/if}
+								</div>
+							</div>
+							{#if availableSourceFolders.length > 1}
+								<div class="lv-filter-group lv-filter-group--sources">
+									<span class="lv-filter-group__label">{tr('Category', 'Categoria')}</span>
+									<div class="lv-progress-filters lv-source-filters" role="group" aria-label={tr('Filter courses by source folder', 'Filtrar cursos por pasta de origem')}>
+										<button type="button" class="lv-filter-pill" class:is-active={sourceFolderFilter === 'all'} aria-pressed={sourceFolderFilter === 'all'} onclick={() => (sourceFolderFilter = 'all')}>
+											{tr(`All folders (${catalog?.nodes.length ?? 0})`, `Todas as pastas (${catalog?.nodes.length ?? 0})`)}
+										</button>
+										{#each availableSourceFolders as folder}
+											{@const count = (catalog?.nodes ?? []).filter((n) => n.sourceFolder === folder).length}
+											<button type="button" class="lv-filter-pill" class:is-active={sourceFolderFilter === folder} aria-pressed={sourceFolderFilter === folder} onclick={() => (sourceFolderFilter = folder)}>
+												{formatCategoryName(folder)} <span class="lv-filter-badge">{count}</span>
+											</button>
+										{/each}
+									</div>
+								</div>
 							{/if}
 						</div>
-						{#if availableSourceFolders.length > 1}
-							<div class="lv-progress-filters lv-source-filters" role="group" aria-label={tr('Filter courses by source folder', 'Filtrar cursos por pasta de origem')}>
-								<button type="button" class="lv-filter-pill" class:is-active={sourceFolderFilter === 'all'} aria-pressed={sourceFolderFilter === 'all'} onclick={() => (sourceFolderFilter = 'all')}>
-									{tr(`All folders (${catalog?.nodes.length ?? 0})`, `Todas as pastas (${catalog?.nodes.length ?? 0})`)}
-								</button>
-								{#each availableSourceFolders as folder}
-									{@const count = (catalog?.nodes ?? []).filter((n) => n.sourceFolder === folder).length}
-									<button type="button" class="lv-filter-pill" class:is-active={sourceFolderFilter === folder} aria-pressed={sourceFolderFilter === folder} onclick={() => (sourceFolderFilter = folder)}>
-										{folder} <span class="lv-filter-badge">{count}</span>
-									</button>
-								{/each}
-							</div>
-						{/if}
 					{/if}
 
 					{#if studySyncSupported && libraryRecent.length && !catalogQuery.trim()}
@@ -1009,7 +1044,7 @@
 							<div class="lv-section__tools">
 								<div class="lv-view-switch lvui-join" role="group" aria-label={tr('Course view', 'Visualização dos cursos')}>
 									{#each LIBRARY_VIEWS as view}
-										<button type="button" class={`lvui-join-item lvui-btn lvui-btn-sm${libraryView === view ? ' lvui-btn-active' : ''}`} aria-pressed={libraryView === view} onclick={() => changeLibraryView(view)}>
+										<button type="button" class={`lvui-join-item lvui-btn lv-view-tab${libraryView === view ? ' lvui-btn-active' : ''}`} aria-pressed={libraryView === view} onclick={() => changeLibraryView(view)}>
 											{#if view === 'covers'}<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="13" y="4" width="7" height="7" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="4" y="13" width="7" height="7" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="13" y="13" width="7" height="7" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>
 											{:else if view === 'list'}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
 											{:else if view === 'compact'}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>

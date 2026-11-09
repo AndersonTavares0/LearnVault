@@ -13,6 +13,7 @@
 </script>
 
 <script lang="ts">
+	import Brand from './Brand.svelte';
 	import { courseCover, selectCourseCoverSource } from './cover';
 	import type { CatalogNode } from './transport';
 
@@ -110,5 +111,7 @@
 	{:else if coverSource === 'thumbnail'}<img class="lv-cover__image" src={thumbnailUrl ?? ''} alt="" width="600" height="400" loading={size === 'hero' ? 'eager' : 'lazy'} decoding="async" />{/if}
 	<span class="lv-cover__pattern lv-cover__pattern--{cover.pattern}"></span>
 	<span class="lv-cover__spine"><span>{cover.code}</span></span>
-	{#if coverSource !== 'manual'}<span class="lv-cover__monogram">{cover.monogram}</span>{/if}
+	{#if coverSource === 'generated'}
+		<span class="lv-cover__mark"><Brand /></span>
+	{/if}
 </span>
