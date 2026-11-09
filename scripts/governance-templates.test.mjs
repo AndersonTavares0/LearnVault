@@ -45,3 +45,11 @@ test('agent entry points reach one canonical review policy and reviewer permissi
         }
     }
 });
+
+test('LearnVault production ruleset permits squash merges only', () => {
+    const ruleset = JSON.parse(read('.github/rulesets/learnvault-main.json'));
+    const pullRequestRule = ruleset.rules.find(rule => rule.type === 'pull_request');
+
+    assert.ok(pullRequestRule, 'pull request rule exists');
+    assert.deepEqual(pullRequestRule.parameters.allowed_merge_methods, ['squash']);
+});
