@@ -210,6 +210,23 @@ jobs:
       - name: Run tests with coverage
         run: cargo llvm-cov --package learnvault-core --all-targets --fail-under-lines 80
 
+  windows-core:
+    name: Windows core tests
+    runs-on: windows-latest
+    timeout-minutes: 20
+    needs: [change-scope]
+    if: ${{ needs['change-scope'].outputs.docs_release_only != 'true' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install Rust toolchain
+        run: rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Run core Clippy
+        run: cargo clippy -p learnvault-core --all-targets --locked -- -D warnings
+      - name: Run core tests
+        run: cargo test -p learnvault-core --locked
+
   desktop:
     name: Desktop crate compile and guards
     runs-on: ubuntu-latest
