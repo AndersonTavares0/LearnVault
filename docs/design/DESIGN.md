@@ -9,7 +9,7 @@ The canonical specification for LearnVault's visual identity, layout architectur
 **A private course shelf.** LearnVault anchors user experience around rapid course discovery and immediate resume affordances:
 - A compact, non-intrusive topbar with clear page state and responsive wrapping.
 - Global instant search accessible via `/` hotkey.
-- A prominent "Continue studying" row with timestamped progress (deduplicated by course; up to 4 distinct courses).
+- A prominent "Continue studying" row with timestamped progress (up to 4 most recently studied lessons).
 - A structured course catalog supporting distinct Progress and Category filter groups, with numeric folder prefixes cleaned for readability.
 - Four persistent views: Covers, List, Compact, and Shelf.
 - A media player centered around an uncompromised 16:9 stage with an attached contextual curriculum column.

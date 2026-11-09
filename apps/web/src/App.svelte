@@ -124,18 +124,7 @@
 		const location = findLessonLocation(catalog, item.mediaId);
 		return location ? [{ item, location }] : [];
 	});
-	$: libraryRecent = (() => {
-		const seen = new Set<string>();
-		const list: typeof locatedRecent = [];
-		for (const entry of locatedRecent) {
-			if (!seen.has(entry.location.courseId)) {
-				seen.add(entry.location.courseId);
-				list.push(entry);
-				if (list.length >= 4) break;
-			}
-		}
-		return list;
-	})();
+	$: libraryRecent = locatedRecent.slice(0, 4);
 	$: courseRecent = course ? locatedRecent.find((entry) => entry.location.courseId === courseIdOf(course)) ?? null : null;
 	$: userInitials = user
 		? user.username

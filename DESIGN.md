@@ -65,7 +65,7 @@ Color tokens are defined in `apps/web/src/redesign.css` and use semantic roles:
 ## Key Workspaces & Components
 
 ### 1. Library & Browsing Modes
-- **Continue Studying:** Direct resume row with 16:9 cards, current lesson title, and instant playback trigger. Deduplicated by course so each course appears at most once (showing its most recent lesson, up to 4 distinct courses). On mobile viewports, cards maintain a 76vw width to ensure the next item peeks out as a visible scroll affordance.
+- **Continue Studying:** Direct resume row with 16:9 cards, lesson title, and instant playback trigger. Presents up to 4 most recently studied lessons, allowing rapid one-click continuation of active study tracks. On mobile viewports, cards maintain a 76vw width to ensure the next item peeks out as a visible scroll affordance.
 - **Filter Groups:** Organized into distinct Progress filters (All, In progress, Not started, Completed, Favorites) and Category filters. Category names automatically strip noisy numeric folder prefixes (e.g., `01 - `, `02. `) while preserving item counts.
 - **Course Covers:** Neutral, consistent treatment for courses without uploaded covers or video posters, using deterministic earthy gradients with a subtle brand monogram watermark rather than loud letter tiles.
 - **Four Layout Views:** User-selectable and persisted in `localStorage`:
