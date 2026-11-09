@@ -8,6 +8,7 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
+tempfile = "3"
 rusqlite = { version = "0.41", features = ["backup", "bundled"] }
 thiserror = "2"
 uuid = { version = "1.28", features = ["v5", "v7"] }

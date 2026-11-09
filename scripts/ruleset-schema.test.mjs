@@ -27,6 +27,7 @@ test('learnvault-main.json is valid and enforces required invariants', () => {
 
 	const prRule = content.rules.find((r) => r.type === 'pull_request');
 	assert.equal(prRule.parameters.required_approving_review_count, 0, 'Solo maintainer compatibility');
+	assert.deepEqual(prRule.parameters.allowed_merge_methods, ['squash'], 'Production merges follow the squash-only policy');
 	assert.equal(prRule.parameters.required_review_thread_resolution, true, 'Conversation resolution mandatory');
 	assert.equal(prRule.parameters.dismiss_stale_reviews_on_push, true, 'Dismiss stale reviews on push');
 

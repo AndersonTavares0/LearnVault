@@ -55,15 +55,17 @@ jobs:
           fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.sha }}
+          ref: refs/tags/${{ steps.tag.outputs.tag }}
           fetch-depth: 1
           persist-credentials: false
       - name: Resolve release tag commit
         id: commit
         shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
         run: |
           set -euo pipefail
-          COMMIT_SHA="$(git rev-parse HEAD)"
+          COMMIT_SHA="$(git rev-parse "refs/tags/${RELEASE_TAG}^{commit}")"
           if [[ ! "$COMMIT_SHA" =~ ^[0-9a-f]{40}$ ]]; then
             echo "::error::Release tag did not resolve to a commit" >&2
             exit 1
@@ -286,6 +288,19 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Confirm container release tag did not move
+        shell: bash
+        env:
+          EXPECTED_COMMIT_SHA: ${{ needs.validate-tag.outputs.commit_sha }}
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git fetch --force --no-tags origin "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
+          actual_commit_sha="$(git rev-parse "refs/tags/${RELEASE_TAG}^{commit}")"
+          if [[ "$actual_commit_sha" != "$EXPECTED_COMMIT_SHA" ]]; then
+            echo "::error::Release tag moved during the build (expected $EXPECTED_COMMIT_SHA, found $actual_commit_sha)" >&2
+            exit 1
+          fi
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
@@ -322,9 +337,11 @@ jobs:
         shell: bash
         env:
           EXPECTED_COMMIT_SHA: ${{ needs.validate-tag.outputs.commit_sha }}
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
         run: |
           set -euo pipefail
-          actual_commit_sha="$(git rev-parse HEAD)"
+          git fetch --force --no-tags origin "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
+          actual_commit_sha="$(git rev-parse "refs/tags/${RELEASE_TAG}^{commit}")"
           if [[ "$actual_commit_sha" != "$EXPECTED_COMMIT_SHA" ]]; then
             echo "::error::Release tag moved during the build (expected $EXPECTED_COMMIT_SHA, found $actual_commit_sha)" >&2
             exit 1

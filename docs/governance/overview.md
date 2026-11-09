@@ -147,3 +147,11 @@ Labels are informational and never block merges. Work type (`bug`, `enhancement`
 - [Architecture](../architecture/overview.md) for core, server, and desktop boundaries.
 - [Requirements](../product/requirements.md) for functional and non-functional requirements.
 - [Distribution](../operations/distribution.md) for build artifacts and deployment.
+
+## Release identity and recovery
+
+Stable builds resolve the requested `refs/tags/vX.Y.Z` to a commit SHA. Container and asset publication refresh that tag and reject a different commit. Manual rebuilds therefore use the release's tagged source rather than the dispatch branch. A maintainer must avoid moving release tags during publication; the container guard runs before the image build.
+
+Database backup and restore stage SQLite files and sidecars in a private directory on the destination filesystem. Exports preserve private Unix file permissions, rollback copies fail on an existing filename, and destination replacement does not delete a valid database first. Choose a destination with trusted ancestors or a protected shared directory; Windows confidentiality depends on the directory's inherited ACLs.
+
+Container restore commands override the image entrypoint so `restore` is parsed as the CLI subcommand. Restore and rollback still require the service to be stopped.
