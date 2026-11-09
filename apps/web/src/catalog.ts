@@ -214,3 +214,16 @@ export function collectMaterials(node: CatalogNode): FileEntry[] {
 export function formatLocationContext(courseTitle: string, moduleTitle: string | null): string {
 	return joinParts([courseTitle, moduleTitle ?? '']);
 }
+
+/**
+ * Remove prefixos numéricos e separadores de pastas de categoria para exibição legível.
+ *
+ * Ex: "01 - Programacao e Desenvolvimento" -> "Programacao e Desenvolvimento"
+ *     "02. Design de Interfaces" -> "Design de Interfaces"
+ */
+export function formatCategoryName(folder: string): string {
+	const trimmed = folder.trim();
+	const cleaned = trimmed.replace(/^\d+[\s._-]+/, '').trim();
+	return cleaned || trimmed;
+}
+

@@ -113,6 +113,11 @@
 			await transport.deleteUserAvatar();
 			cancelSelection();
 			avatarFailed = true;
+			try {
+				localStorage.removeItem('learnvault_avatar_' + user.userId);
+			} catch {
+				// localStorage unavailable
+			}
 			message = tr('Profile photo removed successfully.', 'Foto de perfil removida com sucesso.');
 			onAvatarChange();
 		} catch (cause) {

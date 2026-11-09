@@ -4892,8 +4892,8 @@ svg {
 .lv-topbar__icon {
 	display: grid;
 	place-items: center;
-	width: 36px;
-	height: 36px;
+	min-width: 44px;
+	min-height: 44px;
 	border: 1px solid rgba(238, 241, 243, 0.28);
 	border-radius: 50%;
 	background: transparent;
@@ -5062,7 +5062,8 @@ input[type="radio"] {
 
 @media (max-width: 480px) {
 	.lv-topbar__icon {
-		display: none;
+		min-width: 44px;
+		min-height: 44px;
 	}
 }
 
@@ -6550,33 +6551,26 @@ img.lv-avatar,
 	display: flex;
 	align-items: center;
 	gap: 10px;
-	margin-bottom: 28px;
+	margin-bottom: 24px;
 }
 
-.login-page .brand-mark {
-	width: 34px;
-	height: 34px;
-	color: var(--rail-bg);
-}
-
-:root[data-theme="dark"] .login-page .brand-mark {
-	color: var(--ink);
-}
-
-.login-page .login-head span {
-	color: var(--ink);
-	font-size: 14px;
-	font-weight: 760;
+.login-head__locale {
+	margin-left: auto;
+	min-width: 44px;
+	min-height: 44px;
+	display: inline-grid;
+	place-items: center;
 }
 
 .login-page h1 {
 	margin: 0;
 	color: var(--heading);
 	font-family: var(--display);
-	font-size: 34px;
-	font-weight: 400;
-	letter-spacing: -0.035em;
-	line-height: 1.05;
+	font-size: clamp(1.15rem, 3.8vw, 1.45rem);
+	font-weight: 700;
+	letter-spacing: -0.02em;
+	line-height: 1.2;
+	white-space: nowrap;
 }
 
 .login-page .intro {
@@ -6690,8 +6684,7 @@ img.lv-avatar,
 		left: 12%;
 	}
 
-	.lv-topbar__username,
-	.lv-topbar__icon {
+	.lv-topbar__username {
 		display: none;
 	}
 
@@ -7150,11 +7143,12 @@ img.lv-avatar,
 		display: grid;
 		grid-auto-flow: column;
 		grid-template-columns: none;
-		grid-auto-columns: minmax(260px, 85%);
-		gap: 10px;
+		grid-auto-columns: minmax(240px, 76vw);
+		gap: 12px;
 		overflow-x: auto;
-		padding: 3px 3px 8px;
+		padding: 4px 4px 12px;
 		scroll-snap-type: x mandatory;
+		-webkit-overflow-scrolling: touch;
 	}
 
 	.lv-library .lv-resume > li {
@@ -7626,10 +7620,33 @@ img.lv-avatar,
 .lv-progress-filters {
 	display: flex;
 	align-items: center;
-	gap: 6px;
+	gap: 8px;
 	flex-wrap: wrap;
-	margin-top: 10px;
 }
+
+.lv-library-filters {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	margin-top: 14px;
+}
+
+.lv-filter-group {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+
+.lv-filter-group__label {
+	font-size: 11px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--muted);
+	min-width: 68px;
+}
+
 .lv-filter-pill {
 	display: inline-flex;
 	align-items: center;
@@ -7637,7 +7654,9 @@ img.lv-avatar,
 	background: var(--surface-2);
 	border: 1px solid var(--line);
 	color: var(--muted);
-	padding: 4px 10px;
+	min-height: 44px;
+	min-width: 44px;
+	padding: 8px 14px;
 	border-radius: 9999px;
 	font-size: 13px;
 	font-weight: 500;
@@ -7656,7 +7675,7 @@ img.lv-avatar,
 }
 .lv-filter-badge {
 	font-size: 11px;
-	padding: 1px 6px;
+	padding: 2px 7px;
 	border-radius: 9999px;
 	background: var(--line);
 	color: var(--muted);
@@ -7664,6 +7683,42 @@ img.lv-avatar,
 .lv-filter-pill.is-active .lv-filter-badge {
 	background: var(--accent);
 	color: #fff;
+}
+
+.lv-view-tab {
+	min-height: 44px;
+	min-width: 44px;
+	padding: 0 14px;
+}
+
+.lv-topbar__locale {
+	font-size: 0.75rem;
+	font-weight: 700;
+	letter-spacing: 0.03em;
+}
+
+.lv-cover__mark {
+	position: absolute;
+	top: 14px;
+	right: 14px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	color: rgba(255, 255, 255, 0.45);
+	transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.lv-cover__mark .brand-mark {
+	width: 28px;
+	height: 28px;
+	color: currentColor;
+}
+
+.lv-course-card:hover .lv-cover__mark {
+	color: rgba(255, 255, 255, 0.85);
+	transform: scale(1.05);
 }
 
 /* Overlay de contagem regressiva para próxima aula */

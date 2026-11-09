@@ -7,10 +7,11 @@ The canonical specification for LearnVault's visual identity, layout architectur
 ## Visual Direction
 
 **A private course shelf.** LearnVault anchors user experience around rapid course discovery and immediate resume affordances:
-- A compact, non-intrusive topbar with clear page state.
+- A compact, non-intrusive topbar with clear page state and responsive wrapping.
 - Global instant search accessible via `/` hotkey.
-- A prominent "Continue studying" row with timestamped progress.
-- A structured course catalog supporting four persistent views: Covers, List, Compact, and Shelf.
+- A prominent "Continue studying" row with timestamped progress (up to 4 most recently studied lessons).
+- A structured course catalog supporting distinct Progress and Category filter groups, with numeric folder prefixes cleaned for readability.
+- Four persistent views: Covers, List, Compact, and Shelf.
 - A media player centered around an uncompromised 16:9 stage with an attached contextual curriculum column.
 
 ---
@@ -21,33 +22,34 @@ The design system is implemented in `apps/web/src/redesign.css` and `apps/web/sr
 
 | Token | Light | Dark | Semantic Purpose |
 | :--- | :--- | :--- | :--- |
-| **Canvas** | `#f4f6f9` | `#0b1220` | Full-page background canvas |
-| **Surface** | `#ffffff` | `#111b2b` | Cards, panels, inputs, shelves |
-| **Raised** | `#edf1f6` | `#182230` | Selected state, active tab, hover highlights |
-| **Ink** | `#152238` | `#f5f7fb` | Primary headings, titles, high-contrast text |
-| **Muted** | `#56657a` | `#a8b5c7` | Secondary metadata, timestamps, subtle guidance |
-| **Cobalt** | `#1d5fd1` | `#1d5fd1` | Primary action triggers and active selections |
-| **Saffron** | `#8a5708` | `#e8b43c` | Saved progress, resume position, active streaks |
-| **Line** | `#d7dee8` | `#2a3a52` | Structural borders and container outlines |
+| **Canvas** | `#f8fafc` | `#090d13` | Full-page background canvas |
+| **Surface** | `#ffffff` | `#111722` | Cards, panels, inputs, shelves |
+| **Raised** | `#f1f5f9` | `#182230` | Selected state, active tab, hover highlights |
+| **Ink** | `#0f172a` | `#f1f5f9` | Primary headings, titles, high-contrast text |
+| **Muted** | `#475569` | `#8e9ea9` | Secondary metadata, timestamps, subtle guidance |
+| **Accent** | `#d97706` | `#d97706` | Primary action triggers, active streaks, and highlights |
+| **Blue** | `#0284c7` | `#0284c7` | Secondary actions, links, active selections |
+| **Line** | `#e2e8f0` | `#2a3a52` | Structural borders and container outlines |
 
 ---
 
 ## Typography & Composition
 
-- **Editorial Headings:** `Georgia`, `Cambria`, serif, weight 400, fluid scale for library section entries and course titles.
-- **Interface & Controls:** `Segoe UI Variable`, `Segoe UI`, `-apple-system`, `Inter`, sans-serif, weight 400–700 for buttons, navigation, and descriptions.
-- **Technical Metas:** `Cascadia Mono`, `Consolas`, monospace for timestamps, shortcuts, and counters.
-- **Desktop Viewport:** Centered layout constrained to 1240–1380px with sticky topbar.
+- **Headings & Display:** `-apple-system`, `BlinkMacSystemFont`, `Segoe UI`, `Roboto`, `Inter`, sans-serif, weight 400–700 for headings and section entries.
+- **Interface & Controls:** `-apple-system`, `BlinkMacSystemFont`, `Segoe UI`, `Roboto`, `Inter`, system-ui, sans-serif, weight 400–700 for buttons, navigation, and descriptions.
+- **Technical Metas:** `Cascadia Code`, `Cascadia Mono`, `JetBrains Mono`, `Consolas`, monospace for timestamps, shortcuts, and counters.
+- **Desktop Viewport:** Centered layout with responsive sticky topbar.
 - **Mobile Viewport (`≤820px`):** Single-column layout, full-width CTA buttons, touch targets meeting 44×44px minimums.
 
 ---
 
 ## Core Brand Mark
 
-The official visual brand mark is a geometric Shield with centered 3D depth lines:
-- Monochromatic, clean-room design.
+The official visual brand mark is the architectural geometric **LV Monogram**:
+- Monochromatic, clean-room design rendered in `currentColor`.
 - Quiet presence that does not compete with user course covers.
-- Located in `Brand.svelte` and vector SVG at `docs/design/branding/learnvault-banner.svg`.
+- Located in `Brand.svelte` and vector SVGs at `docs/design/branding/learnvault-mark.svg`, `docs/design/branding/learnvault-icon-light.svg`, and `docs/design/branding/learnvault-icon-dark.svg`.
+
 
 ---
 

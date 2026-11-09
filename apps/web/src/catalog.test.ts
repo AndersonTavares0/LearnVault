@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { setLocale } from './i18n.svelte';
-import { collectMaterials, countCatalogFiles, countCatalogNode, countMissingVideos, formatCount, formatCourseCardMeta, formatCourseMeta, formatLessonCounts, formatLessonMeta, getCourseProgressStatus, isLessonMissing } from './catalog';
+import { collectMaterials, countCatalogFiles, countCatalogNode, countMissingVideos, formatCategoryName, formatCount, formatCourseCardMeta, formatCourseMeta, formatLessonCounts, formatLessonMeta, getCourseProgressStatus, isLessonMissing } from './catalog';
 import type { CatalogCounts } from './catalog';
 import type { CatalogNode, FileEntry } from './transport';
 
@@ -326,3 +326,23 @@ describe('getCourseProgressStatus', () => {
 		expect(getCourseProgressStatus(mixedCourse, new Set(['v1.mp4']))).toBe('completed');
 	});
 });
+
+describe('formatCategoryName', () => {
+	it('strips leading numeric prefixes and separators', () => {
+		expect(formatCategoryName('01 - Programacao e Desenvolvimento')).toBe('Programacao e Desenvolvimento');
+		expect(formatCategoryName('02. Design de Interfaces')).toBe('Design de Interfaces');
+		expect(formatCategoryName('3_ DevOps e Cloud')).toBe('DevOps e Cloud');
+		expect(formatCategoryName('10 - Machine Learning')).toBe('Machine Learning');
+	});
+
+	it('preserves names without numeric prefixes', () => {
+		expect(formatCategoryName('Desenvolvimento Web')).toBe('Desenvolvimento Web');
+		expect(formatCategoryName('Geral')).toBe('Geral');
+	});
+
+	it('handles numeric-only or empty strings gracefully', () => {
+		expect(formatCategoryName('01')).toBe('01');
+		expect(formatCategoryName('')).toBe('');
+	});
+});
+
