@@ -1,7 +1,7 @@
 import { Award, Check, Flame, Target, Timer } from 'lucide-react';
 import { useId, useMemo, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useLocale } from '@/hooks/use-locale';
 import { formatCount } from '@/lib/catalog';
@@ -31,7 +31,7 @@ export function ProgressPage() {
 	const claim = useClaimMission();
 	const setGoal = useSetWeeklyGoal();
 	const library = useMemo(() => buildLibrary({ catalog: catalog.data, recent: recent.data ?? [], favoriteCourseIds: new Set(favorites.data?.courseIds ?? []) }), [catalog.data, recent.data, favorites.data]);
-	const game = rewards.data ? buildGamification({ rewards: rewards.data }) : null;
+	const game = rewards.data ? buildGamification({ rewards: rewards.data, completedCourses: library.entries.filter((entry) => entry.status === 'completed').length }) : null;
 
 	if (!studySyncSupported) return <PageHeader title={tr('Progress', 'Progresso')} description={tr('Study tracking is off on this server.', 'O acompanhamento de estudo está desligado neste servidor.')} />;
 	if (rewards.isPending) return <><PageHeader title={tr('Progress', 'Progresso')} /><p role="status" className="text-muted-foreground">{tr('Loading your progress…', 'Carregando seu progresso…')}</p></>;
@@ -81,11 +81,7 @@ export function ProgressPage() {
 									<Link to={`/course/${encodeURIComponent(entry.courseId)}`} className="font-medium hover:underline">{entry.course.title}</Link>
 									<Bar value={entry.done / Math.max(1, entry.total)} label={tr(`${entry.done} of ${entry.total} lessons`, `${entry.done} de ${entry.total} aulas`)} />
 								</div>
-								{entry.status === 'completed' && (
-									<Link to={`/progress/certificate/${encodeURIComponent(entry.courseId)}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-										<Award />{tr('Certificate', 'Certificado')}
-									</Link>
-								)}
+								{entry.status === 'completed' && <p className="flex items-center gap-1 text-sm font-medium text-primary"><Check className="size-4" aria-hidden="true" />{tr('Finished', 'Concluído')}</p>}
 							</li>
 						))}
 					</ul>

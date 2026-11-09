@@ -80,7 +80,14 @@ describe('buildGamification', () => {
 		expect(result.xp).toBe(140);
 		expect(result.missions.find((mission) => mission.id === 'lesson')).toMatchObject({ progress: 0, claimed: false, rewardXp: 30 });
 		expect(result.badges.find((badge) => badge.id === 'first-lesson')?.earned).toBe(true);
-		expect(result.badges.map((badge) => badge.id)).toEqual(['first-lesson', 'five-lessons', 'twenty-five-lessons', 'hundred-lessons']);
+		expect(result.badges.map((badge) => badge.id).sort()).toEqual(['first-course', 'first-lesson', 'five-lessons', 'hundred-lessons', 'three-courses', 'twenty-five-lessons']);
+	});
+
+	it('earns course badges from the number of finished courses', () => {
+		const badges = (completedCourses?: number) => Object.fromEntries(buildGamification({ rewards: rewards(0, 0), completedCourses }).badges.map((badge) => [badge.id, badge.earned]));
+		expect(badges()).toMatchObject({ 'first-course': false, 'three-courses': false });
+		expect(badges(1)).toMatchObject({ 'first-course': true, 'three-courses': false });
+		expect(badges(3)).toMatchObject({ 'first-course': true, 'three-courses': true });
 	});
 
 	it('keeps missions open and badges locked without activity', () => {
@@ -93,6 +100,6 @@ describe('buildGamification', () => {
 	it('unlocks lesson milestones from the full summary even when recent activity is empty', () => {
 		const result = buildGamification({ rewards: rewards(100, 4_000) });
 		expect(result.xp).toBe(4_000);
-		expect(result.badges.at(-1)).toMatchObject({ id: 'hundred-lessons', earned: true, progress: 100, target: 100 });
+		expect(result.badges.find((badge) => badge.id === 'hundred-lessons')).toMatchObject({ earned: true, progress: 100, target: 100 });
 	});
 });

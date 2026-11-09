@@ -22,12 +22,13 @@ afterEach(() => {
 });
 
 describe('progress', () => {
-	it('shows the habit, completed courses with a certificate and the focus summary', async () => {
+	it('shows the habit, a finished course with its badge and the focus summary', async () => {
 		renderApp('/progress', { catalog, rewards, recent: [done('a'), done('b')] });
 		expect(await screen.findByText('1 day')).toBeTruthy();
 		expect(screen.getByText('1 of 3 days')).toBeTruthy();
 		expect(screen.getByRole('list', { name: 'This week' }).querySelectorAll('li')).toHaveLength(7);
-		expect(screen.getByRole('link', { name: 'Certificate' }).getAttribute('href')).toBe('/progress/certificate/rust');
+		expect(screen.getByText('Finished')).toBeTruthy();
+		expect(screen.getByText('First course finished').parentElement?.textContent).toContain('1/1');
 		expect(await screen.findByText('25 min today · 50 min in 2 sessions this week')).toBeTruthy();
 		expect(screen.getByRole('heading', { name: 'Level 2 · Archive Explorer' })).toBeTruthy();
 	});
@@ -42,14 +43,5 @@ describe('progress', () => {
 		await waitFor(() => expect(claim).toHaveBeenCalledWith('lesson'));
 		fireEvent.change(screen.getByLabelText('Days per week'), { target: { value: '5' } });
 		await waitFor(() => expect(goal).toHaveBeenCalledWith(5));
-	});
-
-	it('issues a certificate only for a completed course', async () => {
-		renderApp('/progress/certificate/rust', { catalog, recent: [done('a'), done('b')] });
-		expect(await screen.findByRole('heading', { name: 'Rust' })).toBeTruthy();
-		expect(screen.getByText(/not an accredited credential/)).toBeTruthy();
-		cleanup();
-		renderApp('/progress/certificate/rust', { catalog, recent: [done('a')] });
-		expect(await screen.findByRole('heading', { name: 'No certificate yet' })).toBeTruthy();
 	});
 });

@@ -80,6 +80,8 @@ function badge(id: string, title: string, description: string, progress: number,
 
 export function buildGamification(input: {
 	rewards: RewardSummary;
+	/** Courses whose every lesson is completed; counted from the catalog, not the server. */
+	completedCourses?: number;
 }): Gamification {
 	const descriptions: Record<MissionId, { title: string; description: string }> = {
 		lesson: {
@@ -109,7 +111,9 @@ export function buildGamification(input: {
 		badge('first-lesson', tr('First lesson', 'Primeira aula'), tr('One completed lesson already counts.', 'Uma aula concluída já conta.'), completedLessons, 1),
 		badge('five-lessons', tr('Five lessons', 'Cinco aulas'), tr('Five lessons completed.', 'Cinco aulas concluídas.'), completedLessons, 5),
 		badge('twenty-five-lessons', tr('Twenty-five lessons', 'Vinte e cinco aulas'), tr('A whole course fits in here.', 'Um curso inteiro cabe aqui.'), completedLessons, 25),
-		badge('hundred-lessons', tr('One hundred lessons', 'Cem aulas'), tr('One hundred lessons completed.', 'Cem aulas concluídas.'), completedLessons, 100)
+		badge('hundred-lessons', tr('One hundred lessons', 'Cem aulas'), tr('One hundred lessons completed.', 'Cem aulas concluídas.'), completedLessons, 100),
+		badge('first-course', tr('First course finished', 'Primeiro curso concluído'), tr('Every lesson of one course completed.', 'Todas as aulas de um curso concluídas.'), input.completedCourses ?? 0, 1),
+		badge('three-courses', tr('Three courses finished', 'Três cursos concluídos'), tr('Every lesson of three courses completed.', 'Todas as aulas de três cursos concluídas.'), input.completedCourses ?? 0, 3)
 	];
 	badges.sort((a, b) => Number(b.earned) - Number(a.earned) || a.target - b.target);
 
