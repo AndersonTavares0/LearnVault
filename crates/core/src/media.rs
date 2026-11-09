@@ -587,6 +587,10 @@ fn is_reparse_point(_metadata: &Metadata) -> bool {
     false
 }
 
+/// Windows attribute marking a symbolic link, junction, or other reparse point.
+#[cfg(windows)]
+const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
+
 /// Nome do arquivo no fim do caminho, para a classificação por extensão.
 fn file_name(path: &Path) -> String {
     path.file_name()
