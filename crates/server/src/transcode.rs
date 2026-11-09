@@ -259,6 +259,10 @@ pub(crate) async fn media_transcode(
         Err(_timeout_err) => return error_private_no_store(StatusCode::INTERNAL_SERVER_ERROR),
     };
 
+    if is_hls_playlist(&opened.name) {
+        return error_private_no_store(StatusCode::UNSUPPORTED_MEDIA_TYPE);
+    }
+
     if opened.kind != learnvault_core::MediaKind::Media {
         return error_private_no_store(StatusCode::NOT_FOUND);
     }
@@ -400,6 +404,12 @@ fn error_private_no_store(status: StatusCode) -> Response {
         .into_response()
 }
 
+fn is_hls_playlist(name: &str) -> bool {
+    PathBuf::from(name)
+        .extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("m3u8"))
+}
+
 fn media_error_status(error: &learnvault_core::Error) -> StatusCode {
     use learnvault_core::Error;
 
@@ -415,6 +425,13 @@ fn media_error_status(error: &learnvault_core::Error) -> StatusCode {
 #[cfg(test)]
 mod tests {
     use super::FFMPEG_INPUT_PROTOCOL_WHITELIST;
+
+    #[test]
+    fn hls_playlists_are_not_sent_to_ffmpeg() {
+        assert!(super::is_hls_playlist("lesson.m3u8"));
+        assert!(super::is_hls_playlist("lesson.M3U8"));
+        assert!(!super::is_hls_playlist("lesson.mp4"));
+    }
 
     #[test]
     fn ffmpeg_input_protocols_cannot_open_local_files() {

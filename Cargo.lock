@@ -1952,6 +1952,7 @@ dependencies = [
  "rusqlite",
  "rusqlite_migration",
  "rustix",
+ "windows-sys 0.61.2",
  "tempfile",
  "thiserror 2.0.21",
  "uuid",

@@ -560,22 +560,86 @@ fn open_readonly(_root: &Path, _relative_path: &str, _path: &Path, media_id: &st
         })
     }
 
-    #[cfg(not(unix))]
+    #[cfg(windows)]
     {
-        let mut options = std::fs::OpenOptions::new();
-        options.read(true);
-        #[cfg(windows)]
-        {
-            use std::os::windows::fs::OpenOptionsExt;
-            options.custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
+        use std::os::windows::fs::OpenOptionsExt;
+
+        let mut root_options = std::fs::OpenOptions::new();
+        root_options
+            .read(true)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT);
+        let root = root_options
+            .open(_root)
+            .map_err(|source| Error::MediaUnreadable {
+                media_id: media_id.to_owned(),
+                source,
+            })?;
+        let root_metadata = root.metadata().map_err(|source| Error::MediaUnreadable {
+            media_id: media_id.to_owned(),
+            source,
+        })?;
+        if !root_metadata.is_dir() || is_reparse_point(&root_metadata) {
+            return Err(Error::MediaOutsideLibrary {
+                media_id: media_id.to_owned(),
+            });
         }
+
+        let mut options = std::fs::OpenOptions::new();
         options
+            .read(true)
+            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
+        let file = options.open(_path).map_err(|source| Error::MediaUnreadable {
+            media_id: media_id.to_owned(),
+            source,
+        })?;
+        let root_path = final_handle_path(&root).map_err(|source| Error::MediaUnreadable {
+            media_id: media_id.to_owned(),
+            source,
+        })?;
+        let opened_path = final_handle_path(&file).map_err(|source| Error::MediaUnreadable {
+            media_id: media_id.to_owned(),
+            source,
+        })?;
+        if opened_path == root_path || !opened_path.starts_with(&root_path) {
+            return Err(Error::MediaOutsideLibrary {
+                media_id: media_id.to_owned(),
+            });
+        }
+        Ok(file)
+    }
+
+    #[cfg(not(any(unix, windows)))]
+    {
+        std::fs::OpenOptions::new()
+            .read(true)
             .open(_path)
             .map_err(|source| Error::MediaUnreadable {
                 media_id: media_id.to_owned(),
                 source,
             })
     }
+}
+
+#[cfg(windows)]
+fn final_handle_path(file: &File) -> io::Result<PathBuf> {
+    use std::{ffi::OsString, os::windows::{ffi::OsStringExt, io::AsRawHandle}};
+    use windows_sys::Win32::Storage::FileSystem::GetFinalPathNameByHandleW;
+
+    let handle = file.as_raw_handle();
+    let required = unsafe { GetFinalPathNameByHandleW(handle, std::ptr::null_mut(), 0, 0) };
+    if required == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let mut buffer = vec![0_u16; required as usize];
+    let length = unsafe {
+        GetFinalPathNameByHandleW(handle, buffer.as_mut_ptr(), buffer.len() as u32, 0)
+    };
+    if length == 0 || length as usize >= buffer.len() {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(PathBuf::from(OsString::from_wide(
+        &buffer[..length as usize],
+    )))
 }
 
 /// Verdadeiro quando o metadado marca um ponto de reparse (symlink ou junction) no Windows.
@@ -596,6 +660,10 @@ fn is_reparse_point(_metadata: &Metadata) -> bool {
 #[cfg(windows)]
 const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
 
+/// Flag necessária para abrir um diretório no Windows.
+#[cfg(windows)]
+const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+
 /// Flag de abertura que não segue o componente final de reparse no Windows.
 #[cfg(windows)]
 const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
@@ -606,3 +674,34 @@ fn file_name(path: &Path) -> String {
         .map(|name| name.to_string_lossy().into_owned())
         .unwrap_or_else(|| path.to_string_lossy().into_owned())
 }
+#[cfg(all(test, windows))]
+mod windows_open_tests {
+    use super::{Error, open_readonly};
+    use std::path::Path;
+
+    #[test]
+    fn an_intermediate_directory_link_cannot_escape_the_open_root() -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let root = directory.path().join("library");
+        let outside = directory.path().join("outside");
+        std::fs::create_dir_all(root.join("Course"))?;
+        std::fs::create_dir_all(&outside)?;
+        std::fs::write(outside.join("video.mp4"), b"synthetic video")?;
+        let link = root.join("Course/Alias");
+        if std::os::windows::fs::symlink_dir(&outside, &link).is_err() {
+            eprintln!("skipped: creating a directory link requires Windows privileges");
+            return Ok(());
+        }
+
+        match open_readonly(
+            &root,
+            "Course/Alias/video.mp4",
+            &root.join("Course/Alias/video.mp4"),
+            "media-1",
+        ) {
+            Err(Error::MediaOutsideLibrary { .. }) => Ok(()),
+            other => panic!("expected an out-of-library error, got {other:?}"),
+        }
+    }
+}
+
