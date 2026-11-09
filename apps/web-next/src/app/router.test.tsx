@@ -47,3 +47,13 @@ describe('routes', () => {
 		expect(await screen.findByRole('heading', { name: 'Progresso' })).toBeTruthy();
 	});
 });
+
+describe('account menu', () => {
+	it('opens without crashing and offers settings and sign-out', async () => {
+		const { fireEvent } = await import('@testing-library/react');
+		renderApp('/');
+		fireEvent.click(await screen.findByRole('button', { name: 'Account: admin' }));
+		expect(await screen.findByRole('menuitem', { name: 'Settings' })).toBeTruthy();
+		expect(screen.getByRole('menuitem', { name: 'Sign out' })).toBeTruthy();
+	});
+});

@@ -179,3 +179,33 @@ test('keeps legacy links working', async ({ page, origin }) => {
 	await expect(page).toHaveURL(/#\/progress$/);
 	await expect(page.getByRole('heading', { name: 'Progress' })).toBeVisible();
 });
+
+test('admin settings pass axe and new accounts start with no course access', async ({ page, origin }) => {
+	const violations = collectCspViolations(page);
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	await signIn(page, origin);
+	await page.getByRole('button', { name: 'Refresh courses' }).click();
+	await expect(page.getByText('Catalog updated.')).toBeVisible();
+	await page.goto(`${origin}/#/settings`);
+	await expect(page.getByRole('heading', { name: 'Accounts and course access' })).toBeVisible();
+	await expectNoAxeViolations(page, 'settings');
+
+	const form = page.locator('form', { has: page.getByRole('heading', { name: 'New account' }) });
+	await expect(form.getByRole('checkbox', { name: /All courses/ })).not.toBeChecked();
+	await form.getByLabel('Username').fill('ana');
+	await form.getByLabel('Password (12+ characters)', { exact: true }).fill('a long student passphrase');
+	await form.getByRole('button', { name: 'Create account' }).click();
+	await expect(page.getByText('Account “ana” created.')).toBeVisible();
+
+	await page.getByRole('button', { name: 'Account: admin' }).click();
+	await page.getByRole('menuitem', { name: 'Sign out' }).click();
+	await expect(page.getByRole('heading', { name: 'Sign in to LearnVault' })).toBeVisible();
+	await page.getByLabel('Username').fill('ana');
+	await page.getByLabel('Password', { exact: true }).fill('a long student passphrase');
+	await page.getByRole('button', { name: 'Sign in' }).click();
+	await expect(page.getByText('No courses yet')).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Import course' })).toHaveCount(0);
+	await page.goto(`${origin}/#/settings`);
+	await expect(page.getByRole('heading', { name: 'Accounts and course access' })).toHaveCount(0);
+	expect(violations).toEqual([]);
+});
