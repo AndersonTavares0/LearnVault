@@ -136,3 +136,5 @@ Caso deseje que o LearnVault verifique e atualize autonomamente durante a madrug
    docker compose -f compose.yaml -f compose.updater.yaml up -d
    ```
 O container companion updater roda isoladamente, consulta a API e só aplica atualizações dentro da janela de manutenção definida.
+
+**Segurança do socket do Docker.** O updater não monta o socket do host: ele fala com o `docker-proxy` (`tecnativa/docker-socket-proxy`, fixado por digest), que só libera as seções da API usadas por `update.sh` (containers, imagens, redes, volumes, exec) e recusa o resto (segredos, swarm, build, commit, plugins). Isso reduz a superfície, mas não a elimina: quem consegue criar containers pela API ainda pode, em teoria, montar o host. Por isso o updater é opt-in e deve rodar só em máquinas que você controla. Para uma garantia maior, prefira o Quadlet com `podman-auto-update.timer`, que não usa socket nenhum.

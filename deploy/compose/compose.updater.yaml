@@ -1,10 +1,42 @@
 # LearnVault - Serviço Companion de Atualização Automática (Opt-in)
-# O container da aplicação LearnVault NUNCA monta o socket do Docker.
+# O container da aplicação LearnVault NUNCA monta o socket do Docker. O updater também não:
+# ele fala com um proxy que filtra a API (docker-proxy), e só o proxy monta o socket.
 # Este container isolado executa com permissões estritas e validação de healthcheck com rollback.
 #
 # Uso manual: docker compose -f compose.yaml -f compose.updater.yaml run --rm updater
 # Uso contínuo (agendado): docker compose -f compose.yaml -f compose.updater.yaml up -d updater
 services:
+  # Filters the Docker API: only the sections update.sh needs are allowed, everything else
+  # (secrets, swarm, builds, plugins, commit...) is refused with 403. This narrows the
+  # updater's access; it does not make it harmless: creating containers is still possible.
+  docker-proxy:
+    # Pinned by digest; bump it deliberately.
+    image: tecnativa/docker-socket-proxy@sha256:1f5038b54f06c3e18422902cf00ba21803d1c97805aae032e5e6673d532d3459
+    container_name: learnvault-docker-proxy
+    restart: unless-stopped
+    profiles:
+      - updater
+    environment:
+      CONTAINERS: 1
+      IMAGES: 1
+      NETWORKS: 1
+      VOLUMES: 1
+      EXEC: 1
+      INFO: 1
+      VERSION: 1
+      POST: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    read_only: true
+    tmpfs:
+      - /run
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - updater_net
+
   updater:
     image: docker:cli
     container_name: learnvault-updater
@@ -18,16 +50,27 @@ services:
       COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-learnvault}
       LEARNVAULT_CONTAINER: ${LEARNVAULT_CONTAINER:-learnvault}
       LEARNVAULT_IMAGE_REPO: ${LEARNVAULT_IMAGE_REPO:-ghcr.io/andersontavares0/learnvault}
+      # The updater talks to the filtered proxy below, never to the host socket.
+      DOCKER_HOST: tcp://docker-proxy:2375
+    depends_on:
+      - docker-proxy
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - .:/compose:ro
       - ../../deploy/scripts:/scripts:ro
       - ${DATA_DIR:-../../data}:/data:rw
     entrypoint: ["/bin/sh", "/scripts/updater-daemon.sh"]
     networks:
+      # learnvault_net gives it internet for the GitHub release lookup; updater_net reaches the proxy.
       - learnvault_net
+      - updater_net
     logging:
       driver: "json-file"
       options:
         max-size: "5m"
         max-file: "2"
+
+networks:
+  # Only the proxy and the updater share it (no internet), so the application never sees the
+  # Docker API.
+  updater_net:
+    internal: true
