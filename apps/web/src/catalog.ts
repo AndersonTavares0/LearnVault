@@ -102,11 +102,20 @@ export function countCatalogNode(node: CatalogNode): CatalogCounts {
  * `4 aulas`, `4 aulas · 4 ausentes`, `1 aula · 3 ausentes`, `0 aulas · 4 ausentes`. A
  * contagem de disponíveis aparece sempre para que o total do catálogo continue legível;
  * a de ausentes só aparece quando existe, para não poluir um catálogo íntegro.
+ *
+ * Uma pasta-aula pode conter vários arquivos de mídia distintos (o modelo de catálogo
+ * trata qualquer pasta-folha com arquivos como uma única aula, documentado em
+ * `role_of` no núcleo Rust). Quando isso acontece, `videos` passa de `lessons +
+ * missingLessons`, e a contagem de vídeos aparece ao lado para que "12 aulas" não pareça
+ * baixo demais diante de um curso com 20 vídeos empacotados nessas 12 pastas.
  */
 export function formatLessonCounts(counts: CatalogCounts): string {
 	return joinParts([
 		formatCount(counts.lessons, tr('lesson', 'aula'), tr('lessons', 'aulas')),
-		counts.missingLessons > 0 ? formatCount(counts.missingLessons, tr('missing', 'ausente'), tr('missing', 'ausentes')) : ''
+		counts.missingLessons > 0 ? formatCount(counts.missingLessons, tr('missing', 'ausente'), tr('missing', 'ausentes')) : '',
+		counts.videos > counts.lessons + counts.missingLessons
+			? formatCount(counts.videos, tr('video', 'vídeo'), tr('videos', 'vídeos'))
+			: ''
 	]);
 }
 
