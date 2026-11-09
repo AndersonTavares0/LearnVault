@@ -54,3 +54,7 @@ A crítica independente da candidatura K v5 pontuou:
 - Não houve pesquisa com participantes nem certificação WCAG 2.2 AA. A cobertura automatizada e suas limitações constam em [final-review.md](final-review.md).
 
 **Decisão:** manter K como direção final e não abrir outra exploração visual sem falha funcional ou bloqueio de acessibilidade confirmado.
+
+## Revisão pós-K (reabertura, ver #330)
+
+Três falhas funcionais/de acessibilidade confirmadas pelo mantenedor satisfazem a cláusula de reabertura acima: #317 (overflow de layout em ~1270px), #319 (alternador de idioma inacessível em larguras de desktop) e #324 (27 elementos interativos abaixo do alvo de 44×44px do WCAG). Isso autoriza uma revisão de composição dentro de K — biblioteca, página de curso e Player — usando plataformas de cursos como referência estrutural, nunca como fonte de código, assets ou layout pixel a pixel (política *clean-room*, [`.github/CONTRIBUTING.md`](../../.github/CONTRIBUTING.md)). A avaliação A/B/C/K original acima permanece como registro histórico e não é refeita.
