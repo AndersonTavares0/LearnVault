@@ -502,12 +502,7 @@ fn verify_identity(_resolved: &Path, opened: &Metadata, media_id: &str) -> Resul
 /// Opens the validated file read-only. Unix resolves every component through an open
 /// directory descriptor with symlink following disabled. Windows opens the final component
 /// without following reparse points and rejects a reparse-point descriptor afterward.
-fn open_readonly(
-    _root: &Path,
-    _relative_path: &str,
-    _path: &Path,
-    media_id: &str,
-) -> Result<File> {
+fn open_readonly(_root: &Path, _relative_path: &str, _path: &Path, media_id: &str) -> Result<File> {
     #[cfg(unix)]
     {
         use rustix::fs::{CWD, Mode, OFlags, openat};
