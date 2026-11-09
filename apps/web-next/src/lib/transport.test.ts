@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { setLocale } from './i18n';
+import type { NewPdfAnnotation } from './transport';
 import { findLesson } from './router';
 import { desktopCoverUrl, desktopMediaUrl, DesktopStub, FocusSessionConflict, HttpTransport, InvalidFocusSession, lessonFromNode, MAX_COVER_BYTES, normalizeCatalog, normalizeFocusSession, normalizeFocusSummary, normalizeRecentStudy, normalizeRewardSummary, normalizeStudyProgress, normalizeStudySummary, normalizeUpdateStatus, normalizeUser, STUDY_NOT_AVAILABLE, CATALOG_LIMITS, type Transport } from './transport';
 
@@ -14,8 +15,8 @@ beforeEach(() => {
 
 describe('transport contract', () => {
 	it('exposes the HTTP transport seam without routing assumptions', () => {
-		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'studySummary', 'listNotes', 'createNote', 'updateNote', 'deleteNote', 'listFlashcards', 'createFlashcard', 'updateFlashcard', 'deleteFlashcard', 'reviewFlashcard', 'listFavorites', 'setCourseFavorite', 'setLessonFavorite', 'recordFocusSession', 'listFocusSessions', 'focusSummary', 'rewardSummary', 'claimDailyMission', 'setWeeklyGoal', 'userAvatarUrl', 'uploadUserAvatar', 'deleteUserAvatar', 'checkUpdate', 'installUpdate', 'updateHistory', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover', 'mediaCapabilities', 'transcodeUrl', 'openInSystemPlayer'];
-		expect(methods).toHaveLength(45);
+		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'studySummary', 'listNotes', 'createNote', 'updateNote', 'deleteNote', 'listPdfAnnotations', 'createPdfAnnotation', 'updatePdfAnnotation', 'deletePdfAnnotation', 'listFlashcards', 'createFlashcard', 'updateFlashcard', 'deleteFlashcard', 'reviewFlashcard', 'listFavorites', 'setCourseFavorite', 'setLessonFavorite', 'recordFocusSession', 'listFocusSessions', 'focusSummary', 'rewardSummary', 'claimDailyMission', 'setWeeklyGoal', 'userAvatarUrl', 'uploadUserAvatar', 'deleteUserAvatar', 'checkUpdate', 'installUpdate', 'updateHistory', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover', 'mediaCapabilities', 'transcodeUrl', 'openInSystemPlayer'];
+		expect(methods).toHaveLength(49);
 	});
 	it('tells a rate-limited sign-in apart from wrong credentials', async () => {
 		vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 429 })));
@@ -1326,5 +1327,70 @@ describe('desktop transport over IPC', () => {
 		await expect(new DesktopStub().catalog()).rejects.toThrow('Catalog unavailable.');
 
 		vi.unstubAllGlobals();
+	});
+});
+
+describe('pdf annotations', () => {
+	const wire = { annotation_id: 'a1', media_id: 'p1', page: 12, kind: 'highlight', color: 'yellow', rects: [{ x: 0.1, y: 0.2, width: 0.5, height: 0.03 }], quote: 'A reference cannot outlive its owner.', content: '', created_at: 100, updated_at: 100 };
+	const input: NewPdfAnnotation = { page: 12, kind: 'highlight', color: 'yellow', rects: [{ x: 0.1, y: 0.2, width: 0.5, height: 0.03 }], quote: 'A reference cannot outlive its owner.' };
+
+	it('talks to the server endpoints and reads the camel-case shape', async () => {
+		setLocale('en');
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+		const http = new HttpTransport();
+
+		fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ items: [wire] }), { status: 200 }));
+		const listed = await http.listPdfAnnotations('p1');
+		expect(fetchMock).toHaveBeenCalledWith('/api/study/pdf-annotations?media_id=p1');
+		expect(listed[0]).toMatchObject({ annotationId: 'a1', mediaId: 'p1', page: 12, kind: 'highlight', color: 'yellow', quote: 'A reference cannot outlive its owner.' });
+		expect(listed[0].rects[0].width).toBe(0.5);
+
+		fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(wire), { status: 201 }));
+		await http.createPdfAnnotation('p1', input);
+		const [url, options] = fetchMock.mock.calls.at(-1)!;
+		expect(url).toBe('/api/study/pdf-annotations');
+		expect(JSON.parse(options.body)).toEqual({ media_id: 'p1', ...input, content: '' });
+
+		fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ...wire, color: 'green' }), { status: 200 }));
+		expect((await http.updatePdfAnnotation('a1', { color: 'green' })).color).toBe('green');
+		expect(fetchMock).toHaveBeenLastCalledWith('/api/study/pdf-annotations/a1', expect.objectContaining({ method: 'PUT', body: '{"color":"green"}' }));
+
+		fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+		await expect(http.deletePdfAnnotation('a1')).resolves.toBeUndefined();
+		expect(fetchMock).toHaveBeenLastCalledWith('/api/study/pdf-annotations/a1', { method: 'DELETE' });
+
+		fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ error: 'invalid_pdf_annotation' }), { status: 422 }));
+		await expect(http.createPdfAnnotation('p1', input)).rejects.toThrow('Invalid annotation.');
+		vi.unstubAllGlobals();
+	});
+
+	it('refuses a payload with an unknown kind or color', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [{ ...wire, kind: 'strike' }] }), { status: 200 }));
+		vi.stubGlobal('fetch', fetchMock);
+		await expect(new HttpTransport().listPdfAnnotations('p1')).rejects.toThrow();
+		vi.unstubAllGlobals();
+	});
+
+	it('uses the desktop commands with the argument names the Rust side expects', async () => {
+		const desktop = new DesktopStub();
+		vi.mocked(invoke).mockResolvedValueOnce([wire]);
+		expect((await desktop.listPdfAnnotations('p1'))[0].annotationId).toBe('a1');
+		expect(invoke).toHaveBeenCalledWith('desktop_list_pdf_annotations', { mediaId: 'p1' });
+
+		vi.mocked(invoke).mockResolvedValueOnce(wire);
+		await desktop.createPdfAnnotation('p1', input);
+		expect(invoke).toHaveBeenCalledWith('desktop_create_pdf_annotation', { mediaId: 'p1', input: { ...input, content: '' } });
+
+		vi.mocked(invoke).mockResolvedValueOnce({ ...wire, content: 'key idea' });
+		await desktop.updatePdfAnnotation('a1', { content: 'key idea' });
+		expect(invoke).toHaveBeenCalledWith('desktop_update_pdf_annotation', { annotationId: 'a1', color: null, content: 'key idea' });
+
+		vi.mocked(invoke).mockResolvedValueOnce(null);
+		await desktop.deletePdfAnnotation('a1');
+		expect(invoke).toHaveBeenCalledWith('desktop_delete_pdf_annotation', { annotationId: 'a1' });
+
+		vi.mocked(invoke).mockRejectedValueOnce({ code: 'pdf_annotation_not_found', message: 'x' });
+		await expect(desktop.deletePdfAnnotation('gone')).rejects.toThrow('Anotação não encontrada.');
 	});
 });

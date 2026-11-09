@@ -23,8 +23,9 @@ use crate::covers::{
 };
 use crate::dto::{
     CatalogDto, CoverDto, CoverRemovalDto, FlashcardDto, FocusSessionDto, FocusSummaryDto,
-    MediaRemovalImpactDto, MediaRemovalOutcomeDto, RecentStudyDto, RescanSummaryDto,
-    RewardSummaryDto, StudyFavoritesDto, StudyNoteDto, StudyProgressDto, StudySummaryDto,
+    MediaRemovalImpactDto, MediaRemovalOutcomeDto, NewPdfAnnotationDto, PdfAnnotationDto,
+    RecentStudyDto, RescanSummaryDto, RewardSummaryDto, StudyFavoritesDto, StudyNoteDto,
+    StudyProgressDto, StudySummaryDto,
 };
 use crate::error::IpcError;
 use crate::ordering::{CourseOrders, load_orders, store_orders};
@@ -428,6 +429,51 @@ impl DesktopState {
             .lock()
             .map_err(|_| IpcError::database_unavailable())?;
         study::delete_note(&database, note_id)
+    }
+
+    /// Lists the local owner's annotations on one PDF.
+    pub fn list_pdf_annotations(&self, media_id: &str) -> Result<Vec<PdfAnnotationDto>, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::list_pdf_annotations(&database, media_id)
+    }
+
+    /// Creates an annotation on a PDF.
+    pub fn create_pdf_annotation(
+        &self,
+        media_id: &str,
+        input: NewPdfAnnotationDto,
+    ) -> Result<PdfAnnotationDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::create_pdf_annotation(&database, media_id, input)
+    }
+
+    /// Changes an annotation's color and/or text.
+    pub fn update_pdf_annotation(
+        &self,
+        annotation_id: &str,
+        color: Option<&str>,
+        content: Option<&str>,
+    ) -> Result<PdfAnnotationDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::update_pdf_annotation(&database, annotation_id, color, content)
+    }
+
+    /// Deletes an annotation.
+    pub fn delete_pdf_annotation(&self, annotation_id: &str) -> Result<(), IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::delete_pdf_annotation(&database, annotation_id)
     }
 
     /// Lista os cartões de memorização do dono local para uma mídia específica.

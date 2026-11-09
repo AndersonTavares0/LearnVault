@@ -340,6 +340,17 @@ pub enum Error {
         note_id: String,
     },
 
+    /// Uma anotação de PDF tem página, tipo, cor, retângulos ou texto inválidos.
+    #[error("anotação de PDF inválida")]
+    InvalidPdfAnnotation,
+
+    /// A anotação de PDF não foi encontrada.
+    #[error("anotação de PDF não encontrada: {annotation_id}")]
+    PdfAnnotationNotFound {
+        /// Identificador consultado.
+        annotation_id: String,
+    },
+
     /// O conteúdo da frente ou do verso do cartão é inválido ou excede o limite.
     #[error("conteúdo do cartão é inválido ou excede o limite")]
     InvalidFlashcardContent,

@@ -138,6 +138,19 @@ pub fn build_router(state: AppState) -> Router {
                 .delete(study::delete_note)
                 .layer(DefaultBodyLimit::max(16 * 1024)),
         )
+        // Up to 200 rectangles plus the marked text and a note: well under 128 KiB.
+        .route(
+            "/api/study/pdf-annotations",
+            get(study::list_pdf_annotations)
+                .post(study::create_pdf_annotation)
+                .layer(DefaultBodyLimit::max(128 * 1024)),
+        )
+        .route(
+            "/api/study/pdf-annotations/{id}",
+            axum::routing::put(study::update_pdf_annotation)
+                .delete(study::delete_pdf_annotation)
+                .layer(DefaultBodyLimit::max(128 * 1024)),
+        )
         .route(
             "/api/study/flashcards",
             get(study::list_flashcards)

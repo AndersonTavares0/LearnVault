@@ -55,17 +55,18 @@ pub mod study;
 pub use command::{
     catalog, catalog_with_orders, desktop_catalog, desktop_check_update,
     desktop_claim_daily_mission, desktop_create_flashcard, desktop_create_note,
-    desktop_delete_flashcard, desktop_delete_note, desktop_focus_summary, desktop_import_course,
+    desktop_create_pdf_annotation, desktop_delete_flashcard, desktop_delete_note,
+    desktop_delete_pdf_annotation, desktop_focus_summary, desktop_import_course,
     desktop_import_course_cover, desktop_install_update, desktop_list_favorites,
     desktop_list_flashcards, desktop_list_focus_sessions, desktop_list_notes,
-    desktop_media_capabilities, desktop_media_removal_impact, desktop_open_in_system_player,
-    desktop_recent_study, desktop_record_focus_session, desktop_record_position,
-    desktop_remove_course, desktop_remove_course_cover, desktop_remove_media, desktop_rescan,
-    desktop_reset_course_order, desktop_review_flashcard, desktop_reward_summary,
-    desktop_set_completed, desktop_set_course_favorite, desktop_set_course_order,
-    desktop_set_lesson_favorite, desktop_set_weekly_goal, desktop_study_progress,
-    desktop_study_summary, desktop_update_flashcard, desktop_update_note, desktop_weekly_goal,
-    open_in_system_player,
+    desktop_list_pdf_annotations, desktop_media_capabilities, desktop_media_removal_impact,
+    desktop_open_in_system_player, desktop_recent_study, desktop_record_focus_session,
+    desktop_record_position, desktop_remove_course, desktop_remove_course_cover,
+    desktop_remove_media, desktop_rescan, desktop_reset_course_order, desktop_review_flashcard,
+    desktop_reward_summary, desktop_set_completed, desktop_set_course_favorite,
+    desktop_set_course_order, desktop_set_lesson_favorite, desktop_set_weekly_goal,
+    desktop_study_progress, desktop_study_summary, desktop_update_flashcard, desktop_update_note,
+    desktop_update_pdf_annotation, desktop_weekly_goal, open_in_system_player,
 };
 pub use config::{DATABASE_FILE_NAME, DesktopConfigDto, database_path};
 pub use courses::{
@@ -79,9 +80,9 @@ pub use covers::{
 pub use dto::{
     CatalogDto, CatalogFileDto, CatalogNodeDto, CoverDto, CoverRemovalDto, DailyMissionDto,
     DesktopMediaCapabilitiesDto, DesktopUpdateInfoDto, FlashcardDto, FocusDayDto, FocusSessionDto,
-    FocusSummaryDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto, RecentStudyDto,
-    RescanSummaryDto, RewardSummaryDto, StudyFavoritesDto, StudyNoteDto, StudyProgressDto,
-    StudySummaryDto,
+    FocusSummaryDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto, NewPdfAnnotationDto,
+    PdfAnnotationDto, PdfRectDto, RecentStudyDto, RescanSummaryDto, RewardSummaryDto,
+    StudyFavoritesDto, StudyNoteDto, StudyProgressDto, StudySummaryDto,
 };
 pub use error::{IpcError, IpcErrorCode};
 pub use ordering::{CourseOrders, OrderError, order_path};
@@ -125,6 +126,10 @@ pub fn run() {
             command::desktop_create_note,
             command::desktop_update_note,
             command::desktop_delete_note,
+            command::desktop_list_pdf_annotations,
+            command::desktop_create_pdf_annotation,
+            command::desktop_update_pdf_annotation,
+            command::desktop_delete_pdf_annotation,
             command::desktop_list_flashcards,
             command::desktop_create_flashcard,
             command::desktop_update_flashcard,

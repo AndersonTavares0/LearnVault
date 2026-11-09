@@ -19,9 +19,9 @@ use crate::config::DesktopConfigDto;
 use crate::courses::CourseEntry;
 use crate::dto::{
     CatalogDto, CatalogNodeDto, CoverDto, CoverRemovalDto, FlashcardDto, FocusSessionDto,
-    FocusSummaryDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto, RecentStudyDto,
-    RescanSummaryDto, RewardSummaryDto, StudyFavoritesDto, StudyNoteDto, StudyProgressDto,
-    StudySummaryDto,
+    FocusSummaryDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto, NewPdfAnnotationDto,
+    PdfAnnotationDto, RecentStudyDto, RescanSummaryDto, RewardSummaryDto, StudyFavoritesDto,
+    StudyNoteDto, StudyProgressDto, StudySummaryDto,
 };
 use crate::error::IpcError;
 use crate::ordering::CourseOrders;
@@ -383,6 +383,59 @@ pub async fn desktop_delete_note(
 ) -> Result<(), IpcError> {
     let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || state.delete_note(&note_id))
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// IPC command: lists the local owner's annotations on one PDF.
+#[tauri::command]
+pub async fn desktop_list_pdf_annotations(
+    state: State<'_, DesktopState>,
+    media_id: String,
+) -> Result<Vec<PdfAnnotationDto>, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.list_pdf_annotations(&media_id))
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// IPC command: creates an annotation on a PDF for the local owner.
+#[tauri::command]
+pub async fn desktop_create_pdf_annotation(
+    state: State<'_, DesktopState>,
+    media_id: String,
+    input: NewPdfAnnotationDto,
+) -> Result<PdfAnnotationDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.create_pdf_annotation(&media_id, input))
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// IPC command: changes the color and/or text of one of the local owner's annotations.
+#[tauri::command]
+pub async fn desktop_update_pdf_annotation(
+    state: State<'_, DesktopState>,
+    annotation_id: String,
+    color: Option<String>,
+    content: Option<String>,
+) -> Result<PdfAnnotationDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        state.update_pdf_annotation(&annotation_id, color.as_deref(), content.as_deref())
+    })
+    .await
+    .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// IPC command: deletes one of the local owner's annotations.
+#[tauri::command]
+pub async fn desktop_delete_pdf_annotation(
+    state: State<'_, DesktopState>,
+    annotation_id: String,
+) -> Result<(), IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.delete_pdf_annotation(&annotation_id))
         .await
         .map_err(|_| IpcError::study_unavailable())?
 }

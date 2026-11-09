@@ -116,6 +116,17 @@ impl Database {
             )?
             || !index_matches(
                 &self.conn,
+                "pdf_annotation",
+                Some("pdf_annotation_owner_media_idx"),
+                false,
+                &[
+                    ("owner_id", "BINARY"),
+                    ("media_id", "BINARY"),
+                    ("page", "BINARY"),
+                ],
+            )?
+            || !index_matches(
+                &self.conn,
                 "flashcard",
                 Some("flashcard_owner_media_due_idx"),
                 false,
@@ -532,6 +543,22 @@ const REQUIRED_TABLES: &[TableDefinition] = &[
         ],
     },
     TableDefinition {
+        name: "pdf_annotation",
+        columns: &[
+            ("annotation_id", "TEXT", true, None, 1),
+            ("owner_id", "TEXT", true, None, 0),
+            ("media_id", "TEXT", true, None, 0),
+            ("page", "INTEGER", true, None, 0),
+            ("kind", "TEXT", true, None, 0),
+            ("color", "TEXT", true, None, 0),
+            ("rects", "TEXT", true, None, 0),
+            ("quote", "TEXT", true, None, 0),
+            ("content", "TEXT", true, None, 0),
+            ("created_at", "INTEGER", true, None, 0),
+            ("updated_at", "INTEGER", true, None, 0),
+        ],
+    },
+    TableDefinition {
         name: "flashcard",
         columns: &[
             ("card_id", "TEXT", true, None, 1),
@@ -687,6 +714,14 @@ fn expected_checks(table: &str) -> &'static [&'static str] {
             "position_seconds >= 0",
             "length(trim(content)) > 0 and length(content) <= 10000",
         ],
+        "pdf_annotation" => &[
+            "page >= 1 and page <= 100000",
+            "kind in ('highlight', 'underline', 'note')",
+            "color in ('yellow', 'green', 'blue', 'pink')",
+            "length(rects) > 0 and length(rects) <= 20000",
+            "length(quote) <= 4000",
+            "length(content) <= 10000",
+        ],
         "flashcard" => &[
             "length(trim(front)) > 0 and length(front) <= 4000",
             "length(trim(back)) > 0 and length(back) <= 4000",
@@ -718,6 +753,7 @@ fn expected_foreign_keys(
             ("library_id", "library", "library_id", "NO ACTION"),
         ],
         "study_note" => &[("media_id", "media", "media_id", "NO ACTION")],
+        "pdf_annotation" => &[("media_id", "media", "media_id", "NO ACTION")],
         "flashcard" => &[("media_id", "media", "media_id", "NO ACTION")],
         "user_course_access" => &[("user_id", "user", "user_id", "CASCADE")],
         _ => &[],

@@ -134,6 +134,83 @@ struct NotesResponse {
 }
 
 #[derive(Debug, Deserialize)]
+pub(crate) struct PdfAnnotationsQuery {
+    media_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) struct PdfRectDto {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct CreatePdfAnnotationRequest {
+    media_id: String,
+    page: i64,
+    kind: String,
+    color: String,
+    rects: Vec<PdfRectDto>,
+    #[serde(default)]
+    quote: String,
+    #[serde(default)]
+    content: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct UpdatePdfAnnotationRequest {
+    color: Option<String>,
+    content: Option<String>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct PdfAnnotationResponse {
+    annotation_id: String,
+    media_id: String,
+    page: i64,
+    kind: &'static str,
+    color: &'static str,
+    rects: Vec<PdfRectDto>,
+    quote: String,
+    content: String,
+    created_at: i64,
+    updated_at: i64,
+}
+
+impl From<learnvault_core::PdfAnnotation> for PdfAnnotationResponse {
+    fn from(annotation: learnvault_core::PdfAnnotation) -> Self {
+        Self {
+            annotation_id: annotation.annotation_id,
+            media_id: annotation.media_id,
+            page: annotation.page,
+            kind: annotation.kind.as_str(),
+            color: annotation.color.as_str(),
+            rects: annotation
+                .rects
+                .into_iter()
+                .map(|rect| PdfRectDto {
+                    x: rect.x,
+                    y: rect.y,
+                    width: rect.width,
+                    height: rect.height,
+                })
+                .collect(),
+            quote: annotation.quote,
+            content: annotation.content,
+            created_at: annotation.created_at,
+            updated_at: annotation.updated_at,
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct PdfAnnotationsResponse {
+    items: Vec<PdfAnnotationResponse>,
+}
+
+#[derive(Debug, Deserialize)]
 pub(crate) struct FlashcardsQuery {
     media_id: String,
 }
@@ -884,6 +961,159 @@ pub(crate) async fn delete_note(
     }
 }
 
+/// Lists the authenticated user's annotations on one PDF.
+pub(crate) async fn list_pdf_annotations(
+    State(state): State<AppState>,
+    RawQuery(raw): RawQuery,
+    headers: HeaderMap,
+) -> Response {
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let Some(query) =
+        serde_urlencoded::from_str::<PdfAnnotationsQuery>(raw.as_deref().unwrap_or_default()).ok()
+    else {
+        return invalid_query();
+    };
+    let owner = user.user_id;
+    match run_study(&state, move |db| {
+        learnvault_core::list_pdf_annotations(db, &owner, &query.media_id)
+    })
+    .await
+    {
+        Ok(items) => private_no_store(
+            Json(PdfAnnotationsResponse {
+                items: items.into_iter().map(PdfAnnotationResponse::from).collect(),
+            })
+            .into_response(),
+        ),
+        Err(failure) => study_failure_response(failure),
+    }
+}
+
+/// Creates an annotation. An unknown kind or color is the same input error as a bad rectangle.
+pub(crate) async fn create_pdf_annotation(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<CreatePdfAnnotationRequest>,
+) -> Response {
+    if !same_origin(&headers) {
+        return csrf_failed();
+    }
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let owner = user.user_id;
+    match run_study(&state, move |db| {
+        let (Some(kind), Some(color)) = (
+            learnvault_core::PdfAnnotationKind::parse(&request.kind),
+            learnvault_core::PdfAnnotationColor::parse(&request.color),
+        ) else {
+            return Err(learnvault_core::Error::InvalidPdfAnnotation);
+        };
+        learnvault_core::create_pdf_annotation(
+            db,
+            &owner,
+            &request.media_id,
+            learnvault_core::NewPdfAnnotation {
+                page: request.page,
+                kind,
+                color,
+                rects: request
+                    .rects
+                    .into_iter()
+                    .map(|rect| learnvault_core::PdfRect {
+                        x: rect.x,
+                        y: rect.y,
+                        width: rect.width,
+                        height: rect.height,
+                    })
+                    .collect(),
+                quote: request.quote,
+                content: request.content,
+            },
+        )
+    })
+    .await
+    {
+        Ok(annotation) => private_no_store(
+            (
+                StatusCode::CREATED,
+                Json(PdfAnnotationResponse::from(annotation)),
+            )
+                .into_response(),
+        ),
+        Err(failure) => study_failure_response(failure),
+    }
+}
+
+/// Changes an annotation's color and/or text.
+pub(crate) async fn update_pdf_annotation(
+    State(state): State<AppState>,
+    Path(annotation_id): Path<String>,
+    headers: HeaderMap,
+    Json(request): Json<UpdatePdfAnnotationRequest>,
+) -> Response {
+    if !same_origin(&headers) {
+        return csrf_failed();
+    }
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let owner = user.user_id;
+    match run_study(&state, move |db| {
+        let color = match request.color.as_deref() {
+            Some(value) => Some(
+                learnvault_core::PdfAnnotationColor::parse(value)
+                    .ok_or(learnvault_core::Error::InvalidPdfAnnotation)?,
+            ),
+            None => None,
+        };
+        learnvault_core::update_pdf_annotation(
+            db,
+            &owner,
+            &annotation_id,
+            color,
+            request.content.as_deref(),
+        )
+    })
+    .await
+    {
+        Ok(annotation) => {
+            private_no_store(Json(PdfAnnotationResponse::from(annotation)).into_response())
+        }
+        Err(failure) => study_failure_response(failure),
+    }
+}
+
+/// Deletes one of the user's annotations.
+pub(crate) async fn delete_pdf_annotation(
+    State(state): State<AppState>,
+    Path(annotation_id): Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    if !same_origin(&headers) {
+        return csrf_failed();
+    }
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let owner = user.user_id;
+    match run_study(&state, move |db| {
+        learnvault_core::delete_pdf_annotation(db, &owner, &annotation_id)
+    })
+    .await
+    {
+        Ok(true) => status_private_no_store(StatusCode::NO_CONTENT),
+        Ok(false) => error_response(StatusCode::NOT_FOUND, "pdf_annotation_not_found"),
+        Err(failure) => study_failure_response(failure),
+    }
+}
+
 /// Lista os cartões de memorização do usuário para a aula.
 pub(crate) async fn list_flashcards(
     State(state): State<AppState>,
@@ -1200,6 +1430,12 @@ fn study_failure_response(failure: StudyFailure) -> Response {
         }
         StudyFailure::Core(Error::StudyNoteNotFound { .. }) => {
             error_response(StatusCode::NOT_FOUND, "note_not_found")
+        }
+        StudyFailure::Core(Error::InvalidPdfAnnotation) => {
+            error_response(StatusCode::UNPROCESSABLE_ENTITY, "invalid_pdf_annotation")
+        }
+        StudyFailure::Core(Error::PdfAnnotationNotFound { .. }) => {
+            error_response(StatusCode::NOT_FOUND, "pdf_annotation_not_found")
         }
         StudyFailure::Core(Error::InvalidFlashcardContent) => error_response(
             StatusCode::UNPROCESSABLE_ENTITY,

@@ -61,6 +61,10 @@ pub enum IpcErrorCode {
     NoteNotFound,
     /// O conteúdo da anotação é inválido ou excede o limite aceito.
     InvalidNote,
+    /// The PDF annotation was not found or does not belong to the user.
+    PdfAnnotationNotFound,
+    /// The PDF annotation has an invalid page, kind, color, rectangle or text.
+    InvalidPdfAnnotation,
     /// O cartão de memorização solicitado não foi encontrado ou não pertence ao usuário.
     FlashcardNotFound,
     /// O conteúdo do cartão de memorização é inválido ou excede o limite aceito.
@@ -278,6 +282,22 @@ impl IpcError {
         Self {
             code: IpcErrorCode::InvalidNote,
             message: "conteúdo da anotação inválido",
+        }
+    }
+
+    /// The requested PDF annotation was not found or is not the user's.
+    pub fn pdf_annotation_not_found() -> Self {
+        Self {
+            code: IpcErrorCode::PdfAnnotationNotFound,
+            message: "anotação de PDF não encontrada",
+        }
+    }
+
+    /// The PDF annotation is invalid.
+    pub fn invalid_pdf_annotation() -> Self {
+        Self {
+            code: IpcErrorCode::InvalidPdfAnnotation,
+            message: "anotação de PDF inválida",
         }
     }
 
