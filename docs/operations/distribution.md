@@ -25,6 +25,19 @@ If you are developing or studying the architecture, start with the [README](../.
 
 When enabled in configuration, the server queries the public GitHub Releases API over HTTPS and compares the latest stable tag with the local running version using strict SemVer. The check times out after 5 seconds, consumes at most 64 KiB, and caches results in-process for 1 hour. No binaries or files are ever downloaded or installed automatically. Local builds (`0.0.0`) skip remote checks.
 
+### Automatic updates with Podman Quadlet
+
+`deploy/quadlet/learnvault.container` pulls `ghcr.io/andersontavares0/learnvault:stable` and is marked `AutoUpdate=registry`. Enable the native Podman timer to apply new releases:
+
+```sh
+systemctl --user enable --now podman-auto-update.timer
+podman auto-update --dry-run   # shows what would change
+```
+
+`Notify=healthy` delays the "started" signal until the container healthcheck passes. If a new image never becomes healthy, the unit restart fails and `podman auto-update` rolls back to the previous image. Back up the data directory first (`deploy/scripts/backup.sh`): a rollback restores the image, not the database.
+
+To follow a slower line, change the tag to a minor line such as `:0.9`, or pin an exact version to turn automatic updates off. Previously the unit ran a locally built `localhost/learnvault:latest`; build and tag your own image if you prefer that.
+
 ### Linux Server Tarball Usage
 
 The `learnvault-linux-<arch>.tar.gz` tarball contains the `learnvault-linux-<arch>` binary, `LICENSE`, and canonical SPA files in `web/` with `web/200.html`. Extract and point `--web-root` to the web directory:
