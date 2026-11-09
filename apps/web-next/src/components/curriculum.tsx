@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { countCatalogFiles, courseProgress, formatLessonMeta, isLessonMissing } from '@/lib/catalog';
+import { lessonPdfId } from '@/lib/pdf';
 import { tr } from '@/lib/i18n';
 import { studySyncSupported } from '@/lib/player';
 import { href } from '@/lib/router';
@@ -21,7 +22,7 @@ type Props = {
 	signal?: { open: boolean; n: number };
 };
 
-const lessonMediaId = (node: CatalogNode) => [...node.files, ...node.looseFiles].find((file) => file.kind === 'media' && file.mediaId)?.mediaId ?? null;
+const lessonMediaId = (node: CatalogNode) => [...node.files, ...node.looseFiles].find((file) => file.kind === 'media' && file.mediaId)?.mediaId ?? lessonPdfId(node);
 const contains = (node: CatalogNode, path: string | null | undefined) => Boolean(path) && (node.path === path || path!.startsWith(`${node.path}/`));
 
 /**

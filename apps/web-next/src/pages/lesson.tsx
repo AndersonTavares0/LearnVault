@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, CircleCheck, Circle, PenLine, SquarePlus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CircleCheck, Circle, FileText, PenLine, SquarePlus } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Curriculum } from '@/components/curriculum';
@@ -7,6 +7,7 @@ import { Materials } from '@/components/materials';
 import { BreakOverlay } from '@/components/player/break-overlay';
 import { FocusCard } from '@/components/player/focus-card';
 import { Flashcards } from '@/components/player/flashcards';
+import { PdfReader } from '@/components/player/pdf-reader';
 import { MediaPlayer, type PlayerHandle } from '@/components/player/media-player';
 import { StudyNotes, useLessonNotes } from '@/components/player/study-notes';
 import { Button } from '@/components/ui/button';
@@ -17,12 +18,13 @@ import { useStore } from '@/hooks/use-store';
 import { courseProgress } from '@/lib/catalog';
 import { tr } from '@/lib/i18n';
 import { lessonSequence, neighboringLessons } from '@/lib/navigation';
+import { findLessonPdf, formatFileSize } from '@/lib/pdf';
 import { formatDuration, selectPlayableMedia, shouldAutoAdvance, studySyncSupported } from '@/lib/player';
 import { lessonPreferenceKey } from '@/lib/player-preferences';
 import { pomodoro, resetTimer, skipTimer, startTimer } from '@/lib/pomodoro-store';
 import { findLesson, findLessonLocation, href } from '@/lib/router';
 import { createPositionSaver } from '@/lib/study';
-import { transport, type CatalogNode, type StudyProgress } from '@/lib/transport';
+import { transport, type CatalogNode, type FileEntry, type StudyProgress } from '@/lib/transport';
 import { cn } from '@/lib/utils';
 import { keys, useCatalog, useFavorites, useRecent, useSession, useSetLessonCompleted } from '@/app/data';
 
@@ -57,12 +59,14 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 	const [countdown, setCountdown] = useState<number | null>(null);
 
 	const lesson = findLesson(catalog.data ?? null, courseId, lessonPath);
+	// A lesson with nothing to play and a PDF is a PDF lesson: the PDF is read here and drives progress.
+	const pdf = lesson ? findLessonPdf(lesson) : null;
 	const location = useMemo(() => {
-		const media = lesson?.media.find((file) => file.mediaId);
+		const media = lesson?.media.find((file) => file.mediaId) ?? pdf;
 		return media?.mediaId ? findLessonLocation(catalog.data ?? null, media.mediaId) : null;
-	}, [catalog.data, lesson]);
+	}, [catalog.data, lesson, pdf]);
 	const { previous, next } = neighboringLessons([course], lessonPath);
-	const mediaId = lesson ? selectPlayableMedia(lesson.media, preferences.lessons[lessonPreferenceKey(courseId, lessonPath)]?.mediaId)?.mediaId ?? null : null;
+	const mediaId = pdf?.mediaId ?? (lesson ? selectPlayableMedia(lesson.media, preferences.lessons[lessonPreferenceKey(courseId, lessonPath)]?.mediaId)?.mediaId ?? null : null);
 	const completed = useMemo(() => new Set((recent.data ?? []).filter((item) => item.completed).map((item) => item.mediaId)), [recent.data]);
 	const favoriteMedia = useMemo(() => new Set(favorites.data?.mediaIds ?? []), [favorites.data]);
 	const progress = useQuery({ queryKey: ['progress', mediaId], enabled: Boolean(mediaId) && studySyncSupported, queryFn: () => transport.studyProgress(mediaId!) });
@@ -137,8 +141,10 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 
 	const sequence = lessonSequence([course]);
 	const position = sequence.findIndex((item) => item.path === lessonPath);
-	const hasNotes = studySyncSupported && Boolean(mediaId);
-	const activeTab = (tab === 'notes' || tab === 'cards') && !hasNotes ? 'lessons' : tab;
+	const hasCards = studySyncSupported && Boolean(mediaId);
+	// Notes are tied to a moment in time, so a PDF lesson has cards but no timed notes.
+	const hasNotes = hasCards && !pdf;
+	const activeTab = (tab === 'notes' && !hasNotes) || (tab === 'cards' && !hasCards) ? 'lessons' : tab;
 	const openNotes = () => { setTab('notes'); setNoteRequest((value) => value + 1); };
 	const closeBreak = () => setBreakPhase(null);
 
@@ -153,9 +159,12 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 						<Button variant="outline" disabled={!next} onClick={() => next && goTo(next.path)}>{tr('Next', 'Próxima')}<ChevronRight /></Button>
 					</div>
 				</div>
-				<LessonRail sequence={sequence} current={position} isDone={(path) => findLesson(catalog.data ?? null, courseId, path)?.media.some((file) => file.mediaId && completed.has(file.mediaId)) ?? false} />
+				<LessonRail sequence={sequence} current={position} isDone={(path) => { const other = findLesson(catalog.data ?? null, courseId, path); const pdfOther = other ? findLessonPdf(other) : null; const files = other ? (pdfOther ? [pdfOther] : other.media) : []; return files.some((file) => file.mediaId && completed.has(file.mediaId)); }} />
 
 				<div className="relative">
+					{pdf ? (
+						<PdfLesson file={pdf} courseId={courseId} ready={!studySyncSupported || !progress.isPending} initialPage={initialPosition ?? (progress.data?.recorded && !progress.data.completed && progress.data.positionSeconds > 1 ? progress.data.positionSeconds : null)} onPage={(page) => void recordPosition(pdf.mediaId!, page)} />
+					) : (
 					<MediaPlayer
 						key={`${courseId}/${lessonPath}`}
 						lesson={lesson}
@@ -169,6 +178,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 						onOpenNotes={openNotes}
 						handle={(value) => { player.current = value; }}
 					/>
+					)}
 					{breakPhase && (
 						<BreakOverlay
 							phase={breakPhase}
@@ -193,9 +203,9 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 					</div>
 				)}
 
-				{hasNotes && (
+				{hasCards && (
 					<div className="flex flex-wrap gap-2">
-						<Button variant="outline" onClick={() => { player.current?.pause(); openNotes(); }} aria-keyshortcuts="n"><PenLine />{tr('Pause and note', 'Pausar e anotar')}<kbd aria-hidden="true" className="ml-1 rounded border px-1.5 text-xs text-muted-foreground">N</kbd></Button>
+						{hasNotes && <Button variant="outline" onClick={() => { player.current?.pause(); openNotes(); }} aria-keyshortcuts="n"><PenLine />{tr('Pause and note', 'Pausar e anotar')}<kbd aria-hidden="true" className="ml-1 rounded border px-1.5 text-xs text-muted-foreground">N</kbd></Button>}
 						<Button variant="outline" onClick={() => { player.current?.pause(); setTab('cards'); setCardRequest((value) => value + 1); }}><SquarePlus />{tr('Make card', 'Criar cartão')}</Button>
 					</div>
 				)}
@@ -212,7 +222,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 					)}
 				</div>
 				<div className="flex flex-wrap items-center gap-2">
-					{savedPosition !== null && time < savedPosition && (
+					{!pdf && savedPosition !== null && time < savedPosition && (
 						<Button variant="secondary" onClick={() => player.current?.seek(savedPosition)}>{tr(`Resume from ${formatDuration(savedPosition)}`, `Retomar de ${formatDuration(savedPosition)}`)}</Button>
 					)}
 					<label className="flex min-h-11 items-center gap-2 text-sm">
@@ -227,7 +237,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 				<Tabs value={activeTab} onValueChange={(value) => setTab(String(value))}>
 					<TabsList aria-label={tr('Lesson tools', 'Ferramentas da aula')}>
 						{hasNotes && <TabsTrigger value="notes">{tr('Notes', 'Notas')}</TabsTrigger>}
-						{hasNotes && <TabsTrigger value="cards">{tr('Cards', 'Cartões')}</TabsTrigger>}
+						{hasCards && <TabsTrigger value="cards">{tr('Cards', 'Cartões')}</TabsTrigger>}
 						<TabsTrigger value="lessons">{tr('Lessons', 'Aulas')}</TabsTrigger>
 						<TabsTrigger value="materials">{tr('Materials', 'Materiais')}</TabsTrigger>
 					</TabsList>
@@ -236,7 +246,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 							<StudyNotes mediaId={mediaId} currentTime={time} onSeek={(seconds) => player.current?.seek(seconds)} addRequest={noteRequest} />
 						</TabsContent>
 					)}
-					{hasNotes && mediaId && (
+					{hasCards && mediaId && (
 						<TabsContent value="cards" keepMounted className="pt-4">
 							<Flashcards mediaId={mediaId} addRequest={cardRequest} />
 						</TabsContent>
@@ -260,6 +270,22 @@ function LessonRail({ sequence, current, isDone }: { sequence: { path: string }[
 	return (
 		<div aria-hidden="true" className="flex gap-1">
 			{sequence.map((item, index) => <span key={item.path} className={cn('h-1.5 flex-1 rounded-full', isDone(item.path) ? 'bg-primary' : index === current ? 'bg-amber-500' : 'bg-muted')} />)}
+		</div>
+	);
+}
+
+/** The reader for a PDF lesson, with its type said out loud and the read-only promise. */
+function PdfLesson({ file, courseId, ready, initialPage, onPage }: { file: FileEntry; courseId: string; ready: boolean; initialPage: number | null; onPage: (page: number, pages: number) => void }) {
+	return (
+		<div className="space-y-3">
+			<p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+				<span className="inline-flex items-center gap-1.5 rounded-full bg-destructive/10 px-2.5 py-0.5 font-semibold text-destructive"><FileText className="size-3.5" aria-hidden="true" />{tr('PDF document', 'Documento PDF')}</span>
+				<span>{formatFileSize(file.size)}</span>
+			</p>
+			<p role="note" className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100">
+				{tr('This lesson is a PDF document. Read it here; the original file is never changed.', 'Esta aula é um documento PDF. Leia aqui; o arquivo original nunca é alterado.')}
+			</p>
+			{ready ? <PdfReader file={file} courseId={courseId} initialPage={initialPage} onPage={onPage} /> : <p role="status" className="text-muted-foreground">{tr('Loading…', 'Carregando…')}</p>}
 		</div>
 	);
 }
