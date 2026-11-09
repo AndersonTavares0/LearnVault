@@ -93,6 +93,19 @@ test('signs in, indexes the library and resumes a lesson from My learning', asyn
 	await expect(resume.getByRole('link', { name: 'Resume lesson' })).toHaveAttribute('href', /#\/course\/.+\?t=5$/);
 	await expectNoAxeViolations(page, 'home with resume');
 
+	await resume.getByRole('link', { name: 'Resume lesson' }).click();
+	await expect(page.getByRole('heading', { level: 1, name: 'Ownership' })).toBeVisible();
+	// The fixture bytes are not a real video, so the player shows its recovery state.
+	await expect(page.getByRole('alert').filter({ hasText: /media/i })).toBeVisible();
+	await expect(page.getByRole('complementary', { name: 'Course content' })).toBeVisible();
+	await page.getByRole('tab', { name: 'Notes' }).click();
+	await page.getByRole('button', { name: /Add note at/ }).click();
+	await page.getByLabel(/Note at/).fill('Ownership moves values.');
+	await page.getByRole('button', { name: 'Save note' }).click();
+	await expect(page.getByText('Ownership moves values.')).toBeVisible();
+	await expectNoAxeViolations(page, 'lesson');
+	await page.goto(`${origin}/#/`);
+
 	await page.getByRole('link', { name: 'library' }).click();
 	await expect(page.getByRole('heading', { level: 1, name: 'library' })).toBeVisible();
 	// The module holding the lesson to continue starts expanded.
