@@ -52,9 +52,9 @@ Rust version is pinned by `rust-toolchain.toml`; Node.js 24 and pnpm 11.28.5 com
   modify, and refactor code. Keep code clean, consistent with existing architecture, and focused on
   surgical changes without unnecessary refactorings or bloat.
 - The course library is strictly read-only: no change may write, move, rename, or copy original course files.
-- Pre-major releases are paced through Release Please with `"bump-minor-pre-major": true` and
-  `"bump-patch-for-minor-pre-major": true`. Standard feature changes (`feat:`) increment patch versions
-  (`0.8.1`, `0.8.2`) rather than skipping minor versions rapidly.
+- Release Please follows Conventional Commit version bumps before `1.0.0`: `feat:` increments the
+  minor version, `fix:` and `perf:` increment patch, and breaking changes increment minor. From
+  `1.0.0`, breaking changes increment major. Release tags and names use `vMAJOR.MINOR.PATCH`.
 - GitHub Wiki is permanently removed; do not create wiki sync scripts, workflows, or documentation.
 - Never include secrets, personal course data, database files, or generated media in commits,
   logs, or prompts. Tests use temporary directories (`tempfile::TempDir`, `Database::open_in_memory()`)
