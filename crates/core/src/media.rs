@@ -6,12 +6,11 @@
 //! the descriptor prevents adapters from reopening a path that may have changed.
 //!
 //! Unix opens every path component relative to its parent directory descriptor and refuses
-//! symlinks, closing the intermediate-directory symlink race. Windows refuses a reparse point
-//! at the final component, but stable `std` does not provide equivalent handle-relative
-//! traversal for parent directories; concurrent replacement of an intermediate directory
-//! remains a limitation. Hard links to files outside the root are indistinguishable from
-//! ordinary files. The library is never written by this code, though another process may
-//! still change its contents.
+//! symlinks, closing the intermediate-directory symlink race. Windows refuses reparse points
+//! at the final component and checks the normalized paths returned for the opened root and
+//! media handles. Hard links to files outside the root are indistinguishable from ordinary
+//! files. The library is never written by this code, though another process may still change
+//! its contents.
 //!
 //! The platform adapter is responsible for pairing the supplied root with the `library_id`.
 //! This module confines the file to the root it receives but cannot verify that association.
@@ -481,14 +480,11 @@ fn verify_identity(resolved: &Path, opened: &Metadata, media_id: &str) -> Result
     Ok(())
 }
 
-/// Fora do Unix o `std` estável não expõe `dev`/`ino` do descritor aberto.
+/// Outside Unix, stable `std` does not expose descriptor identity.
 ///
-/// No Windows a defesa vem da abertura: o componente final é aberto **sem seguir** um
-/// ponto de reparse ([`open_readonly`]). Se o caminho foi trocado por um link, junction ou
-/// outro reparse point entre a canonicalização e a abertura, o descritor carrega o atributo
-/// de reparse e é recusado. Uma troca de componente **intermediário** por um reparse point
-/// nessa janela permanece um limite conhecido: o `std` estável não compara a identidade do
-/// diretório pai aberto.
+/// Windows also compares normalized paths from the root and media handles in
+/// [`open_readonly`], so an intermediate junction replacement cannot redirect the open
+/// file outside the validated root.
 #[cfg(not(unix))]
 fn verify_identity(_resolved: &Path, opened: &Metadata, media_id: &str) -> Result<()> {
     if is_reparse_point(opened) {
@@ -596,6 +592,11 @@ fn open_readonly(_root: &Path, _relative_path: &str, _path: &Path, media_id: &st
             media_id: media_id.to_owned(),
             source,
         })?;
+        if root_path != _root {
+            return Err(Error::MediaOutsideLibrary {
+                media_id: media_id.to_owned(),
+            });
+        }
         let opened_path = final_handle_path(&file).map_err(|source| Error::MediaUnreadable {
             media_id: media_id.to_owned(),
             source,
@@ -677,10 +678,9 @@ fn file_name(path: &Path) -> String {
 #[cfg(all(test, windows))]
 mod windows_open_tests {
     use super::{Error, open_readonly};
-    use std::path::Path;
-
     #[test]
-    fn an_intermediate_directory_link_cannot_escape_the_open_root() -> Result<(), Box<dyn std::error::Error>> {
+    fn an_intermediate_directory_link_cannot_escape_the_open_root()
+    -> Result<(), Box<dyn std::error::Error>> {
         let directory = tempfile::tempdir()?;
         let root = directory.path().join("library");
         let outside = directory.path().join("outside");

@@ -407,7 +407,7 @@ fn error_private_no_store(status: StatusCode) -> Response {
 fn is_hls_playlist(name: &str) -> bool {
     PathBuf::from(name)
         .extension()
-        .is_some_and(|extension| extension.eq_ignore_ascii_case("m3u8"))
+        .is_some_and(|extension| extension.to_string_lossy().eq_ignore_ascii_case("m3u8"))
 }
 
 fn media_error_status(error: &learnvault_core::Error) -> StatusCode {
