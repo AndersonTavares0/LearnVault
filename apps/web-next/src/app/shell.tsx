@@ -1,15 +1,20 @@
 import { BookOpen, ChartNoAxesColumn, CircleUser, Languages, LogOut, NotebookPen, Search, Settings } from 'lucide-react';
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { BrandMark } from '@/components/brand';
+import { FocusMenu } from '@/components/focus-menu';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { useLocale } from '@/hooks/use-locale';
 import { LOCALE_LABELS, setLocale, tr } from '@/lib/i18n';
+import { focusSaved, focusSync, retryFocusSessions, setFocusOutboxScope } from '@/lib/pomodoro-store';
+import { playerPreferencesScope } from '@/lib/player-preferences';
 import { transportKind } from '@/lib/transport';
 import { cn } from '@/lib/utils';
-import { useSession, useSignOut } from './data';
+import { keys, useSession, useSignOut } from './data';
 import { clearUserLocalData } from './preferences';
 
 const navItems = () => [
@@ -27,6 +32,17 @@ export function AppShell() {
 	useLocale();
 	const session = useSession();
 	const location = useLocation();
+
+	const client = useQueryClient();
+	const userId = session.data?.user?.userId ?? null;
+	// Focus sessions queue per user, so a shared browser never mixes accounts.
+	useEffect(() => {
+		setFocusOutboxScope(playerPreferencesScope(transportKind, userId));
+	}, [userId]);
+	useEffect(() => focusSaved.subscribe(() => {
+		void client.invalidateQueries({ queryKey: ['focus-summary'] });
+		void client.invalidateQueries({ queryKey: keys.rewards });
+	}), [client]);
 
 	if (session.isPending) return <p role="status" className="p-8 text-muted-foreground">{tr('Loading…', 'Carregando…')}</p>;
 	if (!session.data?.user) return <Navigate to="/login" replace state={{ from: `${location.pathname}${location.search}` }} />;
@@ -56,6 +72,8 @@ function Topbar({ username, userId }: { username: string; userId: string }) {
 	const navigate = useNavigate();
 	const signOut = useSignOut();
 	const otherLocale = locale === 'en' ? 'pt-BR' : 'en';
+	const [unsynced, setUnsynced] = useState(0);
+	const leave = () => signOut.mutate(undefined, { onSettled: () => { clearUserLocalData(userId); navigate('/login', { replace: true }); } });
 
 	return (
 		<header className="sticky top-0 z-40 border-b print:hidden bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/80">
@@ -73,6 +91,7 @@ function Topbar({ username, userId }: { username: string; userId: string }) {
 				</nav>
 				<div className="ml-auto flex items-center gap-1">
 					<SearchBox />
+					<FocusMenu />
 					<Button variant="ghost" size="icon" aria-label={tr(`Switch language to ${LOCALE_LABELS[otherLocale]}`, `Mudar idioma para ${LOCALE_LABELS[otherLocale]}`)} onClick={() => setLocale(otherLocale)}>
 						<Languages />
 					</Button>
@@ -85,7 +104,7 @@ function Topbar({ username, userId }: { username: string; userId: string }) {
 							<DropdownMenuSeparator />
 							<DropdownMenuItem onClick={() => navigate('/settings')}><Settings />{tr('Settings', 'Ajustes')}</DropdownMenuItem>
 							{transportKind === 'http' && (
-								<DropdownMenuItem onClick={() => signOut.mutate(undefined, { onSettled: () => { clearUserLocalData(userId); navigate('/login', { replace: true }); } })}>
+								<DropdownMenuItem onClick={() => (focusSync.get().pending.length > 0 ? setUnsynced(focusSync.get().pending.length) : leave())}>
 									<LogOut />{tr('Sign out', 'Sair')}
 								</DropdownMenuItem>
 							)}
@@ -93,6 +112,19 @@ function Topbar({ username, userId }: { username: string; userId: string }) {
 					</DropdownMenu>
 				</div>
 			</div>
+			{/* Unsynced focus sessions stay queued for this user; sign-out warns instead of dropping them (docs/design/security.md). */}
+			<AlertDialog open={unsynced > 0} onOpenChange={(open) => !open && setUnsynced(0)}>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>{tr('Some focus sessions are not saved yet', 'Algumas sessões de foco ainda não foram salvas')}</AlertDialogTitle>
+						<AlertDialogDescription>{tr(`${unsynced} session(s) are waiting to reach the server. If you sign out now they stay in this browser and sync the next time you sign in here.`, `${unsynced} sessão(ões) aguardam envio ao servidor. Se você sair agora, elas ficam neste navegador e sincronizam no próximo acesso por aqui.`)}</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel onClick={() => void retryFocusSessions()}>{tr('Stay and sync', 'Ficar e sincronizar')}</AlertDialogCancel>
+						<AlertDialogAction onClick={() => { setUnsynced(0); leave(); }}>{tr('Sign out anyway', 'Sair mesmo assim')}</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
 		</header>
 	);
 }

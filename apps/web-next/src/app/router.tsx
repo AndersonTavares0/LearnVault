@@ -8,7 +8,8 @@ import { LoginPage } from '@/pages/login';
 import { CourseRoute } from '@/pages/course';
 import { CertificatePage } from '@/pages/certificate';
 import { ProgressPage } from '@/pages/progress';
-import { NotesPage, SettingsPage } from './pages';
+import { NotesPage } from '@/pages/notes';
+import { SettingsPage } from './pages';
 
 /** Strips the leading `#` so a legacy hash can be used as a router path. */
 const toPath = (hash: string) => hash.replace(/^#/, '');

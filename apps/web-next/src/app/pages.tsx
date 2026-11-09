@@ -5,18 +5,6 @@ import { PALETTES, readPalette, readThemeMode, THEME_MODES, type Palette, type T
 import { safeStorage, savePalette, saveThemeMode } from './preferences';
 import { useState } from 'react';
 
-function Placeholder({ title, issue }: { title: string; issue: number }) {
-	useLocale();
-	return (
-		<section className="space-y-2">
-			<h1 className="text-2xl font-semibold">{title}</h1>
-			<p className="text-muted-foreground">{tr(`This screen is being rebuilt (#${issue}).`, `Esta tela está sendo refeita (#${issue}).`)}</p>
-		</section>
-	);
-}
-
-export const NotesPage = () => <Placeholder title={tr('Notes', 'Notas')} issue={339} />;
-
 const paletteLabels: Record<Palette, string> = { emerald: 'Stone + Emerald', teal: 'Zinc + Teal', indigo: 'Zinc + Indigo' };
 const themeLabels = (): Record<ThemeMode, string> => ({ system: tr('System', 'Sistema'), light: tr('Light', 'Claro'), dark: tr('Dark', 'Escuro') });
 
