@@ -51,9 +51,17 @@ Rebuild the SPA with:
 | Lint | ESLint with `jsx-a11y`, `react-hooks`, `react/no-danger` |
 | Tests | Vitest + Testing Library; Playwright + axe end to end |
 
-The headless base for shadcn/ui is chosen in Phase 1. The candidates are React Aria, Radix, and
-Base UI. The deciding criteria are WAI-ARIA conformance, CSP compatibility (no style element
-injection), and bundle size.
+The headless base for shadcn/ui is **Base UI**. A dialog and a menu from each candidate were opened
+under the server's `style-src 'self' 'unsafe-hashes'` policy (Chromium, Playwright):
+
+| Base | CSP violations | Injected `<style>` |
+| --- | --- | --- |
+| Radix (`@radix-ui/react-dialog` 1.3.1) | 1 | no (blocked inline style) |
+| React Aria (`react-aria-components` 1.22.1) | 1 | yes |
+| Base UI (`@base-ui/react` 1.9.0) | 0 | no |
+
+Allowing `'unsafe-inline'` styles to fit Radix or React Aria would weaken the CSP for every user. Base UI
+is also shadcn/ui's default base.
 
 We rejected these alternatives:
 
