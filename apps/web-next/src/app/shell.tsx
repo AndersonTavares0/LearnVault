@@ -3,7 +3,7 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { BrandMark } from '@/components/brand';
 import { Button } from '@/components/ui/button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { useLocale } from '@/hooks/use-locale';
 import { LOCALE_LABELS, setLocale, tr } from '@/lib/i18n';
@@ -81,7 +81,10 @@ function Topbar({ username, userId }: { username: string; userId: string }) {
 							<CircleUser />
 						</DropdownMenuTrigger>
 						<DropdownMenuContent align="end" className="w-56">
-							<DropdownMenuLabel className="truncate">{username}</DropdownMenuLabel>
+							{/* Base UI requires group labels inside a group. */}
+							<DropdownMenuGroup>
+								<DropdownMenuLabel className="truncate">{username}</DropdownMenuLabel>
+							</DropdownMenuGroup>
 							<DropdownMenuSeparator />
 							<DropdownMenuItem onClick={() => navigate('/settings')}><Settings />{tr('Settings', 'Ajustes')}</DropdownMenuItem>
 							{transportKind === 'http' && (
