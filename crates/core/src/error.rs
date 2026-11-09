@@ -30,12 +30,12 @@ pub enum Error {
     ReadSchemaVersion {
         /// Causa original reportada pelo SQLite.
         #[source]
-        source: rusqlite_migration::Error,
+        source: rusqlite::Error,
     },
 
     /// A cadeia de migrações não pôde ser aplicada.
     #[error("não foi possível aplicar as migrações do banco de dados")]
-    Migrations(#[from] rusqlite_migration::Error),
+    Migrations(#[source] rusqlite::Error),
 
     /// O banco foi criado por uma versão mais nova deste programa.
     ///
