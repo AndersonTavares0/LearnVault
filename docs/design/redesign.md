@@ -70,10 +70,10 @@ Every page starts with a skip link and uses `header`, `nav`, `main`, and `aside`
 ### Progress (`#/progress`)
 
 - Streak (current and best), weekly goal (1–7 days), and today's missions.
-- Level and XP, plus achievements earned and in progress.
+- Level and XP, plus achievement badges earned and in progress.
 - **Yearly heatmap** of study days, built from existing study-day data.
-- **Per-course progress**, with time remaining. Completed courses offer a local completion
-  certificate: a printable page generated in the browser from existing progress.
+- **Per-course progress**, with time remaining. A finished course earns a quiet achievement
+  badge (first course, three courses); there is no certificate.
 - **Focus.** Recent Pomodoro sessions and totals.
 
 ### Notes (`#/notes`)
@@ -104,7 +104,7 @@ Kept: streak, weekly goal, daily missions, XP and level, achievements, Pomodoro,
 Added without backend changes (Phase 5):
 
 - Course milestones
-- Completion certificate
+- Course-completion badges
 - Yearly heatmap
 - Time remaining
 - Today's review
