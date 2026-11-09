@@ -73,7 +73,7 @@ export function ProgressPage() {
 			</section>
 
 			<div className="grid gap-10 lg:grid-cols-[1fr_22rem] lg:gap-14">
-				<section aria-labelledby="courses-progress-heading">
+				<section aria-labelledby="courses-progress-heading" className="min-w-0">
 					<h2 id="courses-progress-heading" className="mb-1 text-xl font-semibold">{tr('Your courses', 'Seus cursos')}</h2>
 					{started.length === 0 ? (
 						<p className="rounded-xl border border-dashed p-6 text-muted-foreground">{tr('Courses you start appear here with their progress.', 'Os cursos que você começar aparecem aqui com o progresso.')}</p>
@@ -93,13 +93,13 @@ export function ProgressPage() {
 					)}
 				</section>
 
-				<section aria-labelledby="missions-heading">
+				<section aria-labelledby="missions-heading" className="min-w-0">
 					<h2 id="missions-heading" className="mb-1 text-xl font-semibold">{tr('Today', 'Hoje')}</h2>
 					<ul>
 						{game.missions.map((mission) => {
 							const done = mission.progress >= mission.target;
 							return (
-								<li key={mission.id} className="flex items-start gap-3 border-t py-3">
+								<li key={mission.id} className="flex flex-wrap items-start gap-3 border-t py-3">
 									<span className={cn('mt-0.5 grid size-6 shrink-0 place-items-center rounded-full border-2', done ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/50')}>{done && <Check className="size-4" aria-hidden="true" />}</span>
 									<div className="min-w-0 flex-1">
 										<p className="font-medium">{mission.title}</p>
@@ -133,18 +133,20 @@ export function ProgressPage() {
 function Week({ days, today, focusDays }: { days: StudyDay[]; today: string; focusDays: FocusDaySummary[] }) {
 	const minutes = new Map(focusDays.map((day) => [day.day, day.minutes]));
 	return (
-		<ol aria-label={tr('This week', 'Esta semana')} className="mt-6 grid grid-cols-7 gap-2 sm:gap-4">
+		<ol aria-label={tr('This week', 'Esta semana')} className="mt-6 grid grid-cols-7 gap-1 sm:gap-4">
 			{days.map((day) => {
 				const focusMinutes = minutes.get(day.day) ?? 0;
 				const isToday = day.day === today;
 				return (
-					<li key={day.day} className={cn('space-y-2 rounded-lg p-1.5 sm:p-2', isToday && 'bg-primary/10')}>
+					<li key={day.day} className={cn('min-w-0 space-y-2 rounded-lg p-1 sm:p-2', isToday && 'ring-2 ring-primary/40')}>
 						<p className={cn('flex flex-col items-start text-sm sm:flex-row sm:justify-between', isToday ? 'font-semibold' : 'text-muted-foreground')}>
 							<span>{weekday(day.day)}</span><span className="tabular-nums">{dayOfMonth(day.day)}</span>
 						</p>
-						<div className={cn('flex min-h-14 flex-col justify-center rounded-md px-2 py-1.5 text-xs sm:text-sm', day.active ? 'border-l-4 border-primary bg-muted' : 'border border-dashed')}>
-							<span className={day.active ? 'font-medium' : 'text-muted-foreground'}>{day.active ? tr('Studied', 'Estudou') : tr('No study', 'Sem estudo')}</span>
-							{focusMinutes > 0 && <span className="text-muted-foreground tabular-nums">{tr(`${focusMinutes} min focus`, `${focusMinutes} min de foco`)}</span>}
+						{/* Phones show a mark only; the words are still read out. From `sm` up there is room for them. */}
+						<div className={cn('flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-md px-1 py-1.5 text-xs sm:items-start sm:px-2 sm:text-sm', day.active ? 'bg-primary/15' : 'border border-dashed')}>
+							{day.active && <Check className="size-4 text-primary sm:hidden" aria-hidden="true" />}
+							<span className={cn('sr-only sm:not-sr-only', day.active ? 'font-medium' : 'text-muted-foreground')}>{day.active ? tr('Studied', 'Estudou') : tr('No study', 'Sem estudo')}</span>
+							{focusMinutes > 0 && <span className="text-muted-foreground tabular-nums"><span className="sm:hidden">{focusMinutes}m</span><span className="sr-only sm:not-sr-only">{tr(`${focusMinutes} min focus`, `${focusMinutes} min de foco`)}</span></span>}
 						</div>
 					</li>
 				);

@@ -44,13 +44,15 @@ function lessonMap(done: number, total: number) {
 	const rows = Math.ceil(shown / columns);
 	const gap = 3;
 	const width = (140 - gap * (columns - 1)) / columns;
-	const height = Math.min(14, (76 - gap * (rows - 1)) / rows);
+	const height = Math.min(26, (76 - gap * (rows - 1)) / rows);
+	// Centered, so a short course does not leave the map stuck to the top.
+	const top = (100 - (rows * height + gap * (rows - 1))) / 2;
 	const finished = Math.min(done, total);
 	return Array.from({ length: shown }, (_, index) => (
 		<rect
 			key={index}
 			x={10 + (index % columns) * (width + gap)}
-			y={14 + Math.floor(index / columns) * (height + gap)}
+			y={top + Math.floor(index / columns) * (height + gap)}
 			width={width}
 			height={height}
 			rx="3"

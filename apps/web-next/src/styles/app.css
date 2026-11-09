@@ -237,3 +237,8 @@
 .pdf-text-layer ::selection {
   background: color-mix(in oklch, var(--primary) 35%, transparent);
 }
+
+/* Text selection takes the palette instead of the browser's blue. */
+::selection {
+  background: color-mix(in oklch, var(--primary) 30%, transparent);
+}

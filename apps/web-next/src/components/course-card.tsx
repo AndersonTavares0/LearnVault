@@ -50,7 +50,7 @@ export function CourseCard({ entry, profile, variant = 'grid' }: Props) {
 	return (
 		<li className={cn('group/card relative rounded-lg has-focus-visible:ring-3 has-focus-visible:ring-ring [content-visibility:auto]', variant === 'shelf' && 'w-64 shrink-0 snap-start sm:w-72', listed && 'flex items-center gap-4 py-3')}>
 			<div className={cn('relative', listed && 'w-36 shrink-0')}>
-				<CourseCover course={entry.course} profile={profile} />
+				<CourseCover course={entry.course} profile={profile} done={entry.done} total={entry.total} compact={listed} />
 				{studySyncSupported && (
 					<div className="absolute top-1 right-1 z-10">
 						<Button variant="ghost" size="icon" aria-pressed={entry.favorite} disabled={toggle.isPending} onClick={() => toggle.mutate({ courseId: entry.courseId, favorite: !entry.favorite })}
