@@ -24,6 +24,10 @@ All changes to the codebase enter `main` exclusively through pull requests that 
 
 ---
 
+## Squash merge policy
+
+The production ruleset export and active GitHub ruleset allow only squash merges, matching the contribution policy. Changes to this JSON file do not update GitHub settings; maintainers must apply and verify remote ruleset changes separately.
+
 ## Mandatory Status Checks
 
 The ruleset enforces that the following 5 CI checks must pass before any pull request can be merged:
