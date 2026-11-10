@@ -4,9 +4,11 @@ import { useLocation } from 'react-router';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { useLocale } from '@/hooks/use-locale';
 import { LOCALE_LABELS, LOCALES, setLocale, tr } from '@/lib/i18n';
+import { studySyncSupported } from '@/lib/player';
+import { MAX_WEEKLY_GOAL, MIN_WEEKLY_GOAL } from '@/lib/statistics';
 import { PALETTES, readPalette, readThemeMode, THEME_MODES, type Palette, type ThemeMode } from '@/lib/theme';
 import { transportKind } from '@/lib/transport';
-import { useCatalog, useSession } from '@/app/data';
+import { useCatalog, useRewards, useSession, useSetWeeklyGoal } from '@/app/data';
 import { safeStorage, savePalette, saveThemeMode } from '@/app/preferences';
 import { PageHeader } from '@/app/shell';
 import { AvatarSettings, CredentialsForm } from './account';
@@ -49,6 +51,11 @@ export function SettingsPage() {
 				</Section>
 			)}
 			{!server && <Section id="profile" title={tr('Profile', 'Perfil')} description={tr('Local library on this device. There is no account to sign in to.', 'Biblioteca local neste dispositivo. Não há conta para entrar.')} />}
+			{studySyncSupported && (
+				<Section id="study" title={tr('Study', 'Estudo')} description={tr('A missed week never resets your badges.', 'Uma semana sem estudar nunca zera seus emblemas.')}>
+					<WeeklyGoal />
+				</Section>
+			)}
 			<Section id="focus" title={tr('Focus timer', 'Timer de foco')}>
 				<FocusSettings />
 			</Section>
@@ -69,6 +76,16 @@ export function SettingsPage() {
 			)}
 		</div>
 	);
+}
+
+const GOAL_DAYS = Array.from({ length: MAX_WEEKLY_GOAL - MIN_WEEKLY_GOAL + 1 }, (_, index) => String(index + MIN_WEEKLY_GOAL));
+
+/** Study days per week; Progress shows this goal against the week. */
+function WeeklyGoal() {
+	const rewards = useRewards();
+	const setGoal = useSetWeeklyGoal();
+	if (!rewards.data) return null;
+	return <Choice legend={tr('Weekly goal, in study days', 'Meta semanal, em dias de estudo')} options={GOAL_DAYS} value={String(rewards.data.weeklyGoal)} label={(value) => value} onChange={(value) => setGoal.mutate(Number(value))} />;
 }
 
 function Section({ id, title, description, children }: { id: string; title: string; description?: string; children?: ReactNode }) {

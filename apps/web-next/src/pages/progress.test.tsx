@@ -22,34 +22,23 @@ afterEach(() => {
 });
 
 describe('progress', () => {
-	it('shows the habit, completed courses with a certificate and the focus summary', async () => {
+	it('shows the week, a finished course with its badge and the level', async () => {
 		renderApp('/progress', { catalog, rewards, recent: [done('a'), done('b')] });
-		expect(await screen.findByText('1 day')).toBeTruthy();
-		expect(screen.getByText('1 of 3 days')).toBeTruthy();
+		expect(await screen.findByRole('heading', { name: '1 day studied this week' })).toBeTruthy();
+		expect(screen.getByText(/2 more days reaches your goal of 3\./)).toBeTruthy();
+		expect(screen.getByText(/Current streak: 1\. Best: 5\./)).toBeTruthy();
 		expect(screen.getByRole('list', { name: 'This week' }).querySelectorAll('li')).toHaveLength(7);
-		expect(screen.getByRole('link', { name: 'Certificate' }).getAttribute('href')).toBe('/progress/certificate/rust');
-		expect(await screen.findByText('25 min today · 50 min in 2 sessions this week')).toBeTruthy();
-		expect(screen.getByRole('heading', { name: 'Level 2 · Archive Explorer' })).toBeTruthy();
+		expect(screen.getByText('Finished')).toBeTruthy();
+		expect(screen.getByText('First course finished').parentElement?.textContent).toContain('Earned');
+		expect(screen.getByText(/Level 2, Archive Explorer:/)).toBeTruthy();
 	});
 
-	it('claims a finished mission and changes the weekly goal', async () => {
+	it('offers to claim only a finished mission', async () => {
 		const claim = vi.spyOn(transport, 'claimDailyMission').mockResolvedValue(true);
-		const goal = vi.spyOn(transport, 'setWeeklyGoal').mockResolvedValue(5);
 		renderApp('/progress', { catalog, rewards });
-		const buttons = await screen.findAllByRole('button', { name: 'Claim 30 XP' });
-		expect((buttons[1] as HTMLButtonElement).disabled).toBe(true);
-		fireEvent.click(buttons[0]);
+		const button = await screen.findByRole('button', { name: 'Claim 30 XP' });
+		expect(screen.getAllByRole('button', { name: /^Claim/ })).toHaveLength(1);
+		fireEvent.click(button);
 		await waitFor(() => expect(claim).toHaveBeenCalledWith('lesson'));
-		fireEvent.change(screen.getByLabelText('Days per week'), { target: { value: '5' } });
-		await waitFor(() => expect(goal).toHaveBeenCalledWith(5));
-	});
-
-	it('issues a certificate only for a completed course', async () => {
-		renderApp('/progress/certificate/rust', { catalog, recent: [done('a'), done('b')] });
-		expect(await screen.findByRole('heading', { name: 'Rust' })).toBeTruthy();
-		expect(screen.getByText(/not an accredited credential/)).toBeTruthy();
-		cleanup();
-		renderApp('/progress/certificate/rust', { catalog, recent: [done('a')] });
-		expect(await screen.findByRole('heading', { name: 'No certificate yet' })).toBeTruthy();
 	});
 });

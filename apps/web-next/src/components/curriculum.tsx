@@ -1,4 +1,5 @@
 import { ChevronDown, CircleCheck, Circle, FileText, PlayCircle, Star, TriangleAlert } from 'lucide-react';
+import { useState } from 'react';
 import { Link } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { countCatalogFiles, courseProgress, formatLessonMeta, isLessonMissing } from '@/lib/catalog';
@@ -16,6 +17,8 @@ type Props = {
 	favorites: ReadonlySet<string>;
 	/** Lesson open in the player: highlighted, and its modules start expanded. */
 	activePath?: string | null;
+	/** Bumping `n` opens or closes every module at once (the Expand all / Collapse all buttons). */
+	signal?: { open: boolean; n: number };
 };
 
 const lessonMediaId = (node: CatalogNode) => [...node.files, ...node.looseFiles].find((file) => file.kind === 'media' && file.mediaId)?.mediaId ?? null;
@@ -35,14 +38,20 @@ export function Curriculum(props: Props) {
 }
 
 function CurriculumNode({ node, ...props }: Props & { node: CatalogNode }) {
+	const [open, setOpen] = useState(() => contains(node, props.activePath));
+	const [seen, setSeen] = useState(props.signal?.n ?? 0);
+	if (props.signal && props.signal.n !== seen) {
+		setSeen(props.signal.n);
+		setOpen(props.signal.open);
+	}
 	if (node.role === 'lesson') return <LessonRow node={node} {...props} />;
 	const { done, total } = courseProgress(node, props.completed);
 	return (
 		<li>
-			<details open={contains(node, props.activePath) || undefined} className="group">
-				<summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 px-4 py-3 hover:bg-muted [&::-webkit-details-marker]:hidden">
+			<details open={open} onToggle={(event) => setOpen(event.currentTarget.open)} className="group">
+				<summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 bg-muted/50 px-4 py-3 hover:bg-muted [&::-webkit-details-marker]:hidden">
 					<ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden="true" />
-					<span className="min-w-0 flex-1 font-medium">{node.title}</span>
+					<span className="min-w-0 flex-1 font-serif text-lg font-semibold">{node.title}</span>
 					{total > 0 && <span className="shrink-0 text-sm text-muted-foreground tabular-nums">{tr(`${done} of ${total} done`, `${done} de ${total} concluídas`)}</span>}
 				</summary>
 				{node.children.length > 0 && (

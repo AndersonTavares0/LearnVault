@@ -1,37 +1,39 @@
-import { Award, Check, Flame, Target, Timer } from 'lucide-react';
-import { useId, useMemo, type ReactNode } from 'react';
+import { Award, Check, Lock } from 'lucide-react';
+import { useMemo } from 'react';
 import { Link } from 'react-router';
-import { Button, buttonVariants } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
+import { CourseCover } from '@/components/course-cover';
+import { ProgressBar, progressLabel, routerPath } from '@/components/course-card';
+import { Button } from '@/components/ui/button';
 import { useLocale } from '@/hooks/use-locale';
 import { formatCount } from '@/lib/catalog';
-import { buildGamification } from '@/lib/gamification';
+import { buildGamification, type Badge } from '@/lib/gamification';
 import { getLocale, tr } from '@/lib/i18n';
 import { buildLibrary } from '@/lib/library';
 import { studySyncSupported } from '@/lib/player';
-import { MAX_WEEKLY_GOAL, MIN_WEEKLY_GOAL } from '@/lib/statistics';
-import type { StudyDay } from '@/lib/transport';
+import { href } from '@/lib/router';
+import type { FocusDaySummary, StudyDay } from '@/lib/transport';
 import { cn } from '@/lib/utils';
-import { useCatalog, useClaimMission, useFavorites, useFocusSummary, useRecent, useRewards, useSetWeeklyGoal } from '@/app/data';
+import { useCatalog, useClaimMission, useFavorites, useFocusSummary, useRecent, useRewards, useSession } from '@/app/data';
 import { PageHeader } from '@/app/shell';
 
 const weekday = (day: string) => new Date(`${day}T12:00:00`).toLocaleDateString(getLocale(), { weekday: 'short' });
+const dayOfMonth = (day: string) => new Date(`${day}T12:00:00`).getDate();
 
 /**
- * Progress (docs/design/redesign.md): habit first — streak and weekly goal — then the
- * course list, with XP, missions and achievements kept quiet below.
+ * Progress: this week as a sentence and seven days, then your courses beside today's missions,
+ * then the badges. Habit first and quiet; XP and level stay in one line under the missions.
  */
 export function ProgressPage() {
 	useLocale();
+	const session = useSession();
 	const rewards = useRewards();
 	const focus = useFocusSummary();
 	const catalog = useCatalog();
 	const recent = useRecent();
 	const favorites = useFavorites();
 	const claim = useClaimMission();
-	const setGoal = useSetWeeklyGoal();
 	const library = useMemo(() => buildLibrary({ catalog: catalog.data, recent: recent.data ?? [], favoriteCourseIds: new Set(favorites.data?.courseIds ?? []) }), [catalog.data, recent.data, favorites.data]);
-	const game = rewards.data ? buildGamification({ rewards: rewards.data }) : null;
+	const game = rewards.data ? buildGamification({ rewards: rewards.data, completedCourses: library.entries.filter((entry) => entry.status === 'completed').length }) : null;
 
 	if (!studySyncSupported) return <PageHeader title={tr('Progress', 'Progresso')} description={tr('Study tracking is off on this server.', 'O acompanhamento de estudo está desligado neste servidor.')} />;
 	if (rewards.isPending) return <><PageHeader title={tr('Progress', 'Progresso')} /><p role="status" className="text-muted-foreground">{tr('Loading your progress…', 'Carregando seu progresso…')}</p></>;
@@ -40,142 +42,126 @@ export function ProgressPage() {
 
 	const study = rewards.data.study;
 	const goal = rewards.data.weeklyGoal;
+	const profile = session.data?.user?.userId ?? '';
 	const started = library.entries.filter((entry) => entry.status !== 'not_started').sort((a, b) => b.done / Math.max(1, b.total) - a.done / Math.max(1, a.total));
+	const missing = Math.max(0, goal - study.weekActiveDays);
 
 	return (
 		<div className="space-y-10">
 			<PageHeader title={tr('Progress', 'Progresso')} description={formatCount(game.completedLessons, tr('lesson completed', 'aula concluída'), tr('lessons completed', 'aulas concluídas'))} />
 
-			<section aria-labelledby="habit-heading" className="grid gap-4 md:grid-cols-2">
-				<h2 id="habit-heading" className="sr-only">{tr('Study habit', 'Hábito de estudo')}</h2>
-				<Panel icon={<Flame />} title={tr('Streak', 'Sequência')}>
-					<p className="text-3xl font-semibold tabular-nums">{formatCount(study.currentStreak, tr('day', 'dia'), tr('days', 'dias'))}</p>
-					<p className="text-sm text-muted-foreground">
-						{study.atRisk
-							? tr('Study today to keep your streak.', 'Estude hoje para manter a sequência.')
-							: study.todayActive ? tr('Today counts already.', 'Hoje já conta.') : tr('Any lesson today starts a new streak.', 'Qualquer aula hoje começa uma nova sequência.')}
-						{' '}{tr(`Best: ${study.longestStreak}.`, `Melhor: ${study.longestStreak}.`)}
-					</p>
-				</Panel>
-				<Panel icon={<Target />} title={tr('Weekly goal', 'Meta semanal')}>
-					<p className="text-3xl font-semibold tabular-nums">{tr(`${study.weekActiveDays} of ${goal} days`, `${study.weekActiveDays} de ${goal} dias`)}</p>
-					<WeekStrip days={study.days} />
-					<div className="flex items-center gap-2">
-						<Label htmlFor="weekly-goal">{tr('Days per week', 'Dias por semana')}</Label>
-						<select id="weekly-goal" value={goal} disabled={setGoal.isPending} onChange={(event) => setGoal.mutate(Number(event.target.value))} className="h-11 rounded-lg border border-input bg-background px-2 text-sm">
-							{Array.from({ length: MAX_WEEKLY_GOAL - MIN_WEEKLY_GOAL + 1 }, (_, index) => index + MIN_WEEKLY_GOAL).map((value) => <option key={value} value={value}>{value}</option>)}
-						</select>
+			<section aria-labelledby="week-heading" className="rounded-2xl border bg-card p-5 sm:p-7">
+				<div className="flex flex-wrap items-end justify-between gap-6">
+					<div className="min-w-0 space-y-1">
+						<h2 id="week-heading" className="font-serif text-2xl font-bold text-balance sm:text-3xl">{formatCount(study.weekActiveDays, tr('day studied this week', 'dia estudado nesta semana'), tr('days studied this week', 'dias estudados nesta semana'))}</h2>
+						<p className="text-muted-foreground">
+							{missing === 0
+								? tr(`You reached your goal of ${goal} days.`, `Você atingiu sua meta de ${goal} dias.`)
+								: tr(`${formatCount(missing, 'more day', 'more days')} reaches your goal of ${goal}.`, `Mais ${formatCount(missing, 'dia', 'dias')} atinge sua meta de ${goal}.`)}
+							{' '}{study.currentStreak > 0 ? tr(`Current streak: ${study.currentStreak}.`, `Sequência atual: ${study.currentStreak}.`) : ''}
+							{' '}{tr(`Best: ${study.longestStreak}.`, `Melhor: ${study.longestStreak}.`)}
+						</p>
 					</div>
-				</Panel>
+					<div className="w-full max-w-xs space-y-1.5">
+						<div className="flex justify-between text-sm text-muted-foreground"><span>{tr(`Weekly goal: ${goal} days`, `Meta semanal: ${goal} dias`)}</span><span className="tabular-nums">{Math.min(study.weekActiveDays, goal)} / {goal}</span></div>
+						<div role="progressbar" aria-valuemin={0} aria-valuemax={goal} aria-valuenow={Math.min(study.weekActiveDays, goal)} aria-label={tr('Weekly goal', 'Meta semanal')} className="flex gap-1">
+							{Array.from({ length: goal }, (_, index) => <span key={index} className={cn('h-2 flex-1 rounded-full', index < study.weekActiveDays ? 'bg-primary' : 'bg-muted')} />)}
+						</div>
+					</div>
+				</div>
+				<Week days={study.days} today={study.today} focusDays={focus.data?.days ?? []} />
 			</section>
 
-			<section aria-labelledby="courses-progress-heading" className="space-y-4">
-				<h2 id="courses-progress-heading" className="text-lg font-semibold">{tr('Your courses', 'Seus cursos')}</h2>
-				{started.length === 0 ? (
-					<p className="text-muted-foreground">{tr('Courses you start appear here with their progress.', 'Os cursos que você começar aparecem aqui com o progresso.')}</p>
-				) : (
-					<ul className="divide-y rounded-lg border bg-card">
-						{started.map((entry) => (
-							<li key={entry.courseId} className="flex flex-wrap items-center gap-4 p-4">
-								<div className="min-w-0 flex-1 space-y-2">
-									<Link to={`/course/${encodeURIComponent(entry.courseId)}`} className="font-medium hover:underline">{entry.course.title}</Link>
-									<Bar value={entry.done / Math.max(1, entry.total)} label={tr(`${entry.done} of ${entry.total} lessons`, `${entry.done} de ${entry.total} aulas`)} />
-								</div>
-								{entry.status === 'completed' && (
-									<Link to={`/progress/certificate/${encodeURIComponent(entry.courseId)}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-										<Award />{tr('Certificate', 'Certificado')}
-									</Link>
-								)}
-							</li>
-						))}
-					</ul>
-				)}
-			</section>
-
-			{focus.data && (
-				<section aria-labelledby="focus-heading" className="space-y-2">
-					<h2 id="focus-heading" className="flex items-center gap-2 text-lg font-semibold"><Timer className="size-5" aria-hidden="true" />{tr('Focus', 'Foco')}</h2>
-					<p className="text-muted-foreground">
-						{tr(`${focus.data.todayMinutes} min today · ${focus.data.weekMinutes} min in ${focus.data.weekSessions} sessions this week`, `${focus.data.todayMinutes} min hoje · ${focus.data.weekMinutes} min em ${focus.data.weekSessions} sessões nesta semana`)}
-					</p>
+			<div className="grid gap-10 lg:grid-cols-[1fr_22rem] lg:gap-14">
+				<section aria-labelledby="courses-progress-heading">
+					<h2 id="courses-progress-heading" className="mb-1 text-xl font-semibold">{tr('Your courses', 'Seus cursos')}</h2>
+					{started.length === 0 ? (
+						<p className="rounded-xl border border-dashed p-6 text-muted-foreground">{tr('Courses you start appear here with their progress.', 'Os cursos que você começar aparecem aqui com o progresso.')}</p>
+					) : (
+						<ul>
+							{started.map((entry) => (
+								<li key={entry.courseId} className="relative flex items-center gap-4 border-t py-3 hover:bg-accent/40">
+									<CourseCover course={entry.course} profile={profile} done={entry.done} total={entry.total} compact className="w-24 shrink-0" />
+									<div className="min-w-0 flex-1">
+										<h3 className="truncate font-semibold"><Link to={routerPath(href('course', entry.courseId))} className="after:absolute after:inset-0 after:content-['']">{entry.course.title}</Link></h3>
+										<p className="truncate text-sm text-muted-foreground">{progressLabel(entry)}</p>
+									</div>
+									<span className="flex shrink-0 items-center gap-1 text-sm font-semibold text-primary">{entry.status === 'completed' ? <><Check className="size-4" aria-hidden="true" />{tr('Finished', 'Concluído')}</> : tr('Resume', 'Retomar')}</span>
+								</li>
+							))}
+						</ul>
+					)}
 				</section>
-			)}
 
-			<section aria-labelledby="missions-heading" className="space-y-4">
-				<h2 id="missions-heading" className="text-lg font-semibold">{tr('Today’s missions', 'Missões de hoje')}</h2>
-				<ul className="grid gap-3 md:grid-cols-3">
-					{game.missions.map((mission) => {
-						const done = mission.progress >= mission.target;
-						return (
-							<li key={mission.id} className="space-y-2 rounded-lg border bg-card p-4">
-								<p className="font-medium">{mission.title}</p>
-								<p className="text-sm text-muted-foreground">{mission.description}</p>
-								<Bar value={mission.progress / mission.target} label={`${Math.min(mission.progress, mission.target)} / ${mission.target}`} />
-								{mission.claimed ? (
-									<p className="flex min-h-11 items-center gap-1 text-sm text-muted-foreground"><Check className="size-4" aria-hidden="true" />{tr(`${mission.rewardXp} XP claimed`, `${mission.rewardXp} XP resgatados`)}</p>
-								) : (
-									<Button size="sm" variant={done ? 'default' : 'outline'} disabled={!done || claim.isPending} onClick={() => claim.mutate(mission.id)}>{tr(`Claim ${mission.rewardXp} XP`, `Resgatar ${mission.rewardXp} XP`)}</Button>
-								)}
-							</li>
-						);
-					})}
+				<section aria-labelledby="missions-heading">
+					<h2 id="missions-heading" className="mb-1 text-xl font-semibold">{tr('Today', 'Hoje')}</h2>
+					<ul>
+						{game.missions.map((mission) => {
+							const done = mission.progress >= mission.target;
+							return (
+								<li key={mission.id} className="flex items-start gap-3 border-t py-3">
+									<span className={cn('mt-0.5 grid size-6 shrink-0 place-items-center rounded-full border-2', done ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/50')}>{done && <Check className="size-4" aria-hidden="true" />}</span>
+									<div className="min-w-0 flex-1">
+										<p className="font-medium">{mission.title}</p>
+										<p className="text-sm text-muted-foreground">{mission.description}</p>
+										<ProgressBar value={mission.progress / mission.target} label={`${Math.min(mission.progress, mission.target)} / ${mission.target}`} className="mt-2" />
+									</div>
+									{mission.claimed ? (
+										<p className="flex min-h-11 items-center gap-1 text-sm text-muted-foreground"><Check className="size-4" aria-hidden="true" />{tr(`${mission.rewardXp} XP claimed`, `${mission.rewardXp} XP resgatados`)}</p>
+									) : done ? (
+										<Button size="sm" variant="outline" disabled={claim.isPending} onClick={() => claim.mutate(mission.id)}>{tr(`Claim ${mission.rewardXp} XP`, `Resgatar ${mission.rewardXp} XP`)}</Button>
+									) : null}
+								</li>
+							);
+						})}
+					</ul>
+					<p className="border-t pt-3 text-sm text-muted-foreground">{tr(`Level ${game.level.level}, ${game.level.title}: ${game.level.xp} XP, ${game.level.xpToNext} to the next level.`, `Nível ${game.level.level}, ${game.level.title}: ${game.level.xp} XP, faltam ${game.level.xpToNext} para o próximo nível.`)}</p>
+				</section>
+			</div>
+
+			<section aria-labelledby="badges-heading">
+				<h2 id="badges-heading" className="mb-1 text-xl font-semibold">{tr('Badges', 'Emblemas')}</h2>
+				<ul className="grid grid-cols-2 border-t sm:grid-cols-3 lg:grid-cols-6">
+					{game.badges.map((badge) => <BadgeTile key={badge.id} badge={badge} />)}
 				</ul>
 			</section>
-
-			<section aria-labelledby="level-heading" className="grid gap-4 md:grid-cols-2">
-				<Panel icon={<Award />} title={tr(`Level ${game.level.level} · ${game.level.title}`, `Nível ${game.level.level} · ${game.level.title}`)} headingId="level-heading">
-					<Bar value={game.level.progress} label={tr(`${game.level.xp} XP · ${game.level.xpToNext} XP to the next level`, `${game.level.xp} XP · faltam ${game.level.xpToNext} XP para o próximo nível`)} />
-				</Panel>
-				<Panel icon={<Award />} title={tr('Achievements', 'Conquistas')}>
-					<ul className="space-y-2">
-						{game.badges.map((badge) => (
-							<li key={badge.id} className={cn('flex items-center gap-3', !badge.earned && 'text-muted-foreground')}>
-								{badge.earned ? <Check className="size-4 shrink-0 text-primary" aria-hidden="true" /> : <span className="size-4 shrink-0" aria-hidden="true" />}
-								<span className="min-w-0 flex-1">{badge.title}<span className="sr-only">{badge.earned ? tr(', earned', ', conquistada') : ''}</span></span>
-								<span className="text-sm tabular-nums">{badge.progress}/{badge.target}</span>
-							</li>
-						))}
-					</ul>
-				</Panel>
-			</section>
 		</div>
 	);
 }
 
-function Panel({ icon, title, children, headingId }: { icon: ReactNode; title: string; children: ReactNode; headingId?: string }) {
+/** Seven days of this week. A studied day is filled; focus minutes show under it. */
+function Week({ days, today, focusDays }: { days: StudyDay[]; today: string; focusDays: FocusDaySummary[] }) {
+	const minutes = new Map(focusDays.map((day) => [day.day, day.minutes]));
 	return (
-		<div className="space-y-3 rounded-xl border bg-card p-5">
-			<h3 id={headingId} className="flex items-center gap-2 font-semibold [&_svg]:size-5 [&_svg]:text-primary"><span aria-hidden="true">{icon}</span>{title}</h3>
-			{children}
-		</div>
-	);
-}
-
-function Bar({ value, label }: { value: number; label: string }) {
-	const id = useId();
-	const percent = Math.round(Math.min(1, Math.max(0, value)) * 100);
-	return (
-		<div className="space-y-1">
-			<div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-labelledby={id} className="h-2 overflow-hidden rounded-full bg-muted">
-				<div className="h-full rounded-full bg-primary" style={{ width: `${percent}%` }} />
-			</div>
-			<p id={id} className="text-xs text-muted-foreground">{label}</p>
-		</div>
-	);
-}
-
-/** This week, Monday first; active days are filled and labelled, not only colored (WCAG 1.4.1). */
-function WeekStrip({ days }: { days: StudyDay[] }) {
-	return (
-		<ol className="flex gap-2" aria-label={tr('This week', 'Esta semana')}>
-			{days.map((day) => (
-				<li key={day.day} className="flex flex-col items-center gap-1 text-xs text-muted-foreground">
-					<span className={cn('grid size-8 place-items-center rounded-full border', day.active && 'border-primary bg-primary text-primary-foreground')}>
-						{day.active ? <Check className="size-4" aria-hidden="true" /> : null}
-					</span>
-					<span>{weekday(day.day)}<span className="sr-only">{day.active ? tr(': studied', ': estudou') : tr(': no study', ': sem estudo')}</span></span>
-				</li>
-			))}
+		<ol aria-label={tr('This week', 'Esta semana')} className="mt-6 grid grid-cols-7 gap-2 sm:gap-4">
+			{days.map((day) => {
+				const focusMinutes = minutes.get(day.day) ?? 0;
+				const isToday = day.day === today;
+				return (
+					<li key={day.day} className={cn('space-y-2 rounded-lg p-1.5 sm:p-2', isToday && 'bg-primary/10')}>
+						<p className={cn('flex flex-col items-start text-sm sm:flex-row sm:justify-between', isToday ? 'font-semibold' : 'text-muted-foreground')}>
+							<span>{weekday(day.day)}</span><span className="tabular-nums">{dayOfMonth(day.day)}</span>
+						</p>
+						<div className={cn('flex min-h-14 flex-col justify-center rounded-md px-2 py-1.5 text-xs sm:text-sm', day.active ? 'border-l-4 border-primary bg-muted' : 'border border-dashed')}>
+							<span className={day.active ? 'font-medium' : 'text-muted-foreground'}>{day.active ? tr('Studied', 'Estudou') : tr('No study', 'Sem estudo')}</span>
+							{focusMinutes > 0 && <span className="text-muted-foreground tabular-nums">{tr(`${focusMinutes} min focus`, `${focusMinutes} min de foco`)}</span>}
+						</div>
+					</li>
+				);
+			})}
 		</ol>
+	);
+}
+
+/** A badge: filled when earned, a dashed outline with its count while locked. */
+function BadgeTile({ badge }: { badge: Badge }) {
+	return (
+		<li className="flex flex-col items-center gap-1.5 px-2 py-4 text-center">
+			<span className={cn('grid size-14 place-items-center rounded-full', badge.earned ? 'bg-primary text-primary-foreground' : 'border-2 border-dashed border-muted-foreground/50 text-muted-foreground')}>
+				{badge.earned ? <Award className="size-6" aria-hidden="true" /> : <Lock className="size-5" aria-hidden="true" />}
+			</span>
+			<p className="text-sm leading-tight font-semibold">{badge.title}<span className="sr-only">{badge.earned ? tr(', earned', ', conquistada') : tr(', locked', ', bloqueada')}</span></p>
+			<p className="text-sm text-muted-foreground tabular-nums">{badge.earned ? tr('Earned', 'Conquistada') : `${badge.progress}/${badge.target}`}</p>
+		</li>
 	);
 }

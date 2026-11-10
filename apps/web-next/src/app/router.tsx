@@ -6,7 +6,6 @@ import { AppShell } from './shell';
 import { HomePage } from '@/pages/home';
 import { LoginPage } from '@/pages/login';
 import { CourseRoute } from '@/pages/course';
-import { CertificatePage } from '@/pages/certificate';
 import { ProgressPage } from '@/pages/progress';
 import { NotesPage } from '@/pages/notes';
 import { SettingsPage } from '@/pages/settings';
@@ -38,7 +37,6 @@ export const routes: RouteObject[] = [
 			{ path: 'home', element: <Navigate to="/" replace /> },
 			{ path: 'course/:courseId/*', element: <CourseRoute /> },
 			{ path: 'progress', element: <ProgressPage /> },
-			{ path: 'progress/certificate/:courseId', element: <CertificatePage /> },
 			{ path: 'notes', element: <NotesPage /> },
 			{ path: 'settings', element: <SettingsPage /> }
 		]

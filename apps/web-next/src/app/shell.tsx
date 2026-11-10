@@ -1,4 +1,4 @@
-import { BookOpen, ChartNoAxesColumn, CircleUser, Languages, LogOut, NotebookPen, Search, Settings } from 'lucide-react';
+import { BookOpen, Bookmark, ChartNoAxesColumn, CircleUser, LogOut, NotebookPen, Search, Settings } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router';
@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { useLocale } from '@/hooks/use-locale';
-import { LOCALE_LABELS, setLocale, tr } from '@/lib/i18n';
+import { tr } from '@/lib/i18n';
 import { focusSaved, focusSync, retryFocusSessions, setFocusOutboxScope } from '@/lib/pomodoro-store';
 import { playerPreferencesScope } from '@/lib/player-preferences';
 import { transportKind } from '@/lib/transport';
@@ -20,6 +20,7 @@ import { clearUserLocalData } from './preferences';
 
 const navItems = () => [
 	{ to: '/', label: tr('My learning', 'Meu aprendizado'), icon: BookOpen, end: true },
+	{ to: '/saved', label: tr('Saved', 'Salvos'), icon: Bookmark },
 	{ to: '/progress', label: tr('Progress', 'Progresso'), icon: ChartNoAxesColumn },
 	{ to: '/notes', label: tr('Notes', 'Notas'), icon: NotebookPen }
 ];
@@ -56,6 +57,10 @@ export function AppShell() {
 			<main id="main" tabIndex={-1} className="mx-auto w-full max-w-6xl px-4 py-6 outline-none sm:py-8">
 				<Outlet />
 			</main>
+			<footer className="mx-auto flex w-full max-w-6xl items-center gap-3 border-t px-4 py-6 text-sm text-muted-foreground print:hidden">
+				<BrandMark className="size-5 text-primary" />
+				<span>{tr('Your course files are read-only', 'Seus arquivos de curso são somente leitura')}</span>
+			</footer>
 			<MobileTabs />
 		</div>
 	);
@@ -70,10 +75,9 @@ function SkipLink() {
 }
 
 function Topbar({ username, userId }: { username: string; userId: string }) {
-	const locale = useLocale();
+	useLocale();
 	const navigate = useNavigate();
 	const signOut = useSignOut();
-	const otherLocale = locale === 'en' ? 'pt-BR' : 'en';
 	const [unsynced, setUnsynced] = useState(0);
 	const leave = () => signOut.mutate(undefined, { onSettled: () => { clearUserLocalData(userId); navigate('/login', { replace: true }); } });
 
@@ -94,9 +98,6 @@ function Topbar({ username, userId }: { username: string; userId: string }) {
 				<div className="ml-auto flex items-center gap-1">
 					<SearchBox />
 					<FocusMenu />
-					<Button variant="ghost" size="icon" aria-label={tr(`Switch language to ${LOCALE_LABELS[otherLocale]}`, `Mudar idioma para ${LOCALE_LABELS[otherLocale]}`)} onClick={() => setLocale(otherLocale)}>
-						<Languages />
-					</Button>
 					<DropdownMenu>
 						<DropdownMenuTrigger render={<Button variant="ghost" size="icon" aria-label={tr(`Account: ${username}`, `Conta: ${username}`)} />}>
 							<CircleUser />
@@ -174,7 +175,7 @@ function MobileTabs() {
 	const items: { to: string; label: string; icon: typeof BookOpen; end?: boolean }[] = [...navItems(), { to: '/settings', label: tr('Account', 'Conta'), icon: CircleUser }];
 	return (
 		<nav aria-label={tr('Sections', 'Seções')} className="fixed inset-x-0 bottom-0 z-40 border-t bg-background pb-[env(safe-area-inset-bottom)] sm:hidden print:hidden">
-			<ul className="grid grid-cols-4">
+			<ul className="grid grid-cols-5">
 				{items.map((item) => (
 					<li key={item.to}>
 						<NavLink to={item.to} end={item.end} className={({ isActive }) => cn('flex min-h-14 flex-col items-center justify-center gap-0.5 text-xs text-muted-foreground', isActive && 'font-medium text-primary')}>
@@ -188,12 +189,12 @@ function MobileTabs() {
 	);
 }
 
-export function PageHeader({ title, description, actions }: { title: string; description?: ReactNode; actions?: ReactNode }) {
+export function PageHeader({ title, description, actions, className }: { title: string; description?: ReactNode; actions?: ReactNode; className?: string }) {
 	return (
-		<div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+		<div className={cn('mb-8 flex flex-wrap items-end justify-between gap-4', className)}>
 			<div className="min-w-0 space-y-1">
-				<h1 className="text-2xl font-semibold tracking-tight text-balance">{title}</h1>
-				{description && <p className="text-muted-foreground">{description}</p>}
+				<h1 className="text-3xl font-semibold text-balance sm:text-4xl">{title}</h1>
+				{description && <div className="text-muted-foreground">{description}</div>}
 			</div>
 			{actions && <div className="flex flex-wrap gap-2">{actions}</div>}
 		</div>
