@@ -117,6 +117,8 @@ jobs:
         run: pnpm --filter learnvault-web test
         env:
           LEARNVAULT_PREBUILT_OUTPUTS: '1'
+      # Dependabot alert #17: deepmerge 4.3.1 is dev-only via @sveltejs/vite-plugin-svelte;
+      # GHSA-gcqx-w48m-w2h4 has no patched release yet. Remove this narrow ignore when fixed.
       - run: pnpm audit --audit-level=low --ignore GHSA-gcqx-w48m-w2h4
 
   e2e-server:
