@@ -47,12 +47,22 @@ describe('My learning', () => {
 
 	it('shows admin actions only to admins and explains an empty library', async () => {
 		renderApp('/', { user: { userId: 'u2', username: 'ana', role: 'user', isAdmin: false, mustChangeCredentials: false } });
-		expect(await screen.findByText('No courses yet')).toBeTruthy();
+		expect(await screen.findByText('Bring in the courses you already have')).toBeTruthy();
 		expect(screen.queryByRole('button', { name: 'Import course' })).toBeNull();
 		cleanup();
 		renderApp('/');
 		expect(await screen.findByRole('button', { name: 'Import course' })).toBeTruthy();
 		expect(screen.getByRole('button', { name: 'Refresh courses' })).toBeTruthy();
+	});
+
+	it('opens the import dialog, says files stay read-only and closes on cancel', async () => {
+		renderApp('/');
+		fireEvent.click(await screen.findByRole('button', { name: 'Import course' }));
+		const dialog = await screen.findByRole('dialog', { name: 'Import a course' });
+		expect(within(dialog).getByText(/never moved, renamed or changed/)).toBeTruthy();
+		expect(within(dialog).getByLabelText('Course folder on the server')).toBeTruthy();
+		fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+		expect(screen.queryByRole('dialog')).toBeNull();
 	});
 });
 

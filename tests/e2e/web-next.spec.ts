@@ -204,7 +204,7 @@ test('admin settings pass axe and new accounts start with no course access', asy
 	await page.getByLabel('Username').fill('ana');
 	await page.getByLabel('Password', { exact: true }).fill('a long student passphrase');
 	await page.getByRole('button', { name: 'Sign in' }).click();
-	await expect(page.getByText('No courses yet')).toBeVisible();
+	await expect(page.getByText('Bring in the courses you already have')).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Import course' })).toHaveCount(0);
 	await page.goto(`${origin}/#/settings`);
 	await expect(page.getByRole('heading', { name: 'Accounts and course access' })).toHaveCount(0);

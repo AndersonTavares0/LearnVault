@@ -5,6 +5,7 @@ import { BrandMark } from '@/components/brand';
 import { CourseCard, CourseRow, ProgressBar, routerPath } from '@/components/course-card';
 import { CourseCover } from '@/components/course-cover';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useLocale } from '@/hooks/use-locale';
@@ -202,6 +203,7 @@ export function LibraryActions({ onMessage }: { onMessage: (message: string) => 
 	const navigate = useNavigate();
 	const [importOpen, setImportOpen] = useState(false);
 	const [importPath, setImportPath] = useState('');
+	const [importError, setImportError] = useState('');
 
 	const runImport = (folder?: string) =>
 		importCourse.mutate(folder, {
@@ -211,7 +213,7 @@ export function LibraryActions({ onMessage }: { onMessage: (message: string) => 
 				setImportPath('');
 				navigate('/');
 			},
-			onError: (error) => onMessage(error.message)
+			onError: (error) => { if (transportKind === 'http') setImportError(error.message); else onMessage(error.message); }
 		});
 	const submit = (event: FormEvent) => {
 		event.preventDefault();
@@ -223,18 +225,29 @@ export function LibraryActions({ onMessage }: { onMessage: (message: string) => 
 			<Button variant="outline" disabled={rescan.isPending} onClick={() => { onMessage(tr('Reading courses…', 'Lendo os cursos…')); rescan.mutate(undefined, { onSuccess: () => onMessage(tr('Catalog updated.', 'Catálogo atualizado.')), onError: (error) => onMessage(error.message) }); }}>
 				<RefreshCw className={cn(rescan.isPending && 'motion-safe:animate-spin')} />{tr('Refresh courses', 'Atualizar cursos')}
 			</Button>
-			<Button disabled={importCourse.isPending} aria-expanded={transportKind === 'http' ? importOpen : undefined} onClick={() => (transportKind === 'desktop' ? runImport() : setImportOpen((open) => !open))}>
+			<Button disabled={importCourse.isPending} aria-haspopup={transportKind === 'http' ? 'dialog' : undefined} onClick={() => (transportKind === 'desktop' ? runImport() : setImportOpen(true))}>
 				<FolderPlus />{tr('Import course', 'Importar curso')}
 			</Button>
-			{importOpen && (
-				<form onSubmit={submit} className="flex w-full flex-wrap items-end gap-2">
-					<div className="min-w-0 flex-1 space-y-2">
-						<Label htmlFor="import-path">{tr('Course folder on the server', 'Pasta do curso no servidor')}</Label>
-						<Input id="import-path" value={importPath} onChange={(event) => setImportPath(event.target.value)} placeholder="/library/My course" required autoComplete="off" spellCheck={false} />
-					</div>
-					<Button type="submit" disabled={importCourse.isPending}>{tr('Import', 'Importar')}</Button>
-				</form>
-			)}
+			<Dialog open={importOpen} onOpenChange={(open) => { setImportOpen(open); if (!open) { setImportError(''); importCourse.reset(); } }}>
+				<DialogContent className="sm:max-w-lg">
+					<DialogHeader>
+						<DialogTitle className="font-serif text-2xl">{tr('Import a course', 'Importar um curso')}</DialogTitle>
+						<DialogDescription>{tr('Point LearnVault at a folder you already own. Your files are read, never moved, renamed or changed.', 'Aponte o LearnVault para uma pasta que você já tem. Seus arquivos são lidos, nunca movidos, renomeados ou alterados.')}</DialogDescription>
+					</DialogHeader>
+					<form onSubmit={submit} className="space-y-4">
+						<div className="space-y-2">
+							<Label htmlFor="import-path">{tr('Course folder on the server', 'Pasta do curso no servidor')}</Label>
+							<Input id="import-path" value={importPath} onChange={(event) => { setImportPath(event.target.value); setImportError(''); }} placeholder="/courses/rust-from-zero" required autoComplete="off" spellCheck={false} aria-describedby="import-help import-error" aria-invalid={importError ? true : undefined} />
+							<p id="import-help" className="text-sm text-muted-foreground">{tr('Type a path the server can read. The course name is taken from the folder name.', 'Digite um caminho que o servidor consiga ler. O nome do curso vem do nome da pasta.')}</p>
+							<p id="import-error" role="alert" className="text-sm font-medium text-destructive empty:hidden">{importError}</p>
+						</div>
+						<DialogFooter>
+							<DialogClose render={<Button type="button" variant="outline" />}>{tr('Cancel', 'Cancelar')}</DialogClose>
+							<Button type="submit" disabled={importCourse.isPending}>{tr('Import course', 'Importar curso')}</Button>
+						</DialogFooter>
+					</form>
+				</DialogContent>
+			</Dialog>
 		</>
 	);
 }
@@ -244,10 +257,10 @@ function EmptyLibrary({ isAdmin, onMessage }: { isAdmin: boolean; onMessage: (me
 	return (
 		<div className="mx-auto max-w-xl space-y-5 rounded-2xl border border-dashed p-8 text-center sm:p-12">
 			<BrandMark className="mx-auto size-12 text-primary" />
-			<p className="font-serif text-2xl font-semibold text-balance">{tr('No courses yet', 'Nenhum curso ainda')}</p>
+			<p className="font-serif text-2xl font-semibold text-balance">{tr('Bring in the courses you already have', 'Traga os cursos que você já tem')}</p>
 			<p className="text-muted-foreground">
 				{isAdmin
-					? tr('Import a folder of lessons and it becomes a course with progress, notes and flashcards. Your files are never moved, renamed or changed.', 'Importe uma pasta de aulas e ela vira um curso com progresso, notas e flashcards. Seus arquivos nunca são movidos, renomeados ou alterados.')
+					? tr('Pick a folder of videos and documents. LearnVault builds the lessons, remembers where you stopped and never touches your files.', 'Escolha uma pasta de vídeos e documentos. O LearnVault monta as aulas, lembra onde você parou e nunca mexe nos seus arquivos.')
 					: tr('Ask an administrator to give you access to a course.', 'Peça a um administrador acesso a um curso.')}
 			</p>
 			{isAdmin && <div className="flex flex-wrap justify-center gap-2"><LibraryActions onMessage={onMessage} /></div>}
