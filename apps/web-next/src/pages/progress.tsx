@@ -109,7 +109,7 @@ export function ProgressPage() {
 									{mission.claimed ? (
 										<p className="flex min-h-11 items-center gap-1 text-sm text-muted-foreground"><Check className="size-4" aria-hidden="true" />{tr(`${mission.rewardXp} XP claimed`, `${mission.rewardXp} XP resgatados`)}</p>
 									) : done ? (
-										<Button size="sm" variant="outline" disabled={claim.isPending} onClick={() => claim.mutate(mission.id)}>{tr(`Claim ${mission.rewardXp} XP`, `Resgatar ${mission.rewardXp} XP`)}</Button>
+										<Button size="sm" variant="secondary" disabled={claim.isPending} onClick={() => claim.mutate(mission.id)}>{tr(`Claim ${mission.rewardXp} XP`, `Resgatar ${mission.rewardXp} XP`)}</Button>
 									) : null}
 								</li>
 							);
@@ -143,9 +143,9 @@ function Week({ days, today, focusDays }: { days: StudyDay[]; today: string; foc
 							<span>{weekday(day.day)}</span><span className="tabular-nums">{dayOfMonth(day.day)}</span>
 						</p>
 						{/* Phones show a mark only; the words are still read out. From `sm` up there is room for them. */}
-						<div className={cn('flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-md px-1 py-1.5 text-xs sm:items-start sm:px-2 sm:text-sm', day.active ? 'bg-primary/15' : 'border border-dashed')}>
+						<div className={cn('flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-md px-1 py-1.5 text-xs sm:items-start sm:px-2 sm:text-sm', day.active ? 'bg-primary/15' : 'bg-muted/60')}>
 							{day.active && <Check className="size-4 text-primary sm:hidden" aria-hidden="true" />}
-							<span className={cn('sr-only sm:not-sr-only', day.active ? 'font-medium' : 'text-muted-foreground')}>{day.active ? tr('Studied', 'Estudou') : tr('No study', 'Sem estudo')}</span>
+							<span className={cn(day.active ? 'font-medium sr-only sm:not-sr-only' : 'sr-only')}>{day.active ? tr('Studied', 'Estudou') : tr('No study', 'Sem estudo')}</span>
 							{focusMinutes > 0 && <span className="text-muted-foreground tabular-nums"><span className="sm:hidden">{focusMinutes}m</span><span className="sr-only sm:not-sr-only">{tr(`${focusMinutes} min focus`, `${focusMinutes} min de foco`)}</span></span>}
 						</div>
 					</li>

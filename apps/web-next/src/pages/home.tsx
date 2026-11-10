@@ -63,8 +63,9 @@ export function HomePage() {
 	const profile = user?.userId ?? '';
 	const filtered = Boolean(query || filter !== 'all' || category);
 	const inProgress = library.entries.filter((entry) => entry.status === 'in_progress');
-	const resumeCourseId = library.resume[0]?.location.courseId;
-	const alsoInProgress = inProgress.filter((entry) => entry.courseId !== resumeCourseId).slice(0, 4);
+	// Every course already offered in the dark card is left out of "Also in progress", so none appears twice.
+	const shownInHero = new Set(library.resume.map((item) => item.location.courseId));
+	const alsoInProgress = inProgress.filter((entry) => !shownInHero.has(entry.courseId)).slice(0, 4);
 	const streak = rewards.data?.study;
 
 	return (
@@ -143,24 +144,30 @@ function ContinueLearning({ items, entries, profile }: { items: ResumeEntry[]; e
 				</div>
 			</article>
 			{rest.length > 0 && (
-				<ul className="mt-6 grid gap-2 border-t border-white/15 pt-4 sm:grid-cols-3">
-					{rest.map((entry) => (
-						<li key={entry.progress.mediaId}>
-							<Link to={link(entry)} className="flex min-h-11 flex-col rounded-lg px-3 py-2 hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none">
-								<span className="truncate text-sm text-ink-muted">{entry.location.courseTitle}</span>
-								<span className="line-clamp-2 font-medium">{entry.location.lesson.title}</span>
-							</Link>
-						</li>
-					))}
-				</ul>
+				<div className="mt-6 border-t border-white/15 pt-4">
+					<h3 className="mb-2 text-sm font-semibold text-ink-muted">{tr('Also continue', 'Continue também')}</h3>
+					<ul className="grid gap-2 sm:grid-cols-3">
+						{rest.map((entry) => (
+							<li key={entry.progress.mediaId}>
+								<Link to={link(entry)} className="flex min-h-14 items-center gap-3 rounded-lg px-2 py-2 hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none">
+									<CourseCoverFor entry={entries.find((course) => course.courseId === entry.location.courseId)} profile={profile} compact className="w-20 shrink-0" />
+									<span className="min-w-0">
+										<span className="block truncate text-sm text-ink-muted">{entry.location.courseTitle}</span>
+										<span className="line-clamp-2 font-medium">{entry.location.lesson.title}</span>
+									</span>
+								</Link>
+							</li>
+						))}
+					</ul>
+				</div>
 			)}
 		</section>
 	);
 }
 
 /** The resume band shows the same cover as the course card, with its lesson bar. */
-function CourseCoverFor({ entry, profile, eager }: { entry?: CourseEntry; profile: string; eager?: boolean }) {
-	return entry ? <CourseCover course={entry.course} profile={profile} eager={eager} done={entry.done} total={entry.total} /> : null;
+function CourseCoverFor({ entry, profile, eager, compact, className }: { entry?: CourseEntry; profile: string; eager?: boolean; compact?: boolean; className?: string }) {
+	return entry ? <CourseCover course={entry.course} profile={profile} eager={eager} done={entry.done} total={entry.total} compact={compact} className={className} /> : null;
 }
 
 function Filters(props: { counts: Record<LibraryFilter, number>; filter: LibraryFilter; onFilter: (value: LibraryFilter) => void; categories: string[]; category: string | null; onCategory: (value: string | null) => void; view: View; onView: (view: View) => void }) {

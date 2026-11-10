@@ -28,6 +28,8 @@ export function NotesPage() {
 	const client = useQueryClient();
 	const [query, setQuery] = useState('');
 	const [course, setCourse] = useState<string | null>(null);
+	// Fixed when the page opens, so the note brought back does not change on every render.
+	const [openedAt] = useState(() => Math.floor(Date.now() / 1000));
 	const [view, setView] = useState<'lesson' | 'date'>('lesson');
 	const [editing, setEditing] = useState<{ id: string; content: string } | null>(null);
 	const refresh = () => client.invalidateQueries({ queryKey: ['notes'] });
@@ -51,8 +53,10 @@ export function NotesPage() {
 		for (const group of groups) group.items.sort((a, b) => a.note.positionSeconds - b.note.positionSeconds);
 		// The note left alone the longest, among those that can still be opened.
 		const revisit = entries.filter((entry) => entry.location).sort((a, b) => a.note.updatedAt - b.note.updatedAt)[0] ?? null;
-		return { groups, matches, courses, revisit: entries.length > 3 ? revisit : null };
-	}, [notes.data, catalog.data, query, course]);
+		// A note from a couple of days ago or older: a fresh one is already on screen right below.
+		const old = revisit && revisit.note.updatedAt < openedAt - 2 * 86_400 ? revisit : null;
+		return { groups, matches, courses, revisit: entries.length > 3 ? old : null };
+	}, [notes.data, catalog.data, query, course, openedAt]);
 
 	if (!studySyncSupported) return <PageHeader title={tr('Notes', 'Notas')} description={tr('Study tracking is off on this server.', 'O acompanhamento de estudo está desligado neste servidor.')} />;
 	const total = notes.data?.length ?? 0;
