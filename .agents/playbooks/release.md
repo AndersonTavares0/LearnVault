@@ -1,6 +1,6 @@
 # Release playbook
 
-1. Use Conventional Commit SemVer bumps in `.github/release-please/release-please-config.json`: before `1.0.0`, `feat:` increments minor, `fix:` and `perf:` increment patch, and breaking changes increment minor. From `1.0.0`, breaking changes increment major.
+1. Use Conventional Commit SemVer bumps in `.github/release-please/release-please-config.json`: before `1.0.0`, `feat:`, `fix:`, and `perf:` increment patch, while breaking changes increment minor. From `1.0.0`, breaking changes increment major.
 2. Confirm the release target, database migration impact, and rollback notes before merging.
 3. Use English Conventional Commits (`feat:`, `fix:`, `perf:`, `docs:`, `chore:`). Release Please generates the `vMAJOR.MINOR.PATCH` tag/release name and changelog automatically.
 4. Run all relevant native, SPA, E2E, and deployment validations before merging the release PR.
