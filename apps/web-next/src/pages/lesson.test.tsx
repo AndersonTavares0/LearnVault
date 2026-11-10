@@ -52,6 +52,17 @@ describe('lesson page', () => {
 		expect(await screen.findByRole('button', { name: 'Completed' })).toBeTruthy();
 	});
 
+	it('switches to theater mode and remembers it', async () => {
+		localStorage.removeItem('learnvault-theater');
+		renderApp('/course/c/c%2FOne', { catalog });
+		const toggle = await screen.findByRole('button', { name: 'Theater mode' });
+		expect(toggle.getAttribute('aria-pressed')).toBe('false');
+		fireEvent.click(toggle);
+		expect(screen.getByRole('button', { name: 'Show side panel' }).getAttribute('aria-pressed')).toBe('true');
+		expect(localStorage.getItem('learnvault-theater')).toBe('1');
+		localStorage.removeItem('learnvault-theater');
+	});
+
 	it('opens a note draft with the n shortcut', async () => {
 		renderApp('/course/c/c%2FOne', { catalog });
 		fireEvent.keyDown(await screen.findByRole('group', { name: 'Media player' }), { key: 'n' });

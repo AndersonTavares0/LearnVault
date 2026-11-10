@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, CircleCheck, Circle, FileText, PenLine, SquarePlus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CircleCheck, Circle, FileText, PanelRightClose, PanelRightOpen, PenLine, SquarePlus } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Curriculum } from '@/components/curriculum';
@@ -30,6 +30,9 @@ import { keys, useCatalog, useFavorites, useRecent, useSession, useSetLessonComp
 
 const path = (hash: string) => hash.replace(/^#/, '');
 const AUTO_NEXT_SECONDS = 5;
+const THEATER_KEY = 'learnvault-theater';
+const readTheater = () => { try { return localStorage.getItem(THEATER_KEY) === '1'; } catch { return false; } };
+const saveTheater = (on: boolean) => { try { localStorage.setItem(THEATER_KEY, on ? '1' : '0'); } catch { /* storage can be blocked; the choice just does not persist */ } };
 
 /**
  * Lesson page, laid out as a study workspace: the media on the left; on the right the focus
@@ -53,6 +56,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 	const [tab, setTab] = useState(studySyncSupported ? 'notes' : 'lessons');
 	const [noteRequest, setNoteRequest] = useState(0);
 	const [cardRequest, setCardRequest] = useState(0);
+	const [theater, setTheater] = useState(readTheater);
 	const [breakPhase, setBreakPhase] = useState<'break' | 'over' | null>(null);
 	const timer = useStore(pomodoro);
 	const [seenRound, setSeenRound] = useState(timer.lastCompleted?.at ?? 0);
@@ -157,11 +161,14 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 	const closeBreak = () => setBreakPhase(null);
 
 	return (
-		<div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem]">
+		<div className={cn('grid gap-6', !theater && 'lg:grid-cols-[minmax(0,1fr)_24rem]')}>
 			<div className="min-w-0 space-y-4">
 				<div className="flex flex-wrap items-center justify-between gap-2">
 					<BackLink course={course} courseId={courseId} />
 					<div className="flex items-center gap-2">
+						<Button variant="outline" className="hidden lg:inline-flex" aria-pressed={theater} onClick={() => { setTheater(!theater); saveTheater(!theater); }}>
+							{theater ? <PanelRightOpen /> : <PanelRightClose />}{theater ? tr('Show side panel', 'Mostrar painel lateral') : tr('Theater mode', 'Modo teatro')}
+						</Button>
 						<Button variant="outline" disabled={!previous} onClick={() => previous && goTo(previous.path)}><ChevronLeft />{tr('Previous', 'Anterior')}</Button>
 						{position >= 0 && <span className="text-sm text-muted-foreground tabular-nums">{tr(`Lesson ${position + 1} of ${sequence.length}`, `Aula ${position + 1} de ${sequence.length}`)}</span>}
 						<Button variant="outline" disabled={!next} onClick={() => next && goTo(next.path)}>{tr('Next', 'Próxima')}<ChevronRight /></Button>
@@ -243,7 +250,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 				</div>
 			</div>
 
-			<aside aria-label={tr('Study panel', 'Painel de estudo')} className="min-w-0 space-y-4 lg:sticky lg:top-20 lg:max-h-[calc(100dvh-6rem)] lg:self-start lg:overflow-y-auto">
+			<aside aria-label={tr('Study panel', 'Painel de estudo')} className={cn('min-w-0 space-y-4', !theater && 'lg:sticky lg:top-20 lg:max-h-[calc(100dvh-6rem)] lg:self-start lg:overflow-y-auto')}>
 				<FocusCard />
 				<Tabs value={activeTab} onValueChange={(value) => setTab(String(value))}>
 					<TabsList aria-label={tr('Lesson tools', 'Ferramentas da aula')}>
