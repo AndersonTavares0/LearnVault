@@ -61,6 +61,35 @@ test('release repair rejects missing, draft, and prerelease targets without crea
     assert.doesNotMatch(workflow, /gh release create|--draft=false/);
 });
 
+test('updater notes use the selected release body with a fallback and repair leaves release notes untouched', t => {
+    const { directory } = fixture(t);
+    const script = runBlock('Resolve release notes');
+    const wrapped = `gh() { printf '%s' "$GH_RESULT"; }\n${script}`;
+    const run = (body) => {
+        const output = join(directory, `output-${body ? 'body' : 'empty'}`);
+        const result = spawnSync('bash', ['-c', wrapped], {
+            cwd: directory, encoding: 'utf8',
+            env: {
+                PATH: process.env.PATH,
+                GH_TOKEN: 'synthetic',
+                GITHUB_REPOSITORY: 'owner/repo',
+                RELEASE_TAG: 'v1.2.3',
+                GH_RESULT: body,
+                GITHUB_OUTPUT: output
+            }
+        });
+        assert.equal(result.status, 0, result.stderr);
+        const line = readFileSync(output, 'utf8').trim();
+        const encoded = line.slice('release_notes_base64='.length);
+        return Buffer.from(encoded, 'base64').toString('utf8');
+    };
+
+    assert.equal(run('## What changed\n\n- Synthetic updater notes'), '## What changed\n\n- Synthetic updater notes');
+    assert.equal(run(''), 'LearnVault release v1.2.3');
+    assert.match(workflow, /--json body --jq '\.body \/\/ ""'/);
+    assert.match(workflow, /- name: Attribute release contributors\n\s+if: \$\{\{ github\.event_name == 'release' \}\}/);
+});
+
 test('manual repair does not move latest or publish before the post-build tag check', () => {
     assert.match(workflow, /flavor: latest=false/);
     assert.match(workflow, /type=raw,value=latest,enable=\$\{\{ github\.event_name == 'release' \}\}/);
