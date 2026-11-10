@@ -128,6 +128,23 @@ fn post_json(uri: &str, cookie: &str, body: &str) -> Request<Body> {
         .unwrap()
 }
 
+fn put_json(uri: &str, cookie: &str, body: &str) -> Request<Body> {
+    Request::put(uri)
+        .header("origin", "http://localhost")
+        .header("cookie", cookie)
+        .header("content-type", "application/json")
+        .body(Body::from(body.to_owned()))
+        .unwrap()
+}
+
+fn delete_with_cookie(uri: &str, cookie: &str) -> Request<Body> {
+    Request::delete(uri)
+        .header("origin", "http://localhost")
+        .header("cookie", cookie)
+        .body(Body::empty())
+        .unwrap()
+}
+
 async fn json_body(response: Response) -> serde_json::Value {
     let bytes = response.into_body().collect().await.unwrap().to_bytes();
     serde_json::from_slice(&bytes).unwrap()
@@ -810,7 +827,7 @@ async fn current_database_carries_study_tables_and_constraints() {
         .connection()
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 10, "o formato persistido está na versão 10");
+    assert_eq!(version, 11, "o formato persistido está na versão 11");
     let present: i64 = db
         .connection()
         .query_row(
@@ -1362,4 +1379,128 @@ async fn favorites_endpoints_persist_courses_and_lessons_for_authenticated_user(
     let final_body = json_body(final_favs).await;
     assert_eq!(final_body["course_ids"], serde_json::json!([]));
     assert_eq!(final_body["media_ids"], serde_json::json!(["m1"]));
+}
+
+#[tokio::test]
+async fn revoked_course_access_blocks_course_linked_study_reads_and_writes() {
+    let temp = tempfile::tempdir().unwrap();
+    seed(&temp, &["m1"], &[(READER_ID, "m1", 17, false, 1)]);
+    seed_user(&temp, READER_ID, READER, READER_PASSWORD);
+    let mut db = Database::open(database_path(&temp)).unwrap();
+    db.connection()
+        .execute_batch(
+            "INSERT INTO user_course_access (user_id, course_id) VALUES ('usr-reader', 'library-1');",
+        )
+        .unwrap();
+    let note =
+        learnvault_core::create_study_note(&db, READER_ID, "m1", 5, "synthetic note").unwrap();
+    let card = learnvault_core::create_flashcard(
+        &db,
+        READER_ID,
+        "m1",
+        "synthetic front",
+        "synthetic back",
+    )
+    .unwrap();
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let cookie = login(&app, READER, READER_PASSWORD).await;
+    learnvault_core::set_user_course_access(&mut db, READER_ID, Some(&["other-course".to_owned()]))
+        .unwrap();
+
+    for request in [
+        get_with_cookie("/api/study/progress?media_id=m1", &cookie),
+        get_with_cookie("/api/study/notes?media_id=m1", &cookie),
+        get_with_cookie("/api/study/flashcards?media_id=m1", &cookie),
+        post_json(
+            "/api/study/position",
+            &cookie,
+            r#"{"media_id":"m1","position_seconds":21}"#,
+        ),
+        post_json(
+            "/api/study/completed",
+            &cookie,
+            r#"{"media_id":"m1","completed":true}"#,
+        ),
+        post_json(
+            "/api/study/notes",
+            &cookie,
+            r#"{"media_id":"m1","position_seconds":21,"content":"blocked"}"#,
+        ),
+        post_json(
+            "/api/study/flashcards",
+            &cookie,
+            r#"{"media_id":"m1","front":"blocked","back":"blocked"}"#,
+        ),
+        put_json(
+            &format!("/api/study/notes/{}", note.note_id),
+            &cookie,
+            r#"{"content":"blocked"}"#,
+        ),
+        delete_with_cookie(&format!("/api/study/notes/{}", note.note_id), &cookie),
+        put_json(
+            &format!("/api/study/flashcards/{}", card.card_id),
+            &cookie,
+            r#"{"front":"blocked","back":"blocked"}"#,
+        ),
+        delete_with_cookie(&format!("/api/study/flashcards/{}", card.card_id), &cookie),
+        post_json(
+            &format!("/api/study/flashcards/{}/review", card.card_id),
+            &cookie,
+            r#"{"rating":"good"}"#,
+        ),
+        post_json(
+            "/api/study/favorites/lesson",
+            &cookie,
+            r#"{"media_id":"m1","favorite":true}"#,
+        ),
+        post_json(
+            "/api/study/favorites/course",
+            &cookie,
+            r#"{"course_id":"library-1","favorite":true}"#,
+        ),
+    ] {
+        let response = app.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    for (uri, key) in [
+        ("/api/study/recent?limit=999", "items"),
+        ("/api/study/notes", "items"),
+        ("/api/study/favorites", "course_ids"),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(get_with_cookie(uri, &cookie))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(json_body(response).await[key].as_array().unwrap().len(), 0);
+    }
+    let favorites = app
+        .clone()
+        .oneshot(get_with_cookie("/api/study/favorites", &cookie))
+        .await
+        .unwrap();
+    let favorites = json_body(favorites).await;
+    assert!(favorites["media_ids"].as_array().unwrap().is_empty());
+
+    assert_eq!(
+        learnvault_core::study_progress(&db, READER_ID, "m1")
+            .unwrap()
+            .unwrap()
+            .position_seconds,
+        17
+    );
+    assert_eq!(
+        learnvault_core::list_study_notes(&db, READER_ID, "m1")
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        learnvault_core::list_flashcards(&db, READER_ID, "m1")
+            .unwrap()
+            .len(),
+        1
+    );
 }

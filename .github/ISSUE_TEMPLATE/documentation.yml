@@ -1,22 +1,25 @@
-name: Documentação ou typo
-description: Corrija documentação, texto ou typo sem mudança de comportamento
+name: Documentation or typo
+description: Correct documentation, copy, or typos without changing behavior
 title: "docs: "
 labels:
   - documentation
 body:
+  - type: markdown
+    attributes:
+      value: Remove credentials, course files, private addresses, and personal data before posting. Report suspected vulnerabilities privately through the [security policy](https://github.com/AndersonTavares0/LearnVault/security/policy), not in a public issue.
   - type: textarea
     id: location
     attributes:
-      label: Local da documentação
-      description: Informe o arquivo, página ou seção afetada.
+      label: Documentation location
+      description: Identify the affected file, page, or section.
     validations:
       required: true
   - type: textarea
     id: change
     attributes:
-      label: Correção proposta
+      label: Proposed correction
     validations:
       required: true
   - type: markdown
     attributes:
-      value: Issue opcional. Para dúvidas ou alternativas, use Discussions.
+      value: An issue is optional. Use Discussions for questions or alternatives.

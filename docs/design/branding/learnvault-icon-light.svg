@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none" role="img" aria-labelledby="title">
-  <title id="title">LearnVault — ícone claro</title>
+  <title id="title">LearnVault — light icon</title>
   <rect width="128" height="128" rx="28" fill="#F5F5F4"/>
-  <path d="M23 27H39L51 81H65L59 99H42C35 99 31 95 29 89L23 27Z" fill="#17191D"/>
-  <path d="M45 27H62L79 78L98 27H114L88 93C86 98 82 101 77 101H73C68 101 64 98 62 93L45 45H62L75 82L94 34L79 78L62 27H45Z" fill="#17191D"/>
+  <path d="M20 30H38V84H62V100H20Z" fill="#17191D"/>
+  <path d="M56 30H75L87 76L99 30H118L97 100H77Z" fill="#047857"/>
 </svg>

@@ -11,12 +11,14 @@
     "dev": "node scripts/dev.mjs localhost",
     "dev:localhost": "node scripts/dev.mjs localhost",
     "dev:tauri": "node scripts/dev.mjs tauri",
+    "dev:next": "pnpm --filter learnvault-web-next dev",
     "verify": "node scripts/verify.mjs",
     "test:scripts": "node --test \"scripts/*.test.mjs\" \".opencode/plugins/*.test.mjs\"",
     "e2e:server": "pnpm run build && cargo build -p learnvault-server && pnpm exec playwright test tests/e2e/server.spec.ts"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "2.12.4",
-    "@playwright/test": "1.64.1"
+    "@axe-core/playwright": "4.14.0",
+    "@playwright/test": "1.64.1",
+    "@tauri-apps/cli": "2.12.4"
   }
 }

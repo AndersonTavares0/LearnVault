@@ -17,8 +17,9 @@
 use learnvault_core::{Database, FocusSessionInput, ReviewRating};
 
 use crate::dto::{
-    FlashcardDto, FocusSessionDto, FocusSummaryDto, RecentStudyDto, RewardSummaryDto,
-    StudyFavoritesDto, StudyNoteDto, StudyProgressDto, StudySummaryDto,
+    FlashcardDto, FocusSessionDto, FocusSummaryDto, NewPdfAnnotationDto, PdfAnnotationDto,
+    RecentStudyDto, RewardSummaryDto, StudyFavoritesDto, StudyNoteDto, StudyProgressDto,
+    StudySummaryDto,
 };
 use crate::error::IpcError;
 
@@ -201,9 +202,94 @@ pub fn delete_note(database: &Database, note_id: &str) -> Result<(), IpcError> {
     }
 }
 
+/// Lists the local owner's annotations on one PDF.
+pub fn list_pdf_annotations(
+    database: &Database,
+    media_id: &str,
+) -> Result<Vec<PdfAnnotationDto>, IpcError> {
+    learnvault_core::list_pdf_annotations(database, LOCAL_OWNER_ID, media_id)
+        .map(|items| items.into_iter().map(PdfAnnotationDto::from).collect())
+        .map_err(study_error)
+}
+
+/// Creates an annotation. An unknown kind or color is refused like any other bad input.
+pub fn create_pdf_annotation(
+    database: &Database,
+    media_id: &str,
+    input: NewPdfAnnotationDto,
+) -> Result<PdfAnnotationDto, IpcError> {
+    let (Some(kind), Some(color)) = (
+        learnvault_core::PdfAnnotationKind::parse(&input.kind),
+        learnvault_core::PdfAnnotationColor::parse(&input.color),
+    ) else {
+        return Err(IpcError::invalid_pdf_annotation());
+    };
+    learnvault_core::create_pdf_annotation(
+        database,
+        LOCAL_OWNER_ID,
+        media_id,
+        learnvault_core::NewPdfAnnotation {
+            page: input.page,
+            kind,
+            color,
+            rects: input
+                .rects
+                .into_iter()
+                .map(|rect| learnvault_core::PdfRect {
+                    x: rect.x,
+                    y: rect.y,
+                    width: rect.width,
+                    height: rect.height,
+                })
+                .collect(),
+            quote: input.quote,
+            content: input.content,
+        },
+    )
+    .map(PdfAnnotationDto::from)
+    .map_err(study_error)
+}
+
+/// Changes an annotation's color and/or text.
+pub fn update_pdf_annotation(
+    database: &Database,
+    annotation_id: &str,
+    color: Option<&str>,
+    content: Option<&str>,
+) -> Result<PdfAnnotationDto, IpcError> {
+    let color = match color {
+        Some(value) => Some(
+            learnvault_core::PdfAnnotationColor::parse(value)
+                .ok_or_else(IpcError::invalid_pdf_annotation)?,
+        ),
+        None => None,
+    };
+    learnvault_core::update_pdf_annotation(database, LOCAL_OWNER_ID, annotation_id, color, content)
+        .map(PdfAnnotationDto::from)
+        .map_err(study_error)
+}
+
+/// Deletes an annotation; an unknown id is an error, like for notes.
+pub fn delete_pdf_annotation(database: &Database, annotation_id: &str) -> Result<(), IpcError> {
+    let deleted = learnvault_core::delete_pdf_annotation(database, LOCAL_OWNER_ID, annotation_id)
+        .map_err(study_error)?;
+    if deleted {
+        Ok(())
+    } else {
+        Err(IpcError::pdf_annotation_not_found())
+    }
+}
+
 /// Lista os cartões de memorização do dono local para uma mídia específica.
 pub fn list_flashcards(database: &Database, media_id: &str) -> Result<Vec<FlashcardDto>, IpcError> {
     learnvault_core::list_flashcards(database, LOCAL_OWNER_ID, media_id)
+        .map(|cards| cards.into_iter().map(FlashcardDto::from).collect())
+        .map_err(study_error)
+}
+
+/// Lists every card of the local owner, soonest due first, for the review hub.
+pub fn list_all_flashcards(database: &Database) -> Result<Vec<FlashcardDto>, IpcError> {
+    learnvault_core::list_all_flashcards(database, LOCAL_OWNER_ID)
         .map(|cards| cards.into_iter().map(FlashcardDto::from).collect())
         .map_err(study_error)
 }
@@ -297,6 +383,8 @@ fn study_error(error: learnvault_core::Error) -> IpcError {
         Error::InvalidStudyPosition { .. } => IpcError::invalid_position(),
         Error::StudyNoteNotFound { .. } => IpcError::note_not_found(),
         Error::InvalidStudyNoteContent => IpcError::invalid_note(),
+        Error::PdfAnnotationNotFound { .. } => IpcError::pdf_annotation_not_found(),
+        Error::InvalidPdfAnnotation => IpcError::invalid_pdf_annotation(),
         Error::FlashcardNotFound { .. } => IpcError::flashcard_not_found(),
         Error::InvalidFlashcardContent => IpcError::invalid_flashcard(),
         Error::InvalidFavoriteTarget => IpcError::invalid_favorite_target(),
