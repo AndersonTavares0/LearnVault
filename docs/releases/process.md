@@ -2,9 +2,11 @@
 
 LearnVault adheres to Semantic Versioning: `MAJOR.MINOR.PATCH`.
 
-1. Merge approved changes using Conventional Commits into `main`.
-2. Release Please automatically opens or updates a release candidate PR with updated version files and `docs/releases/CHANGELOG.md`.
-3. Merge the release PR; this tags the commit and generates the GitHub Release.
+Before `1.0.0`, Release Please increments the minor version for `feat:` commits and breaking changes, and increments patch for `fix:` and `perf:` commits. From `1.0.0`, breaking changes increment major. Tags and GitHub release names are generated as `vMAJOR.MINOR.PATCH`; release notes and the changelog are generated from English Conventional Commits.
+
+1. Merge approved changes using Conventional Commits into `main`; these changes accumulate for the next monthly release.
+2. On the first day of each month (UTC), Release Please opens or updates one release PR with version files and generated `docs/releases/CHANGELOG.md` notes.
+3. Review and merge the release PR to publish the accumulated changes. Ordinary code PRs do not publish releases; merging the release PR creates the tag and GitHub Release. Urgent security fixes may ship outside the monthly schedule.
 4. The published release workflow builds Linux server tarballs and the Windows desktop NSIS installer, verifies checksums with `SHA256SUMS`, and generates the contributors list.
 5. Verify assets, checksums, and the Contributors section before general distribution.
 
