@@ -450,9 +450,33 @@ CREATE TABLE user_course_access (
 );
 ";
 
+/// Versão 11: anotações do aluno sobre páginas de PDF.
+///
+/// O arquivo do curso nunca é alterado: marca-textos, sublinhados e notas ficam aqui, presos
+/// a uma mídia e a uma página. `rects` guarda os retângulos como texto `x,y,largura,altura`
+/// separados por `;`, em frações da página (0 a 1), para sobreviver a qualquer zoom.
+/// A regra de que uma nota exige texto é validada no domínio, não no banco.
+const V11: &str = "
+CREATE TABLE pdf_annotation (
+    annotation_id TEXT PRIMARY KEY NOT NULL,
+    owner_id TEXT NOT NULL,
+    media_id TEXT NOT NULL REFERENCES media (media_id) ON DELETE NO ACTION,
+    page INTEGER NOT NULL CHECK (page >= 1 AND page <= 100000),
+    kind TEXT NOT NULL CHECK (kind IN ('highlight', 'underline', 'note')),
+    color TEXT NOT NULL CHECK (color IN ('yellow', 'green', 'blue', 'pink')),
+    rects TEXT NOT NULL CHECK (length(rects) > 0 AND length(rects) <= 20000),
+    quote TEXT NOT NULL CHECK (length(quote) <= 4000),
+    content TEXT NOT NULL CHECK (length(content) <= 10000),
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX pdf_annotation_owner_media_idx ON pdf_annotation (owner_id, media_id, page);
+";
+
 /// Cadeia de migrações aplicada por [`crate::db::Database`]; o índice `n` leva o banco da
 /// versão `n` para `n + 1`.
-pub(crate) const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6, V7, V8, V9, V10];
+pub(crate) const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11];
 
 /// Versão do schema gravada em `PRAGMA user_version` (0 quando nunca migrado).
 ///

@@ -67,6 +67,24 @@ export type StudyNote = {
 	createdAt: number;
 	updatedAt: number;
 };
+export type PdfAnnotationKind = 'highlight' | 'underline' | 'note';
+export type PdfAnnotationColor = 'yellow' | 'green' | 'blue' | 'pink';
+/** A rectangle on a page, as fractions of its width and height, origin at the top left. */
+export type PdfRect = { x: number; y: number; width: number; height: number };
+/** The reader's mark on a PDF page. It lives in the database; the PDF file is never written. */
+export type PdfAnnotation = {
+	annotationId: string;
+	mediaId: string;
+	page: number;
+	kind: PdfAnnotationKind;
+	color: PdfAnnotationColor;
+	rects: PdfRect[];
+	quote: string;
+	content: string;
+	createdAt: number;
+	updatedAt: number;
+};
+export type NewPdfAnnotation = { page: number; kind: PdfAnnotationKind; color: PdfAnnotationColor; rects: PdfRect[]; quote?: string; content?: string };
 export type Flashcard = {
 	cardId: string;
 	mediaId: string;
@@ -149,6 +167,10 @@ export interface Transport {
 	listNotes(mediaId?: string): Promise<StudyNote[]>;
 	createNote(mediaId: string, positionSeconds: number, content: string): Promise<StudyNote>;
 	updateNote(noteId: string, content: string): Promise<StudyNote>;
+	listPdfAnnotations(mediaId: string): Promise<PdfAnnotation[]>;
+	createPdfAnnotation(mediaId: string, input: NewPdfAnnotation): Promise<PdfAnnotation>;
+	updatePdfAnnotation(annotationId: string, change: { color?: PdfAnnotationColor; content?: string }): Promise<PdfAnnotation>;
+	deletePdfAnnotation(annotationId: string): Promise<void>;
 	deleteNote(noteId: string): Promise<void>;
 	listFlashcards(mediaId: string): Promise<Flashcard[]>;
 	createFlashcard(mediaId: string, front: string, back: string): Promise<Flashcard>;
@@ -565,6 +587,29 @@ export function normalizeStudyNote(raw: unknown): StudyNote {
 	return res;
 }
 
+const PDF_KINDS: readonly string[] = ['highlight', 'underline', 'note'];
+const PDF_COLORS: readonly string[] = ['yellow', 'green', 'blue', 'pink'];
+
+export function normalizePdfAnnotation(raw: unknown): PdfAnnotation {
+	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalidPayload('anotação de PDF inválida.');
+	const item = raw as Record<string, unknown>;
+	const kind = String(item.kind ?? '');
+	const color = String(item.color ?? '');
+	if (!PDF_KINDS.includes(kind) || !PDF_COLORS.includes(color) || !Array.isArray(item.rects)) throw invalidPayload('anotação de PDF inválida.');
+	return {
+		annotationId: String(item.annotation_id ?? item.annotationId ?? ''),
+		mediaId: String(item.media_id ?? item.mediaId ?? ''),
+		page: Number(item.page ?? 0),
+		kind: kind as PdfAnnotationKind,
+		color: color as PdfAnnotationColor,
+		rects: item.rects.map((rect: Record<string, unknown>) => ({ x: Number(rect?.x), y: Number(rect?.y), width: Number(rect?.width), height: Number(rect?.height) })),
+		quote: String(item.quote ?? ''),
+		content: String(item.content ?? ''),
+		createdAt: Number(item.created_at ?? item.createdAt ?? 0),
+		updatedAt: Number(item.updated_at ?? item.updatedAt ?? 0)
+	};
+}
+
 export function normalizeFlashcard(raw: unknown): Flashcard {
 	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalidPayload('cartão de estudo inválido.');
 	const card = raw as Record<string, unknown>;
@@ -789,6 +834,34 @@ export class HttpTransport implements Transport {
 		});
 		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not delete note.', 'Não foi possível excluir a anotação.'));
 	}
+	async listPdfAnnotations(mediaId: string): Promise<PdfAnnotation[]> {
+		const response = await fetch(`/api/study/pdf-annotations?media_id=${encodeURIComponent(mediaId)}`);
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not load annotations.', 'Não foi possível carregar as anotações do PDF.'));
+		const data = await response.json();
+		return (Array.isArray(data.items) ? data.items : []).map(normalizePdfAnnotation);
+	}
+	async createPdfAnnotation(mediaId: string, input: NewPdfAnnotation): Promise<PdfAnnotation> {
+		const response = await fetch('/api/study/pdf-annotations', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ media_id: mediaId, page: input.page, kind: input.kind, color: input.color, rects: input.rects, quote: input.quote ?? '', content: input.content ?? '' })
+		});
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 422 ? tr('Invalid annotation.', 'Anotação inválida.') : tr('Could not save annotation.', 'Não foi possível salvar a anotação.'));
+		return normalizePdfAnnotation(await response.json());
+	}
+	async updatePdfAnnotation(annotationId: string, change: { color?: PdfAnnotationColor; content?: string }): Promise<PdfAnnotation> {
+		const response = await fetch(`/api/study/pdf-annotations/${encodeURIComponent(annotationId)}`, {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(change)
+		});
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? tr('Annotation not found.', 'Anotação não encontrada.') : response.status === 422 ? tr('Invalid annotation.', 'Anotação inválida.') : tr('Could not update annotation.', 'Não foi possível atualizar a anotação.'));
+		return normalizePdfAnnotation(await response.json());
+	}
+	async deletePdfAnnotation(annotationId: string): Promise<void> {
+		const response = await fetch(`/api/study/pdf-annotations/${encodeURIComponent(annotationId)}`, { method: 'DELETE' });
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not delete annotation.', 'Não foi possível excluir a anotação.'));
+	}
 	async listFlashcards(mediaId: string): Promise<Flashcard[]> {
 		const response = await fetch(`/api/study/flashcards?media_id=${encodeURIComponent(mediaId)}`);
 		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not load flashcards.', 'Não foi possível carregar os cartões.'));
@@ -1003,6 +1076,8 @@ function desktopErrorMessage(code: string): string | null {
 		case 'update_unavailable': return tr('Could not check or apply update.', 'Não foi possível verificar ou aplicar a atualização.');
 		case 'note_not_found': return tr('Note not found.', 'Anotação não encontrada.');
 		case 'invalid_note': return tr('Invalid note content.', 'Conteúdo da anotação inválido.');
+		case 'pdf_annotation_not_found': return tr('Annotation not found.', 'Anotação não encontrada.');
+		case 'invalid_pdf_annotation': return tr('Invalid annotation.', 'Anotação inválida.');
 		case 'flashcard_not_found': return tr('Card not found.', 'Cartão não encontrado.');
 		case 'invalid_flashcard': return tr('Invalid card content.', 'Conteúdo do cartão inválido.');
 		case 'invalid_review_rating': return tr('Invalid review rating.', 'Avaliação inválida.');
@@ -1078,6 +1153,37 @@ export class DesktopStub implements Transport {
 			await invoke<unknown>('desktop_delete_note', { noteId });
 		} catch (cause) {
 			throw desktopError(cause, tr('Could not delete note.', 'Não foi possível excluir a anotação.'));
+		}
+	}
+	async listPdfAnnotations(mediaId: string): Promise<PdfAnnotation[]> {
+		try {
+			const res = await invoke<unknown>('desktop_list_pdf_annotations', { mediaId });
+			return (Array.isArray(res) ? res : []).map(normalizePdfAnnotation);
+		} catch (cause) {
+			throw desktopError(cause, tr('Could not load annotations.', 'Não foi possível carregar as anotações do PDF.'));
+		}
+	}
+	async createPdfAnnotation(mediaId: string, input: NewPdfAnnotation): Promise<PdfAnnotation> {
+		try {
+			const res = await invoke<unknown>('desktop_create_pdf_annotation', { mediaId, input: { page: input.page, kind: input.kind, color: input.color, rects: input.rects, quote: input.quote ?? '', content: input.content ?? '' } });
+			return normalizePdfAnnotation(res);
+		} catch (cause) {
+			throw desktopError(cause, tr('Could not save annotation.', 'Não foi possível salvar a anotação.'));
+		}
+	}
+	async updatePdfAnnotation(annotationId: string, change: { color?: PdfAnnotationColor; content?: string }): Promise<PdfAnnotation> {
+		try {
+			const res = await invoke<unknown>('desktop_update_pdf_annotation', { annotationId, color: change.color ?? null, content: change.content ?? null });
+			return normalizePdfAnnotation(res);
+		} catch (cause) {
+			throw desktopError(cause, tr('Could not update annotation.', 'Não foi possível atualizar a anotação.'));
+		}
+	}
+	async deletePdfAnnotation(annotationId: string): Promise<void> {
+		try {
+			await invoke<unknown>('desktop_delete_pdf_annotation', { annotationId });
+		} catch (cause) {
+			throw desktopError(cause, tr('Could not delete annotation.', 'Não foi possível excluir a anotação.'));
 		}
 	}
 	async listFlashcards(mediaId: string): Promise<Flashcard[]> {

@@ -13,6 +13,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod annotations;
 pub mod auth;
 pub mod catalog;
 pub mod courses;
@@ -31,6 +32,11 @@ pub mod study;
 
 mod migrations;
 
+pub use annotations::{
+    MAX_PDF_PAGE, MAX_PDF_RECTS, NewPdfAnnotation, PdfAnnotation, PdfAnnotationColor,
+    PdfAnnotationKind, PdfRect, create_pdf_annotation, delete_pdf_annotation, list_pdf_annotations,
+    update_pdf_annotation,
+};
 pub use auth::{
     AuthSession, AuthUser, LocalUserSummary, bootstrap_admin, bootstrap_admin_with_change_required,
     can_user_access_course, create_session, create_user, delete_session, delete_user,

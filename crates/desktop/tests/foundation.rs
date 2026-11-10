@@ -267,6 +267,10 @@ fn build_registers_the_app_commands_in_the_acl_manifest() {
         "desktop_create_note",
         "desktop_update_note",
         "desktop_delete_note",
+        "desktop_list_pdf_annotations",
+        "desktop_create_pdf_annotation",
+        "desktop_update_pdf_annotation",
+        "desktop_delete_pdf_annotation",
         "desktop_list_flashcards",
         "desktop_create_flashcard",
         "desktop_update_flashcard",
@@ -331,6 +335,10 @@ fn capability_grants_only_the_core_default_and_the_app_commands() {
     assert!(permissions.contains(&"allow-desktop-create-note"));
     assert!(permissions.contains(&"allow-desktop-update-note"));
     assert!(permissions.contains(&"allow-desktop-delete-note"));
+    assert!(permissions.contains(&"allow-desktop-list-pdf-annotations"));
+    assert!(permissions.contains(&"allow-desktop-create-pdf-annotation"));
+    assert!(permissions.contains(&"allow-desktop-update-pdf-annotation"));
+    assert!(permissions.contains(&"allow-desktop-delete-pdf-annotation"));
     assert!(permissions.contains(&"allow-desktop-list-flashcards"));
     assert!(permissions.contains(&"allow-desktop-create-flashcard"));
     assert!(permissions.contains(&"allow-desktop-update-flashcard"));
@@ -356,7 +364,7 @@ fn capability_grants_only_the_core_default_and_the_app_commands() {
     assert!(permissions.contains(&"allow-desktop-open-in-system-player"));
     assert_eq!(
         permissions.len(),
-        44,
+        48,
         "a capability não pode ampliar além do núcleo, dos controles da titlebar e dos comandos do app: {permissions:?}"
     );
 }
@@ -508,6 +516,10 @@ fn invoke_handler_registers_only_the_desktop_commands() {
         "desktop_create_note",
         "desktop_update_note",
         "desktop_delete_note",
+        "desktop_list_pdf_annotations",
+        "desktop_create_pdf_annotation",
+        "desktop_update_pdf_annotation",
+        "desktop_delete_pdf_annotation",
         "desktop_list_flashcards",
         "desktop_create_flashcard",
         "desktop_update_flashcard",
@@ -544,6 +556,22 @@ fn study_commands_are_async_blocking_and_never_accept_an_owner() {
         ("desktop_create_note", "state.create_note("),
         ("desktop_update_note", "state.update_note("),
         ("desktop_delete_note", "state.delete_note("),
+        (
+            "desktop_list_pdf_annotations",
+            "state.list_pdf_annotations(",
+        ),
+        (
+            "desktop_create_pdf_annotation",
+            "state.create_pdf_annotation(",
+        ),
+        (
+            "desktop_update_pdf_annotation",
+            "state.update_pdf_annotation(",
+        ),
+        (
+            "desktop_delete_pdf_annotation",
+            "state.delete_pdf_annotation(",
+        ),
         ("desktop_list_flashcards", "state.list_flashcards("),
         ("desktop_create_flashcard", "state.create_flashcard("),
         ("desktop_update_flashcard", "state.update_flashcard("),

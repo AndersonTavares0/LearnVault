@@ -192,7 +192,7 @@ pub fn recent_study(db: &Database, owner_id: &str, limit: usize) -> Result<Vec<S
 }
 
 /// Recusa um dono não identificado.
-fn validate_owner(owner_id: &str) -> Result<()> {
+pub(crate) fn validate_owner(owner_id: &str) -> Result<()> {
     if owner_id.trim().is_empty() {
         return Err(Error::InvalidOwnerId);
     }
@@ -204,7 +204,7 @@ fn validate_owner(owner_id: &str) -> Result<()> {
 ///
 /// A disponibilidade do arquivo não é consultada: uma mídia ausente continua sendo uma
 /// mídia conhecida, com identidade e progresso próprios.
-fn require_media(conn: &rusqlite::Connection, media_id: &str) -> Result<()> {
+pub(crate) fn require_media(conn: &rusqlite::Connection, media_id: &str) -> Result<()> {
     let exists = conn
         .query_row(
             "SELECT 1 FROM media WHERE media_id = ?1",
