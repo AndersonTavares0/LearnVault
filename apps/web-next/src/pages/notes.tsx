@@ -15,40 +15,66 @@ import { PageHeader } from '@/app/shell';
 
 type Entry = { note: StudyNote; location: LessonLocation | null };
 
-/** Every note the user wrote, searchable by text, course or lesson, grouped by course. */
+/**
+ * Every note the user wrote, as a notebook: grouped by lesson and ordered by the moment in the
+ * lesson, searchable by text, course or lesson, with a course filter. One older note is brought
+ * back at the top, so writing notes pays off later.
+ */
 export function NotesPage() {
 	useLocale();
 	const notes = useNotes();
 	const catalog = useCatalog();
 	const client = useQueryClient();
 	const [query, setQuery] = useState('');
+	const [course, setCourse] = useState<string | null>(null);
 	const [editing, setEditing] = useState<{ id: string; content: string } | null>(null);
 	const refresh = () => client.invalidateQueries({ queryKey: ['notes'] });
 	const update = useMutation({ mutationFn: ({ id, content }: { id: string; content: string }) => transport.updateNote(id, content), onSuccess: () => { setEditing(null); return refresh(); } });
 	const remove = useMutation({ mutationFn: (id: string) => transport.deleteNote(id), onSuccess: refresh });
 
-	const groups = useMemo(() => {
+	const { groups, courses, revisit } = useMemo(() => {
 		const needle = normalizeForSearch(query.trim());
+		const gone = tr('Lessons no longer in the library', 'Aulas que não estão mais na biblioteca');
 		const entries: Entry[] = (notes.data ?? []).map((note) => ({ note, location: findLessonLocation(catalog.data ?? null, note.mediaId) }));
-		const matches = entries.filter(({ note, location }) => !needle || [note.content, location?.courseTitle, location?.lesson.title, note.relativePath].some((text) => text && normalizeForSearch(text).includes(needle)));
-		const byCourse = new Map<string, Entry[]>();
+		const courses = [...new Set(entries.map((entry) => entry.location?.courseTitle ?? gone))];
+		const matches = entries.filter(({ note, location }) => (!course || (location?.courseTitle ?? gone) === course) && (!needle || [note.content, location?.courseTitle, location?.lesson.title, note.relativePath].some((text) => text && normalizeForSearch(text).includes(needle))));
+		const byLesson = new Map<string, { course: string; lesson: string; location: LessonLocation | null; updatedAt: number; items: Entry[] }>();
 		for (const entry of matches) {
-			const title = entry.location?.courseTitle ?? tr('Lessons no longer in the library', 'Aulas que não estão mais na biblioteca');
-			byCourse.set(title, [...(byCourse.get(title) ?? []), entry]);
+			const group = byLesson.get(entry.note.mediaId) ?? { course: entry.location?.courseTitle ?? gone, lesson: entry.location?.lesson.title ?? entry.note.relativePath ?? tr('Unknown lesson', 'Aula desconhecida'), location: entry.location, updatedAt: 0, items: [] };
+			group.items.push(entry);
+			group.updatedAt = Math.max(group.updatedAt, entry.note.updatedAt);
+			byLesson.set(entry.note.mediaId, group);
 		}
-		return [...byCourse.entries()].map(([title, items]) => ({ title, items: items.sort((a, b) => b.note.updatedAt - a.note.updatedAt) }));
-	}, [notes.data, catalog.data, query]);
+		const groups = [...byLesson.values()].sort((a, b) => b.updatedAt - a.updatedAt);
+		for (const group of groups) group.items.sort((a, b) => a.note.positionSeconds - b.note.positionSeconds);
+		// The note left alone the longest, among those that can still be opened.
+		const revisit = entries.filter((entry) => entry.location).sort((a, b) => a.note.updatedAt - b.note.updatedAt)[0] ?? null;
+		return { groups, courses, revisit: entries.length > 3 ? revisit : null };
+	}, [notes.data, catalog.data, query, course]);
 
 	if (!studySyncSupported) return <PageHeader title={tr('Notes', 'Notas')} description={tr('Study tracking is off on this server.', 'O acompanhamento de estudo está desligado neste servidor.')} />;
 	const total = notes.data?.length ?? 0;
 
 	return (
-		<div className="space-y-6">
+		<div className="space-y-8">
 			<PageHeader title={tr('Notes', 'Notas')} description={tr(`${total} notes across your courses`, `${total} notas nos seus cursos`)} />
 			<div role="search" className="relative max-w-md">
 				<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
 				<Input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={tr('Search notes, courses or lessons', 'Buscar notas, cursos ou aulas')} aria-label={tr('Search notes', 'Buscar notas')} className="pl-9" />
 			</div>
+			{courses.length > 1 && (
+				<div role="group" aria-label={tr('Course', 'Curso')} className="flex flex-wrap gap-2">
+					<Button size="sm" variant={course === null ? 'default' : 'outline'} aria-pressed={course === null} onClick={() => setCourse(null)}>{tr('All courses', 'Todos os cursos')}</Button>
+					{courses.map((title) => <Button key={title} size="sm" variant={course === title ? 'default' : 'outline'} aria-pressed={course === title} onClick={() => setCourse(title)}>{title}</Button>)}
+				</div>
+			)}
+			{revisit?.location && !query && !course && (
+				<aside aria-label={tr('A note to revisit', 'Uma nota para revisitar')} className="rounded-2xl bg-ink p-5 text-ink-foreground sm:p-6">
+					<p className="text-sm text-ink-muted">{revisit.location.courseTitle} · {new Date(revisit.note.updatedAt * 1000).toLocaleDateString(getLocale(), { dateStyle: 'medium' })}</p>
+					<p className="mt-2 line-clamp-4 max-w-prose font-serif text-xl leading-relaxed">{revisit.note.content}</p>
+					<Link to={href('course', revisit.location.courseId, revisit.location.lesson.path, revisit.note.positionSeconds).replace(/^#/, '')} className="mt-3 inline-flex min-h-11 items-center font-semibold text-[var(--a-soft)] hover:underline focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none">{tr('Go back to that moment', 'Voltar àquele momento')}</Link>
+				</aside>
+			)}
 			{(update.error || remove.error) && <p role="alert" className="text-sm text-destructive">{(update.error ?? remove.error)?.message}</p>}
 			{notes.isPending ? (
 				<p role="status" className="text-muted-foreground">{tr('Loading notes…', 'Carregando notas…')}</p>
@@ -58,18 +84,24 @@ export function NotesPage() {
 				<p role="status" className="text-muted-foreground">{tr('No notes match your search.', 'Nenhuma nota corresponde à busca.')}</p>
 			) : (
 				groups.map((group) => (
-					<section key={group.title} aria-label={group.title} className="space-y-3">
-						<h2 className="text-lg font-semibold">{group.title}</h2>
-						<ul className="space-y-2">
+					<section key={group.items[0].note.mediaId} aria-label={`${group.course}: ${group.lesson}`}>
+						<div className="flex flex-wrap items-end justify-between gap-2">
+							<div className="min-w-0">
+								<p className="text-sm text-muted-foreground">{group.course}</p>
+								<h2 className="font-serif text-2xl font-bold text-balance">{group.lesson}</h2>
+							</div>
+							{group.location && <Link to={href('course', group.location.courseId, group.location.lesson.path).replace(/^#/, '')} className="inline-flex min-h-11 items-center text-sm font-semibold text-primary hover:underline">{tr('Open lesson', 'Abrir aula')}</Link>}
+						</div>
+						<ul className="mt-2">
 							{group.items.map(({ note, location }) => (
-								<li key={note.noteId} className="space-y-2 rounded-lg border bg-card p-4">
-									<div className="flex flex-wrap items-center gap-2 text-sm">
+								<li key={note.noteId} className="space-y-1 border-t py-3">
+									<div className="flex flex-wrap items-center gap-3 text-sm">
 										{location ? (
-											<Link to={href('course', location.courseId, location.lesson.path, note.positionSeconds).replace(/^#/, '')} className="inline-flex min-h-11 items-center font-medium text-primary hover:underline">
-												{location.lesson.title} · {formatDuration(note.positionSeconds)}
+											<Link to={href('course', location.courseId, location.lesson.path, note.positionSeconds).replace(/^#/, '')} aria-label={tr(`Open ${location.lesson.title} at ${formatDuration(note.positionSeconds)}`, `Abrir ${location.lesson.title} em ${formatDuration(note.positionSeconds)}`)} className="inline-flex min-h-11 items-center font-semibold text-primary tabular-nums hover:underline">
+												{formatDuration(note.positionSeconds)}
 											</Link>
 										) : (
-											<span className="text-muted-foreground">{note.relativePath ?? tr('Unknown lesson', 'Aula desconhecida')}</span>
+											<span className="text-muted-foreground tabular-nums">{formatDuration(note.positionSeconds)}</span>
 										)}
 										<span className="text-muted-foreground">{new Date(note.updatedAt * 1000).toLocaleDateString(getLocale(), { dateStyle: 'medium' })}</span>
 										<span className="ml-auto flex gap-1">
@@ -88,7 +120,7 @@ export function NotesPage() {
 											</div>
 										</form>
 									) : (
-										<p className="whitespace-pre-wrap">{note.content}</p>
+										<p className="max-w-prose font-serif text-lg leading-relaxed whitespace-pre-wrap">{note.content}</p>
 									)}
 								</li>
 							))}
