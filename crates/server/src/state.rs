@@ -144,6 +144,16 @@ impl AppState {
                 let existing =
                     learnvault_core::has_admin(&database).map_err(StateError::Database)?;
                 if existing {
+                    if !setup.listen_addr.ip().is_loopback()
+                        && let Some(admin) =
+                            learnvault_core::find_user_by_username(&database, "admin")
+                                .map_err(StateError::Database)?
+                        && (admin.must_change_credentials
+                            || crate::auth::verify_password("admin", &admin.password_hash)
+                                .unwrap_or(false))
+                    {
+                        return Err(StateError::MissingAdministrator);
+                    }
                     return Ok((
                         database,
                         shell,
@@ -155,12 +165,13 @@ impl AppState {
                 }
                 let using_temporary_default =
                     setup.admin_username.is_none() && setup.admin_password.is_none();
+                if using_temporary_default && !setup.listen_addr.ip().is_loopback() {
+                    return Err(StateError::MissingAdministrator);
+                }
                 let username = setup.admin_username.as_deref().unwrap_or("admin");
                 let password = setup.admin_password.as_deref().unwrap_or("admin");
                 crate::auth::validate_username(username)
                     .map_err(|_| StateError::InvalidAdministrator)?;
-                // A senha temporária não força troca após o login: a troca acontece
-                // em "Configurações → Conta", autenticada pela senha atual.
                 let password_hash = if using_temporary_default {
                     crate::auth::hash_password_unchecked(password)
                 } else {
@@ -173,7 +184,7 @@ impl AppState {
                     username,
                     &password_hash,
                     unix_now(),
-                    false,
+                    using_temporary_default,
                 )
                 .map_err(StateError::Database)?;
                 Ok((
@@ -321,18 +332,16 @@ impl AppState {
         self.spa_shell_too_large
     }
 
-    pub(crate) async fn allow_login_attempt(&self, username: &str) -> bool {
-        self.allow_login_attempt_at(username, Instant::now()).await
+    pub(crate) async fn allow_login_attempt(&self, source: &str) -> bool {
+        self.allow_login_attempt_at(source, Instant::now()).await
     }
 
-    async fn allow_login_attempt_at(&self, username: &str, now: Instant) -> bool {
+    async fn allow_login_attempt_at(&self, source: &str, now: Instant) -> bool {
         let mut attempts = self.login_attempts.lock().await;
         attempts.retain(|_, (_, started)| now.duration_since(*started) < LOGIN_ATTEMPT_WINDOW);
-        let key = username.to_ascii_lowercase();
+        let key = source.to_owned();
         if attempts.len() >= MAX_LOGIN_ATTEMPT_BUCKETS && !attempts.contains_key(&key) {
-            // Nunca descarte um bucket ainda ativo: uma enxurrada de usernames distintos
-            // não pode reiniciar o limite de um usuário já acompanhado. Negar novos
-            // usernames até o TTL expirar mantém o uso de memória limitado.
+            // Keep the table bounded without evicting an active source bucket.
             return false;
         }
         let entry = attempts.entry(key).or_insert((0, now));
@@ -779,7 +788,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn missing_bootstrap_configuration_creates_temporary_admin_admin() {
+    async fn missing_bootstrap_configuration_creates_loopback_only_temporary_admin() {
         let directory = tempdir().unwrap();
         let mut setup = config();
         setup.database_path = directory.path().join("learnvault.sqlite");
@@ -787,11 +796,34 @@ mod tests {
         let user = state.user("admin".to_owned()).await.unwrap().unwrap();
         assert_eq!(user.username, "admin");
         assert!(user.is_admin);
-        // A senha temporária não é trocada à força após o login: a configuração
-        // acontece em "Configurações → Conta", com a senha atual como verificação.
-        assert!(!user.must_change_credentials);
+        assert!(user.must_change_credentials);
         assert!(crate::verify_password("admin", &user.password_hash).unwrap());
         assert_ne!(user.password_hash, "admin");
+    }
+
+    #[tokio::test]
+    async fn missing_bootstrap_credentials_are_rejected_on_network_listener() {
+        let directory = tempdir().unwrap();
+        let mut setup = config();
+        setup.database_path = directory.path().join("learnvault.sqlite");
+        setup.listen_addr = "0.0.0.0:8090".parse().unwrap();
+        assert!(matches!(
+            AppState::initialize(setup).await,
+            Err(StateError::MissingAdministrator)
+        ));
+    }
+
+    #[tokio::test]
+    async fn network_listener_is_rejected_until_temporary_admin_changes_credentials() {
+        let directory = tempdir().unwrap();
+        let mut setup = config();
+        setup.database_path = directory.path().join("learnvault.sqlite");
+        AppState::initialize(setup.clone()).await.unwrap();
+        setup.listen_addr = "0.0.0.0:8090".parse().unwrap();
+        assert!(matches!(
+            AppState::initialize(setup).await,
+            Err(StateError::MissingAdministrator)
+        ));
     }
 
     #[tokio::test]
@@ -818,7 +850,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn distinct_usernames_do_not_evict_an_active_login_bucket() {
+    async fn distinct_sources_do_not_evict_an_active_login_bucket() {
         let state = AppState::new(config());
         let now = Instant::now();
 
@@ -839,6 +871,17 @@ mod tests {
         assert_eq!(attempts.len(), 1024);
         assert!(attempts.contains_key("admin"));
         assert!(!attempts.contains_key("new-user"));
+    }
+
+    #[tokio::test]
+    async fn one_source_limit_does_not_lock_the_same_username_for_other_sources() {
+        let state = AppState::new(config());
+        let now = Instant::now();
+        for _ in 0..5 {
+            assert!(state.allow_login_attempt_at("192.0.2.10", now).await);
+        }
+        assert!(!state.allow_login_attempt_at("192.0.2.10", now).await);
+        assert!(state.allow_login_attempt_at("192.0.2.11", now).await);
     }
 
     #[test]

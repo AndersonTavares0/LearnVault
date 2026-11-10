@@ -466,3 +466,62 @@ fn restore_from_rejects_missing_or_corrupt_file() -> TestResult {
 
     Ok(())
 }
+
+#[cfg(unix)]
+#[test]
+fn backup_and_restore_do_not_follow_predictable_staging_links() -> TestResult {
+    use std::os::unix::fs::{PermissionsExt, symlink};
+    let directory = tempfile::tempdir()?;
+    let backup = directory.path().join("backup.sqlite");
+    let target = directory.path().join("target.sqlite");
+    let victim = directory.path().join("unrelated.sqlite");
+    Database::open_in_memory()?.backup_to(&victim)?;
+    let original = std::fs::read(&victim)?;
+    let source = Database::open_in_memory()?;
+    source.connection().execute_batch("CREATE TABLE synthetic_marker(value TEXT); INSERT INTO synthetic_marker VALUES ('source');")?;
+    for path in [
+        backup.with_extension(format!("tmp.{}", std::process::id())),
+        target.with_extension(format!("tmp.restore.{}", std::process::id())),
+    ] {
+        symlink(&victim, path)?;
+    }
+    source.backup_to(&backup)?;
+    Database::restore_from(&backup, &target)?;
+    assert!(
+        std::fs::read(&victim)? == original,
+        "unrelated database must stay unchanged"
+    );
+    for path in [&backup, &target] {
+        assert_eq!(std::fs::metadata(path)?.permissions().mode() & 0o077, 0);
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn restore_refuses_existing_rollback_paths_without_modifying_files() -> TestResult {
+    use std::os::unix::fs::symlink;
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let directory = tempfile::tempdir()?;
+    let backup = directory.path().join("backup.sqlite");
+    let target = directory.path().join("target.sqlite");
+    let victim = directory.path().join("unrelated.txt");
+    Database::open_in_memory()?.backup_to(&backup)?;
+    Database::open_in_memory()?.backup_to(&target)?;
+    let original = std::fs::read(&target)?;
+    std::fs::write(&victim, b"synthetic unrelated file")?;
+    let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+    for timestamp in now..=now + 60 {
+        symlink(
+            &victim,
+            target.with_extension(format!("rollback.{timestamp}.bak")),
+        )?;
+    }
+    assert!(Database::restore_from(&backup, &target).is_err());
+    assert_eq!(std::fs::read(&victim)?, b"synthetic unrelated file");
+    assert!(
+        std::fs::read(&target)? == original,
+        "restore must preserve the target on collision"
+    );
+    Ok(())
+}

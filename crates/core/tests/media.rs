@@ -363,6 +363,29 @@ fn a_directory_symlink_that_escapes_the_library_is_refused() -> TestResult {
 
 #[cfg(unix)]
 #[test]
+fn a_symlinked_intermediate_directory_is_not_followed() -> TestResult {
+    let directory = tempfile::tempdir()?;
+    let root = directory.path();
+    write_file(root, "Course/Real/Lesson/video.mp4", b"synthetic video")?;
+    std::os::unix::fs::symlink(root.join("Course/Real"), root.join("Course/Alias"))?;
+
+    let db = library_db()?;
+    insert_media(
+        &db,
+        LIB,
+        "m1",
+        "Course/Alias/Lesson/video.mp4",
+        15,
+        10,
+        "available",
+    )?;
+
+    assert!(open_media(&db, LIB, "m1", root).is_err());
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
 fn a_root_replaced_by_a_symlink_does_not_authorize_outside_files() -> TestResult {
     let directory = tempfile::tempdir()?;
     let root = directory.path().join("biblioteca");
