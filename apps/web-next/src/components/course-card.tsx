@@ -22,7 +22,7 @@ export function ProgressBar({ value, label, className }: { value: number; label:
 			<div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-labelledby={id} className="h-1.5 overflow-hidden rounded-full bg-muted">
 				<div className="h-full rounded-full bg-primary" style={{ width: `${percent}%` }} />
 			</div>
-			<p id={id} className="text-sm text-muted-foreground">{label}</p>
+			<p id={id} className="meta text-sm text-muted-foreground">{label}</p>
 		</div>
 	);
 }
@@ -62,7 +62,7 @@ export function CourseCard({ entry, profile, variant = 'grid' }: Props) {
 				)}
 			</div>
 			<div className={cn('min-w-0 space-y-1.5', !listed && 'mt-3', listed && 'flex-1')}>
-				<h3 className="text-base leading-snug font-semibold text-balance group-has-[[data-titled]]/card:m-0 group-has-[[data-titled]]/card:h-0 group-has-[[data-titled]]/card:opacity-0">
+				<h3 className="card-heading text-base leading-snug font-semibold text-balance">
 					{/* The link covers the whole card; the favorite button sits above it. */}
 					<Link to={routerPath(href('course', entry.courseId))} className="line-clamp-2 after:absolute after:inset-0 after:content-[''] hover:underline">{entry.course.title}</Link>
 				</h3>

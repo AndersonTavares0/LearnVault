@@ -38,8 +38,9 @@ export function wrapTitle(title: string): string[] {
 
 /** One block per lesson in rows, the finished ones lit and the next one marked. */
 function lessonMap(done: number, total: number) {
-	if (total <= 0) return null;
-	const shown = Math.min(total, 60);
+	// A course with no playable lessons yet still gets a cover: a few dim blocks.
+	const empty = total <= 0;
+	const shown = empty ? 6 : Math.min(total, 60);
 	const columns = Math.min(shown, shown > 24 ? 12 : 8);
 	const rows = Math.ceil(shown / columns);
 	const gap = 3;
@@ -56,7 +57,24 @@ function lessonMap(done: number, total: number) {
 			width={width}
 			height={height}
 			rx="3"
-			className={index < finished ? 'fill-white' : index === finished ? 'fill-[var(--a-soft)]' : 'fill-white/15'}
+			className={empty ? 'fill-white/10' : index < finished ? 'fill-white' : index === finished ? 'fill-[var(--a-soft)]' : 'fill-white/15'}
+		/>
+	));
+}
+
+/** Vault cover: one hairline per lesson, finished ones lit, the next one marked. */
+function lessonLines(done: number, total: number) {
+	const shown = Math.min(Math.max(total, 8), 24);
+	const gap = 56 / (shown - 1);
+	const finished = Math.min(done, total);
+	return Array.from({ length: shown }, (_, index) => (
+		<rect
+			key={index}
+			x="10"
+			y={32 + index * gap}
+			width="140"
+			height="0.8"
+			className={total === 0 || index >= total ? 'fill-white/10' : index < finished ? 'fill-white' : index === finished ? 'fill-[var(--a-soft)]' : 'fill-white/25'}
 		/>
 	));
 }
@@ -81,6 +99,7 @@ export function CoverArt({ title, done, total, compact = false, map = false }: P
 	const ground = GROUNDS[hash(title.normalize('NFD').toLowerCase()) % GROUNDS.length];
 	const lines = wrapTitle(title);
 	const size = Math.max(...lines.map((line) => line.length), 0) <= LINE_CHARS - 1 ? 15 : 13;
+	const vaultLabel = title.length > 24 ? `${title.slice(0, 23)}…` : title;
 	const finished = Math.min(done, total);
 	const segments = total > 0 && total <= MAX_SEGMENTS ? total : 0;
 	const gap = total <= 14 ? 2 : 0.6;
@@ -89,6 +108,13 @@ export function CoverArt({ title, done, total, compact = false, map = false }: P
 	return (
 		<svg viewBox="0 0 160 100" aria-hidden="true" focusable="false" className="absolute inset-0 size-full" preserveAspectRatio="xMidYMid slice">
 			<rect width="160" height="100" fill={ground} />
+			{/* The three Styles draw the cover differently; CSS on `data-style` shows one (src/styles/app.css). */}
+			<g className="cover-quiet">{lessonMap(done, total)}</g>
+			<g className="cover-vault">
+				<text x="10" y="20" fontSize="7" className="fill-[var(--a-soft)] font-mono uppercase">{vaultLabel}</text>
+				{lessonLines(done, total)}
+			</g>
+			<g className="cover-paper">
 			{compact ? (
 				<text x="12" y="66" fontSize="56" className="fill-white font-serif font-bold">{(title.trim()[0] ?? '?').toUpperCase()}</text>
 			) : (
@@ -116,6 +142,7 @@ export function CoverArt({ title, done, total, compact = false, map = false }: P
 					<rect x="10" y="86" width={(140 * finished) / total} height="4" rx="2" className="fill-white" />
 				</>
 			)}
+			</g>
 		</svg>
 	);
 }

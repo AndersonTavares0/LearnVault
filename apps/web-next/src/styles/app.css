@@ -189,6 +189,15 @@
 :root[data-style="quiet"] { --radius: 0.5rem; }
 :root[data-style="vault"] { --radius: 0.25rem; }
 
+/* Cover drawings per Style: Paper (default) shows the title cover; Quiet the lesson map; Vault the hairlines. */
+.cover-quiet, .cover-vault { display: none; }
+:root[data-style="quiet"] .cover-paper, :root[data-style="vault"] .cover-paper { display: none; }
+:root[data-style="quiet"] .cover-quiet, :root[data-style="vault"] .cover-vault { display: inline; }
+/* Only Paper draws the whole title on the cover, so only there the heading beside it collapses. */
+:root:not([data-style="quiet"]):not([data-style="vault"]) .group\/card:has([data-titled]) .card-heading { height: 0; margin: 0; opacity: 0; }
+/* Vault sets measurements, such as progress, in the mono face. */
+:root[data-style="vault"] .meta { font-family: var(--font-mono); font-size: 0.8125rem; }
+
 /* An ink band (course header, resume card) stays dark in both themes, like a reading lamp. */
 :root {
   --ink: oklch(19% 0.012 160);
