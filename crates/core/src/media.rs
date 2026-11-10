@@ -665,9 +665,7 @@ mod windows_open_tests {
     }
 
     #[test]
-    fn a_replaced_library_root_junction_is_not_followed()
-    -> Result<(), Box<dyn std::error::Error>>
-    {
+    fn root_junction_is_not_followed() -> Result<(), Box<dyn std::error::Error>> {
         let directory = tempfile::tempdir()?;
         let outside = directory.path().join("outside");
         let root_link = directory.path().join("library");
