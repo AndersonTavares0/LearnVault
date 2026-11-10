@@ -31,6 +31,9 @@ that area.
 
 ## GitHub governance
 
+- For delegation and review of security, persistence, or release/update changes, follow
+  `.agents/policies/agent-collaboration.md`.
+
 - Follow `.agents/policies/governance.md` and `.agents/checklists/pull-request.md`.
 - For pull requests, replace every template prompt with factual content and record only
   validations that actually ran.

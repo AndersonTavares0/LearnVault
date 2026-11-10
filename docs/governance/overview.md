@@ -28,6 +28,13 @@ Forks are not part of the standard maintainer flow. Contributors with write acce
 branches within this repository. `.github/CODEOWNERS` indicates subsystem ownership. Every open
 issue must have an assigned owner.
 
+## Agent review policy
+
+The canonical [agent collaboration policy](../../.agents/policies/agent-collaboration.md)
+defines delegation ownership, review according to risk, and revision-specific evidence.
+It complements the required CI and human/agent review workflow; it does not update GitHub
+protection settings.
+
 ## Issue Templates
 
 | Scenario | Location |

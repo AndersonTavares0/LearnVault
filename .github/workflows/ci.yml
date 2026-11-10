@@ -24,6 +24,19 @@ jobs:
       docs_release_only: ${{ steps.classify.outputs.docs_release_only }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Validate Conventional Commit pull request title
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          PULL_REQUEST_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { isConventionalPullRequestTitle } from './scripts/ci-gate.mjs';
+
+          if (!isConventionalPullRequestTitle(process.env.PULL_REQUEST_TITLE)) {
+            console.error('Pull request titles must follow Conventional Commits (for example, "feat(player): add progress tracking").');
+            process.exitCode = 1;
+          }
+          NODE
       - name: List changed files
         id: changed
         if: ${{ github.event_name == 'pull_request' }}
