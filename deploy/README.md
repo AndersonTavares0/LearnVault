@@ -138,3 +138,11 @@ Caso deseje que o LearnVault verifique e atualize autonomamente durante a madrug
 O container companion updater roda isoladamente, consulta a API e só aplica atualizações dentro da janela de manutenção definida.
 
 **Segurança do socket do Docker.** O updater não monta o socket do host: ele fala com o `docker-proxy` (`tecnativa/docker-socket-proxy`, fixado por digest), que só libera as seções da API usadas por `update.sh` (containers, imagens, redes, volumes, exec) e recusa o resto (segredos, swarm, build, commit, plugins). Isso reduz a superfície, mas não a elimina: quem consegue criar containers pela API ainda pode, em teoria, montar o host. Por isso o updater é opt-in e deve rodar só em máquinas que você controla. Para uma garantia maior, prefira o Quadlet com `podman-auto-update.timer`, que não usa socket nenhum.
+
+## Updater failure boundaries
+
+Automatic updates remain opt-in. Maintenance windows use the updater container's local clock, include their start minute, and exclude their end minute. Overnight windows such as `23:30-01:15` are supported. Equal endpoints and malformed clock values are rejected. `CHECK_INTERVAL_SECONDS` must contain at most ten decimal digits and represent a value from 1 to 2147483647; leading zeros are accepted.
+
+An update requires a successful backup and target image download before restarting the service. A healthy container is accepted only when its reported version matches the requested stable version. Startup failure or a version mismatch enters rollback using the previous immutable image ID for database restoration and service restart. A failed restore or restart stops recovery and leaves a nonzero exit status; it is never reported as success.
+
+An atomic lock directory in `DATA_DIR/.update.lock` prevents simultaneous attempts against the same data directory. A process crash can leave a stale lock: after confirming that no updater is running, the operator must remove the empty lock directory before retrying. Do not remove an active updater's lock.

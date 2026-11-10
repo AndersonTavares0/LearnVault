@@ -109,11 +109,17 @@ chmod -R a+rX "$library" 2>/dev/null || true
 chmod 0777 "$data" 2>/dev/null || true
 chmod 0755 "$workdir" 2>/dev/null || true
 
-printf 'Building %s ...\n' "$IMAGE"
-"$engine" build \
-	-f "$(host_path "$repo_root/deploy/container/Containerfile")" \
-	-t "$IMAGE" \
-	"$(host_path "$repo_root")"
+# CI builds the image beforehand with a layer cache and sets SKIP_BUILD=1; without a prebuilt
+# image the script still builds it itself.
+if [ "${SKIP_BUILD:-0}" = 1 ] && "$engine" image inspect "$IMAGE" >/dev/null 2>&1; then
+	printf 'Using the prebuilt image %s\n' "$IMAGE"
+else
+	printf 'Building %s ...\n' "$IMAGE"
+	"$engine" build \
+		-f "$(host_path "$repo_root/deploy/container/Containerfile")" \
+		-t "$IMAGE" \
+		"$(host_path "$repo_root")"
+fi
 
 failures=0
 pass() { printf 'PASS: %s\n' "$1"; }

@@ -32,6 +32,11 @@ pub fn new_note_id() -> String {
     Uuid::now_v7().to_string()
 }
 
+/// Gera um identificador opaco de anotação de PDF.
+pub fn new_annotation_id() -> String {
+    Uuid::now_v7().to_string()
+}
+
 /// Gera um identificador opaco de cartão de estudo (flashcard).
 pub fn new_card_id() -> String {
     Uuid::now_v7().to_string()

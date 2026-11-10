@@ -13,6 +13,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod annotations;
 pub mod auth;
 pub mod catalog;
 pub mod courses;
@@ -31,6 +32,11 @@ pub mod study;
 
 mod migrations;
 
+pub use annotations::{
+    MAX_PDF_PAGE, MAX_PDF_RECTS, NewPdfAnnotation, PdfAnnotation, PdfAnnotationColor,
+    PdfAnnotationKind, PdfRect, create_pdf_annotation, delete_pdf_annotation, list_pdf_annotations,
+    update_pdf_annotation,
+};
 pub use auth::{
     AuthSession, AuthUser, LocalUserSummary, bootstrap_admin, bootstrap_admin_with_change_required,
     can_user_access_course, create_session, create_user, delete_session, delete_user,
@@ -66,8 +72,8 @@ pub use scanner::{MediaKind, ScanOutcome, ScannedFile, scan};
 pub use study::{
     Flashcard, GlobalStudyNote, MAX_RECENT_STUDY, ReviewRating, StudyDay, StudyFavorites,
     StudyNote, StudyProgress, StudySummary, create_flashcard, create_study_note, delete_flashcard,
-    delete_study_note, list_all_study_notes, list_favorites, list_flashcards, list_study_notes,
-    recent_study, record_position, review_flashcard, set_completed, set_course_favorite,
-    set_lesson_favorite, study_progress, study_summary, study_summary_on, update_flashcard,
-    update_study_note,
+    delete_study_note, flashcard_media_id, list_all_flashcards, list_all_study_notes,
+    list_favorites, list_flashcards, list_study_notes, recent_study, record_position,
+    review_flashcard, set_completed, set_course_favorite, set_lesson_favorite, study_note_media_id,
+    study_progress, study_summary, study_summary_on, update_flashcard, update_study_note,
 };

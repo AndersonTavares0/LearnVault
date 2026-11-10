@@ -192,7 +192,7 @@ pub fn recent_study(db: &Database, owner_id: &str, limit: usize) -> Result<Vec<S
 }
 
 /// Recusa um dono não identificado.
-fn validate_owner(owner_id: &str) -> Result<()> {
+pub(crate) fn validate_owner(owner_id: &str) -> Result<()> {
     if owner_id.trim().is_empty() {
         return Err(Error::InvalidOwnerId);
     }
@@ -204,7 +204,7 @@ fn validate_owner(owner_id: &str) -> Result<()> {
 ///
 /// A disponibilidade do arquivo não é consultada: uma mídia ausente continua sendo uma
 /// mídia conhecida, com identidade e progresso próprios.
-fn require_media(conn: &rusqlite::Connection, media_id: &str) -> Result<()> {
+pub(crate) fn require_media(conn: &rusqlite::Connection, media_id: &str) -> Result<()> {
     let exists = conn
         .query_row(
             "SELECT 1 FROM media WHERE media_id = ?1",
@@ -437,6 +437,18 @@ pub fn list_study_notes(db: &Database, owner_id: &str, media_id: &str) -> Result
     Ok(notes)
 }
 
+/// Finds the media linked to a study note without returning the note contents.
+pub fn study_note_media_id(db: &Database, note_id: &str) -> Result<Option<String>> {
+    Ok(db
+        .connection()
+        .query_row(
+            "SELECT media_id FROM study_note WHERE note_id = ?1",
+            [note_id],
+            |row| row.get(0),
+        )
+        .optional()?)
+}
+
 /// Lista todas as anotações do dono em todo o catálogo, ordenadas da mais recente para a mais antiga.
 pub fn list_all_study_notes(db: &Database, owner_id: &str) -> Result<Vec<GlobalStudyNote>> {
     validate_owner(owner_id)?;
@@ -635,6 +647,36 @@ pub fn list_flashcards(db: &Database, owner_id: &str, media_id: &str) -> Result<
     )?;
     let rows = statement.query_map(rusqlite::params![owner_id, media_id], card_from_row)?;
 
+    let mut cards = Vec::new();
+    for card in rows {
+        cards.push(card?);
+    }
+    Ok(cards)
+}
+
+/// Finds the media linked to a flashcard without returning its contents.
+pub fn flashcard_media_id(db: &Database, card_id: &str) -> Result<Option<String>> {
+    Ok(db
+        .connection()
+        .query_row(
+            "SELECT media_id FROM flashcard WHERE card_id = ?1",
+            [card_id],
+            |row| row.get(0),
+        )
+        .optional()?)
+}
+
+/// Lists every card of the owner across all lessons, soonest due first. The review hub needs
+/// what is due everywhere, not one lesson at a time.
+pub fn list_all_flashcards(db: &Database, owner_id: &str) -> Result<Vec<Flashcard>> {
+    validate_owner(owner_id)?;
+    let mut statement = db.connection().prepare(
+        "SELECT card_id, owner_id, media_id, front, back, interval_days, next_due, created_at, updated_at
+         FROM flashcard
+         WHERE owner_id = ?1
+         ORDER BY next_due ASC, created_at ASC",
+    )?;
+    let rows = statement.query_map([owner_id], card_from_row)?;
     let mut cards = Vec::new();
     for card in rows {
         cards.push(card?);

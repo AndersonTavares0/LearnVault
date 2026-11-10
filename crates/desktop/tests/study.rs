@@ -651,7 +651,7 @@ fn desktop_mission_claim_is_one_time_and_reward_summary_uses_snake_case() {
                 actual_seconds: 1_500,
                 completed: true,
                 started_at: now - 3_000 + index * 1_500,
-                ended_at: now - 1_500 + index * 1_500,
+                ended_at: now,
             })
             .unwrap();
     }

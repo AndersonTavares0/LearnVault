@@ -268,6 +268,89 @@ pub struct RecentStudyDto {
     pub items: Vec<StudyProgressDto>,
 }
 
+/// A rectangle of a PDF annotation, as fractions of the page.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct PdfRectDto {
+    /// Left edge, 0 to 1.
+    pub x: f64,
+    /// Top edge, 0 to 1.
+    pub y: f64,
+    /// Width, up to 1.
+    pub width: f64,
+    /// Height, up to 1.
+    pub height: f64,
+}
+
+/// A reader's mark on a PDF page, for the local owner.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PdfAnnotationDto {
+    /// Stable identity of the annotation.
+    pub annotation_id: String,
+    /// Identity of the PDF the mark belongs to.
+    pub media_id: String,
+    /// 1-based page.
+    pub page: i64,
+    /// `highlight`, `underline` or `note`.
+    pub kind: String,
+    /// `yellow`, `green`, `blue` or `pink`.
+    pub color: String,
+    /// Where the mark sits on the page.
+    pub rects: Vec<PdfRectDto>,
+    /// The marked text.
+    pub quote: String,
+    /// The reader's own words.
+    pub content: String,
+    /// Creation time, Unix seconds.
+    pub created_at: i64,
+    /// Last edit time, Unix seconds.
+    pub updated_at: i64,
+}
+
+impl From<learnvault_core::PdfAnnotation> for PdfAnnotationDto {
+    fn from(annotation: learnvault_core::PdfAnnotation) -> Self {
+        Self {
+            annotation_id: annotation.annotation_id,
+            media_id: annotation.media_id,
+            page: annotation.page,
+            kind: annotation.kind.as_str().to_owned(),
+            color: annotation.color.as_str().to_owned(),
+            rects: annotation
+                .rects
+                .into_iter()
+                .map(|rect| PdfRectDto {
+                    x: rect.x,
+                    y: rect.y,
+                    width: rect.width,
+                    height: rect.height,
+                })
+                .collect(),
+            quote: annotation.quote,
+            content: annotation.content,
+            created_at: annotation.created_at,
+            updated_at: annotation.updated_at,
+        }
+    }
+}
+
+/// What the frontend sends to create a PDF annotation.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct NewPdfAnnotationDto {
+    /// 1-based page.
+    pub page: i64,
+    /// `highlight`, `underline` or `note`.
+    pub kind: String,
+    /// `yellow`, `green`, `blue` or `pink`.
+    pub color: String,
+    /// Where the mark sits on the page.
+    pub rects: Vec<PdfRectDto>,
+    /// The marked text.
+    #[serde(default)]
+    pub quote: String,
+    /// The reader's own words.
+    #[serde(default)]
+    pub content: String,
+}
+
 /// Anotação de estudo associada a uma aula/mídia para o dono local.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StudyNoteDto {
