@@ -109,6 +109,18 @@ test('signs in, indexes the library and resumes a lesson from My learning', asyn
 	await expect(page.getByRole('heading', { name: 'Weekly goal' })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'Your courses' })).toBeVisible();
 	await expectNoAxeViolations(page, 'progress');
+
+	await page.goto(`${origin}/#/notes`);
+	await expect(page.getByText('Ownership moves values.')).toBeVisible();
+	await expectNoAxeViolations(page, 'notes');
+	await page.getByRole('button', { name: /^Pomodoro:/ }).click();
+	const timer = page.getByRole('dialog', { name: 'Pomodoro' });
+	await timer.getByRole('button', { name: 'Start' }).click();
+	await expect(timer.getByRole('button', { name: 'Pause' })).toBeVisible();
+	await expectNoAxeViolations(page, 'pomodoro');
+	await timer.getByRole('button', { name: 'Reset' }).click();
+	await page.keyboard.press('Escape');
+	await expect(timer).toBeHidden();
 	await page.goto(`${origin}/#/`);
 
 	await page.getByRole('link', { name: 'library' }).click();
