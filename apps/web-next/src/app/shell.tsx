@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { BrandMark } from '@/components/brand';
+import { DesktopTitlebar } from '@/components/desktop-titlebar';
 import { FocusMenu } from '@/components/focus-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
@@ -50,6 +51,7 @@ export function AppShell() {
 	return (
 		<div className="min-h-dvh pb-16 sm:pb-0">
 			<SkipLink />
+			<DesktopTitlebar />
 			<Topbar username={session.data.user.username} userId={session.data.user.userId} />
 			<main id="main" tabIndex={-1} className="mx-auto w-full max-w-6xl px-4 py-6 outline-none sm:py-8">
 				<Outlet />

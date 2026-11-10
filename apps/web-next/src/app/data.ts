@@ -162,3 +162,13 @@ export function useSetWeeklyGoal() {
 	const client = useQueryClient();
 	return useMutation({ mutationFn: (goal: number) => transport.setWeeklyGoal(goal), onSuccess: () => client.invalidateQueries({ queryKey: keys.rewards }) });
 }
+
+/** Desktop opens the native image picker in Rust (no file crosses IPC); the server uploads the chosen file. */
+export function useCourseCover() {
+	const client = useQueryClient();
+	const refresh = () => client.invalidateQueries({ queryKey: keys.catalog });
+	return {
+		change: useMutation({ mutationFn: ({ courseId, file }: { courseId: string; file?: File }) => transport.importCourseCover(courseId, file), onSuccess: refresh }),
+		remove: useMutation({ mutationFn: (courseId: string) => transport.removeCourseCover(courseId), onSuccess: refresh })
+	};
+}
