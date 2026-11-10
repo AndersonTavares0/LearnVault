@@ -1,44 +1,47 @@
-name: Planejamento
-description: Organize contexto, escopo e critérios de aceite de um trabalho planejado
-title: "[Planejamento] "
+name: Planning
+description: Record context, scope, and acceptance criteria for planned work
+title: "[Planning] "
 labels:
   - planning
 body:
+  - type: markdown
+    attributes:
+      value: Remove credentials, course files, private addresses, and personal data before posting. Report suspected vulnerabilities privately through the [security policy](https://github.com/AndersonTavares0/LearnVault/security/policy), not in a public issue.
   - type: textarea
     id: objective
     attributes:
-      label: Contexto e objetivo
-      description: Explique por que este trabalho existe e o resultado esperado.
+      label: Context and objective
+      description: Explain why this work is needed and its expected result.
     validations:
       required: true
   - type: textarea
     id: scope
     attributes:
-      label: Escopo
-      description: Liste o que está incluído neste planejamento.
+      label: Scope
+      description: List what this plan includes.
     validations:
       required: true
   - type: textarea
     id: out_of_scope
     attributes:
-      label: Fora de escopo
-      description: Registre o que não será tratado aqui.
+      label: Out of scope
+      description: Record what this work will not address.
     validations:
       required: true
   - type: textarea
     id: acceptance_criteria
     attributes:
-      label: Critérios de aceite
-      description: Como saberemos que o trabalho está concluído?
+      label: Acceptance criteria
+      description: How will we know the work is complete?
     validations:
       required: true
   - type: textarea
     id: risks
     attributes:
-      label: Riscos e dependências
-      description: Liste riscos, bloqueios e dependências conhecidas.
+      label: Risks and dependencies
+      description: List known risks, blockers, and dependencies.
     validations:
       required: true
   - type: markdown
     attributes:
-      value: Use Discussions para dúvidas ainda não resolvidas antes de abrir a issue.
+      value: Use Discussions for unresolved questions before opening an issue.

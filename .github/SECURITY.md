@@ -1,19 +1,13 @@
-# Política de segurança
+# Security policy
 
-## Versões suportadas
+## Supported versions
 
-Apenas a versão mais recente publicada na branch padrão recebe correções de segurança no
-momento. Snapshots de desenvolvimento podem conter comportamento inacabado.
+Security fixes apply to the latest release from the default branch. Development snapshots may contain unfinished behavior.
 
-## Reportar uma vulnerabilidade
+## Reporting a vulnerability
 
-Não abra uma issue pública para uma suspeita de vulnerabilidade. Use o relato privado de
-security advisories do GitHub para este repositório ou contate o mantenedor de forma privada
-pelo endereço configurado nas configurações de segurança do GitHub.
+Do not open a public issue for a suspected vulnerability. Use GitHub's private security advisory reporting for this repository, or contact the maintainer through a private channel configured for the project.
 
-Inclua a versão afetada, passos de reprodução, impacto e logs com segredos removidos. Nunca
-inclua arquivos de cursos, senhas, cookies de sessão, tokens de API ou detalhes de rede
-privada.
+Include the affected version, reproduction steps, impact, and logs with secrets removed. Never include course files, passwords, session cookies, API tokens, or private network details.
 
-Mantenha o `.env` e os dados persistentes fora do repositório. Execute o contêiner com a
-biblioteca montada somente para leitura e use HTTPS por meio do proxy reverso local.
+Keep `.env` files and persistent data outside version control. Mount the course library read-only and use HTTPS through a reverse proxy for network deployments.
