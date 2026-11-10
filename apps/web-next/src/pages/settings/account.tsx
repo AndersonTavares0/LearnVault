@@ -63,7 +63,9 @@ export function AvatarSettings({ user }: { user: User }) {
 		setPreview({ file, url: URL.createObjectURL(file) });
 	};
 
-	const src = preview?.url ?? (version && !failed ? transport.userAvatarUrl(version) : '');
+	// The preview is a `blob:` URL this page made from the chosen file; nothing else is ever shown from it.
+	const previewSrc = preview && /^blob:/.test(preview.url) ? preview.url : '';
+	const src = previewSrc || (version && !failed ? transport.userAvatarUrl(version) : '');
 	return (
 		<div className="flex flex-wrap items-center gap-4">
 			{src ? <img src={src} alt={tr(`Photo of ${user.username}`, `Foto de ${user.username}`)} onError={() => setFailed(true)} className="size-20 rounded-full object-cover" /> : <CircleUser className="size-20 text-muted-foreground" aria-hidden="true" />}
