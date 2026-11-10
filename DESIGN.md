@@ -1,99 +1,82 @@
 # LearnVault Design System
 
-## Vision & Creative Direction
+The design record for the React app (`apps/web-next`, epic #347). It describes the system as built; the screen-by-screen spec is [`docs/design/redesign.md`](docs/design/redesign.md). The Svelte app in `apps/web` keeps shipping until the cutover (#340) and follows the older tokens in its own CSS.
 
-**North Star: "A private course shelf — calm, durable, and content-first."**
+**Status.** The visual direction for the next iteration is being re-chosen (Progress, My learning and Notes were judged generic). This file is rewritten from the built result when that work finishes; the palette, type, accessibility and security rules below are settled and do not wait for it.
 
-LearnVault is a self-hosted study space and offline workstation designed for developers, researchers, and self-directed learners who study with course directories they already own. The experience combines familiar course discovery and clear resume affordances with workstation density and ergonomic navigation.
+## Intent
 
-The interface prioritizes content clarity, swift curriculum navigation, and the strict integrity of physical course files—which remain 100% read-only on disk.
+A private course shelf: the familiar structure of a course platform (library, course, lesson, progress) for courses the learner already owns. Calm, durable and content-first, with course covers and the next lesson doing the visual work. Udemy and Coursera are structural references only.
 
----
+## Colour
 
-## Brand Identity
+Colour is shadcn/ui's theme variables over Tailwind's palette, in OKLCH, with light and dark values. A palette is a `data-palette` value on `<html>` (`emerald` default, `teal`, `indigo`), stored per device in `learnvault-palette`. `data-theme` (`system`, `light`, `dark`) is independent.
 
-The official LearnVault brand mark is the architectural geometric **LV Monogram**, representing durable, content-first study of personal knowledge.
+| Palette | Neutral | Action, light | Action, dark | Default |
+| --- | --- | --- | --- | --- |
+| Stone + Emerald | stone | emerald-700 | emerald-400 | yes |
+| Zinc + Teal | zinc | teal-700 | teal-400 | |
+| Zinc + Indigo | zinc | indigo-600 | indigo-400 | |
 
-- **Monochromatic & Quiet:** Rendered in monochromatic tones in `currentColor`, following theme ink color and integrating harmoniously into desktop titlebars, web headers, and dark mode surfaces.
-- **Orientation Anchor:** Anchored at the top-left of global navigation (`apps/web/src/Brand.svelte`) with proportional optical spacing.
-- **Official Vector Assets:** Maintained in clean SVG vector format at `docs/design/branding/learnvault-mark.svg`, `docs/design/branding/learnvault-icon-light.svg`, and `docs/design/branding/learnvault-icon-dark.svg`.
+Semantic roles (all derived from the palette, defined once in `src/styles/app.css`):
 
----
+- `background`, `foreground`, `card`, `popover`, `secondary`, `muted`, `accent`, `border`, `input`: neutral steps.
+- `primary` (and `ring`): the palette's action colour. It marks what can be done and where progress stands, nothing else.
+- `muted-foreground`: neutral-600 in light mode, so secondary text keeps a safe margin above 4.5:1.
+- `destructive`: red-700 in light mode, red-400 in dark, with its own `destructive-foreground`; buttons use a solid fill, never a tinted one.
+- `ink` / `ink-foreground` / `ink-muted`: a deep green-black band that stays dark in both themes, used for the course header and the resume card.
 
-## Production Color Tokens
-
-Color tokens are defined in `apps/web/src/redesign.css` and use semantic roles:
-
-### Dark Theme (Default)
-- **Canvas (Background):** `#090d13` (Deep night canvas, minimizing eye fatigue during long sessions)
-- **Surface (Panels, Cards):** `#111722` (Stratified graphite surface)
-- **Surface Raised (Active & Hover):** `#182230` (Elevated surface for selection and active tabs)
-- **Borders & Dividers:** `#2a3a52` (Calm structural boundary lines)
-- **Primary Ink (Headings & Content):** `#f1f5f9` (High-contrast readable text, > 14:1 contrast ratio)
-- **Muted Ink (Secondary Metadata):** `#8e9ea9` (Clean technical typography, > 4.5:1 ratio)
-- **Accent (Primary Action):** `#d97706` (Amber tone for resume badges, study streaks, and primary actions)
-- **Blue (Info & Secondary):** `#0284c7` (Clean technical highlights and links)
-- **Success:** `#059669` (Completed lessons and active streak markers)
-- **Danger:** `#e11d48` (Missing media or unreadable paths)
-- **Focus Ring:** `#0284c7` (2px accessible focus outline)
-
-### Light Theme
-- **Canvas:** `#f8fafc` (Soft neutral canvas, non-glaring)
-- **Surface:** `#ffffff` (Pure white structured by 1px neutral lines)
-- **Surface Raised:** `#f1f5f9` (Subtle selection highlight)
-- **Borders & Dividers:** `#e2e8f0`
-- **Primary Ink:** `#0f172a` (Deep navy slate text)
-- **Muted Ink:** `#475569`
-- **Accent:** `#d97706`
-- **Blue:** `#0284c7`
-- **Success:** `#059669`
-- **Danger:** `#e11d48`
-- **Focus Ring:** `#0284c7`
-
----
+Rules: one accent colour per screen; no gradients as decoration (the generated cover gradient is content); no decorative shadows. State is never colour alone.
 
 ## Typography
 
-| Role | Family | Weight | Purpose |
-|---|---|---|---|
-| **Headings & Display** | `system-ui`, `-apple-system`, `BlinkMacSystemFont`, `Segoe UI`, `Roboto`, `Inter`, sans-serif | 400 / 600 / 700 | Library headings, course titles, prominent section entrypoints |
-| **Interface & Body** | `-apple-system`, `BlinkMacSystemFont`, `Segoe UI`, `Roboto`, `Inter`, system-ui, sans-serif | 400 / 500 / 600 | Navigation, metadata, buttons, labels, readable descriptions |
-| **Technical & Mono** | `Cascadia Code`, `Cascadia Mono`, `JetBrains Mono`, `Consolas`, `SFMono-Regular`, monospace | 500 / 600 | Video timestamps, seek indicators, durations, keyboard shortcuts |
+| Role | Face | Use |
+| --- | --- | --- |
+| Display and titles | Literata (variable, optical size) | Page titles, course and lesson titles, module names |
+| Interface and body | Geist (variable) | Navigation, controls, metadata, body |
+| Technical | JetBrains Mono (variable) | Timer clock, timestamps, shortcuts |
 
----
+Fonts are bundled with the app; the app makes no font requests to third parties and the server's CSP would block them. Titles use `text-wrap: balance`. Body measure stays under 75 characters.
 
-## Key Workspaces & Components
+## Layout
 
-### 1. Library & Browsing Modes
-- **Continue Studying:** Direct resume row with 16:9 cards, lesson title, and instant playback trigger. Presents up to 4 most recently studied lessons, allowing rapid one-click continuation of active study tracks. On mobile viewports, cards maintain a 76vw width to ensure the next item peeks out as a visible scroll affordance.
-- **Filter Groups:** Organized into distinct Progress filters (All, In progress, Not started, Completed, Favorites) and Category filters. Category names automatically strip noisy numeric folder prefixes (e.g., `01 - `, `02. `) while preserving item counts.
-- **Course Covers:** Neutral, consistent treatment for courses without uploaded covers or video posters, using deterministic earthy gradients with a subtle brand monogram watermark rather than loud letter tiles.
-- **Four Layout Views:** User-selectable and persisted in `localStorage`:
-  - *Covers (Grid):* 16:9 cards with video thumbnails, custom covers, or quiet geometric generative art.
-  - *List:* Full-width horizontal rows with course metadata, estimated durations, and lesson counts.
-  - *Compact:* Maximum density for extensive multi-hundred course collections.
-  - *Shelf:* Spine-inspired visual layout reminiscent of a technical library.
-- **Global Search:** Instant live filter accessible via `/` shortcut matching course titles and lesson names.
+- **Global navigation.** Topbar with the logo, My learning, Saved, Progress and Notes, the search box (`/` focuses it), the Pomodoro timer and the account menu. Below 640 px a bottom tab bar replaces the topbar links. The language switch is in Settings, not here.
+- **Course context.** The curriculum is a sidebar next to the player on desktop and sits below the player on small screens.
+- **Containers.** Content is at most 72 rem wide with a 16 px gutter; the player page uses a media column plus a 22 rem sidebar.
+- **Targets.** Every interactive target is at least 44×44 px, including icon buttons, tabs, menu items and form fields.
 
-### 2. Media Player & Lesson Workspace
-- **Split View:** 16:9 video or audio player on the main stage, contextual curriculum sidebar with independent scrolling.
-- **Lesson Controls:**
-  - Auto-advance toggle for continuous sequential study.
-  - Explicit completion toggle decoupled from seek position.
-  - Picture-in-Picture (PiP) and on-demand transcoding toggles when supported.
-- **Keyboard Shortcuts:** `Space` (play/pause), arrow keys (seek ±5s, volume), `m` (mute), `f` (fullscreen), `p` (PiP), documented visually with accessible ARIA keyshortcut declarations.
+## Components
 
-### 3. Study Forest & Focus Gamification
-- **Pomodoro Timer:** Configurable focus cycles (Focus, Short Break, Long Break) with sound indicators.
-- **Ecosystem Growth:** Blossoming trees and 2.5D island groves rewarded for focused sessions.
-- **Flashcards & Notes:** Spaced repetition (SM-2 based) and timestamped notes attached to lessons.
+Built on shadcn/ui with **Base UI** primitives (chosen because it is the only candidate that satisfies the server's `style-src` CSP with no violation; see ADR 0003). Components live in `src/components/ui/`. LearnVault changes to the stock set:
 
----
+- Buttons, inputs, tabs and menu items are sized to 44 px.
+- The default button's hover mixes toward the foreground colour instead of fading, to hold label contrast.
+- The tab list has a line variant for page sections.
 
-## Design Invariants & Accessibility
+Product components: `CourseCover`, `CourseCard`, `Curriculum`, `MediaPlayer`, `StudyNotes`, `Flashcards`, `FocusMenu`, `DesktopTitlebar`.
 
-1. **Host Library is Strictly Read-Only:** The interface never provides actions to move, rename, delete, or write original course files on disk.
-2. **WCAG 2.2 AA Target Ratios:** All production tokens are designed to meet or exceed 4.5:1 contrast (> 14:1 for primary ink), and interactive controls maintain minimum 44×44px click targets (formal assistive-technology certification pending external audit).
-3. **Reduced Motion:** All transitions, rotations, and animations respect `prefers-reduced-motion: reduce`.
-4. **Resilient Offline States:** Missing media or disconnected disks are communicated with clear recovery instructions without discarding progress records.
-5. **Zero AI-Slop & Clutter:** No decorative drop-shadows, nested multi-card wrappers, or saturated background gradients.
+- **Course cover.** Order of precedence: uploaded cover, automatic video thumbnail, generated cover (cloth colour from the title, darker spine, inner frame, serif title). Covers are decorative; the text beside them names the course.
+- **Progress.** A thin bar plus text ("42% complete · 3 lessons left"); the bar is `role="progressbar"` labelled by that text.
+
+## Screens
+
+My learning (resume, shelves, all courses), Course, Lesson (player), Progress, Notes, Settings and Sign in are built. Saved and Search are being added. Details: [`docs/design/redesign.md`](docs/design/redesign.md).
+
+## Gamification
+
+Habit first: streak, weekly goal, daily missions, XP and level, and quiet achievement badges (lessons completed, courses finished). No leaderboards, coins, certificates or celebratory animations. The 2.5D forest and nursery of the Svelte app are not part of this system.
+
+## Accessibility
+
+WCAG 2.2 AA is the target. Automated gates: `eslint-plugin-jsx-a11y`, axe on every route in all three palettes and both themes, and a check that fails on any CSP violation. Required behaviour: skip link and landmarks, visible focus, `prefers-reduced-motion` honoured, status changes in live regions without moving focus, and single-key shortcuts that act only when the player has focus. A manual keyboard and screen-reader pass is required before cutover. Checklist: [`docs/design/accessibility.md`](docs/design/accessibility.md).
+
+## Security and privacy in the interface
+
+No third-party requests, no HTML from user or file content (`react/no-danger`), nothing sensitive in browser storage, a generic sign-in error with rate-limit feedback, sign-out that clears per-user local data, and destructive dialogs that state their impact. Details: [`docs/design/security.md`](docs/design/security.md).
+
+## Invariants
+
+1. The interface never offers to move, rename, delete or write original course files.
+2. Every user-facing string goes through `tr(en, ptBr)`.
+3. Motion is short and shows a state change; nothing animates on its own to decorate.
+4. Missing media explains how to recover and never discards progress.

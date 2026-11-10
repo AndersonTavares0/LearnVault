@@ -1,0 +1,276 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/jetbrains-mono";
+@import "@fontsource-variable/literata/opsz.css";
+
+/* Theme and palette come from `data-theme` / `data-palette` on <html> (src/lib/theme.ts). */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@theme inline {
+  /* Literata is drawn for long reading: titles feel like book spines, the interface stays in Geist. */
+  --font-heading: "Literata Variable", ui-serif, Georgia, serif;
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "Cascadia Code", monospace;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-panel: var(--panel);
+  --color-panel-edge: var(--panel-edge);
+  --color-ink: var(--ink);
+  --color-ink-foreground: var(--ink-foreground);
+  --color-ink-muted: var(--ink-muted);
+  --font-serif: var(--font-heading);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/*
+ * Palettes (docs/design/redesign.md, "Color"): a Tailwind neutral (--n-*) plus one accent.
+ * --a-strong is the light-mode action color, --a-soft the dark-mode one; values are Tailwind's.
+ */
+:root,
+:root[data-palette="emerald"] {
+  --n-50: oklch(98.5% 0.001 106.423);
+  --n-100: oklch(97% 0.001 106.424);
+  --n-200: oklch(92.3% 0.003 48.717);
+  --n-400: oklch(70.9% 0.01 56.259);
+  --n-600: oklch(44.4% 0.011 73.639);
+  --n-800: oklch(26.8% 0.007 34.298);
+  --n-900: oklch(21.6% 0.006 56.043);
+  --n-950: oklch(14.7% 0.004 49.25);
+  --a-strong: oklch(50.8% 0.118 165.612);
+  --a-soft: oklch(76.5% 0.177 163.223);
+}
+
+:root[data-palette="teal"],
+:root[data-palette="indigo"] {
+  --n-50: oklch(98.5% 0 0);
+  --n-100: oklch(96.7% 0.001 286.375);
+  --n-200: oklch(92% 0.004 286.32);
+  --n-400: oklch(70.5% 0.015 286.067);
+  --n-600: oklch(44.2% 0.017 285.786);
+  --n-800: oklch(27.4% 0.006 286.033);
+  --n-900: oklch(21% 0.006 285.885);
+  --n-950: oklch(14.1% 0.005 285.823);
+}
+
+:root[data-palette="teal"] {
+  --a-strong: oklch(51.1% 0.096 186.391);
+  --a-soft: oklch(77.7% 0.152 181.912);
+}
+
+:root[data-palette="indigo"] {
+  --a-strong: oklch(51.1% 0.262 276.966);
+  --a-soft: oklch(67.3% 0.182 276.935);
+}
+
+:root {
+  --radius: 0.625rem;
+  --background: var(--n-100);
+  --foreground: var(--n-950);
+  --card: oklch(1 0 0);
+  --card-foreground: var(--n-950);
+  --popover: oklch(1 0 0);
+  --popover-foreground: var(--n-950);
+  --primary: var(--a-strong);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: var(--n-200);
+  --secondary-foreground: var(--n-900);
+  --muted: var(--n-200);
+  --muted-foreground: var(--n-600);
+  --accent: var(--n-200);
+  --accent-foreground: var(--n-900);
+  --destructive: oklch(50.5% 0.213 27.518); /* red-700: AA as text on n-100 and under white labels */
+  --destructive-foreground: oklch(1 0 0);
+  --border: var(--n-200);
+  --input: var(--n-200);
+  --ring: var(--a-strong);
+  --chart-1: var(--a-strong);
+  --chart-2: var(--n-600);
+  --chart-3: var(--a-soft);
+  --chart-4: var(--n-400);
+  --chart-5: var(--n-800);
+  --sidebar: var(--n-50);
+  --sidebar-foreground: var(--n-950);
+  --sidebar-primary: var(--a-strong);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: var(--n-100);
+  --sidebar-accent-foreground: var(--n-900);
+  --sidebar-border: var(--n-200);
+  --sidebar-ring: var(--a-strong);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --background: var(--n-950);
+  --foreground: var(--n-50);
+  --card: var(--n-900);
+  --card-foreground: var(--n-50);
+  --popover: var(--n-900);
+  --popover-foreground: var(--n-50);
+  --primary: var(--a-soft);
+  --primary-foreground: var(--n-950);
+  --secondary: var(--n-800);
+  --secondary-foreground: var(--n-50);
+  --muted: var(--n-800);
+  --muted-foreground: var(--n-400);
+  --accent: var(--n-800);
+  --accent-foreground: var(--n-50);
+  --destructive: oklch(70.4% 0.191 22.216);
+  --destructive-foreground: var(--n-950);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: var(--a-soft);
+  --sidebar: var(--n-900);
+  --sidebar-foreground: var(--n-50);
+  --sidebar-primary: var(--a-soft);
+  --sidebar-primary-foreground: var(--n-950);
+  --sidebar-accent: var(--n-800);
+  --sidebar-accent-foreground: var(--n-50);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: var(--a-soft);
+}
+
+/* A panel is the palette's tint at page scale: white cards sit inside it (Coursera-style shelves). */
+:root {
+  --panel: color-mix(in oklch, var(--a-strong) 9%, var(--n-100));
+  --panel-edge: color-mix(in oklch, var(--a-strong) 18%, var(--n-200));
+}
+:root[data-theme="dark"] {
+  --panel: color-mix(in oklch, var(--a-soft) 11%, var(--n-900));
+  --panel-edge: color-mix(in oklch, var(--a-soft) 20%, var(--n-800));
+}
+
+/*
+ * Styles (identity directions): "paper" is the default and keeps serif titles. "quiet" and
+ * "vault" set titles in the interface sans; "vault" also tightens corners. Selectors beat the
+ * `font-serif` utility, which `@theme inline` resolves to a literal.
+ */
+:root[data-style="quiet"] :is(h1, h2, h3, .font-serif),
+:root[data-style="vault"] :is(h1, h2, h3, .font-serif) {
+  font-family: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+}
+:root[data-style="quiet"] { --radius: 0.5rem; }
+/* Quiet: a cool, near-white page with hairlines, against Paper's warm stone. */
+:root[data-style="quiet"]:not([data-theme="dark"]) { --background: var(--n-50); --muted: var(--n-100); }
+:root[data-style="vault"] { --radius: 0.25rem; }
+
+/* Cover drawings per Style: Paper (default) shows the title cover; Quiet the lesson map; Vault the hairlines. */
+.cover-quiet, .cover-vault { display: none; }
+:root[data-style="quiet"] .cover-paper, :root[data-style="vault"] .cover-paper { display: none; }
+:root[data-style="quiet"] .cover-quiet, :root[data-style="vault"] .cover-vault { display: inline; }
+/* Only Paper draws the whole title on the cover, so only there the heading beside it collapses. */
+:root:not([data-style="quiet"]):not([data-style="vault"]) .group\/card:has([data-titled]) .card-heading { height: 0; margin: 0; opacity: 0; }
+/* Vault sets measurements, such as progress, in the mono face. */
+:root[data-style="vault"] .meta { font-family: var(--font-mono); font-size: 0.8125rem; }
+
+/* An ink band (course header, resume card) stays dark in both themes, like a reading lamp. */
+:root {
+  --ink: oklch(19% 0.012 160);
+  --ink-foreground: oklch(97% 0.004 160);
+  --ink-muted: oklch(78% 0.012 160);
+  --ink-edge: transparent;
+}
+/* On a dark page the banner steps up a level, tinted toward the accent, with a hairline edge: otherwise it reads as a hole. */
+:root[data-theme="dark"] {
+  --ink: oklch(25% 0.03 165);
+  --ink-muted: oklch(82% 0.015 160);
+  --ink-edge: oklch(100% 0 0 / 0.1);
+}
+/* Banners keep the interface sans even when a Style sets measurements in mono. */
+:root[data-style="vault"] .on-ink .meta { font-family: var(--font-sans); font-size: 0.875rem; }
+
+@layer base {
+  h1, h2 {
+    font-family: var(--font-heading);
+    font-optical-sizing: auto;
+    letter-spacing: -0.01em;
+  }
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/*
+ * Selectable text over a rendered PDF page (pdf.js TextLayer). The spans are transparent and sit
+ * exactly over the canvas text, so selection, copy and screen readers use real text. pdf.js sets
+ * positions and sizes itself, through the CSSOM, which the server CSP allows.
+ */
+.pdf-text-layer {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  line-height: 1;
+  text-align: initial;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  opacity: 1;
+}
+.pdf-text-layer :is(span, br) {
+  position: absolute;
+  color: transparent;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+.pdf-text-layer ::selection {
+  background: color-mix(in oklch, var(--primary) 35%, transparent);
+}
+
+/* Text selection takes the palette instead of the browser's blue. */
+::selection {
+  background: color-mix(in oklch, var(--primary) 30%, transparent);
+}

@@ -760,7 +760,9 @@ fn flashcards_and_focus_sessions_work_over_desktop_state() {
 
     let cards = state.list_flashcards(media_id).unwrap();
     assert_eq!(cards.len(), 1);
-
+    let all_cards = state.list_all_flashcards().unwrap();
+    assert_eq!(all_cards.len(), 1);
+    assert_eq!(all_cards[0].media_id, *media_id);
     state.delete_flashcard(&card.card_id).unwrap();
     assert!(state.list_flashcards(media_id).unwrap().is_empty());
     let missing_del = state.delete_flashcard(&card.card_id).unwrap_err();

@@ -30,12 +30,12 @@ pub enum Error {
     ReadSchemaVersion {
         /// Causa original reportada pelo SQLite.
         #[source]
-        source: rusqlite_migration::Error,
+        source: rusqlite::Error,
     },
 
     /// A cadeia de migrações não pôde ser aplicada.
     #[error("não foi possível aplicar as migrações do banco de dados")]
-    Migrations(#[from] rusqlite_migration::Error),
+    Migrations(#[source] rusqlite::Error),
 
     /// O banco foi criado por uma versão mais nova deste programa.
     ///
@@ -338,6 +338,17 @@ pub enum Error {
     StudyNoteNotFound {
         /// Identificador consultado.
         note_id: String,
+    },
+
+    /// Uma anotação de PDF tem página, tipo, cor, retângulos ou texto inválidos.
+    #[error("anotação de PDF inválida")]
+    InvalidPdfAnnotation,
+
+    /// A anotação de PDF não foi encontrada.
+    #[error("anotação de PDF não encontrada: {annotation_id}")]
+    PdfAnnotationNotFound {
+        /// Identificador consultado.
+        annotation_id: String,
     },
 
     /// O conteúdo da frente ou do verso do cartão é inválido ou excede o limite.
