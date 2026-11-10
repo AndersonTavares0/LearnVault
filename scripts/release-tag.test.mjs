@@ -25,6 +25,42 @@ function fixture(t) {
     return { directory, git, commit };
 }
 
+test('manual release repair only runs from main', t => {
+    const { directory } = fixture(t);
+    for (const [ref, expected] of [['refs/heads/main', 0], ['refs/heads/feature', 1]]) {
+        const result = spawnSync('bash', ['-c', runBlock('Require the trusted release workflow ref')], {
+            cwd: directory, encoding: 'utf8',
+            env: { PATH: process.env.PATH, EVENT_NAME: 'workflow_dispatch', WORKFLOW_REF: ref }
+        });
+        assert.equal(result.status, expected, result.stderr);
+    }
+    const releaseEvent = spawnSync('bash', ['-c', runBlock('Require the trusted release workflow ref')], {
+        cwd: directory, encoding: 'utf8',
+        env: { PATH: process.env.PATH, EVENT_NAME: 'release', WORKFLOW_REF: 'refs/tags/v1.2.3' }
+    });
+    assert.equal(releaseEvent.status, 0, releaseEvent.stderr);
+});
+
+test('release repair rejects missing, draft, and prerelease targets without creating or publishing releases', t => {
+    const { directory } = fixture(t);
+    const script = runBlock('Require an existing published stable release');
+    const wrapped = `gh() { printf '%s' "$GH_RESULT"; }\n${script}`;
+    const runWithFunction = metadata => spawnSync('bash', ['-c', wrapped], {
+        cwd: directory, encoding: 'utf8',
+        env: { PATH: process.env.PATH, GH_TOKEN: 'synthetic', GITHUB_REPOSITORY: 'owner/repo', RELEASE_TAG: 'v1.2.3', GH_RESULT: metadata }
+    });
+    const published = runWithFunction('{"isDraft":false,"isPrerelease":false}');
+    assert.equal(published.status, 0, published.stderr);
+    assert.notEqual(runWithFunction('{"isDraft":true,"isPrerelease":false}').status, 0);
+    assert.notEqual(runWithFunction('{"isDraft":false,"isPrerelease":true}').status, 0);
+    const missing = spawnSync('bash', ['-c', `gh() { return 1; }\n${script}`], {
+        cwd: directory, encoding: 'utf8',
+        env: { PATH: process.env.PATH, GH_TOKEN: 'synthetic', GITHUB_REPOSITORY: 'owner/repo', RELEASE_TAG: 'v1.2.3' }
+    });
+    assert.notEqual(missing.status, 0);
+    assert.doesNotMatch(workflow, /gh release create|--draft=false/);
+});
+
 test('release resolution uses the requested tag when dispatch HEAD has advanced', t => {
     const { directory, git, commit } = fixture(t);
     git('-c', 'user.name=Security Test', '-c', 'user.email=test@example.invalid', 'commit', '--quiet', '--allow-empty', '-m', 'Later synthetic change');

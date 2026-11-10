@@ -18,12 +18,22 @@ jobs:
     name: Validate release tag
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
       commit_sha: ${{ steps.commit.outputs.commit_sha }}
-      is_draft: ${{ steps.release-meta.outputs.is_draft }}
     steps:
+      - name: Require the trusted release workflow ref
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "workflow_dispatch" && "$WORKFLOW_REF" != "refs/heads/main" ]]; then
+            echo "::error::Manual release repair must run from main" >&2
+            exit 1
+          fi
       - name: Require a strict vX.Y.Z tag
         id: tag
         shell: bash
@@ -36,22 +46,17 @@ jobs:
             exit 1
           fi
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
-      - name: Confirm or initialize release and tag
-        id: release-meta
+      - name: Require an existing published stable release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.tag.outputs.tag }}
         run: |
           set -euo pipefail
-          if meta="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease 2>/dev/null)"; then
-            is_draft="$(printf '%s' "$meta" | jq -r .isDraft)"
-            echo "Release $RELEASE_TAG encontrada (draft: $is_draft)."
-            echo "is_draft=$is_draft" >> "$GITHUB_OUTPUT"
-          else
-            echo "Release $RELEASE_TAG não existe no GitHub. Criando como draft para validação segura sem expor release vazia."
-            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --target "${{ github.sha }}" --draft --title "$RELEASE_TAG" --notes "LearnVault release $RELEASE_TAG"
-            echo "is_draft=true" >> "$GITHUB_OUTPUT"
+          meta="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease)"
+          if [[ "$(jq -r .isDraft <<<"$meta")" != "false" || "$(jq -r .isPrerelease <<<"$meta")" != "false" ]]; then
+            echo "::error::Only an existing published stable release can be repaired" >&2
+            exit 1
           fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -401,12 +406,11 @@ jobs:
           gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
             "${upload_args[@]}" \
             --clobber
-      - name: Attribute release contributors and publish
+      - name: Attribute release contributors
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
-          IS_DRAFT: ${{ needs.validate-tag.outputs.is_draft }}
         run: |
           set -euo pipefail
           notes="$(mktemp)"
@@ -436,8 +440,4 @@ jobs:
               } >> "$notes"
             fi
             gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --notes-file "$notes"
-          fi
-          if [[ "$IS_DRAFT" == "true" ]]; then
-            echo "Publicando release $RELEASE_TAG agora que todos os artefatos assinados e checksums foram validados..."
-            gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false
           fi
