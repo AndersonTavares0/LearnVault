@@ -1,35 +1,38 @@
-name: Solicitação de feature
-description: Proponha uma melhoria de comportamento ou produto
+name: Feature request
+description: Propose an improvement to behavior or the product
 title: "feat: "
 labels:
   - enhancement
 body:
+  - type: markdown
+    attributes:
+      value: Remove credentials, course files, private addresses, and personal data before posting. Report suspected vulnerabilities privately through the [security policy](https://github.com/AndersonTavares0/LearnVault/security/policy), not in a public issue.
   - type: textarea
     id: problem
     attributes:
-      label: Problema a resolver
-      description: Qual necessidade ou limitação do usuário será resolvida?
+      label: Problem to solve
+      description: Which user need or limitation will this address?
     validations:
       required: true
   - type: textarea
     id: proposal
     attributes:
-      label: Comportamento proposto
+      label: Proposed behavior
     validations:
       required: true
   - type: textarea
     id: alternatives
     attributes:
-      label: Alternativas consideradas
+      label: Alternatives considered
     validations:
       required: true
   - type: textarea
     id: acceptance
     attributes:
-      label: Critérios de aceite
-      description: Como saberemos que a mudança está concluída?
+      label: Acceptance criteria
+      description: How will we know the change is complete?
     validations:
       required: true
   - type: markdown
     attributes:
-      value: Features exigem uma issue antes da implementação. Use Discussions para dúvidas de design ainda não resolvidas.
+      value: Features require an issue before implementation. Use Discussions for unresolved design questions.

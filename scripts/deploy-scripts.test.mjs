@@ -64,8 +64,9 @@ test('release workflow mandates signed Windows updater assets and latest.json', 
     assert.match(content, /learnvault-windows-\$\{RELEASE_TAG\}\.nsis\.zip\.sig/, 'deve incluir a assinatura .sig nos esperados');
     assert.match(content, /latest\.json/, 'deve incluir latest.json nos esperados');
     assert.match(content, /windows-x86_64-nsis/, 'manifesto latest.json deve incluir o alvo windows-x86_64-nsis');
-    assert.match(content, /is_draft/, 'deve propagar is_draft para publicação atômica');
-    assert.match(content, /--draft=false/, 'deve publicar release apenas após upload e validação completa');
+    assert.match(content, /Only an existing published stable release can be repaired/, 'reparo manual deve exigir release estável já publicada');
+    assert.match(content, /refs\/heads\/main/, 'reparo manual deve usar a definição confiável de main');
+    assert.doesNotMatch(content, /gh release create|--draft=false/, 'reparo não deve criar nem publicar releases');
     assert.match(content, /docker\/setup-buildx-action@[0-9a-f]{40}/, 'setup-buildx-action deve usar commit SHA completo');
     assert.match(content, /docker\/login-action@[0-9a-f]{40}/, 'login-action deve usar commit SHA completo');
     assert.match(content, /docker\/metadata-action@[0-9a-f]{40}/, 'metadata-action deve usar commit SHA completo');

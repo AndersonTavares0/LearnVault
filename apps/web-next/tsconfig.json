@@ -1,0 +1,34 @@
+{
+	"compilerOptions": {
+		"esModuleInterop": true,
+		"forceConsistentCasingInFileNames": true,
+		"resolveJsonModule": true,
+		"skipLibCheck": true,
+		"sourceMap": true,
+		"strict": true,
+		"noEmit": true,
+		"jsx": "react-jsx",
+		"moduleResolution": "bundler",
+		"target": "ES2022",
+		"module": "ESNext",
+		"lib": [
+			"ES2022",
+			"DOM",
+			"DOM.Iterable"
+		],
+		"types": [
+			"vite/client",
+			"node"
+		],
+		"paths": {
+			"@/*": [
+				"./src/*"
+			]
+		}
+	},
+	"include": [
+		"src",
+		"vite.config.ts",
+		"eslint.config.js"
+	]
+}

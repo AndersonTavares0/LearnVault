@@ -58,3 +58,21 @@ A crítica independente da candidatura K v5 pontuou:
 ## Post-K review (reopening, see #330)
 
 Three maintainer-confirmed functional/accessibility failures satisfy the reopening clause above: #317 (layout overflow at ~1270px), #319 (language toggle unreachable at desktop widths), and #324 (27 interactive elements below the WCAG 44×44px target). This authorizes a composition revision within K — library, course page, and Player — using course platforms as a structural reference only, never as a source of code, assets, or pixel-level layout (clean-room policy, [`.github/CONTRIBUTING.md`](../../.github/CONTRIBUTING.md)). The original A/B/C/K evaluation above remains a historical record and is not redone.
+
+## Direction L: course-platform redesign on React (reopened, see #347)
+
+On 2026-11-09 the maintainer reopened the visual direction as part of the React migration
+([ADR 0003](../architecture/adr/0003-react-frontend.md)). The reasons were recurring layout and target-size failures under K (#317, #319, #324, #321), CSS debt that blocks further fixes, and a
+documented palette that no longer matches the shipped one. Direction L replaces K. The A/B/C/K
+records above stay as history.
+
+L keeps K's product stance (local-first, no marketplace, ratings, or enrollment). It changes:
+
+- **Navigation.** A topbar holds the four global destinations: My learning, Progress, Notes, and the account menu. A curriculum sidebar appears only inside the course page and the player. Mobile uses a bottom tab bar. Research behind this choice: course platforms keep curriculum and completion next to the lesson, and Open edX is restoring the course sidebar it removed in 2017.
+- **Palette.** We use ready-made shadcn/ui themes built on the Tailwind palette instead of custom tokens. The default is **Stone + Emerald**; users can switch to **Zinc + Teal** or **Zinc + Indigo** under Settings → Appearance. Pure blue and purple accents are avoided because they read as other platforms' brands.
+- **Gamification.** Habit and visible progress come first: a forgiving streak, the weekly goal, per-course progress, and the next lesson one click away. XP, levels, and achievements stay on the Progress screen. The forest, island, and nursery are removed.
+- **Accessibility and security** are written requirements. See [accessibility.md](accessibility.md) and [security.md](security.md).
+
+The screen-level spec lives in [redesign.md](redesign.md). It becomes `DESIGN.md` at cutover.
+
+**Gate.** L is scored with the same rubric and threshold (weighted ≥ 4.00, no dimension below 3). The scoring is done by a blind critique of the implemented React screens before cutover (#340), not of mockups. Until then L is the approved working direction, and `DESIGN.md` describes what currently ships.

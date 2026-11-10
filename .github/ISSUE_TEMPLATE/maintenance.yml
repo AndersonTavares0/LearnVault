@@ -1,32 +1,35 @@
-name: Dependências ou manutenção de CI
-description: Atualize dependências ou faça um ajuste simples de CI
+name: Dependencies or CI maintenance
+description: Update dependencies or make a small CI adjustment
 title: "chore: "
 body:
+  - type: markdown
+    attributes:
+      value: Remove credentials, course files, private addresses, and personal data before posting. Report suspected vulnerabilities privately through the [security policy](https://github.com/AndersonTavares0/LearnVault/security/policy), not in a public issue.
   - type: dropdown
     id: area
     attributes:
-      label: Área
+      label: Area
       options:
-        - Dependências
+        - Dependencies
         - GitHub Actions
         - CI/CD
-        - Ferramentas de desenvolvimento
+        - Development tools
     validations:
       required: true
   - type: textarea
     id: change
     attributes:
-      label: Mudança proposta
-      description: Explique o motivo e o impacto esperado.
+      label: Proposed change
+      description: Explain the reason and expected impact.
     validations:
       required: true
   - type: textarea
     id: validation
     attributes:
-      label: Validação
-      description: Liste os checks que devem continuar passando.
+      label: Validation
+      description: List the checks that must continue to pass.
     validations:
       required: true
   - type: markdown
     attributes:
-      value: Issue opcional para mudanças pequenas. Use uma issue de feature se houver mudança de comportamento.
+      value: An issue is optional for small changes. Use a feature issue for behavior changes.

@@ -7,10 +7,9 @@ use std::{
 
 use rusqlite::config::DbConfig;
 use rusqlite::{Connection, OptionalExtension, params};
-use rusqlite_migration::SchemaVersion;
 
 use crate::error::{Error, Result};
-use crate::migrations::{MIGRATIONS, SCHEMA_VERSION};
+use crate::migrations::{SCHEMA_VERSION, migrate_to_latest, schema_version};
 
 /// Conexão SQLite com o schema do domínio aplicado.
 ///
@@ -54,15 +53,7 @@ impl Database {
 
     /// Versão do schema registrada no banco (`PRAGMA user_version`).
     pub fn schema_version(&self) -> Result<usize> {
-        Ok(
-            match MIGRATIONS
-                .current_version(&self.conn)
-                .map_err(read_schema_version)?
-            {
-                SchemaVersion::NoneSet => 0,
-                SchemaVersion::Inside(version) | SchemaVersion::Outside(version) => version.get(),
-            },
-        )
+        schema_version(&self.conn).map_err(read_schema_version)
     }
 
     /// Verifica se o banco está exatamente no schema suportado e mantém as tabelas essenciais.
@@ -71,13 +62,7 @@ impl Database {
     /// nenhuma delas é uma dependência pronta para o servidor HTTP, mesmo quando a leitura da
     /// versão não produz erro.
     pub fn has_current_schema(&self) -> Result<bool> {
-        let version = MIGRATIONS
-            .current_version(&self.conn)
-            .map_err(read_schema_version)?;
-        let SchemaVersion::Inside(version) = version else {
-            return Ok(false);
-        };
-        if version.get() != CURRENT_SCHEMA_VERSION {
+        if schema_version(&self.conn).map_err(read_schema_version)? != CURRENT_SCHEMA_VERSION {
             return Ok(false);
         }
 
@@ -112,6 +97,17 @@ impl Database {
                     ("owner_id", "BINARY"),
                     ("media_id", "BINARY"),
                     ("position_seconds", "BINARY"),
+                ],
+            )?
+            || !index_matches(
+                &self.conn,
+                "pdf_annotation",
+                Some("pdf_annotation_owner_media_idx"),
+                false,
+                &[
+                    ("owner_id", "BINARY"),
+                    ("media_id", "BINARY"),
+                    ("page", "BINARY"),
                 ],
             )?
             || !index_matches(
@@ -163,12 +159,10 @@ impl Database {
         // A versão é lida antes de qualquer alteração no arquivo. Recusar um schema mais
         // novo precisa ser uma operação sem efeito colateral: nada de trocar o journal ou
         // criar tabelas em um banco que este binário não conhece.
-        if let SchemaVersion::Outside(found) = MIGRATIONS
-            .current_version(&conn)
-            .map_err(read_schema_version)?
-        {
+        let found = schema_version(&conn).map_err(read_schema_version)?;
+        if found > SCHEMA_VERSION {
             return Err(Error::SchemaTooNew {
-                found: found.get(),
+                found,
                 known: SCHEMA_VERSION,
             });
         }
@@ -178,7 +172,7 @@ impl Database {
         }
 
         let mut conn = conn;
-        MIGRATIONS.to_latest(&mut conn)?;
+        migrate_to_latest(&mut conn).map_err(Error::Migrations)?;
 
         Ok(Self { conn })
     }
@@ -197,7 +191,8 @@ impl Database {
                 source,
             })?;
         }
-        let temp_path = dest_path.with_extension(format!("tmp.{}", std::process::id()));
+        let (_staging_directory, staging_file) = private_staging_file(dest_path)?;
+        let temp_path = staging_file.path().to_path_buf();
         let mut dest_conn = Connection::open(&temp_path).map_err(|source| Error::OpenDatabase {
             path: temp_path.clone(),
             source,
@@ -241,14 +236,13 @@ impl Database {
         }
         drop(dest_conn);
 
-        if dest_path.exists() {
-            let _ = std::fs::remove_file(dest_path);
-        }
-        std::fs::rename(&temp_path, dest_path).map_err(|source| Error::BackupIo {
-            operation: "renomear arquivo de backup para destino final".to_owned(),
-            path: dest_path.to_path_buf(),
-            source,
-        })?;
+        staging_file
+            .persist(dest_path)
+            .map_err(|error| Error::BackupIo {
+                source: error.error,
+                operation: "renomear arquivo de backup para destino final".to_owned(),
+                path: dest_path.to_path_buf(),
+            })?;
 
         Ok(())
     }
@@ -287,12 +281,10 @@ impl Database {
             return Err(Error::LegacyGoDatabase);
         }
 
-        if let SchemaVersion::Outside(found) = MIGRATIONS
-            .current_version(&backup_conn)
-            .map_err(read_schema_version)?
-        {
+        let found = schema_version(&backup_conn).map_err(read_schema_version)?;
+        if found > SCHEMA_VERSION {
             return Err(Error::SchemaTooNew {
-                found: found.get(),
+                found,
                 known: SCHEMA_VERSION,
             });
         }
@@ -305,23 +297,29 @@ impl Database {
             })?;
         }
 
-        let rollback_copy = if target_path.exists() {
+        if target_path.exists() {
             let timestamp = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .map(|d| d.as_secs())
                 .unwrap_or(0);
             let copy_path = target_path.with_extension(format!("rollback.{timestamp}.bak"));
-            std::fs::copy(target_path, &copy_path).map_err(|source| Error::BackupIo {
-                operation: "criar cópia de segurança antes do restore".to_owned(),
+            let (_directory, mut copy) = private_staging_file(target_path)?;
+            let copy_result = (|| -> std::io::Result<()> {
+                std::io::copy(&mut std::fs::File::open(target_path)?, copy.as_file_mut())?;
+                copy.as_file().sync_all()?;
+                copy.persist_noclobber(&copy_path)
+                    .map_err(|error| error.error)?;
+                Ok(())
+            })();
+            copy_result.map_err(|source| Error::BackupIo {
+                operation: "create rollback copy".to_owned(),
                 path: copy_path.clone(),
                 source,
             })?;
-            Some(copy_path)
-        } else {
-            None
-        };
+        }
 
-        let temp_target = target_path.with_extension(format!("tmp.restore.{}", std::process::id()));
+        let (_staging_directory, staging_file) = private_staging_file(target_path)?;
+        let temp_target = staging_file.path().to_path_buf();
         let mut dest_conn =
             Connection::open(&temp_target).map_err(|source| Error::OpenDatabase {
                 path: temp_target.clone(),
@@ -365,19 +363,13 @@ impl Database {
         let _ = std::fs::remove_file(&wal);
         let _ = std::fs::remove_file(&shm);
 
-        if target_path.exists() {
-            let _ = std::fs::remove_file(target_path);
-        }
-        if let Err(source) = std::fs::rename(&temp_target, target_path) {
-            if let Some(ref copy) = rollback_copy {
-                let _ = std::fs::copy(copy, target_path);
-            }
-            return Err(Error::BackupIo {
-                operation: "substituir banco com o arquivo restaurado".to_owned(),
+        staging_file
+            .persist(target_path)
+            .map_err(|error| Error::BackupIo {
+                operation: "replace restored database".to_owned(),
                 path: target_path.to_path_buf(),
-                source,
-            });
-        }
+                source: error.error,
+            })?;
 
         Ok(())
     }
@@ -526,6 +518,22 @@ const REQUIRED_TABLES: &[TableDefinition] = &[
             ("owner_id", "TEXT", true, None, 0),
             ("media_id", "TEXT", true, None, 0),
             ("position_seconds", "INTEGER", true, None, 0),
+            ("content", "TEXT", true, None, 0),
+            ("created_at", "INTEGER", true, None, 0),
+            ("updated_at", "INTEGER", true, None, 0),
+        ],
+    },
+    TableDefinition {
+        name: "pdf_annotation",
+        columns: &[
+            ("annotation_id", "TEXT", true, None, 1),
+            ("owner_id", "TEXT", true, None, 0),
+            ("media_id", "TEXT", true, None, 0),
+            ("page", "INTEGER", true, None, 0),
+            ("kind", "TEXT", true, None, 0),
+            ("color", "TEXT", true, None, 0),
+            ("rects", "TEXT", true, None, 0),
+            ("quote", "TEXT", true, None, 0),
             ("content", "TEXT", true, None, 0),
             ("created_at", "INTEGER", true, None, 0),
             ("updated_at", "INTEGER", true, None, 0),
@@ -687,6 +695,14 @@ fn expected_checks(table: &str) -> &'static [&'static str] {
             "position_seconds >= 0",
             "length(trim(content)) > 0 and length(content) <= 10000",
         ],
+        "pdf_annotation" => &[
+            "page >= 1 and page <= 100000",
+            "kind in ('highlight', 'underline', 'note')",
+            "color in ('yellow', 'green', 'blue', 'pink')",
+            "length(rects) > 0 and length(rects) <= 20000",
+            "length(quote) <= 4000",
+            "length(content) <= 10000",
+        ],
         "flashcard" => &[
             "length(trim(front)) > 0 and length(front) <= 4000",
             "length(trim(back)) > 0 and length(back) <= 4000",
@@ -718,6 +734,7 @@ fn expected_foreign_keys(
             ("library_id", "library", "library_id", "NO ACTION"),
         ],
         "study_note" => &[("media_id", "media", "media_id", "NO ACTION")],
+        "pdf_annotation" => &[("media_id", "media", "media_id", "NO ACTION")],
         "flashcard" => &[("media_id", "media", "media_id", "NO ACTION")],
         "user_course_access" => &[("user_id", "user", "user_id", "CASCADE")],
         _ => &[],
@@ -932,7 +949,7 @@ fn is_legacy_go_database(conn: &Connection) -> Result<bool> {
 }
 
 /// Traduz a falha de leitura da versão do schema, que não é uma migração.
-fn read_schema_version(source: rusqlite_migration::Error) -> Error {
+fn read_schema_version(source: rusqlite::Error) -> Error {
     Error::ReadSchemaVersion { source }
 }
 
@@ -946,4 +963,26 @@ pub(crate) fn now_unix_seconds() -> i64 {
         Ok(elapsed) => i64::try_from(elapsed.as_secs()).unwrap_or(i64::MAX),
         Err(_) => 0,
     }
+}
+
+/// Keep SQLite staging and sidecars private until atomic promotion to the destination.
+fn private_staging_file(
+    destination: &Path,
+) -> Result<(tempfile::TempDir, tempfile::NamedTempFile)> {
+    let parent = destination
+        .parent()
+        .filter(|path| !path.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    let staging = (|| -> std::io::Result<_> {
+        let directory = tempfile::Builder::new()
+            .prefix(".learnvault-")
+            .tempdir_in(parent)?;
+        let file = tempfile::NamedTempFile::new_in(directory.path())?;
+        Ok((directory, file))
+    })();
+    staging.map_err(|source| Error::BackupIo {
+        operation: "create private database staging".to_owned(),
+        path: destination.to_path_buf(),
+        source,
+    })
 }
