@@ -287,7 +287,7 @@ function LessonRail({ sequence, current, isDone }: { sequence: { path: string }[
 	if (sequence.length < 2 || sequence.length > 60) return null;
 	return (
 		<div aria-hidden="true" className="flex gap-1">
-			{sequence.map((item, index) => <span key={item.path} className={cn('h-1.5 flex-1 rounded-full', isDone(item.path) ? 'bg-primary' : index === current ? 'bg-amber-500' : 'bg-muted')} />)}
+			{sequence.map((item, index) => <span key={item.path} className={cn('h-1.5 flex-1 rounded-full', isDone(item.path) ? 'bg-primary' : index === current ? 'bg-primary/45' : 'bg-muted')} />)}
 		</div>
 	);
 }
