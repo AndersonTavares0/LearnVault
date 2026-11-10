@@ -12,7 +12,9 @@ const templatePath = path.join(root, '.github/rulesets/default-branch.template.j
 
 test('learnvault-main.json is valid and enforces required invariants', () => {
 	assert.ok(fs.existsSync(learnvaultPath), 'learnvault-main.json must exist');
-	const content = JSON.parse(fs.readFileSync(learnvaultPath, 'utf8'));
+	const source = fs.readFileSync(learnvaultPath, 'utf8');
+	assert.equal(source.match(/"allowed_merge_methods"\s*:/g)?.length, 1, 'JSON must not contain duplicate merge policy keys');
+	const content = JSON.parse(source);
 
 	assert.equal(content.target, 'branch');
 	assert.equal(content.enforcement, 'active');
@@ -27,6 +29,7 @@ test('learnvault-main.json is valid and enforces required invariants', () => {
 
 	const prRule = content.rules.find((r) => r.type === 'pull_request');
 	assert.equal(prRule.parameters.required_approving_review_count, 0, 'Solo maintainer compatibility');
+	assert.deepEqual(prRule.parameters.allowed_merge_methods, ['squash'], 'Production merges follow the squash-only policy');
 	assert.equal(prRule.parameters.required_review_thread_resolution, true, 'Conversation resolution mandatory');
 	assert.equal(prRule.parameters.dismiss_stale_reviews_on_push, true, 'Dismiss stale reviews on push');
 

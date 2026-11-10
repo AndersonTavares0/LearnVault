@@ -11,6 +11,30 @@ log() {
     printf "[%s] [Updater Daemon] %s\n" "$(date +'%Y-%m-%d %H:%M:%S')" "$*"
 }
 
+# Return minutes since midnight only for an exact 24-hour clock value.
+time_minutes() {
+    case "$1" in
+        [01][0-9]:[0-5][0-9]|2[0-3]:[0-5][0-9]) ;;
+        *) return 2 ;;
+    esac
+    hour=${1%:*}; minute=${1#*:}
+    hour=${hour#0}; minute=${minute#0}
+    printf '%s\n' "$(( ${hour:-0} * 60 + ${minute:-0} ))"
+}
+
+in_window() {
+    window="$1"
+    start=$(time_minutes "${window%-*}") || return 2
+    end=$(time_minutes "${window#*-}") || return 2
+    current=$(time_minutes "${2:-$(date +%H:%M)}") || return 2
+    [ "$start" -ne "$end" ] || return 2
+    if [ "$start" -lt "$end" ]; then
+        [ "$current" -ge "$start" ] && [ "$current" -lt "$end" ]
+    else
+        [ "$current" -ge "$start" ] || [ "$current" -lt "$end" ]
+    fi
+}
+
 if [ "$AUTO_UPDATE" != "true" ]; then
     log "AUTO_UPDATE está desativado (padrão seguro). O container updater ficará ocioso."
     log "Para habilitar atualizações automáticas, defina AUTO_UPDATE=true no .env."
@@ -18,6 +42,27 @@ if [ "$AUTO_UPDATE" != "true" ]; then
     while true; do sleep 86400; done
 fi
 
+# Reject invalid opt-in settings before any Docker or package-manager operation.
+window_status=0
+in_window "$AUTO_UPDATE_WINDOW" "00:00" || window_status=$?
+if [ "$window_status" -eq 2 ]; then
+    log "Invalid AUTO_UPDATE_WINDOW: use distinct HH:MM-HH:MM endpoints."
+    exit 1
+fi
+case "$CHECK_INTERVAL_SECONDS" in
+    ''|*[!0-9]*) log "CHECK_INTERVAL_SECONDS must be a positive integer."; exit 1 ;;
+esac
+if [ "${#CHECK_INTERVAL_SECONDS}" -gt 10 ]; then
+    log "CHECK_INTERVAL_SECONDS exceeds the portable integer range."
+    exit 1
+fi
+while [ "${CHECK_INTERVAL_SECONDS#0}" != "$CHECK_INTERVAL_SECONDS" ]; do
+    CHECK_INTERVAL_SECONDS=${CHECK_INTERVAL_SECONDS#0}
+done
+if [ -z "$CHECK_INTERVAL_SECONDS" ] || [ "$CHECK_INTERVAL_SECONDS" -gt 2147483647 ]; then
+    log "CHECK_INTERVAL_SECONDS must be between 1 and 2147483647."
+    exit 1
+fi
 # Assegura que o plugin do docker compose está presente se executando em Alpine/docker:cli
 if ! docker compose version >/dev/null 2>&1; then
     if command -v apk >/dev/null 2>&1; then
@@ -28,19 +73,6 @@ fi
 
 log "Iniciando daemon de atualização automática (Janela: ${AUTO_UPDATE_WINDOW}, Intervalo: ${CHECK_INTERVAL_SECONDS}s)..."
 
-in_window() {
-    # Janela no formato HH:MM-HH:MM
-    window="$1"
-    start_hour=$(printf "%s" "$window" | cut -d'-' -f1 | cut -d':' -f1)
-    end_hour=$(printf "%s" "$window" | cut -d'-' -f2 | cut -d':' -f1)
-    current_hour=$(date +%H)
-    
-    # Compara horas como inteiros
-    if [ "$current_hour" -ge "$start_hour" ] && [ "$current_hour" -lt "$end_hour" ]; then
-        return 0
-    fi
-    return 1
-}
 
 while true; do
     if in_window "$AUTO_UPDATE_WINDOW"; then
