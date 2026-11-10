@@ -58,7 +58,7 @@ function Topbar({ username, userId }: { username: string; userId: string }) {
 	const otherLocale = locale === 'en' ? 'pt-BR' : 'en';
 
 	return (
-		<header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/80">
+		<header className="sticky top-0 z-40 border-b print:hidden bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/80">
 			<div className="mx-auto flex h-16 max-w-6xl items-center gap-2 px-4">
 				<Link to="/" className="mr-2 flex min-h-11 items-center gap-2 rounded-md font-semibold" aria-label={tr('LearnVault home', 'Início do LearnVault')}>
 					<BrandMark className="size-7 text-primary" />
@@ -139,7 +139,7 @@ function SearchBox() {
 function MobileTabs() {
 	const items: { to: string; label: string; icon: typeof BookOpen; end?: boolean }[] = [...navItems(), { to: '/settings', label: tr('Account', 'Conta'), icon: CircleUser }];
 	return (
-		<nav aria-label={tr('Sections', 'Seções')} className="fixed inset-x-0 bottom-0 z-40 border-t bg-background pb-[env(safe-area-inset-bottom)] sm:hidden">
+		<nav aria-label={tr('Sections', 'Seções')} className="fixed inset-x-0 bottom-0 z-40 border-t bg-background pb-[env(safe-area-inset-bottom)] sm:hidden print:hidden">
 			<ul className="grid grid-cols-4">
 				{items.map((item) => (
 					<li key={item.to}>

@@ -104,6 +104,11 @@ test('signs in, indexes the library and resumes a lesson from My learning', asyn
 	await page.getByRole('button', { name: 'Save note' }).click();
 	await expect(page.getByText('Ownership moves values.')).toBeVisible();
 	await expectNoAxeViolations(page, 'lesson');
+
+	await page.goto(`${origin}/#/progress`);
+	await expect(page.getByRole('heading', { name: 'Weekly goal' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Your courses' })).toBeVisible();
+	await expectNoAxeViolations(page, 'progress');
 	await page.goto(`${origin}/#/`);
 
 	await page.getByRole('link', { name: 'library' }).click();

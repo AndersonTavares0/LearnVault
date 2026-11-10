@@ -6,7 +6,9 @@ import { AppShell } from './shell';
 import { HomePage } from '@/pages/home';
 import { LoginPage } from '@/pages/login';
 import { CourseRoute } from '@/pages/course';
-import { NotesPage, ProgressPage, SettingsPage } from './pages';
+import { CertificatePage } from '@/pages/certificate';
+import { ProgressPage } from '@/pages/progress';
+import { NotesPage, SettingsPage } from './pages';
 
 /** Strips the leading `#` so a legacy hash can be used as a router path. */
 const toPath = (hash: string) => hash.replace(/^#/, '');
@@ -35,6 +37,7 @@ export const routes: RouteObject[] = [
 			{ path: 'home', element: <Navigate to="/" replace /> },
 			{ path: 'course/:courseId/*', element: <CourseRoute /> },
 			{ path: 'progress', element: <ProgressPage /> },
+			{ path: 'progress/certificate/:courseId', element: <CertificatePage /> },
 			{ path: 'notes', element: <NotesPage /> },
 			{ path: 'settings', element: <SettingsPage /> }
 		]
