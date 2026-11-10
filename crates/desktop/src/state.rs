@@ -485,6 +485,15 @@ impl DesktopState {
         study::list_flashcards(&database, media_id)
     }
 
+    /// Lists every card of the local owner, for the review hub.
+    pub fn list_all_flashcards(&self) -> Result<Vec<FlashcardDto>, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::list_all_flashcards(&database)
+    }
+
     /// Cria um novo cartão de memorização associado a uma mídia.
     pub fn create_flashcard(
         &self,

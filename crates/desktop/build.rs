@@ -32,6 +32,7 @@ fn main() {
             "desktop_update_pdf_annotation",
             "desktop_delete_pdf_annotation",
             "desktop_list_flashcards",
+            "desktop_list_all_flashcards",
             "desktop_create_flashcard",
             "desktop_update_flashcard",
             "desktop_delete_flashcard",

@@ -8,6 +8,7 @@ import { LoginPage } from '@/pages/login';
 import { CourseRoute } from '@/pages/course';
 import { ProgressPage } from '@/pages/progress';
 import { NotesPage } from '@/pages/notes';
+import { ReviewPage } from '@/pages/review';
 import { SettingsPage } from '@/pages/settings';
 
 /** Strips the leading `#` so a legacy hash can be used as a router path. */
@@ -37,6 +38,7 @@ export const routes: RouteObject[] = [
 			{ path: 'home', element: <Navigate to="/" replace /> },
 			{ path: 'course/:courseId/*', element: <CourseRoute /> },
 			{ path: 'progress', element: <ProgressPage /> },
+			{ path: 'review', element: <ReviewPage /> },
 			{ path: 'notes', element: <NotesPage /> },
 			{ path: 'settings', element: <SettingsPage /> }
 		]

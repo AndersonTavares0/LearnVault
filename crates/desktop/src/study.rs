@@ -287,6 +287,13 @@ pub fn list_flashcards(database: &Database, media_id: &str) -> Result<Vec<Flashc
         .map_err(study_error)
 }
 
+/// Lists every card of the local owner, soonest due first, for the review hub.
+pub fn list_all_flashcards(database: &Database) -> Result<Vec<FlashcardDto>, IpcError> {
+    learnvault_core::list_all_flashcards(database, LOCAL_OWNER_ID)
+        .map(|cards| cards.into_iter().map(FlashcardDto::from).collect())
+        .map_err(study_error)
+}
+
 /// Cria um novo cartão de memorização para o dono local.
 pub fn create_flashcard(
     database: &Database,

@@ -1,4 +1,4 @@
-import { BookOpen, Bookmark, ChartNoAxesColumn, CircleUser, LogOut, NotebookPen, Search, Settings } from 'lucide-react';
+import { BookOpen, ChartNoAxesColumn, Layers, CircleUser, LogOut, NotebookPen, Search, Settings } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router';
@@ -20,7 +20,7 @@ import { clearUserLocalData } from './preferences';
 
 const navItems = () => [
 	{ to: '/', label: tr('My learning', 'Meu aprendizado'), icon: BookOpen, end: true },
-	{ to: '/saved', label: tr('Saved', 'Salvos'), icon: Bookmark },
+	{ to: '/review', label: tr('Review', 'Revisão'), icon: Layers },
 	{ to: '/progress', label: tr('Progress', 'Progresso'), icon: ChartNoAxesColumn },
 	{ to: '/notes', label: tr('Notes', 'Notas'), icon: NotebookPen }
 ];

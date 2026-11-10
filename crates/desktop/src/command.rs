@@ -452,6 +452,17 @@ pub async fn desktop_list_flashcards(
         .map_err(|_| IpcError::study_unavailable())?
 }
 
+/// IPC command: lists every card of the local owner, for the review hub.
+#[tauri::command]
+pub async fn desktop_list_all_flashcards(
+    state: State<'_, DesktopState>,
+) -> Result<Vec<FlashcardDto>, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.list_all_flashcards())
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
 /// Comando IPC: cria um novo cartão de memorização para o dono local.
 #[tauri::command]
 pub async fn desktop_create_flashcard(

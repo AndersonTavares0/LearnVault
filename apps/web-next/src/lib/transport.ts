@@ -172,7 +172,8 @@ export interface Transport {
 	updatePdfAnnotation(annotationId: string, change: { color?: PdfAnnotationColor; content?: string }): Promise<PdfAnnotation>;
 	deletePdfAnnotation(annotationId: string): Promise<void>;
 	deleteNote(noteId: string): Promise<void>;
-	listFlashcards(mediaId: string): Promise<Flashcard[]>;
+	/** Without a media id: every card of the user, soonest due first (the review hub). */
+	listFlashcards(mediaId?: string): Promise<Flashcard[]>;
 	createFlashcard(mediaId: string, front: string, back: string): Promise<Flashcard>;
 	updateFlashcard(cardId: string, front: string, back: string): Promise<Flashcard>;
 	deleteFlashcard(cardId: string): Promise<void>;
@@ -862,8 +863,8 @@ export class HttpTransport implements Transport {
 		const response = await fetch(`/api/study/pdf-annotations/${encodeURIComponent(annotationId)}`, { method: 'DELETE' });
 		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not delete annotation.', 'Não foi possível excluir a anotação.'));
 	}
-	async listFlashcards(mediaId: string): Promise<Flashcard[]> {
-		const response = await fetch(`/api/study/flashcards?media_id=${encodeURIComponent(mediaId)}`);
+	async listFlashcards(mediaId?: string): Promise<Flashcard[]> {
+		const response = await fetch(mediaId ? `/api/study/flashcards?media_id=${encodeURIComponent(mediaId)}` : '/api/study/flashcards');
 		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not load flashcards.', 'Não foi possível carregar os cartões.'));
 		const data = await response.json();
 		return (Array.isArray(data.items) ? data.items : []).map(normalizeFlashcard);
@@ -1186,9 +1187,9 @@ export class DesktopStub implements Transport {
 			throw desktopError(cause, tr('Could not delete annotation.', 'Não foi possível excluir a anotação.'));
 		}
 	}
-	async listFlashcards(mediaId: string): Promise<Flashcard[]> {
+	async listFlashcards(mediaId?: string): Promise<Flashcard[]> {
 		try {
-			const res = await invoke<unknown>('desktop_list_flashcards', { mediaId });
+			const res = mediaId ? await invoke<unknown>('desktop_list_flashcards', { mediaId }) : await invoke<unknown>('desktop_list_all_flashcards');
 			return (Array.isArray(res) ? res : []).map(normalizeFlashcard);
 		} catch (cause) {
 			throw desktopError(cause, tr('Could not load cards.', 'Não foi possível carregar os cartões.'));

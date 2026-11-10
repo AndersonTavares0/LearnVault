@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Plus, Trash2 } from 'lucide-react';
-import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { Pencil, Plus, Trash2, Upload } from 'lucide-react';
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { MAX_IMPORT_CARDS, parseCards } from '@/lib/cards';
 import { tr } from '@/lib/i18n';
 import { transport, type Flashcard, type ReviewRating } from '@/lib/transport';
 
@@ -45,10 +46,31 @@ export function Flashcards({ mediaId, addRequest = 0 }: { mediaId: string; addRe
 	});
 	const remove = useMutation({ mutationFn: (cardId: string) => transport.deleteFlashcard(cardId), onSuccess: (_, cardId) => client.setQueryData<Flashcard[]>(key, (list = []) => list.filter((item) => item.cardId !== cardId)) });
 
+	// Import: an Anki text export (tab-separated) or a simple CSV, added to this lesson's deck.
+	const fileInput = useRef<HTMLInputElement>(null);
+	const [importMessage, setImportMessage] = useState('');
+	const importCards = useMutation({
+		mutationFn: async (file: File) => {
+			const parsed = parseCards(await file.text());
+			const batch = parsed.slice(0, MAX_IMPORT_CARDS);
+			for (const card of batch) patch(await transport.createFlashcard(mediaId, card.front, card.back));
+			return { added: batch.length, skipped: parsed.length - batch.length };
+		},
+		onSuccess: ({ added, skipped }) => setImportMessage(added === 0
+			? tr('No cards found in that file. Use one card per line: front, a tab, then back.', 'Nenhum cartão encontrado no arquivo. Use um cartão por linha: frente, uma tabulação e o verso.')
+			: tr(`${added} cards imported.${skipped ? ` ${skipped} more were left out; import them in another file.` : ''}`, `${added} cartões importados.${skipped ? ` Outros ${skipped} ficaram de fora; importe-os em outro arquivo.` : ''}`)),
+		onError: () => { setImportMessage(''); void client.invalidateQueries({ queryKey: key }); }
+	});
+	const onFile = (event: ChangeEvent<HTMLInputElement>) => {
+		const file = event.target.files?.[0];
+		event.target.value = '';
+		if (file) importCards.mutate(file);
+	};
+
 	const all = cards.data ?? [];
 	const due = all.filter((card) => card.nextDue <= now);
 	const current = due[0] ?? null;
-	const error = cards.error?.message || review.error?.message || save.error?.message || remove.error?.message;
+	const error = cards.error?.message || review.error?.message || save.error?.message || remove.error?.message || importCards.error?.message;
 
 	const submit = (event?: FormEvent) => {
 		event?.preventDefault();
@@ -74,8 +96,13 @@ export function Flashcards({ mediaId, addRequest = 0 }: { mediaId: string; addRe
 					<Button size="sm" variant={mode === 'manage' ? 'secondary' : 'ghost'} aria-pressed={mode === 'manage'} onClick={() => setMode('manage')}>{tr('Manage', 'Gerenciar')}</Button>
 				</div>
 				<p className="text-sm text-muted-foreground">{tr(`${due.length} due · ${all.length} total`, `${due.length} para revisar · ${all.length} no total`)}</p>
-				{!form && <Button size="sm" variant="outline" className="ml-auto" onClick={() => setForm({ cardId: null, front: '', back: '' })}><Plus />{tr('New card', 'Novo cartão')}</Button>}
+				<span className="ml-auto flex gap-2">
+					<input ref={fileInput} type="file" accept=".txt,.tsv,.csv,text/plain,text/csv,text/tab-separated-values" className="sr-only" tabIndex={-1} aria-label={tr('Card file to import', 'Arquivo de cartões para importar')} onChange={onFile} />
+					<Button size="sm" variant="ghost" disabled={importCards.isPending} onClick={() => fileInput.current?.click()}><Upload />{importCards.isPending ? tr('Importing…', 'Importando…') : tr('Import', 'Importar')}</Button>
+					{!form && <Button size="sm" variant="outline" onClick={() => setForm({ cardId: null, front: '', back: '' })}><Plus />{tr('New card', 'Novo cartão')}</Button>}
+				</span>
 			</div>
+			<p role="status" aria-live="polite" className="text-sm text-muted-foreground empty:hidden">{importMessage}</p>
 			{error && <p role="alert" className="text-sm text-destructive">{error}</p>}
 
 			{form && (
