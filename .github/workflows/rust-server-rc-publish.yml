@@ -52,8 +52,8 @@ jobs:
             echo "::error::version must not be empty" >&2
             exit 1
           fi
-          if [[ -z "$RUN_ID" ]]; then
-            echo "::error::run_id must not be empty" >&2
+          if [[ ! "$RUN_ID" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::run_id must be a positive integer" >&2
             exit 1
           fi
           if [[ -z "$TAG" ]]; then
@@ -64,10 +64,24 @@ jobs:
             echo "::error::stable release tag namespace is not allowed: $TAG" >&2
             exit 1
           fi
-          if [[ "$TAG" != rust-rc-* ]]; then
-            echo "::error::tag must start with rust-rc-" >&2
+          if [[ ! "$TAG" =~ ^rust-rc-[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+            echo "::error::tag must be a safe rust-rc- identifier" >&2
             exit 1
           fi
+
+      - name: Verify RC producer run
+        shell: bash
+        env:
+          RUN_ID: ${{ inputs.run_id }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" > producer-run.json
+          jq -e --arg repository "$GITHUB_REPOSITORY" --arg run_id "$RUN_ID" '
+            (.id | tostring) == $run_id and
+            .repository.full_name == $repository and .head_repository.full_name == $repository and
+            .path == ".github/workflows/rust-server-rc.yml" and
+            .event == "workflow_dispatch" and .status == "completed" and .conclusion == "success"
+          ' producer-run.json > /dev/null
 
       - name: Download RC artifact from the other run
         shell: bash
@@ -78,12 +92,28 @@ jobs:
           gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n rust-server-rc -D dist
 
       - name: Verify artifact before publishing
+        id: artifact
         shell: bash
+        env:
+          RUN_ID: ${{ inputs.run_id }}
+          VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
           test -f dist/learnvault-server-linux-x86_64.tar.gz
           test -f dist/SHA256SUMS.rust-rc
-          (cd dist && sha256sum -c SHA256SUMS.rust-rc)
+          test -f dist/rust-rc-metadata.json
+          # Verify only the fixed expected files, never paths selected by the checksum file.
+          test "$(wc -l < dist/SHA256SUMS.rust-rc)" -eq 2
+          grep -E '^[0-9a-f]{64}  (learnvault-server-linux-x86_64.tar.gz|rust-rc-metadata.json)$' dist/SHA256SUMS.rust-rc > expected-checksums
+          test "$(wc -l < expected-checksums)" -eq 2
+          test "$(cut -c67- expected-checksums | sort -u | wc -l)" -eq 2
+          (cd dist && sha256sum -c ../expected-checksums)
+          jq -e --arg repository "$GITHUB_REPOSITORY" --arg run_id "$RUN_ID" --arg version "$VERSION" '
+            .schema_version == 1 and .repository == $repository and .run_id == $run_id and
+            .version == $version and .target == "x86_64-unknown-linux-musl" and
+            (.source_sha | type == "string" and test("^[0-9a-f]{40}$"))
+          ' dist/rust-rc-metadata.json > /dev/null
+          echo "source_sha=$(jq -r .source_sha dist/rust-rc-metadata.json)" >> "$GITHUB_OUTPUT"
           listing="$(tar -tzf dist/learnvault-server-linux-x86_64.tar.gz)"
           for entry in ./learnvault-server ./web/200.html ./LICENSE; do
             if ! printf '%s\n' "$listing" | grep -qxF "$entry"; then
@@ -98,6 +128,7 @@ jobs:
           VERSION: ${{ inputs.version }}
           RUN_ID: ${{ inputs.run_id }}
           TAG: ${{ inputs.tag }}
+          SOURCE_SHA: ${{ steps.artifact.outputs.source_sha }}
         run: |
           set -euo pipefail
           notes="$(mktemp)"
@@ -111,5 +142,8 @@ jobs:
           # repository, so there is no `.git` directory and `gh` cannot infer the
           # repository from a git remote. Run 38994990424 failed exactly because of
           # that ("failed to run git: fatal: not a git repository").
-          release_url="$(gh release create "$TAG" -R "$GITHUB_REPOSITORY" --draft --prerelease --title "Rust server RC $VERSION" --notes "$(cat "$notes")" --target "$GITHUB_SHA" dist/learnvault-server-linux-x86_64.tar.gz dist/SHA256SUMS.rust-rc)"
+          # Reserve the tag atomically; an existing tag must never select another source.
+          gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+            -f "ref=refs/tags/$TAG" -f "sha=$SOURCE_SHA" > /dev/null
+          release_url="$(gh release create "$TAG" -R "$GITHUB_REPOSITORY" --draft --prerelease --title "Rust server RC $VERSION" --notes "$(cat "$notes")" --verify-tag dist/learnvault-server-linux-x86_64.tar.gz dist/SHA256SUMS.rust-rc dist/rust-rc-metadata.json)"
           printf 'Draft release URL: %s\n' "$release_url"
