@@ -121,6 +121,8 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 			setBreakPhase('over');
 		}
 	}
+	// Starting the next focus round from the timer card or the top bar ends the break screen.
+	if (breakPhase && timer.mode === 'focus' && timer.status !== 'idle') setBreakPhase(null);
 	useEffect(() => {
 		if (breakPhase === 'break') player.current?.pause();
 	}, [breakPhase]);
@@ -129,6 +131,13 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 		document.title = lesson ? `${lesson.title} · ${course.title} · LearnVault` : 'LearnVault';
 	}, [lesson, course.title]);
 
+	const sequence = useMemo(() => lessonSequence([course]), [course]);
+	// One pass over the course, not one catalog walk per segment on every render.
+	const donePaths = useMemo(() => new Set(sequence.filter((item) => {
+		const other = findLesson(catalog.data ?? null, courseId, item.path);
+		const files = other ? [findLessonPdf(other), ...other.media] : [];
+		return files.some((file) => file?.mediaId && completed.has(file.mediaId));
+	}).map((item) => item.path)), [sequence, catalog.data, courseId, completed]);
 	if (!lesson) {
 		return (
 			<div className="space-y-4">
@@ -139,7 +148,6 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 		);
 	}
 
-	const sequence = lessonSequence([course]);
 	const position = sequence.findIndex((item) => item.path === lessonPath);
 	const hasCards = studySyncSupported && Boolean(mediaId);
 	// Notes are tied to a moment in time, so a PDF lesson has cards but no timed notes.
@@ -159,9 +167,11 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 						<Button variant="outline" disabled={!next} onClick={() => next && goTo(next.path)}>{tr('Next', 'Próxima')}<ChevronRight /></Button>
 					</div>
 				</div>
-				<LessonRail sequence={sequence} current={position} isDone={(path) => { const other = findLesson(catalog.data ?? null, courseId, path); const pdfOther = other ? findLessonPdf(other) : null; const files = other ? (pdfOther ? [pdfOther] : other.media) : []; return files.some((file) => file.mediaId && completed.has(file.mediaId)); }} />
+				<LessonRail sequence={sequence} current={position} isDone={(path) => donePaths.has(path)} />
 
 				<div className="relative">
+					{/* While the break screen is up, the player under it takes no focus or keys. */}
+					<div inert={Boolean(breakPhase)}>
 					{pdf ? (
 						<PdfLesson file={pdf} courseId={courseId} ready={!studySyncSupported || !progress.isPending} initialPage={initialPosition ?? (progress.data?.recorded && !progress.data.completed && progress.data.positionSeconds > 1 ? progress.data.positionSeconds : null)} onPage={(page) => void recordPosition(pdf.mediaId!, page)} />
 					) : (
@@ -179,6 +189,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 						handle={(value) => { player.current = value; }}
 					/>
 					)}
+					</div>
 					{breakPhase && (
 						<BreakOverlay
 							phase={breakPhase}
