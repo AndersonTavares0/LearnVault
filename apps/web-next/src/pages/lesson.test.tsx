@@ -63,6 +63,15 @@ describe('lesson page', () => {
 		localStorage.removeItem('learnvault-theater');
 	});
 
+	it('walks the A-B loop control through start, end and clear', async () => {
+		renderApp('/course/c/c%2FOne', { catalog });
+		fireEvent.click(await screen.findByRole('button', { name: 'Loop: set start' }));
+		expect(screen.getByRole('button', { name: /Loop from 0:00: set end/ }).getAttribute('aria-pressed')).toBe('true');
+		fireEvent.click(screen.getByRole('button', { name: /Loop from 0:00: set end/ }));
+		// End must be after the start, so with no playback time the loop stays open.
+		expect(screen.getByRole('button', { name: /Loop from 0:00: set end/ })).toBeTruthy();
+	});
+
 	it('opens a note draft with the n shortcut', async () => {
 		renderApp('/course/c/c%2FOne', { catalog });
 		fireEvent.keyDown(await screen.findByRole('group', { name: 'Media player' }), { key: 'n' });

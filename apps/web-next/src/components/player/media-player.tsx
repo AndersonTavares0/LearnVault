@@ -1,12 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
-import { ExternalLink, Maximize, PictureInPicture2, Rewind, FastForward, Zap } from 'lucide-react';
+import { ExternalLink, Maximize, PictureInPicture2, Repeat, Rewind, FastForward, Zap } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Link } from 'react-router';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { tr } from '@/lib/i18n';
 import {
-	mediaAvailability, mediaPlaybackKind, nextSpeed, PLAYBACK_SPEEDS, playerShortcutAction, requiresTranscodingProbe,
+	formatDuration, mediaAvailability, mediaPlaybackKind, nextSpeed, PLAYBACK_SPEEDS, playerShortcutAction, requiresTranscodingProbe,
 	seekPercentPosition, selectPlayableMedia, selectPlayableSubtitle, srtConversionSupported, srtToWebVtt, stepVolume, subtitleFormat, type PlaybackSpeed
 } from '@/lib/player';
 import { lessonPreferenceKey, updateLessonPreference, type PlayerPreferences } from '@/lib/player-preferences';
@@ -85,6 +85,8 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 	const lastSave = useRef(0);
 	const appliedStart = useRef<string | null>(null);
 	const [pip, setPip] = useState(false);
+	// A–B loop: A then B are set from the current time; passing B jumps back to A.
+	const [loop, setLoop] = useState<{ a: number; b: number | null } | null>(null);
 	const supportsPip = typeof document !== 'undefined' && Boolean(document.pictureInPictureEnabled);
 
 	const activeSource = playable && transcode ? transport.transcodeUrl(playable, courseId, transcode.offset, transcode.reencode) ?? source : source;
@@ -202,6 +204,7 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 		},
 		onTimeUpdate: () => {
 			const now = absoluteTime();
+			if (loop?.b != null && now >= loop.b) { seek(loop.a); return; }
 			onTime(now);
 			if (mediaId && performance.now() - lastSave.current > SAVE_INTERVAL_MS && now > 0) {
 				lastSave.current = performance.now();
@@ -248,6 +251,9 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 			<div role="toolbar" aria-label={tr('Player controls', 'Controles do player')} className="flex flex-wrap items-center gap-2">
 				<Button variant="outline" size="sm" onClick={() => seek(absoluteTime() - 10)} aria-keyshortcuts="ArrowLeft j"><Rewind />{tr('Back 10s', 'Voltar 10s')}</Button>
 				<Button variant="outline" size="sm" onClick={() => seek(absoluteTime() + 10)} aria-keyshortcuts="ArrowRight l"><FastForward />{tr('Forward 10s', 'Avançar 10s')}</Button>
+				<Button variant={loop ? 'secondary' : 'outline'} size="sm" aria-pressed={Boolean(loop)} onClick={() => setLoop(!loop ? { a: absoluteTime(), b: null } : loop.b === null ? (absoluteTime() > loop.a + 1 ? { a: loop.a, b: absoluteTime() } : loop) : null)}>
+					<Repeat />{!loop ? tr('Loop: set start', 'Laço: marcar início') : loop.b === null ? tr(`Loop from ${formatDuration(loop.a)}: set end`, `Laço de ${formatDuration(loop.a)}: marcar fim`) : tr(`Looping ${formatDuration(loop.a)}–${formatDuration(loop.b)}: clear`, `Repetindo ${formatDuration(loop.a)}–${formatDuration(loop.b)}: limpar`)}
+				</Button>
 				<Label htmlFor="player-speed" className="ml-2">{tr('Speed', 'Velocidade')}</Label>
 				<select id="player-speed" value={speed} onChange={(event) => changeSpeed(Number(event.target.value) as PlaybackSpeed)} className="h-11 rounded-lg border border-input bg-background px-2 text-sm" aria-keyshortcuts="[ ]">
 					{PLAYBACK_SPEEDS.map((value) => <option key={value} value={value}>{value}×</option>)}
