@@ -33,14 +33,33 @@ function writeAvatarVersion(userId: string, version: number) {
 	}
 }
 
+/** Draws the chosen photo, centre-cropped, straight from the file: it never becomes a URL or markup. */
+function PreviewCanvas({ file, label }: { file: File; label: string }) {
+	const canvas = useRef<HTMLCanvasElement>(null);
+	useEffect(() => {
+		if (typeof createImageBitmap !== 'function') return;
+		let live = true;
+		createImageBitmap(file).then((bitmap) => {
+			const context = canvas.current?.getContext('2d');
+			if (live && context) {
+				const side = Math.min(bitmap.width, bitmap.height);
+				context.clearRect(0, 0, 160, 160);
+				context.drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side, 0, 0, 160, 160);
+			}
+			bitmap.close();
+		}).catch(() => { /* an unreadable image still uploads; the server validates it */ });
+		return () => { live = false; };
+	}, [file]);
+	return <canvas ref={canvas} width={160} height={160} role="img" aria-label={label} className="size-20 rounded-full bg-muted" />;
+}
+
 /** Profile photo, validated in the browser before upload; the server stays the authority. */
 export function AvatarSettings({ user }: { user: User }) {
 	const input = useRef<HTMLInputElement>(null);
 	const [version, setVersion] = useState(() => readAvatarVersion(user.userId));
-	const [preview, setPreview] = useState<{ file: File; url: string } | null>(null);
+	const [preview, setPreview] = useState<File | null>(null);
 	const [failed, setFailed] = useState(false);
 	const [message, setMessage] = useState('');
-	useEffect(() => () => { if (preview) URL.revokeObjectURL(preview.url); }, [preview]);
 
 	const upload = useMutation({
 		mutationFn: (file: File) => transport.uploadUserAvatar(file),
@@ -60,20 +79,18 @@ export function AvatarSettings({ user }: { user: User }) {
 		if (!AVATAR_TYPES.includes(file.type.toLowerCase())) return setMessage(tr('Choose a PNG, JPEG or WebP image.', 'Escolha uma imagem PNG, JPEG ou WebP.'));
 		if (file.size > MAX_AVATAR_BYTES) return setMessage(tr('The image is larger than 2 MiB. Choose a smaller one.', 'A imagem tem mais de 2 MiB. Escolha uma menor.'));
 		setMessage('');
-		setPreview({ file, url: URL.createObjectURL(file) });
+		setPreview(file);
 	};
 
-	// The preview is a `blob:` URL this page made from the chosen file; nothing else is ever shown from it.
-	const previewSrc = preview && /^blob:/.test(preview.url) ? preview.url : '';
-	const src = previewSrc || (version && !failed ? transport.userAvatarUrl(version) : '');
+	const src = version && !failed ? transport.userAvatarUrl(version) : '';
 	return (
 		<div className="flex flex-wrap items-center gap-4">
-			{src ? <img src={src} alt={tr(`Photo of ${user.username}`, `Foto de ${user.username}`)} onError={() => setFailed(true)} className="size-20 rounded-full object-cover" /> : <CircleUser className="size-20 text-muted-foreground" aria-hidden="true" />}
+			{preview ? <PreviewCanvas file={preview} label={tr('Preview of the new photo', 'Prévia da nova foto')} /> : src ? <img src={src} alt={tr(`Photo of ${user.username}`, `Foto de ${user.username}`)} onError={() => setFailed(true)} className="size-20 rounded-full object-cover" /> : <CircleUser className="size-20 text-muted-foreground" aria-hidden="true" />}
 			<div className="flex flex-wrap gap-2">
 				<input ref={input} type="file" accept={AVATAR_TYPES.join(',')} onChange={choose} className="sr-only" id="avatar-file" tabIndex={-1} aria-hidden="true" />
 				{preview ? (
 					<>
-						<Button disabled={upload.isPending} onClick={() => upload.mutate(preview.file)}>{upload.isPending ? tr('Saving…', 'Salvando…') : tr('Save photo', 'Salvar foto')}</Button>
+						<Button disabled={upload.isPending} onClick={() => upload.mutate(preview)}>{upload.isPending ? tr('Saving…', 'Salvando…') : tr('Save photo', 'Salvar foto')}</Button>
 						<Button variant="outline" onClick={() => setPreview(null)}>{tr('Cancel', 'Cancelar')}</Button>
 					</>
 				) : (
