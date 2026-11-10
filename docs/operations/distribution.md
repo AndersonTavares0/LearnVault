@@ -104,6 +104,8 @@ Native installations configure runtime options via environment variables or CLI 
 - `LISTEN_ADDR`: Listening network address.
 - `PORT`: HTTP port.
 - `ADMIN_USERNAME` / `ADMIN_PASSWORD` (or `ADMIN_USERNAME_FILE` / `ADMIN_PASSWORD_FILE`): Initial admin credentials.
+- A network listener requires explicit initial admin credentials. Loopback-only first startup may use the temporary `admin/admin` account, which must change its password before accessing protected endpoints.
+- `TRUSTED_PROXY_IPS`: Optional comma-separated IP addresses of reverse proxies allowed to supply `X-Real-IP` for login rate limiting. Forwarded headers from other peers are ignored; configure the proxy address as stable and ensure it overwrites `X-Real-IP`.
 
 Course folders remain external and read-only across all platforms. Installers never copy course folders.
 

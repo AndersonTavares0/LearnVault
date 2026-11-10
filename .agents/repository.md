@@ -31,6 +31,9 @@ that area.
 
 ## GitHub governance
 
+- For delegation and review of security, persistence, or release/update changes, follow
+  `.agents/policies/agent-collaboration.md`.
+
 - Follow `.agents/policies/governance.md` and `.agents/checklists/pull-request.md`.
 - For pull requests, replace every template prompt with factual content and record only
   validations that actually ran.
@@ -50,5 +53,10 @@ that area.
 - Use GitHub Discussions for unresolved questions; use Issues for features and behavior changes.
 - `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, and documentation are in English. The application provides built-in internationalization (i18n) supporting English as default and Brazilian Portuguese (`pt-BR`).
 - Conventional Commits and descriptions are written in English for Release Please.
-- Pre-major releases are paced through Release Please with `"bump-minor-pre-major": true` and `"bump-patch-for-minor-pre-major": true`.
+- Release Please follows Conventional Commit version bumps before `1.0.0`: `feat:`, `fix:`, and
+  `perf:` increment patch, while breaking changes increment minor. From `1.0.0`, breaking changes
+  increment major. Release tags and names use `vMAJOR.MINOR.PATCH`.
+- Release Please prepares one release candidate on the first day of each month (UTC). Merge its
+  release PR to publish; urgently needed security releases can prepare a candidate early by
+  manually running the `Release Please` workflow on `main`.
 - GitHub Wiki is permanently removed; do not recreate wiki sync scripts or workflows.
