@@ -437,6 +437,18 @@ pub fn list_study_notes(db: &Database, owner_id: &str, media_id: &str) -> Result
     Ok(notes)
 }
 
+/// Finds the media linked to a study note without returning the note contents.
+pub fn study_note_media_id(db: &Database, note_id: &str) -> Result<Option<String>> {
+    Ok(db
+        .connection()
+        .query_row(
+            "SELECT media_id FROM study_note WHERE note_id = ?1",
+            [note_id],
+            |row| row.get(0),
+        )
+        .optional()?)
+}
+
 /// Lista todas as anotações do dono em todo o catálogo, ordenadas da mais recente para a mais antiga.
 pub fn list_all_study_notes(db: &Database, owner_id: &str) -> Result<Vec<GlobalStudyNote>> {
     validate_owner(owner_id)?;
@@ -640,6 +652,18 @@ pub fn list_flashcards(db: &Database, owner_id: &str, media_id: &str) -> Result<
         cards.push(card?);
     }
     Ok(cards)
+}
+
+/// Finds the media linked to a flashcard without returning its contents.
+pub fn flashcard_media_id(db: &Database, card_id: &str) -> Result<Option<String>> {
+    Ok(db
+        .connection()
+        .query_row(
+            "SELECT media_id FROM flashcard WHERE card_id = ?1",
+            [card_id],
+            |row| row.get(0),
+        )
+        .optional()?)
 }
 
 /// Cria um novo cartão de estudo vinculado à aula.

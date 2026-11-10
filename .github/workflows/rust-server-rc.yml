@@ -144,7 +144,12 @@ jobs:
         run: |
           set -euo pipefail
           tar -czf dist/learnvault-server-linux-x86_64.tar.gz -C dist/stage .
-          (cd dist && sha256sum learnvault-server-linux-x86_64.tar.gz > SHA256SUMS.rust-rc)
+          source_sha="$(git rev-parse HEAD)"
+          jq -n --arg repository "$GITHUB_REPOSITORY" --arg run_id "$GITHUB_RUN_ID" \
+            --arg version "$VERSION" --arg source_sha "$source_sha" --arg target "$TARGET" \
+            '{schema_version: 1, repository: $repository, run_id: $run_id, version: $version, source_sha: $source_sha, target: $target}' \
+            > dist/rust-rc-metadata.json
+          (cd dist && sha256sum learnvault-server-linux-x86_64.tar.gz rust-rc-metadata.json > SHA256SUMS.rust-rc)
 
       - name: Assert the archive inventory and checksum
         shell: bash
@@ -237,5 +242,6 @@ jobs:
           path: |
             dist/learnvault-server-linux-x86_64.tar.gz
             dist/SHA256SUMS.rust-rc
+            dist/rust-rc-metadata.json
           if-no-files-found: error
           retention-days: 7

@@ -17,6 +17,7 @@ services:
       LIBRARY_DIR: /library
       ADMIN_USERNAME: ${ADMIN_USERNAME:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-}
       COOKIE_SECURE: ${COOKIE_SECURE:-true}
     ports:
       - "${BIND_ADDR:-127.0.0.1}:${PORT:-8090}:${PORT:-8090}"
