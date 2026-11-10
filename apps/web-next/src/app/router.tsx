@@ -5,7 +5,8 @@ import { transportKind } from '@/lib/transport';
 import { AppShell } from './shell';
 import { HomePage } from '@/pages/home';
 import { LoginPage } from '@/pages/login';
-import { CoursePage, NotesPage, ProgressPage, SettingsPage } from './pages';
+import { CourseRoute } from '@/pages/course';
+import { NotesPage, ProgressPage, SettingsPage } from './pages';
 
 /** Strips the leading `#` so a legacy hash can be used as a router path. */
 const toPath = (hash: string) => hash.replace(/^#/, '');
@@ -32,7 +33,7 @@ export const routes: RouteObject[] = [
 		children: [
 			{ index: true, element: <HomePage /> },
 			{ path: 'home', element: <Navigate to="/" replace /> },
-			{ path: 'course/:courseId/*', element: <CoursePage /> },
+			{ path: 'course/:courseId/*', element: <CourseRoute /> },
 			{ path: 'progress', element: <ProgressPage /> },
 			{ path: 'notes', element: <NotesPage /> },
 			{ path: 'settings', element: <SettingsPage /> }

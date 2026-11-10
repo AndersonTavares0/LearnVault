@@ -163,7 +163,7 @@ export function getCourseProgressStatus(
 }
 
 /** Completed and total playable lessons of a course; a lesson counts once even with several videos. */
-export function courseProgress(courseNode: CatalogNode, completedMediaIds: Set<string>): { done: number; total: number } {
+export function courseProgress(courseNode: CatalogNode, completedMediaIds: ReadonlySet<string>): { done: number; total: number } {
 	let done = 0;
 	let total = 0;
 	const walk = (current: CatalogNode): void => {

@@ -107,3 +107,44 @@ export function useSignOut() {
 		}
 	});
 }
+
+/** Marks a lesson done or not and patches the cached history, so progress updates at once. */
+export function useSetLessonCompleted() {
+	const client = useQueryClient();
+	return useMutation({
+		mutationFn: ({ mediaId, completed }: { mediaId: string; completed: boolean }) => transport.setCompleted(mediaId, completed),
+		onSuccess: (updated) => {
+			client.setQueryData<StudyProgress[]>(keys.recent, (items = []) => [updated, ...items.filter((item) => item.mediaId !== updated.mediaId)]);
+			void client.invalidateQueries({ queryKey: keys.rewards });
+		}
+	});
+}
+
+export function useToggleLessonFavorite() {
+	const client = useQueryClient();
+	return useMutation({
+		mutationFn: ({ mediaId, favorite }: { mediaId: string; favorite: boolean }) => transport.setLessonFavorite(mediaId, favorite),
+		onSuccess: () => client.invalidateQueries({ queryKey: keys.favorites })
+	});
+}
+
+/** Removes a course from the registry only; files on disk are never touched. */
+export function useRemoveCourse() {
+	const client = useQueryClient();
+	return useMutation({
+		mutationFn: (courseId: string) => transport.removeCourse(courseId),
+		onSuccess: () => client.invalidateQueries({ queryKey: keys.catalog })
+	});
+}
+
+export function useResetCourseOrder() {
+	const client = useQueryClient();
+	return useMutation({
+		mutationFn: (courseId: string) => transport.resetCourseOrder(courseId),
+		onSuccess: () => client.invalidateQueries({ queryKey: keys.catalog })
+	});
+}
+
+export function useNotes(enabled = true) {
+	return useQuery({ queryKey: ['notes'], enabled: enabled && studySyncSupported, queryFn: () => transport.listNotes() });
+}

@@ -93,6 +93,24 @@ test('signs in, indexes the library and resumes a lesson from My learning', asyn
 	await expect(resume.getByRole('link', { name: 'Resume lesson' })).toHaveAttribute('href', /#\/course\/.+\?t=5$/);
 	await expectNoAxeViolations(page, 'home with resume');
 
+	await page.getByRole('link', { name: 'library' }).click();
+	await expect(page.getByRole('heading', { level: 1, name: 'library' })).toBeVisible();
+	// The module holding the lesson to continue starts expanded.
+	await expect(page.getByRole('link', { name: /Borrowing/ })).toBeVisible();
+	await page.getByRole('button', { name: 'Mark “Borrowing” as completed' }).click();
+	await expect(page.getByRole('progressbar', { name: /1 of 2 lessons completed/ })).toBeVisible();
+	await expectNoAxeViolations(page, 'course');
+	await page.getByRole('tab', { name: /Materials/ }).click();
+	await expect(page.getByText('No support materials in this course.')).toBeVisible();
+	await page.getByRole('button', { name: 'Manage course' }).click();
+	await page.getByRole('menuitem', { name: 'Remove course' }).click();
+	const dialog = page.getByRole('alertdialog');
+	await expect(dialog).toContainText('The original files on disk are not deleted');
+	await expectNoAxeViolations(page, 'remove dialog');
+	await dialog.getByRole('button', { name: 'Cancel' }).click();
+	await expect(dialog).toBeHidden();
+	await page.goto(`${origin}/#/`);
+
 	await page.setViewportSize({ width: 375, height: 800 });
 	await expect(page.getByRole('navigation', { name: 'Sections' })).toBeVisible();
 	await expect(page.getByRole('navigation', { name: 'Main' })).toBeHidden();
