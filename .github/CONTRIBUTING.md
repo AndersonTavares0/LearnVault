@@ -46,6 +46,7 @@ Tests must use synthetic fixtures and temporary directories; they must never acc
 ## Pull Requests
 
 - Use a clear title following Conventional Commits in English (e.g., `feat(player): add lesson progress persistence`).
+- CI validates the Conventional Commit title format; English descriptions remain a contributor requirement.
 - Describe the problem, solution, and validations executed.
 - For UI changes, include visual evidence or screenshots **in the PR description/comments only**—never commit binary mockups or screenshots to Git tracking.
 - Document database migrations and deployment adjustments when applicable.

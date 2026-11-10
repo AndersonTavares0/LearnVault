@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { classifyDocsReleaseOnly, evaluateCiGate, evaluateCiGateFromNeeds } from './ci-gate.mjs'
+import {
+  classifyDocsReleaseOnly,
+  evaluateCiGate,
+  evaluateCiGateFromNeeds,
+  isConventionalPullRequestTitle,
+} from './ci-gate.mjs'
 
 const successfulResults = {
   changes: 'success',
@@ -39,6 +44,21 @@ test('classifies documentation and release metadata changes as skippable', () =>
     ]),
     true,
   )
+})
+
+test('accepts Conventional Commit PR titles and rejects malformed titles', () => {
+  for (const title of [
+    'feat(player): add lesson progress',
+    'fix!: preserve backup data',
+    'docs(governance): define review policy',
+    'chore: release 0.8.1',
+  ]) {
+    assert.equal(isConventionalPullRequestTitle(title), true, title)
+  }
+
+  for (const title of ['Add a feature', 'feature: add playback', 'fix(player): ', 'fix(player): trailing ', 'fix(player): line\nbreak', null]) {
+    assert.equal(isConventionalPullRequestTitle(title), false, String(title))
+  }
 })
 
 test('fails safe for empty, mixed, unknown, or unsafe changed paths', () => {
