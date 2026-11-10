@@ -53,9 +53,9 @@ that area.
 - Use GitHub Discussions for unresolved questions; use Issues for features and behavior changes.
 - `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, and documentation are in English. The application provides built-in internationalization (i18n) supporting English as default and Brazilian Portuguese (`pt-BR`).
 - Conventional Commits and descriptions are written in English for Release Please.
-- Release Please follows Conventional Commit version bumps before `1.0.0`: `feat:` increments the
-  minor version, `fix:` and `perf:` increment patch, and breaking changes increment minor. From
-  `1.0.0`, breaking changes increment major. Release tags and names use `vMAJOR.MINOR.PATCH`.
+- Release Please follows Conventional Commit version bumps before `1.0.0`: `feat:`, `fix:`, and
+  `perf:` increment patch, while breaking changes increment minor. From `1.0.0`, breaking changes
+  increment major. Release tags and names use `vMAJOR.MINOR.PATCH`.
 - Release Please prepares one release candidate on the first day of each month (UTC). Merge its
   release PR to publish; urgently needed security releases can prepare a candidate early by
   manually running the `Release Please` workflow on `main`.

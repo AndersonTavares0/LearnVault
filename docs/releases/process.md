@@ -2,7 +2,7 @@
 
 LearnVault adheres to Semantic Versioning: `MAJOR.MINOR.PATCH`.
 
-Before `1.0.0`, Release Please increments the minor version for `feat:` commits and breaking changes, and increments patch for `fix:` and `perf:` commits. From `1.0.0`, breaking changes increment major. Tags and GitHub release names are generated as `vMAJOR.MINOR.PATCH`; release notes and the changelog are generated from English Conventional Commits.
+Before `1.0.0`, Release Please increments the patch version for `feat:`, `fix:`, and `perf:` commits, and increments the minor version for breaking changes. From `1.0.0`, breaking changes increment major. Tags and GitHub release names are generated as `vMAJOR.MINOR.PATCH`; release notes and the changelog are generated from English Conventional Commits.
 
 1. Merge approved changes using Conventional Commits into `main`; these changes accumulate for the next monthly release.
 2. On the first day of each month (UTC), Release Please opens or updates one release PR with version files and generated `docs/releases/CHANGELOG.md` notes.
