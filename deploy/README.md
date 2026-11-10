@@ -136,3 +136,12 @@ Caso deseje que o LearnVault verifique e atualize autonomamente durante a madrug
    docker compose -f compose.yaml -f compose.updater.yaml up -d
    ```
 O container companion updater roda isoladamente, consulta a API e só aplica atualizações dentro da janela de manutenção definida.
+
+
+## Updater failure boundaries
+
+Automatic updates remain opt-in. Maintenance windows use the updater container's local clock, include their start minute, and exclude their end minute. Overnight windows such as `23:30-01:15` are supported. Equal endpoints and malformed clock values are rejected. `CHECK_INTERVAL_SECONDS` must contain at most ten decimal digits and represent a value from 1 to 2147483647; leading zeros are accepted.
+
+An update requires a successful backup and target image download before restarting the service. A healthy container is accepted only when its reported version matches the requested stable version. Startup failure or a version mismatch enters rollback using the previous immutable image ID for database restoration and service restart. A failed restore or restart stops recovery and leaves a nonzero exit status; it is never reported as success.
+
+An atomic lock directory in `DATA_DIR/.update.lock` prevents simultaneous attempts against the same data directory. A process crash can leave a stale lock: after confirming that no updater is running, the operator must remove the empty lock directory before retrying. Do not remove an active updater's lock.
