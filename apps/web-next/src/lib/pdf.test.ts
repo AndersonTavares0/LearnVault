@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clampPage, findLessonPdf, formatFileSize, isPdf, lessonPdfId, stepZoom } from './pdf';
+import { clampPage, findLessonPdf, formatFileSize, isPdf, lessonPdfId, selectionBoxes, stepZoom } from './pdf';
 import type { FileEntry, Lesson } from './transport';
 
 const file = (name: string, extra: Partial<FileEntry> = {}): FileEntry => ({ name, path: `c/${name}`, size: 1, mediaId: name, kind: 'material', availability: 'available', ...extra });
@@ -56,5 +56,25 @@ describe('pdf progress id', () => {
 
 	it('leaves a lesson with media to its player', () => {
 		expect(lessonPdfId({ files: [file('v.mp4', { kind: 'media' }), file('a.pdf')], looseFiles: [] })).toBeNull();
+	});
+});
+
+describe('selection boxes', () => {
+	const page = { left: 100, top: 50, width: 400, height: 800 } as DOMRect;
+	const box = (left: number, top: number, width: number, height: number) => ({ left, top, width, height, right: left + width, bottom: top + height } as DOMRect);
+
+	it('turns client rectangles into fractions of the page', () => {
+		expect(selectionBoxes([box(200, 130, 100, 40)], page)).toEqual([{ x: 0.25, y: 0.1, width: 0.25, height: 0.05 }]);
+	});
+
+	it('clips a rectangle that runs past the page edge and drops empty ones', () => {
+		const [clipped] = selectionBoxes([box(450, 130, 200, 40)], page);
+		expect(clipped.x + clipped.width).toBeLessThanOrEqual(1);
+		expect(selectionBoxes([box(600, 130, 10, 40)], page)).toEqual([]);
+		expect(selectionBoxes([box(200, 130, 0, 40)], page)).toEqual([]);
+	});
+
+	it('returns nothing for a page with no size', () => {
+		expect(selectionBoxes([box(200, 130, 100, 40)], { ...page, width: 0 } as DOMRect)).toEqual([]);
 	});
 });
