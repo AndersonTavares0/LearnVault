@@ -17,6 +17,16 @@ DATA_DIR="${DATA_DIR:-/data}"
 HISTORY_FILE="${DATA_DIR}/update-history.json"
 TARGET_VERSION="${1:-}"
 
+# Serialize updates sharing the same persistent data directory.
+mkdir -p "$DATA_DIR"
+UPDATE_LOCK="${DATA_DIR}/.update.lock"
+if ! mkdir "$UPDATE_LOCK" 2>/dev/null; then
+    printf '%s\n' "Another update holds $UPDATE_LOCK; update aborted." >&2
+    exit 1
+fi
+# shortcut: a crash can leave this lock behind; add supervisor-owned locking for automatic crash recovery.
+trap 'rmdir "$UPDATE_LOCK"' 0
+
 log() {
     printf "[%s] %s\n" "$(date +'%Y-%m-%d %H:%M:%S')" "$*"
 }
@@ -76,6 +86,13 @@ if [ -z "$TARGET_VERSION" ]; then
     fi
 fi
 
+TARGET_VERSION=${TARGET_VERSION#v}
+CURRENT_VERSION=${CURRENT_VERSION#v}
+if ! printf '%s\n' "$TARGET_VERSION" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'; then
+    log "Invalid stable target version; update aborted."
+    exit 1
+fi
+
 if [ "$CURRENT_VERSION" = "$TARGET_VERSION" ]; then
     log "O LearnVault já está na versão ${TARGET_VERSION}. Nenhuma ação necessária."
     exit 0
@@ -100,14 +117,23 @@ NEW_IMAGE="${LEARNVAULT_IMAGE_REPO:-ghcr.io/andersontavares0/learnvault}:${TARGE
 log "Baixando nova imagem: ${NEW_IMAGE}..."
 
 if ! docker pull "$NEW_IMAGE" 2>/dev/null; then
-    log "AVISO: Download de ${NEW_IMAGE} falhou ou imagem local. Tentando docker compose pull..."
-    docker compose pull learnvault || true
+    log "Target image download failed; the running service is unchanged."
+    record_history "failed_download" "$CURRENT_VERSION" "$TARGET_VERSION" "Target image download failed"
+    exit 1
 fi
 
 # 4. Aplica a nova imagem
-PREVIOUS_IMAGE=$(docker inspect --format='{{.Config.Image}}' "$CONTAINER" 2>/dev/null || echo "")
-log "Reiniciando serviços com a nova versão..."
-LEARNVAULT_IMAGE="$NEW_IMAGE" docker compose up -d "$CONTAINER"
+# Retain the immutable previous image, not a mutable image tag.
+PREVIOUS_IMAGE=$(docker inspect --format='{{.Image}}' "$CONTAINER" 2>/dev/null || true)
+if [ -z "$PREVIOUS_IMAGE" ]; then
+    log "Could not identify the previous image; update aborted."
+    exit 1
+fi
+log "Starting target image..."
+started=0
+if LEARNVAULT_IMAGE="$NEW_IMAGE" docker compose up -d --no-build "$CONTAINER"; then
+    started=1
+fi
 
 # 5. Validação de Healthcheck com timeout
 log "Aguardando inicialização e validação de healthcheck (até 60s)..."
@@ -115,7 +141,7 @@ attempts=0
 max_attempts=30
 healthy=0
 
-while [ "$attempts" -lt "$max_attempts" ]; do
+while [ "$started" -eq 1 ] && [ "$attempts" -lt "$max_attempts" ]; do
     status=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}unknown{{end}}' "$CONTAINER" 2>/dev/null || echo "unhealthy")
     if [ "$status" = "healthy" ]; then
         healthy=1
@@ -127,7 +153,12 @@ done
 
 if [ "$healthy" -eq 1 ]; then
     new_health=$(docker compose exec -T "$CONTAINER" wget -q -O - http://127.0.0.1:8090/api/healthz 2>/dev/null || true)
-    NEW_ACTIVE_VERSION=$(printf "%s" "$new_health" | grep -o '"version":"[^"]*"' | cut -d'"' -f4 || echo "$TARGET_VERSION")
+    NEW_ACTIVE_VERSION=$(printf "%s" "$new_health" | grep -o '"version":"[^"]*"' | cut -d'"' -f4 || true)
+    NEW_ACTIVE_VERSION=${NEW_ACTIVE_VERSION#v}
+    [ "$NEW_ACTIVE_VERSION" = "$TARGET_VERSION" ] || healthy=0
+fi
+
+if [ "$healthy" -eq 1 ]; then
     log "SUCESSO: LearnVault atualizado para a versão ${NEW_ACTIVE_VERSION} e validado com sucesso!"
     record_history "success" "$CURRENT_VERSION" "$NEW_ACTIVE_VERSION" "Atualização concluída com sucesso"
     exit 0
@@ -140,7 +171,7 @@ else
     
     # Restaura o banco de dados pré-atualização
     log "Restaurando banco de dados a partir do backup preventivo ${BACKUP_PATH}..."
-    docker compose run --rm "$CONTAINER" /app/learnvault-server restore --backup "$BACKUP_PATH" --database "$DATABASE_PATH"
+    LEARNVAULT_IMAGE="$PREVIOUS_IMAGE" docker compose run --rm --entrypoint /app/learnvault-server "$CONTAINER" restore --backup "$BACKUP_PATH" --database "$DATABASE_PATH"
     
     # Reverte para a imagem anterior
     if [ -n "$PREVIOUS_IMAGE" ]; then

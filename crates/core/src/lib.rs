@@ -66,8 +66,8 @@ pub use scanner::{MediaKind, ScanOutcome, ScannedFile, scan};
 pub use study::{
     Flashcard, GlobalStudyNote, MAX_RECENT_STUDY, ReviewRating, StudyDay, StudyFavorites,
     StudyNote, StudyProgress, StudySummary, create_flashcard, create_study_note, delete_flashcard,
-    delete_study_note, list_all_study_notes, list_favorites, list_flashcards, list_study_notes,
-    recent_study, record_position, review_flashcard, set_completed, set_course_favorite,
-    set_lesson_favorite, study_progress, study_summary, study_summary_on, update_flashcard,
-    update_study_note,
+    delete_study_note, flashcard_media_id, list_all_study_notes, list_favorites, list_flashcards,
+    list_study_notes, recent_study, record_position, review_flashcard, set_completed,
+    set_course_favorite, set_lesson_favorite, study_note_media_id, study_progress, study_summary,
+    study_summary_on, update_flashcard, update_study_note,
 };
