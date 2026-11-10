@@ -1,8 +1,9 @@
-import { ChevronLeft, Download, Star } from 'lucide-react';
+import { Star } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { CourseCover } from '@/components/course-cover';
 import { Curriculum } from '@/components/curriculum';
+import { Materials } from '@/components/materials';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -12,9 +13,10 @@ import { collectMaterials, countCatalogNode, formatCount, formatCourseMeta } fro
 import { tr } from '@/lib/i18n';
 import { buildLibrary } from '@/lib/library';
 import { formatDuration, studySyncSupported } from '@/lib/player';
-import { findCourse, findLesson, findLessonLocation, href } from '@/lib/router';
-import { fileStatus, transport, type CatalogNode, type FileEntry } from '@/lib/transport';
+import { findCourse, findLessonLocation, href } from '@/lib/router';
+import type { CatalogNode } from '@/lib/transport';
 import { cn } from '@/lib/utils';
+import { LessonPage } from './lesson';
 import { useCatalog, useFavorites, useNotes, useRecent, useRemoveCourse, useResetCourseOrder, useSession, useToggleCourseFavorite } from '@/app/data';
 
 const path = (hash: string) => hash.replace(/^#/, '');
@@ -26,7 +28,7 @@ export function CourseRoute() {
 	if (catalog.isPending) return <p role="status" className="text-muted-foreground">{tr('Loading course…', 'Carregando curso…')}</p>;
 	const course = findCourse(catalog.data ?? null, courseId);
 	if (!course) return <NotFound />;
-	if (lessonPath) return <LessonPlaceholder course={course} courseId={courseId} lessonPath={lessonPath} />;
+	if (lessonPath) return <LessonPage course={course} courseId={courseId} lessonPath={lessonPath} />;
 	return <CourseOverview course={course} courseId={courseId} />;
 }
 
@@ -37,27 +39,6 @@ function NotFound() {
 			<p className="text-muted-foreground">{tr('It may have been removed from the library or you may not have access to it.', 'Ele pode ter sido removido da biblioteca ou você pode não ter acesso a ele.')}</p>
 			<Link to="/" className={buttonVariants({ variant: 'outline' })}>{tr('Back to My learning', 'Voltar para Meu aprendizado')}</Link>
 		</div>
-	);
-}
-
-/** The player lands in Phase 4 (#338); until then the lesson route says so and keeps context. */
-function LessonPlaceholder({ course, courseId, lessonPath }: { course: CatalogNode; courseId: string; lessonPath: string }) {
-	const catalog = useCatalog();
-	const lesson = findLesson(catalog.data ?? null, courseId, lessonPath);
-	return (
-		<div className="space-y-4">
-			<BackToCourse course={course} courseId={courseId} />
-			<h1 className="text-2xl font-semibold">{lesson?.title ?? tr('Lesson', 'Aula')}</h1>
-			<p className="text-muted-foreground">{tr('The new player is being built (#338).', 'O novo player está sendo construído (#338).')}</p>
-		</div>
-	);
-}
-
-function BackToCourse({ course, courseId }: { course: CatalogNode; courseId: string }) {
-	return (
-		<Link to={path(href('course', courseId))} className="inline-flex min-h-11 items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-			<ChevronLeft className="size-4" aria-hidden="true" />{course.title}
-		</Link>
 	);
 }
 
@@ -144,28 +125,6 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 				)}
 			</Tabs>
 		</div>
-	);
-}
-
-function Materials({ files, courseId }: { files: FileEntry[]; courseId: string }) {
-	if (!files.length) return <p className="text-muted-foreground">{tr('No support materials in this course.', 'Nenhum material de apoio neste curso.')}</p>;
-	return (
-		<ul className="divide-y rounded-lg border bg-card">
-			{files.map((file) => {
-				const url = file.availability?.trim().toLowerCase() === 'missing' ? null : transport.mediaUrl(file, courseId);
-				const status = fileStatus(file);
-				return (
-					<li key={file.path} className="flex min-h-14 items-center gap-3 px-4 py-2">
-						<span className="min-w-0 flex-1 break-words">{file.name}{status && <span className="ml-2 text-xs text-muted-foreground">({status})</span>}</span>
-						{url && (
-							<a href={url} download={file.name} target="_blank" rel="noopener noreferrer" className={buttonVariants({ variant: 'outline', size: 'sm' })} aria-label={tr(`Download ${file.name}`, `Baixar ${file.name}`)}>
-								<Download />{tr('Download', 'Baixar')}
-							</a>
-						)}
-					</li>
-				);
-			})}
-		</ul>
 	);
 }
 
