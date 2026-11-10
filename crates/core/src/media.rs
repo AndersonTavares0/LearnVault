@@ -552,8 +552,35 @@ fn open_readonly(_root: &Path, _relative_path: &str, _path: &Path, media_id: &st
 
     #[cfg(windows)]
     {
-        cap_std::fs::Dir::open_ambient_dir(_root, cap_std::ambient_authority())
-            .and_then(|directory| directory.open(_relative_path))
+        use std::os::windows::fs::OpenOptionsExt;
+
+        let root = std::fs::OpenOptions::new()
+            .read(true)
+            // Keeping delete sharing disabled pins the capability to this directory on Windows.
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+            .open(_root)
+            .map_err(|source| Error::MediaUnreadable {
+                media_id: media_id.to_owned(),
+                source,
+            })?;
+        let metadata = root.metadata().map_err(|source| Error::MediaUnreadable {
+            media_id: media_id.to_owned(),
+            source,
+        })?;
+        if is_reparse_point(&metadata) {
+            return Err(Error::LibraryRootIsLink {
+                path: _root.to_path_buf(),
+            });
+        }
+        if !metadata.is_dir() {
+            return Err(Error::LibraryRootNotDirectory {
+                path: _root.to_path_buf(),
+            });
+        }
+
+        cap_std::fs::Dir::from_std_file(root)
+            .open(_relative_path)
             .map(cap_std::fs::File::into_std)
             .map_err(|source| Error::MediaUnreadable {
                 media_id: media_id.to_owned(),
@@ -591,6 +618,18 @@ fn is_reparse_point(_metadata: &Metadata) -> bool {
 #[cfg(windows)]
 const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
 
+#[cfg(windows)]
+const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+
+#[cfg(windows)]
+const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+
+#[cfg(windows)]
+const FILE_SHARE_READ: u32 = 0x0000_0001;
+
+#[cfg(windows)]
+const FILE_SHARE_WRITE: u32 = 0x0000_0002;
+
 /// Nome do arquivo no fim do caminho, para a classificação por extensão.
 fn file_name(path: &Path) -> String {
     path.file_name()
@@ -622,6 +661,28 @@ mod windows_open_tests {
             "media-1",
         );
         assert!(result.is_err(), "directory links must not escape the root");
+        Ok(())
+    }
+
+    #[test]
+    fn a_replaced_library_root_junction_is_not_followed() -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let outside = directory.path().join("outside");
+        let root_link = directory.path().join("library");
+        std::fs::create_dir_all(&outside)?;
+        std::fs::write(outside.join("video.mp4"), b"synthetic video")?;
+        if std::os::windows::fs::symlink_dir(&outside, &root_link).is_err() {
+            eprintln!("skipped: creating a directory link requires Windows privileges");
+            return Ok(());
+        }
+
+        assert!(open_readonly(
+            &root_link,
+            "video.mp4",
+            &root_link.join("video.mp4"),
+            "media-1",
+        )
+        .is_err());
         Ok(())
     }
 }
