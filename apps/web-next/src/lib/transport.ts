@@ -692,7 +692,11 @@ export class HttpTransport implements Transport {
 	async me() { const response = await fetch('/api/me'); return response.ok ? normalizeUser(await response.json()) : null; }
 	async login(username: string, password: string) {
 		const response = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
-		if (!response.ok) throw new Error(response.status === 401 ? tr('Incorrect username or password.', 'Usuário ou senha incorretos.') : tr('Could not sign in.', 'Não foi possível entrar.'));
+		if (!response.ok) {
+			// The server limits attempts per username over a 60-second window (crates/server/src/state.rs).
+			if (response.status === 429) throw new Error(tr('Too many sign-in attempts. Wait a minute and try again.', 'Muitas tentativas de entrada. Aguarde um minuto e tente de novo.'));
+			throw new Error(response.status === 401 ? tr('Incorrect username or password.', 'Usuário ou senha incorretos.') : tr('Could not sign in.', 'Não foi possível entrar.'));
+		}
 		return normalizeUser(await response.json());
 	}
 	async logout() { await fetch('/api/logout', { method: 'POST' }); }

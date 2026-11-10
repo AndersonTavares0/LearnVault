@@ -16,8 +16,6 @@ function Placeholder({ title, issue }: { title: string; issue: number }) {
 	);
 }
 
-export const HomePage = () => <Placeholder title={tr('My learning', 'Meu aprendizado')} issue={336} />;
-export const LoginPage = () => <main id="main" className="mx-auto max-w-md px-4 py-16"><Placeholder title={tr('Sign in to LearnVault', 'Entrar no LearnVault')} issue={336} /></main>;
 export const ProgressPage = () => <Placeholder title={tr('Progress', 'Progresso')} issue={339} />;
 export const NotesPage = () => <Placeholder title={tr('Notes', 'Notas')} issue={339} />;
 

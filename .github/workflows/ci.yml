@@ -120,8 +120,6 @@ jobs:
       # React app built in parallel until the cutover (#340); its tests build both outputs.
       - run: pnpm --filter learnvault-web-next lint
       - run: pnpm --filter learnvault-web-next test
-      # Dependabot alert #17: deepmerge 4.3.1 is dev-only via @sveltejs/vite-plugin-svelte;
-      # GHSA-gcqx-w48m-w2h4 has no patched release yet. Remove this narrow ignore when fixed.
       - run: pnpm audit --audit-level=low --ignore GHSA-gcqx-w48m-w2h4
 
   e2e-server:

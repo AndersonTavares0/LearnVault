@@ -11,7 +11,7 @@ describe('session bootstrap', () => {
 		});
 
 		expect(session.user).toBeNull();
-		expect(session.error).toBe('Não foi possível conectar ao serviço.');
+		expect(session.error).toBe('Could not connect to the service.');
 	});
 
 	it('uses the server session on HTTP', async () => {
