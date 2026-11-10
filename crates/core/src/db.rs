@@ -7,10 +7,9 @@ use std::{
 
 use rusqlite::config::DbConfig;
 use rusqlite::{Connection, OptionalExtension, params};
-use rusqlite_migration::SchemaVersion;
 
 use crate::error::{Error, Result};
-use crate::migrations::{MIGRATIONS, SCHEMA_VERSION};
+use crate::migrations::{SCHEMA_VERSION, migrate_to_latest, schema_version};
 
 /// Conexão SQLite com o schema do domínio aplicado.
 ///
@@ -54,15 +53,7 @@ impl Database {
 
     /// Versão do schema registrada no banco (`PRAGMA user_version`).
     pub fn schema_version(&self) -> Result<usize> {
-        Ok(
-            match MIGRATIONS
-                .current_version(&self.conn)
-                .map_err(read_schema_version)?
-            {
-                SchemaVersion::NoneSet => 0,
-                SchemaVersion::Inside(version) | SchemaVersion::Outside(version) => version.get(),
-            },
-        )
+        schema_version(&self.conn).map_err(read_schema_version)
     }
 
     /// Verifica se o banco está exatamente no schema suportado e mantém as tabelas essenciais.
@@ -71,13 +62,7 @@ impl Database {
     /// nenhuma delas é uma dependência pronta para o servidor HTTP, mesmo quando a leitura da
     /// versão não produz erro.
     pub fn has_current_schema(&self) -> Result<bool> {
-        let version = MIGRATIONS
-            .current_version(&self.conn)
-            .map_err(read_schema_version)?;
-        let SchemaVersion::Inside(version) = version else {
-            return Ok(false);
-        };
-        if version.get() != CURRENT_SCHEMA_VERSION {
+        if schema_version(&self.conn).map_err(read_schema_version)? != CURRENT_SCHEMA_VERSION {
             return Ok(false);
         }
 
@@ -174,12 +159,10 @@ impl Database {
         // A versão é lida antes de qualquer alteração no arquivo. Recusar um schema mais
         // novo precisa ser uma operação sem efeito colateral: nada de trocar o journal ou
         // criar tabelas em um banco que este binário não conhece.
-        if let SchemaVersion::Outside(found) = MIGRATIONS
-            .current_version(&conn)
-            .map_err(read_schema_version)?
-        {
+        let found = schema_version(&conn).map_err(read_schema_version)?;
+        if found > SCHEMA_VERSION {
             return Err(Error::SchemaTooNew {
-                found: found.get(),
+                found,
                 known: SCHEMA_VERSION,
             });
         }
@@ -189,7 +172,7 @@ impl Database {
         }
 
         let mut conn = conn;
-        MIGRATIONS.to_latest(&mut conn)?;
+        migrate_to_latest(&mut conn).map_err(Error::Migrations)?;
 
         Ok(Self { conn })
     }
@@ -298,12 +281,10 @@ impl Database {
             return Err(Error::LegacyGoDatabase);
         }
 
-        if let SchemaVersion::Outside(found) = MIGRATIONS
-            .current_version(&backup_conn)
-            .map_err(read_schema_version)?
-        {
+        let found = schema_version(&backup_conn).map_err(read_schema_version)?;
+        if found > SCHEMA_VERSION {
             return Err(Error::SchemaTooNew {
-                found: found.get(),
+                found,
                 known: SCHEMA_VERSION,
             });
         }
@@ -968,7 +949,7 @@ fn is_legacy_go_database(conn: &Connection) -> Result<bool> {
 }
 
 /// Traduz a falha de leitura da versão do schema, que não é uma migração.
-fn read_schema_version(source: rusqlite_migration::Error) -> Error {
+fn read_schema_version(source: rusqlite::Error) -> Error {
     Error::ReadSchemaVersion { source }
 }
 

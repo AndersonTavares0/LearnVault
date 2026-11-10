@@ -4,14 +4,13 @@
 //! publicadas nunca são editadas: uma mudança de schema acrescenta um passo novo. O
 //! domínio não escreve DDL em nenhum outro lugar.
 
-use rusqlite_migration::{M, Migrations};
+use rusqlite::Connection;
 
 /// Versão do schema conhecida por este programa.
 ///
-/// A recusa de um schema mais novo não depende desta constante — ela vem de
-/// `SchemaVersion::Outside` —, mas ela deve acompanhar a cadeia de migrações porque
-/// aparece na mensagem de diagnóstico de [`crate::Error::SchemaTooNew`].
-pub(crate) const SCHEMA_VERSION: usize = 11;
+/// É sempre o tamanho de [`MIGRATIONS`]: um banco acima dela foi gravado por uma versão
+/// mais nova e é recusado com [`crate::Error::SchemaTooNew`].
+pub(crate) const SCHEMA_VERSION: usize = MIGRATIONS.len();
 
 /// Versão 1: bibliotecas, mídia, varreduras e estado de estudo.
 ///
@@ -475,19 +474,29 @@ CREATE TABLE pdf_annotation (
 CREATE INDEX pdf_annotation_owner_media_idx ON pdf_annotation (owner_id, media_id, page);
 ";
 
-const MIGRATIONS_SLICE: &[M<'static>] = &[
-    M::up(V1),
-    M::up(V2),
-    M::up(V3),
-    M::up(V4),
-    M::up(V5),
-    M::up(V6),
-    M::up(V7),
-    M::up(V8),
-    M::up(V9),
-    M::up(V10),
-    M::up(V11),
-];
+/// Cadeia de migrações aplicada por [`crate::db::Database`]; o índice `n` leva o banco da
+/// versão `n` para `n + 1`.
+pub(crate) const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11];
 
-/// Cadeia de migrações aplicada por [`crate::db::Database`].
-pub(crate) const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATIONS_SLICE);
+/// Versão do schema gravada em `PRAGMA user_version` (0 quando nunca migrado).
+///
+/// O mesmo pragma usado pela antiga dependência `rusqlite_migration`, então bancos
+/// existentes continuam na versão que já tinham.
+pub(crate) fn schema_version(conn: &Connection) -> rusqlite::Result<usize> {
+    let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    usize::try_from(version).map_err(|_| rusqlite::Error::IntegralValueOutOfRange(0, version))
+}
+
+/// Aplica as migrações pendentes numa única transação: ou todas entram, ou nenhuma.
+pub(crate) fn migrate_to_latest(conn: &mut Connection) -> rusqlite::Result<()> {
+    let current = schema_version(conn)?;
+    if current >= SCHEMA_VERSION {
+        return Ok(());
+    }
+    let tx = conn.transaction()?;
+    for step in &MIGRATIONS[current..] {
+        tx.execute_batch(step)?;
+    }
+    tx.pragma_update(None, "user_version", SCHEMA_VERSION as i64)?;
+    tx.commit()
+}
