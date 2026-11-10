@@ -68,12 +68,12 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 
 	return (
 		<div className="space-y-8">
-			<header className="rounded-2xl bg-ink p-5 text-ink-foreground sm:p-8">
+			<header className="on-ink rounded-2xl border border-[color:var(--ink-edge)] bg-ink p-5 text-ink-foreground sm:p-8">
 				<Link to="/" className="mb-4 inline-flex min-h-11 items-center gap-1 text-sm text-ink-muted hover:text-ink-foreground focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none">
 					<ChevronLeft className="size-4" aria-hidden="true" />{tr('My learning', 'Meu aprendizado')}
 				</Link>
-				<div className="grid gap-8 md:grid-cols-[1fr_minmax(0,22rem)] md:items-center">
-					<div className="order-2 min-w-0 space-y-5 md:order-1">
+				<div className="grid gap-8 lg:grid-cols-[1fr_minmax(0,22rem)] lg:items-center">
+					<div className="order-2 min-w-0 space-y-5 lg:order-1">
 						<div className="space-y-2">
 							<h1 className="text-4xl leading-tight font-semibold text-balance">{course.title}</h1>
 							<p className="text-ink-muted">{formatCourseMeta(counts)}</p>
@@ -108,7 +108,7 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 							{user?.isAdmin && <ManageCourse course={course} courseId={courseId} lessons={counts.lessons} buttonClassName={onInk} />}
 						</div>
 					</div>
-					<div className="order-1 md:order-2"><CourseCover course={course} profile={user?.userId ?? ''} eager done={entry?.done ?? 0} total={entry?.total ?? 0} map /></div>
+					<div className="order-1 max-w-md lg:order-2 lg:max-w-none"><CourseCover course={course} profile={user?.userId ?? ''} eager done={entry?.done ?? 0} total={entry?.total ?? 0} map /></div>
 				</div>
 			</header>
 

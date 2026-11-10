@@ -127,7 +127,7 @@ export function NotesPage() {
 				</div>
 			)}
 			{revisit?.location && !query && !course && (
-				<aside aria-label={tr('A note to revisit', 'Uma nota para revisitar')} className="rounded-2xl bg-ink p-5 text-ink-foreground sm:p-6">
+				<aside aria-label={tr('A note to revisit', 'Uma nota para revisitar')} className="on-ink rounded-2xl border border-[color:var(--ink-edge)] bg-ink p-5 text-ink-foreground sm:p-6">
 					<p className="text-sm text-ink-muted">{revisit.location.courseTitle} · {new Date(revisit.note.updatedAt * 1000).toLocaleDateString(getLocale(), { dateStyle: 'medium' })}</p>
 					<p className="mt-2 line-clamp-4 max-w-prose font-serif text-xl leading-relaxed">{revisit.note.content}</p>
 					<Link to={href('course', revisit.location.courseId, revisit.location.lesson.path, revisit.note.positionSeconds).replace(/^#/, '')} className="mt-3 inline-flex min-h-11 items-center font-semibold text-[var(--a-soft)] hover:underline focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none">{tr('Go back to that moment', 'Voltar àquele momento')}</Link>

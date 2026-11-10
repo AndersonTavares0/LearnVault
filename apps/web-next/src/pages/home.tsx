@@ -130,26 +130,26 @@ function ContinueLearning({ items, entries, profile }: { items: ResumeEntry[]; e
 	const [first, ...rest] = items;
 	const link = (entry: ResumeEntry) => routerPath(href('course', entry.location.courseId, entry.location.lesson.path, entry.progress.positionSeconds));
 	return (
-		<section aria-labelledby="continue-heading" className="rounded-2xl bg-ink p-5 text-ink-foreground sm:p-8">
+		<section aria-labelledby="continue-heading" className="on-ink rounded-2xl border border-[color:var(--ink-edge)] bg-ink p-4 text-ink-foreground sm:p-6 lg:p-8">
 			<h2 id="continue-heading" className="sr-only">{tr('Continue studying', 'Continuar estudando')}</h2>
-			<article className="grid items-center gap-6 md:grid-cols-[minmax(0,20rem)_1fr]">
+			<article className="grid grid-cols-[6.5rem_1fr] items-center gap-x-4 gap-y-4 sm:grid-cols-[12rem_1fr] md:gap-x-6 lg:grid-cols-[16rem_1fr_auto]">
 				<CourseCoverFor entry={entries.find((entry) => entry.courseId === first.location.courseId)} profile={profile} eager />
-				<div className="min-w-0 space-y-4">
+				<div className="min-w-0 space-y-3 lg:space-y-4">
 					<div className="min-w-0">
 						<p className="truncate text-ink-muted">{first.location.courseTitle}{first.location.moduleTitle ? `, ${first.location.moduleTitle}` : ''}</p>
-						<h3 className="font-serif text-3xl leading-tight font-semibold text-balance">{first.location.lesson.title}</h3>
+						<h3 className="font-serif text-xl leading-tight font-semibold text-balance sm:text-2xl lg:text-3xl">{first.location.lesson.title}</h3>
 					</div>
 					<ProgressBar value={first.courseProgress} label={tr(`${Math.round(first.courseProgress * 100)}% of the course complete`, `${Math.round(first.courseProgress * 100)}% do curso concluído`)} className="max-w-md [&_[role=progressbar]]:bg-white/20 [&_[role=progressbar]>div]:bg-[var(--a-soft)] [&_p]:text-ink-muted" />
-					<Link to={link(first)} className="inline-flex h-12 items-center justify-center rounded-lg bg-[var(--a-soft)] px-6 text-sm font-semibold text-stone-950 hover:bg-white focus-visible:ring-3 focus-visible:ring-white/60 focus-visible:outline-none">{tr('Resume lesson', 'Retomar aula')}</Link>
-				</div>
+					</div>
+				<Link to={link(first)} className="col-span-2 inline-flex h-12 items-center justify-center rounded-lg bg-[var(--a-soft)] px-6 text-sm font-semibold text-stone-950 hover:bg-white focus-visible:ring-3 focus-visible:ring-white/60 focus-visible:outline-none sm:col-span-2 lg:col-span-1 lg:self-center">{tr('Resume lesson', 'Retomar aula')}</Link>
 			</article>
 			{rest.length > 0 && (
 				<div className="mt-6 border-t border-white/15 pt-4">
-					<h3 className="mb-2 text-sm font-semibold text-ink-muted">{tr('Also continue', 'Continue também')}</h3>
+					<h3 className="sr-only">{tr('Also continue', 'Continue também')}</h3>
 					<ul className="grid gap-2 sm:grid-cols-3">
 						{rest.map((entry) => (
 							<li key={entry.progress.mediaId}>
-								<Link to={link(entry)} className="flex min-h-14 items-center gap-3 rounded-lg px-2 py-2 hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none">
+								<Link to={link(entry)} className="-mx-2 flex min-h-14 items-center gap-3 rounded-lg px-2 py-2 hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none">
 									<CourseCoverFor entry={entries.find((course) => course.courseId === entry.location.courseId)} profile={profile} compact className="w-20 shrink-0" />
 									<span className="min-w-0">
 										<span className="block truncate text-sm text-ink-muted">{entry.location.courseTitle}</span>

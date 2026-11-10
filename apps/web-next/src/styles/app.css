@@ -205,7 +205,16 @@
   --ink: oklch(19% 0.012 160);
   --ink-foreground: oklch(97% 0.004 160);
   --ink-muted: oklch(78% 0.012 160);
+  --ink-edge: transparent;
 }
+/* On a dark page the banner steps up a level, tinted toward the accent, with a hairline edge: otherwise it reads as a hole. */
+:root[data-theme="dark"] {
+  --ink: oklch(25% 0.03 165);
+  --ink-muted: oklch(82% 0.015 160);
+  --ink-edge: oklch(100% 0 0 / 0.1);
+}
+/* Banners keep the interface sans even when a Style sets measurements in mono. */
+:root[data-style="vault"] .on-ink .meta { font-family: var(--font-sans); font-size: 0.875rem; }
 
 @layer base {
   h1, h2 {
