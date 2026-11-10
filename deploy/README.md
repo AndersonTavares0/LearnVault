@@ -133,7 +133,7 @@ Caso deseje que o LearnVault verifique e atualize autonomamente durante a madrug
    ```
 2. Inicie o container companion:
    ```sh
-   docker compose -f compose.yaml -f compose.updater.yaml up -d
+   docker compose -f compose.yaml -f compose.updater.yaml --profile updater up -d
    ```
 O container companion updater roda isoladamente, consulta a API e só aplica atualizações dentro da janela de manutenção definida.
 
