@@ -6,7 +6,7 @@ Before `1.0.0`, Release Please increments the minor version for `feat:` commits 
 
 1. Merge approved changes using Conventional Commits into `main`; these changes accumulate for the next monthly release.
 2. On the first day of each month (UTC), Release Please opens or updates one release PR with version files and generated `docs/releases/CHANGELOG.md` notes.
-3. Review and merge the release PR to publish the accumulated changes. Ordinary code PRs do not publish releases; merging the release PR creates the tag and GitHub Release. Urgent security fixes may ship outside the monthly schedule.
+3. Review and merge the release PR to publish the accumulated changes. Ordinary code PRs do not publish releases; merging the release PR creates the tag and GitHub Release. For an urgent security release outside the monthly schedule, manually run the `Release Please` workflow on `main` to prepare the candidate early.
 4. The published release workflow builds Linux server tarballs and the Windows desktop NSIS installer, verifies checksums with `SHA256SUMS`, and generates the contributors list.
 5. Verify assets, checksums, and the Contributors section before general distribution.
 

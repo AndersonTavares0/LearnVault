@@ -54,5 +54,6 @@ that area.
   minor version, `fix:` and `perf:` increment patch, and breaking changes increment minor. From
   `1.0.0`, breaking changes increment major. Release tags and names use `vMAJOR.MINOR.PATCH`.
 - Release Please prepares one release candidate on the first day of each month (UTC). Merge its
-  release PR to publish; urgent security fixes may ship outside the monthly schedule.
+  release PR to publish; urgently needed security releases can prepare a candidate early by
+  manually running the `Release Please` workflow on `main`.
 - GitHub Wiki is permanently removed; do not recreate wiki sync scripts or workflows.
