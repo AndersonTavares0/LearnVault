@@ -10,7 +10,6 @@ publish = false
 [dependencies]
 tempfile = "3"
 rusqlite = { version = "0.41", features = ["backup", "bundled"] }
-rusqlite_migration = "2.6"
 rustix = { version = "1.1.5", features = ["fs"] }
 thiserror = "2"
 uuid = { version = "1.28", features = ["v5", "v7"] }
