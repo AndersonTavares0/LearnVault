@@ -142,6 +142,17 @@ jobs:
           path: crates/server/web/build
       - name: Install Rust toolchain
         run: rustup toolchain install 1.99.0 --profile minimal
+      # Same cache the Rust job saves: the server's dependencies are already compiled there.
+      - name: Restore Cargo registry and target
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-${{ runner.os }}-1.99.0-workspace-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            rust-${{ runner.os }}-1.99.0-workspace-
       - run: cargo build -p learnvault-server
       - run: pnpm --filter learnvault-web-next build
       - run: pnpm exec playwright install --with-deps chromium
@@ -163,8 +174,23 @@ jobs:
     if: ${{ needs['change-scope'].outputs.docs_release_only != 'true' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Build and validate the Rust container image
+      # The image is built through Buildx so its layers (the compiled dependencies above all)
+      # come from the Actions cache; the validation script then reuses the loaded image.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build the Rust container image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/container/Containerfile
+          load: true
+          tags: learnvault-rust-validation:local
+          cache-from: type=gha,scope=rust-oci
+          cache-to: type=gha,scope=rust-oci,mode=max
+      - name: Validate the Rust container image
         shell: bash
+        env:
+          SKIP_BUILD: '1'
         run: ./scripts/verify-rust-oci.sh
       - name: Scan the Rust image for HIGH and CRITICAL vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
