@@ -6,10 +6,10 @@ import { useLocale } from '@/hooks/use-locale';
 import { LOCALE_LABELS, LOCALES, setLocale, tr } from '@/lib/i18n';
 import { studySyncSupported } from '@/lib/player';
 import { MAX_WEEKLY_GOAL, MIN_WEEKLY_GOAL } from '@/lib/statistics';
-import { PALETTES, readPalette, readThemeMode, THEME_MODES, type Palette, type ThemeMode } from '@/lib/theme';
+import { PALETTES, readPalette, readStyle, readThemeMode, STYLES, THEME_MODES, type Palette, type Style, type ThemeMode } from '@/lib/theme';
 import { transportKind } from '@/lib/transport';
 import { useCatalog, useRewards, useSession, useSetWeeklyGoal } from '@/app/data';
-import { safeStorage, savePalette, saveThemeMode } from '@/app/preferences';
+import { safeStorage, savePalette, saveStyle, saveThemeMode } from '@/app/preferences';
 import { PageHeader } from '@/app/shell';
 import { AvatarSettings, CredentialsForm } from './account';
 import { FocusSettings } from './focus';
@@ -19,6 +19,8 @@ import { UserSettings } from './users';
 const paletteLabels: Record<Palette, string> = { emerald: 'Stone + Emerald', teal: 'Zinc + Teal', indigo: 'Zinc + Indigo' };
 const themeLabels = (): Record<ThemeMode, string> => ({ system: tr('System', 'Sistema'), light: tr('Light', 'Claro'), dark: tr('Dark', 'Escuro') });
 
+const styleLabels = (): Record<Style, string> => ({ paper: tr('Paper and ink', 'Papel e tinta'), quiet: tr('Quiet tool', 'Ferramenta calma'), vault: 'Vault' });
+
 export function SettingsPage() {
 	const locale = useLocale();
 	const session = useSession();
@@ -27,6 +29,7 @@ export function SettingsPage() {
 	const user = session.data?.user;
 	const [theme, setTheme] = useState(() => readThemeMode(safeStorage()));
 	const [palette, setPalette] = useState(() => readPalette(safeStorage()));
+	const [style, setStyle] = useState(() => readStyle(safeStorage()));
 	const server = transportKind === 'http';
 	const admin = Boolean(user?.isAdmin);
 
@@ -63,6 +66,7 @@ export function SettingsPage() {
 			<Section id="appearance" title={tr('Appearance', 'Aparência')}>
 				<Choice legend={tr('Theme', 'Tema')} options={THEME_MODES} value={theme} label={(mode) => themeLabels()[mode]} onChange={(mode) => { saveThemeMode(mode); setTheme(mode); }} />
 				<Choice legend={tr('Color palette', 'Paleta de cores')} options={PALETTES} value={palette} label={(value) => paletteLabels[value]} onChange={(value) => { savePalette(value); setPalette(value); }} />
+				<Choice legend={tr('Style', 'Estilo')} options={STYLES} value={style} label={(value) => styleLabels()[value]} onChange={(value) => { saveStyle(value); setStyle(value); }} />
 				<Choice legend={tr('Language', 'Idioma')} options={LOCALES} value={locale} label={(value) => LOCALE_LABELS[value]} onChange={(value) => setLocale(value)} />
 			</Section>
 			{server && user && (

@@ -1,6 +1,6 @@
 import { applyLocale, readLocale, setLocale } from '@/lib/i18n';
 import { playerPreferencesKey, playerPreferencesScope } from '@/lib/player-preferences';
-import { applyPalette, applyTheme, persistPalette, persistThemeMode, readPalette, readThemeMode, resolveTheme, type Palette, type ThemeMode } from '@/lib/theme';
+import { applyPalette, applyStyle, applyTheme, persistPalette, persistStyle, persistThemeMode, readPalette, readStyle, readThemeMode, resolveTheme, type Palette, type Style, type ThemeMode } from '@/lib/theme';
 
 export function safeStorage(): Storage | null {
 	try {
@@ -17,6 +17,7 @@ export function applyStoredPreferences(root: HTMLElement = document.documentElem
 	const storage = safeStorage();
 	applyThemeMode(readThemeMode(storage), root);
 	applyPalette(root, readPalette(storage));
+	applyStyle(root, readStyle(storage));
 	const locale = readLocale(storage, navigator.language);
 	setLocale(locale, storage, root);
 	applyLocale(root, locale);
@@ -45,6 +46,11 @@ export function saveThemeMode(mode: ThemeMode): void {
 export function savePalette(palette: Palette): void {
 	persistPalette(safeStorage(), palette);
 	applyPalette(document.documentElement, palette);
+}
+
+export function saveStyle(style: Style): void {
+	persistStyle(safeStorage(), style);
+	applyStyle(document.documentElement, style);
 }
 
 /**

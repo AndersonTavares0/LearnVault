@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { applyPalette, applyTheme, persistPalette, persistThemeMode, readPalette, readThemeMode, resolveTheme, PALETTE_STORAGE_KEY, THEME_STORAGE_KEY, type ThemeMode } from './theme';
+import { applyStyle, persistStyle, readStyle, applyPalette, applyTheme, persistPalette, persistThemeMode, readPalette, readThemeMode, resolveTheme, PALETTE_STORAGE_KEY, THEME_STORAGE_KEY, type ThemeMode } from './theme';
 
 describe('theme preferences', () => {
 	it('resolves explicit modes and follows the current system preference', () => {
@@ -52,5 +52,15 @@ describe('palette preferences', () => {
 		const root = { dataset: {} } as HTMLElement;
 		applyPalette(root, 'teal');
 		expect(root.dataset.palette).toBe('teal');
+	});
+
+	it('stores the identity style, defaults to paper and applies it to the root', () => {
+		const root = document.createElement('html');
+		expect(readStyle(null)).toBe('paper');
+		expect(readStyle({ getItem: () => 'neon' })).toBe('paper');
+		expect(readStyle({ getItem: () => 'vault' })).toBe('vault');
+		expect(persistStyle({ setItem: () => { throw new Error('denied'); } }, 'quiet')).toBe(false);
+		applyStyle(root, 'quiet');
+		expect(root.dataset.style).toBe('quiet');
 	});
 });

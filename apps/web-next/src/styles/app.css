@@ -177,6 +177,18 @@
   --panel-edge: color-mix(in oklch, var(--a-soft) 20%, var(--n-800));
 }
 
+/*
+ * Styles (identity directions): "paper" is the default and keeps serif titles. "quiet" and
+ * "vault" set titles in the interface sans; "vault" also tightens corners. Selectors beat the
+ * `font-serif` utility, which `@theme inline` resolves to a literal.
+ */
+:root[data-style="quiet"] :is(h1, h2, h3, .font-serif),
+:root[data-style="vault"] :is(h1, h2, h3, .font-serif) {
+  font-family: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+}
+:root[data-style="quiet"] { --radius: 0.5rem; }
+:root[data-style="vault"] { --radius: 0.25rem; }
+
 /* An ink band (course header, resume card) stays dark in both themes, like a reading lamp. */
 :root {
   --ink: oklch(19% 0.012 160);
