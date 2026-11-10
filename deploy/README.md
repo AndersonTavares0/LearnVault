@@ -133,10 +133,11 @@ Caso deseje que o LearnVault verifique e atualize autonomamente durante a madrug
    ```
 2. Inicie o container companion:
    ```sh
-   docker compose -f compose.yaml -f compose.updater.yaml up -d
+   docker compose -f compose.yaml -f compose.updater.yaml --profile updater up -d
    ```
 O container companion updater roda isoladamente, consulta a API e só aplica atualizações dentro da janela de manutenção definida.
 
+**Docker socket security.** The updater never mounts the host socket: it talks to `docker-proxy` (`tecnativa/docker-socket-proxy`, pinned by digest), which only enables the API sections used by `update.sh` (containers, start/stop, images, networks, volumes and exec) and refuses the rest (secrets, swarm, build, commit and plugins). This reduces the surface; it does not eliminate the risk: anyone able to create containers through the API could, in theory, mount the host. Therefore the updater is opt-in and should run only on machines you control. For a stronger guarantee, prefer the Quadlet with `podman-auto-update.timer`, which does not use a socket.
 
 ## Updater failure boundaries
 
