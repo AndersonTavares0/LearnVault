@@ -5,6 +5,7 @@ on:
     branches: [main]
   schedule:
     - cron: '0 12 1 * *'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -22,5 +23,5 @@ jobs:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           config-file: .github/release-please/release-please-config.json
           manifest-file: .github/release-please/release-please-manifest.json
-          skip-github-release: ${{ github.event_name == 'schedule' }}
+          skip-github-release: ${{ github.event_name != 'push' }}
           skip-github-pull-request: ${{ github.event_name == 'push' }}

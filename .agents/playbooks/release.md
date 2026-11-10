@@ -6,4 +6,4 @@
 4. Run all relevant native, SPA, E2E, and deployment validations before merging the release PR.
 5. Verify published assets, `SHA256SUMS`, release notes, and platform labels after the release workflow publishes.
 6. Do not make containers a prerequisite for native executable artifacts.
-7. Release Please prepares one release PR on the first day of each month (UTC), collecting changes merged since the previous release. Merge that PR to publish; urgent security fixes may ship outside the monthly schedule.
+7. Release Please prepares one release PR on the first day of each month (UTC), collecting changes merged since the previous release. For an urgent security release, manually run the `Release Please` workflow on `main` to prepare the candidate early. In both cases, merge the release PR to publish.
