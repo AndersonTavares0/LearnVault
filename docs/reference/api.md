@@ -22,6 +22,8 @@ Static file serving is disabled by default. Pass `--web-root` pointing to the di
 
 Initial bootstrap allows temporary credentials (`admin/admin`). The response marks `must_change_credentials: true`, and all protected endpoints return `403 credentials_change_required` until the password is changed.
 
+Temporary credentials are created only when the server listens on a loopback address. A non-loopback listener requires explicit bootstrap credentials; a persisted administrator still marked for credential change also prevents network startup. Login rate limiting uses the socket peer address. `X-Real-IP` is honored only when that peer is listed in `TRUSTED_PROXY_IPS`; `X-Forwarded-For` is not trusted.
+
 ## Database Compatibility & Migration
 
 The Rust server detects legacy database signatures (`users`, `sessions`, `schema_migrations`) before bootstrapping or running migrations. If detected, it exits with the message:

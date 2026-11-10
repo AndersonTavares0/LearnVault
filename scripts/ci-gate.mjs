@@ -17,6 +17,12 @@ const filterableJobs = new Set([
   'rustAudit',
 ]);
 
+const conventionalPullRequestTitle = /^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([A-Za-z0-9][A-Za-z0-9._/-]*\))?!?: [^\s\r\n](?:[^\r\n]*[^\s\r\n])?$/;
+
+export function isConventionalPullRequestTitle(title) {
+  return typeof title === 'string' && conventionalPullRequestTitle.test(title);
+}
+
 function isSafeRelativePath(file) {
   if (typeof file !== 'string' || file.length === 0) return false;
   if (file.includes('\\') || file.startsWith('/') || /^[a-z]:/i.test(file)) return false;

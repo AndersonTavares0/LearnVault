@@ -7,12 +7,16 @@ use crate::{
 use argon2::{Algorithm, Argon2, Params, PasswordHash, PasswordHasher, PasswordVerifier, Version};
 use axum::{
     Json,
-    extract::{Path as AxumPath, State},
+    extract::{Extension, Path as AxumPath, State, connect_info::ConnectInfo},
     http::{HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::{
+    net::{IpAddr, SocketAddr},
+    sync::OnceLock,
+};
 use thiserror::Error;
 
 const ARGON_MEMORY_KIB: u32 = 64 * 1024;
@@ -20,6 +24,7 @@ const ARGON_ITERATIONS: u32 = 2;
 const ARGON_LANES: u32 = 1;
 const ARGON_OUTPUT_BYTES: usize = 32;
 const SESSION_TOKEN_BYTES: usize = 32;
+static TRUSTED_PROXY_IPS: OnceLock<Vec<IpAddr>> = OnceLock::new();
 
 /// Erros internos das primitivas de autenticação.
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -249,13 +254,19 @@ struct ErrorResponse {
 
 pub(crate) async fn login(
     State(state): State<AppState>,
+    peer: Option<Extension<ConnectInfo<SocketAddr>>>,
     headers: HeaderMap,
     Json(request): Json<LoginRequest>,
 ) -> Response {
     if !same_origin(&headers) {
         return csrf_failed();
     }
-    if !state.allow_login_attempt(&request.username).await {
+    let source = login_source(
+        peer.map(|Extension(ConnectInfo(address))| address),
+        &headers,
+        trusted_proxy_ips(),
+    );
+    if !state.allow_login_attempt(&source).await {
         return no_store(
             (
                 StatusCode::TOO_MANY_REQUESTS,
@@ -348,6 +359,59 @@ pub(crate) async fn login(
     };
     response.headers_mut().insert("set-cookie", cookie);
     no_store(response)
+}
+
+fn trusted_proxy_ips() -> &'static [IpAddr] {
+    TRUSTED_PROXY_IPS
+        .get_or_init(|| {
+            std::env::var("TRUSTED_PROXY_IPS")
+                .unwrap_or_default()
+                .split(',')
+                .filter_map(|value| value.trim().parse().ok())
+                .collect()
+        })
+        .as_slice()
+}
+
+fn login_source(
+    peer: Option<SocketAddr>,
+    headers: &HeaderMap,
+    trusted_proxies: &[IpAddr],
+) -> String {
+    let Some(peer) = peer else {
+        return "unbound-test-client".to_owned();
+    };
+    if trusted_proxies.contains(&peer.ip())
+        && let Some(client_ip) = headers
+            .get("x-real-ip")
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.trim().parse::<IpAddr>().ok())
+    {
+        return client_ip.to_string();
+    }
+    peer.ip().to_string()
+}
+
+#[cfg(test)]
+mod login_rate_limit_tests {
+    use super::login_source;
+    use axum::http::{HeaderMap, HeaderValue};
+    use std::net::{IpAddr, SocketAddr};
+
+    #[test]
+    fn client_ip_headers_are_used_only_from_explicitly_trusted_proxies() {
+        let peer: SocketAddr = "192.0.2.1:8090".parse().unwrap();
+        let client: IpAddr = "198.51.100.7".parse().unwrap();
+        let mut headers = HeaderMap::new();
+        headers.insert("x-real-ip", HeaderValue::from_static("198.51.100.7"));
+        headers.insert("x-forwarded-for", HeaderValue::from_static("203.0.113.9"));
+
+        assert_eq!(login_source(Some(peer), &headers, &[]), "192.0.2.1");
+        assert_eq!(
+            login_source(Some(peer), &headers, &[peer.ip()]),
+            client.to_string()
+        );
+    }
 }
 
 pub(crate) async fn me(State(state): State<AppState>, headers: HeaderMap) -> Response {
