@@ -52,9 +52,12 @@ Rust version is pinned by `rust-toolchain.toml`; Node.js 24 and pnpm 11.28.5 com
   modify, and refactor code. Keep code clean, consistent with existing architecture, and focused on
   surgical changes without unnecessary refactorings or bloat.
 - The course library is strictly read-only: no change may write, move, rename, or copy original course files.
-- Pre-major releases are paced through Release Please with `"bump-minor-pre-major": true` and
-  `"bump-patch-for-minor-pre-major": true`. Standard feature changes (`feat:`) increment patch versions
-  (`0.8.1`, `0.8.2`) rather than skipping minor versions rapidly.
+- Release Please follows Conventional Commit version bumps before `1.0.0`: `feat:` increments the
+  minor version, `fix:` and `perf:` increment patch, and breaking changes increment minor. From
+  `1.0.0`, breaking changes increment major. Release tags and names use `vMAJOR.MINOR.PATCH`.
+- Release Please prepares one release candidate on the first day of each month (UTC). Merge its
+  release PR to publish; urgently needed security releases can prepare a candidate early by
+  manually running the `Release Please` workflow on `main`.
 - GitHub Wiki is permanently removed; do not create wiki sync scripts, workflows, or documentation.
 - Never include secrets, personal course data, database files, or generated media in commits,
   logs, or prompts. Tests use temporary directories (`tempfile::TempDir`, `Database::open_in_memory()`)
@@ -66,28 +69,10 @@ Rust version is pinned by `rust-toolchain.toml`; Node.js 24 and pnpm 11.28.5 com
 
 ## Multi-agent collaboration
 
-LearnVault is developed with help from multiple agents and harnesses (OpenCode,
-OMP/Pi, Antigravity CLI / Agy, Codex, ClaudeCode), often concurrently. These rules apply to every
-agent, without requiring any shared orchestration infrastructure:
-
-- **Verify before acting** — inspect `git status`, branches, worktrees, recent
-  history, and in-flight PRs/issues before starting. Never assume you are the only
-  active agent.
-- **Preserve others' work** — never overwrite, discard, revert, or commit changes
-  authored by another agent without their authorization or an explicit maintainer
-  instruction.
-- **Avoid conflicts** — do not duplicate tasks already in flight and do not edit the
-  same files simultaneously. When in doubt, work in an isolated branch or worktree.
-- **Coordinate through repository state** — use Git, issues, PRs, Discussions, and
-  the documents under `.agents/` as the source of truth for what is happening. Do
-  not assume direct communication between agents.
-- **Integrate safely** — review external changes, respect ADRs and contracts, and
-  run the relevant validations (tests, lints, build) before merging. Do not merge
-  with unresolved conflicts, pending checks, or hidden failures: when a test fails,
-  fix the real cause and keep it visible.
-- **Act responsibly with autonomy** — continue independent tasks without asking for
-  confirmation, and only request guidance on genuine conflicts, ambiguous
-  ownership, or risk of losing work.
+Before starting work, follow [`.agents/policies/agent-collaboration.md`](.agents/policies/agent-collaboration.md)
+for repository-state checks, ownership, delegation, integration, and independent review
+of security, persistence, and release/update changes. The same policy applies to every
+agent and harness working in this repository.
 
 ## Repository map
 
