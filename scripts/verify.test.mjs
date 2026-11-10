@@ -45,6 +45,8 @@ test('o plano padrão roda os checks pretendidos, sem Go nem desktop', () => {
 
 	assert.equal(labels[0], 'pnpm run check');
 	assert.ok(labels.includes('pnpm --filter learnvault-web test'));
+	assert.ok(labels.includes('pnpm --filter learnvault-web-next lint'));
+	assert.ok(labels.includes('pnpm --filter learnvault-web-next test'));
 	assert.ok(labels.includes('cargo fmt --all -- --check'));
 	assert.ok(labels.includes('cargo clippy --all-targets -- -D warnings'));
 	assert.ok(labels.includes('cargo test'));

@@ -24,6 +24,19 @@ jobs:
       docs_release_only: ${{ steps.classify.outputs.docs_release_only }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Validate Conventional Commit pull request title
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          PULL_REQUEST_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { isConventionalPullRequestTitle } from './scripts/ci-gate.mjs';
+
+          if (!isConventionalPullRequestTitle(process.env.PULL_REQUEST_TITLE)) {
+            console.error('Pull request titles must follow Conventional Commits (for example, "feat(player): add progress tracking").');
+            process.exitCode = 1;
+          }
+          NODE
       - name: List changed files
         id: changed
         if: ${{ github.event_name == 'pull_request' }}
@@ -104,6 +117,9 @@ jobs:
         run: pnpm --filter learnvault-web test
         env:
           LEARNVAULT_PREBUILT_OUTPUTS: '1'
+      # React app built in parallel until the cutover (#340); its tests build both outputs.
+      - run: pnpm --filter learnvault-web-next lint
+      - run: pnpm --filter learnvault-web-next test
       - run: pnpm audit --audit-level=low --ignore GHSA-gcqx-w48m-w2h4
 
   e2e-server:
@@ -126,9 +142,21 @@ jobs:
           path: crates/server/web/build
       - name: Install Rust toolchain
         run: rustup toolchain install 1.99.0 --profile minimal
+      # Same cache the Rust job saves: the server's dependencies are already compiled there.
+      - name: Restore Cargo registry and target
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-${{ runner.os }}-1.99.0-workspace-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            rust-${{ runner.os }}-1.99.0-workspace-
       - run: cargo build -p learnvault-server
+      - run: pnpm --filter learnvault-web-next build
       - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm exec playwright test tests/e2e/server.spec.ts
+      - run: pnpm exec playwright test tests/e2e/server.spec.ts tests/e2e/web-next.spec.ts
       - name: Upload E2E diagnostics
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -146,8 +174,23 @@ jobs:
     if: ${{ needs['change-scope'].outputs.docs_release_only != 'true' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Build and validate the Rust container image
+      # The image is built through Buildx so its layers (the compiled dependencies above all)
+      # come from the Actions cache; the validation script then reuses the loaded image.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build the Rust container image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/container/Containerfile
+          load: true
+          tags: learnvault-rust-validation:local
+          cache-from: type=gha,scope=rust-oci
+          cache-to: type=gha,scope=rust-oci,mode=max
+      - name: Validate the Rust container image
         shell: bash
+        env:
+          SKIP_BUILD: '1'
         run: ./scripts/verify-rust-oci.sh
       - name: Scan the Rust image for HIGH and CRITICAL vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -209,6 +252,23 @@ jobs:
         run: cargo test --doc --workspace --exclude learnvault-desktop
       - name: Run tests with coverage
         run: cargo llvm-cov --package learnvault-core --all-targets --fail-under-lines 80
+
+  windows-core:
+    name: Windows core tests
+    runs-on: windows-latest
+    timeout-minutes: 20
+    needs: [change-scope]
+    if: ${{ needs['change-scope'].outputs.docs_release_only != 'true' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install Rust toolchain
+        run: rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Run core Clippy
+        run: cargo clippy -p learnvault-core --all-targets --locked -- -D warnings
+      - name: Run core tests
+        run: cargo test -p learnvault-core --locked
 
   desktop:
     name: Desktop crate compile and guards

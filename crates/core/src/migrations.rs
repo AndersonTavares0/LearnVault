@@ -4,14 +4,13 @@
 //! publicadas nunca são editadas: uma mudança de schema acrescenta um passo novo. O
 //! domínio não escreve DDL em nenhum outro lugar.
 
-use rusqlite_migration::{M, Migrations};
+use rusqlite::Connection;
 
 /// Versão do schema conhecida por este programa.
 ///
-/// A recusa de um schema mais novo não depende desta constante — ela vem de
-/// `SchemaVersion::Outside` —, mas ela deve acompanhar a cadeia de migrações porque
-/// aparece na mensagem de diagnóstico de [`crate::Error::SchemaTooNew`].
-pub(crate) const SCHEMA_VERSION: usize = 10;
+/// É sempre o tamanho de [`MIGRATIONS`]: um banco acima dela foi gravado por uma versão
+/// mais nova e é recusado com [`crate::Error::SchemaTooNew`].
+pub(crate) const SCHEMA_VERSION: usize = MIGRATIONS.len();
 
 /// Versão 1: bibliotecas, mídia, varreduras e estado de estudo.
 ///
@@ -451,18 +450,53 @@ CREATE TABLE user_course_access (
 );
 ";
 
-const MIGRATIONS_SLICE: &[M<'static>] = &[
-    M::up(V1),
-    M::up(V2),
-    M::up(V3),
-    M::up(V4),
-    M::up(V5),
-    M::up(V6),
-    M::up(V7),
-    M::up(V8),
-    M::up(V9),
-    M::up(V10),
-];
+/// Versão 11: anotações do aluno sobre páginas de PDF.
+///
+/// O arquivo do curso nunca é alterado: marca-textos, sublinhados e notas ficam aqui, presos
+/// a uma mídia e a uma página. `rects` guarda os retângulos como texto `x,y,largura,altura`
+/// separados por `;`, em frações da página (0 a 1), para sobreviver a qualquer zoom.
+/// A regra de que uma nota exige texto é validada no domínio, não no banco.
+const V11: &str = "
+CREATE TABLE pdf_annotation (
+    annotation_id TEXT PRIMARY KEY NOT NULL,
+    owner_id TEXT NOT NULL,
+    media_id TEXT NOT NULL REFERENCES media (media_id) ON DELETE NO ACTION,
+    page INTEGER NOT NULL CHECK (page >= 1 AND page <= 100000),
+    kind TEXT NOT NULL CHECK (kind IN ('highlight', 'underline', 'note')),
+    color TEXT NOT NULL CHECK (color IN ('yellow', 'green', 'blue', 'pink')),
+    rects TEXT NOT NULL CHECK (length(rects) > 0 AND length(rects) <= 20000),
+    quote TEXT NOT NULL CHECK (length(quote) <= 4000),
+    content TEXT NOT NULL CHECK (length(content) <= 10000),
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
 
-/// Cadeia de migrações aplicada por [`crate::db::Database`].
-pub(crate) const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATIONS_SLICE);
+CREATE INDEX pdf_annotation_owner_media_idx ON pdf_annotation (owner_id, media_id, page);
+";
+
+/// Cadeia de migrações aplicada por [`crate::db::Database`]; o índice `n` leva o banco da
+/// versão `n` para `n + 1`.
+pub(crate) const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11];
+
+/// Versão do schema gravada em `PRAGMA user_version` (0 quando nunca migrado).
+///
+/// O mesmo pragma usado pela antiga dependência `rusqlite_migration`, então bancos
+/// existentes continuam na versão que já tinham.
+pub(crate) fn schema_version(conn: &Connection) -> rusqlite::Result<usize> {
+    let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    usize::try_from(version).map_err(|_| rusqlite::Error::IntegralValueOutOfRange(0, version))
+}
+
+/// Aplica as migrações pendentes numa única transação: ou todas entram, ou nenhuma.
+pub(crate) fn migrate_to_latest(conn: &mut Connection) -> rusqlite::Result<()> {
+    let current = schema_version(conn)?;
+    if current >= SCHEMA_VERSION {
+        return Ok(());
+    }
+    let tx = conn.transaction()?;
+    for step in &MIGRATIONS[current..] {
+        tx.execute_batch(step)?;
+    }
+    tx.pragma_update(None, "user_version", SCHEMA_VERSION as i64)?;
+    tx.commit()
+}

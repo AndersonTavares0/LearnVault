@@ -134,8 +134,86 @@ struct NotesResponse {
 }
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct FlashcardsQuery {
+pub(crate) struct PdfAnnotationsQuery {
     media_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) struct PdfRectDto {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct CreatePdfAnnotationRequest {
+    media_id: String,
+    page: i64,
+    kind: String,
+    color: String,
+    rects: Vec<PdfRectDto>,
+    #[serde(default)]
+    quote: String,
+    #[serde(default)]
+    content: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct UpdatePdfAnnotationRequest {
+    color: Option<String>,
+    content: Option<String>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct PdfAnnotationResponse {
+    annotation_id: String,
+    media_id: String,
+    page: i64,
+    kind: &'static str,
+    color: &'static str,
+    rects: Vec<PdfRectDto>,
+    quote: String,
+    content: String,
+    created_at: i64,
+    updated_at: i64,
+}
+
+impl From<learnvault_core::PdfAnnotation> for PdfAnnotationResponse {
+    fn from(annotation: learnvault_core::PdfAnnotation) -> Self {
+        Self {
+            annotation_id: annotation.annotation_id,
+            media_id: annotation.media_id,
+            page: annotation.page,
+            kind: annotation.kind.as_str(),
+            color: annotation.color.as_str(),
+            rects: annotation
+                .rects
+                .into_iter()
+                .map(|rect| PdfRectDto {
+                    x: rect.x,
+                    y: rect.y,
+                    width: rect.width,
+                    height: rect.height,
+                })
+                .collect(),
+            quote: annotation.quote,
+            content: annotation.content,
+            created_at: annotation.created_at,
+            updated_at: annotation.updated_at,
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct PdfAnnotationsResponse {
+    items: Vec<PdfAnnotationResponse>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct FlashcardsQuery {
+    /// Absent: every card of the user, for the review hub.
+    media_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -380,8 +458,14 @@ pub(crate) async fn recent(
     };
     let limit = query.limit.unwrap_or(DEFAULT_RECENT_LIMIT);
     let owner = user.user_id;
+    let admin = user.is_admin;
     match run_study(&state, move |db| {
-        learnvault_core::recent_study(db, &owner, limit)
+        let states = learnvault_core::recent_study(db, &owner, learnvault_core::MAX_RECENT_STUDY)?;
+        Ok(states
+            .into_iter()
+            .filter(|progress| require_media_access(db, &owner, admin, &progress.media_id).is_ok())
+            .take(limit)
+            .collect::<Vec<_>>())
     })
     .await
     {
@@ -679,9 +763,11 @@ pub(crate) async fn progress(
         return invalid_query();
     };
     let owner = user.user_id;
+    let admin = user.is_admin;
     let media_id = query.media_id;
     let lookup = media_id.clone();
     match run_study(&state, move |db| {
+        require_media_access(db, &owner, admin, &lookup)?;
         learnvault_core::study_progress(db, &owner, &lookup)
     })
     .await
@@ -708,9 +794,12 @@ pub(crate) async fn record_position(
         Err(failure) => return failure.into_response(),
     };
     let owner = user.user_id;
+    let admin = user.is_admin;
     let media_id = request.media_id;
+    let lookup = media_id.clone();
     let position_seconds = request.position_seconds;
     match run_study(&state, move |db| {
+        require_media_access(db, &owner, admin, &lookup)?;
         learnvault_core::record_position(db, &owner, &media_id, position_seconds)
     })
     .await
@@ -736,9 +825,12 @@ pub(crate) async fn set_completed(
         Err(failure) => return failure.into_response(),
     };
     let owner = user.user_id;
+    let admin = user.is_admin;
     let media_id = request.media_id;
+    let lookup = media_id.clone();
     let completed = request.completed;
     match run_study(&state, move |db| {
+        require_media_access(db, &owner, admin, &lookup)?;
         learnvault_core::set_completed(db, &owner, &media_id, completed)
     })
     .await
@@ -766,8 +858,11 @@ pub(crate) async fn list_notes(
         return invalid_query();
     };
     let owner = user.user_id;
+    let admin = user.is_admin;
     if let Some(media_id) = query.media_id.filter(|s| !s.trim().is_empty()) {
+        let lookup = media_id.clone();
         match run_study(&state, move |db| {
+            require_media_access(db, &owner, admin, &lookup)?;
             learnvault_core::list_study_notes(db, &owner, &media_id)
         })
         .await
@@ -782,7 +877,11 @@ pub(crate) async fn list_notes(
         }
     } else {
         match run_study(&state, move |db| {
-            learnvault_core::list_all_study_notes(db, &owner)
+            let notes = learnvault_core::list_all_study_notes(db, &owner)?;
+            Ok(notes
+                .into_iter()
+                .filter(|note| require_media_access(db, &owner, admin, &note.media_id).is_ok())
+                .collect::<Vec<_>>())
         })
         .await
         {
@@ -811,7 +910,10 @@ pub(crate) async fn create_note(
         Err(failure) => return failure.into_response(),
     };
     let owner = user.user_id;
+    let admin = user.is_admin;
+    let lookup = request.media_id.clone();
     match run_study(&state, move |db| {
+        require_media_access(db, &owner, admin, &lookup)?;
         learnvault_core::create_study_note(
             db,
             &owner,
@@ -844,7 +946,11 @@ pub(crate) async fn update_note(
         Err(failure) => return failure.into_response(),
     };
     let owner = user.user_id;
+    let admin = user.is_admin;
     match run_study(&state, move |db| {
+        if let Some(media_id) = learnvault_core::study_note_media_id(db, &note_id)? {
+            require_media_access(db, &owner, admin, &media_id)?;
+        }
         learnvault_core::update_study_note(db, &owner, &note_id, &request.content)
     })
     .await
@@ -868,7 +974,11 @@ pub(crate) async fn delete_note(
         Err(failure) => return failure.into_response(),
     };
     let owner = user.user_id;
+    let admin = user.is_admin;
     match run_study(&state, move |db| {
+        if let Some(media_id) = learnvault_core::study_note_media_id(db, &note_id)? {
+            require_media_access(db, &owner, admin, &media_id)?;
+        }
         learnvault_core::delete_study_note(db, &owner, &note_id)
     })
     .await
@@ -880,6 +990,159 @@ pub(crate) async fn delete_note(
                 error_response(StatusCode::NOT_FOUND, "note_not_found")
             }
         }
+        Err(failure) => study_failure_response(failure),
+    }
+}
+
+/// Lists the authenticated user's annotations on one PDF.
+pub(crate) async fn list_pdf_annotations(
+    State(state): State<AppState>,
+    RawQuery(raw): RawQuery,
+    headers: HeaderMap,
+) -> Response {
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let Some(query) =
+        serde_urlencoded::from_str::<PdfAnnotationsQuery>(raw.as_deref().unwrap_or_default()).ok()
+    else {
+        return invalid_query();
+    };
+    let owner = user.user_id;
+    match run_study(&state, move |db| {
+        learnvault_core::list_pdf_annotations(db, &owner, &query.media_id)
+    })
+    .await
+    {
+        Ok(items) => private_no_store(
+            Json(PdfAnnotationsResponse {
+                items: items.into_iter().map(PdfAnnotationResponse::from).collect(),
+            })
+            .into_response(),
+        ),
+        Err(failure) => study_failure_response(failure),
+    }
+}
+
+/// Creates an annotation. An unknown kind or color is the same input error as a bad rectangle.
+pub(crate) async fn create_pdf_annotation(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<CreatePdfAnnotationRequest>,
+) -> Response {
+    if !same_origin(&headers) {
+        return csrf_failed();
+    }
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let owner = user.user_id;
+    match run_study(&state, move |db| {
+        let (Some(kind), Some(color)) = (
+            learnvault_core::PdfAnnotationKind::parse(&request.kind),
+            learnvault_core::PdfAnnotationColor::parse(&request.color),
+        ) else {
+            return Err(learnvault_core::Error::InvalidPdfAnnotation);
+        };
+        learnvault_core::create_pdf_annotation(
+            db,
+            &owner,
+            &request.media_id,
+            learnvault_core::NewPdfAnnotation {
+                page: request.page,
+                kind,
+                color,
+                rects: request
+                    .rects
+                    .into_iter()
+                    .map(|rect| learnvault_core::PdfRect {
+                        x: rect.x,
+                        y: rect.y,
+                        width: rect.width,
+                        height: rect.height,
+                    })
+                    .collect(),
+                quote: request.quote,
+                content: request.content,
+            },
+        )
+    })
+    .await
+    {
+        Ok(annotation) => private_no_store(
+            (
+                StatusCode::CREATED,
+                Json(PdfAnnotationResponse::from(annotation)),
+            )
+                .into_response(),
+        ),
+        Err(failure) => study_failure_response(failure),
+    }
+}
+
+/// Changes an annotation's color and/or text.
+pub(crate) async fn update_pdf_annotation(
+    State(state): State<AppState>,
+    Path(annotation_id): Path<String>,
+    headers: HeaderMap,
+    Json(request): Json<UpdatePdfAnnotationRequest>,
+) -> Response {
+    if !same_origin(&headers) {
+        return csrf_failed();
+    }
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let owner = user.user_id;
+    match run_study(&state, move |db| {
+        let color = match request.color.as_deref() {
+            Some(value) => Some(
+                learnvault_core::PdfAnnotationColor::parse(value)
+                    .ok_or(learnvault_core::Error::InvalidPdfAnnotation)?,
+            ),
+            None => None,
+        };
+        learnvault_core::update_pdf_annotation(
+            db,
+            &owner,
+            &annotation_id,
+            color,
+            request.content.as_deref(),
+        )
+    })
+    .await
+    {
+        Ok(annotation) => {
+            private_no_store(Json(PdfAnnotationResponse::from(annotation)).into_response())
+        }
+        Err(failure) => study_failure_response(failure),
+    }
+}
+
+/// Deletes one of the user's annotations.
+pub(crate) async fn delete_pdf_annotation(
+    State(state): State<AppState>,
+    Path(annotation_id): Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    if !same_origin(&headers) {
+        return csrf_failed();
+    }
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let owner = user.user_id;
+    match run_study(&state, move |db| {
+        learnvault_core::delete_pdf_annotation(db, &owner, &annotation_id)
+    })
+    .await
+    {
+        Ok(true) => status_private_no_store(StatusCode::NO_CONTENT),
+        Ok(false) => error_response(StatusCode::NOT_FOUND, "pdf_annotation_not_found"),
         Err(failure) => study_failure_response(failure),
     }
 }
@@ -900,9 +1163,21 @@ pub(crate) async fn list_flashcards(
         return invalid_query();
     };
     let owner = user.user_id;
-    let media_id = query.media_id;
-    match run_study(&state, move |db| {
-        learnvault_core::list_flashcards(db, &owner, &media_id)
+    let admin = user.is_admin;
+    let media_id = query.media_id.filter(|id| !id.trim().is_empty());
+    match run_study(&state, move |db| match media_id {
+        Some(media_id) => {
+            require_media_access(db, &owner, admin, &media_id)?;
+            learnvault_core::list_flashcards(db, &owner, &media_id)
+        }
+        None => {
+            // Every card of the owner, but only for lessons they may still open.
+            let cards = learnvault_core::list_all_flashcards(db, &owner)?;
+            Ok(cards
+                .into_iter()
+                .filter(|card| require_media_access(db, &owner, admin, &card.media_id).is_ok())
+                .collect::<Vec<_>>())
+        }
     })
     .await
     {
@@ -930,7 +1205,10 @@ pub(crate) async fn create_flashcard(
         Err(failure) => return failure.into_response(),
     };
     let owner = user.user_id;
+    let admin = user.is_admin;
+    let lookup = request.media_id.clone();
     match run_study(&state, move |db| {
+        require_media_access(db, &owner, admin, &lookup)?;
         learnvault_core::create_flashcard(
             db,
             &owner,
@@ -963,7 +1241,11 @@ pub(crate) async fn update_flashcard(
         Err(failure) => return failure.into_response(),
     };
     let owner = user.user_id;
+    let admin = user.is_admin;
     match run_study(&state, move |db| {
+        if let Some(media_id) = learnvault_core::flashcard_media_id(db, &card_id)? {
+            require_media_access(db, &owner, admin, &media_id)?;
+        }
         learnvault_core::update_flashcard(db, &owner, &card_id, &request.front, &request.back)
     })
     .await
@@ -987,7 +1269,11 @@ pub(crate) async fn delete_flashcard(
         Err(failure) => return failure.into_response(),
     };
     let owner = user.user_id;
+    let admin = user.is_admin;
     match run_study(&state, move |db| {
+        if let Some(media_id) = learnvault_core::flashcard_media_id(db, &card_id)? {
+            require_media_access(db, &owner, admin, &media_id)?;
+        }
         learnvault_core::delete_flashcard(db, &owner, &card_id)
     })
     .await
@@ -1021,7 +1307,11 @@ pub(crate) async fn review_flashcard(
         Err(failure) => return failure.into_response(),
     };
     let owner = user.user_id;
+    let admin = user.is_admin;
     match run_study(&state, move |db| {
+        if let Some(media_id) = learnvault_core::flashcard_media_id(db, &card_id)? {
+            require_media_access(db, &owner, admin, &media_id)?;
+        }
         learnvault_core::review_flashcard(db, &owner, &card_id, rating)
     })
     .await
@@ -1038,8 +1328,16 @@ pub(crate) async fn list_favorites(State(state): State<AppState>, headers: Heade
         Err(failure) => return failure.into_response(),
     };
     let owner = user.user_id;
+    let admin = user.is_admin;
     match run_study(&state, move |db| {
-        learnvault_core::list_favorites(db, &owner)
+        let mut favorites = learnvault_core::list_favorites(db, &owner)?;
+        favorites.course_ids.retain(|course_id| {
+            learnvault_core::can_user_access_course(db, &owner, admin, course_id).unwrap_or(false)
+        });
+        favorites
+            .media_ids
+            .retain(|media_id| require_media_access(db, &owner, admin, media_id).is_ok());
+        Ok(favorites)
     })
     .await
     {
@@ -1068,10 +1366,16 @@ pub(crate) async fn set_course_favorite(
         Err(failure) => return failure.into_response(),
     };
     let owner = user.user_id;
+    let admin = user.is_admin;
     let course_id = request.course_id.trim().to_owned();
     let lookup_id = course_id.clone();
     let favorite = request.favorite;
     match run_study(&state, move |db| {
+        if !learnvault_core::can_user_access_course(db, &owner, admin, &lookup_id)? {
+            return Err(learnvault_core::Error::MediaNotFound {
+                media_id: lookup_id,
+            });
+        }
         learnvault_core::set_course_favorite(db, &owner, &lookup_id, favorite)
     })
     .await
@@ -1101,10 +1405,12 @@ pub(crate) async fn set_lesson_favorite(
         Err(failure) => return failure.into_response(),
     };
     let owner = user.user_id;
+    let admin = user.is_admin;
     let media_id = request.media_id.trim().to_owned();
     let lookup_id = media_id.clone();
     let favorite = request.favorite;
     match run_study(&state, move |db| {
+        require_media_access(db, &owner, admin, &lookup_id)?;
         learnvault_core::set_lesson_favorite(db, &owner, &lookup_id, favorite)
     })
     .await
@@ -1154,6 +1460,26 @@ enum StudyFailure {
     Core(learnvault_core::Error),
 }
 
+fn require_media_access(
+    db: &Database,
+    user_id: &str,
+    is_admin: bool,
+    media_id: &str,
+) -> learnvault_core::Result<()> {
+    let Some(library_id) = learnvault_core::find_media_library_id(db, media_id)? else {
+        return Err(learnvault_core::Error::MediaNotFound {
+            media_id: media_id.to_owned(),
+        });
+    };
+    if learnvault_core::can_user_access_course(db, user_id, is_admin, &library_id)? {
+        Ok(())
+    } else {
+        Err(learnvault_core::Error::MediaNotFound {
+            media_id: media_id.to_owned(),
+        })
+    }
+}
+
 /// Executa uma operação do núcleo sobre o banco, fora das threads Tokio.
 ///
 /// O permit e o guard do banco são movidos para a closure, então continuam contabilizados
@@ -1200,6 +1526,12 @@ fn study_failure_response(failure: StudyFailure) -> Response {
         }
         StudyFailure::Core(Error::StudyNoteNotFound { .. }) => {
             error_response(StatusCode::NOT_FOUND, "note_not_found")
+        }
+        StudyFailure::Core(Error::InvalidPdfAnnotation) => {
+            error_response(StatusCode::UNPROCESSABLE_ENTITY, "invalid_pdf_annotation")
+        }
+        StudyFailure::Core(Error::PdfAnnotationNotFound { .. }) => {
+            error_response(StatusCode::NOT_FOUND, "pdf_annotation_not_found")
         }
         StudyFailure::Core(Error::InvalidFlashcardContent) => error_response(
             StatusCode::UNPROCESSABLE_ENTITY,

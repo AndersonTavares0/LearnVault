@@ -81,6 +81,23 @@ required before cutover.
       keep their original language. Mark them with `lang` when known (3.1.2).
 - [ ] Every user-facing string uses `tr(en, ptBr)`.
 
+## Keyboard shortcut map
+
+| Key | Action |
+| --- | --- |
+| `/` | Focus library search |
+| `Space` / `K` | Play or pause |
+| `←` / `J` | Seek back |
+| `→` / `L` | Seek forward |
+| `↑` / `↓` | Volume |
+| `[` / `]` | Playback speed |
+| `F` | Fullscreen (video) |
+| `M` | Mute |
+| `0`–`9` | Jump to a point in the lesson |
+| `←` / `→` / `PgUp` / `PgDn` | Previous or next page (PDF reader) |
+
+Keep this table in sync with the player's shortcut handler.
+
 ## Manual pass before cutover
 
 - [ ] Keyboard only: sign in, resume a lesson, take a note, mark completed, change palette.
