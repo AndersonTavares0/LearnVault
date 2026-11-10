@@ -48,6 +48,11 @@ describe('parsePomodoroSettings', () => {
 		});
 	});
 
+	it('pauses the lesson at the end of a round unless told otherwise', () => {
+		expect(parsePomodoroSettings({}).pauseVideoOnRoundEnd).toBe(true);
+		expect(parsePomodoroSettings({ pauseVideoOnRoundEnd: false }).pauseVideoOnRoundEnd).toBe(false);
+	});
+
 	it('keeps valid values and clamps the volume', () => {
 		const parsed = parsePomodoroSettings({
 			focusMinutes: 50,

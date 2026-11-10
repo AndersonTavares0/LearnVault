@@ -98,7 +98,7 @@ test('signs in, indexes the library and resumes a lesson from My learning', asyn
 	await expect(page.getByRole('heading', { level: 1, name: 'Ownership' })).toBeVisible();
 	// The fixture bytes are not a real video, so the player shows its recovery state.
 	await expect(page.getByRole('alert').filter({ hasText: /media/i })).toBeVisible();
-	await expect(page.getByRole('complementary', { name: 'Course content' })).toBeVisible();
+	await expect(page.getByRole('complementary', { name: 'Study panel' })).toBeVisible();
 	await page.getByRole('tab', { name: 'Notes' }).click();
 	await page.getByRole('button', { name: /Add note at/ }).click();
 	await page.getByLabel(/Note at/).fill('Ownership moves values.');

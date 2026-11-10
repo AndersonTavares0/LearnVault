@@ -14,6 +14,8 @@ export type PomodoroSettings = {
 	longMinutes: number;
 	longEvery: number;
 	autoStartNext: boolean;
+	/** Pause the lesson video when a focus block ends, so the break is a real break. */
+	pauseVideoOnRoundEnd: boolean;
 	alarmEnabled: boolean;
 	alarmSound: AlarmSound;
 	alarmVolume: number;
@@ -27,6 +29,7 @@ export const DEFAULT_POMODORO_SETTINGS: PomodoroSettings = {
 	longMinutes: 15,
 	longEvery: 4,
 	autoStartNext: false,
+	pauseVideoOnRoundEnd: true,
 	alarmEnabled: true,
 	alarmSound: 'sine',
 	alarmVolume: 0.5,
@@ -87,6 +90,7 @@ export function parsePomodoroSettings(value: unknown): PomodoroSettings {
 		longMinutes: finiteInteger(source.longMinutes, 1, 120, DEFAULT_POMODORO_SETTINGS.longMinutes),
 		longEvery: finiteInteger(source.longEvery, 2, 12, DEFAULT_POMODORO_SETTINGS.longEvery),
 		autoStartNext: source.autoStartNext === true,
+		pauseVideoOnRoundEnd: source.pauseVideoOnRoundEnd !== false,
 		alarmEnabled: source.alarmEnabled !== false,
 		alarmSound: alarmSound(source.alarmSound),
 		alarmVolume: finiteNumber(source.alarmVolume, 0, 1, DEFAULT_POMODORO_SETTINGS.alarmVolume),
