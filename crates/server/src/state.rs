@@ -341,8 +341,14 @@ impl AppState {
         attempts.retain(|_, (_, started)| now.duration_since(*started) < LOGIN_ATTEMPT_WINDOW);
         let key = source.to_owned();
         if attempts.len() >= MAX_LOGIN_ATTEMPT_BUCKETS && !attempts.contains_key(&key) {
-            // Keep the table bounded without evicting an active source bucket.
-            return false;
+            // Evict the oldest source instead of locking every new client out at capacity.
+            if let Some(oldest) = attempts
+                .iter()
+                .min_by_key(|(_, (_, started))| *started)
+                .map(|(source, _)| source.clone())
+            {
+                attempts.remove(&oldest);
+            }
         }
         let entry = attempts.entry(key).or_insert((0, now));
         if now.duration_since(entry.1) >= LOGIN_ATTEMPT_WINDOW {
@@ -850,9 +856,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn distinct_sources_do_not_evict_an_active_login_bucket() {
+    async fn source_bucket_capacity_evicts_the_oldest_without_locking_out_new_sources() {
         let state = AppState::new(config());
         let now = Instant::now();
+        let later = now + Duration::from_secs(1);
 
         for _ in 0..5 {
             assert!(state.allow_login_attempt_at("admin", now).await);
@@ -860,17 +867,16 @@ mod tests {
         for index in 0..1023 {
             assert!(
                 state
-                    .allow_login_attempt_at(&format!("user-{index}"), now)
+                    .allow_login_attempt_at(&format!("source-{index}"), later)
                     .await
             );
         }
 
-        assert!(!state.allow_login_attempt_at("new-user", now).await);
-        assert!(!state.allow_login_attempt_at("admin", now).await);
+        assert!(state.allow_login_attempt_at("new-source", later).await);
         let attempts = state.login_attempts.lock().await;
         assert_eq!(attempts.len(), 1024);
-        assert!(attempts.contains_key("admin"));
-        assert!(!attempts.contains_key("new-user"));
+        assert!(!attempts.contains_key("admin"));
+        assert!(attempts.contains_key("new-source"));
     }
 
     #[tokio::test]
