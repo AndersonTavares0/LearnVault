@@ -66,7 +66,8 @@ export function SettingsPage() {
 			<Section id="appearance" title={tr('Appearance', 'Aparência')}>
 				<Choice legend={tr('Theme', 'Tema')} options={THEME_MODES} value={theme} label={(mode) => themeLabels()[mode]} onChange={(mode) => { saveThemeMode(mode); setTheme(mode); }} />
 				<Choice legend={tr('Color palette', 'Paleta de cores')} options={PALETTES} value={palette} label={(value) => paletteLabels[value]} onChange={(value) => { savePalette(value); setPalette(value); }} />
-				<Choice legend={tr('Style', 'Estilo')} options={STYLES} value={style} label={(value) => styleLabels()[value]} onChange={(value) => { saveStyle(value); setStyle(value); }} />
+				<Choice legend={tr('Style', 'Estilo')} options={STYLES} value={style} label={(value) => styleLabels()[value]} onChange={(value) => { saveStyle(value); setStyle(value); // Vault is the night direction: it comes with the dark theme, which stays changeable above.
+					if (value === 'vault') { saveThemeMode('dark'); setTheme('dark'); } }} />
 				<Choice legend={tr('Language', 'Idioma')} options={LOCALES} value={locale} label={(value) => LOCALE_LABELS[value]} onChange={(value) => setLocale(value)} />
 			</Section>
 			{server && user && (

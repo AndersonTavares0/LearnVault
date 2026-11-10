@@ -22,6 +22,18 @@ afterEach(() => {
 });
 
 describe('settings', () => {
+	it('applies the chosen Style to the page and brings the dark theme with Vault', async () => {
+		renderApp('/settings', { catalog });
+		const style = await screen.findByRole('group', { name: 'Style' });
+		fireEvent.click(within(style).getByRole('button', { name: 'Quiet tool' }));
+		expect(document.documentElement.dataset.style).toBe('quiet');
+		fireEvent.click(within(style).getByRole('button', { name: 'Vault' }));
+		expect(document.documentElement.dataset.style).toBe('vault');
+		expect(within(screen.getByRole('group', { name: 'Theme' })).getByRole('button', { name: 'Dark' }).getAttribute('aria-pressed')).toBe('true');
+		fireEvent.click(within(style).getByRole('button', { name: 'Paper and ink' }));
+		expect(document.documentElement.dataset.style).toBe('paper');
+	});
+
 	it('changes the weekly goal', async () => {
 		const goal = vi.spyOn(transport, 'setWeeklyGoal').mockResolvedValue(5);
 		renderApp('/settings', { catalog, rewards: { xp: 0, completedLessons: 0, weeklyGoal: 3, missions: [], study: { currentStreak: 0, longestStreak: 0, today: '2026-11-09', todayActive: false, atRisk: false, weekActiveDays: 0, completedLessons: 0, days: [] } } });

@@ -187,6 +187,8 @@
   font-family: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
 }
 :root[data-style="quiet"] { --radius: 0.5rem; }
+/* Quiet: a cool, near-white page with hairlines, against Paper's warm stone. */
+:root[data-style="quiet"]:not([data-theme="dark"]) { --background: var(--n-50); --muted: var(--n-100); }
 :root[data-style="vault"] { --radius: 0.25rem; }
 
 /* Cover drawings per Style: Paper (default) shows the title cover; Quiet the lesson map; Vault the hairlines. */
