@@ -117,6 +117,9 @@ jobs:
         run: pnpm --filter learnvault-web test
         env:
           LEARNVAULT_PREBUILT_OUTPUTS: '1'
+      # React app built in parallel until the cutover (#340); its tests build both outputs.
+      - run: pnpm --filter learnvault-web-next lint
+      - run: pnpm --filter learnvault-web-next test
       # Dependabot alert #17: deepmerge 4.3.1 is dev-only via @sveltejs/vite-plugin-svelte;
       # GHSA-gcqx-w48m-w2h4 has no patched release yet. Remove this narrow ignore when fixed.
       - run: pnpm audit --audit-level=low --ignore GHSA-gcqx-w48m-w2h4
@@ -142,8 +145,9 @@ jobs:
       - name: Install Rust toolchain
         run: rustup toolchain install 1.99.0 --profile minimal
       - run: cargo build -p learnvault-server
+      - run: pnpm --filter learnvault-web-next build
       - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm exec playwright test tests/e2e/server.spec.ts
+      - run: pnpm exec playwright test tests/e2e/server.spec.ts tests/e2e/web-next.spec.ts
       - name: Upload E2E diagnostics
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
