@@ -665,7 +665,9 @@ mod windows_open_tests {
     }
 
     #[test]
-    fn a_replaced_library_root_junction_is_not_followed() -> Result<(), Box<dyn std::error::Error>> {
+    fn a_replaced_library_root_junction_is_not_followed()
+    -> Result<(), Box<dyn std::error::Error>>
+    {
         let directory = tempfile::tempdir()?;
         let outside = directory.path().join("outside");
         let root_link = directory.path().join("library");
@@ -676,13 +678,15 @@ mod windows_open_tests {
             return Ok(());
         }
 
-        assert!(open_readonly(
-            &root_link,
-            "video.mp4",
-            &root_link.join("video.mp4"),
-            "media-1",
-        )
-        .is_err());
+        assert!(
+            open_readonly(
+                &root_link,
+                "video.mp4",
+                &root_link.join("video.mp4"),
+                "media-1",
+            )
+            .is_err()
+        );
         Ok(())
     }
 }

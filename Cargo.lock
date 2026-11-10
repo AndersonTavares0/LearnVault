@@ -1949,6 +1949,7 @@ dependencies = [
 name = "learnvault-core"
 version = "0.0.0"
 dependencies = [
+ "cap-std",
  "rusqlite",
  "rustix",
  "tempfile",
