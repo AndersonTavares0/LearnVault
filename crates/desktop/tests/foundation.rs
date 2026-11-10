@@ -272,6 +272,7 @@ fn build_registers_the_app_commands_in_the_acl_manifest() {
         "desktop_update_pdf_annotation",
         "desktop_delete_pdf_annotation",
         "desktop_list_flashcards",
+        "desktop_list_all_flashcards",
         "desktop_create_flashcard",
         "desktop_update_flashcard",
         "desktop_delete_flashcard",
@@ -340,6 +341,7 @@ fn capability_grants_only_the_core_default_and_the_app_commands() {
     assert!(permissions.contains(&"allow-desktop-update-pdf-annotation"));
     assert!(permissions.contains(&"allow-desktop-delete-pdf-annotation"));
     assert!(permissions.contains(&"allow-desktop-list-flashcards"));
+    assert!(permissions.contains(&"allow-desktop-list-all-flashcards"));
     assert!(permissions.contains(&"allow-desktop-create-flashcard"));
     assert!(permissions.contains(&"allow-desktop-update-flashcard"));
     assert!(permissions.contains(&"allow-desktop-delete-flashcard"));
@@ -364,7 +366,7 @@ fn capability_grants_only_the_core_default_and_the_app_commands() {
     assert!(permissions.contains(&"allow-desktop-open-in-system-player"));
     assert_eq!(
         permissions.len(),
-        48,
+        49,
         "a capability não pode ampliar além do núcleo, dos controles da titlebar e dos comandos do app: {permissions:?}"
     );
 }
@@ -521,6 +523,7 @@ fn invoke_handler_registers_only_the_desktop_commands() {
         "desktop_update_pdf_annotation",
         "desktop_delete_pdf_annotation",
         "desktop_list_flashcards",
+        "desktop_list_all_flashcards",
         "desktop_create_flashcard",
         "desktop_update_flashcard",
         "desktop_delete_flashcard",
@@ -573,6 +576,7 @@ fn study_commands_are_async_blocking_and_never_accept_an_owner() {
             "state.delete_pdf_annotation(",
         ),
         ("desktop_list_flashcards", "state.list_flashcards("),
+        ("desktop_list_all_flashcards", "state.list_all_flashcards("),
         ("desktop_create_flashcard", "state.create_flashcard("),
         ("desktop_update_flashcard", "state.update_flashcard("),
         ("desktop_delete_flashcard", "state.delete_flashcard("),

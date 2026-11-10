@@ -6,10 +6,10 @@ import { useLocale } from '@/hooks/use-locale';
 import { LOCALE_LABELS, LOCALES, setLocale, tr } from '@/lib/i18n';
 import { studySyncSupported } from '@/lib/player';
 import { MAX_WEEKLY_GOAL, MIN_WEEKLY_GOAL } from '@/lib/statistics';
-import { PALETTES, readPalette, readThemeMode, THEME_MODES, type Palette, type ThemeMode } from '@/lib/theme';
+import { PALETTES, readPalette, readStyle, readThemeMode, STYLES, THEME_MODES, type Palette, type Style, type ThemeMode } from '@/lib/theme';
 import { transportKind } from '@/lib/transport';
 import { useCatalog, useRewards, useSession, useSetWeeklyGoal } from '@/app/data';
-import { safeStorage, savePalette, saveThemeMode } from '@/app/preferences';
+import { safeStorage, savePalette, saveStyle, saveThemeMode } from '@/app/preferences';
 import { PageHeader } from '@/app/shell';
 import { AvatarSettings, CredentialsForm } from './account';
 import { FocusSettings } from './focus';
@@ -19,6 +19,8 @@ import { UserSettings } from './users';
 const paletteLabels: Record<Palette, string> = { emerald: 'Stone + Emerald', teal: 'Zinc + Teal', indigo: 'Zinc + Indigo' };
 const themeLabels = (): Record<ThemeMode, string> => ({ system: tr('System', 'Sistema'), light: tr('Light', 'Claro'), dark: tr('Dark', 'Escuro') });
 
+const styleLabels = (): Record<Style, string> => ({ paper: tr('Paper and ink', 'Papel e tinta'), quiet: tr('Quiet tool', 'Ferramenta calma'), vault: 'Vault' });
+
 export function SettingsPage() {
 	const locale = useLocale();
 	const session = useSession();
@@ -27,6 +29,7 @@ export function SettingsPage() {
 	const user = session.data?.user;
 	const [theme, setTheme] = useState(() => readThemeMode(safeStorage()));
 	const [palette, setPalette] = useState(() => readPalette(safeStorage()));
+	const [style, setStyle] = useState(() => readStyle(safeStorage()));
 	const server = transportKind === 'http';
 	const admin = Boolean(user?.isAdmin);
 
@@ -35,12 +38,36 @@ export function SettingsPage() {
 		if (location.hash) document.getElementById(location.hash.slice(1))?.scrollIntoView();
 	}, [location.hash]);
 
+	const sections = [
+		{ id: 'appearance', label: tr('Appearance', 'Aparência') },
+		{ id: 'profile', label: tr('Profile', 'Perfil') },
+		...(studySyncSupported ? [{ id: 'study', label: tr('Study', 'Estudo') }] : []),
+		{ id: 'focus', label: tr('Focus timer', 'Timer de foco') },
+		...(!server || admin ? [{ id: 'updates', label: tr('Updates', 'Atualizações') }] : []),
+		...(server && admin ? [{ id: 'users', label: tr('Users', 'Usuários') }, { id: 'backup', label: 'Backup' }] : [])
+	];
+
 	return (
-		<div className="space-y-10">
+		<div className="lg:grid lg:grid-cols-[12rem_1fr] lg:gap-10">
+			{/* Buttons, not `#id` links: the hash belongs to the router. */}
+			<nav aria-label={tr('Settings sections', 'Seções dos ajustes')} className="sticky top-20 hidden self-start lg:block">
+				<ul className="space-y-1">
+					{sections.map((section) => (
+						<li key={section.id}>
+							<button type="button" onClick={() => document.getElementById(section.id)?.scrollIntoView({ behavior: 'smooth' })} className="min-h-11 w-full rounded-md px-3 text-left text-sm text-muted-foreground hover:bg-muted hover:text-foreground">
+								{section.label}
+							</button>
+						</li>
+					))}
+				</ul>
+			</nav>
+			<div className="min-w-0 space-y-10">
 			<PageHeader title={tr('Settings', 'Ajustes')} />
 			<Section id="appearance" title={tr('Appearance', 'Aparência')}>
 				<Choice legend={tr('Theme', 'Tema')} options={THEME_MODES} value={theme} label={(mode) => themeLabels()[mode]} onChange={(mode) => { saveThemeMode(mode); setTheme(mode); }} />
 				<Choice legend={tr('Color palette', 'Paleta de cores')} options={PALETTES} value={palette} label={(value) => paletteLabels[value]} onChange={(value) => { savePalette(value); setPalette(value); }} />
+				<Choice legend={tr('Style', 'Estilo')} options={STYLES} value={style} label={(value) => styleLabels()[value]} onChange={(value) => { saveStyle(value); setStyle(value); // Vault is the night direction: it comes with the dark theme, which stays changeable above.
+					if (value === 'vault') { saveThemeMode('dark'); setTheme('dark'); } }} />
 				<Choice legend={tr('Language', 'Idioma')} options={LOCALES} value={locale} label={(value) => LOCALE_LABELS[value]} onChange={(value) => setLocale(value)} />
 			</Section>
 			{server && user && (
@@ -74,6 +101,7 @@ export function SettingsPage() {
 					</Section>
 				</>
 			)}
+			</div>
 		</div>
 	);
 }

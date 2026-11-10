@@ -177,12 +177,44 @@
   --panel-edge: color-mix(in oklch, var(--a-soft) 20%, var(--n-800));
 }
 
+/*
+ * Styles (identity directions): "paper" is the default and keeps serif titles. "quiet" and
+ * "vault" set titles in the interface sans; "vault" also tightens corners. Selectors beat the
+ * `font-serif` utility, which `@theme inline` resolves to a literal.
+ */
+:root[data-style="quiet"] :is(h1, h2, h3, .font-serif),
+:root[data-style="vault"] :is(h1, h2, h3, .font-serif) {
+  font-family: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+}
+:root[data-style="quiet"] { --radius: 0.5rem; }
+/* Quiet: a cool, near-white page with hairlines, against Paper's warm stone. */
+:root[data-style="quiet"]:not([data-theme="dark"]) { --background: var(--n-50); --muted: var(--n-100); }
+:root[data-style="vault"] { --radius: 0.25rem; }
+
+/* Cover drawings per Style: Paper (default) shows the title cover; Quiet the lesson map; Vault the hairlines. */
+.cover-quiet, .cover-vault { display: none; }
+:root[data-style="quiet"] .cover-paper, :root[data-style="vault"] .cover-paper { display: none; }
+:root[data-style="quiet"] .cover-quiet, :root[data-style="vault"] .cover-vault { display: inline; }
+/* Only Paper draws the whole title on the cover, so only there the heading beside it collapses. */
+:root:not([data-style="quiet"]):not([data-style="vault"]) .group\/card:has([data-titled]) .card-heading { height: 0; margin: 0; opacity: 0; }
+/* Vault sets measurements, such as progress, in the mono face. */
+:root[data-style="vault"] .meta { font-family: var(--font-mono); font-size: 0.8125rem; }
+
 /* An ink band (course header, resume card) stays dark in both themes, like a reading lamp. */
 :root {
   --ink: oklch(19% 0.012 160);
   --ink-foreground: oklch(97% 0.004 160);
   --ink-muted: oklch(78% 0.012 160);
+  --ink-edge: transparent;
 }
+/* On a dark page the banner steps up a level, tinted toward the accent, with a hairline edge: otherwise it reads as a hole. */
+:root[data-theme="dark"] {
+  --ink: oklch(25% 0.03 165);
+  --ink-muted: oklch(82% 0.015 160);
+  --ink-edge: oklch(100% 0 0 / 0.1);
+}
+/* Banners keep the interface sans even when a Style sets measurements in mono. */
+:root[data-style="vault"] .on-ink .meta { font-family: var(--font-sans); font-size: 0.875rem; }
 
 @layer base {
   h1, h2 {
@@ -236,4 +268,9 @@
 }
 .pdf-text-layer ::selection {
   background: color-mix(in oklch, var(--primary) 35%, transparent);
+}
+
+/* Text selection takes the palette instead of the browser's blue. */
+::selection {
+  background: color-mix(in oklch, var(--primary) 30%, transparent);
 }

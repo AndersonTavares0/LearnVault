@@ -49,13 +49,15 @@ export function LoginPage() {
 				{/* Light: a dashed library card with a folded corner. Dark: the card chrome drops away. */}
 				<form onSubmit={submit} className="relative space-y-6 rounded-lg border-[1.5px] border-dashed border-muted-foreground/50 bg-card p-8 dark:border-transparent dark:bg-transparent" noValidate={false}>
 					<span aria-hidden="true" className="absolute -top-px -left-px size-0 rounded-tl-lg border-t-[26px] border-r-[26px] border-t-primary border-r-transparent dark:hidden" />
-					<div className="flex items-center justify-between gap-3">
-						<div className="flex items-center gap-3">
-							<BrandMark className="size-9 text-primary" />
-							<h1 className="font-serif text-xl font-bold tracking-tight sm:text-2xl">{tr('Sign in to LearnVault', 'Entrar no LearnVault')}</h1>
+					{/* One heading in both themes. Light: a row with a study-card label. Dark: the mark large and centered, as the night design. */}
+					<div className="flex items-center justify-between gap-3 dark:flex-col dark:justify-center dark:text-center">
+						<div className="flex items-center gap-3 dark:flex-col">
+							<BrandMark className="size-9 text-primary dark:size-16" />
+							<h1 className="font-serif text-xl font-bold tracking-tight sm:text-2xl dark:text-2xl">{tr('Sign in to LearnVault', 'Entrar no LearnVault')}</h1>
 						</div>
 						<span aria-hidden="true" className="hidden font-mono text-[0.7rem] tracking-widest whitespace-nowrap text-muted-foreground uppercase md:inline dark:hidden">{tr('Study card', 'Ficha de estudo')}</span>
 					</div>
+					<p className="hidden text-center text-muted-foreground dark:block">{tr('Sign in to pick up where you stopped.', 'Entre para retomar de onde parou.')}</p>
 					<div className="space-y-1.5">
 						<Label htmlFor="username" className={fieldLabel}>{tr('Username', 'Usuário')}</Label>
 						<Input id="username" name="username" autoComplete="username" autoCapitalize="none" spellCheck={false} required value={username} onChange={(event) => setUsername(event.target.value)} aria-describedby={error ? 'login-error' : undefined} className={cn(field)} />

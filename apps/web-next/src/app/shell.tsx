@@ -1,4 +1,4 @@
-import { BookOpen, Bookmark, ChartNoAxesColumn, CircleUser, LogOut, NotebookPen, Search, Settings } from 'lucide-react';
+import { BookOpen, ChartNoAxesColumn, Layers, CircleUser, LogOut, NotebookPen, Search, Settings } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router';
@@ -20,7 +20,7 @@ import { clearUserLocalData } from './preferences';
 
 const navItems = () => [
 	{ to: '/', label: tr('My learning', 'Meu aprendizado'), icon: BookOpen, end: true },
-	{ to: '/saved', label: tr('Saved', 'Salvos'), icon: Bookmark },
+	{ to: '/review', label: tr('Review', 'Revisão'), icon: Layers },
 	{ to: '/progress', label: tr('Progress', 'Progresso'), icon: ChartNoAxesColumn },
 	{ to: '/notes', label: tr('Notes', 'Notas'), icon: NotebookPen }
 ];
@@ -86,11 +86,11 @@ function Topbar({ username, userId }: { username: string; userId: string }) {
 			<div className="mx-auto flex h-16 max-w-6xl items-center gap-2 px-4">
 				<Link to="/" className="mr-2 flex min-h-11 items-center gap-2 rounded-md font-semibold" aria-label={tr('LearnVault home', 'Início do LearnVault')}>
 					<BrandMark className="size-7 text-primary" />
-					<span className="hidden md:inline">LearnVault</span>
+					<span className="hidden lg:inline">LearnVault</span>
 				</Link>
 				<nav aria-label={tr('Main', 'Principal')} className="hidden items-center gap-1 sm:flex">
 					{navItems().map((item) => (
-						<NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => cn('inline-flex min-h-11 items-center rounded-md px-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground', isActive && 'text-foreground underline decoration-primary decoration-2 underline-offset-[1.15rem]')}>
+						<NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => cn('inline-flex min-h-11 items-center rounded-md px-2 text-sm font-medium whitespace-nowrap text-muted-foreground lg:px-3 hover:bg-muted hover:text-foreground', isActive && 'text-foreground underline decoration-primary decoration-2 underline-offset-[1.15rem]')}>
 							{item.label}
 						</NavLink>
 					))}
@@ -155,7 +155,7 @@ function SearchBox() {
 	}, []);
 
 	return (
-		<div role="search" className="relative hidden w-56 md:block lg:w-72">
+		<div role="search" className="relative hidden w-44 md:block lg:w-72">
 			<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
 			<Input
 				ref={input}

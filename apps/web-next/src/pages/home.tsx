@@ -5,6 +5,7 @@ import { BrandMark } from '@/components/brand';
 import { CourseCard, CourseRow, ProgressBar, routerPath } from '@/components/course-card';
 import { CourseCover } from '@/components/course-cover';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useLocale } from '@/hooks/use-locale';
@@ -62,8 +63,9 @@ export function HomePage() {
 	const profile = user?.userId ?? '';
 	const filtered = Boolean(query || filter !== 'all' || category);
 	const inProgress = library.entries.filter((entry) => entry.status === 'in_progress');
-	const resumeCourseId = library.resume[0]?.location.courseId;
-	const alsoInProgress = inProgress.filter((entry) => entry.courseId !== resumeCourseId).slice(0, 4);
+	// Every course already offered in the dark card is left out of "Also in progress", so none appears twice.
+	const shownInHero = new Set(library.resume.map((item) => item.location.courseId));
+	const alsoInProgress = inProgress.filter((entry) => !shownInHero.has(entry.courseId)).slice(0, 4);
 	const streak = rewards.data?.study;
 
 	return (
@@ -128,38 +130,44 @@ function ContinueLearning({ items, entries, profile }: { items: ResumeEntry[]; e
 	const [first, ...rest] = items;
 	const link = (entry: ResumeEntry) => routerPath(href('course', entry.location.courseId, entry.location.lesson.path, entry.progress.positionSeconds));
 	return (
-		<section aria-labelledby="continue-heading" className="rounded-2xl bg-ink p-5 text-ink-foreground sm:p-8">
+		<section aria-labelledby="continue-heading" className="on-ink rounded-2xl border border-[color:var(--ink-edge)] bg-ink p-4 text-ink-foreground sm:p-6 lg:p-8">
 			<h2 id="continue-heading" className="sr-only">{tr('Continue studying', 'Continuar estudando')}</h2>
-			<article className="grid items-center gap-6 md:grid-cols-[minmax(0,20rem)_1fr]">
+			<article className="grid grid-cols-[6.5rem_1fr] items-center gap-x-4 gap-y-4 sm:grid-cols-[12rem_1fr] md:gap-x-6 lg:grid-cols-[16rem_1fr_auto]">
 				<CourseCoverFor entry={entries.find((entry) => entry.courseId === first.location.courseId)} profile={profile} eager />
-				<div className="min-w-0 space-y-4">
+				<div className="min-w-0 space-y-3 lg:space-y-4">
 					<div className="min-w-0">
 						<p className="truncate text-ink-muted">{first.location.courseTitle}{first.location.moduleTitle ? `, ${first.location.moduleTitle}` : ''}</p>
-						<h3 className="font-serif text-3xl leading-tight font-semibold text-balance">{first.location.lesson.title}</h3>
+						<h3 className="font-serif text-xl leading-tight font-semibold text-balance sm:text-2xl lg:text-3xl">{first.location.lesson.title}</h3>
 					</div>
 					<ProgressBar value={first.courseProgress} label={tr(`${Math.round(first.courseProgress * 100)}% of the course complete`, `${Math.round(first.courseProgress * 100)}% do curso concluído`)} className="max-w-md [&_[role=progressbar]]:bg-white/20 [&_[role=progressbar]>div]:bg-[var(--a-soft)] [&_p]:text-ink-muted" />
-					<Link to={link(first)} className="inline-flex h-12 items-center justify-center rounded-lg bg-[var(--a-soft)] px-6 text-sm font-semibold text-stone-950 hover:bg-white focus-visible:ring-3 focus-visible:ring-white/60 focus-visible:outline-none">{tr('Resume lesson', 'Retomar aula')}</Link>
-				</div>
+					</div>
+				<Link to={link(first)} className="col-span-2 inline-flex h-12 items-center justify-center rounded-lg bg-[var(--a-soft)] px-6 text-sm font-semibold text-stone-950 hover:bg-white focus-visible:ring-3 focus-visible:ring-white/60 focus-visible:outline-none sm:col-span-2 lg:col-span-1 lg:self-center">{tr('Resume lesson', 'Retomar aula')}</Link>
 			</article>
 			{rest.length > 0 && (
-				<ul className="mt-6 grid gap-2 border-t border-white/15 pt-4 sm:grid-cols-3">
-					{rest.map((entry) => (
-						<li key={entry.progress.mediaId}>
-							<Link to={link(entry)} className="flex min-h-11 flex-col rounded-lg px-3 py-2 hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none">
-								<span className="truncate text-sm text-ink-muted">{entry.location.courseTitle}</span>
-								<span className="line-clamp-2 font-medium">{entry.location.lesson.title}</span>
-							</Link>
-						</li>
-					))}
-				</ul>
+				<div className="mt-6 border-t border-white/15 pt-4">
+					<h3 className="sr-only">{tr('Also continue', 'Continue também')}</h3>
+					<ul className="grid gap-2 sm:grid-cols-3">
+						{rest.map((entry) => (
+							<li key={entry.progress.mediaId}>
+								<Link to={link(entry)} className="-mx-2 flex min-h-14 items-center gap-3 rounded-lg px-2 py-2 hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none">
+									<CourseCoverFor entry={entries.find((course) => course.courseId === entry.location.courseId)} profile={profile} compact className="w-20 shrink-0" />
+									<span className="min-w-0">
+										<span className="block truncate text-sm text-ink-muted">{entry.location.courseTitle}</span>
+										<span className="line-clamp-2 font-medium">{entry.location.lesson.title}</span>
+									</span>
+								</Link>
+							</li>
+						))}
+					</ul>
+				</div>
 			)}
 		</section>
 	);
 }
 
 /** The resume band shows the same cover as the course card, with its lesson bar. */
-function CourseCoverFor({ entry, profile, eager }: { entry?: CourseEntry; profile: string; eager?: boolean }) {
-	return entry ? <CourseCover course={entry.course} profile={profile} eager={eager} done={entry.done} total={entry.total} /> : null;
+function CourseCoverFor({ entry, profile, eager, compact, className }: { entry?: CourseEntry; profile: string; eager?: boolean; compact?: boolean; className?: string }) {
+	return entry ? <CourseCover course={entry.course} profile={profile} eager={eager} done={entry.done} total={entry.total} compact={compact} className={className} /> : null;
 }
 
 function Filters(props: { counts: Record<LibraryFilter, number>; filter: LibraryFilter; onFilter: (value: LibraryFilter) => void; categories: string[]; category: string | null; onCategory: (value: string | null) => void; view: View; onView: (view: View) => void }) {
@@ -202,6 +210,7 @@ export function LibraryActions({ onMessage }: { onMessage: (message: string) => 
 	const navigate = useNavigate();
 	const [importOpen, setImportOpen] = useState(false);
 	const [importPath, setImportPath] = useState('');
+	const [importError, setImportError] = useState('');
 
 	const runImport = (folder?: string) =>
 		importCourse.mutate(folder, {
@@ -211,7 +220,7 @@ export function LibraryActions({ onMessage }: { onMessage: (message: string) => 
 				setImportPath('');
 				navigate('/');
 			},
-			onError: (error) => onMessage(error.message)
+			onError: (error) => { if (transportKind === 'http') setImportError(error.message); else onMessage(error.message); }
 		});
 	const submit = (event: FormEvent) => {
 		event.preventDefault();
@@ -223,18 +232,29 @@ export function LibraryActions({ onMessage }: { onMessage: (message: string) => 
 			<Button variant="outline" disabled={rescan.isPending} onClick={() => { onMessage(tr('Reading courses…', 'Lendo os cursos…')); rescan.mutate(undefined, { onSuccess: () => onMessage(tr('Catalog updated.', 'Catálogo atualizado.')), onError: (error) => onMessage(error.message) }); }}>
 				<RefreshCw className={cn(rescan.isPending && 'motion-safe:animate-spin')} />{tr('Refresh courses', 'Atualizar cursos')}
 			</Button>
-			<Button disabled={importCourse.isPending} aria-expanded={transportKind === 'http' ? importOpen : undefined} onClick={() => (transportKind === 'desktop' ? runImport() : setImportOpen((open) => !open))}>
+			<Button disabled={importCourse.isPending} aria-haspopup={transportKind === 'http' ? 'dialog' : undefined} onClick={() => (transportKind === 'desktop' ? runImport() : setImportOpen(true))}>
 				<FolderPlus />{tr('Import course', 'Importar curso')}
 			</Button>
-			{importOpen && (
-				<form onSubmit={submit} className="flex w-full flex-wrap items-end gap-2">
-					<div className="min-w-0 flex-1 space-y-2">
-						<Label htmlFor="import-path">{tr('Course folder on the server', 'Pasta do curso no servidor')}</Label>
-						<Input id="import-path" value={importPath} onChange={(event) => setImportPath(event.target.value)} placeholder="/library/My course" required autoComplete="off" spellCheck={false} />
-					</div>
-					<Button type="submit" disabled={importCourse.isPending}>{tr('Import', 'Importar')}</Button>
-				</form>
-			)}
+			<Dialog open={importOpen} onOpenChange={(open) => { setImportOpen(open); if (!open) { setImportError(''); importCourse.reset(); } }}>
+				<DialogContent className="sm:max-w-lg">
+					<DialogHeader>
+						<DialogTitle className="font-serif text-2xl">{tr('Import a course', 'Importar um curso')}</DialogTitle>
+						<DialogDescription>{tr('Point LearnVault at a folder you already own. Your files are read, never moved, renamed or changed.', 'Aponte o LearnVault para uma pasta que você já tem. Seus arquivos são lidos, nunca movidos, renomeados ou alterados.')}</DialogDescription>
+					</DialogHeader>
+					<form onSubmit={submit} className="space-y-4">
+						<div className="space-y-2">
+							<Label htmlFor="import-path">{tr('Course folder on the server', 'Pasta do curso no servidor')}</Label>
+							<Input id="import-path" value={importPath} onChange={(event) => { setImportPath(event.target.value); setImportError(''); }} placeholder="/courses/rust-from-zero" required autoComplete="off" spellCheck={false} aria-describedby="import-help import-error" aria-invalid={importError ? true : undefined} />
+							<p id="import-help" className="text-sm text-muted-foreground">{tr('Type a path the server can read. The course name is taken from the folder name.', 'Digite um caminho que o servidor consiga ler. O nome do curso vem do nome da pasta.')}</p>
+							<p id="import-error" role="alert" className="text-sm font-medium text-destructive empty:hidden">{importError}</p>
+						</div>
+						<DialogFooter>
+							<DialogClose render={<Button type="button" variant="outline" />}>{tr('Cancel', 'Cancelar')}</DialogClose>
+							<Button type="submit" disabled={importCourse.isPending}>{tr('Import course', 'Importar curso')}</Button>
+						</DialogFooter>
+					</form>
+				</DialogContent>
+			</Dialog>
 		</>
 	);
 }
@@ -244,10 +264,10 @@ function EmptyLibrary({ isAdmin, onMessage }: { isAdmin: boolean; onMessage: (me
 	return (
 		<div className="mx-auto max-w-xl space-y-5 rounded-2xl border border-dashed p-8 text-center sm:p-12">
 			<BrandMark className="mx-auto size-12 text-primary" />
-			<p className="font-serif text-2xl font-semibold text-balance">{tr('No courses yet', 'Nenhum curso ainda')}</p>
+			<p className="font-serif text-2xl font-semibold text-balance">{tr('Bring in the courses you already have', 'Traga os cursos que você já tem')}</p>
 			<p className="text-muted-foreground">
 				{isAdmin
-					? tr('Import a folder of lessons and it becomes a course with progress, notes and flashcards. Your files are never moved, renamed or changed.', 'Importe uma pasta de aulas e ela vira um curso com progresso, notas e flashcards. Seus arquivos nunca são movidos, renomeados ou alterados.')
+					? tr('Pick a folder of videos and documents. LearnVault builds the lessons, remembers where you stopped and never touches your files.', 'Escolha uma pasta de vídeos e documentos. O LearnVault monta as aulas, lembra onde você parou e nunca mexe nos seus arquivos.')
 					: tr('Ask an administrator to give you access to a course.', 'Peça a um administrador acesso a um curso.')}
 			</p>
 			{isAdmin && <div className="flex flex-wrap justify-center gap-2"><LibraryActions onMessage={onMessage} /></div>}

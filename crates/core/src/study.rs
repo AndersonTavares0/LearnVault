@@ -666,6 +666,24 @@ pub fn flashcard_media_id(db: &Database, card_id: &str) -> Result<Option<String>
         .optional()?)
 }
 
+/// Lists every card of the owner across all lessons, soonest due first. The review hub needs
+/// what is due everywhere, not one lesson at a time.
+pub fn list_all_flashcards(db: &Database, owner_id: &str) -> Result<Vec<Flashcard>> {
+    validate_owner(owner_id)?;
+    let mut statement = db.connection().prepare(
+        "SELECT card_id, owner_id, media_id, front, back, interval_days, next_due, created_at, updated_at
+         FROM flashcard
+         WHERE owner_id = ?1
+         ORDER BY next_due ASC, created_at ASC",
+    )?;
+    let rows = statement.query_map([owner_id], card_from_row)?;
+    let mut cards = Vec::new();
+    for card in rows {
+        cards.push(card?);
+    }
+    Ok(cards)
+}
+
 /// Cria um novo cartão de estudo vinculado à aula.
 ///
 /// O cartão novo vence imediatamente (`next_due = now`, `interval_days = 0`).

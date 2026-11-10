@@ -61,3 +61,30 @@ export function persistPalette(storage: Pick<Storage, 'setItem'> | null | undefi
 export function applyPalette(root: HTMLElement, palette: Palette): void {
 	root.dataset.palette = palette;
 }
+
+export const STYLE_STORAGE_KEY = 'learnvault-style';
+// Identity direction (docs/design/redesign.md): the first entry is the default.
+export const STYLES = ['paper', 'quiet', 'vault'] as const;
+export type Style = (typeof STYLES)[number];
+
+export function readStyle(storage: Pick<Storage, 'getItem'> | null | undefined): Style {
+	try {
+		const value = storage?.getItem(STYLE_STORAGE_KEY);
+		return (STYLES as readonly unknown[]).includes(value) ? (value as Style) : STYLES[0];
+	} catch {
+		return STYLES[0];
+	}
+}
+
+export function persistStyle(storage: Pick<Storage, 'setItem'> | null | undefined, style: Style): boolean {
+	try {
+		storage?.setItem(STYLE_STORAGE_KEY, style);
+		return Boolean(storage);
+	} catch {
+		return false;
+	}
+}
+
+export function applyStyle(root: HTMLElement, style: Style): void {
+	root.dataset.style = style;
+}

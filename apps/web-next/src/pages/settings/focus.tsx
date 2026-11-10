@@ -15,6 +15,12 @@ const numberFields: { key: 'focusMinutes' | 'shortMinutes' | 'longMinutes' | 'lo
 	{ key: 'alarmRepeats', label: () => tr('Alarm repeats', 'Repetições do alarme'), min: 1, max: 5 }
 ];
 
+const PRESETS = [
+	{ name: () => tr('Classic', 'Clássico'), focusMinutes: 25, shortMinutes: 5, longMinutes: 15 },
+	{ name: () => tr('Deep', 'Profundo'), focusMinutes: 50, shortMinutes: 10, longMinutes: 30 },
+	{ name: () => tr('Light', 'Leve'), focusMinutes: 15, shortMinutes: 3, longMinutes: 10 }
+];
+
 /** Pomodoro durations and alarm; stored in this browser like the rest of the timer. */
 export function FocusSettings() {
 	const state = useStore(pomodoro);
@@ -35,6 +41,19 @@ export function FocusSettings() {
 
 	return (
 		<form onSubmit={submit} className="space-y-4">
+			<fieldset className="space-y-2">
+				<legend className="text-sm font-medium">{tr('Preset', 'Predefinição')}</legend>
+				<div className="flex flex-wrap gap-2">
+					{PRESETS.map((preset) => {
+						const active = draft.focusMinutes === preset.focusMinutes && draft.shortMinutes === preset.shortMinutes && draft.longMinutes === preset.longMinutes;
+						return (
+							<Button key={preset.name()} type="button" variant={active ? 'default' : 'outline'} aria-pressed={active} onClick={() => setDraft({ ...draft, focusMinutes: preset.focusMinutes, shortMinutes: preset.shortMinutes, longMinutes: preset.longMinutes })}>
+								{preset.name()} · {tr(`${preset.focusMinutes} min focus, ${preset.shortMinutes} break`, `${preset.focusMinutes} min foco, ${preset.shortMinutes} pausa`)}
+							</Button>
+						);
+					})}
+				</div>
+			</fieldset>
 			<div className="grid max-w-2xl gap-4 sm:grid-cols-2">
 				{numberFields.map((field) => (
 					<div key={field.key} className="space-y-2">

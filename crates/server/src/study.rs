@@ -212,7 +212,8 @@ struct PdfAnnotationsResponse {
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct FlashcardsQuery {
-    media_id: String,
+    /// Absent: every card of the user, for the review hub.
+    media_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1163,11 +1164,20 @@ pub(crate) async fn list_flashcards(
     };
     let owner = user.user_id;
     let admin = user.is_admin;
-    let media_id = query.media_id;
-    let lookup = media_id.clone();
-    match run_study(&state, move |db| {
-        require_media_access(db, &owner, admin, &lookup)?;
-        learnvault_core::list_flashcards(db, &owner, &media_id)
+    let media_id = query.media_id.filter(|id| !id.trim().is_empty());
+    match run_study(&state, move |db| match media_id {
+        Some(media_id) => {
+            require_media_access(db, &owner, admin, &media_id)?;
+            learnvault_core::list_flashcards(db, &owner, &media_id)
+        }
+        None => {
+            // Every card of the owner, but only for lessons they may still open.
+            let cards = learnvault_core::list_all_flashcards(db, &owner)?;
+            Ok(cards
+                .into_iter()
+                .filter(|card| require_media_access(db, &owner, admin, &card.media_id).is_ok())
+                .collect::<Vec<_>>())
+        }
     })
     .await
     {
