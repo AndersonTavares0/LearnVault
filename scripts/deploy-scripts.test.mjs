@@ -44,7 +44,9 @@ test('deploy scripts and configs exist and have proper security settings', () =>
     const updaterComposeContent = readFileSync(updaterComposePath, 'utf8');
     assert.match(updaterComposeContent, /image:\s*docker:cli/, 'updater deve usar imagem docker:cli');
     assert.match(updaterComposeContent, /working_dir:\s*\/compose/, 'updater deve ter working_dir /compose');
-    assert.match(updaterComposeContent, /\/var\/run\/docker\.sock/, 'updater companion deve ter acesso ao socket do docker');
+    assert.match(updaterComposeContent, /docker-proxy:/, 'updater deve usar o proxy do Docker');
+    assert.match(updaterComposeContent, /- \/tmp:rw,noexec,nosuid,size=1m/, 'proxy read-only deve ter tmpfs para o arquivo temporário do HAProxy');
+    assert.match(updaterComposeContent, /- \/var\/run\/docker\.sock:\/var\/run\/docker\.sock:ro/, 'somente o proxy deve montar o socket do Docker');
     assert.match(updaterComposeContent, /ghcr\.io\/andersontavares0\/learnvault/, 'updater deve usar o repositório correto no GHCR');
 
     const envExamplePath = resolve(root, 'deploy/compose/.env.example');

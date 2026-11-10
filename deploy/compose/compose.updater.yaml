@@ -32,6 +32,7 @@ services:
     read_only: true
     tmpfs:
       - /run
+      - /tmp:rw,noexec,nosuid,size=1m
     security_opt:
       - no-new-privileges:true
     cap_drop:
