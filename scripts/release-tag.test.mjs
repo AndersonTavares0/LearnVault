@@ -61,6 +61,19 @@ test('release repair rejects missing, draft, and prerelease targets without crea
     assert.doesNotMatch(workflow, /gh release create|--draft=false/);
 });
 
+test('manual repair does not move latest or publish before the post-build tag check', () => {
+    assert.match(workflow, /type=raw,value=latest,enable=\$\{\{ github\.event_name == 'release' \}\}/);
+    const build = workflow.indexOf('- name: Build OCI image');
+    const containerCheck = workflow.indexOf('- name: Confirm container release tag did not move');
+    const containerPush = workflow.indexOf('- name: Push OCI image');
+    assert.ok(build < containerCheck && containerCheck < containerPush, 'container tag is checked after build and before push');
+
+    const checksum = workflow.indexOf('- name: Create SHA256SUMS');
+    const assetCheck = workflow.indexOf('- name: Confirm release tag did not move');
+    const upload = workflow.indexOf('- name: Upload assets to the published release');
+    assert.ok(checksum < assetCheck && assetCheck < upload, 'asset tag is checked immediately before upload');
+});
+
 test('release resolution uses the requested tag when dispatch HEAD has advanced', t => {
     const { directory, git, commit } = fixture(t);
     git('-c', 'user.name=Security Test', '-c', 'user.email=test@example.invalid', 'commit', '--quiet', '--allow-empty', '-m', 'Later synthetic change');

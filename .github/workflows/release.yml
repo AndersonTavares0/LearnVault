@@ -313,8 +313,8 @@ jobs:
           images: ghcr.io/${{ github.repository }}
           tags: |
             type=semver,pattern={{version}},value=${{ needs.validate-tag.outputs.tag }}
-            type=raw,value=latest
-      - name: Build and push OCI image
+            type=raw,value=latest,enable=${{ github.event_name == 'release' }}
+      - name: Build OCI image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
@@ -322,9 +322,31 @@ jobs:
           platforms: linux/amd64
           build-args: |
             LEARNVAULT_BUILD_VERSION=${{ needs.validate-tag.outputs.tag }}
-          push: true
+          load: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+      - name: Confirm container release tag did not move
+        shell: bash
+        env:
+          EXPECTED_COMMIT_SHA: ${{ needs.validate-tag.outputs.commit_sha }}
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git fetch --force --no-tags origin "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
+          actual_commit_sha="$(git rev-parse "refs/tags/${RELEASE_TAG}^{commit}")"
+          if [[ "$actual_commit_sha" != "$EXPECTED_COMMIT_SHA" ]]; then
+            echo "::error::Release tag moved during the build (expected $EXPECTED_COMMIT_SHA, found $actual_commit_sha)" >&2
+            exit 1
+          fi
+      - name: Push OCI image
+        shell: bash
+        env:
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r image_tag; do
+            [[ -n "$image_tag" ]] && docker image push "$image_tag"
+          done <<< "$IMAGE_TAGS"
 
   publish:
     name: Publish release assets
@@ -338,19 +360,6 @@ jobs:
           ref: ${{ needs.validate-tag.outputs.commit_sha }}
           fetch-depth: 0
           persist-credentials: false
-      - name: Confirm release tag did not move
-        shell: bash
-        env:
-          EXPECTED_COMMIT_SHA: ${{ needs.validate-tag.outputs.commit_sha }}
-          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
-        run: |
-          set -euo pipefail
-          git fetch --force --no-tags origin "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
-          actual_commit_sha="$(git rev-parse "refs/tags/${RELEASE_TAG}^{commit}")"
-          if [[ "$actual_commit_sha" != "$EXPECTED_COMMIT_SHA" ]]; then
-            echo "::error::Release tag moved during the build (expected $EXPECTED_COMMIT_SHA, found $actual_commit_sha)" >&2
-            exit 1
-          fi
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: release-*
@@ -384,6 +393,19 @@ jobs:
           printf '%s\n' "${actual[@]}" | sort | diff -u <(printf '%s\n' "${expected[@]}" | sort) -
           (cd dist && sha256sum "${expected[@]}" > SHA256SUMS)
           (cd dist && sha256sum -c SHA256SUMS)
+      - name: Confirm release tag did not move
+        shell: bash
+        env:
+          EXPECTED_COMMIT_SHA: ${{ needs.validate-tag.outputs.commit_sha }}
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git fetch --force --no-tags origin "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
+          actual_commit_sha="$(git rev-parse "refs/tags/${RELEASE_TAG}^{commit}")"
+          if [[ "$actual_commit_sha" != "$EXPECTED_COMMIT_SHA" ]]; then
+            echo "::error::Release tag moved during the build (expected $EXPECTED_COMMIT_SHA, found $actual_commit_sha)" >&2
+            exit 1
+          fi
       - name: Upload assets to the published release
         env:
           GH_TOKEN: ${{ github.token }}
