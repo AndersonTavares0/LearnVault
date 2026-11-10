@@ -45,9 +45,13 @@ test('deploy scripts and configs exist and have proper security settings', () =>
     assert.match(updaterComposeContent, /image:\s*docker:cli/, 'updater deve usar imagem docker:cli');
     assert.match(updaterComposeContent, /working_dir:\s*\/compose/, 'updater deve ter working_dir /compose');
     assert.match(updaterComposeContent, /docker-proxy:/, 'updater deve usar o proxy do Docker');
-    assert.match(updaterComposeContent, /- \/tmp:rw,noexec,nosuid,size=1m/, 'proxy read-only deve ter tmpfs para o arquivo temporário do HAProxy');
-    assert.match(updaterComposeContent, /- \/var\/run\/docker\.sock:\/var\/run\/docker\.sock:ro/, 'somente o proxy deve montar o socket do Docker');
-    assert.match(updaterComposeContent, /ghcr\.io\/andersontavares0\/learnvault/, 'updater deve usar o repositório correto no GHCR');
+    const proxyService = updaterComposeContent.match(/^  docker-proxy:\n[\s\S]*?(?=^  updater:)/m)?.[0] ?? '';
+    const updaterService = updaterComposeContent.match(/^  updater:\n[\s\S]*?(?=^networks:)/m)?.[0] ?? '';
+    assert.match(proxyService, /- \/var\/run\/docker\.sock:\/var\/run\/docker\.sock:ro/, 'somente o proxy deve montar o socket do Docker');
+    assert.match(proxyService, /- \/tmp:rw,noexec,nosuid,size=1m/, 'proxy read-only deve ter tmpfs para o arquivo temporário do HAProxy');
+    assert.match(updaterService, /DOCKER_HOST:\s*tcp:\/\/docker-proxy:2375/, 'updater deve apontar para o proxy');
+    assert.doesNotMatch(updaterService, /docker\.sock/, 'updater não deve montar o socket do Docker');
+    assert.match(updaterComposeContent, /updater_net:\n\s+internal:\s+true/, 'rede do proxy deve ser interna');
 
     const envExamplePath = resolve(root, 'deploy/compose/.env.example');
     assert.ok(existsSync(envExamplePath), '.env.example deve existir');
