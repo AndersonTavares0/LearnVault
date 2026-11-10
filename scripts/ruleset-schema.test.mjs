@@ -12,7 +12,9 @@ const templatePath = path.join(root, '.github/rulesets/default-branch.template.j
 
 test('learnvault-main.json is valid and enforces required invariants', () => {
 	assert.ok(fs.existsSync(learnvaultPath), 'learnvault-main.json must exist');
-	const content = JSON.parse(fs.readFileSync(learnvaultPath, 'utf8'));
+	const source = fs.readFileSync(learnvaultPath, 'utf8');
+	assert.equal(source.match(/"allowed_merge_methods"\s*:/g)?.length, 1, 'JSON must not contain duplicate merge policy keys');
+	const content = JSON.parse(source);
 
 	assert.equal(content.target, 'branch');
 	assert.equal(content.enforcement, 'active');

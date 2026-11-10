@@ -26,7 +26,7 @@ All changes to the codebase enter `main` exclusively through pull requests that 
 
 ## Squash merge policy
 
-The production ruleset export allows only squash merges, matching the contribution policy. A read-only inspection on 2026-11-09 found that the active GitHub ruleset still allowed merge, squash, and rebase. A repository administrator must apply the updated export to enforce squash-only merges remotely; changing the JSON file alone does not update GitHub settings.
+The production ruleset export and active GitHub ruleset allow only squash merges, matching the contribution policy. Changes to this JSON file do not update GitHub settings; maintainers must apply and verify remote ruleset changes separately.
 
 ## Mandatory Status Checks
 
