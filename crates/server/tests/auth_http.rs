@@ -210,7 +210,7 @@ async fn login_rejects_when_blocking_capacity_is_saturated() {
 }
 
 #[tokio::test]
-async fn startup_without_credentials_creates_temporary_admin() {
+async fn startup_without_credentials_creates_temporary_admin_that_must_change_password() {
     let temp = tempfile::tempdir().unwrap();
 
     let app = build_router(AppState::initialize(config(&temp, false)).await.unwrap());
@@ -226,8 +226,7 @@ async fn startup_without_credentials_creates_temporary_admin() {
         .unwrap();
 
     assert_eq!(login.status(), StatusCode::OK);
-    // A senha temporária entra direto, sem forçar troca de credenciais.
-    assert_eq!(body(login).await["must_change_credentials"], false);
+    assert_eq!(body(login).await["must_change_credentials"], true);
 }
 
 #[tokio::test]

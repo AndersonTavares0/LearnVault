@@ -18,10 +18,15 @@ All changes to the codebase enter `main` exclusively through pull requests that 
 | **Conversation Resolution** | Active (`required_review_thread_resolution`) | Guarantees all discussion threads, questions, and code review remarks are resolved before merge. |
 | **Dismiss Stale Approvals** | Active (`dismiss_stale_reviews_on_push`) | Resets approvals when new commits are added to an open PR. |
 | **Strict Up-To-Date Base** | Active (`strict_required_status_checks_policy`) | Enforces that PR branches must be rebased or updated against current `main` before merge. |
+| **Squash-Only Merges** | Active (`allowed_merge_methods: ["squash"]`) | Keeps the effective merge-method restriction explicit in the ruleset as well as repository settings. |
 | **Single-Maintainer Compatibility** | Active (`required_approving_review_count: 0`) | Avoids blocking the solo maintainer while retaining all automated CI quality gates and PR verification. |
 | **Zero Admin Bypass** | Active (`bypass_actors: []`) | Administrators are subject to the same protections, eliminating backdoors or unverified merges. |
 
 ---
+
+## Squash merge policy
+
+The production ruleset export and active GitHub ruleset allow only squash merges, matching the contribution policy. Changes to this JSON file do not update GitHub settings; maintainers must apply and verify remote ruleset changes separately.
 
 ## Mandatory Status Checks
 

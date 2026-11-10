@@ -18,12 +18,23 @@ jobs:
     name: Validate release tag
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
       commit_sha: ${{ steps.commit.outputs.commit_sha }}
-      is_draft: ${{ steps.release-meta.outputs.is_draft }}
+      release_notes_base64: ${{ steps.release-notes.outputs.release_notes_base64 }}
     steps:
+      - name: Require the trusted release workflow ref
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "workflow_dispatch" && "$WORKFLOW_REF" != "refs/heads/main" ]]; then
+            echo "::error::Manual release repair must run from main" >&2
+            exit 1
+          fi
       - name: Require a strict vX.Y.Z tag
         id: tag
         shell: bash
@@ -36,34 +47,45 @@ jobs:
             exit 1
           fi
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
-      - name: Confirm or initialize release and tag
-        id: release-meta
+      - name: Require an existing published stable release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.tag.outputs.tag }}
         run: |
           set -euo pipefail
-          if meta="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease 2>/dev/null)"; then
-            is_draft="$(printf '%s' "$meta" | jq -r .isDraft)"
-            echo "Release $RELEASE_TAG encontrada (draft: $is_draft)."
-            echo "is_draft=$is_draft" >> "$GITHUB_OUTPUT"
-          else
-            echo "Release $RELEASE_TAG não existe no GitHub. Criando como draft para validação segura sem expor release vazia."
-            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --target "${{ github.sha }}" --draft --title "$RELEASE_TAG" --notes "LearnVault release $RELEASE_TAG"
-            echo "is_draft=true" >> "$GITHUB_OUTPUT"
+          meta="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease)"
+          if [[ "$(jq -r .isDraft <<<"$meta")" != "false" || "$(jq -r .isPrerelease <<<"$meta")" != "false" ]]; then
+            echo "::error::Only an existing published stable release can be repaired" >&2
+            exit 1
           fi
+      - name: Resolve release notes
+        id: release-notes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          release_notes="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json body --jq '.body // ""')"
+          if [[ -z "$release_notes" ]]; then
+            release_notes="LearnVault release $RELEASE_TAG"
+          fi
+          release_notes_base64="$(printf '%s' "$release_notes" | base64 -w 0)"
+          echo "release_notes_base64=$release_notes_base64" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.sha }}
+          ref: refs/tags/${{ steps.tag.outputs.tag }}
           fetch-depth: 1
           persist-credentials: false
       - name: Resolve release tag commit
         id: commit
         shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
         run: |
           set -euo pipefail
-          COMMIT_SHA="$(git rev-parse HEAD)"
+          COMMIT_SHA="$(git rev-parse "refs/tags/${RELEASE_TAG}^{commit}")"
           if [[ ! "$COMMIT_SHA" =~ ^[0-9a-f]{40}$ ]]; then
             echo "::error::Release tag did not resolve to a commit" >&2
             exit 1
@@ -218,6 +240,7 @@ jobs:
         env:
           RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_NOTES_BASE64: ${{ needs.validate-tag.outputs.release_notes_base64 }}
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
           $installers = @(Get-ChildItem target/release/bundle/nsis -Filter *.exe -File)
@@ -240,9 +263,10 @@ jobs:
             throw "A assinatura do updater gerada em $($sigs[0].FullName) está vazia"
           }
           $assetUrl = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:RELEASE_TAG/learnvault-windows-$env:RELEASE_TAG.nsis.zip"
+          $releaseNotes = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:RELEASE_NOTES_BASE64))
           $latest = @{
             version = $env:RELEASE_TAG
-            notes = "LearnVault release $env:RELEASE_TAG"
+            notes = $releaseNotes
             pub_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
             platforms = @{
               "windows-x86_64" = @{
@@ -291,10 +315,11 @@ jobs:
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ghcr.io/${{ github.repository }}
+          flavor: latest=false
           tags: |
             type=semver,pattern={{version}},value=${{ needs.validate-tag.outputs.tag }}
-            type=raw,value=latest
-      - name: Build and push OCI image
+            type=raw,value=latest,enable=${{ github.event_name == 'release' }}
+      - name: Build OCI image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
@@ -302,9 +327,31 @@ jobs:
           platforms: linux/amd64
           build-args: |
             LEARNVAULT_BUILD_VERSION=${{ needs.validate-tag.outputs.tag }}
-          push: true
+          load: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+      - name: Confirm container release tag did not move
+        shell: bash
+        env:
+          EXPECTED_COMMIT_SHA: ${{ needs.validate-tag.outputs.commit_sha }}
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git fetch --force --no-tags origin "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
+          actual_commit_sha="$(git rev-parse "refs/tags/${RELEASE_TAG}^{commit}")"
+          if [[ "$actual_commit_sha" != "$EXPECTED_COMMIT_SHA" ]]; then
+            echo "::error::Release tag moved during the build (expected $EXPECTED_COMMIT_SHA, found $actual_commit_sha)" >&2
+            exit 1
+          fi
+      - name: Push OCI image
+        shell: bash
+        env:
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r image_tag; do
+            [[ -n "$image_tag" ]] && docker image push "$image_tag"
+          done <<< "$IMAGE_TAGS"
 
   publish:
     name: Publish release assets
@@ -318,17 +365,6 @@ jobs:
           ref: ${{ needs.validate-tag.outputs.commit_sha }}
           fetch-depth: 0
           persist-credentials: false
-      - name: Confirm release tag did not move
-        shell: bash
-        env:
-          EXPECTED_COMMIT_SHA: ${{ needs.validate-tag.outputs.commit_sha }}
-        run: |
-          set -euo pipefail
-          actual_commit_sha="$(git rev-parse HEAD)"
-          if [[ "$actual_commit_sha" != "$EXPECTED_COMMIT_SHA" ]]; then
-            echo "::error::Release tag moved during the build (expected $EXPECTED_COMMIT_SHA, found $actual_commit_sha)" >&2
-            exit 1
-          fi
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: release-*
@@ -362,6 +398,19 @@ jobs:
           printf '%s\n' "${actual[@]}" | sort | diff -u <(printf '%s\n' "${expected[@]}" | sort) -
           (cd dist && sha256sum "${expected[@]}" > SHA256SUMS)
           (cd dist && sha256sum -c SHA256SUMS)
+      - name: Confirm release tag did not move
+        shell: bash
+        env:
+          EXPECTED_COMMIT_SHA: ${{ needs.validate-tag.outputs.commit_sha }}
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git fetch --force --no-tags origin "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
+          actual_commit_sha="$(git rev-parse "refs/tags/${RELEASE_TAG}^{commit}")"
+          if [[ "$actual_commit_sha" != "$EXPECTED_COMMIT_SHA" ]]; then
+            echo "::error::Release tag moved during the build (expected $EXPECTED_COMMIT_SHA, found $actual_commit_sha)" >&2
+            exit 1
+          fi
       - name: Upload assets to the published release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -384,12 +433,12 @@ jobs:
           gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
             "${upload_args[@]}" \
             --clobber
-      - name: Attribute release contributors and publish
+      - name: Attribute release contributors
+        if: ${{ github.event_name == 'release' }}
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
-          IS_DRAFT: ${{ needs.validate-tag.outputs.is_draft }}
         run: |
           set -euo pipefail
           notes="$(mktemp)"
@@ -419,8 +468,4 @@ jobs:
               } >> "$notes"
             fi
             gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --notes-file "$notes"
-          fi
-          if [[ "$IS_DRAFT" == "true" ]]; then
-            echo "Publicando release $RELEASE_TAG agora que todos os artefatos assinados e checksums foram validados..."
-            gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false
           fi

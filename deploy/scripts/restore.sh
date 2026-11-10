@@ -18,7 +18,7 @@ if [ -f "/app/learnvault-server" ]; then
     /app/learnvault-server restore --backup "$BACKUP_FILE" --database "$DATABASE_PATH"
 else
     docker compose stop "$CONTAINER"
-    docker compose run --rm "$CONTAINER" /app/learnvault-server restore --backup "$BACKUP_FILE" --database "$DATABASE_PATH"
+    docker compose run --rm --entrypoint /app/learnvault-server "$CONTAINER" restore --backup "$BACKUP_FILE" --database "$DATABASE_PATH"
     docker compose start "$CONTAINER"
 fi
 
