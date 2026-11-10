@@ -62,6 +62,7 @@ test('release repair rejects missing, draft, and prerelease targets without crea
 });
 
 test('manual repair does not move latest or publish before the post-build tag check', () => {
+    assert.match(workflow, /flavor: latest=false/);
     assert.match(workflow, /type=raw,value=latest,enable=\$\{\{ github\.event_name == 'release' \}\}/);
     const build = workflow.indexOf('- name: Build OCI image');
     const containerCheck = workflow.indexOf('- name: Confirm container release tag did not move');

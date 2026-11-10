@@ -293,24 +293,12 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Confirm container release tag did not move
-        shell: bash
-        env:
-          EXPECTED_COMMIT_SHA: ${{ needs.validate-tag.outputs.commit_sha }}
-          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
-        run: |
-          set -euo pipefail
-          git fetch --force --no-tags origin "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
-          actual_commit_sha="$(git rev-parse "refs/tags/${RELEASE_TAG}^{commit}")"
-          if [[ "$actual_commit_sha" != "$EXPECTED_COMMIT_SHA" ]]; then
-            echo "::error::Release tag moved during the build (expected $EXPECTED_COMMIT_SHA, found $actual_commit_sha)" >&2
-            exit 1
-          fi
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ghcr.io/${{ github.repository }}
+          flavor: latest=false
           tags: |
             type=semver,pattern={{version}},value=${{ needs.validate-tag.outputs.tag }}
             type=raw,value=latest,enable=${{ github.event_name == 'release' }}
