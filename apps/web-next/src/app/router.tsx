@@ -3,6 +3,7 @@ import { href, locationFromHash } from '@/lib/router';
 import { defaultRoute } from '@/lib/session';
 import { transportKind } from '@/lib/transport';
 import { AppShell } from './shell';
+import { RouteError } from './route-error';
 import { HomePage } from '@/pages/home';
 import { LoginPage } from '@/pages/login';
 import { CourseRoute } from '@/pages/course';
@@ -33,6 +34,7 @@ export const routes: RouteObject[] = [
 	...(transportKind === 'http' ? [{ path: '/login', element: <LoginPage /> }] : []),
 	{
 		element: <AppShell />,
+		errorElement: <RouteError />,
 		children: [
 			{ index: true, element: <HomePage /> },
 			{ path: 'home', element: <Navigate to="/" replace /> },

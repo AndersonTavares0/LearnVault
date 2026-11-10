@@ -35,8 +35,30 @@ export function SettingsPage() {
 		if (location.hash) document.getElementById(location.hash.slice(1))?.scrollIntoView();
 	}, [location.hash]);
 
+	const sections = [
+		{ id: 'appearance', label: tr('Appearance', 'Aparência') },
+		{ id: 'profile', label: tr('Profile', 'Perfil') },
+		...(studySyncSupported ? [{ id: 'study', label: tr('Study', 'Estudo') }] : []),
+		{ id: 'focus', label: tr('Focus timer', 'Timer de foco') },
+		...(!server || admin ? [{ id: 'updates', label: tr('Updates', 'Atualizações') }] : []),
+		...(server && admin ? [{ id: 'users', label: tr('Users', 'Usuários') }, { id: 'backup', label: 'Backup' }] : [])
+	];
+
 	return (
-		<div className="space-y-10">
+		<div className="lg:grid lg:grid-cols-[12rem_1fr] lg:gap-10">
+			{/* Buttons, not `#id` links: the hash belongs to the router. */}
+			<nav aria-label={tr('Settings sections', 'Seções dos ajustes')} className="sticky top-20 hidden self-start lg:block">
+				<ul className="space-y-1">
+					{sections.map((section) => (
+						<li key={section.id}>
+							<button type="button" onClick={() => document.getElementById(section.id)?.scrollIntoView({ behavior: 'smooth' })} className="min-h-11 w-full rounded-md px-3 text-left text-sm text-muted-foreground hover:bg-muted hover:text-foreground">
+								{section.label}
+							</button>
+						</li>
+					))}
+				</ul>
+			</nav>
+			<div className="min-w-0 space-y-10">
 			<PageHeader title={tr('Settings', 'Ajustes')} />
 			<Section id="appearance" title={tr('Appearance', 'Aparência')}>
 				<Choice legend={tr('Theme', 'Tema')} options={THEME_MODES} value={theme} label={(mode) => themeLabels()[mode]} onChange={(mode) => { saveThemeMode(mode); setTheme(mode); }} />
@@ -74,6 +96,7 @@ export function SettingsPage() {
 					</Section>
 				</>
 			)}
+			</div>
 		</div>
 	);
 }
