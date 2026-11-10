@@ -3,7 +3,12 @@ Description=LearnVault personal course library
 RequiresMountsFor=/mnt/cursos /mnt/scratch /home/media/stacks/learnvault/data
 
 [Container]
-Image=localhost/learnvault:latest
+Image=ghcr.io/andersontavares0/learnvault:stable
+# Podman pulls a newer :stable image on `podman-auto-update.timer` and restarts this unit.
+# Notify=healthy holds the "started" signal until the healthcheck passes, so a bad image
+# fails the restart and `podman auto-update` rolls back to the previous one.
+AutoUpdate=registry
+Notify=healthy
 ContainerName=learnvault
 UserNS=keep-id:uid=10001,gid=10001
 PublishPort=8090:8090
@@ -24,6 +29,7 @@ DropCapability=ALL
 HealthCmd=wget -q -O - http://127.0.0.1:8090/api/healthz
 HealthInterval=30s
 HealthTimeout=3s
+HealthStartPeriod=20s
 
 [Service]
 Restart=always
