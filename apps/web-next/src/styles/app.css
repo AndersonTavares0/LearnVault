@@ -210,3 +210,30 @@
     }
   }
 }
+
+/*
+ * Selectable text over a rendered PDF page (pdf.js TextLayer). The spans are transparent and sit
+ * exactly over the canvas text, so selection, copy and screen readers use real text. pdf.js sets
+ * positions and sizes itself, through the CSSOM, which the server CSP allows.
+ */
+.pdf-text-layer {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  line-height: 1;
+  text-align: initial;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  opacity: 1;
+}
+.pdf-text-layer :is(span, br) {
+  position: absolute;
+  color: transparent;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+.pdf-text-layer ::selection {
+  background: color-mix(in oklch, var(--primary) 35%, transparent);
+}
