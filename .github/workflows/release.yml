@@ -318,6 +318,8 @@ jobs:
           flavor: latest=false
           tags: |
             type=semver,pattern={{version}},value=${{ needs.validate-tag.outputs.tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.validate-tag.outputs.tag }}
+            type=raw,value=stable,enable=${{ github.event_name == 'release' }}
             type=raw,value=latest,enable=${{ github.event_name == 'release' }}
       - name: Build OCI image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -343,15 +345,21 @@ jobs:
             echo "::error::Release tag moved during the build (expected $EXPECTED_COMMIT_SHA, found $actual_commit_sha)" >&2
             exit 1
           fi
-      - name: Push OCI image
-        shell: bash
-        env:
-          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
-        run: |
-          set -euo pipefail
-          while IFS= read -r image_tag; do
-            [[ -n "$image_tag" ]] && docker image push "$image_tag"
-          done <<< "$IMAGE_TAGS"
+      - name: Push OCI image with provenance and SBOM
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/container/Containerfile
+          platforms: linux/amd64
+          build-args: |
+            LEARNVAULT_BUILD_VERSION=${{ needs.validate-tag.outputs.tag }}
+          push: true
+          # Attestations can only be attached when Buildx pushes, so the push repeats the build
+          # (from cache) after the release tag has been confirmed; the updater verifies them (#342).
+          provenance: mode=max
+          sbom: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
 
   publish:
     name: Publish release assets
