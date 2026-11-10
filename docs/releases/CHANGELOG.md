@@ -4,6 +4,33 @@ Todas as mudanças relevantes do LearnVault são documentadas neste arquivo.
 
 O formato segue o Keep a Changelog e as versões usam Semantic Versioning.
 
+## [0.8.1](https://github.com/AndersonTavares0/LearnVault/compare/v0.8.0...v0.8.1) (2026-11-10)
+
+
+### Features
+
+* **brand:** adopt the new LearnVault icon set ([#323](https://github.com/AndersonTavares0/LearnVault/issues/323)) ([fdbdb3a](https://github.com/AndersonTavares0/LearnVault/commit/fdbdb3abc1688e70415d9a9059ff33ee4bdfc6ff))
+* contas locais de estudantes e permissoes de acesso a cursos ([#305](https://github.com/AndersonTavares0/LearnVault/issues/305)) ([2e0072b](https://github.com/AndersonTavares0/LearnVault/commit/2e0072b96bbdb2e630d49b58f1b7d271971dd127))
+* **design:** polish UI layout, touch targets, filter groups, and default cover mark ([#333](https://github.com/AndersonTavares0/LearnVault/issues/333)) ([da03903](https://github.com/AndersonTavares0/LearnVault/commit/da03903c71e78971f1708fb1a7c4443f61f9666a))
+* favoritos de cursos e aulas no núcleo, servidor, desktop e SPA ([#304](https://github.com/AndersonTavares0/LearnVault/issues/304)) ([11907b5](https://github.com/AndersonTavares0/LearnVault/commit/11907b52065856fc08dc0e8f9dc28df1219ba69f))
+* **i18n:** add en/pt-BR internationalization, set English default, and remove wiki ([#306](https://github.com/AndersonTavares0/LearnVault/issues/306)) ([b1a2da7](https://github.com/AndersonTavares0/LearnVault/commit/b1a2da71c1c4e9e7972aa0041e85cd85269a8fc8)), closes [#303](https://github.com/AndersonTavares0/LearnVault/issues/303)
+* **i18n:** localize transport errors and refine UI accessibility ([#313](https://github.com/AndersonTavares0/LearnVault/issues/313)) ([260758b](https://github.com/AndersonTavares0/LearnVault/commit/260758bb7a5991686e4b51437e5295b246cab577))
+
+
+### Bug Fixes
+
+* **core:** bundle SQLite 3.54 to close CVE-2026-119375 ([#353](https://github.com/AndersonTavares0/LearnVault/issues/353)) ([794a8e6](https://github.com/AndersonTavares0/LearnVault/commit/794a8e6d6b2496a85dfb728cae88da025dc70cd0))
+* **release:** bind RC provenance and validate updater recovery ([#364](https://github.com/AndersonTavares0/LearnVault/issues/364)) ([c62a468](https://github.com/AndersonTavares0/LearnVault/commit/c62a46898b6bd578766e8bffc6a7bb344626c136))
+* **release:** corrigir SHAs do GHCR, createUpdaterArtifacts e chave Ed25519 ([#302](https://github.com/AndersonTavares0/LearnVault/issues/302)) ([324ecda](https://github.com/AndersonTavares0/LearnVault/commit/324ecda68bb83d73d5a02db2a4a65fc2e98b8989))
+* **release:** keep pre-major feature bumps on patch versions ([#380](https://github.com/AndersonTavares0/LearnVault/issues/380)) ([d20d599](https://github.com/AndersonTavares0/LearnVault/commit/d20d5992ab96fae219c840a8bd6ec7334029c85a))
+* **release:** standardize SemVer and monthly cadence ([#370](https://github.com/AndersonTavares0/LearnVault/issues/370)) ([bf09a7e](https://github.com/AndersonTavares0/LearnVault/commit/bf09a7eff17f25a0a49e4af31c00a3405d958c88))
+* **release:** support off-cycle security releases ([#375](https://github.com/AndersonTavares0/LearnVault/issues/375)) ([5c45173](https://github.com/AndersonTavares0/LearnVault/commit/5c451738619c1bb854c4224f483079fb705d9ca9))
+* **release:** use generated notes in updater manifest ([#379](https://github.com/AndersonTavares0/LearnVault/issues/379)) ([ce17841](https://github.com/AndersonTavares0/LearnVault/commit/ce1784103badd57d6251674ce1d562ba6ace990b))
+* **repo:** robust hygiene checks, unified test scripts and calibrated docs ([#315](https://github.com/AndersonTavares0/LearnVault/issues/315)) ([063815d](https://github.com/AndersonTavares0/LearnVault/commit/063815dea9527c88fa24b9623d785284fd0e4882))
+* **security:** enforce course and media access boundaries ([#357](https://github.com/AndersonTavares0/LearnVault/issues/357)) ([9cd65cc](https://github.com/AndersonTavares0/LearnVault/commit/9cd65cc35de9277886bf0adb03822af57315857b))
+* **security:** protect backup staging and release provenance ([#361](https://github.com/AndersonTavares0/LearnVault/issues/361)) ([1235424](https://github.com/AndersonTavares0/LearnVault/commit/12354240d3ef109013a55348ff3295e5e950a582))
+* **web:** show the real video count when a lesson bundles several ([#332](https://github.com/AndersonTavares0/LearnVault/issues/332)) ([33222e5](https://github.com/AndersonTavares0/LearnVault/commit/33222e5ff252d2f7e2a2eb62bb855b8423abdec8))
+
 ## [0.8.0](https://github.com/AndersonTavares0/LearnVault/compare/v0.7.0...v0.8.0) (2026-11-07)
 
 
