@@ -18,12 +18,26 @@ RUN pnpm --filter learnvault-web run build
 FROM rust:1.99-alpine AS rust-build
 RUN apk add --no-cache build-base
 WORKDIR /src
+# Dependency layer: only the manifests and empty entry points, so the third-party crates
+# (axum, the bundled SQLite) compile once and stay cached until Cargo.lock or a manifest
+# changes. The desktop crate is a workspace member but is never built here; it only has to
+# exist for Cargo to resolve the workspace.
 COPY Cargo.toml Cargo.lock ./
+COPY crates/core/Cargo.toml ./crates/core/
+COPY crates/server/Cargo.toml ./crates/server/
+COPY crates/desktop/Cargo.toml ./crates/desktop/
+RUN mkdir -p crates/core/src crates/server/src crates/desktop/src \
+    && touch crates/core/src/lib.rs crates/server/src/lib.rs crates/desktop/src/lib.rs \
+    && echo 'fn main() {}' > crates/server/src/main.rs \
+    && cargo build --release --locked --package learnvault-server
 COPY crates ./crates
 COPY --from=web-build /src/crates/server/web/build ./crates/server/web/build
 ARG LEARNVAULT_BUILD_VERSION=""
 ENV LEARNVAULT_BUILD_VERSION=${LEARNVAULT_BUILD_VERSION}
-RUN cargo build --release --locked --package learnvault-server
+# COPY keeps the sources' older timestamps, so without this Cargo would treat the stubs
+# built above as up to date and ship an empty binary.
+RUN touch crates/core/src/lib.rs crates/server/src/lib.rs crates/server/src/main.rs \
+    && cargo build --release --locked --package learnvault-server
 
 FROM alpine:3.24
 RUN apk add --no-cache ca-certificates wget ffmpeg \
