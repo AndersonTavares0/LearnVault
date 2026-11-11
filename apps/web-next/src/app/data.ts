@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { resolveSession } from '@/lib/session';
 import { studySyncSupported } from '@/lib/player';
-import { STUDY_NOT_AVAILABLE, transport, transportKind, type MissionId, type NewPdfAnnotation, type StudyFavorites, type StudyProgress } from '@/lib/transport';
+import { STUDY_NOT_AVAILABLE, transport, transportKind, type MissionId, type NewPdfAnnotation, type PdfAnnotationColor, type StudyFavorites, type StudyProgress } from '@/lib/transport';
 
 /** Query keys shared by every screen; invalidating one refreshes all its readers. */
 export const keys = {
@@ -183,6 +183,7 @@ export function usePdfAnnotationMutations(mediaId: string | null) {
 	const refresh = () => client.invalidateQueries({ queryKey: ['pdf-annotations', mediaId] });
 	return {
 		create: useMutation({ mutationFn: (input: NewPdfAnnotation) => transport.createPdfAnnotation(mediaId!, input), onSuccess: refresh }),
+		update: useMutation({ mutationFn: ({ annotationId, ...change }: { annotationId: string; color?: PdfAnnotationColor; content?: string }) => transport.updatePdfAnnotation(annotationId, change), onSuccess: refresh }),
 		remove: useMutation({ mutationFn: (annotationId: string) => transport.deletePdfAnnotation(annotationId), onSuccess: refresh })
 	};
 }

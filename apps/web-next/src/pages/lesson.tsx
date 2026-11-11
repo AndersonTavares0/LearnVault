@@ -292,7 +292,7 @@ function PdfLesson({ file, courseId, ready, initialPage, onPage }: { file: FileE
 				<span className="inline-flex items-center gap-1.5 rounded-full bg-destructive/10 px-2.5 py-0.5 font-semibold text-destructive"><FileText className="size-3.5" aria-hidden="true" />{tr('PDF document', 'Documento PDF')}</span>
 				<span>{formatFileSize(file.size)}</span>
 			</p>
-			<p role="note" className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100">
+			<p role="note" className="rounded-2xl border border-brand-soft bg-panel p-4 text-sm">
 				{tr('This lesson is a PDF document. Read it here; the original file is never changed.', 'Esta aula é um documento PDF. Leia aqui; o arquivo original nunca é alterado.')}
 			</p>
 			{ready ? <PdfReader file={file} courseId={courseId} initialPage={initialPage} onPage={onPage} /> : <p role="status" className="text-muted-foreground">{tr('Loading…', 'Carregando…')}</p>}

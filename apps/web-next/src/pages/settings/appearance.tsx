@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useLocale } from '@/hooks/use-locale';
 import { useStore } from '@/hooks/use-store';
-import { ACCENT_PRESETS, appearanceStore, BANNERS, DENSITIES, FONTS, HOME_LAYOUTS, RADII, readableAccent, resetAppearance, REWARD_COLORS, SIDEBARS, TEXT_SIZES, updateAppearance, type Appearance } from '@/lib/appearance';
+import { ACCENT_PRESETS, appearanceStore, DENSITIES, FONTS, HOME_LAYOUTS, RADII, readableAccent, resetAppearance, REWARD_COLORS, SIDEBARS, TEXT_SIZES, updateAppearance, type Appearance } from '@/lib/appearance';
 import { tr } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { safeStorage } from '@/app/preferences';
@@ -56,8 +56,7 @@ export function AppearanceSettings() {
 			<Choice legend={tr('Corners', 'Cantos')} options={RADII} value={value.radius} label={(option) => ({ square: tr('Square', 'Retos'), soft: tr('Soft', 'Suaves'), round: tr('Round', 'Arredondados') })[option]} onChange={(radius) => change({ radius })} />
 			<Choice legend={tr('Density', 'Densidade')} options={DENSITIES} value={value.density} label={(option) => (option === 'comfortable' ? tr('Comfortable', 'Confortável') : tr('Compact', 'Compacta'))} onChange={(density) => change({ density })} />
 			<Choice legend={tr('Text size', 'Tamanho do texto')} options={TEXT_SIZES} value={value.textSize} label={(option) => ({ small: tr('Small', 'Pequeno'), medium: tr('Medium', 'Médio'), large: tr('Large', 'Grande') })[option]} onChange={(textSize) => change({ textSize })} />
-			<Choice legend={tr('Font', 'Fonte')} options={FONTS} value={value.font} label={(option) => ({ sans: tr('Source Sans', 'Source Sans'), system: tr('System font', 'Fonte do sistema'), serif: tr('Reading serif', 'Serifada de leitura') })[option]} onChange={(font) => change({ font })} />
-			<Choice legend={tr('Banners', 'Faixas de destaque')} options={BANNERS} value={value.banner} label={(option) => (option === 'dark' ? tr('Dark neutral', 'Escuro neutro') : tr('Deep accent', 'Destaque escuro'))} onChange={(banner) => change({ banner })} />
+			<Choice legend={tr('Font', 'Fonte')} options={FONTS} value={value.font} label={(option) => ({ sans: tr('DM Sans with serif titles', 'DM Sans com títulos serifados'), system: tr('System font', 'Fonte do sistema'), serif: tr('Reading serif', 'Serifada de leitura') })[option]} onChange={(font) => change({ font })} />
 			<Choice legend={tr('Course list in My learning', 'Lista de cursos em Meu aprendizado')} options={HOME_LAYOUTS} value={value.homeLayout} label={(option) => (option === 'grid' ? tr('Cards', 'Cartões') : tr('List', 'Lista'))} onChange={(homeLayout) => change({ homeLayout })} />
 			<Choice legend={tr('Course content in a lesson', 'Conteúdo do curso na aula')} options={SIDEBARS} value={value.sidebar} label={(option) => (option === 'right' ? tr('On the right', 'À direita') : tr('On the left', 'À esquerda'))} onChange={(sidebar) => change({ sidebar })} />
 

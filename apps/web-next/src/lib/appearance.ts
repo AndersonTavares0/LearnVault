@@ -23,7 +23,6 @@ export const RADII = ['square', 'soft', 'round'] as const;
 export const DENSITIES = ['comfortable', 'compact'] as const;
 export const TEXT_SIZES = ['small', 'medium', 'large'] as const;
 export const FONTS = ['sans', 'system', 'serif'] as const;
-export const BANNERS = ['dark', 'brand'] as const;
 export const SIDEBARS = ['right', 'left'] as const;
 export const HOME_LAYOUTS = ['grid', 'list'] as const;
 
@@ -34,7 +33,6 @@ export type Appearance = {
 	density: (typeof DENSITIES)[number];
 	textSize: (typeof TEXT_SIZES)[number];
 	font: (typeof FONTS)[number];
-	banner: (typeof BANNERS)[number];
 	sidebar: (typeof SIDEBARS)[number];
 	homeLayout: (typeof HOME_LAYOUTS)[number];
 	showContinue: boolean;
@@ -51,7 +49,6 @@ export const DEFAULT_APPEARANCE: Appearance = {
 	density: 'comfortable',
 	textSize: 'medium',
 	font: 'sans',
-	banner: 'dark',
 	sidebar: 'right',
 	homeLayout: 'grid',
 	showContinue: true,
@@ -77,7 +74,6 @@ export function parseAppearance(value: unknown): Appearance {
 		density: pick(raw.density, DENSITIES, d.density),
 		textSize: pick(raw.textSize, TEXT_SIZES, d.textSize),
 		font: pick(raw.font, FONTS, d.font),
-		banner: pick(raw.banner, BANNERS, d.banner),
 		sidebar: pick(raw.sidebar, SIDEBARS, d.sidebar),
 		homeLayout: pick(raw.homeLayout, HOME_LAYOUTS, d.homeLayout),
 		showContinue: flag(raw.showContinue, d.showContinue),
@@ -133,7 +129,7 @@ export function applyAppearance(appearance: Appearance, root: HTMLElement = docu
 	root.style.setProperty('--reward-fill', appearance.reward === 'accent' ? 'var(--brand)' : '#BC7F29');
 	root.style.setProperty('--reward-fill-fg', appearance.reward === 'accent' ? 'var(--brand-fg)' : '#2A2118');
 	root.style.setProperty('--reward-tint', appearance.reward === 'accent' ? 'var(--brand-tint)' : '#F8E9C8');
-	for (const key of ['radius', 'density', 'textSize', 'font', 'banner', 'sidebar', 'homeLayout'] as const) root.dataset[key] = appearance[key];
+	for (const key of ['radius', 'density', 'textSize', 'font', 'sidebar', 'homeLayout'] as const) root.dataset[key] = appearance[key];
 }
 
 export function readAppearance(storage: Pick<Storage, 'getItem'> | null | undefined): Appearance {

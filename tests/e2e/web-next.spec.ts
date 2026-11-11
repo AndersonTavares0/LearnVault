@@ -164,7 +164,7 @@ test('customizing the look passes axe for every accent and breaks no CSP rule', 
 		await expectNoAxeViolations(page, `settings/${accent}`);
 	}
 	expect(brand.size).toBe(8);
-	for (const choice of [['Corners', 'Round'], ['Density', 'Compact'], ['Text size', 'Large'], ['Banners', 'Deep accent'], ['Font', 'System font']]) {
+	for (const choice of [['Corners', 'Round'], ['Density', 'Compact'], ['Text size', 'Large'], ['Font', 'System font']]) {
 		await page.getByRole('group', { name: choice[0] }).getByRole('button', { name: choice[1] }).click();
 	}
 	await expectNoAxeViolations(page, 'settings/customized');
@@ -174,7 +174,6 @@ test('customizing the look passes axe for every accent and breaks no CSP rule', 
 
 	await page.reload();
 	await expect(page.locator('html')).toHaveAttribute('data-radius', 'round');
-	await expect(page.locator('html')).toHaveAttribute('data-banner', 'brand');
 	expect(violations).toEqual([]);
 });
 
