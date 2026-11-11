@@ -27,6 +27,13 @@ fi
 # shortcut: a crash can leave this lock behind; add supervisor-owned locking for automatic crash recovery.
 trap 'rmdir "$UPDATE_LOCK"' 0
 
+# Prints the certificate identity a valid release signature must have: this repository's
+# release workflow, run for a version tag or for main. $1 is owner/name, already validated.
+signer_identity_regex() {
+    owner_name=$(printf '%s' "$1" | sed 's/[.]/\\./g')
+    printf '%s' "^https://github\\.com/${owner_name}/\\.github/workflows/release\\.yml@refs/(tags/v[0-9]+\\.[0-9]+\\.[0-9]+|heads/main)\$"
+}
+
 log() {
     printf "[%s] %s\n" "$(date +'%Y-%m-%d %H:%M:%S')" "$*"
 }
@@ -100,6 +107,53 @@ fi
 
 log "Preparando atualização de ${CURRENT_VERSION} para ${TARGET_VERSION}..."
 
+# 1b. Only an image signed by this project's release workflow is accepted (cosign keyless).
+# The signature is checked before anything is backed up, downloaded or changed, and the image
+# that is then pulled and started is the verified digest, not the mutable tag. Set
+# LEARNVAULT_VERIFY_SIGNATURE=false only for a private mirror that re-publishes the image.
+IMAGE_REPO="${LEARNVAULT_IMAGE_REPO:-ghcr.io/andersontavares0/learnvault}"
+SIGNER_REPO="${LEARNVAULT_GITHUB_REPO:-AndersonTavares0/LearnVault}"
+VERIFY_SIGNATURE="${LEARNVAULT_VERIFY_SIGNATURE:-true}"
+VERIFIED_IMAGE=""
+case "$VERIFY_SIGNATURE" in
+    true|false) ;;
+    *)
+        log "LEARNVAULT_VERIFY_SIGNATURE must be true or false; update aborted."
+        exit 1 ;;
+esac
+if [ "$VERIFY_SIGNATURE" = "true" ]; then
+    if ! printf '%s\n' "$SIGNER_REPO" | grep -Eq '^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$'; then
+        log "LEARNVAULT_GITHUB_REPO must look like owner/name; update aborted."
+        exit 1
+    fi
+    if ! command -v cosign >/dev/null 2>&1; then
+        # shortcut: cosign is installed from the Alpine mirror at run time, unpinned; bake a pinned cosign into the updater image.
+        apk add --no-cache cosign >/dev/null 2>&1 || true
+    fi
+    if ! command -v cosign >/dev/null 2>&1; then
+        log "cosign is not available, so the image signature cannot be checked; update aborted."
+        record_history "failed_verification" "$CURRENT_VERSION" "$TARGET_VERSION" "cosign unavailable; signature not checked"
+        exit 1
+    fi
+    verify_errors="${DATA_DIR}/.cosign-verify.err"
+    if ! verified=$(cosign verify "${IMAGE_REPO}:${TARGET_VERSION}" \
+        --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+        --certificate-identity-regexp "$(signer_identity_regex "$SIGNER_REPO")" 2>"$verify_errors"); then
+        log "The image ${IMAGE_REPO}:${TARGET_VERSION} has no valid signature from the release workflow; update aborted and the running service is unchanged."
+        sed -n '1,3p' "$verify_errors" 2>/dev/null | while IFS= read -r line; do log "cosign: $line"; done
+        record_history "failed_verification" "$CURRENT_VERSION" "$TARGET_VERSION" "Image signature missing or invalid"
+        exit 1
+    fi
+    verified_digest=$(printf '%s' "$verified" | grep -o '"docker-manifest-digest":"sha256:[0-9a-f]\{64\}"' | head -n 1 | cut -d'"' -f4)
+    if [ -z "$verified_digest" ]; then
+        log "cosign did not report the verified digest; update aborted and the running service is unchanged."
+        record_history "failed_verification" "$CURRENT_VERSION" "$TARGET_VERSION" "Verified digest missing"
+        exit 1
+    fi
+    VERIFIED_IMAGE="${IMAGE_REPO}@${verified_digest}"
+    log "Image signature verified (${verified_digest})."
+fi
+
 # 2. Backup pré-atualização com validação de integridade
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 BACKUP_PATH="/data/backups/pre-update-${CURRENT_VERSION}-${TIMESTAMP}.sqlite"
@@ -113,7 +167,10 @@ fi
 log "Backup preventivo criado com sucesso."
 
 # 3. Baixa imagem da nova versão
-NEW_IMAGE="${LEARNVAULT_IMAGE_REPO:-ghcr.io/andersontavares0/learnvault}:${TARGET_VERSION}"
+NEW_IMAGE="${IMAGE_REPO}:${TARGET_VERSION}"
+if [ -n "$VERIFIED_IMAGE" ]; then
+    NEW_IMAGE="$VERIFIED_IMAGE"
+fi
 log "Baixando nova imagem: ${NEW_IMAGE}..."
 
 if ! docker pull "$NEW_IMAGE" 2>/dev/null; then
