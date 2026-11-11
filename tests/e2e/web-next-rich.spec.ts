@@ -64,7 +64,9 @@ test('notes take formatting, show it, and are found from the course card', async
 	await page.getByRole('tab', { name: 'Notes' }).click();
 	await page.getByRole('button', { name: /Add note at/ }).click();
 	const field = page.getByLabel(/Note at/);
-	await field.fill('remember this');
+	// The editor opens focused, so typing goes straight in.
+	await expect(field).toBeFocused();
+	await page.keyboard.type('remember this');
 	await field.press('Control+A');
 	await page.getByRole('button', { name: 'Bold' }).click();
 	await expect(field).toHaveValue('**remember this**');

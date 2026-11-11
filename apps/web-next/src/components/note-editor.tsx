@@ -1,5 +1,5 @@
 import { Bold, Heading2, Heading3, Italic, List, ListOrdered, Underline } from 'lucide-react';
-import { useRef, type KeyboardEvent, type MouseEvent } from 'react';
+import { useEffect, useRef, type KeyboardEvent, type MouseEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { tr } from '@/lib/i18n';
 import { applyFormat, type Format } from '@/lib/markdown';
@@ -14,11 +14,12 @@ const TOOLS = (): { format: Format; label: string; icon: typeof Bold }[] => [
 	{ format: 'numbered', label: tr('Numbered list', 'Lista numerada'), icon: ListOrdered }
 ];
 
-type Props = { id: string; value: string; onChange: (value: string) => void; onKeyDown?: (event: KeyboardEvent) => void; describedBy?: string; rows?: number; label?: string };
+type Props = { /** Focus the field when it appears: the editor opens from a click, so focus follows the person's action. */ focusOnOpen?: boolean; id: string; value: string; onChange: (value: string) => void; onKeyDown?: (event: KeyboardEvent) => void; describedBy?: string; rows?: number; label?: string };
 
 /** A text box with a small formatting bar. The note stays plain text with Markdown marks. */
-export function NoteEditor({ id, value, onChange, onKeyDown, describedBy, rows = 4, label }: Props) {
+export function NoteEditor({ id, value, onChange, onKeyDown, describedBy, rows = 4, label, focusOnOpen = false }: Props) {
 	const field = useRef<HTMLTextAreaElement>(null);
+	useEffect(() => { if (focusOnOpen) field.current?.focus(); }, [focusOnOpen]);
 	const format = (kind: Format) => {
 		const element = field.current;
 		if (!element) return;

@@ -70,7 +70,7 @@ export function StudyNotes({ mediaId, currentTime, onSeek, addRequest, title, tr
 			{draft && (
 				<div className="space-y-2 rounded-[1.5rem] border bg-card p-4">
 					<Label htmlFor="note-draft">{tr(`Note at ${formatDuration(draft.position)}`, `Nota em ${formatDuration(draft.position)}`)}</Label>
-					<NoteEditor id="note-draft" rows={3} value={draft.content} onChange={(content) => setDraft({ ...draft, content })} onKeyDown={onKeyDown} describedBy="note-draft-hint" />
+					<NoteEditor id="note-draft" focusOnOpen rows={3} value={draft.content} onChange={(content) => setDraft({ ...draft, content })} onKeyDown={onKeyDown} describedBy="note-draft-hint" />
 					<p id="note-draft-hint" className="text-xs text-muted-foreground">{tr('Ctrl+Enter saves the note.', 'Ctrl+Enter salva a nota.')}</p>
 					<div className="flex justify-end gap-2">
 						<Button variant="outline" onClick={() => setDraft(null)} disabled={create.isPending}>{tr('Cancel', 'Cancelar')}</Button>

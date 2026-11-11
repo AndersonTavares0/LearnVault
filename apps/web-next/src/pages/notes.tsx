@@ -119,7 +119,7 @@ function Notebook({ courseId }: { courseId: string }) {
 				{editing?.id === note.noteId ? (
 					<form className="space-y-2" onSubmit={(event) => { event.preventDefault(); if (editing.content.trim()) update.mutate({ id: editing.id, content: editing.content.trim() }); }}>
 						<label htmlFor={`edit-${note.noteId}`} className="sr-only">{tr('Note text', 'Texto da nota')}</label>
-						<NoteEditor id={`edit-${note.noteId}`} rows={3} value={editing.content} onChange={(content) => setEditing({ ...editing, content })} />
+						<NoteEditor id={`edit-${note.noteId}`} focusOnOpen rows={3} value={editing.content} onChange={(content) => setEditing({ ...editing, content })} />
 						<div className="flex justify-end gap-2">
 							<Button type="button" variant="outline" onClick={() => setEditing(null)}>{tr('Cancel', 'Cancelar')}</Button>
 							<Button type="submit" disabled={update.isPending || !editing.content.trim()}>{tr('Save', 'Salvar')}</Button>

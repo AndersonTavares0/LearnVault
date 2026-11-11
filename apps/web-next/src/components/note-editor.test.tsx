@@ -26,4 +26,9 @@ describe('NoteEditor', () => {
 		fireEvent.click(screen.getByRole('button', { name: 'Bulleted list' }));
 		expect(screen.getByRole('listitem').textContent).toBe('hello world');
 	});
+
+	it('takes focus when it opens from a click, so typing goes straight in', () => {
+		render(<NoteEditor id="f" label="Note" value="" onChange={() => undefined} focusOnOpen />);
+		expect(document.activeElement).toBe(screen.getByLabelText('Note'));
+	});
 });
