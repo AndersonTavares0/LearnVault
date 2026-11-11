@@ -25,6 +25,26 @@ If you are developing or studying the architecture, start with the [README](../.
 
 When enabled in configuration, the server queries the public GitHub Releases API over HTTPS and compares the latest stable tag with the local running version using strict SemVer. The check times out after 5 seconds, consumes at most 64 KiB, and caches results in-process for 1 hour. No binaries or files are ever downloaded or installed automatically. Local builds (`0.0.0`) skip remote checks.
 
+### Verify the container image
+
+From the first release after this was added, every image pushed to GHCR is signed by the release workflow with cosign (keyless: no key to keep, the signature is tied to the workflow run). To check an image yourself:
+
+```sh
+cosign verify ghcr.io/andersontavares0/learnvault:0.9.0 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp '^https://github\.com/AndersonTavares0/LearnVault/\.github/workflows/release\.yml@refs/(tags/v[0-9]+\.[0-9]+\.[0-9]+|heads/main)$'
+```
+
+The command succeeds only for an image signed by `release.yml` in this repository. The Compose updater (`deploy/scripts/update.sh`) runs the same check on the target version before it backs up or changes anything, and refuses to update to an image that is unsigned or signed by anything else. Set `LEARNVAULT_VERIFY_SIGNATURE=false` only for a private mirror that re-publishes the image. Images published before this change (up to v0.8.0) are not signed.
+
+What this does and does not promise:
+
+- The updater verifies the tag, then pulls and starts the verified digest (`repo@sha256:…`), so retagging the registry between the check and the pull has no effect.
+- A signature proves the image came from `release.yml` in this repository, run for a version tag or for `main`. A manual run of the workflow on `main` can re-sign a rebuilt tag; the signature does not distinguish that from the original.
+- The image is pushed before it is signed. If signing fails, the release is not published, but the tags already point at an unsigned image; the updater refuses it, but `docker compose pull` of `:latest` would not. Re-run the workflow to fix it.
+- The updater installs `cosign` from the Alpine mirror when it starts, unpinned. Bake a pinned `cosign` into the updater image if that matters for your threat model.
+- `LEARNVAULT_GITHUB_REPO` must look like `owner/name`, and `LEARNVAULT_VERIFY_SIGNATURE` must be exactly `true` or `false`; anything else stops the update.
+
 ### Automatic updates with Podman Quadlet
 
 `deploy/quadlet/learnvault.container` pulls `ghcr.io/andersontavares0/learnvault:stable` and is marked `AutoUpdate=registry`. Enable the native Podman timer to apply new releases:
