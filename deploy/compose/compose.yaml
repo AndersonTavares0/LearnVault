@@ -1,12 +1,10 @@
 # LearnVault - Docker Compose para Self-Hosting
-# Imagem oficial OCI minimalista, segura e não-root (UID 10001).
+# Imagem oficial OCI minimalista, segura e não-root (UID 10001), publicada no GHCR.
+# Para compilar a imagem a partir do código-fonte, some compose.build.yaml (veja deploy/README.md).
 # A pasta de cursos (/library) é montada estritamente como somente leitura (:ro).
 services:
   learnvault:
-    build:
-      context: ../..
-      dockerfile: deploy/container/Containerfile
-    image: ${LEARNVAULT_IMAGE:-learnvault-rust:local}
+    image: ${LEARNVAULT_IMAGE:-ghcr.io/andersontavares0/learnvault:latest}
     container_name: learnvault
     restart: unless-stopped
     environment:
