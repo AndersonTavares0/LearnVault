@@ -51,19 +51,24 @@ Edite o arquivo `.env` e defina suas credenciais de administrador e caminhos:
 - `ADMIN_USERNAME`: Usuário administrador inicial.
 - `ADMIN_PASSWORD`: Senha forte (mínimo de 12 caracteres).
 - `DATA_DIR`: Onde o banco de dados e metadados serão armazenados.
-- `LIBRARY_DIR`: Caminho da pasta que contém os cursos no seu computador/servidor.
+- `LIBRARY_DIR`: Folder on the host, mounted read-only at `/library`. It sets the root the server is allowed to read; it does not register your course folders by itself. On the first start the folder itself appears as one course (named after it). To list each course folder under it, sign in as the administrator, use **Import course** for each one, then **Refresh courses**. Once your course folders are imported, remove the root course (**Manage course**, then remove) so every file is not indexed twice. See #318.
 
 ### 2. Executar com Docker Compose
 
-Você pode compilar localmente ou utilizar a imagem pré-compilada oficial publicada no GitHub Container Registry (GHCR):
+By default Compose uses the official image published on the GitHub Container Registry (GHCR), so a new release is one `docker compose pull && docker compose up -d` away (or automatic, with the opt-in updater below). You can also pin a version or build the image yourself:
 
 ```sh
-# Opção A: Usando a imagem oficial do GHCR (recomendado para produção)
-LEARNVAULT_IMAGE=ghcr.io/andersontavares0/learnvault:latest docker compose up -d
+# Option A: the official image (the default; recommended for production)
+docker compose up -d
 
-# Opção B: Compilar imagem local a partir do código fonte
-docker compose up -d --build
+# Option B: pin a version
+LEARNVAULT_IMAGE=ghcr.io/andersontavares0/learnvault:0.9.0 docker compose up -d
+
+# Option C: build the image from the source code (contributors)
+docker compose -f compose.yaml -f compose.build.yaml up -d --build
 ```
+
+> **Upgrading from a setup that built the image locally:** if your `.env` still has `LEARNVAULT_IMAGE=learnvault-rust:local`, remove that line (the default is now the published image), or keep building by adding `-f compose.build.yaml` to every `docker compose` command.
 
 Acesse no seu navegador: `http://localhost:8090`.
 
