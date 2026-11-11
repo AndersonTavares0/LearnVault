@@ -1,7 +1,8 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/source-sans-3";
+@import "@fontsource-variable/dm-sans";
+@import "@fontsource-variable/playfair-display";
 @import "@fontsource-variable/literata/opsz.css";
 @import "@fontsource-variable/jetbrains-mono";
 
@@ -73,62 +74,62 @@
  * structure from: a white page, near-black text, a pale grey band, a light grey rule.
  */
 :root {
-  --ui-font: "Source Sans 3 Variable", ui-sans-serif, system-ui, sans-serif;
-  --heading-font: "Literata Variable", ui-serif, Georgia, serif;
-  --brand: #A5540A;
+  --ui-font: "DM Sans Variable", ui-sans-serif, system-ui, sans-serif;
+  --heading-font: "Playfair Display Variable", ui-serif, Georgia, serif;
+  --brand: #5C4229;
   --brand-fg: #FFFFFF;
   --brand-deep: color-mix(in oklch, var(--brand) 55%, black);
-  --brand-tint: color-mix(in oklch, var(--brand) 9%, #FBF8F2);
-  --brand-soft: color-mix(in oklch, var(--brand) 18%, #FBF8F2);
-  --reward: #8F4A08;
-  --reward-fill: #E8A33D;
+  --brand-tint: color-mix(in oklch, var(--brand) 6%, #FDF9F6);
+  --brand-soft: color-mix(in oklch, var(--brand) 13%, #FDF9F6);
+  --reward: #8F5A12;
+  --reward-fill: #BC7F29;
   --reward-fill-fg: #2A2118;
   --reward-tint: #F8E9C8;
   --radius: 0.875rem;
   --density: 1;
 
-  --background: #FBF8F2;
-  --foreground: #2A2118;
-  --card: #FFFDF9;
-  --card-foreground: #2A2118;
-  --popover: #FFFDF9;
-  --popover-foreground: #2A2118;
+  --background: #FDF9F6;
+  --foreground: #3A2515;
+  --card: #FFFFFF;
+  --card-foreground: #3A2515;
+  --popover: #FFFFFF;
+  --popover-foreground: #3A2515;
   --primary: var(--brand);
   --primary-foreground: var(--brand-fg);
-  --secondary: #F3ECDF;
-  --secondary-foreground: #2A2118;
-  --muted: #F3ECDF;
-  --muted-foreground: #6B5D4B;
+  --secondary: #FBEFDC;
+  --secondary-foreground: #3A2515;
+  --muted: #F8EFE3;
+  --muted-foreground: #735F4A;
   --accent: var(--brand-tint);
-  --accent-foreground: #2A2118;
+  --accent-foreground: #3A2515;
   --destructive: #B91C1C;
   --destructive-foreground: #FFFFFF;
-  --border: #E6DCCB;
+  --border: #ECE2D6;
   --input: #8C7F6C;
   --ring: var(--brand);
   --chart-1: var(--brand);
   --chart-2: #6B5D4B;
   --chart-3: var(--brand-soft);
   --chart-4: #8C7F6C;
-  --chart-5: #2A2118;
+  --chart-5: #3A2515;
   --sidebar: #FBF8F2;
-  --sidebar-foreground: #2A2118;
+  --sidebar-foreground: #3A2515;
   --sidebar-primary: var(--brand);
   --sidebar-primary-foreground: var(--brand-fg);
   --sidebar-accent: var(--brand-tint);
-  --sidebar-accent-foreground: #2A2118;
-  --sidebar-border: #E6DCCB;
+  --sidebar-accent-foreground: #3A2515;
+  --sidebar-border: #ECE2D6;
   --sidebar-ring: var(--brand);
-  --panel: #F6F0E4;
-  --panel-edge: #E6DCCB;
-  --ink: #F1E8D8;
-  --ink-foreground: #2A2118;
+  --panel: #FBEFDC;
+  --panel-edge: #ECE2D6;
+  --ink: #FBEFDC;
+  --ink-foreground: #3A2515;
   --ink-muted: #5E513F;
 }
 
 /* Learner choices, set on <html> by applyAppearance (src/lib/appearance.ts). */
-:root[data-radius="square"] { --radius: 0.25rem; }
-:root[data-radius="round"] { --radius: 1.5rem; }
+:root[data-radius="square"] { --radius: 0.375rem; }
+:root[data-radius="round"] { --radius: 1.75rem; }
 :root[data-density="compact"] { --density: 0.78; }
 :root[data-text-size="small"] { font-size: 15px; }
 :root[data-text-size="large"] { font-size: 18px; }
@@ -151,8 +152,8 @@ html, body { overflow-x: clip; }
   }
   h1, h2, h3 {
     font-family: var(--heading-font);
-    font-weight: 600;
-    letter-spacing: -0.015em;
+    font-weight: 700;
+    letter-spacing: -0.02em;
   }
   @media (prefers-reduced-motion: reduce) {
     *,

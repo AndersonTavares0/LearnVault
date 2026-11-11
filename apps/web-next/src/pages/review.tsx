@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Download } from 'lucide-react';
+import { Download, Layers } from 'lucide-react';
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
 import { Link } from 'react-router';
 import { Button } from '@/components/ui/button';
@@ -121,6 +121,7 @@ export function ReviewPage() {
 	return (
 		<div className="space-y-10">
 			<PageHeader
+				icon={Layers}
 				title={tr('Review', 'Revisão')}
 				description={tr('Cards you make in your lessons, brought back just before you forget them.', 'Cartões que você cria nas aulas, trazidos de volta pouco antes de você esquecer.')}
 				actions={exportUrl && <a href={exportUrl} download="learnvault-cards.tsv" className="inline-flex h-11 items-center gap-2 rounded-lg border bg-background px-4 text-sm font-medium hover:bg-muted"><Download className="size-4" aria-hidden="true" />{tr('Export for Anki', 'Exportar para o Anki')}</a>}

@@ -1,6 +1,6 @@
-import { Award, Check, Lock } from 'lucide-react';
+import { Award, ChartNoAxesColumn, Check, Flame, Lock, Target } from 'lucide-react';
 import { useMemo } from 'react';
-import { Band } from '@/components/band';
+import { Stat, Panel } from '@/components/panel';
 import { ProgressBar } from '@/components/course-card';
 import { Button } from '@/components/ui/button';
 import { useLocale } from '@/hooks/use-locale';
@@ -42,21 +42,19 @@ export function ProgressPage() {
 
 	return (
 		<div>
-			<Band>
-				<div className="space-y-2 pb-8">
-					<h1 className="text-3xl font-bold sm:text-4xl">{tr('Progress', 'Progresso')}</h1>
-					<p className="text-ink-muted">
-						{tr(`Level ${game.level.level}`, `Nível ${game.level.level}`)} · {game.level.xp} XP · {formatCount(study.currentStreak, tr('day streak', 'dia seguido'), tr('day streak', 'dias seguidos'))} · {formatCount(game.completedLessons, tr('lesson completed', 'aula concluída'), tr('lessons completed', 'aulas concluídas'))}
-					</p>
-				</div>
-			</Band>
+			<PageHeader icon={ChartNoAxesColumn} title={tr('Progress', 'Progresso')} description={`${tr(`Level ${game.level.level}`, `Nível ${game.level.level}`)} · ${game.level.xp} XP`} />
+			<ul aria-label={tr('Your habit', 'Seu hábito')} className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-3">
+				<li><Stat icon={<Flame />} label={tr('day streak', 'dias seguidos')} value={study.currentStreak} /></li>
+				<li><Stat icon={<Target />} label={tr('Goal', 'Meta')} value={`${Math.min(study.weekActiveDays, goal)}/${goal}`} unit={tr('days', 'dias')} /></li>
+				<li className="col-span-2 lg:col-span-1"><Stat icon={<Award />} label={tr('lessons completed', 'aulas concluídas')} value={game.completedLessons} /></li>
+			</ul>
 
-			<div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_24rem]">
-				<div className="min-w-0 space-y-12">
-					<section aria-labelledby="week-heading" className="space-y-5">
+			<div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_24rem]">
+				<div className="min-w-0 space-y-6">
+					<Panel><section aria-labelledby="week-heading" className="space-y-5">
 						<div className="flex flex-wrap items-end justify-between gap-3">
 							<div>
-								<h2 id="week-heading" className="text-2xl font-bold">{tr(`${Math.min(study.weekActiveDays, goal)} of ${goal} days this week`, `${Math.min(study.weekActiveDays, goal)} de ${goal} dias nesta semana`)}</h2>
+								<h2 id="week-heading" className="font-heading text-2xl font-bold">{tr(`${Math.min(study.weekActiveDays, goal)} of ${goal} days this week`, `${Math.min(study.weekActiveDays, goal)} de ${goal} dias nesta semana`)}</h2>
 								<p className="text-muted-foreground">{missing === 0 ? tr('You reached your weekly goal.', 'Você atingiu a meta semanal.') : tr(`${formatCount(missing, 'more day', 'more days')} to reach your goal.`, `Mais ${formatCount(missing, 'dia', 'dias')} para a meta.`)}</p>
 							</div>
 							<div role="progressbar" aria-valuemin={0} aria-valuemax={goal} aria-valuenow={Math.min(study.weekActiveDays, goal)} aria-label={tr('Weekly goal', 'Meta semanal')} className="flex w-48 gap-1">
@@ -64,18 +62,18 @@ export function ProgressPage() {
 							</div>
 						</div>
 						<Week days={study.days} today={study.today} focusDays={focus.data?.days ?? []} />
-					</section>
+					</section></Panel>
 
-					<section aria-labelledby="badges-heading" className="space-y-3">
-						<h2 id="badges-heading" className="text-2xl font-bold">{tr('Badges', 'Emblemas')}</h2>
+					<Panel><section aria-labelledby="badges-heading" className="space-y-3">
+						<h2 id="badges-heading" className="font-heading text-2xl font-bold">{tr('Badges', 'Emblemas')}</h2>
 						<ul className="grid grid-cols-2 gap-x-4 sm:grid-cols-3 lg:grid-cols-4">
 							{game.badges.map((badge) => <BadgeTile key={badge.id} badge={badge} />)}
 						</ul>
-					</section>
+					</section></Panel>
 				</div>
 
-				<section aria-labelledby="missions-heading" className="min-w-0 space-y-3">
-					<h2 id="missions-heading" className="text-2xl font-bold">{tr('Today', 'Hoje')}</h2>
+				<Panel className="min-w-0"><section aria-labelledby="missions-heading" className="space-y-3">
+					<h2 id="missions-heading" className="font-heading text-2xl font-bold">{tr('Today', 'Hoje')}</h2>
 					<ul className="divide-y border-y">
 						{game.missions.map((mission) => {
 							const done = mission.progress >= mission.target;
@@ -95,7 +93,7 @@ export function ProgressPage() {
 							);
 						})}
 					</ul>
-				</section>
+				</section></Panel>
 			</div>
 		</div>
 	);

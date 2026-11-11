@@ -2,7 +2,7 @@ import { ChevronLeft, Star } from 'lucide-react';
 import { useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { CourseCover } from '@/components/course-cover';
-import { Band } from '@/components/band';
+import { Hero } from '@/components/panel';
 import { Curriculum } from '@/components/curriculum';
 import { Materials } from '@/components/materials';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -68,37 +68,37 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 
 	return (
 		<div className="space-y-8">
-			<Band className="mb-0">
-			<div className="pb-8">
-				<Link to="/" className="mb-4 inline-flex min-h-11 items-center gap-1 text-sm text-ink-muted hover:text-ink-foreground focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none">
+			<Hero>
+			<div>
+				<Link to="/" className="mb-4 inline-flex min-h-11 items-center gap-1 text-sm text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">
 					<ChevronLeft className="size-4" aria-hidden="true" />{tr('My learning', 'Meu aprendizado')}
 				</Link>
 				<div className="grid gap-8 lg:grid-cols-[1fr_minmax(0,22rem)] lg:items-center">
 					<div className="order-2 min-w-0 space-y-5 lg:order-1">
 						<div className="space-y-2">
-							<h1 className="text-4xl leading-tight font-bold text-balance">{course.title}</h1>
-							<p className="text-ink-muted">{formatCourseMeta(counts)}</p>
+							<h1 className="font-heading text-4xl leading-tight font-bold text-balance">{course.title}</h1>
+							<p className="text-muted-foreground">{formatCourseMeta(counts)}</p>
 						</div>
 						{entry && entry.total > 0 && (
 							<div className="max-w-md space-y-1">
 								<div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-labelledby="course-progress" className="h-2 overflow-hidden rounded-full bg-brand-soft">
-									<div className="h-full bg-brand" style={{ width: `${percent}%` }} />
+									<div className="h-full bg-primary" style={{ width: `${percent}%` }} />
 								</div>
-								<p id="course-progress" className="text-sm text-ink-muted">{tr(`${entry.done} of ${entry.total} lessons completed (${percent}%)`, `${entry.done} de ${entry.total} aulas concluídas (${percent}%)`)}</p>
+								<p id="course-progress" className="text-sm text-muted-foreground">{tr(`${entry.done} of ${entry.total} lessons completed (${percent}%)`, `${entry.done} de ${entry.total} aulas concluídas (${percent}%)`)}</p>
 							</div>
 						)}
 						{lastStudied?.location && (
-							<p className="text-sm text-ink-muted">
-								{tr('Last lesson:', 'Última aula:')} <span className="text-ink-foreground">{lastStudied.location.lesson.title}</span>, {lastStudied.item.completed ? tr('completed', 'concluída') : tr(`stopped at ${formatDuration(lastStudied.item.positionSeconds)}`, `parou em ${formatDuration(lastStudied.item.positionSeconds)}`)}
+							<p className="text-sm text-muted-foreground">
+								{tr('Last lesson:', 'Última aula:')} <span className="text-foreground">{lastStudied.location.lesson.title}</span>, {lastStudied.item.completed ? tr('completed', 'concluída') : tr(`stopped at ${formatDuration(lastStudied.item.positionSeconds)}`, `parou em ${formatDuration(lastStudied.item.positionSeconds)}`)}
 							</p>
 						)}
 						<div className="flex flex-wrap gap-2">
 							{continuePath ? (
-								<Link to={path(href('course', courseId, continuePath, resumeAt))} className="inline-flex h-12 items-center justify-center rounded-lg bg-brand px-6 text-sm font-semibold text-brand-foreground hover:bg-brand-deep focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
+								<Link to={path(href('course', courseId, continuePath, resumeAt))} className="inline-flex h-12 items-center justify-center rounded-full bg-primary px-7 text-base font-semibold text-primary-foreground hover:bg-brand-deep focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
 									{lastStudied ? tr('Continue studying', 'Continuar estudando') : tr('Start course', 'Começar curso')}
 								</Link>
 							) : (
-								<p className="text-sm text-ink-muted">{tr('No lessons available', 'Nenhuma aula disponível')}</p>
+								<p className="text-sm text-muted-foreground">{tr('No lessons available', 'Nenhuma aula disponível')}</p>
 							)}
 							{studySyncSupported && entry && (
 								<Button variant="outline" size="lg" aria-pressed={entry.favorite} disabled={toggleFavorite.isPending} onClick={() => toggleFavorite.mutate({ courseId, favorite: !entry.favorite })}>
@@ -112,7 +112,7 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 					<div className="order-1 max-w-md lg:order-2 lg:max-w-none"><CourseCover course={course} profile={user?.userId ?? ''} eager done={entry?.done ?? 0} total={entry?.total ?? 0} map /></div>
 				</div>
 			</div>
-			</Band>
+			</Hero>
 
 			<Tabs defaultValue="content">
 				<TabsList variant="line" aria-label={tr('Course sections', 'Seções do curso')}>

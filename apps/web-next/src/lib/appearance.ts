@@ -8,6 +8,7 @@ import { createStore } from '@/lib/store';
 export const APPEARANCE_STORAGE_KEY = 'learnvault-appearance';
 
 export const ACCENT_PRESETS = [
+	{ id: 'brown', hex: '#5C4229' },
 	{ id: 'amber', hex: '#A5540A' },
 	{ id: 'forest', hex: '#2F6B3F' },
 	{ id: 'terracotta', hex: '#B2472D' },
@@ -128,8 +129,8 @@ export function applyAppearance(appearance: Appearance, root: HTMLElement = docu
 	const accent = readableAccent(appearance.accent);
 	root.style.setProperty('--brand', accent);
 	root.style.setProperty('--brand-fg', '#FFFFFF');
-	root.style.setProperty('--reward', appearance.reward === 'accent' ? 'var(--brand)' : '#8F4A08');
-	root.style.setProperty('--reward-fill', appearance.reward === 'accent' ? 'var(--brand)' : '#E8A33D');
+	root.style.setProperty('--reward', appearance.reward === 'accent' ? 'var(--brand)' : '#8F5A12');
+	root.style.setProperty('--reward-fill', appearance.reward === 'accent' ? 'var(--brand)' : '#BC7F29');
 	root.style.setProperty('--reward-fill-fg', appearance.reward === 'accent' ? 'var(--brand-fg)' : '#2A2118');
 	root.style.setProperty('--reward-tint', appearance.reward === 'accent' ? 'var(--brand-tint)' : '#F8E9C8');
 	for (const key of ['radius', 'density', 'textSize', 'font', 'banner', 'sidebar', 'homeLayout'] as const) root.dataset[key] = appearance[key];

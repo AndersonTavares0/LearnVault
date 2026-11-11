@@ -10,7 +10,7 @@ import { tr } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { safeStorage } from '@/app/preferences';
 
-const accentNames = (): Record<(typeof ACCENT_PRESETS)[number]['id'], string> => ({ amber: tr('Amber', 'Âmbar'), forest: tr('Forest', 'Floresta'), terracotta: tr('Terracotta', 'Terracota'), navy: tr('Navy', 'Azul-marinho'), plum: tr('Plum', 'Ameixa'), teal: tr('Teal', 'Verde-azulado'), slate: tr('Slate', 'Ardósia') });
+const accentNames = (): Record<(typeof ACCENT_PRESETS)[number]['id'], string> => ({ brown: tr('Brown', 'Marrom'), amber: tr('Amber', 'Âmbar'), forest: tr('Forest', 'Floresta'), terracotta: tr('Terracotta', 'Terracota'), navy: tr('Navy', 'Azul-marinho'), plum: tr('Plum', 'Ameixa'), teal: tr('Teal', 'Verde-azulado'), slate: tr('Slate', 'Ardósia') });
 
 /**
  * Customize: the colour, shape, size and layout of the app, and which parts of the habit tools show.

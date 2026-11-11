@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Download, Pencil, Search, Trash2 } from 'lucide-react';
+import { Download, NotebookPen, Pencil, Search, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { Button } from '@/components/ui/button';
@@ -58,7 +58,7 @@ export function NotesPage() {
 		return { groups, matches, courses, revisit: entries.length > 3 ? old : null };
 	}, [notes.data, catalog.data, query, course, openedAt]);
 
-	if (!studySyncSupported) return <PageHeader title={tr('Notes', 'Notas')} description={tr('Study tracking is off on this server.', 'O acompanhamento de estudo está desligado neste servidor.')} />;
+	if (!studySyncSupported) return <PageHeader icon={NotebookPen} title={tr('Notes', 'Notas')} description={tr('Study tracking is off on this server.', 'O acompanhamento de estudo está desligado neste servidor.')} />;
 	const total = notes.data?.length ?? 0;
 	const week = notesThisWeek(notes.data ?? []);
 	const dayGroups = [...new Set(matches.map((entry) => dayKey(entry.note.updatedAt)))].sort().reverse().map((day) => ({ day, items: matches.filter((entry) => dayKey(entry.note.updatedAt) === day).sort((a, b) => b.note.updatedAt - a.note.updatedAt) }));
@@ -108,7 +108,7 @@ export function NotesPage() {
 
 	return (
 		<div className="space-y-8">
-			<PageHeader title={tr('Notes', 'Notas')} description={tr(`${total} notes in ${Math.max(courses.length, 1)} ${courses.length === 1 ? 'course' : 'courses'}. This week you wrote ${week}.`, `${total} notas em ${Math.max(courses.length, 1)} ${courses.length === 1 ? 'curso' : 'cursos'}. Nesta semana você escreveu ${week}.`)} />
+			<PageHeader icon={NotebookPen} title={tr('Notes', 'Notas')} description={tr(`${total} notes in ${Math.max(courses.length, 1)} ${courses.length === 1 ? 'course' : 'courses'}. This week you wrote ${week}.`, `${total} notas em ${Math.max(courses.length, 1)} ${courses.length === 1 ? 'curso' : 'cursos'}. Nesta semana você escreveu ${week}.`)} />
 			<div className="flex flex-wrap items-center gap-3">
 			<div role="group" aria-label={tr('Group notes', 'Agrupar notas')} className="flex gap-2">
 				<Button size="sm" variant={view === 'lesson' ? 'default' : 'outline'} aria-pressed={view === 'lesson'} onClick={() => setView('lesson')}>{tr('By lesson', 'Por aula')}</Button>
@@ -127,8 +127,8 @@ export function NotesPage() {
 				</div>
 			)}
 			{revisit?.location && !query && !course && (
-				<aside aria-label={tr('A note to revisit', 'Uma nota para revisitar')} className="on-ink rounded-2xl border border-[color:var(--ink-edge)] bg-ink p-5 text-ink-foreground sm:p-6">
-					<p className="text-sm text-ink-muted">{revisit.location.courseTitle} · {new Date(revisit.note.updatedAt * 1000).toLocaleDateString(getLocale(), { dateStyle: 'medium' })}</p>
+				<aside aria-label={tr('A note to revisit', 'Uma nota para revisitar')} className="rounded-[2rem] border border-brand-soft bg-panel p-6 sm:p-8">
+					<p className="text-sm text-muted-foreground">{revisit.location.courseTitle} · {new Date(revisit.note.updatedAt * 1000).toLocaleDateString(getLocale(), { dateStyle: 'medium' })}</p>
 					<p className="mt-2 line-clamp-4 max-w-prose font-serif text-xl leading-relaxed">{revisit.note.content}</p>
 					<Link to={href('course', revisit.location.courseId, revisit.location.lesson.path, revisit.note.positionSeconds).replace(/^#/, '')} className="mt-3 inline-flex min-h-11 items-center font-semibold text-[var(--a-soft)] hover:underline focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none">{tr('Go back to that moment', 'Voltar àquele momento')}</Link>
 				</aside>

@@ -27,14 +27,14 @@ describe('My learning', () => {
 		renderApp('/', { catalog, rewards, recent: [{ mediaId: 'r2', positionSeconds: 95, completed: false, updatedAt: 2, recorded: true }, { mediaId: 'r1', positionSeconds: 0, completed: true, updatedAt: 1, recorded: true }] });
 		const resume = await screen.findByRole('region', { name: 'Continue learning' });
 		expect(within(resume).getByRole('heading', { name: 'Borrowing' })).toBeTruthy();
-		expect(within(resume).getByRole('link', { name: 'Borrowing' }).getAttribute('href')).toBe('/course/rust/m%2Fr2?t=95');
-		expect(within(screen.getByRole('list', { name: 'Your habit' })).getByText(/day streak/).textContent).toContain('2');
+		expect(within(resume).getByRole('link', { name: 'Resume' }).getAttribute('href')).toBe('/course/rust/m%2Fr2?t=95');
+		expect(screen.getByRole('list', { name: 'Your habit' }).textContent).toMatch(/day streak.*2|2.*day streak/);
 		expect(screen.getAllByRole('progressbar', { name: /^50% complete/ }).length).toBeGreaterThan(0);
 	});
 
 	it('filters by progress and offers to clear when nothing matches', async () => {
 		renderApp('/', { catalog, recent: [{ mediaId: 'a1', positionSeconds: 0, completed: true, updatedAt: 1, recorded: true }] });
-		const courses = await screen.findByRole('region', { name: 'All courses' });
+		const courses = await screen.findByRole('region', { name: 'Your library' });
 		fireEvent.click(screen.getByRole('button', { name: /^Completed/ }));
 		expect(within(courses).getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent)).toEqual(['Drawing basics']);
 

@@ -1,4 +1,4 @@
-import { Download } from 'lucide-react';
+import { Download, Settings } from 'lucide-react';
 import { createContext, useContext, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -59,7 +59,7 @@ export function SettingsPage() {
 				</ul>
 			</nav>
 			<div className="min-w-0 space-y-10">
-			<PageHeader title={tr('Settings', 'Ajustes')} />
+			<PageHeader icon={Settings} title={tr('Settings', 'Ajustes')} />
 			<Section id="appearance" title={tr('Appearance', 'Aparência')}>
 				<AppearanceSettings />
 				<Choice legend={tr('Language', 'Idioma')} options={LOCALES} value={locale} label={(value) => LOCALE_LABELS[value]} onChange={(value) => setLocale(value)} />

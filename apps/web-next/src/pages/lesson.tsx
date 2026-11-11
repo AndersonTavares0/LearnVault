@@ -160,11 +160,11 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 		<div>
 			<Band className="mb-6">
 				<div className="flex flex-wrap items-center gap-x-4 gap-y-2 pb-4">
-					<Link to={path(href('course', courseId))} className="inline-flex min-h-11 items-center gap-1 text-sm text-ink-muted hover:text-ink-foreground">
+					<Link to={path(href('course', courseId))} className="inline-flex min-h-11 items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
 						<ChevronLeft className="size-4 shrink-0" aria-hidden="true" /><span className="max-w-72 truncate">{location?.moduleTitle ? `${course.title} · ${location.moduleTitle}` : course.title}</span>
 					</Link>
-					<h1 className="mr-auto min-w-0 truncate text-lg font-bold">{lesson.title}</h1>
-					{position >= 0 && <span className="text-sm text-ink-muted tabular-nums">{tr(`Lesson ${position + 1} of ${sequence.length}`, `Aula ${position + 1} de ${sequence.length}`)}</span>}
+					<h1 className="mr-auto min-w-0 truncate font-heading text-2xl font-bold">{lesson.title}</h1>
+					{position >= 0 && <span className="text-sm text-muted-foreground tabular-nums">{tr(`Lesson ${position + 1} of ${sequence.length}`, `Aula ${position + 1} de ${sequence.length}`)}</span>}
 					<div className="flex items-center gap-2">
 						<Button variant="outline" className="disabled:opacity-60" disabled={!previous} onClick={() => previous && goTo(previous.path)}><ChevronLeft />{tr('Previous', 'Anterior')}</Button>
 						<Button disabled={!next} onClick={() => next && goTo(next.path)}>{tr('Next', 'Próxima')}<ChevronRight /></Button>
@@ -264,7 +264,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 					</Tabs>
 				</div>
 
-				<aside aria-label={tr('Course content', 'Conteúdo do curso')} className={cn('min-w-0 space-y-3 [:root[data-sidebar=left]_&]:lg:order-first', 'lg:sticky lg:top-24 lg:max-h-[calc(100dvh-8rem)] lg:self-start lg:overflow-y-auto')}>
+				<aside aria-label={tr('Course content', 'Conteúdo do curso')} className={cn('min-w-0 space-y-3 rounded-[2rem] border bg-card p-5 [:root[data-sidebar=left]_&]:lg:order-first', 'lg:sticky lg:top-6 lg:max-h-[calc(100dvh-3rem)] lg:self-start lg:overflow-y-auto')}>
 					<h2 className="text-lg font-bold">{tr('Course content', 'Conteúdo do curso')}</h2>
 					<p className="text-sm text-muted-foreground">{tr(`${overall.done} of ${overall.total} lessons completed`, `${overall.done} de ${overall.total} aulas concluídas`)}</p>
 					<Curriculum nodes={course.children} courseId={courseId} completed={completed} favorites={favoriteMedia} activePath={lessonPath} />

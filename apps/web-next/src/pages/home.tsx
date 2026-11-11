@@ -1,10 +1,9 @@
 import { Flame, FolderPlus, LayoutGrid, List, Play, RefreshCw, Search, Star, Target } from 'lucide-react';
 import { useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
-import { Band } from '@/components/band';
 import { BrandMark } from '@/components/brand';
+import { Eyebrow, Hero, Ring, Stat } from '@/components/panel';
 import { CourseCard, routerPath } from '@/components/course-card';
-import { CourseCover } from '@/components/course-cover';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -66,51 +65,50 @@ export function HomePage() {
 	const filtered = Boolean(query || filter !== 'all' || category);
 
 	return (
-		<div>
-			<Band>
-				<div className="flex flex-wrap items-end justify-between gap-4 pb-5">
-					<div className="min-w-0 space-y-1">
-						<h1 className="text-3xl font-bold text-balance sm:text-4xl">{tr('My learning', 'Meu aprendizado')}</h1>
-											</div>
-					{user?.isAdmin && library.entries.length > 0 && <LibraryActions onMessage={setMessage} />}
+		<div className="space-y-8">
+			<div className="flex flex-wrap items-end justify-between gap-4">
+				<h1 className="font-heading text-4xl font-bold text-balance sm:text-5xl">{tr('My ', 'Meu ')}<em className="text-reward-fill">{tr('learning', 'aprendizado')}</em></h1>
+				{user?.isAdmin && library.entries.length > 0 && <LibraryActions onMessage={setMessage} />}
+			</div>
+			{library.entries.length > 0 && <FilterTabs counts={library.counts} filter={filter} onFilter={(value) => setParam('filter', value === 'all' ? null : value)} />}
+			<p role="status" aria-live="polite" className="text-sm text-muted-foreground empty:hidden">{message}</p>
+
+			<div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_21rem]">
+				<div className="min-w-0 space-y-10">
+					{!filtered && studySyncSupported && library.entries.length > 0 && <ResumeCard items={library.resume} entries={library.entries} />}
+
+					<section aria-labelledby="courses-heading" className="space-y-5">
+						<div className="flex flex-wrap items-center gap-3">
+							<h2 id="courses-heading" className="mr-auto font-heading text-2xl font-bold">{filtered ? tr('Results', 'Resultados') : tr('Your library', 'Sua biblioteca')}</h2>
+							{library.entries.length > 0 && <Filters categories={library.categories} category={category} onCategory={(value) => setParam('category', value)} view={view} onView={changeView} />}
+						</div>
+						{library.entries.length > 0 && (
+							<div role="search" className="relative md:hidden">
+								<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+								<Input type="search" value={query} onChange={(event) => setParam('q', event.target.value || null)} placeholder={tr('Search courses and lessons', 'Buscar cursos e aulas')} aria-label={tr('Search courses', 'Buscar cursos')} className="pl-9" />
+							</div>
+						)}
+						{library.entries.length === 0 ? (
+							<EmptyLibrary isAdmin={Boolean(user?.isAdmin)} onMessage={setMessage} />
+						) : library.visible.length === 0 ? (
+							<div className="rounded-[2rem] border border-dashed p-8 text-center">
+								<p className="font-medium">{tr('No results found', 'Nenhum resultado encontrado')}</p>
+								<Button variant="outline" className="mt-4" onClick={() => setParams({}, { replace: true })}>{tr('Clear filters and search', 'Limpar filtros e busca')}</Button>
+							</div>
+						) : (
+							<ul className={view === 'grid' ? 'grid grid-cols-1 gap-x-5 gap-y-[calc(var(--density)*2rem)] sm:grid-cols-2 xl:grid-cols-3' : 'divide-y border-y'}>
+								{library.visible.map((entry) => <CourseCard key={entry.courseId} entry={entry} profile={profile} variant={view === 'grid' ? 'grid' : 'list'} />)}
+							</ul>
+						)}
+					</section>
 				</div>
-				{library.entries.length > 0 && <FilterTabs counts={library.counts} filter={filter} onFilter={(value) => setParam('filter', value === 'all' ? null : value)} />}
-			</Band>
-			<p role="status" aria-live="polite" className="mb-4 text-sm text-muted-foreground empty:hidden">{message}</p>
-
-			<div className="space-y-10">
-				{!filtered && studySyncSupported && library.entries.length > 0 && <ResumeStrip items={library.resume} entries={library.entries} profile={profile} rewards={rewards.data} completedCourses={library.entries.filter((entry) => entry.status === 'completed').length} />}
-
-				<section aria-labelledby="courses-heading" className="space-y-5">
-					<div className="flex flex-wrap items-center gap-3">
-						<h2 id="courses-heading" className="mr-auto text-2xl font-bold">{filtered ? tr('Results', 'Resultados') : tr('All courses', 'Todos os cursos')}</h2>
-						{library.entries.length > 0 && <Filters categories={library.categories} category={category} onCategory={(value) => setParam('category', value)} view={view} onView={changeView} />}
-					</div>
-					{library.entries.length > 0 && (
-						<div role="search" className="relative md:hidden">
-							<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-							<Input type="search" value={query} onChange={(event) => setParam('q', event.target.value || null)} placeholder={tr('Search courses and lessons', 'Buscar cursos e aulas')} aria-label={tr('Search courses', 'Buscar cursos')} className="pl-9" />
-						</div>
-					)}
-					{library.entries.length === 0 ? (
-						<EmptyLibrary isAdmin={Boolean(user?.isAdmin)} onMessage={setMessage} />
-					) : library.visible.length === 0 ? (
-						<div className="rounded-lg border border-dashed p-8 text-center">
-							<p className="font-medium">{tr('No results found', 'Nenhum resultado encontrado')}</p>
-							<Button variant="outline" className="mt-4" onClick={() => setParams({}, { replace: true })}>{tr('Clear filters and search', 'Limpar filtros e busca')}</Button>
-						</div>
-					) : (
-						<ul className={view === 'grid' ? 'grid grid-cols-1 gap-x-5 gap-y-[calc(var(--density)*2rem)] sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' : 'divide-y border-y'}>
-							{library.visible.map((entry) => <CourseCard key={entry.courseId} entry={entry} profile={profile} variant={view === 'grid' ? 'grid' : 'list'} />)}
-						</ul>
-					)}
-				</section>
+				{library.entries.length > 0 && <Habit rewards={rewards.data} completedCourses={library.entries.filter((entry) => entry.status === 'completed').length} />}
 			</div>
 		</div>
 	);
 }
 
-/** Underline tabs on the band: which courses to show, with how many in each. */
+/** Outlined pills: which courses to show, with how many in each. */
 function FilterTabs({ counts, filter, onFilter }: { counts: Record<LibraryFilter, number>; filter: LibraryFilter; onFilter: (value: LibraryFilter) => void }) {
 	const options: [LibraryFilter, string][] = [
 		['all', tr('All courses', 'Todos os cursos')],
@@ -120,54 +118,57 @@ function FilterTabs({ counts, filter, onFilter }: { counts: Record<LibraryFilter
 		...(studySyncSupported ? [['favorites', tr('Favorites', 'Favoritos')] as [LibraryFilter, string]] : [])
 	];
 	return (
-		<div role="group" aria-label={tr('Show', 'Mostrar')} className="-mb-px flex flex-wrap gap-x-6">
+		<div role="group" aria-label={tr('Show', 'Mostrar')} className="flex flex-wrap gap-3">
 			{options.map(([value, label]) => (
-				<button key={value} type="button" aria-pressed={filter === value} onClick={() => onFilter(value)} className={cn('min-h-12 border-b-4 border-transparent px-0.5 text-base font-semibold text-ink-muted hover:text-ink-foreground focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none', filter === value && 'border-ink-foreground text-ink-foreground')}>
-					{label} <span className="text-sm font-normal opacity-80">{counts[value]}</span>
+				<button key={value} type="button" aria-pressed={filter === value} onClick={() => onFilter(value)} className={cn('min-h-12 rounded-full border-2 border-brand-soft bg-card px-5 text-base font-medium hover:bg-brand-tint focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none', filter === value && 'border-reward-fill bg-panel font-semibold')}>
+					{label} <span className="ml-1 text-sm font-normal text-muted-foreground">{counts[value]}</span>
 				</button>
 			))}
 		</div>
 	);
 }
 
-/**
- * One strip under the band: the lesson to go back to, and the habit in a single line. Everything
- * else about progress lives on the Progress page, so this page has one thing to do first.
- */
-function ResumeStrip({ items, entries, profile, rewards, completedCourses }: { items: ResumeEntry[]; entries: CourseEntry[]; profile: string; rewards: RewardSummary | undefined; completedCourses: number }) {
+/** The one thing to do first: the lesson to go back to, with how far the course is. */
+function ResumeCard({ items, entries }: { items: ResumeEntry[]; entries: CourseEntry[] }) {
 	const look = useStore(appearanceStore);
 	const first = items[0];
-	const game = rewards ? buildGamification({ rewards, completedCourses }) : null;
-	const study = rewards?.study;
-	const stats = [
-		look.showStreak && study && <li key="s" className="flex items-center gap-1.5"><Flame className="size-4 text-reward" aria-hidden="true" /><span className="font-bold">{study.currentStreak}</span> {tr('day streak', 'dias seguidos')}</li>,
-		look.showGoal && study && rewards && <li key="g" className="flex items-center gap-1.5"><Target className="size-4 text-primary" aria-hidden="true" />{tr('Goal', 'Meta')} <span className="font-bold">{Math.min(study.weekActiveDays, rewards.weeklyGoal)}/{rewards.weeklyGoal}</span></li>,
-		look.showXp && game && <li key="x" className="flex items-center gap-1.5"><Star className="size-4 text-reward" aria-hidden="true" />{tr(`Level ${game.level.level}`, `Nível ${game.level.level}`)} <span className="text-muted-foreground">{game.level.xp} XP</span></li>
-	].filter(Boolean);
-	if (!first && stats.length === 0) return null;
-	const entry = first ? entries.find((course) => course.courseId === first.location.courseId) : undefined;
+	if (!first || !look.showContinue) return null;
+	const entry = entries.find((course) => course.courseId === first.location.courseId);
+	const value = entry && entry.total ? entry.done / entry.total : 0;
 	return (
-		<section aria-label={tr('Continue learning', 'Continuar estudando')} className="relative flex flex-wrap items-center gap-x-8 gap-y-3 rounded-lg bg-muted px-4 py-3">
-			{first && look.showContinue && (
-				<div className="flex min-w-0 flex-1 items-center gap-4">
-					<CourseCoverFor entry={entry} profile={profile} eager compact className="w-24 shrink-0" />
-					<div className="min-w-0">
-						<p className="truncate text-sm text-muted-foreground">{first.location.courseTitle}</p>
-						<h2 className="truncate text-lg font-bold">
-							<Link to={routerPath(href('course', first.location.courseId, first.location.lesson.path, first.progress.positionSeconds))} className="after:absolute after:inset-0 after:content-[''] focus-visible:outline-none">{first.location.lesson.title}</Link>
-						</h2>
+		<section aria-label={tr('Continue learning', 'Continuar estudando')}>
+			<Hero className="flex flex-wrap items-center justify-between gap-8">
+				<div className="min-w-0 max-w-xl space-y-4">
+					<Eyebrow>{tr('Next up', 'A seguir')}</Eyebrow>
+					<h2 className="font-heading text-3xl font-bold text-balance sm:text-4xl">{first.location.lesson.title}</h2>
+					<p className="text-lg text-muted-foreground">{first.location.courseTitle}</p>
+					<div className="flex flex-wrap gap-3 pt-2">
+						<Link to={routerPath(href('course', first.location.courseId, first.location.lesson.path, first.progress.positionSeconds))} className="inline-flex h-14 items-center gap-2 rounded-full bg-primary px-8 text-base font-semibold text-primary-foreground hover:bg-brand-deep focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
+							<Play className="size-4 fill-current" aria-hidden="true" />{tr('Resume', 'Retomar')}
+						</Link>
+						<Link to={routerPath(href('course', first.location.courseId))} className="inline-flex h-14 items-center rounded-full border bg-card px-8 text-base font-medium hover:bg-brand-tint focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">{tr('Open course', 'Abrir curso')}</Link>
 					</div>
-					<span className="ml-auto inline-flex shrink-0 items-center gap-1.5 text-sm font-bold text-primary"><Play className="size-4 fill-current" aria-hidden="true" />{tr('Resume', 'Retomar')}</span>
 				</div>
-			)}
-			{stats.length > 0 && <ul aria-label={tr('Your habit', 'Seu hábito')} className="relative z-10 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">{stats}</ul>}
+				{entry && entry.total > 0 && <Ring value={value} label={tr(`${Math.round(value * 100)}% of the course`, `${Math.round(value * 100)}% do curso`)} caption={tr('Course', 'Curso')} size={150} />}
+			</Hero>
 		</section>
 	);
 }
 
-/** The resume band shows the same cover as the course card, with its lesson bar. */
-function CourseCoverFor({ entry, profile, eager, compact, className }: { entry?: CourseEntry; profile: string; eager?: boolean; compact?: boolean; className?: string }) {
-	return entry ? <CourseCover course={entry.course} profile={profile} eager={eager} done={entry.done} total={entry.total} compact={compact} className={className} /> : null;
+/** Streak, this week's goal and level as small cards beside the library. Each can be hidden in Settings. */
+function Habit({ rewards, completedCourses }: { rewards: RewardSummary | undefined; completedCourses: number }) {
+	const look = useStore(appearanceStore);
+	const study = rewards?.study;
+	if (!rewards || !study) return null;
+	const game = buildGamification({ rewards, completedCourses });
+	const days = Math.min(study.weekActiveDays, rewards.weeklyGoal);
+	const cards = [
+		look.showStreak && <li key="s"><Stat icon={<Flame />} label={tr('day streak', 'dias seguidos')} value={study.currentStreak} /></li>,
+		look.showXp && <li key="x"><Stat icon={<Star />} label={tr(`Level ${game.level.level}`, `Nível ${game.level.level}`)} value={game.level.xp} unit="XP" /></li>,
+		look.showGoal && <li key="g" className="col-span-2"><Stat icon={<Target />} label={tr('Goal', 'Meta')} value={`${days}/${rewards.weeklyGoal}`} unit={tr('days this week', 'dias nesta semana')} /></li>
+	].filter(Boolean);
+	if (cards.length === 0) return null;
+	return <ul aria-label={tr('Your habit', 'Seu hábito')} className="grid grid-cols-2 gap-4">{cards}</ul>;
 }
 
 function Filters(props: { categories: string[]; category: string | null; onCategory: (value: string | null) => void; view: View; onView: (view: View) => void }) {

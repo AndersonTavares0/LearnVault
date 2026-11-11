@@ -91,10 +91,10 @@ test('signs in, indexes the library and resumes a lesson from My learning', asyn
 	await expect(await page.request.post(`${origin}/api/study/position`, { headers: { Origin: origin }, data: { media_id: mediaId, position_seconds: 5 } })).toBeOK();
 	await page.reload();
 	const resume = page.getByRole('region', { name: 'Continue learning' });
-	await expect(resume.getByRole('link', { name: 'Ownership' })).toHaveAttribute('href', /#\/course\/.+\?t=5$/);
+	await expect(resume.getByRole('link', { name: 'Resume' })).toHaveAttribute('href', /#\/course\/.+\?t=5$/);
 	await expectNoAxeViolations(page, 'home with resume');
 
-	await resume.getByRole('link', { name: 'Ownership' }).click();
+	await resume.getByRole('link', { name: 'Resume' }).click();
 	await expect(page.getByRole('heading', { level: 1, name: 'Ownership' })).toBeVisible();
 	// The fixture bytes are not a real video, so the player shows its recovery state.
 	await expect(page.getByRole('alert').filter({ hasText: /media/i })).toBeVisible();
@@ -158,12 +158,12 @@ test('customizing the look passes axe for every accent and breaks no CSP rule', 
 	await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
 
 	const brand = new Set<string>();
-	for (const accent of ['Amber', 'Forest', 'Terracotta', 'Navy', 'Plum', 'Teal', 'Slate']) {
+	for (const accent of ['Brown', 'Amber', 'Forest', 'Terracotta', 'Navy', 'Plum', 'Teal', 'Slate']) {
 		await page.getByRole('group', { name: 'Accent color' }).getByRole('button', { name: accent }).click();
 		brand.add(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--brand').trim()));
 		await expectNoAxeViolations(page, `settings/${accent}`);
 	}
-	expect(brand.size).toBe(7);
+	expect(brand.size).toBe(8);
 	for (const choice of [['Corners', 'Round'], ['Density', 'Compact'], ['Text size', 'Large'], ['Banners', 'Deep accent'], ['Font', 'System font']]) {
 		await page.getByRole('group', { name: choice[0] }).getByRole('button', { name: choice[1] }).click();
 	}
