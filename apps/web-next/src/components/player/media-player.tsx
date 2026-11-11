@@ -85,6 +85,19 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 	const lastSave = useRef(0);
 	const appliedStart = useRef<string | null>(null);
 	const [pip, setPip] = useState(false);
+	// React has no props for these two events, so the element is listened to directly.
+	useEffect(() => {
+		const element = media.current;
+		if (!element) return;
+		const enter = () => setPip(true);
+		const leave = () => setPip(false);
+		element.addEventListener('enterpictureinpicture', enter);
+		element.addEventListener('leavepictureinpicture', leave);
+		return () => {
+			element.removeEventListener('enterpictureinpicture', enter);
+			element.removeEventListener('leavepictureinpicture', leave);
+		};
+	}, [errorCode, kind]);
 	// A–B loop: A then B are set from the current time; passing B jumps back to A.
 	const [loop, setLoop] = useState<{ a: number; b: number | null } | null>(null);
 	const supportsPip = typeof document !== 'undefined' && Boolean(document.pictureInPictureEnabled);
@@ -216,8 +229,6 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 		onPause: () => { if (mediaId && absoluteTime() > 0) onPosition(mediaId, Math.floor(absoluteTime())); },
 		onEnded: () => { if (mediaId) onEnded(mediaId); },
 		onError: () => setErrorCode(media.current?.error?.code ?? null),
-		onEnterPictureInPicture: () => setPip(true),
-		onLeavePictureInPicture: () => setPip(false),
 		className: 'w-full bg-black'
 	} as const;
 

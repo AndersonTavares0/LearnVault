@@ -289,7 +289,7 @@ function PdfLesson({ file, courseId, ready, initialPage, onPage }: { file: FileE
 	return (
 		<div className="space-y-3">
 			<p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-				<span className="inline-flex items-center gap-1.5 rounded-full bg-destructive/10 px-2.5 py-0.5 font-semibold text-destructive"><FileText className="size-3.5" aria-hidden="true" />{tr('PDF document', 'Documento PDF')}</span>
+				<span className="inline-flex items-center gap-1.5 rounded-full bg-brand-soft px-2.5 py-0.5 font-semibold"><FileText className="size-3.5" aria-hidden="true" />{tr('PDF document', 'Documento PDF')}</span>
 				<span>{formatFileSize(file.size)}</span>
 			</p>
 			<p role="note" className="rounded-2xl border border-brand-soft bg-panel p-4 text-sm">

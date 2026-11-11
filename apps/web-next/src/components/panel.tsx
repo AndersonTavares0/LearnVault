@@ -28,7 +28,7 @@ export function Stat({ label, value, unit, note, icon, className }: { label: str
 }
 
 /** Circular progress with the value in the middle. The label is the accessible name. */
-export function Ring({ value, label, caption, size = 132 }: { value: number; label: string; caption?: string; size?: number }) {
+export function Ring({ value, label, caption, center, size = 132 }: { value: number; label: string; caption?: string; center?: ReactNode; size?: number }) {
 	const percent = Math.round(Math.min(1, Math.max(0, value)) * 100);
 	const radius = 52;
 	const circumference = 2 * Math.PI * radius;
@@ -39,7 +39,7 @@ export function Ring({ value, label, caption, size = 132 }: { value: number; lab
 				<circle cx="64" cy="64" r={radius} fill="none" strokeWidth="11" strokeLinecap="round" className="stroke-primary" strokeDasharray={`${(percent / 100) * circumference} ${circumference}`} />
 			</svg>
 			<div className="absolute inset-0 grid place-content-center text-center" aria-hidden="true">
-				<span className="font-heading text-3xl leading-none font-bold">{percent}<span className="text-base">%</span></span>
+				{center ?? <span className="font-heading text-3xl leading-none font-bold">{percent}<span className="text-base">%</span></span>}
 				{caption && <span className="mt-1 text-[0.65rem] font-semibold tracking-[0.12em] text-muted-foreground uppercase">{caption}</span>}
 			</div>
 		</div>

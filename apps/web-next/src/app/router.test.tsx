@@ -28,7 +28,7 @@ describe('routes', () => {
 	it('maps legacy statistics and focus links to progress', async () => {
 		for (const path of ['/statistics', '/focus']) {
 			const { router } = renderApp(path);
-			expect(await screen.findByRole('heading', { name: 'Progress' })).toBeTruthy();
+			expect(await screen.findByRole('heading', { name: 'Your progress' })).toBeTruthy();
 			expect(router.state.location.pathname).toBe('/progress');
 			cleanup();
 		}
@@ -44,7 +44,7 @@ describe('routes', () => {
 	it('follows the selected language', async () => {
 		setLocale('pt-BR');
 		renderApp('/progress');
-		expect(await screen.findByRole('heading', { name: 'Progresso' })).toBeTruthy();
+		expect(await screen.findByRole('heading', { name: 'Seu progresso' })).toBeTruthy();
 	});
 });
 

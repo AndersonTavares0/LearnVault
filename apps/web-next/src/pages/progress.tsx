@@ -31,10 +31,10 @@ export function ProgressPage() {
 	const library = useMemo(() => buildLibrary({ catalog: catalog.data, recent: recent.data ?? [], favoriteCourseIds: new Set(favorites.data?.courseIds ?? []) }), [catalog.data, recent.data, favorites.data]);
 	const game = rewards.data ? buildGamification({ rewards: rewards.data, completedCourses: library.entries.filter((entry) => entry.status === 'completed').length }) : null;
 
-	if (!studySyncSupported) return <PageHeader title={tr('Progress', 'Progresso')} description={tr('Study tracking is off on this server.', 'O acompanhamento de estudo está desligado neste servidor.')} />;
-	if (rewards.isPending) return <><PageHeader title={tr('Progress', 'Progresso')} /><p role="status" className="text-muted-foreground">{tr('Loading your progress…', 'Carregando seu progresso…')}</p></>;
+	if (!studySyncSupported) return <PageHeader title={tr('Your progress', 'Seu progresso')} description={tr('Study tracking is off on this server.', 'O acompanhamento de estudo está desligado neste servidor.')} />;
+	if (rewards.isPending) return <><PageHeader title={tr('Your progress', 'Seu progresso')} /><p role="status" className="text-muted-foreground">{tr('Loading your progress…', 'Carregando seu progresso…')}</p></>;
 	// A failed refetch keeps showing the last good data.
-	if (!rewards.data || !game) return <><PageHeader title={tr('Progress', 'Progresso')} /><p role="alert" className="text-destructive">{rewards.error?.message ?? tr('Could not load your progress.', 'Não foi possível carregar seu progresso.')}</p></>;
+	if (!rewards.data || !game) return <><PageHeader title={tr('Your progress', 'Seu progresso')} /><p role="alert" className="text-destructive">{rewards.error?.message ?? tr('Could not load your progress.', 'Não foi possível carregar seu progresso.')}</p></>;
 
 	const study = rewards.data.study;
 	const goal = rewards.data.weeklyGoal;
@@ -42,7 +42,7 @@ export function ProgressPage() {
 
 	return (
 		<div>
-			<PageHeader icon={ChartNoAxesColumn} title={tr('Progress', 'Progresso')} description={`${tr(`Level ${game.level.level}`, `Nível ${game.level.level}`)} · ${game.level.xp} XP`} />
+			<PageHeader icon={ChartNoAxesColumn} title={tr('Your progress', 'Seu progresso')} description={`${tr(`Level ${game.level.level}`, `Nível ${game.level.level}`)} · ${game.level.xp} XP`} />
 			<ul aria-label={tr('Your habit', 'Seu hábito')} className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-3">
 				<li><Stat icon={<Flame />} label={tr('day streak', 'dias seguidos')} value={study.currentStreak} /></li>
 				<li><Stat icon={<Target />} label={tr('Goal', 'Meta')} value={`${Math.min(study.weekActiveDays, goal)}/${goal}`} unit={tr('days', 'dias')} /></li>

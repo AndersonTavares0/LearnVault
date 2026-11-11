@@ -150,7 +150,7 @@ function SearchBox() {
 	}, []);
 
 	return (
-		<div role="search" className="relative hidden w-44 md:block lg:w-64">
+		<div role="search" aria-label={tr('Library', 'Biblioteca')} className="relative hidden w-44 md:block lg:w-64">
 			<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
 			<Input
 				ref={input}

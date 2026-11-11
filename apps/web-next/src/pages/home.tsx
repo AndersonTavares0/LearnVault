@@ -1,4 +1,4 @@
-import { Flame, FolderPlus, LayoutGrid, List, Play, RefreshCw, Search, Star, Target } from 'lucide-react';
+import { BookOpen, Flame, FolderPlus, LayoutGrid, List, Play, RefreshCw, Search, Star, Target } from 'lucide-react';
 import { useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { BrandMark } from '@/components/brand';
@@ -21,6 +21,7 @@ import { transportKind, type RewardSummary } from '@/lib/transport';
 import { cn } from '@/lib/utils';
 import { useCatalog, useFavorites, useImportCourse, useRecent, useRescan, useRewards, useSession } from '@/app/data';
 import { safeStorage } from '@/app/preferences';
+import { PageHeader } from '@/app/shell';
 
 type View = 'grid' | 'list';
 // The four legacy views collapse into two (docs/design/parity.md).
@@ -66,10 +67,7 @@ export function HomePage() {
 
 	return (
 		<div className="space-y-8">
-			<div className="flex flex-wrap items-end justify-between gap-4">
-				<h1 className="font-heading text-4xl font-bold text-balance sm:text-5xl">{tr('My ', 'Meu ')}<em className="text-reward-fill">{tr('learning', 'aprendizado')}</em></h1>
-				{user?.isAdmin && library.entries.length > 0 && <LibraryActions onMessage={setMessage} />}
-			</div>
+			<PageHeader icon={BookOpen} title={tr('My learning', 'Meu aprendizado')} actions={user?.isAdmin && library.entries.length > 0 ? <LibraryActions onMessage={setMessage} /> : undefined} className="mb-0" />
 			{library.entries.length > 0 && <FilterTabs counts={library.counts} filter={filter} onFilter={(value) => setParam('filter', value === 'all' ? null : value)} />}
 			<p role="status" aria-live="polite" className="text-sm text-muted-foreground empty:hidden">{message}</p>
 
@@ -118,10 +116,10 @@ function FilterTabs({ counts, filter, onFilter }: { counts: Record<LibraryFilter
 		...(studySyncSupported ? [['favorites', tr('Favorites', 'Favoritos')] as [LibraryFilter, string]] : [])
 	];
 	return (
-		<div role="group" aria-label={tr('Show', 'Mostrar')} className="flex flex-wrap gap-3">
+		<div role="group" aria-label={tr('Show', 'Mostrar')} className="-mx-5 flex gap-3 overflow-x-auto px-5 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
 			{options.map(([value, label]) => (
-				<button key={value} type="button" aria-pressed={filter === value} onClick={() => onFilter(value)} className={cn('min-h-12 rounded-full border-2 border-brand-soft bg-card px-5 text-base font-medium hover:bg-brand-tint focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none', filter === value && 'border-reward-fill bg-panel font-semibold')}>
-					{label} <span className="ml-1 text-sm font-normal text-muted-foreground">{counts[value]}</span>
+				<button key={value} type="button" aria-pressed={filter === value} onClick={() => onFilter(value)} className={cn('min-h-12 shrink-0 rounded-full border-2 border-brand-soft bg-card px-5 text-base font-medium hover:bg-brand-tint focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none', filter === value && 'border-reward-fill bg-panel font-semibold')}>
+					{label}{counts[value] > 0 && <span className="ml-1.5 text-sm font-normal text-muted-foreground">{counts[value]}</span>}
 				</button>
 			))}
 		</div>

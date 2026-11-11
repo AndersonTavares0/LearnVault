@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { transport, type Catalog, type Flashcard } from '@/lib/transport';
 import { renderApp } from '@/test/render-app';
@@ -17,19 +17,23 @@ afterEach(() => {
 });
 
 describe('review', () => {
-	it('counts what is due across courses and lists one deck per course', async () => {
+	it('lists one deck per course with what is due, and opens a deck', async () => {
 		vi.spyOn(transport, 'listFlashcards').mockResolvedValue([card('a', 'own', 1), card('b', 'own', 2), card('c', 'chan', future)]);
 		renderApp('/review', { catalog });
-		expect(await screen.findByRole('heading', { name: '2 cards are due' })).toBeTruthy();
-		const rows = within(screen.getByRole('table')).getAllByRole('row').slice(1).map((row) => row.textContent);
-		expect(rows).toEqual(['Rust22', 'Go01']);
+		expect(await screen.findByText('2 cards are due')).toBeTruthy();
+		expect(await screen.findByRole('link', { name: /^Rust/ })).toBeTruthy();
+		expect(screen.getAllByText('2 due · 2 cards').length).toBeGreaterThan(0);
+		expect(screen.getAllByText('0 due · 1 cards').length).toBeGreaterThan(0);
 		expect(transport.listFlashcards).toHaveBeenCalledWith();
+		cleanup();
+		renderApp('/review?course=rust', { catalog });
+		expect(await screen.findByRole('heading', { name: '2 cards are due' })).toBeTruthy();
 	});
 
 	it('runs a session with the keyboard and ends when the due cards are done', async () => {
 		vi.spyOn(transport, 'listFlashcards').mockResolvedValue([card('a', 'own', 1), card('b', 'own', 2)]);
 		const review = vi.spyOn(transport, 'reviewFlashcard').mockImplementation(async (id) => card(id, 'own', future));
-		renderApp('/review', { catalog });
+		renderApp('/review?course=rust', { catalog });
 		fireEvent.click(await screen.findByRole('button', { name: 'Start review' }));
 		expect(screen.getByRole('heading', { name: 'front a' })).toBeTruthy();
 		expect(screen.queryByText('back a')).toBeNull();
