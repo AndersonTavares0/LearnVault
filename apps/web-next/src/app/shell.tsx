@@ -1,4 +1,4 @@
-import { BookOpen, ChartNoAxesColumn, Layers, CircleUser, LogOut, NotebookPen, Search, Settings, type LucideIcon } from 'lucide-react';
+import { BookOpen, ChartNoAxesColumn, Layers, CircleUser, LogOut, Moon, NotebookPen, Search, Settings, Sun, type LucideIcon } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router';
@@ -9,13 +9,15 @@ import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { useLocale } from '@/hooks/use-locale';
+import { useStore } from '@/hooks/use-store';
+import { appearanceStore, resolveTheme, updateAppearance } from '@/lib/appearance';
 import { tr } from '@/lib/i18n';
 import { focusSaved, focusSync, retryFocusSessions, setFocusOutboxScope } from '@/lib/pomodoro-store';
 import { playerPreferencesScope } from '@/lib/player-preferences';
 import { transportKind } from '@/lib/transport';
 import { cn } from '@/lib/utils';
 import { keys, useSession, useSignOut } from './data';
-import { clearUserLocalData } from './preferences';
+import { clearUserLocalData, safeStorage } from './preferences';
 
 const navItems = () => [
 	{ to: '/', label: tr('My learning', 'Meu aprendizado'), icon: BookOpen, end: true },
@@ -66,6 +68,7 @@ export function AppShell() {
 					<div className="ml-auto flex items-center gap-1 md:ml-0">
 						<SearchBox />
 						<FocusMenu />
+						<ThemeToggle />
 						<AccountMenu username={user.username} userId={user.userId} />
 					</div>
 				</div>
@@ -75,6 +78,17 @@ export function AppShell() {
 			</main>
 			<MobileTabs />
 		</div>
+	);
+}
+
+/** One press switches between the light and the dark page; "follow the system" is in Settings. */
+function ThemeToggle() {
+	const look = useStore(appearanceStore);
+	const dark = resolveTheme(look.theme) === 'dark';
+	return (
+		<Button variant="ghost" size="icon" aria-label={dark ? tr('Switch to the light theme', 'Usar o tema claro') : tr('Switch to the dark theme', 'Usar o tema escuro')} onClick={() => updateAppearance({ theme: dark ? 'light' : 'dark' }, safeStorage())}>
+			{dark ? <Sun /> : <Moon />}
+		</Button>
 	);
 }
 

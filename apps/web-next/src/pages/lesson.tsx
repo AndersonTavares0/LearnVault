@@ -1,8 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, CircleCheck, Circle, FileText, PenLine, SquarePlus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CircleCheck, Circle, FileText, PanelRightClose, PanelRightOpen, PenLine, SquarePlus } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
-import { Band } from '@/components/band';
+import { safeStorage } from '@/app/preferences';
 import { Curriculum } from '@/components/curriculum';
 import { Materials } from '@/components/materials';
 import { BreakOverlay } from '@/components/player/break-overlay';
@@ -51,6 +51,10 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 	const player = useRef<PlayerHandle | null>(null);
 	const [time, setTime] = useState(0);
 	const [tab, setTab] = useState('lessons');
+	// Cinema gives the picture the whole width; the course content can also be hidden. Both are remembered.
+	const [cinema, setCinema] = useStoredFlag('learnvault-cinema', false);
+	const [contentOpen, setContentOpen] = useStoredFlag('learnvault-lesson-content', true);
+	const wide = cinema || !contentOpen;
 	const [noteRequest, setNoteRequest] = useState(0);
 	const [cardRequest, setCardRequest] = useState(0);
 	const [breakPhase, setBreakPhase] = useState<'break' | 'over' | null>(null);
@@ -158,24 +162,27 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 
 	return (
 		<div>
-			<Band className="mb-6">
-				<div className="flex flex-wrap items-center gap-x-4 gap-y-2 pb-4">
-					<Link to={path(href('course', courseId))} className="inline-flex min-h-11 items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-						<ChevronLeft className="size-4 shrink-0" aria-hidden="true" /><span className="max-w-72 truncate">{location?.moduleTitle ? `${course.title} · ${location.moduleTitle}` : course.title}</span>
-					</Link>
-					<h1 className="mr-auto min-w-0 truncate font-heading text-2xl font-bold">{lesson.title}</h1>
-					{position >= 0 && <span className="text-sm text-muted-foreground tabular-nums">{tr(`Lesson ${position + 1} of ${sequence.length}`, `Aula ${position + 1} de ${sequence.length}`)}</span>}
-					<div className="flex items-center gap-2">
-						<Button variant="outline" className="disabled:opacity-60" disabled={!previous} onClick={() => previous && goTo(previous.path)}><ChevronLeft />{tr('Previous', 'Anterior')}</Button>
-						<Button disabled={!next} onClick={() => next && goTo(next.path)}>{tr('Next', 'Próxima')}<ChevronRight /></Button>
+			<header className="mb-6 space-y-4">
+				<div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+					<div className="min-w-0 space-y-1">
+						<Link to={path(href('course', courseId))} className="inline-flex min-h-11 items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground">
+							<ChevronLeft className="size-4 shrink-0" aria-hidden="true" /><span className="max-w-[28rem] truncate">{location?.moduleTitle ? `${course.title} · ${location.moduleTitle}` : course.title}</span>
+						</Link>
+						<h1 className="font-heading text-3xl leading-tight font-bold text-balance sm:text-4xl">{lesson.title}</h1>
+					</div>
+					<div className="flex flex-wrap items-center gap-2">
+						{position >= 0 && <span className="mr-2 text-sm text-muted-foreground tabular-nums">{tr(`Lesson ${position + 1} of ${sequence.length}`, `Aula ${position + 1} de ${sequence.length}`)}</span>}
+						<Button variant="outline" className="h-11 rounded-full px-5 disabled:opacity-60" disabled={!previous} onClick={() => previous && goTo(previous.path)}><ChevronLeft />{tr('Previous', 'Anterior')}</Button>
+						<Button className="h-11 rounded-full px-5" disabled={!next} onClick={() => next && goTo(next.path)}>{tr('Next', 'Próxima')}<ChevronRight /></Button>
+						<Button variant="outline" size="icon" className="hidden size-11 rounded-full lg:inline-flex" aria-pressed={contentOpen} onClick={() => setContentOpen(!contentOpen)} aria-label={contentOpen ? tr('Hide course content', 'Ocultar conteúdo do curso') : tr('Show course content', 'Mostrar conteúdo do curso')}>{contentOpen ? <PanelRightClose /> : <PanelRightOpen />}</Button>
 					</div>
 				</div>
-				<div className="pb-4"><LessonRail sequence={sequence} current={position} isDone={(path) => donePaths.has(path)} /></div>
-			</Band>
+				<LessonRail sequence={sequence} current={position} isDone={(path) => donePaths.has(path)} />
+			</header>
 
-			<div className={cn('grid gap-6', 'lg:grid-cols-[minmax(0,1fr)_22rem] [:root[data-sidebar=left]_&]:lg:grid-cols-[22rem_minmax(0,1fr)]')}>
+			<div className={cn('grid gap-6', !wide && 'lg:grid-cols-[minmax(0,1fr)_22rem] [:root[data-sidebar=left]_&]:lg:grid-cols-[22rem_minmax(0,1fr)]')}>
 				<div className="min-w-0 space-y-4">
-					<div className="relative">
+					<div className={cn('relative', cinema && 'rounded-[2rem] bg-black p-3 sm:p-6')}>
 						{/* While the break screen is up, the player under it takes no focus or keys. */}
 						<div inert={Boolean(breakPhase)}>
 						{pdf ? (
@@ -192,6 +199,8 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 							onEnded={finished}
 							onTime={setTime}
 							onOpenNotes={openNotes}
+							cinema={cinema}
+							onCinema={() => setCinema(!cinema)}
 							handle={(value) => { player.current = value; }}
 						/>
 						)}
@@ -229,7 +238,6 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 						</TabsList>
 						<TabsContent value="lessons" className="space-y-4 pt-5">
 							<div className="flex flex-wrap items-center gap-3">
-								<div className="mr-auto" />
 								{hasCards && hasNotes && <Button variant="outline" onClick={() => { player.current?.pause(); openNotes(); }} aria-keyshortcuts="n"><PenLine />{tr('Note', 'Nota')}<kbd aria-hidden="true" className="ml-1 rounded border px-1.5 text-xs text-muted-foreground">N</kbd></Button>}
 								{hasCards && <Button variant="outline" onClick={() => { player.current?.pause(); setTab('cards'); setCardRequest((value) => value + 1); }}><SquarePlus />{tr('Card', 'Cartão')}</Button>}
 								{studySyncSupported && mediaId && (
@@ -264,14 +272,42 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 					</Tabs>
 				</div>
 
-				<aside aria-label={tr('Course content', 'Conteúdo do curso')} className={cn('min-w-0 space-y-3 rounded-[2rem] border bg-card p-5 [:root[data-sidebar=left]_&]:lg:order-first', 'lg:sticky lg:top-6 lg:max-h-[calc(100dvh-3rem)] lg:self-start lg:overflow-y-auto')}>
-					<h2 className="text-lg font-bold">{tr('Course content', 'Conteúdo do curso')}</h2>
-					<p className="text-sm text-muted-foreground">{tr(`${overall.done} of ${overall.total} lessons completed`, `${overall.done} de ${overall.total} aulas concluídas`)}</p>
-					<Curriculum nodes={course.children} courseId={courseId} completed={completed} favorites={favoriteMedia} activePath={lessonPath} />
-				</aside>
+				{contentOpen && (
+					<aside aria-label={tr('Course content', 'Conteúdo do curso')} className={cn('min-w-0 space-y-3 rounded-[2rem] border bg-card p-4 [:root[data-sidebar=left]_&]:lg:order-first', !wide && 'lg:sticky lg:top-6 lg:max-h-[calc(100dvh-3rem)] lg:self-start lg:overflow-y-auto')}>
+						<div className="flex items-start justify-between gap-2 px-1">
+							<div>
+								<h2 className="font-heading text-lg font-bold">{tr('Course content', 'Conteúdo do curso')}</h2>
+								<p className="text-sm text-muted-foreground">{tr(`${overall.done} of ${overall.total} lessons completed`, `${overall.done} de ${overall.total} aulas concluídas`)}</p>
+							</div>
+							<Button variant="ghost" size="icon" className="hidden size-11 rounded-full lg:inline-flex" onClick={() => setContentOpen(false)} aria-label={tr('Hide course content', 'Ocultar conteúdo do curso')}><PanelRightClose /></Button>
+						</div>
+						<Curriculum compact nodes={course.children} courseId={courseId} completed={completed} favorites={favoriteMedia} activePath={lessonPath} />
+					</aside>
+				)}
 			</div>
 		</div>
 	);
+}
+
+/** A yes/no choice kept in this browser; unreadable storage just means the default. */
+function useStoredFlag(key: string, fallback: boolean) {
+	const [value, setValue] = useState(() => {
+		try {
+			const saved = safeStorage()?.getItem(key);
+			return saved === null || saved === undefined ? fallback : saved === '1';
+		} catch {
+			return fallback;
+		}
+	});
+	const set = (next: boolean) => {
+		setValue(next);
+		try {
+			safeStorage()?.setItem(key, next ? '1' : '0');
+		} catch {
+			// The choice just is not kept.
+		}
+	};
+	return [value, set] as const;
 }
 
 /** One segment per lesson: done, the current one, or still to come. Decorative; the text names the position. */
@@ -279,7 +315,7 @@ function LessonRail({ sequence, current, isDone }: { sequence: { path: string }[
 	if (sequence.length < 2 || sequence.length > 60) return null;
 	return (
 		<div aria-hidden="true" className="flex gap-1">
-			{sequence.map((item, index) => <span key={item.path} className={cn('h-1.5 flex-1 rounded-full', isDone(item.path) ? 'bg-brand' : index === current ? 'bg-brand/55' : 'bg-brand/20')} />)}
+			{sequence.map((item, index) => <span key={item.path} className={cn('h-1.5 flex-1 rounded-full', isDone(item.path) ? 'bg-primary' : index === current ? 'bg-[var(--reward-fill)]' : 'bg-border')} />)}
 		</div>
 	);
 }

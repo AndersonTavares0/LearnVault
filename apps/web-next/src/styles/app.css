@@ -1,12 +1,15 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+
+/* `dark:` utilities follow the theme the learner chose, not the system alone. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 @import "@fontsource-variable/dm-sans";
 @import "@fontsource-variable/playfair-display";
 @import "@fontsource-variable/literata/opsz.css";
 @import "@fontsource-variable/jetbrains-mono";
 
-/* The interface is light only. Colours come from the learner's accent (src/lib/appearance.ts). */
+/* Light by default; dark is a warm black. Accent colours come from the learner's choice (src/lib/appearance.ts). */
 
 @theme inline {
   --font-heading: var(--heading-font);
@@ -76,8 +79,8 @@
   --brand: #5C4229;
   --brand-fg: #FFFFFF;
   --brand-deep: color-mix(in oklch, var(--brand) 55%, black);
-  --brand-tint: color-mix(in oklch, var(--brand) 6%, #FDF9F6);
-  --brand-soft: color-mix(in oklch, var(--brand) 13%, #FDF9F6);
+  --brand-tint: color-mix(in oklch, var(--brand) 6%, var(--background));
+  --brand-soft: color-mix(in oklch, var(--brand) 13%, var(--background));
   --reward: #8F5A12;
   --reward-fill: #BC7F29;
   --reward-fill-fg: #2A2118;
@@ -120,6 +123,49 @@
   --panel: #FBEFDC;
   --panel-edge: #ECE2D6;
 }
+
+/* The dark page: warm black, raised panels a step lighter, amber-led accent. */
+:root[data-theme="dark"] {
+  --background: #090705;
+  --foreground: #F6EEE4;
+  --card: #13100D;
+  --card-foreground: #F6EEE4;
+  --popover: #17130F;
+  --popover-foreground: #F6EEE4;
+  --secondary: #1C1510;
+  --secondary-foreground: #F6EEE4;
+  --muted: #1A1511;
+  --muted-foreground: #B6A694;
+  --accent-foreground: #F6EEE4;
+  --destructive: #F87171;
+  --destructive-foreground: #1C0909;
+  --border: #2F251C;
+  --input: #8A7A68;
+  --chart-2: #B6A694;
+  --chart-4: #8A7A68;
+  --chart-5: #F6EEE4;
+  --sidebar: #090705;
+  --sidebar-foreground: #F6EEE4;
+  --sidebar-accent-foreground: #F6EEE4;
+  --sidebar-border: #2F251C;
+  --panel: #1C1510;
+  --panel-edge: #2F251C;
+  --cover-0: #2B2118; --cover-1: #2E211B; --cover-2: #26261C; --cover-3: #222A20;
+  --cover-4: #2A241C; --cover-5: #2E2320; --cover-6: #262420; --cover-7: #2B2316;
+}
+:root {
+  --cover-0: #F6E7CF; --cover-1: #F2E0D2; --cover-2: #EAE4CF; --cover-3: #E3E8D6;
+  --cover-4: #E9DED0; --cover-5: #F1DCD3; --cover-6: #E6E3D8; --cover-7: #EFE2C8;
+}
+
+/* A small tint and ink in one hue per course, for the code and footer of a card. */
+.tone { background: hsl(var(--hue) 45% 92%); color: hsl(var(--hue) 60% 22%); }
+.tone-ink { color: hsl(var(--hue) 60% 22%); }
+:root[data-theme="dark"] .tone { background: hsl(var(--hue) 28% 17%); color: hsl(var(--hue) 65% 74%); }
+:root[data-theme="dark"] .tone-ink { color: hsl(var(--hue) 65% 74%); }
+
+/* Playfair's default figures sit on the baseline unevenly ("0" reads as "o"); headings use lining figures. */
+.font-heading, h1, h2, h3 { font-variant-numeric: lining-nums; }
 
 /* Learner choices, set on <html> by applyAppearance (src/lib/appearance.ts). */
 :root[data-radius="square"] { --radius: 0.375rem; }

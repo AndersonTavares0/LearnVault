@@ -67,7 +67,7 @@ export function HomePage() {
 
 	return (
 		<div className="space-y-8">
-			<PageHeader icon={BookOpen} title={tr('My learning', 'Meu aprendizado')} actions={user?.isAdmin && library.entries.length > 0 ? <LibraryActions onMessage={setMessage} /> : undefined} className="mb-0" />
+			<PageHeader icon={BookOpen} title={tr('My learning', 'Meu aprendizado')} actions={user?.isAdmin && library.entries.length > 0 ? <LibraryActions onMessage={setMessage} /> : undefined} />
 			{library.entries.length > 0 && <FilterTabs counts={library.counts} filter={filter} onFilter={(value) => setParam('filter', value === 'all' ? null : value)} />}
 			<p role="status" aria-live="polite" className="text-sm text-muted-foreground empty:hidden">{message}</p>
 

@@ -85,8 +85,8 @@ function PickerCard({ entry, title: given, footer, to }: { entry?: CourseEntry; 
 	return (
 		<li className="group/pick relative overflow-hidden rounded-[1.5rem] border bg-card transition-shadow focus-within:ring-3 focus-within:ring-ring hover:shadow-md">
 			<div className="flex items-center gap-3 p-4 pb-2">
-				<span className="grid size-9 place-items-center rounded-xl font-heading text-sm font-bold" style={{ backgroundColor: tone.tint, color: tone.ink }} aria-hidden="true">{title.trim()[0]?.toUpperCase()}</span>
-				<span className="text-sm font-bold tabular-nums" style={{ color: tone.ink }}>{courseCode(title)}</span>
+				<span className="tone grid size-9 place-items-center rounded-xl font-heading text-sm font-bold" style={tone} aria-hidden="true">{title.trim()[0]?.toUpperCase()}</span>
+				<span className="tone-ink text-sm font-bold tabular-nums" style={tone}>{courseCode(title)}</span>
 				{entry && (
 					<Button variant="ghost" size="icon" className="relative z-10 ml-auto size-11" aria-pressed={entry.favorite} disabled={toggle.isPending} onClick={() => toggle.mutate({ courseId: entry.courseId, favorite: !entry.favorite })} aria-label={entry.favorite ? tr(`Unpin ${title}`, `Desafixar ${title}`) : tr(`Pin ${title}`, `Fixar ${title}`)}>
 						<Pin className={entry.favorite ? 'fill-current' : ''} />
@@ -96,7 +96,7 @@ function PickerCard({ entry, title: given, footer, to }: { entry?: CourseEntry; 
 			<h3 className="line-clamp-2 min-h-[4.25rem] px-4 pb-4 font-heading text-lg leading-snug font-bold">
 				<Link to={to} className="after:absolute after:inset-0 after:content-[''] focus-visible:outline-none">{title}<span className="sr-only">: {footer}</span></Link>
 			</h3>
-			<div className="flex items-center justify-between px-4 py-2.5 text-xs font-bold" style={{ backgroundColor: tone.tint, color: tone.ink }} aria-hidden="true">
+			<div className="tone flex items-center justify-between px-4 py-2.5 text-xs font-bold" style={tone} aria-hidden="true">
 				<span>{footer}</span><ArrowRight className="size-4 transition-transform group-hover/pick:translate-x-0.5" />
 			</div>
 		</li>

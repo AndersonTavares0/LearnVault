@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { transport, type Catalog, type CatalogNode, type RewardSummary } from '@/lib/transport';
 import { renderApp } from '@/test/render-app';
@@ -26,7 +26,7 @@ describe('progress', () => {
 		renderApp('/progress', { catalog, rewards, recent: [done('a'), done('b')] });
 		expect(await screen.findByRole('heading', { name: '1 of 3 days this week' })).toBeTruthy();
 		expect(screen.getByText(/2 more days to reach your goal\./)).toBeTruthy();
-		expect(screen.getByRole('list', { name: 'This week' }).querySelectorAll('li')).toHaveLength(7);
+		expect(within(screen.getByRole('table', { name: 'Focus minutes by day' })).getAllByRole('row')).toHaveLength(8);
 		expect(screen.getByText('First course finished').parentElement?.textContent).toContain('Earned');
 		expect(screen.getByText(/Level 2 · /)).toBeTruthy();
 	});

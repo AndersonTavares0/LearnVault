@@ -3,20 +3,23 @@ import { createStore } from '@/lib/store';
 /**
  * Everything a learner can change about how LearnVault looks and what it shows. One small object,
  * kept in this browser (nothing is sent anywhere), applied to <html> before the first render.
- * The interface is light only: there is no theme switch.
+ * Light is the default; dark (warm black) and "follow the system" are choices.
  */
 export const APPEARANCE_STORAGE_KEY = 'learnvault-appearance';
 
+/** Each preset has the colour used on the light page and a lighter one for the dark page. */
 export const ACCENT_PRESETS = [
-	{ id: 'brown', hex: '#5C4229' },
-	{ id: 'amber', hex: '#A5540A' },
-	{ id: 'forest', hex: '#2F6B3F' },
-	{ id: 'terracotta', hex: '#B2472D' },
-	{ id: 'navy', hex: '#27508F' },
-	{ id: 'plum', hex: '#7A3B7B' },
-	{ id: 'teal', hex: '#12736E' },
-	{ id: 'slate', hex: '#4A4F5C' }
+	{ id: 'brown', hex: '#5C4229', dark: '#E3A857' },
+	{ id: 'amber', hex: '#A5540A', dark: '#F0B35A' },
+	{ id: 'forest', hex: '#2F6B3F', dark: '#6FBF86' },
+	{ id: 'terracotta', hex: '#B2472D', dark: '#F08A6B' },
+	{ id: 'navy', hex: '#27508F', dark: '#8FB0FF' },
+	{ id: 'plum', hex: '#7A3B7B', dark: '#C58BD0' },
+	{ id: 'teal', hex: '#12736E', dark: '#5CC8C0' },
+	{ id: 'slate', hex: '#4A4F5C', dark: '#AEB6C8' }
 ] as const;
+
+export const THEMES = ['light', 'dark', 'system'] as const;
 
 export const REWARD_COLORS = ['amber', 'accent'] as const;
 export const RADII = ['square', 'soft', 'round'] as const;
@@ -27,6 +30,7 @@ export const SIDEBARS = ['right', 'left'] as const;
 export const HOME_LAYOUTS = ['grid', 'list'] as const;
 
 export type Appearance = {
+	theme: (typeof THEMES)[number];
 	accent: string;
 	reward: (typeof REWARD_COLORS)[number];
 	radius: (typeof RADII)[number];
@@ -43,6 +47,7 @@ export type Appearance = {
 };
 
 export const DEFAULT_APPEARANCE: Appearance = {
+	theme: 'light',
 	accent: ACCENT_PRESETS[0].hex,
 	reward: 'amber',
 	radius: 'soft',
@@ -68,6 +73,7 @@ export function parseAppearance(value: unknown): Appearance {
 	const raw = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
 	const d = DEFAULT_APPEARANCE;
 	return {
+		theme: pick(raw.theme, THEMES, d.theme),
 		accent: typeof raw.accent === 'string' && HEX.test(raw.accent) ? raw.accent.toUpperCase() : d.accent,
 		reward: pick(raw.reward, REWARD_COLORS, d.reward),
 		radius: pick(raw.radius, RADII, d.radius),
@@ -120,15 +126,42 @@ export const appearanceStore = {
 	subscribe: store.subscribe
 };
 
+const DARK_PANEL = '#1C1510';
+const DARK_PAGE = '#090705';
+
+/** "Follow the system" resolves to what the browser says right now. */
+export function resolveTheme(theme: Appearance['theme']): 'light' | 'dark' {
+	if (theme !== 'system') return theme;
+	return typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+/**
+ * On the dark page the accent has to stand out from a warm black, so a preset uses its lighter
+ * twin and any other colour is lightened until it reaches 4.5:1 on the raised panel colour.
+ */
+export function darkAccent(hex: string): string {
+	const preset = ACCENT_PRESETS.find((item) => item.hex === hex.toUpperCase());
+	if (preset) return preset.dark;
+	let [r, g, b] = rgb(hex);
+	const text = (x: number, y: number, z: number) => `#${[x, y, z].map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')}`.toUpperCase();
+	for (let step = 0; step < 40 && contrast(DARK_PANEL, text(r, g, b)) < 4.5; step += 1) [r, g, b] = [r + (255 - r) * 0.1, g + (255 - g) * 0.1, b + (255 - b) * 0.1];
+	return text(r, g, b);
+}
+
 /** Writes the choices to <html>: colours as custom properties, the rest as data attributes the CSS reads. */
 export function applyAppearance(appearance: Appearance, root: HTMLElement = document.documentElement): void {
-	const accent = readableAccent(appearance.accent);
+	const dark = resolveTheme(appearance.theme) === 'dark';
+	root.dataset.theme = dark ? 'dark' : 'light';
+	root.style.colorScheme = dark ? 'dark' : 'light';
+	if (root === document.documentElement) document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? DARK_PAGE : '#FDF9F6');
+	const accent = dark ? darkAccent(appearance.accent) : readableAccent(appearance.accent);
 	root.style.setProperty('--brand', accent);
-	root.style.setProperty('--brand-fg', '#FFFFFF');
-	root.style.setProperty('--reward', appearance.reward === 'accent' ? 'var(--brand)' : '#8F5A12');
-	root.style.setProperty('--reward-fill', appearance.reward === 'accent' ? 'var(--brand)' : '#BC7F29');
-	root.style.setProperty('--reward-fill-fg', appearance.reward === 'accent' ? 'var(--brand-fg)' : '#2A2118');
-	root.style.setProperty('--reward-tint', appearance.reward === 'accent' ? 'var(--brand-tint)' : '#F8E9C8');
+	root.style.setProperty('--brand-fg', dark ? '#1C1209' : '#FFFFFF');
+	const own = appearance.reward === 'accent';
+	root.style.setProperty('--reward', own ? 'var(--brand)' : dark ? '#E3A857' : '#8F5A12');
+	root.style.setProperty('--reward-fill', own ? 'var(--brand)' : dark ? '#E3A857' : '#BC7F29');
+	root.style.setProperty('--reward-fill-fg', own ? 'var(--brand-fg)' : dark ? '#1C1209' : '#2A2118');
+	root.style.setProperty('--reward-tint', own ? 'var(--brand-tint)' : dark ? '#2A1F10' : '#F8E9C8');
 	for (const key of ['radius', 'density', 'textSize', 'font', 'sidebar', 'homeLayout'] as const) root.dataset[key] = appearance[key];
 }
 
@@ -151,11 +184,18 @@ export function persistAppearance(storage: Pick<Storage, 'setItem'> | null | und
 	}
 }
 
+let watching = false;
+
 /** Loads the saved choices, applies them and makes them the app's current value. */
 export function loadAppearance(storage: Storage | null, root: HTMLElement = document.documentElement): Appearance {
 	const appearance = readAppearance(storage);
 	store.set(appearance);
 	applyAppearance(appearance, root);
+	// "Follow the system" tracks the browser's setting while the app is open.
+	if (!watching && typeof window !== 'undefined' && window.matchMedia) {
+		watching = true;
+		window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => { if (store.get().theme === 'system') applyAppearance(store.get(), root); });
+	}
 	return appearance;
 }
 

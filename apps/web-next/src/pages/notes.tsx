@@ -44,7 +44,7 @@ export function NotesPage() {
 		<CoursePicker
 			icon={NotebookPen}
 			title={tr('Choose a course to open its Notes', 'Escolha um curso para abrir suas Notas')}
-			description={tr(`${total} notes in all. This week you wrote ${notesThisWeek(notes.data ?? [])}.`, `${total} notas no total. Nesta semana você escreveu ${notesThisWeek(notes.data ?? [])}.`)}
+			description={tr(`${total} ${total === 1 ? 'note' : 'notes'} in all. This week you wrote ${notesThisWeek(notes.data ?? [])}.`, `${total} ${total === 1 ? 'nota' : 'notas'} no total. Nesta semana você escreveu ${notesThisWeek(notes.data ?? [])}.`)}
 			footer={(id) => tr(`${count(id)} ${count(id) === 1 ? 'note' : 'notes'}`, `${count(id)} ${count(id) === 1 ? 'nota' : 'notas'}`)}
 			to={(id) => `/notes?course=${encodeURIComponent(id)}`}
 			hasGone={counts.has(GONE)}

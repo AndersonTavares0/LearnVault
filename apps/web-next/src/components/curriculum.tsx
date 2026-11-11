@@ -20,6 +20,8 @@ type Props = {
 	activePath?: string | null;
 	/** Bumping `n` opens or closes every module at once (the Expand all / Collapse all buttons). */
 	signal?: { open: boolean; n: number };
+	/** Tighter rows for the player sidebar: numbered modules with a count and a small bar, shorter lessons. */
+	compact?: boolean;
 };
 
 const lessonMediaId = (node: CatalogNode) => [...node.files, ...node.looseFiles].find((file) => file.kind === 'media' && file.mediaId)?.mediaId ?? lessonPdfId(node);
@@ -32,13 +34,13 @@ const contains = (node: CatalogNode, path: string | null | undefined) => Boolean
  */
 export function Curriculum(props: Props) {
 	return (
-		<ul className="divide-y rounded-lg border bg-card">
-			{props.nodes.map((node) => <CurriculumNode key={node.path} node={node} {...props} />)}
+		<ul className={cn('divide-y rounded-lg border bg-card', props.compact && 'rounded-2xl')}>
+			{props.nodes.map((node, index) => <CurriculumNode key={node.path} node={node} index={index + 1} {...props} />)}
 		</ul>
 	);
 }
 
-function CurriculumNode({ node, ...props }: Props & { node: CatalogNode }) {
+function CurriculumNode({ node, index, ...props }: Props & { node: CatalogNode; index?: number }) {
 	const [open, setOpen] = useState(() => contains(node, props.activePath));
 	const [seen, setSeen] = useState(props.signal?.n ?? 0);
 	if (props.signal && props.signal.n !== seen) {
@@ -50,10 +52,22 @@ function CurriculumNode({ node, ...props }: Props & { node: CatalogNode }) {
 	return (
 		<li>
 			<details open={open} onToggle={(event) => setOpen(event.currentTarget.open)} className="group">
-				<summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 bg-muted/50 px-4 py-3 hover:bg-muted [&::-webkit-details-marker]:hidden">
-					<ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden="true" />
-					<span className="min-w-0 flex-1 font-serif text-lg font-semibold">{node.title}</span>
-					{total > 0 && <span className="shrink-0 text-sm text-muted-foreground tabular-nums">{tr(`${done} of ${total} done`, `${done} de ${total} concluídas`)}</span>}
+				<summary className={cn('flex cursor-pointer list-none items-center gap-3 hover:bg-muted [&::-webkit-details-marker]:hidden', props.compact ? 'min-h-14 px-3 py-2' : 'min-h-14 bg-muted/50 px-4 py-3')}>
+					{props.compact ? (
+						<span className="grid size-8 shrink-0 place-items-center rounded-full bg-brand-soft text-sm font-bold" aria-hidden="true">{index}</span>
+					) : (
+						<ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden="true" />
+					)}
+					<span className={cn('min-w-0 flex-1 font-heading font-bold', props.compact ? 'text-base leading-snug' : 'text-lg')}>{node.title}</span>
+					{total > 0 && props.compact ? (
+						<>
+							<span className="shrink-0 text-xs text-muted-foreground tabular-nums"><span className="sr-only">{tr(`${done} of ${total} done`, `${done} de ${total} concluídas`)}</span><span aria-hidden="true">{done}/{total}</span></span>
+							<span aria-hidden="true" className="h-1.5 w-10 shrink-0 overflow-hidden rounded-full bg-muted"><span className="block h-full rounded-full bg-primary" style={{ width: `${(done / total) * 100}%` }} /></span>
+							<ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden="true" />
+						</>
+					) : total > 0 ? (
+						<span className="shrink-0 text-sm text-muted-foreground tabular-nums">{tr(`${done} of ${total} done`, `${done} de ${total} concluídas`)}</span>
+					) : null}
 				</summary>
 				{node.children.length > 0 && (
 					<ul className="divide-y border-t bg-background/50">
@@ -65,7 +79,7 @@ function CurriculumNode({ node, ...props }: Props & { node: CatalogNode }) {
 	);
 }
 
-function LessonRow({ node, courseId, completed, favorites, activePath }: Props & { node: CatalogNode }) {
+function LessonRow({ node, courseId, completed, favorites, activePath, compact }: Props & { node: CatalogNode }) {
 	const setCompleted = useSetLessonCompleted();
 	const toggleFavorite = useToggleLessonFavorite();
 	const counts = countCatalogFiles(node);
@@ -97,7 +111,7 @@ function LessonRow({ node, courseId, completed, favorites, activePath }: Props &
 				<Link to={href('course', courseId, node.path).replace(/^#/, '')} aria-current={active ? 'page' : undefined} className={cn('flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-md py-2 hover:underline', active && 'font-medium')}>
 					<Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
 					<span className="min-w-0 flex-1">{node.title}</span>
-					{meta && <span className="shrink-0 text-xs text-muted-foreground">{meta}</span>}
+					{meta && !compact && <span className="shrink-0 text-xs text-muted-foreground">{meta}</span>}
 				</Link>
 			)}
 			{studySyncSupported && mediaId && !missing && (

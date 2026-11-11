@@ -76,7 +76,7 @@ test('signs in, indexes the library and resumes a lesson from My learning', asyn
 	await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
 	await page.getByRole('button', { name: 'Sign in' }).click();
 	// Sign-in returns to the page that asked for it.
-	await expect(page.getByRole('heading', { name: 'Notes' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: /Choose a course to open its Notes/ })).toBeVisible();
 
 	await page.getByRole('link', { name: 'My learning' }).first().click();
 	await page.getByRole('button', { name: 'Refresh courses' }).click();
@@ -112,6 +112,8 @@ test('signs in, indexes the library and resumes a lesson from My learning', asyn
 	await expectNoAxeViolations(page, 'progress');
 
 	await page.goto(`${origin}/#/notes`);
+	await expectNoAxeViolations(page, 'notes courses');
+	await page.getByRole('link', { name: /^library/ }).click();
 	await expect(page.getByText('Ownership moves values.')).toBeVisible();
 	await expectNoAxeViolations(page, 'notes');
 	await page.getByRole('button', { name: /^Pomodoro:/ }).click();
@@ -158,12 +160,18 @@ test('customizing the look passes axe for every accent and breaks no CSP rule', 
 	await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
 
 	const brand = new Set<string>();
-	for (const accent of ['Brown', 'Amber', 'Forest', 'Terracotta', 'Navy', 'Plum', 'Teal', 'Slate']) {
-		await page.getByRole('group', { name: 'Accent color' }).getByRole('button', { name: accent }).click();
-		brand.add(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--brand').trim()));
-		await expectNoAxeViolations(page, `settings/${accent}`);
+	// Every accent has to pass on the light page and on the dark one.
+	for (const theme of ['Light', 'Dark']) {
+		await page.getByRole('group', { name: 'Theme' }).getByRole('button', { name: theme }).click();
+		await expect(page.locator('html')).toHaveAttribute('data-theme', theme.toLowerCase());
+		for (const accent of ['Brown', 'Amber', 'Forest', 'Terracotta', 'Navy', 'Plum', 'Teal', 'Slate']) {
+			await page.getByRole('group', { name: 'Accent color' }).getByRole('button', { name: accent }).click();
+			brand.add(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--brand').trim()));
+			await expectNoAxeViolations(page, `settings/${theme}/${accent}`);
+		}
 	}
-	expect(brand.size).toBe(8);
+	expect(brand.size).toBe(16);
+	await page.getByRole('group', { name: 'Theme' }).getByRole('button', { name: 'Light' }).click();
 	for (const choice of [['Corners', 'Round'], ['Density', 'Compact'], ['Text size', 'Large'], ['Font', 'System font']]) {
 		await page.getByRole('group', { name: choice[0] }).getByRole('button', { name: choice[1] }).click();
 	}

@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { courseMonogram } from '@/lib/cover';
 
 /** FNV-1a: the same title always gets the same ground. */
@@ -10,9 +11,9 @@ function hash(value: string): number {
 	return h >>> 0;
 }
 
-// Course colours: pale warm papers that sit on the cream page, one per title. Dark brown text on
-// every one stays above 7:1.
-const GROUNDS = ['#F6E7CF', '#F2E0D2', '#EAE4CF', '#E3E8D6', '#E9DED0', '#F1DCD3', '#E6E3D8', '#EFE2C8'];
+// Course colours: pale warm papers on the cream page and deep warm browns on the dark page, one
+// per title (the --cover-N tokens in app.css). Text on every one stays above 7:1.
+const GROUND_COUNT = 8;
 
 /** One block per lesson in rows, the finished ones lit and the next one marked. */
 function lessonMap(done: number, total: number) {
@@ -57,12 +58,12 @@ type Props = {
  * because the card beside it already shows both. Decorative.
  */
 export function CoverArt({ title, done, total, compact = false, map = false }: Props) {
-	const ground = GROUNDS[hash(title.normalize('NFD').toLowerCase()) % GROUNDS.length];
-	if (map) return <svg viewBox="0 0 160 100" aria-hidden="true" focusable="false" className="absolute inset-0 size-full" preserveAspectRatio="xMidYMid slice"><rect width="160" height="100" fill={ground} />{lessonMap(done, total)}</svg>;
+	const ground = `var(--cover-${hash(title.normalize('NFD').toLowerCase()) % GROUND_COUNT})`;
+	if (map) return <svg viewBox="0 0 160 100" aria-hidden="true" focusable="false" className="absolute inset-0 size-full" preserveAspectRatio="xMidYMid slice"><rect width="160" height="100" style={{ fill: ground }} />{lessonMap(done, total)}</svg>;
 	const letters = compact ? (title.trim()[0] ?? '?').toUpperCase() : courseMonogram(title);
 	return (
 		<svg viewBox="0 0 160 100" aria-hidden="true" focusable="false" className="absolute inset-0 size-full" preserveAspectRatio="xMidYMid slice">
-			<rect width="160" height="100" fill={ground} />
+			<rect width="160" height="100" style={{ fill: ground }} />
 			<rect x="14" y="18" width="22" height="2.5" rx="1.25" className="fill-[var(--reward-fill)]" />
 			<text x="12" y="80" fontSize={compact ? 56 : 52} className="fill-foreground font-heading font-bold">{letters}</text>
 		</svg>
@@ -71,8 +72,7 @@ export function CoverArt({ title, done, total, compact = false, map = false }: P
 
 const TONE_HUES = [38, 95, 150, 175, 225, 262, 330, 20];
 
-/** A soft tint and a dark ink of one hue per title, for small coloured labels (ink on white is above 7:1). */
-export function courseTone(title: string): { tint: string; ink: string } {
-	const hue = TONE_HUES[hash(title.normalize('NFD').toLowerCase()) % TONE_HUES.length];
-	return { tint: `hsl(${hue} 45% 92%)`, ink: `hsl(${hue} 60% 22%)` };
+/** The hue of a course's small labels, as a custom property the `.tone` class reads. */
+export function courseTone(title: string): CSSProperties {
+	return { '--hue': TONE_HUES[hash(title.normalize('NFD').toLowerCase()) % TONE_HUES.length] } as CSSProperties;
 }
