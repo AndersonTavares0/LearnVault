@@ -1,82 +1,98 @@
 # LearnVault Design System
 
-The design record for the React app (`apps/web-next`, epic #347). It describes the system as built; the screen-by-screen spec is [`docs/design/redesign.md`](docs/design/redesign.md). The Svelte app in `apps/web` keeps shipping until the cutover (#340) and follows the older tokens in its own CSS.
-
-**Status.** The visual direction for the next iteration is being re-chosen (Progress, My learning and Notes were judged generic). This file is rewritten from the built result when that work finishes; the palette, type, accessibility and security rules below are settled and do not wait for it.
+The design record for the React app (`apps/web-next`). It describes the system as built. The Svelte app in `apps/web` keeps shipping until the cutover and follows the older tokens in its own CSS. Earlier directions (Stone + Emerald, dark theme, Literata titles, the dark title band) are superseded by this file; `docs/design/` keeps their research as history.
 
 ## Intent
 
-A private course shelf: the familiar structure of a course platform (library, course, lesson, progress) for courses the learner already owns. Calm, durable and content-first, with course covers and the next lesson doing the visual work. Udemy and Coursera are structural references only.
+An editorial study room: warm paper, generous space and a serif voice, around the familiar structure of a course platform (library, course, lesson, progress). Calm and premium, never a generic dashboard. The next lesson and the learner's own habit do the visual work; there are no decorative graphics. Direction taken from the maintainer's reference (a warm off-white study dashboard with a tinted "next up" card, outlined pills and small stat cards). Course platforms are a structural reference only.
+
+**Light only.** There is no dark theme and no theme switch. `color-scheme` is `light`.
 
 ## Colour
 
-Colour is shadcn/ui's theme variables over Tailwind's palette, in OKLCH, with light and dark values. A palette is a `data-palette` value on `<html>` (`emerald` default, `teal`, `indigo`), stored per device in `learnvault-palette`. `data-theme` (`system`, `light`, `dark`) is independent.
+Tokens live once in `src/styles/app.css` as shadcn variables, mapped by Tailwind's `@theme inline`.
 
-| Palette | Neutral | Action, light | Action, dark | Default |
-| --- | --- | --- | --- | --- |
-| Stone + Emerald | stone | emerald-700 | emerald-400 | yes |
-| Zinc + Teal | zinc | teal-700 | teal-400 | |
-| Zinc + Indigo | zinc | indigo-600 | indigo-400 | |
+| Role | Value | Use |
+| --- | --- | --- |
+| `background` | `#FDF9F6` | Page |
+| `card` / `popover` | `#FFFFFF` | Panels, menus, dialogs |
+| `panel` (`secondary`) | `#FBEFDC` | The tinted hero, stat cards, selected pills |
+| `muted` | `#F8EFE3` | Quiet fills |
+| `foreground` | `#3A2515` | Text |
+| `muted-foreground` | `#735F4A` | Secondary text (above 4.5:1 on every surface) |
+| `border` | `#ECE2D6` | Warm hairlines |
+| `input` | `#8C7F6C` | Form-field outline (3:1 non-text contrast) |
+| `primary` / `--brand` | `#5C4229` (brown) | Buttons, progress, the current step; the learner can change it |
+| `reward-fill` | `#BC7F29` (amber) | The accent word in titles and rewards; 3.2:1, used for large text and fills only |
+| `destructive` | `#B91C1C` | Destructive actions, solid fill |
 
-Semantic roles (all derived from the palette, defined once in `src/styles/app.css`):
-
-- `background`, `foreground`, `card`, `popover`, `secondary`, `muted`, `accent`, `border`, `input`: neutral steps.
-- `primary` (and `ring`): the palette's action colour. It marks what can be done and where progress stands, nothing else.
-- `muted-foreground`: neutral-600 in light mode, so secondary text keeps a safe margin above 4.5:1.
-- `destructive`: red-700 in light mode, red-400 in dark, with its own `destructive-foreground`; buttons use a solid fill, never a tinted one.
-- `ink` / `ink-foreground` / `ink-muted`: a deep green-black band that stays dark in both themes, used for the course header and the resume card.
-
-Rules: one accent colour per screen; no gradients as decoration (the generated cover gradient is content); no decorative shadows. State is never colour alone.
+`--brand-tint`, `--brand-soft` and `--brand-deep` are mixed from the accent, so a custom accent keeps the whole interface consistent. Text and controls that sit on the accent use white; `readableAccent()` darkens a colour the learner picks until white text reaches 4.5:1. Rules: one accent per screen, no gradients as decoration (the generated cover is content), no decorative shadows, state is never colour alone.
 
 ## Typography
 
 | Role | Face | Use |
 | --- | --- | --- |
-| Display and titles | Literata (variable, optical size) | Page titles, course and lesson titles, module names |
-| Interface and body | Geist (variable) | Navigation, controls, metadata, body |
-| Technical | JetBrains Mono (variable) | Timer clock, timestamps, shortcuts |
+| Display | Playfair Display (variable) | Page titles, card and panel titles, big numbers |
+| Interface and body | DM Sans (variable) | Everything else |
+| Technical | JetBrains Mono (variable) | Timer clock, shortcuts |
 
-Fonts are bundled with the app; the app makes no font requests to third parties and the server's CSP would block them. Titles use `text-wrap: balance`. Body measure stays under 75 characters.
+Page titles carry the accent: the last word is set in italic amber (`<em>`), as in "My *learning*". Small labels above numbers are 12 px, bold, tracked and uppercase (`Eyebrow`). Fonts are bundled with the app; the server's CSP would block third-party fonts and the desktop build is offline. The learner can switch to the system font or to a serif reading face.
+
+## Shape and space
+
+Wide and soft: panels and the hero use a 2rem radius, stat cards 1.75rem, pills are fully round, controls follow `--radius` (0.875rem by default; Corners in Settings changes it). Pages sit in a 72 rem column with a 40 px gutter on desktop and 20 px on phones. Vertical rhythm scales with `--density` (Settings: comfortable or compact).
 
 ## Layout
 
-- **Global navigation.** Topbar with the logo, My learning, Saved, Progress and Notes, the search box (`/` focuses it), the Pomodoro timer and the account menu. Below 640 px a bottom tab bar replaces the topbar links. The language switch is in Settings, not here.
-- **Course context.** The curriculum is a sidebar next to the player on desktop and sits below the player on small screens.
-- **Containers.** Content is at most 72 rem wide with a 16 px gutter; the player page uses a media column plus a 22 rem sidebar.
-- **Targets.** Every interactive target is at least 44×44 px, including icon buttons, tabs, menu items and form fields.
+- **Navigation.** A top bar with the wordmark (text, no logo tile), centred destinations (My learning, Review, Progress, Notes) with the current page in a cream pill, the search box (`/` focuses it), the Pomodoro timer and the account menu. Below 768 px the destinations move to a bottom tab bar. The language switch is in Settings.
+- **Page title.** An optional icon tile, the serif title with its accent word, and an optional line under it (`PageHeader`).
+- **Home.** Title and admin actions, outlined filter pills with counts, then two columns: the "Next up" hero (lesson, course, Resume, a progress ring) above the library, and the habit cards (streak, level and XP, weekly goal) beside them. The library is a grid of course cards or a list.
+- **Course.** A tinted header card (title, progress, Continue, favourite, cover), then tabs for Content, Materials and Notes.
+- **Lesson.** A title row with Previous and Next and one segment per lesson, then the player and its tabs beside a white "Course content" panel (left or right, the learner's choice).
+- **Progress.** Stat cards, the week as seven dots, badges and today's missions, each in a white panel.
+- **Targets.** Every interactive target is at least 44×44 px.
 
 ## Components
 
-Built on shadcn/ui with **Base UI** primitives (chosen because it is the only candidate that satisfies the server's `style-src` CSP with no violation; see ADR 0003). Components live in `src/components/ui/`. LearnVault changes to the stock set:
+shadcn/ui on **Base UI** primitives (the only candidate that satisfies the server's `style-src` CSP; see ADR 0003), in `src/components/ui/`. Product components:
 
-- Buttons, inputs, tabs and menu items are sized to 44 px.
-- The default button's hover mixes toward the foreground colour instead of fading, to hold label contrast.
-- The tab list has a line variant for page sections.
+- `Panel`, `Hero`, `Stat`, `Ring`, `Eyebrow` (`components/panel.tsx`): the shared card vocabulary. Use these instead of one-off boxes.
+- `CourseCover`, `CourseCard`, `Curriculum`, `MediaPlayer`, `StudyNotes`, `Flashcards`, `FocusMenu`, `DesktopTitlebar`.
+- **Course cover.** Uploaded cover, then an automatic video thumbnail, then a cover drawn from the title in warm hues. Covers are decorative; the text beside them names the course.
+- **Progress.** A thin bar plus text ("42% complete · 3 lessons left"), `role="progressbar"` labelled by that text; the ring carries its value in `aria-label`.
 
-Product components: `CourseCover`, `CourseCard`, `Curriculum`, `MediaPlayer`, `StudyNotes`, `Flashcards`, `FocusMenu`, `DesktopTitlebar`.
+## PDF reader and editor
 
-- **Course cover.** Order of precedence: uploaded cover, automatic video thumbnail, generated cover (cloth colour from the title, darker spine, inner frame, serif title). Covers are decorative; the text beside them names the course.
-- **Progress.** A thin bar plus text ("42% complete · 3 lessons left"); the bar is `role="progressbar"` labelled by that text.
+A PDF lesson (or a PDF material) opens in the app and is never written. The page renders to a canvas with a selectable text layer; the reader adds:
 
-## Screens
+- page, zoom and fit controls with keyboard shortcuts (arrows, Page Up/Down, Home/End, +/-);
+- search across every page, with previous/next result and a spoken summary;
+- marks on selected text: highlight (`h`), underline (`u`) and note (`n`), in four colours chosen with a labelled radio group;
+- a note is written in a small form before it is saved (the server refuses empty notes);
+- a "Marks in this document" panel: show all or this page, edit each note, change its colour, jump to its page, delete it, or export every mark as Markdown.
 
-My learning (resume, shelves, all courses), Course, Lesson (player), Progress, Notes, Settings and Sign in are built. Saved and Search are being added. Details: [`docs/design/redesign.md`](docs/design/redesign.md).
+Marks live in the database per user; the file and the library are untouched.
+
+## Customisation
+
+One JSON object in `localStorage` (`learnvault-appearance`), validated on read and applied to `<html>` before first paint: accent (8 presets or any colour), reward colour, corners, density, text size, font, lesson sidebar side, library layout, and which habit cards show. Everything has a default and can be reset.
 
 ## Gamification
 
-Habit first: streak, weekly goal, daily missions, XP and level, and quiet achievement badges (lessons completed, courses finished). No leaderboards, coins, certificates or celebratory animations. The 2.5D forest and nursery of the Svelte app are not part of this system.
+Habit first: streak, weekly goal, daily missions, XP and level, and quiet badges. They appear as small cards, never as pop-ups, and each can be hidden. No leaderboards, coins, certificates or celebratory animation.
 
 ## Accessibility
 
-WCAG 2.2 AA is the target. Automated gates: `eslint-plugin-jsx-a11y`, axe on every route in all three palettes and both themes, and a check that fails on any CSP violation. Required behaviour: skip link and landmarks, visible focus, `prefers-reduced-motion` honoured, status changes in live regions without moving focus, and single-key shortcuts that act only when the player has focus. A manual keyboard and screen-reader pass is required before cutover. Checklist: [`docs/design/accessibility.md`](docs/design/accessibility.md).
+WCAG 2.2 AA. Automated gates: `eslint-plugin-jsx-a11y`, axe on every route with every accent preset (`tests/e2e/web-next.spec.ts`), and a check that fails on any CSP violation. Required behaviour: skip link and landmarks, visible focus, `prefers-reduced-motion`, live regions for status without moving focus, single-key shortcuts only when their widget has focus. A manual keyboard and screen-reader pass is still owed. Checklist: [`docs/design/accessibility.md`](docs/design/accessibility.md).
 
 ## Security and privacy in the interface
 
-No third-party requests, no HTML from user or file content (`react/no-danger`), nothing sensitive in browser storage, a generic sign-in error with rate-limit feedback, sign-out that clears per-user local data, and destructive dialogs that state their impact. Details: [`docs/design/security.md`](docs/design/security.md).
+No third-party requests, no HTML from user or file content (`react/no-danger`), nothing sensitive in browser storage, a generic sign-in error with rate-limit feedback, sign-out that clears per-user local data, destructive dialogs that state their impact. Details: [`docs/design/security.md`](docs/design/security.md).
 
 ## Invariants
 
 1. The interface never offers to move, rename, delete or write original course files.
 2. Every user-facing string goes through `tr(en, ptBr)`.
-3. Motion is short and shows a state change; nothing animates on its own to decorate.
+3. Motion is short and shows a state change; nothing animates to decorate.
 4. Missing media explains how to recover and never discards progress.
+5. New screens use `Panel`, `Hero`, `Stat` and `PageHeader` before inventing a new container.

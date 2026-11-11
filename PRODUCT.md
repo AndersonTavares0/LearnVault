@@ -36,7 +36,7 @@ The course-platform experience for courses you already own, with nothing leaving
 
 ## Capabilities and Constraints
 
-Confirmed functionality: library and search; course page with curriculum and materials; lesson player with subtitles, speed, picture-in-picture, shortcuts and a resume position; timestamped notes; spaced-repetition flashcards; favourites; Pomodoro timer; streak, weekly goal, daily missions, XP, levels and achievement badges; accounts with per-course access; backup; update checks.
+Confirmed functionality: library and search; course page with curriculum and materials; lesson player with subtitles, speed, picture-in-picture, shortcuts and a resume position; a PDF reader with page search and an editor for highlights, underlines and notes with Markdown export; timestamped notes; spaced-repetition flashcards; favourites; Pomodoro timer; streak, weekly goal, daily missions, XP, levels and achievement badges; accounts with per-course access; backup; update checks.
 
 Non-negotiable constraints:
 1. **Read-only library.** No action writes, moves, renames, deletes or copies original course files.
@@ -49,21 +49,23 @@ Non-negotiable constraints:
 
 Terminology: *library* (everything), *course* (an imported folder), *module* (a group of lessons), *lesson* (one unit of media), *material* (a non-media file).
 
-Undecided: a yearly study heatmap and rest days need backend changes (issue #341); the final visual direction is still being chosen.
+Undecided: a yearly study heatmap and rest days need backend changes (issue #341).
+
+Customisation is part of the product: the learner picks the accent colour, corners, density, text size, font, lesson sidebar side and library layout, and chooses which habit cards show (Settings, stored only in this browser).
 
 ## Brand Commitments
 
-- Name **LearnVault** and the LV monogram (`docs/design/branding/`).
-- Default palette **Stone + Emerald**, with **Zinc + Teal** and **Zinc + Indigo** selectable in Settings, each in light and dark. Chosen by the maintainer, 2026-11-09.
+- Name **LearnVault**, set as a text wordmark in the display serif. The LV monogram (`docs/design/branding/`) is for icons and the favicon only.
+- **Light only**: a warm off-white page, cream and white cards, brown actions and an amber accent word in titles, with Playfair Display titles and DM Sans text. The learner can change the accent colour and other details; there is no dark theme. Direction chosen by the maintainer, 2026-11-11, from their reference dashboard; see `DESIGN.md`.
 - Udemy, Coursera and similar course platforms are a **structural reference only**. Nothing is copied: no code, assets, brand, text or pixel-level layout.
 - The language switch lives in Settings, not in the navigation bar.
-- The result must not read as a generic SaaS dashboard, a course store, a children's game or a dated site.
+- The result must read as a premium, calm study room: not a generic SaaS dashboard, a course store, a children's game or a dated site, and not a wall of metrics.
 
 ## Evidence on Hand
 
 - `docs/design/research.md`, `decision.md` and `final-review.md`: design reviews of earlier directions. No user research and no user testing exist.
 - No testimonials, customers or benchmarks exist, and none may be invented.
-- Accessibility has automated coverage (axe on every route, in every palette and theme) but no screen-reader or keyboard audit and no WCAG certification.
+- Accessibility has automated coverage (axe on the main routes with every accent preset) but no screen-reader or keyboard audit and no WCAG certification.
 - Demonstration courses are synthetic and generated locally; the repository holds no real course material.
 
 ## Product Principles
@@ -76,4 +78,4 @@ Undecided: a yearly study heatmap and rest days need backend changes (issue #341
 
 ## Accessibility & Inclusion
 
-Target WCAG 2.2 AA: 4.5:1 text contrast in every palette and theme, 44×44 px touch targets, visible focus, reduced-motion support, keyboard operation of the player, and status changes announced without moving focus. Single-key shortcuts only act when the player has focus. Information is never carried by colour alone.
+Target WCAG 2.2 AA: 4.5:1 text contrast with every accent preset, 44×44 px touch targets, visible focus, reduced-motion support, keyboard operation of the player, and status changes announced without moving focus. Single-key shortcuts only act when the player has focus. Information is never carried by colour alone.
