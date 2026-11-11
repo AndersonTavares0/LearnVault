@@ -22,16 +22,20 @@ afterEach(() => {
 });
 
 describe('settings', () => {
-	it('applies the chosen Style to the page and brings the dark theme with Vault', async () => {
+	it('customizes the look at once and can put the default back', async () => {
 		renderApp('/settings', { catalog });
-		const style = await screen.findByRole('group', { name: 'Style' });
-		fireEvent.click(within(style).getByRole('button', { name: 'Quiet tool' }));
-		expect(document.documentElement.dataset.style).toBe('quiet');
-		fireEvent.click(within(style).getByRole('button', { name: 'Vault' }));
-		expect(document.documentElement.dataset.style).toBe('vault');
-		expect(within(screen.getByRole('group', { name: 'Theme' })).getByRole('button', { name: 'Dark' }).getAttribute('aria-pressed')).toBe('true');
-		fireEvent.click(within(style).getByRole('button', { name: 'Paper and ink' }));
-		expect(document.documentElement.dataset.style).toBe('paper');
+		const accent = await screen.findByRole('group', { name: 'Accent color' });
+		fireEvent.click(within(accent).getByRole('button', { name: 'Purple' }));
+		expect(document.documentElement.style.getPropertyValue('--brand')).toBe('#6A32C9');
+		fireEvent.click(within(screen.getByRole('group', { name: 'Corners' })).getByRole('button', { name: 'Round' }));
+		expect(document.documentElement.dataset.radius).toBe('round');
+		fireEvent.click(within(screen.getByRole('group', { name: 'Course content in a lesson' })).getByRole('button', { name: 'On the left' }));
+		expect(document.documentElement.dataset.sidebar).toBe('left');
+		fireEvent.click(screen.getByRole('checkbox', { name: 'Streak' }));
+		expect(JSON.parse(localStorage.getItem('learnvault-appearance')!)).toMatchObject({ accent: '#6A32C9', radius: 'round', sidebar: 'left', showStreak: false });
+		fireEvent.click(screen.getByRole('button', { name: 'Reset to the default look' }));
+		expect(document.documentElement.style.getPropertyValue('--brand')).toBe('#1F5AD6');
+		expect(document.documentElement.dataset.radius).toBe('soft');
 	});
 
 	it('changes the weekly goal', async () => {

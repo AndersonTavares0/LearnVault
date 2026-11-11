@@ -2,10 +2,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft, ChevronRight, CircleCheck, Circle, FileText, PanelRightClose, PanelRightOpen, PenLine, SquarePlus } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
+import { Band } from '@/components/band';
 import { Curriculum } from '@/components/curriculum';
 import { Materials } from '@/components/materials';
 import { BreakOverlay } from '@/components/player/break-overlay';
-import { FocusCard } from '@/components/player/focus-card';
 import { Flashcards } from '@/components/player/flashcards';
 import { PdfReader } from '@/components/player/pdf-reader';
 import { MediaPlayer, type PlayerHandle } from '@/components/player/media-player';
@@ -53,7 +53,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 	const setCompleted = useSetLessonCompleted();
 	const player = useRef<PlayerHandle | null>(null);
 	const [time, setTime] = useState(0);
-	const [tab, setTab] = useState(studySyncSupported ? 'notes' : 'lessons');
+	const [tab, setTab] = useState('lessons');
 	const [noteRequest, setNoteRequest] = useState(0);
 	const [cardRequest, setCardRequest] = useState(0);
 	const [theater, setTheater] = useState(readTheater);
@@ -161,123 +161,125 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 	const closeBreak = () => setBreakPhase(null);
 
 	return (
-		<div className={cn('grid gap-6', !theater && 'lg:grid-cols-[minmax(0,1fr)_24rem]')}>
-			<div className="min-w-0 space-y-4">
-				<div className="flex flex-wrap items-center justify-between gap-2">
-					<BackLink course={course} courseId={courseId} />
+		<div>
+			<Band className="mb-6">
+				<div className="flex flex-wrap items-center gap-x-4 gap-y-2 pb-4">
+					<Link to={path(href('course', courseId))} className="inline-flex min-h-11 items-center gap-1 text-sm text-ink-muted hover:text-ink-foreground">
+						<ChevronLeft className="size-4 shrink-0" aria-hidden="true" /><span className="max-w-48 truncate">{course.title}</span>
+					</Link>
+					<h1 className="mr-auto min-w-0 truncate text-lg font-bold">{lesson.title}</h1>
+					{position >= 0 && <span className="text-sm text-ink-muted tabular-nums">{tr(`Lesson ${position + 1} of ${sequence.length}`, `Aula ${position + 1} de ${sequence.length}`)}</span>}
 					<div className="flex items-center gap-2">
-						<Button variant="outline" className="hidden lg:inline-flex" aria-pressed={theater} onClick={() => { setTheater(!theater); saveTheater(!theater); }}>
-							{theater ? <PanelRightOpen /> : <PanelRightClose />}{theater ? tr('Show side panel', 'Mostrar painel lateral') : tr('Theater mode', 'Modo teatro')}
+						<Button variant="outline" className="hidden border-white/60 bg-transparent text-ink-foreground hover:bg-white/10 hover:text-ink-foreground disabled:opacity-60 lg:inline-flex" aria-pressed={theater} onClick={() => { setTheater(!theater); saveTheater(!theater); }}>
+							{theater ? <PanelRightOpen /> : <PanelRightClose />}{theater ? tr('Show course content', 'Mostrar conteúdo do curso') : tr('Theater mode', 'Modo teatro')}
 						</Button>
-						<Button variant="outline" disabled={!previous} onClick={() => previous && goTo(previous.path)}><ChevronLeft />{tr('Previous', 'Anterior')}</Button>
-						{position >= 0 && <span className="text-sm text-muted-foreground tabular-nums">{tr(`Lesson ${position + 1} of ${sequence.length}`, `Aula ${position + 1} de ${sequence.length}`)}</span>}
-						<Button variant="outline" disabled={!next} onClick={() => next && goTo(next.path)}>{tr('Next', 'Próxima')}<ChevronRight /></Button>
+						<Button variant="outline" className="border-white/60 bg-transparent text-ink-foreground hover:bg-white/10 hover:text-ink-foreground disabled:opacity-60" disabled={!previous} onClick={() => previous && goTo(previous.path)}><ChevronLeft />{tr('Previous', 'Anterior')}</Button>
+						<Button className="bg-ink-foreground text-ink hover:bg-white/90" disabled={!next} onClick={() => next && goTo(next.path)}>{tr('Next', 'Próxima')}<ChevronRight /></Button>
 					</div>
 				</div>
-				<LessonRail sequence={sequence} current={position} isDone={(path) => donePaths.has(path)} />
+				<div className="pb-4"><LessonRail sequence={sequence} current={position} isDone={(path) => donePaths.has(path)} /></div>
+			</Band>
 
-				<div className="relative">
-					{/* While the break screen is up, the player under it takes no focus or keys. */}
-					<div inert={Boolean(breakPhase)}>
-					{pdf ? (
-						<PdfLesson file={pdf} courseId={courseId} ready={!studySyncSupported || !progress.isPending} initialPage={initialPosition ?? (progress.data?.recorded && !progress.data.completed && progress.data.positionSeconds > 1 ? progress.data.positionSeconds : null)} onPage={(page) => void recordPosition(pdf.mediaId!, page)} />
-					) : (
-					<MediaPlayer
-						key={`${courseId}/${lessonPath}`}
-						lesson={lesson}
-						courseId={courseId}
-						initialPosition={initialPosition}
-						preferences={preferences}
-						onPreferencesChange={savePreferences}
-						onPosition={recordPosition}
-						onEnded={finished}
-						onTime={setTime}
-						onOpenNotes={openNotes}
-						handle={(value) => { player.current = value; }}
-					/>
-					)}
-					</div>
-					{breakPhase && (
-						<BreakOverlay
-							phase={breakPhase}
-							mode={timer.mode}
-							remainingSeconds={timer.remainingSeconds}
-							running={timer.status === 'running'}
-							notes={noteCount}
-							onStart={startTimer}
-							onOpenNotes={() => { openNotes(); closeBreak(); }}
-							onSkip={() => { skipTimer(); closeBreak(); player.current?.play(); }}
-							onEnd={() => { resetTimer(); closeBreak(); }}
-							onResume={() => { closeBreak(); player.current?.play(); }}
+			<div className={cn('grid gap-6', !theater && 'lg:grid-cols-[minmax(0,1fr)_22rem] [:root[data-sidebar=left]_&]:lg:grid-cols-[22rem_minmax(0,1fr)]')}>
+				<div className="min-w-0 space-y-4">
+					<div className="relative">
+						{/* While the break screen is up, the player under it takes no focus or keys. */}
+						<div inert={Boolean(breakPhase)}>
+						{pdf ? (
+							<PdfLesson file={pdf} courseId={courseId} ready={!studySyncSupported || !progress.isPending} initialPage={initialPosition ?? (progress.data?.recorded && !progress.data.completed && progress.data.positionSeconds > 1 ? progress.data.positionSeconds : null)} onPage={(page) => void recordPosition(pdf.mediaId!, page)} />
+						) : (
+						<MediaPlayer
+							key={`${courseId}/${lessonPath}`}
+							lesson={lesson}
+							courseId={courseId}
+							initialPosition={initialPosition}
+							preferences={preferences}
+							onPreferencesChange={savePreferences}
+							onPosition={recordPosition}
+							onEnded={finished}
+							onTime={setTime}
+							onOpenNotes={openNotes}
+							handle={(value) => { player.current = value; }}
 						/>
+						)}
+						</div>
+						{breakPhase && (
+							<BreakOverlay
+								phase={breakPhase}
+								mode={timer.mode}
+								remainingSeconds={timer.remainingSeconds}
+								running={timer.status === 'running'}
+								notes={noteCount}
+								onStart={startTimer}
+								onOpenNotes={() => { openNotes(); closeBreak(); }}
+								onSkip={() => { skipTimer(); closeBreak(); player.current?.play(); }}
+								onEnd={() => { resetTimer(); closeBreak(); }}
+								onResume={() => { closeBreak(); player.current?.play(); }}
+							/>
+						)}
+					</div>
+
+					{countdown !== null && next && (
+						<div role="status" aria-live="polite" className="flex flex-wrap items-center gap-3 rounded-lg border bg-card p-4">
+							<p className="min-w-0 flex-1">{tr(`Next lesson in ${countdown} s: ${next.title}`, `Próxima aula em ${countdown} s: ${next.title}`)}</p>
+							<Button variant="outline" onClick={() => setCountdown(null)}>{tr('Cancel', 'Cancelar')}</Button>
+							<Button onClick={() => goTo(next.path)}>{tr('Play now', 'Reproduzir agora')}</Button>
+						</div>
 					)}
+
+					<Tabs value={activeTab} onValueChange={(value) => setTab(String(value))}>
+						<TabsList variant="line" aria-label={tr('Lesson tools', 'Ferramentas da aula')} className="w-full justify-start border-b">
+							<TabsTrigger value="lessons">{tr('Overview', 'Visão geral')}</TabsTrigger>
+							{hasNotes && <TabsTrigger value="notes">{tr('Notes', 'Notas')}</TabsTrigger>}
+							{hasCards && <TabsTrigger value="cards">{tr('Cards', 'Cartões')}</TabsTrigger>}
+							<TabsTrigger value="materials">{tr('Materials', 'Materiais')}</TabsTrigger>
+						</TabsList>
+						<TabsContent value="lessons" className="space-y-4 pt-5">
+							<div className="flex flex-wrap items-center gap-3">
+								<div className="mr-auto min-w-0">
+									<h2 className="text-2xl font-bold text-balance">{lesson.title}</h2>
+									<p className="text-sm text-muted-foreground">{location?.moduleTitle ? `${course.title} · ${location.moduleTitle}` : course.title}</p>
+								</div>
+								{hasCards && hasNotes && <Button variant="outline" onClick={() => { player.current?.pause(); openNotes(); }} aria-keyshortcuts="n"><PenLine />{tr('Note', 'Nota')}<kbd aria-hidden="true" className="ml-1 rounded border px-1.5 text-xs text-muted-foreground">N</kbd></Button>}
+								{hasCards && <Button variant="outline" onClick={() => { player.current?.pause(); setTab('cards'); setCardRequest((value) => value + 1); }}><SquarePlus />{tr('Card', 'Cartão')}</Button>}
+								{studySyncSupported && mediaId && (
+									<Button variant={isDone ? 'secondary' : 'default'} aria-pressed={isDone} disabled={setCompleted.isPending} onClick={() => setCompleted.mutate({ mediaId, completed: !isDone }, { onSuccess: (updated) => client.setQueryData(['progress', mediaId], updated) })}>
+										{isDone ? <CircleCheck /> : <Circle />}{isDone ? tr('Completed', 'Concluída') : tr('Mark as completed', 'Marcar como concluída')}
+									</Button>
+								)}
+							</div>
+							<div className="flex flex-wrap items-center gap-2">
+								{!pdf && savedPosition !== null && time < savedPosition && (
+									<Button variant="secondary" onClick={() => player.current?.seek(savedPosition)}>{tr(`Resume from ${formatDuration(savedPosition)}`, `Retomar de ${formatDuration(savedPosition)}`)}</Button>
+								)}
+								<label className="flex min-h-11 items-center gap-2 text-sm">
+									<input type="checkbox" className="size-5 accent-[var(--brand)]" checked={preferences.autoNext} onChange={(event) => savePreferences({ ...preferences, autoNext: event.target.checked })} />
+									{tr('Play the next lesson automatically', 'Reproduzir a próxima aula automaticamente')}
+								</label>
+							</div>
+						</TabsContent>
+						{hasNotes && mediaId && (
+							<TabsContent value="notes" keepMounted className="pt-5">
+								<StudyNotes mediaId={mediaId} currentTime={time} onSeek={(seconds) => player.current?.seek(seconds)} addRequest={noteRequest} />
+							</TabsContent>
+						)}
+						{hasCards && mediaId && (
+							<TabsContent value="cards" keepMounted className="pt-5">
+								<Flashcards mediaId={mediaId} addRequest={cardRequest} />
+							</TabsContent>
+						)}
+						<TabsContent value="materials" className="pt-5">
+							<Materials files={[...lesson.subtitles, ...lesson.materials]} courseId={courseId} />
+						</TabsContent>
+					</Tabs>
 				</div>
 
-				{countdown !== null && next && (
-					<div role="status" aria-live="polite" className="flex flex-wrap items-center gap-3 rounded-lg border bg-card p-4">
-						<p className="min-w-0 flex-1">{tr(`Next lesson in ${countdown} s: ${next.title}`, `Próxima aula em ${countdown} s: ${next.title}`)}</p>
-						<Button variant="outline" onClick={() => setCountdown(null)}>{tr('Cancel', 'Cancelar')}</Button>
-						<Button onClick={() => goTo(next.path)}>{tr('Play now', 'Reproduzir agora')}</Button>
-					</div>
-				)}
-
-				{hasCards && (
-					<div className="flex flex-wrap gap-2">
-						{hasNotes && <Button variant="outline" onClick={() => { player.current?.pause(); openNotes(); }} aria-keyshortcuts="n"><PenLine />{tr('Pause and note', 'Pausar e anotar')}<kbd aria-hidden="true" className="ml-1 rounded border px-1.5 text-xs text-muted-foreground">N</kbd></Button>}
-						<Button variant="outline" onClick={() => { player.current?.pause(); setTab('cards'); setCardRequest((value) => value + 1); }}><SquarePlus />{tr('Make card', 'Criar cartão')}</Button>
-					</div>
-				)}
-
-				<div className="flex flex-wrap items-center gap-2">
-					<div className="mr-auto min-w-0">
-						<h1 className="text-2xl font-semibold tracking-tight text-balance">{lesson.title}</h1>
-						<p className="text-sm text-muted-foreground">{location?.moduleTitle ? `${course.title} · ${location.moduleTitle}` : course.title}</p>
-					</div>
-					{studySyncSupported && mediaId && (
-						<Button variant={isDone ? 'secondary' : 'default'} aria-pressed={isDone} disabled={setCompleted.isPending} onClick={() => setCompleted.mutate({ mediaId, completed: !isDone }, { onSuccess: (updated) => client.setQueryData(['progress', mediaId], updated) })}>
-							{isDone ? <CircleCheck /> : <Circle />}{isDone ? tr('Completed', 'Concluída') : tr('Mark as completed', 'Marcar como concluída')}
-						</Button>
-					)}
-				</div>
-				<div className="flex flex-wrap items-center gap-2">
-					{!pdf && savedPosition !== null && time < savedPosition && (
-						<Button variant="secondary" onClick={() => player.current?.seek(savedPosition)}>{tr(`Resume from ${formatDuration(savedPosition)}`, `Retomar de ${formatDuration(savedPosition)}`)}</Button>
-					)}
-					<label className="flex min-h-11 items-center gap-2 text-sm">
-						<input type="checkbox" className="size-5 accent-[var(--primary)]" checked={preferences.autoNext} onChange={(event) => savePreferences({ ...preferences, autoNext: event.target.checked })} />
-						{tr('Play the next lesson automatically', 'Reproduzir a próxima aula automaticamente')}
-					</label>
-				</div>
+				<aside aria-label={tr('Course content', 'Conteúdo do curso')} className={cn('min-w-0 space-y-3 [:root[data-sidebar=left]_&]:lg:order-first', !theater && 'lg:sticky lg:top-24 lg:max-h-[calc(100dvh-8rem)] lg:self-start lg:overflow-y-auto')}>
+					<h2 className="text-lg font-bold">{tr('Course content', 'Conteúdo do curso')}</h2>
+					<p className="text-sm text-muted-foreground">{tr(`${overall.done} of ${overall.total} lessons completed`, `${overall.done} de ${overall.total} aulas concluídas`)}</p>
+					<Curriculum nodes={course.children} courseId={courseId} completed={completed} favorites={favoriteMedia} activePath={lessonPath} />
+				</aside>
 			</div>
-
-			<aside aria-label={tr('Study panel', 'Painel de estudo')} className={cn('min-w-0 space-y-4', !theater && 'lg:sticky lg:top-20 lg:max-h-[calc(100dvh-6rem)] lg:self-start lg:overflow-y-auto')}>
-				<FocusCard />
-				<Tabs value={activeTab} onValueChange={(value) => setTab(String(value))}>
-					<TabsList aria-label={tr('Lesson tools', 'Ferramentas da aula')}>
-						{hasNotes && <TabsTrigger value="notes">{tr('Notes', 'Notas')}</TabsTrigger>}
-						{hasCards && <TabsTrigger value="cards">{tr('Cards', 'Cartões')}</TabsTrigger>}
-						<TabsTrigger value="lessons">{tr('Lessons', 'Aulas')}</TabsTrigger>
-						<TabsTrigger value="materials">{tr('Materials', 'Materiais')}</TabsTrigger>
-					</TabsList>
-					{hasNotes && mediaId && (
-						<TabsContent value="notes" keepMounted className="pt-4">
-							<StudyNotes mediaId={mediaId} currentTime={time} onSeek={(seconds) => player.current?.seek(seconds)} addRequest={noteRequest} />
-						</TabsContent>
-					)}
-					{hasCards && mediaId && (
-						<TabsContent value="cards" keepMounted className="pt-4">
-							<Flashcards mediaId={mediaId} addRequest={cardRequest} />
-						</TabsContent>
-					)}
-					<TabsContent value="lessons" className="space-y-3 pt-4">
-						<p className="text-sm text-muted-foreground">{tr(`${overall.done} of ${overall.total} lessons of this course completed.`, `${overall.done} de ${overall.total} aulas deste curso concluídas.`)}</p>
-						<Curriculum nodes={course.children} courseId={courseId} completed={completed} favorites={favoriteMedia} activePath={lessonPath} />
-					</TabsContent>
-					<TabsContent value="materials" className="pt-4">
-						<Materials files={[...lesson.subtitles, ...lesson.materials]} courseId={courseId} />
-					</TabsContent>
-				</Tabs>
-			</aside>
 		</div>
 	);
 }
@@ -287,7 +289,7 @@ function LessonRail({ sequence, current, isDone }: { sequence: { path: string }[
 	if (sequence.length < 2 || sequence.length > 60) return null;
 	return (
 		<div aria-hidden="true" className="flex gap-1">
-			{sequence.map((item, index) => <span key={item.path} className={cn('h-1.5 flex-1 rounded-full', isDone(item.path) ? 'bg-primary' : index === current ? 'bg-primary/45' : 'bg-muted')} />)}
+			{sequence.map((item, index) => <span key={item.path} className={cn('h-1.5 flex-1 rounded-full', isDone(item.path) ? 'bg-ink-foreground' : index === current ? 'bg-ink-foreground/55' : 'bg-ink-foreground/20')} />)}
 		</div>
 	);
 }

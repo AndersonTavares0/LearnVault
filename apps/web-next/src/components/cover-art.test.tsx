@@ -31,14 +31,6 @@ describe('CoverArt', () => {
 		expect(bars(container)).toHaveLength(2);
 	});
 
-	it('also carries the Quiet lesson map and the Vault hairlines, one per lesson', () => {
-		const { container } = render(<CoverArt title="Rust from Zero" done={1} total={6} />);
-		expect(container.querySelectorAll('.cover-quiet rect')).toHaveLength(6);
-		expect(container.querySelectorAll('.cover-vault rect[height="0.8"]')).toHaveLength(8);
-		expect(container.querySelectorAll('.cover-vault rect.fill-white')).toHaveLength(1);
-		expect(container.querySelector('.cover-vault text')?.textContent).toBe('Rust from Zero');
-	});
-
 	it('draws one block per lesson in map mode and no title', () => {
 		const { container } = render(<CoverArt title="Rust from Zero" done={1} total={6} map />);
 		expect(container.querySelectorAll('rect[rx="3"]')).toHaveLength(6);

@@ -38,9 +38,8 @@ describe('lesson page', () => {
 		expect(screen.getByLabelText('Lesson player: One').getAttribute('src')).toBe('/api/media?course=c&path=c%2Fone.mp4');
 		expect((screen.getByRole('button', { name: /Previous/ }) as HTMLButtonElement).disabled).toBe(true);
 		expect((screen.getByRole('button', { name: /Next/ }) as HTMLButtonElement).disabled).toBe(false);
-		expect(screen.getByRole('complementary', { name: 'Study panel' })).toBeTruthy();
+		expect(screen.getByRole('complementary', { name: 'Course content' })).toBeTruthy();
 		expect(screen.getByText('Lesson 1 of 3')).toBeTruthy();
-		fireEvent.click(screen.getByRole('tab', { name: 'Lessons' }));
 		expect(await screen.findByRole('link', { name: /Two/ })).toBeTruthy();
 	});
 
@@ -58,7 +57,7 @@ describe('lesson page', () => {
 		const toggle = await screen.findByRole('button', { name: 'Theater mode' });
 		expect(toggle.getAttribute('aria-pressed')).toBe('false');
 		fireEvent.click(toggle);
-		expect(screen.getByRole('button', { name: 'Show side panel' }).getAttribute('aria-pressed')).toBe('true');
+		expect(screen.getByRole('button', { name: 'Show course content' }).getAttribute('aria-pressed')).toBe('true');
 		expect(localStorage.getItem('learnvault-theater')).toBe('1');
 		localStorage.removeItem('learnvault-theater');
 	});
@@ -147,9 +146,10 @@ describe('lesson page', () => {
 		it('opens a note draft and a blank card from the tools under the video', async () => {
 			vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
 			renderApp('/course/c/c%2FOne', { catalog });
-			fireEvent.click(await screen.findByRole('button', { name: /Pause and note/ }));
+			fireEvent.click(await screen.findByRole('button', { name: /^Note/ }));
 			expect(await screen.findByLabelText('Note at 0:00')).toBeTruthy();
-			fireEvent.click(screen.getByRole('button', { name: 'Make card' }));
+			fireEvent.click(screen.getByRole('tab', { name: 'Overview' }));
+			fireEvent.click(screen.getByRole('button', { name: 'Card' }));
 			expect(await screen.findByRole('form', { name: 'New card' })).toBeTruthy();
 		});
 	});

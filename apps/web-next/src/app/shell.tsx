@@ -5,6 +5,7 @@ import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate, useSearchPar
 import { BrandMark } from '@/components/brand';
 import { DesktopTitlebar } from '@/components/desktop-titlebar';
 import { FocusMenu } from '@/components/focus-menu';
+import { GameChips } from '@/components/game-chips';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -54,13 +55,9 @@ export function AppShell() {
 			<SkipLink />
 			<DesktopTitlebar />
 			<Topbar username={session.data.user.username} userId={session.data.user.userId} />
-			<main id="main" tabIndex={-1} className="mx-auto w-full max-w-6xl px-4 py-6 outline-none sm:py-8">
+			<main id="main" tabIndex={-1} className="mx-auto w-full max-w-7xl px-4 py-6 outline-none sm:py-8">
 				<Outlet />
 			</main>
-			<footer className="mx-auto flex w-full max-w-6xl items-center gap-3 border-t px-4 py-6 text-sm text-muted-foreground print:hidden">
-				<BrandMark className="size-5 text-primary" />
-				<span>{tr('Your course files are read-only', 'Seus arquivos de curso são somente leitura')}</span>
-			</footer>
 			<MobileTabs />
 		</div>
 	);
@@ -83,7 +80,7 @@ function Topbar({ username, userId }: { username: string; userId: string }) {
 
 	return (
 		<header className="sticky top-0 z-40 border-b print:hidden bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/80">
-			<div className="mx-auto flex h-16 max-w-6xl items-center gap-2 px-4">
+			<div className="mx-auto flex h-[4.25rem] max-w-7xl items-center gap-2 px-4">
 				<Link to="/" className="mr-2 flex min-h-11 items-center gap-2 rounded-md font-semibold" aria-label={tr('LearnVault home', 'Início do LearnVault')}>
 					<BrandMark className="size-7 text-primary" />
 					<span className="hidden lg:inline">LearnVault</span>
@@ -97,6 +94,7 @@ function Topbar({ username, userId }: { username: string; userId: string }) {
 				</nav>
 				<div className="ml-auto flex items-center gap-1">
 					<SearchBox />
+					<GameChips />
 					<FocusMenu />
 					<DropdownMenu>
 						<DropdownMenuTrigger render={<Button variant="ghost" size="icon" aria-label={tr(`Account: ${username}`, `Conta: ${username}`)} />}>
@@ -155,7 +153,7 @@ function SearchBox() {
 	}, []);
 
 	return (
-		<div role="search" className="relative hidden w-44 md:block lg:w-72">
+		<div role="search" className="relative hidden w-44 md:block lg:w-80">
 			<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
 			<Input
 				ref={input}

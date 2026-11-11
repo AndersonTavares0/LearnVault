@@ -57,24 +57,7 @@ function lessonMap(done: number, total: number) {
 			width={width}
 			height={height}
 			rx="3"
-			className={empty ? 'fill-white/10' : index < finished ? 'fill-white' : index === finished ? 'fill-[var(--a-soft)]' : 'fill-white/15'}
-		/>
-	));
-}
-
-/** Vault cover: one hairline per lesson, finished ones lit, the next one marked. */
-function lessonLines(done: number, total: number) {
-	const shown = Math.min(Math.max(total, 8), 24);
-	const gap = 56 / (shown - 1);
-	const finished = Math.min(done, total);
-	return Array.from({ length: shown }, (_, index) => (
-		<rect
-			key={index}
-			x="10"
-			y={32 + index * gap}
-			width="140"
-			height="0.8"
-			className={total === 0 || index >= total ? 'fill-white/10' : index < finished ? 'fill-white' : index === finished ? 'fill-[var(--a-soft)]' : 'fill-white/25'}
+			className={empty ? 'fill-white/10' : index < finished ? 'fill-white' : index === finished ? 'fill-[var(--reward-fill)]' : 'fill-white/15'}
 		/>
 	));
 }
@@ -99,7 +82,6 @@ export function CoverArt({ title, done, total, compact = false, map = false }: P
 	const ground = GROUNDS[hash(title.normalize('NFD').toLowerCase()) % GROUNDS.length];
 	const lines = wrapTitle(title);
 	const size = Math.max(...lines.map((line) => line.length), 0) <= LINE_CHARS - 1 ? 15 : 13;
-	const vaultLabel = title.length > 24 ? `${title.slice(0, 23)}…` : title;
 	const finished = Math.min(done, total);
 	const segments = total > 0 && total <= MAX_SEGMENTS ? total : 0;
 	const gap = total <= 14 ? 2 : 0.6;
@@ -108,18 +90,12 @@ export function CoverArt({ title, done, total, compact = false, map = false }: P
 	return (
 		<svg viewBox="0 0 160 100" aria-hidden="true" focusable="false" className="absolute inset-0 size-full" preserveAspectRatio="xMidYMid slice">
 			<rect width="160" height="100" fill={ground} />
-			{/* The three Styles draw the cover differently; CSS on `data-style` shows one (src/styles/app.css). */}
-			<g className="cover-quiet">{lessonMap(done, total)}</g>
-			<g className="cover-vault">
-				<text x="10" y="20" fontSize="7" className="fill-[var(--a-soft)] font-mono uppercase">{vaultLabel}</text>
-				{lessonLines(done, total)}
-			</g>
 			<g className="cover-paper">
 			{compact ? (
 				<text x="12" y="66" fontSize="56" className="fill-white font-serif font-bold">{(title.trim()[0] ?? '?').toUpperCase()}</text>
 			) : (
 				<>
-					<rect x="12" y="20" width="22" height="2" rx="1" className="fill-[var(--a-soft)]" />
+					<rect x="12" y="20" width="22" height="2" rx="1" className="fill-[var(--reward-fill)]" />
 					{lines.map((line, index) => (
 						<text key={index} x="12" y={38 + index * (size + 3)} fontSize={size} className="fill-white font-serif font-bold">{line}</text>
 					))}
@@ -133,7 +109,7 @@ export function CoverArt({ title, done, total, compact = false, map = false }: P
 					width={width}
 					height="4"
 					rx="2"
-					className={index < finished ? 'fill-white' : index === finished ? 'fill-[var(--a-soft)]' : 'fill-white/20'}
+					className={index < finished ? 'fill-white' : index === finished ? 'fill-[var(--reward-fill)]' : 'fill-white/20'}
 				/>
 			))}
 			{total > MAX_SEGMENTS && (

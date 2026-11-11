@@ -41,8 +41,8 @@ describe('PDF lesson', () => {
 		await screen.findByText('PDF document');
 		expect(screen.getByRole('tab', { name: 'Cards' })).toBeTruthy();
 		expect(screen.queryByRole('tab', { name: 'Notes' })).toBeNull();
-		expect(screen.queryByRole('button', { name: /Pause and note/ })).toBeNull();
-		fireEvent.click(screen.getByRole('button', { name: 'Make card' }));
+		expect(screen.queryByRole('button', { name: /^Note/ })).toBeNull();
+		fireEvent.click(screen.getByRole('button', { name: 'Card' }));
 		expect(await screen.findByRole('form', { name: 'New card' })).toBeTruthy();
 	});
 

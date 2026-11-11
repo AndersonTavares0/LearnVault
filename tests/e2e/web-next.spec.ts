@@ -29,8 +29,9 @@ function collectCspViolations(page: Page): string[] {
 	page.on('console', (message) => { if (message.type() === 'error' && /Content Security Policy/.test(message.text())) violations.push(message.text()); });
 	return violations;
 }
-const test = base.extend<object, { origin: string }>({
-	origin: [async ({}, use) => {
+// One server per test: the sign-in limiter counts attempts per address, so a shared server runs out of them.
+const test = base.extend<{ origin: string }>({
+	origin: async ({}, use) => {
 		const root = await mkdtemp(join(tmpdir(), 'learnvault-web-next-'));
 		const library = join(root, 'library');
 		for (const lesson of ['01 Ownership', '02 Borrowing']) {
@@ -59,14 +60,14 @@ const test = base.extend<object, { origin: string }>({
 			await closed;
 			await rm(root, { recursive: true, force: true });
 		}
-	}, { scope: 'worker' }]
+	}
 });
 
 test('signs in, indexes the library and resumes a lesson from My learning', async ({ page, origin }) => {
 	const violations = collectCspViolations(page);
 	await page.emulateMedia({ reducedMotion: 'reduce' });
 	await page.goto(`${origin}/#/notes`);
-	await expect(page.getByRole('heading', { name: 'Sign in to LearnVault' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Sign in', level: 1 })).toBeVisible();
 	await expectNoAxeViolations(page, 'login');
 	await page.getByLabel('Username').fill('admin');
 	await page.getByLabel('Password', { exact: true }).fill('wrong password');
@@ -81,7 +82,6 @@ test('signs in, indexes the library and resumes a lesson from My learning', asyn
 	await page.getByRole('button', { name: 'Refresh courses' }).click();
 	await expect(page.getByText('Catalog updated.')).toBeVisible();
 	// The library root registers as one course; its folders become modules.
-	// The generated cover draws the title, so the heading beside it is collapsed but still named.
 	await expect(page.getByRole('heading', { name: 'library', level: 3 })).toHaveCount(1);
 	await expectNoAxeViolations(page, 'home');
 
@@ -90,15 +90,15 @@ test('signs in, indexes the library and resumes a lesson from My learning', asyn
 	expect(mediaId).toBeTruthy();
 	await expect(await page.request.post(`${origin}/api/study/position`, { headers: { Origin: origin }, data: { media_id: mediaId, position_seconds: 5 } })).toBeOK();
 	await page.reload();
-	const resume = page.getByRole('region', { name: 'Continue studying' });
-	await expect(resume.getByRole('link', { name: 'Resume lesson' })).toHaveAttribute('href', /#\/course\/.+\?t=5$/);
+	const resume = page.getByRole('region', { name: 'Continue learning' });
+	await expect(resume.getByRole('link', { name: 'Ownership' })).toHaveAttribute('href', /#\/course\/.+\?t=5$/);
 	await expectNoAxeViolations(page, 'home with resume');
 
-	await resume.getByRole('link', { name: 'Resume lesson' }).click();
+	await resume.getByRole('link', { name: 'Ownership' }).click();
 	await expect(page.getByRole('heading', { level: 1, name: 'Ownership' })).toBeVisible();
 	// The fixture bytes are not a real video, so the player shows its recovery state.
 	await expect(page.getByRole('alert').filter({ hasText: /media/i })).toBeVisible();
-	await expect(page.getByRole('complementary', { name: 'Study panel' })).toBeVisible();
+	await expect(page.getByRole('complementary', { name: 'Course content' })).toBeVisible();
 	await page.getByRole('tab', { name: 'Notes' }).click();
 	await page.getByRole('button', { name: /Add note at/ }).click();
 	await page.getByLabel(/Note at/).fill('Ownership moves values.');
@@ -149,28 +149,32 @@ test('signs in, indexes the library and resumes a lesson from My learning', asyn
 	expect(violations).toEqual([]);
 });
 
-test('switches palette and theme with no CSP violations or axe issues', async ({ page, origin }) => {
+test('customizing the look passes axe for every accent and breaks no CSP rule', async ({ page, origin }) => {
 	const violations = collectCspViolations(page);
-	// Reduced motion disables transitions, so axe measures settled colors, not mid-fade ones.
+	// Reduced motion turns transitions off, so axe measures settled colours, not mid-fade ones.
 	await page.emulateMedia({ reducedMotion: 'reduce' });
 	await signIn(page, origin);
 	await page.goto(`${origin}/#/settings`);
 	await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
 
-	const primary = new Set<string>();
-	for (const palette of ['Stone + Emerald', 'Zinc + Teal', 'Zinc + Indigo']) {
-		await page.getByRole('button', { name: palette }).click();
-		for (const theme of ['Light', 'Dark']) {
-			await page.getByRole('button', { name: theme, exact: true }).click();
-			primary.add(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--primary')));
-			await expectNoAxeViolations(page, `${palette}/${theme}`);
-		}
+	const brand = new Set<string>();
+	for (const accent of ['Blue', 'Purple', 'Teal', 'Green', 'Orange', 'Rose', 'Slate']) {
+		await page.getByRole('group', { name: 'Accent color' }).getByRole('button', { name: accent }).click();
+		brand.add(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--brand').trim()));
+		await expectNoAxeViolations(page, `settings/${accent}`);
 	}
-	expect(primary.size).toBe(6);
+	expect(brand.size).toBe(7);
+	for (const choice of [['Corners', 'Round'], ['Density', 'Compact'], ['Text size', 'Large'], ['Banners', 'Deep accent'], ['Font', 'System font']]) {
+		await page.getByRole('group', { name: choice[0] }).getByRole('button', { name: choice[1] }).click();
+	}
+	await expectNoAxeViolations(page, 'settings/customized');
+	await page.goto(`${origin}/#/`);
+	await expect(page.getByRole('heading', { name: 'My learning' })).toBeVisible();
+	await expectNoAxeViolations(page, 'home/customized');
 
 	await page.reload();
-	await expect(page.locator('html')).toHaveAttribute('data-palette', 'indigo');
-	await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+	await expect(page.locator('html')).toHaveAttribute('data-radius', 'round');
+	await expect(page.locator('html')).toHaveAttribute('data-banner', 'brand');
 	expect(violations).toEqual([]);
 });
 
@@ -200,7 +204,7 @@ test('admin settings pass axe and new accounts start with no course access', asy
 
 	await page.getByRole('button', { name: 'Account: admin' }).click();
 	await page.getByRole('menuitem', { name: 'Sign out' }).click();
-	await expect(page.getByRole('heading', { name: 'Sign in to LearnVault' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Sign in', level: 1 })).toBeVisible();
 	await page.getByLabel('Username').fill('ana');
 	await page.getByLabel('Password', { exact: true }).fill('a long student passphrase');
 	await page.getByRole('button', { name: 'Sign in' }).click();

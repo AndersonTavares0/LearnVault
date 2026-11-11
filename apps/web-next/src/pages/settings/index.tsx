@@ -1,25 +1,21 @@
 import { Download } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { useLocation } from 'react-router';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { useLocale } from '@/hooks/use-locale';
 import { LOCALE_LABELS, LOCALES, setLocale, tr } from '@/lib/i18n';
 import { studySyncSupported } from '@/lib/player';
 import { MAX_WEEKLY_GOAL, MIN_WEEKLY_GOAL } from '@/lib/statistics';
-import { PALETTES, readPalette, readStyle, readThemeMode, STYLES, THEME_MODES, type Palette, type Style, type ThemeMode } from '@/lib/theme';
 import { transportKind } from '@/lib/transport';
 import { useCatalog, useRewards, useSession, useSetWeeklyGoal } from '@/app/data';
-import { safeStorage, savePalette, saveStyle, saveThemeMode } from '@/app/preferences';
 import { PageHeader } from '@/app/shell';
+import { AppearanceSettings } from './appearance';
 import { AvatarSettings, CredentialsForm } from './account';
 import { FocusSettings } from './focus';
 import { UpdateSettings } from './updates';
 import { UserSettings } from './users';
 
-const paletteLabels: Record<Palette, string> = { emerald: 'Stone + Emerald', teal: 'Zinc + Teal', indigo: 'Zinc + Indigo' };
-const themeLabels = (): Record<ThemeMode, string> => ({ system: tr('System', 'Sistema'), light: tr('Light', 'Claro'), dark: tr('Dark', 'Escuro') });
 
-const styleLabels = (): Record<Style, string> => ({ paper: tr('Paper and ink', 'Papel e tinta'), quiet: tr('Quiet tool', 'Ferramenta calma'), vault: 'Vault' });
 
 export function SettingsPage() {
 	const locale = useLocale();
@@ -27,9 +23,6 @@ export function SettingsPage() {
 	const catalog = useCatalog();
 	const location = useLocation();
 	const user = session.data?.user;
-	const [theme, setTheme] = useState(() => readThemeMode(safeStorage()));
-	const [palette, setPalette] = useState(() => readPalette(safeStorage()));
-	const [style, setStyle] = useState(() => readStyle(safeStorage()));
 	const server = transportKind === 'http';
 	const admin = Boolean(user?.isAdmin);
 
@@ -64,10 +57,7 @@ export function SettingsPage() {
 			<div className="min-w-0 space-y-10">
 			<PageHeader title={tr('Settings', 'Ajustes')} />
 			<Section id="appearance" title={tr('Appearance', 'Aparência')}>
-				<Choice legend={tr('Theme', 'Tema')} options={THEME_MODES} value={theme} label={(mode) => themeLabels()[mode]} onChange={(mode) => { saveThemeMode(mode); setTheme(mode); }} />
-				<Choice legend={tr('Color palette', 'Paleta de cores')} options={PALETTES} value={palette} label={(value) => paletteLabels[value]} onChange={(value) => { savePalette(value); setPalette(value); }} />
-				<Choice legend={tr('Style', 'Estilo')} options={STYLES} value={style} label={(value) => styleLabels()[value]} onChange={(value) => { saveStyle(value); setStyle(value); // Vault is the night direction: it comes with the dark theme, which stays changeable above.
-					if (value === 'vault') { saveThemeMode('dark'); setTheme('dark'); } }} />
+				<AppearanceSettings />
 				<Choice legend={tr('Language', 'Idioma')} options={LOCALES} value={locale} label={(value) => LOCALE_LABELS[value]} onChange={(value) => setLocale(value)} />
 			</Section>
 			{server && user && (

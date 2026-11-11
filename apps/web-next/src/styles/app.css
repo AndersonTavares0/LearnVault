@@ -1,25 +1,32 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/geist";
-@import "@fontsource-variable/jetbrains-mono";
+@import "@fontsource-variable/source-sans-3";
 @import "@fontsource-variable/literata/opsz.css";
+@import "@fontsource-variable/jetbrains-mono";
 
-/* Theme and palette come from `data-theme` / `data-palette` on <html> (src/lib/theme.ts). */
-@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+/* The interface is light only. Colours come from the learner's accent (src/lib/appearance.ts). */
 
 @theme inline {
-  /* Literata is drawn for long reading: titles feel like book spines, the interface stays in Geist. */
-  --font-heading: "Literata Variable", ui-serif, Georgia, serif;
-  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--ui-font);
+  --font-sans: var(--ui-font);
+  --font-serif: var(--ui-font);
   --font-mono: "JetBrains Mono Variable", ui-monospace, "Cascadia Code", monospace;
-  --color-sidebar-ring: var(--sidebar-ring);
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-fg);
+  --color-brand-deep: var(--brand-deep);
+  --color-brand-tint: var(--brand-tint);
+  --color-brand-soft: var(--brand-soft);
+  --color-reward: var(--reward);
+  --color-reward-fill: var(--reward-fill);
+  --color-reward-fill-foreground: var(--reward-fill-fg);
+  --color-reward-tint: var(--reward-tint);
   --color-panel: var(--panel);
   --color-panel-edge: var(--panel-edge);
   --color-ink: var(--ink);
   --color-ink-foreground: var(--ink-foreground);
   --color-ink-muted: var(--ink-muted);
-  --font-serif: var(--font-heading);
+  --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-accent: var(--sidebar-accent);
@@ -61,175 +68,89 @@
 }
 
 /*
- * Palettes (docs/design/redesign.md, "Color"): a Tailwind neutral (--n-*) plus one accent.
- * --a-strong is the light-mode action color, --a-soft the dark-mode one; values are Tailwind's.
+ * One accent, three derived tones: a deep one for banners, a soft tint for selected rows and
+ * hovers, and a stronger tint for fills. Neutrals follow the course platforms this app takes its
+ * structure from: a white page, near-black text, a pale grey band, a light grey rule.
  */
-:root,
-:root[data-palette="emerald"] {
-  --n-50: oklch(98.5% 0.001 106.423);
-  --n-100: oklch(97% 0.001 106.424);
-  --n-200: oklch(92.3% 0.003 48.717);
-  --n-400: oklch(70.9% 0.01 56.259);
-  --n-600: oklch(44.4% 0.011 73.639);
-  --n-800: oklch(26.8% 0.007 34.298);
-  --n-900: oklch(21.6% 0.006 56.043);
-  --n-950: oklch(14.7% 0.004 49.25);
-  --a-strong: oklch(50.8% 0.118 165.612);
-  --a-soft: oklch(76.5% 0.177 163.223);
-}
-
-:root[data-palette="teal"],
-:root[data-palette="indigo"] {
-  --n-50: oklch(98.5% 0 0);
-  --n-100: oklch(96.7% 0.001 286.375);
-  --n-200: oklch(92% 0.004 286.32);
-  --n-400: oklch(70.5% 0.015 286.067);
-  --n-600: oklch(44.2% 0.017 285.786);
-  --n-800: oklch(27.4% 0.006 286.033);
-  --n-900: oklch(21% 0.006 285.885);
-  --n-950: oklch(14.1% 0.005 285.823);
-}
-
-:root[data-palette="teal"] {
-  --a-strong: oklch(51.1% 0.096 186.391);
-  --a-soft: oklch(77.7% 0.152 181.912);
-}
-
-:root[data-palette="indigo"] {
-  --a-strong: oklch(51.1% 0.262 276.966);
-  --a-soft: oklch(67.3% 0.182 276.935);
-}
-
 :root {
-  --radius: 0.625rem;
-  --background: var(--n-100);
-  --foreground: var(--n-950);
-  --card: oklch(1 0 0);
-  --card-foreground: var(--n-950);
-  --popover: oklch(1 0 0);
-  --popover-foreground: var(--n-950);
-  --primary: var(--a-strong);
-  --primary-foreground: oklch(1 0 0);
-  --secondary: var(--n-200);
-  --secondary-foreground: var(--n-900);
-  --muted: var(--n-200);
-  --muted-foreground: var(--n-600);
-  --accent: var(--n-200);
-  --accent-foreground: var(--n-900);
-  --destructive: oklch(50.5% 0.213 27.518); /* red-700: AA as text on n-100 and under white labels */
-  --destructive-foreground: oklch(1 0 0);
-  --border: var(--n-200);
-  --input: var(--n-200);
-  --ring: var(--a-strong);
-  --chart-1: var(--a-strong);
-  --chart-2: var(--n-600);
-  --chart-3: var(--a-soft);
-  --chart-4: var(--n-400);
-  --chart-5: var(--n-800);
-  --sidebar: var(--n-50);
-  --sidebar-foreground: var(--n-950);
-  --sidebar-primary: var(--a-strong);
-  --sidebar-primary-foreground: oklch(1 0 0);
-  --sidebar-accent: var(--n-100);
-  --sidebar-accent-foreground: var(--n-900);
-  --sidebar-border: var(--n-200);
-  --sidebar-ring: var(--a-strong);
+  --ui-font: "Source Sans 3 Variable", ui-sans-serif, system-ui, sans-serif;
+  --brand: #1F5AD6;
+  --brand-fg: #FFFFFF;
+  --brand-deep: color-mix(in oklch, var(--brand) 55%, black);
+  --brand-tint: color-mix(in oklch, var(--brand) 8%, white);
+  --brand-soft: color-mix(in oklch, var(--brand) 16%, white);
+  --reward: #B45309;
+  --reward-fill: #F59E0B;
+  --reward-fill-fg: #1C1D1F;
+  --reward-tint: #FEF3C7;
+  --radius: 0.375rem;
+  --density: 1;
+
+  --background: #FFFFFF;
+  --foreground: #1C1D1F;
+  --card: #FFFFFF;
+  --card-foreground: #1C1D1F;
+  --popover: #FFFFFF;
+  --popover-foreground: #1C1D1F;
+  --primary: var(--brand);
+  --primary-foreground: var(--brand-fg);
+  --secondary: #F7F9FA;
+  --secondary-foreground: #1C1D1F;
+  --muted: #F7F9FA;
+  --muted-foreground: #5D6368;
+  --accent: var(--brand-tint);
+  --accent-foreground: #1C1D1F;
+  --destructive: #B91C1C;
+  --destructive-foreground: #FFFFFF;
+  --border: #D1D7DC;
+  --input: #8A9096;
+  --ring: var(--brand);
+  --chart-1: var(--brand);
+  --chart-2: #5D6368;
+  --chart-3: var(--brand-soft);
+  --chart-4: #8A9096;
+  --chart-5: #1C1D1F;
+  --sidebar: #FFFFFF;
+  --sidebar-foreground: #1C1D1F;
+  --sidebar-primary: var(--brand);
+  --sidebar-primary-foreground: var(--brand-fg);
+  --sidebar-accent: var(--brand-tint);
+  --sidebar-accent-foreground: #1C1D1F;
+  --sidebar-border: #D1D7DC;
+  --sidebar-ring: var(--brand);
+  --panel: #F7F9FA;
+  --panel-edge: #D1D7DC;
+  --ink: #1C1D1F;
+  --ink-foreground: #FFFFFF;
+  --ink-muted: #C9CED3;
 }
 
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --background: var(--n-950);
-  --foreground: var(--n-50);
-  --card: var(--n-900);
-  --card-foreground: var(--n-50);
-  --popover: var(--n-900);
-  --popover-foreground: var(--n-50);
-  --primary: var(--a-soft);
-  --primary-foreground: var(--n-950);
-  --secondary: var(--n-800);
-  --secondary-foreground: var(--n-50);
-  --muted: var(--n-800);
-  --muted-foreground: var(--n-400);
-  --accent: var(--n-800);
-  --accent-foreground: var(--n-50);
-  --destructive: oklch(70.4% 0.191 22.216);
-  --destructive-foreground: var(--n-950);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: var(--a-soft);
-  --sidebar: var(--n-900);
-  --sidebar-foreground: var(--n-50);
-  --sidebar-primary: var(--a-soft);
-  --sidebar-primary-foreground: var(--n-950);
-  --sidebar-accent: var(--n-800);
-  --sidebar-accent-foreground: var(--n-50);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: var(--a-soft);
-}
+/* Learner choices, set on <html> by applyAppearance (src/lib/appearance.ts). */
+:root[data-radius="square"] { --radius: 0.125rem; }
+:root[data-radius="round"] { --radius: 0.875rem; }
+:root[data-density="compact"] { --density: 0.78; }
+:root[data-text-size="small"] { font-size: 15px; }
+:root[data-text-size="large"] { font-size: 18px; }
+:root[data-font="system"] { --ui-font: ui-sans-serif, system-ui, "Segoe UI", sans-serif; }
+:root[data-font="serif"] { --ui-font: "Literata Variable", ui-serif, Georgia, serif; }
+:root[data-banner="brand"] { --ink: var(--brand-deep); --ink-muted: color-mix(in oklch, white 78%, var(--brand-deep)); }
 
-/* A panel is the palette's tint at page scale: white cards sit inside it (Coursera-style shelves). */
-:root {
-  --panel: color-mix(in oklch, var(--a-strong) 9%, var(--n-100));
-  --panel-edge: color-mix(in oklch, var(--a-strong) 18%, var(--n-200));
-}
-:root[data-theme="dark"] {
-  --panel: color-mix(in oklch, var(--a-soft) 11%, var(--n-900));
-  --panel-edge: color-mix(in oklch, var(--a-soft) 20%, var(--n-800));
-}
-
-/*
- * Styles (identity directions): "paper" is the default and keeps serif titles. "quiet" and
- * "vault" set titles in the interface sans; "vault" also tightens corners. Selectors beat the
- * `font-serif` utility, which `@theme inline` resolves to a literal.
- */
-:root[data-style="quiet"] :is(h1, h2, h3, .font-serif),
-:root[data-style="vault"] :is(h1, h2, h3, .font-serif) {
-  font-family: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
-}
-:root[data-style="quiet"] { --radius: 0.5rem; }
-/* Quiet: a cool, near-white page with hairlines, against Paper's warm stone. */
-:root[data-style="quiet"]:not([data-theme="dark"]) { --background: var(--n-50); --muted: var(--n-100); }
-:root[data-style="vault"] { --radius: 0.25rem; }
-
-/* Cover drawings per Style: Paper (default) shows the title cover; Quiet the lesson map; Vault the hairlines. */
-.cover-quiet, .cover-vault { display: none; }
-:root[data-style="quiet"] .cover-paper, :root[data-style="vault"] .cover-paper { display: none; }
-:root[data-style="quiet"] .cover-quiet, :root[data-style="vault"] .cover-vault { display: inline; }
-/* Only Paper draws the whole title on the cover, so only there the heading beside it collapses. */
-:root:not([data-style="quiet"]):not([data-style="vault"]) .group\/card:has([data-titled]) .card-heading { height: 0; margin: 0; opacity: 0; }
-/* Vault sets measurements, such as progress, in the mono face. */
-:root[data-style="vault"] .meta { font-family: var(--font-mono); font-size: 0.8125rem; }
-
-/* An ink band (course header, resume card) stays dark in both themes, like a reading lamp. */
-:root {
-  --ink: oklch(19% 0.012 160);
-  --ink-foreground: oklch(97% 0.004 160);
-  --ink-muted: oklch(78% 0.012 160);
-  --ink-edge: transparent;
-}
-/* On a dark page the banner steps up a level, tinted toward the accent, with a hairline edge: otherwise it reads as a hole. */
-:root[data-theme="dark"] {
-  --ink: oklch(25% 0.03 165);
-  --ink-muted: oklch(82% 0.015 160);
-  --ink-edge: oklch(100% 0 0 / 0.1);
-}
-/* Banners keep the interface sans even when a Style sets measurements in mono. */
-:root[data-style="vault"] .on-ink .meta { font-family: var(--font-sans); font-size: 0.875rem; }
+html, body { overflow-x: clip; }
 
 @layer base {
-  h1, h2 {
-    font-family: var(--font-heading);
-    font-optical-sizing: auto;
-    letter-spacing: -0.01em;
-  }
   * {
     @apply border-border outline-ring/50;
   }
   body {
     @apply bg-background text-foreground;
+    font-variant-numeric: tabular-nums;
   }
   html {
     @apply font-sans;
+  }
+  h1, h2, h3 {
+    font-weight: 700;
+    letter-spacing: -0.01em;
   }
   @media (prefers-reduced-motion: reduce) {
     *,
