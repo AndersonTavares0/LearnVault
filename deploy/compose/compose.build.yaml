@@ -1,0 +1,10 @@
+# LearnVault - build local da imagem (para contribuidores)
+# O compose.yaml usa a imagem publicada no GHCR. Este arquivo a substitui por uma imagem
+# compilada a partir do código-fonte:
+#   docker compose -f compose.yaml -f compose.build.yaml up -d --build
+services:
+  learnvault:
+    build:
+      context: ../..
+      dockerfile: deploy/container/Containerfile
+    image: learnvault-rust:local
