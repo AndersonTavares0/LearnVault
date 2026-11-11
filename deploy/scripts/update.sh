@@ -100,6 +100,31 @@ fi
 
 log "Preparando atualização de ${CURRENT_VERSION} para ${TARGET_VERSION}..."
 
+# 1b. Only an image signed by this project's release workflow is accepted (cosign keyless).
+# The signature is checked before anything is backed up, downloaded or changed. Set
+# LEARNVAULT_VERIFY_SIGNATURE=false only for a private mirror that re-publishes the image.
+IMAGE_REPO="${LEARNVAULT_IMAGE_REPO:-ghcr.io/andersontavares0/learnvault}"
+SIGNER_REPO="${LEARNVAULT_GITHUB_REPO:-AndersonTavares0/LearnVault}"
+if [ "${LEARNVAULT_VERIFY_SIGNATURE:-true}" = "true" ]; then
+    if ! command -v cosign >/dev/null 2>&1; then
+        apk add --no-cache cosign >/dev/null 2>&1 || true
+    fi
+    if ! command -v cosign >/dev/null 2>&1; then
+        log "cosign is not available, so the image signature cannot be checked; update aborted."
+        record_history "failed_verification" "$CURRENT_VERSION" "$TARGET_VERSION" "cosign unavailable; signature not checked"
+        exit 1
+    fi
+    signer_pattern=$(printf '%s' "$SIGNER_REPO" | sed 's/[.]/\\./g')
+    if ! cosign verify "${IMAGE_REPO}:${TARGET_VERSION}" \
+        --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+        --certificate-identity-regexp "^https://github\\.com/${signer_pattern}/\\.github/workflows/release\\.yml@refs/(tags/v[0-9]+\\.[0-9]+\\.[0-9]+|heads/main)$" >/dev/null 2>&1; then
+        log "The image ${IMAGE_REPO}:${TARGET_VERSION} has no valid signature from the release workflow; update aborted and the running service is unchanged."
+        record_history "failed_verification" "$CURRENT_VERSION" "$TARGET_VERSION" "Image signature missing or invalid"
+        exit 1
+    fi
+    log "Image signature verified."
+fi
+
 # 2. Backup pré-atualização com validação de integridade
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 BACKUP_PATH="/data/backups/pre-update-${CURRENT_VERSION}-${TIMESTAMP}.sqlite"

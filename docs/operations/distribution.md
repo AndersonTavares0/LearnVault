@@ -25,6 +25,18 @@ If you are developing or studying the architecture, start with the [README](../.
 
 When enabled in configuration, the server queries the public GitHub Releases API over HTTPS and compares the latest stable tag with the local running version using strict SemVer. The check times out after 5 seconds, consumes at most 64 KiB, and caches results in-process for 1 hour. No binaries or files are ever downloaded or installed automatically. Local builds (`0.0.0`) skip remote checks.
 
+### Verify the container image
+
+From the first release after this was added, every image pushed to GHCR is signed by the release workflow with cosign (keyless: no key to keep, the signature is tied to the workflow run). To check an image yourself:
+
+```sh
+cosign verify ghcr.io/andersontavares0/learnvault:0.9.0 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp '^https://github\.com/AndersonTavares0/LearnVault/\.github/workflows/release\.yml@refs/(tags/v[0-9]+\.[0-9]+\.[0-9]+|heads/main)$'
+```
+
+The command succeeds only for an image signed by `release.yml` in this repository. The Compose updater (`deploy/scripts/update.sh`) runs the same check on the target version before it backs up or changes anything, and refuses to update to an image that is unsigned or signed by anything else. Set `LEARNVAULT_VERIFY_SIGNATURE=false` only for a private mirror that re-publishes the image. Images published before this change (up to v0.8.0) are not signed.
+
 ### Automatic updates with Podman Quadlet
 
 `deploy/quadlet/learnvault.container` pulls `ghcr.io/andersontavares0/learnvault:stable` and is marked `AutoUpdate=registry`. Enable the native Podman timer to apply new releases:
