@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Play, Plus, Trash2 } from 'lucide-react';
+import { Link } from 'react-router';
+import { Eyebrow } from '@/components/panel';
 import { useState, type KeyboardEvent } from 'react';
 import { Markdown } from '@/components/markdown';
 import { NoteEditor } from '@/components/note-editor';
@@ -16,14 +18,15 @@ export function useLessonNotes(mediaId: string | null) {
 }
 
 /** Timestamped notes for one lesson; a note's time button seeks the player. */
-export function StudyNotes({ mediaId, currentTime, onSeek, addRequest }: { mediaId: string; currentTime: number; onSeek: (seconds: number) => void; addRequest: number }) {
+export function StudyNotes({ mediaId, currentTime, onSeek, addRequest, title, trail, allNotesTo }: { mediaId: string; currentTime: number; onSeek: (seconds: number) => void; addRequest: number; title?: string; trail?: string; allNotesTo?: string }) {
 	const client = useQueryClient();
 	const notes = useLessonNotes(mediaId);
 	const [draft, setDraft] = useState<{ position: number; content: string } | null>(null);
 	const [lastRequest, setLastRequest] = useState(addRequest);
+	const [saved, setSaved] = useState(false);
 	const refresh = () => Promise.all([client.invalidateQueries({ queryKey: lessonNotesKey(mediaId) }), client.invalidateQueries({ queryKey: ['notes'], exact: true })]);
-	const create = useMutation({ mutationFn: (note: { position: number; content: string }) => transport.createNote(mediaId, note.position, note.content), onSuccess: () => { setDraft(null); return refresh(); } });
-	const remove = useMutation({ mutationFn: (noteId: string) => transport.deleteNote(noteId), onSuccess: refresh });
+	const create = useMutation({ mutationFn: (note: { position: number; content: string }) => transport.createNote(mediaId, note.position, note.content), onSuccess: () => { setDraft(null); setSaved(true); return refresh(); } });
+	const remove = useMutation({ mutationFn: (noteId: string) => transport.deleteNote(noteId), onSuccess: () => { setSaved(false); return refresh(); } });
 
 	// The `n` shortcut asks the panel to open a draft at the current time.
 	if (addRequest !== lastRequest) {
@@ -45,6 +48,19 @@ export function StudyNotes({ mediaId, currentTime, onSeek, addRequest }: { media
 
 	return (
 		<div className="space-y-4">
+			{title && (
+				<div className="flex flex-wrap items-start justify-between gap-3 border-b pb-4">
+					<div className="min-w-0">
+						<Eyebrow>{tr('My notes', 'Minhas notas')}</Eyebrow>
+						<p className="mt-1 truncate font-heading text-xl font-bold">{title}</p>
+						{trail && <p className="truncate text-sm text-muted-foreground">{trail}</p>}
+					</div>
+					<div className="flex items-center gap-3">
+						<p role="status" aria-live="polite" className="text-sm text-muted-foreground">{saved ? tr('Saved · just now', 'Salva · agora') : ''}</p>
+						{allNotesTo && <Link to={allNotesTo} className="inline-flex min-h-11 items-center rounded-full border px-4 text-sm font-medium hover:bg-brand-tint">{tr('View all', 'Ver todas')}</Link>}
+					</div>
+				</div>
+			)}
 			{!draft && (
 				<Button variant="outline" onClick={() => setDraft({ position: Math.floor(currentTime), content: '' })}>
 					<Plus />{tr(`Add note at ${formatDuration(currentTime)}`, `Anotar em ${formatDuration(currentTime)}`)}

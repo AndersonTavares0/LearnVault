@@ -43,6 +43,28 @@ describe('lesson page', () => {
 		expect(await screen.findByRole('link', { name: /Two/ })).toBeTruthy();
 	});
 
+	it('has one set of controls on the player and the browser\'s own are off', async () => {
+		renderApp('/course/c/c%2FOne', { catalog });
+		const video = await screen.findByLabelText('Lesson player: One');
+		expect(video.hasAttribute('controls')).toBe(false);
+		expect(screen.getByRole('slider', { name: 'Seek' })).toBeTruthy();
+		expect(screen.getByRole('slider', { name: 'Volume' })).toBeTruthy();
+		for (const name of ['Play', 'Back 10s', 'Forward 10s', 'Mute', 'Loop', 'Cinema mode', 'Fullscreen']) expect(screen.getAllByRole('button', { name }).length).toBe(1);
+		expect(screen.getByRole('combobox', { name: 'Speed' })).toBeTruthy();
+	});
+
+	it('keeps cinema mode and hidden course content between visits', async () => {
+		renderApp('/course/c/c%2FOne', { catalog });
+		fireEvent.click(await screen.findByRole('button', { name: 'Cinema mode' }));
+		expect(localStorage.getItem('learnvault-cinema')).toBe('1');
+		fireEvent.click(screen.getAllByRole('button', { name: 'Hide course content' })[0]);
+		expect(localStorage.getItem('learnvault-lesson-content')).toBe('0');
+		expect(screen.queryByRole('complementary', { name: 'Course content' })).toBeNull();
+		cleanup();
+		renderApp('/course/c/c%2FOne', { catalog });
+		expect((await screen.findByRole('button', { name: 'Cinema mode' })).getAttribute('aria-pressed')).toBe('true');
+	});
+
 	it('marks the lesson completed from the page', async () => {
 		const setCompleted = vi.spyOn(transport, 'setCompleted').mockImplementation(async (id, completed) => progress(id, completed));
 		renderApp('/course/c/c%2FOne', { catalog });

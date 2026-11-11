@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Clapperboard, ExternalLink, Maximize, PictureInPicture2, Repeat, Rewind, FastForward, Zap } from 'lucide-react';
+import { Captions, Clapperboard, ExternalLink, Maximize, Minimize, Pause, PictureInPicture2, Play, Repeat, Rewind, FastForward, Volume2, VolumeX, Zap } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { cn } from '@/lib/utils';
 import { Link } from 'react-router';
@@ -89,6 +89,19 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 	const lastSave = useRef(0);
 	const appliedStart = useRef<string | null>(null);
 	const [pip, setPip] = useState(false);
+	// What the control bar shows; the element stays the source of truth.
+	const [playing, setPlaying] = useState(false);
+	const [now, setNow] = useState(0);
+	const [total, setTotal] = useState(0);
+	const [volume, setVolume] = useState(1);
+	const [muted, setMuted] = useState(false);
+	const [captionsOn, setCaptionsOn] = useState(true);
+	const [fullscreen, setFullscreen] = useState(false);
+	useEffect(() => {
+		const change = () => setFullscreen(document.fullscreenElement === container.current);
+		document.addEventListener('fullscreenchange', change);
+		return () => document.removeEventListener('fullscreenchange', change);
+	}, []);
 	// React has no props for these two events, so the element is listened to directly.
 	useEffect(() => {
 		const element = media.current;
@@ -209,61 +222,81 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 	const mediaProps = {
 		ref: media,
 		src: activeSource,
-		controls: true,
-		// Our toolbar already has fullscreen, which also keeps the shortcut working; two buttons only add noise.
-		controlsList: 'nofullscreen',
+		// The browser's own controls are off: the bar below is the one set of controls.
 		preload: 'metadata',
 		'aria-label': tr(`Lesson player: ${lesson.title}`, `Player da aula: ${lesson.title}`),
 		onLoadedMetadata: () => {
 			const element = media.current!;
 			element.playbackRate = speed;
+			setTotal((transcode?.offset ?? 0) + (Number.isFinite(element.duration) ? element.duration : 0));
+			setVolume(element.volume);
+			setMuted(element.muted);
 			if (!transcode && initialPosition && appliedStart.current !== `${activeSource}@${initialPosition}`) {
 				element.currentTime = initialPosition;
 				appliedStart.current = `${activeSource}@${initialPosition}`;
 			}
 		},
 		onTimeUpdate: () => {
-			const now = absoluteTime();
-			if (loop?.b != null && now >= loop.b) { seek(loop.a); return; }
-			onTime(now);
-			if (mediaId && performance.now() - lastSave.current > SAVE_INTERVAL_MS && now > 0) {
+			const at = absoluteTime();
+			if (loop?.b != null && at >= loop.b) { seek(loop.a); return; }
+			setNow(at);
+			onTime(at);
+			if (mediaId && performance.now() - lastSave.current > SAVE_INTERVAL_MS && at > 0) {
 				lastSave.current = performance.now();
-				onPosition(mediaId, Math.floor(now));
+				onPosition(mediaId, Math.floor(at));
 			}
 		},
-		onPause: () => { if (mediaId && absoluteTime() > 0) onPosition(mediaId, Math.floor(absoluteTime())); },
-		onEnded: () => { if (mediaId) onEnded(mediaId); },
+		onDurationChange: () => { const element = media.current; if (element && Number.isFinite(element.duration)) setTotal((transcode?.offset ?? 0) + element.duration); },
+		onVolumeChange: () => { const element = media.current; if (element) { setVolume(element.volume); setMuted(element.muted); } },
+		onPlay: () => setPlaying(true),
+		onPause: () => { setPlaying(false); if (mediaId && absoluteTime() > 0) onPosition(mediaId, Math.floor(absoluteTime())); },
+		onEnded: () => { setPlaying(false); if (mediaId) onEnded(mediaId); },
 		onError: () => setErrorCode(media.current?.error?.code ?? null),
 		className: 'w-full bg-black'
 	} as const;
 
 	const onVideo = kind === 'video';
 	const hasChoices = available(lesson.media).length > 1 || available(lesson.subtitles).length > 0;
-	// On the picture the buttons are round and white on a dark pill; under audio they are ordinary buttons.
-	const look = onVideo ? 'size-11 rounded-full text-white hover:bg-white/20 hover:text-white aria-pressed:bg-white/25' : '';
-	const variant = onVideo ? 'ghost' : 'outline';
+	// On the picture the bar is white on a dark fade; under audio it is an ordinary card.
+	const look = cn('size-11 rounded-full', onVideo && 'text-white hover:bg-white/20 hover:text-white aria-pressed:bg-white/25');
 	const loopText = !loop ? null : loop.b === null ? tr(`Loop from ${formatDuration(loop.a)}: set end`, `Laço de ${formatDuration(loop.a)}: marcar fim`) : tr(`Looping ${formatDuration(loop.a)}–${formatDuration(loop.b)}: clear`, `Repetindo ${formatDuration(loop.a)}–${formatDuration(loop.b)}: limpar`);
-	const controls = (
-		<>
-			<Button variant={variant} size={onVideo ? 'icon' : 'sm'} className={look} onClick={() => seek(absoluteTime() - 10)} aria-keyshortcuts="ArrowLeft j"><Rewind /><span className="sr-only">{tr('Back 10s', 'Voltar 10s')}</span></Button>
-			<Button variant={variant} size={onVideo ? 'icon' : 'sm'} className={look} onClick={() => seek(absoluteTime() + 10)} aria-keyshortcuts="ArrowRight l"><FastForward /><span className="sr-only">{tr('Forward 10s', 'Avançar 10s')}</span></Button>
-			<Button variant={loop && !onVideo ? 'secondary' : variant} size={loopText && onVideo ? 'sm' : onVideo ? 'icon' : 'sm'} className={cn(look, loopText && onVideo && 'h-11 w-auto px-3 text-xs')} aria-pressed={Boolean(loop)} onClick={() => setLoop(!loop ? { a: absoluteTime(), b: null } : loop.b === null ? (absoluteTime() > loop.a + 1 ? { a: loop.a, b: absoluteTime() } : loop) : null)}>
-				<Repeat />{loopText ?? <span className="sr-only">{tr('Loop', 'Laço')}</span>}
-			</Button>
-			<Label htmlFor="player-speed" className={onVideo ? 'sr-only' : 'ml-2'}>{tr('Speed', 'Velocidade')}</Label>
-			<select id="player-speed" value={speed} onChange={(event) => changeSpeed(Number(event.target.value) as PlaybackSpeed)} className={onVideo ? 'h-11 cursor-pointer rounded-full bg-transparent px-2 text-sm font-medium text-white hover:bg-white/20 [&>option]:text-black' : 'h-11 rounded-lg border border-input bg-background px-2 text-sm'} aria-keyshortcuts="[ ]">
-				{PLAYBACK_SPEEDS.map((value) => <option key={value} value={value}>{value}×</option>)}
-			</select>
-			{capabilities.data?.transcoding && (
-				<Button variant={transcode && !onVideo ? 'secondary' : variant} size={onVideo ? 'icon' : 'sm'} className={look} aria-pressed={Boolean(transcode)} onClick={() => (transcode ? setTranscode(null) : startTranscode(false))}>
-					<Zap /><span className="sr-only">{tr('Transcode', 'Transcodificar')}</span>
-				</Button>
-			)}
-			{capabilities.data?.systemPlayer && <Button variant={variant} size="icon" className={look} onClick={openSystemPlayer} aria-label={tr('Open in system player', 'Abrir no player do sistema')}><ExternalLink /></Button>}
-			{onVideo && supportsPip && <Button variant={variant} size="icon" className={look} aria-pressed={pip} onClick={togglePip} aria-label={tr('Picture-in-picture', 'Picture-in-picture')} aria-keyshortcuts="p"><PictureInPicture2 /></Button>}
-			{onVideo && onCinema && <Button variant={variant} size="icon" className={cn(look, 'hidden lg:inline-flex')} aria-pressed={cinema} onClick={onCinema} aria-label={tr('Cinema mode', 'Modo cinema')} aria-keyshortcuts="t"><Clapperboard /></Button>}
-			{onVideo && <Button variant={variant} size="icon" className={look} onClick={toggleFullscreen} aria-label={tr('Fullscreen', 'Tela cheia')} aria-keyshortcuts="f"><Maximize /></Button>}
-		</>
+	const togglePlay = () => { const element = media.current; if (element) void (element.paused ? element.play().catch(() => undefined) : element.pause()); };
+	const toggleCaptions = () => {
+		const next = !captionsOn;
+		setCaptionsOn(next);
+		for (const track of Array.from(media.current?.textTracks ?? [])) track.mode = next ? 'showing' : 'hidden';
+	};
+	const span = Math.max(1, Math.floor(total));
+	const bar = (
+		<div className={cn('space-y-1', onVideo ? 'relative bg-black px-3 pt-1 pb-2 text-white sm:absolute sm:inset-x-0 sm:bottom-0 sm:z-10 sm:bg-transparent sm:bg-gradient-to-t sm:from-black/85 sm:via-black/55 sm:to-transparent sm:pt-12 sm:transition-opacity' : 'rounded-[1.5rem] border bg-card p-3', onVideo && (playing ? 'sm:opacity-0 sm:group-hover/player:opacity-100 sm:group-focus-within/player:opacity-100 sm:[@media(hover:none)]:opacity-100' : ''))}>
+			<input type="range" aria-label={tr('Seek', 'Posição')} min={0} max={span} step={1} value={Math.min(Math.floor(now), span)} aria-valuetext={`${formatDuration(now)} / ${formatDuration(total)}`}
+				onChange={(event) => seek(Number(event.target.value))} className="block h-5 w-full cursor-pointer accent-[var(--reward-fill)]" />
+			<div role="toolbar" aria-label={tr('Player controls', 'Controles do player')} className="flex flex-wrap items-center gap-x-0.5">
+				<Button variant="ghost" size="icon" className={look} onClick={togglePlay} aria-label={playing ? tr('Pause', 'Pausar') : tr('Play', 'Reproduzir')} aria-keyshortcuts="k Space">{playing ? <Pause /> : <Play />}</Button>
+				<Button variant="ghost" size="icon" className={look} onClick={() => seek(absoluteTime() - 10)} aria-keyshortcuts="ArrowLeft j"><Rewind /><span className="sr-only">{tr('Back 10s', 'Voltar 10s')}</span></Button>
+				<Button variant="ghost" size="icon" className={look} onClick={() => seek(absoluteTime() + 10)} aria-keyshortcuts="ArrowRight l"><FastForward /><span className="sr-only">{tr('Forward 10s', 'Avançar 10s')}</span></Button>
+				<Button variant="ghost" size="icon" className={look} aria-pressed={muted} onClick={() => { if (media.current) media.current.muted = !media.current.muted; }} aria-label={muted ? tr('Unmute', 'Ativar o som') : tr('Mute', 'Silenciar')} aria-keyshortcuts="m">{muted || volume === 0 ? <VolumeX /> : <Volume2 />}</Button>
+				<input type="range" aria-label={tr('Volume', 'Volume')} min={0} max={1} step={0.05} value={muted ? 0 : volume} onChange={(event) => { const element = media.current; if (!element) return; element.volume = Number(event.target.value); element.muted = false; }} className="hidden h-5 w-20 cursor-pointer accent-[var(--reward-fill)] sm:block" />
+				<span className="mx-2 text-sm tabular-nums"><span className="sr-only">{tr('Time', 'Tempo')}: </span>{formatDuration(now)} <span className={onVideo ? 'text-white/70' : 'text-muted-foreground'}>/ {formatDuration(total)}</span></span>
+				<div className="ml-auto flex flex-wrap items-center justify-end">
+					{captions.src && <Button variant="ghost" size="icon" className={look} aria-pressed={captionsOn} onClick={toggleCaptions} aria-label={tr('Subtitles', 'Legendas')}><Captions /></Button>}
+					<Button variant="ghost" size={loopText ? 'sm' : 'icon'} className={cn(look, loopText && 'h-11 w-auto px-3 text-xs')} aria-pressed={Boolean(loop)} onClick={() => setLoop(!loop ? { a: absoluteTime(), b: null } : loop.b === null ? (absoluteTime() > loop.a + 1 ? { a: loop.a, b: absoluteTime() } : loop) : null)}>
+						<Repeat />{loopText ?? <span className="sr-only">{tr('Loop', 'Laço')}</span>}
+					</Button>
+					<Label htmlFor="player-speed" className="sr-only">{tr('Speed', 'Velocidade')}</Label>
+					<select id="player-speed" value={speed} onChange={(event) => changeSpeed(Number(event.target.value) as PlaybackSpeed)} className={cn('h-11 cursor-pointer rounded-full bg-transparent px-2 text-sm font-medium', onVideo ? 'text-white hover:bg-white/20 [&>option]:text-black' : 'hover:bg-muted')} aria-keyshortcuts="[ ]">
+						{PLAYBACK_SPEEDS.map((value) => <option key={value} value={value}>{value}×</option>)}
+					</select>
+					{capabilities.data?.transcoding && (
+						<Button variant="ghost" size="icon" className={look} aria-pressed={Boolean(transcode)} onClick={() => (transcode ? setTranscode(null) : startTranscode(false))}><Zap /><span className="sr-only">{tr('Transcode', 'Transcodificar')}</span></Button>
+					)}
+					{capabilities.data?.systemPlayer && <Button variant="ghost" size="icon" className={look} onClick={openSystemPlayer} aria-label={tr('Open in system player', 'Abrir no player do sistema')}><ExternalLink /></Button>}
+					{onVideo && supportsPip && <Button variant="ghost" size="icon" className={look} aria-pressed={pip} onClick={togglePip} aria-label={tr('Picture-in-picture', 'Picture-in-picture')} aria-keyshortcuts="p"><PictureInPicture2 /></Button>}
+					{onVideo && onCinema && <Button variant="ghost" size="icon" className={cn(look, 'hidden lg:inline-flex')} aria-pressed={cinema} onClick={onCinema} aria-label={tr('Cinema mode', 'Modo cinema')} aria-keyshortcuts="t"><Clapperboard /></Button>}
+					{onVideo && <Button variant="ghost" size="icon" className={look} onClick={toggleFullscreen} aria-label={fullscreen ? tr('Exit fullscreen', 'Sair da tela cheia') : tr('Fullscreen', 'Tela cheia')} aria-keyshortcuts="f">{fullscreen ? <Minimize /> : <Maximize />}</Button>}
+				</div>
+			</div>
+		</div>
 	);
 
 	return (
@@ -290,36 +323,15 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 						<audio {...mediaProps}>{captions.src && <track kind="captions" src={captions.src} label={tr('Subtitles', 'Legenda')} default />}</audio>
 					) : (
 						// eslint-disable-next-line jsx-a11y/media-has-caption
-						<video {...mediaProps} className="aspect-video w-full bg-black">{captions.src && <track kind="captions" src={captions.src} label={tr('Subtitles', 'Legenda')} default />}</video>
+						<video {...mediaProps} onClick={togglePlay} className="aspect-video w-full cursor-pointer bg-black">{captions.src && <track kind="captions" src={captions.src} label={tr('Subtitles', 'Legenda')} default />}</video>
 					)}
-					{kind === 'video' && <div className="absolute top-3 right-3 z-10 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center justify-end gap-0.5 rounded-full bg-black/70 p-1 text-white opacity-0 transition-opacity group-hover/player:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100" role="toolbar" aria-label={tr('Player controls', 'Controles do player')}>{controls}</div>}
+					{bar}
 				</div>
 			)}
 
-			{kind === 'audio' ? (
-				<div role="toolbar" aria-label={tr('Player controls', 'Controles do player')} className="flex flex-wrap items-center gap-2">
-					{controls}
-				{available(lesson.media).length > 1 && (
-					<>
-						<Label htmlFor="player-media" className="ml-2">{tr('Video', 'Vídeo')}</Label>
-						<select id="player-media" value={mediaId ?? ''} onChange={(event) => onPreferencesChange(updateLessonPreference(preferences, courseId, lesson.path, { mediaId: event.target.value }))} className="h-11 max-w-48 rounded-lg border border-input bg-background px-2 text-sm">
-							{available(lesson.media).map((file) => <option key={file.mediaId} value={file.mediaId}>{file.name}</option>)}
-						</select>
-					</>
-				)}
-				{available(lesson.subtitles).length > 0 && (
-					<>
-						<Label htmlFor="player-subtitles" className="ml-2">{tr('Subtitles', 'Legendas')}</Label>
-						<select id="player-subtitles" value={lessonPreference.subtitleId === null ? '' : subtitle?.mediaId ?? ''} onChange={(event) => onPreferencesChange(updateLessonPreference(preferences, courseId, lesson.path, { subtitleId: event.target.value || null }))} className="h-11 max-w-48 rounded-lg border border-input bg-background px-2 text-sm">
-							<option value="">{tr('Off', 'Desligadas')}</option>
-							{available(lesson.subtitles).map((file) => <option key={file.mediaId} value={file.mediaId}>{file.name}</option>)}
-						</select>
-					</>
-				)}
-				</div>
-			) : (hasChoices && (
+			{hasChoices && (
 				<div className="flex flex-wrap items-center gap-2">
-				{available(lesson.media).length > 1 && (
+					{available(lesson.media).length > 1 && (
 					<>
 						<Label htmlFor="player-media" className="ml-2">{tr('Video', 'Vídeo')}</Label>
 						<select id="player-media" value={mediaId ?? ''} onChange={(event) => onPreferencesChange(updateLessonPreference(preferences, courseId, lesson.path, { mediaId: event.target.value }))} className="h-11 max-w-48 rounded-lg border border-input bg-background px-2 text-sm">
@@ -337,7 +349,7 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 					</>
 				)}
 				</div>
-			))}
+			)}
 			{captions.message && (
 				<p role="status" className="text-sm text-muted-foreground">
 					{captions.message} {captions.download && <a href={captions.download} download className="font-medium text-primary underline-offset-4 hover:underline">{tr('Download subtitle', 'Baixar legenda')}</a>}

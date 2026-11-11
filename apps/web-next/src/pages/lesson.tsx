@@ -258,7 +258,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 						</TabsContent>
 						{hasNotes && mediaId && (
 							<TabsContent value="notes" keepMounted className="pt-5">
-								<StudyNotes mediaId={mediaId} currentTime={time} onSeek={(seconds) => player.current?.seek(seconds)} addRequest={noteRequest} />
+								<StudyNotes mediaId={mediaId} currentTime={time} onSeek={(seconds) => player.current?.seek(seconds)} addRequest={noteRequest} title={lesson.title} trail={location?.moduleTitle ? `${course.title} · ${location.moduleTitle}` : course.title} allNotesTo={`/notes?course=${encodeURIComponent(courseId)}`} />
 							</TabsContent>
 						)}
 						{hasCards && mediaId && (
