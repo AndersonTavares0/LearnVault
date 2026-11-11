@@ -25,17 +25,17 @@ afterEach(() => {
 describe('My learning', () => {
 	it('puts the last unfinished lesson first and shows course progress', async () => {
 		renderApp('/', { catalog, rewards, recent: [{ mediaId: 'r2', positionSeconds: 95, completed: false, updatedAt: 2, recorded: true }, { mediaId: 'r1', positionSeconds: 0, completed: true, updatedAt: 1, recorded: true }] });
-		const resume = await screen.findByRole('region', { name: 'Continue studying' });
+		const resume = await screen.findByRole('region', { name: 'Continue learning' });
 		expect(within(resume).getByRole('heading', { name: 'Borrowing' })).toBeTruthy();
-		expect(within(resume).getByRole('link', { name: 'Resume lesson' }).getAttribute('href')).toBe('/course/rust/m%2Fr2?t=95');
-		expect(screen.getByText(/2 day streak, 1 of 3 days this week/)).toBeTruthy();
-		expect(screen.getByRole('progressbar', { name: /^50% complete/ })).toBeTruthy();
+		expect(within(resume).getByRole('link', { name: 'Resume' }).getAttribute('href')).toBe('/course/rust/m%2Fr2?t=95');
+		expect(screen.getByRole('list', { name: 'Your habit' }).textContent).toMatch(/Streak.*2|2.*Streak/);
+		expect(screen.getAllByRole('progressbar', { name: /^50% complete/ }).length).toBeGreaterThan(0);
 	});
 
 	it('filters by progress and offers to clear when nothing matches', async () => {
 		renderApp('/', { catalog, recent: [{ mediaId: 'a1', positionSeconds: 0, completed: true, updatedAt: 1, recorded: true }] });
-		const courses = await screen.findByRole('region', { name: 'All courses' });
-		fireEvent.click(within(courses).getByRole('button', { name: /^Completed/ }));
+		const courses = await screen.findByRole('region', { name: 'Your library' });
+		fireEvent.click(screen.getByRole('button', { name: /^Completed/ }));
 		expect(within(courses).getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent)).toEqual(['Drawing basics']);
 
 		cleanup();
@@ -76,5 +76,14 @@ describe('Sign in', () => {
 		expect(password.getAttribute('type')).toBe('password');
 		fireEvent.click(screen.getByRole('button', { name: 'Show password' }));
 		expect(password.getAttribute('type')).toBe('text');
+	});
+
+	it('lists starred lessons as bookmarks, or says there are none', async () => {
+		renderApp('/', { catalog, rewards, favorites: { courseIds: [], mediaIds: ['r2'] } });
+		const bookmarks = await screen.findByRole('region', { name: 'Bookmarks' });
+		expect(within(bookmarks).getByRole('link', { name: /Borrowing/ }).getAttribute('href')).toBe('/course/rust/m%2Fr2');
+		cleanup();
+		renderApp('/', { catalog, rewards });
+		expect(await screen.findByText(/Nothing saved yet/)).toBeTruthy();
 	});
 });

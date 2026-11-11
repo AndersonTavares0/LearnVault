@@ -1,6 +1,6 @@
 <div align="center">
 
-  <img src="docs/design/branding/learnvault-banner.svg" alt="LearnVault — Self-Hosted Course Library and Offline Study Workspace" width="100%">
+  <img src="docs/design/branding/learnvault-banner.svg" alt="LearnVault: a self-hosted study room for the courses you already own" width="100%">
 
   <br>
 
@@ -9,13 +9,13 @@
   Organize the course videos, audios, and materials you already own into a personal study space without moving, renaming, or modifying a single file.
 
   [![CI Status](https://github.com/AndersonTavares0/LearnVault/actions/workflows/ci.yml/badge.svg)](https://github.com/AndersonTavares0/LearnVault/actions/workflows/ci.yml)
-  [![Latest Release](https://img.shields.io/github/v/release/AndersonTavares0/LearnVault?include_prereleases&color=2563eb&label=release)](https://github.com/AndersonTavares0/LearnVault/releases)
-  [![License](https://img.shields.io/badge/license-MIT-4f8f68.svg)](LICENSE)
+  [![Latest Release](https://img.shields.io/github/v/release/AndersonTavares0/LearnVault?include_prereleases&color=5C4229&label=release)](https://github.com/AndersonTavares0/LearnVault/releases)
+  [![License](https://img.shields.io/badge/license-MIT-BC7F29.svg)](LICENSE)
   [![Rust](https://img.shields.io/badge/rust-1.99.0-black?logo=rust)](https://www.rust-lang.org)
   [![Svelte 5](https://img.shields.io/badge/svelte-5-ff3e00?logo=svelte)](https://svelte.dev)
   [![Tauri 2](https://img.shields.io/badge/tauri-2-24c8db?logo=tauri)](https://tauri.app)
 
-  [Features](#features) • [Downloads &amp; Deployment](#downloads--deployment) • [Quickstart](#quickstart) • [Development](#development) • [Documentation](docs/README.md)
+  [Features](#features) • [Design](#design) • [Downloads &amp; Deployment](#downloads--deployment) • [Quickstart](#quickstart) • [Development](#development) • [Documentation](docs/README.md)
 
 </div>
 
@@ -33,6 +33,14 @@ LearnVault turns folders of video courses into a structured study environment. I
   - **Offline Desktop Application:** Tauri 2 native desktop app with zero open network ports and complete offline capability.
 - **Full Internationalization (i18n):** Native runtime support for English (`en`, default) and Brazilian Portuguese (`pt-BR`), with instant locale switching and persistent preferences.
 - **Data Sovereignty:** No telemetry, no third-party CDNs, and zero cloud dependencies. All data resides in a local SQLite file.
+
+---
+
+## Design
+
+LearnVault is moving to a new interface (`apps/web-next`, React). It is a warm, editorial study room: an off-white page and a warm-black dark theme, Playfair Display titles with an amber accent word, DM Sans text, tinted cards and a single "Next up" action on the home page. Light is the default; dark and "follow the system" are one click away, and the accent colour, corners, density and text size are yours to change. Notes and Review start from a course, the player keeps all its controls in one bar (with a cinema mode), and PDF lessons open in a reader with search, highlights, underlines and notes.
+
+The design record is [`DESIGN.md`](DESIGN.md) and the product record is [`PRODUCT.md`](PRODUCT.md). The interface that ships today is still the Svelte app in `apps/web`; the React app replaces it at the cutover tracked in the migration epic.
 
 ---
 

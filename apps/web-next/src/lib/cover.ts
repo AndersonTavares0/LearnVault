@@ -8,7 +8,7 @@
  */
 
 /** Cloth colors for generated covers: moss, olive, ochre, brick, ink blue, slate teal and plum. */
-const HUES = [158, 130, 86, 20, 215, 190, 320];
+const HUES = [28, 38, 14, 140, 100, 195, 345];
 
 export type CourseCoverPattern = 'grid' | 'arcs' | 'lines' | 'dots' | 'blocks' | 'wave';
 
@@ -95,8 +95,8 @@ export function courseCover(title: string): CourseCover {
 	// Bits altos do hash alimentam o ângulo, para que ele varie mesmo quando o matiz repete.
 	const angle = 95 + ((hash >>> 8) % 106);
 	return {
-		from: `hsl(${hue} 26% 31%)`,
-		to: `hsl(${(hue + shift) % 360} 32% 17%)`,
+		from: `hsl(${hue} 30% 34%)`,
+		to: `hsl(${(hue + shift) % 360} 34% 22%)`,
 		monogram: courseMonogram(title),
 		angle,
 		code: courseCode(title, hash),

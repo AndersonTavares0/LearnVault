@@ -48,7 +48,7 @@ export function CourseCard({ entry, profile, variant = 'grid' }: Props) {
 	const toggle = useToggleCourseFavorite();
 	const listed = variant === 'list';
 	return (
-		<li className={cn('group/card relative rounded-lg has-focus-visible:ring-3 has-focus-visible:ring-ring [content-visibility:auto]', variant === 'shelf' && 'w-64 shrink-0 snap-start sm:w-72', listed && 'flex items-center gap-4 py-3')}>
+		<li className={cn('group/card relative [content-visibility:auto] has-focus-visible:ring-3 has-focus-visible:ring-ring', !listed && 'overflow-hidden rounded-[1.75rem] border bg-card transition-shadow hover:shadow-md', variant === 'shelf' && 'w-64 shrink-0 snap-start sm:w-72', listed && 'flex items-center gap-4 rounded-2xl py-3')}>
 			<div className={cn('relative', listed && 'w-36 shrink-0')}>
 				<CourseCover course={entry.course} profile={profile} done={entry.done} total={entry.total} compact={listed} />
 				{studySyncSupported && (
@@ -61,8 +61,8 @@ export function CourseCard({ entry, profile, variant = 'grid' }: Props) {
 					</div>
 				)}
 			</div>
-			<div className={cn('min-w-0 space-y-1.5', !listed && 'mt-3', listed && 'flex-1')}>
-				<h3 className="card-heading text-base leading-snug font-semibold text-balance">
+			<div className={cn('min-w-0 space-y-2', !listed && 'p-5', listed && 'flex-1')}>
+				<h3 className="card-heading font-heading text-lg leading-snug font-bold text-balance">
 					{/* The link covers the whole card; the favorite button sits above it. */}
 					<Link to={routerPath(href('course', entry.courseId))} className="line-clamp-2 after:absolute after:inset-0 after:content-[''] hover:underline">{entry.course.title}</Link>
 				</h3>

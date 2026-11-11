@@ -60,7 +60,7 @@ export function CourseCover({ course, profile, className, eager = false, done = 
 
 	const image = source === 'manual' ? manualCoverUrl : source === 'thumbnail' ? thumbnailUrl : null;
 	return (
-		<span ref={element} aria-hidden="true" data-titled={!image && !compact && !map ? '' : undefined} className={cn('relative block aspect-[16/10] overflow-hidden rounded-lg bg-muted', className)}>
+		<span ref={element} aria-hidden="true" className={cn('relative block aspect-[16/10] overflow-hidden rounded-[1.25rem] bg-muted', className)}>
 			{image ? (
 				<img src={image} alt="" width={600} height={400} loading={eager ? 'eager' : 'lazy'} decoding="async" className="size-full object-cover" />
 			) : (

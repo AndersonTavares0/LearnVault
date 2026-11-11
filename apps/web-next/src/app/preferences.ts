@@ -1,6 +1,6 @@
 import { applyLocale, readLocale, setLocale } from '@/lib/i18n';
 import { playerPreferencesKey, playerPreferencesScope } from '@/lib/player-preferences';
-import { applyPalette, applyStyle, applyTheme, persistPalette, persistStyle, persistThemeMode, readPalette, readStyle, readThemeMode, resolveTheme, type Palette, type Style, type ThemeMode } from '@/lib/theme';
+import { loadAppearance } from '@/lib/appearance';
 
 export function safeStorage(): Storage | null {
 	try {
@@ -10,47 +10,21 @@ export function safeStorage(): Storage | null {
 	}
 }
 
-const systemDark = () => window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
-
-/** Applies theme, palette and locale to <html> before the first render, avoiding a flash. */
+/** Applies the learner's appearance choices and the language to <html> before the first render, avoiding a flash. */
 export function applyStoredPreferences(root: HTMLElement = document.documentElement): void {
 	const storage = safeStorage();
-	applyThemeMode(readThemeMode(storage), root);
-	applyPalette(root, readPalette(storage));
-	applyStyle(root, readStyle(storage));
-	const locale = readLocale(storage, navigator.language);
+	loadAppearance(storage, root);
+	const locale = readLocale(storage);
 	setLocale(locale, storage, root);
 	applyLocale(root, locale);
 	// Drop data from the removed forest feature (docs/design/redesign.md, "Gamification").
-	for (const key of ['learnvault-forest-nursery', 'learnvault-forest-session-seeds']) {
+	for (const key of ['learnvault-forest-nursery', 'learnvault-forest-session-seeds', 'learnvault-theme', 'learnvault-palette', 'learnvault-style']) {
 		try {
 			storage?.removeItem(key);
 		} catch {
 			// Storage can be unavailable; the keys are harmless leftovers.
 		}
 	}
-}
-
-export function applyThemeMode(mode: ThemeMode, root: HTMLElement = document.documentElement): void {
-	const theme = resolveTheme(mode, systemDark());
-	applyTheme(root, theme);
-	const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
-	if (meta) meta.content = getComputedStyle(root).getPropertyValue('--background').trim() || (theme === 'dark' ? '#0c0a09' : '#fafaf9');
-}
-
-export function saveThemeMode(mode: ThemeMode): void {
-	persistThemeMode(safeStorage(), mode);
-	applyThemeMode(mode);
-}
-
-export function savePalette(palette: Palette): void {
-	persistPalette(safeStorage(), palette);
-	applyPalette(document.documentElement, palette);
-}
-
-export function saveStyle(style: Style): void {
-	persistStyle(safeStorage(), style);
-	applyStyle(document.documentElement, style);
 }
 
 /**

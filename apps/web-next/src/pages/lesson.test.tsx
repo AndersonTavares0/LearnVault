@@ -38,10 +38,31 @@ describe('lesson page', () => {
 		expect(screen.getByLabelText('Lesson player: One').getAttribute('src')).toBe('/api/media?course=c&path=c%2Fone.mp4');
 		expect((screen.getByRole('button', { name: /Previous/ }) as HTMLButtonElement).disabled).toBe(true);
 		expect((screen.getByRole('button', { name: /Next/ }) as HTMLButtonElement).disabled).toBe(false);
-		expect(screen.getByRole('complementary', { name: 'Study panel' })).toBeTruthy();
+		expect(screen.getByRole('complementary', { name: 'Course content' })).toBeTruthy();
 		expect(screen.getByText('Lesson 1 of 3')).toBeTruthy();
-		fireEvent.click(screen.getByRole('tab', { name: 'Lessons' }));
 		expect(await screen.findByRole('link', { name: /Two/ })).toBeTruthy();
+	});
+
+	it('has one set of controls on the player and the browser\'s own are off', async () => {
+		renderApp('/course/c/c%2FOne', { catalog });
+		const video = await screen.findByLabelText('Lesson player: One');
+		expect(video.hasAttribute('controls')).toBe(false);
+		expect(screen.getByRole('slider', { name: 'Seek' })).toBeTruthy();
+		expect(screen.getByRole('slider', { name: 'Volume' })).toBeTruthy();
+		for (const name of ['Play', 'Back 10s', 'Forward 10s', 'Mute', 'Loop', 'Cinema mode', 'Fullscreen']) expect(screen.getAllByRole('button', { name }).length).toBe(1);
+		expect(screen.getByRole('combobox', { name: 'Speed' })).toBeTruthy();
+	});
+
+	it('keeps cinema mode and hidden course content between visits', async () => {
+		renderApp('/course/c/c%2FOne', { catalog });
+		fireEvent.click(await screen.findByRole('button', { name: 'Cinema mode' }));
+		expect(localStorage.getItem('learnvault-cinema')).toBe('1');
+		fireEvent.click(screen.getAllByRole('button', { name: 'Hide course content' })[0]);
+		expect(localStorage.getItem('learnvault-lesson-content')).toBe('0');
+		expect(screen.queryByRole('complementary', { name: 'Course content' })).toBeNull();
+		cleanup();
+		renderApp('/course/c/c%2FOne', { catalog });
+		expect((await screen.findByRole('button', { name: 'Cinema mode' })).getAttribute('aria-pressed')).toBe('true');
 	});
 
 	it('marks the lesson completed from the page', async () => {
@@ -50,17 +71,6 @@ describe('lesson page', () => {
 		fireEvent.click(await screen.findByRole('button', { name: 'Mark as completed' }));
 		await waitFor(() => expect(setCompleted).toHaveBeenCalledWith('one.mp4', true));
 		expect(await screen.findByRole('button', { name: 'Completed' })).toBeTruthy();
-	});
-
-	it('switches to theater mode and remembers it', async () => {
-		localStorage.removeItem('learnvault-theater');
-		renderApp('/course/c/c%2FOne', { catalog });
-		const toggle = await screen.findByRole('button', { name: 'Theater mode' });
-		expect(toggle.getAttribute('aria-pressed')).toBe('false');
-		fireEvent.click(toggle);
-		expect(screen.getByRole('button', { name: 'Show side panel' }).getAttribute('aria-pressed')).toBe('true');
-		expect(localStorage.getItem('learnvault-theater')).toBe('1');
-		localStorage.removeItem('learnvault-theater');
 	});
 
 	it('walks the A-B loop control through start, end and clear', async () => {
@@ -147,9 +157,10 @@ describe('lesson page', () => {
 		it('opens a note draft and a blank card from the tools under the video', async () => {
 			vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
 			renderApp('/course/c/c%2FOne', { catalog });
-			fireEvent.click(await screen.findByRole('button', { name: /Pause and note/ }));
+			fireEvent.click(await screen.findByRole('button', { name: /^Note/ }));
 			expect(await screen.findByLabelText('Note at 0:00')).toBeTruthy();
-			fireEvent.click(screen.getByRole('button', { name: 'Make card' }));
+			fireEvent.click(screen.getByRole('tab', { name: 'Overview' }));
+			fireEvent.click(screen.getByRole('button', { name: 'Card' }));
 			expect(await screen.findByRole('form', { name: 'New card' })).toBeTruthy();
 		});
 	});
