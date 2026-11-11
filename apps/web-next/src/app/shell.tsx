@@ -5,7 +5,6 @@ import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate, useSearchPar
 import { BrandMark } from '@/components/brand';
 import { DesktopTitlebar } from '@/components/desktop-titlebar';
 import { FocusMenu } from '@/components/focus-menu';
-import { GameChips } from '@/components/game-chips';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -94,7 +93,6 @@ function Topbar({ username, userId }: { username: string; userId: string }) {
 				</nav>
 				<div className="ml-auto flex items-center gap-1">
 					<SearchBox />
-					<GameChips />
 					<FocusMenu />
 					<DropdownMenu>
 						<DropdownMenuTrigger render={<Button variant="ghost" size="icon" aria-label={tr(`Account: ${username}`, `Conta: ${username}`)} />}>

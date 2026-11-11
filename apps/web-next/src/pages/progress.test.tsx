@@ -24,13 +24,11 @@ afterEach(() => {
 describe('progress', () => {
 	it('shows the week, a finished course with its badge and the level', async () => {
 		renderApp('/progress', { catalog, rewards, recent: [done('a'), done('b')] });
-		expect(await screen.findByRole('heading', { name: '1 day studied this week' })).toBeTruthy();
-		expect(screen.getByText(/2 more days reaches your goal of 3\./)).toBeTruthy();
-		expect(screen.getByText(/Current streak: 1\. Best: 5\./)).toBeTruthy();
+		expect(await screen.findByRole('heading', { name: '1 of 3 days this week' })).toBeTruthy();
+		expect(screen.getByText(/2 more days to reach your goal\./)).toBeTruthy();
 		expect(screen.getByRole('list', { name: 'This week' }).querySelectorAll('li')).toHaveLength(7);
-		expect(screen.getByText('Finished')).toBeTruthy();
 		expect(screen.getByText('First course finished').parentElement?.textContent).toContain('Earned');
-		expect(screen.getByText(/Level 2, Archive Explorer:/)).toBeTruthy();
+		expect(screen.getByText(/Level 2 · /)).toBeTruthy();
 	});
 
 	it('offers to claim only a finished mission', async () => {

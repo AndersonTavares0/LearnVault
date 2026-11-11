@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, CircleCheck, Circle, FileText, PanelRightClose, PanelRightOpen, PenLine, SquarePlus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CircleCheck, Circle, FileText, PenLine, SquarePlus } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Band } from '@/components/band';
@@ -30,9 +30,6 @@ import { keys, useCatalog, useFavorites, useRecent, useSession, useSetLessonComp
 
 const path = (hash: string) => hash.replace(/^#/, '');
 const AUTO_NEXT_SECONDS = 5;
-const THEATER_KEY = 'learnvault-theater';
-const readTheater = () => { try { return localStorage.getItem(THEATER_KEY) === '1'; } catch { return false; } };
-const saveTheater = (on: boolean) => { try { localStorage.setItem(THEATER_KEY, on ? '1' : '0'); } catch { /* storage can be blocked; the choice just does not persist */ } };
 
 /**
  * Lesson page, laid out as a study workspace: the media on the left; on the right the focus
@@ -56,7 +53,6 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 	const [tab, setTab] = useState('lessons');
 	const [noteRequest, setNoteRequest] = useState(0);
 	const [cardRequest, setCardRequest] = useState(0);
-	const [theater, setTheater] = useState(readTheater);
 	const [breakPhase, setBreakPhase] = useState<'break' | 'over' | null>(null);
 	const timer = useStore(pomodoro);
 	const [seenRound, setSeenRound] = useState(timer.lastCompleted?.at ?? 0);
@@ -165,14 +161,11 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 			<Band className="mb-6">
 				<div className="flex flex-wrap items-center gap-x-4 gap-y-2 pb-4">
 					<Link to={path(href('course', courseId))} className="inline-flex min-h-11 items-center gap-1 text-sm text-ink-muted hover:text-ink-foreground">
-						<ChevronLeft className="size-4 shrink-0" aria-hidden="true" /><span className="max-w-48 truncate">{course.title}</span>
+						<ChevronLeft className="size-4 shrink-0" aria-hidden="true" /><span className="max-w-72 truncate">{location?.moduleTitle ? `${course.title} · ${location.moduleTitle}` : course.title}</span>
 					</Link>
 					<h1 className="mr-auto min-w-0 truncate text-lg font-bold">{lesson.title}</h1>
 					{position >= 0 && <span className="text-sm text-ink-muted tabular-nums">{tr(`Lesson ${position + 1} of ${sequence.length}`, `Aula ${position + 1} de ${sequence.length}`)}</span>}
 					<div className="flex items-center gap-2">
-						<Button variant="outline" className="hidden border-white/60 bg-transparent text-ink-foreground hover:bg-white/10 hover:text-ink-foreground disabled:opacity-60 lg:inline-flex" aria-pressed={theater} onClick={() => { setTheater(!theater); saveTheater(!theater); }}>
-							{theater ? <PanelRightOpen /> : <PanelRightClose />}{theater ? tr('Show course content', 'Mostrar conteúdo do curso') : tr('Theater mode', 'Modo teatro')}
-						</Button>
 						<Button variant="outline" className="border-white/60 bg-transparent text-ink-foreground hover:bg-white/10 hover:text-ink-foreground disabled:opacity-60" disabled={!previous} onClick={() => previous && goTo(previous.path)}><ChevronLeft />{tr('Previous', 'Anterior')}</Button>
 						<Button className="bg-ink-foreground text-ink hover:bg-white/90" disabled={!next} onClick={() => next && goTo(next.path)}>{tr('Next', 'Próxima')}<ChevronRight /></Button>
 					</div>
@@ -180,7 +173,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 				<div className="pb-4"><LessonRail sequence={sequence} current={position} isDone={(path) => donePaths.has(path)} /></div>
 			</Band>
 
-			<div className={cn('grid gap-6', !theater && 'lg:grid-cols-[minmax(0,1fr)_22rem] [:root[data-sidebar=left]_&]:lg:grid-cols-[22rem_minmax(0,1fr)]')}>
+			<div className={cn('grid gap-6', 'lg:grid-cols-[minmax(0,1fr)_22rem] [:root[data-sidebar=left]_&]:lg:grid-cols-[22rem_minmax(0,1fr)]')}>
 				<div className="min-w-0 space-y-4">
 					<div className="relative">
 						{/* While the break screen is up, the player under it takes no focus or keys. */}
@@ -236,10 +229,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 						</TabsList>
 						<TabsContent value="lessons" className="space-y-4 pt-5">
 							<div className="flex flex-wrap items-center gap-3">
-								<div className="mr-auto min-w-0">
-									<h2 className="text-2xl font-bold text-balance">{lesson.title}</h2>
-									<p className="text-sm text-muted-foreground">{location?.moduleTitle ? `${course.title} · ${location.moduleTitle}` : course.title}</p>
-								</div>
+								<div className="mr-auto" />
 								{hasCards && hasNotes && <Button variant="outline" onClick={() => { player.current?.pause(); openNotes(); }} aria-keyshortcuts="n"><PenLine />{tr('Note', 'Nota')}<kbd aria-hidden="true" className="ml-1 rounded border px-1.5 text-xs text-muted-foreground">N</kbd></Button>}
 								{hasCards && <Button variant="outline" onClick={() => { player.current?.pause(); setTab('cards'); setCardRequest((value) => value + 1); }}><SquarePlus />{tr('Card', 'Cartão')}</Button>}
 								{studySyncSupported && mediaId && (
@@ -274,7 +264,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 					</Tabs>
 				</div>
 
-				<aside aria-label={tr('Course content', 'Conteúdo do curso')} className={cn('min-w-0 space-y-3 [:root[data-sidebar=left]_&]:lg:order-first', !theater && 'lg:sticky lg:top-24 lg:max-h-[calc(100dvh-8rem)] lg:self-start lg:overflow-y-auto')}>
+				<aside aria-label={tr('Course content', 'Conteúdo do curso')} className={cn('min-w-0 space-y-3 [:root[data-sidebar=left]_&]:lg:order-first', 'lg:sticky lg:top-24 lg:max-h-[calc(100dvh-8rem)] lg:self-start lg:overflow-y-auto')}>
 					<h2 className="text-lg font-bold">{tr('Course content', 'Conteúdo do curso')}</h2>
 					<p className="text-sm text-muted-foreground">{tr(`${overall.done} of ${overall.total} lessons completed`, `${overall.done} de ${overall.total} aulas concluídas`)}</p>
 					<Curriculum nodes={course.children} courseId={courseId} completed={completed} favorites={favoriteMedia} activePath={lessonPath} />

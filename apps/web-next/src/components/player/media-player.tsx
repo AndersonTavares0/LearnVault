@@ -251,10 +251,10 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 			)}
 
 			<div role="toolbar" aria-label={tr('Player controls', 'Controles do player')} className="flex flex-wrap items-center gap-2">
-				<Button variant="outline" size="sm" onClick={() => seek(absoluteTime() - 10)} aria-keyshortcuts="ArrowLeft j"><Rewind />{tr('Back 10s', 'Voltar 10s')}</Button>
-				<Button variant="outline" size="sm" onClick={() => seek(absoluteTime() + 10)} aria-keyshortcuts="ArrowRight l"><FastForward />{tr('Forward 10s', 'Avançar 10s')}</Button>
+				<Button variant="outline" size="sm" onClick={() => seek(absoluteTime() - 10)} aria-keyshortcuts="ArrowLeft j"><Rewind /><span className="sr-only">{tr('Back 10s', 'Voltar 10s')}</span></Button>
+				<Button variant="outline" size="sm" onClick={() => seek(absoluteTime() + 10)} aria-keyshortcuts="ArrowRight l"><FastForward /><span className="sr-only">{tr('Forward 10s', 'Avançar 10s')}</span></Button>
 				<Button variant={loop ? 'secondary' : 'outline'} size="sm" aria-pressed={Boolean(loop)} onClick={() => setLoop(!loop ? { a: absoluteTime(), b: null } : loop.b === null ? (absoluteTime() > loop.a + 1 ? { a: loop.a, b: absoluteTime() } : loop) : null)}>
-					<Repeat />{!loop ? tr('Loop', 'Laço') : loop.b === null ? tr(`Loop from ${formatDuration(loop.a)}: set end`, `Laço de ${formatDuration(loop.a)}: marcar fim`) : tr(`Looping ${formatDuration(loop.a)}–${formatDuration(loop.b)}: clear`, `Repetindo ${formatDuration(loop.a)}–${formatDuration(loop.b)}: limpar`)}
+					<Repeat />{!loop ? <span className="sr-only">{tr('Loop', 'Laço')}</span> : loop.b === null ? tr(`Loop from ${formatDuration(loop.a)}: set end`, `Laço de ${formatDuration(loop.a)}: marcar fim`) : tr(`Looping ${formatDuration(loop.a)}–${formatDuration(loop.b)}: clear`, `Repetindo ${formatDuration(loop.a)}–${formatDuration(loop.b)}: limpar`)}
 				</Button>
 				<Label htmlFor="player-speed" className="ml-2">{tr('Speed', 'Velocidade')}</Label>
 				<select id="player-speed" value={speed} onChange={(event) => changeSpeed(Number(event.target.value) as PlaybackSpeed)} className="h-11 rounded-lg border border-input bg-background px-2 text-sm" aria-keyshortcuts="[ ]">
@@ -280,7 +280,7 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 				<div className="ml-auto flex flex-wrap gap-1">
 					{capabilities.data?.transcoding && (
 						<Button variant={transcode ? 'secondary' : 'ghost'} size="sm" aria-pressed={Boolean(transcode)} onClick={() => (transcode ? setTranscode(null) : startTranscode(false))}>
-							<Zap />{tr('Transcode', 'Transcodificar')}
+							<Zap /><span className="sr-only">{tr('Transcode', 'Transcodificar')}</span>
 						</Button>
 					)}
 					{capabilities.data?.systemPlayer && <Button variant="ghost" size="icon" onClick={openSystemPlayer} aria-label={tr('Open in system player', 'Abrir no player do sistema')}><ExternalLink /></Button>}

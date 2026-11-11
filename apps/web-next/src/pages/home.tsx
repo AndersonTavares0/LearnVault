@@ -3,7 +3,7 @@ import { useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Band } from '@/components/band';
 import { BrandMark } from '@/components/brand';
-import { CourseCard, ProgressBar, routerPath } from '@/components/course-card';
+import { CourseCard, routerPath } from '@/components/course-card';
 import { CourseCover } from '@/components/course-cover';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -13,7 +13,6 @@ import { useLocale } from '@/hooks/use-locale';
 import { useStore } from '@/hooks/use-store';
 import { appearanceStore } from '@/lib/appearance';
 import { buildGamification } from '@/lib/gamification';
-import { formatCount } from '@/lib/catalog';
 import { tr } from '@/lib/i18n';
 import { buildLibrary, type CourseEntry, type LibraryFilter, type ResumeEntry } from '@/lib/library';
 import { persistLibraryView, readLibraryView } from '@/lib/library-view';
@@ -72,8 +71,7 @@ export function HomePage() {
 				<div className="flex flex-wrap items-end justify-between gap-4 pb-5">
 					<div className="min-w-0 space-y-1">
 						<h1 className="text-3xl font-bold text-balance sm:text-4xl">{tr('My learning', 'Meu aprendizado')}</h1>
-						<p className="text-ink-muted">{formatCount(library.entries.length, tr('course', 'curso'), tr('courses', 'cursos'))}</p>
-					</div>
+											</div>
 					{user?.isAdmin && library.entries.length > 0 && <LibraryActions onMessage={setMessage} onDark />}
 				</div>
 				{library.entries.length > 0 && <FilterTabs counts={library.counts} filter={filter} onFilter={(value) => setParam('filter', value === 'all' ? null : value)} />}
@@ -81,8 +79,7 @@ export function HomePage() {
 			<p role="status" aria-live="polite" className="mb-4 text-sm text-muted-foreground empty:hidden">{message}</p>
 
 			<div className="space-y-10">
-				{!filtered && look.showContinue && library.resume.length > 0 && <ContinueLearning items={library.resume} entries={library.entries} profile={profile} />}
-				{!filtered && studySyncSupported && rewards.data && <HabitRow rewards={rewards.data} completedCourses={library.entries.filter((entry) => entry.status === 'completed').length} />}
+				{!filtered && studySyncSupported && library.entries.length > 0 && <ResumeStrip items={library.resume} entries={library.entries} profile={profile} rewards={rewards.data} completedCourses={library.entries.filter((entry) => entry.status === 'completed').length} />}
 
 				<section aria-labelledby="courses-heading" className="space-y-5">
 					<div className="flex flex-wrap items-center gap-3">
@@ -133,66 +130,39 @@ function FilterTabs({ counts, filter, onFilter }: { counts: Record<LibraryFilter
 	);
 }
 
-/** "Continue learning": the lessons you stopped in, each one click from where you left off. */
-function ContinueLearning({ items, entries, profile }: { items: ResumeEntry[]; entries: CourseEntry[]; profile: string }) {
-	const link = (entry: ResumeEntry) => routerPath(href('course', entry.location.courseId, entry.location.lesson.path, entry.progress.positionSeconds));
+/**
+ * One strip under the band: the lesson to go back to, and the habit in a single line. Everything
+ * else about progress lives on the Progress page, so this page has one thing to do first.
+ */
+function ResumeStrip({ items, entries, profile, rewards, completedCourses }: { items: ResumeEntry[]; entries: CourseEntry[]; profile: string; rewards: RewardSummary | undefined; completedCourses: number }) {
+	const look = useStore(appearanceStore);
+	const first = items[0];
+	const game = rewards ? buildGamification({ rewards, completedCourses }) : null;
+	const study = rewards?.study;
+	const stats = [
+		look.showStreak && study && <li key="s" className="flex items-center gap-1.5"><Flame className="size-4 text-reward" aria-hidden="true" /><span className="font-bold">{study.currentStreak}</span> {tr('day streak', 'dias seguidos')}</li>,
+		look.showGoal && study && rewards && <li key="g" className="flex items-center gap-1.5"><Target className="size-4 text-primary" aria-hidden="true" />{tr('Goal', 'Meta')} <span className="font-bold">{Math.min(study.weekActiveDays, rewards.weeklyGoal)}/{rewards.weeklyGoal}</span></li>,
+		look.showXp && game && <li key="x" className="flex items-center gap-1.5"><Star className="size-4 text-reward" aria-hidden="true" />{tr(`Level ${game.level.level}`, `Nível ${game.level.level}`)} <span className="text-muted-foreground">{game.level.xp} XP</span></li>
+	].filter(Boolean);
+	if (!first && stats.length === 0) return null;
+	const entry = first ? entries.find((course) => course.courseId === first.location.courseId) : undefined;
 	return (
-		<section aria-labelledby="continue-heading" className="space-y-4">
-			<h2 id="continue-heading" className="text-2xl font-bold">{tr('Continue learning', 'Continuar estudando')}</h2>
-			<ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-				{items.slice(0, 3).map((entry, index) => (
-					<li key={entry.progress.mediaId} className="relative flex gap-4 rounded-lg border bg-card p-3 hover:bg-brand-tint">
-						<CourseCoverFor entry={entries.find((course) => course.courseId === entry.location.courseId)} profile={profile} eager={index === 0} compact className="w-32 shrink-0 self-start" />
-						<div className="flex min-w-0 flex-1 flex-col justify-between gap-2">
-							<div className="min-w-0">
-								<p className="truncate text-sm text-muted-foreground">{entry.location.courseTitle}</p>
-								<h3 className="line-clamp-2 leading-snug font-bold">
-									<Link to={link(entry)} className="after:absolute after:inset-0 after:content-[''] focus-visible:outline-none">{entry.location.lesson.title}</Link>
-								</h3>
-							</div>
-							<ProgressBar value={entry.courseProgress} label={tr(`${Math.round(entry.courseProgress * 100)}% complete`, `${Math.round(entry.courseProgress * 100)}% concluído`)} />
-							<span className="inline-flex w-fit items-center gap-1.5 text-sm font-bold text-primary"><Play className="size-4 fill-current" aria-hidden="true" />{tr('Resume', 'Retomar')}</span>
-						</div>
-					</li>
-				))}
-			</ul>
+		<section aria-label={tr('Continue learning', 'Continuar estudando')} className="relative flex flex-wrap items-center gap-x-8 gap-y-3 rounded-lg bg-muted px-4 py-3">
+			{first && look.showContinue && (
+				<div className="flex min-w-0 flex-1 items-center gap-4">
+					<CourseCoverFor entry={entry} profile={profile} eager compact className="w-24 shrink-0" />
+					<div className="min-w-0">
+						<p className="truncate text-sm text-muted-foreground">{first.location.courseTitle}</p>
+						<h2 className="truncate text-lg font-bold">
+							<Link to={routerPath(href('course', first.location.courseId, first.location.lesson.path, first.progress.positionSeconds))} className="after:absolute after:inset-0 after:content-[''] focus-visible:outline-none">{first.location.lesson.title}</Link>
+						</h2>
+					</div>
+					<span className="ml-auto inline-flex shrink-0 items-center gap-1.5 text-sm font-bold text-primary"><Play className="size-4 fill-current" aria-hidden="true" />{tr('Resume', 'Retomar')}</span>
+				</div>
+			)}
+			{stats.length > 0 && <ul aria-label={tr('Your habit', 'Seu hábito')} className="relative z-10 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">{stats}</ul>}
 		</section>
 	);
-}
-
-/** The habit tools in one row: this week's goal, the streak and the level. Each can be turned off in Settings. */
-function HabitRow({ rewards, completedCourses }: { rewards: RewardSummary; completedCourses: number }) {
-	const look = useStore(appearanceStore);
-	const game = buildGamification({ rewards, completedCourses });
-	const study = rewards.study;
-	const goal = rewards.weeklyGoal;
-	const cards = [
-		look.showGoal && (
-			<article key="goal" className="space-y-3 rounded-lg border bg-card p-4">
-				<h3 className="flex items-center gap-2 font-bold"><Target className="size-5 text-primary" aria-hidden="true" />{tr('Weekly goal', 'Meta semanal')}</h3>
-				<p className="text-2xl font-bold tabular-nums">{Math.min(study.weekActiveDays, goal)} <span className="text-base font-normal text-muted-foreground">{tr(`of ${goal} days`, `de ${goal} dias`)}</span></p>
-				<div role="progressbar" aria-valuemin={0} aria-valuemax={goal} aria-valuenow={Math.min(study.weekActiveDays, goal)} aria-label={tr('Weekly goal', 'Meta semanal')} className="flex gap-1">
-					{Array.from({ length: goal }, (_, index) => <span key={index} className={cn('h-2 flex-1 rounded-full', index < study.weekActiveDays ? 'bg-primary' : 'bg-muted')} />)}
-				</div>
-			</article>
-		),
-		look.showStreak && (
-			<article key="streak" className="space-y-3 rounded-lg border bg-card p-4">
-				<h3 className="flex items-center gap-2 font-bold"><Flame className="size-5 text-reward" aria-hidden="true" />{tr('Streak', 'Sequência')}</h3>
-				<p className="text-2xl font-bold tabular-nums">{formatCount(study.currentStreak, tr('day', 'dia'), tr('days', 'dias'))}</p>
-				<p className="text-sm text-muted-foreground">{tr(`Best: ${study.longestStreak}`, `Melhor: ${study.longestStreak}`)}</p>
-			</article>
-		),
-		look.showXp && (
-			<article key="xp" className="space-y-3 rounded-lg border bg-card p-4">
-				<h3 className="flex items-center gap-2 font-bold"><Star className="size-5 text-reward" aria-hidden="true" />{tr(`Level ${game.level.level}`, `Nível ${game.level.level}`)}</h3>
-				<p className="text-2xl font-bold tabular-nums">{game.level.xp} <span className="text-base font-normal text-muted-foreground">XP</span></p>
-				<ProgressBar value={game.level.progress} label={tr(`${game.level.xpToNext} XP to level ${game.level.level + 1}`, `${game.level.xpToNext} XP para o nível ${game.level.level + 1}`)} />
-			</article>
-		)
-	].filter(Boolean);
-	if (cards.length === 0) return null;
-	return <section aria-label={tr('Your habit', 'Seu hábito')} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{cards}</section>;
 }
 
 /** The resume band shows the same cover as the course card, with its lesson bar. */

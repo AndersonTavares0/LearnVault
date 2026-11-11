@@ -51,17 +51,6 @@ describe('lesson page', () => {
 		expect(await screen.findByRole('button', { name: 'Completed' })).toBeTruthy();
 	});
 
-	it('switches to theater mode and remembers it', async () => {
-		localStorage.removeItem('learnvault-theater');
-		renderApp('/course/c/c%2FOne', { catalog });
-		const toggle = await screen.findByRole('button', { name: 'Theater mode' });
-		expect(toggle.getAttribute('aria-pressed')).toBe('false');
-		fireEvent.click(toggle);
-		expect(screen.getByRole('button', { name: 'Show course content' }).getAttribute('aria-pressed')).toBe('true');
-		expect(localStorage.getItem('learnvault-theater')).toBe('1');
-		localStorage.removeItem('learnvault-theater');
-	});
-
 	it('walks the A-B loop control through start, end and clear', async () => {
 		renderApp('/course/c/c%2FOne', { catalog });
 		fireEvent.click(await screen.findByRole('button', { name: 'Loop' }));
