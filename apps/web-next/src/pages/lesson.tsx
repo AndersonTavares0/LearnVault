@@ -166,8 +166,8 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 					<h1 className="mr-auto min-w-0 truncate text-lg font-bold">{lesson.title}</h1>
 					{position >= 0 && <span className="text-sm text-ink-muted tabular-nums">{tr(`Lesson ${position + 1} of ${sequence.length}`, `Aula ${position + 1} de ${sequence.length}`)}</span>}
 					<div className="flex items-center gap-2">
-						<Button variant="outline" className="border-white/60 bg-transparent text-ink-foreground hover:bg-white/10 hover:text-ink-foreground disabled:opacity-60" disabled={!previous} onClick={() => previous && goTo(previous.path)}><ChevronLeft />{tr('Previous', 'Anterior')}</Button>
-						<Button className="bg-ink-foreground text-ink hover:bg-white/90" disabled={!next} onClick={() => next && goTo(next.path)}>{tr('Next', 'Próxima')}<ChevronRight /></Button>
+						<Button variant="outline" className="disabled:opacity-60" disabled={!previous} onClick={() => previous && goTo(previous.path)}><ChevronLeft />{tr('Previous', 'Anterior')}</Button>
+						<Button disabled={!next} onClick={() => next && goTo(next.path)}>{tr('Next', 'Próxima')}<ChevronRight /></Button>
 					</div>
 				</div>
 				<div className="pb-4"><LessonRail sequence={sequence} current={position} isDone={(path) => donePaths.has(path)} /></div>
@@ -279,7 +279,7 @@ function LessonRail({ sequence, current, isDone }: { sequence: { path: string }[
 	if (sequence.length < 2 || sequence.length > 60) return null;
 	return (
 		<div aria-hidden="true" className="flex gap-1">
-			{sequence.map((item, index) => <span key={item.path} className={cn('h-1.5 flex-1 rounded-full', isDone(item.path) ? 'bg-ink-foreground' : index === current ? 'bg-ink-foreground/55' : 'bg-ink-foreground/20')} />)}
+			{sequence.map((item, index) => <span key={item.path} className={cn('h-1.5 flex-1 rounded-full', isDone(item.path) ? 'bg-brand' : index === current ? 'bg-brand/55' : 'bg-brand/20')} />)}
 		</div>
 	);
 }

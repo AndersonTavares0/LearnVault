@@ -8,13 +8,13 @@ import { createStore } from '@/lib/store';
 export const APPEARANCE_STORAGE_KEY = 'learnvault-appearance';
 
 export const ACCENT_PRESETS = [
-	{ id: 'blue', hex: '#1F5AD6' },
-	{ id: 'purple', hex: '#6A32C9' },
-	{ id: 'teal', hex: '#0B7C77' },
-	{ id: 'green', hex: '#1E7A46' },
-	{ id: 'orange', hex: '#C2410C' },
-	{ id: 'rose', hex: '#C2185B' },
-	{ id: 'slate', hex: '#3F4B63' }
+	{ id: 'amber', hex: '#A5540A' },
+	{ id: 'forest', hex: '#2F6B3F' },
+	{ id: 'terracotta', hex: '#B2472D' },
+	{ id: 'navy', hex: '#27508F' },
+	{ id: 'plum', hex: '#7A3B7B' },
+	{ id: 'teal', hex: '#12736E' },
+	{ id: 'slate', hex: '#4A4F5C' }
 ] as const;
 
 export const REWARD_COLORS = ['amber', 'accent'] as const;
@@ -128,10 +128,10 @@ export function applyAppearance(appearance: Appearance, root: HTMLElement = docu
 	const accent = readableAccent(appearance.accent);
 	root.style.setProperty('--brand', accent);
 	root.style.setProperty('--brand-fg', '#FFFFFF');
-	root.style.setProperty('--reward', appearance.reward === 'accent' ? 'var(--brand)' : '#B45309');
-	root.style.setProperty('--reward-fill', appearance.reward === 'accent' ? 'var(--brand)' : '#F59E0B');
-	root.style.setProperty('--reward-fill-fg', appearance.reward === 'accent' ? 'var(--brand-fg)' : '#1C1D1F');
-	root.style.setProperty('--reward-tint', appearance.reward === 'accent' ? 'var(--brand-tint)' : '#FEF3C7');
+	root.style.setProperty('--reward', appearance.reward === 'accent' ? 'var(--brand)' : '#8F4A08');
+	root.style.setProperty('--reward-fill', appearance.reward === 'accent' ? 'var(--brand)' : '#E8A33D');
+	root.style.setProperty('--reward-fill-fg', appearance.reward === 'accent' ? 'var(--brand-fg)' : '#2A2118');
+	root.style.setProperty('--reward-tint', appearance.reward === 'accent' ? 'var(--brand-tint)' : '#F8E9C8');
 	for (const key of ['radius', 'density', 'textSize', 'font', 'banner', 'sidebar', 'homeLayout'] as const) root.dataset[key] = appearance[key];
 }
 

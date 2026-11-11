@@ -72,7 +72,7 @@ export function HomePage() {
 					<div className="min-w-0 space-y-1">
 						<h1 className="text-3xl font-bold text-balance sm:text-4xl">{tr('My learning', 'Meu aprendizado')}</h1>
 											</div>
-					{user?.isAdmin && library.entries.length > 0 && <LibraryActions onMessage={setMessage} onDark />}
+					{user?.isAdmin && library.entries.length > 0 && <LibraryActions onMessage={setMessage} />}
 				</div>
 				{library.entries.length > 0 && <FilterTabs counts={library.counts} filter={filter} onFilter={(value) => setParam('filter', value === 'all' ? null : value)} />}
 			</Band>
@@ -190,7 +190,7 @@ function Filters(props: { categories: string[]; category: string | null; onCateg
 	);
 }
 
-export function LibraryActions({ onMessage, onDark = false }: { onMessage: (message: string) => void; onDark?: boolean }) {
+export function LibraryActions({ onMessage }: { onMessage: (message: string) => void }) {
 	const rescan = useRescan();
 	const importCourse = useImportCourse();
 	const navigate = useNavigate();
@@ -215,10 +215,10 @@ export function LibraryActions({ onMessage, onDark = false }: { onMessage: (mess
 
 	return (
 		<>
-			<Button variant="outline" className={cn(onDark && 'border-white/60 bg-transparent text-ink-foreground hover:bg-white/10 hover:text-ink-foreground')} disabled={rescan.isPending} onClick={() => { onMessage(tr('Reading courses…', 'Lendo os cursos…')); rescan.mutate(undefined, { onSuccess: () => onMessage(tr('Catalog updated.', 'Catálogo atualizado.')), onError: (error) => onMessage(error.message) }); }}>
+			<Button variant="outline" disabled={rescan.isPending} onClick={() => { onMessage(tr('Reading courses…', 'Lendo os cursos…')); rescan.mutate(undefined, { onSuccess: () => onMessage(tr('Catalog updated.', 'Catálogo atualizado.')), onError: (error) => onMessage(error.message) }); }}>
 				<RefreshCw className={cn(rescan.isPending && 'motion-safe:animate-spin')} />{tr('Refresh courses', 'Atualizar cursos')}
 			</Button>
-			<Button className={cn(onDark && 'bg-ink-foreground text-ink hover:bg-white/90')} disabled={importCourse.isPending} aria-haspopup={transportKind === 'http' ? 'dialog' : undefined} onClick={() => (transportKind === 'desktop' ? runImport() : setImportOpen(true))}>
+			<Button disabled={importCourse.isPending} aria-haspopup={transportKind === 'http' ? 'dialog' : undefined} onClick={() => (transportKind === 'desktop' ? runImport() : setImportOpen(true))}>
 				<FolderPlus />{tr('Import course', 'Importar curso')}
 			</Button>
 			<Dialog open={importOpen} onOpenChange={(open) => { setImportOpen(open); if (!open) { setImportError(''); importCourse.reset(); } }}>

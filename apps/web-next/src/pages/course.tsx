@@ -22,7 +22,6 @@ import { useCatalog, useCourseCover, useFavorites, useNotes, useRecent, useRemov
 
 const path = (hash: string) => hash.replace(/^#/, '');
 /** Buttons that sit on the dark course header. */
-const onInk = 'border-white/30 bg-transparent text-ink-foreground hover:bg-white/10 hover:text-ink-foreground dark:border-white/30 dark:bg-transparent dark:hover:bg-white/10';
 
 export function CourseRoute() {
 	useLocale();
@@ -82,8 +81,8 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 						</div>
 						{entry && entry.total > 0 && (
 							<div className="max-w-md space-y-1">
-								<div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-labelledby="course-progress" className="h-2 overflow-hidden rounded-full bg-white/20">
-									<div className="h-full bg-ink-foreground" style={{ width: `${percent}%` }} />
+								<div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-labelledby="course-progress" className="h-2 overflow-hidden rounded-full bg-brand-soft">
+									<div className="h-full bg-brand" style={{ width: `${percent}%` }} />
 								</div>
 								<p id="course-progress" className="text-sm text-ink-muted">{tr(`${entry.done} of ${entry.total} lessons completed (${percent}%)`, `${entry.done} de ${entry.total} aulas concluídas (${percent}%)`)}</p>
 							</div>
@@ -95,19 +94,19 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 						)}
 						<div className="flex flex-wrap gap-2">
 							{continuePath ? (
-								<Link to={path(href('course', courseId, continuePath, resumeAt))} className="inline-flex h-12 items-center justify-center rounded-lg bg-ink-foreground px-6 text-sm font-semibold text-ink hover:bg-white/90 focus-visible:ring-3 focus-visible:ring-white/60 focus-visible:outline-none">
+								<Link to={path(href('course', courseId, continuePath, resumeAt))} className="inline-flex h-12 items-center justify-center rounded-lg bg-brand px-6 text-sm font-semibold text-brand-foreground hover:bg-brand-deep focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
 									{lastStudied ? tr('Continue studying', 'Continuar estudando') : tr('Start course', 'Começar curso')}
 								</Link>
 							) : (
 								<p className="text-sm text-ink-muted">{tr('No lessons available', 'Nenhuma aula disponível')}</p>
 							)}
 							{studySyncSupported && entry && (
-								<Button variant="outline" size="lg" className={onInk} aria-pressed={entry.favorite} disabled={toggleFavorite.isPending} onClick={() => toggleFavorite.mutate({ courseId, favorite: !entry.favorite })}>
+								<Button variant="outline" size="lg" aria-pressed={entry.favorite} disabled={toggleFavorite.isPending} onClick={() => toggleFavorite.mutate({ courseId, favorite: !entry.favorite })}>
 									<Star className={cn(entry.favorite && 'fill-current')} />
 									{entry.favorite ? tr('Favorited', 'Favoritado') : tr('Favorite course', 'Favoritar curso')}
 								</Button>
 							)}
-							{user?.isAdmin && <ManageCourse course={course} courseId={courseId} lessons={counts.lessons} buttonClassName={onInk} />}
+							{user?.isAdmin && <ManageCourse course={course} courseId={courseId} lessons={counts.lessons} />}
 						</div>
 					</div>
 					<div className="order-1 max-w-md lg:order-2 lg:max-w-none"><CourseCover course={course} profile={user?.userId ?? ''} eager done={entry?.done ?? 0} total={entry?.total ?? 0} map /></div>
@@ -171,7 +170,7 @@ function CourseNotes({ course, courseId }: { course: CatalogNode; courseId: stri
 }
 
 /** Admin actions. Removing only unregisters the course; the dialog states the impact first. */
-function ManageCourse({ course, courseId, lessons, buttonClassName }: { course: CatalogNode; courseId: string; lessons: number; buttonClassName?: string }) {
+function ManageCourse({ course, courseId, lessons }: { course: CatalogNode; courseId: string; lessons: number }) {
 	const remove = useRemoveCourse();
 	const reset = useResetCourseOrder();
 	const navigate = useNavigate();
@@ -194,7 +193,7 @@ function ManageCourse({ course, courseId, lessons, buttonClassName }: { course: 
 		<>
 			<input ref={fileInput} type="file" accept={COVER_ACCEPT} onChange={pickFile} className="sr-only" tabIndex={-1} aria-hidden="true" />
 			<DropdownMenu>
-				<DropdownMenuTrigger render={<Button variant="outline" size="lg" className={buttonClassName} />}>{tr('Manage course', 'Gerenciar curso')}</DropdownMenuTrigger>
+				<DropdownMenuTrigger render={<Button variant="outline" size="lg" />}>{tr('Manage course', 'Gerenciar curso')}</DropdownMenuTrigger>
 				<DropdownMenuContent align="end">
 					<DropdownMenuItem disabled={reset.isPending} onClick={() => reset.mutate(courseId, { onSuccess: () => setMessage(tr('Lesson order restored.', 'Ordem das aulas restaurada.')), onError: (error) => setMessage(error.message) })}>
 						{tr('Restore lesson order', 'Restaurar ordem das aulas')}

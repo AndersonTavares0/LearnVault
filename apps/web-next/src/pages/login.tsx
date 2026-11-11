@@ -1,7 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router';
 import { CircleAlert } from 'lucide-react';
-import { BrandMark } from '@/components/brand';
 import { PasswordField } from '@/components/password-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,7 +41,7 @@ export function LoginPage() {
 	return (
 		<main id="main" className="grid min-h-dvh place-items-center bg-muted px-4 py-10">
 			<div className="flex w-full max-w-md flex-col items-center gap-6">
-				<div className="flex items-center gap-3 text-2xl font-bold"><BrandMark className="size-9 text-primary" />LearnVault</div>
+				<div className="flex items-center gap-3 text-2xl font-bold"><span className="font-heading font-semibold">LearnVault</span></div>
 				<form onSubmit={submit} className="w-full space-y-5 rounded-lg border bg-card p-8 shadow-sm">
 					<div className="space-y-1">
 						<h1 className="text-2xl font-bold">{tr('Sign in', 'Entrar')}</h1>

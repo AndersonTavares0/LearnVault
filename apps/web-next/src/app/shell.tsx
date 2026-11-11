@@ -2,7 +2,6 @@ import { BookOpen, ChartNoAxesColumn, Layers, CircleUser, LogOut, NotebookPen, S
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router';
-import { BrandMark } from '@/components/brand';
 import { DesktopTitlebar } from '@/components/desktop-titlebar';
 import { FocusMenu } from '@/components/focus-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -81,8 +80,7 @@ function Topbar({ username, userId }: { username: string; userId: string }) {
 		<header className="sticky top-0 z-40 border-b print:hidden bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/80">
 			<div className="mx-auto flex h-[4.25rem] max-w-7xl items-center gap-2 px-4">
 				<Link to="/" className="mr-2 flex min-h-11 items-center gap-2 rounded-md font-semibold" aria-label={tr('LearnVault home', 'Início do LearnVault')}>
-					<BrandMark className="size-7 text-primary" />
-					<span className="hidden lg:inline">LearnVault</span>
+					<span className="font-heading text-xl font-semibold tracking-tight">LearnVault</span>
 				</Link>
 				<nav aria-label={tr('Main', 'Principal')} className="hidden items-center gap-1 sm:flex">
 					{navItems().map((item) => (

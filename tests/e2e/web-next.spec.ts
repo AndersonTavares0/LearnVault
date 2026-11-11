@@ -107,8 +107,8 @@ test('signs in, indexes the library and resumes a lesson from My learning', asyn
 	await expectNoAxeViolations(page, 'lesson');
 
 	await page.goto(`${origin}/#/progress`);
-	await expect(page.getByRole('heading', { name: /studied this week/ })).toBeVisible();
-	await expect(page.getByRole('heading', { name: 'Your courses' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: /days this week/ })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Badges' })).toBeVisible();
 	await expectNoAxeViolations(page, 'progress');
 
 	await page.goto(`${origin}/#/notes`);
@@ -158,7 +158,7 @@ test('customizing the look passes axe for every accent and breaks no CSP rule', 
 	await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
 
 	const brand = new Set<string>();
-	for (const accent of ['Blue', 'Purple', 'Teal', 'Green', 'Orange', 'Rose', 'Slate']) {
+	for (const accent of ['Amber', 'Forest', 'Terracotta', 'Navy', 'Plum', 'Teal', 'Slate']) {
 		await page.getByRole('group', { name: 'Accent color' }).getByRole('button', { name: accent }).click();
 		brand.add(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--brand').trim()));
 		await expectNoAxeViolations(page, `settings/${accent}`);
@@ -191,7 +191,7 @@ test('admin settings pass axe and new accounts start with no course access', asy
 	await signIn(page, origin);
 	await page.getByRole('button', { name: 'Refresh courses' }).click();
 	await expect(page.getByText('Catalog updated.')).toBeVisible();
-	await page.goto(`${origin}/#/settings`);
+	await page.goto(`${origin}/#/settings#users`);
 	await expect(page.getByRole('heading', { name: 'Accounts and course access' })).toBeVisible();
 	await expectNoAxeViolations(page, 'settings');
 

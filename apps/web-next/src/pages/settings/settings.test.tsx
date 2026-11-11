@@ -25,16 +25,16 @@ describe('settings', () => {
 	it('customizes the look at once and can put the default back', async () => {
 		renderApp('/settings', { catalog });
 		const accent = await screen.findByRole('group', { name: 'Accent color' });
-		fireEvent.click(within(accent).getByRole('button', { name: 'Purple' }));
-		expect(document.documentElement.style.getPropertyValue('--brand')).toBe('#6A32C9');
+		fireEvent.click(within(accent).getByRole('button', { name: 'Plum' }));
+		expect(document.documentElement.style.getPropertyValue('--brand')).toBe('#7A3B7B');
 		fireEvent.click(within(screen.getByRole('group', { name: 'Corners' })).getByRole('button', { name: 'Round' }));
 		expect(document.documentElement.dataset.radius).toBe('round');
 		fireEvent.click(within(screen.getByRole('group', { name: 'Course content in a lesson' })).getByRole('button', { name: 'On the left' }));
 		expect(document.documentElement.dataset.sidebar).toBe('left');
 		fireEvent.click(screen.getByRole('checkbox', { name: 'Streak' }));
-		expect(JSON.parse(localStorage.getItem('learnvault-appearance')!)).toMatchObject({ accent: '#6A32C9', radius: 'round', sidebar: 'left', showStreak: false });
+		expect(JSON.parse(localStorage.getItem('learnvault-appearance')!)).toMatchObject({ accent: '#7A3B7B', radius: 'round', sidebar: 'left', showStreak: false });
 		fireEvent.click(screen.getByRole('button', { name: 'Reset to the default look' }));
-		expect(document.documentElement.style.getPropertyValue('--brand')).toBe('#1F5AD6');
+		expect(document.documentElement.style.getPropertyValue('--brand')).toBe('#A5540A');
 		expect(document.documentElement.dataset.radius).toBe('soft');
 	});
 
