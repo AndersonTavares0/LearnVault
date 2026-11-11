@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { DesktopTitlebar } from '@/components/desktop-titlebar';
+import { UpdateNotice } from '@/components/update-notice';
 import { FocusMenu } from '@/components/focus-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
@@ -73,6 +74,7 @@ export function AppShell() {
 					</div>
 				</div>
 			</header>
+			<UpdateNotice isAdmin={Boolean(user.isAdmin)} />
 			<main id="main" tabIndex={-1} className="mx-auto w-full max-w-7xl px-5 py-8 outline-none sm:px-10 sm:py-10">
 				<Outlet />
 			</main>
