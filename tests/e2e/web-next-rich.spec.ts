@@ -128,8 +128,8 @@ test('every main page passes axe on the dark theme', async ({ page, origin }) =>
 	await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
 });
 
-// Regression for #321: in the old app the module rows of the course list did not open.
-test('a module row opens to show its lessons and closes again (#321)', async ({ page, origin }) => {
+// Module rows are native disclosures: they open to show their lessons and close again.
+test('a module row opens to show its lessons and closes again', async ({ page, origin }) => {
 	await page.emulateMedia({ reducedMotion: 'reduce' });
 	await openCourse(page, origin);
 	const lesson = page.getByRole('link', { name: /^Lesson/ });
