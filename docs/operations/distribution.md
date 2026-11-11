@@ -37,6 +37,14 @@ cosign verify ghcr.io/andersontavares0/learnvault:0.9.0 \
 
 The command succeeds only for an image signed by `release.yml` in this repository. The Compose updater (`deploy/scripts/update.sh`) runs the same check on the target version before it backs up or changes anything, and refuses to update to an image that is unsigned or signed by anything else. Set `LEARNVAULT_VERIFY_SIGNATURE=false` only for a private mirror that re-publishes the image. Images published before this change (up to v0.8.0) are not signed.
 
+What this does and does not promise:
+
+- The updater verifies the tag, then pulls and starts the verified digest (`repo@sha256:…`), so retagging the registry between the check and the pull has no effect.
+- A signature proves the image came from `release.yml` in this repository, run for a version tag or for `main`. A manual run of the workflow on `main` can re-sign a rebuilt tag; the signature does not distinguish that from the original.
+- The image is pushed before it is signed. If signing fails, the release is not published, but the tags already point at an unsigned image; the updater refuses it, but `docker compose pull` of `:latest` would not. Re-run the workflow to fix it.
+- The updater installs `cosign` from the Alpine mirror when it starts, unpinned. Bake a pinned `cosign` into the updater image if that matters for your threat model.
+- `LEARNVAULT_GITHUB_REPO` must look like `owner/name`, and `LEARNVAULT_VERIFY_SIGNATURE` must be exactly `true` or `false`; anything else stops the update.
+
 ### Automatic updates with Podman Quadlet
 
 `deploy/quadlet/learnvault.container` pulls `ghcr.io/andersontavares0/learnvault:stable` and is marked `AutoUpdate=registry`. Enable the native Podman timer to apply new releases:
