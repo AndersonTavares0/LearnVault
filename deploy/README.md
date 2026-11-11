@@ -51,7 +51,7 @@ Edite o arquivo `.env` e defina suas credenciais de administrador e caminhos:
 - `ADMIN_USERNAME`: Usuário administrador inicial.
 - `ADMIN_PASSWORD`: Senha forte (mínimo de 12 caracteres).
 - `DATA_DIR`: Onde o banco de dados e metadados serão armazenados.
-- `LIBRARY_DIR`: Caminho da pasta que contém os cursos no seu computador/servidor.
+- `LIBRARY_DIR`: Folder on the host, mounted read-only at `/library`. It sets the root the server is allowed to read; it does not register your course folders by itself. On the first start the folder itself appears as one course (named after it). To list each course folder under it, sign in as the administrator, use **Import course** for each one, then **Refresh courses**. Once your course folders are imported, remove the root course (**Manage course**, then remove) so every file is not indexed twice. See #318.
 
 ### 2. Executar com Docker Compose
 
