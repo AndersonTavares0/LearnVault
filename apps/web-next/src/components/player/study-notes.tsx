@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Play, Plus, Trash2 } from 'lucide-react';
 import { useState, type KeyboardEvent } from 'react';
+import { Markdown } from '@/components/markdown';
+import { NoteEditor } from '@/components/note-editor';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { tr } from '@/lib/i18n';
@@ -50,20 +52,9 @@ export function StudyNotes({ mediaId, currentTime, onSeek, addRequest }: { media
 			)}
 			{error && <p role="alert" className="text-sm text-destructive">{error}</p>}
 			{draft && (
-				<div className="space-y-2 rounded-lg border bg-card p-4">
+				<div className="space-y-2 rounded-[1.5rem] border bg-card p-4">
 					<Label htmlFor="note-draft">{tr(`Note at ${formatDuration(draft.position)}`, `Nota em ${formatDuration(draft.position)}`)}</Label>
-					<textarea
-						id="note-draft"
-						// eslint-disable-next-line jsx-a11y/no-autofocus -- the draft opens on request, so focus follows the user's action
-						autoFocus
-						rows={3}
-						maxLength={10_000}
-						value={draft.content}
-						onChange={(event) => setDraft({ ...draft, content: event.target.value })}
-						onKeyDown={onKeyDown}
-						aria-describedby="note-draft-hint"
-						className="w-full rounded-lg border border-input bg-background p-3 text-sm"
-					/>
+					<NoteEditor id="note-draft" rows={3} value={draft.content} onChange={(content) => setDraft({ ...draft, content })} onKeyDown={onKeyDown} describedBy="note-draft-hint" />
 					<p id="note-draft-hint" className="text-xs text-muted-foreground">{tr('Ctrl+Enter saves the note.', 'Ctrl+Enter salva a nota.')}</p>
 					<div className="flex justify-end gap-2">
 						<Button variant="outline" onClick={() => setDraft(null)} disabled={create.isPending}>{tr('Cancel', 'Cancelar')}</Button>
@@ -82,7 +73,7 @@ export function StudyNotes({ mediaId, currentTime, onSeek, addRequest }: { media
 							<Button variant="ghost" size="sm" onClick={() => onSeek(note.positionSeconds)} aria-label={tr(`Play from ${formatDuration(note.positionSeconds)}`, `Reproduzir de ${formatDuration(note.positionSeconds)}`)} className="font-mono tabular-nums">
 								<Play />{formatDuration(note.positionSeconds)}
 							</Button>
-							<p className="min-w-0 flex-1 py-3 text-sm whitespace-pre-wrap">{note.content}</p>
+							<Markdown text={note.content} className="min-w-0 flex-1 py-3 text-sm" />
 							<Button variant="ghost" size="icon" onClick={() => remove.mutate(note.noteId)} disabled={remove.isPending} aria-label={tr(`Delete note at ${formatDuration(note.positionSeconds)}`, `Excluir nota em ${formatDuration(note.positionSeconds)}`)}>
 								<Trash2 />
 							</Button>

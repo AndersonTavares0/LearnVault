@@ -1,12 +1,12 @@
 # LearnVault Design System
 
-The design record for the React app (`apps/web-next`). It describes the system as built. The Svelte app in `apps/web` keeps shipping until the cutover and follows the older tokens in its own CSS. Earlier directions (Stone + Emerald, dark theme, Literata titles, the dark title band) are superseded by this file; `docs/design/` keeps their research as history.
+The design record for the React app (`apps/web-next`). It describes the system as built. The Svelte app in `apps/web` keeps shipping until the cutover and follows the older tokens in its own CSS. Earlier directions (Stone + Emerald, Literata titles, the dark title band) are superseded by this file; `docs/design/` keeps their research as history.
 
 ## Intent
 
 An editorial study room: warm paper, generous space and a serif voice, around the familiar structure of a course platform (library, course, lesson, progress). Calm and premium, never a generic dashboard. The next lesson and the learner's own habit do the visual work; there are no decorative graphics. Direction taken from the maintainer's reference (a warm off-white study dashboard with a tinted "next up" card, outlined pills and small stat cards). Course platforms are a structural reference only.
 
-**Light only.** There is no dark theme and no theme switch. `color-scheme` is `light`.
+**Light and dark.** Light is the default. Dark is a warm black in the same voice (reference: the maintainer's dark study dashboard). The header has a sun/moon button; Settings offers Light, Dark and Follow the system. `<html data-theme>` carries the resolved theme and `color-scheme` follows it; `dark:` utilities read `data-theme`.
 
 ## Colour
 
@@ -26,7 +26,9 @@ Tokens live once in `src/styles/app.css` as shadcn variables, mapped by Tailwind
 | `reward-fill` | `#BC7F29` (amber) | The accent word in titles and rewards; 3.2:1, used for large text and fills only |
 | `destructive` | `#B91C1C` | Destructive actions, solid fill |
 
-`--brand-tint`, `--brand-soft` and `--brand-deep` are mixed from the accent, so a custom accent keeps the whole interface consistent. Text and controls that sit on the accent use white; `readableAccent()` darkens a colour the learner picks until white text reaches 4.5:1. Rules: one accent per screen, no gradients as decoration (the generated cover is content), no decorative shadows, state is never colour alone.
+**Dark values:** `background` `#090705`, `card` `#13100D`, `panel` `#1C1510`, `foreground` `#F6EEE4`, `muted-foreground` `#B6A694`, `border` `#2F251C`. Every accent preset has a lighter twin for the dark page (brown becomes amber `#E3A857`); a custom colour is lightened until it reaches 4.5:1 on the panel colour, and text on it is `#1C1209`.
+
+`--brand-tint`, `--brand-soft` and `--brand-deep` are mixed from the accent and the page colour, so a custom accent keeps the whole interface consistent in both themes. On the light page text on the accent is white and `readableAccent()` darkens a colour until white text reaches 4.5:1. Rules: one accent per screen, no gradients as decoration (the generated cover is content), no decorative shadows, state is never colour alone.
 
 ## Typography
 
@@ -44,12 +46,13 @@ Wide and soft: panels and the hero use a 2rem radius, stat cards 1.75rem, pills 
 
 ## Layout
 
-- **Navigation.** A top bar with the wordmark (text, no logo tile), centred destinations (My learning, Review, Progress, Notes) with the current page in a cream pill, the search box (`/` focuses it), the Pomodoro timer and the account menu. Below 768 px the destinations move to a bottom tab bar. The language switch is in Settings.
+- **Navigation.** A top bar with the wordmark (text, no logo tile), centred destinations (My learning, Review, Progress, Notes) with the current page in a cream pill, the search box (`/` focuses it), the Pomodoro timer, the theme button and the account menu. Below 768 px the destinations move to a bottom tab bar. The language switch is in Settings.
 - **Page title.** An optional icon tile, the serif title with its accent word, and an optional line under it (`PageHeader`).
-- **Home.** Title and admin actions, outlined filter pills with counts, then two columns: the "Next up" hero (lesson, course, Resume, a progress ring) above the library, and the habit cards (streak, level and XP, weekly goal) beside them. The library is a grid of course cards or a list.
+- **Home.** Title and admin actions, outlined filter pills (counts only when above zero; one scrolling row on phones), then two columns: the "Next up" hero (lesson, course, Resume, a progress ring) above the library, and beside them the habit cards (streak, level and XP, weekly goal) and a Bookmarks panel with starred lessons. The library is a grid of course cards or a list.
 - **Course.** A tinted header card (title, progress, Continue, favourite, cover), then tabs for Content, Materials and Notes.
-- **Lesson.** A title row with Previous and Next and one segment per lesson, then the player and its tabs beside a white "Course content" panel (left or right, the learner's choice).
-- **Progress.** Stat cards, the week as seven dots, badges and today's missions, each in a white panel.
+- **Lesson.** A title row with Previous, Next and a hide/show button for the course content, one segment per lesson (done brown, current amber), then the player and its tabs beside a compact "Course content" panel (left or right, the learner's choice) whose modules are numbered with a count and a small bar. The player's controls (back and forward 10 s, loop, speed, transcode, picture-in-picture, cinema mode, fullscreen) sit on the picture as a pill that appears on hover or focus and always on touch screens; under audio they are an ordinary toolbar. Cinema mode (`t`) gives the picture the whole width on a black stage and moves the content panel below; both choices are remembered.
+- **Progress.** One usage panel: the focus time as a big number with This week / All time, the weekly goal, a smooth area chart of focus minutes by day (with a table for screen readers) and three totals (busiest day, days studied, streak); badges and today's missions in panels below.
+- **Notes and Review** start from a course: a title, the pinned (favourite) courses, then every course as a card with its code, a pin and a tinted footer that says what waits inside ("3 notes", "2 due · 8 cards"). A card opens the course's notebook or its deck. A review session is a focused screen: back, deck title, a progress ring with cards left, the card with its number and Question/Answer label, a large Show answer button, then Again and Good.
 - **Targets.** Every interactive target is at least 44×44 px.
 
 ## Components
@@ -57,8 +60,8 @@ Wide and soft: panels and the hero use a 2rem radius, stat cards 1.75rem, pills 
 shadcn/ui on **Base UI** primitives (the only candidate that satisfies the server's `style-src` CSP; see ADR 0003), in `src/components/ui/`. Product components:
 
 - `Panel`, `Hero`, `Stat`, `Ring`, `Eyebrow` (`components/panel.tsx`): the shared card vocabulary. Use these instead of one-off boxes.
-- `CourseCover`, `CourseCard`, `Curriculum`, `MediaPlayer`, `StudyNotes`, `Flashcards`, `FocusMenu`, `DesktopTitlebar`.
-- **Course cover.** Uploaded cover, then an automatic video thumbnail, then a cover drawn from the title in warm hues. Covers are decorative; the text beside them names the course.
+- `CoursePicker` (the course-card grid shared by Notes and Review), `NoteEditor` and `Markdown` (notes with a formatting bar; note text is parsed to data and drawn by React, never as HTML), `CourseCover`, `CourseCard`, `Curriculum`, `MediaPlayer`, `StudyNotes`, `Flashcards`, `FocusMenu`, `DesktopTitlebar`.
+- **Course cover.** Uploaded cover, then an automatic video thumbnail, then a generated cover: pale paper (deep warm brown on the dark page) with the course's initials set large. It carries no title or progress, because the card beside it shows both. Covers are decorative.
 - **Progress.** A thin bar plus text ("42% complete · 3 lessons left"), `role="progressbar"` labelled by that text; the ring carries its value in `aria-label`.
 
 ## PDF reader and editor
@@ -75,7 +78,7 @@ Marks live in the database per user; the file and the library are untouched.
 
 ## Customisation
 
-One JSON object in `localStorage` (`learnvault-appearance`), validated on read and applied to `<html>` before first paint: accent (8 presets or any colour), reward colour, corners, density, text size, font, lesson sidebar side, library layout, and which habit cards show. Everything has a default and can be reset.
+One JSON object in `localStorage` (`learnvault-appearance`), validated on read and applied to `<html>` before first paint: theme (light, dark or follow the system), accent (8 presets or any colour), reward colour, corners, density, text size, font, lesson sidebar side, library layout, and which habit cards show. Everything has a default and can be reset.
 
 ## Gamification
 
@@ -83,7 +86,7 @@ Habit first: streak, weekly goal, daily missions, XP and level, and quiet badges
 
 ## Accessibility
 
-WCAG 2.2 AA. Automated gates: `eslint-plugin-jsx-a11y`, axe on every route with every accent preset (`tests/e2e/web-next.spec.ts`), and a check that fails on any CSP violation. Required behaviour: skip link and landmarks, visible focus, `prefers-reduced-motion`, live regions for status without moving focus, single-key shortcuts only when their widget has focus. A manual keyboard and screen-reader pass is still owed. Checklist: [`docs/design/accessibility.md`](docs/design/accessibility.md).
+WCAG 2.2 AA. Automated gates: `eslint-plugin-jsx-a11y`, axe with every accent preset on both the light and the dark page (`tests/e2e/web-next.spec.ts`), and a check that fails on any CSP violation. Required behaviour: skip link and landmarks, visible focus, `prefers-reduced-motion`, live regions for status without moving focus, single-key shortcuts only when their widget has focus. A manual keyboard and screen-reader pass is still owed. Checklist: [`docs/design/accessibility.md`](docs/design/accessibility.md).
 
 ## Security and privacy in the interface
 

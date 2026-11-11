@@ -77,4 +77,13 @@ describe('Sign in', () => {
 		fireEvent.click(screen.getByRole('button', { name: 'Show password' }));
 		expect(password.getAttribute('type')).toBe('text');
 	});
+
+	it('lists starred lessons as bookmarks, or says there are none', async () => {
+		renderApp('/', { catalog, rewards, favorites: { courseIds: [], mediaIds: ['r2'] } });
+		const bookmarks = await screen.findByRole('region', { name: 'Bookmarks' });
+		expect(within(bookmarks).getByRole('link', { name: /Borrowing/ }).getAttribute('href')).toBe('/course/rust/m%2Fr2');
+		cleanup();
+		renderApp('/', { catalog, rewards });
+		expect(await screen.findByText(/Nothing saved yet/)).toBeTruthy();
+	});
 });

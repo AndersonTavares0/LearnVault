@@ -36,7 +36,7 @@ The course-platform experience for courses you already own, with nothing leaving
 
 ## Capabilities and Constraints
 
-Confirmed functionality: library and search; course page with curriculum and materials; lesson player with subtitles, speed, picture-in-picture, shortcuts and a resume position; a PDF reader with page search and an editor for highlights, underlines and notes with Markdown export; timestamped notes; spaced-repetition flashcards; favourites; Pomodoro timer; streak, weekly goal, daily missions, XP, levels and achievement badges; accounts with per-course access; backup; update checks.
+Confirmed functionality: library and search; course page with curriculum and materials; lesson player with subtitles, speed, picture-in-picture, cinema mode, shortcuts and a resume position; a PDF reader with page search and an editor for highlights, underlines and notes with Markdown export; timestamped notes with a formatting bar and Markdown export; spaced-repetition flashcards; favourites; Pomodoro timer; streak, weekly goal, daily missions, XP, levels and achievement badges; accounts with per-course access; backup; update checks.
 
 Non-negotiable constraints:
 1. **Read-only library.** No action writes, moves, renames, deletes or copies original course files.
@@ -56,7 +56,7 @@ Customisation is part of the product: the learner picks the accent colour, corne
 ## Brand Commitments
 
 - Name **LearnVault**, set as a text wordmark in the display serif. The LV monogram (`docs/design/branding/`) is for icons and the favicon only.
-- **Light only**: a warm off-white page, cream and white cards, brown actions and an amber accent word in titles, with Playfair Display titles and DM Sans text. The learner can change the accent colour and other details; there is no dark theme. Direction chosen by the maintainer, 2026-11-11, from their reference dashboard; see `DESIGN.md`.
+- **Light and dark**: by default a warm off-white page, cream and white cards, brown actions and an amber accent word in titles, with Playfair Display titles and DM Sans text; a warm-black dark theme in the same voice, switched from the header or followed from the system. The learner can change the accent colour and other details. Direction chosen by the maintainer, 2026-11-11, from their reference dashboard; see `DESIGN.md`.
 - Udemy, Coursera and similar course platforms are a **structural reference only**. Nothing is copied: no code, assets, brand, text or pixel-level layout.
 - The language switch lives in Settings, not in the navigation bar.
 - The result must read as a premium, calm study room: not a generic SaaS dashboard, a course store, a children's game or a dated site, and not a wall of metrics.
@@ -78,4 +78,4 @@ Customisation is part of the product: the learner picks the accent colour, corne
 
 ## Accessibility & Inclusion
 
-Target WCAG 2.2 AA: 4.5:1 text contrast with every accent preset, 44×44 px touch targets, visible focus, reduced-motion support, keyboard operation of the player, and status changes announced without moving focus. Single-key shortcuts only act when the player has focus. Information is never carried by colour alone.
+Target WCAG 2.2 AA: 4.5:1 text contrast with every accent preset, on the light and the dark page, 44×44 px touch targets, visible focus, reduced-motion support, keyboard operation of the player, and status changes announced without moving focus. Single-key shortcuts only act when the player has focus. Information is never carried by colour alone.

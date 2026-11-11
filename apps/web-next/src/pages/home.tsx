@@ -1,4 +1,4 @@
-import { BookOpen, Flame, FolderPlus, LayoutGrid, List, Play, RefreshCw, Search, Star, Target } from 'lucide-react';
+import { BookOpen, ChevronRight, Flame, FolderPlus, LayoutGrid, List, Play, RefreshCw, Search, Star, Target } from 'lucide-react';
 import { useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { BrandMark } from '@/components/brand';
@@ -16,8 +16,8 @@ import { tr } from '@/lib/i18n';
 import { buildLibrary, type CourseEntry, type LibraryFilter, type ResumeEntry } from '@/lib/library';
 import { persistLibraryView, readLibraryView } from '@/lib/library-view';
 import { studySyncSupported } from '@/lib/player';
-import { href } from '@/lib/router';
-import { transportKind, type RewardSummary } from '@/lib/transport';
+import { findLessonLocation, href, type LessonLocation } from '@/lib/router';
+import { transportKind, type Catalog, type RewardSummary } from '@/lib/transport';
 import { cn } from '@/lib/utils';
 import { useCatalog, useFavorites, useImportCourse, useRecent, useRescan, useRewards, useSession } from '@/app/data';
 import { safeStorage } from '@/app/preferences';
@@ -100,7 +100,12 @@ export function HomePage() {
 						)}
 					</section>
 				</div>
-				{library.entries.length > 0 && <Habit rewards={rewards.data} completedCourses={library.entries.filter((entry) => entry.status === 'completed').length} />}
+				{library.entries.length > 0 && (
+					<aside aria-label={tr('Your habit and bookmarks', 'Seu hábito e favoritos')} className="space-y-6">
+						<Habit rewards={rewards.data} completedCourses={library.entries.filter((entry) => entry.status === 'completed').length} />
+						{studySyncSupported && <Bookmarks mediaIds={favorites.data?.mediaIds ?? []} catalog={catalog.data} />}
+					</aside>
+				)}
 			</div>
 		</div>
 	);
@@ -149,6 +154,30 @@ function ResumeCard({ items, entries }: { items: ResumeEntry[]; entries: CourseE
 				</div>
 				{entry && entry.total > 0 && <Ring value={value} label={tr(`${Math.round(value * 100)}% of the course`, `${Math.round(value * 100)}% do curso`)} caption={tr('Course', 'Curso')} size={150} />}
 			</Hero>
+		</section>
+	);
+}
+
+/** The lessons starred in a course, one click from the home page. */
+function Bookmarks({ mediaIds, catalog }: { mediaIds: string[]; catalog: Catalog | undefined }) {
+	const items = mediaIds.map((id) => findLessonLocation(catalog ?? null, id)).filter((location): location is LessonLocation => location !== null).slice(0, 5);
+	return (
+		<section aria-labelledby="bookmarks-heading" className="rounded-[2rem] border bg-card p-5 sm:p-6">
+			<h2 id="bookmarks-heading" className="font-heading text-xl font-bold">{tr('Bookmarks', 'Favoritos')}</h2>
+			{items.length === 0 ? (
+				<p className="mt-4 text-center text-sm text-muted-foreground">{tr('Nothing saved yet. Star a lesson and it will wait for you here.', 'Nada salvo ainda. Marque uma aula com estrela e ela espera por você aqui.')}</p>
+			) : (
+				<ul className="mt-4 space-y-2">
+					{items.map((location) => (
+						<li key={`${location.courseId}/${location.lesson.path}`}>
+							<Link to={routerPath(href('course', location.courseId, location.lesson.path))} className="flex min-h-14 items-center gap-3 rounded-2xl bg-panel px-4 py-2 hover:bg-brand-soft focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
+								<span className="min-w-0 flex-1"><span className="block truncate font-semibold">{location.lesson.title}</span><span className="block truncate text-sm text-muted-foreground">{location.courseTitle}</span></span>
+								<ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+							</Link>
+						</li>
+					))}
+				</ul>
+			)}
 		</section>
 	);
 }

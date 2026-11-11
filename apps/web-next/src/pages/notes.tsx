@@ -3,6 +3,8 @@ import { ArrowLeft, Download, NotebookPen, Pencil, Search, Trash2 } from 'lucide
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { CoursePicker, GONE } from '@/components/course-picker';
+import { Markdown } from '@/components/markdown';
+import { NoteEditor } from '@/components/note-editor';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useLocale } from '@/hooks/use-locale';
@@ -117,15 +119,14 @@ function Notebook({ courseId }: { courseId: string }) {
 				{editing?.id === note.noteId ? (
 					<form className="space-y-2" onSubmit={(event) => { event.preventDefault(); if (editing.content.trim()) update.mutate({ id: editing.id, content: editing.content.trim() }); }}>
 						<label htmlFor={`edit-${note.noteId}`} className="sr-only">{tr('Note text', 'Texto da nota')}</label>
-						{/* eslint-disable-next-line jsx-a11y/no-autofocus -- editing starts from an explicit click */}
-						<textarea id={`edit-${note.noteId}`} autoFocus rows={3} maxLength={10_000} value={editing.content} onChange={(event) => setEditing({ ...editing, content: event.target.value })} className="w-full rounded-lg border border-input bg-background p-3 text-sm" />
+						<NoteEditor id={`edit-${note.noteId}`} rows={3} value={editing.content} onChange={(content) => setEditing({ ...editing, content })} />
 						<div className="flex justify-end gap-2">
 							<Button type="button" variant="outline" onClick={() => setEditing(null)}>{tr('Cancel', 'Cancelar')}</Button>
 							<Button type="submit" disabled={update.isPending || !editing.content.trim()}>{tr('Save', 'Salvar')}</Button>
 						</div>
 					</form>
 				) : (
-					<p className="max-w-prose font-serif text-lg leading-relaxed whitespace-pre-wrap">{note.content}</p>
+					<Markdown text={note.content} className="max-w-prose font-serif text-lg leading-relaxed" />
 				)}
 			</li>
 	);
