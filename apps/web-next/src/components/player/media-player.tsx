@@ -284,7 +284,7 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 						<Repeat />{loopText ?? <span className="sr-only">{tr('Loop', 'Laço')}</span>}
 					</Button>
 					<Label htmlFor="player-speed" className="sr-only">{tr('Speed', 'Velocidade')}</Label>
-					<select id="player-speed" value={speed} onChange={(event) => changeSpeed(Number(event.target.value) as PlaybackSpeed)} className={cn('h-11 cursor-pointer rounded-full bg-transparent px-2 text-sm font-medium', onVideo ? 'text-white hover:bg-white/20 [&>option]:text-black' : 'hover:bg-muted')} aria-keyshortcuts="[ ]">
+					<select id="player-speed" value={speed} onChange={(event) => changeSpeed(Number(event.target.value) as PlaybackSpeed)} className={cn('h-11 w-16 cursor-pointer appearance-none rounded-full bg-transparent px-2 text-center text-sm font-medium', onVideo ? 'text-white hover:bg-white/20 [&>option]:text-black' : 'hover:bg-muted')} aria-keyshortcuts="[ ]">
 						{PLAYBACK_SPEEDS.map((value) => <option key={value} value={value}>{value}×</option>)}
 					</select>
 					{capabilities.data?.transcoding && (

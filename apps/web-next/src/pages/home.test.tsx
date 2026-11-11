@@ -28,7 +28,7 @@ describe('My learning', () => {
 		const resume = await screen.findByRole('region', { name: 'Continue learning' });
 		expect(within(resume).getByRole('heading', { name: 'Borrowing' })).toBeTruthy();
 		expect(within(resume).getByRole('link', { name: 'Resume' }).getAttribute('href')).toBe('/course/rust/m%2Fr2?t=95');
-		expect(screen.getByRole('list', { name: 'Your habit' }).textContent).toMatch(/day streak.*2|2.*day streak/);
+		expect(screen.getByRole('list', { name: 'Your habit' }).textContent).toMatch(/Streak.*2|2.*Streak/);
 		expect(screen.getAllByRole('progressbar', { name: /^50% complete/ }).length).toBeGreaterThan(0);
 	});
 

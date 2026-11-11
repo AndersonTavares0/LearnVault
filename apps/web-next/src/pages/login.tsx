@@ -39,10 +39,10 @@ export function LoginPage() {
 
 	const error = signIn.error?.message || session.data?.error;
 	return (
-		<main id="main" className="grid min-h-dvh place-items-center bg-muted px-4 py-10">
+		<main id="main" className="grid min-h-dvh place-items-center bg-background px-4 py-10">
 			<div className="flex w-full max-w-md flex-col items-center gap-6">
 				<div className="flex items-center gap-3 text-2xl font-bold"><span className="font-heading font-semibold">LearnVault</span></div>
-				<form onSubmit={submit} className="w-full space-y-5 rounded-lg border bg-card p-8 shadow-sm">
+				<form onSubmit={submit} className="w-full space-y-5 rounded-[2rem] border bg-card p-8">
 					<div className="space-y-1">
 						<h1 className="text-2xl font-bold">{tr('Sign in', 'Entrar')}</h1>
 						<p className="text-muted-foreground">{tr('Welcome back. Your courses are where you left them.', 'Bem-vindo de volta. Seus cursos estão onde você deixou.')}</p>

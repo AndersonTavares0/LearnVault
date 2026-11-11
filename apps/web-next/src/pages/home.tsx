@@ -152,7 +152,7 @@ function ResumeCard({ items, entries }: { items: ResumeEntry[]; entries: CourseE
 						<Link to={routerPath(href('course', first.location.courseId))} className="inline-flex h-14 items-center rounded-full border bg-card px-8 text-base font-medium hover:bg-brand-tint focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">{tr('Open course', 'Abrir curso')}</Link>
 					</div>
 				</div>
-				{entry && entry.total > 0 && <Ring value={value} label={tr(`${Math.round(value * 100)}% of the course`, `${Math.round(value * 100)}% do curso`)} caption={tr('Course', 'Curso')} size={150} />}
+				{entry && entry.total > 0 && <Ring value={value} label={tr(`${Math.round(value * 100)}% of the course`, `${Math.round(value * 100)}% do curso`)} caption={tr('complete', 'concluído')} size={150} />}
 			</Hero>
 		</section>
 	);
@@ -190,7 +190,7 @@ function Habit({ rewards, completedCourses }: { rewards: RewardSummary | undefin
 	const game = buildGamification({ rewards, completedCourses });
 	const days = Math.min(study.weekActiveDays, rewards.weeklyGoal);
 	const cards = [
-		look.showStreak && <li key="s"><Stat icon={<Flame />} label={tr('day streak', 'dias seguidos')} value={study.currentStreak} /></li>,
+		look.showStreak && <li key="s"><Stat icon={<Flame />} label={tr('Streak', 'Sequência')} value={study.currentStreak} unit={study.currentStreak === 1 ? tr('day', 'dia') : tr('days', 'dias')} /></li>,
 		look.showXp && <li key="x"><Stat icon={<Star />} label={tr(`Level ${game.level.level}`, `Nível ${game.level.level}`)} value={game.level.xp} unit="XP" /></li>,
 		look.showGoal && <li key="g" className="col-span-2"><Stat icon={<Target />} label={tr('Goal', 'Meta')} value={`${days}/${rewards.weeklyGoal}`} unit={tr('days this week', 'dias nesta semana')} /></li>
 	].filter(Boolean);
