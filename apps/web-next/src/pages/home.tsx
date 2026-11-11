@@ -1,21 +1,23 @@
-import { Flame, FolderPlus, LayoutGrid, List, RefreshCw, Search } from 'lucide-react';
+import { BookOpen, ChevronRight, Flame, FolderPlus, LayoutGrid, List, Play, RefreshCw, Search, Star, Target } from 'lucide-react';
 import { useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { BrandMark } from '@/components/brand';
-import { CourseCard, CourseRow, ProgressBar, routerPath } from '@/components/course-card';
-import { CourseCover } from '@/components/course-cover';
+import { Eyebrow, Hero, Ring, Stat } from '@/components/panel';
+import { CourseCard, routerPath } from '@/components/course-card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useLocale } from '@/hooks/use-locale';
-import { formatCount } from '@/lib/catalog';
+import { useStore } from '@/hooks/use-store';
+import { appearanceStore } from '@/lib/appearance';
+import { buildGamification } from '@/lib/gamification';
 import { tr } from '@/lib/i18n';
 import { buildLibrary, type CourseEntry, type LibraryFilter, type ResumeEntry } from '@/lib/library';
 import { persistLibraryView, readLibraryView } from '@/lib/library-view';
 import { studySyncSupported } from '@/lib/player';
-import { href } from '@/lib/router';
-import { transportKind } from '@/lib/transport';
+import { findLessonLocation, href, type LessonLocation } from '@/lib/router';
+import { transportKind, type Catalog, type RewardSummary } from '@/lib/transport';
 import { cn } from '@/lib/utils';
 import { useCatalog, useFavorites, useImportCourse, useRecent, useRescan, useRewards, useSession } from '@/app/data';
 import { safeStorage } from '@/app/preferences';
@@ -23,7 +25,6 @@ import { PageHeader } from '@/app/shell';
 
 type View = 'grid' | 'list';
 // The four legacy views collapse into two (docs/design/parity.md).
-const readView = (): View => (['list', 'compact'].includes(readLibraryView(safeStorage())) ? 'list' : 'grid');
 
 export function HomePage() {
 	useLocale();
@@ -34,7 +35,8 @@ export function HomePage() {
 	const favorites = useFavorites();
 	const rewards = useRewards();
 	const [params, setParams] = useSearchParams();
-	const [view, setView] = useState<View>(readView);
+	const look = useStore(appearanceStore);
+	const [view, setView] = useState<View>(() => (readLibraryView(safeStorage()) === 'covers' ? 'grid' : readLibraryView(safeStorage()) === 'list' ? 'list' : look.homeLayout));
 	const [message, setMessage] = useState('');
 
 	const query = params.get('q') ?? '';
@@ -62,131 +64,143 @@ export function HomePage() {
 
 	const profile = user?.userId ?? '';
 	const filtered = Boolean(query || filter !== 'all' || category);
-	const inProgress = library.entries.filter((entry) => entry.status === 'in_progress');
-	// Every course already offered in the dark card is left out of "Also in progress", so none appears twice.
-	const shownInHero = new Set(library.resume.map((item) => item.location.courseId));
-	const alsoInProgress = inProgress.filter((entry) => !shownInHero.has(entry.courseId)).slice(0, 4);
-	const streak = rewards.data?.study;
 
 	return (
-		<div className="space-y-12">
-			<PageHeader
-				title={tr('My learning', 'Meu aprendizado')}
-				description={
-					<span className="flex flex-wrap items-center gap-x-4 gap-y-1">
-						<span>{formatCount(library.entries.length, tr('course', 'curso'), tr('courses', 'cursos'))}</span>
-						{studySyncSupported && streak && (
-							<Link to="/progress" className="inline-flex min-h-11 items-center gap-1.5 hover:text-foreground">
-								<Flame className={cn('size-4', streak.currentStreak > 0 && 'text-primary')} aria-hidden="true" />
-								{formatCount(streak.currentStreak, tr('day streak', 'dia seguido'), tr('day streak', 'dias seguidos'))}
-								{', '}{tr(`${streak.weekActiveDays} of ${rewards.data!.weeklyGoal} days this week`, `${streak.weekActiveDays} de ${rewards.data!.weeklyGoal} dias nesta semana`)}
-							</Link>
-						)}
-					</span>
-				}
-				actions={user?.isAdmin && library.entries.length > 0 && <LibraryActions onMessage={setMessage} />}
-			/>
-			<p role="status" aria-live="polite" className="-mt-10 text-sm text-muted-foreground empty:hidden">{message}</p>
+		<div className="space-y-8">
+			<PageHeader icon={BookOpen} title={tr('My learning', 'Meu aprendizado')} actions={user?.isAdmin && library.entries.length > 0 ? <LibraryActions onMessage={setMessage} /> : undefined} />
+			{library.entries.length > 0 && <FilterTabs counts={library.counts} filter={filter} onFilter={(value) => setParam('filter', value === 'all' ? null : value)} />}
+			<p role="status" aria-live="polite" className="text-sm text-muted-foreground empty:hidden">{message}</p>
 
-			{library.resume.length > 0 && !filtered && <ContinueLearning items={library.resume} entries={library.entries} profile={profile} />}
+			<div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_21rem]">
+				<div className="min-w-0 space-y-10">
+					{!filtered && studySyncSupported && library.entries.length > 0 && <ResumeCard items={library.resume} entries={library.entries} />}
 
-			{!filtered && alsoInProgress.length > 0 && (
-				<section aria-labelledby="also-heading">
-					<h2 id="also-heading" className="mb-1 text-lg font-semibold">{tr('Also in progress', 'Também em andamento')}</h2>
-					<ul className="grid gap-x-10 md:grid-cols-2">{alsoInProgress.map((entry) => <CourseRow key={entry.courseId} entry={entry} profile={profile} />)}</ul>
-				</section>
-			)}
-
-			<section aria-labelledby="courses-heading" className="space-y-5">
-				<h2 id="courses-heading" className="text-2xl font-semibold">{tr('All courses', 'Todos os cursos')}</h2>
-				{library.entries.length > 0 && (
-					<>
-						<div role="search" className="relative md:hidden">
-							<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-							<Input type="search" value={query} onChange={(event) => setParam('q', event.target.value || null)} placeholder={tr('Search courses and lessons', 'Buscar cursos e aulas')} aria-label={tr('Search courses', 'Buscar cursos')} className="pl-9" />
+					<section aria-labelledby="courses-heading" className="space-y-5">
+						<div className="flex flex-wrap items-center gap-3">
+							<h2 id="courses-heading" className="mr-auto font-heading text-2xl font-bold">{filtered ? tr('Results', 'Resultados') : tr('Your library', 'Sua biblioteca')}</h2>
+							{library.entries.length > 0 && <Filters categories={library.categories} category={category} onCategory={(value) => setParam('category', value)} view={view} onView={changeView} />}
 						</div>
-						<Filters counts={library.counts} filter={filter} onFilter={(value) => setParam('filter', value === 'all' ? null : value)} categories={library.categories} category={category} onCategory={(value) => setParam('category', value)} view={view} onView={changeView} />
-					</>
+						{library.entries.length > 0 && (
+							<div role="search" className="relative md:hidden">
+								<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+								<Input type="search" value={query} onChange={(event) => setParam('q', event.target.value || null)} placeholder={tr('Search courses and lessons', 'Buscar cursos e aulas')} aria-label={tr('Search courses', 'Buscar cursos')} className="pl-9" />
+							</div>
+						)}
+						{library.entries.length === 0 ? (
+							<EmptyLibrary isAdmin={Boolean(user?.isAdmin)} onMessage={setMessage} />
+						) : library.visible.length === 0 ? (
+							<div className="rounded-[2rem] border border-dashed p-8 text-center">
+								<p className="font-medium">{tr('No results found', 'Nenhum resultado encontrado')}</p>
+								<Button variant="outline" className="mt-4" onClick={() => setParams({}, { replace: true })}>{tr('Clear filters and search', 'Limpar filtros e busca')}</Button>
+							</div>
+						) : (
+							<ul className={view === 'grid' ? 'grid grid-cols-1 gap-x-5 gap-y-[calc(var(--density)*2rem)] sm:grid-cols-2 xl:grid-cols-3' : 'divide-y border-y'}>
+								{library.visible.map((entry) => <CourseCard key={entry.courseId} entry={entry} profile={profile} variant={view === 'grid' ? 'grid' : 'list'} />)}
+							</ul>
+						)}
+					</section>
+				</div>
+				{library.entries.length > 0 && (
+					<aside aria-label={tr('Your habit and bookmarks', 'Seu hábito e favoritos')} className="space-y-6">
+						<Habit rewards={rewards.data} completedCourses={library.entries.filter((entry) => entry.status === 'completed').length} />
+						{studySyncSupported && <Bookmarks mediaIds={favorites.data?.mediaIds ?? []} catalog={catalog.data} />}
+					</aside>
 				)}
-
-				{library.entries.length === 0 ? (
-					<EmptyLibrary isAdmin={Boolean(user?.isAdmin)} onMessage={setMessage} />
-				) : library.visible.length === 0 ? (
-					<div className="rounded-lg border border-dashed p-8 text-center">
-						<p className="font-medium">{tr('No results found', 'Nenhum resultado encontrado')}</p>
-						<Button variant="outline" className="mt-4" onClick={() => setParams({}, { replace: true })}>{tr('Clear filters and search', 'Limpar filtros e busca')}</Button>
-					</div>
-				) : (
-					<ul className={view === 'grid' ? 'grid grid-cols-1 gap-x-6 gap-y-10 sm:grid-cols-2 lg:grid-cols-3' : 'divide-y border-y'}>
-						{library.visible.map((entry) => <CourseCard key={entry.courseId} entry={entry} profile={profile} variant={view === 'grid' ? 'grid' : 'list'} />)}
-					</ul>
-				)}
-			</section>
+			</div>
 		</div>
 	);
 }
 
-function ContinueLearning({ items, entries, profile }: { items: ResumeEntry[]; entries: CourseEntry[]; profile: string }) {
-	const [first, ...rest] = items;
-	const link = (entry: ResumeEntry) => routerPath(href('course', entry.location.courseId, entry.location.lesson.path, entry.progress.positionSeconds));
-	return (
-		<section aria-labelledby="continue-heading" className="on-ink rounded-2xl border border-[color:var(--ink-edge)] bg-ink p-4 text-ink-foreground sm:p-6 lg:p-8">
-			<h2 id="continue-heading" className="sr-only">{tr('Continue studying', 'Continuar estudando')}</h2>
-			<article className="grid grid-cols-[6.5rem_1fr] items-center gap-x-4 gap-y-4 sm:grid-cols-[12rem_1fr] md:gap-x-6 lg:grid-cols-[16rem_1fr_auto]">
-				<CourseCoverFor entry={entries.find((entry) => entry.courseId === first.location.courseId)} profile={profile} eager />
-				<div className="min-w-0 space-y-3 lg:space-y-4">
-					<div className="min-w-0">
-						<p className="truncate text-ink-muted">{first.location.courseTitle}{first.location.moduleTitle ? `, ${first.location.moduleTitle}` : ''}</p>
-						<h3 className="font-serif text-xl leading-tight font-semibold text-balance sm:text-2xl lg:text-3xl">{first.location.lesson.title}</h3>
-					</div>
-					<ProgressBar value={first.courseProgress} label={tr(`${Math.round(first.courseProgress * 100)}% of the course complete`, `${Math.round(first.courseProgress * 100)}% do curso concluído`)} className="max-w-md [&_[role=progressbar]]:bg-white/20 [&_[role=progressbar]>div]:bg-[var(--a-soft)] [&_p]:text-ink-muted" />
-					</div>
-				<Link to={link(first)} className="col-span-2 inline-flex h-12 items-center justify-center rounded-lg bg-[var(--a-soft)] px-6 text-sm font-semibold text-stone-950 hover:bg-white focus-visible:ring-3 focus-visible:ring-white/60 focus-visible:outline-none sm:col-span-2 lg:col-span-1 lg:self-center">{tr('Resume lesson', 'Retomar aula')}</Link>
-			</article>
-			{rest.length > 0 && (
-				<div className="mt-6 border-t border-white/15 pt-4">
-					<h3 className="sr-only">{tr('Also continue', 'Continue também')}</h3>
-					<ul className="grid gap-2 sm:grid-cols-3">
-						{rest.map((entry) => (
-							<li key={entry.progress.mediaId}>
-								<Link to={link(entry)} className="-mx-2 flex min-h-14 items-center gap-3 rounded-lg px-2 py-2 hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none">
-									<CourseCoverFor entry={entries.find((course) => course.courseId === entry.location.courseId)} profile={profile} compact className="w-20 shrink-0" />
-									<span className="min-w-0">
-										<span className="block truncate text-sm text-ink-muted">{entry.location.courseTitle}</span>
-										<span className="line-clamp-2 font-medium">{entry.location.lesson.title}</span>
-									</span>
-								</Link>
-							</li>
-						))}
-					</ul>
-				</div>
-			)}
-		</section>
-	);
-}
-
-/** The resume band shows the same cover as the course card, with its lesson bar. */
-function CourseCoverFor({ entry, profile, eager, compact, className }: { entry?: CourseEntry; profile: string; eager?: boolean; compact?: boolean; className?: string }) {
-	return entry ? <CourseCover course={entry.course} profile={profile} eager={eager} done={entry.done} total={entry.total} compact={compact} className={className} /> : null;
-}
-
-function Filters(props: { counts: Record<LibraryFilter, number>; filter: LibraryFilter; onFilter: (value: LibraryFilter) => void; categories: string[]; category: string | null; onCategory: (value: string | null) => void; view: View; onView: (view: View) => void }) {
+/** Outlined pills: which courses to show, with how many in each. */
+function FilterTabs({ counts, filter, onFilter }: { counts: Record<LibraryFilter, number>; filter: LibraryFilter; onFilter: (value: LibraryFilter) => void }) {
 	const options: [LibraryFilter, string][] = [
-		['all', tr('All', 'Todos')],
+		['all', tr('All courses', 'Todos os cursos')],
 		['in_progress', tr('In progress', 'Em andamento')],
 		['not_started', tr('Not started', 'Não iniciados')],
 		['completed', tr('Completed', 'Concluídos')],
 		...(studySyncSupported ? [['favorites', tr('Favorites', 'Favoritos')] as [LibraryFilter, string]] : [])
 	];
 	return (
+		<div role="group" aria-label={tr('Show', 'Mostrar')} className="-mx-5 flex gap-3 overflow-x-auto px-5 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
+			{options.map(([value, label]) => (
+				<button key={value} type="button" aria-pressed={filter === value} onClick={() => onFilter(value)} className={cn('min-h-12 shrink-0 rounded-full border-2 border-brand-soft bg-card px-5 text-base font-medium hover:bg-brand-tint focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none', filter === value && 'border-reward-fill bg-panel font-semibold')}>
+					{label}{counts[value] > 0 && <span className="ml-1.5 text-sm font-normal text-muted-foreground">{counts[value]}</span>}
+				</button>
+			))}
+		</div>
+	);
+}
+
+/** The one thing to do first: the lesson to go back to, with how far the course is. */
+function ResumeCard({ items, entries }: { items: ResumeEntry[]; entries: CourseEntry[] }) {
+	const look = useStore(appearanceStore);
+	const first = items[0];
+	if (!first || !look.showContinue) return null;
+	const entry = entries.find((course) => course.courseId === first.location.courseId);
+	const value = entry && entry.total ? entry.done / entry.total : 0;
+	return (
+		<section aria-label={tr('Continue learning', 'Continuar estudando')}>
+			<Hero className="flex flex-wrap items-center justify-between gap-8">
+				<div className="min-w-0 max-w-xl space-y-4">
+					<Eyebrow>{tr('Next up', 'A seguir')}</Eyebrow>
+					<h2 className="font-heading text-3xl font-bold text-balance sm:text-4xl">{first.location.lesson.title}</h2>
+					<p className="text-lg text-muted-foreground">{first.location.courseTitle}</p>
+					<div className="flex flex-wrap gap-3 pt-2">
+						<Link to={routerPath(href('course', first.location.courseId, first.location.lesson.path, first.progress.positionSeconds))} className="inline-flex h-14 items-center gap-2 rounded-full bg-primary px-8 text-base font-semibold text-primary-foreground hover:bg-brand-deep focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
+							<Play className="size-4 fill-current" aria-hidden="true" />{tr('Resume', 'Retomar')}
+						</Link>
+						<Link to={routerPath(href('course', first.location.courseId))} className="inline-flex h-14 items-center rounded-full border bg-card px-8 text-base font-medium hover:bg-brand-tint focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">{tr('Open course', 'Abrir curso')}</Link>
+					</div>
+				</div>
+				{entry && entry.total > 0 && <Ring value={value} label={tr(`${Math.round(value * 100)}% of the course`, `${Math.round(value * 100)}% do curso`)} caption={tr('complete', 'concluído')} size={150} />}
+			</Hero>
+		</section>
+	);
+}
+
+/** The lessons starred in a course, one click from the home page. */
+function Bookmarks({ mediaIds, catalog }: { mediaIds: string[]; catalog: Catalog | undefined }) {
+	const items = mediaIds.map((id) => findLessonLocation(catalog ?? null, id)).filter((location): location is LessonLocation => location !== null).slice(0, 5);
+	return (
+		<section aria-labelledby="bookmarks-heading" className="rounded-[2rem] border bg-card p-5 sm:p-6">
+			<h2 id="bookmarks-heading" className="font-heading text-xl font-bold">{tr('Bookmarks', 'Favoritos')}</h2>
+			{items.length === 0 ? (
+				<p className="mt-4 text-center text-sm text-muted-foreground">{tr('Nothing saved yet. Star a lesson and it will wait for you here.', 'Nada salvo ainda. Marque uma aula com estrela e ela espera por você aqui.')}</p>
+			) : (
+				<ul className="mt-4 space-y-2">
+					{items.map((location) => (
+						<li key={`${location.courseId}/${location.lesson.path}`}>
+							<Link to={routerPath(href('course', location.courseId, location.lesson.path))} className="flex min-h-14 items-center gap-3 rounded-2xl bg-panel px-4 py-2 hover:bg-brand-soft focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
+								<span className="min-w-0 flex-1"><span className="block truncate font-semibold">{location.lesson.title}</span><span className="block truncate text-sm text-muted-foreground">{location.courseTitle}</span></span>
+								<ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+							</Link>
+						</li>
+					))}
+				</ul>
+			)}
+		</section>
+	);
+}
+
+/** Streak, this week's goal and level as small cards beside the library. Each can be hidden in Settings. */
+function Habit({ rewards, completedCourses }: { rewards: RewardSummary | undefined; completedCourses: number }) {
+	const look = useStore(appearanceStore);
+	const study = rewards?.study;
+	if (!rewards || !study) return null;
+	const game = buildGamification({ rewards, completedCourses });
+	const days = Math.min(study.weekActiveDays, rewards.weeklyGoal);
+	const cards = [
+		look.showStreak && <li key="s"><Stat icon={<Flame />} label={tr('Streak', 'Sequência')} value={study.currentStreak} unit={study.currentStreak === 1 ? tr('day', 'dia') : tr('days', 'dias')} /></li>,
+		look.showXp && <li key="x"><Stat icon={<Star />} label={tr(`Level ${game.level.level}`, `Nível ${game.level.level}`)} value={game.level.xp} unit="XP" /></li>,
+		look.showGoal && <li key="g" className="col-span-2"><Stat icon={<Target />} label={tr('Goal', 'Meta')} value={`${days}/${rewards.weeklyGoal}`} unit={tr('days this week', 'dias nesta semana')} /></li>
+	].filter(Boolean);
+	if (cards.length === 0) return null;
+	return <ul aria-label={tr('Your habit', 'Seu hábito')} className="grid grid-cols-2 gap-4">{cards}</ul>;
+}
+
+function Filters(props: { categories: string[]; category: string | null; onCategory: (value: string | null) => void; view: View; onView: (view: View) => void }) {
+	return (
 		<div className="flex flex-wrap items-center gap-2">
-			<div role="group" aria-label={tr('Progress', 'Progresso')} className="flex flex-wrap gap-2">
-				{options.map(([value, label]) => (
-					<Button key={value} size="sm" variant={props.filter === value ? 'default' : 'outline'} aria-pressed={props.filter === value} onClick={() => props.onFilter(value)}>
-						{label} <span className="tabular-nums opacity-80">{props.counts[value]}</span>
-					</Button>
-				))}
-			</div>
 			{props.categories.length > 1 && (
 				<div className="flex items-center gap-2">
 					<Label htmlFor="category" className="sr-only">{tr('Category', 'Categoria')}</Label>

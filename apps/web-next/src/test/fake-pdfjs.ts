@@ -7,7 +7,8 @@ export function fakePdfjs(numPages = 5) {
 		render: () => ({ promise: Promise.resolve(), cancel: vi.fn() }),
 		streamTextContent: () => ({})
 	};
-	const doc = { numPages, getPage: async () => page };
+	// Page 3 mentions an owl, so search tests have something to find.
+	const doc = { numPages, getPage: async (n: number) => ({ ...page, getTextContent: async () => ({ items: [{ str: n === 3 ? 'The owl hunts at night' : `Plain page ${n}` }] }) }) };
 	return {
 		getDocument: vi.fn(() => ({ promise: Promise.resolve(doc), destroy: async () => undefined })),
 		GlobalWorkerOptions: {} as { workerSrc?: string },

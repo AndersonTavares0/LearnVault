@@ -1,5 +1,5 @@
-import { getLocale } from './i18n';
-import type { FileEntry, Lesson } from './transport';
+import { getLocale, tr } from './i18n';
+import type { FileEntry, Lesson, PdfAnnotation } from './transport';
 
 /**
  * pdf.js is only bundled for the server (HTTP) build. The desktop bundle must contain no
@@ -108,4 +108,32 @@ export function selectionBoxes(rects: ArrayLike<DOMRect>, page: DOMRect): { x: n
 		}
 	}
 	return lines.slice(0, MAX_MARK_RECTS);
+}
+
+/** 1-based numbers of the pages whose text contains the query, ignoring case. */
+export function pagesMatching(pageTexts: string[], query: string): number[] {
+	const needle = query.trim().toLocaleLowerCase();
+	if (!needle) return [];
+	return pageTexts.flatMap((text, index) => (text.toLocaleLowerCase().includes(needle) ? [index + 1] : []));
+}
+
+const KIND_NAMES = () => ({ highlight: tr('Highlight', 'Destaque'), underline: tr('Underline', 'Sublinhado'), note: tr('Note', 'Nota') });
+
+/** The marks as a Markdown document, in page order, so they can be kept outside the app. */
+export function marksToMarkdown(title: string, items: PdfAnnotation[]): string {
+	const names = KIND_NAMES();
+	const sorted = [...items].sort((a, b) => a.page - b.page || a.createdAt - b.createdAt);
+	const lines = [`# ${tr('Marks in', 'Marcações em')} ${title}`];
+	let page = 0;
+	for (const item of sorted) {
+		if (item.page !== page) {
+			page = item.page;
+			lines.push('', `## ${tr('Page', 'Página')} ${page}`, '');
+		}
+		const quote = item.quote.replace(/\s+/g, ' ').trim();
+		lines.push(`- **${names[item.kind]}**${quote ? `: “${quote}”` : ''}`);
+		const note = item.content.trim();
+		if (note) lines.push(...note.split('\n').map((line) => `  > ${line}`));
+	}
+	return `${lines.join('\n')}\n`;
 }
