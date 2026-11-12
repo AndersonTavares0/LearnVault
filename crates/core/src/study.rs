@@ -261,6 +261,8 @@ pub struct StudySummary {
     pub completed_lessons: i64,
     /// Os sete dias da semana corrente, de segunda a domingo.
     pub days: Vec<StudyDay>,
+    /// Dias ativos nos últimos 365 dias até hoje, em ordem crescente, no formato `YYYY-MM-DD`.
+    pub active_days_year: Vec<String>,
 }
 
 /// Resumo usando o dia local atual do banco.
@@ -362,6 +364,15 @@ fn summary_for_connection(
         });
     }
     let week_active_days = days.iter().filter(|day| day.active).count() as i64;
+    let mut active_days_year = Vec::new();
+    for number in active_days
+        .iter()
+        .copied()
+        .filter(|number| *number > today_number - 365)
+    {
+        let day: String = conn.query_row("SELECT date(?1)", [number], |row| row.get(0))?;
+        active_days_year.push(day);
+    }
     let completed_lessons: i64 = conn.query_row(
         "SELECT COUNT(*) FROM study_state WHERE owner_id = ?1 AND completed = 1",
         [owner_id],
@@ -377,6 +388,7 @@ fn summary_for_connection(
         week_active_days,
         completed_lessons,
         days,
+        active_days_year,
     })
 }
 
