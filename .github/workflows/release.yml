@@ -373,23 +373,6 @@ jobs:
           format: table
           severity: HIGH,CRITICAL
           exit-code: '1'
-      # Only a scanned digest gets the release tags, so :stable, :latest and :version never point at an unscanned image.
-      - name: Apply the release tags to the scanned image
-        shell: bash
-        env:
-          IMAGE: ${{ steps.image.outputs.name }}
-          DIGEST: ${{ steps.push.outputs.digest }}
-          TAGS: ${{ steps.meta.outputs.tags }}
-        run: |
-          set -euo pipefail
-          test -n "$DIGEST"
-          mapfile -t tags <<< "$TAGS"
-          args=()
-          for tag in "${tags[@]}"; do
-            if [[ -n "$tag" ]]; then args+=(--tag "$tag"); fi
-          done
-          test "${#args[@]}" -gt 0
-          docker buildx imagetools create "${args[@]}" "${IMAGE}@${DIGEST}"
       - name: Install cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
       - name: Sign the image (keyless)
@@ -415,7 +398,24 @@ jobs:
           # The certificate identity keeps the repository's original case; only the image name is lowercased.
           cosign verify "${IMAGE}@${DIGEST}" \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-            --certificate-identity-regexp "^https://github\\.com/${REPOSITORY//./\\.}/\\.github/workflows/release\\.yml@refs/(tags/v[0-9]+\\.[0-9]+\\.[0-9]+|heads/main)$" >/dev/null
+            --certificate-identity-regexp "^https://github\\.com/${REPOSITORY//./\\.}/\\.github/workflows/release\\.yml@refs/(tags/v[0-9]+\\.[0-9]+\\.[0-9]+(-beta\\.(0|[1-9][0-9]*))?|heads/main)$" >/dev/null
+      # Tags are applied last: only a scanned and signed-and-verified digest gets :version, :stable or :latest.
+      - name: Apply the release tags to the verified image
+        shell: bash
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          test -n "$DIGEST"
+          mapfile -t tags <<< "$TAGS"
+          args=()
+          for tag in "${tags[@]}"; do
+            if [[ -n "$tag" ]]; then args+=(--tag "$tag"); fi
+          done
+          test "${#args[@]}" -gt 0
+          docker buildx imagetools create "${args[@]}" "${IMAGE}@${DIGEST}"
 
   publish:
     name: Publish release assets

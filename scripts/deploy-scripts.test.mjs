@@ -71,6 +71,7 @@ test('release workflow mandates signed Windows updater assets and latest.json', 
     assert.match(content, /latest\.json/, 'deve incluir latest.json nos esperados');
     assert.match(content, /windows-x86_64-nsis/, 'manifesto latest.json deve incluir o alvo windows-x86_64-nsis');
     assert.match(content, /must be a published release marked prerelease=\$expected_prerelease/, 'reparo manual deve exigir release publicada do tipo correto');
+    assert.match(content, /expected_prerelease=false/, 'a tag estável deve esperar release não pré-lançamento');
     assert.match(content, /refs\/heads\/main/, 'reparo manual deve usar a definição confiável de main');
     assert.doesNotMatch(content, /gh release create|--draft=false/, 'reparo não deve criar nem publicar releases');
     assert.match(content, /docker\/setup-buildx-action@[0-9a-f]{40}/, 'setup-buildx-action deve usar commit SHA completo');

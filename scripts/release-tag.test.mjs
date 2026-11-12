@@ -96,8 +96,9 @@ test('manual repair does not move latest or publish before the post-build tag ch
     const containerCheck = workflow.indexOf('- name: Confirm container release tag did not move');
     const containerPush = workflow.indexOf('- name: Build and push the image by digest');
     const containerScan = workflow.indexOf('- name: Scan the pushed image for HIGH and CRITICAL vulnerabilities');
-    const containerTags = workflow.indexOf('- name: Apply the release tags to the scanned image');
-    assert.ok(containerCheck < containerPush && containerPush < containerScan && containerScan < containerTags, 'container tag is checked before push, and tags are applied only after the scan');
+    const containerVerify = workflow.indexOf('- name: Check the signature before publishing the release');
+    const containerTags = workflow.indexOf('- name: Apply the release tags to the verified image');
+    assert.ok(containerCheck < containerPush && containerPush < containerScan && containerScan < containerVerify && containerVerify < containerTags, 'container tag is checked before push, and tags are applied only after the scan and the signature check');
 
     const checksum = workflow.indexOf('- name: Create SHA256SUMS');
     const assetCheck = workflow.indexOf('- name: Confirm release tag did not move');
@@ -166,4 +167,13 @@ test('beta releases never move stable, latest or minor image tags', () => {
     const stableOnly = "!contains(needs.validate-tag.outputs.tag, '-')";
     assert.equal(workflow.split(stableOnly).length - 1, 3);
     assert.match(workflow, /expected_prerelease=true/);
+});
+
+test('the cosign identity accepts stable and beta release tags, and nothing else', () => {
+    const pattern = workflow.match(/@(refs\/\(.+?\))\$"/)?.[1];
+    assert.ok(pattern, 'cosign identity pattern not found');
+    // YAML and bash leave one backslash per `\\` in the source text.
+    const identity = new RegExp(`^${pattern.replaceAll('\\\\', '\\')}$`);
+    for (const ref of ['refs/tags/v0.9.0', 'refs/tags/v0.9.0-beta.1', 'refs/tags/v1.0.0-beta.10', 'refs/heads/main']) assert.match(ref, identity);
+    for (const ref of ['refs/tags/v0.9.0-beta.01', 'refs/tags/v0.9.0-rc.1', 'refs/tags/v0.9.0-beta', 'refs/heads/feature']) assert.doesNotMatch(ref, identity);
 });
