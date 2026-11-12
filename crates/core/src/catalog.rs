@@ -374,7 +374,7 @@ pub fn clean_title(name: &str) -> String {
 /// Título apresentado de um nó do catálogo ou aula: se a limpeza remover todos os
 /// caracteres (como em pastas ou arquivos chamados "01" ou "2024"), preserva o número.
 pub fn clean_node_title(name: &str) -> String {
-    let cleaned = clean_title(name);
+    let cleaned = crate::titles::presentable(&clean_title(name));
     if cleaned.is_empty() {
         let trimmed = name.trim();
         let fallback = trimmed
