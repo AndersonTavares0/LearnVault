@@ -250,7 +250,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 								{!pdf && savedPosition !== null && time < savedPosition && (
 									<Button variant="secondary" onClick={() => player.current?.seek(savedPosition)}>{tr(`Resume from ${formatDuration(savedPosition)}`, `Retomar de ${formatDuration(savedPosition)}`)}</Button>
 								)}
-								<label className="flex min-h-11 items-center gap-2 text-sm">
+								<label className="flex min-h-11 items-center gap-3 rounded-xl border bg-card px-3 text-sm hover:bg-muted">
 									<input type="checkbox" className="size-5 accent-[var(--brand)]" checked={preferences.autoNext} onChange={(event) => savePreferences({ ...preferences, autoNext: event.target.checked })} />
 									{tr('Play the next lesson automatically', 'Reproduzir a próxima aula automaticamente')}
 								</label>
