@@ -187,3 +187,18 @@ test('pushing and publishing wait for approval in the release environment', () =
         assert.match(block, /\n    environment: release\n/, `${job} must use the release environment`);
     }
 });
+
+test('a release candidate must be a published pre-release, and a stable release must not be one', t => {
+    const { directory } = fixture(t);
+    const script = runBlock('Require an existing published release of the tag\'s kind');
+    const wrapped = `gh() { printf '%s' "$GH_RESULT"; }\n${script}`;
+    const run = (tag, metadata) => spawnSync('bash', ['-c', wrapped], {
+        cwd: directory, encoding: 'utf8',
+        env: { PATH: process.env.PATH, GH_TOKEN: 'synthetic', GITHUB_REPOSITORY: 'owner/repo', RELEASE_TAG: tag, GH_RESULT: metadata }
+    });
+    assert.equal(run('v0.9.0-rc.1', '{"isDraft":false,"isPrerelease":true}').status, 0);
+    assert.notEqual(run('v0.9.0-rc.1', '{"isDraft":false,"isPrerelease":false}').status, 0);
+    assert.notEqual(run('v0.9.0-rc.1', '{"isDraft":true,"isPrerelease":true}').status, 0);
+    assert.equal(run('v0.9.0', '{"isDraft":false,"isPrerelease":false}').status, 0);
+    assert.notEqual(run('v0.9.0', '{"isDraft":false,"isPrerelease":true}').status, 0);
+});

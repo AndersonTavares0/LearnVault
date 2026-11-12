@@ -298,7 +298,8 @@ jobs:
 
   container:
     name: Build and publish container image (GHCR)
-    needs: validate-tag
+    # Every platform build must pass before the image is pushed, tagged or offered for approval.
+    needs: [validate-tag, linux, linux-arm64, windows]
     runs-on: ubuntu-latest
     # Waits for a reviewer approval in the `release` environment before anything is pushed or tagged.
     environment: release
