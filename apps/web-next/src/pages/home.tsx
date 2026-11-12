@@ -172,8 +172,7 @@ function ResumeCard({ items, entries }: { items: ResumeEntry[]; entries: CourseE
 					<dl className="grid grid-cols-2 gap-4 border-t pt-4 text-sm lg:grid-cols-1 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6">
 						<div>
 							<dt className="text-xs text-muted-foreground">{tr('Lessons', 'Aulas')}</dt>
-							<dd className="mt-0.5 font-semibold">{entry.done} / {entry.total}</dd>
-							<p className="text-xs text-muted-foreground">{remaining === 0 ? tr('All done', 'Tudo concluído') : tr(`${remaining} left`, `${remaining} restantes`)}</p>
+							<dd className="mt-0.5 font-semibold">{entry.done} / {entry.total}<span className="mt-0.5 block text-xs font-normal text-muted-foreground">{remaining === 0 ? tr('All done', 'Tudo concluído') : tr(`${remaining} left`, `${remaining} restantes`)}</span></dd>
 						</div>
 						{position > 0 && (
 							<div>
