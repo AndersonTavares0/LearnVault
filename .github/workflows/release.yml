@@ -335,8 +335,21 @@ jobs:
           build-args: |
             LEARNVAULT_BUILD_VERSION=${{ needs.validate-tag.outputs.tag }}
           load: true
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: |
+            ${{ steps.meta.outputs.tags }}
+            learnvault-release-scan:local
           labels: ${{ steps.meta.outputs.labels }}
+      # Same scan as the CI validation image, on the exact image that is about to be pushed and signed.
+      # Runs before the push, so a vulnerable release never reaches GHCR.
+      - name: Scan the release image for HIGH and CRITICAL vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: learnvault-release-scan:local
+          version: v0.70.0
+          format: table
+          severity: HIGH,CRITICAL
+          exit-code: '1'
       - name: Confirm container release tag did not move
         shell: bash
         env:

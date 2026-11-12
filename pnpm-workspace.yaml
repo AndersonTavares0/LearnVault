@@ -4,6 +4,8 @@ packages:
   - "apps/*"
 allowBuilds:
   esbuild: true
+# GHSA-gcqx-w48m-w2h4: low-severity deepmerge (transitive via @sveltejs/vite-plugin-svelte in the
+# legacy apps/web). No patched version is published. Remove this entry when apps/web is deleted (#340).
 auditConfig:
   ignoreGhsas:
     - GHSA-gcqx-w48m-w2h4
