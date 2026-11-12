@@ -14,7 +14,7 @@ const catalog: Catalog = {
 };
 const rewards: RewardSummary = {
 	xp: 10, completedLessons: 1, weeklyGoal: 3, missions: [],
-	study: { currentStreak: 2, longestStreak: 4, today: '2026-11-09', todayActive: true, atRisk: false, weekActiveDays: 1, completedLessons: 1, days: [] }
+	study: { currentStreak: 2, longestStreak: 4, today: '2026-11-09', todayActive: true, atRisk: false, weekActiveDays: 1, completedLessons: 1, activeDaysYear: [], days: [] }
 };
 
 afterEach(() => {

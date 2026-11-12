@@ -329,6 +329,8 @@ struct SummaryResponse {
     week_active_days: i64,
     completed_lessons: i64,
     days: Vec<SummaryDay>,
+    /// Dias ativos do último ano, para o heatmap de atividade.
+    active_days_year: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -497,6 +499,7 @@ impl From<StudySummary> for SummaryResponse {
                     active: day.active,
                 })
                 .collect(),
+            active_days_year: summary.active_days_year,
         }
     }
 }

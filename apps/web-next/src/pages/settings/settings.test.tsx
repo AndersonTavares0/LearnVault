@@ -40,7 +40,7 @@ describe('settings', () => {
 
 	it('changes the weekly goal', async () => {
 		const goal = vi.spyOn(transport, 'setWeeklyGoal').mockResolvedValue(5);
-		renderApp('/settings#study', { catalog, rewards: { xp: 0, completedLessons: 0, weeklyGoal: 3, missions: [], study: { currentStreak: 0, longestStreak: 0, today: '2026-11-09', todayActive: false, atRisk: false, weekActiveDays: 0, completedLessons: 0, days: [] } } });
+		renderApp('/settings#study', { catalog, rewards: { xp: 0, completedLessons: 0, weeklyGoal: 3, missions: [], study: { currentStreak: 0, longestStreak: 0, today: '2026-11-09', todayActive: false, atRisk: false, weekActiveDays: 0, completedLessons: 0, activeDaysYear: [], days: [] } } });
 		const group = await screen.findByRole('group', { name: 'Weekly goal, in study days' });
 		expect(within(group).getByRole('button', { name: '3' }).getAttribute('aria-pressed')).toBe('true');
 		fireEvent.click(within(group).getByRole('button', { name: '5' }));
