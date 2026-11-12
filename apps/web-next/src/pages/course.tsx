@@ -15,7 +15,7 @@ import { tr } from '@/lib/i18n';
 import { buildLibrary } from '@/lib/library';
 import { formatDuration, studySyncSupported } from '@/lib/player';
 import { findCourse, findLessonLocation, href } from '@/lib/router';
-import { COVER_ACCEPT, MAX_COVER_BYTES, transportKind, type CatalogNode } from '@/lib/transport';
+import { COVER_ACCEPT, MAX_COVER_BYTES, transportKind, type CatalogNode, type CourseStructure } from '@/lib/transport';
 import { cn } from '@/lib/utils';
 import { LessonPage } from './lesson';
 import { useCatalog, useCourseCover, useFavorites, useNotes, useRecent, useRemoveCourse, useResetCourseOrder, useSession, useToggleCourseFavorite } from '@/app/data';
@@ -79,6 +79,7 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 							<h1 className="font-heading text-4xl leading-tight font-bold text-balance">{course.title}</h1>
 							<p className="text-muted-foreground">{formatCourseMeta(counts)}</p>
 						</div>
+						{course.structure && course.structure.confidence !== 'high' && <StructureNotice structure={course.structure} />}
 						{entry && entry.total > 0 && (
 							<div className="max-w-md space-y-1">
 								<div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-labelledby="course-progress" className="h-2 overflow-hidden rounded-full bg-brand-soft">
@@ -232,4 +233,29 @@ function ManageCourse({ course, courseId, lessons }: { course: CatalogNode; cour
 			</AlertDialog>
 		</>
 	);
+}
+
+/** Why the course's organization may not match what the learner expects, in plain words. */
+function StructureNotice({ structure }: { structure: CourseStructure }) {
+	const headline = structure.confidence === 'low'
+		? tr('The structure of this course was hard to read.', 'A estrutura deste curso foi difícil de interpretar.')
+		: tr('The organization of this course may not be the one you expect.', 'A organização deste curso pode não ser a que você espera.');
+	return (
+		<div role="note" className="max-w-xl space-y-2 rounded-lg border border-border bg-card p-4 text-sm">
+			<p className="font-medium">{headline}</p>
+			<ul className="list-disc space-y-1 pl-5 text-muted-foreground">
+				{structure.concerns.map((concern) => <li key={concern}>{concernText(concern)}</li>)}
+			</ul>
+		</div>
+	);
+}
+
+function concernText(concern: string): string {
+	switch (concern) {
+		case 'no_lessons': return tr('No lesson has a video, so the lesson list may be empty.', 'Nenhuma aula tem vídeo, então a lista de aulas pode estar vazia.');
+		case 'loose_media': return tr('Some videos are outside any lesson, so they are not listed as lessons.', 'Alguns vídeos estão fora de qualquer aula, então não aparecem como aulas.');
+		case 'lessons_without_numbering': return tr('Most lessons have no number in their name, so they are ordered alphabetically.', 'A maioria das aulas não tem número no nome, então estão em ordem alfabética.');
+		case 'loose_materials': return tr('Some materials are not attached to a lesson.', 'Alguns materiais não estão ligados a uma aula.');
+		default: return tr('Some files could not be classified.', 'Alguns arquivos não puderam ser classificados.');
+	}
 }

@@ -10,7 +10,9 @@ export type FileEntry = { name: string; path: string; size: number; mediaId?: st
 export type Lesson = { title: string; path: string; media: FileEntry[]; subtitles: FileEntry[]; materials: FileEntry[]; availability?: string; unverified?: boolean };
 // Cada nó de topo do catálogo é um curso com identidade opaca (`courseId`). Nós internos
 // não carregam a identidade: a árvore inteira pertence ao curso do topo.
-export type CatalogNode = { title: string; path: string; role: string; courseId?: string; coverVersion?: number; sourceFolder?: string; files: FileEntry[]; looseFiles: FileEntry[]; children: CatalogNode[] };
+/** How clear the course folder's organization is, and the facts that lowered it. */
+export type CourseStructure = { confidence: 'high' | 'medium' | 'low'; concerns: string[] };
+export type CatalogNode = { title: string; path: string; role: string; courseId?: string; coverVersion?: number; sourceFolder?: string; structure?: CourseStructure; files: FileEntry[]; looseFiles: FileEntry[]; children: CatalogNode[] };
 export type Catalog = { complete: boolean; looseFiles: FileEntry[]; nodes: CatalogNode[] };
 // A seleção nativa de uma pasta de curso é específica do desktop: no HTTP o servidor
 // registra cursos por caminho e nenhum caminho cruza o frontend.
@@ -215,7 +217,7 @@ export interface Transport {
 }
 
 type RustFile = { media_id?: string; name?: string; path?: string; size?: number; mtime_seconds?: number; kind?: string; availability?: string; unverified?: boolean };
-type RustNode = { title?: string; path?: string; role?: string; course_id?: string; cover_version?: number; source_folder?: string; files?: RustFile[]; loose_files?: RustFile[]; children?: RustNode[] };
+type RustNode = { title?: string; path?: string; role?: string; course_id?: string; cover_version?: number; source_folder?: string; structure?: { confidence?: unknown; concerns?: unknown }; files?: RustFile[]; loose_files?: RustFile[]; children?: RustNode[] };
 type RustCatalog = { complete?: boolean; categories?: RustNode[]; nodes?: RustNode[]; loose_files?: RustFile[]; looseFiles?: RustFile[] };
 
 function invalidPayload(message: string): Error { return new Error(`Resposta inválida do servidor: ${message}`); }
@@ -369,6 +371,14 @@ function optionalCoverVersion(value: unknown): number | undefined {
 	return value;
 }
 
+/** Accepts only a known confidence level; anything else is treated as absent. */
+function parseStructure(value: { confidence?: unknown; concerns?: unknown } | undefined): CourseStructure | undefined {
+	const confidence = value?.confidence;
+	if (confidence !== 'high' && confidence !== 'medium' && confidence !== 'low') return undefined;
+	const concerns = Array.isArray(value?.concerns) ? value.concerns.filter((item): item is string => typeof item === 'string') : [];
+	return { confidence, concerns };
+}
+
 function normalizeRustNode(value: unknown, depth: number, budget: CatalogBudget): CatalogNode {
 	countNode(budget, depth);
 	if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('node Rust inválido.');
@@ -382,6 +392,7 @@ function normalizeRustNode(value: unknown, depth: number, budget: CatalogBudget)
 		courseId: node.course_id,
 		coverVersion: optionalCoverVersion(node.cover_version),
 		sourceFolder: optionalFileString(node.source_folder, 'source_folder'),
+		structure: parseStructure(node.structure),
 		files: optionalArray(value, 'files').map((file) => normalizeRustFile(file, budget)),
 		looseFiles: optionalArray(value, 'loose_files').map((file) => normalizeRustFile(file, budget)),
 		children: optionalArray(value, 'children').map((child) => normalizeRustNode(child, depth + 1, budget))
