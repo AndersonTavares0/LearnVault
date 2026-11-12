@@ -43,7 +43,7 @@ test('manual release repair only runs from main', t => {
 
 test('release repair rejects missing, draft, and prerelease targets without creating or publishing releases', t => {
     const { directory } = fixture(t);
-    const script = runBlock('Require an existing published stable release');
+    const script = runBlock('Require an existing published release of the tag\'s kind');
     const wrapped = `gh() { printf '%s' "$GH_RESULT"; }\n${script}`;
     const runWithFunction = metadata => spawnSync('bash', ['-c', wrapped], {
         cwd: directory, encoding: 'utf8',
@@ -92,7 +92,7 @@ test('updater notes use the selected release body with a fallback and repair lea
 
 test('manual repair does not move latest or publish before the post-build tag check', () => {
     assert.match(workflow, /flavor: latest=false/);
-    assert.match(workflow, /type=raw,value=latest,enable=\$\{\{ github\.event_name == 'release' \}\}/);
+    assert.match(workflow, /type=raw,value=latest,enable=\$\{\{ github\.event_name == 'release' && !contains\(needs\.validate-tag\.outputs\.tag, '-'\) \}\}/);
     const containerCheck = workflow.indexOf('- name: Confirm container release tag did not move');
     const containerPush = workflow.indexOf('- name: Build and push the image by digest');
     const containerScan = workflow.indexOf('- name: Scan the pushed image for HIGH and CRITICAL vulnerabilities');
@@ -147,4 +147,23 @@ test('restore commands override the image entrypoint before selecting the restor
         const script = readFileSync(join(root, 'deploy/scripts', name), 'utf8');
         assert.match(script, /docker compose run --rm --entrypoint \/app\/learnvault-server "\$CONTAINER" restore --backup/);
     }
+});
+
+test('release tags accept strict stable and beta versions only', t => {
+    const { directory } = fixture(t);
+    const output = join(directory, 'github-output');
+    const block = runBlock('Require a strict vX.Y.Z or vX.Y.Z-beta.N tag');
+    for (const [tag, accepted] of [['v0.9.0', true], ['v0.9.0-beta.0', true], ['v0.9.0-beta.1', true], ['v0.9.0-beta.01', false], ['v0.9.0-beta', false], ['v0.9.0-rc.1', false], ['v0.9-beta.1', false], ['v00.9.0', false]]) {
+        const result = spawnSync('bash', ['-c', block], {
+            cwd: directory, encoding: 'utf8',
+            env: { PATH: process.env.PATH, RELEASE_TAG: tag, GITHUB_OUTPUT: output }
+        });
+        assert.equal(result.status === 0, accepted, `${tag}: ${result.stderr}`);
+    }
+});
+
+test('beta releases never move stable, latest or minor image tags', () => {
+    const stableOnly = "!contains(needs.validate-tag.outputs.tag, '-')";
+    assert.equal(workflow.split(stableOnly).length - 1, 3);
+    assert.match(workflow, /expected_prerelease=true/);
 });
