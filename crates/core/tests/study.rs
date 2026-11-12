@@ -710,6 +710,22 @@ fn study_summary_counts_streak_and_current_week() -> TestResult {
 }
 
 #[test]
+fn study_summary_lists_active_days_of_the_last_year_in_order() -> TestResult {
+    let db = library_db()?;
+    // 2025-10-21 is 376 days before 2026-11-01 and falls outside the window; 2025-11-10 is 356 days before and inside it.
+    for day in ["2025-10-21", "2025-11-10", "2026-10-21", "2026-11-01"] {
+        seed_day(&db, OWNER, day)?;
+    }
+
+    let summary = study_summary_on(&db, OWNER, "2026-11-01")?;
+    assert_eq!(
+        summary.active_days_year,
+        vec!["2025-11-10", "2026-10-21", "2026-11-01"]
+    );
+    Ok(())
+}
+
+#[test]
 fn study_summary_counts_all_completed_lessons_for_progress_rewards() -> TestResult {
     let db = library_db()?;
     for id in ["done-1", "done-2", "open"] {
