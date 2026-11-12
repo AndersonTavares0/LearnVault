@@ -9,7 +9,7 @@
 		var root = document.documentElement;
 		root.setAttribute('data-theme', dark ? 'dark' : 'light');
 		root.style.colorScheme = dark ? 'dark' : 'light';
-	} catch (error) {
+	} catch {
 		// Unreadable storage: the light default stays.
 	}
 })();
