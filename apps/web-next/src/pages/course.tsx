@@ -85,6 +85,7 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 									<div className="h-full bg-primary" style={{ width: `${percent}%` }} />
 								</div>
 								<p id="course-progress" className="text-sm text-muted-foreground">{tr(`${entry.done} of ${entry.total} lessons completed (${percent}%)`, `${entry.done} de ${entry.total} aulas concluídas (${percent}%)`)}</p>
+								{entry.done === entry.total && <p role="status" className="text-sm font-medium text-primary">{tr('Course complete. Well done.', 'Curso concluído. Muito bem.')}</p>}
 							</div>
 						)}
 						{lastStudied?.location && (
