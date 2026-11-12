@@ -242,9 +242,9 @@ function StructureNotice({ structure }: { structure: CourseStructure }) {
 		? tr('The structure of this course was hard to read.', 'A estrutura deste curso foi difícil de interpretar.')
 		: tr('The organization of this course may not be the one you expect.', 'A organização deste curso pode não ser a que você espera.');
 	return (
-		<div role="note" className="max-w-xl space-y-2 rounded-lg border border-border bg-card p-4 text-sm">
+		<div role="note" className="max-w-xl space-y-1 text-sm">
 			<p className="font-medium">{headline}</p>
-			<ul className="list-disc space-y-1 pl-5 text-muted-foreground">
+			<ul className="list-disc space-y-0.5 pl-5 text-muted-foreground">
 				{structure.concerns.map((concern) => <li key={concern}>{concernText(concern)}</li>)}
 			</ul>
 		</div>
