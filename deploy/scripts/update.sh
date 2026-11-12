@@ -116,6 +116,11 @@ IMAGE_REPO="${LEARNVAULT_IMAGE_REPO:-ghcr.io/andersontavares0/learnvault}"
 SIGNER_REPO="${LEARNVAULT_GITHUB_REPO:-AndersonTavares0/LearnVault}"
 VERIFY_SIGNATURE="${LEARNVAULT_VERIFY_SIGNATURE:-true}"
 VERIFIED_IMAGE=""
+# The image name ends up in docker commands, so it must look like a registry path and cannot start like an option.
+if ! printf '%s\n' "$IMAGE_REPO" | grep -Eq '^[a-z0-9][a-z0-9._:/-]*$'; then
+    log "LEARNVAULT_IMAGE_REPO must be a lowercase registry path such as ghcr.io/owner/name; update aborted."
+    exit 1
+fi
 case "$VERIFY_SIGNATURE" in
     true|false) ;;
     *)

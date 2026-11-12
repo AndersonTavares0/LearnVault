@@ -9,7 +9,8 @@ export type Block =
 	| { kind: 'heading'; level: 2 | 3; inlines: Inline[] }
 	| { kind: 'list'; ordered: boolean; items: Inline[][] };
 
-const TOKEN = /(\*\*[^*]+\*\*|__[^_]+__|\*[^*\s][^*]*\*)/g;
+// Underline needs a boundary on both sides, so a name like __init__ or snake__case stays as typed.
+const TOKEN = /(\*\*[^*]+\*\*|(?<![\p{L}\p{N}_])__[^_]+__(?![\p{L}\p{N}_])|\*[^*\s][^*]*\*)/gu;
 
 export function parseInline(text: string): Inline[] {
 	return text.split(TOKEN).filter(Boolean).map((part) => {

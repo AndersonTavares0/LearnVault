@@ -33,4 +33,9 @@ describe('markdown', () => {
 	it('treats a cursor at the very start of text that begins with a line break as that empty line', () => {
 		expect(applyFormat('\nabc', 0, 0, 'bullets').value).toBe('- \nabc');
 	});
+
+	it('leaves double underscores inside a word alone', () => {
+		expect(parseMarkdown('call __init__ now')).toEqual([{ kind: 'paragraph', lines: [[{ text: 'call ' }, { text: 'init', underline: true }, { text: ' now' }]] }]);
+		expect(parseMarkdown('snake__case__name')).toEqual([{ kind: 'paragraph', lines: [[{ text: 'snake__case__name' }]] }]);
+	});
 });

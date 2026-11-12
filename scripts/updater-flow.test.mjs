@@ -99,6 +99,8 @@ for (const [name, settings, expectedStatus, rollback] of [
     ['missing cosign', { NO_COSIGN: '1' }, 1, false],
     ['unknown verification setting', { LEARNVAULT_VERIFY_SIGNATURE: 'True' }, 1, false],
     ['malformed signer repository', { LEARNVAULT_GITHUB_REPO: 'a(b)|c' }, 1, false],
+    ['hostile image repository', { LEARNVAULT_IMAGE_REPO: 'ghcr.io/x;touch /tmp/pwn' }, 1, false],
+    ['image repository that looks like an option', { LEARNVAULT_IMAGE_REPO: '--all-tags' }, 1, false],
 ]) {
     test(`update ${name}`, t => {
         const fixtureData = fixture(t, settings);
@@ -115,8 +117,8 @@ for (const [name, settings, expectedStatus, rollback] of [
         }
         if (settings.TEST_PULL_EXIT || settings.TEST_BACKUP_EXIT) assert.doesNotMatch(calls, /compose up/);
         // A target that cannot be verified is refused before any backup, download or change.
-        if (settings.TEST_COSIGN_EXIT || settings.NO_COSIGN || settings.LEARNVAULT_VERIFY_SIGNATURE || settings.LEARNVAULT_GITHUB_REPO) assert.doesNotMatch(calls, /backup|pull |compose up/);
-        if (settings.LEARNVAULT_VERIFY_SIGNATURE || settings.LEARNVAULT_GITHUB_REPO) return; // refused as a bad setting, before any history entry
+        if (settings.TEST_COSIGN_EXIT || settings.NO_COSIGN || settings.LEARNVAULT_VERIFY_SIGNATURE || settings.LEARNVAULT_GITHUB_REPO || settings.LEARNVAULT_IMAGE_REPO) assert.doesNotMatch(calls, /backup|pull |compose up/);
+        if (settings.LEARNVAULT_VERIFY_SIGNATURE || settings.LEARNVAULT_GITHUB_REPO || settings.LEARNVAULT_IMAGE_REPO) return; // refused as a bad setting, before any history entry
         const history = JSON.parse(readFileSync(join(fixtureData.directory, 'update-history.json'), 'utf8'));
         assert.equal(history[0].status, expectedStatus === 0 ? 'success' : rollback ? 'rollback' : (settings.TEST_COSIGN_EXIT || settings.NO_COSIGN) ? 'failed_verification' : (settings.LEARNVAULT_VERIFY_SIGNATURE || settings.LEARNVAULT_GITHUB_REPO) ? null : settings.TEST_PULL_EXIT ? 'failed_download' : 'failed_pre_backup');
     });
