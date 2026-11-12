@@ -83,7 +83,7 @@ and local data/cache directories) is strictly gitignored and must never be commi
 
 - Never commit course media, secrets, private addresses, SQLite database files, or build artifacts.
 - Changes to security, storage persistence, deployment, database migrations, or UX architecture require explicit review.
-- Clean-room design research may guide behavior, but code, assets, trademarks, copy, or UI layouts must never be copied.
+- Research into other products may guide behavior as a structural reference only; their code, assets, trademarks, copy, or UI layouts must never be copied.
 - Docker and Podman are optional deployment adapters. All functionality must remain fully testable without container runtimes.
 
 ## Documentation Standards

@@ -12,7 +12,7 @@ that area.
 ## Product and architecture
 
 - Read `docs/architecture/adr/0001-reescrita-em-rust.md` before architectural work.
-- Preserve the clean-room product policy: do not copy another product's code,
+- Other products are structural references only: do not copy their code,
   assets, brand, proprietary text, or pixel-level layout.
 - Keep Docker/Podman as optional deployment adapters; do not make them a runtime
   requirement for native packages.
