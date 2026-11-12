@@ -67,7 +67,7 @@ if (mode === 'localhost') {
 	const listenAddr = process.env.LEARNVAULT_LISTEN_ADDR ?? '127.0.0.1:8090';
 	console.log('LearnVault em desenvolvimento:');
 	console.log(`  API (Rust):  http://${listenAddr}`);
-	console.log('  SPA (Vite):  http://localhost:5173');
+	console.log('  SPA (Vite):  http://localhost:5174');
 	console.log('  Sem configuração, o primeiro acesso usa admin / admin.');
 	console.log('  A primeira execução compila o servidor e pode demorar.\n');
 	run('cargo', [
@@ -75,7 +75,7 @@ if (mode === 'localhost') {
 		'--listen-addr', listenAddr,
 		'--insecure-http'
 	]);
-	run('pnpm', ['--filter', 'learnvault-web', 'dev'], {
+	run('pnpm', ['--filter', 'learnvault-web-next', 'dev'], {
 		env: {
 			...process.env,
 			LEARNVAULT_API_TARGET: process.env.LEARNVAULT_API_TARGET ?? `http://${listenAddr}`
@@ -94,7 +94,7 @@ if (mode === 'localhost') {
 	console.log('O primeiro build compila o crate desktop; edições da SPA recarregam sozinhas.');
 	console.log('Primeiro uso: use "Importar curso" e escolha a pasta de um curso.\n');
 
-	run('pnpm', ['--filter', 'learnvault-web', 'dev:tauri']);
+	run('pnpm', ['--filter', 'learnvault-web-next', 'dev:tauri']);
 
 	console.log('Aguardando o build inicial do frontend desktop...');
 	const deadline = Date.now() + 120_000;

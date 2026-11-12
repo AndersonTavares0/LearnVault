@@ -6,15 +6,16 @@
   "license": "MIT",
   "scripts": {
     "check": "pnpm -r check",
-    "build": "pnpm -r build",
-    "build:desktop": "pnpm --filter learnvault-web build:desktop",
+    "build": "pnpm --filter learnvault-web-next build",
+    "build:legacy": "pnpm --filter learnvault-web build",
+    "build:desktop": "pnpm --filter learnvault-web-next build:desktop",
     "dev": "node scripts/dev.mjs localhost",
     "dev:localhost": "node scripts/dev.mjs localhost",
     "dev:tauri": "node scripts/dev.mjs tauri",
     "dev:next": "pnpm --filter learnvault-web-next dev",
     "verify": "node scripts/verify.mjs",
     "test:scripts": "node --test \"scripts/*.test.mjs\" \".opencode/plugins/*.test.mjs\"",
-    "e2e:server": "pnpm run build && cargo build -p learnvault-server && pnpm exec playwright test tests/e2e/server.spec.ts"
+    "e2e:server": "pnpm run build && cargo build -p learnvault-server && pnpm exec playwright test tests/e2e/web-next.spec.ts tests/e2e/web-next-rich.spec.ts"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.14.0",
