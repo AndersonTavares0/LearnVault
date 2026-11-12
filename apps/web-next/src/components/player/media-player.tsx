@@ -337,7 +337,7 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 						<audio key={attempt} {...mediaProps}>{captions.src && <track kind="captions" src={captions.src} label={tr('Subtitles', 'Legenda')} default />}</audio>
 					) : (
 						// eslint-disable-next-line jsx-a11y/media-has-caption
-						<video key={attempt} {...mediaProps} onClick={togglePlay} className="aspect-video w-full cursor-pointer bg-black">{captions.src && <track kind="captions" src={captions.src} label={tr('Subtitles', 'Legenda')} default />}</video>
+						<video key={attempt} {...mediaProps} onClick={togglePlay} className="aspect-video w-full cursor-pointer bg-black lg:max-h-[calc(100svh-19rem)]">{captions.src && <track kind="captions" src={captions.src} label={tr('Subtitles', 'Legenda')} default />}</video>
 					)}
 					{bar}
 				</div>
