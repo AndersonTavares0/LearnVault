@@ -324,12 +324,10 @@ function LessonRail({ sequence, current, isDone }: { sequence: { path: string }[
 function PdfLesson({ file, courseId, ready, initialPage, onPage }: { file: FileEntry; courseId: string; ready: boolean; initialPage: number | null; onPage: (page: number, pages: number) => void }) {
 	return (
 		<div className="space-y-3">
-			<p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+			<p role="note" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
 				<span className="inline-flex items-center gap-1.5 rounded-full bg-brand-soft px-2.5 py-0.5 font-semibold"><FileText className="size-3.5" aria-hidden="true" />{tr('PDF document', 'Documento PDF')}</span>
 				<span>{formatFileSize(file.size)}</span>
-			</p>
-			<p role="note" className="rounded-2xl border border-brand-soft bg-panel p-4 text-sm">
-				{tr('This lesson is a PDF document. Read it here; the original file is never changed.', 'Esta aula é um documento PDF. Leia aqui; o arquivo original nunca é alterado.')}
+				<span>{tr('Read it here; the original file is never changed.', 'Leia aqui; o arquivo original nunca é alterado.')}</span>
 			</p>
 			{ready ? <PdfReader key={file.mediaId ?? file.path} file={file} courseId={courseId} initialPage={initialPage} onPage={onPage} /> : <p role="status" className="text-muted-foreground">{tr('Loading…', 'Carregando…')}</p>}
 		</div>
