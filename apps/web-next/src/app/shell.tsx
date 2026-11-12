@@ -57,11 +57,11 @@ export function AppShell() {
 			<SkipLink />
 			<DesktopTitlebar />
 			<header className="border-b print:hidden">
-				<div className="mx-auto flex h-[4.5rem] max-w-7xl items-center gap-x-8 px-5 sm:px-10">
+				<div className="mx-auto flex h-[4.5rem] max-w-[88rem] items-center gap-x-8 px-5 sm:px-10">
 					<Link to="/" className="rounded-md font-heading text-2xl font-bold tracking-tight" aria-label={tr('LearnVault home', 'Início do LearnVault')}>LearnVault</Link>
 					<nav aria-label={tr('Main', 'Principal')} className="hidden flex-1 justify-center gap-1 md:flex">
 						{navItems().map((item) => (
-							<NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => cn('inline-flex min-h-11 items-center rounded-xl px-4 text-[0.95rem] font-medium text-muted-foreground hover:bg-brand-tint hover:text-foreground', isActive && 'bg-panel font-semibold text-foreground')}>
+							<NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => cn('inline-flex min-h-11 items-center rounded-xl px-4 text-[0.95rem] font-medium whitespace-nowrap text-muted-foreground hover:bg-brand-tint hover:text-foreground', isActive && 'bg-panel font-semibold text-foreground')}>
 								{item.label}
 							</NavLink>
 						))}
@@ -75,7 +75,7 @@ export function AppShell() {
 				</div>
 			</header>
 			<UpdateNotice isAdmin={Boolean(user.isAdmin)} />
-			<main id="main" tabIndex={-1} className="mx-auto w-full max-w-7xl px-5 py-8 outline-none sm:px-10 sm:py-10">
+			<main id="main" tabIndex={-1} className="mx-auto w-full max-w-[88rem] px-5 py-8 outline-none sm:px-10 sm:py-10">
 				<Outlet />
 			</main>
 			<MobileTabs />
@@ -166,7 +166,7 @@ function SearchBox() {
 	}, []);
 
 	return (
-		<div role="search" aria-label={tr('Library', 'Biblioteca')} className="relative hidden w-44 md:block lg:w-64">
+		<div role="search" aria-label={tr('Library', 'Biblioteca')} className="relative hidden w-44 md:block lg:w-64 xl:w-72">
 			<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
 			<Input
 				ref={input}
@@ -208,7 +208,7 @@ export function PageHeader({ title, description, actions, icon: Icon, className 
 			<div className="flex min-w-0 items-center gap-4">
 				{Icon && <span className="hidden size-14 shrink-0 place-items-center rounded-2xl bg-brand-soft text-primary sm:grid" aria-hidden="true"><Icon className="size-7" /></span>}
 				<div className="min-w-0 space-y-1">
-					<h1 className="font-heading text-3xl font-bold text-balance sm:text-4xl">{title.slice(0, cut)}<em className="text-reward-fill">{title.slice(cut)}</em></h1>
+					<h1 className="font-heading text-3xl font-semibold text-balance sm:text-4xl">{cut > 0 ? <>{title.slice(0, cut)}<em className="text-primary">{title.slice(cut)}</em></> : title}</h1>
 					{description && <div className="text-muted-foreground">{description}</div>}
 				</div>
 			</div>

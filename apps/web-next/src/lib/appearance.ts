@@ -127,7 +127,7 @@ export const appearanceStore = {
 };
 
 const DARK_PANEL = '#1C1510';
-const DARK_PAGE = '#090705';
+const DARK_PAGE = '#0B0A09';
 
 /** "Follow the system" resolves to what the browser says right now. */
 export function resolveTheme(theme: Appearance['theme']): 'light' | 'dark' {
@@ -153,15 +153,15 @@ export function applyAppearance(appearance: Appearance, root: HTMLElement = docu
 	const dark = resolveTheme(appearance.theme) === 'dark';
 	root.dataset.theme = dark ? 'dark' : 'light';
 	root.style.colorScheme = dark ? 'dark' : 'light';
-	if (root === document.documentElement) document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? DARK_PAGE : '#FDF9F6');
+	if (root === document.documentElement) document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? DARK_PAGE : '#FBF7F1');
 	const accent = dark ? darkAccent(appearance.accent) : readableAccent(appearance.accent);
 	root.style.setProperty('--brand', accent);
 	root.style.setProperty('--brand-fg', dark ? '#1C1209' : '#FFFFFF');
 	const own = appearance.reward === 'accent';
-	root.style.setProperty('--reward', own ? 'var(--brand)' : dark ? '#E3A857' : '#8F5A12');
-	root.style.setProperty('--reward-fill', own ? 'var(--brand)' : dark ? '#E3A857' : '#BC7F29');
-	root.style.setProperty('--reward-fill-fg', own ? 'var(--brand-fg)' : dark ? '#1C1209' : '#2A2118');
-	root.style.setProperty('--reward-tint', own ? 'var(--brand-tint)' : dark ? '#2A1F10' : '#F8E9C8');
+	root.style.setProperty('--reward', own ? 'var(--brand)' : dark ? '#C08A4E' : '#A96F2E');
+	root.style.setProperty('--reward-fill', own ? 'var(--brand)' : dark ? '#C08A4E' : '#A96F2E');
+	root.style.setProperty('--reward-fill-fg', own ? 'var(--brand-fg)' : dark ? '#201C18' : '#FFFFFF');
+	root.style.setProperty('--reward-tint', own ? 'var(--brand-tint)' : dark ? '#3A2A18' : '#F3E3CB');
 	for (const key of ['radius', 'density', 'textSize', 'font', 'sidebar', 'homeLayout'] as const) root.dataset[key] = appearance[key];
 }
 

@@ -1,3 +1,4 @@
+import { Check } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -47,8 +48,9 @@ export function FocusSettings() {
 					{PRESETS.map((preset) => {
 						const active = draft.focusMinutes === preset.focusMinutes && draft.shortMinutes === preset.shortMinutes && draft.longMinutes === preset.longMinutes;
 						return (
-							<Button key={preset.name()} type="button" variant={active ? 'default' : 'outline'} aria-pressed={active} onClick={() => setDraft({ ...draft, focusMinutes: preset.focusMinutes, shortMinutes: preset.shortMinutes, longMinutes: preset.longMinutes })}>
+							<Button key={preset.name()} type="button" variant={active ? 'selected' : 'outline'} aria-pressed={active} onClick={() => setDraft({ ...draft, focusMinutes: preset.focusMinutes, shortMinutes: preset.shortMinutes, longMinutes: preset.longMinutes })}>
 								{preset.name()} · {tr(`${preset.focusMinutes} min focus, ${preset.shortMinutes} break`, `${preset.focusMinutes} min foco, ${preset.shortMinutes} pausa`)}
+								{active && <Check className="size-3.5 text-primary" aria-hidden="true" />}
 							</Button>
 						);
 					})}

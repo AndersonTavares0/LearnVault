@@ -27,6 +27,13 @@
   --color-reward-tint: var(--reward-tint);
   --color-panel: var(--panel);
   --color-panel-edge: var(--panel-edge);
+  --color-border-strong: var(--border-strong);
+  --color-success: var(--success);
+  --color-success-tint: var(--success-tint);
+  --color-warning: var(--warning);
+  --color-warning-tint: var(--warning-tint);
+  --color-info: var(--info);
+  --color-info-tint: var(--info-tint);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -81,76 +88,112 @@
   --brand-deep: color-mix(in oklch, var(--brand) 55%, black);
   --brand-tint: color-mix(in oklch, var(--brand) 6%, var(--background));
   --brand-soft: color-mix(in oklch, var(--brand) 13%, var(--background));
-  --reward: #8F5A12;
-  --reward-fill: #BC7F29;
-  --reward-fill-fg: #2A2118;
-  --reward-tint: #F8E9C8;
+  --reward: #A96F2E;
+  --reward-fill: #A96F2E;
+  --reward-fill-fg: #FFFFFF;
+  --reward-tint: #F3E3CB;
   --radius: 0.875rem;
   --density: 1;
 
-  --background: #FDF9F6;
-  --foreground: #3A2515;
-  --card: #FFFFFF;
-  --card-foreground: #3A2515;
-  --popover: #FFFFFF;
-  --popover-foreground: #3A2515;
+  --background: color-mix(in oklch, var(--brand) 3%, #FBF7F1);
+  --foreground: #2E2118;
+  --card: color-mix(in oklch, var(--brand) 4%, #FFFDF9);
+  --card-foreground: #2E2118;
+  --popover: var(--card);
+  --popover-foreground: #2E2118;
   --primary: var(--brand);
   --primary-foreground: var(--brand-fg);
-  --secondary: #FBEFDC;
-  --secondary-foreground: #3A2515;
-  --muted: #F8EFE3;
-  --muted-foreground: #735F4A;
+  --secondary: var(--panel);
+  --secondary-foreground: #2E2118;
+  --muted: color-mix(in oklch, var(--brand) 4%, #F3E9DB);
+  --muted-foreground: #705E4C;
   --accent: var(--brand-tint);
-  --accent-foreground: #3A2515;
-  --destructive: #B91C1C;
+  --accent-foreground: #2E2118;
+  --destructive: #A33A32;
   --destructive-foreground: #FFFFFF;
-  --border: #ECE2D6;
+  --border: color-mix(in oklch, var(--brand) 6%, #E7D8C6);
+  --border-strong: color-mix(in oklch, var(--foreground) 38%, var(--background));
   --input: #8C7F6C;
   --ring: var(--brand);
+  --success: #4F7D5A;
+  --success-tint: #E4EFE4;
+  --warning: #8A5A16;
+  --warning-tint: #F3E3CB;
+  --info: #3F5F8F;
+  --info-tint: #E7EEF6;
   --chart-1: var(--brand);
   --chart-2: #6B5D4B;
   --chart-3: var(--brand-soft);
   --chart-4: #8C7F6C;
   --chart-5: #3A2515;
-  --sidebar: #FBF8F2;
-  --sidebar-foreground: #3A2515;
+  --sidebar: color-mix(in oklch, var(--brand) 3%, #FBF7F1);
+  --sidebar-foreground: #2E2118;
   --sidebar-primary: var(--brand);
   --sidebar-primary-foreground: var(--brand-fg);
   --sidebar-accent: var(--brand-tint);
-  --sidebar-accent-foreground: #3A2515;
-  --sidebar-border: #ECE2D6;
+  --sidebar-accent-foreground: #2E2118;
+  --sidebar-border: var(--border);
   --sidebar-ring: var(--brand);
-  --panel: #FBEFDC;
-  --panel-edge: #ECE2D6;
+  --panel: color-mix(in oklch, var(--brand) 5%, #F7EDDF);
+  --panel-edge: var(--border);
+  --stat-amber-bg: #F3E3CB;
+  --stat-amber-border: #E4CFAF;
+  --stat-amber-ink: #8A5526;
+  --stat-violet-bg: #EDE4F2;
+  --stat-violet-border: #D8C6E4;
+  --stat-violet-ink: #6B4A8A;
+  --stat-green-bg: #E4EFE4;
+  --stat-green-border: #C9DEC9;
+  --stat-green-ink: #3F6B4A;
 }
 
-/* The dark page: warm black, raised panels a step lighter, amber-led accent. */
+/* Carvão quente: graphite with a warm undertone, warm hairlines, brass accent. */
 :root[data-theme="dark"] {
-  --background: #090705;
+  --background: color-mix(in oklch, var(--brand) 3%, #0B0A09);
   --brand-soft: color-mix(in oklch, var(--brand) 24%, var(--background));
-  --foreground: #F6EEE4;
-  --card: #13100D;
-  --card-foreground: #F6EEE4;
-  --popover: #17130F;
-  --popover-foreground: #F6EEE4;
-  --secondary: #1C1510;
-  --secondary-foreground: #F6EEE4;
-  --muted: #1A1511;
-  --muted-foreground: #B6A694;
-  --accent-foreground: #F6EEE4;
-  --destructive: #F87171;
-  --destructive-foreground: #1C0909;
-  --border: #2F251C;
+  --foreground: #F4EFE6;
+  --card: color-mix(in oklch, var(--brand) 4%, #161311);
+  --card-foreground: #F4EFE6;
+  --popover: color-mix(in oklch, var(--brand) 5%, #1C1916);
+  --popover-foreground: #F4EFE6;
+  --secondary: var(--panel);
+  --secondary-foreground: #F4EFE6;
+  --muted: color-mix(in oklch, var(--brand) 4%, #1A1613);
+  --muted-foreground: #BFB5A7;
+  --accent-foreground: #F4EFE6;
+  --destructive: #E08A82;
+  --destructive-foreground: #201C18;
+  --border: color-mix(in oklch, var(--brand) 6%, #38322B);
+  --border-strong: color-mix(in oklch, var(--foreground) 30%, var(--background));
   --input: #8A7A68;
-  --chart-2: #B6A694;
+  --success: #8FC79A;
+  --success-tint: #223026;
+  --warning: #E0B05F;
+  --warning-tint: #3A2A18;
+  --info: #9DB4D8;
+  --info-tint: #1E2A3A;
+  --reward: #C08A4E;
+  --reward-fill: #C08A4E;
+  --reward-fill-fg: #201C18;
+  --reward-tint: #3A2A18;
+  --chart-2: #BFB5A7;
   --chart-4: #8A7A68;
-  --chart-5: #F6EEE4;
-  --sidebar: #090705;
-  --sidebar-foreground: #F6EEE4;
-  --sidebar-accent-foreground: #F6EEE4;
-  --sidebar-border: #2F251C;
-  --panel: #1C1510;
-  --panel-edge: #2F251C;
+  --chart-5: #F4EFE6;
+  --sidebar: color-mix(in oklch, var(--brand) 3%, #0B0A09);
+  --sidebar-foreground: #F4EFE6;
+  --sidebar-accent-foreground: #F4EFE6;
+  --sidebar-border: var(--border);
+  --panel: color-mix(in oklch, var(--brand) 5%, #201C18);
+  --panel-edge: var(--border);
+  --stat-amber-bg: #3A2A18;
+  --stat-amber-border: #5A4228;
+  --stat-amber-ink: #F0B35A;
+  --stat-violet-bg: #2E2438;
+  --stat-violet-border: #4A3A5E;
+  --stat-violet-ink: #C4A9D8;
+  --stat-green-bg: #223026;
+  --stat-green-border: #3A5440;
+  --stat-green-ink: #8FC79A;
   --cover-0: #2B2118; --cover-1: #2E211B; --cover-2: #26261C; --cover-3: #222A20;
   --cover-4: #2A241C; --cover-5: #2E2320; --cover-6: #262420; --cover-7: #2B2316;
 }
@@ -158,6 +201,12 @@
   --cover-0: #F6E7CF; --cover-1: #F2E0D2; --cover-2: #EAE4CF; --cover-3: #E3E8D6;
   --cover-4: #E9DED0; --cover-5: #F1DCD3; --cover-6: #E6E3D8; --cover-7: #EFE2C8;
 }
+
+/* Habit stats: a neutral card with one small jewel tile; color stays a detail. */
+.stat-amber, .stat-violet, .stat-green { background: var(--card); border-color: var(--border); }
+.stat-amber [data-stat-icon] { background: var(--stat-amber-bg); color: var(--stat-amber-ink); }
+.stat-violet [data-stat-icon] { background: var(--stat-violet-bg); color: var(--stat-violet-ink); }
+.stat-green [data-stat-icon] { background: var(--stat-green-bg); color: var(--stat-green-ink); }
 
 /* A small tint and ink in one hue per course, for the code and footer of a card. */
 .tone { background: hsl(var(--hue) 45% 92%); color: hsl(var(--hue) 60% 22%); }
@@ -192,7 +241,7 @@ html, body { overflow-x: clip; }
   }
   h1, h2, h3 {
     font-family: var(--heading-font);
-    font-weight: 700;
+    font-weight: 600;
     letter-spacing: -0.02em;
   }
   @media (prefers-reduced-motion: reduce) {

@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+	LIBRARY_SORTS,
+	LIBRARY_SORT_STORAGE_KEY,
 	LIBRARY_VIEWS,
 	LIBRARY_VIEW_STORAGE_KEY,
+	parseLibrarySort,
 	parseLibraryView,
+	persistLibrarySort,
 	persistLibraryView,
+	readLibrarySort,
 	readLibraryView
 } from './library-view';
 
@@ -38,5 +43,27 @@ describe('readLibraryView / persistLibraryView', () => {
 		expect(writes).toEqual([[LIBRARY_VIEW_STORAGE_KEY, 'compact']]);
 		expect(persistLibraryView(null, 'list')).toBe(false);
 		expect(persistLibraryView({ setItem: () => { throw new Error('quota'); } }, 'list')).toBe(false);
+	});
+});
+
+describe('library sort', () => {
+	it('accepts every known sort and rejects the rest', () => {
+		for (const sort of LIBRARY_SORTS) expect(parseLibrarySort(sort)).toBe(sort);
+		expect(parseLibrarySort('newest')).toBeNull();
+		expect(parseLibrarySort(null)).toBeNull();
+	});
+
+	it('defaults to recent and reads a stored sort', () => {
+		expect(readLibrarySort(null)).toBe('recent');
+		expect(readLibrarySort({ getItem: () => 'invalid' })).toBe('recent');
+		expect(readLibrarySort({ getItem: (key) => (key === LIBRARY_SORT_STORAGE_KEY ? 'title' : null) })).toBe('title');
+	});
+
+	it('persists and reports write failures without throwing', () => {
+		const writes: Array<[string, string]> = [];
+		expect(persistLibrarySort({ setItem: (key, value) => { writes.push([key, value]); } }, 'progress')).toBe(true);
+		expect(writes).toEqual([[LIBRARY_SORT_STORAGE_KEY, 'progress']]);
+		expect(persistLibrarySort(null, 'title')).toBe(false);
+		expect(persistLibrarySort({ setItem: () => { throw new Error('quota'); } }, 'recent')).toBe(false);
 	});
 });

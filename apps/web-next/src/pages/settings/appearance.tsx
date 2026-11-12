@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { useLocale } from '@/hooks/use-locale';
 import { useStore } from '@/hooks/use-store';
 import { Panel } from '@/components/panel';
-import { ACCENT_PRESETS, appearanceStore, darkAccent, DENSITIES, FONTS, HOME_LAYOUTS, RADII, readableAccent, resetAppearance, resolveTheme, REWARD_COLORS, SIDEBARS, TEXT_SIZES, THEMES, updateAppearance, type Appearance } from '@/lib/appearance';
+import { ACCENT_PRESETS, appearanceStore, darkAccent, DENSITIES, FONTS, RADII, readableAccent, resetAppearance, resolveTheme, REWARD_COLORS, SIDEBARS, TEXT_SIZES, THEMES, updateAppearance, type Appearance } from '@/lib/appearance';
 import { tr } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { safeStorage } from '@/app/preferences';
@@ -27,8 +27,9 @@ export function AppearanceSettings() {
 	const applied = dark ? darkAccent(custom) : readableAccent(custom);
 	return (
 		<div className="space-y-6">
+			<div className="grid gap-6 xl:grid-cols-2">
 			<Panel className="space-y-6 p-5 sm:p-6">
-				<h2 className="font-heading text-xl font-bold">{tr('Colour', 'Cor')}</h2>
+				<h2 className="font-heading text-xl font-semibold">{tr('Colour', 'Cor')}</h2>
 			<Choice legend={tr('Theme', 'Tema')} options={THEMES} value={value.theme} label={(option) => ({ light: tr('Light', 'Claro'), dark: tr('Dark', 'Escuro'), system: tr('Follow the system', 'Seguir o sistema') })[option]} onChange={(theme) => change({ theme })} />
 			<fieldset className="space-y-3">
 				<legend className="text-sm font-semibold">{tr('Accent color', 'Cor de destaque')}</legend>
@@ -59,15 +60,14 @@ export function AppearanceSettings() {
 			<Choice legend={tr('Rewards (streak, XP, badges)', 'Recompensas (sequência, XP, emblemas)')} options={REWARD_COLORS} value={value.reward} label={(option) => (option === 'amber' ? tr('Amber', 'Âmbar') : tr('Same as accent', 'Igual ao destaque'))} onChange={(reward) => change({ reward })} />
 			</Panel>
 			<Panel className="space-y-6 p-5 sm:p-6">
-				<h2 className="font-heading text-xl font-bold">{tr('Shape and text', 'Forma e texto')}</h2>
+				<h2 className="font-heading text-xl font-semibold">{tr('Shape and text', 'Forma e texto')}</h2>
 			<Choice legend={tr('Corners', 'Cantos')} options={RADII} value={value.radius} label={(option) => ({ square: tr('Square', 'Retos'), soft: tr('Soft', 'Suaves'), round: tr('Round', 'Arredondados') })[option]} onChange={(radius) => change({ radius })} />
 			<Choice legend={tr('Density', 'Densidade')} options={DENSITIES} value={value.density} label={(option) => (option === 'comfortable' ? tr('Comfortable', 'Confortável') : tr('Compact', 'Compacta'))} onChange={(density) => change({ density })} />
 			<Choice legend={tr('Text size', 'Tamanho do texto')} options={TEXT_SIZES} value={value.textSize} label={(option) => ({ small: tr('Small', 'Pequeno'), medium: tr('Medium', 'Médio'), large: tr('Large', 'Grande') })[option]} onChange={(textSize) => change({ textSize })} />
 			<Choice legend={tr('Font', 'Fonte')} options={FONTS} value={value.font} label={(option) => ({ sans: tr('DM Sans with serif titles', 'DM Sans com títulos serifados'), system: tr('System font', 'Fonte do sistema'), serif: tr('Reading serif', 'Serifada de leitura') })[option]} onChange={(font) => change({ font })} />
 			</Panel>
-			<Panel className="space-y-6 p-5 sm:p-6">
-				<h2 className="font-heading text-xl font-bold">{tr('My learning layout', 'Layout do Meu aprendizado')}</h2>
-			<Choice legend={tr('Course list in My learning', 'Lista de cursos em Meu aprendizado')} options={HOME_LAYOUTS} value={value.homeLayout} label={(option) => (option === 'grid' ? tr('Cards', 'Cartões') : tr('List', 'Lista'))} onChange={(homeLayout) => change({ homeLayout })} />
+			<Panel className="space-y-6 p-5 sm:p-6 xl:col-span-2">
+				<h2 className="font-heading text-xl font-semibold">{tr('My learning layout', 'Layout do Meu aprendizado')}</h2>
 			<Choice legend={tr('Course content in a lesson', 'Conteúdo do curso na aula')} options={SIDEBARS} value={value.sidebar} label={(option) => (option === 'right' ? tr('On the right', 'À direita') : tr('On the left', 'À esquerda'))} onChange={(sidebar) => change({ sidebar })} />
 			<fieldset className="space-y-2">
 				<legend className="text-sm font-semibold">{tr('What My learning shows', 'O que Meu aprendizado mostra')}</legend>
@@ -78,6 +78,7 @@ export function AppearanceSettings() {
 				<Toggle label={tr('Badges', 'Emblemas')} checked={value.showBadges} onChange={(showBadges) => change({ showBadges })} />
 			</fieldset>
 			</Panel>
+			</div>
 			<Button variant="outline" onClick={() => { const next = resetAppearance(safeStorage()); setCustom(next.accent); }}>{tr('Reset to the default look', 'Voltar ao visual padrão')}</Button>
 		</div>
 	);
@@ -89,7 +90,10 @@ function Choice<T extends string>({ legend, options, value, label, onChange }: {
 			<legend className="text-sm font-semibold">{legend}</legend>
 			<div className="flex flex-wrap gap-2">
 				{options.map((option) => (
-					<Button key={option} variant={option === value ? 'default' : 'outline'} aria-pressed={option === value} onClick={() => onChange(option)}>{label(option)}</Button>
+					<Button key={option} variant={option === value ? 'selected' : 'outline'} aria-pressed={option === value} onClick={() => onChange(option)}>
+						{label(option)}
+						{option === value && <Check className="size-3.5 text-primary" aria-hidden="true" />}
+					</Button>
 				))}
 			</div>
 		</fieldset>
