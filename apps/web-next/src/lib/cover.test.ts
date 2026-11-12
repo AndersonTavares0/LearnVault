@@ -67,3 +67,30 @@ describe('course cover precedence', () => {
 		expect(selectCourseCoverSource({ manualCoverUrl: '', thumbnailUrl: '' })).toBe('generated');
 	});
 });
+
+/** WCAG relative luminance of an `hsl(h s% l%)` colour, as produced by `courseCover`. */
+function luminanceOfHsl(value: string): number {
+	const [, hue, sat, light] = value.match(/hsl\((\d+(?:\.\d+)?) (\d+(?:\.\d+)?)% (\d+(?:\.\d+)?)%\)/) ?? [];
+	const h = Number(hue) / 360;
+	const s = Number(sat) / 100;
+	const l = Number(light) / 100;
+	const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+	const p = 2 * l - q;
+	const channel = (t: number) => {
+		const x = ((t % 1) + 1) % 1;
+		const v = x < 1 / 6 ? p + (q - p) * 6 * x : x < 1 / 2 ? q : x < 2 / 3 ? p + (q - p) * (2 / 3 - x) * 6 : p;
+		return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+	};
+	return 0.2126 * channel(h + 1 / 3) + 0.7152 * channel(h) + 0.0722 * channel(h - 1 / 3);
+}
+
+describe('generated cover text contrast', () => {
+	it('keeps white title text at 5:1 or more on the lightest corner of every palette hue', () => {
+		for (let i = 0; i < 200; i += 1) {
+			const cover = courseCover(`Curso ${i}`);
+			const lightest = Math.max(luminanceOfHsl(cover.from), luminanceOfHsl(cover.to));
+			const ratio = 1.05 / (lightest + 0.05);
+			expect(ratio, `Curso ${i}: ${cover.from}`).toBeGreaterThanOrEqual(5);
+		}
+	});
+});
