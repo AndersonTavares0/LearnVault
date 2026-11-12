@@ -43,7 +43,7 @@ test('manual release repair only runs from main', t => {
 
 test('release repair rejects missing, draft, and prerelease targets without creating or publishing releases', t => {
     const { directory } = fixture(t);
-    const script = runBlock('Require an existing published stable release');
+    const script = runBlock('Require an existing published release of the tag\'s kind');
     const wrapped = `gh() { printf '%s' "$GH_RESULT"; }\n${script}`;
     const runWithFunction = metadata => spawnSync('bash', ['-c', wrapped], {
         cwd: directory, encoding: 'utf8',
@@ -92,12 +92,13 @@ test('updater notes use the selected release body with a fallback and repair lea
 
 test('manual repair does not move latest or publish before the post-build tag check', () => {
     assert.match(workflow, /flavor: latest=false/);
-    assert.match(workflow, /type=raw,value=latest,enable=\$\{\{ github\.event_name == 'release' \}\}/);
+    assert.match(workflow, /type=raw,value=latest,enable=\$\{\{ github\.event_name == 'release' && !contains\(needs\.validate-tag\.outputs\.tag, '-'\) \}\}/);
     const containerCheck = workflow.indexOf('- name: Confirm container release tag did not move');
     const containerPush = workflow.indexOf('- name: Build and push the image by digest');
     const containerScan = workflow.indexOf('- name: Scan the pushed image for HIGH and CRITICAL vulnerabilities');
-    const containerTags = workflow.indexOf('- name: Apply the release tags to the scanned image');
-    assert.ok(containerCheck < containerPush && containerPush < containerScan && containerScan < containerTags, 'container tag is checked before push, and tags are applied only after the scan');
+    const containerVerify = workflow.indexOf('- name: Check the signature before publishing the release');
+    const containerTags = workflow.indexOf('- name: Apply the release tags to the verified image');
+    assert.ok(containerCheck < containerPush && containerPush < containerScan && containerScan < containerVerify && containerVerify < containerTags, 'container tag is checked before push, and tags are applied only after the scan and the signature check');
 
     const checksum = workflow.indexOf('- name: Create SHA256SUMS');
     const assetCheck = workflow.indexOf('- name: Confirm release tag did not move');
@@ -147,4 +148,57 @@ test('restore commands override the image entrypoint before selecting the restor
         const script = readFileSync(join(root, 'deploy/scripts', name), 'utf8');
         assert.match(script, /docker compose run --rm --entrypoint \/app\/learnvault-server "\$CONTAINER" restore --backup/);
     }
+});
+
+test('release tags accept strict stable and rc versions only', t => {
+    const { directory } = fixture(t);
+    const output = join(directory, 'github-output');
+    const block = runBlock('Require a strict vX.Y.Z or vX.Y.Z-rc.N tag');
+    for (const [tag, accepted] of [['v0.9.0', true], ['v0.9.0-rc.0', true], ['v0.9.0-rc.1', true], ['v0.9.0-rc.01', false], ['v0.9.0-rc', false], ['v0.9.0-beta.1', false], ['v0.9-rc.1', false], ['v00.9.0', false]]) {
+        const result = spawnSync('bash', ['-c', block], {
+            cwd: directory, encoding: 'utf8',
+            env: { PATH: process.env.PATH, RELEASE_TAG: tag, GITHUB_OUTPUT: output }
+        });
+        assert.equal(result.status === 0, accepted, `${tag}: ${result.stderr}`);
+    }
+});
+
+test('release candidates never move stable, latest or minor image tags', () => {
+    const stableOnly = "!contains(needs.validate-tag.outputs.tag, '-')";
+    assert.equal(workflow.split(stableOnly).length - 1, 3);
+    assert.match(workflow, /expected_prerelease=true/);
+});
+
+test('the cosign identity accepts stable and rc release tags, and nothing else', () => {
+    const pattern = workflow.match(/@(refs\/\(.+?\))\$"/)?.[1];
+    assert.ok(pattern, 'cosign identity pattern not found');
+    // YAML and bash leave one backslash per `\\` in the source text.
+    const identity = new RegExp(`^${pattern.replaceAll('\\\\', '\\')}$`);
+    for (const ref of ['refs/tags/v0.9.0', 'refs/tags/v0.9.0-rc.1', 'refs/tags/v1.0.0-rc.10', 'refs/heads/main']) assert.match(ref, identity);
+    for (const ref of ['refs/tags/v0.9.0-rc.01', 'refs/tags/v0.9.0-rc', 'refs/tags/v0.9.0-beta.1', 'refs/heads/feature']) assert.doesNotMatch(ref, identity);
+});
+
+test('pushing and publishing wait for approval in the release environment', () => {
+    for (const job of ['container:', 'publish:']) {
+        const start = workflow.indexOf(`\n  ${job}\n`);
+        assert.ok(start >= 0, `missing job ${job}`);
+        const next = workflow.slice(start + 1).search(/\n {2}[a-z-]+:\n/);
+        const block = workflow.slice(start, next < 0 ? undefined : start + 1 + next);
+        assert.match(block, /\n    environment: release\n/, `${job} must use the release environment`);
+    }
+});
+
+test('a release candidate must be a published pre-release, and a stable release must not be one', t => {
+    const { directory } = fixture(t);
+    const script = runBlock('Require an existing published release of the tag\'s kind');
+    const wrapped = `gh() { printf '%s' "$GH_RESULT"; }\n${script}`;
+    const run = (tag, metadata) => spawnSync('bash', ['-c', wrapped], {
+        cwd: directory, encoding: 'utf8',
+        env: { PATH: process.env.PATH, GH_TOKEN: 'synthetic', GITHUB_REPOSITORY: 'owner/repo', RELEASE_TAG: tag, GH_RESULT: metadata }
+    });
+    assert.equal(run('v0.9.0-rc.1', '{"isDraft":false,"isPrerelease":true}').status, 0);
+    assert.notEqual(run('v0.9.0-rc.1', '{"isDraft":false,"isPrerelease":false}').status, 0);
+    assert.notEqual(run('v0.9.0-rc.1', '{"isDraft":true,"isPrerelease":true}').status, 0);
+    assert.equal(run('v0.9.0', '{"isDraft":false,"isPrerelease":false}').status, 0);
+    assert.notEqual(run('v0.9.0', '{"isDraft":false,"isPrerelease":true}').status, 0);
 });

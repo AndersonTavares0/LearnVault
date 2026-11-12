@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Published release tag to rebuild assets for, strict vX.Y.Z
+        description: Published release tag to rebuild assets for, strict vX.Y.Z or vX.Y.Z-rc.N
         required: true
         type: string
 
@@ -35,28 +35,32 @@ jobs:
             echo "::error::Manual release repair must run from main" >&2
             exit 1
           fi
-      - name: Require a strict vX.Y.Z tag
+      - name: Require a strict vX.Y.Z or vX.Y.Z-rc.N tag
         id: tag
         shell: bash
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
         run: |
           set -euo pipefail
-          if [[ ! "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+          if [[ ! "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rc\.(0|[1-9][0-9]*))?$ ]]; then
             echo "::error::Unexpected release tag format: $RELEASE_TAG" >&2
             exit 1
           fi
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
-      - name: Require an existing published stable release
+      # A release candidate tag must be a published pre-release and a stable tag a published stable release,
+      # so a release candidate can never be repaired or published as the latest release by mistake.
+      - name: Require an existing published release of the tag's kind
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.tag.outputs.tag }}
         run: |
           set -euo pipefail
+          expected_prerelease=false
+          if [[ "$RELEASE_TAG" == *-rc.* ]]; then expected_prerelease=true; fi
           meta="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease)"
-          if [[ "$(jq -r .isDraft <<<"$meta")" != "false" || "$(jq -r .isPrerelease <<<"$meta")" != "false" ]]; then
-            echo "::error::Only an existing published stable release can be repaired" >&2
+          if [[ "$(jq -r .isDraft <<<"$meta")" != "false" || "$(jq -r .isPrerelease <<<"$meta")" != "$expected_prerelease" ]]; then
+            echo "::error::$RELEASE_TAG must be a published release marked prerelease=$expected_prerelease" >&2
             exit 1
           fi
       - name: Resolve release notes
@@ -294,8 +298,11 @@ jobs:
 
   container:
     name: Build and publish container image (GHCR)
-    needs: validate-tag
+    # Every platform build must pass before the image is pushed, tagged or offered for approval.
+    needs: [validate-tag, linux, linux-arm64, windows]
     runs-on: ubuntu-latest
+    # Waits for a reviewer approval in the `release` environment before anything is pushed or tagged.
+    environment: release
     permissions:
       contents: read
       packages: write
@@ -323,9 +330,9 @@ jobs:
           flavor: latest=false
           tags: |
             type=semver,pattern={{version}},value=${{ needs.validate-tag.outputs.tag }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ needs.validate-tag.outputs.tag }}
-            type=raw,value=stable,enable=${{ github.event_name == 'release' }}
-            type=raw,value=latest,enable=${{ github.event_name == 'release' }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.validate-tag.outputs.tag }},enable=${{ !contains(needs.validate-tag.outputs.tag, '-') }}
+            type=raw,value=stable,enable=${{ github.event_name == 'release' && !contains(needs.validate-tag.outputs.tag, '-') }}
+            type=raw,value=latest,enable=${{ github.event_name == 'release' && !contains(needs.validate-tag.outputs.tag, '-') }}
       - name: Confirm container release tag did not move
         shell: bash
         env:
@@ -369,23 +376,6 @@ jobs:
           format: table
           severity: HIGH,CRITICAL
           exit-code: '1'
-      # Only a scanned digest gets the release tags, so :stable, :latest and :version never point at an unscanned image.
-      - name: Apply the release tags to the scanned image
-        shell: bash
-        env:
-          IMAGE: ${{ steps.image.outputs.name }}
-          DIGEST: ${{ steps.push.outputs.digest }}
-          TAGS: ${{ steps.meta.outputs.tags }}
-        run: |
-          set -euo pipefail
-          test -n "$DIGEST"
-          mapfile -t tags <<< "$TAGS"
-          args=()
-          for tag in "${tags[@]}"; do
-            if [[ -n "$tag" ]]; then args+=(--tag "$tag"); fi
-          done
-          test "${#args[@]}" -gt 0
-          docker buildx imagetools create "${args[@]}" "${IMAGE}@${DIGEST}"
       - name: Install cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
       - name: Sign the image (keyless)
@@ -411,12 +401,30 @@ jobs:
           # The certificate identity keeps the repository's original case; only the image name is lowercased.
           cosign verify "${IMAGE}@${DIGEST}" \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-            --certificate-identity-regexp "^https://github\\.com/${REPOSITORY//./\\.}/\\.github/workflows/release\\.yml@refs/(tags/v[0-9]+\\.[0-9]+\\.[0-9]+|heads/main)$" >/dev/null
+            --certificate-identity-regexp "^https://github\\.com/${REPOSITORY//./\\.}/\\.github/workflows/release\\.yml@refs/(tags/v[0-9]+\\.[0-9]+\\.[0-9]+(-rc\\.(0|[1-9][0-9]*))?|heads/main)$" >/dev/null
+      # Tags are applied last: only a scanned and signed-and-verified digest gets :version, :stable or :latest.
+      - name: Apply the release tags to the verified image
+        shell: bash
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          test -n "$DIGEST"
+          mapfile -t tags <<< "$TAGS"
+          args=()
+          for tag in "${tags[@]}"; do
+            if [[ -n "$tag" ]]; then args+=(--tag "$tag"); fi
+          done
+          test "${#args[@]}" -gt 0
+          docker buildx imagetools create "${args[@]}" "${IMAGE}@${DIGEST}"
 
   publish:
     name: Publish release assets
     needs: [validate-tag, linux, linux-arm64, windows, container]
     runs-on: ubuntu-latest
+    environment: release
     permissions:
       contents: write
     steps:
