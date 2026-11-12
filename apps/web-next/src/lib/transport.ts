@@ -27,6 +27,8 @@ export type StudySummary = {
 	weekActiveDays: number;
 	completedLessons: number;
 	days: StudyDay[];
+	/** Dias com atividade nos últimos 365 dias, em ordem crescente (`YYYY-MM-DD`). */
+	activeDaysYear: string[];
 };
 export type FocusKind = 'focus' | 'short' | 'long';
 export type FocusSessionInput = { id: string; kind: FocusKind; plannedSeconds: number; actualSeconds: number; completed: boolean; startedAt: number; endedAt: number };
@@ -450,6 +452,8 @@ export function normalizeRecentStudy(value: unknown): RecentStudy {
 
 export function normalizeStudySummary(value: unknown): StudySummary {
 	if (!value || typeof value !== 'object') throw invalidPayload('resumo de estudo ausente.');
+	// Older servers do not send the yearly list; absence means no activity to draw.
+	const yearDays = (value as { active_days_year?: unknown }).active_days_year ?? [];
 	const summary = value as {
 		current_streak?: unknown;
 		longest_streak?: unknown;
@@ -459,6 +463,7 @@ export function normalizeStudySummary(value: unknown): StudySummary {
 		week_active_days?: unknown;
 		completed_lessons?: unknown;
 		days?: unknown;
+		active_days_year?: unknown;
 	};
 	if (
 		!Number.isInteger(summary.current_streak) ||
@@ -470,7 +475,9 @@ export function normalizeStudySummary(value: unknown): StudySummary {
 		typeof summary.today_active !== 'boolean' ||
 		typeof summary.at_risk !== 'boolean' ||
 		!Array.isArray(summary.days) ||
-		summary.days.length !== 7
+		summary.days.length !== 7 ||
+		!Array.isArray(yearDays) ||
+		!yearDays.every((day) => typeof day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(day))
 	) throw invalidPayload('resumo de estudo incompleto.');
 	const days = summary.days.map((entry) => {
 		if (!entry || typeof entry !== 'object') throw invalidPayload('dia do resumo inválido.');
@@ -486,7 +493,8 @@ export function normalizeStudySummary(value: unknown): StudySummary {
 		atRisk: summary.at_risk as boolean,
 		weekActiveDays: summary.week_active_days as number,
 		completedLessons: summary.completed_lessons as number,
-		days
+		days,
+		activeDaysYear: yearDays as string[]
 	};
 }
 
