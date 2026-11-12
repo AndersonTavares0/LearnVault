@@ -12,11 +12,13 @@ Before `1.0.0`, Release Please increments the patch version for `feat:`, `fix:`,
 
 The release workflow receives the published tag via environment variables and validates that it strictly matches `vMAJOR.MINOR.PATCH` with non-negative numeric components and no leading zeros.
 
-## Beta pre-releases
+## Release candidates (rc)
 
-A beta is a manually created GitHub pre-release tagged `vMAJOR.MINOR.PATCH-beta.N` (for example `v0.9.0-beta.1`) on a commit of `main`. The workflow requires its GitHub release to be published and marked as a pre-release, and a stable tag to be a published non-pre-release.
+Before a release candidate or a stable release is pushed or published, its container and publish jobs wait for approval in the `release` GitHub environment (required reviewer). No tag moves without that approval.
 
-A beta publishes the same assets and the container tag `:MAJOR.MINOR.PATCH-beta.N` only. It never moves `:stable`, `:latest` or `:MAJOR.MINOR`, and GitHub does not offer it as the latest release, so the desktop updater (`releases/latest/download/latest.json`) and the server update notice ignore it.
+A release candidate is a manually created GitHub pre-release tagged `vMAJOR.MINOR.PATCH-rc.N` (for example `v0.9.0-rc.1`) on a commit of `main`. The workflow requires its GitHub release to be published and marked as a pre-release, and a stable tag to be a published non-pre-release.
+
+A release candidate publishes the same assets and the container tag `:MAJOR.MINOR.PATCH-rc.N` only. It never moves `:stable`, `:latest` or `:MAJOR.MINOR`, and GitHub does not offer it as the latest release, so the desktop updater (`releases/latest/download/latest.json`) and the server update notice ignore it.
 
 ## Canonical SPA Bundling
 

@@ -150,11 +150,11 @@ test('restore commands override the image entrypoint before selecting the restor
     }
 });
 
-test('release tags accept strict stable and beta versions only', t => {
+test('release tags accept strict stable and rc versions only', t => {
     const { directory } = fixture(t);
     const output = join(directory, 'github-output');
-    const block = runBlock('Require a strict vX.Y.Z or vX.Y.Z-beta.N tag');
-    for (const [tag, accepted] of [['v0.9.0', true], ['v0.9.0-beta.0', true], ['v0.9.0-beta.1', true], ['v0.9.0-beta.01', false], ['v0.9.0-beta', false], ['v0.9.0-rc.1', false], ['v0.9-beta.1', false], ['v00.9.0', false]]) {
+    const block = runBlock('Require a strict vX.Y.Z or vX.Y.Z-rc.N tag');
+    for (const [tag, accepted] of [['v0.9.0', true], ['v0.9.0-rc.0', true], ['v0.9.0-rc.1', true], ['v0.9.0-rc.01', false], ['v0.9.0-rc', false], ['v0.9.0-beta.1', false], ['v0.9-rc.1', false], ['v00.9.0', false]]) {
         const result = spawnSync('bash', ['-c', block], {
             cwd: directory, encoding: 'utf8',
             env: { PATH: process.env.PATH, RELEASE_TAG: tag, GITHUB_OUTPUT: output }
@@ -163,17 +163,26 @@ test('release tags accept strict stable and beta versions only', t => {
     }
 });
 
-test('beta releases never move stable, latest or minor image tags', () => {
+test('release candidates never move stable, latest or minor image tags', () => {
     const stableOnly = "!contains(needs.validate-tag.outputs.tag, '-')";
     assert.equal(workflow.split(stableOnly).length - 1, 3);
     assert.match(workflow, /expected_prerelease=true/);
 });
 
-test('the cosign identity accepts stable and beta release tags, and nothing else', () => {
+test('the cosign identity accepts stable and rc release tags, and nothing else', () => {
     const pattern = workflow.match(/@(refs\/\(.+?\))\$"/)?.[1];
     assert.ok(pattern, 'cosign identity pattern not found');
     // YAML and bash leave one backslash per `\\` in the source text.
     const identity = new RegExp(`^${pattern.replaceAll('\\\\', '\\')}$`);
-    for (const ref of ['refs/tags/v0.9.0', 'refs/tags/v0.9.0-beta.1', 'refs/tags/v1.0.0-beta.10', 'refs/heads/main']) assert.match(ref, identity);
-    for (const ref of ['refs/tags/v0.9.0-beta.01', 'refs/tags/v0.9.0-rc.1', 'refs/tags/v0.9.0-beta', 'refs/heads/feature']) assert.doesNotMatch(ref, identity);
+    for (const ref of ['refs/tags/v0.9.0', 'refs/tags/v0.9.0-rc.1', 'refs/tags/v1.0.0-rc.10', 'refs/heads/main']) assert.match(ref, identity);
+    for (const ref of ['refs/tags/v0.9.0-rc.01', 'refs/tags/v0.9.0-rc', 'refs/tags/v0.9.0-beta.1', 'refs/heads/feature']) assert.doesNotMatch(ref, identity);
+});
+
+test('pushing and publishing wait for approval in the release environment', () => {
+    for (const job of ['container:', 'publish:']) {
+        const start = workflow.indexOf(`\n  ${job}\n`);
+        assert.ok(start >= 0, `missing job ${job}`);
+        const block = workflow.slice(start, workflow.indexOf('\n  ', start + job.length + 4));
+        assert.match(block, /\n    environment: release\n/, `${job} must use the release environment`);
+    }
 });
