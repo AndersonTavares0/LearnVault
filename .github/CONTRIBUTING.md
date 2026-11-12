@@ -95,6 +95,6 @@ chore: update dependencies
 
 ---
 
-## Clean-Room Policy
+## Reference Policy
 
-Research into external platforms may inform general product ergonomics, but never copy code, proprietary assets, branding, or pixel-level layouts. LearnVault maintains an original, calm, content-first visual identity and architecture.
+Research into external platforms may inform general product ergonomics as a structural reference only, and never copy code, proprietary assets, branding, or pixel-level layouts. LearnVault maintains an original, calm, content-first visual identity and architecture.
