@@ -68,3 +68,11 @@ Release Please is the single source of truth for `docs/releases/CHANGELOG.md`. A
 
 Configuration is defined in `.github/release-please/release-please-config.json` and manifest in `.github/release-please/release-please-manifest.json`.
 Database schema migrations must always be documented in release notes. Releases must never contain course files, local databases, secrets, or cache artifacts.
+
+## Troubleshooting
+
+- **Desktop update is not offered after a release.** The release must be published (not a draft) and not a pre-release, and `latest.json` must carry a version greater than the installed app. Check with `gh release view <tag> --json isDraft,isPrerelease`.
+- **The release workflow refuses the tag.** The tag must match `vX.Y.Z` or `vX.Y.Z-rc.N` exactly. A candidate must be a published pre-release, and a stable tag must be a published non-pre-release.
+- **Signature verification fails in the updater or in `update.sh`.** The image or the update file was not signed by this repository's release workflow on a release tag or `main`. Re-run the release workflow for the tag instead of editing the assets by hand.
+- **The container image has no version tag.** The image is pushed by digest first and tagged only after the vulnerability scan and the signature check pass. If the scan fails, no tag is applied, which is intended.
+- **Windows installer build fails on a candidate.** Check whether the NSIS build accepts the pre-release version string in the build log. A failure stops before the publish job, so nothing is published.
