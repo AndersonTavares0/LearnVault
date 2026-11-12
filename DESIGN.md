@@ -53,7 +53,8 @@ Wide and soft: panels and the hero use a 2rem radius, stat cards 1.75rem, pills 
 - **Lesson.** A title row with Previous, Next and a hide/show button for the course content, one segment per lesson (done brown, current amber), then the player and its tabs beside a compact "Course content" panel (left or right, the learner's choice) whose modules are numbered with a count and a small bar. The player's controls (back and forward 10 s, loop, speed, transcode, picture-in-picture, cinema mode, fullscreen) sit on the picture as a pill that appears on hover or focus and always on touch screens; under audio they are an ordinary toolbar. Cinema mode (`t`) gives the picture the whole width on a black stage and moves the content panel below; both choices are remembered.
 - **Progress.** One usage panel: the focus time as a big number with This week / All time, the weekly goal, a smooth area chart of focus minutes by day (with a table for screen readers) and three totals (busiest day, days studied, streak); badges and today's missions in panels below.
 - **Notes and Review** start from a course: a title, the pinned (favourite) courses, then every course as a card with its code, a pin and a tinted footer that says what waits inside ("3 notes", "2 due · 8 cards"). A card opens the course's notebook or its deck. A review session is a focused screen: back, deck title, a progress ring with cards left, the card with its number and Question/Answer label, a large Show answer button, then Again and Good.
-- **Targets.** Every interactive target is at least 44×44 px.
+- **Targets.** Every interactive target is at least 44×44 px, including the PDF toolbar fields and colour swatches.
+- **Cinema mode** shows its button from 1024 px up (below that the course content already sits under the picture). The Bookmarks panel on Home appears when study tracking is on.
 
 ## Components
 

@@ -47,7 +47,7 @@ Rust version is pinned by `rust-toolchain.toml`; Node.js 24 and pnpm 11.28.5 com
 - The application supports internationalization (i18n) with English (`en`) as the default language
   and Brazilian Portuguese (`pt-BR`) fully supported. All user-facing strings (UI copy, modals,
   validation alerts, error fallbacks, and transport messages) must use `tr(en, ptBr)` from
-  `apps/web/src/i18n.svelte.ts`. Raw untranslated strings in user-facing UI or error toasts are forbidden.
+  `apps/web/src/i18n.svelte.ts` (the React app, `apps/web-next`, has the same function in `src/lib/i18n.ts`). Raw untranslated strings in user-facing UI or error toasts are forbidden.
 - **Mandatory use of Ponytail:** on all LearnVault development tasks, always use Ponytail to write,
   modify, and refactor code. Keep code clean, consistent with existing architecture, and focused on
   surgical changes without unnecessary refactorings or bloat.

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Download, Layers } from 'lucide-react';
-import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { CoursePicker, GONE } from '@/components/course-picker';
 import { Eyebrow, Hero, Ring } from '@/components/panel';
@@ -97,7 +97,12 @@ function Deck({ courseId, title, cards, now }: { courseId: string; title: string
 			setDone((value) => value + 1);
 		}
 	});
-	const current = queue && done < queue.length ? cards.find((card) => card.cardId === queue[done]) ?? null : null;
+	// A card deleted elsewhere while the session runs is skipped instead of ending the session early.
+	const live = useMemo(() => (queue ?? []).filter((id) => cards.some((card) => card.cardId === id)), [queue, cards]);
+	const current = queue && done < live.length ? cards.find((card) => card.cardId === live[done]) ?? null : null;
+	const wrapper = useRef<HTMLDivElement>(null);
+	// The button that was focused disappears when the answer shows, so focus moves to the session itself and 1 and 2 keep working.
+	useEffect(() => { if (revealed) wrapper.current?.focus(); }, [revealed]);
 	const location = current ? findLessonLocation(catalog.data ?? null, current.mediaId) : null;
 	const leave = () => { setQueue(null); setDone(0); setRevealed(false); };
 	const rate = (rating: ReviewRating) => { if (current && !review.isPending) review.mutate({ cardId: current.cardId, rating }); };
@@ -111,7 +116,7 @@ function Deck({ courseId, title, cards, now }: { courseId: string; title: string
 	if (queue) {
 		return (
 			// eslint-disable-next-line jsx-a11y/no-static-element-interactions -- keyboard shortcuts for the review controls inside
-			<div className="mx-auto max-w-3xl space-y-6" onKeyDown={onKeyDown}>
+			<div ref={wrapper} tabIndex={-1} className="mx-auto max-w-3xl space-y-6 outline-none" onKeyDown={onKeyDown}>
 				<div className="flex flex-wrap items-center gap-4">
 					<Button variant="outline" size="icon" className="size-11 rounded-full" onClick={leave} aria-label={tr('Close', 'Fechar')}><ArrowLeft /></Button>
 					<div className="min-w-0 flex-1">
@@ -119,8 +124,8 @@ function Deck({ courseId, title, cards, now }: { courseId: string; title: string
 						{location && <p className="truncate text-sm text-muted-foreground">{location.lesson.title}</p>}
 					</div>
 					<div className="flex items-center gap-3 rounded-2xl border bg-card px-4 py-2">
-						<Ring size={52} value={queue.length ? done / queue.length : 0} label={tr(`${done} of ${queue.length} cards reviewed`, `${done} de ${queue.length} cartões revisados`)} center={<span className="text-[0.7rem] font-bold tabular-nums">{Math.min(done + 1, queue.length)}/{queue.length}</span>} />
-						<p className="text-sm"><span className="font-bold tabular-nums">{queue.length - done}</span> <span className="text-muted-foreground">{tr('left', 'restantes')}</span></p>
+						<Ring size={52} value={live.length ? done / live.length : 0} label={tr(`${done} of ${live.length} cards reviewed`, `${done} de ${live.length} cartões revisados`)} center={<span className="text-[0.7rem] font-bold tabular-nums">{Math.min(done + 1, live.length)}/{live.length}</span>} />
+						<p className="text-sm"><span className="font-bold tabular-nums">{live.length - done}</span> <span className="text-muted-foreground">{tr('left', 'restantes')}</span></p>
 					</div>
 				</div>
 				{review.error && <p role="alert" className="text-sm text-destructive">{review.error.message}</p>}

@@ -1,5 +1,7 @@
 # LearnVault — revisão final da implementação
 
+> **Superseded in part (2026-11-11).** The palette, themes, navigation and gamification described here were replaced by the direction in [`DESIGN.md`](../../DESIGN.md) and [`PRODUCT.md`](../../PRODUCT.md): light and dark themes, brown and amber, Playfair Display and DM Sans, top navigation, no forest. Where this file names a palette, a theme or a layout, those two files win. It is kept as history and for the research and the accessibility and security rules, which still apply.
+
 ## Estado
 
 A direção K foi encerrada e implementada no aplicativo real. O resultado não é um protótipo: as evidências abaixo foram capturadas contra o servidor Rust do LearnVault com uma biblioteca temporária criada pelo fixture E2E. Nenhum banco, curso, mídia ou pasta real do usuário foi usado.

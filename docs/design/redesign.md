@@ -1,5 +1,7 @@
 # Redesign spec (direction L)
 
+> **Superseded in part (2026-11-11).** The palette, themes, navigation and gamification described here were replaced by the direction in [`DESIGN.md`](../../DESIGN.md) and [`PRODUCT.md`](../../PRODUCT.md): light and dark themes, brown and amber, Playfair Display and DM Sans, top navigation, no forest. Where this file names a palette, a theme or a layout, those two files win. It is kept as history and for the research and the accessibility and security rules, which still apply.
+
 This is the target design for the React app (`apps/web-next`, epic #347). Until cutover (#340),
 [DESIGN.md](DESIGN.md) describes what ships. At cutover, this file replaces it.
 

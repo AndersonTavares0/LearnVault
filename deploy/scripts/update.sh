@@ -1,14 +1,15 @@
 #!/bin/sh
-# LearnVault - Script Autônomo de Atualização com Backup e Rollback Seguro
+# LearnVault - standalone update script with backup and safe rollback
 #
-# Etapas:
-# 1. Identifica a versão atual e a versão alvo
-# 2. Executa backup transacional preventivo com verificação de integridade
-# 3. Baixa a nova imagem versionada
-# 4. Atualiza os containers com Docker Compose
-# 5. Valida o healthcheck pós-inicialização e migrações
-# 6. Em caso de falha: executa ROLLBACK automático para a imagem e banco anteriores
-# 7. Registra histórico estruturado em /data/update-history.json
+# Steps:
+# 1. Find the current version and the target version
+# 2. Check that the target image is signed by this project's release workflow (cosign)
+# 3. Take a pre-update backup and check its integrity
+# 4. Pull the new, versioned image (by the verified digest)
+# 5. Update the containers with Docker Compose
+# 6. Check the healthcheck and the migrations after start
+# 7. On failure: roll back to the previous image and database automatically
+# 8. Record a structured history in /data/update-history.json
 set -eu
 
 CONTAINER="${LEARNVAULT_CONTAINER:-learnvault}"

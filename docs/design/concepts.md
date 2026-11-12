@@ -1,5 +1,7 @@
 # LearnVault — direções visuais
 
+> **Superseded in part (2026-11-11).** The palette, themes, navigation and gamification described here were replaced by the direction in [`DESIGN.md`](../../DESIGN.md) and [`PRODUCT.md`](../../PRODUCT.md): light and dark themes, brown and amber, Playfair Display and DM Sans, top navigation, no forest. Where this file names a palette, a theme or a layout, those two files win. It is kept as history and for the research and the accessibility and security rules, which still apply.
+
 ## Escopo e evidência
 
 Os protótipos A/B/C foram iniciados como documentos independentes vazios e comparados em Biblioteca, Curso e Player, desktop e mobile. O Open Design MCP foi usado para criar/recuperar artefatos HTML; a integração observada não expõe canvas vetorial nativo. As capturas abaixo são renders locais desses artefatos em Chromium, com dados sintéticos. Elas comprovam a composição, não playback, persistência ou comportamento do produto.

@@ -178,6 +178,8 @@ export function PdfReader({ file, courseId, initialPage, onPage }: Props) {
 	};
 	const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
 		if ((event.target as HTMLElement).closest('input, select, textarea')) return;
+		// Browser shortcuts such as Ctrl+- and Ctrl+N are not ours to take.
+		if (event.ctrlKey || event.metaKey || event.altKey) return;
 		const actions: Record<string, () => void> = {
 			ArrowLeft: () => go(current - 1), PageUp: () => go(current - 1), ArrowRight: () => go(current + 1), PageDown: () => go(current + 1),
 			Home: () => go(1), End: () => go(pages), '+': () => setZoom(stepZoom(zoom, 1)), '-': () => setZoom(stepZoom(zoom, -1)),
@@ -192,7 +194,7 @@ export function PdfReader({ file, courseId, initialPage, onPage }: Props) {
 			<div role="toolbar" aria-label={tr('PDF controls', 'Controles do PDF')} className="flex flex-wrap items-center gap-2 rounded-2xl border bg-card p-2">
 				<Button variant="outline" size="sm" disabled={current <= 1} onClick={() => go(current - 1)}>{tr('Previous page', 'Página anterior')}</Button>
 				<Label htmlFor="pdf-page" className="sr-only">{tr('Page', 'Página')}</Label>
-				<Input id="pdf-page" type="number" inputMode="numeric" min={1} max={pages || undefined} value={current} disabled={!pages} onChange={(event) => go(Number(event.target.value))} className="h-9 w-16 text-center tabular-nums" />
+				<Input id="pdf-page" type="number" inputMode="numeric" min={1} max={pages || undefined} value={current} disabled={!pages} onChange={(event) => go(Number(event.target.value))} className="h-11 w-16 text-center tabular-nums" />
 				<span className="text-sm text-muted-foreground tabular-nums">{tr(`of ${pages || '…'}`, `de ${pages || '…'}`)}</span>
 				<Button variant="outline" size="sm" disabled={!pages || current >= pages} onClick={() => go(current + 1)}>{tr('Next page', 'Próxima página')}</Button>
 				<div className="ml-auto flex items-center gap-1">
@@ -208,7 +210,7 @@ export function PdfReader({ file, courseId, initialPage, onPage }: Props) {
 					<form role="search" aria-label={tr('Search in the document', 'Buscar no documento')} onSubmit={(event) => void runSearch(event)} className="flex flex-wrap items-center gap-2">
 						<div className="relative min-w-48 flex-1 sm:max-w-sm">
 							<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-							<Input type="search" value={query} onChange={(event) => setQuery(event.target.value)} aria-label={tr('Search in the document', 'Buscar no documento')} placeholder={tr('Search in the document', 'Buscar no documento')} className="h-10 pl-9" />
+							<Input type="search" value={query} onChange={(event) => setQuery(event.target.value)} aria-label={tr('Search in the document', 'Buscar no documento')} placeholder={tr('Search in the document', 'Buscar no documento')} className="h-11 pl-9" />
 						</div>
 						<Button type="submit" variant="outline" size="sm" disabled={searching || !query.trim()}>{tr('Search', 'Buscar')}</Button>
 						{search && search.pages.length > 0 && (

@@ -140,3 +140,16 @@ test('a module row opens to show its lessons and closes again', async ({ page, o
 	await page.locator('summary', { hasText: 'Video' }).click();
 	await expect(lesson).toBeHidden();
 });
+
+test('the chosen theme is applied before the app starts, from a script the CSP allows', async ({ page, origin }) => {
+	const violations = collectCspViolations(page);
+	const script = await page.request.get(`${origin}/theme-init.js`);
+	expect(script.status()).toBe(200);
+	expect(script.headers()['content-type']).toMatch(/javascript/);
+	await page.addInitScript(() => localStorage.setItem('learnvault-appearance', JSON.stringify({ theme: 'dark' })));
+	// With the app's own script blocked, only theme-init.js can have set the theme.
+	await page.route('**/_app/**', (route) => route.abort());
+	await page.goto(`${origin}/#/login`);
+	await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+	expect(violations).toEqual([]);
+});

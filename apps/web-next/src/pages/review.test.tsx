@@ -39,7 +39,9 @@ describe('review', () => {
 		expect(screen.queryByText('back a')).toBeNull();
 		fireEvent.keyDown(screen.getByRole('button', { name: 'Show answer' }), { key: ' ' });
 		expect(screen.getByText('back a')).toBeTruthy();
-		fireEvent.keyDown(screen.getByText('back a'), { key: '2' });
+		// The button that had focus is gone, so the session itself takes focus and 1 and 2 keep working.
+		expect(document.activeElement?.getAttribute('tabindex')).toBe('-1');
+		fireEvent.keyDown(document.activeElement!, { key: '2' });
 		await waitFor(() => expect(review).toHaveBeenCalledWith('a', 'good'));
 		expect(await screen.findByRole('heading', { name: 'front b' })).toBeTruthy();
 		fireEvent.click(screen.getByRole('button', { name: 'Show answer' }));

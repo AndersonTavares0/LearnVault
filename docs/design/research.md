@@ -1,5 +1,7 @@
 # Pesquisa de design: reformulação do LearnVault
 
+> **Superseded in part (2026-11-11).** The palette, themes, navigation and gamification described here were replaced by the direction in [`DESIGN.md`](../../DESIGN.md) and [`PRODUCT.md`](../../PRODUCT.md): light and dark themes, brown and amber, Playfair Display and DM Sans, top navigation, no forest. Where this file names a palette, a theme or a layout, those two files win. It is kept as history and for the research and the accessibility and security rules, which still apply.
+
 Este documento é um resumo de referências, não uma especificação de interface. Os requisitos do LearnVault abaixo descrevem a verdade do produto; a documentação de produtos/fornecedores dá suporte às afirmações sobre esses produtos; páginas de galerias são apenas exemplos visuais e não estabelecem comportamentos de interação. Nenhuma captura de tela foi copiada, e não foram realizados testes ou avaliações por usuários. O acesso foi verificado em páginas públicas/material indexado por mecanismos de busca em 2026-10-29; algumas telas podem exigir conta, assinatura, aplicativo ou acesso específico por região.
 
 ## Restrições do produto (com fontes)
