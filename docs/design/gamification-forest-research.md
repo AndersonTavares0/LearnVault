@@ -2,7 +2,7 @@
 
 > **Superseded in part (2026-11-11).** The palette, themes, navigation and gamification described here were replaced by the direction in [`DESIGN.md`](../../DESIGN.md) and [`PRODUCT.md`](../../PRODUCT.md): light and dark themes, brown and amber, Playfair Display and DM Sans, top navigation, no forest. Where this file names a palette, a theme or a layout, those two files win. It is kept as history and for the research and the accessibility and security rules, which still apply.
 
-Este documento consolida a pesquisa comportamental, de interface e de arquitetura de software sobre o modelo de gamificação do aplicativo **Forest: Stay Focused** (Seekrtech Co., Ltd.), estruturando a sua transposição em conformidade com a política *clean-room* para a **Floresta de Estudos** do LearnVault.
+Este documento consolida a pesquisa comportamental, de interface e de arquitetura de software sobre o modelo de gamificação do aplicativo **Forest: Stay Focused** (Seekrtech Co., Ltd.), estruturando a sua transposição em conformidade com a política de referência estrutural para a **Floresta de Estudos** do LearnVault.
 
 ---
 
@@ -79,9 +79,9 @@ Durante a contagem regressiva, frases curtas e expressivas alternam-se no visor 
 
 ---
 
-## 4. Arquitetura Clean-Room Proposta para o LearnVault
+## 4. Arquitetura Original Proposta para o LearnVault
 
-Para implementar a experiência do Forest no LearnVault sem ferir a política *clean-room* e mantendo a leveza do ecossistema Rust + Svelte:
+Para implementar a experiência do Forest no LearnVault sem ferir a política de referência estrutural e mantendo a leveza do ecossistema Rust + Svelte:
 
 ```mermaid
 graph LR
