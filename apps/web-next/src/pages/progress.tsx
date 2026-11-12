@@ -1,5 +1,6 @@
 import { Award, ChartNoAxesColumn, Check, Lock } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { ActivityHeatmap } from '@/components/activity-heatmap';
 import { Eyebrow, Panel } from '@/components/panel';
 import { ProgressBar } from '@/components/course-card';
 import { Button } from '@/components/ui/button';
@@ -67,6 +68,9 @@ export function ProgressPage() {
 				<div className="rounded-[1.75rem] border border-brand-soft bg-panel p-5">
 					<Eyebrow>{tr('Focus time, this week', 'Tempo de foco, nesta semana')}</Eyebrow>
 					<FocusChart days={weekDays} />
+				</div>
+				<div className="rounded-[1.75rem] border border-brand-soft bg-panel p-5">
+					<ActivityHeatmap today={study.today} activeDays={study.activeDaysYear} />
 				</div>
 				<dl className="grid divide-y sm:grid-cols-3 sm:divide-x sm:divide-y-0">
 					<div className="py-4 sm:px-6 sm:first:pl-0"><dt className="text-sm text-muted-foreground">{tr('Busiest day', 'Dia mais forte')}</dt><dd className="mt-1 font-heading text-2xl font-bold">{best ? best.label : '–'}</dd></div>
