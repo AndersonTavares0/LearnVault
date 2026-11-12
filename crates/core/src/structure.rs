@@ -5,7 +5,7 @@
 //! lê o disco nem escreve no banco, e não altera a árvore; o resultado serve para o usuário
 //! entender por que a organização pode estar diferente do esperado.
 
-use crate::catalog::{CatalogNode, NodeRole};
+use crate::catalog::{CatalogFile, CatalogNode, NodeRole};
 use crate::scanner::MediaKind;
 
 /// Quão confiável é a organização detectada.
@@ -47,10 +47,24 @@ pub struct StructureAssessment {
 /// preocupação de ordem ou de materiais conta: nenhuma é `High`, uma é `Medium` e duas ou
 /// mais são `Low`.
 pub fn assess(course: &CatalogNode) -> StructureAssessment {
+    assess_parts(&course.children, &course.loose_files)
+}
+
+/// Avalia um curso a partir dos módulos e aulas e dos arquivos soltos no topo, sem exigir
+/// o nó de curso montado. Usado pelo servidor, que já tem essas partes separadas.
+pub fn assess_parts(children: &[CatalogNode], loose_files: &[CatalogFile]) -> StructureAssessment {
     let mut lessons = Vec::new();
     let mut loose_media = false;
     let mut loose_materials = false;
-    collect(course, &mut lessons, &mut loose_media, &mut loose_materials);
+    for file in loose_files {
+        match file.kind {
+            MediaKind::Media => loose_media = true,
+            MediaKind::Subtitle | MediaKind::Material => loose_materials = true,
+        }
+    }
+    for child in children {
+        collect(child, &mut lessons, &mut loose_media, &mut loose_materials);
+    }
 
     let with_media = lessons.iter().filter(|lesson| has_media(lesson)).count();
     let numbered = lessons
