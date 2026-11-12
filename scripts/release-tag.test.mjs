@@ -182,7 +182,8 @@ test('pushing and publishing wait for approval in the release environment', () =
     for (const job of ['container:', 'publish:']) {
         const start = workflow.indexOf(`\n  ${job}\n`);
         assert.ok(start >= 0, `missing job ${job}`);
-        const block = workflow.slice(start, workflow.indexOf('\n  ', start + job.length + 4));
+        const next = workflow.slice(start + 1).search(/\n {2}[a-z-]+:\n/);
+        const block = workflow.slice(start, next < 0 ? undefined : start + 1 + next);
         assert.match(block, /\n    environment: release\n/, `${job} must use the release environment`);
     }
 });
