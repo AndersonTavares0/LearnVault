@@ -1,4 +1,4 @@
-import { BookOpen, ChevronRight, Flame, FolderPlus, LayoutGrid, List, Play, RefreshCw, Search, Star, Target } from 'lucide-react';
+import { BookOpen, ChevronRight, Flame, FolderPlus, LayoutGrid, LibraryBig, List, Play, RefreshCw, Rows3, Search, Star, Target } from 'lucide-react';
 import { useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { BrandMark } from '@/components/brand';
@@ -12,10 +12,10 @@ import { useLocale } from '@/hooks/use-locale';
 import { useStore } from '@/hooks/use-store';
 import { appearanceStore } from '@/lib/appearance';
 import { buildGamification } from '@/lib/gamification';
-import { tr } from '@/lib/i18n';
+import { getLocale, tr } from '@/lib/i18n';
 import { buildLibrary, type CourseEntry, type LibraryFilter, type ResumeEntry } from '@/lib/library';
-import { persistLibraryView, readLibraryView } from '@/lib/library-view';
-import { studySyncSupported } from '@/lib/player';
+import { persistLibrarySort, persistLibraryView, readLibrarySort, readLibraryView, type LibrarySort, type LibraryView } from '@/lib/library-view';
+import { formatDuration, studySyncSupported } from '@/lib/player';
 import { findLessonLocation, href, type LessonLocation } from '@/lib/router';
 import { transportKind, type Catalog, type RewardSummary } from '@/lib/transport';
 import { cn } from '@/lib/utils';
@@ -23,8 +23,7 @@ import { useCatalog, useFavorites, useImportCourse, useRecent, useRescan, useRew
 import { safeStorage } from '@/app/preferences';
 import { PageHeader } from '@/app/shell';
 
-type View = 'grid' | 'list';
-// The four legacy views collapse into two (docs/design/parity.md).
+// Four views share one filter and sort state (docs/design/parity.md).
 
 export function HomePage() {
 	useLocale();
@@ -35,8 +34,8 @@ export function HomePage() {
 	const favorites = useFavorites();
 	const rewards = useRewards();
 	const [params, setParams] = useSearchParams();
-	const look = useStore(appearanceStore);
-	const [view, setView] = useState<View>(() => (readLibraryView(safeStorage()) === 'covers' ? 'grid' : readLibraryView(safeStorage()) === 'list' ? 'list' : look.homeLayout));
+	const [view, setView] = useState<LibraryView>(() => readLibraryView(safeStorage()));
+	const [sort, setSort] = useState<LibrarySort>(() => readLibrarySort(safeStorage()));
 	const [message, setMessage] = useState('');
 
 	const query = params.get('q') ?? '';
@@ -54,10 +53,21 @@ export function HomePage() {
 		else next.delete(key);
 		setParams(next, { replace: true });
 	};
-	const changeView = (next: View) => {
+	const changeView = (next: LibraryView) => {
 		setView(next);
-		persistLibraryView(safeStorage(), next === 'grid' ? 'covers' : 'list');
+		persistLibraryView(safeStorage(), next);
 	};
+	const changeSort = (next: LibrarySort) => {
+		setSort(next);
+		persistLibrarySort(safeStorage(), next);
+	};
+	const sorted = useMemo(() => {
+		const list = [...library.visible];
+		if (sort === 'title') list.sort((a, b) => a.course.title.localeCompare(b.course.title));
+		else if (sort === 'progress') list.sort((a, b) => (b.total ? b.done / b.total : 0) - (a.total ? a.done / a.total : 0));
+		else list.sort((a, b) => b.lastStudiedAt - a.lastStudiedAt || a.course.title.localeCompare(b.course.title));
+		return list;
+	}, [library.visible, sort]);
 
 	if (catalog.isPending) return <p role="status" className="text-muted-foreground">{tr('Loading your courses…', 'Carregando seus cursos…')}</p>;
 	if (catalog.isError) return <p role="alert" className="text-destructive">{catalog.error.message}</p>;
@@ -71,14 +81,14 @@ export function HomePage() {
 			{library.entries.length > 0 && <FilterTabs counts={library.counts} filter={filter} onFilter={(value) => setParam('filter', value === 'all' ? null : value)} />}
 			<p role="status" aria-live="polite" className="text-sm text-muted-foreground empty:hidden">{message}</p>
 
-			<div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_21rem]">
-				<div className="min-w-0 space-y-10">
+			<div className="grid items-start gap-6 lg:grid-cols-12">
+				<div className="min-w-0 space-y-10 lg:col-span-8">
 					{!filtered && studySyncSupported && library.entries.length > 0 && <ResumeCard items={library.resume} entries={library.entries} />}
 
 					<section aria-labelledby="courses-heading" className="space-y-5">
 						<div className="flex flex-wrap items-center gap-3">
 							<h2 id="courses-heading" className="mr-auto font-heading text-2xl font-bold">{filtered ? tr('Results', 'Resultados') : tr('Your library', 'Sua biblioteca')}</h2>
-							{library.entries.length > 0 && <Filters categories={library.categories} category={category} onCategory={(value) => setParam('category', value)} view={view} onView={changeView} />}
+							{library.entries.length > 0 && <Filters categories={library.categories} category={category} onCategory={(value) => setParam('category', value)} view={view} onView={changeView} sort={sort} onSort={changeSort} />}
 						</div>
 						{library.entries.length > 0 && (
 							<div role="search" className="relative md:hidden">
@@ -93,15 +103,17 @@ export function HomePage() {
 								<p className="font-medium">{tr('No results found', 'Nenhum resultado encontrado')}</p>
 								<Button variant="outline" className="mt-4" onClick={() => setParams({}, { replace: true })}>{tr('Clear filters and search', 'Limpar filtros e busca')}</Button>
 							</div>
+						) : view === 'shelf' ? (
+							<Shelf entries={sorted} profile={profile} />
 						) : (
-							<ul className={view === 'grid' ? 'grid grid-cols-1 gap-x-5 gap-y-[calc(var(--density)*2rem)] sm:grid-cols-2 xl:grid-cols-3' : 'divide-y border-y'}>
-								{library.visible.map((entry) => <CourseCard key={entry.courseId} entry={entry} profile={profile} variant={view === 'grid' ? 'grid' : 'list'} />)}
+							<ul className={view === 'covers' ? 'grid grid-cols-1 gap-x-5 gap-y-[calc(var(--density)*2rem)] sm:grid-cols-2 xl:grid-cols-3' : 'divide-y border-y'}>
+								{sorted.map((entry) => <CourseCard key={entry.courseId} entry={entry} profile={profile} variant={view === 'covers' ? 'grid' : view} />)}
 							</ul>
 						)}
 					</section>
 				</div>
 				{library.entries.length > 0 && (
-					<aside aria-label={tr('Your habit and bookmarks', 'Seu hábito e favoritos')} className="space-y-6">
+					<aside aria-label={tr('Your habit and bookmarks', 'Seu hábito e favoritos')} className="space-y-6 lg:col-span-4">
 						<Habit rewards={rewards.data} completedCourses={library.entries.filter((entry) => entry.status === 'completed').length} />
 						{studySyncSupported && <Bookmarks mediaIds={favorites.data?.mediaIds ?? []} catalog={catalog.data} />}
 					</aside>
@@ -123,7 +135,7 @@ function FilterTabs({ counts, filter, onFilter }: { counts: Record<LibraryFilter
 	return (
 		<div role="group" aria-label={tr('Show', 'Mostrar')} className="flex flex-wrap gap-2 sm:gap-3">
 			{options.map(([value, label]) => (
-				<button key={value} type="button" aria-pressed={filter === value} onClick={() => onFilter(value)} className={cn('min-h-12 shrink-0 rounded-full border-2 border-brand-soft bg-card px-5 text-base font-medium hover:bg-brand-tint focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none', filter === value && 'border-reward-fill bg-panel font-semibold')}>
+				<button key={value} type="button" aria-pressed={filter === value} onClick={() => onFilter(value)} className={cn('min-h-12 shrink-0 rounded-full border border-border bg-card px-5 text-base font-medium hover:bg-brand-tint focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none', filter === value && 'border-primary bg-brand-tint font-semibold')}>
 					{label}{counts[value] > 0 && <span className="ml-1.5 text-sm font-normal text-muted-foreground">{counts[value]}</span>}
 				</button>
 			))}
@@ -138,23 +150,79 @@ function ResumeCard({ items, entries }: { items: ResumeEntry[]; entries: CourseE
 	if (!first || !look.showContinue) return null;
 	const entry = entries.find((course) => course.courseId === first.location.courseId);
 	const value = entry && entry.total ? entry.done / entry.total : 0;
+	const remaining = entry ? Math.max(0, entry.total - entry.done) : 0;
+	const studied = entry?.lastStudiedAt ? new Date(entry.lastStudiedAt * 1000).toLocaleDateString(getLocale(), { month: 'short', day: 'numeric' }) : null;
+	const position = first.progress.positionSeconds;
+	const next = entry?.next && entry.next.path !== first.location.lesson.path ? entry.next.title : null;
 	return (
 		<section aria-label={tr('Continue learning', 'Continuar estudando')}>
-			<Hero className="flex flex-wrap items-center justify-between gap-8">
+			<Hero className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_13rem_auto] lg:items-center">
 				<div className="min-w-0 max-w-xl space-y-4">
 					<Eyebrow>{tr('Next up', 'A seguir')}</Eyebrow>
 					<h2 className="font-heading text-3xl font-bold text-balance sm:text-4xl">{first.location.lesson.title}</h2>
 					<p className="text-lg text-muted-foreground">{first.location.courseTitle}</p>
 					<div className="flex flex-wrap gap-3 pt-2">
-						<Link to={routerPath(href('course', first.location.courseId, first.location.lesson.path, first.progress.positionSeconds))} className="inline-flex h-14 items-center gap-2 rounded-full bg-primary px-8 text-base font-semibold text-primary-foreground hover:bg-brand-deep focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
+						<Link to={routerPath(href('course', first.location.courseId, first.location.lesson.path, first.progress.positionSeconds))} className="inline-flex h-14 items-center gap-2 rounded-full bg-primary px-8 text-base font-semibold whitespace-nowrap text-primary-foreground hover:bg-brand-deep focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
 							<Play className="size-4 fill-current" aria-hidden="true" />{tr('Resume', 'Retomar')}
 						</Link>
-						<Link to={routerPath(href('course', first.location.courseId))} className="inline-flex h-14 items-center rounded-full border bg-card px-8 text-base font-medium hover:bg-brand-tint focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">{tr('Open course', 'Abrir curso')}</Link>
+						<Link to={routerPath(href('course', first.location.courseId))} className="inline-flex h-14 items-center rounded-full border bg-card px-8 text-base font-medium whitespace-nowrap hover:bg-brand-tint focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">{tr('Open course', 'Abrir curso')}</Link>
 					</div>
 				</div>
-				{entry && entry.total > 0 && <Ring value={value} label={tr(`${Math.round(value * 100)}% of the course`, `${Math.round(value * 100)}% do curso`)} caption={tr('complete', 'concluído')} size={150} />}
+				{entry && entry.total > 0 && (
+					<dl className="grid grid-cols-2 gap-4 border-t pt-4 text-sm lg:grid-cols-1 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6">
+						<div>
+							<dt className="text-xs text-muted-foreground">{tr('Lessons', 'Aulas')}</dt>
+							<dd className="mt-0.5 font-semibold">{entry.done} / {entry.total}<span className="mt-0.5 block text-xs font-normal text-muted-foreground">{remaining === 0 ? tr('All done', 'Tudo concluído') : tr(`${remaining} left`, `${remaining} restantes`)}</span></dd>
+						</div>
+						{position > 0 && (
+							<div>
+								<dt className="text-xs text-muted-foreground">{tr('Resume at', 'Retomar em')}</dt>
+								<dd className="mt-0.5 font-semibold tabular-nums">{formatDuration(position)}</dd>
+							</div>
+						)}
+						<div>
+							<dt className="text-xs text-muted-foreground">{tr('Studied', 'Estudado')}</dt>
+							<dd className="mt-0.5 font-semibold">{studied ?? tr('Not yet', 'Ainda não')}</dd>
+						</div>
+						{next && (
+							<div className="col-span-2 lg:col-span-1">
+								<dt className="text-xs text-muted-foreground">{tr('After this', 'Depois desta')}</dt>
+								<dd className="mt-0.5 truncate font-semibold">{next}</dd>
+							</div>
+						)}
+					</dl>
+				)}
+				{entry && entry.total > 0 && <div className="hidden justify-self-end lg:block"><Ring value={value} label={tr(`${Math.round(value * 100)}% of the course`, `${Math.round(value * 100)}% do curso`)} caption={tr('complete', 'concluído')} size={150} /></div>}
 			</Hero>
 		</section>
+	);
+}
+
+/** Courses as horizontal shelves, grouped by how far the reader has got. */
+function Shelf({ entries, profile }: { entries: CourseEntry[]; profile: string }) {
+	const groups = [
+		{ status: 'in_progress', label: tr('In progress', 'Em andamento') },
+		{ status: 'not_started', label: tr('Not started', 'Não iniciados') },
+		{ status: 'completed', label: tr('Completed', 'Concluídos') }
+	] as const;
+	return (
+		<div className="space-y-8">
+			{groups.map(({ status, label }) => {
+				const items = entries.filter((entry) => entry.status === status);
+				if (items.length === 0) return null;
+				return (
+					<section key={status} aria-label={label} className="space-y-3">
+						<div className="flex items-center justify-between gap-3">
+							<h3 className="font-heading text-lg font-semibold">{label}</h3>
+							<span className="text-sm text-muted-foreground tabular-nums">{items.length}</span>
+						</div>
+						<ul className="flex snap-x gap-5 overflow-x-auto pb-2">
+							{items.map((entry) => <CourseCard key={entry.courseId} entry={entry} profile={profile} variant="shelf" />)}
+						</ul>
+					</section>
+				);
+			})}
+		</div>
 	);
 }
 
@@ -162,10 +230,13 @@ function ResumeCard({ items, entries }: { items: ResumeEntry[]; entries: CourseE
 function Bookmarks({ mediaIds, catalog }: { mediaIds: string[]; catalog: Catalog | undefined }) {
 	const items = mediaIds.map((id) => findLessonLocation(catalog ?? null, id)).filter((location): location is LessonLocation => location !== null).slice(0, 5);
 	return (
-		<section aria-labelledby="bookmarks-heading" className="rounded-[2rem] border bg-card p-5 sm:p-6">
-			<h2 id="bookmarks-heading" className="font-heading text-xl font-bold">{tr('Bookmarks', 'Favoritos')}</h2>
+		<section aria-labelledby="bookmarks-heading" className="rounded-[2rem] border bg-card p-5">
+			<h2 id="bookmarks-heading" className="font-heading text-xl font-semibold">{tr('Bookmarks', 'Favoritos')}</h2>
 			{items.length === 0 ? (
-				<p className="mt-4 text-center text-sm text-muted-foreground">{tr('Nothing saved yet. Star a lesson and it will wait for you here.', 'Nada salvo ainda. Marque uma aula com estrela e ela espera por você aqui.')}</p>
+				<div className="mt-3 flex items-start gap-3 rounded-2xl border border-dashed p-4">
+					<Star className="mt-0.5 size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+					<p className="text-sm text-muted-foreground">{tr('Nothing saved yet.', 'Nada salvo ainda.')}<span className="mt-0.5 block text-xs">{tr('Star a lesson to keep it here.', 'Marque uma aula com estrela para mantê-la aqui.')}</span></p>
+				</div>
 			) : (
 				<ul className="mt-4 space-y-2">
 					{items.map((location) => (
@@ -189,16 +260,34 @@ function Habit({ rewards, completedCourses }: { rewards: RewardSummary | undefin
 	if (!rewards || !study) return null;
 	const game = buildGamification({ rewards, completedCourses });
 	const days = Math.min(study.weekActiveDays, rewards.weeklyGoal);
+	const remaining = Math.max(0, rewards.weeklyGoal - study.weekActiveDays);
+	const todayActive = study.days.find((day) => day.day === study.today)?.active ?? false;
+	const dayInitial = (day: string) => new Date(`${day}T12:00:00`).toLocaleDateString(getLocale(), { weekday: 'narrow' });
 	const cards = [
-		look.showStreak && <li key="s"><Stat icon={<Flame />} label={tr('Streak', 'Sequência')} value={study.currentStreak} unit={study.currentStreak === 1 ? tr('day', 'dia') : tr('days', 'dias')} /></li>,
-		look.showXp && <li key="x"><Stat icon={<Star />} label={tr(`Level ${game.level.level}`, `Nível ${game.level.level}`)} value={game.level.xp} unit="XP" /></li>,
-		look.showGoal && <li key="g" className="col-span-2"><Stat icon={<Target />} label={tr('Goal', 'Meta')} value={`${days}/${rewards.weeklyGoal}`} unit={tr('days this week', 'dias nesta semana')} /></li>
+		look.showStreak && <li key="s"><Stat tone="amber" icon={<Flame />} label={tr('Streak', 'Sequência')} value={study.currentStreak} unit={study.currentStreak === 1 ? tr('day', 'dia') : tr('days', 'dias')} note={todayActive ? tr('Today counted', 'Hoje já conta') : tr('Today counts', 'Hoje conta')} className="p-4 xl:p-5">
+			<div role="img" aria-label={tr(`${study.weekActiveDays} of 7 days studied this week`, `${study.weekActiveDays} de 7 dias estudados nesta semana`)} className="flex justify-between gap-1">
+				{study.days.map((day) => (
+					<span key={day.day} className="flex flex-col items-center gap-1">
+						<span className={cn('size-2.5 rounded-full', day.active ? 'bg-reward-fill' : 'border border-border-strong')} />
+						<span className="text-[10px] text-muted-foreground">{dayInitial(day.day)}</span>
+					</span>
+				))}
+			</div>
+		</Stat></li>,
+		look.showXp && <li key="x"><Stat tone="violet" icon={<Star />} label={tr(`Level ${game.level.level}`, `Nível ${game.level.level}`)} value={game.level.xp} unit="XP" progress={game.level.progress} note={tr(`${game.level.xpToNext} XP to Level ${game.level.level + 1}`, `${game.level.xpToNext} XP para o Nível ${game.level.level + 1}`)} className="p-4 xl:p-5" /></li>,
+		look.showGoal && <li key="g" className="col-span-2"><Stat tone="green" icon={<Target />} label={tr('Goal', 'Meta')} value={`${days}/${rewards.weeklyGoal}`} unit={tr('days this week', 'dias nesta semana')} bar={{ value: days, max: rewards.weeklyGoal }} note={remaining === 0 ? tr('Goal reached', 'Meta atingida') : remaining === 1 ? tr('1 more day', 'Mais 1 dia') : tr(`${remaining} more days`, `Mais ${remaining} dias`)} /></li>
 	].filter(Boolean);
 	if (cards.length === 0) return null;
-	return <ul aria-label={tr('Your habit', 'Seu hábito')} className="grid grid-cols-2 gap-4">{cards}</ul>;
+	return <ul aria-label={tr('Your habit', 'Seu hábito')} className="grid grid-cols-2 gap-3">{cards}</ul>;
 }
 
-function Filters(props: { categories: string[]; category: string | null; onCategory: (value: string | null) => void; view: View; onView: (view: View) => void }) {
+function Filters(props: { categories: string[]; category: string | null; onCategory: (value: string | null) => void; view: LibraryView; onView: (view: LibraryView) => void; sort: LibrarySort; onSort: (sort: LibrarySort) => void }) {
+	const views: [LibraryView, typeof LayoutGrid, string][] = [
+		['covers', LayoutGrid, tr('Covers', 'Capas')],
+		['list', List, tr('List', 'Lista')],
+		['compact', Rows3, tr('Compact', 'Compacta')],
+		['shelf', LibraryBig, tr('Shelf', 'Estante')]
+	];
 	return (
 		<div className="flex flex-wrap items-center gap-2">
 			{props.categories.length > 1 && (
@@ -210,9 +299,18 @@ function Filters(props: { categories: string[]; category: string | null; onCateg
 					</select>
 				</div>
 			)}
-			<div role="group" aria-label={tr('View', 'Visualização')} className="ml-auto flex gap-1">
-				<Button size="icon" variant={props.view === 'grid' ? 'secondary' : 'ghost'} aria-pressed={props.view === 'grid'} aria-label={tr('Covers', 'Capas')} onClick={() => props.onView('grid')}><LayoutGrid /></Button>
-				<Button size="icon" variant={props.view === 'list' ? 'secondary' : 'ghost'} aria-pressed={props.view === 'list'} aria-label={tr('List', 'Lista')} onClick={() => props.onView('list')}><List /></Button>
+			<div className="ml-auto flex items-center gap-2">
+				<Label htmlFor="sort" className="sr-only">{tr('Sort', 'Ordenar')}</Label>
+				<select id="sort" value={props.sort} onChange={(event) => props.onSort(event.target.value as LibrarySort)} className="h-11 rounded-lg border border-input bg-background px-3 text-sm">
+					<option value="recent">{tr('Recent', 'Recentes')}</option>
+					<option value="title">{tr('Title A–Z', 'Título A–Z')}</option>
+					<option value="progress">{tr('Progress', 'Progresso')}</option>
+				</select>
+				<div role="group" aria-label={tr('View', 'Visualização')} className="flex gap-1">
+					{views.map(([value, Icon, label]) => (
+						<Button key={value} size="icon" variant={props.view === value ? 'secondary' : 'ghost'} aria-pressed={props.view === value} aria-label={label} onClick={() => props.onView(value)}><Icon /></Button>
+					))}
+				</div>
 			</div>
 		</div>
 	);

@@ -15,6 +15,8 @@ export type CourseEntry = {
 	favorite: boolean;
 	/** Lesson to open from the card: the resume point, else the first available lesson. */
 	next: { path: string; title: string } | null;
+	/** Unix timestamp of the last progress update in this course, or 0. */
+	lastStudiedAt: number;
 };
 
 export type ResumeEntry = { progress: StudyProgress; location: LessonLocation; courseProgress: number };
@@ -40,6 +42,11 @@ export function buildLibrary(input: {
 	const completed = new Set(input.recent.filter((item) => item.completed).map((item) => item.mediaId));
 	const started = new Set(input.recent.filter((item) => !item.completed && item.positionSeconds > 0).map((item) => item.mediaId));
 	const recentIds = input.recent.map((item) => item.mediaId);
+	const lastStudied = new Map<string, number>();
+	for (const progress of input.recent) {
+		const location = findLessonLocation(input.catalog ?? null, progress.mediaId);
+		if (location) lastStudied.set(location.courseId, Math.max(lastStudied.get(location.courseId) ?? 0, progress.updatedAt ?? 0));
+	}
 
 	const entries = nodes.map((course): CourseEntry => {
 		const courseId = courseIdOf(course);
@@ -53,7 +60,8 @@ export function buildLibrary(input: {
 			done,
 			total,
 			favorite: input.favoriteCourseIds.has(courseId),
-			next: nextPath && nextLesson ? { path: nextPath, title: nextLesson.title } : null
+			next: nextPath && nextLesson ? { path: nextPath, title: nextLesson.title } : null,
+			lastStudiedAt: lastStudied.get(courseId) ?? 0
 		};
 	});
 

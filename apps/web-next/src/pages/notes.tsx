@@ -1,10 +1,11 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Download, NotebookPen, Pencil, Search, Trash2 } from 'lucide-react';
+import { ArrowLeft, Check, Download, NotebookPen, Pencil, Search, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { CoursePicker, GONE } from '@/components/course-picker';
 import { Markdown } from '@/components/markdown';
 import { NoteEditor } from '@/components/note-editor';
+import { Eyebrow, Panel } from '@/components/panel';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useLocale } from '@/hooks/use-locale';
@@ -91,6 +92,7 @@ function Notebook({ courseId }: { courseId: string }) {
 
 	const total = matches.length;
 	const dayGroups = [...new Set(matches.map((entry) => dayKey(entry.note.updatedAt)))].sort().reverse().map((day) => ({ day, items: matches.filter((entry) => dayKey(entry.note.updatedAt) === day).sort((a, b) => b.note.updatedAt - a.note.updatedAt) }));
+	const weekCount = notesThisWeek(matches.map(({ note }) => note));
 	const exportMarkdown = () => {
 		const rows = matches.map(({ note, location }) => ({ course: location?.courseTitle ?? goneTitle(), lesson: location?.lesson.title ?? note.relativePath ?? tr('Unknown lesson', 'Aula desconhecida'), positionSeconds: note.positionSeconds, updatedAt: note.updatedAt, content: note.content }));
 		const url = URL.createObjectURL(new Blob([notesToMarkdown(rows)], { type: 'text/markdown;charset=utf-8' }));
@@ -102,7 +104,7 @@ function Notebook({ courseId }: { courseId: string }) {
 	};
 
 	const renderItem = ({ note, location }: Entry, showLesson: boolean) => (
-			<li key={note.noteId} className="space-y-1 border-t py-3">
+			<li key={note.noteId} className="space-y-2 py-4 first:pt-0 last:pb-0">
 			{showLesson && <p className="text-sm text-muted-foreground">{location ? `${location.courseTitle} · ${location.lesson.title}` : note.relativePath ?? tr('Unknown lesson', 'Aula desconhecida')}</p>}
 				<div className="flex flex-wrap items-center gap-3 text-sm">
 					{location ? (
@@ -138,46 +140,73 @@ function Notebook({ courseId }: { courseId: string }) {
 		<div className="space-y-8">
 			<Link to="/notes" className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" aria-hidden="true" />{tr('All courses', 'Todos os cursos')}</Link>
 			<PageHeader icon={NotebookPen} title={tr(`${courseTitle} notes`, `Notas de ${courseTitle}`)} description={tr(`${total} ${total === 1 ? 'note' : 'notes'} in this course.`, `${total} ${total === 1 ? 'nota' : 'notas'} neste curso.`)} />
-			<div className="flex flex-wrap items-center gap-3">
-				<div role="group" aria-label={tr('Group notes', 'Agrupar notas')} className="flex gap-2">
-					<Button size="sm" variant={view === 'lesson' ? 'default' : 'outline'} aria-pressed={view === 'lesson'} onClick={() => setView('lesson')}>{tr('By lesson', 'Por aula')}</Button>
-					<Button size="sm" variant={view === 'date' ? 'default' : 'outline'} aria-pressed={view === 'date'} onClick={() => setView('date')}>{tr('By date', 'Por data')}</Button>
-				</div>
-				{matches.length > 0 && <Button size="sm" variant="outline" className="ml-auto" onClick={exportMarkdown}><Download />{tr('Export as Markdown', 'Exportar em Markdown')}</Button>}
-			</div>
-			<div role="search" aria-label={tr('Notes', 'Notas')} className="relative max-w-md">
-				<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-				<Input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={tr('Search notes or lessons', 'Buscar notas ou aulas')} aria-label={tr('Search notes', 'Buscar notas')} className="pl-9" />
-			</div>
-			{(update.error || remove.error) && <p role="alert" className="text-sm text-destructive">{(update.error ?? remove.error)?.message}</p>}
-			{notes.isPending ? (
-				<p role="status" className="text-muted-foreground">{tr('Loading notes…', 'Carregando notas…')}</p>
-			) : notes.data?.every((note) => noteCourse(findLessonLocation(catalog.data ?? null, note.mediaId)) !== courseId) ? (
-				<p className="text-muted-foreground">{tr('No notes yet. While watching a lesson, open the Notes tab or press n to write one tied to that moment.', 'Ainda não há notas. Assistindo a uma aula, abra a aba Notas ou aperte n para escrever uma presa àquele momento.')}</p>
-			) : groups.length === 0 ? (
-				<p role="status" className="text-muted-foreground">{tr('No notes match your search.', 'Nenhuma nota corresponde à busca.')}</p>
-			) : view === 'date' ? (
-				dayGroups.map(({ day, items }) => (
-					<section key={day} aria-label={day}>
-						<h2 className="font-serif text-2xl font-bold">{new Date(`${day}T12:00:00`).toLocaleDateString(getLocale(), { dateStyle: 'full' })}</h2>
-						<ul className="mt-2">{items.map((entry) => renderItem(entry, true))}</ul>
-					</section>
-				))
-			) : (
-				groups.map((group) => (
-					<section key={group.items[0].note.mediaId} aria-label={group.lesson}>
-						<div className="flex flex-wrap items-end justify-between gap-2">
-							<div className="min-w-0">
-								<h2 className="font-serif text-2xl font-bold text-balance">{group.lesson}</h2>
-							</div>
-							{group.location && <Link to={href('course', group.location.courseId, group.location.lesson.path).replace(/^#/, '')} className="inline-flex min-h-11 items-center text-sm font-semibold text-primary hover:underline">{tr('Open lesson', 'Abrir aula')}</Link>}
+			<div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
+				<div className="min-w-0 space-y-6">
+					<div className="flex flex-wrap items-center gap-3">
+						<div role="group" aria-label={tr('Group notes', 'Agrupar notas')} className="flex gap-2">
+							<Button size="sm" variant={view === 'lesson' ? 'selected' : 'outline'} aria-pressed={view === 'lesson'} onClick={() => setView('lesson')}>{tr('By lesson', 'Por aula')}{view === 'lesson' && <Check className="size-3.5 text-primary" aria-hidden="true" />}</Button>
+							<Button size="sm" variant={view === 'date' ? 'selected' : 'outline'} aria-pressed={view === 'date'} onClick={() => setView('date')}>{tr('By date', 'Por data')}{view === 'date' && <Check className="size-3.5 text-primary" aria-hidden="true" />}</Button>
 						</div>
-						<ul className="mt-2">
-							{group.items.map((entry) => renderItem(entry, false))}
-						</ul>
-					</section>
-				))
-			)}
+						{matches.length > 0 && <Button size="sm" variant="outline" className="ml-auto" onClick={exportMarkdown}><Download />{tr('Export as Markdown', 'Exportar em Markdown')}</Button>}
+					</div>
+					<div role="search" aria-label={tr('Notes', 'Notas')} className="relative max-w-md">
+						<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+						<Input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={tr('Search notes or lessons', 'Buscar notas ou aulas')} aria-label={tr('Search notes', 'Buscar notas')} className="pl-9" />
+					</div>
+					{(update.error || remove.error) && <p role="alert" className="text-sm text-destructive">{(update.error ?? remove.error)?.message}</p>}
+					{notes.isPending ? (
+						<p role="status" className="text-muted-foreground">{tr('Loading notes…', 'Carregando notas…')}</p>
+					) : notes.data?.every((note) => noteCourse(findLessonLocation(catalog.data ?? null, note.mediaId)) !== courseId) ? (
+						<Panel className="p-5 text-sm text-muted-foreground">{tr('No notes yet. While watching a lesson, open the Notes tab or press n to write one tied to that moment.', 'Ainda não há notas. Assistindo a uma aula, abra a aba Notas ou aperte n para escrever uma presa àquele momento.')}</Panel>
+					) : groups.length === 0 ? (
+						<p role="status" className="text-muted-foreground">{tr('No notes match your search.', 'Nenhuma nota corresponde à busca.')}</p>
+					) : view === 'date' ? (
+						dayGroups.map(({ day, items }) => (
+							<section key={day} aria-label={day}>
+								<Panel className="space-y-3">
+									<h2 className="font-heading text-xl font-semibold">{new Date(`${day}T12:00:00`).toLocaleDateString(getLocale(), { dateStyle: 'full' })}</h2>
+									<ul className="divide-y">{items.map((entry) => renderItem(entry, true))}</ul>
+								</Panel>
+							</section>
+						))
+					) : (
+						groups.map((group) => (
+							<section key={group.items[0].note.mediaId} aria-label={group.lesson}>
+								<Panel className="space-y-3">
+									<div className="flex flex-wrap items-end justify-between gap-2">
+										<h2 className="font-heading text-xl font-semibold text-balance">{group.lesson}</h2>
+										{group.location && <Link to={href('course', group.location.courseId, group.location.lesson.path).replace(/^#/, '')} className="inline-flex min-h-11 items-center text-sm font-semibold text-primary hover:underline">{tr('Open lesson', 'Abrir aula')}</Link>}
+									</div>
+									<ul className="divide-y">{group.items.map((entry) => renderItem(entry, false))}</ul>
+								</Panel>
+							</section>
+						))
+					)}
+				</div>
+				<aside className="space-y-6 lg:sticky lg:top-24">
+					<Panel className="space-y-4 p-5 sm:p-6">
+						<Eyebrow>{tr('Notebook', 'Caderno')}</Eyebrow>
+						<dl className="space-y-3 text-sm">
+							<div className="flex items-baseline justify-between gap-3"><dt className="text-muted-foreground">{tr('Notes', 'Notas')}</dt><dd className="font-semibold tabular-nums">{total}</dd></div>
+							<div className="flex items-baseline justify-between gap-3"><dt className="text-muted-foreground">{tr('Lessons', 'Aulas')}</dt><dd className="font-semibold tabular-nums">{groups.length}</dd></div>
+							<div className="flex items-baseline justify-between gap-3"><dt className="text-muted-foreground">{tr('This week', 'Esta semana')}</dt><dd className="font-semibold tabular-nums">{weekCount}</dd></div>
+						</dl>
+					</Panel>
+					{groups.length > 0 && (
+						<Panel className="space-y-3 p-5 sm:p-6">
+							<Eyebrow>{tr('Lessons', 'Aulas')}</Eyebrow>
+							<ul className="space-y-2 text-sm">
+								{groups.slice(0, 8).map((group) => (
+									<li key={group.items[0].note.mediaId} className="flex items-baseline justify-between gap-3">
+										<span className="truncate">{group.lesson}</span>
+										<span className="text-muted-foreground tabular-nums">{group.items.length}</span>
+									</li>
+								))}
+							</ul>
+						</Panel>
+					)}
+				</aside>
+			</div>
 		</div>
 	);
 }

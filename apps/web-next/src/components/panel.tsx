@@ -15,14 +15,26 @@ export const Eyebrow = ({ children, className }: { children: ReactNode; classNam
 	<p className={cn('text-sm font-medium text-muted-foreground', className)}>{children}</p>
 );
 
-/** A small tinted number card: the label, the value, and an optional line under it. */
-export function Stat({ label, value, unit, note, icon, className }: { label: string; value: ReactNode; unit?: string; note?: string; icon?: ReactNode; className?: string }) {
+/** A small tinted number card: the label, the value, and optional extra context. */
+export function Stat({ label, value, unit, note, icon, tone, bar, progress, children, className }: { label: string; value: ReactNode; unit?: string; note?: string; icon?: ReactNode; tone?: 'amber' | 'violet' | 'green'; bar?: { value: number; max: number }; progress?: number; children?: ReactNode; className?: string }) {
+	const percent = Math.round(Math.min(1, Math.max(0, progress ?? 0)) * 100);
 	return (
-		<div className={cn('rounded-[1.75rem] border border-brand-soft bg-panel p-5', className)}>
-			{icon && <div className="mb-3 text-primary [&_svg]:size-6" aria-hidden="true">{icon}</div>}
+		<div className={cn('rounded-[1.75rem] border border-border bg-card p-5', tone && `stat-${tone}`, className)}>
+			{icon && <div data-stat-icon className="mb-3 grid size-9 place-items-center rounded-xl bg-brand-tint text-primary [&_svg]:size-5" aria-hidden="true">{icon}</div>}
 			<Eyebrow>{label}</Eyebrow>
-			<p className="mt-2 font-heading text-3xl font-bold">{value}{unit && <span className="ml-1.5 font-sans text-base font-medium text-muted-foreground">{unit}</span>}</p>
+			<p data-stat-value className="mt-2 font-heading text-3xl font-semibold">{value}{unit && <span className="ml-1.5 font-sans text-base font-medium text-muted-foreground">{unit}</span>}</p>
+			{bar && (
+				<div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={bar.max} aria-valuenow={bar.value} className="mt-3 flex gap-1">
+					{Array.from({ length: bar.max }, (_, index) => <span key={index} className={cn('h-1.5 flex-1 rounded-full', index < bar.value ? 'bg-primary' : 'bg-border')} />)}
+				</div>
+			)}
+			{progress !== undefined && (
+				<div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} className="mt-3 h-1.5 overflow-hidden rounded-full bg-border">
+					<div className="h-full rounded-full bg-primary" style={{ width: `${percent}%` }} />
+				</div>
+			)}
 			{note && <p className="mt-1 text-sm text-muted-foreground">{note}</p>}
+			{children && <div className="mt-3">{children}</div>}
 		</div>
 	);
 }

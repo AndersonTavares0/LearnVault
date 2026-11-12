@@ -29,3 +29,35 @@ export function persistLibraryView(
 		return false;
 	}
 }
+
+export const LIBRARY_SORT_STORAGE_KEY = 'learnvault-library-sort';
+
+export const LIBRARY_SORTS = ['recent', 'title', 'progress'] as const;
+
+export type LibrarySort = (typeof LIBRARY_SORTS)[number];
+
+export function parseLibrarySort(value: unknown): LibrarySort | null {
+	if (typeof value !== 'string') return null;
+	return (LIBRARY_SORTS as readonly string[]).includes(value) ? (value as LibrarySort) : null;
+}
+
+export function readLibrarySort(storage: Pick<Storage, 'getItem'> | null | undefined): LibrarySort {
+	try {
+		return parseLibrarySort(storage?.getItem(LIBRARY_SORT_STORAGE_KEY)) ?? 'recent';
+	} catch {
+		return 'recent';
+	}
+}
+
+export function persistLibrarySort(
+	storage: Pick<Storage, 'setItem'> | null | undefined,
+	sort: LibrarySort
+): boolean {
+	if (!storage) return false;
+	try {
+		storage.setItem(LIBRARY_SORT_STORAGE_KEY, sort);
+		return true;
+	} catch {
+		return false;
+	}
+}

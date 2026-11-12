@@ -34,6 +34,21 @@ describe('buildLibrary', () => {
 		expect(library.resume.map((entry) => [entry.location.courseId, entry.progress.mediaId])).toEqual([['rust', 'r2'], ['art', 'a2']]);
 	});
 
+	it('records the newest study time per course', () => {
+		const library = buildLibrary({
+			catalog,
+			recent: [
+				{ ...progress('r1', false), updatedAt: 10 },
+				{ ...progress('r2', false), updatedAt: 20 },
+				{ ...progress('a1', true), updatedAt: 30 }
+			],
+			favoriteCourseIds: new Set()
+		});
+		expect(library.entries.find((entry) => entry.courseId === 'rust')!.lastStudiedAt).toBe(20);
+		expect(library.entries.find((entry) => entry.courseId === 'art')!.lastStudiedAt).toBe(30);
+		expect(library.entries.find((entry) => entry.courseId === 'go')!.lastStudiedAt).toBe(0);
+	});
+
 	it('handles a missing catalog', () => {
 		expect(buildLibrary({ catalog: null, recent: [], favoriteCourseIds: new Set() }).entries).toEqual([]);
 	});

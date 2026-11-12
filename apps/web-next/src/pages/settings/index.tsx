@@ -1,6 +1,7 @@
-import { Download, Settings } from 'lucide-react';
+import { BookOpen, Check, Database, Download, Palette, RefreshCw, Settings, Timer, UserRound, Users } from 'lucide-react';
 import { createContext, useContext, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router';
+import { Panel } from '@/components/panel';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { useLocale } from '@/hooks/use-locale';
 import { cn } from '@/lib/utils';
@@ -35,12 +36,12 @@ export function SettingsPage() {
 	const setActive = (id: string) => setPicked({ hash: location.hash, id });
 
 	const sections = [
-		{ id: 'appearance', label: tr('Appearance', 'Aparência') },
-		{ id: 'profile', label: tr('Profile', 'Perfil') },
-		...(studySyncSupported ? [{ id: 'study', label: tr('Study', 'Estudo') }] : []),
-		{ id: 'focus', label: tr('Focus timer', 'Timer de foco') },
-		...(!server || admin ? [{ id: 'updates', label: tr('Updates', 'Atualizações') }] : []),
-		...(server && admin ? [{ id: 'users', label: tr('Users', 'Usuários') }, { id: 'backup', label: 'Backup' }] : [])
+		{ id: 'appearance', label: tr('Appearance', 'Aparência'), icon: Palette },
+		{ id: 'profile', label: tr('Profile', 'Perfil'), icon: UserRound },
+		...(studySyncSupported ? [{ id: 'study', label: tr('Study', 'Estudo'), icon: BookOpen }] : []),
+		{ id: 'focus', label: tr('Focus timer', 'Timer de foco'), icon: Timer },
+		...(!server || admin ? [{ id: 'updates', label: tr('Updates', 'Atualizações'), icon: RefreshCw }] : []),
+		...(server && admin ? [{ id: 'users', label: tr('Users', 'Usuários'), icon: Users }, { id: 'backup', label: 'Backup', icon: Database }] : [])
 	];
 
 	return (
@@ -51,7 +52,8 @@ export function SettingsPage() {
 				<ul className="flex gap-1 overflow-x-auto lg:block lg:space-y-1">
 					{sections.map((section) => (
 						<li key={section.id}>
-							<button type="button" aria-current={active === section.id ? 'page' : undefined} onClick={() => setActive(section.id)} className={cn('min-h-11 w-full rounded-md px-3 text-left text-sm font-medium whitespace-nowrap hover:bg-muted', active === section.id ? 'bg-brand-tint text-foreground' : 'text-muted-foreground hover:text-foreground')}>
+							<button type="button" aria-current={active === section.id ? 'page' : undefined} onClick={() => setActive(section.id)} className={cn('flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-medium whitespace-nowrap hover:bg-muted', active === section.id ? 'bg-brand-tint text-foreground' : 'text-muted-foreground hover:text-foreground')}>
+								<section.icon className="size-4 shrink-0" aria-hidden="true" />
 								{section.label}
 							</button>
 						</li>
@@ -60,9 +62,11 @@ export function SettingsPage() {
 			</nav>
 			<div className="min-w-0 space-y-10">
 			<PageHeader icon={Settings} title={tr('Settings', 'Ajustes')} />
-			<Section id="appearance" title={tr('Appearance', 'Aparência')}>
+			<Section id="appearance" title={tr('Appearance', 'Aparência')} framed={false}>
 				<AppearanceSettings />
-				<Choice legend={tr('Language', 'Idioma')} options={LOCALES} value={locale} label={(value) => LOCALE_LABELS[value]} onChange={(value) => setLocale(value)} />
+				<Panel className="p-5 sm:p-6">
+					<Choice legend={tr('Language', 'Idioma')} options={LOCALES} value={locale} label={(value) => LOCALE_LABELS[value]} onChange={(value) => setLocale(value)} />
+				</Panel>
 			</Section>
 			{server && user && (
 				<Section id="profile" title={tr('Profile', 'Perfil')} description={tr(`Signed in as ${user.username}${admin ? ' (administrator)' : ''}.`, `Conectado como ${user.username}${admin ? ' (administrador)' : ''}.`)}>
@@ -111,15 +115,17 @@ function WeeklyGoal() {
 	return <Choice legend={tr('Weekly goal, in study days', 'Meta semanal, em dias de estudo')} options={GOAL_DAYS} value={String(rewards.data.weeklyGoal)} label={(value) => value} onChange={(value) => setGoal.mutate(Number(value))} />;
 }
 
-function Section({ id, title, description, children }: { id: string; title: string; description?: string; children?: ReactNode }) {
+function Section({ id, title, description, children, framed = true }: { id: string; title: string; description?: string; children?: ReactNode; framed?: boolean }) {
 	if (useContext(ActiveSection) !== id) return null;
+	const heading = (
+		<div className="space-y-1">
+			<h2 id={`${id}-heading`} className="text-lg font-semibold">{title}</h2>
+			{description && <p className="text-sm text-muted-foreground">{description}</p>}
+		</div>
+	);
 	return (
-		<section id={id} aria-labelledby={`${id}-heading`} className="space-y-4">
-			<div className="space-y-1">
-				<h2 id={`${id}-heading`} className="text-lg font-semibold">{title}</h2>
-				{description && <p className="text-sm text-muted-foreground">{description}</p>}
-			</div>
-			{children}
+		<section id={id} aria-labelledby={`${id}-heading`}>
+			{framed ? <Panel className="space-y-4">{heading}{children}</Panel> : <div className="space-y-4">{heading}{children}</div>}
 		</section>
 	);
 }
@@ -130,8 +136,9 @@ function Choice<T extends string>({ legend, options, value, label, onChange }: {
 			<legend className="text-sm font-medium">{legend}</legend>
 			<div className="flex flex-wrap gap-2">
 				{options.map((option) => (
-					<Button key={option} variant={option === value ? 'default' : 'outline'} aria-pressed={option === value} onClick={() => onChange(option)}>
+					<Button key={option} variant={option === value ? 'selected' : 'outline'} aria-pressed={option === value} onClick={() => onChange(option)}>
 						{label(option)}
+						{option === value && <Check className="size-3.5 text-primary" aria-hidden="true" />}
 					</Button>
 				))}
 			</div>
