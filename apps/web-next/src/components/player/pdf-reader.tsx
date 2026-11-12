@@ -1,15 +1,15 @@
-import { ExternalLink, Maximize2, Minus, Plus } from 'lucide-react';
-import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
+import { ChevronDown, ChevronUp, ExternalLink, Highlighter, Maximize2, Minus, Plus, Search, StickyNote, Underline } from 'lucide-react';
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent } from 'react';
 import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 import { usePdfAnnotationMutations, usePdfAnnotations } from '@/app/data';
-import { PdfMarks } from '@/components/player/pdf-marks';
+import { ColorSwatches, PdfMarks } from '@/components/player/pdf-marks';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { studySyncSupported } from '@/lib/player';
 import { tr } from '@/lib/i18n';
-import { clampPage, loadPdfJs, PDF_MARK_COLORS, selectionBoxes, stepZoom } from '@/lib/pdf';
-import { transport, type FileEntry, type PdfAnnotationColor } from '@/lib/transport';
+import { clampPage, loadPdfJs, pagesMatching, PDF_MARK_COLORS, selectionBoxes, stepZoom } from '@/lib/pdf';
+import { transport, type FileEntry, type PdfAnnotationColor, type PdfRect } from '@/lib/transport';
 import { cn } from '@/lib/utils';
 
 type Props = {
@@ -43,7 +43,16 @@ export function PdfReader({ file, courseId, initialPage, onPage }: Props) {
 	const [hasSelection, setHasSelection] = useState(false);
 	const mediaId = file.mediaId ?? null;
 	const marks = usePdfAnnotations(mediaId);
-	const { create, remove } = usePdfAnnotationMutations(mediaId);
+	const { create, update, remove } = usePdfAnnotationMutations(mediaId);
+	// A note needs text, so a selection waits here until its text is written.
+	const [draft, setDraft] = useState<{ page: number; rects: PdfRect[]; quote: string; text: string } | null>(null);
+	const [query, setQuery] = useState('');
+	const [searchState, setSearch] = useState<{ url: string; query: string; pages: number[]; at: number } | null>(null);
+	// Results belong to the document they were found in.
+	const docKey = `${courseId}/${file.path}`;
+	const search = searchState?.url === docKey ? searchState : null;
+	const [searching, setSearching] = useState(false);
+	const texts = useRef<{ url: string; list: string[] } | null>(null);
 	const [width, setWidth] = useState(0);
 	const stage = useRef<HTMLDivElement>(null);
 	const canvas = useRef<HTMLCanvasElement>(null);
@@ -124,21 +133,57 @@ export function PdfReader({ file, courseId, initialPage, onPage }: Props) {
 
 	if (!loadPdfJs) return <ViewerFallback file={file} />;
 
-	const mark = (kind: 'highlight' | 'underline') => {
+	const mark = (kind: 'highlight' | 'underline' | 'note') => {
 		const range = selectionIn(textLayer.current);
 		if (!range || !canvas.current || !mediaId) return;
 		const rects = selectionBoxes(range.getClientRects(), canvas.current.getBoundingClientRect());
 		const quote = range.toString().trim().slice(0, 4000);
-		if (rects.length > 0) create.mutate({ page: current, kind, color: markColor, rects, quote });
+		if (rects.length > 0) {
+			if (kind === 'note') setDraft({ page: current, rects, quote, text: '' });
+			else create.mutate({ page: current, kind, color: markColor, rects, quote });
+		}
 		window.getSelection()?.removeAllRanges();
 	};
 
 	const go = (next: number) => { if (pages) setPage(clampPage(next, pages)); };
+
+	/** Reads every page's text once, then lists the pages that contain the query. */
+	const runSearch = async (event: FormEvent) => {
+		event.preventDefault();
+		if (load.state !== 'ready' || !query.trim()) return;
+		const { doc } = load;
+		setSearching(true);
+		try {
+			if (texts.current?.url !== docKey) {
+				const list = await Promise.all(Array.from({ length: doc.numPages }, async (_, index) => {
+					const content = await (await doc.getPage(index + 1)).getTextContent();
+					return content.items.map((item) => ('str' in item ? item.str : '')).join(' ');
+				}));
+				texts.current = { url: docKey, list };
+			}
+			const found = pagesMatching(texts.current.list, query);
+			setSearch({ url: docKey, query: query.trim(), pages: found, at: 0 });
+			if (found.length > 0) go(found[0]);
+		} catch {
+			setSearch({ url: docKey, query: query.trim(), pages: [], at: 0 });
+		} finally {
+			setSearching(false);
+		}
+	};
+	const stepMatch = (direction: 1 | -1) => {
+		if (!search || search.pages.length === 0) return;
+		const at = (search.at + direction + search.pages.length) % search.pages.length;
+		setSearch({ ...search, at });
+		go(search.pages[at]);
+	};
 	const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
 		if ((event.target as HTMLElement).closest('input, select, textarea')) return;
+		// Browser shortcuts such as Ctrl+- and Ctrl+N are not ours to take.
+		if (event.ctrlKey || event.metaKey || event.altKey) return;
 		const actions: Record<string, () => void> = {
 			ArrowLeft: () => go(current - 1), PageUp: () => go(current - 1), ArrowRight: () => go(current + 1), PageDown: () => go(current + 1),
-			Home: () => go(1), End: () => go(pages), '+': () => setZoom(stepZoom(zoom, 1)), '-': () => setZoom(stepZoom(zoom, -1))
+			Home: () => go(1), End: () => go(pages), '+': () => setZoom(stepZoom(zoom, 1)), '-': () => setZoom(stepZoom(zoom, -1)),
+			h: () => mark('highlight'), u: () => mark('underline'), n: () => mark('note')
 		};
 		const action = actions[event.key];
 		if (action) { event.preventDefault(); action(); }
@@ -146,10 +191,10 @@ export function PdfReader({ file, courseId, initialPage, onPage }: Props) {
 
 	return (
 		<div className="space-y-3">
-			<div role="toolbar" aria-label={tr('PDF controls', 'Controles do PDF')} className="flex flex-wrap items-center gap-2 rounded-xl border bg-card p-2">
+			<div role="toolbar" aria-label={tr('PDF controls', 'Controles do PDF')} className="flex flex-wrap items-center gap-2 rounded-2xl border bg-card p-2">
 				<Button variant="outline" size="sm" disabled={current <= 1} onClick={() => go(current - 1)}>{tr('Previous page', 'Página anterior')}</Button>
 				<Label htmlFor="pdf-page" className="sr-only">{tr('Page', 'Página')}</Label>
-				<Input id="pdf-page" type="number" inputMode="numeric" min={1} max={pages || undefined} value={current} disabled={!pages} onChange={(event) => go(Number(event.target.value))} className="h-9 w-16 text-center tabular-nums" />
+				<Input id="pdf-page" type="number" inputMode="numeric" min={1} max={pages || undefined} value={current} disabled={!pages} onChange={(event) => go(Number(event.target.value))} className="h-11 w-16 text-center tabular-nums" />
 				<span className="text-sm text-muted-foreground tabular-nums">{tr(`of ${pages || '…'}`, `de ${pages || '…'}`)}</span>
 				<Button variant="outline" size="sm" disabled={!pages || current >= pages} onClick={() => go(current + 1)}>{tr('Next page', 'Próxima página')}</Button>
 				<div className="ml-auto flex items-center gap-1">
@@ -160,35 +205,63 @@ export function PdfReader({ file, courseId, initialPage, onPage }: Props) {
 				</div>
 			</div>
 
-			{studySyncSupported && mediaId && load.state === 'ready' && (
-				<div role="toolbar" aria-label={tr('Mark the selected text', 'Marcar o texto selecionado')} className="flex flex-wrap items-center gap-2">
-					<Label htmlFor="pdf-mark-color" className="text-sm">{tr('Color', 'Cor')}</Label>
-					<select id="pdf-mark-color" value={markColor} onChange={(event) => setMarkColor(event.target.value as PdfAnnotationColor)} className="h-9 rounded-lg border border-input bg-background px-2 text-sm">
-						<option value="yellow">{tr('Yellow', 'Amarelo')}</option>
-						<option value="green">{tr('Green', 'Verde')}</option>
-						<option value="blue">{tr('Blue', 'Azul')}</option>
-						<option value="pink">{tr('Pink', 'Rosa')}</option>
-					</select>
-					{/* Mouse-down is cancelled so pressing a mark button keeps the text selected. */}
-					<Button variant="outline" size="sm" disabled={!hasSelection || create.isPending} onMouseDown={(event: MouseEvent) => event.preventDefault()} onClick={() => mark('highlight')}>{tr('Highlight', 'Destacar')}</Button>
-					<Button variant="outline" size="sm" disabled={!hasSelection || create.isPending} onMouseDown={(event: MouseEvent) => event.preventDefault()} onClick={() => mark('underline')}>{tr('Underline', 'Sublinhar')}</Button>
-					{(create.error || remove.error) && <p role="alert" className="text-sm text-destructive">{(create.error ?? remove.error)?.message}</p>}
+			{load.state === 'ready' && (
+				<div className="space-y-1">
+					<form role="search" aria-label={tr('Search in the document', 'Buscar no documento')} onSubmit={(event) => void runSearch(event)} className="flex flex-wrap items-center gap-2">
+						<div className="relative min-w-48 flex-1 sm:max-w-sm">
+							<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+							<Input type="search" value={query} onChange={(event) => setQuery(event.target.value)} aria-label={tr('Search in the document', 'Buscar no documento')} placeholder={tr('Search in the document', 'Buscar no documento')} className="h-11 pl-9" />
+						</div>
+						<Button type="submit" variant="outline" size="sm" disabled={searching || !query.trim()}>{tr('Search', 'Buscar')}</Button>
+						{search && search.pages.length > 0 && (
+							<>
+								<Button type="button" variant="ghost" size="icon" aria-label={tr('Previous result', 'Resultado anterior')} onClick={() => stepMatch(-1)}><ChevronUp /></Button>
+								<Button type="button" variant="ghost" size="icon" aria-label={tr('Next result', 'Próximo resultado')} onClick={() => stepMatch(1)}><ChevronDown /></Button>
+							</>
+						)}
+					</form>
+					<p role="status" aria-live="polite" className="min-h-5 text-sm text-muted-foreground">
+						{search && (search.pages.length > 0 ? tr(`Found on ${search.pages.length} ${search.pages.length === 1 ? 'page' : 'pages'}: now on page ${search.pages[search.at]}.`, `Encontrado em ${search.pages.length} ${search.pages.length === 1 ? 'página' : 'páginas'}: agora na página ${search.pages[search.at]}.`) : tr(`Nothing found for “${search.query}”.`, `Nada encontrado para “${search.query}”.`))}
+					</p>
 				</div>
 			)}
 
+			{studySyncSupported && mediaId && load.state === 'ready' && (
+				<div role="toolbar" aria-label={tr('Mark the selected text', 'Marcar o texto selecionado')} className="flex flex-wrap items-center gap-2">
+					<ColorSwatches label={tr('Mark color', 'Cor da marcação')} value={markColor} onChange={setMarkColor} />
+					{/* Mouse-down is cancelled so pressing a mark button keeps the text selected. */}
+					<Button variant="outline" size="sm" aria-keyshortcuts="h" disabled={!hasSelection || create.isPending} onMouseDown={(event: MouseEvent) => event.preventDefault()} onClick={() => mark('highlight')}><Highlighter />{tr('Highlight', 'Destacar')}</Button>
+					<Button variant="outline" size="sm" aria-keyshortcuts="u" disabled={!hasSelection || create.isPending} onMouseDown={(event: MouseEvent) => event.preventDefault()} onClick={() => mark('underline')}><Underline />{tr('Underline', 'Sublinhar')}</Button>
+					<Button variant="outline" size="sm" aria-keyshortcuts="n" disabled={!hasSelection || create.isPending} onMouseDown={(event: MouseEvent) => event.preventDefault()} onClick={() => mark('note')}><StickyNote />{tr('Add note', 'Adicionar nota')}</Button>
+					{(create.error || update.error || remove.error) && <p role="alert" className="text-sm text-destructive">{(create.error ?? update.error ?? remove.error)?.message}</p>}
+				</div>
+			)}
+
+			{draft && (
+				<form className="space-y-3 rounded-2xl border bg-panel p-4" aria-label={tr('New note', 'Nova nota')} onSubmit={(event) => { event.preventDefault(); if (!draft.text.trim()) return; create.mutate({ page: draft.page, kind: 'note', color: markColor, rects: draft.rects, quote: draft.quote, content: draft.text.trim() }, { onSuccess: () => setDraft(null) }); }}>
+					{draft.quote && <blockquote className="border-l-4 pl-3 text-sm" style={{ borderColor: PDF_MARK_COLORS[markColor] }}>{draft.quote}</blockquote>}
+					<Label htmlFor="pdf-note-text">{tr(`Note for page ${draft.page}`, `Nota da página ${draft.page}`)}</Label>
+					<textarea id="pdf-note-text" value={draft.text} rows={3} maxLength={4000} onChange={(event) => setDraft({ ...draft, text: event.target.value })} className="min-h-11 w-full resize-y rounded-xl border border-input bg-background px-3 py-2 text-sm focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none" />
+					<div className="flex gap-2">
+						<Button type="submit" size="sm" disabled={!draft.text.trim() || create.isPending}>{tr('Save note', 'Salvar nota')}</Button>
+						<Button type="button" variant="ghost" size="sm" onClick={() => setDraft(null)}>{tr('Cancel', 'Cancelar')}</Button>
+					</div>
+				</form>
+			)}
+
 			{load.state === 'error' ? (
-				<p role="alert" className="rounded-xl border border-destructive/50 p-4 text-destructive">{load.message}</p>
+				<p role="alert" className="rounded-2xl border border-destructive/50 p-4 text-destructive">{load.message}</p>
 			) : (
 				// The group takes focus so single-key shortcuts only act on the reader (WCAG 2.1.4).
 				// eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-noninteractive-element-interactions
-				<div role="group" tabIndex={0} onKeyDown={onKeyDown} aria-label={tr('PDF page', 'Página do PDF')} aria-keyshortcuts="ArrowLeft ArrowRight PageUp PageDown Home End + -" className="overflow-auto rounded-xl border bg-muted p-2 focus-visible:ring-3 focus-visible:ring-ring sm:p-4">
+				<div role="group" tabIndex={0} onKeyDown={onKeyDown} aria-label={tr('PDF page', 'Página do PDF')} aria-keyshortcuts="ArrowLeft ArrowRight PageUp PageDown Home End + - h u n" className="overflow-auto rounded-[1.75rem] border bg-panel p-2 focus-visible:ring-3 focus-visible:ring-ring sm:p-4">
 					<div ref={stage} className="mx-auto w-full max-w-4xl">
 						{load.state === 'loading' && <p role="status" className="p-8 text-center text-muted-foreground">{tr('Opening the PDF…', 'Abrindo o PDF…')}</p>}
 						<div className="relative mx-auto w-fit bg-white shadow-sm" hidden={load.state !== 'ready'}>
 							<canvas ref={canvas} role="img" aria-label={tr(`Page ${current} of ${pages}`, `Página ${current} de ${pages}`)} className="block" />
 							{(marks.data ?? []).filter((item) => item.page === current).flatMap((item) => item.rects.map((rect, index) => (
-								<span key={`${item.annotationId}-${index}`} aria-hidden="true" className={cn('pointer-events-none absolute', item.kind === 'highlight' ? 'mix-blend-multiply' : 'border-b-2')}
-									style={{ left: `${rect.x * 100}%`, top: `${rect.y * 100}%`, width: `${rect.width * 100}%`, height: `${rect.height * 100}%`, ...(item.kind === 'highlight' ? { backgroundColor: PDF_MARK_COLORS[item.color] } : { borderColor: PDF_MARK_COLORS[item.color] }) }} />
+								<span key={`${item.annotationId}-${index}`} aria-hidden="true" className={cn('pointer-events-none absolute', item.kind === 'underline' ? 'border-b-2' : 'mix-blend-multiply', item.kind === 'note' && 'outline-1 outline-dashed outline-foreground/40')}
+									style={{ left: `${rect.x * 100}%`, top: `${rect.y * 100}%`, width: `${rect.width * 100}%`, height: `${rect.height * 100}%`, ...(item.kind === 'underline' ? { borderColor: PDF_MARK_COLORS[item.color] } : { backgroundColor: PDF_MARK_COLORS[item.color] }) }} />
 							)))}
 							<div ref={textLayer} className="pdf-text-layer" />
 						</div>
@@ -197,9 +270,9 @@ export function PdfReader({ file, courseId, initialPage, onPage }: Props) {
 			)}
 			<p role="status" aria-live="polite" className="sr-only">{pages ? tr(`Page ${current} of ${pages}`, `Página ${current} de ${pages}`) : ''}</p>
 			{studySyncSupported && mediaId && (
-				<section aria-labelledby="pdf-marks-heading" className="space-y-2">
-					<h2 id="pdf-marks-heading" className="font-semibold">{tr('Marks in this document', 'Marcações neste documento')}</h2>
-					<PdfMarks items={marks.data ?? []} onGo={go} onDelete={(annotationId) => remove.mutate(annotationId)} pending={remove.isPending} />
+				<section aria-labelledby="pdf-marks-heading" className="space-y-3 rounded-[1.75rem] border bg-card p-5">
+					<h2 id="pdf-marks-heading" className="font-heading text-xl font-bold">{tr('Marks in this document', 'Marcações neste documento')}</h2>
+					<PdfMarks title={file.name} items={marks.data ?? []} page={current} onGo={go} onChange={(annotationId, change) => update.mutate({ annotationId, ...change })} onDelete={(annotationId) => remove.mutate(annotationId)} pending={remove.isPending} />
 				</section>
 			)}
 		</div>

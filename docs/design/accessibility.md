@@ -1,5 +1,7 @@
 # Accessibility requirements
 
+> **Superseded in part (2026-11-11).** The palette, themes, navigation and gamification described here were replaced by the direction in [`DESIGN.md`](../../DESIGN.md) and [`PRODUCT.md`](../../PRODUCT.md): light and dark themes, brown and amber, Playfair Display and DM Sans, top navigation, no forest. Where this file names a palette, a theme or a layout, those two files win. It is kept as history and for the research and the accessibility and security rules, which still apply.
+
 LearnVault targets **WCAG 2.2 Level AA**. This checklist applies to the React app (epic #347). Every
 phase PR that changes UI ticks the relevant items. The cutover (#340) requires all of them.
 

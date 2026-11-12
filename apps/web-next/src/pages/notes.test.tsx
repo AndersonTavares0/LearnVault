@@ -25,7 +25,7 @@ describe('notes', () => {
 	it('regroups notes by date, newest first, naming each lesson', async () => {
 		const at = (id: string, updatedAt: number): StudyNote => ({ ...note(id, `note ${id}`), updatedAt });
 		vi.mocked(transport.listNotes).mockResolvedValue([at('old', new Date(2026, 9, 1, 10).getTime() / 1000), at('new', new Date(2026, 10, 5, 10).getTime() / 1000)]);
-		renderApp('/notes', { catalog });
+		renderApp('/notes?course=rust', { catalog });
 		fireEvent.click(await screen.findByRole('button', { name: 'By date' }));
 		const days = await screen.findAllByRole('region');
 		expect(days).toHaveLength(2);
@@ -38,7 +38,7 @@ describe('notes', () => {
 		const create = vi.fn(() => 'blob:notes');
 		vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: create, revokeObjectURL: vi.fn() }));
 		const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
-		renderApp('/notes', { catalog });
+		renderApp('/notes?course=rust', { catalog });
 		fireEvent.click(await screen.findByRole('button', { name: 'Export as Markdown' }));
 		expect(create).toHaveBeenCalledOnce();
 		const blob = (create.mock.calls[0] as unknown as [Blob])[0];
@@ -48,8 +48,8 @@ describe('notes', () => {
 	});
 
 	it('groups notes by lesson, links to the moment and searches without accents', async () => {
-		renderApp('/notes', { catalog });
-		const lesson = await screen.findByRole('region', { name: 'Rust: Ownership' });
+		renderApp('/notes?course=rust', { catalog });
+		const lesson = await screen.findByRole('region', { name: 'Ownership' });
 		expect(within(lesson).getAllByRole('link', { name: 'Open Ownership at 1:15' })[0].getAttribute('href')).toBe('/course/rust/r%2Fown?t=75');
 		expect(within(lesson).getByRole('link', { name: 'Open lesson' }).getAttribute('href')).toBe('/course/rust/r%2Fown');
 		fireEvent.change(screen.getByRole('searchbox', { name: 'Search notes' }), { target: { value: 'acao' } });
@@ -57,20 +57,29 @@ describe('notes', () => {
 		expect(screen.queryByText('Borrow checker rules')).toBeNull();
 	});
 
-	it('orders a lesson by its timeline, filters by course and brings an old note back', async () => {
+	it('orders a lesson by its timeline and leaves other courses out', async () => {
 		const at = (id: string, positionSeconds: number, updatedAt: number, mediaId = 'own'): StudyNote => ({ ...note(id, `note ${id}`, mediaId), positionSeconds, updatedAt });
 		vi.mocked(transport.listNotes).mockResolvedValue([at('late', 300, 50), at('early', 10, 40), at('mid', 100, 30), at('oldest', 200, 5), at('lost', 1, 60, 'gone')]);
-		renderApp('/notes', { catalog });
-		const lesson = await screen.findByRole('region', { name: 'Rust: Ownership' });
+		renderApp('/notes?course=rust', { catalog });
+		const lesson = await screen.findByRole('region', { name: 'Ownership' });
 		expect(within(lesson).getAllByRole('listitem').map((item) => item.textContent?.match(/note \w+/)?.[0])).toEqual(['note early', 'note mid', 'note oldest', 'note late']);
-		expect(within(screen.getByRole('complementary', { name: 'A note to revisit' })).getByText('note oldest')).toBeTruthy();
-		fireEvent.click(within(screen.getByRole('group', { name: 'Course' })).getByRole('button', { name: 'Rust' }));
 		expect(screen.queryByText('note lost')).toBeNull();
+	});
+
+	it('starts from the courses, with the note count of each, and opens one', async () => {
+		renderApp('/notes', { catalog });
+		expect(await screen.findByRole('heading', { level: 1, name: /Choose a course to open its Notes/ })).toBeTruthy();
+		const link = await screen.findByRole('link', { name: /^Rust/ });
+		expect(link.getAttribute('href')).toBe('/notes?course=rust');
+		expect(screen.getAllByText('2 notes').length).toBeGreaterThan(0);
+		expect(screen.getByText(/No pinned courses yet/)).toBeTruthy();
+		fireEvent.change(screen.getByRole('searchbox', { name: 'Filter courses' }), { target: { value: 'zzz' } });
+		expect(screen.getByText('No courses match your search.')).toBeTruthy();
 	});
 
 	it('edits a note in place', async () => {
 		const update = vi.spyOn(transport, 'updateNote').mockImplementation(async (id, content) => ({ ...note(id, content) }));
-		renderApp('/notes', { catalog });
+		renderApp('/notes?course=rust', { catalog });
 		fireEvent.click((await screen.findAllByRole('button', { name: 'Edit note' }))[0]);
 		fireEvent.change(screen.getByLabelText('Note text'), { target: { value: 'Updated' } });
 		fireEvent.click(screen.getByRole('button', { name: 'Save' }));

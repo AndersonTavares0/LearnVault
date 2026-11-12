@@ -1,25 +1,24 @@
-import { Download } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { Download, Settings } from 'lucide-react';
+import { createContext, useContext, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { useLocale } from '@/hooks/use-locale';
+import { cn } from '@/lib/utils';
 import { LOCALE_LABELS, LOCALES, setLocale, tr } from '@/lib/i18n';
 import { studySyncSupported } from '@/lib/player';
 import { MAX_WEEKLY_GOAL, MIN_WEEKLY_GOAL } from '@/lib/statistics';
-import { PALETTES, readPalette, readStyle, readThemeMode, STYLES, THEME_MODES, type Palette, type Style, type ThemeMode } from '@/lib/theme';
 import { transportKind } from '@/lib/transport';
 import { useCatalog, useRewards, useSession, useSetWeeklyGoal } from '@/app/data';
-import { safeStorage, savePalette, saveStyle, saveThemeMode } from '@/app/preferences';
 import { PageHeader } from '@/app/shell';
+import { AppearanceSettings } from './appearance';
 import { AvatarSettings, CredentialsForm } from './account';
 import { FocusSettings } from './focus';
 import { UpdateSettings } from './updates';
 import { UserSettings } from './users';
 
-const paletteLabels: Record<Palette, string> = { emerald: 'Stone + Emerald', teal: 'Zinc + Teal', indigo: 'Zinc + Indigo' };
-const themeLabels = (): Record<ThemeMode, string> => ({ system: tr('System', 'Sistema'), light: tr('Light', 'Claro'), dark: tr('Dark', 'Escuro') });
 
-const styleLabels = (): Record<Style, string> => ({ paper: tr('Paper and ink', 'Papel e tinta'), quiet: tr('Quiet tool', 'Ferramenta calma'), vault: 'Vault' });
+
+const ActiveSection = createContext('appearance');
 
 export function SettingsPage() {
 	const locale = useLocale();
@@ -27,16 +26,13 @@ export function SettingsPage() {
 	const catalog = useCatalog();
 	const location = useLocation();
 	const user = session.data?.user;
-	const [theme, setTheme] = useState(() => readThemeMode(safeStorage()));
-	const [palette, setPalette] = useState(() => readPalette(safeStorage()));
-	const [style, setStyle] = useState(() => readStyle(safeStorage()));
 	const server = transportKind === 'http';
 	const admin = Boolean(user?.isAdmin);
 
-	// `#/settings#focus` (from the Pomodoro dialog) jumps to that section.
-	useEffect(() => {
-		if (location.hash) document.getElementById(location.hash.slice(1))?.scrollIntoView();
-	}, [location.hash]);
+	// One section at a time keeps the page short. `#/settings#focus` (from the Pomodoro dialog) opens that section.
+	const [picked, setPicked] = useState({ hash: location.hash, id: '' });
+	const active = picked.id && picked.hash === location.hash ? picked.id : location.hash.slice(1) || 'appearance';
+	const setActive = (id: string) => setPicked({ hash: location.hash, id });
 
 	const sections = [
 		{ id: 'appearance', label: tr('Appearance', 'Aparência') },
@@ -48,13 +44,14 @@ export function SettingsPage() {
 	];
 
 	return (
+		<ActiveSection.Provider value={active}>
 		<div className="lg:grid lg:grid-cols-[12rem_1fr] lg:gap-10">
 			{/* Buttons, not `#id` links: the hash belongs to the router. */}
-			<nav aria-label={tr('Settings sections', 'Seções dos ajustes')} className="sticky top-20 hidden self-start lg:block">
-				<ul className="space-y-1">
+			<nav aria-label={tr('Settings sections', 'Seções dos ajustes')} className="mb-6 lg:sticky lg:top-24 lg:mb-0 lg:self-start">
+				<ul className="flex gap-1 overflow-x-auto lg:block lg:space-y-1">
 					{sections.map((section) => (
 						<li key={section.id}>
-							<button type="button" onClick={() => document.getElementById(section.id)?.scrollIntoView({ behavior: 'smooth' })} className="min-h-11 w-full rounded-md px-3 text-left text-sm text-muted-foreground hover:bg-muted hover:text-foreground">
+							<button type="button" aria-current={active === section.id ? 'page' : undefined} onClick={() => setActive(section.id)} className={cn('min-h-11 w-full rounded-md px-3 text-left text-sm font-medium whitespace-nowrap hover:bg-muted', active === section.id ? 'bg-brand-tint text-foreground' : 'text-muted-foreground hover:text-foreground')}>
 								{section.label}
 							</button>
 						</li>
@@ -62,12 +59,9 @@ export function SettingsPage() {
 				</ul>
 			</nav>
 			<div className="min-w-0 space-y-10">
-			<PageHeader title={tr('Settings', 'Ajustes')} />
+			<PageHeader icon={Settings} title={tr('Settings', 'Ajustes')} />
 			<Section id="appearance" title={tr('Appearance', 'Aparência')}>
-				<Choice legend={tr('Theme', 'Tema')} options={THEME_MODES} value={theme} label={(mode) => themeLabels()[mode]} onChange={(mode) => { saveThemeMode(mode); setTheme(mode); }} />
-				<Choice legend={tr('Color palette', 'Paleta de cores')} options={PALETTES} value={palette} label={(value) => paletteLabels[value]} onChange={(value) => { savePalette(value); setPalette(value); }} />
-				<Choice legend={tr('Style', 'Estilo')} options={STYLES} value={style} label={(value) => styleLabels()[value]} onChange={(value) => { saveStyle(value); setStyle(value); // Vault is the night direction: it comes with the dark theme, which stays changeable above.
-					if (value === 'vault') { saveThemeMode('dark'); setTheme('dark'); } }} />
+				<AppearanceSettings />
 				<Choice legend={tr('Language', 'Idioma')} options={LOCALES} value={locale} label={(value) => LOCALE_LABELS[value]} onChange={(value) => setLocale(value)} />
 			</Section>
 			{server && user && (
@@ -103,6 +97,7 @@ export function SettingsPage() {
 			)}
 			</div>
 		</div>
+		</ActiveSection.Provider>
 	);
 }
 
@@ -117,8 +112,9 @@ function WeeklyGoal() {
 }
 
 function Section({ id, title, description, children }: { id: string; title: string; description?: string; children?: ReactNode }) {
+	if (useContext(ActiveSection) !== id) return null;
 	return (
-		<section id={id} aria-labelledby={`${id}-heading`} className="scroll-mt-20 space-y-4 border-t pt-6">
+		<section id={id} aria-labelledby={`${id}-heading`} className="space-y-4">
 			<div className="space-y-1">
 				<h2 id={`${id}-heading`} className="text-lg font-semibold">{title}</h2>
 				{description && <p className="text-sm text-muted-foreground">{description}</p>}

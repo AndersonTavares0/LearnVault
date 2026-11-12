@@ -1,5 +1,7 @@
 # Pesquisa de Gamificação: Modelo Forest App para o LearnVault
 
+> **Superseded in part (2026-11-11).** The palette, themes, navigation and gamification described here were replaced by the direction in [`DESIGN.md`](../../DESIGN.md) and [`PRODUCT.md`](../../PRODUCT.md): light and dark themes, brown and amber, Playfair Display and DM Sans, top navigation, no forest. Where this file names a palette, a theme or a layout, those two files win. It is kept as history and for the research and the accessibility and security rules, which still apply.
+
 Este documento consolida a pesquisa comportamental, de interface e de arquitetura de software sobre o modelo de gamificação do aplicativo **Forest: Stay Focused** (Seekrtech Co., Ltd.), estruturando a sua transposição em conformidade com a política *clean-room* para a **Floresta de Estudos** do LearnVault.
 
 ---

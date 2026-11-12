@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { clampPage, findLessonPdf, formatFileSize, isPdf, lessonPdfId, selectionBoxes, stepZoom } from './pdf';
-import type { FileEntry, Lesson } from './transport';
+import { clampPage, findLessonPdf, formatFileSize, isPdf, lessonPdfId, marksToMarkdown, pagesMatching, selectionBoxes, stepZoom } from './pdf';
+import type { FileEntry, Lesson, PdfAnnotation } from './transport';
 
 const file = (name: string, extra: Partial<FileEntry> = {}): FileEntry => ({ name, path: `c/${name}`, size: 1, mediaId: name, kind: 'material', availability: 'available', ...extra });
 const lesson = (media: FileEntry[], materials: FileEntry[]): Lesson => ({ title: 'L', path: 'c/L', media, subtitles: [], materials, moduleTitle: null } as unknown as Lesson);
@@ -86,5 +86,18 @@ describe('selection boxes', () => {
 
 	it('returns nothing for a page with no size', () => {
 		expect(selectionBoxes([box(200, 130, 100, 40)], { ...page, width: 0 } as DOMRect)).toEqual([]);
+	});
+});
+
+describe('pagesMatching and marksToMarkdown', () => {
+	it('finds pages by text, ignoring case and blank queries', () => {
+		expect(pagesMatching(['The Owl', 'nothing', 'an OWL again'], ' owl ')).toEqual([1, 3]);
+		expect(pagesMatching(['a', 'b'], '  ')).toEqual([]);
+	});
+
+	it('writes the marks in page order with their notes', () => {
+		const item = (annotationId: string, page: number, kind: 'highlight' | 'note', quote: string, content: string): PdfAnnotation => ({ annotationId, mediaId: 'm', page, kind, color: 'yellow', rects: [], quote, content, createdAt: page, updatedAt: page });
+		const text = marksToMarkdown('Guide.pdf', [item('b', 4, 'note', 'late', 'check this\nand that'), item('a', 2, 'highlight', 'early  text', '')]);
+		expect(text).toBe('# Marks in Guide.pdf\n\n## Page 2\n\n- **Highlight**: “early text”\n\n## Page 4\n\n- **Note**: “late”\n  > check this\n  > and that\n');
 	});
 });

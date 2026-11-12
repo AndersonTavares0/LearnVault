@@ -106,7 +106,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
-          cache: pnpm
+          # A release must not restore a cache that an earlier run could have written (setup-node turns one on by itself).
+          package-manager-cache: false
       - run: pnpm install --frozen-lockfile
       - run: pnpm run check
       - run: pnpm run build
@@ -156,7 +157,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
-          cache: pnpm
+          # A release must not restore a cache that an earlier run could have written (setup-node turns one on by itself).
+          package-manager-cache: false
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
       - name: Install Rust toolchain
@@ -207,7 +209,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
-          cache: pnpm
+          # A release must not restore a cache that an earlier run could have written (setup-node turns one on by itself).
+          package-manager-cache: false
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build:desktop
       - name: Install Rust toolchain
@@ -296,6 +299,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # Keyless signing: the job proves who it is to Sigstore with a short-lived OIDC token.
+      id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -346,6 +351,7 @@ jobs:
             exit 1
           fi
       - name: Push OCI image with provenance and SBOM
+        id: push
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
@@ -360,6 +366,32 @@ jobs:
           sbom: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Sign the image (keyless)
+        shell: bash
+        env:
+          REPOSITORY: ${{ github.repository }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          set -euo pipefail
+          test -n "$DIGEST"
+          # Registries want a lowercase repository name (the metadata action lowercases the tags too).
+          IMAGE="ghcr.io/${REPOSITORY,,}"
+          # The signature covers the digest, so every tag that points at it is signed.
+          cosign sign --yes "${IMAGE}@${DIGEST}"
+      - name: Check the signature before publishing the release
+        shell: bash
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          IMAGE="ghcr.io/${REPOSITORY,,}"
+          # The certificate identity keeps the repository's original case; only the image name is lowercased.
+          cosign verify "${IMAGE}@${DIGEST}" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity-regexp "^https://github\\.com/${REPOSITORY//./\\.}/\\.github/workflows/release\\.yml@refs/(tags/v[0-9]+\\.[0-9]+\\.[0-9]+|heads/main)$" >/dev/null
 
   publish:
     name: Publish release assets

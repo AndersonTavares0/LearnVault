@@ -1,18 +1,13 @@
 import { useState, type FormEvent } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router';
-import { BrandMark } from '@/components/brand';
+import { CircleAlert } from 'lucide-react';
 import { PasswordField } from '@/components/password-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useLocale } from '@/hooks/use-locale';
 import { LOCALE_LABELS, setLocale, tr } from '@/lib/i18n';
-import { cn } from '@/lib/utils';
 import { useSession, useSignIn } from '@/app/data';
-
-// Fields are ruled lines on a library card: serif values, mono labels. The ring stays for focus.
-const field = 'rounded-none border-0 border-b-[1.5px] border-foreground bg-transparent px-0 font-serif text-2xl md:text-2xl dark:bg-transparent';
-const fieldLabel = 'font-mono text-xs tracking-widest text-muted-foreground uppercase';
 
 /** Returns a same-app path only, never an external URL (open-redirect guard). */
 function safeDestination(state: unknown): string {
@@ -44,35 +39,33 @@ export function LoginPage() {
 
 	const error = signIn.error?.message || session.data?.error;
 	return (
-		<main id="main" className="grid min-h-dvh place-items-center px-4 py-10">
-			<div className="w-full max-w-md space-y-6">
-				{/* Light: a dashed library card with a folded corner. Dark: the card chrome drops away. */}
-				<form onSubmit={submit} className="relative space-y-6 rounded-lg border-[1.5px] border-dashed border-muted-foreground/50 bg-card p-8 dark:border-transparent dark:bg-transparent" noValidate={false}>
-					<span aria-hidden="true" className="absolute -top-px -left-px size-0 rounded-tl-lg border-t-[26px] border-r-[26px] border-t-primary border-r-transparent dark:hidden" />
-					{/* One heading in both themes. Light: a row with a study-card label. Dark: the mark large and centered, as the night design. */}
-					<div className="flex items-center justify-between gap-3 dark:flex-col dark:justify-center dark:text-center">
-						<div className="flex items-center gap-3 dark:flex-col">
-							<BrandMark className="size-9 text-primary dark:size-16" />
-							<h1 className="font-serif text-xl font-bold tracking-tight sm:text-2xl dark:text-2xl">{tr('Sign in to LearnVault', 'Entrar no LearnVault')}</h1>
-						</div>
-						<span aria-hidden="true" className="hidden font-mono text-[0.7rem] tracking-widest whitespace-nowrap text-muted-foreground uppercase md:inline dark:hidden">{tr('Study card', 'Ficha de estudo')}</span>
+		<main id="main" className="grid min-h-dvh place-items-center bg-background px-4 py-10">
+			<div className="flex w-full max-w-md flex-col items-center gap-6">
+				<div className="flex items-center gap-3 text-2xl font-bold"><span className="font-heading font-semibold">LearnVault</span></div>
+				<form onSubmit={submit} className="w-full space-y-5 rounded-[2rem] border bg-card p-8">
+					<div className="space-y-1">
+						<h1 className="text-2xl font-bold">{tr('Sign in', 'Entrar')}</h1>
+						<p className="text-muted-foreground">{tr('Welcome back. Your courses are where you left them.', 'Bem-vindo de volta. Seus cursos estão onde você deixou.')}</p>
 					</div>
-					<p className="hidden text-center text-muted-foreground dark:block">{tr('Sign in to pick up where you stopped.', 'Entre para retomar de onde parou.')}</p>
+					{error && (
+						<p id="login-error" role="alert" className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+							<CircleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0" />
+							<span>{error}</span>
+						</p>
+					)}
 					<div className="space-y-1.5">
-						<Label htmlFor="username" className={fieldLabel}>{tr('Username', 'Usuário')}</Label>
-						<Input id="username" name="username" autoComplete="username" autoCapitalize="none" spellCheck={false} required value={username} onChange={(event) => setUsername(event.target.value)} aria-describedby={error ? 'login-error' : undefined} className={cn(field)} />
+						<Label htmlFor="username">{tr('Username', 'Usuário')}</Label>
+						<Input id="username" name="username" autoComplete="username" autoCapitalize="none" spellCheck={false} required value={username} onChange={(event) => setUsername(event.target.value)} aria-describedby={error ? 'login-error' : undefined} />
 					</div>
-					<PasswordField id="password" label={tr('Password', 'Senha')} labelClassName={fieldLabel} className={field} autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} aria-describedby={error ? 'login-error' : undefined} />
-					<p id="login-error" role="alert" className="min-h-5 text-sm text-destructive">{error}</p>
+					<PasswordField id="password" label={tr('Password', 'Senha')} autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} aria-describedby={error ? 'login-error' : undefined} />
 					<Button type="submit" size="lg" className="w-full" disabled={signIn.isPending}>
 						{signIn.isPending ? tr('Signing in…', 'Entrando…') : tr('Sign in', 'Entrar')}
 					</Button>
 				</form>
-				<div className="flex justify-center">
-					<Button variant="ghost" onClick={() => setLocale(otherLocale)} aria-label={tr(`Switch language to ${LOCALE_LABELS[otherLocale]}`, `Mudar idioma para ${LOCALE_LABELS[otherLocale]}`)}>
-						{LOCALE_LABELS[otherLocale]}
-					</Button>
-				</div>
+				<p className="text-center text-sm text-muted-foreground">{tr('Accounts are created by the administrator. Nothing leaves this server.', 'As contas são criadas pelo administrador. Nada sai deste servidor.')}</p>
+				<Button variant="ghost" onClick={() => setLocale(otherLocale)} aria-label={tr(`Switch language to ${LOCALE_LABELS[otherLocale]}`, `Mudar idioma para ${LOCALE_LABELS[otherLocale]}`)}>
+					{LOCALE_LABELS[otherLocale]}
+				</Button>
 			</div>
 		</main>
 	);
