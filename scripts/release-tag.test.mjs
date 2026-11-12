@@ -93,10 +93,11 @@ test('updater notes use the selected release body with a fallback and repair lea
 test('manual repair does not move latest or publish before the post-build tag check', () => {
     assert.match(workflow, /flavor: latest=false/);
     assert.match(workflow, /type=raw,value=latest,enable=\$\{\{ github\.event_name == 'release' \}\}/);
-    const build = workflow.indexOf('- name: Build OCI image');
     const containerCheck = workflow.indexOf('- name: Confirm container release tag did not move');
-    const containerPush = workflow.indexOf('- name: Push OCI image');
-    assert.ok(build < containerCheck && containerCheck < containerPush, 'container tag is checked after build and before push');
+    const containerPush = workflow.indexOf('- name: Build and push the image by digest');
+    const containerScan = workflow.indexOf('- name: Scan the pushed image for HIGH and CRITICAL vulnerabilities');
+    const containerTags = workflow.indexOf('- name: Apply the release tags to the scanned image');
+    assert.ok(containerCheck < containerPush && containerPush < containerScan && containerScan < containerTags, 'container tag is checked before push, and tags are applied only after the scan');
 
     const checksum = workflow.indexOf('- name: Create SHA256SUMS');
     const assetCheck = workflow.indexOf('- name: Confirm release tag did not move');

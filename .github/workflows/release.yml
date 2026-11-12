@@ -326,30 +326,6 @@ jobs:
             type=semver,pattern={{major}}.{{minor}},value=${{ needs.validate-tag.outputs.tag }}
             type=raw,value=stable,enable=${{ github.event_name == 'release' }}
             type=raw,value=latest,enable=${{ github.event_name == 'release' }}
-      - name: Build OCI image
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          file: deploy/container/Containerfile
-          platforms: linux/amd64
-          build-args: |
-            LEARNVAULT_BUILD_VERSION=${{ needs.validate-tag.outputs.tag }}
-          load: true
-          tags: |
-            ${{ steps.meta.outputs.tags }}
-            learnvault-release-scan:local
-          labels: ${{ steps.meta.outputs.labels }}
-      # Same scan as the CI validation image, on the exact image that is about to be pushed and signed.
-      # Runs before the push, so a vulnerable release never reaches GHCR.
-      - name: Scan the release image for HIGH and CRITICAL vulnerabilities
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          scan-type: image
-          image-ref: learnvault-release-scan:local
-          version: v0.70.0
-          format: table
-          severity: HIGH,CRITICAL
-          exit-code: '1'
       - name: Confirm container release tag did not move
         shell: bash
         env:
@@ -363,7 +339,15 @@ jobs:
             echo "::error::Release tag moved during the build (expected $EXPECTED_COMMIT_SHA, found $actual_commit_sha)" >&2
             exit 1
           fi
-      - name: Push OCI image with provenance and SBOM
+      - name: Resolve the lowercase image name
+        id: image
+        shell: bash
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: echo "name=ghcr.io/${REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+      # Push by digest only: no tag points at the image yet, so nothing can pull it until it passes the scan.
+      # Provenance and SBOM are attached here; the updater verifies them (#342).
+      - name: Build and push the image by digest with provenance and SBOM
         id: push
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
@@ -372,13 +356,36 @@ jobs:
           platforms: linux/amd64
           build-args: |
             LEARNVAULT_BUILD_VERSION=${{ needs.validate-tag.outputs.tag }}
-          push: true
-          # Attestations can only be attached when Buildx pushes, so the push repeats the build
-          # (from cache) after the release tag has been confirmed; the updater verifies them (#342).
           provenance: mode=max
           sbom: true
-          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=${{ steps.image.outputs.name }},push-by-digest=true,name-canonical=true,push=true
+      - name: Scan the pushed image for HIGH and CRITICAL vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ steps.image.outputs.name }}@${{ steps.push.outputs.digest }}
+          version: v0.70.0
+          format: table
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+      # Only a scanned digest gets the release tags, so :stable, :latest and :version never point at an unscanned image.
+      - name: Apply the release tags to the scanned image
+        shell: bash
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          test -n "$DIGEST"
+          mapfile -t tags <<< "$TAGS"
+          args=()
+          for tag in "${tags[@]}"; do
+            if [[ -n "$tag" ]]; then args+=(--tag "$tag"); fi
+          done
+          test "${#args[@]}" -gt 0
+          docker buildx imagetools create "${args[@]}" "${IMAGE}@${DIGEST}"
       - name: Install cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
       - name: Sign the image (keyless)
