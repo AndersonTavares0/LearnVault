@@ -12,7 +12,7 @@ export const Hero = ({ children, className }: { children: ReactNode; className?:
 );
 
 export const Eyebrow = ({ children, className }: { children: ReactNode; className?: string }) => (
-	<p className={cn('text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase', className)}>{children}</p>
+	<p className={cn('text-sm font-medium text-muted-foreground', className)}>{children}</p>
 );
 
 /** A small tinted number card: the label, the value, and an optional line under it. */
