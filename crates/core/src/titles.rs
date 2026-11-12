@@ -30,6 +30,47 @@ pub fn presentable(title: &str) -> String {
     }
 }
 
+/// Remove do início de todos os títulos as palavras que eles têm em comum, como o nome do
+/// curso repetido em cada aula ("Rust Course – Ownership", "Rust Course – Borrowing").
+///
+/// Só age com pelo menos três títulos, mantém ao menos uma palavra em cada um e não muda
+/// nada se algum título ficaria vazio ou só com separadores.
+pub fn strip_shared_prefix(titles: &mut [String]) {
+    if titles.len() < 3 {
+        return;
+    }
+    let words: Vec<Vec<&str>> = titles
+        .iter()
+        .map(|title| title.split_whitespace().collect())
+        .collect();
+    let first = &words[0];
+    let mut shared = first.len();
+    for other in &words[1..] {
+        shared = shared.min(other.iter().zip(first).take_while(|(a, b)| a == b).count());
+    }
+    let shortest = words.iter().map(Vec::len).min().unwrap_or(0);
+    shared = shared.min(shortest.saturating_sub(1));
+    if shared == 0 {
+        return;
+    }
+    let rests: Vec<String> = words
+        .iter()
+        .map(|words| {
+            words[shared..]
+                .join(" ")
+                .trim_start_matches(|c: char| "-–—:|·•/".contains(c))
+                .trim()
+                .to_owned()
+        })
+        .collect();
+    if rests.iter().any(String::is_empty) {
+        return;
+    }
+    for (title, rest) in titles.iter_mut().zip(rests) {
+        *title = rest;
+    }
+}
+
 /// Verdadeiro para uma palavra que é só uma tag de release, mesmo entre colchetes.
 fn is_release_tag(token: &str) -> bool {
     let word = token
@@ -67,6 +108,54 @@ mod tests {
         assert_eq!(presentable("Node.js 4K editing"), "Node.js 4K editing");
         assert_eq!(presentable("AAC audio basics"), "AAC audio basics");
         assert_eq!(presentable("1080 steps"), "1080 steps");
+    }
+
+    #[test]
+    fn removes_a_prefix_shared_by_every_title() {
+        let mut titles: Vec<String> = [
+            "Rust Course – Ownership",
+            "Rust Course – Borrowing",
+            "Rust Course – Lifetimes",
+        ]
+        .iter()
+        .map(|title| (*title).to_owned())
+        .collect();
+        super::strip_shared_prefix(&mut titles);
+        assert_eq!(titles, vec!["Ownership", "Borrowing", "Lifetimes"]);
+    }
+
+    #[test]
+    fn leaves_titles_alone_with_fewer_than_three_or_no_shared_words() {
+        let mut two: Vec<String> = vec!["Rust Ownership".into(), "Rust Borrowing".into()];
+        super::strip_shared_prefix(&mut two);
+        assert_eq!(two, vec!["Rust Ownership", "Rust Borrowing"]);
+
+        let mut none: Vec<String> =
+            vec!["Ownership".into(), "Borrowing".into(), "Lifetimes".into()];
+        super::strip_shared_prefix(&mut none);
+        assert_eq!(none, vec!["Ownership", "Borrowing", "Lifetimes"]);
+    }
+
+    #[test]
+    fn never_empties_a_title() {
+        let mut separators: Vec<String> = vec![
+            "Rust –".into(),
+            "Rust – Borrowing".into(),
+            "Rust – Lifetimes".into(),
+        ];
+        super::strip_shared_prefix(&mut separators);
+        assert_eq!(
+            separators,
+            vec!["Rust –", "Rust – Borrowing", "Rust – Lifetimes"]
+        );
+
+        let mut kept: Vec<String> = vec![
+            "Rust Course".into(),
+            "Rust Course – Borrowing".into(),
+            "Rust Course –".into(),
+        ];
+        super::strip_shared_prefix(&mut kept);
+        assert_eq!(kept, vec!["Course", "Course – Borrowing", "Course –"]);
     }
 
     #[test]

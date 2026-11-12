@@ -415,6 +415,14 @@ pub fn course_file_lessons(node: CatalogNode) -> CatalogNode {
         children,
     } = node;
     let mut children: Vec<_> = children.into_iter().map(course_file_lessons).collect();
+    // Lessons of one module often repeat the course name; module and course titles keep theirs.
+    if children.iter().all(|child| child.role == NodeRole::Lesson) {
+        let mut titles: Vec<String> = children.iter().map(|child| child.title.clone()).collect();
+        crate::titles::strip_shared_prefix(&mut titles);
+        for (child, title) in children.iter_mut().zip(titles) {
+            child.title = title;
+        }
+    }
     let (has_media, loose) = promote_loose_media_to_lessons(loose_files, &mut children);
 
     CatalogNode {
