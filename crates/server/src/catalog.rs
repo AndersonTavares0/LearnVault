@@ -64,9 +64,42 @@ struct CatalogNodeResponse {
     /// Nome da pasta de origem imediata do curso no disco (diretório pai), sem expor caminhos absolutos.
     #[serde(skip_serializing_if = "Option::is_none")]
     source_folder: Option<String>,
+    /// Avaliação da organização do curso. Presente só nos nós de curso.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    structure: Option<StructureResponse>,
     files: Vec<CatalogFileResponse>,
     loose_files: Vec<CatalogFileResponse>,
     children: Vec<CatalogNodeResponse>,
+}
+
+/// Nível de confiança da organização do curso e os motivos que o reduziram.
+#[derive(Serialize, Clone)]
+struct StructureResponse {
+    confidence: &'static str,
+    concerns: Vec<&'static str>,
+}
+
+fn structure_response(
+    assessment: learnvault_core::structure::StructureAssessment,
+) -> StructureResponse {
+    use learnvault_core::structure::{Concern, Confidence};
+    StructureResponse {
+        confidence: match assessment.confidence {
+            Confidence::High => "high",
+            Confidence::Medium => "medium",
+            Confidence::Low => "low",
+        },
+        concerns: assessment
+            .concerns
+            .into_iter()
+            .map(|concern| match concern {
+                Concern::NoLessons => "no_lessons",
+                Concern::LooseMedia => "loose_media",
+                Concern::LessonsWithoutNumbering => "lessons_without_numbering",
+                Concern::LooseMaterials => "loose_materials",
+            })
+            .collect(),
+    }
 }
 
 #[derive(Serialize, Clone)]
@@ -181,6 +214,10 @@ fn build_course_catalog(
         let (mut children, loose_files) = learnvault_core::shape_course_catalog(catalog);
         learnvault_core::apply_order(&mut children, orders.get(&course.id).unwrap_or(&empty));
         let source_folder = learnvault_core::course_source_folder(course.root.as_path());
+        let structure = structure_response(learnvault_core::structure::assess_parts(
+            &children,
+            &loose_files,
+        ));
         nodes.push(CatalogNodeResponse {
             title: course.title.clone(),
             path: String::new(),
@@ -188,6 +225,7 @@ fn build_course_catalog(
             course_id: Some(course.id.clone()),
             cover_version: crate::covers::cover_version(covers_dir, &course.id),
             source_folder,
+            structure: Some(structure),
             files: Vec::new(),
             loose_files: loose_files.into_iter().map(Into::into).collect(),
             children: children.into_iter().map(Into::into).collect(),
@@ -400,6 +438,7 @@ impl From<CatalogNode> for CatalogNodeResponse {
             course_id: None,
             cover_version: None,
             source_folder: None,
+            structure: None,
             files: node.files.into_iter().map(Into::into).collect(),
             loose_files: node.loose_files.into_iter().map(Into::into).collect(),
             children: node.children.into_iter().map(Into::into).collect(),
@@ -501,6 +540,7 @@ mod tests {
             course_id: Some("c1".to_owned()),
             cover_version: None,
             source_folder: Some("Cursos 2026".to_owned()),
+            structure: None,
             files: Vec::new(),
             loose_files: Vec::new(),
             children: Vec::new(),
@@ -516,6 +556,7 @@ mod tests {
             course_id: Some("c2".to_owned()),
             cover_version: None,
             source_folder: None,
+            structure: None,
             files: Vec::new(),
             loose_files: Vec::new(),
             children: Vec::new(),
@@ -523,5 +564,17 @@ mod tests {
 
         let json_without = serde_json::to_value(without).unwrap();
         assert!(json_without.get("source_folder").is_none());
+    }
+
+    #[test]
+    fn course_structure_serializes_confidence_and_concerns() {
+        use learnvault_core::structure::{Concern, Confidence, StructureAssessment};
+        let response = structure_response(StructureAssessment {
+            confidence: Confidence::Medium,
+            concerns: vec![Concern::LessonsWithoutNumbering],
+        });
+        let json = serde_json::to_value(&response).unwrap();
+        assert_eq!(json["confidence"], "medium");
+        assert_eq!(json["concerns"][0], "lessons_without_numbering");
     }
 }
