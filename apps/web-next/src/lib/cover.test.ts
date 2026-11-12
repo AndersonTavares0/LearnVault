@@ -30,11 +30,9 @@ describe('generated course covers', () => {
 		expect(first).not.toEqual(second);
 	});
 
-	it('derives a stable spine code and a known pattern', () => {
+	it('derives a known pattern and never invents a course code', () => {
 		const first = courseCover('Física Quântica');
-		const second = courseCover('Física Quântica');
-		expect(first.code).toMatch(/^FQ \d{3}$/);
-		expect(second.code).toBe(first.code);
+		expect(first).not.toHaveProperty('code');
 		expect(['grid', 'arcs', 'lines', 'dots', 'blocks', 'wave']).toContain(first.pattern);
 		expect(courseCover('História da Arte').pattern).not.toBe('');
 	});

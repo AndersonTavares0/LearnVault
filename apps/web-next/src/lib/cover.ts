@@ -26,8 +26,6 @@ export type CourseCover = {
 	 * sem depender de aleatoriedade nem de ordem de renderização.
 	 */
 	angle: number;
-	/** Código curto exibido na lombada, como `PG 482`. */
-	code: string;
 	/** Padrão geométrico da capa, determinístico por título. */
 	pattern: CourseCoverPattern;
 };
@@ -79,14 +77,6 @@ export function selectCourseCoverSource(input: {
 
 const PATTERNS: CourseCoverPattern[] = ['grid', 'arcs', 'lines', 'dots', 'blocks', 'wave'];
 
-/**
- * Código curto e estável para a lombada. As iniciais vêm do monograma e o número do hash
- * separa cursos que compartilham as mesmas iniciais.
- */
-export function courseCode(title: string, hash = hashTitle(normalize(title).toLowerCase())): string {
-	return `${courseMonogram(title)} ${100 + (hash % 900)}`;
-}
-
 /** Capa determinística do curso. */
 export function courseCover(title: string): CourseCover {
 	const hash = hashTitle(normalize(title).toLowerCase());
@@ -99,7 +89,6 @@ export function courseCover(title: string): CourseCover {
 		to: `hsl(${(hue + shift) % 360} 34% 22%)`,
 		monogram: courseMonogram(title),
 		angle,
-		code: courseCode(title, hash),
 		pattern: PATTERNS[(hash >>> 16) % PATTERNS.length]
 	};
 }

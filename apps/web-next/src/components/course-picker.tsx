@@ -5,7 +5,6 @@ import { courseTone } from '@/components/cover-art';
 import { Eyebrow } from '@/components/panel';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { courseCode } from '@/lib/cover';
 import { tr } from '@/lib/i18n';
 import { buildLibrary, type CourseEntry } from '@/lib/library';
 import { normalizeForSearch } from '@/lib/search';
@@ -86,7 +85,6 @@ function PickerCard({ entry, title: given, footer, to }: { entry?: CourseEntry; 
 		<li className="group/pick relative overflow-hidden rounded-[1.5rem] border bg-card transition-shadow focus-within:ring-3 focus-within:ring-ring hover:shadow-md">
 			<div className="flex items-center gap-3 p-4 pb-2">
 				<span className="tone grid size-9 place-items-center rounded-xl font-heading text-sm font-bold" style={tone} aria-hidden="true">{title.trim()[0]?.toUpperCase()}</span>
-				<span className="tone-ink text-sm font-bold tabular-nums" style={tone}>{courseCode(title)}</span>
 				{entry && (
 					<Button variant="ghost" size="icon" className="relative z-10 ml-auto size-11" aria-pressed={entry.favorite} disabled={toggle.isPending} onClick={() => toggle.mutate({ courseId: entry.courseId, favorite: !entry.favorite })} aria-label={entry.favorite ? tr(`Unpin ${title}`, `Desafixar ${title}`) : tr(`Pin ${title}`, `Fixar ${title}`)}>
 						<Pin className={entry.favorite ? 'fill-current' : ''} />

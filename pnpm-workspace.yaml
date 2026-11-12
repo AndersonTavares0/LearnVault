@@ -9,8 +9,8 @@ allowBuilds:
 # GHSA-g3hv-75wg-m249: moderate minimatch ReDoS (>=7 <11.0.1), transitive via typescript-eslint and
 # eslint. Build and lint tooling only; not in the shipped SPA or desktop bundle. Overriding to
 # minimatch 11 breaks eslint-plugin-jsx-a11y. Remove when typescript-eslint ships a patched minimatch.
-auditConfig:
-  ignoreGhsas:
+audit:
+  ignore:
     - GHSA-gcqx-w48m-w2h4
     - GHSA-g3hv-75wg-m249
 minimumReleaseAgeExclude:
