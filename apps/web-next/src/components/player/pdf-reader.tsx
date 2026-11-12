@@ -197,6 +197,21 @@ export function PdfReader({ file, courseId, initialPage, onPage }: Props) {
 				<Input id="pdf-page" type="number" inputMode="numeric" min={1} max={pages || undefined} value={current} disabled={!pages} onChange={(event) => go(Number(event.target.value))} className="h-11 w-16 text-center tabular-nums" />
 				<span className="text-sm text-muted-foreground tabular-nums">{tr(`of ${pages || '…'}`, `de ${pages || '…'}`)}</span>
 				<Button variant="outline" size="sm" disabled={!pages || current >= pages} onClick={() => go(current + 1)}>{tr('Next page', 'Próxima página')}</Button>
+				{load.state === 'ready' && (
+				<form role="search" aria-label={tr('Search in the document', 'Buscar no documento')} onSubmit={(event) => void runSearch(event)} className="flex flex-wrap items-center gap-2">
+					<div className="relative min-w-48 flex-1 sm:max-w-sm">
+						<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+						<Input type="search" value={query} onChange={(event) => setQuery(event.target.value)} aria-label={tr('Search in the document', 'Buscar no documento')} placeholder={tr('Search in the document', 'Buscar no documento')} className="h-11 pl-9" />
+					</div>
+					<Button type="submit" variant="outline" size="sm" disabled={searching || !query.trim()}>{tr('Search', 'Buscar')}</Button>
+					{search && search.pages.length > 0 && (
+						<>
+							<Button type="button" variant="ghost" size="icon" aria-label={tr('Previous result', 'Resultado anterior')} onClick={() => stepMatch(-1)}><ChevronUp /></Button>
+							<Button type="button" variant="ghost" size="icon" aria-label={tr('Next result', 'Próximo resultado')} onClick={() => stepMatch(1)}><ChevronDown /></Button>
+						</>
+					)}
+				</form>
+				)}
 				<div className="ml-auto flex items-center gap-1">
 					<Button variant="ghost" size="icon" aria-label={tr('Zoom out', 'Diminuir zoom')} onClick={() => setZoom(stepZoom(zoom, -1))}><Minus /></Button>
 					<span className="min-w-12 text-center text-sm tabular-nums" aria-live="polite">{zoom === 'fit' ? tr('Fit', 'Ajustar') : `${Math.round(zoom * 100)}%`}</span>
@@ -207,19 +222,6 @@ export function PdfReader({ file, courseId, initialPage, onPage }: Props) {
 
 			{load.state === 'ready' && (
 				<div className="space-y-1">
-					<form role="search" aria-label={tr('Search in the document', 'Buscar no documento')} onSubmit={(event) => void runSearch(event)} className="flex flex-wrap items-center gap-2">
-						<div className="relative min-w-48 flex-1 sm:max-w-sm">
-							<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-							<Input type="search" value={query} onChange={(event) => setQuery(event.target.value)} aria-label={tr('Search in the document', 'Buscar no documento')} placeholder={tr('Search in the document', 'Buscar no documento')} className="h-11 pl-9" />
-						</div>
-						<Button type="submit" variant="outline" size="sm" disabled={searching || !query.trim()}>{tr('Search', 'Buscar')}</Button>
-						{search && search.pages.length > 0 && (
-							<>
-								<Button type="button" variant="ghost" size="icon" aria-label={tr('Previous result', 'Resultado anterior')} onClick={() => stepMatch(-1)}><ChevronUp /></Button>
-								<Button type="button" variant="ghost" size="icon" aria-label={tr('Next result', 'Próximo resultado')} onClick={() => stepMatch(1)}><ChevronDown /></Button>
-							</>
-						)}
-					</form>
 					<p role="status" aria-live="polite" className="min-h-5 text-sm text-muted-foreground">
 						{search && (search.pages.length > 0 ? tr(`Found on ${search.pages.length} ${search.pages.length === 1 ? 'page' : 'pages'}: now on page ${search.pages[search.at]}.`, `Encontrado em ${search.pages.length} ${search.pages.length === 1 ? 'página' : 'páginas'}: agora na página ${search.pages[search.at]}.`) : tr(`Nothing found for “${search.query}”.`, `Nada encontrado para “${search.query}”.`))}
 					</p>
