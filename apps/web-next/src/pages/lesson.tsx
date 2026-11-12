@@ -331,7 +331,7 @@ function PdfLesson({ file, courseId, ready, initialPage, onPage }: { file: FileE
 			<p role="note" className="rounded-2xl border border-brand-soft bg-panel p-4 text-sm">
 				{tr('This lesson is a PDF document. Read it here; the original file is never changed.', 'Esta aula é um documento PDF. Leia aqui; o arquivo original nunca é alterado.')}
 			</p>
-			{ready ? <PdfReader file={file} courseId={courseId} initialPage={initialPage} onPage={onPage} /> : <p role="status" className="text-muted-foreground">{tr('Loading…', 'Carregando…')}</p>}
+			{ready ? <PdfReader key={file.mediaId ?? file.path} file={file} courseId={courseId} initialPage={initialPage} onPage={onPage} /> : <p role="status" className="text-muted-foreground">{tr('Loading…', 'Carregando…')}</p>}
 		</div>
 	);
 }

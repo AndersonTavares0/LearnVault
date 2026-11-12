@@ -16,7 +16,7 @@ export function ColorSwatches({ value, onChange, label, size = 'md' }: { value: 
 		<div role="radiogroup" aria-label={label} className="flex items-center gap-1">
 			{MARK_COLORS.map((color) => (
 				<button key={color} type="button" role="radio" aria-checked={value === color} aria-label={colorName(color)} onClick={() => onChange(color)}
-					className={cn('grid place-items-center rounded-full focus-visible:ring-3 focus-visible:ring-ring/60 focus-visible:outline-none', size === 'md' ? 'size-9' : 'size-7')}>
+					className={cn('grid place-items-center rounded-full focus-visible:ring-3 focus-visible:ring-ring/60 focus-visible:outline-none', 'size-11')}>
 					<span className={cn('rounded-full border border-black/15', size === 'md' ? 'size-5' : 'size-4', value === color && 'ring-2 ring-foreground ring-offset-2 ring-offset-card')} style={{ backgroundColor: PDF_MARK_COLORS[color] }} />
 				</button>
 			))}
@@ -54,7 +54,7 @@ export function PdfMarks({ title, items, page, onGo, onChange, onDelete, pending
 			<div className="flex flex-wrap items-center gap-2">
 				<div role="group" aria-label={tr('Show marks', 'Mostrar marcações')} className="flex gap-1 rounded-full bg-muted p-1">
 					{([['all', tr(`All (${items.length})`, `Todas (${items.length})`)], ['page', tr(`This page (${items.filter((item) => item.page === page).length})`, `Esta página (${items.filter((item) => item.page === page).length})`)]] as const).map(([value, text]) => (
-						<button key={value} type="button" aria-pressed={scope === value} onClick={() => setScope(value)} className={cn('min-h-9 rounded-full px-4 text-sm font-medium focus-visible:ring-3 focus-visible:ring-ring/60 focus-visible:outline-none', scope === value && 'bg-card shadow-sm')}>{text}</button>
+						<button key={value} type="button" aria-pressed={scope === value} onClick={() => setScope(value)} className={cn('min-h-11 rounded-full px-4 text-sm font-medium focus-visible:ring-3 focus-visible:ring-ring/60 focus-visible:outline-none', scope === value && 'bg-card shadow-sm')}>{text}</button>
 					))}
 				</div>
 				<Button variant="outline" size="sm" className="ml-auto" disabled={items.length === 0} onClick={exportMarks}><Download />{tr('Export as Markdown', 'Exportar em Markdown')}</Button>

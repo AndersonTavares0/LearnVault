@@ -60,6 +60,8 @@ The design record is [`DESIGN.md`](DESIGN.md) and the product record is [`PRODUC
 
 ### Study Forest and Focus Timer
 
+> The forest and nursery are features of the Svelte app that ships today. The new React interface (see [Design](#design)) replaces them with a streak, a weekly goal and quiet badges.
+
 - **Offline-Safe Pomodoro:** Built-in focus timer with local queuing and conflict-free state synchronization.
 - **Study Analytics:** Track daily focus minutes, completion streaks, and weekly consistency metrics.
 - **Botanical Forest Nursery:** Successful study blocks cultivate trees in a personal 2.5D isometric forest garden.

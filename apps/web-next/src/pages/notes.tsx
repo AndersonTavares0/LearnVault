@@ -38,8 +38,10 @@ export function NotesPage() {
 		return map;
 	}, [notes.data, catalog.data]);
 	if (!studySyncSupported) return <PageHeader icon={NotebookPen} title={tr('Notes', 'Notas')} description={tr('Study tracking is off on this server.', 'O acompanhamento de estudo está desligado neste servidor.')} />;
-	if (courseId) return <Notebook courseId={courseId} />;
+	// Wait for both lists: without the catalog every note would look like it belongs to a lesson that is gone.
 	if (notes.isPending || catalog.isPending) return <p role="status" className="text-muted-foreground">{tr('Loading notes…', 'Carregando notas…')}</p>;
+	if (notes.isError) return <p role="alert" className="text-destructive">{notes.error.message}</p>;
+	if (courseId) return <Notebook courseId={courseId} />;
 	const total = notes.data?.length ?? 0;
 	const count = (id: string) => counts.get(id) ?? 0;
 	return (
@@ -94,7 +96,7 @@ function Notebook({ courseId }: { courseId: string }) {
 		const url = URL.createObjectURL(new Blob([notesToMarkdown(rows)], { type: 'text/markdown;charset=utf-8' }));
 		const link = document.createElement('a');
 		link.href = url;
-		link.download = `learnvault-notes-${courseTitle.replace(/[^\p{L}\p{N}]+/gu, '-').toLowerCase()}.md`;
+		link.download = `learnvault-notes-${courseTitle.replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').toLowerCase() || 'course'}.md`;
 		link.click();
 		URL.revokeObjectURL(url);
 	};

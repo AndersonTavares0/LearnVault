@@ -25,4 +25,17 @@ describe('markdown', () => {
 		expect(applyFormat('- a\n- b', 0, 7, 'numbered').value).toBe('1. a\n2. b');
 		expect(applyFormat('plain', 0, 0, 'h2').value).toBe('## plain');
 	});
+
+	it('keeps a selection that ends at the start of a line to the lines it covers', () => {
+		expect(applyFormat('one\ntwo\nthree', 0, 4, 'bullets').value).toBe('- one\ntwo\nthree');
+	});
+
+	it('treats a cursor at the very start of text that begins with a line break as that empty line', () => {
+		expect(applyFormat('\nabc', 0, 0, 'bullets').value).toBe('- \nabc');
+	});
+
+	it('leaves double underscores inside a word alone', () => {
+		expect(parseMarkdown('call __init__ now')).toEqual([{ kind: 'paragraph', lines: [[{ text: 'call ' }, { text: 'init', underline: true }, { text: ' now' }]] }]);
+		expect(parseMarkdown('snake__case__name')).toEqual([{ kind: 'paragraph', lines: [[{ text: 'snake__case__name' }]] }]);
+	});
 });

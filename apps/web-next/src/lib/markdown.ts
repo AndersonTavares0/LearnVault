@@ -9,7 +9,8 @@ export type Block =
 	| { kind: 'heading'; level: 2 | 3; inlines: Inline[] }
 	| { kind: 'list'; ordered: boolean; items: Inline[][] };
 
-const TOKEN = /(\*\*[^*]+\*\*|__[^_]+__|\*[^*\s][^*]*\*)/g;
+// Underline needs a boundary on both sides, so a name like __init__ or snake__case stays as typed.
+const TOKEN = /(\*\*[^*]+\*\*|(?<![\p{L}\p{N}_])__[^_]+__(?![\p{L}\p{N}_])|\*[^*\s][^*]*\*)/gu;
 
 export function parseInline(text: string): Inline[] {
 	return text.split(TOKEN).filter(Boolean).map((part) => {
@@ -55,8 +56,10 @@ export function applyFormat(value: string, start: number, end: number, format: F
 	if (format === 'italic') return wrap('*');
 	if (format === 'underline') return wrap('__');
 	// Line formats work on whole lines touched by the selection.
-	const lineStart = value.lastIndexOf('\n', start - 1) + 1;
-	const nextBreak = value.indexOf('\n', end);
+	const lineStart = start === 0 ? 0 : value.lastIndexOf('\n', start - 1) + 1;
+	// A selection that ends right after a line break does not include the next line.
+	const stop = end > start && value[end - 1] === '\n' ? end - 1 : end;
+	const nextBreak = value.indexOf('\n', stop);
 	const lineEnd = nextBreak === -1 ? value.length : nextBreak;
 	const lines = value.slice(lineStart, lineEnd).split('\n');
 	const strip = (line: string) => line.replace(/^(#{2,3} |[-*] |\d+\. )/, '');

@@ -2,7 +2,7 @@ import { expect, type Page } from '@playwright/test';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { TINY_WEBM_BASE64 } from './fixtures/tiny-webm';
-import { makePdf } from './fixtures/make-pdf';
+import { makeHostilePdfs, makePdf } from './fixtures/make-pdf';
 import { collectCspViolations, createTest, expectNoAxeViolations, signIn } from './web-next-support';
 
 // The parts of the React app that need real media: the player's control bar, notes with formatting,
@@ -10,6 +10,14 @@ import { collectCspViolations, createTest, expectNoAxeViolations, signIn } from 
 const test = createTest(async (library) => {
 	await mkdir(join(library, '01 Video'), { recursive: true });
 	await writeFile(join(library, '01 Video', 'Lesson.webm'), Buffer.from(TINY_WEBM_BASE64, 'base64'));
+	// A lesson that holds two videos: switching between them changes the player's source.
+	await mkdir(join(library, '03 Pair', 'Both'), { recursive: true });
+	await writeFile(join(library, '03 Pair', 'Both', 'a.webm'), Buffer.from(TINY_WEBM_BASE64, 'base64'));
+	await writeFile(join(library, '03 Pair', 'Both', 'b.webm'), Buffer.from(TINY_WEBM_BASE64, 'base64'));
+	for (const [name, bytes] of Object.entries(makeHostilePdfs())) {
+		await mkdir(join(library, '04 Hostile', name), { recursive: true });
+		await writeFile(join(library, '04 Hostile', name, `${name}.pdf`), bytes);
+	}
 	await mkdir(join(library, '02 Reading', 'Guide'), { recursive: true });
 	await writeFile(join(library, '02 Reading', 'Guide', 'Guide.pdf'), makePdf(['Exercise 1', 'Write a function longest that takes two slices']));
 });
@@ -140,3 +148,115 @@ test('a module row opens to show its lessons and closes again', async ({ page, o
 	await page.locator('summary', { hasText: 'Video' }).click();
 	await expect(lesson).toBeHidden();
 });
+
+test('the chosen theme is applied before the app starts, from a script the CSP allows', async ({ page, origin }) => {
+	const violations = collectCspViolations(page);
+	const script = await page.request.get(`${origin}/theme-init.js`);
+	expect(script.status()).toBe(200);
+	expect(script.headers()['content-type']).toMatch(/javascript/);
+	await page.addInitScript(() => localStorage.setItem('learnvault-appearance', JSON.stringify({ theme: 'dark' })));
+	// With the app's own script blocked, only theme-init.js can have set the theme.
+	await page.route('**/_app/**', (route) => route.abort());
+	await page.goto(`${origin}/#/login`);
+	await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+	expect(violations).toEqual([]);
+});
+
+/** The bar's Play/Pause button must always say what the video is doing. */
+async function expectBarMatchesVideo(page: Page) {
+	await expect.poll(async () => {
+		const paused = await page.locator('video').evaluate((element: HTMLVideoElement) => element.paused);
+		const shows = (await page.getByRole('button', { name: 'Pause', exact: true }).count()) > 0 ? 'Pause' : 'Play';
+		return `${paused ? 'paused' : 'playing'}/${shows}`;
+	}).toMatch(/^(paused\/Play|playing\/Pause)$/);
+}
+
+async function openPair(page: Page, origin: string) {
+	await openCourse(page, origin);
+	await page.getByRole('button', { name: 'Expand all' }).click();
+	await page.getByRole('link', { name: /^Both/ }).first().click();
+	await expect(page.getByRole('slider', { name: 'Seek' })).toBeVisible();
+}
+
+test('switching to another video of the lesson keeps the bar in step and clears the loop', async ({ page, origin }) => {
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	await openPair(page, origin);
+	const video = page.locator('video');
+	await page.getByRole('button', { name: 'Play', exact: true }).click();
+	await expect.poll(() => video.evaluate((element: HTMLVideoElement) => !element.paused)).toBe(true);
+	await page.getByRole('button', { name: 'Loop' }).click();
+	await expect(page.getByRole('button', { name: 'Loop' })).toHaveAttribute('aria-pressed', 'true');
+
+	await page.getByLabel('Video', { exact: true }).selectOption({ index: 1 });
+	await expect(page.getByRole('slider', { name: 'Seek' })).toBeVisible();
+	await expectBarMatchesVideo(page);
+	await expect(page.getByRole('button', { name: 'Loop' })).toHaveAttribute('aria-pressed', 'false');
+	// The new video plays from the bar.
+	await page.getByRole('button', { name: 'Play', exact: true }).click();
+	await expect.poll(() => video.evaluate((element: HTMLVideoElement) => !element.paused)).toBe(true);
+	await expectBarMatchesVideo(page);
+});
+
+test('turning transcoding on and seeking keeps the bar in step with the video', async ({ page, origin }) => {
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	await openVideoLesson(page, origin);
+	const transcode = page.getByRole('button', { name: 'Transcode', exact: true });
+	test.skip(!(await transcode.isVisible().catch(() => false)), 'the server has no ffmpeg, so transcoding is not offered');
+	await page.getByRole('button', { name: 'Play', exact: true }).click();
+	await transcode.click();
+	await expectBarMatchesVideo(page);
+	await page.getByRole('slider', { name: 'Seek' }).focus();
+	await page.keyboard.press('ArrowRight');
+	await expectBarMatchesVideo(page);
+	await expect(page.getByRole('slider', { name: 'Seek' })).toBeVisible();
+});
+
+// Security regression: note text is data, never markup. A hostile note must render as plain text.
+test('a note with HTML, a script and a javascript link renders as text and runs nothing', async ({ page, origin }) => {
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	const violations = collectCspViolations(page);
+	const dialogs: string[] = [];
+	page.on('dialog', (dialog) => { dialogs.push(dialog.message()); void dialog.dismiss(); });
+	await openVideoLesson(page, origin);
+	await page.getByRole('tab', { name: 'Notes' }).click();
+	await page.getByRole('button', { name: /Add note at/ }).click();
+	const hostile = '<img src=x onerror="window.pwned=1"> <script>window.pwned=2</script> [click](javascript:window.pwned=3) **bold** and snake__case__name';
+	await page.getByLabel(/Note at/).fill(hostile);
+	await page.getByRole('button', { name: 'Save note' }).click();
+	await expect(page.locator('span.font-bold', { hasText: 'bold' })).toBeVisible();
+	const result = await page.evaluate(() => ({
+		pwned: (window as unknown as { pwned?: number }).pwned ?? null,
+		injected: document.querySelectorAll('main img[src="x"], main script, main a[href^="javascript:"]').length
+	}));
+	expect(result).toEqual({ pwned: null, injected: 0 });
+	// Every character of the payload is on the page as text, including the double underscores inside a name like snake__case__name.
+	await expect(page.locator('main')).toContainText('<img src=x onerror="window.pwned=1"> <script>window.pwned=2</script> [click](javascript:window.pwned=3) bold and snake__case__name');
+	expect(dialogs).toEqual([]);
+	expect(violations).toEqual([]);
+});
+
+// Security regression: a PDF is a file from the course folder, so the reader treats it as untrusted.
+for (const name of ['script', 'cycle', 'truncated']) {
+	test(`a hostile PDF (${name}) shows as text or an error and runs nothing`, async ({ page, origin }) => {
+		await page.emulateMedia({ reducedMotion: 'reduce' });
+		const violations = collectCspViolations(page);
+		const dialogs: string[] = [];
+		page.on('dialog', (dialog) => { dialogs.push(dialog.message()); void dialog.dismiss(); });
+		const popups: string[] = [];
+		page.on('popup', (popup) => popups.push(popup.url()));
+		await openCourse(page, origin);
+		await page.getByRole('button', { name: 'Expand all' }).click();
+		await page.getByRole('link', { name: new RegExp(`^${name}`) }).first().click();
+		// The reader either draws the file or says it cannot open it; both are fine, a hang is not.
+		await expect(page.getByRole('toolbar', { name: 'PDF controls' }).or(page.getByRole('alert')).first()).toBeVisible({ timeout: 15_000 });
+		await page.getByRole('toolbar', { name: 'PDF controls' }).click({ position: { x: 5, y: 5 }, timeout: 2000 }).catch(() => undefined);
+		// Click where the hostile link sits and let the page settle.
+		await page.locator('.pdf-text-layer').click({ position: { x: 20, y: 20 }, timeout: 2000, force: true }).catch(() => undefined);
+		await page.waitForTimeout(500);
+		const state = await page.evaluate(() => ({ pwned: (window as unknown as { pdfpwned?: number }).pdfpwned ?? null, responsive: 1 + 1 }));
+		expect(state).toEqual({ pwned: null, responsive: 2 });
+		expect(dialogs).toEqual([]);
+		expect(popups).toEqual([]);
+		expect(violations).toEqual([]);
+	});
+}

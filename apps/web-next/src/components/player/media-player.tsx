@@ -96,6 +96,10 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 	const [volume, setVolume] = useState(1);
 	const [muted, setMuted] = useState(false);
 	const [captionsOn, setCaptionsOn] = useState(true);
+	// The button's choice also applies to a subtitle file picked later, so it stays in step with the tracks.
+	useEffect(() => {
+		for (const track of Array.from(media.current?.textTracks ?? [])) track.mode = captionsOn ? 'showing' : 'hidden';
+	}, [captionsOn, captions.src]);
 	const [fullscreen, setFullscreen] = useState(false);
 	useEffect(() => {
 		const change = () => setFullscreen(document.fullscreenElement === container.current);
@@ -114,7 +118,7 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 			element.removeEventListener('enterpictureinpicture', enter);
 			element.removeEventListener('leavepictureinpicture', leave);
 		};
-	}, [errorCode, kind]);
+	}, [errorCode, kind, source]);
 	// A–B loop: A then B are set from the current time; passing B jumps back to A.
 	const [loop, setLoop] = useState<{ a: number; b: number | null } | null>(null);
 	const supportsPip = typeof document !== 'undefined' && Boolean(document.pictureInPictureEnabled);
@@ -126,6 +130,7 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 	const [currentSource, setCurrentSource] = useState(source);
 	if (source !== currentSource) {
 		setCurrentSource(source);
+		setLoop(null);
 		setTranscode(null);
 		setErrorCode(null);
 	}
@@ -228,7 +233,10 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 		onLoadedMetadata: () => {
 			const element = media.current!;
 			element.playbackRate = speed;
-			setTotal((transcode?.offset ?? 0) + (Number.isFinite(element.duration) ? element.duration : 0));
+			// Keep the last known length when the element reports none (a transcoded stream can).
+			if (Number.isFinite(element.duration)) setTotal((transcode?.offset ?? 0) + element.duration);
+			// Loading a new source leaves the element paused without a pause event, so the bar is told here.
+			setPlaying(!element.paused);
 			setVolume(element.volume);
 			setMuted(element.muted);
 			if (!transcode && initialPosition && appliedStart.current !== `${activeSource}@${initialPosition}`) {
@@ -246,6 +254,7 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 				onPosition(mediaId, Math.floor(at));
 			}
 		},
+		onEmptied: () => setPlaying(false),
 		onDurationChange: () => { const element = media.current; if (element && Number.isFinite(element.duration)) setTotal((transcode?.offset ?? 0) + element.duration); },
 		onVolumeChange: () => { const element = media.current; if (element) { setVolume(element.volume); setMuted(element.muted); } },
 		onPlay: () => setPlaying(true),
@@ -262,9 +271,7 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 	const loopText = !loop ? null : loop.b === null ? tr(`Loop from ${formatDuration(loop.a)}: set end`, `Laço de ${formatDuration(loop.a)}: marcar fim`) : tr(`Looping ${formatDuration(loop.a)}–${formatDuration(loop.b)}: clear`, `Repetindo ${formatDuration(loop.a)}–${formatDuration(loop.b)}: limpar`);
 	const togglePlay = () => { const element = media.current; if (element) void (element.paused ? element.play().catch(() => undefined) : element.pause()); };
 	const toggleCaptions = () => {
-		const next = !captionsOn;
-		setCaptionsOn(next);
-		for (const track of Array.from(media.current?.textTracks ?? [])) track.mode = next ? 'showing' : 'hidden';
+		setCaptionsOn(!captionsOn);
 	};
 	const span = Math.max(1, Math.floor(total));
 	const bar = (
@@ -284,7 +291,7 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 						<Repeat />{loopText ?? <span className="sr-only">{tr('Loop', 'Laço')}</span>}
 					</Button>
 					<Label htmlFor="player-speed" className="sr-only">{tr('Speed', 'Velocidade')}</Label>
-					<select id="player-speed" value={speed} onChange={(event) => changeSpeed(Number(event.target.value) as PlaybackSpeed)} className={cn('h-11 w-16 cursor-pointer appearance-none rounded-full bg-transparent px-2 text-center text-sm font-medium', onVideo ? 'text-white hover:bg-white/20 [&>option]:text-black' : 'hover:bg-muted')} aria-keyshortcuts="[ ]">
+					<select id="player-speed" value={speed} onChange={(event) => changeSpeed(Number(event.target.value) as PlaybackSpeed)} className={cn('h-11 w-16 cursor-pointer appearance-none rounded-full bg-transparent px-2 text-center text-sm font-medium', onVideo ? 'text-white hover:bg-white/20 [&>option]:bg-card [&>option]:text-foreground' : 'hover:bg-muted')} aria-keyshortcuts="[ ]">
 						{PLAYBACK_SPEEDS.map((value) => <option key={value} value={value}>{value}×</option>)}
 					</select>
 					{capabilities.data?.transcoding && (
