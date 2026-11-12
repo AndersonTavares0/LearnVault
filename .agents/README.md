@@ -27,7 +27,7 @@ for AI coding agents. Keep these instructions aligned with `.github/CONTRIBUTING
 | Path | Purpose |
 | --- | --- |
 | `repository.md` | mandatory short index and non-negotiable rules |
-| `policies/` | durable safety, governance, and clean-room boundaries |
+| `policies/` | durable safety, governance, and reference-use boundaries |
 | `playbooks/` | focused workflows for tests, dependencies, releases, and documentation |
 | `checklists/` | reviewable pre-PR checks |
 | `templates/` | reusable factual records; never a source of secrets |

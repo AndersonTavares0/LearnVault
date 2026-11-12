@@ -9,7 +9,7 @@ const days = ['2026-11-09', '2026-11-10', '2026-11-11', '2026-11-12', '2026-11-1
 const rewards: RewardSummary = {
 	xp: 150, completedLessons: 2, weeklyGoal: 3,
 	missions: [{ id: 'lesson', progress: 1, target: 1, claimed: false }, { id: 'focus-two', progress: 0, target: 2, claimed: false }],
-	study: { currentStreak: 1, longestStreak: 5, today: '2026-11-09', todayActive: true, atRisk: false, weekActiveDays: 1, completedLessons: 2, days }
+	study: { currentStreak: 1, longestStreak: 5, today: '2026-11-09', todayActive: true, atRisk: false, weekActiveDays: 1, completedLessons: 2, activeDaysYear: [], days }
 };
 const done = (mediaId: string) => ({ mediaId, completed: true, positionSeconds: 0, updatedAt: 1_794_200_000, recorded: true });
 

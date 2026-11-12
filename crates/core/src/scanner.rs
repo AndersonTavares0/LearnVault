@@ -197,9 +197,42 @@ pub fn classify(name: &str, size: u64) -> MediaKind {
     match extension(name).as_deref() {
         Some(extension) if SUBTITLE_EXTENSIONS.contains(&extension) => MediaKind::Subtitle,
         Some("ts") if size < MIN_TS_MEDIA_SIZE => MediaKind::Material,
+        Some(extension) if MEDIA_EXTENSIONS.contains(&extension) && is_showcase_video(name) => {
+            MediaKind::Material
+        }
         Some(extension) if MEDIA_EXTENSIONS.contains(&extension) => MediaKind::Media,
         _ => MediaKind::Material,
     }
+}
+
+/// Nomes que são vitrine do curso e não aula: o nome inteiro, sem extensão, precisa ser um
+/// desses termos. Um título que só contém a palavra (como "Trailer tips") continua sendo aula.
+const SHOWCASE_NAMES: &[&str] = &[
+    "trailer",
+    "preview",
+    "promo",
+    "sample",
+    "teaser",
+    "advertisement",
+    "course trailer",
+    "course preview",
+    "intro promo",
+];
+
+fn is_showcase_video(name: &str) -> bool {
+    let stem = name.rsplit_once('.').map_or(name, |(stem, _)| stem);
+    let normalized = stem
+        .chars()
+        .map(|character| {
+            if character == '_' || character == '-' {
+                ' '
+            } else {
+                character.to_ascii_lowercase()
+            }
+        })
+        .collect::<String>();
+    let normalized = normalized.split_whitespace().collect::<Vec<_>>().join(" ");
+    SHOWCASE_NAMES.contains(&normalized.as_str())
 }
 
 fn extension(name: &str) -> Option<String> {
@@ -241,5 +274,37 @@ fn relative_to_root(root: &Path, path: Option<&Path>) -> String {
         ".".to_owned()
     } else {
         relative
+    }
+}
+
+#[cfg(test)]
+mod showcase_tests {
+    use super::{MediaKind, classify};
+
+    const LARGE: u64 = 10_000_000;
+
+    #[test]
+    fn exact_showcase_names_are_material_not_lessons() {
+        for name in [
+            "Trailer.mp4",
+            "course_trailer.mkv",
+            "Course Preview.mp4",
+            "sample.webm",
+            "Intro-Promo.mp4",
+        ] {
+            assert_eq!(classify(name, LARGE), MediaKind::Material, "{name}");
+        }
+    }
+
+    #[test]
+    fn lessons_that_only_contain_the_word_stay_media() {
+        for name in [
+            "01 Trailer tips.mp4",
+            "Sample code.mp4",
+            "Preview of the API.mp4",
+            "Lesson 3.mp4",
+        ] {
+            assert_eq!(classify(name, LARGE), MediaKind::Media, "{name}");
+        }
     }
 }

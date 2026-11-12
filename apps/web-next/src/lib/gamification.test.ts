@@ -13,7 +13,7 @@ function study(overrides: Partial<StudySummary> = {}): StudySummary {
 		todayActive: false,
 		atRisk: false,
 		weekActiveDays: 0,
-		completedLessons: 0,
+		completedLessons: 0, activeDaysYear: [],
 		days: ['2026-10-26', '2026-10-27', '2026-10-28', '2026-10-29', '2026-10-30', '2026-10-31', '2026-11-01'].map((day) => ({ day, active: false })),
 		...overrides
 	};
