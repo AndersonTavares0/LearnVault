@@ -23,15 +23,14 @@ export function Stat({ label, value, unit, note, icon, tone, bar, progress, chil
 			{icon && <div data-stat-icon className="mb-3 grid size-9 place-items-center rounded-xl bg-brand-tint text-primary [&_svg]:size-5" aria-hidden="true">{icon}</div>}
 			<Eyebrow>{label}</Eyebrow>
 			<p data-stat-value className="mt-2 font-heading text-3xl font-semibold">{value}{unit && <span className="ml-1.5 font-sans text-base font-medium text-muted-foreground">{unit}</span>}</p>
-			{progress !== undefined && <div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${percent}%` }} /></div>}
 			{bar && (
-				<div role="progressbar" aria-valuemin={0} aria-valuemax={bar.max} aria-valuenow={bar.value} className="mt-3 flex gap-1">
+				<div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={bar.max} aria-valuenow={bar.value} className="mt-3 flex gap-1">
 					{Array.from({ length: bar.max }, (_, index) => <span key={index} className={cn('h-1.5 flex-1 rounded-full', index < bar.value ? 'bg-primary' : 'bg-border')} />)}
 				</div>
 			)}
 			{progress !== undefined && (
-				<div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(Math.min(1, Math.max(0, progress)) * 100)} className="mt-3 h-1.5 overflow-hidden rounded-full bg-border">
-					<div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(1, Math.max(0, progress)) * 100}%` }} />
+				<div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} className="mt-3 h-1.5 overflow-hidden rounded-full bg-border">
+					<div className="h-full rounded-full bg-primary" style={{ width: `${percent}%` }} />
 				</div>
 			)}
 			{note && <p className="mt-1 text-sm text-muted-foreground">{note}</p>}

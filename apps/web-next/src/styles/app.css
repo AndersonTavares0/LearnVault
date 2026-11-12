@@ -106,7 +106,7 @@
   --secondary: var(--panel);
   --secondary-foreground: #2E2118;
   --muted: color-mix(in oklch, var(--brand) 4%, #F3E9DB);
-  --muted-foreground: #705E4C;
+  --muted-foreground: #6A5745;
   --accent: var(--brand-tint);
   --accent-foreground: #2E2118;
   --destructive: #A33A32;

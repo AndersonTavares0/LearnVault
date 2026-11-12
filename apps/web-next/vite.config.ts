@@ -37,7 +37,7 @@ export default defineConfig(({ mode }) => {
 			proxy: { '/api': { target: process.env.LEARNVAULT_API_TARGET ?? 'http://127.0.0.1:8090' } }
 		},
 		build: {
-			outDir: desktop ? 'dist-desktop' : 'dist',
+			outDir: desktop ? '../../crates/desktop/frontend-dist' : '../../crates/server/web/build',
 			assetsDir: '_app/immutable',
 			// The server CSP only allows fonts from 'self'; inlined `data:` fonts would be blocked.
 			assetsInlineLimit: 0,

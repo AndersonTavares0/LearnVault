@@ -15,6 +15,7 @@
     "check": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint --max-warnings 0 .",
     "dev": "vite",
+    "dev:tauri": "vite build --mode desktop --watch",
     "build": "vite build",
     "build:desktop": "vite build --mode desktop",
     "test": "vitest run"

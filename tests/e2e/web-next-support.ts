@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 // Runs the React app (apps/web-next, epic #347) behind the real Rust server and its CSP.
-// Folded into server.spec.ts at cutover (#340).
+// The web-next build is the server web root after cutover (#340).
 export const PASSWORD = 'uma senha local muito segura';
 
 export async function signIn(page: Page, origin: string) {
@@ -44,7 +44,7 @@ export const createTest = (prepare: (library: string) => Promise<void>) => base.
 		const library = join(root, 'library');
 		await prepare(library);
 		const binary = process.env.LEARNVAULT_SERVER_BIN ?? resolve(process.platform === 'win32' ? 'target/debug/learnvault-server.exe' : 'target/debug/learnvault-server');
-		const server = spawn(binary, ['--listen-addr', '127.0.0.1:0', '--database', join(root, 'db.sqlite'), '--library-root', library, '--web-root', resolve('apps/web-next/dist'), '--insecure-http'], {
+		const server = spawn(binary, ['--listen-addr', '127.0.0.1:0', '--database', join(root, 'db.sqlite'), '--library-root', library, '--web-root', resolve('crates/server/web/build'), '--insecure-http'], {
 			env: { ...process.env, ADMIN_USERNAME: 'admin', ADMIN_PASSWORD: PASSWORD },
 			stdio: ['ignore', 'pipe', 'ignore']
 		});
