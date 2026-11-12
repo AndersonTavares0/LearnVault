@@ -83,6 +83,8 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 	// Transcoded streams restart at `offset`, so the element's own clock is relative to it.
 	const [transcode, setTranscode] = useState<{ offset: number; reencode: boolean } | null>(null);
 	const [errorCode, setErrorCode] = useState<number | null>(null);
+	// Bumping this remounts the media element, so a failed load is requested again.
+	const [attempt, setAttempt] = useState(0);
 	const [notice, setNotice] = useState('');
 	const media = useRef<HTMLVideoElement & HTMLAudioElement>(null);
 	const container = useRef<HTMLDivElement>(null);
@@ -178,6 +180,10 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 		} catch {
 			setNotice(tr('Could not open the system player.', 'Não foi possível abrir o player do sistema.'));
 		}
+	};
+	const retry = () => {
+		setErrorCode(null);
+		setAttempt((count) => count + 1);
 	};
 	const startTranscode = (reencode: boolean) => {
 		setTranscode({ offset: absoluteTime() || initialPosition || 0, reencode });
@@ -314,6 +320,7 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 					<p className="font-medium">{errorMessage[0]}</p>
 					<p className="text-sm text-muted-foreground">{errorMessage[1]}</p>
 					<div className="flex flex-wrap gap-2">
+						{errorCode !== 4 && <Button variant="outline" onClick={retry}>{tr('Try again', 'Tentar de novo')}</Button>}
 						{capabilities.data?.transcoding && <Button onClick={() => startTranscode(false)}><Zap />{tr('Play with on-demand transcoding', 'Reproduzir com transcodificação sob demanda')}</Button>}
 						{capabilities.data?.transcoding && <Button variant="outline" onClick={() => startTranscode(true)}>{tr('Re-encode video (H.264)', 'Recodificar vídeo (H.264)')}</Button>}
 						{capabilities.data?.systemPlayer && <Button variant="outline" onClick={openSystemPlayer}><ExternalLink />{tr('Open in system player', 'Abrir no player do sistema')}</Button>}
@@ -327,10 +334,10 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 					{/* Captions come from the course's own subtitle files; many lessons have none (WCAG 1.2.2 depends on the content). */}
 					{kind === 'audio' ? (
 						// eslint-disable-next-line jsx-a11y/media-has-caption
-						<audio {...mediaProps}>{captions.src && <track kind="captions" src={captions.src} label={tr('Subtitles', 'Legenda')} default />}</audio>
+						<audio key={attempt} {...mediaProps}>{captions.src && <track kind="captions" src={captions.src} label={tr('Subtitles', 'Legenda')} default />}</audio>
 					) : (
 						// eslint-disable-next-line jsx-a11y/media-has-caption
-						<video {...mediaProps} onClick={togglePlay} className="aspect-video w-full cursor-pointer bg-black">{captions.src && <track kind="captions" src={captions.src} label={tr('Subtitles', 'Legenda')} default />}</video>
+						<video key={attempt} {...mediaProps} onClick={togglePlay} className="aspect-video w-full cursor-pointer bg-black">{captions.src && <track kind="captions" src={captions.src} label={tr('Subtitles', 'Legenda')} default />}</video>
 					)}
 					{bar}
 				</div>
