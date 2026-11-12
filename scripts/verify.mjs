@@ -28,7 +28,7 @@ export function buildSteps({ fast = false } = {}) {
 		{ label: 'pnpm --filter learnvault-web-next lint', command: 'pnpm', args: ['--filter', 'learnvault-web-next', 'lint'] },
 		{ label: 'pnpm --filter learnvault-web-next test', command: 'pnpm', args: ['--filter', 'learnvault-web-next', 'test'] },
 		{ label: 'pnpm run test:scripts', command: 'pnpm', args: ['run', 'test:scripts'] },
-		{ label: 'pnpm audit --audit-level=low', command: 'pnpm', args: ['audit', '--audit-level=low', '--ignore', 'GHSA-gcqx-w48m-w2h4'], slow: true },
+		{ label: 'pnpm audit --audit-level=low', command: 'pnpm', args: ['audit', '--audit-level=low'], slow: true },
 		{ label: 'cargo fmt --all -- --check', command: 'cargo', args: ['fmt', '--all', '--', '--check'] },
 		{ label: 'cargo clippy --all-targets -- -D warnings', command: 'cargo', args: ['clippy', '--all-targets', '--', '-D', 'warnings'] },
 		{ label: 'cargo test', command: 'cargo', args: ['test'] }

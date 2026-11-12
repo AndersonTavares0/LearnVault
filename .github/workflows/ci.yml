@@ -126,7 +126,8 @@ jobs:
       # React app built in parallel until the cutover (#340); its tests build both outputs.
       - run: pnpm --filter learnvault-web-next lint
       - run: pnpm --filter learnvault-web-next test
-      - run: pnpm audit --audit-level=low --ignore GHSA-gcqx-w48m-w2h4
+      # Accepted advisories live in pnpm-workspace.yaml (auditConfig.ignoreGhsas), the single source.
+      - run: pnpm audit --audit-level=low
 
   e2e-server:
     name: Rust server browser E2E
@@ -277,6 +278,16 @@ jobs:
           persist-credentials: false
       - name: Install Rust toolchain
         run: rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy
+      - name: Cache Cargo registry and target
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-${{ runner.os }}-1.99.0-core-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            rust-${{ runner.os }}-1.99.0-core-
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Run core Clippy
