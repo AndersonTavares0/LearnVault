@@ -28,7 +28,9 @@ pub mod pomodoro;
 pub mod removal;
 pub mod rescan;
 pub mod scanner;
+pub mod structure;
 pub mod study;
+pub mod titles;
 
 mod migrations;
 
