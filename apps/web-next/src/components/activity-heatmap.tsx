@@ -1,5 +1,4 @@
-import { useMemo } from 'react';
-import { Eyebrow } from '@/components/panel';
+import { useEffect, useMemo, useRef } from 'react';
 import { formatCount } from '@/lib/catalog';
 import { tr } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
@@ -21,18 +20,25 @@ export function ActivityHeatmap({ today, activeDays }: { today: string; activeDa
 	const active = useMemo(() => new Set(activeDays), [activeDays]);
 	const days = useMemo(() => lastDays(today, WEEKS * 7), [today]);
 	const total = days.filter((day) => active.has(day)).length;
+	// On narrow screens the grid scrolls; start at the newest weeks, on the right.
+	const scroller = useRef<HTMLDivElement>(null);
+	useEffect(() => {
+		if (scroller.current) scroller.current.scrollLeft = scroller.current.scrollWidth;
+	}, []);
 	const summary = tr(
 		`${formatCount(total, 'day with study', 'days with study')} in the last year`,
 		`${formatCount(total, 'dia com estudo', 'dias com estudo')} no último ano`,
 	);
 	return (
 		<section aria-labelledby="heatmap-heading" className="space-y-3">
-			<Eyebrow><span id="heatmap-heading">{tr('Study days, last year', 'Dias de estudo, último ano')}</span></Eyebrow>
-			<p className="text-sm text-muted-foreground">{summary}</p>
-			<div className="overflow-x-auto pb-2">
-				<div aria-hidden="true" className="grid grid-flow-col grid-rows-7 gap-1 w-max">
+			<div className="space-y-1">
+				<h2 id="heatmap-heading" className="text-base font-medium">{tr('Study days', 'Dias de estudo')}</h2>
+				<p className="text-sm text-muted-foreground">{summary}</p>
+			</div>
+			<div ref={scroller} className="overflow-x-auto pb-2">
+				<div aria-hidden="true" className="grid w-max grid-flow-col grid-rows-7 gap-1 sm:w-full sm:auto-cols-fr">
 					{days.map((day) => (
-						<span key={day} className={cn('size-3 rounded-[3px]', active.has(day) ? 'bg-primary' : 'bg-muted')} />
+						<span key={day} className={cn('size-3 rounded-[3px] sm:size-auto sm:aspect-square', active.has(day) ? 'bg-primary' : 'bg-card ring-1 ring-inset ring-border')} />
 					))}
 				</div>
 			</div>

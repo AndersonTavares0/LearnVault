@@ -127,6 +127,7 @@
 /* The dark page: warm black, raised panels a step lighter, amber-led accent. */
 :root[data-theme="dark"] {
   --background: #090705;
+  --brand-soft: color-mix(in oklch, var(--brand) 24%, var(--background));
   --foreground: #F6EEE4;
   --card: #13100D;
   --card-foreground: #F6EEE4;
