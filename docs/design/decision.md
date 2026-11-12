@@ -59,7 +59,7 @@ A crítica independente da candidatura K v5 pontuou:
 
 ## Post-K review (reopening, see #330)
 
-Three maintainer-confirmed functional/accessibility failures satisfy the reopening clause above: #317 (layout overflow at ~1270px), #319 (language toggle unreachable at desktop widths), and #324 (27 interactive elements below the WCAG 44×44px target). This authorizes a composition revision within K — library, course page, and Player — using course platforms as a structural reference only, never as a source of code, assets, or pixel-level layout (clean-room policy, [`.github/CONTRIBUTING.md`](../../.github/CONTRIBUTING.md)). The original A/B/C/K evaluation above remains a historical record and is not redone.
+Three maintainer-confirmed functional/accessibility failures satisfy the reopening clause above: #317 (layout overflow at ~1270px), #319 (language toggle unreachable at desktop widths), and #324 (27 interactive elements below the WCAG 44×44px target). This authorizes a composition revision within K — library, course page, and Player — using course platforms as a structural reference only, never as a source of code, assets, or pixel-level layout (reference policy, [`.github/CONTRIBUTING.md`](../../.github/CONTRIBUTING.md)). The original A/B/C/K evaluation above remains a historical record and is not redone.
 
 ## Direction L: course-platform redesign on React (reopened, see #347)
 
