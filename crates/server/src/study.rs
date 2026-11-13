@@ -258,6 +258,9 @@ pub(crate) struct CreateFlashcardRequest {
     media_id: String,
     front: String,
     back: String,
+    /// Instante da aula em que o cartão foi criado; ausente em cartões sem vínculo temporal.
+    #[serde(default)]
+    position_seconds: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -275,6 +278,7 @@ pub(crate) struct ReviewFlashcardRequest {
 pub(crate) struct FlashcardResponse {
     card_id: String,
     media_id: String,
+    position_seconds: Option<i64>,
     front: String,
     back: String,
     interval_days: i64,
@@ -288,6 +292,7 @@ impl From<learnvault_core::Flashcard> for FlashcardResponse {
         Self {
             card_id: c.card_id,
             media_id: c.media_id,
+            position_seconds: c.position_seconds,
             front: c.front,
             back: c.back,
             interval_days: c.interval_days,
@@ -1357,6 +1362,7 @@ pub(crate) async fn create_flashcard(
             &request.media_id,
             &request.front,
             &request.back,
+            request.position_seconds,
         )
     })
     .await

@@ -2,8 +2,9 @@
 
 use learnvault_core::paths::relative_path_key;
 use learnvault_core::{
-    Database, Error, KeyMode, ReviewRating, create_flashcard, delete_flashcard, list_flashcards,
-    review_flashcard, update_flashcard,
+    Database, Error, KeyMode, ReviewRating, create_flashcard, delete_flashcard,
+    list_all_flashcards, list_flashcard_reviews, list_flashcards, review_flashcard,
+    update_flashcard,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -46,6 +47,7 @@ fn flashcard_crud_and_isolation_flow() -> TestResult {
         MEDIA_A,
         "O que é idempotência?",
         "Propriedade de uma operação que pode ser aplicada várias vezes sem mudar o resultado inicial.",
+        None,
     )?;
     assert_eq!(card1.front, "O que é idempotência?");
     assert_eq!(card1.interval_days, 0, "novo cartão deve ter intervalo 0");
@@ -60,6 +62,7 @@ fn flashcard_crud_and_isolation_flow() -> TestResult {
         MEDIA_A,
         "O que é ACID?",
         "Atomicidade, Consistência, Isolamento e Durabilidade.",
+        None,
     )?;
 
     // 2. Listar cartões do OWNER na MEDIA_A
@@ -127,7 +130,7 @@ fn flashcard_crud_and_isolation_flow() -> TestResult {
 fn flashcard_spaced_repetition_scheduling_rules() -> TestResult {
     let db = library_db()?;
 
-    let card = create_flashcard(&db, OWNER, MEDIA_A, "Pergunta 1", "Resposta 1")?;
+    let card = create_flashcard(&db, OWNER, MEDIA_A, "Pergunta 1", "Resposta 1", None)?;
     assert_eq!(card.interval_days, 0);
 
     // 1. Revisão 'Good' em cartão novo (interval_days == 0):
@@ -190,43 +193,115 @@ fn flashcard_validation_rejects_empty_whitespace_and_oversized() -> TestResult {
 
     // Vazio ou apenas espaços
     assert!(matches!(
-        create_flashcard(&db, OWNER, MEDIA_A, "", "Resposta"),
+        create_flashcard(&db, OWNER, MEDIA_A, "", "Resposta", None),
         Err(Error::InvalidFlashcardContent)
     ));
     assert!(matches!(
-        create_flashcard(&db, OWNER, MEDIA_A, "   \n\t  ", "Resposta"),
+        create_flashcard(&db, OWNER, MEDIA_A, "   \n\t  ", "Resposta", None),
         Err(Error::InvalidFlashcardContent)
     ));
     assert!(matches!(
-        create_flashcard(&db, OWNER, MEDIA_A, "Pergunta", ""),
+        create_flashcard(&db, OWNER, MEDIA_A, "Pergunta", "", None),
         Err(Error::InvalidFlashcardContent)
     ));
     assert!(matches!(
-        create_flashcard(&db, OWNER, MEDIA_A, "Pergunta", "   "),
+        create_flashcard(&db, OWNER, MEDIA_A, "Pergunta", "   ", None),
         Err(Error::InvalidFlashcardContent)
     ));
 
     // Excede 4000 escalares Unicode
     let oversized = "a".repeat(4001);
     assert!(matches!(
-        create_flashcard(&db, OWNER, MEDIA_A, &oversized, "Resposta"),
+        create_flashcard(&db, OWNER, MEDIA_A, &oversized, "Resposta", None),
         Err(Error::InvalidFlashcardContent)
     ));
     assert!(matches!(
-        create_flashcard(&db, OWNER, MEDIA_A, "Pergunta", &oversized),
+        create_flashcard(&db, OWNER, MEDIA_A, "Pergunta", &oversized, None),
         Err(Error::InvalidFlashcardContent)
     ));
 
     // Exatamente 4000 escalares é aceito
     let boundary_4000 = "a".repeat(4000);
-    let card = create_flashcard(&db, OWNER, MEDIA_A, &boundary_4000, "Resposta")?;
+    let card = create_flashcard(&db, OWNER, MEDIA_A, &boundary_4000, "Resposta", None)?;
     assert_eq!(card.front.len(), 4000);
 
     // Mídia desconhecida
     assert!(matches!(
-        create_flashcard(&db, OWNER, "midia-inexistente", "Pergunta", "Resposta"),
+        create_flashcard(
+            &db,
+            OWNER,
+            "midia-inexistente",
+            "Pergunta",
+            "Resposta",
+            None
+        ),
         Err(Error::MediaNotFound { .. })
     ));
+
+    // Posição negativa é recusada
+    assert!(matches!(
+        create_flashcard(&db, OWNER, MEDIA_A, "Pergunta", "Resposta", Some(-1)),
+        Err(Error::InvalidStudyPosition { .. })
+    ));
+
+    Ok(())
+}
+
+#[test]
+fn flashcard_records_lesson_position_and_appends_review_log() -> TestResult {
+    let db = library_db()?;
+
+    let card = create_flashcard(
+        &db,
+        OWNER,
+        MEDIA_A,
+        "Em que instante o conceito aparece?",
+        "Aos 2 minutos e 5 segundos.",
+        Some(125),
+    )?;
+    assert_eq!(card.position_seconds, Some(125));
+    assert_eq!(
+        list_flashcards(&db, OWNER, MEDIA_A)?[0].position_seconds,
+        Some(125),
+        "a posição fica gravada e sobrevive à leitura"
+    );
+
+    // Um cartão novo vence imediatamente: é o mesmo predicado que a fila de revisão usa.
+    let due_before = list_all_flashcards(&db, OWNER)?
+        .into_iter()
+        .filter(|card| card.next_due <= card.created_at)
+        .count();
+    assert_eq!(due_before, 1);
+
+    let first = review_flashcard(&db, OWNER, &card.card_id, ReviewRating::Good)?;
+    assert_eq!(
+        first.position_seconds,
+        Some(125),
+        "revisar não perde o vínculo"
+    );
+    assert!(
+        first.next_due > first.updated_at,
+        "Good tira o cartão da fila até o próximo dia"
+    );
+
+    let second = review_flashcard(&db, OWNER, &card.card_id, ReviewRating::Again)?;
+    assert!(
+        second.next_due > second.updated_at,
+        "Again devolve o cartão dez minutos depois"
+    );
+
+    let reviews = list_flashcard_reviews(&db, OWNER, &card.card_id)?;
+    assert_eq!(reviews.len(), 2);
+    assert_eq!(reviews[0].rating, ReviewRating::Good);
+    assert_eq!(reviews[0].previous_interval_days, 0);
+    assert_eq!(reviews[0].next_due, first.next_due);
+    assert_eq!(reviews[1].rating, ReviewRating::Again);
+    assert_eq!(reviews[1].previous_interval_days, 1);
+    assert_eq!(reviews[1].next_due, second.next_due);
+    assert!(
+        list_flashcard_reviews(&db, OTHER, &card.card_id)?.is_empty(),
+        "o histórico é isolado por dono"
+    );
 
     Ok(())
 }

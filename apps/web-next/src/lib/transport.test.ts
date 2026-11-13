@@ -985,7 +985,7 @@ describe('desktop transport over IPC', () => {
 			card_id: 'c2', media_id: 'm1', front: 'Frente', back: 'Verso', interval_days: 0, next_due: 101, created_at: 101, updated_at: 101
 		});
 		const created = await desktop.createFlashcard('m1', 'Frente', 'Verso');
-		expect(invoke).toHaveBeenCalledWith('desktop_create_flashcard', { mediaId: 'm1', front: 'Frente', back: 'Verso' });
+		expect(invoke).toHaveBeenCalledWith('desktop_create_flashcard', { mediaId: 'm1', front: 'Frente', back: 'Verso', positionSeconds: null });
 		expect(created.cardId).toBe('c2');
 
 		vi.mocked(invoke).mockResolvedValueOnce({
@@ -1216,6 +1216,7 @@ describe('desktop transport over IPC', () => {
 		const mockCard = {
 			card_id: 'card-1',
 			media_id: 'media-1',
+			position_seconds: 125,
 			front: 'Frente',
 			back: 'Verso',
 			interval_days: 1,
@@ -1238,6 +1239,7 @@ describe('desktop transport over IPC', () => {
 		expect(list).toEqual([{
 			cardId: 'card-1',
 			mediaId: 'media-1',
+			positionSeconds: 125,
 			front: 'Frente',
 			back: 'Verso',
 			intervalDays: 1,

@@ -92,6 +92,8 @@ Top-level course nodes include `cover_version` when a cover exists, prompting th
 | `POST` | `/api/study/flashcards/{id}/review` | Session | Records flashcard review grade and calculates next interval |
 | `DELETE` | `/api/study/flashcards/{id}` | Session | Deletes a flashcard |
 
+Creating a card accepts an optional `position_seconds` (the lesson moment it came from), returned on every card as `position_seconds`. A card stays linked to its lesson through `media_id`. Each review appends a row to the review history with the rating, the previous interval and the next due date, so the schedule and its history change in one transaction.
+
 ## Search
 
 | Method | Path | Auth | Purpose |

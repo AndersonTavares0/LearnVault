@@ -135,6 +135,17 @@ impl Database {
             )?
             || !index_matches(
                 &self.conn,
+                "flashcard_review",
+                Some("flashcard_review_owner_card_idx"),
+                false,
+                &[
+                    ("owner_id", "BINARY"),
+                    ("card_id", "BINARY"),
+                    ("reviewed_at", "BINARY"),
+                ],
+            )?
+            || !index_matches(
+                &self.conn,
                 "study_favorite",
                 Some("study_favorite_owner_kind_idx"),
                 false,
@@ -578,6 +589,19 @@ const REQUIRED_TABLES: &[TableDefinition] = &[
             ("next_due", "INTEGER", true, None, 0),
             ("created_at", "INTEGER", true, None, 0),
             ("updated_at", "INTEGER", true, None, 0),
+            ("position_seconds", "INTEGER", false, None, 0),
+        ],
+    },
+    TableDefinition {
+        name: "flashcard_review",
+        columns: &[
+            ("review_id", "INTEGER", false, None, 1),
+            ("owner_id", "TEXT", true, None, 0),
+            ("card_id", "TEXT", true, None, 0),
+            ("rating", "TEXT", true, None, 0),
+            ("previous_interval_days", "INTEGER", true, None, 0),
+            ("next_due", "INTEGER", true, None, 0),
+            ("reviewed_at", "INTEGER", true, None, 0),
         ],
     },
     TableDefinition {
@@ -745,6 +769,11 @@ fn expected_checks(table: &str) -> &'static [&'static str] {
             "length(trim(front)) > 0 and length(front) <= 4000",
             "length(trim(back)) > 0 and length(back) <= 4000",
             "interval_days >= 0 and interval_days <= 365",
+            "position_seconds is null or position_seconds >= 0",
+        ],
+        "flashcard_review" => &[
+            "rating in ('again', 'good')",
+            "previous_interval_days >= 0 and previous_interval_days <= 365",
         ],
         "study_favorite" => &[
             "target_kind in ('course', 'lesson')",

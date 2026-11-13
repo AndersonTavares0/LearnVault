@@ -218,7 +218,7 @@ async fn flashcards_crud_and_review_flow() {
                 .header("origin", "http://localhost")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    r#"{"media_id":"media-1","front":"O que é TDD?","back":"Desenvolvimento orientado a testes (Red-Green-Refactor)."}"#,
+                    r#"{"media_id":"media-1","front":"O que é TDD?","back":"Desenvolvimento orientado a testes (Red-Green-Refactor).","position_seconds":125}"#,
                 ))
                 .unwrap(),
         )
@@ -230,6 +230,7 @@ async fn flashcards_crud_and_review_flow() {
     let card_id = card["card_id"].as_str().unwrap().to_owned();
     assert_eq!(card["front"], "O que é TDD?");
     assert_eq!(card["interval_days"], 0);
+    assert_eq!(card["position_seconds"], 125);
 
     // 2. Listar cartões do aluno
     let list_resp = app
@@ -246,6 +247,7 @@ async fn flashcards_crud_and_review_flow() {
     let list_body = list_resp.into_body().collect().await.unwrap().to_bytes();
     let list_json: serde_json::Value = serde_json::from_slice(&list_body).unwrap();
     assert_eq!(list_json["items"].as_array().unwrap().len(), 1);
+    assert_eq!(list_json["items"][0]["position_seconds"], 125);
 
     // 3. Isolamento: Admin não vê os cartões do aluno
     let admin_list_resp = app

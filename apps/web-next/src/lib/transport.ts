@@ -107,6 +107,8 @@ export type NewPdfAnnotation = { page: number; kind: PdfAnnotationKind; color: P
 export type Flashcard = {
 	cardId: string;
 	mediaId: string;
+	/** Moment in the lesson where the card was made, when it was created from the player. */
+	positionSeconds: number | null;
 	front: string;
 	back: string;
 	intervalDays: number;
@@ -206,7 +208,7 @@ export interface Transport {
 	deleteNote(noteId: string): Promise<void>;
 	/** Without a media id: every card of the user, soonest due first (the review hub). */
 	listFlashcards(mediaId?: string): Promise<Flashcard[]>;
-	createFlashcard(mediaId: string, front: string, back: string): Promise<Flashcard>;
+	createFlashcard(mediaId: string, front: string, back: string, positionSeconds?: number | null): Promise<Flashcard>;
 	updateFlashcard(cardId: string, front: string, back: string): Promise<Flashcard>;
 	deleteFlashcard(cardId: string): Promise<void>;
 	reviewFlashcard(cardId: string, rating: ReviewRating): Promise<Flashcard>;
@@ -730,9 +732,11 @@ export function normalizeBookmark(raw: unknown): MediaBookmark {
 
 export function normalizeFlashcard(raw: unknown): Flashcard {	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalidPayload('cartão de estudo inválido.');
 	const card = raw as Record<string, unknown>;
+	const position = card.position_seconds ?? card.positionSeconds;
 	return {
 		cardId: String(card.card_id ?? card.cardId ?? ''),
 		mediaId: String(card.media_id ?? card.mediaId ?? ''),
+		positionSeconds: position == null ? null : Number(position),
 		front: String(card.front ?? ''),
 		back: String(card.back ?? ''),
 		intervalDays: Number(card.interval_days ?? card.intervalDays ?? 0),
@@ -1011,11 +1015,11 @@ export class HttpTransport implements Transport {
 		const data = await response.json();
 		return (Array.isArray(data.items) ? data.items : []).map(normalizeFlashcard);
 	}
-	async createFlashcard(mediaId: string, front: string, back: string): Promise<Flashcard> {
+	async createFlashcard(mediaId: string, front: string, back: string, positionSeconds?: number | null): Promise<Flashcard> {
 		const response = await fetch('/api/study/flashcards', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ media_id: mediaId, front, back })
+			body: JSON.stringify({ media_id: mediaId, front, back, position_seconds: positionSeconds ?? null })
 		});
 		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 422 ? tr('Invalid flashcard content.', 'Conteúdo do cartão inválido.') : tr('Could not save flashcard.', 'Não foi possível salvar o cartão.'));
 		return normalizeFlashcard(await response.json());
@@ -1366,9 +1370,9 @@ export class DesktopStub implements Transport {
 			throw desktopError(cause, tr('Could not load cards.', 'Não foi possível carregar os cartões.'));
 		}
 	}
-	async createFlashcard(mediaId: string, front: string, back: string): Promise<Flashcard> {
+	async createFlashcard(mediaId: string, front: string, back: string, positionSeconds?: number | null): Promise<Flashcard> {
 		try {
-			const res = await invoke<unknown>('desktop_create_flashcard', { mediaId, front, back });
+			const res = await invoke<unknown>('desktop_create_flashcard', { mediaId, front, back, positionSeconds: positionSeconds ?? null });
 			return normalizeFlashcard(res);
 		} catch (cause) {
 			throw desktopError(cause, tr('Could not save card.', 'Não foi possível salvar o cartão.'));

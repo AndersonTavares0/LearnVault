@@ -434,6 +434,8 @@ pub struct FlashcardDto {
     pub card_id: String,
     /// Identidade da mídia à qual o cartão pertence.
     pub media_id: String,
+    /// Instante da aula em que o cartão foi criado, quando informado.
+    pub position_seconds: Option<i64>,
     /// Pergunta ou frente do cartão.
     pub front: String,
     /// Resposta ou verso do cartão.
@@ -453,6 +455,7 @@ impl From<learnvault_core::Flashcard> for FlashcardDto {
         Self {
             card_id: card.card_id,
             media_id: card.media_id,
+            position_seconds: card.position_seconds,
             front: card.front,
             back: card.back,
             interval_days: card.interval_days,

@@ -622,6 +622,8 @@ pub struct Flashcard {
     pub owner_id: String,
     /// Mídia vinculada.
     pub media_id: String,
+    /// Instante da aula em que o cartão foi criado, quando informado.
+    pub position_seconds: Option<i64>,
     /// Pergunta ou conteúdo da frente.
     pub front: String,
     /// Resposta ou conteúdo do verso.
@@ -652,7 +654,7 @@ pub fn list_flashcards(db: &Database, owner_id: &str, media_id: &str) -> Result<
     require_media(conn, media_id)?;
 
     let mut statement = conn.prepare(
-        "SELECT card_id, owner_id, media_id, front, back, interval_days, next_due, created_at, updated_at
+        "SELECT card_id, owner_id, media_id, position_seconds, front, back, interval_days, next_due, created_at, updated_at
          FROM flashcard
          WHERE owner_id = ?1 AND media_id = ?2
          ORDER BY next_due ASC, created_at ASC",
@@ -683,7 +685,7 @@ pub fn flashcard_media_id(db: &Database, card_id: &str) -> Result<Option<String>
 pub fn list_all_flashcards(db: &Database, owner_id: &str) -> Result<Vec<Flashcard>> {
     validate_owner(owner_id)?;
     let mut statement = db.connection().prepare(
-        "SELECT card_id, owner_id, media_id, front, back, interval_days, next_due, created_at, updated_at
+        "SELECT card_id, owner_id, media_id, position_seconds, front, back, interval_days, next_due, created_at, updated_at
          FROM flashcard
          WHERE owner_id = ?1
          ORDER BY next_due ASC, created_at ASC",
@@ -705,10 +707,18 @@ pub fn create_flashcard(
     media_id: &str,
     front: &str,
     back: &str,
+    position_seconds: Option<i64>,
 ) -> Result<Flashcard> {
     validate_owner(owner_id)?;
     let front_trimmed = validate_card_text(front)?;
     let back_trimmed = validate_card_text(back)?;
+    if let Some(position) = position_seconds
+        && position < 0
+    {
+        return Err(Error::InvalidStudyPosition {
+            position_seconds: position,
+        });
+    }
 
     let conn = db.connection();
     require_media(conn, media_id)?;
@@ -719,12 +729,13 @@ pub fn create_flashcard(
     let next_due = now;
 
     conn.execute(
-        "INSERT INTO flashcard (card_id, owner_id, media_id, front, back, interval_days, next_due, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        "INSERT INTO flashcard (card_id, owner_id, media_id, position_seconds, front, back, interval_days, next_due, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
         rusqlite::params![
             card_id,
             owner_id,
             media_id,
+            position_seconds,
             front_trimmed,
             back_trimmed,
             interval_days,
@@ -738,6 +749,7 @@ pub fn create_flashcard(
         card_id,
         owner_id: owner_id.to_owned(),
         media_id: media_id.to_owned(),
+        position_seconds,
         front: front_trimmed,
         back: back_trimmed,
         interval_days,
@@ -769,7 +781,7 @@ pub fn update_flashcard(
             "UPDATE flashcard
              SET front = ?1, back = ?2, updated_at = ?3
              WHERE owner_id = ?4 AND card_id = ?5
-             RETURNING card_id, owner_id, media_id, front, back, interval_days, next_due, created_at, updated_at",
+             RETURNING card_id, owner_id, media_id, position_seconds, front, back, interval_days, next_due, created_at, updated_at",
             rusqlite::params![front_trimmed, back_trimmed, now, owner_id, card_id],
             card_from_row,
         )
@@ -797,6 +809,9 @@ pub fn delete_flashcard(db: &Database, owner_id: &str, card_id: &str) -> Result<
 /// - `Again`: zera o intervalo (`interval_days = 0`) e agenda para daqui a 10 minutos (`next_due = now + 600`).
 /// - `Good`: se `interval_days == 0`, define 1 dia (`interval_days = 1`), caso contrário dobra o intervalo
 ///   (`interval_days = min(interval_days * 2, 365)`), e agenda para `now + interval_days * 86400`.
+///
+/// O agendamento e o log de revisões mudam na mesma transação: ou a revisão inteira existe, ou
+/// nenhuma parte dela. O log é somente de acréscimo e guarda o intervalo anterior.
 pub fn review_flashcard(
     db: &Database,
     owner_id: &str,
@@ -806,9 +821,10 @@ pub fn review_flashcard(
     validate_owner(owner_id)?;
     let conn = db.connection();
     let now = now_unix_seconds();
+    let transaction = conn.unchecked_transaction()?;
 
     // Consulta o cartão atual para obter o interval_days prévio
-    let current_interval: Option<i64> = conn
+    let current_interval: Option<i64> = transaction
         .query_row(
             "SELECT interval_days FROM flashcard WHERE owner_id = ?1 AND card_id = ?2",
             rusqlite::params![owner_id, card_id],
@@ -838,16 +854,90 @@ pub fn review_flashcard(
         }
     };
 
-    let updated = conn.query_row(
+    let updated = transaction.query_row(
         "UPDATE flashcard
          SET interval_days = ?1, next_due = ?2, updated_at = ?3
          WHERE owner_id = ?4 AND card_id = ?5
-         RETURNING card_id, owner_id, media_id, front, back, interval_days, next_due, created_at, updated_at",
+         RETURNING card_id, owner_id, media_id, position_seconds, front, back, interval_days, next_due, created_at, updated_at",
         rusqlite::params![new_interval, next_due, now, owner_id, card_id],
         card_from_row,
     )?;
 
+    transaction.execute(
+        "INSERT INTO flashcard_review
+             (owner_id, card_id, rating, previous_interval_days, next_due, reviewed_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        rusqlite::params![
+            owner_id,
+            card_id,
+            rating.as_str(),
+            prev_interval,
+            next_due,
+            now
+        ],
+    )?;
+    transaction.commit()?;
+
     Ok(updated)
+}
+
+/// Uma revisão registrada no histórico de um cartão.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FlashcardReview {
+    /// Identificador sequencial da revisão.
+    pub review_id: i64,
+    /// Cartão revisado.
+    pub card_id: String,
+    /// Avaliação dada pelo aluno.
+    pub rating: ReviewRating,
+    /// Intervalo em dias antes desta revisão.
+    pub previous_interval_days: i64,
+    /// Próximo vencimento calculado por esta revisão.
+    pub next_due: i64,
+    /// Instante da revisão em segundos Unix.
+    pub reviewed_at: i64,
+}
+
+/// Lista o histórico de revisões do dono para um cartão, da mais antiga para a mais nova.
+pub fn list_flashcard_reviews(
+    db: &Database,
+    owner_id: &str,
+    card_id: &str,
+) -> Result<Vec<FlashcardReview>> {
+    validate_owner(owner_id)?;
+    let mut statement = db.connection().prepare(
+        "SELECT review_id, card_id, rating, previous_interval_days, next_due, reviewed_at
+         FROM flashcard_review
+         WHERE owner_id = ?1 AND card_id = ?2
+         ORDER BY reviewed_at ASC, review_id ASC",
+    )?;
+    let rows = statement.query_map(rusqlite::params![owner_id, card_id], |row| {
+        Ok((
+            row.get::<_, i64>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, i64>(3)?,
+            row.get::<_, i64>(4)?,
+            row.get::<_, i64>(5)?,
+        ))
+    })?;
+
+    let mut reviews = Vec::new();
+    for row in rows {
+        let (review_id, card_id, rating, previous_interval_days, next_due, reviewed_at) = row?;
+        let Some(rating) = ReviewRating::parse(&rating) else {
+            return Err(Error::InvalidFlashcardRating);
+        };
+        reviews.push(FlashcardReview {
+            review_id,
+            card_id,
+            rating,
+            previous_interval_days,
+            next_due,
+            reviewed_at,
+        });
+    }
+    Ok(reviews)
 }
 
 fn card_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Flashcard> {
@@ -855,12 +945,13 @@ fn card_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Flashcard> {
         card_id: row.get(0)?,
         owner_id: row.get(1)?,
         media_id: row.get(2)?,
-        front: row.get(3)?,
-        back: row.get(4)?,
-        interval_days: row.get(5)?,
-        next_due: row.get(6)?,
-        created_at: row.get(7)?,
-        updated_at: row.get(8)?,
+        position_seconds: row.get(3)?,
+        front: row.get(4)?,
+        back: row.get(5)?,
+        interval_days: row.get(6)?,
+        next_due: row.get(7)?,
+        created_at: row.get(8)?,
+        updated_at: row.get(9)?,
     })
 }
 

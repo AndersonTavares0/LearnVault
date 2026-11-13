@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { MAX_IMPORT_CARDS, parseCards } from '@/lib/cards';
 import { tr } from '@/lib/i18n';
+import { formatDuration } from '@/lib/player';
 import { transport, type Flashcard, type ReviewRating } from '@/lib/transport';
 
 const nowSeconds = () => Math.floor(Date.now() / 1000);
@@ -18,20 +19,20 @@ function dueLabel(nextDue: number, now: number): string {
 }
 
 /** Spaced-repetition cards for one lesson: review what is due, or manage the deck. */
-export function Flashcards({ mediaId, addRequest = 0 }: { mediaId: string; addRequest?: number }) {
+export function Flashcards({ mediaId, currentTime = 0, addRequest = 0 }: { mediaId: string; currentTime?: number; addRequest?: number }) {
 	const client = useQueryClient();
 	const key = ['flashcards', mediaId] as const;
 	const cards = useQuery({ queryKey: key, queryFn: () => transport.listFlashcards(mediaId) });
 	const [mode, setMode] = useState<'review' | 'manage'>('review');
 	const [revealed, setRevealed] = useState(false);
-	const [form, setForm] = useState<{ cardId: string | null; front: string; back: string } | null>(null);
+	const [form, setForm] = useState<{ cardId: string | null; front: string; back: string; position: number | null } | null>(null);
 	const [now, setNow] = useState(nowSeconds);
-	// The lesson's "Make card" button asks this panel to open a blank card.
+	// The lesson's "Make card" button asks this panel to open a blank card at the player time.
 	const [lastRequest, setLastRequest] = useState(addRequest);
 	if (addRequest !== lastRequest) {
 		setLastRequest(addRequest);
 		setMode('manage');
-		setForm({ cardId: null, front: '', back: '' });
+		setForm({ cardId: null, front: '', back: '', position: Math.floor(currentTime) });
 	}
 	useEffect(() => {
 		const timer = setInterval(() => setNow(nowSeconds()), 10_000);
@@ -41,7 +42,7 @@ export function Flashcards({ mediaId, addRequest = 0 }: { mediaId: string; addRe
 	const patch = (card: Flashcard) => client.setQueryData<Flashcard[]>(key, (list = []) => (list.some((item) => item.cardId === card.cardId) ? list.map((item) => (item.cardId === card.cardId ? card : item)) : [...list, card]));
 	const review = useMutation({ mutationFn: ({ cardId, rating }: { cardId: string; rating: ReviewRating }) => transport.reviewFlashcard(cardId, rating), onSuccess: (card) => { patch(card); setRevealed(false); setNow(nowSeconds()); } });
 	const save = useMutation({
-		mutationFn: (input: { cardId: string | null; front: string; back: string }) => (input.cardId ? transport.updateFlashcard(input.cardId, input.front, input.back) : transport.createFlashcard(mediaId, input.front, input.back)),
+		mutationFn: (input: { cardId: string | null; front: string; back: string; position: number | null }) => (input.cardId ? transport.updateFlashcard(input.cardId, input.front, input.back) : transport.createFlashcard(mediaId, input.front, input.back, input.position)),
 		onSuccess: (card) => { patch(card); setForm(null); }
 	});
 	const remove = useMutation({ mutationFn: (cardId: string) => transport.deleteFlashcard(cardId), onSuccess: (_, cardId) => client.setQueryData<Flashcard[]>(key, (list = []) => list.filter((item) => item.cardId !== cardId)) });
@@ -53,7 +54,7 @@ export function Flashcards({ mediaId, addRequest = 0 }: { mediaId: string; addRe
 		mutationFn: async (file: File) => {
 			const parsed = parseCards(await file.text());
 			const batch = parsed.slice(0, MAX_IMPORT_CARDS);
-			for (const card of batch) patch(await transport.createFlashcard(mediaId, card.front, card.back));
+			for (const card of batch) patch(await transport.createFlashcard(mediaId, card.front, card.back, null));
 			return { added: batch.length, skipped: parsed.length - batch.length };
 		},
 		onSuccess: ({ added, skipped }) => setImportMessage(added === 0
@@ -74,7 +75,7 @@ export function Flashcards({ mediaId, addRequest = 0 }: { mediaId: string; addRe
 
 	const submit = (event?: FormEvent) => {
 		event?.preventDefault();
-		if (form && form.front.trim() && form.back.trim() && !save.isPending) save.mutate({ cardId: form.cardId, front: form.front.trim(), back: form.back.trim() });
+		if (form && form.front.trim() && form.back.trim() && !save.isPending) save.mutate({ cardId: form.cardId, front: form.front.trim(), back: form.back.trim(), position: form.position });
 	};
 	// Shortcuts stay inside the panel so they never fight the player's.
 	const onKeyDown = (event: KeyboardEvent) => {
@@ -99,7 +100,7 @@ export function Flashcards({ mediaId, addRequest = 0 }: { mediaId: string; addRe
 				<span className="ml-auto flex gap-2">
 					<input ref={fileInput} type="file" accept=".txt,.tsv,.csv,text/plain,text/csv,text/tab-separated-values" className="sr-only" tabIndex={-1} aria-label={tr('Card file to import', 'Arquivo de cartões para importar')} onChange={onFile} />
 					<Button size="sm" variant="ghost" disabled={importCards.isPending} onClick={() => fileInput.current?.click()}><Upload />{importCards.isPending ? tr('Importing…', 'Importando…') : tr('Import', 'Importar')}</Button>
-					{!form && <Button size="sm" variant="outline" onClick={() => setForm({ cardId: null, front: '', back: '' })}><Plus />{tr('New card', 'Novo cartão')}</Button>}
+					{!form && <Button size="sm" variant="outline" onClick={() => setForm({ cardId: null, front: '', back: '', position: Math.floor(currentTime) })}><Plus />{tr('New card', 'Novo cartão')}</Button>}
 				</span>
 			</div>
 			<p role="status" aria-live="polite" className="text-sm text-muted-foreground empty:hidden">{importMessage}</p>
@@ -116,6 +117,7 @@ export function Flashcards({ mediaId, addRequest = 0 }: { mediaId: string; addRe
 						<Label htmlFor="card-back">{tr('Back: answer or explanation', 'Verso: resposta ou explicação')}</Label>
 						<textarea id="card-back" rows={3} maxLength={4000} required value={form.back} onChange={(event) => setForm({ ...form, back: event.target.value })} className="w-full rounded-lg border border-input bg-background p-3 text-sm" />
 					</div>
+					{form.position !== null && <p className="text-xs text-muted-foreground">{tr(`Linked to this lesson at ${formatDuration(form.position)}.`, `Vinculado a esta aula em ${formatDuration(form.position)}.`)}</p>}
 					<p className="text-xs text-muted-foreground">{tr('Ctrl+Enter saves, Esc cancels.', 'Ctrl+Enter salva, Esc cancela.')}</p>
 					<div className="flex justify-end gap-2">
 						<Button type="button" variant="outline" onClick={() => setForm(null)}>{tr('Cancel', 'Cancelar')}</Button>
@@ -152,9 +154,9 @@ export function Flashcards({ mediaId, addRequest = 0 }: { mediaId: string; addRe
 							<div className="min-w-0 flex-1 space-y-1">
 								<p className="font-medium whitespace-pre-wrap">{card.front}</p>
 								<p className="text-sm text-muted-foreground whitespace-pre-wrap">{card.back}</p>
-								<p className="text-xs text-muted-foreground">{dueLabel(card.nextDue, now)}</p>
+								<p className="text-xs text-muted-foreground">{card.positionSeconds === null ? '' : `${tr('At', 'Em')} ${formatDuration(card.positionSeconds)} · `}{dueLabel(card.nextDue, now)}</p>
 							</div>
-							<Button variant="ghost" size="icon" onClick={() => setForm({ cardId: card.cardId, front: card.front, back: card.back })} aria-label={tr(`Edit card: ${card.front}`, `Editar cartão: ${card.front}`)}><Pencil /></Button>
+							<Button variant="ghost" size="icon" onClick={() => setForm({ cardId: card.cardId, front: card.front, back: card.back, position: card.positionSeconds })} aria-label={tr(`Edit card: ${card.front}`, `Editar cartão: ${card.front}`)}><Pencil /></Button>
 							<Button variant="ghost" size="icon" onClick={() => remove.mutate(card.cardId)} disabled={remove.isPending} aria-label={tr(`Delete card: ${card.front}`, `Excluir cartão: ${card.front}`)}><Trash2 /></Button>
 						</li>
 					))}

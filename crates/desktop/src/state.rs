@@ -532,12 +532,13 @@ impl DesktopState {
         media_id: &str,
         front: &str,
         back: &str,
+        position_seconds: Option<i64>,
     ) -> Result<FlashcardDto, IpcError> {
         let database = self
             .database
             .lock()
             .map_err(|_| IpcError::database_unavailable())?;
-        study::create_flashcard(&database, media_id, front, back)
+        study::create_flashcard(&database, media_id, front, back, position_seconds)
     }
 
     /// Atualiza a frente e o verso de um cartão de memorização existente.

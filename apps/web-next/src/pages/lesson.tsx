@@ -276,7 +276,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 						)}
 						{hasCards && mediaId && (
 							<TabsContent value="cards" keepMounted className="pt-5">
-								<Flashcards mediaId={mediaId} addRequest={cardRequest} />
+								<Flashcards mediaId={mediaId} currentTime={time} addRequest={cardRequest} />
 							</TabsContent>
 						)}
 						<TabsContent value="materials" className="pt-5">

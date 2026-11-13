@@ -734,12 +734,13 @@ fn flashcards_and_focus_sessions_work_over_desktop_state() {
     assert!(state.list_flashcards(media_id).unwrap().is_empty());
 
     let card = state
-        .create_flashcard(media_id, "O que é Rust?", "Linguagem segura")
+        .create_flashcard(media_id, "O que é Rust?", "Linguagem segura", Some(42))
         .unwrap();
     assert_eq!(card.media_id, *media_id);
     assert_eq!(card.front, "O que é Rust?");
     assert_eq!(card.back, "Linguagem segura");
     assert_eq!(card.interval_days, 0);
+    assert_eq!(card.position_seconds, Some(42));
 
     let updated = state
         .update_flashcard(

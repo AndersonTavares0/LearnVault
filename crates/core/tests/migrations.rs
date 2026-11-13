@@ -90,6 +90,7 @@ fn all_domain_tables_are_created() -> TestResult {
         "gamification_settings",
         "study_note",
         "flashcard",
+        "flashcard_review",
         "media_bookmark",
         "study_note_fts",
         "media_fts",

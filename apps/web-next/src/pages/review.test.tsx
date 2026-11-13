@@ -8,7 +8,7 @@ const catalog: Catalog = { complete: true, looseFiles: [], nodes: [
 	{ title: 'Rust', path: 'c', role: 'course', courseId: 'rust', files: [], looseFiles: [], children: [lesson('own', 'Ownership')] },
 	{ title: 'Go', path: 'g', role: 'course', courseId: 'go', files: [], looseFiles: [], children: [lesson('chan', 'Channels')] }
 ] };
-const card = (cardId: string, mediaId: string, nextDue: number): Flashcard => ({ cardId, mediaId, front: `front ${cardId}`, back: `back ${cardId}`, intervalDays: 0, nextDue, createdAt: 1, updatedAt: 1 });
+const card = (cardId: string, mediaId: string, nextDue: number, positionSeconds: number | null = null): Flashcard => ({ cardId, mediaId, positionSeconds, front: `front ${cardId}`, back: `back ${cardId}`, intervalDays: 0, nextDue, createdAt: 1, updatedAt: 1 });
 const future = Math.floor(Date.now() / 1000) + 86_400;
 
 afterEach(() => {
@@ -48,6 +48,15 @@ describe('review', () => {
 		fireEvent.click(screen.getByRole('button', { name: 'Again' }));
 		await waitFor(() => expect(review).toHaveBeenCalledWith('b', 'again'));
 		expect(await screen.findByRole('heading', { name: 'Session done' })).toBeTruthy();
+	});
+
+	it('links a card back to the lesson at the moment it was made', async () => {
+		vi.spyOn(transport, 'listFlashcards').mockResolvedValue([card('a', 'own', 1, 125)]);
+		renderApp('/review?course=rust', { catalog });
+		fireEvent.click(await screen.findByRole('button', { name: 'Start review' }));
+		fireEvent.click(screen.getByRole('button', { name: 'Show answer' }));
+		const link = await screen.findByRole('link', { name: 'Open the lesson at 2:05' });
+		expect(link.getAttribute('href')).toBe('/course/rust/c%2Fown?t=125');
 	});
 
 	it('explains how to make cards when there are none, and is in the navigation', async () => {
