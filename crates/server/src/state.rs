@@ -15,6 +15,7 @@ use crate::{
     Config,
     auth::hash_password,
     courses::{RegisteredCourse, legacy_seed, load_registry, registry_path},
+    indexing::Indexer,
     ordering::{CourseOrders, load_orders, order_path},
     update::{UpdateChecker, github_fetcher},
 };
@@ -45,6 +46,8 @@ pub struct AppState {
     pub(crate) database: Arc<Mutex<Database>>,
     pub(crate) login_attempts: Arc<Mutex<HashMap<String, (u32, Instant)>>>,
     pub(crate) rescan_lock: Arc<Mutex<()>>,
+    /// Job de indexação automática. Inerte até [`Indexer::start`] ser chamado pelo servidor.
+    pub(crate) indexer: Indexer,
     pub(crate) inline_script_hashes: Arc<[String]>,
     pub(crate) inline_style_hashes: Arc<[String]>,
     /// Checagem de atualização do produto, feita pelo servidor local.
@@ -103,6 +106,7 @@ impl AppState {
             database: Arc::new(Mutex::new(database)),
             login_attempts: Arc::new(Mutex::new(HashMap::new())),
             rescan_lock: Arc::new(Mutex::new(())),
+            indexer: Indexer::default(),
             blocking_tasks: Arc::new(Semaphore::new(MAX_BLOCKING_TASKS)),
             spa_asset_streams: Arc::new(Semaphore::new(MAX_SPA_ASSET_STREAMS)),
             spa_shell_streams: Arc::new(Semaphore::new(MAX_SPA_SHELL_STREAMS)),
@@ -210,6 +214,7 @@ impl AppState {
             database: Arc::new(Mutex::new(database)),
             login_attempts: Arc::new(Mutex::new(HashMap::new())),
             rescan_lock: Arc::new(Mutex::new(())),
+            indexer: Indexer::default(),
             inline_script_hashes: inline_script_hashes.into(),
             inline_style_hashes: inline_style_hashes.into(),
             spa_shell,

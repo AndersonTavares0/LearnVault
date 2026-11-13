@@ -63,7 +63,7 @@ pub use media::{
     open_media_file, open_media_reference, validate_media_reference,
 };
 pub use ordering::{CatalogOrder, apply_order, order_siblings, sibling_paths, validate_siblings};
-pub use paths::KeyMode;
+pub use paths::{KeyMode, relative_path_key};
 pub use player::{
     DEFAULT_PLAYBACK_SPEED_PERCENT, MAX_PLAYBACK_SPEED_PERCENT, MAX_SUBTITLE_LANGUAGE_CHARS,
     MIN_PLAYBACK_SPEED_PERCENT, PlayerPreference, player_preference, set_player_preference,
@@ -75,7 +75,7 @@ pub use pomodoro::{
     weekly_goal,
 };
 pub use removal::{MediaRemovalImpact, MediaRemovalOutcome, media_removal_impact, remove_media};
-pub use rescan::{RescanSummary, apply_scan, rescan};
+pub use rescan::{RescanSummary, apply_incremental_scan, apply_scan, rescan};
 pub use scanner::{MediaKind, ScanOutcome, ScannedFile, scan};
 pub use search::{
     MAX_SEARCH_QUERY_CHARS, MAX_SEARCH_RESULTS, MIN_SEARCH_QUERY_CHARS, SearchLessonHit,

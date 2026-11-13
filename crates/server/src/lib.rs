@@ -12,6 +12,7 @@ mod config;
 mod courses;
 mod covers;
 mod health;
+mod indexing;
 mod media;
 mod ordering;
 mod player;
@@ -83,6 +84,8 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/api/catalog", get(catalog::catalog))
         .route("/api/search", get(search::search))
+        .route("/api/indexing", get(indexing::status))
+        .route("/api/indexing/cancel", post(indexing::cancel))
         .route("/api/admin/catalog/rescan", post(catalog::rescan))
         .route("/api/admin/courses", post(courses::import))
         .route(
@@ -308,6 +311,9 @@ where
     let state = AppState::initialize(config)
         .await
         .map_err(|error| ServeError::Startup(error.to_string()))?;
+    // Indexação automática: eventos do sistema de arquivos com reconciliação periódica.
+    // O desktop não abre este laço; ele continua usando o rescan explícito.
+    state.indexer.start(state.clone());
     let app = with_request_limits(build_router(state), Duration::from_secs(30));
     // Stable machine-readable handoff for process-level smoke tests. It is emitted only for
     // an explicitly ephemeral listener, after the OS assigned the address and the application
