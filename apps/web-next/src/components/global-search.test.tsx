@@ -72,6 +72,17 @@ describe('global search', () => {
 		expect(document.activeElement).toBe(searchbox());
 	});
 
+	it('opens the same palette from the mobile tab bar tab', async () => {
+		renderApp('/', {});
+		fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+		expect(document.activeElement).toBe(searchbox());
+		fireEvent.change(searchbox(), { target: { value: 'borrow' } });
+		expect(await screen.findByRole('group', { name: 'Notes' })).toBeTruthy();
+		fireEvent.click(screen.getByRole('button', { name: 'Close search' }));
+		expect(document.activeElement).not.toBe(searchbox());
+		expect((searchbox() as HTMLInputElement).value).toBe('');
+	});
+
 	it('shows loading, empty and error states', async () => {
 		vi.mocked(transport.search).mockReturnValue(new Promise(() => {}));
 		renderApp('/', {});

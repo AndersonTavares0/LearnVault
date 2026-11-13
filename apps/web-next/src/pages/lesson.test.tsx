@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { pomodoro } from '@/lib/pomodoro-store';
 import { clearProgressOutbox, progressOutboxKey, readProgressOutbox } from '@/lib/progress-outbox';
@@ -184,6 +184,20 @@ describe('lesson page', () => {
 			fireEvent.click(screen.getByRole('button', { name: 'Save card' }));
 			await waitFor(() => expect(create).toHaveBeenCalledWith('one.mp4', 'Question', 'Answer', 65));
 		});
+
+		it('asks before deleting a card', async () => {
+			vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
+			vi.mocked(transport.listFlashcards).mockResolvedValue([{ cardId: 'card-1', mediaId: 'one.mp4', positionSeconds: null, front: 'Question', back: 'Answer', intervalDays: 0, nextDue: 1, createdAt: 1, updatedAt: 1 }]);
+			const remove = vi.spyOn(transport, 'deleteFlashcard').mockResolvedValue(undefined);
+			renderApp('/course/c/c%2FOne', { catalog });
+			fireEvent.click(await screen.findByRole('tab', { name: 'Cards' }));
+			fireEvent.click(await screen.findByRole('button', { name: 'Manage' }));
+			fireEvent.click(await screen.findByRole('button', { name: 'Delete card: Question' }));
+			expect(remove).not.toHaveBeenCalled();
+			fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete card' }));
+			await waitFor(() => expect(remove).toHaveBeenCalledWith('card-1'));
+			await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+		});
 	});
 
 	describe('resume and persistence', () => {
@@ -335,6 +349,8 @@ describe('lesson page', () => {
 			await waitFor(() => expect(create).toHaveBeenCalledWith('one.mp4', 0, 'Intro'));
 			expect(await screen.findByText('Intro')).toBeTruthy();
 			fireEvent.click(screen.getByRole('button', { name: 'Delete timestamp: Intro' }));
+			expect(remove).not.toHaveBeenCalled();
+			fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete timestamp' }));
 			await waitFor(() => expect(remove).toHaveBeenCalledWith('b1'));
 		});
 	});

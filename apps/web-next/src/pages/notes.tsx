@@ -3,6 +3,7 @@ import { ArrowLeft, Check, Download, NotebookPen, Pencil, Search, Trash2 } from 
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { CoursePicker, GONE } from '@/components/course-picker';
+import { ConfirmDelete } from '@/components/confirm-delete';
 import { Markdown } from '@/components/markdown';
 import { NoteEditor } from '@/components/note-editor';
 import { Eyebrow, Panel } from '@/components/panel';
@@ -69,9 +70,10 @@ function Notebook({ courseId }: { courseId: string }) {
 	const [query, setQuery] = useState('');
 	const [view, setView] = useState<'lesson' | 'date'>('lesson');
 	const [editing, setEditing] = useState<{ id: string; content: string } | null>(null);
+	const [deleting, setDeleting] = useState<StudyNote | null>(null);
 	const refresh = () => client.invalidateQueries({ queryKey: ['notes'] });
 	const update = useMutation({ mutationFn: ({ id, content }: { id: string; content: string }) => transport.updateNote(id, content), onSuccess: () => { setEditing(null); return refresh(); } });
-	const remove = useMutation({ mutationFn: (id: string) => transport.deleteNote(id), onSuccess: refresh });
+	const remove = useMutation({ mutationFn: (id: string) => transport.deleteNote(id), onSuccess: () => { setDeleting(null); return refresh(); } });
 
 	const { groups, matches, courseTitle } = useMemo(() => {
 		const needle = normalizeForSearch(query.trim());
@@ -117,7 +119,7 @@ function Notebook({ courseId }: { courseId: string }) {
 					<span className="text-muted-foreground">{new Date(note.updatedAt * 1000).toLocaleDateString(getLocale(), { dateStyle: 'medium' })}</span>
 					<span className="ml-auto flex gap-1">
 						<Button variant="ghost" size="icon" onClick={() => setEditing({ id: note.noteId, content: note.content })} aria-label={tr('Edit note', 'Editar nota')}><Pencil /></Button>
-						<Button variant="ghost" size="icon" disabled={remove.isPending} onClick={() => remove.mutate(note.noteId)} aria-label={tr('Delete note', 'Excluir nota')}><Trash2 /></Button>
+						<Button variant="ghost" size="icon" disabled={remove.isPending} onClick={() => setDeleting(note)} aria-label={tr('Delete note', 'Excluir nota')}><Trash2 /></Button>
 					</span>
 				</div>
 				{editing?.id === note.noteId ? (
@@ -207,6 +209,15 @@ function Notebook({ courseId }: { courseId: string }) {
 					)}
 				</aside>
 			</div>
+			<ConfirmDelete
+				open={deleting !== null}
+				onOpenChange={(open) => !open && setDeleting(null)}
+				title={tr('Delete this note?', 'Excluir esta nota?')}
+				description={tr('The note is removed for good. The lesson and your progress stay as they are.', 'A nota será removida para sempre. A aula e o progresso continuam como estão.')}
+				label={tr('Delete note', 'Excluir nota')}
+				pending={remove.isPending}
+				onConfirm={() => { if (deleting) remove.mutate(deleting.noteId); }}
+			/>
 		</div>
 	);
 }

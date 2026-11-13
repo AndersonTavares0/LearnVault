@@ -85,6 +85,22 @@ describe('notes', () => {
 		fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 		await waitFor(() => expect(update).toHaveBeenCalledWith(expect.any(String), 'Updated'));
 	});
+
+	it('asks before deleting a note and keeps it on cancel', async () => {
+		const remove = vi.spyOn(transport, 'deleteNote').mockResolvedValue(undefined);
+		renderApp('/notes?course=rust', { catalog });
+		fireEvent.click((await screen.findAllByRole('button', { name: 'Delete note' }))[0]);
+		const dialog = await screen.findByRole('alertdialog');
+		expect(remove).not.toHaveBeenCalled();
+		fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+		expect(remove).not.toHaveBeenCalled();
+		expect(screen.queryByRole('alertdialog')).toBeNull();
+
+		fireEvent.click(screen.getAllByRole('button', { name: 'Delete note' })[0]);
+		fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete note' }));
+		await waitFor(() => expect(remove).toHaveBeenCalledWith('n1'));
+		await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+	});
 });
 
 describe('Pomodoro menu', () => {

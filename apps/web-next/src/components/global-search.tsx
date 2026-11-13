@@ -1,6 +1,7 @@
-import { BookOpen, NotebookPen, Play, Search } from 'lucide-react';
+import { BookOpen, NotebookPen, Play, Search, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useSearch } from '@/app/data';
 import { tr } from '@/lib/i18n';
@@ -27,6 +28,8 @@ export function GlobalSearch() {
 	const box = useRef<HTMLDivElement>(null);
 	const [query, setQuery] = useState('');
 	const [open, setOpen] = useState(false);
+	// Phones have no room for the palette in the topbar, so the tab bar opens it full-screen.
+	const [mobile, setMobile] = useState(false);
 	const [active, setActive] = useState(-1);
 	const ready = query.trim().length >= 2;
 	const search = useSearch(query, open);
@@ -59,8 +62,20 @@ export function GlobalSearch() {
 		return () => window.removeEventListener('pointerdown', onPointer);
 	}, []);
 
+	// The bottom tab bar asks for the palette; it is the only search entry on a phone.
+	useEffect(() => {
+		const onOpen = () => {
+			setMobile(true);
+			setOpen(true);
+			input.current?.focus();
+		};
+		window.addEventListener('learnvault:search', onOpen);
+		return () => window.removeEventListener('learnvault:search', onOpen);
+	}, []);
+
 	const close = () => {
 		setOpen(false);
+		setMobile(false);
 		setActive(-1);
 		setQuery('');
 	};
@@ -97,27 +112,32 @@ export function GlobalSearch() {
 	const showPanel = open && ready;
 	const total = items.length;
 	return (
-		<div ref={box} className="relative hidden w-44 md:block lg:w-64 xl:w-72">
-			<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-			<Input
-				ref={input}
-				type="search"
-				value={query}
-				role="combobox"
-				aria-expanded={showPanel}
-				aria-controls="global-search-results"
-				aria-autocomplete="list"
-				aria-activedescendant={showPanel && active >= 0 ? `global-search-${active}` : undefined}
-				aria-label={tr('Search notes, courses and lessons', 'Buscar notas, cursos e aulas')}
-				aria-keyshortcuts="/ Control+K Meta+K"
-				placeholder={tr('Search everything', 'Buscar em tudo')}
-				onFocus={() => setOpen(true)}
-				onChange={(event) => { setQuery(event.target.value); setOpen(true); setActive(-1); }}
-				onKeyDown={onKeyDown}
-				className="pl-9"
-			/>
+		<div ref={box} className={cn('relative', mobile
+			? 'fixed inset-0 z-50 flex flex-col bg-background p-4 md:static md:z-auto md:block md:w-44 md:bg-transparent md:p-0 lg:w-64 xl:w-72'
+			: 'hidden w-44 md:block lg:w-64 xl:w-72')}>
+			<div className="relative flex items-center">
+				<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+				<Input
+					ref={input}
+					type="search"
+					value={query}
+					role="combobox"
+					aria-expanded={showPanel}
+					aria-controls="global-search-results"
+					aria-autocomplete="list"
+					aria-activedescendant={showPanel && active >= 0 ? `global-search-${active}` : undefined}
+					aria-label={tr('Search notes, courses and lessons', 'Buscar notas, cursos e aulas')}
+					aria-keyshortcuts="/ Control+K Meta+K"
+					placeholder={tr('Search everything', 'Buscar em tudo')}
+					onFocus={() => setOpen(true)}
+					onChange={(event) => { setQuery(event.target.value); setOpen(true); setActive(-1); }}
+					onKeyDown={onKeyDown}
+					className={cn('pl-9', mobile && 'pr-12')}
+				/>
+				{mobile && <Button variant="ghost" size="icon" className="absolute top-0 right-0 md:hidden" onClick={() => { close(); input.current?.blur(); }} aria-label={tr('Close search', 'Fechar busca')}><X /></Button>}
+			</div>
 			{showPanel && (
-				<div id="global-search-results" role="listbox" aria-label={tr('Search results', 'Resultados da busca')} className="absolute top-full right-0 z-50 mt-2 max-h-[min(70vh,32rem)] w-[min(28rem,calc(100vw-2rem))] overflow-y-auto rounded-2xl border bg-popover p-2 shadow-lg">
+				<div id="global-search-results" role="listbox" aria-label={tr('Search results', 'Resultados da busca')} className={cn('overflow-y-auto rounded-2xl border bg-popover p-2 shadow-lg', mobile ? 'mt-3 max-h-[calc(100dvh-6rem)]' : 'absolute top-full right-0 z-50 mt-2 max-h-[min(70vh,32rem)] w-[min(28rem,calc(100vw-2rem))]')}>
 					{search.isPending && <p role="status" className="px-3 py-4 text-sm text-muted-foreground">{tr('Searching…', 'Buscando…')}</p>}
 					{search.isError && <p role="alert" className="px-3 py-4 text-sm text-destructive">{tr('Search is unavailable right now.', 'A busca não está disponível agora.')}</p>}
 					{!search.isPending && !search.isError && total === 0 && <p role="status" className="px-3 py-4 text-sm text-muted-foreground">{tr(`No results for “${query.trim()}”.`, `Nenhum resultado para “${query.trim()}”.`)}</p>}

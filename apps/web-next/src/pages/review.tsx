@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { Link, useSearchParams } from 'react-router';
 import { CoursePicker, GONE } from '@/components/course-picker';
 import { Eyebrow, Hero, Ring } from '@/components/panel';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { useLocale } from '@/hooks/use-locale';
 import { cardsToTsv } from '@/lib/cards';
 import { formatCount } from '@/lib/catalog';
@@ -17,6 +17,8 @@ import { PageHeader } from '@/app/shell';
 
 const nowSeconds = () => Math.floor(Date.now() / 1000);
 const CARDS = ['flashcards', 'all'] as const;
+/** The review deck that queues every due card, across courses. */
+const ALL = '__all';
 
 /**
  * Review: every card you made in your lessons, due when you are about to forget it. Pick a course
@@ -52,6 +54,7 @@ export function ReviewPage() {
 	if (!studySyncSupported) return <PageHeader icon={Layers} title={tr('Review', 'Revisão')} description={tr('Study tracking is off on this server.', 'O acompanhamento de estudo está desligado neste servidor.')} />;
 	if (cards.isPending || catalog.isPending) return <p role="status" className="text-muted-foreground">{tr('Loading cards…', 'Carregando cartões…')}</p>;
 	if (cards.error) return <p role="alert" className="text-destructive">{cards.error.message}</p>;
+	if (courseId === ALL) return <Deck courseId={ALL} title={tr('All courses', 'Todos os cursos')} cards={all} now={now} />;
 	if (courseId) {
 		const title = courseId === GONE ? tr('Lessons no longer in the library', 'Aulas que não estão mais na biblioteca') : (catalog.data?.nodes ?? []).find((node) => node.courseId === courseId)?.title ?? courseId;
 		return <Deck courseId={courseId} title={title} cards={all.filter((card) => courseOf(card) === courseId)} now={now} />;
@@ -74,7 +77,10 @@ export function ReviewPage() {
 			icon={Layers}
 			title={tr('Choose a course to review its Cards', 'Escolha um curso para revisar seus Cartões')}
 			description={due === 0 ? tr('Nothing is due right now. Cards come back when they are due.', 'Nada vence agora. Os cartões voltam quando vencerem.') : formatCount(due, tr('card is due', 'cartão vence agora'), tr('cards are due', 'cartões vencem agora'))}
-			actions={exportUrl && <a href={exportUrl} download="learnvault-cards.tsv" className="inline-flex h-11 items-center gap-2 rounded-full border bg-card px-5 text-sm font-medium hover:bg-brand-tint"><Download className="size-4" aria-hidden="true" />{tr('Export for Anki', 'Exportar para o Anki')}</a>}
+			actions={<>
+				{due > 0 && <Link to={`/review?course=${ALL}`} className={buttonVariants({ className: 'rounded-full' })}>{tr(`Review all due cards (${due})`, `Revisar todos os cartões a vencer (${due})`)}</Link>}
+				{exportUrl && <a href={exportUrl} download="learnvault-cards.tsv" className="inline-flex h-11 items-center gap-2 rounded-full border bg-card px-5 text-sm font-medium hover:bg-brand-tint"><Download className="size-4" aria-hidden="true" />{tr('Export for Anki', 'Exportar para o Anki')}</a>}
+			</>}
 			footer={(id) => tr(`${decks.get(id)?.due ?? 0} due · ${decks.get(id)?.total ?? 0} cards`, `${decks.get(id)?.due ?? 0} vencem · ${decks.get(id)?.total ?? 0} cartões`)}
 			to={(id) => `/review?course=${encodeURIComponent(id)}`}
 			hasGone={decks.has(GONE)}
@@ -125,7 +131,7 @@ function Deck({ courseId, title, cards, now }: { courseId: string; title: string
 					<Button variant="outline" size="icon" className="size-11 rounded-full" onClick={leave} aria-label={tr('Close', 'Fechar')}><ArrowLeft /></Button>
 					<div className="min-w-0 flex-1">
 						<p className="truncate font-heading text-lg font-bold">{title}</p>
-						{location && <p className="truncate text-sm text-muted-foreground">{location.lesson.title}{current?.positionSeconds == null ? '' : ` · ${formatDuration(current.positionSeconds)}`}</p>}
+						{location && <p className="truncate text-sm text-muted-foreground">{courseId === ALL && `${location.courseTitle} · `}{location.lesson.title}{current?.positionSeconds == null ? '' : ` · ${formatDuration(current.positionSeconds)}`}</p>}
 					</div>
 					<div className="flex items-center gap-3 rounded-2xl border bg-card px-4 py-2">
 						<Ring size={52} value={live.length ? done / live.length : 0} label={tr(`${done} of ${live.length} cards reviewed`, `${done} de ${live.length} cartões revisados`)} center={<span className="text-[0.7rem] font-bold tabular-nums">{Math.min(done + 1, live.length)}/{live.length}</span>} />
@@ -179,7 +185,7 @@ function Deck({ courseId, title, cards, now }: { courseId: string; title: string
 	return (
 		<div className="space-y-8">
 			<Link to="/review" className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" aria-hidden="true" />{tr('All courses', 'Todos os cursos')}</Link>
-			<PageHeader icon={Layers} title={tr(`${title} cards`, `Cartões de ${title}`)} description={formatCount(cards.length, tr('card in this deck.', 'cartão neste baralho.'), tr('cards in this deck.', 'cartões neste baralho.'))} />
+			<PageHeader icon={Layers} title={courseId === ALL ? tr('All due cards', 'Todos os cartões a vencer') : tr(`${title} cards`, `Cartões de ${title}`)} description={formatCount(cards.length, courseId === ALL ? tr('card across all courses.', 'cartão em todos os cursos.') : tr('card in this deck.', 'cartão neste baralho.'), courseId === ALL ? tr('cards across all courses.', 'cartões em todos os cursos.') : tr('cards in this deck.', 'cartões neste baralho.'))} />
 			<section aria-labelledby="due-heading">
 				<Hero className="flex flex-wrap items-center justify-between gap-6">
 					<div>
@@ -189,7 +195,7 @@ function Deck({ courseId, title, cards, now }: { courseId: string; title: string
 					{due.length > 0 && <Button size="lg" className="h-14 rounded-full px-8" onClick={() => { setQueue(due.map((card) => card.cardId)); setDone(0); setRevealed(false); }}>{tr('Start review', 'Começar revisão')}</Button>}
 				</Hero>
 			</section>
-			{courseId !== GONE && <Link to={`/course/${encodeURIComponent(courseId)}`} className="inline-flex min-h-11 items-center font-semibold text-primary hover:underline">{tr('Open the course', 'Abrir o curso')}</Link>}
+			{courseId !== GONE && courseId !== ALL && <Link to={`/course/${encodeURIComponent(courseId)}`} className="inline-flex min-h-11 items-center font-semibold text-primary hover:underline">{tr('Open the course', 'Abrir o curso')}</Link>}
 		</div>
 	);
 }
