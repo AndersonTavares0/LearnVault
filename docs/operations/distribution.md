@@ -53,6 +53,8 @@ What this does and does not promise:
 - A signature proves the image came from `release.yml` in this repository, run for a version tag or for `main`. A manual run of the workflow on `main` can re-sign a rebuilt tag; the signature does not distinguish that from the original.
 - The image is pushed before it is signed. If signing fails, the release is not published, but the tags already point at an unsigned image; the updater refuses it, but `docker compose pull` of `:latest` would not. Re-run the workflow to fix it.
 - The updater installs `cosign` from the Alpine mirror when it starts, unpinned. Bake a pinned `cosign` into the updater image if that matters for your threat model.
+- `LEARNVAULT_CHANNEL` decides which releases may be installed. `stable` (the default) accepts final versions only and reads the server's update endpoint or the repository's latest release. `rc` also accepts release candidates and reads the release list, newest first, because candidates are never marked "latest". Both channels run the same signature check and refuse a candidate tag that is not shaped like `X.Y.Z-rc.N`.
+- The updater never moves backwards: when the discovered or requested version is not newer than the installed one, it logs the comparison and exits without touching the containers.
 - `LEARNVAULT_GITHUB_REPO` must look like `owner/name`, and `LEARNVAULT_VERIFY_SIGNATURE` must be exactly `true` or `false`; anything else stops the update.
 
 ### Automatic updates with Podman Quadlet

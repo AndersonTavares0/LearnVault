@@ -152,6 +152,7 @@ test('the signer identity accepts only the release workflow of this repository',
     const matches = id => spawnSync('grep', ['-Eq', regex], { input: id }).status === 0;
     const base = 'https://github.com/AndersonTavares0/LearnVault/.github/workflows/release.yml';
     assert.ok(matches(`${base}@refs/tags/v0.9.0`));
+    assert.ok(matches(`${base}@refs/tags/v0.9.0-rc.5`));
     assert.ok(matches(`${base}@refs/heads/main`));
     assert.ok(!matches(`${base}@refs/heads/feature`));
     assert.ok(!matches(`${base}@refs/tags/v0.9`));
@@ -160,6 +161,26 @@ test('the signer identity accepts only the release workflow of this repository',
     assert.ok(!matches(base.replace('LearnVault', 'LearnVault2') + '@refs/tags/v0.9.0'));
     assert.ok(!matches(`x${base}@refs/tags/v0.9.0`));
 });
+
+// The channel decides which releases may be installed; the signature check is separate.
+for (const [name, settings, target, status, pulled] of [
+    ['stable refuses a candidate', {}, '1.0.1-rc.2', 1, false],
+    ['rc accepts a candidate', { LEARNVAULT_CHANNEL: 'rc', TEST_ACTIVE_VERSION: 'v1.0.1-rc.2' }, '1.0.1-rc.2', 0, true],
+    ['rc still refuses a malformed candidate', { LEARNVAULT_CHANNEL: 'rc' }, '1.0.1-rc.0', 1, false],
+    ['an older candidate is skipped', { LEARNVAULT_CHANNEL: 'rc' }, '0.9.0-rc.5', 0, false],
+    ['an older release is skipped', {}, '0.9.0', 0, false],
+    ['an unknown channel is refused', { LEARNVAULT_CHANNEL: 'nightly' }, '1.0.1', 1, false],
+]) {
+    test(`update channel: ${name}`, t => {
+        const fixtureData = fixture(t, settings);
+        const result = spawnSync('sh', [join(root, 'deploy/scripts/update.sh'), target], {
+            env: fixtureData.env, encoding: 'utf8', timeout: 2000,
+        });
+        assert.equal(result.status, status, result.stderr);
+        const calls = readFileSync(fixtureData.log, 'utf8');
+        assert.equal(/pull /.test(calls), pulled, calls);
+    });
+}
 
 test('signature checking can be turned off for a private mirror', t => {
     const fixtureData = fixture(t, { LEARNVAULT_VERIFY_SIGNATURE: 'false', TEST_COSIGN_EXIT: '1' });
