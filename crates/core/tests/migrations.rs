@@ -91,6 +91,9 @@ fn all_domain_tables_are_created() -> TestResult {
         "study_note",
         "flashcard",
         "media_bookmark",
+        "study_note_fts",
+        "media_fts",
+        "course_fts",
     ] {
         let found: i64 = db.connection().query_row(
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",

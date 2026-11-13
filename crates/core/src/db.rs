@@ -66,6 +66,18 @@ impl Database {
             return Ok(false);
         }
 
+        for table in REQUIRED_FTS_TABLES {
+            let found: i64 = self.conn.query_row(
+                "SELECT COUNT(*) FROM pragma_table_list
+                 WHERE schema = 'main' AND type = 'virtual' AND name = ?1",
+                [table],
+                |row| row.get(0),
+            )?;
+            if found != 1 {
+                return Ok(false);
+            }
+        }
+
         for definition in REQUIRED_TABLES {
             if !definition_matches(&self.conn, definition)? {
                 return Ok(false);
@@ -391,6 +403,9 @@ struct TableDefinition {
     name: &'static str,
     columns: &'static [(&'static str, &'static str, bool, Option<&'static str>, i64)],
 }
+
+/// FTS5 virtual tables created by schema version 13.
+const REQUIRED_FTS_TABLES: &[&str] = &["study_note_fts", "media_fts", "course_fts"];
 
 const REQUIRED_TABLES: &[TableDefinition] = &[
     TableDefinition {

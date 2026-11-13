@@ -493,9 +493,86 @@ CREATE INDEX media_bookmark_owner_media_idx
     ON media_bookmark (owner_id, media_id, position_seconds, created_at);
 ";
 
+/// Versão 13: índice de busca global em FTS5.
+///
+/// `study_note_fts` and `media_fts` are external-content indexes over the tables that own
+/// the text, so the content is not duplicated. Triggers keep both indexes correct on every
+/// insert, update and delete; `rebuild` backfills the rows that already existed before this
+/// migration. `course_fts` is standalone because registered course titles live in the
+/// server's configuration file, not in the database; the server refreshes it from its
+/// current course registry. The tokenizer removes diacritics so "programacao" matches
+/// "Programação". Note rows stay private through the `study_note.owner_id` join.
+const V13: &str = "
+CREATE VIRTUAL TABLE study_note_fts USING fts5(
+    content,
+    content = 'study_note',
+    content_rowid = 'rowid',
+    tokenize = 'unicode61 remove_diacritics 2'
+);
+
+CREATE TRIGGER study_note_fts_after_insert
+AFTER INSERT ON study_note
+BEGIN
+    INSERT INTO study_note_fts (rowid, content) VALUES (NEW.rowid, NEW.content);
+END;
+
+CREATE TRIGGER study_note_fts_after_update
+AFTER UPDATE OF content ON study_note
+BEGIN
+    INSERT INTO study_note_fts (study_note_fts, rowid, content)
+    VALUES ('delete', OLD.rowid, OLD.content);
+    INSERT INTO study_note_fts (rowid, content) VALUES (NEW.rowid, NEW.content);
+END;
+
+CREATE TRIGGER study_note_fts_after_delete
+AFTER DELETE ON study_note
+BEGIN
+    INSERT INTO study_note_fts (study_note_fts, rowid, content)
+    VALUES ('delete', OLD.rowid, OLD.content);
+END;
+
+INSERT INTO study_note_fts (study_note_fts) VALUES ('rebuild');
+
+CREATE VIRTUAL TABLE media_fts USING fts5(
+    relative_path,
+    content = 'media',
+    content_rowid = 'rowid',
+    tokenize = 'unicode61 remove_diacritics 2'
+);
+
+CREATE TRIGGER media_fts_after_insert
+AFTER INSERT ON media
+BEGIN
+    INSERT INTO media_fts (rowid, relative_path) VALUES (NEW.rowid, NEW.relative_path);
+END;
+
+CREATE TRIGGER media_fts_after_update
+AFTER UPDATE OF relative_path ON media
+BEGIN
+    INSERT INTO media_fts (media_fts, rowid, relative_path)
+    VALUES ('delete', OLD.rowid, OLD.relative_path);
+    INSERT INTO media_fts (rowid, relative_path) VALUES (NEW.rowid, NEW.relative_path);
+END;
+
+CREATE TRIGGER media_fts_after_delete
+AFTER DELETE ON media
+BEGIN
+    INSERT INTO media_fts (media_fts, rowid, relative_path)
+    VALUES ('delete', OLD.rowid, OLD.relative_path);
+END;
+
+INSERT INTO media_fts (media_fts) VALUES ('rebuild');
+
+CREATE VIRTUAL TABLE course_fts USING fts5(
+    course_id UNINDEXED,
+    title,
+    tokenize = 'unicode61 remove_diacritics 2'
+);
+";
+
 /// Cadeia de migrações aplicada por [`crate::db::Database`]; o índice `n` leva o banco da
 /// versão `n` para `n + 1`.
-pub(crate) const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12];
+pub(crate) const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13];
 
 /// Versão do schema gravada em `PRAGMA user_version` (0 quando nunca migrado).
 ///

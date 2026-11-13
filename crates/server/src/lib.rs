@@ -14,6 +14,7 @@ mod covers;
 mod health;
 mod media;
 mod ordering;
+mod search;
 mod spa;
 mod state;
 mod stream;
@@ -80,6 +81,7 @@ pub fn build_router(state: AppState) -> Router {
             axum::routing::delete(auth::delete_user),
         )
         .route("/api/catalog", get(catalog::catalog))
+        .route("/api/search", get(search::search))
         .route("/api/admin/catalog/rescan", post(catalog::rescan))
         .route("/api/admin/courses", post(courses::import))
         .route(

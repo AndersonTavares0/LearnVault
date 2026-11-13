@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { setLocale } from './i18n';
 import type { NewPdfAnnotation } from './transport';
 import { findLesson } from './router';
-import { desktopCoverUrl, desktopMediaUrl, DesktopStub, FocusSessionConflict, HttpTransport, InvalidFocusSession, lessonFromNode, MAX_COVER_BYTES, normalizeBookmark, normalizeCatalog, normalizeFocusSession, normalizeFocusSummary, normalizeRecentStudy, normalizeRewardSummary, normalizeStudyProgress, normalizeStudySummary, normalizeUpdateStatus, normalizeUser, STUDY_NOT_AVAILABLE, CATALOG_LIMITS, type Transport } from './transport';
+import { desktopCoverUrl, desktopMediaUrl, DesktopStub, FocusSessionConflict, HttpTransport, InvalidFocusSession, lessonFromNode, MAX_COVER_BYTES, normalizeBookmark, normalizeCatalog, normalizeFocusSession, normalizeFocusSummary, normalizeRecentStudy, normalizeRewardSummary, normalizeSearchResults, normalizeStudyProgress, normalizeStudySummary, normalizeUpdateStatus, normalizeUser, STUDY_NOT_AVAILABLE, CATALOG_LIMITS, type Transport } from './transport';
 
 // O Tauri só é carregado no desktop: fora dele o módulo é substituído pelo mock, de modo
 // que a suíte nunca toca `window.__TAURI_INTERNALS__`.
@@ -15,8 +15,8 @@ beforeEach(() => {
 
 describe('transport contract', () => {
 	it('exposes the HTTP transport seam without routing assumptions', () => {
-		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'studySummary', 'listNotes', 'createNote', 'updateNote', 'deleteNote', 'listBookmarks', 'createBookmark', 'deleteBookmark', 'listPdfAnnotations', 'createPdfAnnotation', 'updatePdfAnnotation', 'deletePdfAnnotation', 'listFlashcards', 'createFlashcard', 'updateFlashcard', 'deleteFlashcard', 'reviewFlashcard', 'listFavorites', 'setCourseFavorite', 'setLessonFavorite', 'recordFocusSession', 'listFocusSessions', 'focusSummary', 'rewardSummary', 'claimDailyMission', 'setWeeklyGoal', 'userAvatarUrl', 'uploadUserAvatar', 'deleteUserAvatar', 'checkUpdate', 'installUpdate', 'updateHistory', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover', 'mediaCapabilities', 'transcodeUrl', 'openInSystemPlayer'];
-		expect(methods).toHaveLength(52);
+		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'studySummary', 'listNotes', 'search', 'createNote', 'updateNote', 'deleteNote', 'listBookmarks', 'createBookmark', 'deleteBookmark', 'listPdfAnnotations', 'createPdfAnnotation', 'updatePdfAnnotation', 'deletePdfAnnotation', 'listFlashcards', 'createFlashcard', 'updateFlashcard', 'deleteFlashcard', 'reviewFlashcard', 'listFavorites', 'setCourseFavorite', 'setLessonFavorite', 'recordFocusSession', 'listFocusSessions', 'focusSummary', 'rewardSummary', 'claimDailyMission', 'setWeeklyGoal', 'userAvatarUrl', 'uploadUserAvatar', 'deleteUserAvatar', 'checkUpdate', 'installUpdate', 'updateHistory', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover', 'mediaCapabilities', 'transcodeUrl', 'openInSystemPlayer'];
+		expect(methods).toHaveLength(53);
 	});
 	it('tells a rate-limited sign-in apart from wrong credentials', async () => {
 		vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 429 })));
@@ -456,6 +456,19 @@ describe('transport contract', () => {
 		expect(() => normalizeBookmark({ bookmark_id: 'b1', media_id: 'm1', position_seconds: -1, label: 'x', created_at: 10 })).toThrow('Resposta inválida do servidor');
 		expect(() => normalizeBookmark({ bookmark_id: 'b1', media_id: 'm1', position_seconds: 1, label: '   ', created_at: 10 })).toThrow('Resposta inválida do servidor');
 		expect(() => normalizeBookmark({ bookmark_id: 'b1', media_id: 'm1', position_seconds: 1, label: 'a'.repeat(201), created_at: 10 })).toThrow('Resposta inválida do servidor');
+	});
+
+	it('validates grouped search results and keeps snippets as text', () => {
+		const results = normalizeSearchResults({
+			notes: [{ note_id: 'n1', media_id: 'm1', course_id: 'c1', course_title: 'Rust', lesson_path: 'r/own.mp4', lesson_title: 'Ownership', position_seconds: 75, updated_at: 10, snippet: 'the <mark>borrow</mark> checker' }],
+			courses: [{ course_id: 'c1', title: 'Rust' }],
+			lessons: [{ course_id: 'c1', course_title: 'Rust', media_id: 'm1', path: 'r/own.mp4', title: 'Ownership' }]
+		});
+		expect(results.notes[0]).toMatchObject({ noteId: 'n1', lessonPath: 'r/own.mp4', positionSeconds: 75, snippet: 'the <mark>borrow</mark> checker' });
+		expect(results.courses).toEqual([{ courseId: 'c1', title: 'Rust' }]);
+		expect(results.lessons[0].path).toBe('r/own.mp4');
+		expect(() => normalizeSearchResults({ notes: 'nope' })).toThrow('Resposta inválida do servidor');
+		expect(() => normalizeSearchResults({ notes: [{ note_id: 'n1' }] })).toThrow('Resposta inválida do servidor');
 	});
 	it('normalizes a recent study list', () => {
 		const recent = normalizeRecentStudy({ items: [{ media_id: 'm1', position_seconds: 10, completed: false, recorded: true }] });

@@ -71,6 +71,21 @@ export type StudyNote = {
 	createdAt: number;
 	updatedAt: number;
 };
+/** A note matched by global search; `snippet` wraps matches in `<mark>`/`</mark>`. */
+export type SearchNoteResult = {
+	noteId: string;
+	mediaId: string;
+	courseId: string;
+	courseTitle: string;
+	lessonPath: string;
+	lessonTitle: string;
+	positionSeconds: number;
+	updatedAt: number;
+	snippet: string;
+};
+export type SearchCourseResult = { courseId: string; title: string };
+export type SearchLessonResult = { courseId: string; courseTitle: string; mediaId: string; path: string; title: string };
+export type SearchResults = { notes: SearchNoteResult[]; courses: SearchCourseResult[]; lessons: SearchLessonResult[] };
 export type PdfAnnotationKind = 'highlight' | 'underline' | 'note';
 export type PdfAnnotationColor = 'yellow' | 'green' | 'blue' | 'pink';
 /** A rectangle on a page, as fractions of its width and height, origin at the top left. */
@@ -177,6 +192,8 @@ export interface Transport {
 	recentStudy(limit?: number): Promise<RecentStudy>;
 	studySummary(): Promise<StudySummary>;
 	listNotes(mediaId?: string): Promise<StudyNote[]>;
+	/** Global search: the owner's notes plus shared course and lesson titles. */
+	search(query: string, limit?: number): Promise<SearchResults>;
 	createNote(mediaId: string, positionSeconds: number, content: string): Promise<StudyNote>;
 	updateNote(noteId: string, content: string): Promise<StudyNote>;
 	listBookmarks(mediaId: string): Promise<MediaBookmark[]>;
@@ -618,6 +635,62 @@ export function normalizeStudyNote(raw: unknown): StudyNote {
 	return res;
 }
 
+function searchString(value: unknown, key: string): string {
+	if (typeof value !== 'string') throw invalidPayload(`campo ${key} da busca inválido.`);
+	return value;
+}
+
+function searchInteger(value: unknown, key: string): number {
+	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw invalidPayload(`campo ${key} da busca inválido.`);
+	return value;
+}
+
+/** Validates the grouped global search payload; an unknown shape is rejected whole. */
+export function normalizeSearchResults(value: unknown): SearchResults {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('resultados da busca ausentes.');
+	const payload = value as Record<string, unknown>;
+	const list = (key: string): unknown[] => {
+		const raw = payload[key];
+		if (raw === undefined) return [];
+		if (raw === null || !Array.isArray(raw)) throw invalidPayload(`campo ${key} da busca inválido.`);
+		return raw;
+	};
+	const record = (raw: unknown, key: string): Record<string, unknown> => {
+		if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalidPayload(`item ${key} da busca inválido.`);
+		return raw as Record<string, unknown>;
+	};
+	return {
+		notes: list('notes').map((raw) => {
+			const note = record(raw, 'notes');
+			return {
+				noteId: searchString(note.note_id, 'note_id'),
+				mediaId: searchString(note.media_id, 'media_id'),
+				courseId: searchString(note.course_id, 'course_id'),
+				courseTitle: searchString(note.course_title, 'course_title'),
+				lessonPath: searchString(note.lesson_path, 'lesson_path'),
+				lessonTitle: searchString(note.lesson_title, 'lesson_title'),
+				positionSeconds: searchInteger(note.position_seconds, 'position_seconds'),
+				updatedAt: searchInteger(note.updated_at, 'updated_at'),
+				snippet: searchString(note.snippet, 'snippet')
+			};
+		}),
+		courses: list('courses').map((raw) => {
+			const course = record(raw, 'courses');
+			return { courseId: searchString(course.course_id, 'course_id'), title: searchString(course.title, 'title') };
+		}),
+		lessons: list('lessons').map((raw) => {
+			const lesson = record(raw, 'lessons');
+			return {
+				courseId: searchString(lesson.course_id, 'course_id'),
+				courseTitle: searchString(lesson.course_title, 'course_title'),
+				mediaId: searchString(lesson.media_id, 'media_id'),
+				path: searchString(lesson.path, 'path'),
+				title: searchString(lesson.title, 'title')
+			};
+		})
+	};
+}
+
 const PDF_KINDS: readonly string[] = ['highlight', 'underline', 'note'];
 const PDF_COLORS: readonly string[] = ['yellow', 'green', 'blue', 'pink'];
 
@@ -853,6 +926,13 @@ export class HttpTransport implements Transport {
 		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not load notes.', 'Não foi possível carregar as anotações.'));
 		const data = await response.json();
 		return (Array.isArray(data.items) ? data.items : []).map(normalizeStudyNote);
+	}
+	async search(query: string, limit?: number): Promise<SearchResults> {
+		const params = new URLSearchParams({ q: query });
+		if (limit !== undefined) params.set('limit', String(limit));
+		const response = await fetch(`/api/search?${params.toString()}`);
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not search.', 'Não foi possível buscar.'));
+		return normalizeSearchResults(await response.json());
 	}
 	async createNote(mediaId: string, positionSeconds: number, content: string) {
 		const response = await fetch('/api/study/notes', {
@@ -1196,6 +1276,10 @@ export class DesktopStub implements Transport {
 		} catch (cause) {
 			throw desktopError(cause, tr('Could not load notes.', 'Não foi possível carregar as anotações.'));
 		}
+	}
+	/** Global search is not wired to the desktop IPC yet; the UI only shows it on the server build. */
+	search(): Promise<SearchResults> {
+		return Promise.resolve({ notes: [], courses: [], lessons: [] });
 	}
 	async createNote(mediaId: string, positionSeconds: number, content: string): Promise<StudyNote> {
 		try {

@@ -149,6 +149,18 @@ export function useNotes(enabled = true) {
 	return useQuery({ queryKey: ['notes'], enabled: enabled && studySyncSupported, queryFn: () => transport.listNotes() });
 }
 
+/** Global search; disabled until the query has at least two characters. */
+export function useSearch(query: string, enabled = true) {
+	const ready = query.trim().length >= 2;
+	return useQuery({
+		queryKey: ['search', query],
+		enabled: enabled && ready,
+		retry: false,
+		staleTime: 30_000,
+		queryFn: () => transport.search(query)
+	});
+}
+
 export function useFocusSummary(enabled = true) {
 	return useQuery({ queryKey: ['focus-summary'], enabled: enabled && studySyncSupported, queryFn: () => transport.focusSummary() });
 }
