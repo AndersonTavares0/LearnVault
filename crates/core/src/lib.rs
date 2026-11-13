@@ -46,8 +46,9 @@ pub use annotations::{
 pub use auth::{
     AuthSession, AuthUser, LocalUserSummary, bootstrap_admin, bootstrap_admin_with_change_required,
     can_user_access_course, create_session, create_user, delete_session, delete_user,
-    find_user_by_username, has_admin, list_user_course_access, list_users, session_user,
-    set_user_course_access, update_credentials, update_credentials_and_session,
+    find_user_by_username, has_admin, list_user_course_access, list_users, prune_expired_sessions,
+    session_user, set_user_course_access, touch_session, update_credentials,
+    update_credentials_and_session,
 };
 pub use catalog::{
     Availability, Catalog, CatalogFile, CatalogNode, NodeRole, build_catalog, course_file_lessons,

@@ -4,9 +4,11 @@ import { createRoot } from 'react-dom/client';
 import { RouterProvider } from 'react-router/dom';
 import { applyStoredPreferences } from './app/preferences';
 import { createRouter } from './app/router';
+import { installSessionGuard } from './lib/session-guard';
 import './styles/app.css';
 
 applyStoredPreferences();
+installSessionGuard();
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } } });
 

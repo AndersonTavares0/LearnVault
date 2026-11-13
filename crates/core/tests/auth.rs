@@ -3,7 +3,8 @@
 use learnvault_core::{
     AuthSession, AuthUser, Database, Error, bootstrap_admin, can_user_access_course,
     create_session, create_user, delete_session, delete_user, find_user_by_username, list_users,
-    session_user, set_user_course_access, update_credentials,
+    prune_expired_sessions, session_user, set_user_course_access, touch_session,
+    update_credentials,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -92,6 +93,26 @@ fn sessions_expire_and_store_only_the_token_hash() -> TestResult {
         |row| row.get(0),
     )?;
     assert_eq!(stored, TOKEN_HASH);
+    Ok(())
+}
+
+#[test]
+fn touches_a_session_forward_and_prunes_only_expired_rows() -> TestResult {
+    let mut db = Database::open_in_memory()?;
+    bootstrap_admin(&mut db, USER_ID, USERNAME, PASSWORD_HASH, 1_700_000_000)?;
+    create_session(&mut db, TOKEN_HASH, USER_ID, 2_000)?;
+    create_session(&mut db, "expired-hash", USER_ID, 900)?;
+
+    assert_eq!(touch_session(&db, TOKEN_HASH, 3_000)?, 1);
+    assert_eq!(
+        session_user(&db, TOKEN_HASH, 2_999)?.map(|s| s.expires_at),
+        Some(3_000)
+    );
+
+    assert_eq!(prune_expired_sessions(&db, 1_000)?, 1);
+    assert!(session_user(&db, "expired-hash", 1_000)?.is_none());
+    assert!(session_user(&db, TOKEN_HASH, 1_000)?.is_some());
+    assert_eq!(prune_expired_sessions(&db, 1_000)?, 0);
     Ok(())
 }
 

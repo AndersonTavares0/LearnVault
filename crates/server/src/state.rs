@@ -425,7 +425,20 @@ impl AppState {
             .ok_or(StateError::Capacity)?;
         tokio::task::spawn_blocking(move || {
             let _blocking_task = blocking_task;
-            learnvault_core::session_user(&database, &token_hash, unix_now())
+            let now = unix_now();
+            let session = learnvault_core::session_user(&database, &token_hash, now)?;
+            // Sliding window: renew once half of the lifetime has been consumed, so an
+            // active reader keeps the session without extending it on every request.
+            if let Some(session) = &session
+                && session.expires_at - now <= SESSION_LIFETIME_SECONDS / 2
+            {
+                learnvault_core::touch_session(
+                    &database,
+                    &token_hash,
+                    now + SESSION_LIFETIME_SECONDS,
+                )?;
+            }
+            Ok(session)
         })
         .await
         .map_err(StateError::Blocking)?
@@ -443,11 +456,14 @@ impl AppState {
             .ok_or(StateError::Capacity)?;
         tokio::task::spawn_blocking(move || {
             let _blocking_task = blocking_task;
+            let now = unix_now();
+            // Housekeeping on login keeps the table bounded without a scheduler.
+            learnvault_core::prune_expired_sessions(&database, now)?;
             learnvault_core::create_session(
                 &mut database,
                 &token_hash,
                 &user_id,
-                unix_now() + SESSION_LIFETIME_SECONDS,
+                now + SESSION_LIFETIME_SECONDS,
             )
         })
         .await
