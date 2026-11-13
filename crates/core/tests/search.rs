@@ -111,6 +111,37 @@ fn course_access_filters_notes_and_catalog_results() -> TestResult {
 }
 
 #[test]
+fn a_restricted_owner_keeps_matches_that_rank_below_the_limit() -> TestResult {
+    let mut db = database()?;
+    db.connection().execute(
+        "INSERT INTO library (library_id, available) VALUES ('lib-2', 1)",
+        [],
+    )?;
+    for index in 0..12 {
+        let media_id = format!("hidden-{index}");
+        db.connection().execute(
+            "INSERT INTO media (media_id, library_id, relative_path, relative_path_key, size, mtime, availability)
+             VALUES (?1, 'lib-2', ?2, ?2, 1024, 1760000000, 'available')",
+            rusqlite::params![media_id, format!("Hidden/{index} - Borrow.mp4")],
+        )?;
+        create_study_note(&db, "usr-a", &media_id, 10, "borrow note")?;
+    }
+    insert_media(&db, "media-1", "Course/02 - Borrow.mp4")?;
+    insert_user(&db, "usr-a")?;
+    set_user_course_access(&mut db, "usr-a", Some(&[LIB.to_owned()]))?;
+    create_study_note(&db, "usr-a", "media-1", 10, "borrow note")?;
+
+    // Twelve denied notes share the ranking with the allowed one; a small limit must
+    // still surface the note the owner can open instead of an empty group.
+    let results = search(&db, "usr-a", false, "borrow", 2)?;
+    assert_eq!(results.notes.len(), 1);
+    assert_eq!(results.notes[0].media_id, "media-1");
+    assert_eq!(results.lessons.len(), 1);
+    assert_eq!(results.lessons[0].media_id, "media-1");
+    Ok(())
+}
+
+#[test]
 fn media_index_tracks_renames_and_explicit_removal() -> TestResult {
     let db = database()?;
     insert_media(&db, "media-1", "Course/01 - Ownership.mp4")?;

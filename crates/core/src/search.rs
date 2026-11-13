@@ -10,8 +10,6 @@
 //! query, so operators like `NEAR`, `*` or `-` are searched literally. The query is bound
 //! as a SQL parameter, never interpolated.
 
-use std::collections::HashMap;
-
 use crate::db::Database;
 use crate::error::Result;
 
@@ -109,12 +107,10 @@ pub fn search(
     }
 
     let conn = db.connection();
-    let fetch = limit.saturating_mul(4).min(MAX_SEARCH_RESULTS * 4);
-    let mut access: HashMap<String, bool> = HashMap::new();
 
     let mut notes = Vec::new();
     {
-        let mut statement = conn.prepare(
+        let mut statement = conn.prepare(&format!(
             "SELECT n.note_id, n.media_id, m.library_id, m.relative_path,
                     n.position_seconds, n.updated_at,
                     snippet(study_note_fts, 0, '<mark>', '</mark>', '…', 16)
@@ -122,11 +118,13 @@ pub fn search(
              JOIN study_note n ON n.rowid = study_note_fts.rowid
              JOIN media m ON m.media_id = n.media_id
              WHERE study_note_fts MATCH ?1 AND n.owner_id = ?2
+               AND {access_predicate}
              ORDER BY rank
-             LIMIT ?3",
-        )?;
+             LIMIT ?4",
+            access_predicate = access_predicate("m.library_id"),
+        ))?;
         let rows = statement.query_map(
-            rusqlite::params![match_query, owner_id, fetch as i64],
+            rusqlite::params![match_query, owner_id, is_admin, limit as i64],
             |row| {
                 Ok(SearchNoteHit {
                     note_id: row.get(0)?,
@@ -140,19 +138,13 @@ pub fn search(
             },
         )?;
         for row in rows {
-            let hit = row?;
-            if allowed(db, &mut access, owner_id, is_admin, &hit.course_id)? {
-                notes.push(hit);
-                if notes.len() == limit {
-                    break;
-                }
-            }
+            notes.push(row?);
         }
     }
 
     let mut lessons = Vec::new();
     {
-        let mut statement = conn.prepare(
+        let mut statement = conn.prepare(&format!(
             "SELECT m.media_id, m.library_id, m.relative_path
              FROM media_fts
              JOIN media m ON m.rowid = media_fts.rowid
@@ -161,46 +153,42 @@ pub fn search(
                                  FROM media_removal r
                                 WHERE r.library_id = m.library_id
                                   AND r.media_id = m.media_id)
+               AND {access_predicate}
              ORDER BY rank
-             LIMIT ?2",
+             LIMIT ?4",
+            access_predicate = access_predicate("m.library_id"),
+        ))?;
+        let rows = statement.query_map(
+            rusqlite::params![match_query, owner_id, is_admin, limit as i64],
+            |row| {
+                Ok(SearchLessonHit {
+                    media_id: row.get(0)?,
+                    course_id: row.get(1)?,
+                    relative_path: row.get(2)?,
+                })
+            },
         )?;
-        let rows = statement.query_map(rusqlite::params![match_query, fetch as i64], |row| {
-            Ok(SearchLessonHit {
-                media_id: row.get(0)?,
-                course_id: row.get(1)?,
-                relative_path: row.get(2)?,
-            })
-        })?;
         for row in rows {
-            let hit = row?;
-            if allowed(db, &mut access, owner_id, is_admin, &hit.course_id)? {
-                lessons.push(hit);
-                if lessons.len() == limit {
-                    break;
-                }
-            }
+            lessons.push(row?);
         }
     }
 
     let mut course_ids = Vec::new();
     {
-        let mut statement = conn.prepare(
+        let mut statement = conn.prepare(&format!(
             "SELECT course_id FROM course_fts
              WHERE course_fts MATCH ?1
+               AND {access_predicate}
              ORDER BY rank
-             LIMIT ?2",
+             LIMIT ?4",
+            access_predicate = access_predicate("course_fts.course_id"),
+        ))?;
+        let rows = statement.query_map(
+            rusqlite::params![match_query, owner_id, is_admin, limit as i64],
+            |row| row.get::<_, String>(0),
         )?;
-        let rows = statement.query_map(rusqlite::params![match_query, fetch as i64], |row| {
-            row.get::<_, String>(0)
-        })?;
         for row in rows {
-            let course_id = row?;
-            if allowed(db, &mut access, owner_id, is_admin, &course_id)? {
-                course_ids.push(course_id);
-                if course_ids.len() == limit {
-                    break;
-                }
-            }
+            course_ids.push(row?);
         }
     }
 
@@ -211,20 +199,18 @@ pub fn search(
     })
 }
 
-/// Caches the per-course access decision for one search.
-fn allowed(
-    db: &Database,
-    cache: &mut HashMap<String, bool>,
-    owner_id: &str,
-    is_admin: bool,
-    course_id: &str,
-) -> Result<bool> {
-    if let Some(allowed) = cache.get(course_id) {
-        return Ok(*allowed);
-    }
-    let allowed = crate::auth::can_user_access_course(db, owner_id, is_admin, course_id)?;
-    cache.insert(course_id.to_owned(), allowed);
-    Ok(allowed)
+/// SQL predicate that keeps only rows the caller may open.
+///
+/// A user without rows in `user_course_access` is unrestricted, which mirrors
+/// [`crate::auth::can_user_access_course`]; an administrator always passes. Filtering
+/// inside the statement matters: it must happen before `LIMIT`, otherwise a restricted
+/// user loses matches that the truncated window already discarded.
+fn access_predicate(course_column: &str) -> String {
+    format!(
+        "(?3 OR NOT EXISTS (SELECT 1 FROM user_course_access a WHERE a.user_id = ?2)
+             OR EXISTS (SELECT 1 FROM user_course_access a
+                         WHERE a.user_id = ?2 AND a.course_id = {course_column}))"
+    )
 }
 
 /// Turns arbitrary input into a safe FTS5 prefix query, or `None` when nothing is left.
