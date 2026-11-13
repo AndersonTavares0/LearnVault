@@ -52,7 +52,7 @@ export function SettingsPage() {
 		<div className="lg:grid lg:grid-cols-[12rem_1fr] lg:gap-10">
 			{/* Buttons, not `#id` links: the hash belongs to the router. */}
 			<nav aria-label={tr('Settings sections', 'Seções dos ajustes')} className="mb-6 lg:sticky lg:top-24 lg:mb-0 lg:self-start">
-				<ul className="flex gap-1 overflow-x-auto lg:block lg:space-y-1">
+				<ul className="flex flex-wrap gap-1 lg:block lg:space-y-1">
 					{sections.map((section) => (
 						<li key={section.id}>
 							<button type="button" aria-current={active === section.id ? 'page' : undefined} onClick={() => setActive(section.id)} className={cn('flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-medium whitespace-nowrap hover:bg-muted', active === section.id ? 'bg-brand-tint text-foreground' : 'text-muted-foreground hover:text-foreground')}>

@@ -66,20 +66,20 @@ export function AppShell() {
 
 	const user = session.data.user;
 	return (
-		<div className="min-h-dvh pb-16 md:pb-0">
+		<div className="min-h-dvh pb-16 lg:pb-0">
 			<SkipLink />
 			<DesktopTitlebar />
 			<header className="border-b print:hidden">
 				<div className="mx-auto flex h-[4.5rem] max-w-[88rem] items-center gap-x-8 px-5 sm:px-10">
 					<Link to="/" className="rounded-md font-heading text-2xl font-bold tracking-tight" aria-label={tr('LearnVault home', 'Início do LearnVault')}>LearnVault</Link>
-					<nav aria-label={tr('Main', 'Principal')} className="hidden flex-1 justify-center gap-1 md:flex">
+					<nav aria-label={tr('Main', 'Principal')} className="hidden flex-1 justify-center gap-1 lg:flex">
 						{navItems().map((item) => (
 							<NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => cn('inline-flex min-h-11 items-center rounded-xl px-4 text-[0.95rem] font-medium whitespace-nowrap text-muted-foreground hover:bg-brand-tint hover:text-foreground', isActive && 'bg-panel font-semibold text-foreground')}>
 								{item.label}
 							</NavLink>
 						))}
 					</nav>
-					<div className="ml-auto flex items-center gap-1 md:ml-0">
+					<div className="ml-auto flex items-center gap-1 lg:ml-0">
 						<GlobalSearch />
 						<FocusMenu />
 						<ThemeToggle />
@@ -173,7 +173,7 @@ function AccountMenu({ username, userId, wide }: { username: string; userId: str
 
 function MobileTabs() {
 	return (
-		<nav aria-label={tr('Sections', 'Seções')} className="fixed inset-x-0 bottom-0 z-40 border-t bg-background pb-[env(safe-area-inset-bottom)] md:hidden print:hidden">
+		<nav aria-label={tr('Sections', 'Seções')} className="fixed inset-x-0 bottom-0 z-40 border-t bg-background pb-[env(safe-area-inset-bottom)] lg:hidden print:hidden">
 			<ul className="grid grid-cols-5">
 				{navItems().map((item) => (
 					<li key={item.to}>
