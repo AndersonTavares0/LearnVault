@@ -14,7 +14,7 @@ use tokio::sync::{Mutex, OwnedSemaphorePermit, Semaphore};
 use crate::{
     Config,
     auth::hash_password,
-    courses::{RegisteredCourse, legacy_seed, load_registry, registry_path},
+    courses::{RegisteredCourse, load_registry, registry_path, seeded_courses},
     indexing::Indexer,
     ordering::{CourseOrders, load_orders, order_path},
     secret::SecretKey,
@@ -149,15 +149,15 @@ impl AppState {
             {
                 std::fs::create_dir_all(parent).map_err(|_| StateError::DatabaseDirectory)?;
             }
-            // O registro é carregado ao lado do banco; a raiz semeada só entra em cena
-            // quando nenhum registro foi persistido ainda, e nunca é regravada aqui:
-            // uma remoção explícita do curso semente não volta no próximo start.
+            // O registro é carregado ao lado do banco; as raízes semeadas só entram em
+            // cena quando nenhum registro foi persistido ainda, e nunca são regravadas
+            // aqui: uma remoção explícita de um curso semeado não volta no próximo start.
             let courses_file = registry_path(&setup.database_path);
             let mut courses = load_registry(&courses_file);
             if !courses_file.exists()
-                && let Some(seed) = setup.library_root.as_deref().and_then(legacy_seed)
+                && let Some(seed) = setup.library_root.as_deref()
             {
-                courses.push(seed);
+                courses.extend(seeded_courses(seed));
             }
             // As preferências de ordenação vivem ao lado do banco, no arquivo de
             // ordenação; um curso removido do catálogo mantém a preferência, que só

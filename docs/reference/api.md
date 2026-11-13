@@ -51,7 +51,7 @@ It never creates `admin/admin` or overwrites existing data in this scenario. The
 
 Module directories containing video files are presented as collapsible modules with one lesson per video. Complementary materials remain available in the module and matching subtitles remain associated with the lesson video. Natural sorting is applied to course paths (`2` precedes `10`).
 
-Without registered courses, the catalog returns empty. `LIBRARY_DIR`/`--library-root` is accepted as an initial deployment seed: when no registry exists, the specified directory is registered as the first course with ID `library-1`.
+Without registered courses, the catalog returns empty. `LIBRARY_DIR`/`--library-root` is the initial deployment seed: when no registry exists, each top-level folder under it is registered as a course, so a directory that holds one folder per course needs no manual import. A root that keeps media directly inside it is registered as a single course with the historical ID `library-1`. Seeding happens once; folders added later are imported by the administrator.
 
 The scanner inspects directory metadata without traversing symbolic links. It ignores temporary download directories, detects media, subtitles, and documents, and only treats `.ts` files as video if their size exceeds 1 MiB (preventing collision with TypeScript files).
 

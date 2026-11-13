@@ -54,7 +54,7 @@ was removed in Phase 5, and the Svelte SPA was removed after the React cutover.
 
 - **Self-hosted server:** exposes the HTTP API, authenticates users, and serves the SPA. Course
   registrations live in `courses.json` alongside the SQLite database; `LIBRARY_DIR`/`--library-root`
-  serves only as a seed for the initial course.
+  seeds the registry on first start, registering each top-level folder as a course.
 - **Offline desktop:** opens the `main` window defined in `crates/desktop/tauri.conf.json`, with the
   embedded SPA via `frontendDist`. The custom titlebar uses native Tauri window controls for minimize,
   maximize/restore, and close; window permissions are strictly scoped to the `main` window.
