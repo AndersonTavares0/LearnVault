@@ -179,6 +179,14 @@ pub enum Error {
         path: String,
     },
 
+    /// Uma fonte de curso remota (ou não local) não pôde ser lida.
+    #[error("não foi possível ler a fonte do curso")]
+    SourceUnavailable {
+        /// Falha sanitizada da fonte.
+        #[source]
+        source: crate::source::SourceError,
+    },
+
     /// A tentativa de varredura não pôde ser registrada no histórico.
     ///
     /// Registrar o histórico é secundário: a falha original da varredura é preservada

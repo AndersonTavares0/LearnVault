@@ -74,6 +74,51 @@ A custom cover is stored by the application—on the server in `covers/<id>.cove
 
 Top-level course nodes include `cover_version` when a cover exists, prompting the SPA to bust client cache via `?v=`. Missing covers or unknown course IDs return `404` with an empty body.
 
+## Remote Course Sources (WebDAV)
+
+A remote source is a read-only course tree served by WebDAV. Administrators configure it with
+`dav://`, `davs://`, `http://` or `https://`; `dav` maps to `http` and `davs` to `https`. URLs
+with embedded credentials, a query string or a fragment are rejected, and the base path always
+ends in `/`. TLS certificates are always verified; there is no option to accept an invalid
+certificate. Redirects are refused so the `Authorization` header never reaches another host.
+`dav://` and `http://` send Basic credentials without transport encryption, so use them only on a
+trusted private network; prefer `davs://`/`https://`.
+
+Discovery uses `PROPFIND` with `Depth: 1`; the tree is walked through the read-only
+`CourseSource` abstraction (the local filesystem has a reference implementation parity-tested
+against the local scanner), with hidden and temporary directories, symlinks and the media
+classification rules identical to the local scanner. Media bytes are read with `GET` plus a
+single `Range`; a server that ignores `Range` is rejected instead of streaming the wrong span.
+Only `PROPFIND` and `GET` are ever sent: the remote server is never written, renamed or deleted.
+
+Configuration lives in `sources.json` next to the database, next to `courses.json`. Passwords are
+encrypted at rest with ChaCha20-Poly1305 under a 32-byte key in `sources.key` (`0600`), created on
+the first save. The API never returns the password or the ciphertext, only `has_password`. A
+missing or replaced key leaves the source listed with `credential_error: true`; the original
+ciphertext is preserved until the key is restored.
+
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| `GET` | `/api/admin/sources` | Admin Session | Lists sources as `{ id, name, url, username, has_password, credential_error }`; never returns the secret |
+| `POST` | `/api/admin/sources` | Admin Session | Accepts `{ name, url, username?, password? }` and returns `201` with the sanitized source |
+| `DELETE` | `/api/admin/sources/{id}` | Admin Session | Removes the source configuration; returns `{ removed: bool }` and touches no remote file |
+| `POST` | `/api/admin/sources/{id}/test` | Admin Session | Validates reachability and authentication with a root `PROPFIND`; returns `{ ok, entries }` or `{ ok: false, error }` (`unreachable`, `denied`, `not_found`, `invalid_response`, `limit_exceeded`, `credentials_unavailable`, `timeout`) |
+| `POST` | `/api/admin/sources/{id}/scan` | Admin Session | Walks the remote tree and applies it to the catalog as a course; returns the same rescan counters as the local rescan |
+
+A scanned source appears in `GET /api/catalog` as a top-level `course` node with the source's
+opaque `id`; `GET`/`HEAD /api/media?course=<source-id>&path=<relative-path>` streams its bytes with
+`206` ranges. Only paths already present in the catalog are proxied to the remote server. Remote
+courses have no custom cover, manual ordering, search indexing or on-demand transcoding yet.
+
+### SMB
+
+SMB is not shipped in this increment. The `smb` 0.12.1 crate does compile with the pinned Rust
+1.99 toolchain, but integrating NTLM/Kerberos authentication, share discovery and range reads
+adds a large dependency tree and a second credential model without an end-to-end test harness.
+The supported fallback is to mount the share read-only with the operating system (`mount -t cifs
+... -o ro` or the desktop's network mount) and register the mount point as a local course; the
+library remains read-only because the mount itself is read-only.
+
 ## Study Progress, Focus & Gamification
 
 | Method | Path | Auth | Purpose |

@@ -17,6 +17,8 @@ use crate::{
     courses::{RegisteredCourse, legacy_seed, load_registry, registry_path},
     indexing::Indexer,
     ordering::{CourseOrders, load_orders, order_path},
+    secret::SecretKey,
+    sources::{RemoteSource, load_sources, sources_path},
     update::{UpdateChecker, github_fetcher},
 };
 
@@ -43,6 +45,12 @@ pub struct AppState {
     pub(crate) orders: Arc<RwLock<CourseOrders>>,
     /// Arquivo versionado das preferências de ordenação, ao lado do banco.
     pub(crate) orders_file: PathBuf,
+    /// Fontes remotas configuradas, com segredos apenas em memória.
+    pub(crate) sources: Arc<RwLock<Vec<RemoteSource>>>,
+    /// Arquivo versionado das fontes remotas, ao lado do banco.
+    pub(crate) sources_file: PathBuf,
+    /// Arquivo da chave que cifra os segredos das fontes.
+    pub(crate) source_key_path: PathBuf,
     pub(crate) database: Arc<Mutex<Database>>,
     pub(crate) login_attempts: Arc<Mutex<HashMap<String, (u32, Instant)>>>,
     pub(crate) rescan_lock: Arc<Mutex<()>>,
@@ -102,6 +110,9 @@ impl AppState {
             courses_file,
             orders: Arc::new(RwLock::new(CourseOrders::new())),
             orders_file: order_path(&config.database_path),
+            sources: Arc::new(RwLock::new(Vec::new())),
+            sources_file: sources_path(&config.database_path),
+            source_key_path: SecretKey::path_for(&config.database_path),
             config,
             database: Arc::new(Mutex::new(database)),
             login_attempts: Arc::new(Mutex::new(HashMap::new())),
@@ -118,90 +129,106 @@ impl AppState {
     /// fora das threads Tokio.
     pub async fn initialize(config: Config) -> Result<Self, StateError> {
         let setup = config.clone();
-        let (database, spa_shell, spa_shell_too_large, courses, courses_file, orders) =
-            tokio::task::spawn_blocking(move || {
-                let shell_too_large = shell_too_large(setup.web_root.as_deref());
-                let shell = load_spa_shell(setup.web_root.as_deref()).map(Arc::new);
-                if let Some(parent) = setup
-                    .database_path
-                    .parent()
-                    .filter(|parent| !parent.as_os_str().is_empty())
+        let (
+            database,
+            spa_shell,
+            spa_shell_too_large,
+            courses,
+            courses_file,
+            orders,
+            sources,
+            sources_file,
+            source_key_path,
+        ) = tokio::task::spawn_blocking(move || {
+            let shell_too_large = shell_too_large(setup.web_root.as_deref());
+            let shell = load_spa_shell(setup.web_root.as_deref()).map(Arc::new);
+            if let Some(parent) = setup
+                .database_path
+                .parent()
+                .filter(|parent| !parent.as_os_str().is_empty())
+            {
+                std::fs::create_dir_all(parent).map_err(|_| StateError::DatabaseDirectory)?;
+            }
+            // O registro é carregado ao lado do banco; a raiz semeada só entra em cena
+            // quando nenhum registro foi persistido ainda, e nunca é regravada aqui:
+            // uma remoção explícita do curso semente não volta no próximo start.
+            let courses_file = registry_path(&setup.database_path);
+            let mut courses = load_registry(&courses_file);
+            if !courses_file.exists()
+                && let Some(seed) = setup.library_root.as_deref().and_then(legacy_seed)
+            {
+                courses.push(seed);
+            }
+            // As preferências de ordenação vivem ao lado do banco, no arquivo de
+            // ordenação; um curso removido do catálogo mantém a preferência, que só
+            // volta a valer se o mesmo curso for reimportado.
+            let orders = load_orders(&order_path(&setup.database_path));
+            let sources_file = sources_path(&setup.database_path);
+            let source_key_path = SecretKey::path_for(&setup.database_path);
+            let sources = load_sources(&sources_file, &source_key_path);
+            let mut database =
+                Database::open(&setup.database_path).map_err(StateError::Database)?;
+            let existing = learnvault_core::has_admin(&database).map_err(StateError::Database)?;
+            if existing {
+                if !setup.listen_addr.ip().is_loopback()
+                    && let Some(admin) = learnvault_core::find_user_by_username(&database, "admin")
+                        .map_err(StateError::Database)?
+                    && (admin.must_change_credentials
+                        || crate::auth::verify_password("admin", &admin.password_hash)
+                            .unwrap_or(false))
                 {
-                    std::fs::create_dir_all(parent).map_err(|_| StateError::DatabaseDirectory)?;
-                }
-                // O registro é carregado ao lado do banco; a raiz semeada só entra em cena
-                // quando nenhum registro foi persistido ainda, e nunca é regravada aqui:
-                // uma remoção explícita do curso semente não volta no próximo start.
-                let courses_file = registry_path(&setup.database_path);
-                let mut courses = load_registry(&courses_file);
-                if !courses_file.exists()
-                    && let Some(seed) = setup.library_root.as_deref().and_then(legacy_seed)
-                {
-                    courses.push(seed);
-                }
-                // As preferências de ordenação vivem ao lado do banco, no arquivo de
-                // ordenação; um curso removido do catálogo mantém a preferência, que só
-                // volta a valer se o mesmo curso for reimportado.
-                let orders = load_orders(&order_path(&setup.database_path));
-                let mut database =
-                    Database::open(&setup.database_path).map_err(StateError::Database)?;
-                let existing =
-                    learnvault_core::has_admin(&database).map_err(StateError::Database)?;
-                if existing {
-                    if !setup.listen_addr.ip().is_loopback()
-                        && let Some(admin) =
-                            learnvault_core::find_user_by_username(&database, "admin")
-                                .map_err(StateError::Database)?
-                        && (admin.must_change_credentials
-                            || crate::auth::verify_password("admin", &admin.password_hash)
-                                .unwrap_or(false))
-                    {
-                        return Err(StateError::MissingAdministrator);
-                    }
-                    return Ok((
-                        database,
-                        shell,
-                        shell_too_large,
-                        courses,
-                        courses_file,
-                        orders,
-                    ));
-                }
-                let using_temporary_default =
-                    setup.admin_username.is_none() && setup.admin_password.is_none();
-                if using_temporary_default && !setup.listen_addr.ip().is_loopback() {
                     return Err(StateError::MissingAdministrator);
                 }
-                let username = setup.admin_username.as_deref().unwrap_or("admin");
-                let password = setup.admin_password.as_deref().unwrap_or("admin");
-                crate::auth::validate_username(username)
-                    .map_err(|_| StateError::InvalidAdministrator)?;
-                let password_hash = if using_temporary_default {
-                    crate::auth::hash_password_unchecked(password)
-                } else {
-                    hash_password(password)
-                }
-                .map_err(|_| StateError::InvalidAdministrator)?;
-                learnvault_core::bootstrap_admin_with_change_required(
-                    &mut database,
-                    "usr-admin",
-                    username,
-                    &password_hash,
-                    unix_now(),
-                    using_temporary_default,
-                )
-                .map_err(StateError::Database)?;
-                Ok((
+                return Ok((
                     database,
                     shell,
                     shell_too_large,
                     courses,
                     courses_file,
                     orders,
-                ))
-            })
-            .await
-            .map_err(StateError::Blocking)??;
+                    sources,
+                    sources_file,
+                    source_key_path,
+                ));
+            }
+            let using_temporary_default =
+                setup.admin_username.is_none() && setup.admin_password.is_none();
+            if using_temporary_default && !setup.listen_addr.ip().is_loopback() {
+                return Err(StateError::MissingAdministrator);
+            }
+            let username = setup.admin_username.as_deref().unwrap_or("admin");
+            let password = setup.admin_password.as_deref().unwrap_or("admin");
+            crate::auth::validate_username(username)
+                .map_err(|_| StateError::InvalidAdministrator)?;
+            let password_hash = if using_temporary_default {
+                crate::auth::hash_password_unchecked(password)
+            } else {
+                hash_password(password)
+            }
+            .map_err(|_| StateError::InvalidAdministrator)?;
+            learnvault_core::bootstrap_admin_with_change_required(
+                &mut database,
+                "usr-admin",
+                username,
+                &password_hash,
+                unix_now(),
+                using_temporary_default,
+            )
+            .map_err(StateError::Database)?;
+            Ok((
+                database,
+                shell,
+                shell_too_large,
+                courses,
+                courses_file,
+                orders,
+                sources,
+                sources_file,
+                source_key_path,
+            ))
+        })
+        .await
+        .map_err(StateError::Blocking)??;
         let (inline_script_hashes, inline_style_hashes) = shell_hashes(spa_shell.as_deref());
         let update = UpdateChecker::new(config.update_check, github_fetcher());
         Ok(Self {
@@ -211,6 +238,9 @@ impl AppState {
             update,
             courses: Arc::new(RwLock::new(courses)),
             courses_file,
+            sources: Arc::new(RwLock::new(sources)),
+            sources_file,
+            source_key_path,
             database: Arc::new(Mutex::new(database)),
             login_attempts: Arc::new(Mutex::new(HashMap::new())),
             rescan_lock: Arc::new(Mutex::new(())),
@@ -234,6 +264,17 @@ impl AppState {
         self.courses
             .read()
             .map(|courses| courses.clone())
+            .unwrap_or_default()
+    }
+
+    /// Fotografia imutável das fontes remotas.
+    ///
+    /// Inclui a senha em claro apenas em memória para montar o cabeçalho de autenticação;
+    /// nunca é serializada.
+    pub(crate) fn sources_snapshot(&self) -> Vec<RemoteSource> {
+        self.sources
+            .read()
+            .map(|sources| sources.clone())
             .unwrap_or_default()
     }
 

@@ -17,12 +17,15 @@ mod media;
 mod ordering;
 mod player;
 mod search;
+mod secret;
+mod sources;
 mod spa;
 mod state;
 mod stream;
 mod study;
 mod transcode;
 mod update;
+mod webdav;
 
 pub use auth::{
     AuthError, generate_session_token, hash_password, hash_session_token,
@@ -208,6 +211,16 @@ pub fn build_router(state: AppState) -> Router {
                 .delete(avatars::delete_avatar)
                 .layer(DefaultBodyLimit::max(avatars::MAX_AVATAR_BYTES)),
         )
+        .route(
+            "/api/admin/sources",
+            get(sources::list).post(sources::create),
+        )
+        .route(
+            "/api/admin/sources/{id}",
+            axum::routing::delete(sources::remove),
+        )
+        .route("/api/admin/sources/{id}/test", post(sources::test))
+        .route("/api/admin/sources/{id}/scan", post(sources::scan))
         .route("/api/admin/backup", get(backup::download_backup))
         .route("/api/update", get(update::update))
         .route("/api/update/history", get(update::update_history))
