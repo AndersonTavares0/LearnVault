@@ -316,7 +316,13 @@ type RustFile = { media_id?: string; name?: string; path?: string; size?: number
 type RustNode = { title?: string; path?: string; role?: string; course_id?: string; cover_version?: number; source_folder?: string; structure?: { confidence?: unknown; concerns?: unknown }; files?: RustFile[]; loose_files?: RustFile[]; children?: RustNode[] };
 type RustCatalog = { complete?: boolean; categories?: RustNode[]; nodes?: RustNode[]; loose_files?: RustFile[]; looseFiles?: RustFile[] };
 
-function invalidPayload(message: string): Error { return new Error(`Resposta inválida do servidor: ${message}`); }
+// The detail is technical and stays as written; only the prefix follows the locale. The
+// error is named so callers can rethrow a payload failure without matching localized text.
+function invalidPayload(en: string, ptBr: string): Error {
+	const error = new Error(tr(`Invalid server response: ${en}`, `Resposta inválida do servidor: ${ptBr}`));
+	error.name = 'InvalidPayloadError';
+	return error;
+}
 
 // Limites explícitos da normalização do catálogo. Um payload hostil não pode esgotar a pilha
 // (profundidade) nem a memória (nós e arquivos): o payload que ultrapassa um limite é recusado
@@ -331,14 +337,14 @@ type CatalogBudget = { nodes: number; files: number };
 function newCatalogBudget(): CatalogBudget { return { nodes: 0, files: 0 }; }
 
 function countNode(budget: CatalogBudget, depth: number): void {
-	if (depth > CATALOG_LIMITS.depth) throw invalidPayload('catálogo profundo demais.');
+	if (depth > CATALOG_LIMITS.depth) throw invalidPayload('catalog is nested too deeply.', 'catálogo profundo demais.');
 	budget.nodes += 1;
-	if (budget.nodes > CATALOG_LIMITS.nodes) throw invalidPayload('catálogo com nós demais.');
+	if (budget.nodes > CATALOG_LIMITS.nodes) throw invalidPayload('catalog has too many nodes.', 'catálogo com nós demais.');
 }
 
 function countFile(budget: CatalogBudget): void {
 	budget.files += 1;
-	if (budget.files > CATALOG_LIMITS.files) throw invalidPayload('catálogo com arquivos demais.');
+	if (budget.files > CATALOG_LIMITS.files) throw invalidPayload('catalog has too many files.', 'catálogo com arquivos demais.');
 }
 
 export function fileStatus(file: FileEntry): string {
@@ -357,13 +363,13 @@ export function courseIdOf(node: CatalogNode): string {
 // incorreto (por exemplo `media_id: 42`) é recusado em vez de vazar para a interface.
 function optionalFileString(value: unknown, key: string): string | undefined {
 	if (value === undefined) return undefined;
-	if (typeof value !== 'string') throw invalidPayload(`campo ${key} do arquivo inválido.`);
+	if (typeof value !== 'string') throw invalidPayload(`invalid ${key} field in file.`, `campo ${key} do arquivo inválido.`);
 	return value;
 }
 
 function optionalFileBoolean(value: unknown, key: string): boolean | undefined {
 	if (value === undefined) return undefined;
-	if (typeof value !== 'boolean') throw invalidPayload(`campo ${key} do arquivo inválido.`);
+	if (typeof value !== 'boolean') throw invalidPayload(`invalid ${key} field in file.`, `campo ${key} do arquivo inválido.`);
 	return value;
 }
 
@@ -371,7 +377,7 @@ function optionalFileBoolean(value: unknown, key: string): boolean | undefined {
 // Um valor fracionário, negativo ou além do inteiro seguro do JavaScript é recusado em vez
 // de renderizar um tamanho impossível.
 function fileSize(value: unknown): number {
-	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw invalidPayload('arquivo com tamanho inválido.');
+	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw invalidPayload('file has an invalid size.', 'arquivo com tamanho inválido.');
 	return value;
 }
 
@@ -380,7 +386,7 @@ function fileSize(value: unknown): number {
 function optionalMtimeSeconds(value: unknown): number | undefined {
 	if (value === undefined) return undefined;
 	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
-		throw invalidPayload('arquivo com mtime inválido.');
+		throw invalidPayload('file has an invalid mtime.', 'arquivo com mtime inválido.');
 	}
 	return value;
 }
@@ -388,13 +394,13 @@ function optionalMtimeSeconds(value: unknown): number | undefined {
 // Arquivo do contrato canônico Rust/desktop: exige identidade `media_id` não vazia para que
 // o arquivo seja endereçável.
 function normalizeFile(value: unknown): FileEntry {
-	if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('arquivo inválido.');
+	if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('invalid file.', 'arquivo inválido.');
 	const file = value as RustFile;
 	const name = file.name;
 	const path = file.path;
-	if (typeof name !== 'string' || typeof path !== 'string') throw invalidPayload('arquivo sem nome ou caminho.');
+	if (typeof name !== 'string' || typeof path !== 'string') throw invalidPayload('file without a name or path.', 'arquivo sem nome ou caminho.');
 	const mediaId = optionalFileString(file.media_id, 'media_id');
-	if (!mediaId) throw invalidPayload('arquivo sem media_id.');
+	if (!mediaId) throw invalidPayload('file without media_id.', 'arquivo sem media_id.');
 	return {
 		name,
 		path,
@@ -442,10 +448,10 @@ function mirroredArray(source: object, snake: string, camel: string): unknown[] 
 	const record = source as Record<string, unknown>;
 	const hasSnake = Object.prototype.hasOwnProperty.call(record, snake);
 	const hasCamel = Object.prototype.hasOwnProperty.call(record, camel);
-	if (hasSnake && hasCamel && JSON.stringify(record[snake]) !== JSON.stringify(record[camel])) throw invalidPayload(`campos ${snake} e ${camel} conflitantes.`);
+	if (hasSnake && hasCamel && JSON.stringify(record[snake]) !== JSON.stringify(record[camel])) throw invalidPayload(`conflicting ${snake} and ${camel} fields.`, `campos ${snake} e ${camel} conflitantes.`);
 	if (!hasSnake && !hasCamel) return [];
 	const raw = hasSnake ? record[snake] : record[camel];
-	if (raw === null || !Array.isArray(raw)) throw invalidPayload(`campo ${snake} inválido.`);
+	if (raw === null || !Array.isArray(raw)) throw invalidPayload(`invalid ${snake} field.`, `campo ${snake} inválido.`);
 	return raw;
 }
 
@@ -455,7 +461,7 @@ function optionalArray(source: object, key: string): unknown[] {
 	const record = source as Record<string, unknown>;
 	if (!Object.prototype.hasOwnProperty.call(record, key) || record[key] === undefined) return [];
 	const raw = record[key];
-	if (raw === null || !Array.isArray(raw)) throw invalidPayload(`campo ${key} inválido.`);
+	if (raw === null || !Array.isArray(raw)) throw invalidPayload(`invalid ${key} field.`, `campo ${key} inválido.`);
 	return raw;
 }
 
@@ -463,7 +469,7 @@ function optionalArray(source: object, key: string): unknown[] {
 // revisão antiga do servidor simplesmente não envia o campo (sem capa).
 function optionalCoverVersion(value: unknown): number | undefined {
 	if (value === undefined) return undefined;
-	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw invalidPayload('curso com versão de capa inválida.');
+	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw invalidPayload('course has an invalid cover version.', 'curso com versão de capa inválida.');
 	return value;
 }
 
@@ -477,10 +483,10 @@ function parseStructure(value: { confidence?: unknown; concerns?: unknown } | un
 
 function normalizeRustNode(value: unknown, depth: number, budget: CatalogBudget): CatalogNode {
 	countNode(budget, depth);
-	if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('node Rust inválido.');
+	if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('invalid Rust node.', 'node Rust inválido.');
 	const node = value as RustNode;
-	if (typeof node.title !== 'string' || typeof node.path !== 'string' || typeof node.role !== 'string') throw invalidPayload('node Rust incompleto.');
-	if (node.course_id !== undefined && typeof node.course_id !== 'string') throw invalidPayload('node Rust com identidade de curso inválida.');
+	if (typeof node.title !== 'string' || typeof node.path !== 'string' || typeof node.role !== 'string') throw invalidPayload('incomplete Rust node.', 'node Rust incompleto.');
+	if (node.course_id !== undefined && typeof node.course_id !== 'string') throw invalidPayload('Rust node with an invalid course identity.', 'node Rust com identidade de curso inválida.');
 	return {
 		title: node.title,
 		path: node.path,
@@ -503,18 +509,18 @@ function canonicalNodeList(value: RustCatalog): unknown {
 	const record = value as Record<string, unknown>;
 	const hasNodes = Object.prototype.hasOwnProperty.call(record, 'nodes') && record.nodes !== undefined;
 	if (hasNodes) {
-		if (!Array.isArray(record.nodes)) throw invalidPayload('campo nodes inválido.');
+		if (!Array.isArray(record.nodes)) throw invalidPayload('invalid nodes field.', 'campo nodes inválido.');
 		if (record.nodes.length > 0) return record.nodes;
 	}
 	const rawCategories = record.categories;
 	if (rawCategories === undefined) return [];
-	if (!Array.isArray(rawCategories)) throw invalidPayload('campo categories inválido.');
+	if (!Array.isArray(rawCategories)) throw invalidPayload('invalid categories field.', 'campo categories inválido.');
 	return rawCategories;
 }
 
 function normalizeRustCatalog(value: RustCatalog): Catalog {
 	const rawNodes = canonicalNodeList(value);
-	if (!Array.isArray(rawNodes)) throw invalidPayload('catálogo Rust sem nodes.');
+	if (!Array.isArray(rawNodes)) throw invalidPayload('Rust catalog without nodes.', 'catálogo Rust sem nodes.');
 	const budget = newCatalogBudget();
 	const looseFiles = mirroredArray(value, 'loose_files', 'looseFiles').map((file) => { countFile(budget); return normalizeFile(file); });
 	const nodes = rawNodes.map((node) => normalizeRustNode(node, 1, budget));
@@ -522,15 +528,15 @@ function normalizeRustCatalog(value: RustCatalog): Catalog {
 }
 
 export function normalizeUser(value: unknown): User {
-	if (!value || typeof value !== 'object' || typeof (value as { username?: unknown }).username !== 'string') throw invalidPayload('usuário sem username.');
+	if (!value || typeof value !== 'object' || typeof (value as { username?: unknown }).username !== 'string') throw invalidPayload('user without a username.', 'usuário sem username.');
 	const user = value as { user_id?: unknown; username: string; role?: unknown; is_admin?: unknown; must_change_credentials?: unknown };
 	return { userId: typeof user.user_id === 'string' || typeof user.user_id === 'number' ? String(user.user_id) : '', username: user.username, isAdmin: user.is_admin === true || user.role === 'admin', role: user.is_admin === true || user.role === 'admin' ? 'admin' : 'user', mustChangeCredentials: user.must_change_credentials === true };
 }
 
 export function normalizeLocalUser(value: unknown): LocalUser {
-	if (!value || typeof value !== 'object') throw invalidPayload('usuário local ausente.');
+	if (!value || typeof value !== 'object') throw invalidPayload('missing local user.', 'usuário local ausente.');
 	const raw = value as { user_id?: unknown; username?: unknown; is_admin?: unknown; created_at?: unknown; allowed_course_ids?: unknown };
-	if (typeof raw.user_id !== 'string' || typeof raw.username !== 'string') throw invalidPayload('usuário local inválido.');
+	if (typeof raw.user_id !== 'string' || typeof raw.username !== 'string') throw invalidPayload('invalid local user.', 'usuário local inválido.');
 	const allowed = Array.isArray(raw.allowed_course_ids)
 		? raw.allowed_course_ids.filter((id): id is string => typeof id === 'string')
 		: null;
@@ -544,9 +550,9 @@ export function normalizeLocalUser(value: unknown): LocalUser {
 }
 
 export function normalizeRemoteSource(value: unknown): RemoteSource {
-	if (!value || typeof value !== 'object') throw invalidPayload('fonte remota ausente.');
+	if (!value || typeof value !== 'object') throw invalidPayload('missing remote source.', 'fonte remota ausente.');
 	const raw = value as { id?: unknown; name?: unknown; url?: unknown; username?: unknown; has_password?: unknown; credential_error?: unknown };
-	if (typeof raw.id !== 'string' || typeof raw.name !== 'string' || typeof raw.url !== 'string') throw invalidPayload('fonte remota inválida.');
+	if (typeof raw.id !== 'string' || typeof raw.name !== 'string' || typeof raw.url !== 'string') throw invalidPayload('invalid remote source.', 'fonte remota inválida.');
 	return {
 		id: raw.id,
 		name: raw.name,
@@ -558,7 +564,7 @@ export function normalizeRemoteSource(value: unknown): RemoteSource {
 }
 
 export function normalizeSourceConnectionTest(value: unknown): SourceConnectionTest {
-	if (!value || typeof value !== 'object') throw invalidPayload('resultado do teste ausente.');
+	if (!value || typeof value !== 'object') throw invalidPayload('missing test result.', 'resultado do teste ausente.');
 	const raw = value as { ok?: unknown; entries?: unknown; error?: unknown };
 	return {
 		ok: raw.ok === true,
@@ -568,26 +574,26 @@ export function normalizeSourceConnectionTest(value: unknown): SourceConnectionT
 }
 
 export function normalizeStudyProgress(value: unknown): StudyProgress {
-	if (!value || typeof value !== 'object') throw invalidPayload('progresso de estudo ausente.');
+	if (!value || typeof value !== 'object') throw invalidPayload('missing study progress.', 'progresso de estudo ausente.');
 	const progress = value as { media_id?: unknown; position_seconds?: unknown; completed?: unknown; updated_at?: unknown; recorded?: unknown };
-	if (typeof progress.media_id !== 'string' || typeof progress.position_seconds !== 'number' || typeof progress.completed !== 'boolean' || typeof progress.recorded !== 'boolean') throw invalidPayload('progresso de estudo incompleto.');
+	if (typeof progress.media_id !== 'string' || typeof progress.position_seconds !== 'number' || typeof progress.completed !== 'boolean' || typeof progress.recorded !== 'boolean') throw invalidPayload('incomplete study progress.', 'progresso de estudo incompleto.');
 	return { mediaId: progress.media_id, positionSeconds: progress.position_seconds, completed: progress.completed, updatedAt: typeof progress.updated_at === 'number' ? progress.updated_at : null, recorded: progress.recorded };
 }
 
 export function normalizeRecentStudy(value: unknown): RecentStudy {
-	if (!value || typeof value !== 'object' || !Array.isArray((value as { items?: unknown }).items)) throw invalidPayload('histórico de estudo inválido.');
+	if (!value || typeof value !== 'object' || !Array.isArray((value as { items?: unknown }).items)) throw invalidPayload('invalid study history.', 'histórico de estudo inválido.');
 	return { items: (value as { items: unknown[] }).items.map(normalizeStudyProgress) };
 }
 
 export function normalizePlaybackPreferences(value: unknown): PlaybackPreferences {
-	if (!value || typeof value !== 'object') throw invalidPayload('preferências de reprodução ausentes.');
+	if (!value || typeof value !== 'object') throw invalidPayload('missing playback preferences.', 'preferências de reprodução ausentes.');
 	const preferences = value as { video_speed?: unknown; audio_speed?: unknown; subtitle_language?: unknown };
-	if (typeof preferences.video_speed !== 'number' || typeof preferences.audio_speed !== 'number' || typeof preferences.subtitle_language !== 'string') throw invalidPayload('preferências de reprodução incompletas.');
+	if (typeof preferences.video_speed !== 'number' || typeof preferences.audio_speed !== 'number' || typeof preferences.subtitle_language !== 'string') throw invalidPayload('incomplete playback preferences.', 'preferências de reprodução incompletas.');
 	return { videoSpeed: preferences.video_speed / 100, audioSpeed: preferences.audio_speed / 100, subtitleLanguage: preferences.subtitle_language };
 }
 
 export function normalizeStudySummary(value: unknown): StudySummary {
-	if (!value || typeof value !== 'object') throw invalidPayload('resumo de estudo ausente.');
+	if (!value || typeof value !== 'object') throw invalidPayload('missing study summary.', 'resumo de estudo ausente.');
 	// Older servers do not send the yearly list; absence means no activity to draw.
 	const yearDays = (value as { active_days_year?: unknown }).active_days_year ?? [];
 	const summary = value as {
@@ -614,11 +620,11 @@ export function normalizeStudySummary(value: unknown): StudySummary {
 		summary.days.length !== 7 ||
 		!Array.isArray(yearDays) ||
 		!yearDays.every((day) => typeof day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(day))
-	) throw invalidPayload('resumo de estudo incompleto.');
+	) throw invalidPayload('incomplete study summary.', 'resumo de estudo incompleto.');
 	const days = summary.days.map((entry) => {
-		if (!entry || typeof entry !== 'object') throw invalidPayload('dia do resumo inválido.');
+		if (!entry || typeof entry !== 'object') throw invalidPayload('invalid summary day.', 'dia do resumo inválido.');
 		const day = entry as { day?: unknown; active?: unknown };
-		if (typeof day.day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day.day) || typeof day.active !== 'boolean') throw invalidPayload('dia do resumo inválido.');
+		if (typeof day.day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day.day) || typeof day.active !== 'boolean') throw invalidPayload('invalid summary day.', 'dia do resumo inválido.');
 		return { day: day.day, active: day.active };
 	});
 	return {
@@ -647,46 +653,46 @@ export class InvalidFocusSession extends Error {
 }
 
 export function normalizeFocusSession(value: unknown): FocusSessionRecord {
-	if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('sessão de foco ausente.');
+	if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('missing focus session.', 'sessão de foco ausente.');
 	const session = value as Record<string, unknown>;
-	if (typeof session.id !== 'string' || !session.id || !['focus', 'short', 'long'].includes(String(session.kind)) || !safeInteger(session.planned_seconds) || !safeInteger(session.actual_seconds) || typeof session.completed !== 'boolean' || !safeInteger(session.started_at) || !safeInteger(session.ended_at) || session.actual_seconds > session.planned_seconds || session.ended_at < session.started_at || session.actual_seconds > session.ended_at - session.started_at) throw invalidPayload('sessão de foco inválida.');
+	if (typeof session.id !== 'string' || !session.id || !['focus', 'short', 'long'].includes(String(session.kind)) || !safeInteger(session.planned_seconds) || !safeInteger(session.actual_seconds) || typeof session.completed !== 'boolean' || !safeInteger(session.started_at) || !safeInteger(session.ended_at) || session.actual_seconds > session.planned_seconds || session.ended_at < session.started_at || session.actual_seconds > session.ended_at - session.started_at) throw invalidPayload('invalid focus session.', 'sessão de foco inválida.');
 	return { id: session.id, kind: session.kind as FocusKind, plannedSeconds: session.planned_seconds, actualSeconds: session.actual_seconds, completed: session.completed, startedAt: session.started_at, endedAt: session.ended_at };
 }
 
 export function normalizeFocusSummary(value: unknown): FocusSummary {
-	if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('resumo de foco ausente.');
+	if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('missing focus summary.', 'resumo de foco ausente.');
 	const summary = value as Record<string, unknown>;
-	if (!safeInteger(summary.today_minutes) || !safeInteger(summary.week_minutes) || !safeInteger(summary.week_sessions) || !safeInteger(summary.total_minutes) || !safeInteger(summary.total_sessions) || !safeInteger(summary.completion_rate) || summary.completion_rate > 100 || !(summary.best_day === null || typeof summary.best_day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(summary.best_day)) || !Array.isArray(summary.days) || summary.days.length !== 7) throw invalidPayload('resumo de foco incompleto.');
+	if (!safeInteger(summary.today_minutes) || !safeInteger(summary.week_minutes) || !safeInteger(summary.week_sessions) || !safeInteger(summary.total_minutes) || !safeInteger(summary.total_sessions) || !safeInteger(summary.completion_rate) || summary.completion_rate > 100 || !(summary.best_day === null || typeof summary.best_day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(summary.best_day)) || !Array.isArray(summary.days) || summary.days.length !== 7) throw invalidPayload('incomplete focus summary.', 'resumo de foco incompleto.');
 	const days = summary.days.map((value) => {
-		if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('dia de foco inválido.');
+		if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('invalid focus day.', 'dia de foco inválido.');
 		const day = value as Record<string, unknown>;
-		if (typeof day.day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day.day) || !safeInteger(day.minutes) || !safeInteger(day.sessions)) throw invalidPayload('dia de foco inválido.');
+		if (typeof day.day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day.day) || !safeInteger(day.minutes) || !safeInteger(day.sessions)) throw invalidPayload('invalid focus day.', 'dia de foco inválido.');
 		return { day: day.day, minutes: day.minutes, sessions: day.sessions };
 	});
 	return { todayMinutes: summary.today_minutes, weekMinutes: summary.week_minutes, weekSessions: summary.week_sessions, totalMinutes: summary.total_minutes, totalSessions: summary.total_sessions, completionRate: summary.completion_rate, bestDay: summary.best_day as string | null, days };
 }
 
 export function normalizeRewardSummary(value: unknown): RewardSummary {
-	if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('resumo de recompensas ausente.');
+	if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('missing rewards summary.', 'resumo de recompensas ausente.');
 	const summary = value as Record<string, unknown>;
-	if (!safeInteger(summary.xp) || !safeInteger(summary.completed_lessons) || !Number.isInteger(summary.weekly_goal) || (summary.weekly_goal as number) < 1 || (summary.weekly_goal as number) > 7 || !Array.isArray(summary.missions)) throw invalidPayload('resumo de recompensas incompleto.');
+	if (!safeInteger(summary.xp) || !safeInteger(summary.completed_lessons) || !Number.isInteger(summary.weekly_goal) || (summary.weekly_goal as number) < 1 || (summary.weekly_goal as number) > 7 || !Array.isArray(summary.missions)) throw invalidPayload('incomplete rewards summary.', 'resumo de recompensas incompleto.');
 	const missions = summary.missions.map((value) => {
-		if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('missão inválida.');
+		if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('invalid mission.', 'missão inválida.');
 		const mission = value as Record<string, unknown>;
-		if (!['lesson', 'focus-two', 'focus-fifty'].includes(String(mission.id)) || !safeInteger(mission.progress) || !safeInteger(mission.target) || mission.target === 0 || mission.progress > mission.target || typeof mission.claimed !== 'boolean') throw invalidPayload('missão inválida.');
+		if (!['lesson', 'focus-two', 'focus-fifty'].includes(String(mission.id)) || !safeInteger(mission.progress) || !safeInteger(mission.target) || mission.target === 0 || mission.progress > mission.target || typeof mission.claimed !== 'boolean') throw invalidPayload('invalid mission.', 'missão inválida.');
 		return { id: mission.id as MissionId, progress: mission.progress, target: mission.target, claimed: mission.claimed };
 	});
-	if (!summary.study) throw invalidPayload('resumo de atividade ausente.');
+	if (!summary.study) throw invalidPayload('missing activity summary.', 'resumo de atividade ausente.');
 	return { xp: summary.xp, completedLessons: summary.completed_lessons, weeklyGoal: summary.weekly_goal as number, missions, study: normalizeStudySummary(summary.study) };
 }
 
 function normalizeWeeklyGoal(value: unknown): number {
-	if (!value || typeof value !== 'object' || !Number.isInteger((value as { weekly_goal?: unknown }).weekly_goal) || ((value as { weekly_goal: number }).weekly_goal < 1 || (value as { weekly_goal: number }).weekly_goal > 7)) throw invalidPayload('meta semanal inválida.');
+	if (!value || typeof value !== 'object' || !Number.isInteger((value as { weekly_goal?: unknown }).weekly_goal) || ((value as { weekly_goal: number }).weekly_goal < 1 || (value as { weekly_goal: number }).weekly_goal > 7)) throw invalidPayload('invalid weekly goal.', 'meta semanal inválida.');
 	return (value as { weekly_goal: number }).weekly_goal;
 }
 
 function normalizeClaim(value: unknown): boolean {
-	if (!value || typeof value !== 'object' || typeof (value as { claimed?: unknown }).claimed !== 'boolean') throw invalidPayload('resgate de missão inválido.');
+	if (!value || typeof value !== 'object' || typeof (value as { claimed?: unknown }).claimed !== 'boolean') throw invalidPayload('invalid mission claim.', 'resgate de missão inválido.');
 	return (value as { claimed: boolean }).claimed;
 }
 
@@ -694,14 +700,14 @@ function normalizeClaim(value: unknown): boolean {
 // string é recusado em vez de vazar para a interface.
 function optionalUpdateString(value: unknown, key: string): string | null {
 	if (value === undefined || value === null) return null;
-	if (typeof value !== 'string') throw invalidPayload(`campo ${key} da atualização inválido.`);
+	if (typeof value !== 'string') throw invalidPayload(`invalid update field ${key}.`, `campo ${key} da atualização inválido.`);
 	return value;
 }
 
 export function normalizeUpdateStatus(value: unknown): UpdateStatus {
-	if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('estado de atualização ausente.');
+	if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('missing update status.', 'estado de atualização ausente.');
 	const status = value as { current?: unknown; enabled?: unknown; available?: unknown; latest?: unknown; releasedAt?: unknown; url?: unknown; changelog?: unknown; checkedAt?: unknown; error?: unknown };
-	if (typeof status.current !== 'string' || typeof status.enabled !== 'boolean' || typeof status.available !== 'boolean') throw invalidPayload('estado de atualização incompleto.');
+	if (typeof status.current !== 'string' || typeof status.enabled !== 'boolean' || typeof status.available !== 'boolean') throw invalidPayload('incomplete update status.', 'estado de atualização incompleto.');
 	return {
 		current: status.current,
 		enabled: status.enabled,
@@ -723,10 +729,10 @@ function indexingCount(value: unknown): number {
 
 /** Validates the indexing job snapshot; an unknown shape is rejected whole. */
 export function normalizeIndexingStatus(raw: unknown): IndexingSnapshot {
-	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalidPayload('estado de indexação ausente.');
+	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalidPayload('missing indexing status.', 'estado de indexação ausente.');
 	const data = raw as Record<string, unknown>;
 	const status = String(data.status ?? '');
-	if (!INDEXING_STATUSES.includes(status)) throw invalidPayload('estado de indexação inválido.');
+	if (!INDEXING_STATUSES.includes(status)) throw invalidPayload('invalid indexing status.', 'estado de indexação inválido.');
 	const progress = (data.progress && typeof data.progress === 'object' ? data.progress : {}) as Record<string, unknown>;
 	const timestamp = (value: unknown): number | null => (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null);
 	return {
@@ -780,7 +786,7 @@ function syncCount(value: unknown): number {
 }
 
 export function normalizeSyncResult(raw: unknown): SyncResult {
-	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalidPayload('resultado de sincronização inválido.');
+	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalidPayload('invalid sync result.', 'resultado de sincronização inválido.');
 	const result = raw as Record<string, unknown>;
 	return {
 		pushed: syncCount(result.pushed),
@@ -791,9 +797,9 @@ export function normalizeSyncResult(raw: unknown): SyncResult {
 }
 
 export function normalizeSyncState(raw: unknown): SyncState {
-	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalidPayload('estado de sincronização ausente.');
+	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalidPayload('missing sync state.', 'estado de sincronização ausente.');
 	const state = raw as Record<string, unknown>;
-	if (typeof state.device_id !== 'string' || typeof state.server_url !== 'string' || typeof state.signed_in !== 'boolean') throw invalidPayload('estado de sincronização incompleto.');
+	if (typeof state.device_id !== 'string' || typeof state.server_url !== 'string' || typeof state.signed_in !== 'boolean') throw invalidPayload('incomplete sync state.', 'estado de sincronização incompleto.');
 	return {
 		deviceId: state.device_id,
 		pullCursor: syncCount(state.pull_cursor),
@@ -806,7 +812,7 @@ export function normalizeSyncState(raw: unknown): SyncState {
 }
 
 export function normalizeStudyNote(raw: unknown): StudyNote {
-	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalidPayload('anotação de estudo inválida.');
+	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalidPayload('invalid study note.', 'anotação de estudo inválida.');
 	const note = raw as Record<string, unknown>;
 	const res: StudyNote = {
 		noteId: String(note.note_id ?? note.noteId ?? ''),
@@ -823,27 +829,27 @@ export function normalizeStudyNote(raw: unknown): StudyNote {
 }
 
 function searchString(value: unknown, key: string): string {
-	if (typeof value !== 'string') throw invalidPayload(`campo ${key} da busca inválido.`);
+	if (typeof value !== 'string') throw invalidPayload(`invalid search field ${key}.`, `campo ${key} da busca inválido.`);
 	return value;
 }
 
 function searchInteger(value: unknown, key: string): number {
-	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw invalidPayload(`campo ${key} da busca inválido.`);
+	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw invalidPayload(`invalid search field ${key}.`, `campo ${key} da busca inválido.`);
 	return value;
 }
 
 /** Validates the grouped global search payload; an unknown shape is rejected whole. */
 export function normalizeSearchResults(value: unknown): SearchResults {
-	if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('resultados da busca ausentes.');
+	if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('missing search results.', 'resultados da busca ausentes.');
 	const payload = value as Record<string, unknown>;
 	const list = (key: string): unknown[] => {
 		const raw = payload[key];
 		if (raw === undefined) return [];
-		if (raw === null || !Array.isArray(raw)) throw invalidPayload(`campo ${key} da busca inválido.`);
+		if (raw === null || !Array.isArray(raw)) throw invalidPayload(`invalid search field ${key}.`, `campo ${key} da busca inválido.`);
 		return raw;
 	};
 	const record = (raw: unknown, key: string): Record<string, unknown> => {
-		if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalidPayload(`item ${key} da busca inválido.`);
+		if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalidPayload(`invalid ${key} search item.`, `item ${key} da busca inválido.`);
 		return raw as Record<string, unknown>;
 	};
 	return {
@@ -882,11 +888,11 @@ const PDF_KINDS: readonly string[] = ['highlight', 'underline', 'note'];
 const PDF_COLORS: readonly string[] = ['yellow', 'green', 'blue', 'pink'];
 
 export function normalizePdfAnnotation(raw: unknown): PdfAnnotation {
-	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalidPayload('anotação de PDF inválida.');
+	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalidPayload('invalid PDF annotation.', 'anotação de PDF inválida.');
 	const item = raw as Record<string, unknown>;
 	const kind = String(item.kind ?? '');
 	const color = String(item.color ?? '');
-	if (!PDF_KINDS.includes(kind) || !PDF_COLORS.includes(color) || !Array.isArray(item.rects)) throw invalidPayload('anotação de PDF inválida.');
+	if (!PDF_KINDS.includes(kind) || !PDF_COLORS.includes(color) || !Array.isArray(item.rects)) throw invalidPayload('invalid PDF annotation.', 'anotação de PDF inválida.');
 	return {
 		annotationId: String(item.annotation_id ?? item.annotationId ?? ''),
 		mediaId: String(item.media_id ?? item.mediaId ?? ''),
@@ -904,18 +910,18 @@ export function normalizePdfAnnotation(raw: unknown): PdfAnnotation {
 export const MAX_BOOKMARK_LABEL = 200;
 
 export function normalizeBookmark(raw: unknown): MediaBookmark {
-	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalidPayload('marcador inválido.');
+	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalidPayload('invalid timestamp.', 'marcador inválido.');
 	const item = raw as Record<string, unknown>;
 	const bookmarkId = item.bookmark_id ?? item.bookmarkId;
 	const mediaId = item.media_id ?? item.mediaId;
 	const positionSeconds = item.position_seconds ?? item.positionSeconds;
 	const label = item.label;
 	const createdAt = item.created_at ?? item.createdAt;
-	if (typeof bookmarkId !== 'string' || !bookmarkId || typeof mediaId !== 'string' || !mediaId || !Number.isInteger(positionSeconds) || (positionSeconds as number) < 0 || typeof label !== 'string' || !label.trim() || Array.from(label).length > MAX_BOOKMARK_LABEL || !Number.isInteger(createdAt) || (createdAt as number) < 0) throw invalidPayload('marcador inválido.');
+	if (typeof bookmarkId !== 'string' || !bookmarkId || typeof mediaId !== 'string' || !mediaId || !Number.isInteger(positionSeconds) || (positionSeconds as number) < 0 || typeof label !== 'string' || !label.trim() || Array.from(label).length > MAX_BOOKMARK_LABEL || !Number.isInteger(createdAt) || (createdAt as number) < 0) throw invalidPayload('invalid timestamp.', 'marcador inválido.');
 	return { bookmarkId, mediaId, positionSeconds: positionSeconds as number, label, createdAt: createdAt as number };
 }
 
-export function normalizeFlashcard(raw: unknown): Flashcard {	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalidPayload('cartão de estudo inválido.');
+export function normalizeFlashcard(raw: unknown): Flashcard {	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalidPayload('invalid study card.', 'cartão de estudo inválido.');
 	const card = raw as Record<string, unknown>;
 	const position = card.position_seconds ?? card.positionSeconds;
 	return {
@@ -988,17 +994,17 @@ function hasLegacyCourses(categories: unknown): boolean {
 }
 
 export function normalizeCatalog(value: unknown): Catalog {
-	if (!value || typeof value !== 'object') throw invalidPayload('catálogo ausente.');
+	if (!value || typeof value !== 'object') throw invalidPayload('missing catalog.', 'catálogo ausente.');
 	const record = value as Record<string, unknown>;
 	// O contrato canônico Rust/desktop exige explicitamente `complete: bool`.
 	// Payloads sem o marcador ou com valor não booleano são rejeitados (fail-closed).
 	const hasComplete = Object.prototype.hasOwnProperty.call(record, 'complete') && record.complete !== undefined;
-	if (!hasComplete || typeof record.complete !== 'boolean') throw invalidPayload('campo complete ausente ou inválido.');
+	if (!hasComplete || typeof record.complete !== 'boolean') throw invalidPayload('missing or invalid complete field.', 'campo complete ausente ou inválido.');
 
 	// `nodes` presente precisa ser lista: `null`, string ou tipo inválido é payload malformado e
 	// nunca pode ser escondido por um fallback silencioso para `categories`.
 	const hasNodes = Object.prototype.hasOwnProperty.call(record, 'nodes') && record.nodes !== undefined;
-	if (hasNodes && !Array.isArray(record.nodes)) throw invalidPayload('campo nodes inválido.');
+	if (hasNodes && !Array.isArray(record.nodes)) throw invalidPayload('invalid nodes field.', 'campo nodes inválido.');
 	const payload = value as { categories?: unknown };
 
 	// Com nós canônicos, `categories` é a projeção legada e é ignorada.
@@ -1006,10 +1012,10 @@ export function normalizeCatalog(value: unknown): Catalog {
 
 	// Sem nós canônicos, campos só-do-Go (`categories[].courses`) não podem ser consumidos
 	// como nós nem virar conteúdo vazio: falha fechada.
-	if (hasLegacyCourses(payload.categories)) throw invalidPayload('catálogo canônico com campos legados do Go.');
+	if (hasLegacyCourses(payload.categories)) throw invalidPayload('canonical catalog with legacy Go fields.', 'catálogo canônico com campos legados do Go.');
 	if (Array.isArray(payload.categories) && payload.categories.every(isCategoryEnvelope)) return normalizeRustCatalog(value as RustCatalog);
 	if (hasNodes || Array.isArray(payload.categories)) return normalizeRustCatalog(value as RustCatalog);
-	throw invalidPayload('formato de catálogo desconhecido.');
+	throw invalidPayload('unknown catalog format.', 'formato de catálogo desconhecido.');
 }
 
 // Lê o `error` estável do corpo JSON de uma resposta falha, quando existir.
@@ -1759,7 +1765,7 @@ export class DesktopStub implements Transport {
 	async focusSummary() { try { return normalizeFocusSummary(await invoke<unknown>('desktop_focus_summary')); } catch (cause) { throw desktopError(cause, tr('Could not load focus statistics.', 'Não foi possível carregar as estatísticas de foco.')); } }
 	async rewardSummary() { try { return normalizeRewardSummary(await invoke<unknown>('desktop_reward_summary')); } catch (cause) { throw desktopError(cause, tr('Could not load your rewards.', 'Não foi possível carregar suas recompensas.')); } }
 	async claimDailyMission(missionId: MissionId) { try { return await invoke<boolean>('desktop_claim_daily_mission', { missionId }); } catch (cause) { throw desktopError(cause, tr('Could not claim mission.', 'Não foi possível resgatar a missão.')); } }
-	async setWeeklyGoal(goal: number) { try { if (!Number.isInteger(goal) || goal < 1 || goal > 7) throw new Error(); const saved = await invoke<unknown>('desktop_set_weekly_goal', { weeklyGoal: goal }); if (!Number.isInteger(saved) || (saved as number) < 1 || (saved as number) > 7) throw invalidPayload('meta semanal inválida.'); return saved as number; } catch (cause) { if (cause instanceof Error && cause.message.startsWith('Resposta inválida')) throw cause; throw desktopError(cause, tr('Could not save weekly goal.', 'Não foi possível salvar a meta semanal.')); } }
+	async setWeeklyGoal(goal: number) { try { if (!Number.isInteger(goal) || goal < 1 || goal > 7) throw new Error(); const saved = await invoke<unknown>('desktop_set_weekly_goal', { weeklyGoal: goal }); if (!Number.isInteger(saved) || (saved as number) < 1 || (saved as number) > 7) throw invalidPayload('invalid weekly goal.', 'meta semanal inválida.'); return saved as number; } catch (cause) { if (cause instanceof Error && cause.name === 'InvalidPayloadError') throw cause; throw desktopError(cause, tr('Could not save weekly goal.', 'Não foi possível salvar a meta semanal.')); } }
 	// A senha só existe na chamada de login: nenhum estado ou segredo volta para o webview.
 	async syncState() { try { return normalizeSyncState(await invoke<unknown>('desktop_sync_state')); } catch (cause) { throw desktopError(cause, tr('Could not read sync state.', 'Não foi possível ler o estado da sincronização.')); } }
 	async syncConfigure(serverUrl: string) { try { return normalizeSyncState(await invoke<unknown>('desktop_sync_configure', { serverUrl })); } catch (cause) { throw desktopError(cause, tr('Could not save the server address.', 'Não foi possível salvar o endereço do servidor.')); } }
