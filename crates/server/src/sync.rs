@@ -1,13 +1,13 @@
-//! Endpoints HTTP do diário de sincronização.
+//! HTTP endpoints of the synchronization journal.
 //!
-//! O dono é sempre o usuário da sessão, como nas demais rotas de estudo: nenhuma
-//! requisição aceita `owner_id`. O envio é idempotente pelo `op_id` e as mutações exigem
-//! a mesma origem (CSRF). A leitura devolve as operações depois do cursor informado,
-//! exceto as do próprio dispositivo, que já as aplicou localmente.
+//! The owner is always the session user, as in the other study routes: no request accepts
+//! `owner_id`. Pushing is idempotent by `op_id` and mutations require the same origin
+//! (CSRF). The read returns the operations after the given cursor, except those of the
+//! device itself, which has already applied them locally.
 //!
-//! A mídia não é sincronizada. Uma operação que referencia mídia conhecida mas fora do
-//! acesso do usuário é recusada como mídia inexistente; uma mídia desconhecida é
-//! aceita e mantida no diário, porque o outro dispositivo pode conhecê-la.
+//! Media is not synced. An operation that references media known but outside the user's
+//! access is refused as missing media; unknown media is accepted and kept in the journal,
+//! because the other device may know it.
 
 use axum::{
     Json,
@@ -24,7 +24,7 @@ use crate::study::{
     study_failure_response, user_or_response,
 };
 
-/// Página padrão de [`pull`] quando a consulta não informa `limit`.
+/// Default page of [`pull`] when the query omits `limit`.
 const DEFAULT_PULL_LIMIT: usize = 100;
 
 #[derive(Debug, Deserialize)]
@@ -40,7 +40,7 @@ struct PullQuery {
     limit: Option<usize>,
 }
 
-/// Aplica o lote enviado e registra cada operação nova no diário.
+/// Applies the sent batch and records each new operation in the journal.
 pub(crate) async fn push(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -68,7 +68,7 @@ pub(crate) async fn push(
     }
 }
 
-/// Lê as operações do dono depois do cursor informado.
+/// Reads the owner's operations after the given cursor.
 pub(crate) async fn pull(
     State(state): State<AppState>,
     RawQuery(raw): RawQuery,
@@ -103,7 +103,7 @@ pub(crate) async fn pull(
     }
 }
 
-/// Recusa mídia existente fora do acesso do usuário; mídia desconhecida é aceita.
+/// Refuses existing media outside the user's access; unknown media is accepted.
 fn require_sync_access(
     db: &Database,
     user_id: &str,
@@ -126,8 +126,8 @@ fn require_sync_access(
     Ok(())
 }
 
-/// The `same_origin` helper lives in the auth adapter; re-exported locally to keep the
-/// handler readable.
+/// The `same_origin` helper lives in the auth adapter; wrapped locally so the handler
+/// stays readable.
 fn same_origin(headers: &HeaderMap) -> bool {
     crate::auth::same_origin(headers)
 }

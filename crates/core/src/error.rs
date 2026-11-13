@@ -421,7 +421,7 @@ pub enum Error {
     /// Covers an empty identifier, an oversized batch and an unreadable stored payload.
     /// Domain data inside an operation is normalized or skipped instead of rejected, so a
     /// device never retries an operation that can never be applied.
-    #[error("operação de sincronização inválida: {reason}")]
+    #[error("invalid synchronization operation: {reason}")]
     InvalidSyncOperation {
         /// Stable rejection reason.
         reason: &'static str,

@@ -1,11 +1,12 @@
-//! Fontes de curso remotas (WebDAV) e os endpoints administrativos que as mantêm.
+//! Remote course sources (WebDAV) and the administrative endpoints that maintain them.
 //!
-//! A configuração vive em `sources.json`, ao lado do banco, como o registro de cursos
-//! locais. A senha nunca é gravada em claro: cada fonte guarda `v1:<ciphertext>` com a
-//! chave de [`crate::secret`]. A API devolve apenas identidade, nome, URL, usuário e a
-//! presença de senha; o segredo não aparece em respostas, logs nem mensagens de erro.
+//! The configuration lives in `sources.json`, next to the database, like the local course
+//! registry. The password is never stored in clear text: each source keeps
+//! `v1:<ciphertext>` with the key from [`crate::secret`]. The API returns only identity,
+//! name, URL, username and the presence of a password; the secret appears in no response,
+//! log or error message.
 //!
-//! A fonte é somente leitura: o cliente WebDAV só emite `PROPFIND` e `GET`.
+//! The source is read-only: the WebDAV client only issues `PROPFIND` and `GET`.
 
 use std::{
     fs,
@@ -37,33 +38,33 @@ use crate::{
     webdav::{SourceUrlError, WebDavClient, parse_source_url},
 };
 
-/// Nome do arquivo de configuração de fontes dentro do diretório de dados.
+/// Name of the source configuration file inside the data directory.
 pub(crate) const SOURCES_FILE_NAME: &str = "sources.json";
-/// Versão do formato do arquivo de configuração.
+/// Version of the configuration file format.
 const SOURCES_VERSION: u32 = 1;
-/// Limite de caracteres do nome apresentado.
+/// Character limit of the displayed name.
 const MAX_SOURCE_NAME_CHARS: usize = 120;
-/// Tempo máximo para percorrer uma fonte remota.
+/// Maximum time to walk a remote source.
 const SOURCE_SCAN_TIMEOUT: Duration = Duration::from_secs(120);
-/// Tempo máximo do teste de conexão.
+/// Maximum time of the connection test.
 const PROBE_TIMEOUT: Duration = Duration::from_secs(20);
 
-/// Fonte de curso remota carregada em memória.
+/// Remote course source loaded in memory.
 #[derive(Clone)]
 pub(crate) struct RemoteSource {
-    /// Identidade opaca usada como `library_id` e nos endpoints.
+    /// Opaque identity used as `library_id` and in the endpoints.
     pub(crate) id: String,
-    /// Nome apresentado no catálogo.
+    /// Name displayed in the catalog.
     pub(crate) name: String,
-    /// URL base normalizada do WebDAV.
+    /// Normalized WebDAV base URL.
     pub(crate) url: Url,
-    /// Usuário de autenticação básica, quando houver.
+    /// Basic authentication username, when there is one.
     pub(crate) username: Option<String>,
-    /// Senha em claro apenas em memória, nunca serializada.
+    /// Clear-text password only in memory, never serialized.
     password: Option<String>,
-    /// Cifra original, preservada para não perder o segredo quando a chave não carrega.
+    /// Original cipher text, preserved so the secret is not lost when the key does not load.
     stored_secret: Option<String>,
-    /// Verdadeiro quando existe um segredo gravado que não pôde ser decifrado.
+    /// True when there is a stored secret that could not be decrypted.
     pub(crate) credential_error: bool,
 }
 
@@ -81,25 +82,25 @@ impl std::fmt::Debug for RemoteSource {
 }
 
 impl RemoteSource {
-    /// Senha em claro para montar o cabeçalho de autenticação.
+    /// Clear-text password to build the authentication header.
     pub(crate) fn password(&self) -> Option<&str> {
         self.password.as_deref()
     }
 
-    /// Verdadeiro quando a fonte tem usuário e senha utilizáveis.
+    /// True when the source has a usable username and password.
     pub(crate) fn has_password(&self) -> bool {
         self.password.is_some()
     }
 }
 
-/// Adaptador escolhido pelo esquema da URL da fonte.
+/// Adapter chosen by the URL scheme of the source.
 pub(crate) enum RemoteClient {
     WebDav(WebDavClient),
     Smb(SmbSource),
 }
 
 impl RemoteClient {
-    /// Cria o cliente do transporte correspondente.
+    /// Creates the client of the matching transport.
     pub(crate) fn new(source: &RemoteSource) -> Result<Self, SourceError> {
         if source.url.scheme() == "smb" {
             return Ok(Self::Smb(SmbSource::new(
@@ -115,7 +116,7 @@ impl RemoteClient {
         )?))
     }
 
-    /// Confirma alcance, autenticação e leitura do diretório raiz.
+    /// Confirms reachability, authentication and root directory read.
     pub(crate) async fn probe(&self) -> SourceResult<usize> {
         match self {
             Self::WebDav(client) => client.probe().await,
@@ -151,7 +152,7 @@ impl CourseSource for RemoteClient {
     }
 }
 
-/// Entrada persistida. O segredo é o único campo cifrado.
+/// Persisted entry. The secret is the only encrypted field.
 #[derive(Debug, Serialize, Deserialize)]
 struct StoredSource {
     id: String,
@@ -169,7 +170,7 @@ struct SourcesFile {
     sources: Vec<StoredSource>,
 }
 
-/// Caminho do arquivo de fontes para um banco.
+/// Path of the sources file for a database.
 pub(crate) fn sources_path(database_path: &Path) -> PathBuf {
     let parent = database_path
         .parent()
@@ -178,12 +179,12 @@ pub(crate) fn sources_path(database_path: &Path) -> PathBuf {
     parent.join(SOURCES_FILE_NAME)
 }
 
-/// Carrega as fontes persistidas.
+/// Loads the persisted sources.
 ///
-/// Arquivo ausente, corrompido ou em versão desconhecida resulta em lista vazia, como no
-/// registro de cursos. Entradas cuja URL é inválida são descartadas. Um segredo que não
-/// pôde ser decifrado mantém a fonte, marcada para que a interface explique a falha em
-/// vez de tentar autenticar sem senha.
+/// A missing, corrupted or unknown-version file results in an empty list, as in the course
+/// registry. Entries whose URL is invalid are discarded. A secret that could not be
+/// decrypted keeps the source, marked so the interface explains the failure instead of
+/// trying to authenticate without a password.
 pub(crate) fn load_sources(path: &Path, key_path: &Path) -> Vec<RemoteSource> {
     let Ok(raw) = fs::read(path) else {
         return Vec::new();
@@ -224,20 +225,20 @@ pub(crate) fn load_sources(path: &Path, key_path: &Path) -> Vec<RemoteSource> {
     sources
 }
 
-/// Grava as fontes de forma serializada e atômica.
+/// Stores the sources serially and atomically.
 ///
-/// O temporário é criado exclusivamente e trocado por `rename`. Segredos em claro são
-/// cifrados antes da gravação; um segredo que já estava gravado e não pôde ser decifrado
-/// mantém a cifra original.
+/// The temporary file is created exclusively and swapped by `rename`. Clear-text secrets
+/// are encrypted before writing; a secret that was already stored and could not be
+/// decrypted keeps the original cipher text.
 pub(crate) fn store_sources(
     path: &Path,
     key_path: &Path,
     sources: &[RemoteSource],
 ) -> Result<(), SourcesError> {
     let key = if sources.iter().any(|source| source.password.is_some()) {
-        // Criar uma chave nova enquanto outra fonte ainda tem uma cifra órfã tornaria
-        // essa cifra irrecuperável. O administrador precisa restaurar a chave ou remover
-        // a fonte quebrada antes de gravar uma senha nova.
+        // Creating a new key while another source still has an orphan cipher text would
+        // make that cipher text unrecoverable. The administrator must restore the key or
+        // remove the broken source before storing a new password.
         if sources.iter().any(|source| source.credential_error) {
             return Err(SourcesError::WriteFailed);
         }
@@ -291,10 +292,10 @@ pub(crate) fn store_sources(
     })
 }
 
-/// Erro sanitizado da configuração de fontes.
+/// Sanitized error of the source configuration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SourcesError {
-    /// A gravação do arquivo falhou.
+    /// Writing the file failed.
     WriteFailed,
 }
 
@@ -355,7 +356,7 @@ struct ErrorBody {
     error: &'static str,
 }
 
-/// `GET /api/admin/sources` — lista fontes sem nunca devolver o segredo.
+/// `GET /api/admin/sources` — lists sources without ever returning the secret.
 pub(crate) async fn list(State(state): State<AppState>, headers: HeaderMap) -> Response {
     if let Err(failure) = require_admin(&state, &headers).await {
         return admin_failure_response(failure);
@@ -372,7 +373,7 @@ pub(crate) async fn list(State(state): State<AppState>, headers: HeaderMap) -> R
     )
 }
 
-/// `POST /api/admin/sources` — registra uma fonte remota.
+/// `POST /api/admin/sources` — registers a remote source.
 pub(crate) async fn create(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -433,7 +434,8 @@ pub(crate) async fn create(
     }
 }
 
-/// `DELETE /api/admin/sources/{id}` — remove a configuração sem tocar no servidor remoto.
+/// `DELETE /api/admin/sources/{id}` — removes the configuration without touching the
+/// remote server.
 pub(crate) async fn remove(
     State(state): State<AppState>,
     AxumPath(source_id): AxumPath<String>,
@@ -477,7 +479,7 @@ pub(crate) async fn remove(
     }
 }
 
-/// `POST /api/admin/sources/{id}/test` — valida alcance e autenticação.
+/// `POST /api/admin/sources/{id}/test` — validates reachability and authentication.
 pub(crate) async fn test(
     State(state): State<AppState>,
     AxumPath(source_id): AxumPath<String>,
@@ -523,7 +525,8 @@ pub(crate) async fn test(
     }
 }
 
-/// `POST /api/admin/sources/{id}/scan` — descobre a árvore remota e aplica ao catálogo.
+/// `POST /api/admin/sources/{id}/scan` — discovers the remote tree and applies it to the
+/// catalog.
 pub(crate) async fn scan(
     State(state): State<AppState>,
     AxumPath(source_id): AxumPath<String>,
@@ -553,8 +556,8 @@ pub(crate) async fn scan(
         Err(_) => return json_error(StatusCode::BAD_REQUEST, "invalid_source"),
     };
 
-    // A rede acontece antes do lock do banco: uma fonte lenta não bloqueia as demais
-    // operações de leitura do catálogo.
+    // The network happens before the database lock: a slow source does not block the other
+    // catalog read operations.
     let outcome = match tokio::time::timeout(SOURCE_SCAN_TIMEOUT, scan_source(&client)).await {
         Ok(outcome) => outcome,
         Err(_) => return json_error(StatusCode::GATEWAY_TIMEOUT, "source_scan_timeout"),
@@ -583,8 +586,9 @@ pub(crate) async fn scan(
         Ok(Ok(summary)) => {
             private_no_store(Json(crate::catalog::RescanResponse::from(summary)).into_response())
         }
-        // A falha da fonte já foi registrada no histórico pelo `apply_source_scan`; a
-        // resposta devolve o motivo sanitizado em vez de um 500 genérico.
+        // The source failure has already been recorded in the history by
+        // `apply_source_scan`; the response returns the sanitized reason instead of a
+        // generic 500.
         Ok(Err(_)) => match failure {
             Some(error) => json_error(StatusCode::BAD_GATEWAY, error),
             None => internal_error("source_scan_failed"),
@@ -593,7 +597,7 @@ pub(crate) async fn scan(
     }
 }
 
-/// Motivo de recusa de uma sessão administrativa, traduzido só no handler.
+/// Rejection reason of an administrative session, translated only in the handler.
 enum AdminFailure {
     Unauthenticated,
     Forbidden,
@@ -741,12 +745,12 @@ mod tests {
         assert_eq!(loaded[0].password(), None);
         assert!(loaded[0].credential_error);
 
-        // Remover outra fonte não pode apagar a cifra que ainda não foi decifrada.
+        // Removing another source cannot erase the cipher text that was not decrypted yet.
         store_sources(&path, &key_path, &loaded).unwrap();
         let raw = fs::read_to_string(&path).unwrap();
         assert!(raw.contains("v1:"));
 
-        // Gravar uma senha nova criaria outra chave e perderia a cifra órfã.
+        // Storing a new password would create another key and lose the orphan cipher text.
         assert_eq!(
             store_sources(&path, &key_path, &[loaded[0].clone(), source(Some("nova"))]),
             Err(SourcesError::WriteFailed)
