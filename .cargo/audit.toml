@@ -1,37 +1,56 @@
-# Configuração do cargo-audit para o workspace Rust do LearnVault.
+# cargo-audit configuration for the LearnVault Rust workspace.
 #
-# Este arquivo NÃO desliga a auditoria de dependências Rust. Ele registra, de
-# forma estreita e rastreável, uma única exceção aprovada. Tudo o que não
-# estiver listado em `ignore` continua reprovando a verificação.
+# This file does NOT disable Rust dependency auditing. It records, narrowly and
+# traceably, the advisories accepted after review. Anything not listed under
+# `ignore` still fails the check.
 #
-# Local: o cargo-audit 0.22.x lê a configuração em `.cargo/audit.toml` relativo
-# ao diretório de execução; um `audit.toml` na raiz do repositório é IGNORADO
-# por essa versão (verificado em 2026-10-18: erro de sintaxe no arquivo de
-# `.cargo/` é reportado, erro de sintaxe na raiz não).
+# Location: cargo-audit 0.22.x reads `.cargo/audit.toml` relative to the working
+# directory; an `audit.toml` at the repository root is ignored by that version
+# (verified 2026-10-18: a syntax error under `.cargo/` is reported, the same
+# error at the root is not).
 #
-# O job `Rust dependency audit` (`.github/workflows/ci.yml`) executa
-# `cargo audit --deny unsound`, que reprova vulnerabilidades (sempre) e
-# advisories classificados como `unsound`.
+# The `Rust dependency audit` job (`.github/workflows/ci.yml`) runs
+# `cargo audit --deny unsound`, which always fails on vulnerabilities and on
+# advisories classified as `unsound`.
 
 [advisories]
 ignore = [
-    # RUSTSEC-2024-0429 = GHSA-wrw7-89jp-8q8g (categoria: unsound)
-    # glib >= 0.15.0, < 0.20.0 | primeira versão corrigida: 0.20.0
+    # RUSTSEC-2024-0429 = GHSA-wrw7-89jp-8q8g (unsound)
+    # glib >= 0.15.0, < 0.20.0 | first patched version: 0.20.0
     # "Unsoundness in `Iterator` and `DoubleEndedIterator` impls for
-    # `glib::VariantStrIter`". Afeta apenas
-    # glib::VariantStrIter::{next,nth,last,next_back,nth_back}.
+    # `glib::VariantStrIter`". Only
+    # glib::VariantStrIter::{next,nth,last,next_back,nth_back} is affected.
     #
-    # Por que é aceito hoje (2026-10-18):
-    # - O Cargo.lock resolve glib 0.18.5 pelo caminho
+    # Why it is accepted today (2026-10-18):
+    # - Cargo.lock resolves glib 0.18.5 through
     #   learnvault-desktop -> tauri 2.12.4 -> gtk 0.18.2 -> glib ^0.18.
-    # - A correção só existe a partir de glib 0.20.0, alcançável apenas via
-    #   gtk 0.19.0 -> glib 0.22, um salto breaking da pilha GTK/Tauri.
-    # - Não há caminho de atualização não-breaking. O dono do produto decidiu
-    #   não fazer o upgrade agora; o alerta do Dependabot (#16) permanece
-    #   aberto e rastreado em issue própria.
+    # - The fix only exists from glib 0.20.0, reachable only through
+    #   gtk 0.19.0 -> glib 0.22, a breaking jump in the GTK/Tauri stack.
+    # - There is no non-breaking upgrade path. The product owner decided not to
+    #   take the upgrade now; Dependabot alert #16 stays open and tracked in its
+    #   own issue.
     #
-    # Condição de remoção: remover esta entrada assim que a pilha desktop
-    # (Tauri/GTK) puder consumir glib >= 0.20.0, ou imediatamente se o
-    # workspace passar a usar diretamente glib::VariantStrIter.
+    # Removal condition: drop this entry as soon as the desktop stack
+    # (Tauri/GTK) can consume glib >= 0.20.0, or immediately if the workspace
+    # starts using glib::VariantStrIter directly.
     "RUSTSEC-2024-0429",
+
+    # RUSTSEC-2023-0071 (medium, 5.9) — "Marvin Attack: potential key recovery
+    # through timing sidechannels" in `rsa`.
+    # rsa 0.10.0-rc.18 | first patched version: 0.10.0
+    #
+    # Why it is accepted today (2026-11-13):
+    # - Cargo.lock resolves rsa 0.10.0-rc.18 through
+    #   learnvault-server -> smb 0.12.1 -> sspi 0.21.3.
+    # - `sspi` requires exactly `rsa = "=0.10.0-rc.18"`, and `smb` requires
+    #   exactly `sspi = "=0.21.3"`. Even the newest `sspi` (0.23.1) pins the same
+    #   release candidate, so there is no upgrade path on crates.io today.
+    # - The advisory covers RSA private-key decryption timing. LearnVault only
+    #   authenticates outbound SMB sessions with NTLM; Kerberos is disabled and
+    #   no RSA private-key operation runs anywhere in the product.
+    #
+    # Removal condition: drop this entry as soon as `smb`/`sspi` accept rsa
+    # >= 0.10.0 stable, or immediately if the product starts using Kerberos or
+    # any RSA private-key operation.
+    "RUSTSEC-2023-0071",
 ]
