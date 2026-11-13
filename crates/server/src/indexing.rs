@@ -172,8 +172,13 @@ impl Indexer {
     /// Executa uma varredura completa. Um rescan manual em andamento adia esta execução.
     async fn execute(&self, app: &AppState) {
         // O mesmo cadeado do rescan manual garante um único escritor do catálogo por vez.
-        let Ok(_manual_rescan) = app.rescan_lock.clone().try_lock_owned() else {
-            return;
+        // Um rescan manual em andamento apenas adia esta execução: desistir aqui descartaria
+        // o evento que acordou o job e adiaria a atualização até a reconciliação periódica.
+        let _manual_rescan = loop {
+            match app.rescan_lock.clone().try_lock_owned() {
+                Ok(guard) => break guard,
+                Err(_) => tokio::time::sleep(DEBOUNCE).await,
+            }
         };
 
         let courses = app.courses_snapshot();
@@ -369,6 +374,7 @@ fn unix_now() -> i64 {
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::time::Duration;
 
     use tempfile::TempDir;
 
@@ -512,5 +518,33 @@ mod tests {
         assert_eq!(snapshot.status, IndexingStatus::Error);
         assert_eq!(snapshot.last_error, Some("course_unavailable"));
         assert_eq!(snapshot.courses_completed, 0);
+    }
+
+    #[tokio::test]
+    async fn a_manual_rescan_defers_the_job_instead_of_dropping_it() {
+        let root = tempfile::tempdir().unwrap();
+        let state = state(&root);
+        register(&state, &root);
+        fs::write(root.path().join("Curso/aula.mp4"), b"conteudo").unwrap();
+        let indexer = Indexer::default();
+
+        let manual_rescan = state.rescan_lock.clone().lock_owned().await;
+        let job = tokio::spawn({
+            let state = state.clone();
+            let indexer = indexer.clone();
+            async move { indexer.execute(&state).await }
+        });
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert_eq!(
+            indexer.snapshot().await.status,
+            IndexingStatus::Idle,
+            "o job espera o rescan manual em vez de desistir do evento"
+        );
+
+        drop(manual_rescan);
+        job.await.unwrap();
+
+        assert_eq!(indexer.snapshot().await.status, IndexingStatus::Done);
+        assert_eq!(media_count(&state), 1);
     }
 }
