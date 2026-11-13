@@ -7,6 +7,7 @@
   "scripts": {
     "check": "pnpm -r check",
     "build": "pnpm --filter learnvault-web-next build",
+    "build:legacy": "pnpm --filter learnvault-web build",
     "build:desktop": "pnpm --filter learnvault-web-next build:desktop",
     "dev": "node scripts/dev.mjs localhost",
     "dev:localhost": "node scripts/dev.mjs localhost",

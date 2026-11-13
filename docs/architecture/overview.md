@@ -44,13 +44,12 @@ Self-hosted Server                       Offline Desktop
 | `crates/core` | Domain, catalog, scanner, media identity, rescan, SQLite, and study state | Has no HTTP or Tauri knowledge; receives pre-resolved course roots |
 | `crates/server` | Authentication, sessions, `Range`, security headers, course registry, and SPA delivery | Translates domain to HTTP; never reimplements domain rules |
 | `crates/desktop` | Tauri window, course IPC, catalog, covers, rescan, study, and local media streaming | Has no authentication and opens no network ports |
-| `apps/web-next` | React 19 + TypeScript + Vite SPA, hash routing, dual transport builds | Chooses transport at compile time; never touches files directly |
+| `apps/web` | Svelte 5 + TypeScript + Vite SPA, hash routing, dual transport builds | Chooses transport at compile time; never touches files directly |
 
 ## Current State
 
-The Rust workspace is complete: `crates/server` (Axum), `crates/desktop` (Tauri 2), and
-`apps/web-next` (React 19 + Vite), with the shared domain in `crates/core`. The legacy Go backend
-was removed in Phase 5, and the Svelte SPA was removed after the React cutover.
+The Rust workspace is complete: `crates/server` (Axum), `crates/desktop` (Tauri 2), and `apps/web`
+(Svelte 5 + Vite), with the shared domain in `crates/core`. The legacy Go backend was removed in Phase 5.
 
 - **Self-hosted server:** exposes the HTTP API, authenticates users, and serves the SPA. Course
   registrations live in `courses.json` alongside the SQLite database; `LIBRARY_DIR`/`--library-root`
@@ -75,10 +74,9 @@ was removed in Phase 5, and the Svelte SPA was removed after the React cutover.
 - **Distribution:** Windows NSIS installer is available; Linux/Flatpak packaging is in progress.
   See [distribution](../operations/distribution.md).
 
-The frontend is React 19 with Tailwind 4 and shadcn/ui primitives built on Base UI, in
-`apps/web-next`. Design tokens live once in `apps/web-next/src/styles/app.css` and are mapped by
-Tailwind's `@theme inline`. Project styling maintains light and dark theme support; builds never
-load fonts, scripts, or stylesheets over third-party CDNs.
+The frontend uses Svelte and selected DaisyUI 5 components, prefixed with `lvui-` and semantic
+colors mapped to LearnVault tokens in `apps/web/src/ui-components.css`. Project styling maintains
+light and dark theme support; builds never load fonts, scripts, or stylesheets over third-party CDNs.
 
 ### Focus & Rewards Contract
 

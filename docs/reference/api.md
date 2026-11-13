@@ -1,6 +1,6 @@
 # API Reference
 
-The primary backend implementation is the Rust server (`crates/server`), exposing the HTTP endpoints below. The React SPA uses the same study and catalog contract across both HTTP and desktop IPC transports. All endpoints consume and produce JSON unless otherwise specified. Authentication is handled via an HttpOnly cookie session with `SameSite=Strict`.
+The primary backend implementation is the Rust server (`crates/server`), exposing the HTTP endpoints below. The Svelte web SPA uses the same study and catalog contract across both HTTP and desktop IPC transports. All endpoints consume and produce JSON unless otherwise specified. Authentication is handled via an HttpOnly cookie session with `SameSite=Strict`.
 
 In the Rust server, each registered course directory remains under strict filesystem integrity control between administrative operations. The course registry is stored in `courses.json` alongside the database, and raw filesystem paths never cross the API boundary: clients receive only opaque course identifiers and sanitized titles. Rescans revalidate each root and reject detected tampering; however, concurrent alterations of symlinks or junctions by local users still depend on OS-level permissions.
 
@@ -159,6 +159,51 @@ courses have no custom cover, manual ordering, search indexing or on-demand tran
 Creating a card accepts an optional `position_seconds` (the lesson moment it came from), returned on every card as `position_seconds`. A card stays linked to its lesson through `media_id`. Each review appends a row to the review history with the rating, the previous interval and the next due date, so the schedule and its history change in one transaction.
 
 The history endpoint is owner-scoped and read-only: `limit` defaults to 20 and is capped at `MAX_FLASHCARD_REVIEWS` (100). The response is `{ "items": [{ "review_id", "card_id", "rating", "previous_interval_days", "next_due", "reviewed_at" }], "total": <n> }`, where `total` counts the whole append-only log. The due count uses the same predicate as the review queue (`next_due <= now`) and only counts lessons the session user may still open; cards that were never reviewed are included.
+
+## Offline Sync
+
+The desktop keeps an offline queue and reconciles it with the server through an
+append-only operation log. The owner is the authenticated session user; no endpoint accepts
+an `owner_id`. Media files are never synchronized: only progress, notes, bookmarks,
+flashcard reviews and playback preferences travel.
+
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| `POST` | `/api/sync/push` | Session | Accepts `{ "device_id": "...", "operations": [...] }` and applies each new operation, returning `{ applied, duplicated, cursor }` |
+| `GET` | `/api/sync/pull?device=<id>&cursor=<seq>&limit=<n>` | Session | Returns `{ cursor, has_more, items }` with the operations after `cursor`, excluding the requesting device |
+
+Each operation is `{ "op_id": "...", "client_at": <unix-seconds>, "payload": { "kind": ... } }`
+with one of the payload kinds below:
+
+| Kind | Fields |
+| --- | --- |
+| `progress` | `media_id`, `position_seconds`, `completed` |
+| `note` | `note_id`, `media_id`, `position_seconds`, `content`, `created_at`, `updated_at` |
+| `bookmark` | `bookmark_id`, `media_id`, `position_seconds`, `label`, `created_at` |
+| `flashcard_review` | `card_id`, `rating` (`again`/`good`), `reviewed_at` |
+| `preference` | `video_speed`, `audio_speed` (percent of normal), `subtitle_language` |
+
+`op_id` is stable and globally unique: replaying a pushed operation is a duplicate and does
+not repeat its effect. `seq` is the monotonic pull cursor; rows are never deleted, so a
+device resumes from the last cursor it applied. Pulling excludes operations produced by the
+requesting `device_id`, because that device already applied them locally.
+
+Conflict rules:
+
+- **progress**: last write wins by `client_at`, with the position clamped to
+  `[0, 86400]` seconds; completion is monotonic and is never undone by an older write;
+- **notes**: each synchronized version is identified by its `op_id`. The largest `op_id`
+  (UUID v7, so the latest version) owns the note row and every other version is kept as a
+  conflict copy with the deterministic id `<note_id>~<op_id>`. No content is silently lost,
+  and devices that saw the same versions converge on the same texts. Notes created before
+  schema version 17 keep their row and never overwrite it;
+- **flashcard reviews**: append-only, applied in cursor order;
+- **preferences**: last write wins by `client_at`; speeds are clamped to 50–300 and an
+  invalid subtitle language is skipped.
+
+An operation that references media the server does not know is still recorded in the log
+and applied when the media appears; media that exists but is outside the user's course access
+is refused as `404 media_not_found`. The push body accepts up to 200 operations and 4 MiB.
 
 ## Search
 

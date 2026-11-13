@@ -33,7 +33,7 @@
 //!   o mesmo dono em todas as chamadas. A coluna compara bytes, então `"a"` e `"a "` seriam
 //!   donos diferentes.
 
-use rusqlite::{OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, params};
 use std::collections::HashSet;
 
 use crate::db::{Database, now_unix_seconds};
@@ -92,13 +92,25 @@ pub fn record_position(
     media_id: &str,
     position_seconds: i64,
 ) -> Result<StudyProgress> {
+    record_position_on(db.connection(), owner_id, media_id, position_seconds)
+}
+
+/// [`record_position`] sobre uma conexão já aberta.
+///
+/// A forma interna permite que uma transação do chamador agrupe a escrita de estudo e o
+/// registro da operação de sincronização.
+pub(crate) fn record_position_on(
+    conn: &Connection,
+    owner_id: &str,
+    media_id: &str,
+    position_seconds: i64,
+) -> Result<StudyProgress> {
     validate_owner(owner_id)?;
 
     if position_seconds < 0 {
         return Err(Error::InvalidStudyPosition { position_seconds });
     }
 
-    let conn = db.connection();
     require_media(conn, media_id)?;
 
     // `completed` não aparece no `DO UPDATE`, então a conclusão é preservada pela própria
@@ -128,9 +140,18 @@ pub fn set_completed(
     media_id: &str,
     completed: bool,
 ) -> Result<StudyProgress> {
+    set_completed_on(db.connection(), owner_id, media_id, completed)
+}
+
+/// [`set_completed`] sobre uma conexão já aberta.
+pub(crate) fn set_completed_on(
+    conn: &Connection,
+    owner_id: &str,
+    media_id: &str,
+    completed: bool,
+) -> Result<StudyProgress> {
     validate_owner(owner_id)?;
 
-    let conn = db.connection();
     require_media(conn, media_id)?;
 
     // Simétrico a [`record_position`]: `position_seconds` não é tocado pelo `DO UPDATE`, e
@@ -500,6 +521,23 @@ pub fn create_study_note(
     position_seconds: i64,
     content: &str,
 ) -> Result<StudyNote> {
+    create_study_note_on(
+        db.connection(),
+        owner_id,
+        media_id,
+        position_seconds,
+        content,
+    )
+}
+
+/// [`create_study_note`] sobre uma conexão já aberta.
+pub(crate) fn create_study_note_on(
+    conn: &Connection,
+    owner_id: &str,
+    media_id: &str,
+    position_seconds: i64,
+    content: &str,
+) -> Result<StudyNote> {
     validate_owner(owner_id)?;
     if position_seconds < 0 {
         return Err(Error::InvalidStudyPosition { position_seconds });
@@ -509,7 +547,6 @@ pub fn create_study_note(
         return Err(Error::InvalidStudyNoteContent);
     }
 
-    let conn = db.connection();
     require_media(conn, media_id)?;
 
     let note_id = crate::ids::new_note_id();
@@ -538,13 +575,22 @@ pub fn update_study_note(
     note_id: &str,
     content: &str,
 ) -> Result<StudyNote> {
+    update_study_note_on(db.connection(), owner_id, note_id, content)
+}
+
+/// [`update_study_note`] sobre uma conexão já aberta.
+pub(crate) fn update_study_note_on(
+    conn: &Connection,
+    owner_id: &str,
+    note_id: &str,
+    content: &str,
+) -> Result<StudyNote> {
     validate_owner(owner_id)?;
     let trimmed = content.trim();
     if trimmed.is_empty() || trimmed.len() > 10000 {
         return Err(Error::InvalidStudyNoteContent);
     }
 
-    let conn = db.connection();
     let now = now_unix_seconds();
 
     let updated = conn
@@ -818,13 +864,25 @@ pub fn review_flashcard(
     card_id: &str,
     rating: ReviewRating,
 ) -> Result<Flashcard> {
-    validate_owner(owner_id)?;
     let conn = db.connection();
-    let now = now_unix_seconds();
     let transaction = conn.unchecked_transaction()?;
+    let card = review_flashcard_on(&transaction, owner_id, card_id, rating)?;
+    transaction.commit()?;
+    Ok(card)
+}
+
+/// [`review_flashcard`] sobre uma conexão já dentro de uma transação.
+pub(crate) fn review_flashcard_on(
+    conn: &Connection,
+    owner_id: &str,
+    card_id: &str,
+    rating: ReviewRating,
+) -> Result<Flashcard> {
+    validate_owner(owner_id)?;
+    let now = now_unix_seconds();
 
     // Consulta o cartão atual para obter o interval_days prévio
-    let current_interval: Option<i64> = transaction
+    let current_interval: Option<i64> = conn
         .query_row(
             "SELECT interval_days FROM flashcard WHERE owner_id = ?1 AND card_id = ?2",
             rusqlite::params![owner_id, card_id],
@@ -854,7 +912,7 @@ pub fn review_flashcard(
         }
     };
 
-    let updated = transaction.query_row(
+    let updated = conn.query_row(
         "UPDATE flashcard
          SET interval_days = ?1, next_due = ?2, updated_at = ?3
          WHERE owner_id = ?4 AND card_id = ?5
@@ -863,7 +921,7 @@ pub fn review_flashcard(
         card_from_row,
     )?;
 
-    transaction.execute(
+    conn.execute(
         "INSERT INTO flashcard_review
              (owner_id, card_id, rating, previous_interval_days, next_due, reviewed_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
@@ -876,7 +934,6 @@ pub fn review_flashcard(
             now
         ],
     )?;
-    transaction.commit()?;
 
     Ok(updated)
 }
@@ -1048,6 +1105,17 @@ pub fn create_media_bookmark(
     position_seconds: i64,
     label: &str,
 ) -> Result<MediaBookmark> {
+    create_media_bookmark_on(db.connection(), owner_id, media_id, position_seconds, label)
+}
+
+/// [`create_media_bookmark`] sobre uma conexão já aberta.
+pub(crate) fn create_media_bookmark_on(
+    conn: &Connection,
+    owner_id: &str,
+    media_id: &str,
+    position_seconds: i64,
+    label: &str,
+) -> Result<MediaBookmark> {
     validate_owner(owner_id)?;
     if position_seconds < 0 {
         return Err(Error::InvalidStudyPosition { position_seconds });
@@ -1057,7 +1125,6 @@ pub fn create_media_bookmark(
         return Err(Error::InvalidBookmarkLabel);
     }
 
-    let conn = db.connection();
     require_media(conn, media_id)?;
 
     let bookmark_id = crate::ids::new_bookmark_id();

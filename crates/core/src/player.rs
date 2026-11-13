@@ -77,15 +77,33 @@ pub fn set_player_preference(
     audio_speed: i64,
     subtitle_language: &str,
 ) -> Result<PlayerPreference> {
+    set_player_preference_on(
+        db.connection(),
+        owner_id,
+        video_speed,
+        audio_speed,
+        subtitle_language,
+    )
+}
+
+/// [`set_player_preference`] sobre uma conexão já aberta.
+///
+/// Lets the caller's transaction group the preference write with its sync operation.
+pub(crate) fn set_player_preference_on(
+    conn: &rusqlite::Connection,
+    owner_id: &str,
+    video_speed: i64,
+    audio_speed: i64,
+    subtitle_language: &str,
+) -> Result<PlayerPreference> {
     validate_owner(owner_id)?;
     if !valid_speed(video_speed) || !valid_speed(audio_speed) || !valid_language(subtitle_language)
     {
         return Err(Error::InvalidPlayerPreference);
     }
 
-    db.connection()
-        .query_row(
-            "INSERT INTO player_preference
+    conn.query_row(
+        "INSERT INTO player_preference
                  (owner_id, video_speed, audio_speed, subtitle_language, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5)
              ON CONFLICT (owner_id) DO UPDATE SET
@@ -94,23 +112,23 @@ pub fn set_player_preference(
                  subtitle_language = excluded.subtitle_language,
                  updated_at = excluded.updated_at
              RETURNING video_speed, audio_speed, subtitle_language, updated_at",
-            params![
-                owner_id,
-                video_speed,
-                audio_speed,
-                subtitle_language,
-                now_unix_seconds()
-            ],
-            |row| {
-                Ok(PlayerPreference {
-                    video_speed: row.get(0)?,
-                    audio_speed: row.get(1)?,
-                    subtitle_language: row.get(2)?,
-                    updated_at: row.get(3)?,
-                })
-            },
-        )
-        .map_err(Error::from)
+        params![
+            owner_id,
+            video_speed,
+            audio_speed,
+            subtitle_language,
+            now_unix_seconds()
+        ],
+        |row| {
+            Ok(PlayerPreference {
+                video_speed: row.get(0)?,
+                audio_speed: row.get(1)?,
+                subtitle_language: row.get(2)?,
+                updated_at: row.get(3)?,
+            })
+        },
+    )
+    .map_err(Error::from)
 }
 
 fn valid_speed(speed: i64) -> bool {
@@ -118,7 +136,7 @@ fn valid_speed(speed: i64) -> bool {
 }
 
 /// A language tag is ASCII letters/digits with `-` or `_`; empty means no preference.
-fn valid_language(language: &str) -> bool {
+pub(crate) fn valid_language(language: &str) -> bool {
     language.chars().count() <= MAX_SUBTITLE_LANGUAGE_CHARS
         && language
             .chars()

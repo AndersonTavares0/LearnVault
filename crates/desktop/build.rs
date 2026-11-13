@@ -56,6 +56,16 @@ fn main() {
             "desktop_install_update",
             "desktop_media_capabilities",
             "desktop_open_in_system_player",
+            "desktop_playback_preferences",
+            "desktop_save_playback_preferences",
+            "desktop_sync_state",
+            "desktop_sync_pending",
+            "desktop_sync_acknowledge",
+            "desktop_sync_apply",
+            "desktop_sync_configure",
+            "desktop_sync_login",
+            "desktop_sync_logout",
+            "desktop_sync_now",
         ]));
     tauri_build::try_build(attributes).expect("falha ao executar o tauri-build do LearnVault");
 }

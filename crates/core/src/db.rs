@@ -560,6 +560,7 @@ const REQUIRED_TABLES: &[TableDefinition] = &[
             ("content", "TEXT", true, None, 0),
             ("created_at", "INTEGER", true, None, 0),
             ("updated_at", "INTEGER", true, None, 0),
+            ("sync_version", "TEXT", false, None, 0),
         ],
     },
     TableDefinition {
@@ -639,6 +640,38 @@ const REQUIRED_TABLES: &[TableDefinition] = &[
             ("video_speed", "INTEGER", true, Some("100"), 0),
             ("audio_speed", "INTEGER", true, Some("100"), 0),
             ("subtitle_language", "TEXT", true, Some("''"), 0),
+            ("updated_at", "INTEGER", true, None, 0),
+        ],
+    },
+    TableDefinition {
+        name: "sync_operation",
+        columns: &[
+            ("seq", "INTEGER", false, None, 1),
+            ("op_id", "TEXT", true, None, 0),
+            ("owner_id", "TEXT", true, None, 0),
+            ("device_id", "TEXT", true, None, 0),
+            ("client_at", "INTEGER", true, None, 0),
+            ("received_at", "INTEGER", true, None, 0),
+            ("payload", "TEXT", true, None, 0),
+        ],
+    },
+    TableDefinition {
+        name: "sync_outbox",
+        columns: &[
+            ("op_id", "TEXT", true, None, 1),
+            ("owner_id", "TEXT", true, None, 0),
+            ("device_id", "TEXT", true, None, 0),
+            ("client_at", "INTEGER", true, None, 0),
+            ("payload", "TEXT", true, None, 0),
+            ("queued_at", "INTEGER", true, None, 0),
+        ],
+    },
+    TableDefinition {
+        name: "sync_state",
+        columns: &[
+            ("owner_id", "TEXT", true, None, 1),
+            ("device_id", "TEXT", true, None, 0),
+            ("pull_cursor", "INTEGER", true, Some("0"), 0),
             ("updated_at", "INTEGER", true, None, 0),
         ],
     },

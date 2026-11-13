@@ -52,6 +52,7 @@ pub mod ordering;
 pub mod search;
 pub mod state;
 pub mod study;
+pub mod sync;
 
 pub use command::{
     catalog, catalog_with_orders, desktop_catalog, desktop_check_update,
@@ -63,12 +64,15 @@ pub use command::{
     desktop_list_bookmarks, desktop_list_favorites, desktop_list_flashcard_reviews,
     desktop_list_flashcards, desktop_list_focus_sessions, desktop_list_notes,
     desktop_list_pdf_annotations, desktop_media_capabilities, desktop_media_removal_impact,
-    desktop_open_in_system_player, desktop_recent_study, desktop_record_focus_session,
-    desktop_record_position, desktop_remove_course, desktop_remove_course_cover,
-    desktop_remove_media, desktop_rescan, desktop_reset_course_order, desktop_review_flashcard,
-    desktop_reward_summary, desktop_search, desktop_set_completed, desktop_set_course_favorite,
-    desktop_set_course_order, desktop_set_lesson_favorite, desktop_set_weekly_goal,
-    desktop_study_progress, desktop_study_summary, desktop_update_flashcard, desktop_update_note,
+    desktop_open_in_system_player, desktop_playback_preferences, desktop_recent_study,
+    desktop_record_focus_session, desktop_record_position, desktop_remove_course,
+    desktop_remove_course_cover, desktop_remove_media, desktop_rescan, desktop_reset_course_order,
+    desktop_review_flashcard, desktop_reward_summary, desktop_save_playback_preferences,
+    desktop_search, desktop_set_completed, desktop_set_course_favorite, desktop_set_course_order,
+    desktop_set_lesson_favorite, desktop_set_weekly_goal, desktop_study_progress,
+    desktop_study_summary, desktop_sync_acknowledge, desktop_sync_apply, desktop_sync_configure,
+    desktop_sync_login, desktop_sync_logout, desktop_sync_now, desktop_sync_pending,
+    desktop_sync_state, desktop_update_flashcard, desktop_update_note,
     desktop_update_pdf_annotation, desktop_weekly_goal, open_in_system_player,
 };
 pub use config::{DATABASE_FILE_NAME, DesktopConfigDto, database_path};
@@ -84,9 +88,10 @@ pub use dto::{
     CatalogDto, CatalogFileDto, CatalogNodeDto, CoverDto, CoverRemovalDto, DailyMissionDto,
     DesktopMediaCapabilitiesDto, DesktopUpdateInfoDto, FlashcardDto, FocusDayDto, FocusSessionDto,
     FocusSummaryDto, MediaBookmarkDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto,
-    NewPdfAnnotationDto, PdfAnnotationDto, PdfRectDto, RecentStudyDto, RescanSummaryDto,
-    RewardSummaryDto, SearchCourseDto, SearchLessonDto, SearchNoteDto, SearchResultsDto,
-    StudyFavoritesDto, StudyNoteDto, StudyProgressDto, StudySummaryDto,
+    NewPdfAnnotationDto, PdfAnnotationDto, PdfRectDto, PlaybackPreferencesDto, RecentStudyDto,
+    RescanSummaryDto, RewardSummaryDto, SearchCourseDto, SearchLessonDto, SearchNoteDto,
+    SearchResultsDto, StudyFavoritesDto, StudyNoteDto, StudyProgressDto, StudySummaryDto,
+    SyncResultDto, SyncStateDto,
 };
 pub use error::{IpcError, IpcErrorCode};
 pub use ordering::{CourseOrders, OrderError, order_path};
@@ -113,7 +118,9 @@ pub fn run() {
             let state = DesktopState::open(&data_dir, &config_dir).map_err(|_| {
                 std::io::Error::other("learnvault desktop: banco de dados local indisponível")
             })?;
-            app.manage(state);
+            app.manage(state.clone());
+            // Uma sincronização no start cobre o que ficou na fila da execução anterior.
+            state.request_sync();
             Ok(())
         });
     covers::register(media::register(builder))
@@ -122,7 +129,6 @@ pub fn run() {
             command::desktop_import_course,
             command::desktop_remove_course,
             command::desktop_rescan,
-            command::desktop_search,
             command::desktop_study_progress,
             command::desktop_record_position,
             command::desktop_set_completed,
@@ -163,10 +169,21 @@ pub fn run() {
             command::desktop_remove_course_cover,
             command::desktop_set_course_order,
             command::desktop_reset_course_order,
+            command::desktop_search,
             command::desktop_check_update,
             command::desktop_install_update,
             command::desktop_media_capabilities,
-            command::desktop_open_in_system_player
+            command::desktop_open_in_system_player,
+            command::desktop_playback_preferences,
+            command::desktop_save_playback_preferences,
+            command::desktop_sync_state,
+            command::desktop_sync_pending,
+            command::desktop_sync_acknowledge,
+            command::desktop_sync_apply,
+            command::desktop_sync_configure,
+            command::desktop_sync_login,
+            command::desktop_sync_logout,
+            command::desktop_sync_now
         ])
         .run(tauri::generate_context!())
         .expect("falha ao executar o aplicativo desktop do LearnVault");

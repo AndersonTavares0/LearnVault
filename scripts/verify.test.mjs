@@ -44,6 +44,7 @@ test('o plano padrão roda os checks pretendidos, sem Go nem desktop', () => {
 	const labels = buildSteps().map((step) => step.label);
 
 	assert.equal(labels[0], 'pnpm run check');
+	assert.ok(labels.includes('pnpm --filter learnvault-web test'));
 	assert.ok(labels.includes('pnpm --filter learnvault-web-next lint'));
 	assert.ok(labels.includes('pnpm --filter learnvault-web-next test'));
 	assert.ok(labels.includes('cargo fmt --all -- --check'));
@@ -57,6 +58,7 @@ test('--fast mantém check, testes e lints, e remove builds e audit', () => {
 	const labels = buildSteps({ fast: true }).map((step) => step.label);
 
 	assert.ok(labels.includes('pnpm run check'));
+	assert.ok(labels.includes('pnpm --filter learnvault-web test'));
 	assert.ok(labels.includes('cargo test'));
 	assert.ok(!labels.includes('pnpm run build'));
 	assert.ok(!labels.includes('pnpm run build:desktop'));
@@ -110,7 +112,7 @@ test('node scripts/verify.mjs --list anuncia os comandos pretendidos', () => {
 
 	assert.equal(result.status, 0, result.stderr);
 	assert.match(result.stdout, /^pnpm run check$/m);
-	assert.match(result.stdout, /^pnpm --filter learnvault-web-next test$/m);
+	assert.match(result.stdout, /^pnpm --filter learnvault-web test$/m);
 });
 
 test('pnpm verify resolve para o script do projeto (nunca o builtin do cmd.exe)', () => {

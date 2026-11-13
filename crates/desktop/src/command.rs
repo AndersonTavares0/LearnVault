@@ -12,7 +12,7 @@
 
 use std::path::{Path, PathBuf};
 
-use learnvault_core::{Database, FocusKind, FocusSessionInput};
+use learnvault_core::{Database, FocusKind, FocusSessionInput, SyncOperation, SyncOperationInput};
 use tauri::State;
 
 use crate::config::DesktopConfigDto;
@@ -20,9 +20,9 @@ use crate::courses::CourseEntry;
 use crate::dto::{
     CatalogDto, CatalogNodeDto, CoverDto, CoverRemovalDto, FlashcardDto, FlashcardReviewsDto,
     FocusSessionDto, FocusSummaryDto, MediaBookmarkDto, MediaRemovalImpactDto,
-    MediaRemovalOutcomeDto, NewPdfAnnotationDto, PdfAnnotationDto, RecentStudyDto,
-    RescanSummaryDto, RewardSummaryDto, SearchResultsDto, StudyFavoritesDto, StudyNoteDto,
-    StudyProgressDto, StudySummaryDto,
+    MediaRemovalOutcomeDto, NewPdfAnnotationDto, PdfAnnotationDto, PlaybackPreferencesDto,
+    RecentStudyDto, RescanSummaryDto, RewardSummaryDto, SearchResultsDto, StudyFavoritesDto,
+    StudyNoteDto, StudyProgressDto, StudySummaryDto, SyncResultDto, SyncStateDto,
 };
 use crate::error::IpcError;
 use crate::ordering::CourseOrders;
@@ -251,11 +251,10 @@ pub async fn desktop_rescan(state: State<'_, DesktopState>) -> Result<RescanSumm
         .map_err(|_| IpcError::rescan_unavailable())?
 }
 
-/// Comando IPC: busca global nas notas do dono local e nos títulos do catálogo.
+/// Comando IPC: busca notas e catálogo no banco local.
 ///
-/// O dono é o identificador local fixo resolvido no Rust; o webview só fornece a consulta
-/// e, opcionalmente, o limite. Indexação e busca rodam em `spawn_blocking` porque tocam o
-/// SQLite. Assim como no servidor, uma consulta curta devolve grupos vazios, não um erro.
+/// Os títulos dos cursos vêm do registro, então o índice é sincronizado antes da consulta;
+/// a validação do texto e do limite fica no núcleo.
 #[tauri::command]
 pub async fn desktop_search(
     state: State<'_, DesktopState>,
@@ -922,4 +921,120 @@ pub async fn desktop_open_in_system_player(
     tauri::async_runtime::spawn_blocking(move || state.open_in_system_player(&media_id))
         .await
         .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// Comando IPC: lê as preferências de reprodução do dono local.
+#[tauri::command]
+pub async fn desktop_playback_preferences(
+    state: State<'_, DesktopState>,
+) -> Result<PlaybackPreferencesDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.playback_preference())
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// Comando IPC: grava as preferências de reprodução e as enfileira para o servidor.
+#[tauri::command]
+pub async fn desktop_save_playback_preferences(
+    state: State<'_, DesktopState>,
+    video_speed: i64,
+    audio_speed: i64,
+    subtitle_language: String,
+) -> Result<PlaybackPreferencesDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        state.save_playback_preference(video_speed, audio_speed, &subtitle_language)
+    })
+    .await
+    .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// Comando IPC: identidade do dispositivo e cursor já aplicado.
+#[tauri::command]
+pub async fn desktop_sync_state(state: State<'_, DesktopState>) -> Result<SyncStateDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.sync_state())
+        .await
+        .map_err(|_| IpcError::sync_unavailable())?
+}
+
+/// Comando IPC: lista o outbox pendente, da operação mais antiga para a mais nova.
+#[tauri::command]
+pub async fn desktop_sync_pending(
+    state: State<'_, DesktopState>,
+    limit: Option<usize>,
+) -> Result<Vec<SyncOperationInput>, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.sync_pending(limit))
+        .await
+        .map_err(|_| IpcError::sync_unavailable())?
+}
+
+/// Comando IPC: confirma o lote aceito pelo servidor e limpa o outbox.
+#[tauri::command]
+pub async fn desktop_sync_acknowledge(
+    state: State<'_, DesktopState>,
+    op_ids: Vec<String>,
+) -> Result<usize, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.sync_acknowledge(&op_ids))
+        .await
+        .map_err(|_| IpcError::sync_unavailable())?
+}
+
+/// Comando IPC: aplica as operações recebidas e grava o cursor na mesma transação.
+#[tauri::command]
+pub async fn desktop_sync_apply(
+    state: State<'_, DesktopState>,
+    operations: Vec<SyncOperation>,
+    cursor: i64,
+) -> Result<usize, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.sync_apply(&operations, cursor))
+        .await
+        .map_err(|_| IpcError::sync_unavailable())?
+}
+
+/// Comando IPC: configura a URL do servidor de sincronização.
+#[tauri::command]
+pub async fn desktop_sync_configure(
+    state: State<'_, DesktopState>,
+    server_url: String,
+) -> Result<SyncStateDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.sync_configure(&server_url))
+        .await
+        .map_err(|_| IpcError::sync_unavailable())?
+}
+
+/// Comando IPC: entra no servidor configurado e guarda a sessão localmente.
+#[tauri::command]
+pub async fn desktop_sync_login(
+    state: State<'_, DesktopState>,
+    username: String,
+    password: String,
+) -> Result<SyncStateDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.sync_login(&username, &password))
+        .await
+        .map_err(|_| IpcError::sync_unavailable())?
+}
+
+/// Comando IPC: encerra a sessão de sincronização.
+#[tauri::command]
+pub async fn desktop_sync_logout(state: State<'_, DesktopState>) -> Result<SyncStateDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.sync_logout())
+        .await
+        .map_err(|_| IpcError::sync_unavailable())?
+}
+
+/// Comando IPC: executa uma sincronização e devolve o resumo, mesmo quando falha.
+#[tauri::command]
+pub async fn desktop_sync_now(state: State<'_, DesktopState>) -> Result<SyncResultDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.sync_now())
+        .await
+        .map_err(|_| IpcError::sync_unavailable())?
 }

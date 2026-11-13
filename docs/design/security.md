@@ -134,6 +134,11 @@ described below. The desktop application is single-user and has no accounts.
 - The updater consumes a signed manifest; pre-releases are ignored, so a beta never moves a stable
   installation.
 - The desktop database lives in the application data directory and is not shared with the server.
+- Sync is the only outbound network path. The desktop may call one user-configured server over
+  http(s) with TLS verification never disabled, sends only the operation log described in §5, and
+  keeps the session cookie in a `0600` file next to its database. It never opens a listening socket,
+  and the guard tests in `crates/desktop/tests/foundation.rs` still forbid listeners, embedded
+  servers, and privileged Tauri plugins.
 
 ## 8. Secrets and configuration
 
@@ -154,8 +159,8 @@ described below. The desktop application is single-user and has no accounts.
 - Four advisories are accepted with documented rationale rather than silently ignored:
   - `GHSA-g3hv-75wg-m249` (minimatch, dev tooling) is ignored in `pnpm-workspace.yaml`; forcing the
     patched major breaks `eslint-plugin-jsx-a11y`.
-  - `GHSA-gcqx-w48m-w2h4` (deepmerge) is ignored for the same reason: it is reachable only through the
-    `shadcn` component CLI, no patched release exists, and it never reaches the shipped bundles.
+  - `GHSA-gcqx-w48m-w2h4` (deepmerge, dev tooling) has no patched release and is ignored in
+    `pnpm-workspace.yaml`.
   - `RUSTSEC-2024-0429` (glib, reached through Tauri's GTK stack) is ignored in `.cargo/audit.toml`;
     the patched release needs a GTK major upgrade that no current Tauri version provides.
   - `RUSTSEC-2023-0071` (`rsa`, reached through `smb` → `sspi`) is ignored in `.cargo/audit.toml`.

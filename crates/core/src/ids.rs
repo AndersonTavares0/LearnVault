@@ -46,3 +46,8 @@ pub fn new_card_id() -> String {
 pub fn new_bookmark_id() -> String {
     Uuid::now_v7().to_string()
 }
+
+/// Gera um identificador opaco de operação de sincronização ou de dispositivo.
+pub fn new_sync_id() -> String {
+    Uuid::now_v7().to_string()
+}

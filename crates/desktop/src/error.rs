@@ -77,6 +77,14 @@ pub enum IpcErrorCode {
     BookmarkNotFound,
     /// O rótulo do marcador é vazio ou excede o limite aceito.
     InvalidBookmarkLabel,
+    /// As preferências de reprodução estão fora da faixa aceita.
+    InvalidPlayerPreference,
+    /// A fila de sincronização local não pôde ser lida nem gravada.
+    SyncUnavailable,
+    /// A URL do servidor de sincronização é inválida.
+    InvalidSyncServer,
+    /// O servidor recusou as credenciais de sincronização.
+    SyncLoginFailed,
 }
 
 /// Erro IPC serializável devolvido ao webview.
@@ -350,6 +358,38 @@ impl IpcError {
         Self {
             code: IpcErrorCode::InvalidBookmarkLabel,
             message: "rótulo do marcador inválido",
+        }
+    }
+
+    /// As preferências de reprodução estão fora da faixa aceita.
+    pub fn invalid_player_preference() -> Self {
+        Self {
+            code: IpcErrorCode::InvalidPlayerPreference,
+            message: "preferência de reprodução inválida",
+        }
+    }
+
+    /// A fila de sincronização local não pôde ser lida nem gravada.
+    pub fn sync_unavailable() -> Self {
+        Self {
+            code: IpcErrorCode::SyncUnavailable,
+            message: "não foi possível sincronizar o estudo",
+        }
+    }
+
+    /// A URL do servidor de sincronização é inválida.
+    pub fn invalid_sync_server() -> Self {
+        Self {
+            code: IpcErrorCode::InvalidSyncServer,
+            message: "endereço do servidor inválido",
+        }
+    }
+
+    /// O servidor recusou as credenciais de sincronização.
+    pub fn sync_login_failed() -> Self {
+        Self {
+            code: IpcErrorCode::SyncLoginFailed,
+            message: "não foi possível entrar no servidor",
         }
     }
 }

@@ -35,6 +35,11 @@ learnvault-core = { path = "../core" }
 serde = { version = "1", features = ["derive"] }
 # Serialização da configuração versionada da raiz da biblioteca.
 serde_json = "1"
+# Cliente HTTP do desktop para sincronizar com o servidor local. Mesmas features do
+# servidor: sem TLS nativo/OpenSSL, com o provedor `ring` instalado em processo. Sem
+# redirecionamentos e com timeout por requisição.
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 
 [build-dependencies]
 tauri-build = { version = "2.7.3", features = [] }

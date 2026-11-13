@@ -415,6 +415,17 @@ pub enum Error {
     /// A playback speed or subtitle language is outside the accepted bounds.
     #[error("preferência de reprodução inválida")]
     InvalidPlayerPreference,
+
+    /// A synchronization operation is malformed.
+    ///
+    /// Covers an empty identifier, an oversized batch and an unreadable stored payload.
+    /// Domain data inside an operation is normalized or skipped instead of rejected, so a
+    /// device never retries an operation that can never be applied.
+    #[error("operação de sincronização inválida: {reason}")]
+    InvalidSyncOperation {
+        /// Stable rejection reason.
+        reason: &'static str,
+    },
 }
 
 /// Resultado das operações do domínio.

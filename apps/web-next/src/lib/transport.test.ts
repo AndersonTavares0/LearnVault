@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { setLocale } from './i18n';
 import type { NewPdfAnnotation } from './transport';
 import { findLesson } from './router';
-import { desktopCoverUrl, desktopMediaUrl, DesktopStub, FocusSessionConflict, HttpTransport, InvalidFocusSession, lessonFromNode, MAX_COVER_BYTES, normalizeBookmark, normalizeCatalog, normalizeFocusSession, normalizeFocusSummary, normalizeRecentStudy, normalizeRewardSummary, normalizeSearchResults, normalizeStudyProgress, normalizeStudySummary, normalizeUpdateStatus, normalizeUser, STUDY_NOT_AVAILABLE, CATALOG_LIMITS, type Transport } from './transport';
+import { desktopCoverUrl, desktopMediaUrl, DesktopStub, FocusSessionConflict, HttpTransport, InvalidFocusSession, lessonFromNode, MAX_COVER_BYTES, normalizeBookmark, normalizeCatalog, normalizeFocusSession, normalizeFocusSummary, normalizeRecentStudy, normalizeRewardSummary, normalizeSearchResults, normalizeStudyProgress, normalizeStudySummary, normalizeSyncResult, normalizeSyncState, normalizeUpdateStatus, normalizeUser, STUDY_NOT_AVAILABLE, CATALOG_LIMITS, validSyncServerUrl, type Transport } from './transport';
 
 // O Tauri só é carregado no desktop: fora dele o módulo é substituído pelo mock, de modo
 // que a suíte nunca toca `window.__TAURI_INTERNALS__`.
@@ -15,8 +15,8 @@ beforeEach(() => {
 
 describe('transport contract', () => {
 	it('exposes the HTTP transport seam without routing assumptions', () => {
-		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'studySummary', 'listNotes', 'search', 'createNote', 'updateNote', 'deleteNote', 'listBookmarks', 'createBookmark', 'deleteBookmark', 'listPdfAnnotations', 'createPdfAnnotation', 'updatePdfAnnotation', 'deletePdfAnnotation', 'listFlashcards', 'createFlashcard', 'updateFlashcard', 'deleteFlashcard', 'reviewFlashcard', 'listFavorites', 'setCourseFavorite', 'setLessonFavorite', 'recordFocusSession', 'listFocusSessions', 'focusSummary', 'rewardSummary', 'claimDailyMission', 'setWeeklyGoal', 'userAvatarUrl', 'uploadUserAvatar', 'deleteUserAvatar', 'checkUpdate', 'installUpdate', 'updateHistory', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover', 'mediaCapabilities', 'transcodeUrl', 'openInSystemPlayer'];
-		expect(methods).toHaveLength(53);
+		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'studySummary', 'listNotes', 'search', 'createNote', 'updateNote', 'deleteNote', 'listBookmarks', 'createBookmark', 'deleteBookmark', 'listPdfAnnotations', 'createPdfAnnotation', 'updatePdfAnnotation', 'deletePdfAnnotation', 'listFlashcards', 'createFlashcard', 'updateFlashcard', 'deleteFlashcard', 'reviewFlashcard', 'listFavorites', 'setCourseFavorite', 'setLessonFavorite', 'recordFocusSession', 'listFocusSessions', 'focusSummary', 'rewardSummary', 'claimDailyMission', 'setWeeklyGoal', 'syncState', 'syncConfigure', 'syncSignIn', 'syncSignOut', 'syncNow', 'userAvatarUrl', 'uploadUserAvatar', 'deleteUserAvatar', 'checkUpdate', 'installUpdate', 'updateHistory', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover', 'mediaCapabilities', 'transcodeUrl', 'openInSystemPlayer'];
+		expect(methods).toHaveLength(58);
 	});
 	it('tells a rate-limited sign-in apart from wrong credentials', async () => {
 		vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 429 })));
@@ -880,6 +880,19 @@ describe('desktop transport over IPC', () => {
 		expect(invoke).toHaveBeenLastCalledWith('desktop_recent_study', {});
 	});
 
+	it('persists playback preferences through the desktop IPC using percentages', async () => {
+		vi.mocked(invoke).mockResolvedValue({ video_speed: 125, audio_speed: 100, subtitle_language: 'pt-BR', updated_at: 10 });
+
+		const saved = await new DesktopStub().savePlaybackPreferences({ videoSpeed: 1.25, audioSpeed: 1, subtitleLanguage: 'pt-BR' });
+
+		expect(invoke).toHaveBeenCalledWith('desktop_save_playback_preferences', { videoSpeed: 125, audioSpeed: 100, subtitleLanguage: 'pt-BR' });
+		expect(saved).toEqual({ videoSpeed: 1.25, audioSpeed: 1, subtitleLanguage: 'pt-BR' });
+
+		vi.mocked(invoke).mockResolvedValue({ video_speed: 100, audio_speed: 100, subtitle_language: '', updated_at: 11 });
+		await expect(new DesktopStub().getPlaybackPreferences()).resolves.toEqual({ videoSpeed: 1, audioSpeed: 1, subtitleLanguage: '' });
+		expect(invoke).toHaveBeenLastCalledWith('desktop_playback_preferences');
+	});
+
 	it('maps each stable desktop study error code to a sanitized message', async () => {
 		const desktop: Transport = new DesktopStub();
 
@@ -1477,5 +1490,77 @@ describe('pdf annotations', () => {
 
 		vi.mocked(invoke).mockRejectedValueOnce({ code: 'pdf_annotation_not_found', message: 'x' });
 		await expect(desktop.deletePdfAnnotation('gone')).rejects.toThrow('Anotação não encontrada.');
+	});
+});
+
+describe('desktop sync over IPC', () => {
+	const state = { device_id: 'device-1', pull_cursor: 12, server_url: 'https://lv.example', signed_in: false, pending: 3, last_error: null, last_result: null };
+
+	it('drives state, configure, login and logout through the named commands', async () => {
+		const desktop = new DesktopStub();
+
+		vi.mocked(invoke).mockResolvedValueOnce(state);
+		await expect(desktop.syncState()).resolves.toEqual({ deviceId: 'device-1', pullCursor: 12, serverUrl: 'https://lv.example', signedIn: false, pending: 3, lastError: null, lastResult: null });
+		expect(invoke).toHaveBeenLastCalledWith('desktop_sync_state');
+
+		vi.mocked(invoke).mockResolvedValueOnce(state);
+		await desktop.syncConfigure('https://lv.example');
+		expect(invoke).toHaveBeenLastCalledWith('desktop_sync_configure', { serverUrl: 'https://lv.example' });
+
+		vi.mocked(invoke).mockResolvedValueOnce({ ...state, signed_in: true });
+		await expect(desktop.syncSignIn('ana', 'segredo')).resolves.toMatchObject({ signedIn: true });
+		expect(invoke).toHaveBeenLastCalledWith('desktop_sync_login', { username: 'ana', password: 'segredo' });
+
+		vi.mocked(invoke).mockResolvedValueOnce(state);
+		await desktop.syncSignOut();
+		expect(invoke).toHaveBeenLastCalledWith('desktop_sync_logout');
+	});
+
+	it('normalizes the run summary and keeps a stable error code', async () => {
+		vi.mocked(invoke).mockResolvedValueOnce({ pushed: 4, pulled: 2, pending: 1, error: 'sync_rejected' });
+
+		await expect(new DesktopStub().syncNow()).resolves.toEqual({ pushed: 4, pulled: 2, pending: 1, error: 'sync_rejected' });
+		expect(invoke).toHaveBeenLastCalledWith('desktop_sync_now');
+	});
+
+	it('rejects a malformed state or summary instead of guessing', async () => {
+		vi.mocked(invoke).mockResolvedValueOnce({ server_url: 'https://lv.example' });
+		await expect(new DesktopStub().syncState()).rejects.toThrow('Não foi possível ler o estado da sincronização.');
+		vi.mocked(invoke).mockResolvedValueOnce('nada');
+		await expect(new DesktopStub().syncNow()).rejects.toThrow('Não foi possível sincronizar.');
+	});
+
+	it('maps the stable sync error codes and never forwards the raw message', async () => {
+		const desktop = new DesktopStub();
+
+		vi.mocked(invoke).mockRejectedValueOnce({ code: 'invalid_sync_server', message: '/mnt/segredo' });
+		await expect(desktop.syncConfigure('ftp://x')).rejects.toThrow('Informe só o endereço do servidor');
+		vi.mocked(invoke).mockRejectedValueOnce({ code: 'sync_login_failed', message: 'senha em /mnt/segredo' });
+		await expect(desktop.syncSignIn('ana', 'x')).rejects.toThrow('Usuário ou senha incorretos.');
+		vi.mocked(invoke).mockRejectedValueOnce({ code: 'sync_unavailable', message: 'C:\\segredo' });
+		await expect(desktop.syncNow()).rejects.toThrow('Não foi possível alcançar o servidor de sincronização.');
+		vi.mocked(invoke).mockRejectedValueOnce({ code: 'algo_desconhecido', message: 'C:\\segredo' });
+		await expect(desktop.syncState()).rejects.toThrow('Não foi possível ler o estado da sincronização.');
+	});
+
+	it('accepts only the server address the Rust rule accepts', () => {
+		for (const url of ['http://host', 'https://lv.example', 'http://127.0.0.1:8090', 'https://lv.example/']) expect(validSyncServerUrl(url)).toBe(true);
+		for (const url of ['', 'lv.example', 'ftp://host', 'https://user@host', 'https://host/path', 'https://host?x=1', 'https://host#top', 'https://host?', 'http://']) expect(validSyncServerUrl(url)).toBe(false);
+	});
+
+	it('never sends session or username outside the login call', async () => {
+		vi.mocked(invoke).mockResolvedValue({ ...state, signed_in: true, last_result: { pushed: 1, pulled: 1, pending: 0, error: null } });
+
+		await expect(new DesktopStub().syncState()).resolves.toEqual(expect.objectContaining({ signedIn: true, lastResult: { pushed: 1, pulled: 1, pending: 0, error: null } }));
+		expect(JSON.stringify(vi.mocked(invoke).mock.calls)).not.toContain('session');
+	});
+});
+
+describe('sync payload normalization', () => {
+	it('keeps summaries and state in the camelCase contract', () => {
+		expect(normalizeSyncResult({ pushed: 2, pulled: 0, pending: 7, error: null })).toEqual({ pushed: 2, pulled: 0, pending: 7, error: null });
+		expect(normalizeSyncState({ device_id: 'd', pull_cursor: 0, server_url: '', signed_in: false, pending: 0, last_error: 'session_expired', last_result: { pushed: 0, pulled: 0, pending: 0, error: 'session_expired' } })).toEqual({
+			deviceId: 'd', pullCursor: 0, serverUrl: '', signedIn: false, pending: 0, lastError: 'session_expired', lastResult: { pushed: 0, pulled: 0, pending: 0, error: 'session_expired' }
+		});
 	});
 });

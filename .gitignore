@@ -5,7 +5,8 @@
 !.env.*.example
 deploy/compose/secrets/
 
-# Frontend dependencies and build output
+# SvelteKit and frontend dependencies/build output
+.svelte-kit/
 node_modules/
 build/
 crates/server/web/build/

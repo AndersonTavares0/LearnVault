@@ -1,4 +1,4 @@
-import { BookOpen, Check, Database, Download, Palette, RefreshCw, Server, Settings, Timer, UserRound, Users } from 'lucide-react';
+import { BookOpen, Check, Cloud, Database, Download, Palette, RefreshCw, Server, Settings, Timer, UserRound, Users } from 'lucide-react';
 import { createContext, useContext, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router';
 import { Panel } from '@/components/panel';
@@ -15,6 +15,7 @@ import { AppearanceSettings } from './appearance';
 import { AvatarSettings, CredentialsForm } from './account';
 import { FocusSettings } from './focus';
 import { SourceSettings } from './sources';
+import { SyncSettings } from './sync';
 import { UpdateSettings } from './updates';
 import { UserSettings } from './users';
 
@@ -42,6 +43,7 @@ export function SettingsPage() {
 		...(studySyncSupported ? [{ id: 'study', label: tr('Study', 'Estudo'), icon: BookOpen }] : []),
 		{ id: 'focus', label: tr('Focus timer', 'Timer de foco'), icon: Timer },
 		...(!server || admin ? [{ id: 'updates', label: tr('Updates', 'Atualizações'), icon: RefreshCw }] : []),
+		...(!server ? [{ id: 'sync', label: tr('Sync', 'Sincronização'), icon: Cloud }] : []),
 		...(server && admin ? [{ id: 'users', label: tr('Users', 'Usuários'), icon: Users }, { id: 'sources', label: tr('Remote sources', 'Fontes remotas'), icon: Server }, { id: 'backup', label: 'Backup', icon: Database }] : [])
 	];
 
@@ -88,6 +90,11 @@ export function SettingsPage() {
 			{(!server || admin) && (
 				<Section id="updates" title={tr('Updates', 'Atualizações')}>
 					<UpdateSettings />
+				</Section>
+			)}
+			{!server && (
+				<Section id="sync" title={tr('Sync', 'Sincronização')} description={tr('Keep progress, notes and flashcards in step with a LearnVault server. Changes made offline wait on this device until the next sync.', 'Mantenha progresso, notas e flashcards em dia com um servidor LearnVault. Alterações feitas sem conexão esperam neste dispositivo até a próxima sincronização.')}>
+					<SyncSettings />
 				</Section>
 			)}
 			{server && admin && (
