@@ -10,10 +10,10 @@
 FROM node:24-alpine AS web-build
 WORKDIR /src
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY apps/web/package.json ./apps/web/
+COPY apps/web-next/package.json ./apps/web-next/
 RUN corepack enable && corepack install --global pnpm@11.28.5 && pnpm install --frozen-lockfile
-COPY apps/web ./apps/web
-RUN pnpm --filter learnvault-web run build
+COPY apps/web-next ./apps/web-next
+RUN pnpm --filter learnvault-web-next run build
 
 FROM rust:1.99-alpine AS rust-build
 RUN apk add --no-cache build-base
