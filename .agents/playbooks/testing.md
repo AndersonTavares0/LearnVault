@@ -5,7 +5,7 @@
 2. In shells where Cargo is not in the default non-interactive PATH, set `export PATH="$HOME/.cargo/bin:$PATH"`.
 3. Run `cargo fmt --all -- --check`, `cargo clippy --all-targets -- -D warnings`, and
    `cargo test --all` for Rust changes.
-4. Run `pnpm run check`, `pnpm --filter learnvault-web test`, and `pnpm run build` for SPA changes.
+4. Run `pnpm run check`, `pnpm --filter learnvault-web-next test`, and `pnpm run build` for SPA changes.
    `pnpm verify` runs the full verification pipeline; `pnpm verify --fast` skips builds and audit during fast iterations.
 5. Run `pnpm exec playwright test` for end-to-end browser integration tests (verifying authentication, navigation, player, and i18n persistence).
 6. For the desktop crate, use `cargo test -p learnvault-desktop` or `pnpm dev:tauri`.

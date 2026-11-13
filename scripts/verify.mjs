@@ -24,7 +24,6 @@ export function buildSteps({ fast = false } = {}) {
 		{ label: 'pnpm run check', command: 'pnpm', args: ['run', 'check'] },
 		{ label: 'pnpm run build', command: 'pnpm', args: ['run', 'build'], slow: true },
 		{ label: 'pnpm run build:desktop', command: 'pnpm', args: ['run', 'build:desktop'], slow: true },
-		{ label: 'pnpm --filter learnvault-web test', command: 'pnpm', args: ['--filter', 'learnvault-web', 'test'] },
 		{ label: 'pnpm --filter learnvault-web-next lint', command: 'pnpm', args: ['--filter', 'learnvault-web-next', 'lint'] },
 		{ label: 'pnpm --filter learnvault-web-next test', command: 'pnpm', args: ['--filter', 'learnvault-web-next', 'test'] },
 		{ label: 'pnpm run test:scripts', command: 'pnpm', args: ['run', 'test:scripts'] },
