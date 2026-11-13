@@ -299,42 +299,15 @@ pub(crate) async fn media_transcode(
         return error_private_no_store(StatusCode::INTERNAL_SERVER_ERROR);
     };
 
-    let mut cmd = tokio::process::Command::new(ffmpeg_path());
-    cmd.arg("-hide_banner")
-        .arg("-loglevel")
-        .arg("error")
-        .arg("-nostdin")
-        .args(["-protocol_whitelist", FFMPEG_INPUT_PROTOCOL_WHITELIST]);
-
     let start = query.start.unwrap_or(0.0);
     let start = if start.is_finite() && start > 0.0 {
         start
     } else {
         0.0
     };
-    cmd.args(["-i", "pipe:0"]);
-    if start > 0.0 {
-        // Output-side seeking preserves resume behavior for the non-seekable input pipe.
-        cmd.arg("-ss").arg(format!("{start:.3}"));
-    }
 
-    let reencode = query.reencode.unwrap_or(false);
-    if reencode {
-        cmd.args([
-            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-c:a", "aac", "-b:a", "192k",
-        ]);
-    } else {
-        // Modo inteligente: copia fluxo de vídeo diretamente (zero CPU) e assegura áudio em AAC (compatível com navegadores)
-        cmd.args(["-c:v", "copy", "-c:a", "aac", "-b:a", "192k"]);
-    }
-
-    cmd.args([
-        "-movflags",
-        "frag_keyframe+empty_moov+default_base_moof",
-        "-f",
-        "mp4",
-        "pipe:1",
-    ]);
+    let mut cmd = tokio::process::Command::new(ffmpeg_path());
+    cmd.args(transcode_args(start, query.reencode.unwrap_or(false)));
 
     cmd.stdin(std::process::Stdio::piped());
     cmd.stdout(std::process::Stdio::piped());
@@ -422,6 +395,61 @@ fn media_error_status(error: &learnvault_core::Error) -> StatusCode {
     }
 }
 
+/// Argumentos do FFmpeg para o modo de transcodificação sob demanda.
+///
+/// `-ss` vem antes de `-i` para que a busca seja de entrada: com `pipe:0` o FFmpeg descarta
+/// pacotes até o ponto de retomada em vez de decodificar e recodificar o arquivo inteiro
+/// desde o começo. O tremor de timestamps é o mesmo: o áudio e o vídeo continuam saindo
+/// como Fragmented MP4 começando em zero.
+fn transcode_args(start: f64, reencode: bool) -> Vec<String> {
+    let mut args: Vec<String> = [
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-nostdin",
+        "-protocol_whitelist",
+        FFMPEG_INPUT_PROTOCOL_WHITELIST,
+    ]
+    .iter()
+    .map(|argument| (*argument).to_owned())
+    .collect();
+    if start > 0.0 {
+        args.push("-ss".to_owned());
+        args.push(format!("{start:.3}"));
+    }
+    args.push("-i".to_owned());
+    args.push("pipe:0".to_owned());
+    if reencode {
+        args.extend(
+            [
+                "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-c:a", "aac", "-b:a",
+                "192k",
+            ]
+            .iter()
+            .map(|argument| (*argument).to_owned()),
+        );
+    } else {
+        // Modo inteligente: copia fluxo de vídeo diretamente (zero CPU) e assegura áudio em AAC (compatível com navegadores)
+        args.extend(
+            ["-c:v", "copy", "-c:a", "aac", "-b:a", "192k"]
+                .iter()
+                .map(|argument| (*argument).to_owned()),
+        );
+    }
+    args.extend(
+        [
+            "-movflags",
+            "frag_keyframe+empty_moov+default_base_moof",
+            "-f",
+            "mp4",
+            "pipe:1",
+        ]
+        .iter()
+        .map(|argument| (*argument).to_owned()),
+    );
+    args
+}
+
 #[cfg(test)]
 mod tests {
     use super::FFMPEG_INPUT_PROTOCOL_WHITELIST;
@@ -431,6 +459,16 @@ mod tests {
         assert!(super::is_hls_playlist("lesson.m3u8"));
         assert!(super::is_hls_playlist("lesson.M3U8"));
         assert!(!super::is_hls_playlist("lesson.mp4"));
+    }
+
+    #[test]
+    fn seeks_before_the_input_pipe_and_skips_the_seek_at_zero() {
+        let args = super::transcode_args(95.5, false);
+        let seek = args.iter().position(|argument| argument == "-ss").unwrap();
+        let input = args.iter().position(|argument| argument == "-i").unwrap();
+        assert!(seek < input, "a busca precisa ser de entrada: {args:?}");
+        assert_eq!(args[seek + 1], "95.500");
+        assert!(super::transcode_args(0.0, true).iter().all(|a| a != "-ss"));
     }
 
     #[test]
