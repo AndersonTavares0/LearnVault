@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { pomodoro } from '@/lib/pomodoro-store';
+import { clearProgressOutbox, progressOutboxKey, readProgressOutbox } from '@/lib/progress-outbox';
 import { transport, type Catalog, type CatalogNode, type FileEntry, type StudyProgress } from '@/lib/transport';
 import { renderApp } from '@/test/render-app';
 
@@ -18,6 +19,7 @@ const initialTimer = pomodoro.get();
 const progress = (mediaId: string, completed = false): StudyProgress => ({ mediaId, positionSeconds: 0, completed, updatedAt: 1, recorded: false });
 
 beforeEach(() => {
+	clearProgressOutbox();
 	localStorage.clear();
 	vi.spyOn(transport, 'mediaCapabilities').mockResolvedValue({ transcoding: false });
 	vi.spyOn(transport, 'studyProgress').mockImplementation(async (id) => progress(id));
@@ -238,6 +240,68 @@ describe('lesson page', () => {
 			record.mockClear();
 			cleanup();
 			await waitFor(() => expect(record).toHaveBeenCalledWith('one.mp4', 55));
+		});
+
+		const outboxKey = progressOutboxKey('http-user:u1');
+		const queued = (positionSeconds: number) => localStorage.setItem(outboxKey, JSON.stringify([{ mediaId: 'one.mp4', positionSeconds, at: 5 }]));
+		const notice = 'Progress is not saved yet. It will retry when the connection is back.';
+
+		it('queues a failed save, says so, and retries it when the tab comes back', async () => {
+			vi.spyOn(transport, 'studyProgress').mockResolvedValue(saved(10));
+			const record = vi.spyOn(transport, 'recordPosition').mockRejectedValue(new Error('offline'));
+			renderApp('/course/c/c%2FOne', { catalog });
+			const video = await screen.findByLabelText('Lesson player: One') as HTMLVideoElement;
+			// The resume at 0:10 means the progress query settled and the retry listener is on.
+			await screen.findByRole('button', { name: 'Resume from 0:10' });
+			video.currentTime = 42;
+			fireEvent.pause(video);
+
+			const status = await screen.findByText(notice);
+			expect(status.getAttribute('role')).toBe('status');
+			expect(readProgressOutbox(localStorage, 'http-user:u1')).toMatchObject([{ mediaId: 'one.mp4', positionSeconds: 42 }]);
+
+			record.mockImplementation(async (id, positionSeconds) => ({ ...saved(positionSeconds), mediaId: id }));
+			act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+
+			await waitFor(() => expect(screen.queryByText(notice)).toBeNull());
+			expect(record).toHaveBeenLastCalledWith('one.mp4', 42);
+			expect(readProgressOutbox(localStorage, 'http-user:u1')).toEqual([]);
+		});
+
+		it('resumes from a queued position the server does not have yet', async () => {
+			vi.spyOn(transport, 'studyProgress').mockResolvedValue(saved(10));
+			const record = vi.spyOn(transport, 'recordPosition').mockImplementation(async (id, positionSeconds) => ({ ...saved(positionSeconds), mediaId: id }));
+			queued(42);
+			renderApp('/course/c/c%2FOne', { catalog });
+
+			expect(await screen.findByRole('button', { name: 'Resume from 0:42' })).toBeTruthy();
+			await waitFor(() => expect(record).toHaveBeenCalledWith('one.mp4', 42));
+			await waitFor(() => expect(readProgressOutbox(localStorage, 'http-user:u1')).toEqual([]));
+		});
+
+		it('discards a queued position the server has already passed', async () => {
+			vi.spyOn(transport, 'studyProgress').mockResolvedValue(saved(100));
+			const record = vi.spyOn(transport, 'recordPosition').mockImplementation(async (id, positionSeconds) => ({ ...saved(positionSeconds), mediaId: id }));
+			queued(10);
+			renderApp('/course/c/c%2FOne', { catalog });
+
+			expect(await screen.findByRole('button', { name: 'Resume from 1:40' })).toBeTruthy();
+			await waitFor(() => expect(readProgressOutbox(localStorage, 'http-user:u1')).toEqual([]));
+			expect(record).not.toHaveBeenCalled();
+		});
+
+		it('clears the unsaved position queue on sign out', async () => {
+			vi.spyOn(transport, 'recordPosition').mockRejectedValue(new Error('offline'));
+			vi.spyOn(transport, 'logout').mockResolvedValue(undefined);
+			queued(42);
+			renderApp('/course/c/c%2FOne', { catalog });
+			await waitFor(() => expect(localStorage.getItem(outboxKey)).not.toBeNull());
+
+			fireEvent.click(await screen.findByRole('button', { name: 'Account: admin' }));
+			fireEvent.click(await screen.findByRole('menuitem', { name: 'Sign out' }));
+			fireEvent.click(await screen.findByRole('button', { name: 'Sign out anyway' }));
+
+			await waitFor(() => expect(localStorage.getItem(outboxKey)).toBeNull());
 		});
 	});
 

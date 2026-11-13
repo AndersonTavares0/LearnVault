@@ -97,4 +97,22 @@ describe('position saver', () => {
 
 		expect(save).toHaveBeenCalledTimes(2);
 	});
+
+	it('drains a duplicate queued position instead of replaying it over a newer one', async () => {
+		const resolvers: Array<(value: StudyProgress) => void> = [];
+		const save = vi.fn()
+			.mockImplementationOnce(() => new Promise<StudyProgress>((resolve) => { resolvers.push(resolve); }))
+			.mockImplementation(async (id: string, position: number) => progress(id, position));
+		const saver = createPositionSaver(save);
+
+		const first = saver.request('m1', 100);
+		// A duplicate of the in-flight position stays pending under the old implementation.
+		expect(await saver.request('m1', 100)).toEqual({ kind: 'queued' });
+		resolvers.shift()!(progress('m1', 100));
+		await first;
+
+		await saver.request('m1', 200);
+
+		expect(save.mock.calls).toEqual([['m1', 100], ['m1', 100], ['m1', 200]]);
+	});
 });

@@ -41,11 +41,11 @@ export function createPositionSaver(save: (mediaId: string, position: number) =>
 			return { kind: 'error', message: cause instanceof Error ? cause.message : tr('Error saving progress.', 'Erro ao salvar progresso.') };
 		} finally {
 			saving = false;
-			if (queued !== null && (queued.mediaId !== mediaId || queued.position !== position)) {
-				const next = queued;
-				queued = null;
-				await run(next.mediaId, next.position);
-			}
+			// Always drain: a duplicate of the position just sent would otherwise stay
+			// pending and later replay over a newer position.
+			const next = queued;
+			queued = null;
+			if (next !== null) await run(next.mediaId, next.position);
 		}
 	}
 
