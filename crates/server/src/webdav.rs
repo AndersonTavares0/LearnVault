@@ -4,7 +4,13 @@
 //! request (`PUT`, `MKCOL`, `MOVE`, `DELETE`, `PROPPATCH`) is issued. TLS certificates are
 //! always verified; there is no option to accept an invalid certificate.
 
-use std::{future::Future, pin::Pin, sync::OnceLock, time::Duration};
+use std::{
+    future::Future,
+    net::{IpAddr, Ipv4Addr},
+    pin::Pin,
+    sync::OnceLock,
+    time::Duration,
+};
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use learnvault_core::{CourseSource, MAX_SOURCE_READ, SourceEntry, SourceError, SourceResult};
@@ -59,6 +65,10 @@ pub(crate) enum SourceUrlError {
     /// A path segment would try to leave the root.
     #[error("path traversal in url")]
     Traversal,
+    /// The host is a link-local, multicast or unspecified address. No course lives there,
+    /// and link-local includes the cloud metadata service.
+    #[error("unsafe target")]
+    UnsafeTarget,
 }
 
 /// Parses and normalizes the URL of a source.
@@ -89,6 +99,9 @@ pub(crate) fn parse_source_url(input: &str) -> Result<Url, SourceUrlError> {
     if url.host_str().is_none() {
         return Err(SourceUrlError::MissingHost);
     }
+    if let Some(host) = url.host_str() {
+        reject_unsafe_host(host)?;
+    }
     if !url.username().is_empty() || url.password().is_some() {
         return Err(SourceUrlError::CredentialsInUrl);
     }
@@ -102,6 +115,57 @@ pub(crate) fn parse_source_url(input: &str) -> Result<Url, SourceUrlError> {
         url.set_path(&path);
     }
     Ok(url)
+}
+
+/// Refuses hosts no course library can live on: link-local (which includes the cloud
+/// metadata address), multicast, broadcast, and unspecified addresses.
+///
+/// Loopback and private ranges stay allowed on purpose. A source is normally a NAS on the
+/// same LAN, so blocking them would break the main use case. Names are resolved only when
+/// a request runs, so a name that later resolves to a refused address is not caught here.
+fn reject_unsafe_host(host: &str) -> Result<(), SourceUrlError> {
+    // `Url::host_str` keeps the brackets around IPv6 literals.
+    let host = host.trim_end_matches('.');
+    let host = host
+        .strip_prefix('[')
+        .and_then(|value| value.strip_suffix(']'))
+        .unwrap_or(host)
+        .to_ascii_lowercase();
+    let Ok(address) = host.parse::<IpAddr>() else {
+        return Ok(());
+    };
+    if is_unsafe_address(address) {
+        Err(SourceUrlError::UnsafeTarget)
+    } else {
+        Ok(())
+    }
+}
+
+/// Classifies an address that never hosts a course source.
+fn is_unsafe_address(address: IpAddr) -> bool {
+    match address {
+        IpAddr::V4(address) => is_unsafe_v4(address),
+        IpAddr::V6(address) => {
+            address.is_unspecified()
+                || address.is_multicast()
+                // fe80::/10 is link-local.
+                || (address.segments()[0] & 0xffc0) == 0xfe80
+                || address
+                    .to_ipv4_mapped()
+                    .is_some_and(is_unsafe_v4)
+        }
+    }
+}
+
+fn is_unsafe_v4(address: Ipv4Addr) -> bool {
+    let octets = address.octets();
+    // "This network" (0.0.0.0/8), broadcast, multicast and link-local (169.254.0.0/16,
+    // which carries the cloud metadata endpoints).
+    octets[0] == 0
+        || address.is_unspecified()
+        || address.is_broadcast()
+        || address.is_multicast()
+        || (octets[0] == 169 && octets[1] == 254)
 }
 
 /// Refuses `..`, `%2e%2e`, backslashes and NUL in any segment of the text.
@@ -560,7 +624,7 @@ mod tests {
         net::TcpListener,
     };
 
-    use super::{WebDavClient, href_to_relative, parse_propfind, parse_source_url};
+    use super::{SourceUrlError, WebDavClient, href_to_relative, parse_propfind, parse_source_url};
     use learnvault_core::{CourseSource, SourceError};
 
     fn base_url(address: std::net::SocketAddr) -> url::Url {
@@ -688,6 +752,39 @@ mod tests {
             "not-a-url",
         ] {
             assert!(parse_source_url(input).is_err(), "{input}");
+        }
+    }
+
+    #[test]
+    fn refuses_link_local_multicast_and_unspecified_targets() {
+        for input in [
+            "dav://169.254.169.254/latest",
+            "https://169.254.1.1/dav",
+            "dav://[fe80::1]/dav",
+            "https://[ff02::1]/dav",
+            "dav://0.0.0.0/dav",
+            "https://224.0.0.1/dav",
+            "smb://169.254.169.254/Cursos",
+        ] {
+            assert_eq!(
+                parse_source_url(input),
+                Err(SourceUrlError::UnsafeTarget),
+                "{input}"
+            );
+        }
+    }
+
+    #[test]
+    fn keeps_lan_and_loopback_targets_usable() {
+        for input in [
+            "dav://192.168.1.50/dav",
+            "davs://10.0.0.4/dav",
+            "dav://127.0.0.1:8080/dav",
+            "smb://nas.local/Cursos",
+            "smb://[fd00::10]/Cursos",
+            "https://example.test/dav",
+        ] {
+            assert!(parse_source_url(input).is_ok(), "{input}");
         }
     }
 
