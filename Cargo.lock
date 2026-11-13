@@ -2553,7 +2553,7 @@ name = "learnvault-desktop"
 version = "0.0.0"
 dependencies = [
  "learnvault-core",
- "reqwest",
+ "reqwest 0.13.5",
  "rustls",
  "serde",
  "serde_json",
