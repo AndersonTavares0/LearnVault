@@ -36,6 +36,21 @@ describe('review', () => {
 		expect(await screen.findByRole('heading', { name: '2 cards are due' })).toBeTruthy();
 	});
 
+	it('runs one session through every due card across courses and names each origin', async () => {
+		vi.spyOn(transport, 'listFlashcards').mockResolvedValue([card('a', 'own', 1), card('b', 'chan', 2), card('c', 'chan', future)]);
+		vi.spyOn(transport, 'reviewFlashcard').mockImplementation(async (id) => card(id, id === 'a' ? 'own' : 'chan', future));
+		const { router } = renderApp('/review', { catalog });
+		fireEvent.click(await screen.findByRole('link', { name: 'Review all due cards (2)' }));
+		await waitFor(() => expect(router.state.location.search).toBe('?course=__all'));
+		fireEvent.click(await screen.findByRole('button', { name: 'Start review' }));
+		expect(screen.getByRole('heading', { name: 'front a' })).toBeTruthy();
+		expect(screen.getByText(/Rust · Ownership/)).toBeTruthy();
+		fireEvent.click(screen.getByRole('button', { name: 'Show answer' }));
+		fireEvent.click(screen.getByRole('button', { name: 'Good' }));
+		expect(await screen.findByRole('heading', { name: 'front b' })).toBeTruthy();
+		expect(screen.getByText(/Go · Channels/)).toBeTruthy();
+	});
+
 	it('runs a session with the keyboard and ends when the due cards are done', async () => {
 		vi.spyOn(transport, 'listFlashcards').mockResolvedValue([card('a', 'own', 1), card('b', 'own', 2)]);
 		const review = vi.spyOn(transport, 'reviewFlashcard').mockImplementation(async (id) => card(id, 'own', future));
