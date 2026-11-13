@@ -149,13 +149,13 @@ described below. The desktop application is single-user and has no accounts.
   versions are pinned by `rust-toolchain.toml` and `packageManager`.
 - CI runs CodeQL, dependency review on pull requests, `cargo audit --deny unsound`, and
   `pnpm audit --audit-level=low`.
-- Two advisories are accepted with documented rationale rather than silently ignored:
+- Three advisories are accepted with documented rationale rather than silently ignored:
   - `GHSA-g3hv-75wg-m249` (minimatch, dev tooling) is ignored in `pnpm-workspace.yaml`; forcing the
     patched major breaks `eslint-plugin-jsx-a11y`.
+  - `GHSA-gcqx-w48m-w2h4` (deepmerge) is ignored for the same reason: it is reachable only through the
+    `shadcn` component CLI, no patched release exists, and it never reaches the shipped bundles.
   - `RUSTSEC-2024-0429` (glib, reached through Tauri's GTK stack) is ignored in `.cargo/audit.toml`;
     the patched release needs a GTK major upgrade that no current Tauri version provides.
-- `GHSA-gcqx-w48m-w2h4` (deepmerge) needed no suppression: it was only reached through the legacy
-  Svelte app, which is gone, so the dependency left the lockfile with it.
 - Each new runtime dependency must be justified in its pull request, and Dependabot alerts stay open
   until the upgrade is actually possible.
 
