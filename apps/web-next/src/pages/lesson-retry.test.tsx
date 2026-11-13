@@ -25,6 +25,7 @@ beforeEach(() => {
 afterEach(() => {
 	cleanup();
 	delete (HTMLMediaElement.prototype as { error?: unknown }).error;
+	vi.unstubAllGlobals();
 	vi.restoreAllMocks();
 });
 
@@ -46,6 +47,27 @@ describe('lesson load errors', () => {
 		failWith(4);
 		expect(await screen.findByText('This media format or codec is not supported here.')).toBeTruthy();
 		expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+	});
+
+	it('reports a saturated server as retryable instead of a codec or disk problem', async () => {
+		const head = vi.fn().mockResolvedValue(new Response(null, { status: 503 }));
+		vi.stubGlobal('fetch', head);
+		renderApp('/course/c/c%2FVideo', { catalog });
+		await waitForVideo();
+		failWith(4);
+		expect(await screen.findByText('The server is busy right now.')).toBeTruthy();
+		expect(screen.getByText(/Too many streams are open/)).toBeTruthy();
+		expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+		expect(head).toHaveBeenCalledWith('/api/media?course=c&path=c%2Fone.mp4', expect.objectContaining({ method: 'HEAD' }));
+	});
+
+	it('still explains a missing file when the probe is not a busy server', async () => {
+		vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 404 })));
+		renderApp('/course/c/c%2FVideo', { catalog });
+		await waitForVideo();
+		failWith(2);
+		expect(await screen.findByText('Could not load this media.')).toBeTruthy();
+		expect(screen.getByText(/may have moved/)).toBeTruthy();
 	});
 });
 

@@ -84,6 +84,8 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 	// Transcoded streams restart at `offset`, so the element's own clock is relative to it.
 	const [transcode, setTranscode] = useState<{ offset: number; reencode: boolean } | null>(null);
 	const [errorCode, setErrorCode] = useState<number | null>(null);
+	// `null` while the error's HTTP status is being probed; a saturated server answers 503.
+	const [serverBusy, setServerBusy] = useState<boolean | null>(null);
 	// Bumping this remounts the media element, so a failed load is requested again.
 	const [attempt, setAttempt] = useState(0);
 	const [notice, setNotice] = useState('');
@@ -158,6 +160,7 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 		setLoop(null);
 		setTranscode(null);
 		setErrorCode(null);
+		setServerBusy(null);
 	}
 	useEffect(() => {
 		lastKnown.current = 0;
@@ -242,11 +245,13 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 	};
 	const retry = () => {
 		setErrorCode(null);
+		setServerBusy(null);
 		setAttempt((count) => count + 1);
 	};
 	const startTranscode = (reencode: boolean) => {
 		setTranscode({ offset: absoluteTime() || initialPosition || 0, reencode });
 		setErrorCode(null);
+		setServerBusy(null);
 	};
 
 	const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -274,10 +279,11 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 	};
 
 	const errorMessage = useMemo(() => {
+		if (serverBusy) return [tr('The server is busy right now.', 'O servidor está ocupado agora.'), tr('Too many streams are open or the server is under load. Wait a moment and try again; nothing is lost.', 'Há muitas reproduções abertas ou o servidor está sobrecarregado. Espere um momento e tente de novo; nada foi perdido.')];
 		if (errorCode === 4) return [tr('This media format or codec is not supported here.', 'Este formato ou codec de mídia não é suportado aqui.'), requiresTranscodingProbe(playable?.name ?? '') ? tr('This kind of file usually needs on-demand transcoding or the system player.', 'Esse tipo de arquivo geralmente precisa de transcodificação sob demanda ou do player do sistema.') : tr('Examples: HEVC/H.265 video or AC3 audio.', 'Exemplos: vídeo HEVC/H.265 ou áudio AC3.')];
 		if (errorCode === 3) return [tr('The media could not be decoded.', 'Não foi possível decodificar a mídia.'), tr('The file may be damaged or use a codec your hardware cannot decode.', 'O arquivo pode estar corrompido ou usar um codec que seu hardware não decodifica.')];
 		return [tr('Could not load this media.', 'Não foi possível carregar esta mídia.'), tr('The file may have moved or its drive may be disconnected. Reconnect it and use Refresh courses in My learning; your progress is kept.', 'O arquivo pode ter sido movido ou o disco desconectado. Reconecte e use Atualizar cursos em Meu aprendizado; seu progresso fica salvo.')];
-	}, [errorCode, playable?.name]);
+	}, [errorCode, playable?.name, serverBusy]);
 
 	if (!activeSource) {
 		const missing = mediaAvailability(lesson.media) === 'missing';
@@ -328,7 +334,15 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 			if (mediaId && at > 0) onPosition(mediaId, Math.floor(at));
 		},
 		onEnded: () => { setPlaying(false); if (mediaId) onEnded(mediaId); },
-		onError: () => setErrorCode(media.current?.error?.code ?? null),
+		onError: () => {
+			const code = media.current?.error?.code ?? null;
+			setErrorCode(code);
+			// The element error carries no HTTP status; a HEAD probe tells a saturated server (503)
+			// from a missing file (404), which otherwise read the same to the user.
+			if (code === 3 || __LEARNVAULT_TRANSPORT__ !== 'http' || !source) { setServerBusy(false); return; }
+			setServerBusy(null);
+			void fetch(source, { method: 'HEAD', signal: AbortSignal.timeout(4000) }).then((response) => setServerBusy(response.status === 503), () => setServerBusy(false));
+		},
 		className: 'w-full bg-black'
 	} as const;
 
@@ -391,12 +405,12 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 	return (
 		<div className="space-y-3">
 			<p role="status" aria-live="polite" className="text-sm text-muted-foreground empty:hidden">{notice}</p>
-			{errorCode !== null ? (
+			{errorCode !== null && serverBusy !== null ? (
 				<div role="alert" className="space-y-3 rounded-lg border border-destructive/40 bg-card p-6">
 					<p className="font-medium">{errorMessage[0]}</p>
 					<p className="text-sm text-muted-foreground">{errorMessage[1]}</p>
 					<div className="flex flex-wrap gap-2">
-						{errorCode !== 4 && <Button variant="outline" onClick={retry}>{tr('Try again', 'Tentar de novo')}</Button>}
+						{(serverBusy || errorCode !== 4) && <Button variant="outline" onClick={retry}>{tr('Try again', 'Tentar de novo')}</Button>}
 						{capabilities.data?.transcoding && <Button onClick={() => startTranscode(false)}><Zap />{tr('Play with on-demand transcoding', 'Reproduzir com transcodificação sob demanda')}</Button>}
 						{capabilities.data?.transcoding && showReencode && <Button variant="outline" onClick={() => startTranscode(true)}>{tr('Re-encode video (H.264)', 'Recodificar vídeo (H.264)')}</Button>}
 						{capabilities.data?.systemPlayer && <Button variant="outline" onClick={openSystemPlayer}><ExternalLink />{tr('Open in system player', 'Abrir no player do sistema')}</Button>}
