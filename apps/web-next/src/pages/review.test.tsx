@@ -38,6 +38,7 @@ describe('review', () => {
 
 	it('runs one session through every due card across courses and names each origin', async () => {
 		vi.spyOn(transport, 'listFlashcards').mockResolvedValue([card('a', 'own', 1), card('b', 'chan', 2), card('c', 'chan', future)]);
+		vi.mocked(transport.dueFlashcardCount).mockResolvedValue(2);
 		vi.spyOn(transport, 'reviewFlashcard').mockImplementation(async (id) => card(id, id === 'a' ? 'own' : 'chan', future));
 		const { router } = renderApp('/review', { catalog });
 		fireEvent.click(await screen.findByRole('link', { name: 'Review all due cards (2)' }));
