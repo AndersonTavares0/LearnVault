@@ -174,6 +174,21 @@ pub fn session_user(db: &Database, token_hash: &str, now: i64) -> Result<Option<
         .optional()?)
 }
 
+/// Renova o prazo de uma sessão existente.
+pub fn touch_session(db: &Database, token_hash: &str, expires_at: i64) -> Result<usize> {
+    Ok(db.connection().execute(
+        "UPDATE session SET expires_at = ?2 WHERE token_hash = ?1",
+        rusqlite::params![token_hash, expires_at],
+    )?)
+}
+
+/// Remove as sessões expiradas, mantendo a tabela limitada aos logins ativos.
+pub fn prune_expired_sessions(db: &Database, now: i64) -> Result<usize> {
+    Ok(db
+        .connection()
+        .execute("DELETE FROM session WHERE expires_at <= ?1", [now])?)
+}
+
 /// Atualiza credenciais e cria a sessão substituta na mesma transação.
 pub fn update_credentials_and_session(
     db: &mut Database,

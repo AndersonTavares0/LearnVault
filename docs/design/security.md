@@ -54,7 +54,14 @@ described below. The desktop application is single-user and has no accounts.
   change signs out other devices.
 - An account with `mustChangeCredentials` can only reach the credential-change flow; other endpoints
   reject the session until the change is complete.
-- Sessions carry an expiry, are filtered on every lookup, and expired rows are discarded.
+- Sessions carry an expiry, are filtered on every lookup, and expired rows are discarded. The window
+  is 12 hours and slides: once half of it is consumed, a successful request moves `expires_at` forward
+  by a full lifetime, so an active reader is not signed out mid-study while an idle session still dies.
+  Expired rows are deleted when a new session is created, which keeps the table bounded without a
+  background scheduler (`crates/core/src/auth.rs`, `crates/server/src/state.rs`).
+- A `401` from any `/api` call other than `/api/login` raises `learnvault:session-expired`; the SPA
+  re-reads the session and returns to the sign-in screen instead of showing stale or empty pages
+  (`apps/web-next/src/lib/session-guard.ts`).
 
 ## 3. CSRF and transport
 

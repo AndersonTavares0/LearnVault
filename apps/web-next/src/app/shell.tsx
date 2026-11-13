@@ -17,6 +17,7 @@ import { tr } from '@/lib/i18n';
 import { focusSaved, focusSync, retryFocusSessions, setFocusOutboxScope } from '@/lib/pomodoro-store';
 import { playerPreferencesScope } from '@/lib/player-preferences';
 import { progressOutbox, setProgressOutboxScope } from '@/lib/progress-outbox';
+import { SESSION_EXPIRED_EVENT } from '@/lib/session-guard';
 import { transportKind } from '@/lib/transport';
 import { cn } from '@/lib/utils';
 import { keys, useSession, useSignOut } from './data';
@@ -51,6 +52,14 @@ export function AppShell() {
 		void client.invalidateQueries({ queryKey: ['focus-summary'] });
 		void client.invalidateQueries({ queryKey: keys.rewards });
 	}), [client]);
+	// A 401 from any API call re-reads the session; the guard below sends the visitor to /login.
+	useEffect(() => {
+		const onExpired = () => {
+			void client.invalidateQueries({ queryKey: keys.session });
+		};
+		window.addEventListener(SESSION_EXPIRED_EVENT, onExpired);
+		return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired);
+	}, [client]);
 
 	if (session.isPending) return <p role="status" className="p-8 text-muted-foreground">{tr('Loading…', 'Carregando…')}</p>;
 	if (!session.data?.user) return <Navigate to="/login" replace state={{ from: `${location.pathname}${location.search}` }} />;
