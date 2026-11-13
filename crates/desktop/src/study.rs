@@ -17,9 +17,9 @@
 use learnvault_core::{Database, FocusSessionInput, ReviewRating};
 
 use crate::dto::{
-    FlashcardDto, FocusSessionDto, FocusSummaryDto, MediaBookmarkDto, NewPdfAnnotationDto,
-    PdfAnnotationDto, RecentStudyDto, RewardSummaryDto, StudyFavoritesDto, StudyNoteDto,
-    StudyProgressDto, StudySummaryDto,
+    FlashcardDto, FlashcardReviewDto, FlashcardReviewsDto, FocusSessionDto, FocusSummaryDto,
+    MediaBookmarkDto, NewPdfAnnotationDto, PdfAnnotationDto, RecentStudyDto, RewardSummaryDto,
+    StudyFavoritesDto, StudyNoteDto, StudyProgressDto, StudySummaryDto,
 };
 use crate::error::IpcError;
 
@@ -36,6 +36,11 @@ pub const LOCAL_OWNER_ID: &str = "desktop-local";
 /// Acompanha o padrão do adaptador HTTP; o teto real continua sendo
 /// [`learnvault_core::MAX_RECENT_STUDY`], aplicado pelo núcleo, e não uma configuração.
 pub const DEFAULT_RECENT_LIMIT: usize = 20;
+
+/// Limite padrão do histórico de revisões quando o webview não informa um.
+///
+/// O teto real continua sendo [`learnvault_core::MAX_FLASHCARD_REVIEWS`], aplicado pelo núcleo.
+pub const DEFAULT_REVIEW_LIMIT: usize = 20;
 
 /// Lê o progresso do dono local em uma mídia conhecida.
 ///
@@ -335,6 +340,29 @@ pub fn delete_flashcard(database: &Database, card_id: &str) -> Result<(), IpcErr
     } else {
         Err(IpcError::flashcard_not_found())
     }
+}
+
+/// Lista o histórico recente de um cartão do dono local, da revisão mais nova para a mais
+/// antiga, junto da contagem completa.
+pub fn list_flashcard_reviews(
+    database: &Database,
+    card_id: &str,
+    limit: Option<usize>,
+) -> Result<FlashcardReviewsDto, IpcError> {
+    let limit = limit.unwrap_or(DEFAULT_REVIEW_LIMIT);
+    let items = learnvault_core::list_flashcard_reviews(database, LOCAL_OWNER_ID, card_id, limit)
+        .map_err(study_error)?;
+    let total = learnvault_core::count_flashcard_reviews(database, LOCAL_OWNER_ID, card_id)
+        .map_err(study_error)?;
+    Ok(FlashcardReviewsDto {
+        items: items.into_iter().map(FlashcardReviewDto::from).collect(),
+        total,
+    })
+}
+
+/// Conta os cartões do dono local vencidos agora.
+pub fn count_due_flashcards(database: &Database) -> Result<i64, IpcError> {
+    learnvault_core::count_due_flashcards(database, LOCAL_OWNER_ID).map_err(study_error)
 }
 
 /// Registra uma revisão ("again" ou "good") em um cartão de memorização do dono local.

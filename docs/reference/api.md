@@ -147,10 +147,14 @@ library remains read-only because the mount itself is read-only.
 | `DELETE` | `/api/study/notes/{id}` | Session | Deletes a note |
 | `GET` | `/api/study/flashcards` | Session | Lists flashcard review deck |
 | `POST` | `/api/study/flashcards` | Session | Creates a spaced repetition flashcard |
+| `GET` | `/api/study/flashcards/due` | Session | Returns `{ "due": <n> }` for the session user's cards due now |
+| `GET` | `/api/study/flashcards/{id}/reviews?limit=<n>` | Session | Returns the card's recent reviews, newest first |
 | `POST` | `/api/study/flashcards/{id}/review` | Session | Records flashcard review grade and calculates next interval |
 | `DELETE` | `/api/study/flashcards/{id}` | Session | Deletes a flashcard |
 
 Creating a card accepts an optional `position_seconds` (the lesson moment it came from), returned on every card as `position_seconds`. A card stays linked to its lesson through `media_id`. Each review appends a row to the review history with the rating, the previous interval and the next due date, so the schedule and its history change in one transaction.
+
+The history endpoint is owner-scoped and read-only: `limit` defaults to 20 and is capped at `MAX_FLASHCARD_REVIEWS` (100). The response is `{ "items": [{ "review_id", "card_id", "rating", "previous_interval_days", "next_due", "reviewed_at" }], "total": <n> }`, where `total` counts the whole append-only log. The due count uses the same predicate as the review queue (`next_due <= now`) and only counts lessons the session user may still open; cards that were never reviewed are included.
 
 ## Search
 

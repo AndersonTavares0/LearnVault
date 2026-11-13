@@ -141,6 +141,20 @@ export type MediaBookmark = {
 	createdAt: number;
 };
 export type ReviewRating = 'again' | 'good';
+/** One row of a card's append-only review log. */
+export type FlashcardReview = {
+	reviewId: number;
+	cardId: string;
+	rating: ReviewRating;
+	previousIntervalDays: number;
+	nextDue: number;
+	reviewedAt: number;
+};
+/** Recent reviews plus the full log count, so "reviewed N times" survives the limit. */
+export type FlashcardReviews = {
+	items: FlashcardReview[];
+	total: number;
+};
 export type StudyFavorites = {
 	courseIds: string[];
 	mediaIds: string[];
@@ -239,6 +253,10 @@ export interface Transport {
 	updateFlashcard(cardId: string, front: string, back: string): Promise<Flashcard>;
 	deleteFlashcard(cardId: string): Promise<void>;
 	reviewFlashcard(cardId: string, rating: ReviewRating): Promise<Flashcard>;
+	/** Newest reviews first, capped by the server; `total` counts the whole log. */
+	listFlashcardReviews(cardId: string, limit?: number): Promise<FlashcardReviews>;
+	/** Cards due now for the whole user, so the review hub does not have to count them. */
+	dueFlashcardCount(): Promise<number>;
 	listFavorites(): Promise<StudyFavorites>;
 	setCourseFavorite(courseId: string, favorite: boolean): Promise<boolean>;
 	setLessonFavorite(mediaId: string, favorite: boolean): Promise<boolean>;
@@ -846,6 +864,25 @@ export function normalizeFlashcard(raw: unknown): Flashcard {	if (!raw || typeof
 	};
 }
 
+export function normalizeFlashcardReviews(raw: unknown): FlashcardReviews {
+	const obj = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+	const items = Array.isArray(obj.items)
+		? obj.items.map((item) => {
+				const review = item && typeof item === 'object' && !Array.isArray(item) ? (item as Record<string, unknown>) : {};
+				const rating = review.rating === 'again' ? 'again' : 'good';
+				return {
+					reviewId: Number(review.review_id ?? review.reviewId ?? 0),
+					cardId: String(review.card_id ?? review.cardId ?? ''),
+					rating: rating as ReviewRating,
+					previousIntervalDays: Number(review.previous_interval_days ?? review.previousIntervalDays ?? 0),
+					nextDue: Number(review.next_due ?? review.nextDue ?? 0),
+					reviewedAt: Number(review.reviewed_at ?? review.reviewedAt ?? 0)
+				};
+			})
+		: [];
+	return { items, total: Number(obj.total ?? items.length) };
+}
+
 export function normalizeStudyFavorites(raw: unknown): StudyFavorites {
 	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
 		return { courseIds: [], mediaIds: [] };
@@ -1211,6 +1248,18 @@ export class HttpTransport implements Transport {
 		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 422 ? tr('Invalid review rating.', 'Avaliação inválida.') : tr('Could not record review.', 'Não foi possível registrar a revisão.'));
 		return normalizeFlashcard(await response.json());
 	}
+	async listFlashcardReviews(cardId: string, limit?: number): Promise<FlashcardReviews> {
+		const query = limit ? `?limit=${limit}` : '';
+		const response = await fetch(`/api/study/flashcards/${encodeURIComponent(cardId)}/reviews${query}`);
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not load review history.', 'Não foi possível carregar o histórico de revisões.'));
+		return normalizeFlashcardReviews(await response.json());
+	}
+	async dueFlashcardCount(): Promise<number> {
+		const response = await fetch('/api/study/flashcards/due');
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not count due cards.', 'Não foi possível contar os cartões vencidos.'));
+		const data = (await response.json()) as { due?: unknown };
+		return Number(data?.due ?? 0);
+	}
 	async listFavorites(): Promise<StudyFavorites> {
 		const response = await fetch('/api/study/favorites');
 		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not load favorites.', 'Não foi possível carregar os favoritos.'));
@@ -1570,6 +1619,20 @@ export class DesktopStub implements Transport {
 			return normalizeFlashcard(res);
 		} catch (cause) {
 			throw desktopError(cause, tr('Could not record review.', 'Não foi possível registrar a revisão.'));
+		}
+	}
+	async listFlashcardReviews(cardId: string, limit?: number): Promise<FlashcardReviews> {
+		try {
+			return normalizeFlashcardReviews(await invoke<unknown>('desktop_list_flashcard_reviews', { cardId, limit: limit ?? null }));
+		} catch (cause) {
+			throw desktopError(cause, tr('Could not load review history.', 'Não foi possível carregar o histórico de revisões.'));
+		}
+	}
+	async dueFlashcardCount(): Promise<number> {
+		try {
+			return Number(await invoke<number>('desktop_due_flashcard_count'));
+		} catch (cause) {
+			throw desktopError(cause, tr('Could not count due cards.', 'Não foi possível contar os cartões vencidos.'));
 		}
 	}
 	async listFavorites(): Promise<StudyFavorites> {

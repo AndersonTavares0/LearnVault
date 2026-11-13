@@ -1608,7 +1608,7 @@ pub(crate) enum StudyFailure {
     Core(learnvault_core::Error),
 }
 
-fn require_media_access(
+pub(crate) fn require_media_access(
     db: &Database,
     user_id: &str,
     is_admin: bool,

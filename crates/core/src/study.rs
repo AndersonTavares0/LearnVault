@@ -898,29 +898,48 @@ pub struct FlashcardReview {
     pub reviewed_at: i64,
 }
 
-/// Lista o histórico de revisões do dono para um cartão, da mais antiga para a mais nova.
+/// Teto de resultados de [`list_flashcard_reviews`].
+///
+/// Acompanha o código e muda só com uma decisão de projeto, como [`MAX_RECENT_STUDY`].
+pub const MAX_FLASHCARD_REVIEWS: usize = 100;
+
+/// Lista as revisões mais recentes do dono para um cartão, da mais nova para a mais antiga.
+///
+/// O limite é reduzido ao teto de [`MAX_FLASHCARD_REVIEWS`]; um limite zero não consulta
+/// nada. O empate de instantes é desfeito por `review_id`, para uma ordem determinística.
 pub fn list_flashcard_reviews(
     db: &Database,
     owner_id: &str,
     card_id: &str,
+    limit: usize,
 ) -> Result<Vec<FlashcardReview>> {
     validate_owner(owner_id)?;
+
+    let limit = limit.min(MAX_FLASHCARD_REVIEWS);
+    if limit == 0 {
+        return Ok(Vec::new());
+    }
+
     let mut statement = db.connection().prepare(
         "SELECT review_id, card_id, rating, previous_interval_days, next_due, reviewed_at
          FROM flashcard_review
          WHERE owner_id = ?1 AND card_id = ?2
-         ORDER BY reviewed_at ASC, review_id ASC",
+         ORDER BY reviewed_at DESC, review_id DESC
+         LIMIT ?3",
     )?;
-    let rows = statement.query_map(rusqlite::params![owner_id, card_id], |row| {
-        Ok((
-            row.get::<_, i64>(0)?,
-            row.get::<_, String>(1)?,
-            row.get::<_, String>(2)?,
-            row.get::<_, i64>(3)?,
-            row.get::<_, i64>(4)?,
-            row.get::<_, i64>(5)?,
-        ))
-    })?;
+    let rows = statement.query_map(
+        rusqlite::params![owner_id, card_id, i64::try_from(limit).unwrap_or(i64::MAX)],
+        |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, i64>(3)?,
+                row.get::<_, i64>(4)?,
+                row.get::<_, i64>(5)?,
+            ))
+        },
+    )?;
 
     let mut reviews = Vec::new();
     for row in rows {
@@ -938,6 +957,29 @@ pub fn list_flashcard_reviews(
         });
     }
     Ok(reviews)
+}
+
+/// Conta todo o histórico de revisões de um cartão do dono, mesmo além do teto da listagem.
+pub fn count_flashcard_reviews(db: &Database, owner_id: &str, card_id: &str) -> Result<i64> {
+    validate_owner(owner_id)?;
+    Ok(db.connection().query_row(
+        "SELECT COUNT(*) FROM flashcard_review WHERE owner_id = ?1 AND card_id = ?2",
+        rusqlite::params![owner_id, card_id],
+        |row| row.get(0),
+    )?)
+}
+
+/// Conta os cartões do dono que estão vencidos agora, o mesmo predicado da fila de revisão.
+///
+/// Cartões nunca revisados e revisados no passado contam; um `next_due` futuro não. O dono
+/// é o único limite: a filtragem por acesso ao curso cabe ao adaptador.
+pub fn count_due_flashcards(db: &Database, owner_id: &str) -> Result<i64> {
+    validate_owner(owner_id)?;
+    Ok(db.connection().query_row(
+        "SELECT COUNT(*) FROM flashcard WHERE owner_id = ?1 AND next_due <= ?2",
+        rusqlite::params![owner_id, now_unix_seconds()],
+        |row| row.get(0),
+    )?)
 }
 
 fn card_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Flashcard> {

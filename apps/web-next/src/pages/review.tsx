@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { useLocale } from '@/hooks/use-locale';
 import { cardsToTsv } from '@/lib/cards';
 import { formatCount } from '@/lib/catalog';
-import { tr } from '@/lib/i18n';
+import { getLocale, tr } from '@/lib/i18n';
 import { formatDuration, studySyncSupported } from '@/lib/player';
 import { findLessonLocation, href } from '@/lib/router';
 import { transport, type Flashcard, type ReviewRating } from '@/lib/transport';
@@ -29,6 +29,7 @@ export function ReviewPage() {
 	const [params] = useSearchParams();
 	const courseId = params.get('course');
 	const cards = useQuery({ queryKey: CARDS, enabled: studySyncSupported, queryFn: () => transport.listFlashcards() });
+	const dueCount = useQuery({ queryKey: ['flashcards', 'due'], enabled: studySyncSupported, queryFn: () => transport.dueFlashcardCount() });
 	const [now] = useState(nowSeconds);
 	const all = useMemo(() => cards.data ?? [], [cards.data]);
 	const courseOf = (card: Flashcard) => findLessonLocation(catalog.data ?? null, card.mediaId)?.courseId ?? GONE;
@@ -66,7 +67,8 @@ export function ReviewPage() {
 			</div>
 		);
 	}
-	const due = [...decks.values()].reduce((sum, deck) => sum + deck.due, 0);
+	// The server count matches the queue; the deck sum is the offline/failed fallback.
+	const due = dueCount.data ?? [...decks.values()].reduce((sum, deck) => sum + deck.due, 0);
 	return (
 		<CoursePicker
 			icon={Layers}
@@ -93,6 +95,8 @@ function Deck({ courseId, title, cards, now }: { courseId: string; title: string
 		mutationFn: ({ cardId, rating }: { cardId: string; rating: ReviewRating }) => transport.reviewFlashcard(cardId, rating),
 		onSuccess: (card) => {
 			client.setQueryData<Flashcard[]>(CARDS, (list = []) => list.map((item) => (item.cardId === card.cardId ? card : item)));
+			void client.invalidateQueries({ queryKey: ['flashcards', 'due'] });
+			void client.invalidateQueries({ queryKey: ['flashcard-reviews', card.cardId] });
 			setRevealed(false);
 			setDone((value) => value + 1);
 		}
@@ -147,6 +151,7 @@ function Deck({ courseId, title, cards, now }: { courseId: string; title: string
 							</div>
 							{!revealed && <p className="text-center text-sm text-muted-foreground">{tr('Press Space, or use the button, to show the answer.', 'Aperte Espaço, ou use o botão, para mostrar a resposta.')}</p>}
 						</div>
+						<ReviewHistory cardId={current.cardId} nextDue={current.nextDue} now={now} />
 						{revealed ? (
 							<div className="mx-auto grid max-w-md grid-cols-2 gap-3">
 								<Button variant="outline" size="lg" className="h-14 rounded-full" disabled={review.isPending} onClick={() => rate('again')} aria-keyshortcuts="1">{tr('Again', 'De novo')}</Button>
@@ -186,5 +191,37 @@ function Deck({ courseId, title, cards, now }: { courseId: string; title: string
 			</section>
 			{courseId !== GONE && <Link to={`/course/${encodeURIComponent(courseId)}`} className="inline-flex min-h-11 items-center font-semibold text-primary hover:underline">{tr('Open the course', 'Abrir o curso')}</Link>}
 		</div>
+	);
+}
+
+/** Compact history for the card on screen: rating, interval before it, when it happened. */
+function ReviewHistory({ cardId, nextDue, now }: { cardId: string; nextDue: number; now: number }) {
+	const history = useQuery({ queryKey: ['flashcard-reviews', cardId], queryFn: () => transport.listFlashcardReviews(cardId, 8) });
+	const date = (seconds: number) => new Date(seconds * 1000).toLocaleDateString(getLocale(), { dateStyle: 'medium' });
+
+	if (history.isPending) return <p role="status" className="text-sm text-muted-foreground">{tr('Loading review history…', 'Carregando histórico de revisões…')}</p>;
+	if (history.error) return <p role="alert" className="text-sm text-destructive">{history.error.message}</p>;
+	const reviews = history.data?.items ?? [];
+	const total = history.data?.total ?? 0;
+	if (total === 0) return <p className="text-sm text-muted-foreground">{tr('This card has not been reviewed yet.', 'Este cartão ainda não foi revisado.')}</p>;
+
+	return (
+		<section aria-labelledby={`reviews-${cardId}`} className="rounded-2xl border bg-card px-4 py-3 text-sm">
+			<div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+				<h2 id={`reviews-${cardId}`} className="font-semibold">{formatCount(total, tr('review', 'revisão'), tr('reviews', 'revisões'))}</h2>
+				<p className="text-xs text-muted-foreground">
+					{tr(`Last ${date(reviews[0]?.reviewedAt ?? 0)} · next ${nextDue <= now ? 'now' : date(nextDue)}`, `Última em ${date(reviews[0]?.reviewedAt ?? 0)} · próxima ${nextDue <= now ? 'agora' : date(nextDue)}`)}
+				</p>
+			</div>
+			<ol className="mt-2 space-y-1">
+				{reviews.map((review) => (
+					<li key={review.reviewId} className="flex flex-wrap items-baseline gap-x-2 text-xs">
+						<span className="font-medium">{review.rating === 'again' ? tr('Again', 'De novo') : tr('Good', 'Bom')}</span>
+						<span className="text-muted-foreground">{tr(`${review.previousIntervalDays} d before`, `${review.previousIntervalDays} d antes`)}</span>
+						<time dateTime={new Date(review.reviewedAt * 1000).toISOString()} className="ml-auto text-muted-foreground">{date(review.reviewedAt)}</time>
+					</li>
+				))}
+			</ol>
+		</section>
 	);
 }

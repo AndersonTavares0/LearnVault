@@ -22,10 +22,10 @@ use crate::covers::{
     COVERS_DIR_NAME, CoverError, cover_version, read_picked_cover, remove_cover, store_cover,
 };
 use crate::dto::{
-    CatalogDto, CoverDto, CoverRemovalDto, FlashcardDto, FocusSessionDto, FocusSummaryDto,
-    MediaBookmarkDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto, NewPdfAnnotationDto,
-    PdfAnnotationDto, RecentStudyDto, RescanSummaryDto, RewardSummaryDto, SearchResultsDto,
-    StudyFavoritesDto, StudyNoteDto, StudyProgressDto, StudySummaryDto,
+    CatalogDto, CoverDto, CoverRemovalDto, FlashcardDto, FlashcardReviewsDto, FocusSessionDto,
+    FocusSummaryDto, MediaBookmarkDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto,
+    NewPdfAnnotationDto, PdfAnnotationDto, RecentStudyDto, RescanSummaryDto, RewardSummaryDto,
+    SearchResultsDto, StudyFavoritesDto, StudyNoteDto, StudyProgressDto, StudySummaryDto,
 };
 use crate::error::IpcError;
 use crate::ordering::{CourseOrders, load_orders, store_orders};
@@ -542,6 +542,28 @@ impl DesktopState {
             .lock()
             .map_err(|_| IpcError::database_unavailable())?;
         study::list_all_flashcards(&database)
+    }
+
+    /// Lists the recent review history of one local card with the full log count.
+    pub fn list_flashcard_reviews(
+        &self,
+        card_id: &str,
+        limit: Option<usize>,
+    ) -> Result<FlashcardReviewsDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::list_flashcard_reviews(&database, card_id, limit)
+    }
+
+    /// Counts the local owner's cards that are due now.
+    pub fn count_due_flashcards(&self) -> Result<i64, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::count_due_flashcards(&database)
     }
 
     /// Cria um novo cartão de memorização associado a uma mídia.
