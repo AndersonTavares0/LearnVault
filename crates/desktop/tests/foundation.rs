@@ -1,11 +1,11 @@
-//! Guarda de construção do crate desktop.
+//! Build guard of the desktop crate.
 //!
-//! Estes testes não sobem o webview nem dependem de display: eles afirmam, por
-//! construção, que a fundação do desktop embute o frontend em produção, mantém o ACL
-//! em deny-by-default e não introduz listener de rede, servidor HTTP nem plugin
-//! privilegiado. O alvo é detectar regressões de configuração em CI, não exercitar a
-//! UI do Tauri. `reqwest` é a única exceção, restrita ao cliente de sincronização:
-//! o desktop fala com um servidor configurado pelo usuário, nunca escuta.
+//! These tests do not start the webview nor depend on a display: they assert, by
+//! construction, that the desktop foundation bundles the frontend in production, keeps the
+//! ACL deny-by-default and introduces no network listener, HTTP server or privileged
+//! plugin. The goal is to catch configuration regressions in CI, not to exercise the Tauri
+//! UI. `reqwest` is the only exception, restricted to the sync client: the desktop talks
+//! to a user-configured server, it never listens.
 
 use std::fs;
 use std::path::{Path, PathBuf};

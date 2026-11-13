@@ -1,11 +1,11 @@
-//! Cliente SMB2/3 somente leitura.
+//! Read-only SMB2/3 client.
 //!
-//! A conexão usa TCP/445 com autenticação NTLM, assinatura SMB e criptografia SMB3
-//! quando o servidor exige. DFS fica desligado de propósito: uma referência DFS poderia
-//! encaminhar as credenciais a outro servidor, como um redirecionamento HTTP faria.
+//! The connection uses TCP/445 with NTLM authentication, SMB signing and SMB3 encryption
+//! when the server requires it. DFS is deliberately disabled: a DFS reference could
+//! forward the credentials to another server, as an HTTP redirect would.
 //!
-//! Nenhuma operação de escrita é emitida: o cliente só abre recursos existentes com
-//! `GENERIC_READ`, lista diretórios e lê faixas.
+//! No write operation is issued: the client only opens existing resources with
+//! `GENERIC_READ`, lists directories and reads ranges.
 
 use std::{future::Future, io, pin::Pin, str::FromStr, sync::Arc, time::Duration};
 
@@ -18,42 +18,42 @@ use tokio::sync::Mutex;
 use tokio_stream::{Stream, StreamExt, wrappers::ReceiverStream};
 use url::Url;
 
-/// Tempo máximo para resolver e estabelecer a conexão SMB.
+/// Maximum time to resolve and establish the SMB connection.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
-/// Tempo máximo de uma listagem ou de um bloco de leitura.
+/// Maximum time of a listing or of a read block.
 const OPERATION_TIMEOUT: Duration = Duration::from_secs(30);
-/// Itens máximos aceitos em uma única listagem de diretório.
+/// Maximum items accepted in a single directory listing.
 const MAX_DIRECTORY_ENTRIES: usize = 100_000;
-/// Bytes por requisição de leitura SMB; o protocolo limita cada resposta.
+/// Bytes per SMB read request; the protocol limits each response.
 const READ_CHUNK: usize = 1024 * 1024;
 
-/// Alvo de uma URL `smb://host[:porta]/share/caminho`.
+/// Target of an `smb://host[:port]/share/path` URL.
 #[derive(Debug, Clone)]
 pub(crate) struct SmbLocation {
-    /// Host e porta opcional, no formato aceito pelo cliente SMB.
+    /// Host and optional port, in the format accepted by the SMB client.
     server: String,
-    /// Nome do compartilhamento, sem barras.
+    /// Share name, without slashes.
     share: String,
-    /// Caminho inicial dentro do compartilhamento, com `/` e sem barra final.
+    /// Initial path inside the share, with `/` and no trailing slash.
     prefix: String,
-    /// UNC já resolvido do compartilhamento.
+    /// Resolved UNC of the share.
     base: UncPath,
 }
 
 impl SmbLocation {
-    /// Deriva o alvo de uma URL já validada por [`crate::webdav::parse_source_url`].
+    /// Derives the target from a URL already validated by [`crate::webdav::parse_source_url`].
     pub(crate) fn from_url(url: &Url) -> SourceResult<Self> {
         if url.scheme() != "smb" {
             return Err(SourceError::NotFound);
         }
         let host = url.host_str().ok_or(SourceError::NotFound)?;
-        // `host_str` devolve IPv6 já entre colchetes em alguns esquemas.
+        // `host_str` returns IPv6 already in brackets in some schemes.
         let host = host
             .strip_prefix('[')
             .and_then(|host| host.strip_suffix(']'))
             .unwrap_or(host);
         let server = match url.port() {
-            // Um IPv6 literal precisa de colchetes para não confundir a porta.
+            // An IPv6 literal needs brackets so it does not confuse the port.
             Some(port) if host.contains(':') => format!("[{host}]:{port}"),
             Some(port) => format!("{host}:{port}"),
             None => host.to_owned(),
@@ -71,7 +71,7 @@ impl SmbLocation {
     }
 }
 
-/// Cliente SMB de uma fonte, com a sessão reaproveitada entre as chamadas da varredura.
+/// SMB client of a source, with the session reused between scan calls.
 pub(crate) struct SmbSource {
     location: SmbLocation,
     username: Option<String>,
@@ -93,7 +93,7 @@ impl std::fmt::Debug for SmbSource {
 }
 
 impl SmbSource {
-    /// Cria o cliente para uma URL já validada.
+    /// Creates the client for an already validated URL.
     pub(crate) fn new(
         url: Url,
         username: Option<&str>,
@@ -113,7 +113,7 @@ impl SmbSource {
             return Ok(Arc::clone(client));
         }
         let client = Client::new(ClientConfig {
-            // Uma referência DFS levaria as credenciais a outro servidor.
+            // A DFS reference would take the credentials to another server.
             dfs: false,
             connection: ConnectionConfig {
                 timeout: Some(CONNECT_TIMEOUT),
@@ -141,12 +141,12 @@ impl SmbSource {
         Ok(client)
     }
 
-    /// Descarta a sessão em cache após uma falha de transporte.
+    /// Discards the cached session after a transport failure.
     async fn invalidate(&self) {
         *self.client.lock().await = None;
     }
 
-    /// Junta o prefixo da fonte com o caminho relativo, recusando escapes.
+    /// Joins the source prefix with the relative path, refusing escapes.
     fn join(&self, relative: &str) -> SourceResult<String> {
         let mut segments = Vec::new();
         if !self.location.prefix.is_empty() {
@@ -186,7 +186,7 @@ impl SmbSource {
         )
     }
 
-    /// Lista um diretório, limitando itens e tempo.
+    /// Lists a directory, limiting items and time.
     pub(crate) async fn probe(&self) -> SourceResult<usize> {
         Ok(self.list_entries("").await?.len())
     }
@@ -244,7 +244,7 @@ impl SmbSource {
                     } else {
                         item.end_of_file
                     },
-                    // A varredura trata `0` como desconhecido, como no WebDAV.
+                    // The scan treats `0` as unknown, as in WebDAV.
                     mtime: 0,
                 });
             }
@@ -303,7 +303,7 @@ impl SmbSource {
         result
     }
 
-    /// Abre uma faixa da mídia como stream, sem carregar o arquivo inteiro.
+    /// Opens a media range as a stream, without loading the whole file.
     pub(crate) async fn open_stream(
         &self,
         path: &str,
@@ -326,8 +326,8 @@ impl SmbSource {
                 {
                     Ok(Ok(read)) => read,
                     Ok(Err(_)) | Err(_) => {
-                        // A mensagem do protocolo pode nomear o servidor e o caminho;
-                        // o corpo HTTP só transporta uma falha genérica.
+                        // The protocol message may name the server and the path;
+                        // the HTTP body only carries a generic failure.
                         let _ = sender
                             .send(Err(io::Error::other("source read failed")))
                             .await;
@@ -390,7 +390,7 @@ impl CourseSource for SmbSource {
     }
 }
 
-/// Executa uma operação com o tempo máximo de uma listagem ou bloco de leitura.
+/// Runs an operation with the maximum time of a listing or read block.
 async fn timed<T>(future: impl Future<Output = SourceResult<T>>) -> SourceResult<T> {
     match tokio::time::timeout(OPERATION_TIMEOUT, future).await {
         Ok(result) => result,
@@ -398,7 +398,7 @@ async fn timed<T>(future: impl Future<Output = SourceResult<T>>) -> SourceResult
     }
 }
 
-/// Traduz uma falha do protocolo em uma falha sanitizada da fonte.
+/// Translates a protocol failure into a sanitized source failure.
 fn map_smb_error(error: &smb::Error) -> SourceError {
     use smb::Error::*;
     match error {
@@ -412,7 +412,8 @@ fn map_smb_error(error: &smb::Error) -> SourceError {
     }
 }
 
-/// NTSTATUS de autenticação, autorização e ausência de objeto, sem detalhes ao cliente.
+/// NTSTATUS of authentication, authorization and missing object, without details to the
+/// client.
 fn status_error(status: u32) -> SourceError {
     match status {
         0xC000_0022 // STATUS_ACCESS_DENIED

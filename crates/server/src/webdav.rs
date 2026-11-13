@@ -1,9 +1,8 @@
-//! Cliente WebDAV somente leitura.
+//! Read-only WebDAV client.
 //!
-//! A descoberta usa `PROPFIND` com `Depth: 1` e a leitura usa `GET` com `Range`. Nenhuma
-//! requisição de escrita (`PUT`, `MKCOL`, `MOVE`, `DELETE`, `PROPPATCH`) é emitida.
-//! Certificados TLS são sempre verificados; não existe opção para aceitar certificado
-//! inválido.
+//! Discovery uses `PROPFIND` with `Depth: 1` and reading uses `GET` with `Range`. No write
+//! request (`PUT`, `MKCOL`, `MOVE`, `DELETE`, `PROPPATCH`) is issued. TLS certificates are
+//! always verified; there is no option to accept an invalid certificate.
 
 use std::{future::Future, pin::Pin, sync::OnceLock, time::Duration};
 
@@ -17,15 +16,15 @@ use reqwest::{
 };
 use url::Url;
 
-/// Maior URL de fonte aceita, em caracteres.
+/// Largest source URL accepted, in characters.
 const MAX_SOURCE_URL_CHARS: usize = 2048;
-/// Corpo máximo aceito de uma resposta `PROPFIND`.
+/// Largest body accepted from a `PROPFIND` response.
 const MAX_PROPFIND_BYTES: usize = 4 * 1024 * 1024;
-/// Itens máximos aceitos em uma listagem.
+/// Maximum items accepted in a listing.
 const MAX_PROPFIND_ENTRIES: usize = 100_000;
-/// Tempo máximo para estabelecer a conexão TLS/TCP.
+/// Maximum time to establish the TLS/TCP connection.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
-/// Tempo máximo sem receber dados de uma resposta.
+/// Maximum time without receiving data from a response.
 const READ_TIMEOUT: Duration = Duration::from_secs(30);
 
 const PROPFIND_BODY: &str = r#"<?xml version="1.0" encoding="utf-8"?>
@@ -36,38 +35,38 @@ const PROPFIND_BODY: &str = r#"<?xml version="1.0" encoding="utf-8"?>
   </d:prop>
 </d:propfind>"#;
 
-/// Falha ao interpretar a URL de uma fonte.
+/// Failure to parse the URL of a source.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub(crate) enum SourceUrlError {
-    /// O esquema não é WebDAV, HTTP(S) nem SMB.
+    /// The scheme is not WebDAV, HTTP(S) or SMB.
     #[error("unsupported scheme")]
     UnsupportedScheme,
-    /// A URL não pôde ser interpretada.
+    /// The URL could not be parsed.
     #[error("invalid url")]
     InvalidUrl,
-    /// A URL não tem host.
+    /// The URL has no host.
     #[error("missing host")]
     MissingHost,
-    /// O caminho SMB não tem nome de compartilhamento.
+    /// The SMB path has no share name.
     #[error("missing share")]
     MissingShare,
-    /// A URL carrega credenciais no texto, que vazariam em logs.
+    /// The URL carries credentials in plain text, which would leak into logs.
     #[error("credentials in url")]
     CredentialsInUrl,
-    /// A URL carrega consulta ou fragmento, que não identificam um diretório.
+    /// The URL carries a query or fragment, which do not identify a directory.
     #[error("query or fragment in url")]
     QueryOrFragment,
-    /// Um segmento do caminho tentaria sair da raiz.
+    /// A path segment would try to leave the root.
     #[error("path traversal in url")]
     Traversal,
 }
 
-/// Interpreta e normaliza a URL de uma fonte.
+/// Parses and normalizes the URL of a source.
 ///
-/// `dav://` vira `http://` e `davs://` vira `https://`. A barra final é garantida para
-/// que a resolução de `href` do `PROPFIND` permaneça dentro do diretório base. Em
-/// `smb://host/share/caminho` o compartilhamento é obrigatório e cada segmento é
-/// validado, porque ele vira um caminho UNC.
+/// `dav://` becomes `http://` and `davs://` becomes `https://`. The trailing slash is
+/// guaranteed so that `PROPFIND` `href` resolution stays inside the base directory. In
+/// `smb://host/share/path` the share is mandatory and each segment is validated, because
+/// it becomes a UNC path.
 pub(crate) fn parse_source_url(input: &str) -> Result<Url, SourceUrlError> {
     let input = input.trim();
     if input.is_empty() || input.chars().count() > MAX_SOURCE_URL_CHARS {
@@ -80,8 +79,8 @@ pub(crate) fn parse_source_url(input: &str) -> Result<Url, SourceUrlError> {
         "smb" => "smb",
         _ => return Err(SourceUrlError::UnsupportedScheme),
     };
-    // O parser de URL normaliza segmentos `.` e `..` antes de expô-los; a checagem de
-    // travessia precisa acontecer sobre o texto original.
+    // The URL parser normalizes `.` and `..` segments before exposing them; the traversal
+    // check must happen over the original text.
     if scheme == "smb" {
         reject_smb_traversal(rest)?;
     }
@@ -105,7 +104,7 @@ pub(crate) fn parse_source_url(input: &str) -> Result<Url, SourceUrlError> {
     Ok(url)
 }
 
-/// Recusa `..`, `%2e%2e`, barras invertidas e NUL em qualquer segmento do texto.
+/// Refuses `..`, `%2e%2e`, backslashes and NUL in any segment of the text.
 fn reject_smb_traversal(rest: &str) -> Result<(), SourceUrlError> {
     let mut parts = rest.split('/');
     let _host = parts.next();
@@ -125,7 +124,7 @@ fn reject_smb_traversal(rest: &str) -> Result<(), SourceUrlError> {
     Ok(())
 }
 
-/// Exige host, compartilhamento e no máximo um caminho relativo limpo.
+/// Requires a host, a share and at most one clean relative path.
 fn normalize_smb_url(url: &mut Url) -> Result<(), SourceUrlError> {
     let mut segments = Vec::new();
     for segment in url.path().split('/') {
@@ -155,7 +154,7 @@ fn normalize_smb_url(url: &mut Url) -> Result<(), SourceUrlError> {
     Ok(())
 }
 
-/// Cliente WebDAV de uma fonte.
+/// WebDAV client of a source.
 #[derive(Clone)]
 pub(crate) struct WebDavClient {
     base: Url,
@@ -173,7 +172,7 @@ impl std::fmt::Debug for WebDavClient {
 }
 
 impl WebDavClient {
-    /// Cria o cliente para uma base já normalizada.
+    /// Creates the client for an already normalized base.
     pub(crate) fn new(
         base: Url,
         username: Option<&str>,
@@ -212,7 +211,7 @@ impl WebDavClient {
         }
     }
 
-    /// Lista um diretório com `PROPFIND Depth: 1`, excluindo o próprio diretório.
+    /// Lists a directory with `PROPFIND Depth: 1`, excluding the directory itself.
     pub(crate) async fn list_directory(&self, directory: &str) -> SourceResult<Vec<SourceEntry>> {
         let directory = directory.trim_matches('/');
         let url = self.directory_url(directory)?;
@@ -243,8 +242,8 @@ impl WebDavClient {
             let Some(path) = href_to_relative(&self.base, &url, &entry.href)? else {
                 continue;
             };
-            // O `Depth: 1` de um subdiretório devolve o próprio diretório; ele já é a
-            // raiz desta listagem e reenfileirá-lo faria a varredura girar para sempre.
+            // `Depth: 1` of a subdirectory returns the directory itself; it already is the
+            // root of this listing and re-queueing it would make the scan spin forever.
             if path == directory {
                 continue;
             }
@@ -255,19 +254,19 @@ impl WebDavClient {
                 path,
                 is_dir: entry.is_dir,
                 size: entry.size.unwrap_or(0),
-                // WebDAV expõe `getlastmodified` em texto; a varredura trata `0` como
-                // desconhecido, que é preferível a uma data mal interpretada.
+                // WebDAV exposes `getlastmodified` as text; the scan treats `0` as
+                // unknown, which is preferable to a misparsed date.
                 mtime: 0,
             });
         }
         Ok(listed)
     }
 
-    /// Abre uma faixa do arquivo para streaming.
+    /// Opens a file range for streaming.
     ///
-    /// Exige `206 Partial Content`: um servidor que ignora `Range` não pode ser usado
-    /// para reprodução com busca, e aceitar o corpo inteiro entregaria bytes fora da
-    /// faixa pedida.
+    /// Requires `206 Partial Content`: a server that ignores `Range` cannot be used for
+    /// playback with seeking, and accepting the whole body would deliver bytes outside the
+    /// requested range.
     pub(crate) async fn open_range(
         &self,
         path: &str,
@@ -289,7 +288,7 @@ impl WebDavClient {
         }
     }
 
-    /// Confirma alcance, autenticação e leitura de diretório.
+    /// Confirms reachability, authentication and directory read.
     pub(crate) async fn probe(&self) -> SourceResult<usize> {
         Ok(self.list_directory("").await?.len())
     }
@@ -335,13 +334,13 @@ fn client() -> Result<&'static Client, ()> {
     static CLIENT: OnceLock<Result<Client, ()>> = OnceLock::new();
     CLIENT
         .get_or_init(|| {
-            // Mesmo provedor do resto do servidor: `ring`, sem OpenSSL nem CMake.
+            // Same provider as the rest of the server: `ring`, without OpenSSL or CMake.
             let _ = rustls::crypto::ring::default_provider().install_default();
             Client::builder()
                 .connect_timeout(CONNECT_TIMEOUT)
                 .read_timeout(READ_TIMEOUT)
-                // Redirecionamentos cruzados levariam o cabeçalho de autorização a
-                // outro host. A fonte precisa apontar para a URL final.
+                // Cross-origin redirects would take the authorization header to another
+                // host. The source must point to the final URL.
                 .redirect(reqwest::redirect::Policy::none())
                 .build()
                 .map_err(|_| ())
@@ -380,7 +379,7 @@ async fn read_limited(response: reqwest::Response, limit: usize) -> SourceResult
     Ok(body)
 }
 
-/// Monta a URL de um caminho relativo da fonte.
+/// Builds the URL of a relative path of the source.
 fn file_url(base: &Url, path: &str) -> Result<Url, SourceError> {
     let mut url = base.clone();
     {
@@ -416,11 +415,11 @@ pub(crate) fn decoded_segments(url: &Url) -> SourceResult<Vec<String>> {
         .collect()
 }
 
-/// Converte um `href` do `PROPFIND` no caminho relativo à base.
+/// Converts a `PROPFIND` `href` into the path relative to the base.
 ///
-/// O `href` é resolvido contra a URL consultada (que pode ser um subdiretório) e depois
-/// recortado contra a base da fonte. Um `href` fora da base ou com segmentos que tentem
-/// escapar dela é ignorado, nunca aceito como caminho.
+/// The `href` is resolved against the queried URL (which may be a subdirectory) and then
+/// trimmed against the source base. An `href` outside the base or with segments that try
+/// to escape it is ignored, never accepted as a path.
 fn href_to_relative(base: &Url, request_url: &Url, href: &str) -> SourceResult<Option<String>> {
     let resolved = request_url
         .join(href.trim())
@@ -448,7 +447,7 @@ fn href_to_relative(base: &Url, request_url: &Url, href: &str) -> SourceResult<O
     Ok(Some(relative.join("/")))
 }
 
-/// Item bruto de um `multistatus`, antes da resolução contra a base.
+/// Raw item of a `multistatus`, before resolution against the base.
 #[derive(Debug, PartialEq, Eq)]
 struct PropfindEntry {
     href: String,
@@ -456,7 +455,7 @@ struct PropfindEntry {
     size: Option<u64>,
 }
 
-/// Interpreta um `multistatus` de `PROPFIND`.
+/// Parses a `PROPFIND` `multistatus`.
 fn parse_propfind(xml: &[u8]) -> SourceResult<Vec<PropfindEntry>> {
     let mut reader = Reader::from_reader(xml);
     reader.config_mut().trim_text(true);
@@ -579,7 +578,7 @@ mod tests {
         response.into_bytes()
     }
 
-    /// Sobe um servidor HTTP mínimo que atende uma conexão por vez.
+    /// Starts a minimal HTTP server that serves one connection at a time.
     async fn server(
         handler: impl Fn(&str) -> Vec<u8> + Send + Sync + 'static,
     ) -> (std::net::SocketAddr, tokio::task::JoinHandle<()>) {

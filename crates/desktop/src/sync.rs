@@ -1,27 +1,28 @@
-//! Fila offline e cliente de sincronização do desktop.
+//! Offline queue and synchronization client of the desktop.
 //!
-//! Cada escrita sincronizável grava no banco local e entra no outbox (`sync_outbox`) na
-//! mesma transação, então um crash nunca deixa a escrita local sem a operação
-//! correspondente. A operação mantém o mesmo `op_id` entre tentativas: reenviar o que o
-//! servidor já aceitou é uma duplicata e não repete o efeito.
+//! Every syncable write stores in the local database and enters the outbox
+//! (`sync_outbox`) in the same transaction, so a crash never leaves the local write
+//! without its corresponding operation. The operation keeps the same `op_id` between
+//! attempts: resending what the server already accepted is a duplicate and does not repeat
+//! the effect.
 //!
-//! O cliente fala apenas com o servidor configurado: `POST /api/login`,
-//! `POST /api/logout`, `POST /api/sync/push` e `GET /api/sync/pull`. A sessão é o cookie
-//! `learnvault_session`, guardado em `sync.json` no diretório de dados do aplicativo com
-//! permissão `0600` no Unix. O cookie nunca é serializado para o webview, nunca aparece
-//! em log nem em mensagem de erro.
+//! The client talks only to the configured server: `POST /api/login`,
+//! `POST /api/logout`, `POST /api/sync/push` and `GET /api/sync/pull`. The session is the
+//! `learnvault_session` cookie, stored in `sync.json` in the application data directory
+//! with mode `0600` on Unix. The cookie is never serialized to the webview, never appears
+//! in a log nor in an error message.
 //!
-//! A URL do servidor é validada antes de qualquer requisição: somente `http`/`https`, com
-//! host, sem credenciais embutidas, sem query, sem fragmento e sem caminho. Redireciona-
-//! mentos são desligados para que o cookie nunca siga para outra origem. Cada requisição
-//! tem timeout; erros de transporte e 5xx são repetidos com espera crescente e limitada,
-//! enquanto 401 e 403 (`credentials_change_required`) falham imediatamente.
+//! The server URL is validated before any request: only `http`/`https`, with a host,
+//! without embedded credentials, without query, without fragment and without path.
+//! Redirects are disabled so the cookie never follows to another origin. Each request has
+//! a timeout; transport errors and 5xx are retried with a growing, bounded delay, while 401
+//! and 403 (`credentials_change_required`) fail immediately.
 //!
-//! Uma sincronização empurra o outbox em páginas, só confirma (`acknowledge`) depois que
-//! o servidor aceita e então puxa do cursor até `has_more` ser falso. O cursor e os
-//! efeitos entram no mesmo commit (`apply_operations`), então uma execução interrompida
-//! retoma do ponto anterior sem duplicar nem perder operações. Duas execuções nunca se
-//! sobrepõem: um `SyncFlight` garante execução única.
+//! A sync pushes the outbox in pages, only acknowledges after the server accepts, and then
+//! pulls from the cursor until `has_more` is false. The cursor and the effects enter the
+//! same commit (`apply_operations`), so an interrupted run resumes from the previous point
+//! without duplicating or losing operations. Two runs never overlap: a `SyncFlight`
+//! guarantees a single run.
 
 use std::fs;
 use std::io::Write;
@@ -43,43 +44,43 @@ use crate::dto::SyncResultDto;
 use crate::error::IpcError;
 use crate::study::LOCAL_OWNER_ID;
 
-/// Nome do arquivo de configuração e sessão dentro do diretório de dados.
+/// Name of the configuration and session file inside the data directory.
 pub const SYNC_FILE_NAME: &str = "sync.json";
 
-/// Versão do formato do arquivo de sincronização.
+/// Version of the sync file format.
 const SYNC_FILE_VERSION: u32 = 1;
 
-/// Orçamento de cada requisição HTTP. Estar offline não pode prender a interface.
+/// Budget of each HTTP request. Being offline cannot block the interface.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 
-/// Espera entre tentativas de transporte/5xx (a primeira tentativa não espera).
+/// Delay between transport/5xx attempts (the first attempt does not wait).
 const RETRY_DELAYS_MS: [u64; 3] = [0, 250, 750];
 
-/// Nome do cookie de sessão do servidor (`auth::COOKIE_NAME`).
+/// Name of the server session cookie (`auth::COOKIE_NAME`).
 const SESSION_COOKIE_NAME: &str = "learnvault_session";
 
-/// Página de leitura do diário remoto.
+/// Read page of the remote journal.
 const PULL_LIMIT: usize = 200;
 
-/// Falha estável de sincronização, traduzida para um código curto no resumo.
+/// Stable sync failure, translated to a short code in the summary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SyncFailure {
-    /// Servidor ou sessão ainda não configurados.
+    /// Server or session not configured yet.
     NotConfigured,
-    /// A sessão expirou (401); entra de novo.
+    /// The session expired (401); sign in again.
     Unauthorized,
-    /// O servidor exige troca de credenciais (403).
+    /// The server requires a credential change (403).
     CredentialsRequired,
-    /// O servidor recusou a requisição (outro 4xx).
+    /// The server refused the request (other 4xx).
     Rejected,
-    /// Falha de transporte, timeout ou 5xx depois das tentativas.
+    /// Transport failure, timeout or 5xx after the attempts.
     Unavailable,
-    /// Falha local do banco.
+    /// Local database failure.
     Local,
 }
 
 impl SyncFailure {
-    /// Código estável consumido pela interface.
+    /// Stable code consumed by the interface.
     pub fn code(self) -> &'static str {
         match self {
             Self::NotConfigured => "not_configured",
@@ -91,17 +92,17 @@ impl SyncFailure {
     }
 }
 
-/// Configuração persistida: servidor e sessão.
+/// Persisted configuration: server and session.
 ///
-/// O `Debug` é manual para que a sessão nunca apareça em diagnóstico.
+/// `Debug` is manual so the session never appears in diagnostics.
 #[derive(Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct SyncSettings {
-    /// Versão do arquivo, para descartar um formato desconhecido.
+    /// File version, to discard an unknown format.
     pub version: u32,
-    /// URL base do servidor, já normalizada.
+    /// Server base URL, already normalized.
     pub server_url: String,
-    /// Cookie de sessão no formato `nome=valor`; vazio quando não há sessão.
+    /// Session cookie in `name=value` format; empty when there is no session.
     pub session: String,
 }
 
@@ -116,19 +117,19 @@ impl std::fmt::Debug for SyncSettings {
 }
 
 impl SyncSettings {
-    /// Indica que existe um servidor escolhido.
+    /// Indicates a server has been chosen.
     pub fn configured(&self) -> bool {
         !self.server_url.trim().is_empty()
     }
 
-    /// Indica que existe uma sessão guardada.
+    /// Indicates a session is stored.
     pub fn signed_in(&self) -> bool {
         !self.session.is_empty()
     }
 }
 
-/// Lê a configuração do diretório de dados; ausente, corrompida ou em versão desconhecida
-/// vale como não configurada.
+/// Reads the configuration from the data directory; missing, corrupted or in an unknown
+/// version counts as not configured.
 pub fn load_settings(data_dir: &Path) -> SyncSettings {
     fs::read(data_dir.join(SYNC_FILE_NAME))
         .ok()
@@ -137,10 +138,10 @@ pub fn load_settings(data_dir: &Path) -> SyncSettings {
         .unwrap_or_default()
 }
 
-/// Grava a configuração de forma atômica e com permissão `0600` no Unix.
+/// Stores the configuration atomically and with mode `0600` on Unix.
 ///
-/// Uma falha de gravação não altera o arquivo anterior. No Windows não há modo POSIX; o
-/// arquivo herda a ACL do diretório de dados do aplicativo.
+/// A write failure does not change the previous file. On Windows there is no POSIX mode;
+/// the file inherits the ACL of the application data directory.
 pub fn store_settings(path: &Path, settings: &SyncSettings) -> Result<(), IpcError> {
     let mut stored = settings.clone();
     stored.version = SYNC_FILE_VERSION;
@@ -176,10 +177,10 @@ pub fn store_settings(path: &Path, settings: &SyncSettings) -> Result<(), IpcErr
     Ok(())
 }
 
-/// Valida e normaliza a URL base do servidor.
+/// Validates and normalizes the server base URL.
 ///
-/// Somente `http`/`https`, com host explícito, sem credenciais embutidas, query,
-/// fragmento ou caminho. A normalização remove a barra final para concatenar `/api/...`.
+/// Only `http`/`https`, with an explicit host, without embedded credentials, query,
+/// fragment or path. Normalization removes the trailing slash to concatenate `/api/...`.
 pub fn validate_server_url(raw: &str) -> Result<String, IpcError> {
     let mut url = Url::parse(raw.trim()).map_err(|_| IpcError::invalid_sync_server())?;
     if !matches!(url.scheme(), "http" | "https")
@@ -196,9 +197,9 @@ pub fn validate_server_url(raw: &str) -> Result<String, IpcError> {
     Ok(url.as_str().trim_end_matches('/').to_owned())
 }
 
-/// Autentica no servidor e devolve o cookie de sessão para o chamador guardar.
+/// Authenticates on the server and returns the session cookie for the caller to store.
 ///
-/// A senha só existe nesta chamada; o cookie devolvido nunca é registrado em log.
+/// The password only exists in this call; the returned cookie is never logged.
 pub fn login(server_url: &str, username: &str, password: &str) -> Result<String, IpcError> {
     let base = validate_server_url(server_url)?;
     let origin = origin_of(&base)?;
@@ -229,8 +230,8 @@ pub fn login(server_url: &str, username: &str, password: &str) -> Result<String,
     response.session.ok_or_else(IpcError::sync_login_failed)
 }
 
-/// Encerra a sessão no servidor. Falha de rede é ignorada: o chamador apaga a cópia local
-/// de qualquer forma.
+/// Ends the session on the server. A network failure is ignored: the caller deletes the
+/// local copy anyway.
 pub fn logout(server_url: &str, session: &str) {
     let (Ok(base), Ok(origin), Ok(client)) = (
         validate_server_url(server_url),
@@ -249,8 +250,8 @@ pub fn logout(server_url: &str, session: &str) {
     );
 }
 
-/// Executa uma sincronização completa: empurra o outbox, confirma o aceite e puxa do
-/// cursor até a última página.
+/// Runs a complete sync: pushes the outbox, confirms the acceptance and pulls from the
+/// cursor until the last page.
 pub fn run(
     database: &Database,
     server_url: &str,
@@ -303,7 +304,7 @@ pub fn run(
         pulled += batch.items.len();
         let advanced = batch.cursor > cursor;
         cursor = batch.cursor;
-        // Um servidor que repete a mesma página não pode prender o cliente em loop.
+        // A server that repeats the same page cannot trap the client in a loop.
         if !batch.has_more || !advanced {
             break;
         }
@@ -319,35 +320,35 @@ pub fn run(
     })
 }
 
-/// Estado local do dono: dispositivo e cursor já aplicado.
+/// Local state of the owner: device and already applied cursor.
 pub fn state(database: &Database) -> Result<SyncState, IpcError> {
     learnvault_core::sync_state(database, LOCAL_OWNER_ID).map_err(|_| IpcError::sync_unavailable())
 }
 
-/// Identidade estável deste dispositivo.
+/// Stable identity of this device.
 pub(crate) fn device(database: &Database) -> Result<String, IpcError> {
     state(database).map(|state| state.device_id)
 }
 
-/// Operações do outbox ainda não confirmadas, da mais antiga para a mais nova.
+/// Outbox operations not confirmed yet, from the oldest to the newest.
 pub fn pending(database: &Database, limit: usize) -> Result<Vec<SyncOperationInput>, IpcError> {
     learnvault_core::pending_operations(database, LOCAL_OWNER_ID, limit)
         .map_err(|_| IpcError::sync_unavailable())
 }
 
-/// Quantidade de operações ainda pendentes.
+/// Number of operations still pending.
 pub fn pending_count(database: &Database) -> Result<i64, IpcError> {
     learnvault_core::pending_count(database, LOCAL_OWNER_ID)
         .map_err(|_| IpcError::sync_unavailable())
 }
 
-/// Remove do outbox as operações que o servidor já aceitou.
+/// Removes from the outbox the operations the server already accepted.
 pub fn acknowledge(database: &Database, op_ids: &[String]) -> Result<usize, IpcError> {
     learnvault_core::acknowledge_operations(database, LOCAL_OWNER_ID, op_ids)
         .map_err(|_| IpcError::sync_unavailable())
 }
 
-/// Aplica as operações recebidas e grava o cursor na mesma transação.
+/// Applies the received operations and stores the cursor in the same transaction.
 pub fn apply(
     database: &Database,
     operations: &[SyncOperation],
@@ -357,14 +358,14 @@ pub fn apply(
         .map_err(|_| IpcError::sync_unavailable())
 }
 
-/// Garante execução única: a segunda chamada devolve `None` enquanto a primeira vive.
+/// Guarantees a single run: the second call returns `None` while the first lives.
 #[derive(Debug, Default)]
 pub struct SyncFlight {
     running: AtomicBool,
 }
 
 impl SyncFlight {
-    /// Marca uma execução como em andamento.
+    /// Marks a run as in progress.
     pub fn try_begin(&self) -> Option<SyncGuard<'_>> {
         self.running
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
@@ -372,13 +373,13 @@ impl SyncFlight {
             .map(|_| SyncGuard(&self.running))
     }
 
-    /// Indica se existe uma execução em andamento.
+    /// Indicates whether a run is in progress.
     pub fn is_running(&self) -> bool {
         self.running.load(Ordering::SeqCst)
     }
 }
 
-/// Execução em andamento; libera o `SyncFlight` ao ser descartada.
+/// Run in progress; releases the `SyncFlight` when dropped.
 pub struct SyncGuard<'a>(&'a AtomicBool);
 
 impl Drop for SyncGuard<'_> {
@@ -400,7 +401,7 @@ fn http_client() -> Result<Client, SyncFailure> {
     });
     Client::builder()
         .timeout(REQUEST_TIMEOUT)
-        // Sem redirecionamentos: o cookie de sessão nunca segue para outra origem.
+        // Without redirects: the session cookie never follows to another origin.
         .redirect(Policy::none())
         .build()
         .map_err(|_| SyncFailure::Unavailable)
@@ -441,7 +442,7 @@ fn send(
     })
 }
 
-/// Extrai apenas o par `learnvault_session=...` de um `Set-Cookie`.
+/// Extracts only the `learnvault_session=...` pair from a `Set-Cookie`.
 fn session_cookie(value: &reqwest::header::HeaderValue) -> Option<String> {
     let value = value.to_str().ok()?;
     let pair = value.split(';').next()?.trim();
@@ -539,7 +540,7 @@ fn pull(
     serde_json::from_str(&response.body).map_err(|_| SyncFailure::Rejected)
 }
 
-/// Caminho do arquivo de configuração dentro do diretório de dados.
+/// Path of the configuration file inside the data directory.
 pub fn settings_path(data_dir: &Path) -> PathBuf {
     data_dir.join(SYNC_FILE_NAME)
 }
