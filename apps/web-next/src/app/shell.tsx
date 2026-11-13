@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { DesktopTitlebar } from '@/components/desktop-titlebar';
 import { GlobalSearch } from '@/components/global-search';
+import { IndexingIndicator } from '@/components/indexing-indicator';
 import { UpdateNotice } from '@/components/update-notice';
 import { FocusMenu } from '@/components/focus-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -76,6 +77,7 @@ export function AppShell() {
 				</div>
 			</header>
 			<UpdateNotice isAdmin={Boolean(user.isAdmin)} />
+			<IndexingIndicator isAdmin={Boolean(user.isAdmin)} />
 			<main id="main" tabIndex={-1} className="mx-auto w-full max-w-[88rem] px-5 py-8 outline-none sm:px-10 sm:py-10">
 				<Outlet />
 			</main>

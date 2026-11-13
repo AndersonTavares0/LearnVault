@@ -38,6 +38,8 @@ It never creates `admin/admin` or overwrites existing data in this scenario. The
 | `POST` | `/api/admin/courses` | Admin Session | Accepts `{ "path": "..." }` to register a course folder. Path must exist, be readable, and not be a symlink |
 | `DELETE` | `/api/admin/courses/{id}` | Admin Session | Unregisters a course folder without deleting course files or study progress |
 | `POST` | `/api/admin/catalog/rescan` | Admin Session | Explicitly rescans all registered courses in a preserving manner: registers new files, confirms known ones, marks missing ones without deleting records |
+| `GET` | `/api/indexing` | Session | Returns the background indexing job: `status` (`idle`/`running`/`done`/`cancelled`/`error`), `started_at`, `finished_at`, `progress` (`files_seen`, `added`, `changed`, `removed`, `moved`), course counters, and a stable `last_error` code |
+| `POST` | `/api/indexing/cancel` | Admin Session | Cancels the running indexing job. Returns `{ "cancelled": true }`, or `409` when no job is active |
 | `PUT` | `/api/admin/courses/{id}/cover` | Admin Session | Saves custom course cover (raw image body up to 4 MiB; PNG/JPEG/WebP). Returns `{ "cover_version": <timestamp> }` |
 | `DELETE` | `/api/admin/courses/{id}/cover` | Admin Session | Removes custom cover image atomically without modifying course folder. Returns `{ "removed": bool }` |
 | `GET` | `/api/courses/{id}/cover` | Session | Serves custom course cover with appropriate `Content-Type` and `Cache-Control: private, no-store` |
@@ -52,6 +54,17 @@ Module directories containing video files are presented as collapsible modules w
 Without registered courses, the catalog returns empty. `LIBRARY_DIR`/`--library-root` is accepted as an initial deployment seed: when no registry exists, the specified directory is registered as the first course with ID `library-1`.
 
 The scanner inspects directory metadata without traversing symbolic links. It ignores temporary download directories, detects media, subtitles, and documents, and only treats `.ts` files as video if their size exceeds 1 MiB (preventing collision with TypeScript files).
+
+### Automatic Indexing
+
+The server indexes registered courses in the background, outside the request path. A filesystem watcher coalesces event bursts with a debounce, and a periodic reconciliation (five minutes) remains the portable fallback for network mounts where events are unreliable. Only one job runs at a time, and a manual rescan is deferred or rejected with `409` while it runs.
+
+Each course is scanned without holding the database and applied in its own transaction; the database lock and the heavy-work permit are released between courses, so ordinary API requests are not blocked for the duration of the library. The job tracks idle/running/done/cancelled/error, file counts, course progress, timestamps, and a stable error code, exposed by `GET /api/indexing`. Cancellation stops before the next course and leaves the already committed courses intact.
+
+Detection is incremental: a known path is compared by size and mtime, and a sampled SHA-256 (both ends plus the length) separates a real content change from a mere timestamp touch. A file that appears at an unknown path matches a missing row by content hash (or by size and mtime when the hash is unavailable) and keeps its `media_id`, notes, bookmarks, and progress; ambiguous matches are refused instead of guessed. Files that disappear are marked `availability: missing`; no scan deletes rows, notes, bookmarks, or progress history. The read-only guarantee is unchanged: the scanner and the hash only read course files.
+
+The desktop application does not run a background indexer; it keeps the explicit rescan command.
+
 
 In the desktop app, `learnvault-media://localhost/<media-id>` delivers media and subtitle files using only opaque IDs. `GET` and `HEAD` support single ranges. On Windows, the SPA uses `http://learnvault-media.localhost/<media-id>`.
 

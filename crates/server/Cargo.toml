@@ -11,6 +11,11 @@ argon2 = "0.6"
 base64 = "0.23"
 getrandom = "0.4"
 learnvault-core = { path = "../core" }
+# Filesystem events back automatic indexing on inotify/FSEvents/ReadDirectoryChangesW.
+# Periodic reconciliation remains the portable fallback, so a watcher that cannot start
+# only degrades freshness, never correctness. `walkdir` is already in the dependency tree
+# through `learnvault-core`; `notify` is the only new direct dependency.
+notify = "8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_urlencoded = "0.7"

@@ -351,9 +351,11 @@ fn a_failed_course_releases_the_busy_state_and_recovers_when_restored() {
     let second = state.rescan().unwrap();
     assert_eq!(second.failed, 1);
 
-    // Restaurando a raiz, um novo rescan inicia e conclui normalmente.
+    // Restaurando a raiz, um novo rescan inicia e conclui normalmente. O conteúdo é
+    // diferente de propósito: um arquivo idêntico ao anterior seria reconhecido como o
+    // mesmo arquivo em outro caminho (a detecção incremental preserva a identidade).
     fs::create_dir_all(&library).unwrap();
-    fs::write(library.join("aula-2.mp4"), b"video").unwrap();
+    fs::write(library.join("aula-2.mp4"), b"outro video").unwrap();
     let recovered = state.rescan().unwrap();
     assert_eq!(recovered.failed, 0);
     assert_eq!(recovered.inserted, 1);

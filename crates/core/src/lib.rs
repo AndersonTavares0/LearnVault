@@ -75,7 +75,7 @@ pub use pomodoro::{
     weekly_goal,
 };
 pub use removal::{MediaRemovalImpact, MediaRemovalOutcome, media_removal_impact, remove_media};
-pub use rescan::{RescanSummary, apply_scan, rescan};
+pub use rescan::{RescanSummary, apply_incremental_scan, apply_scan, rescan};
 pub use scanner::{MediaKind, ScanOutcome, ScannedFile, scan};
 pub use search::{
     MAX_SEARCH_QUERY_CHARS, MAX_SEARCH_RESULTS, MIN_SEARCH_QUERY_CHARS, SearchLessonHit,

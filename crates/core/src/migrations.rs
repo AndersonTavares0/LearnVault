@@ -612,10 +612,21 @@ CREATE TABLE player_preference (
 );
 ";
 
+/// Versão 16: hash amostral do conteúdo da mídia.
+///
+/// A identidade da aula continua sendo o `media_id`; o hash permite reconhecer o mesmo
+/// arquivo quando ele muda de caminho, sem depender do nome. A coluna é anulável porque
+/// linhas anteriores à migração e arquivos ilegíveis não têm hash; a comparação de
+/// tamanho e mtime continua valendo nesses casos. Nenhum arquivo do curso é alterado:
+/// o hash é lido somente das pontas do arquivo.
+const V16: &str = "
+ALTER TABLE media ADD COLUMN content_hash TEXT;
+";
+
 /// Cadeia de migrações aplicada por [`crate::db::Database`]; o índice `n` leva o banco da
 /// versão `n` para `n + 1`.
 pub(crate) const MIGRATIONS: &[&str] = &[
-    V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15,
+    V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16,
 ];
 
 /// Versão do schema gravada em `PRAGMA user_version` (0 quando nunca migrado).

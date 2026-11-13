@@ -436,6 +436,7 @@ const REQUIRED_TABLES: &[TableDefinition] = &[
             ("size", "INTEGER", true, None, 0),
             ("mtime", "INTEGER", true, None, 0),
             ("availability", "TEXT", true, None, 0),
+            ("content_hash", "TEXT", false, None, 0),
         ],
     },
     TableDefinition {

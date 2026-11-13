@@ -64,6 +64,17 @@ export type UpdateHistoryEntry = {
 	to: string;
 	message: string;
 };
+/** Estado do job de indexação automática do servidor (o desktop indexa só por rescan). */
+export type IndexingStatus = 'idle' | 'running' | 'done' | 'cancelled' | 'error';
+export type IndexingSnapshot = {
+	status: IndexingStatus;
+	startedAt: number | null;
+	finishedAt: number | null;
+	progress: { filesSeen: number; added: number; changed: number; removed: number; moved: number };
+	coursesTotal: number;
+	coursesCompleted: number;
+	lastError: string | null;
+};
 export type StudyNote = {
 	noteId: string;
 	mediaId: string;
@@ -185,6 +196,10 @@ export interface Transport {
 	// Remove um curso do registro, sem tocar nos arquivos.
 	removeCourse(courseId: string): Promise<void>;
 	rescan(): Promise<void>;
+	/** Estado do job de indexação automática; o desktop devolve `idle`. */
+	indexingStatus(): Promise<IndexingSnapshot>;
+	/** Pede o cancelamento do job em execução; `false` quando não havia job ativo. */
+	cancelIndexing(): Promise<boolean>;
 	updateCredentials(username: string, password: string, currentPassword?: string): Promise<User>;
 	listUsers?(): Promise<LocalUser[]>;
 	createUser?(username: string, password: string, allowedCourseIds?: string[] | null): Promise<LocalUser>;
@@ -632,6 +647,48 @@ export function normalizeUpdateStatus(value: unknown): UpdateStatus {
 	};
 }
 
+const INDEXING_STATUSES: readonly string[] = ['idle', 'running', 'done', 'cancelled', 'error'];
+
+function indexingCount(value: unknown): number {
+	return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;
+}
+
+/** Validates the indexing job snapshot; an unknown shape is rejected whole. */
+export function normalizeIndexingStatus(raw: unknown): IndexingSnapshot {
+	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalidPayload('estado de indexação ausente.');
+	const data = raw as Record<string, unknown>;
+	const status = String(data.status ?? '');
+	if (!INDEXING_STATUSES.includes(status)) throw invalidPayload('estado de indexação inválido.');
+	const progress = (data.progress && typeof data.progress === 'object' ? data.progress : {}) as Record<string, unknown>;
+	const timestamp = (value: unknown): number | null => (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null);
+	return {
+		status: status as IndexingStatus,
+		startedAt: timestamp(data.started_at),
+		finishedAt: timestamp(data.finished_at),
+		progress: {
+			filesSeen: indexingCount(progress.files_seen),
+			added: indexingCount(progress.added),
+			changed: indexingCount(progress.changed),
+			removed: indexingCount(progress.removed),
+			moved: indexingCount(progress.moved)
+		},
+		coursesTotal: indexingCount(data.courses_total),
+		coursesCompleted: indexingCount(data.courses_completed),
+		lastError: typeof data.last_error === 'string' ? data.last_error : null
+	};
+}
+
+/** The desktop has no background indexer: its rescan is explicit. */
+export const IDLE_INDEXING: IndexingSnapshot = {
+	status: 'idle',
+	startedAt: null,
+	finishedAt: null,
+	progress: { filesSeen: 0, added: 0, changed: 0, removed: 0, moved: 0 },
+	coursesTotal: 0,
+	coursesCompleted: 0,
+	lastError: null
+};
+
 export function normalizeStudyNote(raw: unknown): StudyNote {
 	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalidPayload('anotação de estudo inválida.');
 	const note = raw as Record<string, unknown>;
@@ -889,6 +946,13 @@ export class HttpTransport implements Transport {
 	}
 	async catalog() { const response = await fetch('/api/catalog'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not load catalog.', 'Não foi possível carregar o catálogo.')); return normalizeCatalog(await response.json()); }
 	async rescan() { const response = await fetch('/api/admin/catalog/rescan', { method: 'POST' }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 409 ? tr('A rescan is already in progress.', 'Já existe um rescan em andamento.') : response.status === 400 ? tr('No courses imported yet.', 'Nenhum curso foi importado ainda.') : tr('Could not index courses.', 'Não foi possível indexar os cursos.')); }
+	async indexingStatus() { const response = await fetch('/api/indexing'); if (!response.ok) throw new Error(tr('Could not load indexing status.', 'Não foi possível carregar o estado da indexação.')); return normalizeIndexingStatus(await response.json()); }
+	async cancelIndexing() {
+		const response = await fetch('/api/indexing/cancel', { method: 'POST' });
+		if (!response.ok) return false;
+		const payload = await response.json().catch(() => null) as { cancelled?: unknown } | null;
+		return payload?.cancelled === true;
+	}
 	async updateCredentials(username: string, password: string, currentPassword = password) { const response = await fetch('/api/account/credentials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ current_password: currentPassword, username, password }) }); if (!response.ok) throw new Error(response.status === 422 ? tr('Invalid username or password.', 'Usuário ou senha inválidos.') : response.status === 401 ? tr('Current password incorrect.', 'Senha atual incorreta.') : tr('Could not update credentials.', 'Não foi possível atualizar as credenciais.')); return normalizeUser(await response.json()); }
 	async listUsers(): Promise<LocalUser[]> {
 		const response = await fetch('/api/admin/users');
@@ -1291,6 +1355,8 @@ export class DesktopStub implements Transport {
 	// O rescan desktop é sempre explícito: o webview só o dispara a pedido do usuário. A
 	// resposta é um resumo sanitizado que não interessa ao shell, que recarrega o catálogo.
 	async rescan() { try { await invoke<unknown>('desktop_rescan'); } catch (cause) { throw desktopError(cause, tr('Could not index courses.', 'Não foi possível indexar os cursos.')); } }
+	indexingStatus() { return Promise.resolve(IDLE_INDEXING); }
+	cancelIndexing() { return Promise.resolve(false); }
 	updateCredentials() { return Promise.reject(new Error(tr('Desktop transport not yet implemented.', 'Transporte desktop ainda não implementado.'))); }
 	// O progresso de estudo do desktop é o do dono local fixo, escolhido no Rust: o webview
 	// envia apenas o `mediaId`, a posição, a conclusão e o limite, e nunca um `owner_id` nem
