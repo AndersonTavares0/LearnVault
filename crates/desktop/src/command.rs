@@ -510,11 +510,14 @@ pub async fn desktop_create_flashcard(
     media_id: String,
     front: String,
     back: String,
+    position_seconds: Option<i64>,
 ) -> Result<FlashcardDto, IpcError> {
     let state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || state.create_flashcard(&media_id, &front, &back))
-        .await
-        .map_err(|_| IpcError::study_unavailable())?
+    tauri::async_runtime::spawn_blocking(move || {
+        state.create_flashcard(&media_id, &front, &back, position_seconds)
+    })
+    .await
+    .map_err(|_| IpcError::study_unavailable())?
 }
 
 /// Comando IPC: atualiza o texto da frente e do verso de um cartão pertencente ao dono local.

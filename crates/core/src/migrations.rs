@@ -570,9 +570,36 @@ CREATE VIRTUAL TABLE course_fts USING fts5(
 );
 ";
 
+/// Versão 14: vínculo do cartão com um instante da aula e histórico de revisões.
+///
+/// O cartão continua preso à mídia (a aula); `position_seconds` registra o momento do player
+/// em que ele foi criado, e não altera o agendamento. `flashcard_review` é um log somente de
+/// acréscimo: cada revisão guarda a avaliação, o intervalo anterior e o próximo vencimento,
+/// para que o histórico não dependa do estado atual do cartão. Sem chave estrangeira para
+/// `flashcard`, como as demais tabelas de eventos: excluir um cartão não apaga o passado nem
+/// falha por causa dele.
+const V14: &str = "
+ALTER TABLE flashcard ADD COLUMN position_seconds INTEGER
+    CHECK (position_seconds IS NULL OR position_seconds >= 0);
+
+CREATE TABLE flashcard_review (
+    review_id INTEGER PRIMARY KEY,
+    owner_id TEXT NOT NULL,
+    card_id TEXT NOT NULL,
+    rating TEXT NOT NULL CHECK (rating IN ('again', 'good')),
+    previous_interval_days INTEGER NOT NULL CHECK (previous_interval_days >= 0 AND previous_interval_days <= 365),
+    next_due INTEGER NOT NULL,
+    reviewed_at INTEGER NOT NULL
+);
+
+CREATE INDEX flashcard_review_owner_card_idx
+    ON flashcard_review (owner_id, card_id, reviewed_at);
+";
+
 /// Cadeia de migrações aplicada por [`crate::db::Database`]; o índice `n` leva o banco da
 /// versão `n` para `n + 1`.
-pub(crate) const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13];
+pub(crate) const MIGRATIONS: &[&str] =
+    &[V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14];
 
 /// Versão do schema gravada em `PRAGMA user_version` (0 quando nunca migrado).
 ///

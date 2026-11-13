@@ -300,10 +300,18 @@ pub fn create_flashcard(
     media_id: &str,
     front: &str,
     back: &str,
+    position_seconds: Option<i64>,
 ) -> Result<FlashcardDto, IpcError> {
-    learnvault_core::create_flashcard(database, LOCAL_OWNER_ID, media_id, front, back)
-        .map(FlashcardDto::from)
-        .map_err(study_error)
+    learnvault_core::create_flashcard(
+        database,
+        LOCAL_OWNER_ID,
+        media_id,
+        front,
+        back,
+        position_seconds,
+    )
+    .map(FlashcardDto::from)
+    .map_err(study_error)
 }
 
 /// Atualiza a frente e o verso de um cartão de memorização do dono local.

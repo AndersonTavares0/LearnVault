@@ -164,6 +164,24 @@ describe('lesson page', () => {
 			fireEvent.click(screen.getByRole('button', { name: 'Card' }));
 			expect(await screen.findByRole('form', { name: 'New card' })).toBeTruthy();
 		});
+
+		it('creates a card at the current player time', async () => {
+			vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
+			vi.spyOn(transport, 'recordPosition').mockImplementation(async (id, position) => ({ ...progress(id), positionSeconds: position, recorded: true }));
+			const create = vi.spyOn(transport, 'createFlashcard').mockResolvedValue({
+				cardId: 'card-1', mediaId: 'one.mp4', positionSeconds: 65, front: 'Question', back: 'Answer', intervalDays: 0, nextDue: 1, createdAt: 1, updatedAt: 1
+			});
+			renderApp('/course/c/c%2FOne', { catalog });
+			const video = await screen.findByLabelText('Lesson player: One') as HTMLVideoElement;
+			video.currentTime = 65;
+			fireEvent.timeUpdate(video);
+			fireEvent.click(screen.getByRole('button', { name: 'Card' }));
+			fireEvent.change(await screen.findByLabelText('Front: question or concept'), { target: { value: 'Question' } });
+			fireEvent.change(screen.getByLabelText('Back: answer or explanation'), { target: { value: 'Answer' } });
+			expect(await screen.findByText('Linked to this lesson at 1:05.')).toBeTruthy();
+			fireEvent.click(screen.getByRole('button', { name: 'Save card' }));
+			await waitFor(() => expect(create).toHaveBeenCalledWith('one.mp4', 'Question', 'Answer', 65));
+		});
 	});
 
 	describe('resume and persistence', () => {

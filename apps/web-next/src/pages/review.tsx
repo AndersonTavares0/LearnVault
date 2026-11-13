@@ -9,7 +9,7 @@ import { useLocale } from '@/hooks/use-locale';
 import { cardsToTsv } from '@/lib/cards';
 import { formatCount } from '@/lib/catalog';
 import { tr } from '@/lib/i18n';
-import { studySyncSupported } from '@/lib/player';
+import { formatDuration, studySyncSupported } from '@/lib/player';
 import { findLessonLocation, href } from '@/lib/router';
 import { transport, type Flashcard, type ReviewRating } from '@/lib/transport';
 import { useCatalog } from '@/app/data';
@@ -121,7 +121,7 @@ function Deck({ courseId, title, cards, now }: { courseId: string; title: string
 					<Button variant="outline" size="icon" className="size-11 rounded-full" onClick={leave} aria-label={tr('Close', 'Fechar')}><ArrowLeft /></Button>
 					<div className="min-w-0 flex-1">
 						<p className="truncate font-heading text-lg font-bold">{title}</p>
-						{location && <p className="truncate text-sm text-muted-foreground">{location.lesson.title}</p>}
+						{location && <p className="truncate text-sm text-muted-foreground">{location.lesson.title}{current?.positionSeconds == null ? '' : ` · ${formatDuration(current.positionSeconds)}`}</p>}
 					</div>
 					<div className="flex items-center gap-3 rounded-2xl border bg-card px-4 py-2">
 						<Ring size={52} value={live.length ? done / live.length : 0} label={tr(`${done} of ${live.length} cards reviewed`, `${done} de ${live.length} cartões revisados`)} center={<span className="text-[0.7rem] font-bold tabular-nums">{Math.min(done + 1, live.length)}/{live.length}</span>} />
@@ -141,7 +141,7 @@ function Deck({ courseId, title, cards, now }: { courseId: string; title: string
 								{revealed && (
 									<>
 										<p className="mx-auto max-w-prose border-t pt-6 text-lg leading-relaxed whitespace-pre-wrap">{current.back}</p>
-										{location && <Link to={href('course', location.courseId, location.lesson.path).replace(/^#/, '')} className="inline-flex min-h-11 items-center font-semibold text-primary hover:underline">{tr('Open the lesson', 'Abrir a aula')}</Link>}
+										{location && <Link to={href('course', location.courseId, location.lesson.path, current.positionSeconds).replace(/^#/, '')} className="inline-flex min-h-11 items-center font-semibold text-primary hover:underline">{current.positionSeconds === null ? tr('Open the lesson', 'Abrir a aula') : tr(`Open the lesson at ${formatDuration(current.positionSeconds)}`, `Abrir a aula em ${formatDuration(current.positionSeconds)}`)}</Link>}
 									</>
 								)}
 							</div>
