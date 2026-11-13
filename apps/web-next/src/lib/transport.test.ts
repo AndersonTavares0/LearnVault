@@ -1556,6 +1556,46 @@ describe('desktop sync over IPC', () => {
 	});
 });
 
+describe('payload errors', () => {
+	const messageOf = (run: () => unknown): string => {
+		try {
+			run();
+		} catch (cause) {
+			return (cause as Error).message;
+		}
+		throw new Error('expected a payload rejection');
+	};
+
+	it('reports a payload error in English with no Portuguese text', () => {
+		setLocale('en');
+		const malformed = [
+			() => normalizeCatalog({ nodes: [] }),
+			() => normalizeSyncState({}),
+			() => normalizeSyncResult(null),
+			() => normalizeSearchResults({ notes: 'nope' }),
+			() => normalizeStudyProgress({ media_id: 'm1' })
+		];
+		for (const run of malformed) {
+			const message = messageOf(run);
+			expect(message).toMatch(/^Invalid server response: /);
+			expect(message).not.toMatch(/inválid|ausente|incomplet[oa]|servidor|catálogo|campo/i);
+		}
+	});
+
+	it('keeps the Portuguese prefix and detail for pt-BR', () => {
+		setLocale('pt-BR');
+		expect(() => normalizeSyncState(null)).toThrow('Resposta inválida do servidor: estado de sincronização ausente.');
+		expect(() => normalizeSyncState({})).toThrow('Resposta inválida do servidor: estado de sincronização incompleto.');
+		expect(() => normalizeSyncResult(null)).toThrow('Resposta inválida do servidor: resultado de sincronização inválido.');
+	});
+
+	it('keeps a malformed desktop weekly goal as an English payload error', async () => {
+		setLocale('en');
+		vi.mocked(invoke).mockResolvedValue(9);
+		await expect(new DesktopStub().setWeeklyGoal(3)).rejects.toThrow('Invalid server response: invalid weekly goal.');
+	});
+});
+
 describe('sync payload normalization', () => {
 	it('keeps summaries and state in the camelCase contract', () => {
 		expect(normalizeSyncResult({ pushed: 2, pulled: 0, pending: 7, error: null })).toEqual({ pushed: 2, pulled: 0, pending: 7, error: null });
