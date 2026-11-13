@@ -596,10 +596,27 @@ CREATE INDEX flashcard_review_owner_card_idx
     ON flashcard_review (owner_id, card_id, reviewed_at);
 ";
 
+/// Versão 15: preferências de reprodução por dono.
+///
+/// Velocidades são guardadas em porcentagem inteira da velocidade normal (100 = 1×), sem
+/// ponto flutuante. `subtitle_language` guarda a última língua escolhida (por exemplo
+/// `pt-BR`); vazio significa "sem preferência". O desktop não tem contas e continua usando
+/// o armazenamento local do webview.
+const V15: &str = "
+CREATE TABLE player_preference (
+    owner_id TEXT PRIMARY KEY NOT NULL,
+    video_speed INTEGER NOT NULL DEFAULT 100 CHECK (video_speed BETWEEN 50 AND 300),
+    audio_speed INTEGER NOT NULL DEFAULT 100 CHECK (audio_speed BETWEEN 50 AND 300),
+    subtitle_language TEXT NOT NULL DEFAULT '' CHECK (length(subtitle_language) <= 32),
+    updated_at INTEGER NOT NULL
+);
+";
+
 /// Cadeia de migrações aplicada por [`crate::db::Database`]; o índice `n` leva o banco da
 /// versão `n` para `n + 1`.
-pub(crate) const MIGRATIONS: &[&str] =
-    &[V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14];
+pub(crate) const MIGRATIONS: &[&str] = &[
+    V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15,
+];
 
 /// Versão do schema gravada em `PRAGMA user_version` (0 quando nunca migrado).
 ///

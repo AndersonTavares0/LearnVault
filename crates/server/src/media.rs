@@ -31,6 +31,8 @@ pub(crate) struct MediaQuery {
 
 const MEDIA_STREAM_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
 const MEDIA_OPEN_TIMEOUT: Duration = Duration::from_secs(5);
+/// A subtitle is fetched whole by the player before it becomes cues, so it needs a cap.
+const MAX_SUBTITLE_BYTES: u64 = 4 * 1024 * 1024;
 
 pub(crate) async fn media(
     State(state): State<AppState>,
@@ -128,6 +130,10 @@ pub(crate) async fn media(
         Ok(Err(_join_err)) => return service_unavailable(),
         Err(_timeout_err) => return error_private_no_store(StatusCode::INTERNAL_SERVER_ERROR),
     };
+
+    if opened.kind == learnvault_core::MediaKind::Subtitle && opened.size > MAX_SUBTITLE_BYTES {
+        return error_private_no_store(StatusCode::PAYLOAD_TOO_LARGE);
+    }
 
     let Some((start, end)) = parse_range(headers.get(header::RANGE), opened.size) else {
         return range_not_satisfiable(opened.size);
@@ -288,6 +294,10 @@ fn playable_media_type(extension: &str) -> Option<&'static str> {
         "weba" => "audio/webm",
         "wma" => "audio/x-ms-wma",
         "vtt" => "text/vtt",
+        "srt" => "application/x-subrip",
+        "ass" => "text/x-ass",
+        "ssa" => "text/x-ssa",
+        "sub" => "text/plain; charset=utf-8",
         _ => return None,
     })
 }
@@ -506,6 +516,10 @@ mod tests {
             ("lesson.wav", "audio/wav"),
             ("lesson.flac", "audio/flac"),
             ("subtitles.vtt", "text/vtt"),
+            ("subtitles.srt", "application/x-subrip"),
+            ("subtitles.ass", "text/x-ass"),
+            ("subtitles.ssa", "text/x-ssa"),
+            ("subtitles.sub", "text/plain; charset=utf-8"),
         ] {
             assert_eq!(content_type(path), expected_type, "{path}");
             assert_eq!(content_disposition(path), None, "{path}");
@@ -514,13 +528,7 @@ mod tests {
 
     #[test]
     fn non_playable_extensions_use_octet_stream_and_safe_attachment_basenames() {
-        for path in [
-            "subtitles.srt",
-            "lesson.html",
-            "lesson.svg",
-            "slides.pdf",
-            "archive.zip",
-        ] {
+        for path in ["lesson.html", "lesson.svg", "slides.pdf", "archive.zip"] {
             assert_eq!(content_type(path), "application/octet-stream", "{path}");
             assert!(content_disposition(path).is_some(), "{path}");
         }

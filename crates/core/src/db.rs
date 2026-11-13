@@ -631,6 +631,16 @@ const REQUIRED_TABLES: &[TableDefinition] = &[
             ("created_at", "INTEGER", true, None, 0),
         ],
     },
+    TableDefinition {
+        name: "player_preference",
+        columns: &[
+            ("owner_id", "TEXT", true, None, 1),
+            ("video_speed", "INTEGER", true, Some("100"), 0),
+            ("audio_speed", "INTEGER", true, Some("100"), 0),
+            ("subtitle_language", "TEXT", true, Some("''"), 0),
+            ("updated_at", "INTEGER", true, None, 0),
+        ],
+    },
 ];
 
 fn definition_matches(conn: &Connection, definition: &TableDefinition) -> Result<bool> {
@@ -783,6 +793,11 @@ fn expected_checks(table: &str) -> &'static [&'static str] {
         "media_bookmark" => &[
             "position_seconds >= 0",
             "length(trim(label)) > 0 and length(label) <= 200",
+        ],
+        "player_preference" => &[
+            "video_speed between 50 and 300",
+            "audio_speed between 50 and 300",
+            "length(subtitle_language) <= 32",
         ],
         _ => &[],
     }

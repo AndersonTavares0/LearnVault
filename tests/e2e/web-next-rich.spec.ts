@@ -10,6 +10,8 @@ import { collectCspViolations, createTest, expectNoAxeViolations, signIn } from 
 const test = createTest(async (library) => {
 	await mkdir(join(library, '01 Video'), { recursive: true });
 	await writeFile(join(library, '01 Video', 'Lesson.webm'), Buffer.from(TINY_WEBM_BASE64, 'base64'));
+	// A language-suffixed sidecar subtitle must reach the lesson as a selectable caption track.
+	await writeFile(join(library, '01 Video', 'Lesson.en.vtt'), 'WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nHello\n');
 	// A lesson that holds two videos: switching between them changes the player's source.
 	await mkdir(join(library, '03 Pair', 'Both'), { recursive: true });
 	await writeFile(join(library, '03 Pair', 'Both', 'a.webm'), Buffer.from(TINY_WEBM_BASE64, 'base64'));
@@ -49,6 +51,14 @@ test('the player has one control bar that works, keeps cinema mode and passes ax
 	await page.getByRole('button', { name: 'Pause' }).click();
 	await page.getByLabel('Speed').selectOption('1.5');
 	expect(await video.evaluate((element: HTMLVideoElement) => element.playbackRate)).toBe(1.5);
+	// The sidecar subtitle is offered, can be hidden, and hiding removes the track.
+	const captions = page.locator('#player-subtitles');
+	await expect(captions).toBeVisible();
+	await expect(page.locator('video track')).toHaveCount(1);
+	await captions.selectOption('');
+	await expect(page.locator('video track')).toHaveCount(0);
+	await captions.selectOption({ label: 'Lesson.en.vtt' });
+	await expect(page.locator('video track')).toHaveCount(1);
 	await expectNoAxeViolations(page, 'lesson light', NO_CAPTIONS);
 
 	// Shortcuts act while the player has focus.
@@ -63,6 +73,11 @@ test('the player has one control bar that works, keeps cinema mode and passes ax
 	await page.getByRole('button', { name: 'Switch to the dark theme' }).click();
 	await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
 	await expectNoAxeViolations(page, 'lesson dark', NO_CAPTIONS);
+	// The server keeps the speed and subtitle language for the user, not the browser.
+	await page.evaluate(() => localStorage.clear());
+	await page.reload();
+	await expect(page.getByLabel('Speed')).toHaveValue('1.5');
+	await expect(page.locator('video track')).toHaveCount(1);
 	expect(violations).toEqual([]);
 });
 
@@ -127,7 +142,7 @@ test('every main page passes axe on the dark theme', async ({ page, origin }) =>
 	await signIn(page, origin);
 	await page.getByRole('button', { name: 'Switch to the dark theme' }).click();
 	await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-	for (const route of ['#/', '#/progress', '#/notes', '#/review', '#/settings', '#/settings#users']) {
+	for (const route of ['#/', '#/progress', '#/notes', '#/review', '#/history', '#/settings', '#/settings#users']) {
 		await page.goto(`${origin}/${route}`);
 		await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 		await expectNoAxeViolations(page, `dark ${route}`);

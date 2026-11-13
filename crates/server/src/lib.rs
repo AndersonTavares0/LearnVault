@@ -14,6 +14,7 @@ mod covers;
 mod health;
 mod media;
 mod ordering;
+mod player;
 mod search;
 mod spa;
 mod state;
@@ -128,6 +129,10 @@ pub fn build_router(state: AppState) -> Router {
             post(study::set_lesson_favorite),
         )
         .route("/api/study/capabilities", get(study::capabilities))
+        .route(
+            "/api/player/preferences",
+            get(player::read).put(player::write),
+        )
         .route(
             "/api/study/notes",
             get(study::list_notes)

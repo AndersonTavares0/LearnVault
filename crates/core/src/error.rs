@@ -403,6 +403,10 @@ pub enum Error {
         /// Valor recusado.
         weekly_goal: i64,
     },
+
+    /// A playback speed or subtitle language is outside the accepted bounds.
+    #[error("preferência de reprodução inválida")]
+    InvalidPlayerPreference,
 }
 
 /// Resultado das operações do domínio.

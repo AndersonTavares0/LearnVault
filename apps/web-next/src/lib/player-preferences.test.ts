@@ -23,6 +23,7 @@ describe('player preferences', () => {
 			audioSpeed: 1,
 			videoSpeed: 1,
 			autoNext: false,
+			subtitleLanguage: '',
 			lessons: {}
 		});
 	});
@@ -40,7 +41,8 @@ describe('player preferences', () => {
 			...createDefaultPlayerPreferences(),
 			audioSpeed: 1.5 as const,
 			videoSpeed: 0.75 as const,
-			autoNext: true
+			autoNext: true,
+			subtitleLanguage: 'pt-BR'
 		};
 
 		expect(writePlayerPreferences(storage, 'http-user:user-a', preferences)).toBe(true);

@@ -92,6 +92,7 @@ fn all_domain_tables_are_created() -> TestResult {
         "flashcard",
         "flashcard_review",
         "media_bookmark",
+        "player_preference",
         "study_note_fts",
         "media_fts",
         "course_fts",

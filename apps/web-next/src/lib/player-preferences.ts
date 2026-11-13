@@ -6,6 +6,10 @@ const MAX_STORED_BYTES = 1_048_576;
 const MAX_LESSONS = 5_000;
 const MAX_ID_LENGTH = 256;
 const MAX_LESSON_KEY_LENGTH = 8_192;
+const MAX_SUBTITLE_LANGUAGE_LENGTH = 32;
+
+/** Query key shared by the preferences hook and the test renderer. */
+export const PLAYBACK_PREFERENCES_KEY = ['playback-preferences'] as const;
 
 export interface PlayerPreferenceStorage {
 	getItem(key: string): string | null;
@@ -21,11 +25,13 @@ export type PlayerPreferences = {
 	audioSpeed: PlaybackSpeed;
 	videoSpeed: PlaybackSpeed;
 	autoNext: boolean;
+	/** Last chosen subtitle language; empty means no preference. */
+	subtitleLanguage: string;
 	lessons: Record<string, LessonPlayerPreference>;
 };
 
 export function createDefaultPlayerPreferences(): PlayerPreferences {
-	return { audioSpeed: 1, videoSpeed: 1, autoNext: false, lessons: {} };
+	return { audioSpeed: 1, videoSpeed: 1, autoNext: false, subtitleLanguage: '', lessons: {} };
 }
 
 /** Preferências web são separadas por usuário; o desktop tem um perfil local fixo. */
@@ -50,6 +56,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function validIdentifier(value: unknown): value is string {
 	return typeof value === 'string' && value.length > 0 && value.length <= MAX_ID_LENGTH;
+}
+
+/** A stored language tag is ASCII letters/digits with `-` or `_`; anything else is dropped. */
+export function normalizeSubtitleLanguage(value: unknown): string {
+	return typeof value === 'string' &&
+		value.length <= MAX_SUBTITLE_LANGUAGE_LENGTH &&
+		/^[A-Za-z0-9_-]*$/.test(value)
+		? value
+		: '';
 }
 
 function validLessonKey(value: string): boolean {
@@ -87,6 +102,7 @@ function normalizePreferences(value: unknown): PlayerPreferences {
 		audioSpeed: clampSpeed(typeof value.audioSpeed === 'number' ? value.audioSpeed : 1),
 		videoSpeed: clampSpeed(typeof value.videoSpeed === 'number' ? value.videoSpeed : 1),
 		autoNext: typeof value.autoNext === 'boolean' ? value.autoNext : false,
+		subtitleLanguage: normalizeSubtitleLanguage(value.subtitleLanguage),
 		lessons
 	};
 }

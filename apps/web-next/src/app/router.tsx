@@ -9,6 +9,7 @@ import { LoginPage } from '@/pages/login';
 import { CourseRoute } from '@/pages/course';
 import { ProgressPage } from '@/pages/progress';
 import { NotesPage } from '@/pages/notes';
+import { HistoryPage } from '@/pages/history';
 import { ReviewPage } from '@/pages/review';
 import { SettingsPage } from '@/pages/settings';
 
@@ -42,6 +43,7 @@ export const routes: RouteObject[] = [
 			{ path: 'progress', element: <ProgressPage /> },
 			{ path: 'review', element: <ReviewPage /> },
 			{ path: 'notes', element: <NotesPage /> },
+			{ path: 'history', element: <HistoryPage /> },
 			{ path: 'settings', element: <SettingsPage /> }
 		]
 	},

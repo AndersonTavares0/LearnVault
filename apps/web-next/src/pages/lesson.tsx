@@ -365,7 +365,10 @@ function RecentlyWatched({ items, catalog, currentMediaId }: { items: StudyProgr
 	if (rows.length === 0) return null;
 	return (
 		<section aria-labelledby="recently-watched-heading" className="border-t pt-4">
-			<h2 id="recently-watched-heading" className="font-heading text-lg font-semibold">{tr('Recently watched', 'Assistidas recentemente')}</h2>
+			<div className="flex items-center justify-between gap-3">
+				<h2 id="recently-watched-heading" className="font-heading text-lg font-semibold">{tr('Recently watched', 'Assistidas recentemente')}</h2>
+				<Link to="/history" className="text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">{tr('View all', 'Ver tudo')}</Link>
+			</div>
 			<ul className="mt-3 divide-y">
 				{rows.map(({ item, found, key }) => (
 					<li key={key}>

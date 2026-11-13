@@ -827,7 +827,7 @@ async fn current_database_carries_study_tables_and_constraints() {
         .connection()
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 14, "o formato persistido está na versão 14");
+    assert_eq!(version, 15, "o formato persistido está na versão 15");
     let present: i64 = db
         .connection()
         .query_row(
@@ -1504,4 +1504,61 @@ async fn revoked_course_access_blocks_course_linked_study_reads_and_writes() {
             .len(),
         1
     );
+}
+
+#[tokio::test]
+async fn playback_preferences_round_trip_per_owner_and_reject_invalid_values() {
+    let temp = tempfile::tempdir().unwrap();
+    seed(&temp, &["m1"], &[]);
+    seed_user(&temp, READER_ID, READER, READER_PASSWORD);
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+
+    let admin_cookie = login(&app, ADMIN, ADMIN_PASSWORD).await;
+    let defaults = json_body(
+        app.clone()
+            .oneshot(get_with_cookie("/api/player/preferences", &admin_cookie))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(defaults["video_speed"], 100);
+    assert_eq!(defaults["audio_speed"], 100);
+    assert_eq!(defaults["subtitle_language"], "");
+
+    let response = app
+        .clone()
+        .oneshot(put_json(
+            "/api/player/preferences",
+            &admin_cookie,
+            r#"{"video_speed":150,"audio_speed":125,"subtitle_language":"pt-BR"}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_private_no_store(&response);
+    let saved = json_body(response).await;
+    assert_eq!(saved["video_speed"], 150);
+    assert_eq!(saved["audio_speed"], 125);
+    assert_eq!(saved["subtitle_language"], "pt-BR");
+
+    let reader_cookie = login(&app, READER, READER_PASSWORD).await;
+    let reader = json_body(
+        app.clone()
+            .oneshot(get_with_cookie("/api/player/preferences", &reader_cookie))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(reader["video_speed"], 100, "preferences are per owner");
+
+    let invalid = app
+        .clone()
+        .oneshot(put_json(
+            "/api/player/preferences",
+            &reader_cookie,
+            r#"{"video_speed":900,"audio_speed":100,"subtitle_language":""}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), StatusCode::UNPROCESSABLE_ENTITY);
 }

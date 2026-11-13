@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { tr } from '@/lib/i18n';
 import {
 	formatDuration, mediaAvailability, mediaPlaybackKind, nextSpeed, PLAYBACK_SPEEDS, playerShortcutAction, requiresTranscodingProbe,
-	resumeTarget, seekPercentPosition, selectPlayableMedia, selectPlayableSubtitle, shouldSavePosition, srtConversionSupported, srtToWebVtt, stepVolume, subtitleFormat, type PlaybackSpeed
+	resumeTarget, seekPercentPosition, selectPlayableMedia, selectPlayableSubtitle, shouldSavePosition, srtConversionSupported, srtToWebVtt, stepVolume, subtitleFormat, subtitleLanguage, type PlaybackSpeed
 } from '@/lib/player';
 import { lessonPreferenceKey, updateLessonPreference, type PlayerPreferences } from '@/lib/player-preferences';
 import { transport, type FileEntry, type Lesson } from '@/lib/transport';
@@ -73,7 +73,7 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 	const lessonPreference = preferences.lessons[lessonPreferenceKey(courseId, lesson.path)] ?? {};
 	const available = (files: FileEntry[]) => files.filter((file) => file.availability?.trim().toLowerCase() !== 'missing');
 	const playable = selectPlayableMedia(lesson.media, lessonPreference.mediaId);
-	const subtitle = selectPlayableSubtitle(lesson.subtitles, lessonPreference.subtitleId);
+	const subtitle = selectPlayableSubtitle(lesson.subtitles, lessonPreference.subtitleId, preferences.subtitleLanguage);
 	const captions = useCaptions(subtitle, courseId);
 	const capabilities = useQuery({ queryKey: ['media-capabilities'], staleTime: Infinity, queryFn: () => transport.mediaCapabilities() });
 	const mediaId = playable?.mediaId ?? null;
@@ -432,7 +432,12 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 				{available(lesson.subtitles).length > 0 && (
 					<>
 						<Label htmlFor="player-subtitles" className="ml-2">{tr('Subtitles', 'Legendas')}</Label>
-						<select id="player-subtitles" value={lessonPreference.subtitleId === null ? '' : subtitle?.mediaId ?? ''} onChange={(event) => onPreferencesChange(updateLessonPreference(preferences, courseId, lesson.path, { subtitleId: event.target.value || null }))} className="h-11 max-w-48 rounded-lg border border-input bg-background px-2 text-sm">
+						<select id="player-subtitles" value={lessonPreference.subtitleId === null ? '' : subtitle?.mediaId ?? ''} onChange={(event) => {
+							const chosen = available(lesson.subtitles).find((file) => file.mediaId === event.target.value) ?? null;
+							const next = updateLessonPreference(preferences, courseId, lesson.path, { subtitleId: chosen?.mediaId ?? null });
+							// The language follows the chosen track, so another lesson prefers it too.
+							onPreferencesChange({ ...next, subtitleLanguage: chosen ? subtitleLanguage(chosen.name) ?? preferences.subtitleLanguage : preferences.subtitleLanguage });
+						}} className="h-11 max-w-48 rounded-lg border border-input bg-background px-2 text-sm">
 							<option value="">{tr('Off', 'Desligadas')}</option>
 							{available(lesson.subtitles).map((file) => <option key={file.mediaId} value={file.mediaId}>{file.name}</option>)}
 						</select>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clampSpeed, formatDuration, mediaAvailability, mediaPlaybackKind, nextSpeed, PLAYBACK_SPEEDS, playerShortcutAction, resumeTarget, seekPercentPosition, selectPlayableMedia, selectPlayableSubtitle, shouldAutoAdvance, shouldSavePosition, srtConversionSupported, srtToWebVtt, stepVolume, studySyncEnabled, studySyncSupported, subtitleFormat } from './player';
+import { clampSpeed, formatDuration, mediaAvailability, mediaPlaybackKind, nextSpeed, PLAYBACK_SPEEDS, playerShortcutAction, resumeTarget, seekPercentPosition, selectPlayableMedia, selectPlayableSubtitle, shouldAutoAdvance, shouldSavePosition, srtConversionSupported, srtToWebVtt, stepVolume, studySyncEnabled, studySyncSupported, subtitleFormat, subtitleLanguage } from './player';
 import type { FileEntry } from './transport';
 
 describe('player media and subtitles', () => {
@@ -36,6 +36,20 @@ describe('player media and subtitles', () => {
 		expect(selectPlayableSubtitle(subtitles, 'subtitle-b')?.mediaId).toBe('subtitle-b');
 		expect(selectPlayableSubtitle(subtitles, 'removed')?.mediaId).toBe('subtitle-a');
 		expect(selectPlayableSubtitle(subtitles, null)).toBeNull();
+	});
+	it('reads sidecar language tags and prefers the remembered language', () => {
+		const subtitles = [
+			{ name: 'aula.en.vtt', path: 'aula.en.vtt', size: 1, mediaId: 'subtitle-en', availability: 'available' },
+			{ name: 'aula.pt-BR.srt', path: 'aula.pt-BR.srt', size: 2, mediaId: 'subtitle-pt', availability: 'available' }
+		];
+
+		expect(subtitleLanguage('aula.pt-BR.vtt')).toBe('pt-BR');
+		expect(subtitleLanguage('aula.en.srt')).toBe('en');
+		expect(subtitleLanguage('aula.vtt')).toBeNull();
+		expect(selectPlayableSubtitle(subtitles, undefined, 'pt-br')?.mediaId).toBe('subtitle-pt');
+		expect(selectPlayableSubtitle(subtitles, undefined, 'fr')).toBe(subtitles[0]);
+		// An explicit per-lesson choice still wins over the language preference.
+		expect(selectPlayableSubtitle(subtitles, 'subtitle-en', 'pt-BR')?.mediaId).toBe('subtitle-en');
 	});
 	it('converts SRT deterministically and classifies formats', () => {
 		expect(srtToWebVtt('1\r\n00:00:01,500 --> 00:00:02,500\r\nOlá\r\n')).toBe('WEBVTT\n\n00:00:01.500 --> 00:00:02.500\nOlá\n');
