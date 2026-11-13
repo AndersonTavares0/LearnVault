@@ -2,9 +2,9 @@
 
 use learnvault_core::paths::relative_path_key;
 use learnvault_core::{
-    Database, Error, KeyMode, ReviewRating, create_flashcard, delete_flashcard,
-    list_all_flashcards, list_flashcard_reviews, list_flashcards, review_flashcard,
-    update_flashcard,
+    Database, Error, KeyMode, MAX_FLASHCARD_REVIEWS, ReviewRating, count_due_flashcards,
+    count_flashcard_reviews, create_flashcard, delete_flashcard, list_all_flashcards,
+    list_flashcard_reviews, list_flashcards, review_flashcard, update_flashcard,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -290,17 +290,89 @@ fn flashcard_records_lesson_position_and_appends_review_log() -> TestResult {
         "Again devolve o cartão dez minutos depois"
     );
 
-    let reviews = list_flashcard_reviews(&db, OWNER, &card.card_id)?;
+    let reviews = list_flashcard_reviews(&db, OWNER, &card.card_id, 10)?;
     assert_eq!(reviews.len(), 2);
-    assert_eq!(reviews[0].rating, ReviewRating::Good);
-    assert_eq!(reviews[0].previous_interval_days, 0);
-    assert_eq!(reviews[0].next_due, first.next_due);
-    assert_eq!(reviews[1].rating, ReviewRating::Again);
-    assert_eq!(reviews[1].previous_interval_days, 1);
-    assert_eq!(reviews[1].next_due, second.next_due);
+    assert_eq!(
+        reviews[0].rating,
+        ReviewRating::Again,
+        "a revisão mais nova vem primeiro"
+    );
+    assert_eq!(reviews[0].previous_interval_days, 1);
+    assert_eq!(reviews[0].next_due, second.next_due);
+    assert_eq!(reviews[1].rating, ReviewRating::Good);
+    assert_eq!(reviews[1].previous_interval_days, 0);
+    assert_eq!(reviews[1].next_due, first.next_due);
+    assert_eq!(count_flashcard_reviews(&db, OWNER, &card.card_id)?, 2);
+    assert_eq!(
+        list_flashcard_reviews(&db, OWNER, &card.card_id, 1)?.len(),
+        1,
+        "o limite corta o histórico"
+    );
     assert!(
-        list_flashcard_reviews(&db, OTHER, &card.card_id)?.is_empty(),
+        list_flashcard_reviews(&db, OWNER, &card.card_id, 0)?.is_empty(),
+        "limite zero não consulta nada"
+    );
+    assert!(
+        list_flashcard_reviews(&db, OTHER, &card.card_id, 10)?.is_empty(),
         "o histórico é isolado por dono"
+    );
+    assert_eq!(count_flashcard_reviews(&db, OTHER, &card.card_id)?, 0);
+
+    Ok(())
+}
+
+#[test]
+fn due_count_matches_the_review_queue() -> TestResult {
+    let db = library_db()?;
+    assert_eq!(count_due_flashcards(&db, OWNER)?, 0, "sem cartões");
+
+    let never_reviewed = create_flashcard(&db, OWNER, MEDIA_A, "Frente", "Verso", None)?;
+    assert_eq!(
+        count_due_flashcards(&db, OWNER)?,
+        1,
+        "cartão nunca revisado vence agora"
+    );
+
+    let scheduled = create_flashcard(&db, OWNER, MEDIA_B, "Outra", "Verso", None)?;
+    review_flashcard(&db, OWNER, &scheduled.card_id, ReviewRating::Good)?;
+    assert_eq!(
+        count_due_flashcards(&db, OWNER)?,
+        1,
+        "um next_due futuro sai da fila"
+    );
+
+    review_flashcard(&db, OWNER, &never_reviewed.card_id, ReviewRating::Again)?;
+    assert_eq!(
+        count_due_flashcards(&db, OWNER)?,
+        0,
+        "Again também agenda para o futuro"
+    );
+
+    let _ = create_flashcard(&db, OTHER, MEDIA_A, "De outro dono", "Verso", None)?;
+    assert_eq!(
+        count_due_flashcards(&db, OWNER)?,
+        0,
+        "o cartão de outro dono não entra na contagem"
+    );
+    assert_eq!(count_due_flashcards(&db, OTHER)?, 1);
+
+    Ok(())
+}
+
+#[test]
+fn review_list_caps_the_limit() -> TestResult {
+    let db = library_db()?;
+    let card = create_flashcard(&db, OWNER, MEDIA_A, "Frente", "Verso", None)?;
+    for _ in 0..MAX_FLASHCARD_REVIEWS + 2 {
+        review_flashcard(&db, OWNER, &card.card_id, ReviewRating::Again)?;
+    }
+
+    let reviews = list_flashcard_reviews(&db, OWNER, &card.card_id, usize::MAX)?;
+    assert_eq!(reviews.len(), MAX_FLASHCARD_REVIEWS);
+    assert_eq!(
+        count_flashcard_reviews(&db, OWNER, &card.card_id)?,
+        MAX_FLASHCARD_REVIEWS as i64 + 2,
+        "a contagem enxerga além do teto"
     );
 
     Ok(())

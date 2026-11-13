@@ -18,10 +18,11 @@ use tauri::State;
 use crate::config::DesktopConfigDto;
 use crate::courses::CourseEntry;
 use crate::dto::{
-    CatalogDto, CatalogNodeDto, CoverDto, CoverRemovalDto, FlashcardDto, FocusSessionDto,
-    FocusSummaryDto, MediaBookmarkDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto,
-    NewPdfAnnotationDto, PdfAnnotationDto, RecentStudyDto, RescanSummaryDto, RewardSummaryDto,
-    SearchResultsDto, StudyFavoritesDto, StudyNoteDto, StudyProgressDto, StudySummaryDto,
+    CatalogDto, CatalogNodeDto, CoverDto, CoverRemovalDto, FlashcardDto, FlashcardReviewsDto,
+    FocusSessionDto, FocusSummaryDto, MediaBookmarkDto, MediaRemovalImpactDto,
+    MediaRemovalOutcomeDto, NewPdfAnnotationDto, PdfAnnotationDto, RecentStudyDto,
+    RescanSummaryDto, RewardSummaryDto, SearchResultsDto, StudyFavoritesDto, StudyNoteDto,
+    StudyProgressDto, StudySummaryDto,
 };
 use crate::error::IpcError;
 use crate::ordering::CourseOrders;
@@ -516,6 +517,28 @@ pub async fn desktop_list_all_flashcards(
 ) -> Result<Vec<FlashcardDto>, IpcError> {
     let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || state.list_all_flashcards())
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// IPC command: lists the recent review history of one local card.
+#[tauri::command]
+pub async fn desktop_list_flashcard_reviews(
+    state: State<'_, DesktopState>,
+    card_id: String,
+    limit: Option<usize>,
+) -> Result<FlashcardReviewsDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.list_flashcard_reviews(&card_id, limit))
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// IPC command: counts the local owner's cards that are due now.
+#[tauri::command]
+pub async fn desktop_due_flashcard_count(state: State<'_, DesktopState>) -> Result<i64, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.count_due_flashcards())
         .await
         .map_err(|_| IpcError::study_unavailable())?
 }

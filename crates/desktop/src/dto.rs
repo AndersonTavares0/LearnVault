@@ -466,6 +466,45 @@ impl From<learnvault_core::Flashcard> for FlashcardDto {
     }
 }
 
+/// Uma revisão registrada no histórico de um cartão do dono local.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct FlashcardReviewDto {
+    /// Identificador sequencial da revisão.
+    pub review_id: i64,
+    /// Cartão revisado.
+    pub card_id: String,
+    /// Avaliação dada pelo aluno, `again` ou `good`.
+    pub rating: &'static str,
+    /// Intervalo em dias antes desta revisão.
+    pub previous_interval_days: i64,
+    /// Próximo vencimento calculado por esta revisão.
+    pub next_due: i64,
+    /// Instante da revisão em segundos Unix.
+    pub reviewed_at: i64,
+}
+
+impl From<learnvault_core::FlashcardReview> for FlashcardReviewDto {
+    fn from(review: learnvault_core::FlashcardReview) -> Self {
+        Self {
+            review_id: review.review_id,
+            card_id: review.card_id,
+            rating: review.rating.as_str(),
+            previous_interval_days: review.previous_interval_days,
+            next_due: review.next_due,
+            reviewed_at: review.reviewed_at,
+        }
+    }
+}
+
+/// Histórico recente de um cartão com a contagem completa do log.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct FlashcardReviewsDto {
+    /// Revisões da mais nova para a mais antiga, até o limite pedido.
+    pub items: Vec<FlashcardReviewDto>,
+    /// Total de revisões registradas, mesmo além do limite.
+    pub total: i64,
+}
+
 /// Um dia da semana corrente na ofensiva de estudo.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct StudyDayDto {

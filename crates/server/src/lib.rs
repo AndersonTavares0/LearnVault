@@ -16,6 +16,7 @@ mod indexing;
 mod media;
 mod ordering;
 mod player;
+mod reviews;
 mod search;
 mod secret;
 mod sources;
@@ -190,6 +191,8 @@ pub fn build_router(state: AppState) -> Router {
             "/api/study/flashcards/{id}/review",
             post(study::review_flashcard).layer(DefaultBodyLimit::max(16 * 1024)),
         )
+        .route("/api/study/flashcards/{id}/reviews", get(reviews::history))
+        .route("/api/study/flashcards/due", get(reviews::due_count))
         .route(
             "/api/focus/sessions",
             get(study::list_focus_sessions).post(study::record_focus_session),

@@ -192,3 +192,145 @@ async fn cards_of_every_lesson_are_listed_for_the_session_user_only() {
         .unwrap();
     assert_eq!(json_body(one).await["items"].as_array().unwrap().len(), 1);
 }
+
+async fn create_card(app: &axum::Router, cookie: &str, media: &str, front: &str) -> String {
+    let response = app
+        .clone()
+        .oneshot(post_json(
+            "/api/study/flashcards",
+            cookie,
+            &format!(r#"{{"media_id":"{media}","front":"{front}","back":"x"}}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    json_body(response).await["card_id"]
+        .as_str()
+        .unwrap()
+        .to_owned()
+}
+
+async fn review_card(app: &axum::Router, cookie: &str, card_id: &str, rating: &str) {
+    let response = app
+        .clone()
+        .oneshot(post_json(
+            &format!("/api/study/flashcards/{card_id}/review"),
+            cookie,
+            &format!(r#"{{"rating":"{rating}"}}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK, "revisão de teste");
+}
+
+#[tokio::test]
+async fn review_history_is_owner_scoped_newest_first_and_capped() {
+    let temp = tempfile::tempdir().unwrap();
+    seed_user(&temp, READER_ID, READER, READER_PASSWORD);
+    seed(&temp, &["m1"], &[]);
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let admin = login(&app, ADMIN, ADMIN_PASSWORD).await;
+    let reader = login(&app, READER, READER_PASSWORD).await;
+    let card_id = create_card(&app, &admin, "m1", "histórico").await;
+
+    review_card(&app, &admin, &card_id, "good").await;
+    review_card(&app, &admin, &card_id, "again").await;
+
+    let unauthorized = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/study/flashcards/{card_id}/reviews"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(unauthorized.status(), StatusCode::UNAUTHORIZED);
+
+    let response = app
+        .clone()
+        .oneshot(get_with_cookie(
+            &format!("/api/study/flashcards/{card_id}/reviews?limit=1"),
+            &admin,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_private_no_store(&response);
+    let body = json_body(response).await;
+    assert_eq!(body["total"], 2, "a contagem enxerga além do limite");
+    let items = body["items"].as_array().unwrap();
+    assert_eq!(items.len(), 1, "o limite corta a listagem");
+    assert_eq!(
+        items[0]["rating"], "again",
+        "a revisão mais nova vem primeiro"
+    );
+    assert_eq!(items[0]["previous_interval_days"], 1);
+    assert_eq!(items[0]["card_id"], card_id);
+
+    let empty = app
+        .clone()
+        .oneshot(get_with_cookie(
+            &format!("/api/study/flashcards/{card_id}/reviews?limit=0"),
+            &admin,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(json_body(empty).await["items"].as_array().unwrap().len(), 0);
+
+    let other = app
+        .oneshot(get_with_cookie(
+            &format!("/api/study/flashcards/{card_id}/reviews"),
+            &reader,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(other.status(), StatusCode::OK);
+    let other = json_body(other).await;
+    assert_eq!(other["total"], 0, "o histórico é isolado por dono");
+    assert_eq!(other["items"].as_array().unwrap().len(), 0);
+}
+
+#[tokio::test]
+async fn due_count_matches_the_queue_and_is_owner_scoped() {
+    let temp = tempfile::tempdir().unwrap();
+    seed_user(&temp, READER_ID, READER, READER_PASSWORD);
+    seed(&temp, &["m1"], &[]);
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let admin = login(&app, ADMIN, ADMIN_PASSWORD).await;
+    let reader = login(&app, READER, READER_PASSWORD).await;
+
+    let due = |cookie: String| {
+        let app = app.clone();
+        async move {
+            let response = app
+                .oneshot(get_with_cookie("/api/study/flashcards/due", &cookie))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            assert_private_no_store(&response);
+            json_body(response).await["due"].as_i64().unwrap()
+        }
+    };
+
+    assert_eq!(due(admin.clone()).await, 0, "sem cartões");
+    let first = create_card(&app, &admin, "m1", "primeiro").await;
+    assert_eq!(due(admin.clone()).await, 1, "cartão nunca revisado vence");
+    assert_eq!(due(reader.clone()).await, 0, "o cartão é de outro dono");
+
+    review_card(&app, &admin, &first, "good").await;
+    assert_eq!(due(admin.clone()).await, 0, "next_due futuro sai da fila");
+
+    let _second = create_card(&app, &admin, "m1", "segundo").await;
+    assert_eq!(due(admin).await, 1);
+
+    let unauthorized = app
+        .oneshot(
+            Request::get("/api/study/flashcards/due")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(unauthorized.status(), StatusCode::UNAUTHORIZED);
+}
