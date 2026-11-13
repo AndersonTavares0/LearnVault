@@ -292,7 +292,8 @@ fn build_registers_the_app_commands_in_the_acl_manifest() {
         "desktop_set_course_order",
         "desktop_reset_course_order",
         "desktop_check_update",
-        "desktop_install_update",
+        "desktop_download_update",
+        "desktop_restart_to_update",
         "desktop_media_capabilities",
         "desktop_open_in_system_player",
         "desktop_playback_preferences",
@@ -368,7 +369,8 @@ fn capability_grants_only_the_core_default_and_the_app_commands() {
     assert!(permissions.contains(&"allow-desktop-set-course-order"));
     assert!(permissions.contains(&"allow-desktop-reset-course-order"));
     assert!(permissions.contains(&"allow-desktop-check-update"));
-    assert!(permissions.contains(&"allow-desktop-install-update"));
+    assert!(permissions.contains(&"allow-desktop-download-update"));
+    assert!(permissions.contains(&"allow-desktop-restart-to-update"));
     assert!(permissions.contains(&"allow-desktop-media-capabilities"));
     assert!(permissions.contains(&"allow-desktop-open-in-system-player"));
     assert!(permissions.contains(&"allow-desktop-playback-preferences"));
@@ -380,7 +382,7 @@ fn capability_grants_only_the_core_default_and_the_app_commands() {
     assert!(permissions.contains(&"allow-desktop-sync-now"));
     assert_eq!(
         permissions.len(),
-        57,
+        58,
         "a capability não pode ampliar além do núcleo, dos controles da titlebar e dos comandos do app: {permissions:?}"
     );
 }
@@ -552,6 +554,9 @@ fn invoke_handler_registers_only_the_desktop_commands() {
         "desktop_remove_course_cover",
         "desktop_set_course_order",
         "desktop_reset_course_order",
+        "desktop_check_update",
+        "desktop_download_update",
+        "desktop_restart_to_update",
     ] {
         assert!(
             commands.contains(command),

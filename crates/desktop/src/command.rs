@@ -826,9 +826,15 @@ pub async fn desktop_check_update(
     }
 }
 
-/// Baixa e aplica a atualização assinada (Ed25519) e reinicia o aplicativo.
+/// Downloads the signed update and holds its bytes for [`desktop_restart_to_update`].
+///
+/// The webview gets no bytes, URL, or progress: `true` means the update is ready to install,
+/// `false` means no update is offered. The download never blocks the app and never restarts it.
 #[tauri::command]
-pub async fn desktop_install_update(app: tauri::AppHandle) -> Result<bool, IpcError> {
+pub async fn desktop_download_update(
+    app: tauri::AppHandle,
+    state: State<'_, DesktopState>,
+) -> Result<bool, IpcError> {
     use tauri_plugin_updater::UpdaterExt;
 
     let updater = app.updater().map_err(|_| IpcError::update_unavailable())?;
@@ -837,10 +843,38 @@ pub async fn desktop_install_update(app: tauri::AppHandle) -> Result<bool, IpcEr
         Ok(None) => return Ok(false),
         Err(_) => return Err(IpcError::update_check_failed()),
     };
-
-    update
-        .download_and_install(|_downloaded, _total| {}, || {})
+    let version = update.version.clone();
+    let bytes = update
+        .download(|_downloaded, _total| {}, || {})
         .await
+        .map_err(|_| IpcError::update_unavailable())?;
+    state.hold_update(version, bytes)?;
+    Ok(true)
+}
+
+/// Installs the held update and restarts the application, on an explicit request only.
+///
+/// The version is checked again before installing: the held bytes are applied only while the
+/// same release is still offered, and a missing download is refused instead of restarting into
+/// nothing. Failures stay sanitized ([`IpcError`]) and never echo a path or a URL.
+#[tauri::command]
+pub async fn desktop_restart_to_update(
+    app: tauri::AppHandle,
+    state: State<'_, DesktopState>,
+) -> Result<bool, IpcError> {
+    use tauri_plugin_updater::UpdaterExt;
+
+    let Some(pending) = state.take_update()? else {
+        return Err(IpcError::update_unavailable());
+    };
+    let updater = app.updater().map_err(|_| IpcError::update_unavailable())?;
+    let update = match updater.check().await {
+        Ok(Some(update)) if update.version == pending.version => update,
+        Ok(_) => return Err(IpcError::update_unavailable()),
+        Err(_) => return Err(IpcError::update_check_failed()),
+    };
+    update
+        .install(&pending.bytes)
         .map_err(|_| IpcError::update_unavailable())?;
 
     app.restart();

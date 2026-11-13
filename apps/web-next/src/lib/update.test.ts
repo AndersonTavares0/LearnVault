@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { setLocale } from './i18n';
 import type { UpdateStatus } from './transport';
-import { updateMessage, updateOutcome, updateReleaseUrl } from './update';
+import { markUpdateChecked, readUpdateCheckAt, shouldCheckForUpdate, updateMessage, updateOutcome, updateReleaseUrl, UPDATE_CHECK_INTERVAL_MS } from './update';
+
+function memoryStorage(): Pick<Storage, 'getItem' | 'setItem'> {
+	const values = new Map<string, string>();
+	return { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => { values.set(key, value); } };
+}
 
 function status(overrides: Partial<UpdateStatus> = {}): UpdateStatus {
 	return { current: '0.3.0', enabled: true, available: false, latest: null, releasedAt: null, url: null, changelog: null, checkedAt: '1', error: null, ...overrides };
@@ -75,5 +80,30 @@ describe('update presentation', () => {
 		expect(updateReleaseUrl(status({ ...available, url: 'https://github.com/AndersonTavares0/LearnVault/releases/tag/v0.5.0' }))).toBeNull();
 		expect(updateReleaseUrl(status({ ...available, url: 'https://user@github.com/AndersonTavares0/LearnVault/releases/tag/v0.4.0' }))).toBeNull();
 		expect(updateReleaseUrl(status({ ...available, url: 'https://github.com/AndersonTavares0/LearnVault/releases/tag/v0.4.0?redirect=1' }))).toBeNull();
+	});
+});
+
+describe('desktop update schedule', () => {
+	const now = 1_800_000_000_000;
+
+	it('checks on the first launch and never twice within a day', () => {
+		const storage = memoryStorage();
+		expect(shouldCheckForUpdate(readUpdateCheckAt(storage), now)).toBe(true);
+		markUpdateChecked(storage, now);
+		expect(readUpdateCheckAt(storage)).toBe(now);
+		expect(shouldCheckForUpdate(readUpdateCheckAt(storage), now + UPDATE_CHECK_INTERVAL_MS - 1)).toBe(false);
+	});
+
+	it('checks again after a full day', () => {
+		const storage = memoryStorage();
+		markUpdateChecked(storage, now);
+		expect(shouldCheckForUpdate(readUpdateCheckAt(storage), now + UPDATE_CHECK_INTERVAL_MS)).toBe(true);
+	});
+
+	it('treats a missing or broken stamp as never checked', () => {
+		const storage = memoryStorage();
+		storage.setItem('learnvault-update-checked-at', 'not a number');
+		expect(readUpdateCheckAt(storage)).toBeNull();
+		expect(shouldCheckForUpdate(readUpdateCheckAt(null), now)).toBe(true);
 	});
 });

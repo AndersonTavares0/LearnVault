@@ -25,6 +25,16 @@ If you are developing or studying the architecture, start with the [README](../.
 
 When enabled in configuration, the server queries the public GitHub Releases API over HTTPS and compares the latest stable tag with the local running version using strict SemVer. The check times out after 5 seconds, consumes at most 64 KiB, and caches results in-process for 1 hour. No binaries or files are ever downloaded or installed automatically. Local builds (`0.0.0`) skip remote checks.
 
+### Desktop Automatic Update Checks
+
+The desktop application checks for a new version on launch and at most once every 24 hours, recording the last check time locally. A failed check stays quiet: the app keeps working offline and offers no retry loop. The result appears in the same update banner used everywhere else.
+
+From the banner (or Settings → Updates), **Download update** fetches the signed manifest artifact in the background without pausing playback or reloading the page. Once the bytes are held, the banner offers **Restart to update**, with the release notes shown in place. Nothing restarts on its own: the click is the only trigger, so an open lesson is never interrupted. At install time the app checks the release again and applies the held bytes only while the same version is still offered; every failure is reported as a generic message with no path or URL.
+
+### Desktop Database Before Migration
+
+Before the desktop opens the database on a version whose schema is newer than the file on disk, it copies the file next to itself as `<database>.backup-<old-version>-<timestamp>` (for example `learnvault.sqlite.backup-12-1763000000`). The three newest backups are kept and older ones are pruned. The copy is best effort: a failed backup never blocks startup, but it is reported on stderr so it is not mistaken for success.
+
 ### Verify the container image
 
 From the first release after this was added, every image pushed to GHCR is signed by the release workflow with cosign (keyless: no key to keep, the signature is tied to the workflow run). To check an image yourself:

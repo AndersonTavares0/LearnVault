@@ -290,7 +290,9 @@ export interface Transport {
 	deleteUserAvatar(): Promise<void>;
 	// Verifica a atualização; `force` ignora o intervalo mínimo de cache do servidor.
 	checkUpdate(force?: boolean): Promise<UpdateStatus>;
-	installUpdate?(): Promise<boolean>;
+	// Desktop: fetch the signed update and hold it, then install it and restart on request.
+	downloadUpdate?(): Promise<boolean>;
+	restartToUpdate?(): Promise<boolean>;
 	updateHistory(): Promise<UpdateHistoryEntry[]>;
 	mediaCapabilities(): Promise<MediaCapabilities>;
 	mediaUrl(file: FileEntry, courseId?: string): string | null;
@@ -1408,7 +1410,6 @@ export class HttpTransport implements Transport {
 	// O servidor local faz a checagem por HTTPS e devolve o estado; o navegador só o exibe.
 	// `force=1` (checagem manual) ignora o intervalo mínimo de cache do servidor.
 	async checkUpdate(force = false) { const response = await fetch(force ? '/api/update?force=1' : '/api/update'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not check for updates.', 'Não foi possível verificar a atualização.')); return normalizeUpdateStatus(await response.json()); }
-	async installUpdate(): Promise<boolean> { return Promise.resolve(false); }
 	async updateHistory(): Promise<UpdateHistoryEntry[]> {
 		const response = await fetch('/api/update/history');
 		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not load update history.', 'Não foi possível carregar o histórico de atualizações.'));
@@ -1811,11 +1812,19 @@ export class DesktopStub implements Transport {
 			};
 		}
 	}
-	async installUpdate(): Promise<boolean> {
+	async downloadUpdate(): Promise<boolean> {
 		try {
-			return await invoke<boolean>('desktop_install_update');
+			return await invoke<boolean>('desktop_download_update');
 		} catch (cause) {
-			throw desktopError(cause, tr('Could not install update.', 'Não foi possível instalar a atualização.'));
+			throw desktopError(cause, tr('Could not download the update.', 'Não foi possível baixar a atualização.'));
+		}
+	}
+	// Reinicia com os bytes já baixados; um erro aqui nunca inclui caminho nem URL.
+	async restartToUpdate(): Promise<boolean> {
+		try {
+			return await invoke<boolean>('desktop_restart_to_update');
+		} catch (cause) {
+			throw desktopError(cause, tr('Could not restart to update.', 'Não foi possível reiniciar para atualizar.'));
 		}
 	}
 	updateHistory(): Promise<UpdateHistoryEntry[]> { return Promise.resolve([]); }

@@ -9,7 +9,7 @@ export function UpdateSettings() {
 	const status = useQuery({ queryKey: ['update'], queryFn: () => transport.checkUpdate(false), retry: false });
 	const history = useQuery({ queryKey: ['update-history'], enabled: transportKind === 'http', queryFn: () => transport.updateHistory(), retry: false });
 	const check = useMutation({ mutationFn: () => transport.checkUpdate(true), onSuccess: () => status.refetch() });
-	const install = useMutation({ mutationFn: async () => { if (!transport.installUpdate || !(await transport.installUpdate())) throw new Error(tr('No update available to install right now.', 'Nenhuma atualização disponível para instalar agora.')); } });
+	const install = useMutation({ mutationFn: async () => { if (!transport.downloadUpdate || !(await transport.downloadUpdate())) throw new Error(tr('No update available to install right now.', 'Nenhuma atualização disponível para instalar agora.')); await transport.restartToUpdate?.(); } });
 	const data = check.data ?? status.data;
 	const outcome = data ? updateOutcome(data) : null;
 	const releaseUrl = data ? updateReleaseUrl(data) : null;
@@ -20,7 +20,7 @@ export function UpdateSettings() {
 			<div className="flex flex-wrap items-center gap-2">
 				<Button variant="outline" disabled={check.isPending} onClick={() => check.mutate()}>{check.isPending ? tr('Checking…', 'Verificando…') : tr('Check for updates', 'Verificar atualização')}</Button>
 				{outcome === 'available' && transportKind === 'desktop' && (
-					<Button disabled={install.isPending} onClick={() => install.mutate()}>{install.isPending ? tr('Installing…', 'Instalando…') : tr('Update and restart', 'Atualizar e reiniciar')}</Button>
+					<Button disabled={install.isPending} onClick={() => install.mutate()}>{install.isPending ? tr('Downloading…', 'Baixando…') : tr('Update and restart', 'Atualizar e reiniciar')}</Button>
 				)}
 			</div>
 			{data && <p role="status" className="text-sm">{updateMessage(data)} {releaseUrl && <a href={releaseUrl} target="_blank" rel="noopener noreferrer" className="font-medium text-primary underline-offset-4 hover:underline">{tr('Release notes', 'Notas da versão')}</a>}</p>}
