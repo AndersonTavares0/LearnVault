@@ -878,7 +878,10 @@ impl DesktopState {
             .database
             .lock()
             .map_err(|_| IpcError::database_unavailable())?;
-        study::create_flashcard(&database, media_id, front, back, position_seconds)
+        let result = study::create_flashcard(&database, media_id, front, back, position_seconds)?;
+        drop(database);
+        self.request_sync();
+        Ok(result)
     }
 
     /// Atualiza a frente e o verso de um cartão de memorização existente.
@@ -892,7 +895,10 @@ impl DesktopState {
             .database
             .lock()
             .map_err(|_| IpcError::database_unavailable())?;
-        study::update_flashcard(&database, card_id, front, back)
+        let result = study::update_flashcard(&database, card_id, front, back)?;
+        drop(database);
+        self.request_sync();
+        Ok(result)
     }
 
     /// Remove um cartão de memorização pertencente ao usuário local.
@@ -901,7 +907,10 @@ impl DesktopState {
             .database
             .lock()
             .map_err(|_| IpcError::database_unavailable())?;
-        study::delete_flashcard(&database, card_id)
+        study::delete_flashcard(&database, card_id)?;
+        drop(database);
+        self.request_sync();
+        Ok(())
     }
 
     /// Registra uma revisão em um cartão de memorização pertencente ao usuário local.
