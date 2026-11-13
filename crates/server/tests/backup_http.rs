@@ -182,4 +182,17 @@ async fn backup_endpoint_requires_admin_and_serves_valid_sqlite_stream() {
 
     let body = response.into_body().collect().await.unwrap().to_bytes();
     assert!(body.starts_with(b"SQLite format 3\0"));
+
+    // O arquivo temporário sai do disco quando o corpo termina de ser consumido.
+    let leftovers = std::fs::read_dir(temp.path())
+        .unwrap()
+        .filter_map(Result::ok)
+        .filter(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".learnvault-backup-")
+        })
+        .count();
+    assert_eq!(leftovers, 0);
 }
