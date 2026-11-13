@@ -90,6 +90,7 @@ fn all_domain_tables_are_created() -> TestResult {
         "gamification_settings",
         "study_note",
         "flashcard",
+        "media_bookmark",
     ] {
         let found: i64 = db.connection().query_row(
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",

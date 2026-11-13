@@ -138,6 +138,16 @@ pub fn build_router(state: AppState) -> Router {
                 .delete(study::delete_note)
                 .layer(DefaultBodyLimit::max(16 * 1024)),
         )
+        .route(
+            "/api/study/bookmarks",
+            get(study::list_bookmarks)
+                .post(study::create_bookmark)
+                .layer(DefaultBodyLimit::max(16 * 1024)),
+        )
+        .route(
+            "/api/study/bookmarks/{id}",
+            axum::routing::delete(study::delete_bookmark),
+        )
         // Up to 200 rectangles plus the marked text and a note: well under 128 KiB.
         .route(
             "/api/study/pdf-annotations",

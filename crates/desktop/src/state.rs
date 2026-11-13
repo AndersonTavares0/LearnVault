@@ -23,9 +23,9 @@ use crate::covers::{
 };
 use crate::dto::{
     CatalogDto, CoverDto, CoverRemovalDto, FlashcardDto, FocusSessionDto, FocusSummaryDto,
-    MediaRemovalImpactDto, MediaRemovalOutcomeDto, NewPdfAnnotationDto, PdfAnnotationDto,
-    RecentStudyDto, RescanSummaryDto, RewardSummaryDto, StudyFavoritesDto, StudyNoteDto,
-    StudyProgressDto, StudySummaryDto,
+    MediaBookmarkDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto, NewPdfAnnotationDto,
+    PdfAnnotationDto, RecentStudyDto, RescanSummaryDto, RewardSummaryDto, StudyFavoritesDto,
+    StudyNoteDto, StudyProgressDto, StudySummaryDto,
 };
 use crate::error::IpcError;
 use crate::ordering::{CourseOrders, load_orders, store_orders};
@@ -429,6 +429,38 @@ impl DesktopState {
             .lock()
             .map_err(|_| IpcError::database_unavailable())?;
         study::delete_note(&database, note_id)
+    }
+
+    /// Lists the local owner's timestamp bookmarks for one lesson.
+    pub fn list_bookmarks(&self, media_id: &str) -> Result<Vec<MediaBookmarkDto>, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::list_bookmarks(&database, media_id)
+    }
+
+    /// Creates a timestamp bookmark for the local owner.
+    pub fn create_bookmark(
+        &self,
+        media_id: &str,
+        position_seconds: i64,
+        label: &str,
+    ) -> Result<MediaBookmarkDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::create_bookmark(&database, media_id, position_seconds, label)
+    }
+
+    /// Deletes one of the local owner's timestamp bookmarks.
+    pub fn delete_bookmark(&self, bookmark_id: &str) -> Result<(), IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::delete_bookmark(&database, bookmark_id)
     }
 
     /// Lists the local owner's annotations on one PDF.

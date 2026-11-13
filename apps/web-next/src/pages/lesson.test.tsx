@@ -22,6 +22,7 @@ beforeEach(() => {
 	vi.spyOn(transport, 'mediaCapabilities').mockResolvedValue({ transcoding: false });
 	vi.spyOn(transport, 'studyProgress').mockImplementation(async (id) => progress(id));
 	vi.spyOn(transport, 'listNotes').mockResolvedValue([]);
+	vi.spyOn(transport, 'listBookmarks').mockResolvedValue([]);
 	vi.spyOn(transport, 'listFlashcards').mockResolvedValue([]);
 	vi.spyOn(transport, 'rewardSummary').mockRejectedValue(new Error('not needed'));
 });
@@ -164,4 +165,96 @@ describe('lesson page', () => {
 			expect(await screen.findByRole('form', { name: 'New card' })).toBeTruthy();
 		});
 	});
+
+	describe('resume and persistence', () => {
+		const saved = (positionSeconds: number, completed = false): StudyProgress => ({ mediaId: 'one.mp4', positionSeconds, completed, updatedAt: 1, recorded: true });
+
+		it('starts at the saved position, clamped to the media duration', async () => {
+			vi.spyOn(transport, 'studyProgress').mockResolvedValue(saved(42));
+			renderApp('/course/c/c%2FOne', { catalog });
+			const video = await screen.findByLabelText('Lesson player: One') as HTMLVideoElement;
+			await screen.findByRole('button', { name: 'Resume from 0:42' });
+			Object.defineProperty(video, 'duration', { configurable: true, value: 120 });
+			fireEvent.loadedMetadata(video);
+			expect(video.currentTime).toBe(42);
+		});
+
+		it('starts a completed lesson from the beginning', async () => {
+			vi.spyOn(transport, 'studyProgress').mockResolvedValue(saved(42, true));
+			renderApp('/course/c/c%2FOne', { catalog });
+			const video = await screen.findByLabelText('Lesson player: One') as HTMLVideoElement;
+			await screen.findByRole('button', { name: 'Completed' });
+			Object.defineProperty(video, 'duration', { configurable: true, value: 120 });
+			fireEvent.loadedMetadata(video);
+			expect(video.currentTime).toBe(0);
+		});
+
+		it('saves on pause and on seek', async () => {
+			const record = vi.spyOn(transport, 'recordPosition').mockImplementation(async (id, positionSeconds) => ({ ...saved(positionSeconds), mediaId: id }));
+			renderApp('/course/c/c%2FOne', { catalog });
+			const video = await screen.findByLabelText('Lesson player: One') as HTMLVideoElement;
+			video.currentTime = 42;
+			fireEvent.pause(video);
+			await waitFor(() => expect(record).toHaveBeenCalledWith('one.mp4', 42));
+
+			record.mockClear();
+			video.currentTime = 10;
+			fireEvent.click(screen.getByRole('button', { name: 'Forward 10s' }));
+			await waitFor(() => expect(record).toHaveBeenCalledWith('one.mp4', 20));
+		});
+
+		it('never writes on every timeupdate and flushes the last position on unmount', async () => {
+			const record = vi.spyOn(transport, 'recordPosition').mockImplementation(async (id, positionSeconds) => ({ ...saved(positionSeconds), mediaId: id }));
+			vi.spyOn(performance, 'now').mockReturnValue(10_000);
+			renderApp('/course/c/c%2FOne', { catalog });
+			const video = await screen.findByLabelText('Lesson player: One') as HTMLVideoElement;
+			video.currentTime = 3;
+			fireEvent.timeUpdate(video);
+			fireEvent.timeUpdate(video);
+			await waitFor(() => expect(record).toHaveBeenCalledTimes(1));
+			expect(record).toHaveBeenLastCalledWith('one.mp4', 3);
+
+			vi.mocked(performance.now).mockReturnValue(0);
+			video.currentTime = 55;
+			fireEvent.timeUpdate(video);
+			record.mockClear();
+			cleanup();
+			await waitFor(() => expect(record).toHaveBeenCalledWith('one.mp4', 55));
+		});
+	});
+
+	describe('timestamp bookmarks', () => {
+		const bookmark = { bookmarkId: 'b1', mediaId: 'one.mp4', positionSeconds: 30, label: 'Intro', createdAt: 1 };
+
+		it('draws timeline markers and seeks from them', async () => {
+			vi.spyOn(transport, 'listBookmarks').mockResolvedValue([bookmark]);
+			renderApp('/course/c/c%2FOne', { catalog });
+			const video = await screen.findByLabelText('Lesson player: One') as HTMLVideoElement;
+			Object.defineProperty(video, 'duration', { configurable: true, value: 100 });
+			fireEvent.loadedMetadata(video);
+			fireEvent.durationChange(video);
+			fireEvent.click(await screen.findByRole('button', { name: 'Jump to timestamp: Intro' }));
+			expect(video.currentTime).toBe(30);
+		});
+
+		it('adds and deletes a bookmark with a label', async () => {
+			const list = vi.spyOn(transport, 'listBookmarks').mockResolvedValue([]);
+			const create = vi.spyOn(transport, 'createBookmark').mockImplementation(async (mediaId, positionSeconds, label) => {
+				const created = { ...bookmark, mediaId, positionSeconds, label };
+				list.mockResolvedValue([created]);
+				return created;
+			});
+			const remove = vi.spyOn(transport, 'deleteBookmark').mockResolvedValue(undefined);
+			renderApp('/course/c/c%2FOne', { catalog });
+			fireEvent.click(await screen.findByRole('tab', { name: 'Timestamps' }));
+			fireEvent.click(await screen.findByRole('button', { name: /Add timestamp at 0:00/ }));
+			fireEvent.change(screen.getByLabelText(/Label at 0:00/), { target: { value: 'Intro' } });
+			fireEvent.click(screen.getByRole('button', { name: 'Save timestamp' }));
+			await waitFor(() => expect(create).toHaveBeenCalledWith('one.mp4', 0, 'Intro'));
+			expect(await screen.findByText('Intro')).toBeTruthy();
+			fireEvent.click(screen.getByRole('button', { name: 'Delete timestamp: Intro' }));
+			await waitFor(() => expect(remove).toHaveBeenCalledWith('b1'));
+		});
+	});
+
 });

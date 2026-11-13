@@ -19,9 +19,9 @@ use crate::config::DesktopConfigDto;
 use crate::courses::CourseEntry;
 use crate::dto::{
     CatalogDto, CatalogNodeDto, CoverDto, CoverRemovalDto, FlashcardDto, FocusSessionDto,
-    FocusSummaryDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto, NewPdfAnnotationDto,
-    PdfAnnotationDto, RecentStudyDto, RescanSummaryDto, RewardSummaryDto, StudyFavoritesDto,
-    StudyNoteDto, StudyProgressDto, StudySummaryDto,
+    FocusSummaryDto, MediaBookmarkDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto,
+    NewPdfAnnotationDto, PdfAnnotationDto, RecentStudyDto, RescanSummaryDto, RewardSummaryDto,
+    StudyFavoritesDto, StudyNoteDto, StudyProgressDto, StudySummaryDto,
 };
 use crate::error::IpcError;
 use crate::ordering::CourseOrders;
@@ -383,6 +383,46 @@ pub async fn desktop_delete_note(
 ) -> Result<(), IpcError> {
     let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || state.delete_note(&note_id))
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// IPC command: lists the local owner's timestamp bookmarks for one lesson.
+#[tauri::command]
+pub async fn desktop_list_bookmarks(
+    state: State<'_, DesktopState>,
+    media_id: String,
+) -> Result<Vec<MediaBookmarkDto>, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.list_bookmarks(&media_id))
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// IPC command: creates a timestamp bookmark for the local owner.
+#[tauri::command]
+pub async fn desktop_create_bookmark(
+    state: State<'_, DesktopState>,
+    media_id: String,
+    position_seconds: i64,
+    label: String,
+) -> Result<MediaBookmarkDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        state.create_bookmark(&media_id, position_seconds, &label)
+    })
+    .await
+    .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// IPC command: deletes one of the local owner's timestamp bookmarks.
+#[tauri::command]
+pub async fn desktop_delete_bookmark(
+    state: State<'_, DesktopState>,
+    bookmark_id: String,
+) -> Result<(), IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.delete_bookmark(&bookmark_id))
         .await
         .map_err(|_| IpcError::study_unavailable())?
 }

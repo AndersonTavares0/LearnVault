@@ -864,6 +864,120 @@ fn card_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Flashcard> {
     })
 }
 
+/// Limite de caracteres do rótulo de um marcador de tempo.
+pub const MAX_BOOKMARK_LABEL_CHARS: usize = 200;
+
+/// Marcador de tempo de uma mídia, visível apenas para o dono.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MediaBookmark {
+    /// Identificador opaco do marcador (UUID v7).
+    pub bookmark_id: String,
+    /// Identificador da mídia vinculada.
+    pub media_id: String,
+    /// Instante da mídia em segundos.
+    pub position_seconds: i64,
+    /// Rótulo curto escrito pelo aluno.
+    pub label: String,
+    /// Instante de criação em segundos desde a época Unix.
+    pub created_at: i64,
+}
+
+/// Lista os marcadores do dono para uma mídia, em ordem cronológica.
+pub fn list_media_bookmarks(
+    db: &Database,
+    owner_id: &str,
+    media_id: &str,
+) -> Result<Vec<MediaBookmark>> {
+    validate_owner(owner_id)?;
+    let conn = db.connection();
+    require_media(conn, media_id)?;
+
+    let mut statement = conn.prepare(
+        "SELECT bookmark_id, media_id, position_seconds, label, created_at
+         FROM media_bookmark
+         WHERE owner_id = ?1 AND media_id = ?2
+         ORDER BY position_seconds ASC, created_at ASC",
+    )?;
+    let rows = statement.query_map(rusqlite::params![owner_id, media_id], bookmark_from_row)?;
+
+    let mut bookmarks = Vec::new();
+    for bookmark in rows {
+        bookmarks.push(bookmark?);
+    }
+    Ok(bookmarks)
+}
+
+/// Cria um marcador de tempo para o dono e a mídia.
+pub fn create_media_bookmark(
+    db: &Database,
+    owner_id: &str,
+    media_id: &str,
+    position_seconds: i64,
+    label: &str,
+) -> Result<MediaBookmark> {
+    validate_owner(owner_id)?;
+    if position_seconds < 0 {
+        return Err(Error::InvalidStudyPosition { position_seconds });
+    }
+    let trimmed = label.trim();
+    if trimmed.is_empty() || trimmed.chars().count() > MAX_BOOKMARK_LABEL_CHARS {
+        return Err(Error::InvalidBookmarkLabel);
+    }
+
+    let conn = db.connection();
+    require_media(conn, media_id)?;
+
+    let bookmark_id = crate::ids::new_bookmark_id();
+    let now = now_unix_seconds();
+
+    conn.execute(
+        "INSERT INTO media_bookmark (bookmark_id, owner_id, media_id, position_seconds, label, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        rusqlite::params![bookmark_id, owner_id, media_id, position_seconds, trimmed, now],
+    )?;
+
+    Ok(MediaBookmark {
+        bookmark_id,
+        media_id: media_id.to_owned(),
+        position_seconds,
+        label: trimmed.to_owned(),
+        created_at: now,
+    })
+}
+
+/// Remove um marcador pertencente ao dono.
+pub fn delete_media_bookmark(db: &Database, owner_id: &str, bookmark_id: &str) -> Result<bool> {
+    validate_owner(owner_id)?;
+    let conn = db.connection();
+    let changes = conn.execute(
+        "DELETE FROM media_bookmark WHERE owner_id = ?1 AND bookmark_id = ?2",
+        rusqlite::params![owner_id, bookmark_id],
+    )?;
+    Ok(changes > 0)
+}
+
+/// Finds the media linked to a bookmark without returning its contents.
+pub fn media_bookmark_media_id(db: &Database, bookmark_id: &str) -> Result<Option<String>> {
+    Ok(db
+        .connection()
+        .query_row(
+            "SELECT media_id FROM media_bookmark WHERE bookmark_id = ?1",
+            [bookmark_id],
+            |row| row.get(0),
+        )
+        .optional()?)
+}
+
+fn bookmark_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MediaBookmark> {
+    Ok(MediaBookmark {
+        bookmark_id: row.get(0)?,
+        media_id: row.get(1)?,
+        position_seconds: row.get(2)?,
+        label: row.get(3)?,
+        created_at: row.get(4)?,
+    })
+}
+
 /// Favoritos de cursos e aulas de um dono.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct StudyFavorites {

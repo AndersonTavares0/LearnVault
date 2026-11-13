@@ -72,10 +72,12 @@ pub use removal::{MediaRemovalImpact, MediaRemovalOutcome, media_removal_impact,
 pub use rescan::{RescanSummary, apply_scan, rescan};
 pub use scanner::{MediaKind, ScanOutcome, ScannedFile, scan};
 pub use study::{
-    Flashcard, GlobalStudyNote, MAX_RECENT_STUDY, ReviewRating, StudyDay, StudyFavorites,
-    StudyNote, StudyProgress, StudySummary, create_flashcard, create_study_note, delete_flashcard,
-    delete_study_note, flashcard_media_id, list_all_flashcards, list_all_study_notes,
-    list_favorites, list_flashcards, list_study_notes, recent_study, record_position,
-    review_flashcard, set_completed, set_course_favorite, set_lesson_favorite, study_note_media_id,
-    study_progress, study_summary, study_summary_on, update_flashcard, update_study_note,
+    Flashcard, GlobalStudyNote, MAX_BOOKMARK_LABEL_CHARS, MAX_RECENT_STUDY, MediaBookmark,
+    ReviewRating, StudyDay, StudyFavorites, StudyNote, StudyProgress, StudySummary,
+    create_flashcard, create_media_bookmark, create_study_note, delete_flashcard,
+    delete_media_bookmark, delete_study_note, flashcard_media_id, list_all_flashcards,
+    list_all_study_notes, list_favorites, list_flashcards, list_media_bookmarks, list_study_notes,
+    media_bookmark_media_id, recent_study, record_position, review_flashcard, set_completed,
+    set_course_favorite, set_lesson_favorite, study_note_media_id, study_progress, study_summary,
+    study_summary_on, update_flashcard, update_study_note,
 };

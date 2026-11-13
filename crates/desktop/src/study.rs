@@ -17,9 +17,9 @@
 use learnvault_core::{Database, FocusSessionInput, ReviewRating};
 
 use crate::dto::{
-    FlashcardDto, FocusSessionDto, FocusSummaryDto, NewPdfAnnotationDto, PdfAnnotationDto,
-    RecentStudyDto, RewardSummaryDto, StudyFavoritesDto, StudyNoteDto, StudyProgressDto,
-    StudySummaryDto,
+    FlashcardDto, FocusSessionDto, FocusSummaryDto, MediaBookmarkDto, NewPdfAnnotationDto,
+    PdfAnnotationDto, RecentStudyDto, RewardSummaryDto, StudyFavoritesDto, StudyNoteDto,
+    StudyProgressDto, StudySummaryDto,
 };
 use crate::error::IpcError;
 
@@ -370,6 +370,45 @@ pub fn set_lesson_favorite(
         .map_err(study_error)
 }
 
+/// Lists the local owner's timestamp bookmarks for one lesson.
+pub fn list_bookmarks(
+    database: &Database,
+    media_id: &str,
+) -> Result<Vec<MediaBookmarkDto>, IpcError> {
+    learnvault_core::list_media_bookmarks(database, LOCAL_OWNER_ID, media_id)
+        .map(|items| items.into_iter().map(MediaBookmarkDto::from).collect())
+        .map_err(study_error)
+}
+
+/// Creates a timestamp bookmark for the local owner.
+pub fn create_bookmark(
+    database: &Database,
+    media_id: &str,
+    position_seconds: i64,
+    label: &str,
+) -> Result<MediaBookmarkDto, IpcError> {
+    learnvault_core::create_media_bookmark(
+        database,
+        LOCAL_OWNER_ID,
+        media_id,
+        position_seconds,
+        label,
+    )
+    .map(MediaBookmarkDto::from)
+    .map_err(study_error)
+}
+
+/// Deletes one of the local owner's timestamp bookmarks.
+pub fn delete_bookmark(database: &Database, bookmark_id: &str) -> Result<(), IpcError> {
+    let deleted = learnvault_core::delete_media_bookmark(database, LOCAL_OWNER_ID, bookmark_id)
+        .map_err(study_error)?;
+    if deleted {
+        Ok(())
+    } else {
+        Err(IpcError::bookmark_not_found())
+    }
+}
+
 /// Traduz o erro do núcleo para o erro IPC estável, sem ecoar o identificador consultado.
 ///
 /// Uma mídia desconhecida e uma posição negativa são falhas de entrada com código próprio,
@@ -388,6 +427,8 @@ fn study_error(error: learnvault_core::Error) -> IpcError {
         Error::FlashcardNotFound { .. } => IpcError::flashcard_not_found(),
         Error::InvalidFlashcardContent => IpcError::invalid_flashcard(),
         Error::InvalidFavoriteTarget => IpcError::invalid_favorite_target(),
+        Error::BookmarkNotFound { .. } => IpcError::bookmark_not_found(),
+        Error::InvalidBookmarkLabel => IpcError::invalid_bookmark_label(),
         _ => IpcError::study_unavailable(),
     }
 }

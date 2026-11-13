@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clampSpeed, formatDuration, mediaAvailability, mediaPlaybackKind, nextSpeed, PLAYBACK_SPEEDS, playerShortcutAction, seekPercentPosition, selectPlayableMedia, selectPlayableSubtitle, shouldAutoAdvance, srtConversionSupported, srtToWebVtt, stepVolume, studySyncEnabled, studySyncSupported, subtitleFormat } from './player';
+import { clampSpeed, formatDuration, mediaAvailability, mediaPlaybackKind, nextSpeed, PLAYBACK_SPEEDS, playerShortcutAction, resumeTarget, seekPercentPosition, selectPlayableMedia, selectPlayableSubtitle, shouldAutoAdvance, shouldSavePosition, srtConversionSupported, srtToWebVtt, stepVolume, studySyncEnabled, studySyncSupported, subtitleFormat } from './player';
 import type { FileEntry } from './transport';
 
 describe('player media and subtitles', () => {
@@ -119,6 +119,22 @@ describe('player media and subtitles', () => {
 		expect(seekPercentPosition(200, 10)).toBe(20);
 		expect(seekPercentPosition(0, 50)).toBe(0);
 		expect(seekPercentPosition(-10, 50)).toBe(0);
+	});
+	it('resumes inside the media, clamps to the duration and restarts a finished lesson', () => {
+		expect(resumeTarget(42, 100)).toBe(42);
+		expect(resumeTarget(120, 100)).toBe(0);
+		expect(resumeTarget(99.5, 100)).toBe(0);
+		expect(resumeTarget(0, 100)).toBe(0);
+		expect(resumeTarget(-5, 100)).toBe(0);
+		// Duration unknown: keep the saved position instead of discarding it.
+		expect(resumeTarget(42, Number.NaN)).toBe(42);
+		expect(resumeTarget(42, 0)).toBe(42);
+	});
+	it('saves periodically at five-second intervals, never on every tick', () => {
+		expect(shouldSavePosition(0, 1000)).toBe(false);
+		expect(shouldSavePosition(0, 5000)).toBe(true);
+		expect(shouldSavePosition(5000, 9000)).toBe(false);
+		expect(shouldSavePosition(5000, 10000)).toBe(true);
 	});
 });
 

@@ -91,6 +91,24 @@ export function seekPercentPosition(duration: number, percent: number): number {
 	return (clamped / 100) * duration;
 }
 
+/**
+ * Onde a reprodução deve começar.
+ *
+ * Clampa a posição salva à duração conhecida e evita retomar a menos de dois segundos do
+ * fim: aí a aula já terminou, então recomeça do zero em vez de parar no crédito final.
+ */
+export function resumeTarget(position: number, duration: number): number {
+	if (!Number.isFinite(position) || position <= 0) return 0;
+	if (!Number.isFinite(duration) || duration <= 0) return position;
+	const target = Math.min(position, Math.max(0, duration - 1));
+	return duration - target < 2 ? 0 : target;
+}
+
+/** O relógio periódico grava no máximo a cada `intervalMs`; eventos discretos são forçados. */
+export function shouldSavePosition(lastSavedAt: number, now: number, intervalMs = 5000): boolean {
+	return now - lastSavedAt >= intervalMs;
+}
+
 /** Não há avanço automático se a preferência estiver desligada ou a sequência terminou. */
 export function shouldAutoAdvance(enabled: boolean, hasNextLesson: boolean): boolean {
 	return enabled && hasNextLesson;

@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { setLocale } from './i18n';
 import type { NewPdfAnnotation } from './transport';
 import { findLesson } from './router';
-import { desktopCoverUrl, desktopMediaUrl, DesktopStub, FocusSessionConflict, HttpTransport, InvalidFocusSession, lessonFromNode, MAX_COVER_BYTES, normalizeCatalog, normalizeFocusSession, normalizeFocusSummary, normalizeRecentStudy, normalizeRewardSummary, normalizeStudyProgress, normalizeStudySummary, normalizeUpdateStatus, normalizeUser, STUDY_NOT_AVAILABLE, CATALOG_LIMITS, type Transport } from './transport';
+import { desktopCoverUrl, desktopMediaUrl, DesktopStub, FocusSessionConflict, HttpTransport, InvalidFocusSession, lessonFromNode, MAX_COVER_BYTES, normalizeBookmark, normalizeCatalog, normalizeFocusSession, normalizeFocusSummary, normalizeRecentStudy, normalizeRewardSummary, normalizeStudyProgress, normalizeStudySummary, normalizeUpdateStatus, normalizeUser, STUDY_NOT_AVAILABLE, CATALOG_LIMITS, type Transport } from './transport';
 
 // O Tauri só é carregado no desktop: fora dele o módulo é substituído pelo mock, de modo
 // que a suíte nunca toca `window.__TAURI_INTERNALS__`.
@@ -15,8 +15,8 @@ beforeEach(() => {
 
 describe('transport contract', () => {
 	it('exposes the HTTP transport seam without routing assumptions', () => {
-		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'studySummary', 'listNotes', 'createNote', 'updateNote', 'deleteNote', 'listPdfAnnotations', 'createPdfAnnotation', 'updatePdfAnnotation', 'deletePdfAnnotation', 'listFlashcards', 'createFlashcard', 'updateFlashcard', 'deleteFlashcard', 'reviewFlashcard', 'listFavorites', 'setCourseFavorite', 'setLessonFavorite', 'recordFocusSession', 'listFocusSessions', 'focusSummary', 'rewardSummary', 'claimDailyMission', 'setWeeklyGoal', 'userAvatarUrl', 'uploadUserAvatar', 'deleteUserAvatar', 'checkUpdate', 'installUpdate', 'updateHistory', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover', 'mediaCapabilities', 'transcodeUrl', 'openInSystemPlayer'];
-		expect(methods).toHaveLength(49);
+		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'studySummary', 'listNotes', 'createNote', 'updateNote', 'deleteNote', 'listBookmarks', 'createBookmark', 'deleteBookmark', 'listPdfAnnotations', 'createPdfAnnotation', 'updatePdfAnnotation', 'deletePdfAnnotation', 'listFlashcards', 'createFlashcard', 'updateFlashcard', 'deleteFlashcard', 'reviewFlashcard', 'listFavorites', 'setCourseFavorite', 'setLessonFavorite', 'recordFocusSession', 'listFocusSessions', 'focusSummary', 'rewardSummary', 'claimDailyMission', 'setWeeklyGoal', 'userAvatarUrl', 'uploadUserAvatar', 'deleteUserAvatar', 'checkUpdate', 'installUpdate', 'updateHistory', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover', 'mediaCapabilities', 'transcodeUrl', 'openInSystemPlayer'];
+		expect(methods).toHaveLength(52);
 	});
 	it('tells a rate-limited sign-in apart from wrong credentials', async () => {
 		vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 429 })));
@@ -450,6 +450,12 @@ describe('transport contract', () => {
 		expect(normalizeStudyProgress({ media_id: 'm1', position_seconds: 42, completed: false, updated_at: 1234567890, recorded: true })).toEqual({ mediaId: 'm1', positionSeconds: 42, completed: false, updatedAt: 1234567890, recorded: true });
 		expect(normalizeStudyProgress({ media_id: 'm2', position_seconds: 0, completed: true, recorded: true })).toEqual({ mediaId: 'm2', positionSeconds: 0, completed: true, updatedAt: null, recorded: true });
 		expect(() => normalizeStudyProgress({ media_id: 'm3', position_seconds: 'zero', completed: true, recorded: true })).toThrow('Resposta inválida do servidor');
+	});
+	it('normalizes a timestamp bookmark and refuses invalid positions or labels', () => {
+		expect(normalizeBookmark({ bookmark_id: 'b1', media_id: 'm1', position_seconds: 42, label: 'Key idea', created_at: 10 })).toEqual({ bookmarkId: 'b1', mediaId: 'm1', positionSeconds: 42, label: 'Key idea', createdAt: 10 });
+		expect(() => normalizeBookmark({ bookmark_id: 'b1', media_id: 'm1', position_seconds: -1, label: 'x', created_at: 10 })).toThrow('Resposta inválida do servidor');
+		expect(() => normalizeBookmark({ bookmark_id: 'b1', media_id: 'm1', position_seconds: 1, label: '   ', created_at: 10 })).toThrow('Resposta inválida do servidor');
+		expect(() => normalizeBookmark({ bookmark_id: 'b1', media_id: 'm1', position_seconds: 1, label: 'a'.repeat(201), created_at: 10 })).toThrow('Resposta inválida do servidor');
 	});
 	it('normalizes a recent study list', () => {
 		const recent = normalizeRecentStudy({ items: [{ media_id: 'm1', position_seconds: 10, completed: false, recorded: true }] });

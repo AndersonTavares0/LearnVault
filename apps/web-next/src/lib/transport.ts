@@ -99,6 +99,14 @@ export type Flashcard = {
 	createdAt: number;
 	updatedAt: number;
 };
+/** A labelled moment in one lesson, private to its owner. */
+export type MediaBookmark = {
+	bookmarkId: string;
+	mediaId: string;
+	positionSeconds: number;
+	label: string;
+	createdAt: number;
+};
 export type ReviewRating = 'again' | 'good';
 export type StudyFavorites = {
 	courseIds: string[];
@@ -171,6 +179,9 @@ export interface Transport {
 	listNotes(mediaId?: string): Promise<StudyNote[]>;
 	createNote(mediaId: string, positionSeconds: number, content: string): Promise<StudyNote>;
 	updateNote(noteId: string, content: string): Promise<StudyNote>;
+	listBookmarks(mediaId: string): Promise<MediaBookmark[]>;
+	createBookmark(mediaId: string, positionSeconds: number, label: string): Promise<MediaBookmark>;
+	deleteBookmark(bookmarkId: string): Promise<void>;
 	listPdfAnnotations(mediaId: string): Promise<PdfAnnotation[]>;
 	createPdfAnnotation(mediaId: string, input: NewPdfAnnotation): Promise<PdfAnnotation>;
 	updatePdfAnnotation(annotationId: string, change: { color?: PdfAnnotationColor; content?: string }): Promise<PdfAnnotation>;
@@ -630,8 +641,21 @@ export function normalizePdfAnnotation(raw: unknown): PdfAnnotation {
 	};
 }
 
-export function normalizeFlashcard(raw: unknown): Flashcard {
-	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalidPayload('cartão de estudo inválido.');
+export const MAX_BOOKMARK_LABEL = 200;
+
+export function normalizeBookmark(raw: unknown): MediaBookmark {
+	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalidPayload('marcador inválido.');
+	const item = raw as Record<string, unknown>;
+	const bookmarkId = item.bookmark_id ?? item.bookmarkId;
+	const mediaId = item.media_id ?? item.mediaId;
+	const positionSeconds = item.position_seconds ?? item.positionSeconds;
+	const label = item.label;
+	const createdAt = item.created_at ?? item.createdAt;
+	if (typeof bookmarkId !== 'string' || !bookmarkId || typeof mediaId !== 'string' || !mediaId || !Number.isInteger(positionSeconds) || (positionSeconds as number) < 0 || typeof label !== 'string' || !label.trim() || Array.from(label).length > MAX_BOOKMARK_LABEL || !Number.isInteger(createdAt) || (createdAt as number) < 0) throw invalidPayload('marcador inválido.');
+	return { bookmarkId, mediaId, positionSeconds: positionSeconds as number, label, createdAt: createdAt as number };
+}
+
+export function normalizeFlashcard(raw: unknown): Flashcard {	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalidPayload('cartão de estudo inválido.');
 	const card = raw as Record<string, unknown>;
 	return {
 		cardId: String(card.card_id ?? card.cardId ?? ''),
@@ -853,6 +877,25 @@ export class HttpTransport implements Transport {
 			method: 'DELETE'
 		});
 		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not delete note.', 'Não foi possível excluir a anotação.'));
+	}
+	async listBookmarks(mediaId: string): Promise<MediaBookmark[]> {
+		const response = await fetch(`/api/study/bookmarks?media_id=${encodeURIComponent(mediaId)}`);
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not load timestamps.', 'Não foi possível carregar os marcadores.'));
+		const data = await response.json();
+		return (Array.isArray(data.items) ? data.items : []).map(normalizeBookmark);
+	}
+	async createBookmark(mediaId: string, positionSeconds: number, label: string): Promise<MediaBookmark> {
+		const response = await fetch('/api/study/bookmarks', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ media_id: mediaId, position_seconds: positionSeconds, label })
+		});
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 422 ? tr('Invalid timestamp label.', 'Rótulo do marcador inválido.') : tr('Could not save timestamp.', 'Não foi possível salvar o marcador.'));
+		return normalizeBookmark(await response.json());
+	}
+	async deleteBookmark(bookmarkId: string): Promise<void> {
+		const response = await fetch(`/api/study/bookmarks/${encodeURIComponent(bookmarkId)}`, { method: 'DELETE' });
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not delete timestamp.', 'Não foi possível excluir o marcador.'));
 	}
 	async listPdfAnnotations(mediaId: string): Promise<PdfAnnotation[]> {
 		const response = await fetch(`/api/study/pdf-annotations?media_id=${encodeURIComponent(mediaId)}`);
@@ -1101,6 +1144,8 @@ function desktopErrorMessage(code: string): string | null {
 		case 'flashcard_not_found': return tr('Card not found.', 'Cartão não encontrado.');
 		case 'invalid_flashcard': return tr('Invalid card content.', 'Conteúdo do cartão inválido.');
 		case 'invalid_review_rating': return tr('Invalid review rating.', 'Avaliação inválida.');
+		case 'bookmark_not_found': return tr('Timestamp not found.', 'Marcador não encontrado.');
+		case 'invalid_bookmark_label': return tr('Invalid timestamp label.', 'Rótulo do marcador inválido.');
 		case 'invalid_favorite_target': return tr('Invalid favorite target.', 'Alvo de favorito inválido.');
 		default: return null;
 	}
@@ -1173,6 +1218,29 @@ export class DesktopStub implements Transport {
 			await invoke<unknown>('desktop_delete_note', { noteId });
 		} catch (cause) {
 			throw desktopError(cause, tr('Could not delete note.', 'Não foi possível excluir a anotação.'));
+		}
+	}
+	async listBookmarks(mediaId: string): Promise<MediaBookmark[]> {
+		try {
+			const res = await invoke<unknown>('desktop_list_bookmarks', { mediaId });
+			return (Array.isArray(res) ? res : []).map(normalizeBookmark);
+		} catch (cause) {
+			throw desktopError(cause, tr('Could not load timestamps.', 'Não foi possível carregar os marcadores.'));
+		}
+	}
+	async createBookmark(mediaId: string, positionSeconds: number, label: string): Promise<MediaBookmark> {
+		try {
+			const res = await invoke<unknown>('desktop_create_bookmark', { mediaId, positionSeconds, label });
+			return normalizeBookmark(res);
+		} catch (cause) {
+			throw desktopError(cause, tr('Could not save timestamp.', 'Não foi possível salvar o marcador.'));
+		}
+	}
+	async deleteBookmark(bookmarkId: string): Promise<void> {
+		try {
+			await invoke<unknown>('desktop_delete_bookmark', { bookmarkId });
+		} catch (cause) {
+			throw desktopError(cause, tr('Could not delete timestamp.', 'Não foi possível excluir o marcador.'));
 		}
 	}
 	async listPdfAnnotations(mediaId: string): Promise<PdfAnnotation[]> {
