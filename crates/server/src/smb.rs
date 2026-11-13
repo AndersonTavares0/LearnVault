@@ -26,6 +26,18 @@ const OPERATION_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_DIRECTORY_ENTRIES: usize = 100_000;
 /// Bytes per SMB read request; the protocol limits each response.
 const READ_CHUNK: usize = 1024 * 1024;
+/// `FILETIME` counts 100 ns intervals.
+const FILETIME_TICKS_PER_SECOND: u64 = 10_000_000;
+/// Seconds between 1601-01-01 (the `FILETIME` epoch) and 1970-01-01.
+const FILETIME_UNIX_OFFSET: i64 = 11_644_473_600;
+
+/// Converts a `FILETIME` into seconds since the Unix epoch.
+///
+/// The scan reads `0` as an unknown mtime, so a date before 1970 keeps that meaning.
+fn unix_seconds(ticks: u64) -> i64 {
+    let seconds = i64::try_from(ticks / FILETIME_TICKS_PER_SECOND).unwrap_or(0);
+    seconds.saturating_sub(FILETIME_UNIX_OFFSET).max(0)
+}
 
 /// Target of an `smb://host[:port]/share/path` URL.
 #[derive(Debug, Clone)]
@@ -244,8 +256,7 @@ impl SmbSource {
                     } else {
                         item.end_of_file
                     },
-                    // The scan treats `0` as unknown, as in WebDAV.
-                    mtime: 0,
+                    mtime: unix_seconds(*item.last_write_time),
                 });
             }
             Ok(entries)
@@ -437,12 +448,21 @@ fn status_error(status: u32) -> SourceError {
 
 #[cfg(test)]
 mod tests {
-    use super::{SmbLocation, SmbSource, status_error};
+    use super::{FILETIME_UNIX_OFFSET, SmbLocation, SmbSource, status_error, unix_seconds};
     use learnvault_core::{CourseSource, SourceError};
     use std::str::FromStr;
 
     fn parsed(input: &str) -> url::Url {
         crate::webdav::parse_source_url(input).unwrap()
+    }
+
+    #[test]
+    fn file_times_become_unix_seconds() {
+        let epoch = 1_445_412_480_i64;
+        let ticks = (epoch + FILETIME_UNIX_OFFSET) * 10_000_000;
+        assert_eq!(unix_seconds(ticks as u64), epoch);
+        assert_eq!(unix_seconds(FILETIME_UNIX_OFFSET as u64 * 10_000_000), 0);
+        assert_eq!(unix_seconds(0), 0);
     }
 
     #[test]

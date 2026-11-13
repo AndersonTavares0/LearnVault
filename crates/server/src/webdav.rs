@@ -318,9 +318,9 @@ impl WebDavClient {
                 path,
                 is_dir: entry.is_dir,
                 size: entry.size.unwrap_or(0),
-                // WebDAV exposes `getlastmodified` as text; the scan treats `0` as
-                // unknown, which is preferable to a misparsed date.
-                mtime: 0,
+                // `getlastmodified` is optional in the protocol; when it is missing or
+                // unparsable the scan treats `0` as an unknown mtime.
+                mtime: entry.mtime.unwrap_or(0),
             });
         }
         Ok(listed)
@@ -517,6 +517,8 @@ struct PropfindEntry {
     href: String,
     is_dir: bool,
     size: Option<u64>,
+    /// `getlastmodified` in seconds since the Unix epoch, when the server sent a parsable date.
+    mtime: Option<i64>,
 }
 
 /// Parses a `PROPFIND` `multistatus`.
@@ -537,6 +539,7 @@ fn parse_propfind(xml: &[u8]) -> SourceResult<Vec<PropfindEntry>> {
                         href: String::new(),
                         is_dir: false,
                         size: None,
+                        mtime: None,
                     });
                 }
                 "href" => {
@@ -545,6 +548,10 @@ fn parse_propfind(xml: &[u8]) -> SourceResult<Vec<PropfindEntry>> {
                 }
                 "getcontentlength" => {
                     capture = Some(Capture::Size);
+                    captured.clear();
+                }
+                "getlastmodified" => {
+                    capture = Some(Capture::LastModified);
                     captured.clear();
                 }
                 "collection" => {
@@ -584,6 +591,16 @@ fn parse_propfind(xml: &[u8]) -> SourceResult<Vec<PropfindEntry>> {
                         entry.size = captured.trim().parse().ok();
                     }
                 }
+                "getlastmodified" => {
+                    if let (Some(entry), Some(Capture::LastModified)) =
+                        (current.as_mut(), capture.take())
+                    {
+                        entry.mtime = httpdate::parse_http_date(captured.trim())
+                            .ok()
+                            .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                            .and_then(|since| i64::try_from(since.as_secs()).ok());
+                    }
+                }
                 "response" => {
                     if let Some(mut entry) = current.take() {
                         if entry.href.ends_with('/') {
@@ -613,6 +630,7 @@ fn parse_propfind(xml: &[u8]) -> SourceResult<Vec<PropfindEntry>> {
 enum Capture {
     Href,
     Size,
+    LastModified,
 }
 
 #[cfg(test)]
@@ -835,6 +853,31 @@ mod tests {
                 .as_deref(),
             Some("Curso novo/aula um.mp4")
         );
+    }
+
+    #[test]
+    fn reads_the_last_modified_date_and_ignores_unparsable_ones() {
+        let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>/dav/a.mp4</D:href>
+    <D:propstat><D:prop>
+      <D:getcontentlength>10</D:getcontentlength>
+      <D:getlastmodified>Wed, 21 Oct 2015 07:28:00 GMT</D:getlastmodified>
+    </D:prop></D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/dav/b.mp4</D:href>
+    <D:propstat><D:prop>
+      <D:getcontentlength>10</D:getcontentlength>
+      <D:getlastmodified>not a date</D:getlastmodified>
+    </D:prop></D:propstat>
+  </D:response>
+</D:multistatus>"#;
+
+        let entries = parse_propfind(xml).unwrap();
+        assert_eq!(entries[0].mtime, Some(1_445_412_480));
+        assert_eq!(entries[1].mtime, None);
     }
 
     #[test]
