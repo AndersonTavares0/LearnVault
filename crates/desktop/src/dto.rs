@@ -7,8 +7,8 @@
 
 use learnvault_core::{
     Availability, Catalog, CatalogFile, CatalogNode, FocusKind, FocusSession, FocusSummary,
-    MediaBookmark, MediaKind, NodeRole, RescanSummary, RewardSummary, StudyFavorites,
-    StudyProgress,
+    MediaBookmark, MediaKind, NodeRole, PlayerPreference, RescanSummary, RewardSummary,
+    StudyFavorites, StudyProgress,
 };
 use serde::{Deserialize, Serialize};
 
@@ -267,6 +267,67 @@ impl StudyProgressDto {
 pub struct RecentStudyDto {
     /// Itens de progresso, já ordenados pelo núcleo.
     pub items: Vec<StudyProgressDto>,
+}
+
+/// Playback preferences of the local owner.
+///
+/// Speeds use the same contract as the HTTP adapter (percentages of normal speed), so
+/// `normalizePlaybackPreferences` in the SPA accepts both payloads unchanged.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PlaybackPreferencesDto {
+    /// Video speed as a percentage of normal speed.
+    pub video_speed: i64,
+    /// Audio speed as a percentage of normal speed.
+    pub audio_speed: i64,
+    /// Last chosen subtitle language; empty means no preference.
+    pub subtitle_language: String,
+    /// Last write in Unix seconds; zero means the defaults were never saved.
+    pub updated_at: i64,
+}
+
+impl From<PlayerPreference> for PlaybackPreferencesDto {
+    fn from(preference: PlayerPreference) -> Self {
+        Self {
+            video_speed: preference.video_speed,
+            audio_speed: preference.audio_speed,
+            subtitle_language: preference.subtitle_language,
+            updated_at: preference.updated_at,
+        }
+    }
+}
+
+/// Outcome of one sync run shown to the interface.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SyncResultDto {
+    /// Operations accepted by the server in this run.
+    pub pushed: usize,
+    /// Operations applied locally in this run.
+    pub pulled: usize,
+    /// Operations still waiting in the local outbox.
+    pub pending: i64,
+    /// Stable failure code, or `None` when the run completed.
+    pub error: Option<String>,
+}
+
+/// Sync configuration, queue and last result shown to the interface.
+///
+/// The session cookie is deliberately absent: it never crosses the IPC boundary.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SyncStateDto {
+    /// Stable identity of this device.
+    pub device_id: String,
+    /// Last server cursor applied locally.
+    pub pull_cursor: i64,
+    /// Configured server base URL; empty when not configured.
+    pub server_url: String,
+    /// Whether a session is stored locally.
+    pub signed_in: bool,
+    /// Operations still waiting in the local outbox.
+    pub pending: i64,
+    /// Stable failure code of the last automatic or manual run.
+    pub last_error: Option<String>,
+    /// Summary of the last run, when one already happened.
+    pub last_result: Option<SyncResultDto>,
 }
 
 /// A rectangle of a PDF annotation, as fractions of the page.

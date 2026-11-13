@@ -33,6 +33,7 @@ pub mod search;
 pub mod source;
 pub mod structure;
 pub mod study;
+pub mod sync;
 pub mod titles;
 
 mod migrations;
@@ -95,4 +96,11 @@ pub use study::{
     list_study_notes, media_bookmark_media_id, recent_study, record_position, review_flashcard,
     set_completed, set_course_favorite, set_lesson_favorite, study_note_media_id, study_progress,
     study_summary, study_summary_on, update_flashcard, update_study_note,
+};
+pub use sync::{
+    MAX_PULL_BATCH, MAX_SYNC_BATCH, MAX_SYNC_ID_CHARS, MAX_SYNC_POSITION_SECONDS, PushOutcome,
+    SyncBatch, SyncOperation, SyncOperationInput, SyncPayload, SyncState, acknowledge_operations,
+    apply_operations, enqueue_operation, pending_count, pending_operations, pull_operations,
+    push_operations, queue_bookmark_create, queue_completed, queue_note_create, queue_note_update,
+    queue_position, queue_preference, queue_review, sync_state,
 };

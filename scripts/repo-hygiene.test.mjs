@@ -44,6 +44,8 @@ test('hygiene checker permits raster images and fixtures strictly in allowed dir
 		'crates/desktop/icons/icon.ico',
 		'crates/desktop/icons/128x128.png',
 		'deploy/packages/app.learnvault.desktop.png',
+		'apps/web/public/favicon.ico',
+		'apps/web/public/apple-touch-icon.png',
 		'testdata/library/sample.mp4'
 	];
 	assert.deepEqual(checkTrackedFiles(permitted, { root }), []);
@@ -51,21 +53,22 @@ test('hygiene checker permits raster images and fixtures strictly in allowed dir
 	const forbidden = [
 		'README-screenshot.png',
 		'docs/architecture/diagram.png',
+		'apps/web/src/assets/hero.jpg',
 		'docs/design/icon.ico',
 		'docs/guide/demo.mkv'
 	];
 	const violations = checkTrackedFiles(forbidden, { root });
-	assert.equal(violations.length, 4);
+	assert.equal(violations.length, 5);
 });
 
 test('hygiene checker normalizes Windows backslash paths', () => {
 	const syntheticWindowsFiles = [
 		'.claude\\settings.json',
 		'docs\\design\\screenshots\\shot.png',
-		'apps\\web\\src\\hero.ico'
+		'apps\\web\\public\\favicon.ico'
 	];
 	const violations = checkTrackedFiles(syntheticWindowsFiles, { root });
-	assert.equal(violations.length, 3);
+	assert.equal(violations.length, 2);
 	assert.ok(violations.some((v) => v.file.includes('.claude')));
 	assert.ok(violations.some((v) => v.file.includes('screenshots')));
 });

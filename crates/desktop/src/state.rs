@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use learnvault_core::{CourseRoot, Database};
+use learnvault_core::{CourseRoot, Database, SyncOperation, SyncOperationInput};
 
 use crate::command::catalog_with_orders;
 use crate::config::{DesktopConfigDto, database_path};
@@ -24,13 +24,15 @@ use crate::covers::{
 use crate::dto::{
     CatalogDto, CoverDto, CoverRemovalDto, FlashcardDto, FlashcardReviewsDto, FocusSessionDto,
     FocusSummaryDto, MediaBookmarkDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto,
-    NewPdfAnnotationDto, PdfAnnotationDto, RecentStudyDto, RescanSummaryDto, RewardSummaryDto,
-    SearchResultsDto, StudyFavoritesDto, StudyNoteDto, StudyProgressDto, StudySummaryDto,
+    NewPdfAnnotationDto, PdfAnnotationDto, PlaybackPreferencesDto, RecentStudyDto,
+    RescanSummaryDto, RewardSummaryDto, SearchResultsDto, StudyFavoritesDto, StudyNoteDto,
+    StudyProgressDto, StudySummaryDto, SyncResultDto, SyncStateDto,
 };
 use crate::error::IpcError;
 use crate::ordering::{CourseOrders, load_orders, store_orders};
 use crate::search;
 use crate::study;
+use crate::sync::{self, SyncFailure, SyncFlight, SyncSettings};
 
 /// Estado Tauri do desktop: banco local e cursos registrados.
 #[derive(Clone)]
@@ -42,6 +44,10 @@ pub struct DesktopState {
     courses: Arc<Mutex<Vec<CourseEntry>>>,
     orders: Arc<Mutex<CourseOrders>>,
     rescanning: Arc<AtomicBool>,
+    sync_file: PathBuf,
+    sync: Arc<Mutex<SyncSettings>>,
+    sync_flight: Arc<SyncFlight>,
+    sync_result: Arc<Mutex<Option<SyncResultDto>>>,
 }
 
 impl DesktopState {
@@ -58,6 +64,8 @@ impl DesktopState {
             .map_err(|_| IpcError::database_unavailable())?;
         let courses = load_courses(config_dir);
         let orders = load_orders(data_dir);
+        let sync_file = sync::settings_path(data_dir);
+        let sync = sync::load_settings(data_dir);
 
         Ok(Self {
             database: Arc::new(Mutex::new(database)),
@@ -67,6 +75,10 @@ impl DesktopState {
             courses: Arc::new(Mutex::new(courses)),
             orders: Arc::new(Mutex::new(orders)),
             rescanning: Arc::new(AtomicBool::new(false)),
+            sync_file,
+            sync: Arc::new(Mutex::new(sync)),
+            sync_flight: Arc::new(SyncFlight::default()),
+            sync_result: Arc::new(Mutex::new(None)),
         })
     }
 
@@ -354,7 +366,10 @@ impl DesktopState {
             .database
             .lock()
             .map_err(|_| IpcError::database_unavailable())?;
-        study::record_position(&database, media_id, position_seconds)
+        let result = study::record_position(&database, media_id, position_seconds)?;
+        drop(database);
+        self.request_sync();
+        Ok(result)
     }
 
     /// Marca ou desmarca a conclusão do dono local, preservando a posição de retomada.
@@ -367,7 +382,10 @@ impl DesktopState {
             .database
             .lock()
             .map_err(|_| IpcError::database_unavailable())?;
-        study::set_completed(&database, media_id, completed)
+        let result = study::set_completed(&database, media_id, completed)?;
+        drop(database);
+        self.request_sync();
+        Ok(result)
     }
 
     /// Lista o progresso de estudo do dono local, do mais recente ao mais antigo.
@@ -391,6 +409,235 @@ impl DesktopState {
         study::summary(&database)
     }
 
+    /// Lê as preferências de reprodução persistidas do dono local.
+    pub fn playback_preference(&self) -> Result<PlaybackPreferencesDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::playback_preference(&database)
+    }
+
+    /// Grava as preferências de reprodução e as enfileira para o servidor.
+    pub fn save_playback_preference(
+        &self,
+        video_speed: i64,
+        audio_speed: i64,
+        subtitle_language: &str,
+    ) -> Result<PlaybackPreferencesDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        let result = study::save_playback_preference(
+            &database,
+            video_speed,
+            audio_speed,
+            subtitle_language,
+        )?;
+        drop(database);
+        self.request_sync();
+        Ok(result)
+    }
+
+    /// Identidade local do dispositivo e cursor já aplicado.
+    pub fn sync_state(&self) -> Result<SyncStateDto, IpcError> {
+        let (device_id, pull_cursor, pending) = {
+            let database = self
+                .database
+                .lock()
+                .map_err(|_| IpcError::database_unavailable())?;
+            let state = sync::state(&database)?;
+            let pending = sync::pending_count(&database)?;
+            (state.device_id, state.pull_cursor, pending)
+        };
+        let settings = self
+            .sync
+            .lock()
+            .map_err(|_| IpcError::sync_unavailable())?
+            .clone();
+        let last_result = self
+            .sync_result
+            .lock()
+            .map_err(|_| IpcError::sync_unavailable())?
+            .clone();
+        let signed_in = settings.signed_in();
+        Ok(SyncStateDto {
+            device_id,
+            pull_cursor,
+            server_url: settings.server_url,
+            signed_in,
+            pending,
+            last_error: last_result.as_ref().and_then(|result| result.error.clone()),
+            last_result,
+        })
+    }
+
+    /// Configura a URL do servidor. Trocar de servidor apaga a sessão guardada, para que
+    /// um cookie de outra origem nunca seja enviado ao novo endereço.
+    pub fn sync_configure(&self, server_url: &str) -> Result<SyncStateDto, IpcError> {
+        let normalized = sync::validate_server_url(server_url)?;
+        {
+            let mut settings = self.sync.lock().map_err(|_| IpcError::sync_unavailable())?;
+            if settings.server_url != normalized {
+                settings.server_url = normalized;
+                settings.session.clear();
+                sync::store_settings(&self.sync_file, &settings)?;
+            }
+        }
+        self.sync_state()
+    }
+
+    /// Entra no servidor configurado e guarda a sessão em disco.
+    pub fn sync_login(&self, username: &str, password: &str) -> Result<SyncStateDto, IpcError> {
+        let settings = self
+            .sync
+            .lock()
+            .map_err(|_| IpcError::sync_unavailable())?
+            .clone();
+        if !settings.configured() {
+            return Err(IpcError::invalid_sync_server());
+        }
+        let session = sync::login(&settings.server_url, username, password)?;
+        {
+            let mut guard = self.sync.lock().map_err(|_| IpcError::sync_unavailable())?;
+            // A URL pode ter mudado durante a requisição; não grave um cookie de outra origem.
+            if guard.server_url != settings.server_url {
+                return Err(IpcError::invalid_sync_server());
+            }
+            guard.session = session;
+            sync::store_settings(&self.sync_file, &guard)?;
+        }
+        self.sync_state()
+    }
+
+    /// Encerra a sessão no servidor (melhor esforço) e apaga a cópia local.
+    pub fn sync_logout(&self) -> Result<SyncStateDto, IpcError> {
+        let settings = self
+            .sync
+            .lock()
+            .map_err(|_| IpcError::sync_unavailable())?
+            .clone();
+        if settings.configured() && settings.signed_in() {
+            sync::logout(&settings.server_url, &settings.session);
+        }
+        {
+            let mut guard = self.sync.lock().map_err(|_| IpcError::sync_unavailable())?;
+            guard.session.clear();
+            sync::store_settings(&self.sync_file, &guard)?;
+        }
+        *self
+            .sync_result
+            .lock()
+            .map_err(|_| IpcError::sync_unavailable())? = None;
+        self.sync_state()
+    }
+
+    /// Executa uma sincronização completa. Nunca sobrepõe outra execução: nesse caso
+    /// devolve apenas o resumo com `sync_in_progress`.
+    pub fn sync_now(&self) -> Result<SyncResultDto, IpcError> {
+        let Some(_flight) = self.sync_flight.try_begin() else {
+            return self.summary_with_error("sync_in_progress");
+        };
+        let settings = self
+            .sync
+            .lock()
+            .map_err(|_| IpcError::sync_unavailable())?
+            .clone();
+        let result = {
+            let database = self
+                .database
+                .lock()
+                .map_err(|_| IpcError::database_unavailable())?;
+            sync::run(&database, &settings.server_url, &settings.session)
+        };
+        let summary = match result {
+            Ok(result) => result,
+            Err(failure) => {
+                if failure == SyncFailure::Unauthorized {
+                    self.clear_session_if(&settings.server_url);
+                }
+                self.summary_with_error(failure.code())?
+            }
+        };
+        *self
+            .sync_result
+            .lock()
+            .map_err(|_| IpcError::sync_unavailable())? = Some(summary.clone());
+        Ok(summary)
+    }
+
+    fn summary_with_error(&self, code: &str) -> Result<SyncResultDto, IpcError> {
+        let pending = {
+            let database = self
+                .database
+                .lock()
+                .map_err(|_| IpcError::database_unavailable())?;
+            sync::pending_count(&database)?
+        };
+        Ok(SyncResultDto {
+            pushed: 0,
+            pulled: 0,
+            pending,
+            error: Some(code.to_owned()),
+        })
+    }
+
+    fn clear_session_if(&self, server_url: &str) {
+        if let Ok(mut settings) = self.sync.lock()
+            && settings.server_url == server_url
+        {
+            settings.session.clear();
+            let _ = sync::store_settings(&self.sync_file, &settings);
+        }
+    }
+
+    /// Dispara uma sincronização em segundo plano quando há servidor e sessão.
+    ///
+    /// Chamado depois de cada escrita enfileirada e na inicialização. Se outra execução
+    /// já estiver em andamento, a chamada não faz nada.
+    pub(crate) fn request_sync(&self) {
+        let ready = self
+            .sync
+            .lock()
+            .map(|settings| settings.configured() && settings.signed_in())
+            .unwrap_or(false);
+        if !ready || self.sync_flight.is_running() {
+            return;
+        }
+        let state = self.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            let _ = state.sync_now();
+        });
+    }
+
+    /// Operações ainda pendentes no outbox local.
+    pub fn sync_pending(&self, limit: Option<usize>) -> Result<Vec<SyncOperationInput>, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        sync::pending(&database, limit.unwrap_or(learnvault_core::MAX_SYNC_BATCH))
+    }
+
+    /// Remove do outbox as operações aceitas pelo servidor.
+    pub fn sync_acknowledge(&self, op_ids: &[String]) -> Result<usize, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        sync::acknowledge(&database, op_ids)
+    }
+
+    /// Aplica as operações recebidas e grava o cursor na mesma transação.
+    pub fn sync_apply(&self, operations: &[SyncOperation], cursor: i64) -> Result<usize, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        sync::apply(&database, operations, cursor)
+    }
+
     /// Lista anotações do dono local, filtrando por mídia ou trazendo todas com caminhos relativos.
     pub fn list_notes(&self, media_id: Option<&str>) -> Result<Vec<StudyNoteDto>, IpcError> {
         let database = self
@@ -400,7 +647,7 @@ impl DesktopState {
         study::list_notes(&database, media_id)
     }
 
-    /// Busca global nas notas do dono local e nos títulos do catálogo.
+    /// Busca notas e catálogo no banco local do dono fixo.
     ///
     /// Os títulos dos cursos vêm do registro, então o índice é sincronizado a cada busca;
     /// a consulta e o limite são validados pelo núcleo.
@@ -428,7 +675,10 @@ impl DesktopState {
             .database
             .lock()
             .map_err(|_| IpcError::database_unavailable())?;
-        study::create_note(&database, media_id, position_seconds, content)
+        let result = study::create_note(&database, media_id, position_seconds, content)?;
+        drop(database);
+        self.request_sync();
+        Ok(result)
     }
 
     /// Atualiza o conteúdo de uma anotação existente.
@@ -437,7 +687,10 @@ impl DesktopState {
             .database
             .lock()
             .map_err(|_| IpcError::database_unavailable())?;
-        study::update_note(&database, note_id, content)
+        let result = study::update_note(&database, note_id, content)?;
+        drop(database);
+        self.request_sync();
+        Ok(result)
     }
 
     /// Remove uma anotação de estudo do usuário local.
@@ -469,7 +722,10 @@ impl DesktopState {
             .database
             .lock()
             .map_err(|_| IpcError::database_unavailable())?;
-        study::create_bookmark(&database, media_id, position_seconds, label)
+        let result = study::create_bookmark(&database, media_id, position_seconds, label)?;
+        drop(database);
+        self.request_sync();
+        Ok(result)
     }
 
     /// Deletes one of the local owner's timestamp bookmarks.
@@ -610,7 +866,10 @@ impl DesktopState {
             .database
             .lock()
             .map_err(|_| IpcError::database_unavailable())?;
-        study::review_flashcard(&database, card_id, rating)
+        let result = study::review_flashcard(&database, card_id, rating)?;
+        drop(database);
+        self.request_sync();
+        Ok(result)
     }
 
     /// Lista os cursos e aulas favoritados pelo dono local.

@@ -85,6 +85,7 @@ jobs:
               . != "Cargo.toml" and
               . != "pnpm-lock.yaml" and
               . != "package.json" and
+              . != "apps/web/package.json" and
               . != "apps/web-next/package.json" and
               (startswith("crates/") and endswith("/Cargo.toml") | not)
             )

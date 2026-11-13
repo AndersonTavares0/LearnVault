@@ -18,8 +18,9 @@ use learnvault_core::{Database, FocusSessionInput, ReviewRating};
 
 use crate::dto::{
     FlashcardDto, FlashcardReviewDto, FlashcardReviewsDto, FocusSessionDto, FocusSummaryDto,
-    MediaBookmarkDto, NewPdfAnnotationDto, PdfAnnotationDto, RecentStudyDto, RewardSummaryDto,
-    StudyFavoritesDto, StudyNoteDto, StudyProgressDto, StudySummaryDto,
+    MediaBookmarkDto, NewPdfAnnotationDto, PdfAnnotationDto, PlaybackPreferencesDto,
+    RecentStudyDto, RewardSummaryDto, StudyFavoritesDto, StudyNoteDto, StudyProgressDto,
+    StudySummaryDto,
 };
 use crate::error::IpcError;
 
@@ -61,9 +62,16 @@ pub fn record_position(
     media_id: &str,
     position_seconds: i64,
 ) -> Result<StudyProgressDto, IpcError> {
-    learnvault_core::record_position(database, LOCAL_OWNER_ID, media_id, position_seconds)
-        .map(StudyProgressDto::from)
-        .map_err(study_error)
+    let device = crate::sync::device(database)?;
+    learnvault_core::queue_position(
+        database,
+        LOCAL_OWNER_ID,
+        &device,
+        media_id,
+        position_seconds,
+    )
+    .map(StudyProgressDto::from)
+    .map_err(study_error)
 }
 
 /// Marca ou desmarca a conclusão do dono local, preservando a posição de retomada.
@@ -72,7 +80,8 @@ pub fn set_completed(
     media_id: &str,
     completed: bool,
 ) -> Result<StudyProgressDto, IpcError> {
-    learnvault_core::set_completed(database, LOCAL_OWNER_ID, media_id, completed)
+    let device = crate::sync::device(database)?;
+    learnvault_core::queue_completed(database, LOCAL_OWNER_ID, &device, media_id, completed)
         .map(StudyProgressDto::from)
         .map_err(study_error)
 }
@@ -174,9 +183,11 @@ pub fn create_note(
     position_seconds: i64,
     content: &str,
 ) -> Result<StudyNoteDto, IpcError> {
-    learnvault_core::create_study_note(
+    let device = crate::sync::device(database)?;
+    learnvault_core::queue_note_create(
         database,
         LOCAL_OWNER_ID,
+        &device,
         media_id,
         position_seconds,
         content,
@@ -191,7 +202,8 @@ pub fn update_note(
     note_id: &str,
     content: &str,
 ) -> Result<StudyNoteDto, IpcError> {
-    learnvault_core::update_study_note(database, LOCAL_OWNER_ID, note_id, content)
+    let device = crate::sync::device(database)?;
+    learnvault_core::queue_note_update(database, LOCAL_OWNER_ID, &device, note_id, content)
         .map(StudyNoteDto::from)
         .map_err(study_error)
 }
@@ -374,7 +386,8 @@ pub fn review_flashcard(
     let Some(parsed) = ReviewRating::parse(rating) else {
         return Err(IpcError::invalid_review_rating());
     };
-    learnvault_core::review_flashcard(database, LOCAL_OWNER_ID, card_id, parsed)
+    let device = crate::sync::device(database)?;
+    learnvault_core::queue_review(database, LOCAL_OWNER_ID, &device, card_id, parsed)
         .map(FlashcardDto::from)
         .map_err(study_error)
 }
@@ -423,9 +436,11 @@ pub fn create_bookmark(
     position_seconds: i64,
     label: &str,
 ) -> Result<MediaBookmarkDto, IpcError> {
-    learnvault_core::create_media_bookmark(
+    let device = crate::sync::device(database)?;
+    learnvault_core::queue_bookmark_create(
         database,
         LOCAL_OWNER_ID,
+        &device,
         media_id,
         position_seconds,
         label,
@@ -443,6 +458,36 @@ pub fn delete_bookmark(database: &Database, bookmark_id: &str) -> Result<(), Ipc
     } else {
         Err(IpcError::bookmark_not_found())
     }
+}
+
+/// Reads the local owner's playback preferences, falling back to the neutral defaults.
+///
+/// Preferences are part of the offline queue: every save is applied locally and enqueued
+/// with its own `op_id`, so two devices converge by last write.
+pub fn playback_preference(database: &Database) -> Result<PlaybackPreferencesDto, IpcError> {
+    learnvault_core::player_preference(database, LOCAL_OWNER_ID)
+        .map(PlaybackPreferencesDto::from)
+        .map_err(study_error)
+}
+
+/// Saves every playback field for the local owner and enqueues the change.
+pub fn save_playback_preference(
+    database: &Database,
+    video_speed: i64,
+    audio_speed: i64,
+    subtitle_language: &str,
+) -> Result<PlaybackPreferencesDto, IpcError> {
+    let device = crate::sync::device(database)?;
+    learnvault_core::queue_preference(
+        database,
+        LOCAL_OWNER_ID,
+        &device,
+        video_speed,
+        audio_speed,
+        subtitle_language,
+    )
+    .map(PlaybackPreferencesDto::from)
+    .map_err(study_error)
 }
 
 /// Traduz o erro do núcleo para o erro IPC estável, sem ecoar o identificador consultado.
@@ -465,6 +510,7 @@ fn study_error(error: learnvault_core::Error) -> IpcError {
         Error::InvalidFavoriteTarget => IpcError::invalid_favorite_target(),
         Error::BookmarkNotFound { .. } => IpcError::bookmark_not_found(),
         Error::InvalidBookmarkLabel => IpcError::invalid_bookmark_label(),
+        Error::InvalidPlayerPreference => IpcError::invalid_player_preference(),
         _ => IpcError::study_unavailable(),
     }
 }

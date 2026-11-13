@@ -69,7 +69,7 @@ test("blocks file tools that touch the worktree on protected branches", async ()
   const cases = [
     ["edit", { filePath: "README.md" }],
     ["write", { filePath: ".opencode/plugins/novo.ts" }],
-    ["apply_patch", { patchText: patchText("apps/web-next/src/app.tsx") }],
+    ["apply_patch", { patchText: patchText("apps/web/src/App.svelte") }],
     ["apply_patch", {}],
   ]
   for (const [tool, args] of cases) {
@@ -228,7 +228,7 @@ test("blocks git mutations when the shell tool is named shell", async () => {
 
 test("blocks patch writes when the patch tool is named patch", async () => {
   const hook = await hookFor({ branch: "main" })
-  const blocked = await attempt(hook, "patch", { patchText: patchText("apps/web-next/src/app.tsx") })
+  const blocked = await attempt(hook, "patch", { patchText: patchText("apps/web/src/App.svelte") })
   assert.equal(blocked.blocked, true, "escrita via patch deveria ser bloqueada")
   assert.match(blocked.message, /protegida/)
 

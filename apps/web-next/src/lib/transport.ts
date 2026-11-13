@@ -161,6 +161,19 @@ export type StudyFavorites = {
 };
 export const STUDY_NOT_AVAILABLE = 'study_not_available';
 
+/** Outcome of one desktop sync run. `error` is a stable code, never a message. */
+export type SyncResult = { pushed: number; pulled: number; pending: number; error: string | null };
+/** Desktop sync settings, queue and last run. The session cookie never reaches the webview. */
+export type SyncState = {
+	deviceId: string;
+	pullCursor: number;
+	serverUrl: string;
+	signedIn: boolean;
+	pending: number;
+	lastError: string | null;
+	lastResult: SyncResult | null;
+};
+
 export type MediaCapabilities = {
 	transcoding: boolean;
 	systemPlayer?: boolean;
@@ -266,6 +279,12 @@ export interface Transport {
 	rewardSummary(): Promise<RewardSummary>;
 	claimDailyMission(missionId: MissionId): Promise<boolean>;
 	setWeeklyGoal(goal: number): Promise<number>;
+	// Desktop only: offline study sync against a configured LearnVault server.
+	syncState?(): Promise<SyncState>;
+	syncConfigure?(serverUrl: string): Promise<SyncState>;
+	syncSignIn?(username: string, password: string): Promise<SyncState>;
+	syncSignOut?(): Promise<SyncState>;
+	syncNow?(): Promise<SyncResult>;
 	userAvatarUrl(version?: number | null): string;
 	uploadUserAvatar(file: File | Blob): Promise<{ version: number }>;
 	deleteUserAvatar(): Promise<void>;
@@ -737,6 +756,54 @@ export const IDLE_INDEXING: IndexingSnapshot = {
 	coursesCompleted: 0,
 	lastError: null
 };
+
+/**
+ * Mirrors the Rust rule for the sync server address: http or https, a host, and nothing else
+ * (no userinfo, query, fragment or path). The Rust side stays the authority.
+ */
+export function validSyncServerUrl(raw: string): boolean {
+	try {
+		const url = new URL(raw.trim());
+		return (url.protocol === 'http:' || url.protocol === 'https:')
+			&& Boolean(url.hostname)
+			&& !url.username && !url.password
+			&& !url.search && !url.hash
+			&& (url.pathname === '' || url.pathname === '/')
+			&& !raw.trim().includes('?'); // An empty query (`?`) is dropped by the URL parser but rejected by Rust.
+	} catch {
+		return false;
+	}
+}
+
+function syncCount(value: unknown): number {
+	return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;
+}
+
+export function normalizeSyncResult(raw: unknown): SyncResult {
+	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalidPayload('resultado de sincronização inválido.');
+	const result = raw as Record<string, unknown>;
+	return {
+		pushed: syncCount(result.pushed),
+		pulled: syncCount(result.pulled),
+		pending: syncCount(result.pending),
+		error: typeof result.error === 'string' ? result.error : null
+	};
+}
+
+export function normalizeSyncState(raw: unknown): SyncState {
+	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalidPayload('estado de sincronização ausente.');
+	const state = raw as Record<string, unknown>;
+	if (typeof state.device_id !== 'string' || typeof state.server_url !== 'string' || typeof state.signed_in !== 'boolean') throw invalidPayload('estado de sincronização incompleto.');
+	return {
+		deviceId: state.device_id,
+		pullCursor: syncCount(state.pull_cursor),
+		serverUrl: state.server_url,
+		signedIn: state.signed_in,
+		pending: syncCount(state.pending),
+		lastError: typeof state.last_error === 'string' ? state.last_error : null,
+		lastResult: state.last_result == null ? null : normalizeSyncResult(state.last_result)
+	};
+}
 
 export function normalizeStudyNote(raw: unknown): StudyNote {
 	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalidPayload('anotação de estudo inválida.');
@@ -1443,6 +1510,9 @@ function desktopErrorMessage(code: string): string | null {
 		case 'bookmark_not_found': return tr('Timestamp not found.', 'Marcador não encontrado.');
 		case 'invalid_bookmark_label': return tr('Invalid timestamp label.', 'Rótulo do marcador inválido.');
 		case 'invalid_favorite_target': return tr('Invalid favorite target.', 'Alvo de favorito inválido.');
+		case 'invalid_sync_server': return tr('Use the server address only, with no path or login.', 'Informe só o endereço do servidor, sem caminho ou login.');
+		case 'sync_login_failed': return tr('Incorrect username or password.', 'Usuário ou senha incorretos.');
+		case 'sync_unavailable': return tr('Could not reach the sync server.', 'Não foi possível alcançar o servidor de sincronização.');
 		default: return null;
 	}
 }
@@ -1487,6 +1557,27 @@ export class DesktopStub implements Transport {
 	// omitido em vez de enviado como `undefined`.
 	async recentStudy(limit?: number) { try { return normalizeRecentStudy(await invoke<unknown>('desktop_recent_study', limit === undefined ? {} : { limit })); } catch (cause) { throw desktopError(cause, tr('Could not load study history.', 'Não foi possível carregar o histórico de estudo.')); } }
 	async studySummary() { try { return normalizeStudySummary(await invoke<unknown>('desktop_study_summary')); } catch (cause) { throw desktopError(cause, tr('Could not load your progress summary.', 'Não foi possível carregar sua evolução.')); } }
+	// As preferências vivem no banco local e entram na fila de sincronização; o
+	// armazenamento do webview continua sendo a cópia imediata e o fallback offline.
+	async getPlaybackPreferences() {
+		try {
+			return normalizePlaybackPreferences(await invoke<unknown>('desktop_playback_preferences'));
+		} catch (cause) {
+			throw desktopError(cause, tr('Could not load playback preferences.', 'Não foi possível carregar as preferências de reprodução.'));
+		}
+	}
+	async savePlaybackPreferences(preferences: PlaybackPreferences) {
+		try {
+			const saved = await invoke<unknown>('desktop_save_playback_preferences', {
+				videoSpeed: Math.round(preferences.videoSpeed * 100),
+				audioSpeed: Math.round(preferences.audioSpeed * 100),
+				subtitleLanguage: preferences.subtitleLanguage
+			});
+			return normalizePlaybackPreferences(saved);
+		} catch (cause) {
+			throw desktopError(cause, tr('Could not save playback preferences.', 'Não foi possível salvar as preferências de reprodução.'));
+		}
+	}
 	async listNotes(mediaId?: string): Promise<StudyNote[]> {
 		try {
 			const res = await invoke<unknown>('desktop_list_notes', mediaId ? { mediaId } : {});
@@ -1669,6 +1760,12 @@ export class DesktopStub implements Transport {
 	async rewardSummary() { try { return normalizeRewardSummary(await invoke<unknown>('desktop_reward_summary')); } catch (cause) { throw desktopError(cause, tr('Could not load your rewards.', 'Não foi possível carregar suas recompensas.')); } }
 	async claimDailyMission(missionId: MissionId) { try { return await invoke<boolean>('desktop_claim_daily_mission', { missionId }); } catch (cause) { throw desktopError(cause, tr('Could not claim mission.', 'Não foi possível resgatar a missão.')); } }
 	async setWeeklyGoal(goal: number) { try { if (!Number.isInteger(goal) || goal < 1 || goal > 7) throw new Error(); const saved = await invoke<unknown>('desktop_set_weekly_goal', { weeklyGoal: goal }); if (!Number.isInteger(saved) || (saved as number) < 1 || (saved as number) > 7) throw invalidPayload('meta semanal inválida.'); return saved as number; } catch (cause) { if (cause instanceof Error && cause.message.startsWith('Resposta inválida')) throw cause; throw desktopError(cause, tr('Could not save weekly goal.', 'Não foi possível salvar a meta semanal.')); } }
+	// A senha só existe na chamada de login: nenhum estado ou segredo volta para o webview.
+	async syncState() { try { return normalizeSyncState(await invoke<unknown>('desktop_sync_state')); } catch (cause) { throw desktopError(cause, tr('Could not read sync state.', 'Não foi possível ler o estado da sincronização.')); } }
+	async syncConfigure(serverUrl: string) { try { return normalizeSyncState(await invoke<unknown>('desktop_sync_configure', { serverUrl })); } catch (cause) { throw desktopError(cause, tr('Could not save the server address.', 'Não foi possível salvar o endereço do servidor.')); } }
+	async syncSignIn(username: string, password: string) { try { return normalizeSyncState(await invoke<unknown>('desktop_sync_login', { username, password })); } catch (cause) { throw desktopError(cause, tr('Could not sign in to the sync server.', 'Não foi possível entrar no servidor de sincronização.')); } }
+	async syncSignOut() { try { return normalizeSyncState(await invoke<unknown>('desktop_sync_logout')); } catch (cause) { throw desktopError(cause, tr('Could not sign out.', 'Não foi possível sair.')); } }
+	async syncNow() { try { return normalizeSyncResult(await invoke<unknown>('desktop_sync_now')); } catch (cause) { throw desktopError(cause, tr('Could not sync.', 'Não foi possível sincronizar.')); } }
 	userAvatarUrl(_version?: number | null) { return ''; }
 	uploadUserAvatar(_file: File | Blob): Promise<{ version: number }> { return Promise.resolve({ version: 1 }); }
 	deleteUserAvatar(): Promise<void> { return Promise.resolve(); }

@@ -25,6 +25,7 @@ mod spa;
 mod state;
 mod stream;
 mod study;
+mod sync;
 mod transcode;
 mod update;
 mod webdav;
@@ -124,6 +125,13 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/api/study/recent", get(study::recent))
         .route("/api/study/summary", get(study::summary))
+        // O lote de sincronização carrega até 200 operações com texto de anotação, então
+        // tem um limite próprio, muito acima do padrão das rotas pequenas.
+        .route(
+            "/api/sync/push",
+            post(sync::push).layer(DefaultBodyLimit::max(4 * 1024 * 1024)),
+        )
+        .route("/api/sync/pull", get(sync::pull))
         .route("/api/study/progress", get(study::progress))
         .route("/api/study/position", post(study::record_position))
         .route("/api/study/completed", post(study::set_completed))

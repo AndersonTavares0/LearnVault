@@ -4,19 +4,19 @@
 //! construção, que a fundação do desktop embute o frontend em produção, mantém o ACL
 //! em deny-by-default e não introduz listener de rede, servidor HTTP nem plugin
 //! privilegiado. O alvo é detectar regressões de configuração em CI, não exercitar a
-//! UI do Tauri.
+//! UI do Tauri. `reqwest` é a única exceção, restrita ao cliente de sincronização:
+//! o desktop fala com um servidor configurado pelo usuário, nunca escuta.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const FORBIDDEN_SOURCE_TOKENS: [&str; 13] = [
+const FORBIDDEN_SOURCE_TOKENS: [&str; 12] = [
     "TcpListener",
     "TcpStream",
     "UdpSocket",
     "std::net",
     "tokio::net",
     "HttpServer",
-    "reqwest",
     "hyper",
     "axum",
     "tauri_plugin_http",
@@ -25,7 +25,7 @@ const FORBIDDEN_SOURCE_TOKENS: [&str; 13] = [
     "tauri_plugin_fs",
 ];
 
-const FORBIDDEN_MANIFEST_DEPS: [&str; 9] = [
+const FORBIDDEN_MANIFEST_DEPS: [&str; 8] = [
     "tauri-plugin-http",
     "tauri-plugin-shell",
     "tauri-plugin-fs",
@@ -33,7 +33,6 @@ const FORBIDDEN_MANIFEST_DEPS: [&str; 9] = [
     "tauri-plugin-store",
     "tauri-plugin-persisted-scope",
     "tokio",
-    "reqwest",
     "axum",
 ];
 
@@ -296,6 +295,16 @@ fn build_registers_the_app_commands_in_the_acl_manifest() {
         "desktop_install_update",
         "desktop_media_capabilities",
         "desktop_open_in_system_player",
+        "desktop_playback_preferences",
+        "desktop_save_playback_preferences",
+        "desktop_sync_state",
+        "desktop_sync_pending",
+        "desktop_sync_acknowledge",
+        "desktop_sync_apply",
+        "desktop_sync_configure",
+        "desktop_sync_login",
+        "desktop_sync_logout",
+        "desktop_sync_now",
     ] {
         assert!(
             build.contains(command),
@@ -328,7 +337,6 @@ fn capability_grants_only_the_core_default_and_the_app_commands() {
     assert!(permissions.contains(&"allow-desktop-import-course-cover"));
     assert!(permissions.contains(&"allow-desktop-remove-course-cover"));
     assert!(permissions.contains(&"allow-desktop-rescan"));
-    assert!(permissions.contains(&"allow-desktop-search"));
     assert!(permissions.contains(&"allow-desktop-study-progress"));
     assert!(permissions.contains(&"allow-desktop-record-position"));
     assert!(permissions.contains(&"allow-desktop-set-completed"));
@@ -366,9 +374,19 @@ fn capability_grants_only_the_core_default_and_the_app_commands() {
     assert!(permissions.contains(&"allow-desktop-install-update"));
     assert!(permissions.contains(&"allow-desktop-media-capabilities"));
     assert!(permissions.contains(&"allow-desktop-open-in-system-player"));
+    assert!(permissions.contains(&"allow-desktop-playback-preferences"));
+    assert!(permissions.contains(&"allow-desktop-save-playback-preferences"));
+    assert!(permissions.contains(&"allow-desktop-sync-state"));
+    assert!(permissions.contains(&"allow-desktop-sync-pending"));
+    assert!(permissions.contains(&"allow-desktop-sync-acknowledge"));
+    assert!(permissions.contains(&"allow-desktop-sync-apply"));
+    assert!(permissions.contains(&"allow-desktop-sync-configure"));
+    assert!(permissions.contains(&"allow-desktop-sync-login"));
+    assert!(permissions.contains(&"allow-desktop-sync-logout"));
+    assert!(permissions.contains(&"allow-desktop-sync-now"));
     assert_eq!(
         permissions.len(),
-        50,
+        60,
         "a capability não pode ampliar além do núcleo, dos controles da titlebar e dos comandos do app: {permissions:?}"
     );
 }
@@ -512,7 +530,6 @@ fn invoke_handler_registers_only_the_desktop_commands() {
         "o handler precisa registrar o comando de rescan explícito: {commands}"
     );
     for command in [
-        "desktop_search",
         "desktop_study_progress",
         "desktop_record_position",
         "desktop_set_completed",

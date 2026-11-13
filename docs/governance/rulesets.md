@@ -32,7 +32,7 @@ The production ruleset export and active GitHub ruleset allow only squash merges
 
 The ruleset enforces that the following 5 CI checks must pass before any pull request can be merged:
 
-1. **`SPA checks`:** TypeScript and ESLint checks (`tsc --noEmit`, `eslint --max-warnings 0`), local scripts tests (`test:scripts`), Vitest unit tests, and dependency audits.
+1. **`SPA checks`:** SvelteKit type checks (`svelte-check`), local scripts tests (`test:scripts`), Vitest unit tests, and dependency audits.
 2. **`Rust tests and lints`:** Cargo format checks, Clippy lints (`-D warnings`), and the workspace test suite via `nextest`.
 3. **`Desktop crate compile and guards`:** Tauri 2 desktop compilation, Clippy, and desktop integration tests with native libraries.
 4. **`Container build (Rust)`:** Rootless Containerfile build verification and Trivy vulnerability scanner.

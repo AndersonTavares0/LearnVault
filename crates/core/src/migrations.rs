@@ -623,10 +623,59 @@ const V16: &str = "
 ALTER TABLE media ADD COLUMN content_hash TEXT;
 ";
 
+/// Versão 17: diário de sincronização entre desktop e servidor.
+///
+/// O diário (`sync_operation`) é somente de acréscimo: cada linha tem um `op_id` estável
+/// e único, e `seq` é o cursor monotônico da leitura incremental. `payload` guarda a
+/// operação tipada como JSON; a linha é gravada pelo servidor depois de aplicada, na
+/// mesma transação, para que um replay do mesmo `op_id` não duplique o efeito.
+///
+/// `sync_outbox` é a fila local do desktop: sobrevive a reinicializações e mantém o
+/// `op_id` entre tentativas, então reenviar nunca duplica. `sync_state` guarda o
+/// dispositivo local e o cursor do servidor por dono.
+///
+/// `study_note.sync_version` identifica a versão sincronizada que ocupa a linha
+/// principal; a versão perdedora vira uma cópia com identidade determinística, para que
+/// dois dispositivos convirjam sem perder texto. Linhas anteriores à migração ficam com
+/// a coluna nula e nunca são substituídas.
+const V17: &str = "
+ALTER TABLE study_note ADD COLUMN sync_version TEXT;
+
+CREATE TABLE sync_operation (
+    seq INTEGER PRIMARY KEY,
+    op_id TEXT NOT NULL UNIQUE,
+    owner_id TEXT NOT NULL,
+    device_id TEXT NOT NULL,
+    client_at INTEGER NOT NULL,
+    received_at INTEGER NOT NULL,
+    payload TEXT NOT NULL
+);
+
+CREATE INDEX sync_operation_owner_seq_idx ON sync_operation (owner_id, seq);
+
+CREATE TABLE sync_outbox (
+    op_id TEXT PRIMARY KEY NOT NULL,
+    owner_id TEXT NOT NULL,
+    device_id TEXT NOT NULL,
+    client_at INTEGER NOT NULL,
+    payload TEXT NOT NULL,
+    queued_at INTEGER NOT NULL
+);
+
+CREATE INDEX sync_outbox_owner_queued_idx ON sync_outbox (owner_id, queued_at, op_id);
+
+CREATE TABLE sync_state (
+    owner_id TEXT PRIMARY KEY NOT NULL,
+    device_id TEXT NOT NULL,
+    pull_cursor INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL
+);
+";
+
 /// Cadeia de migrações aplicada por [`crate::db::Database`]; o índice `n` leva o banco da
 /// versão `n` para `n + 1`.
 pub(crate) const MIGRATIONS: &[&str] = &[
-    V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16,
+    V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17,
 ];
 
 /// Versão do schema gravada em `PRAGMA user_version` (0 quando nunca migrado).

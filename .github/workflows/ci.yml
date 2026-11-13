@@ -119,11 +119,13 @@ jobs:
           path: crates/desktop/frontend-dist
       - run: pnpm run check
       - run: pnpm run test:scripts
-      - run: pnpm --filter learnvault-web-next lint
       - name: Test SPA and generated output contracts
-        run: pnpm --filter learnvault-web-next test
+        run: pnpm --filter learnvault-web test
         env:
           LEARNVAULT_PREBUILT_OUTPUTS: '1'
+      # React app built in parallel until the cutover (#340); its tests build both outputs.
+      - run: pnpm --filter learnvault-web-next lint
+      - run: pnpm --filter learnvault-web-next test
       # Accepted advisories live in pnpm-workspace.yaml (audit.ignore), the single source.
       - run: pnpm audit --audit-level=low
 

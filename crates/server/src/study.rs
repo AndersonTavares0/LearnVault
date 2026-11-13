@@ -1704,6 +1704,9 @@ pub(crate) fn study_failure_response(failure: StudyFailure) -> Response {
             StatusCode::UNPROCESSABLE_ENTITY,
             "invalid_player_preference",
         ),
+        StudyFailure::Core(Error::InvalidSyncOperation { .. }) => {
+            error_response(StatusCode::UNPROCESSABLE_ENTITY, "invalid_sync_operation")
+        }
         StudyFailure::Core(_) => internal_error("study unavailable"),
     }
 }
@@ -1784,11 +1787,11 @@ fn internal_error(message: &'static str) -> Response {
     error_response(StatusCode::INTERNAL_SERVER_ERROR, message)
 }
 
-fn invalid_query() -> Response {
+pub(crate) fn invalid_query() -> Response {
     error_response(StatusCode::BAD_REQUEST, "invalid_query")
 }
 
-fn error_response(status: StatusCode, error: &'static str) -> Response {
+pub(crate) fn error_response(status: StatusCode, error: &'static str) -> Response {
     private_no_store((status, Json(ErrorResponse { error })).into_response())
 }
 
@@ -1796,11 +1799,11 @@ fn credentials_required() -> Response {
     error_response(StatusCode::FORBIDDEN, "credentials_change_required")
 }
 
-fn csrf_failed() -> Response {
+pub(crate) fn csrf_failed() -> Response {
     error_response(StatusCode::FORBIDDEN, "csrf_failed")
 }
 
-fn private_no_store(mut response: Response) -> Response {
+pub(crate) fn private_no_store(mut response: Response) -> Response {
     response.headers_mut().insert(
         header::CACHE_CONTROL,
         HeaderValue::from_static("private, no-store"),
