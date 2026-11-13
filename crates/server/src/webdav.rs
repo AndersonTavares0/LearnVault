@@ -17,6 +17,8 @@ use reqwest::{
 };
 use url::Url;
 
+/// Maior URL de fonte aceita, em caracteres.
+const MAX_SOURCE_URL_CHARS: usize = 2048;
 /// Corpo máximo aceito de uma resposta `PROPFIND`.
 const MAX_PROPFIND_BYTES: usize = 4 * 1024 * 1024;
 /// Itens máximos aceitos em uma listagem.
@@ -37,7 +39,7 @@ const PROPFIND_BODY: &str = r#"<?xml version="1.0" encoding="utf-8"?>
 /// Falha ao interpretar a URL de uma fonte.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub(crate) enum SourceUrlError {
-    /// O esquema não é WebDAV nem HTTP(S).
+    /// O esquema não é WebDAV, HTTP(S) nem SMB.
     #[error("unsupported scheme")]
     UnsupportedScheme,
     /// A URL não pôde ser interpretada.
@@ -46,26 +48,43 @@ pub(crate) enum SourceUrlError {
     /// A URL não tem host.
     #[error("missing host")]
     MissingHost,
+    /// O caminho SMB não tem nome de compartilhamento.
+    #[error("missing share")]
+    MissingShare,
     /// A URL carrega credenciais no texto, que vazariam em logs.
     #[error("credentials in url")]
     CredentialsInUrl,
     /// A URL carrega consulta ou fragmento, que não identificam um diretório.
     #[error("query or fragment in url")]
     QueryOrFragment,
+    /// Um segmento do caminho tentaria sair da raiz.
+    #[error("path traversal in url")]
+    Traversal,
 }
 
 /// Interpreta e normaliza a URL de uma fonte.
 ///
 /// `dav://` vira `http://` e `davs://` vira `https://`. A barra final é garantida para
-/// que a resolução de `href` do `PROPFIND` permaneça dentro do diretório base.
+/// que a resolução de `href` do `PROPFIND` permaneça dentro do diretório base. Em
+/// `smb://host/share/caminho` o compartilhamento é obrigatório e cada segmento é
+/// validado, porque ele vira um caminho UNC.
 pub(crate) fn parse_source_url(input: &str) -> Result<Url, SourceUrlError> {
     let input = input.trim();
+    if input.is_empty() || input.chars().count() > MAX_SOURCE_URL_CHARS {
+        return Err(SourceUrlError::InvalidUrl);
+    }
     let (scheme, rest) = input.split_once("://").ok_or(SourceUrlError::InvalidUrl)?;
     let scheme = match scheme.to_ascii_lowercase().as_str() {
         "dav" | "http" => "http",
         "davs" | "https" => "https",
+        "smb" => "smb",
         _ => return Err(SourceUrlError::UnsupportedScheme),
     };
+    // O parser de URL normaliza segmentos `.` e `..` antes de expô-los; a checagem de
+    // travessia precisa acontecer sobre o texto original.
+    if scheme == "smb" {
+        reject_smb_traversal(rest)?;
+    }
     let mut url =
         Url::parse(&format!("{scheme}://{rest}")).map_err(|_| SourceUrlError::InvalidUrl)?;
     if url.host_str().is_none() {
@@ -77,11 +96,63 @@ pub(crate) fn parse_source_url(input: &str) -> Result<Url, SourceUrlError> {
     if url.query().is_some() || url.fragment().is_some() {
         return Err(SourceUrlError::QueryOrFragment);
     }
-    if !url.path().ends_with('/') {
+    if url.scheme() == "smb" {
+        normalize_smb_url(&mut url)?;
+    } else if !url.path().ends_with('/') {
         let path = format!("{}/", url.path());
         url.set_path(&path);
     }
     Ok(url)
+}
+
+/// Recusa `..`, `%2e%2e`, barras invertidas e NUL em qualquer segmento do texto.
+fn reject_smb_traversal(rest: &str) -> Result<(), SourceUrlError> {
+    let mut parts = rest.split('/');
+    let _host = parts.next();
+    for raw in parts {
+        let decoded = percent_decode_str(raw)
+            .decode_utf8()
+            .map_err(|_| SourceUrlError::InvalidUrl)?;
+        if matches!(decoded.as_ref(), "." | "..")
+            || decoded.contains('/')
+            || decoded.contains('\\')
+            || decoded.contains('\0')
+            || decoded.chars().any(char::is_control)
+        {
+            return Err(SourceUrlError::Traversal);
+        }
+    }
+    Ok(())
+}
+
+/// Exige host, compartilhamento e no máximo um caminho relativo limpo.
+fn normalize_smb_url(url: &mut Url) -> Result<(), SourceUrlError> {
+    let mut segments = Vec::new();
+    for segment in url.path().split('/') {
+        if segment.is_empty() {
+            continue;
+        }
+        let decoded = percent_decode_str(segment)
+            .decode_utf8()
+            .map_err(|_| SourceUrlError::InvalidUrl)?;
+        if decoded.is_empty() || decoded.chars().any(char::is_control) {
+            return Err(SourceUrlError::InvalidUrl);
+        }
+        segments.push(decoded.into_owned());
+    }
+    if segments.is_empty() {
+        return Err(SourceUrlError::MissingShare);
+    }
+    {
+        let mut path = url
+            .path_segments_mut()
+            .map_err(|_| SourceUrlError::InvalidUrl)?;
+        path.clear();
+        for segment in &segments {
+            path.push(segment);
+        }
+    }
+    Ok(())
 }
 
 /// Cliente WebDAV de uma fonte.
@@ -108,6 +179,9 @@ impl WebDavClient {
         username: Option<&str>,
         password: Option<&str>,
     ) -> Result<Self, SourceError> {
+        if !matches!(base.scheme(), "http" | "https") {
+            return Err(SourceError::InvalidResponse);
+        }
         let authorization = match (username, password) {
             (Some(username), Some(password)) => {
                 let encoded = STANDARD.encode(format!("{username}:{password}"));
@@ -329,7 +403,7 @@ fn file_url(base: &Url, path: &str) -> Result<Url, SourceError> {
     Ok(url)
 }
 
-fn decoded_segments(url: &Url) -> SourceResult<Vec<String>> {
+pub(crate) fn decoded_segments(url: &Url) -> SourceResult<Vec<String>> {
     url.path_segments()
         .ok_or(SourceError::InvalidResponse)?
         .filter(|segment| !segment.is_empty())
@@ -558,6 +632,50 @@ mod tests {
                 "{input}"
             );
         }
+    }
+
+    #[test]
+    fn parses_smb_urls_with_a_required_share_and_clean_segments() {
+        let cases = [
+            ("smb://nas/Cursos", "smb://nas/Cursos"),
+            ("smb://nas/Cursos/", "smb://nas/Cursos"),
+            (
+                "smb://nas/Cursos/Modulo%201/aula.mp4",
+                "smb://nas/Cursos/Modulo%201/aula.mp4",
+            ),
+            ("SMB://nas/Cursos", "smb://nas/Cursos"),
+            ("smb://192.0.2.10:1445/Curso", "smb://192.0.2.10:1445/Curso"),
+            ("smb://[::1]:1445/Curso", "smb://[::1]:1445/Curso"),
+        ];
+        for (input, expected) in cases {
+            assert_eq!(
+                parse_source_url(input).unwrap().as_str(),
+                expected,
+                "{input}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_unsafe_smb_urls() {
+        for input in [
+            "smb://nas",
+            "smb://nas/",
+            "smb://user:secret@nas/Cursos",
+            "smb://nas/Cursos?token=secret",
+            "smb://nas/Cursos#fragment",
+            "smb://nas/Cursos/../fora",
+            "smb://nas/Cursos/%2e%2e/fora",
+            "smb://nas/Cursos/a%2Fb",
+            "smb://nas/Cursos/a%5Cb",
+            "smbs://nas/Cursos",
+            "smb://",
+            "smb:///Cursos",
+        ] {
+            assert!(parse_source_url(input).is_err(), "{input}");
+        }
+        let long = format!("smb://nas/Cursos/{}", "a".repeat(4096));
+        assert!(parse_source_url(&long).is_err());
     }
 
     #[test]

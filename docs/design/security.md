@@ -97,8 +97,10 @@ described below. The desktop application is single-user and has no accounts.
   the course library; the scanner and indexer are read-only.
 - Subtitle sidecars are served through the same authenticated media route with the same confinement,
   not through a separate static handler.
-- Future remote sources (WebDAV, SMB) must keep this contract: read-only access, credentials encrypted
-  at rest, never logged, and never echoed back in API responses.
+- Remote sources (WebDAV, SMB) keep this contract: read-only access, credentials encrypted at
+  rest, never logged, and never echoed back in API responses. WebDAV refuses cross-host redirects
+  and SMB disables DFS referrals for the same reason: credentials must not follow a server-chosen
+  redirect to another host.
 
 ## 6. Browser hardening
 
@@ -183,8 +185,10 @@ described below. The desktop application is single-user and has no accounts.
 - **Desktop has no accounts and no at-rest encryption.** Anyone with access to the machine profile
   can read the local database.
 - **Three Dependabot advisories remain open** for the reasons in section 9.
-- **Remote course sources are pending.** When they land, their credential storage must be reviewed
-  against this document before release.
+- **Remote source coverage is uneven.** WebDAV and SMB credentials are encrypted at rest with the
+  same store, but remote sources have no custom cover, manual ordering, search indexing or
+  transcoding. SMB uses NTLM only (no Kerberos) and no end-to-end test against a real SMB server
+  runs in CI; URL validation, error mapping and credential non-disclosure are covered by unit tests.
 
 ## 12. Verification
 

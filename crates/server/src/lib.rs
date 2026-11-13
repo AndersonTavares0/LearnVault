@@ -19,6 +19,7 @@ mod player;
 mod reviews;
 mod search;
 mod secret;
+mod smb;
 mod sources;
 mod spa;
 mod state;

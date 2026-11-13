@@ -21,7 +21,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
-use learnvault_core::{SourceError, scan_source};
+use learnvault_core::{CourseSource, SourceEntry, SourceError, SourceResult, scan_source};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -33,6 +33,7 @@ use crate::{
         service_unavailable, status_private_no_store,
     },
     secret::SecretKey,
+    smb::SmbSource,
     webdav::{SourceUrlError, WebDavClient, parse_source_url},
 };
 
@@ -88,6 +89,65 @@ impl RemoteSource {
     /// Verdadeiro quando a fonte tem usuário e senha utilizáveis.
     pub(crate) fn has_password(&self) -> bool {
         self.password.is_some()
+    }
+}
+
+/// Adaptador escolhido pelo esquema da URL da fonte.
+pub(crate) enum RemoteClient {
+    WebDav(WebDavClient),
+    Smb(SmbSource),
+}
+
+impl RemoteClient {
+    /// Cria o cliente do transporte correspondente.
+    pub(crate) fn new(source: &RemoteSource) -> Result<Self, SourceError> {
+        if source.url.scheme() == "smb" {
+            return Ok(Self::Smb(SmbSource::new(
+                source.url.clone(),
+                source.username.as_deref(),
+                source.password(),
+            )?));
+        }
+        Ok(Self::WebDav(WebDavClient::new(
+            source.url.clone(),
+            source.username.as_deref(),
+            source.password(),
+        )?))
+    }
+
+    /// Confirma alcance, autenticação e leitura do diretório raiz.
+    pub(crate) async fn probe(&self) -> SourceResult<usize> {
+        match self {
+            Self::WebDav(client) => client.probe().await,
+            Self::Smb(client) => client.probe().await,
+        }
+    }
+}
+
+impl CourseSource for RemoteClient {
+    fn list<'a>(
+        &'a self,
+        directory: &'a str,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = SourceResult<Vec<SourceEntry>>> + Send + 'a>,
+    > {
+        match self {
+            Self::WebDav(client) => client.list(directory),
+            Self::Smb(client) => client.list(directory),
+        }
+    }
+
+    fn read_range<'a>(
+        &'a self,
+        path: &'a str,
+        offset: u64,
+        length: usize,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = SourceResult<Vec<u8>>> + Send + 'a>>
+    {
+        match self {
+            Self::WebDav(client) => client.read_range(path, offset, length),
+            Self::Smb(client) => client.read_range(path, offset, length),
+        }
     }
 }
 
@@ -441,11 +501,7 @@ pub(crate) async fn test(
             Json(TestResponse::failure("credentials_unavailable")).into_response(),
         );
     }
-    let client = match WebDavClient::new(
-        source.url.clone(),
-        source.username.as_deref(),
-        source.password(),
-    ) {
+    let client = match RemoteClient::new(&source) {
         Ok(client) => client,
         Err(_) => {
             return private_no_store(Json(TestResponse::failure("invalid_source")).into_response());
@@ -492,11 +548,7 @@ pub(crate) async fn scan(
     if source.credential_error {
         return json_error(StatusCode::BAD_REQUEST, "credentials_unavailable");
     }
-    let client = match WebDavClient::new(
-        source.url.clone(),
-        source.username.as_deref(),
-        source.password(),
-    ) {
+    let client = match RemoteClient::new(&source) {
         Ok(client) => client,
         Err(_) => return json_error(StatusCode::BAD_REQUEST, "invalid_source"),
     };
@@ -595,7 +647,10 @@ fn validate_name(name: &str) -> Option<String> {
 fn source_url_code(error: SourceUrlError) -> &'static str {
     match error {
         SourceUrlError::UnsupportedScheme => "unsupported_source_scheme",
-        SourceUrlError::InvalidUrl | SourceUrlError::MissingHost => "invalid_source_url",
+        SourceUrlError::InvalidUrl
+        | SourceUrlError::MissingHost
+        | SourceUrlError::MissingShare
+        | SourceUrlError::Traversal => "invalid_source_url",
         SourceUrlError::CredentialsInUrl => "source_url_contains_credentials",
         SourceUrlError::QueryOrFragment => "invalid_source_url",
     }
@@ -620,8 +675,8 @@ mod tests {
     use std::fs;
 
     use super::{
-        RemoteSource, SourceResponse, SourcesError, SourcesResponse, load_sources, sources_path,
-        store_sources,
+        RemoteClient, RemoteSource, SourceResponse, SourcesError, SourcesResponse, load_sources,
+        sources_path, store_sources,
     };
     use crate::secret::SecretKey;
     use crate::webdav::parse_source_url;
@@ -728,5 +783,31 @@ mod tests {
 
         let raw = fs::read_to_string(&path).unwrap();
         assert!(raw.contains("http://host/dav/"));
+    }
+
+    #[test]
+    fn an_smb_source_keeps_its_url_and_never_persists_the_password() {
+        let temp = tempfile::tempdir().unwrap();
+        let database = temp.path().join("learnvault.sqlite");
+        let path = sources_path(&database);
+        let key_path = SecretKey::path_for(&database);
+        let mut source = source(Some("synthetic-secret"));
+        source.url = parse_source_url("smb://nas/Cursos/Modulo%201").unwrap();
+
+        assert!(matches!(
+            RemoteClient::new(&source).unwrap(),
+            RemoteClient::Smb(_)
+        ));
+        store_sources(&path, &key_path, &[source]).unwrap();
+
+        let raw = fs::read_to_string(&path).unwrap();
+        assert!(raw.contains("smb://nas/Cursos/Modulo%201"));
+        assert!(!raw.contains("synthetic-secret"));
+        assert!(raw.contains("v1:"));
+
+        let loaded = load_sources(&path, &key_path);
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].url.as_str(), "smb://nas/Cursos/Modulo%201");
+        assert_eq!(loaded[0].password(), Some("synthetic-secret"));
     }
 }

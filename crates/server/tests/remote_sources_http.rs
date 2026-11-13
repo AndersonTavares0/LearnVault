@@ -319,6 +319,60 @@ async fn remote_source_flow_keeps_the_secret_out_of_responses_and_streams_ranges
 }
 
 #[tokio::test]
+async fn smb_source_urls_are_accepted_and_never_echo_credentials() {
+    let temp = tempfile::tempdir().unwrap();
+    let state = AppState::initialize(config(&temp)).await.unwrap();
+    let app = build_router(state);
+    let cookie = login(&app).await;
+
+    let created = create_source(&app, &cookie, "smb://nas/Cursos/Modulo%201", PASSWORD).await;
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let created_body = created.into_body().collect().await.unwrap().to_bytes();
+    let created_text = String::from_utf8_lossy(&created_body);
+    assert!(!created_text.contains(PASSWORD));
+    assert!(!created_text.contains("secret"));
+    let created: serde_json::Value = serde_json::from_slice(&created_body).unwrap();
+    assert_eq!(created["url"], "smb://nas/Cursos/Modulo%201");
+    assert_eq!(created["has_password"], true);
+    assert_eq!(created["credential_error"], false);
+
+    let listed = app
+        .clone()
+        .oneshot(
+            Request::get("/api/admin/sources")
+                .header("cookie", cookie.clone())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(listed.status(), StatusCode::OK);
+    let listed_text =
+        String::from_utf8_lossy(&listed.into_body().collect().await.unwrap().to_bytes())
+            .into_owned();
+    assert!(!listed_text.contains(PASSWORD));
+    assert!(listed_text.contains("\"has_password\":true"));
+
+    for (url, expected) in [
+        ("smb://nas", "invalid_source_url"),
+        ("smb://nas/Cursos/../fora", "invalid_source_url"),
+        (
+            "smb://user:synthetic-secret@nas/Cursos",
+            "source_url_contains_credentials",
+        ),
+    ] {
+        let refused = create_source(&app, &cookie, url, PASSWORD).await;
+        assert_eq!(refused.status(), StatusCode::BAD_REQUEST, "{url}");
+        let body =
+            String::from_utf8_lossy(&refused.into_body().collect().await.unwrap().to_bytes())
+                .into_owned();
+        assert!(body.contains(expected), "{url}: {body}");
+        assert!(!body.contains(PASSWORD), "{url}");
+        assert!(!body.contains("synthetic-secret"), "{url}");
+    }
+}
+
+#[tokio::test]
 async fn invalid_source_urls_are_refused_without_echoing_credentials() {
     let temp = tempfile::tempdir().unwrap();
     let state = AppState::initialize(config(&temp)).await.unwrap();
