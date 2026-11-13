@@ -69,7 +69,7 @@ described below. The desktop application is single-user and has no accounts.
   check on every state-changing handler (login, credentials, logout, user management, course access),
   and the absence of CORS headers.
 - A request without a matching `Origin` is rejected with `403`, not accepted by default.
-- Every `/api` response is `no-store`; authentication and update responses use `private, no-store`.
+- Every `/api` response is `no-store` or `private, no-store`, with one exception: `GET /api/catalog` uses `private, no-cache` plus a content `ETag`, so the browser may cache it but must revalidate before every reuse. A `304` never carries data.
 - Network deployments must terminate HTTPS at a reverse proxy. With TLS configured, cookies carry
   `Secure`.
 
