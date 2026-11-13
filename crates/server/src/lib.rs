@@ -1499,7 +1499,7 @@ mod tests {
                 .to_bytes(),
         )
         .unwrap();
-        let node = catalog["categories"]
+        let node = catalog["nodes"]
             .as_array()
             .unwrap()
             .iter()
