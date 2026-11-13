@@ -336,27 +336,34 @@ async fn admin_rescan_populates_the_authenticated_catalog() {
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(json["complete"], true);
 
-    // O nó de topo é o curso registrado a partir da raiz semeada: identidade opaca
-    // (`library-1`, a identidade histórica da raiz) e título derivado da pasta.
+    // A raiz da biblioteca registra cada pasta de topo como um curso: aqui `Categoria`
+    // vira o curso, e o nó de topo é a árvore relativa a ele.
     let course = &json["nodes"][0];
-    assert_eq!(course["title"], "library");
+    assert_eq!(course["title"], "Categoria");
     assert_eq!(course["path"], "");
     assert_eq!(course["role"], "course");
-    assert_eq!(course["course_id"], "library-1");
-    // `nodes` é a árvore recursiva canônica, o contrato preferido pela SPA: a categoria e a
-    // subárvore de aulas ficam sob o nó do curso, com identidade de mídia, caminhos
-    // relativos, disponibilidade e verificação preservados.
-    let category = &course["children"][0];
-    assert_eq!(category["title"], "Categoria");
-    assert_eq!(category["path"], "Categoria");
-    assert_eq!(category["role"], "category");
-    let lesson = &category["children"][0];
-    assert_eq!(lesson["title"], "Curso");
-    assert_eq!(lesson["path"], "Categoria/Curso");
+    assert!(
+        course["course_id"].is_string(),
+        "o curso semeado precisa de identidade opaca: {course}"
+    );
+    assert_ne!(
+        course["course_id"], "library-1",
+        "a pasta de topo é o próprio curso"
+    );
+    assert_eq!(course["source_folder"], "library");
+    // `nodes` é a árvore recursiva canônica, o contrato preferido pela SPA: a aula fica
+    // sob o módulo, com identidade de mídia, caminhos relativos e verificação.
+    let module = &course["children"][0];
+    assert_eq!(module["title"], "Curso");
+    assert_eq!(module["path"], "Curso");
+    assert_eq!(module["role"], "module");
+    let lesson = &module["children"][0];
+    assert_eq!(lesson["title"], "lesson");
+    assert_eq!(lesson["path"], "Curso/lesson.mp4");
     assert_eq!(lesson["role"], "lesson");
     let node_file = &lesson["files"][0];
     assert_eq!(node_file["name"], "lesson.mp4");
-    assert_eq!(node_file["path"], "Categoria/Curso/lesson.mp4");
+    assert_eq!(node_file["path"], "Curso/lesson.mp4");
     assert_eq!(node_file["size"], 5);
     assert!(
         node_file["mtime_seconds"]
@@ -370,11 +377,11 @@ async fn admin_rescan_populates_the_authenticated_catalog() {
         node_file["media_id"].is_string(),
         "a identidade de mídia precisa sobreviver em nodes"
     );
-    // O arquivo solto da categoria não pertence a nenhuma aula: ele continua acessível, sem
-    // perda, nos arquivos soltos do próprio nó da categoria.
-    let loose = &category["loose_files"][0];
+    // O arquivo solto do curso não pertence a nenhuma aula: ele continua acessível, sem
+    // perda, nos arquivos soltos do próprio nó do curso.
+    let loose = &course["loose_files"][0];
     assert_eq!(loose["name"], "nota.pdf");
-    assert_eq!(loose["path"], "Categoria/nota.pdf");
+    assert_eq!(loose["path"], "nota.pdf");
     assert!(
         loose["media_id"].is_string(),
         "o arquivo solto também carrega identidade de mídia em nodes"
@@ -382,10 +389,10 @@ async fn admin_rescan_populates_the_authenticated_catalog() {
 
     // Cada nó de topo tem papel `course`, `course_id` opaco e a subárvore escaneada sob ele.
     assert_eq!(json["nodes"][0]["role"], "course");
-    assert_eq!(json["nodes"][0]["course_id"], "library-1");
+    assert_eq!(json["nodes"][0]["course_id"], course["course_id"]);
     let file = find_file(&json["nodes"][0]).expect("lesson file in catalog");
     assert_eq!(file["name"], "lesson.mp4");
-    assert_eq!(file["path"], "Categoria/Curso/lesson.mp4");
+    assert_eq!(file["path"], "Curso/lesson.mp4");
     assert_eq!(file["size"], 5);
     assert_eq!(file["kind"], "media");
     assert_eq!(file["availability"], "available");
