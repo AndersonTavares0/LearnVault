@@ -274,7 +274,7 @@ fn a_version_one_database_is_upgraded_additively_preserving_rows() -> TestResult
 
     assert_eq!(
         db.schema_version()?,
-        15,
+        16,
         "a cadeia deve aplicar a migração aditiva"
     );
     assert!(table_exists(&db, "scan_inaccessible"));
@@ -358,7 +358,7 @@ fn a_version_two_database_is_upgraded_additively_preserving_rows() -> TestResult
 
     assert_eq!(
         db.schema_version()?,
-        15,
+        16,
         "a cadeia deve aplicar a migração aditiva"
     );
     assert!(
