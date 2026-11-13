@@ -47,6 +47,12 @@ describe('hash router', () => {
 		expect(locationFromHash('#/notes')).toEqual({ route: 'notes', courseId: null, lessonPath: null });
 		expect(destinationAfterLogin('#/notes')).toBe('#/notes');
 
+		// Histórico de aulas assistidas
+		expect(routeFromHash('#/history')).toBe('history');
+		expect(locationFromHash('#/history')).toEqual({ route: 'history', courseId: null, lessonPath: null });
+		expect(destinationAfterLogin('#/history')).toBe('#/history');
+		expect(href('history')).toBe('#/history');
+
 		// Navegação com timestamp em query string ?t=
 		expect(locationFromHash('#/course/c1/aula?t=45')).toEqual({ route: 'course', courseId: 'c1', lessonPath: 'aula', positionSeconds: 45 });
 		expect(href('course', 'c1', 'aula', 45)).toBe('#/course/c1/aula?t=45');

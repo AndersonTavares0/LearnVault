@@ -3,6 +3,7 @@ import { render } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { keys } from '@/app/data';
 import { routes } from '@/app/router';
+import { PLAYBACK_PREFERENCES_KEY } from '@/lib/player-preferences';
 import type { Catalog, RewardSummary, StudyFavorites, StudyProgress, User } from '@/lib/transport';
 
 export const admin: User = { userId: 'u1', username: 'admin', role: 'admin', isAdmin: true, mustChangeCredentials: false };
@@ -14,6 +15,7 @@ export function renderApp(path: string, seed: { user?: User | null; catalog?: Ca
 	client.setQueryData(keys.catalog, seed.catalog ?? { complete: true, looseFiles: [], nodes: [] });
 	client.setQueryData(keys.recent, seed.recent ?? []);
 	client.setQueryData(keys.favorites, seed.favorites ?? { courseIds: [], mediaIds: [] });
+	client.setQueryData(PLAYBACK_PREFERENCES_KEY, { videoSpeed: 1, audioSpeed: 1, subtitleLanguage: '' });
 	if (seed.rewards) client.setQueryData(keys.rewards, seed.rewards);
 	const router = createMemoryRouter(routes, { initialEntries: [path] });
 	render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>);

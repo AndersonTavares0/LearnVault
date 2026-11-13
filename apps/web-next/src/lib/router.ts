@@ -1,6 +1,6 @@
 import { courseIdOf, lessonFromNode, type Catalog, type CatalogNode, type FileEntry, type Lesson } from './transport';
 
-export type Route = 'login' | 'home' | 'course' | 'player' | 'settings' | 'statistics' | 'notes';
+export type Route = 'login' | 'home' | 'course' | 'player' | 'settings' | 'statistics' | 'notes' | 'history';
 export type HashLocation = { route: Route; courseId: string | null; lessonPath: string | null; positionSeconds?: number | null };
 
 function decodeSegment(value: string | undefined): string | null {
@@ -49,7 +49,12 @@ export function locationFromHash(hash: string, fallback: Route = 'login'): HashL
 		if (positionSeconds !== null) res.positionSeconds = positionSeconds;
 		return res;
 	}
-	const route = name === 'home' || name === 'course' || name === 'player' || name === 'settings' || name === 'statistics' || name === 'notes' ? name : fallback;
+	if (name === 'history') {
+		const res: HashLocation = { route: 'history', courseId: null, lessonPath: null };
+		if (positionSeconds !== null) res.positionSeconds = positionSeconds;
+		return res;
+	}
+	const route = name === 'home' || name === 'course' || name === 'player' || name === 'settings' || name === 'statistics' || name === 'notes' || name === 'history' ? name : fallback;
 	if (route === 'course') {
 		if (parts.length === 0) {
 			const res: HashLocation = { route, courseId: null, lessonPath: null };
@@ -104,7 +109,7 @@ export function href(route: Route, courseId?: string, lessonPath?: string, posit
 /** Destino seguro depois do login, preservando uma rota já navegável. */
 export function destinationAfterLogin(hash: string): string {
 	const location = locationFromHash(hash);
-	if (location.route === 'home' || location.route === 'course' || location.route === 'settings' || location.route === 'statistics' || location.route === 'notes') return href(location.route, location.courseId ?? undefined, location.lessonPath ?? undefined);
+	if (location.route === 'home' || location.route === 'course' || location.route === 'settings' || location.route === 'statistics' || location.route === 'notes' || location.route === 'history') return href(location.route, location.courseId ?? undefined, location.lessonPath ?? undefined);
 	if (location.route === 'player') {
 		const parts = hash.replace(/^#\/?/, '').split('/');
 		if (parts.length === 1) {

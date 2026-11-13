@@ -1700,6 +1700,10 @@ pub(crate) fn study_failure_response(failure: StudyFailure) -> Response {
         StudyFailure::Core(Error::BookmarkNotFound { .. }) => {
             error_response(StatusCode::NOT_FOUND, "bookmark_not_found")
         }
+        StudyFailure::Core(Error::InvalidPlayerPreference) => error_response(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "invalid_player_preference",
+        ),
         StudyFailure::Core(_) => internal_error("study unavailable"),
     }
 }

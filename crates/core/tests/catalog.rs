@@ -691,6 +691,21 @@ fn course_grouping_keeps_material_and_attaches_matching_subtitles() {
                 "Curso/Modulo/Lección 1.srt",
                 MediaKind::Subtitle,
             ),
+            catalog_file(
+                "subtitle-pt",
+                "Curso/Modulo/Lección 1.pt-BR.vtt",
+                MediaKind::Subtitle,
+            ),
+            catalog_file(
+                "subtitle-en",
+                "Curso/Modulo/Lección 1.en.srt",
+                MediaKind::Subtitle,
+            ),
+            catalog_file(
+                "not-a-language",
+                "Curso/Modulo/Lección 1.notes.srt",
+                MediaKind::Subtitle,
+            ),
             catalog_file("material", "Curso/Modulo/Notas.pdf", MediaKind::Material),
             catalog_file(
                 "orphan-subtitle",
@@ -709,7 +724,7 @@ fn course_grouping_keeps_material_and_attaches_matching_subtitles() {
             .iter()
             .map(|file| file.media_id.as_str())
             .collect::<Vec<_>>(),
-        ["material", "orphan-subtitle"]
+        ["not-a-language", "material", "orphan-subtitle"]
     );
     assert_eq!(grouped.children.len(), 1);
     let lesson = &grouped.children[0];
@@ -721,7 +736,7 @@ fn course_grouping_keeps_material_and_attaches_matching_subtitles() {
             .iter()
             .map(|file| file.media_id.as_str())
             .collect::<Vec<_>>(),
-        ["video", "subtitle"]
+        ["video", "subtitle", "subtitle-pt", "subtitle-en"]
     );
 }
 

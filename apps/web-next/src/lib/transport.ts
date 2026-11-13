@@ -18,6 +18,8 @@ export type Catalog = { complete: boolean; looseFiles: FileEntry[]; nodes: Catal
 // registra cursos por caminho e nenhum caminho cruza o frontend.
 export type TransportKind = 'http' | 'desktop';
 export type StudyProgress = { mediaId: string; positionSeconds: number; completed: boolean; updatedAt: number | null; recorded: boolean };
+/** Per-user playback preferences. Speeds arrive as percentages of normal speed. */
+export type PlaybackPreferences = { videoSpeed: number; audioSpeed: number; subtitleLanguage: string };
 export type RecentStudy = { items: StudyProgress[] };
 export type StudyDay = { day: string; active: boolean };
 export type StudySummary = {
@@ -191,6 +193,9 @@ export interface Transport {
 	studyProgress(mediaId: string): Promise<StudyProgress>;
 	recordPosition(mediaId: string, positionSeconds: number): Promise<StudyProgress>;
 	setCompleted(mediaId: string, completed: boolean): Promise<StudyProgress>;
+	/** HTTP only: the desktop build keeps preferences in the webview storage. */
+	getPlaybackPreferences?(): Promise<PlaybackPreferences>;
+	savePlaybackPreferences?(preferences: PlaybackPreferences): Promise<PlaybackPreferences>;
 	recentStudy(limit?: number): Promise<RecentStudy>;
 	studySummary(): Promise<StudySummary>;
 	listNotes(mediaId?: string): Promise<StudyNote[]>;
@@ -489,6 +494,13 @@ export function normalizeStudyProgress(value: unknown): StudyProgress {
 export function normalizeRecentStudy(value: unknown): RecentStudy {
 	if (!value || typeof value !== 'object' || !Array.isArray((value as { items?: unknown }).items)) throw invalidPayload('histórico de estudo inválido.');
 	return { items: (value as { items: unknown[] }).items.map(normalizeStudyProgress) };
+}
+
+export function normalizePlaybackPreferences(value: unknown): PlaybackPreferences {
+	if (!value || typeof value !== 'object') throw invalidPayload('preferências de reprodução ausentes.');
+	const preferences = value as { video_speed?: unknown; audio_speed?: unknown; subtitle_language?: unknown };
+	if (typeof preferences.video_speed !== 'number' || typeof preferences.audio_speed !== 'number' || typeof preferences.subtitle_language !== 'string') throw invalidPayload('preferências de reprodução incompletas.');
+	return { videoSpeed: preferences.video_speed / 100, audioSpeed: preferences.audio_speed / 100, subtitleLanguage: preferences.subtitle_language };
 }
 
 export function normalizeStudySummary(value: unknown): StudySummary {
@@ -920,6 +932,24 @@ export class HttpTransport implements Transport {
 		return data?.deleted === true;
 	}
 	async studyProgress(mediaId: string) { const response = await fetch(`/api/study/progress?media_id=${encodeURIComponent(mediaId)}`); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? tr('Media not found.', 'Mídia não encontrada.') : tr('Could not read progress.', 'Não foi possível ler o progresso.')); return normalizeStudyProgress(await response.json()); }
+	async getPlaybackPreferences() {
+		const response = await fetch('/api/player/preferences');
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not load playback preferences.', 'Não foi possível carregar as preferências de reprodução.'));
+		return normalizePlaybackPreferences(await response.json());
+	}
+	async savePlaybackPreferences(preferences: PlaybackPreferences) {
+		const response = await fetch('/api/player/preferences', {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				video_speed: Math.round(preferences.videoSpeed * 100),
+				audio_speed: Math.round(preferences.audioSpeed * 100),
+				subtitle_language: preferences.subtitleLanguage
+			})
+		});
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not save playback preferences.', 'Não foi possível salvar as preferências de reprodução.'));
+		return normalizePlaybackPreferences(await response.json());
+	}
 	async recordPosition(mediaId: string, positionSeconds: number) { const response = await fetch('/api/study/position', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: mediaId, position_seconds: positionSeconds }) }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? tr('Media not found.', 'Mídia não encontrada.') : response.status === 422 ? tr('Invalid position.', 'Posição inválida.') : tr('Could not save progress.', 'Não foi possível salvar o progresso.')); return normalizeStudyProgress(await response.json()); }
 	async setCompleted(mediaId: string, completed: boolean) { const response = await fetch('/api/study/completed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: mediaId, completed }) }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? tr('Media not found.', 'Mídia não encontrada.') : tr('Could not update completion.', 'Não foi possível atualizar a conclusão.')); return normalizeStudyProgress(await response.json()); }
 	async recentStudy(limit?: number) { const url = limit === undefined ? '/api/study/recent' : `/api/study/recent?limit=${limit}`; const response = await fetch(url); if (!response.ok) throw response.status === 404 ? Object.assign(new Error(tr('Study not available on this server.', 'Estudo não disponível neste servidor.')), { code: STUDY_NOT_AVAILABLE }) : new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not load history.', 'Não foi possível carregar o histórico.')); return normalizeRecentStudy(await response.json()); }

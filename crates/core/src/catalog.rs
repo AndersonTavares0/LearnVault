@@ -458,7 +458,10 @@ fn promote_loose_media_to_lessons(
         let mut lesson_files = vec![file];
         let mut index = 0;
         while index < loose.len() {
-            if loose[index].kind == MediaKind::Subtitle && file_stem(&loose[index].name) == stem {
+            let candidate = &loose[index];
+            if candidate.kind == MediaKind::Subtitle
+                && subtitle_belongs_to(&stem, file_stem(&candidate.name))
+            {
                 lesson_files.push(loose.remove(index));
             } else {
                 index += 1;
@@ -497,6 +500,33 @@ pub fn shape_course_catalog(catalog: Catalog) -> (Vec<CatalogNode>, Vec<CatalogF
 
 fn file_stem(name: &str) -> &str {
     name.rsplit_once('.').map_or(name, |(stem, _)| stem)
+}
+
+/// Sidecar subtitles share the media stem, optionally followed by a language tag.
+///
+/// It accepts `lesson.srt` and `lesson.pt-BR.vtt`; a suffix is a language only when its
+/// first segment is two or three letters and every later segment is a short region or
+/// script. So `lesson.notes.srt` stays a loose material instead of becoming a caption.
+fn subtitle_belongs_to(media_stem: &str, subtitle_stem: &str) -> bool {
+    if subtitle_stem == media_stem {
+        return true;
+    }
+    let Some(tag) = subtitle_stem
+        .strip_prefix(media_stem)
+        .and_then(|rest| rest.strip_prefix('.'))
+    else {
+        return false;
+    };
+    let tag = tag.trim();
+    let mut parts = tag.split(['-', '_']);
+    let Some(primary) = parts.next() else {
+        return false;
+    };
+    (2..=3).contains(&primary.len())
+        && primary.bytes().all(|byte| byte.is_ascii_alphabetic())
+        && parts.all(|part| {
+            (2..=4).contains(&part.len()) && part.bytes().all(|byte| byte.is_ascii_alphanumeric())
+        })
 }
 
 /// Converte o estado gravado em `media.availability`.

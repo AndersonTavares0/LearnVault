@@ -151,14 +151,28 @@ export function mediaAvailability(media: FileEntry[]): MediaAvailability {
 	return media.length > 0 ? 'missing' : 'absent';
 }
 
-export function selectPlayableSubtitle(subtitles: FileEntry[], preferredSubtitleId?: string | null): FileEntry | null {
+export function selectPlayableSubtitle(subtitles: FileEntry[], preferredSubtitleId?: string | null, preferredLanguage?: string): FileEntry | null {
 	if (preferredSubtitleId === null) return null;
 	const available = (file: FileEntry) => file.availability?.trim().toLowerCase() !== 'missing';
 	if (preferredSubtitleId) {
 		const preferred = subtitles.find((file) => file.mediaId === preferredSubtitleId && available(file));
 		if (preferred) return preferred;
 	}
+	if (preferredLanguage) {
+		const localized = subtitles.find((file) => available(file) && subtitleLanguage(file.name)?.toLowerCase() === preferredLanguage.toLowerCase());
+		if (localized) return localized;
+	}
 	return subtitles.find(available) ?? null;
+}
+
+/** Language tag of a sidecar subtitle (`aula.pt-BR.vtt` → `pt-BR`); null when it has none. */
+export function subtitleLanguage(name: string): string | null {
+	const stem = (name.split(/[?#]/, 1)[0] ?? '').replace(/\.[^.]+$/, '');
+	const tag = stem.slice(stem.lastIndexOf('.') + 1);
+	if (tag === stem) return null;
+	const [primary, ...rest] = tag.split(/[-_]/);
+	if (!/^[A-Za-z]{2,3}$/.test(primary ?? '') || rest.some((part) => !/^[A-Za-z0-9]{2,4}$/.test(part))) return null;
+	return tag;
 }
 
 export type MediaPlaybackKind = 'video' | 'audio';
