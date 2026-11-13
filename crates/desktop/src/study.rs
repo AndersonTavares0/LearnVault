@@ -209,8 +209,12 @@ pub fn update_note(
 }
 
 /// Exclui uma anotação de estudo do dono local. Devolve erro se a anotação não existir.
+///
+/// The deletion enters the outbox in the same transaction as the local delete, so another
+/// device stops showing the note instead of pulling it back.
 pub fn delete_note(database: &Database, note_id: &str) -> Result<(), IpcError> {
-    let deleted = learnvault_core::delete_study_note(database, LOCAL_OWNER_ID, note_id)
+    let device = crate::sync::device(database)?;
+    let deleted = learnvault_core::queue_note_delete(database, LOCAL_OWNER_ID, &device, note_id)
         .map_err(study_error)?;
     if deleted {
         Ok(())
@@ -450,9 +454,14 @@ pub fn create_bookmark(
 }
 
 /// Deletes one of the local owner's timestamp bookmarks.
+///
+/// The deletion enters the outbox in the same transaction as the local delete, so another
+/// device stops showing the bookmark instead of pulling it back.
 pub fn delete_bookmark(database: &Database, bookmark_id: &str) -> Result<(), IpcError> {
-    let deleted = learnvault_core::delete_media_bookmark(database, LOCAL_OWNER_ID, bookmark_id)
-        .map_err(study_error)?;
+    let device = crate::sync::device(database)?;
+    let deleted =
+        learnvault_core::queue_bookmark_delete(database, LOCAL_OWNER_ID, &device, bookmark_id)
+            .map_err(study_error)?;
     if deleted {
         Ok(())
     } else {

@@ -183,6 +183,8 @@ with one of the payload kinds below:
 | `progress` | `media_id`, `position_seconds`, `completed` |
 | `note` | `note_id`, `media_id`, `position_seconds`, `content`, `created_at`, `updated_at` |
 | `bookmark` | `bookmark_id`, `media_id`, `position_seconds`, `label`, `created_at` |
+| `note_deleted` | `note_id` |
+| `bookmark_deleted` | `bookmark_id` |
 | `flashcard_review` | `card_id`, `rating` (`again`/`good`), `reviewed_at` |
 | `preference` | `video_speed`, `audio_speed` (percent of normal), `subtitle_language` |
 
@@ -203,6 +205,11 @@ Conflict rules:
 - **flashcard reviews**: append-only, applied in cursor order;
 - **preferences**: last write wins by `client_at`; speeds are clamped to 50–300 and an
   invalid subtitle language is skipped.
+
+Deleting a note or bookmark creates a `note_deleted` / `bookmark_deleted` operation and a
+tombstone holding the delete instant; a create or update whose own instant is not newer than
+the tombstone is skipped, so a row deleted on one device is not resurrected by an older
+operation that arrives later.
 
 An operation that references media the server does not know is still recorded in the log
 and applied when the media appears; media that exists but is outside the user's course access

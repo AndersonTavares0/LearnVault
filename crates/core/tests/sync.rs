@@ -2,8 +2,9 @@
 
 use learnvault_core::{
     Database, SyncOperation, SyncOperationInput, SyncPayload, acknowledge_operations,
-    apply_operations, enqueue_operation, pending_operations, pull_operations, push_operations,
-    set_completed, sync_state,
+    apply_operations, enqueue_operation, pending_count, pending_operations, pull_operations,
+    push_operations, queue_bookmark_create, queue_bookmark_delete, queue_note_create,
+    queue_note_delete, set_completed, sync_state,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -644,5 +645,161 @@ fn completion_recorded_locally_is_preserved_when_an_older_sync_arrives() -> Test
     )?;
     assert!(completed == 1, "conclusão local não é desfeita");
     assert_eq!(position, 10, "a posição local mais nova vence");
+    Ok(())
+}
+
+#[test]
+fn a_deleted_note_disappears_on_the_other_device() -> TestResult {
+    let device_a = database();
+    let note = queue_note_create(&device_a, OWNER, "device-a", "m1", 10, "rascunho")?;
+    let created = pending_operations(&device_a, OWNER, 10)?;
+    let server = database();
+    push_operations(&server, OWNER, "device-a", &created)?;
+
+    let device_b = database();
+    let batch = pull_operations(&server, OWNER, "device-b", 0, 10)?;
+    apply_operations(&device_b, OWNER, &batch.items, batch.cursor)?;
+    assert_eq!(count(&device_b, "study_note"), 1);
+
+    assert!(queue_note_delete(
+        &device_a,
+        OWNER,
+        "device-a",
+        &note.note_id
+    )?);
+    let accepted: Vec<String> = created
+        .iter()
+        .map(|operation| operation.op_id.clone())
+        .collect();
+    acknowledge_operations(&device_a, OWNER, &accepted)?;
+    let deleted = pending_operations(&device_a, OWNER, 10)?;
+    assert_eq!(deleted.len(), 1, "só a exclusão continua pendente");
+    push_operations(&server, OWNER, "device-a", &deleted)?;
+
+    let batch = pull_operations(&server, OWNER, "device-b", batch.cursor, 10)?;
+    apply_operations(&device_b, OWNER, &batch.items, batch.cursor)?;
+    assert_eq!(
+        count(&device_b, "study_note"),
+        0,
+        "a exclusão chega ao outro dispositivo"
+    );
+    assert_eq!(count(&server, "study_note"), 0);
+    Ok(())
+}
+
+#[test]
+fn a_stale_create_does_not_resurrect_a_deleted_note() -> TestResult {
+    let db = database();
+    push_operations(
+        &db,
+        OWNER,
+        "device-a",
+        &[input("op-1", 1_000, note("note-1", "rascunho", 1_000))],
+    )?;
+    push_operations(
+        &db,
+        OWNER,
+        "device-a",
+        &[input(
+            "op-2",
+            2_000,
+            SyncPayload::NoteDeleted {
+                note_id: "note-1".to_owned(),
+            },
+        )],
+    )?;
+    assert_eq!(count(&db, "study_note"), 0);
+    assert_eq!(count(&db, "sync_tombstone"), 1);
+
+    // Um create antigo que chega atrasado é ignorado.
+    push_operations(
+        &db,
+        OWNER,
+        "device-b",
+        &[input("op-3", 3_000, note("note-1", "rascunho", 1_500))],
+    )?;
+    assert_eq!(
+        count(&db, "study_note"),
+        0,
+        "um create antigo não ressuscita a nota"
+    );
+
+    // Uma edição mais nova que a exclusão ainda vence.
+    push_operations(
+        &db,
+        OWNER,
+        "device-b",
+        &[input("op-4", 4_000, note("note-1", "novo", 2_500))],
+    )?;
+    assert_eq!(count(&db, "study_note"), 1);
+    Ok(())
+}
+
+#[test]
+fn a_deleted_bookmark_disappears_on_the_other_device() -> TestResult {
+    let device_a = database();
+    let bookmark = queue_bookmark_create(&device_a, OWNER, "device-a", "m1", 30, "ideia")?;
+    let created = pending_operations(&device_a, OWNER, 10)?;
+    let server = database();
+    push_operations(&server, OWNER, "device-a", &created)?;
+
+    let device_b = database();
+    let batch = pull_operations(&server, OWNER, "device-b", 0, 10)?;
+    apply_operations(&device_b, OWNER, &batch.items, batch.cursor)?;
+    assert_eq!(count(&device_b, "media_bookmark"), 1);
+
+    assert!(queue_bookmark_delete(
+        &device_a,
+        OWNER,
+        "device-a",
+        &bookmark.bookmark_id
+    )?);
+    let accepted: Vec<String> = created
+        .iter()
+        .map(|operation| operation.op_id.clone())
+        .collect();
+    acknowledge_operations(&device_a, OWNER, &accepted)?;
+    let deleted = pending_operations(&device_a, OWNER, 10)?;
+    push_operations(&server, OWNER, "device-a", &deleted)?;
+
+    let batch = pull_operations(&server, OWNER, "device-b", batch.cursor, 10)?;
+    apply_operations(&device_b, OWNER, &batch.items, batch.cursor)?;
+    assert_eq!(count(&device_b, "media_bookmark"), 0);
+
+    // O mesmo create antigo reenviado não ressuscita o marcador no servidor.
+    push_operations(
+        &server,
+        OWNER,
+        "device-b",
+        &[input(
+            "op-stale",
+            300,
+            SyncPayload::Bookmark {
+                bookmark_id: bookmark.bookmark_id.clone(),
+                media_id: "m1".to_owned(),
+                position_seconds: 30,
+                label: "ideia".to_owned(),
+                created_at: 100,
+            },
+        )],
+    )?;
+    assert_eq!(count(&server, "media_bookmark"), 0);
+    Ok(())
+}
+
+#[test]
+fn deleting_an_absent_row_enqueues_nothing() -> TestResult {
+    let db = database();
+
+    assert!(!queue_note_delete(&db, OWNER, "device-a", "missing-note")?);
+    assert!(!queue_bookmark_delete(
+        &db,
+        OWNER,
+        "device-a",
+        "missing-bookmark"
+    )?);
+
+    assert_eq!(pending_count(&db, OWNER)?, 0, "nada entra na fila");
+    assert_eq!(count(&db, "sync_tombstone"), 0, "sem linha, sem tombstone");
     Ok(())
 }
