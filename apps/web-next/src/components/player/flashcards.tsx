@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Pencil, Plus, Trash2, Upload } from 'lucide-react';
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent } from 'react';
 import { Button } from '@/components/ui/button';
+import { ConfirmDelete } from '@/components/confirm-delete';
 import { Label } from '@/components/ui/label';
 import { MAX_IMPORT_CARDS, parseCards } from '@/lib/cards';
 import { tr } from '@/lib/i18n';
@@ -26,6 +27,7 @@ export function Flashcards({ mediaId, currentTime = 0, addRequest = 0 }: { media
 	const [mode, setMode] = useState<'review' | 'manage'>('review');
 	const [revealed, setRevealed] = useState(false);
 	const [form, setForm] = useState<{ cardId: string | null; front: string; back: string; position: number | null } | null>(null);
+	const [deleting, setDeleting] = useState<Flashcard | null>(null);
 	const [now, setNow] = useState(nowSeconds);
 	// The lesson's "Make card" button asks this panel to open a blank card at the player time.
 	const [lastRequest, setLastRequest] = useState(addRequest);
@@ -45,7 +47,7 @@ export function Flashcards({ mediaId, currentTime = 0, addRequest = 0 }: { media
 		mutationFn: (input: { cardId: string | null; front: string; back: string; position: number | null }) => (input.cardId ? transport.updateFlashcard(input.cardId, input.front, input.back) : transport.createFlashcard(mediaId, input.front, input.back, input.position)),
 		onSuccess: (card) => { patch(card); setForm(null); }
 	});
-	const remove = useMutation({ mutationFn: (cardId: string) => transport.deleteFlashcard(cardId), onSuccess: (_, cardId) => client.setQueryData<Flashcard[]>(key, (list = []) => list.filter((item) => item.cardId !== cardId)) });
+	const remove = useMutation({ mutationFn: (cardId: string) => transport.deleteFlashcard(cardId), onSuccess: (_, cardId) => { setDeleting(null); client.setQueryData<Flashcard[]>(key, (list = []) => list.filter((item) => item.cardId !== cardId)); } });
 
 	// Import: an Anki text export (tab-separated) or a simple CSV, added to this lesson's deck.
 	const fileInput = useRef<HTMLInputElement>(null);
@@ -157,11 +159,20 @@ export function Flashcards({ mediaId, currentTime = 0, addRequest = 0 }: { media
 								<p className="text-xs text-muted-foreground">{card.positionSeconds === null ? '' : `${tr('At', 'Em')} ${formatDuration(card.positionSeconds)} · `}{dueLabel(card.nextDue, now)}</p>
 							</div>
 							<Button variant="ghost" size="icon" onClick={() => setForm({ cardId: card.cardId, front: card.front, back: card.back, position: card.positionSeconds })} aria-label={tr(`Edit card: ${card.front}`, `Editar cartão: ${card.front}`)}><Pencil /></Button>
-							<Button variant="ghost" size="icon" onClick={() => remove.mutate(card.cardId)} disabled={remove.isPending} aria-label={tr(`Delete card: ${card.front}`, `Excluir cartão: ${card.front}`)}><Trash2 /></Button>
+							<Button variant="ghost" size="icon" onClick={() => setDeleting(card)} disabled={remove.isPending} aria-label={tr(`Delete card: ${card.front}`, `Excluir cartão: ${card.front}`)}><Trash2 /></Button>
 						</li>
 					))}
 				</ul>
 			)}
+			<ConfirmDelete
+				open={deleting !== null}
+				onOpenChange={(open) => !open && setDeleting(null)}
+				title={tr('Delete this card?', 'Excluir este cartão?')}
+				description={tr('The card is removed for good. The lesson and your progress stay as they are.', 'O cartão será removido para sempre. A aula e o progresso continuam como estão.')}
+				label={tr('Delete card', 'Excluir cartão')}
+				pending={remove.isPending}
+				onConfirm={() => { if (deleting) remove.mutate(deleting.cardId); }}
+			/>
 		</div>
 	);
 }

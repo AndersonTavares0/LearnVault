@@ -1,18 +1,20 @@
 import { Play, Plus, Trash2 } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
+import { ConfirmDelete } from '@/components/confirm-delete';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useBookmarkMutations, useBookmarks } from '@/app/data';
 import { tr } from '@/lib/i18n';
 import { formatDuration } from '@/lib/player';
-import { MAX_BOOKMARK_LABEL } from '@/lib/transport';
+import { MAX_BOOKMARK_LABEL, type MediaBookmark } from '@/lib/transport';
 
 /** Labelled moments in one lesson. A marker seeks the player; the list is keyboard-first. */
 export function Bookmarks({ mediaId, currentTime, onSeek }: { mediaId: string; currentTime: number; onSeek: (seconds: number) => void }) {
 	const bookmarks = useBookmarks(mediaId);
 	const { create, remove } = useBookmarkMutations(mediaId);
 	const [draft, setDraft] = useState<{ position: number; label: string } | null>(null);
+	const [deleting, setDeleting] = useState<MediaBookmark | null>(null);
 	const save = (event: FormEvent) => {
 		event.preventDefault();
 		if (draft?.label.trim() && !create.isPending) create.mutate({ positionSeconds: draft.position, label: draft.label.trim() }, { onSuccess: () => setDraft(null) });
@@ -53,13 +55,22 @@ export function Bookmarks({ mediaId, currentTime, onSeek }: { mediaId: string; c
 								<Play />{formatDuration(bookmark.positionSeconds)}
 							</Button>
 							<span className="min-w-0 flex-1 py-2 text-sm">{bookmark.label}</span>
-							<Button variant="ghost" size="icon" onClick={() => remove.mutate(bookmark.bookmarkId)} disabled={remove.isPending} aria-label={tr(`Delete timestamp: ${bookmark.label}`, `Excluir marcador: ${bookmark.label}`)}>
+							<Button variant="ghost" size="icon" onClick={() => setDeleting(bookmark)} disabled={remove.isPending} aria-label={tr(`Delete timestamp: ${bookmark.label}`, `Excluir marcador: ${bookmark.label}`)}>
 								<Trash2 />
 							</Button>
 						</li>
 					))}
 				</ul>
 			)}
+			<ConfirmDelete
+				open={deleting !== null}
+				onOpenChange={(open) => !open && setDeleting(null)}
+				title={tr('Delete this timestamp?', 'Excluir este marcador?')}
+				description={deleting ? tr(`“${deleting.label}” is removed for good. The lesson and your progress stay as they are.`, `“${deleting.label}” será removido para sempre. A aula e o progresso continuam como estão.`) : ''}
+				label={tr('Delete timestamp', 'Excluir marcador')}
+				pending={remove.isPending}
+				onConfirm={() => { if (deleting) remove.mutate(deleting.bookmarkId, { onSuccess: () => setDeleting(null) }); }}
+			/>
 		</div>
 	);
 }
