@@ -53,6 +53,8 @@ services:
       COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-learnvault}
       LEARNVAULT_CONTAINER: ${LEARNVAULT_CONTAINER:-learnvault}
       LEARNVAULT_IMAGE_REPO: ${LEARNVAULT_IMAGE_REPO:-ghcr.io/andersontavares0/learnvault}
+      # stable installs published releases only; rc also accepts release candidates.
+      LEARNVAULT_CHANNEL: ${LEARNVAULT_CHANNEL:-stable}
       # The updater talks to the filtered proxy below, never to the host socket.
       DOCKER_HOST: tcp://docker-proxy:2375
     depends_on:
