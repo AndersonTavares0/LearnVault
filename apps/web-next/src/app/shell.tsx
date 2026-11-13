@@ -1,4 +1,4 @@
-import { BookOpen, ChartNoAxesColumn, History, Layers, CircleUser, LogOut, Moon, NotebookPen, Settings, Sun, type LucideIcon } from 'lucide-react';
+import { BookOpen, ChartNoAxesColumn, History, Layers, CircleUser, LogOut, Moon, NotebookPen, Search, Settings, Sun, type LucideIcon } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
@@ -163,11 +163,10 @@ function AccountMenu({ username, userId, wide }: { username: string; userId: str
 
 
 function MobileTabs() {
-	const items: { to: string; label: string; icon: typeof BookOpen; end?: boolean }[] = [...navItems(), { to: '/settings', label: tr('Account', 'Conta'), icon: CircleUser }];
 	return (
 		<nav aria-label={tr('Sections', 'Seções')} className="fixed inset-x-0 bottom-0 z-40 border-t bg-background pb-[env(safe-area-inset-bottom)] md:hidden print:hidden">
 			<ul className="grid grid-cols-5">
-				{items.map((item) => (
+				{navItems().map((item) => (
 					<li key={item.to}>
 						<NavLink to={item.to} end={item.end} className={({ isActive }) => cn('flex min-h-14 flex-col items-center justify-center gap-0.5 text-xs text-muted-foreground', isActive && 'font-medium text-primary')}>
 							<item.icon className="size-5" aria-hidden="true" />
@@ -175,6 +174,13 @@ function MobileTabs() {
 						</NavLink>
 					</li>
 				))}
+				{/* The account menu stays in the topbar; the fifth slot opens the search palette full-screen. */}
+				<li>
+					<button type="button" onClick={() => window.dispatchEvent(new Event('learnvault:search'))} className="flex min-h-14 w-full flex-col items-center justify-center gap-0.5 text-xs text-muted-foreground">
+						<Search className="size-5" aria-hidden="true" />
+						{tr('Search', 'Buscar')}
+					</button>
+				</li>
 			</ul>
 		</nav>
 	);
