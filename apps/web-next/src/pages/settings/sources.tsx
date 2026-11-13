@@ -9,7 +9,8 @@ import { tr } from '@/lib/i18n';
 import { transport, type RemoteSource, type SourceConnectionTest } from '@/lib/transport';
 
 const sourcesKey = ['admin-sources'] as const;
-const SCHEMES = ['dav', 'davs', 'http', 'https'];
+const SCHEMES = ['dav', 'davs', 'smb', 'http', 'https'];
+const PLAIN_SCHEMES = ['dav', 'http'];
 const MAX_NAME = 120;
 const EMPTY_FORM = { name: '', url: '', username: '', password: '' };
 
@@ -17,7 +18,7 @@ const EMPTY_FORM = { name: '', url: '', username: '', password: '' };
 function urlIssue(value: string): string | null {
 	const url = value.trim();
 	if (!url.includes('://') || !SCHEMES.includes(url.split('://')[0].toLowerCase())) {
-		return tr('Use a dav://, davs://, http:// or https:// address.', 'Use um endereço dav://, davs://, http:// ou https://.');
+		return tr('Use a dav://, davs://, smb://, http:// or https:// address.', 'Use um endereço dav://, davs://, smb://, http:// ou https://.');
 	}
 	try {
 		const parsed = new URL(url);
@@ -25,9 +26,14 @@ function urlIssue(value: string): string | null {
 		if (parsed.username || parsed.password) return tr('Remove the username and password from the address; use the fields below.', 'Remova o usuário e a senha do endereço; use os campos abaixo.');
 		if (parsed.search || parsed.hash) return tr('Remove the query string and fragment from the address.', 'Remova a consulta e o fragmento do endereço.');
 	} catch {
-		return tr('Enter a valid WebDAV address.', 'Informe um endereço WebDAV válido.');
+		return tr('Enter a valid remote address.', 'Informe um endereço remoto válido.');
 	}
 	return null;
+}
+
+/** Plain http/dav carry the Basic credentials in clear text; the server allows it, so warn here. */
+function isPlainScheme(value: string): boolean {
+	return PLAIN_SCHEMES.includes(value.split('://')[0]?.toLowerCase() ?? '');
 }
 
 function testFailure(error: string | null): string {
@@ -80,7 +86,7 @@ export function SourceSettings() {
 
 	return (
 		<div className="space-y-6">
-			<p className="text-sm text-muted-foreground">{tr('A remote source is a read-only WebDAV folder. Its password is stored encrypted and is never shown again.', 'Uma fonte remota é uma pasta WebDAV somente leitura. A senha é guardada cifrada e nunca é mostrada de novo.')}</p>
+			<p className="text-sm text-muted-foreground">{tr('A remote source is a read-only WebDAV or SMB folder. Its password is stored encrypted and is never shown again.', 'Uma fonte remota é uma pasta WebDAV ou SMB somente leitura. A senha é guardada cifrada e nunca é mostrada de novo.')}</p>
 			{error && <p role="alert" className="text-sm text-destructive">{error.message}</p>}
 			<p role="status" aria-live="polite" className="text-sm empty:hidden">{message}</p>
 
@@ -106,6 +112,7 @@ export function SourceSettings() {
 						<Label htmlFor="source-url">{tr('Address', 'Endereço')}</Label>
 						<Input id="source-url" required type="text" inputMode="url" spellCheck={false} placeholder={tr('davs://server/dav/', 'davs://servidor/dav/')} value={form.url} onChange={(event) => setForm({ ...form, url: event.target.value })} aria-invalid={Boolean(addressIssue) || undefined} aria-describedby={addressIssue ? 'source-url-error' : undefined} />
 						{addressIssue && <p id="source-url-error" className="text-sm text-destructive">{addressIssue}</p>}
+						{!addressIssue && isPlainScheme(form.url) && <p className="text-sm text-muted-foreground">{tr('Plain http:// and dav:// send the password without transport encryption.', 'http:// e dav:// enviam a senha sem criptografia de transporte.')}</p>}
 					</div>
 					<div className="space-y-2">
 						<Label htmlFor="source-username">{tr('Username (optional)', 'Usuário (opcional)')}</Label>

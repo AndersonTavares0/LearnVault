@@ -12,7 +12,7 @@
 
 use std::path::{Path, PathBuf};
 
-use learnvault_core::{Database, FocusKind, FocusSessionInput, SyncOperation, SyncOperationInput};
+use learnvault_core::{Database, FocusKind, FocusSessionInput};
 use tauri::State;
 
 use crate::config::DesktopConfigDto;
@@ -955,43 +955,6 @@ pub async fn desktop_save_playback_preferences(
 pub async fn desktop_sync_state(state: State<'_, DesktopState>) -> Result<SyncStateDto, IpcError> {
     let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || state.sync_state())
-        .await
-        .map_err(|_| IpcError::sync_unavailable())?
-}
-
-/// Comando IPC: lista o outbox pendente, da operação mais antiga para a mais nova.
-#[tauri::command]
-pub async fn desktop_sync_pending(
-    state: State<'_, DesktopState>,
-    limit: Option<usize>,
-) -> Result<Vec<SyncOperationInput>, IpcError> {
-    let state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || state.sync_pending(limit))
-        .await
-        .map_err(|_| IpcError::sync_unavailable())?
-}
-
-/// Comando IPC: confirma o lote aceito pelo servidor e limpa o outbox.
-#[tauri::command]
-pub async fn desktop_sync_acknowledge(
-    state: State<'_, DesktopState>,
-    op_ids: Vec<String>,
-) -> Result<usize, IpcError> {
-    let state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || state.sync_acknowledge(&op_ids))
-        .await
-        .map_err(|_| IpcError::sync_unavailable())?
-}
-
-/// Comando IPC: aplica as operações recebidas e grava o cursor na mesma transação.
-#[tauri::command]
-pub async fn desktop_sync_apply(
-    state: State<'_, DesktopState>,
-    operations: Vec<SyncOperation>,
-    cursor: i64,
-) -> Result<usize, IpcError> {
-    let state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || state.sync_apply(&operations, cursor))
         .await
         .map_err(|_| IpcError::sync_unavailable())?
 }

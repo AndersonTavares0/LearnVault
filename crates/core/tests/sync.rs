@@ -83,6 +83,28 @@ fn replaying_the_same_operation_applies_it_once() -> TestResult {
 }
 
 #[test]
+fn an_operation_id_from_another_owner_is_refused() -> TestResult {
+    let db = database();
+    db.connection().execute_batch(
+        "INSERT INTO user (user_id, username, password_hash, is_admin, created_at)
+         VALUES ('intruder', 'intruder', 'x', 0, 1);",
+    )?;
+    let operation = input("op-1", 100, progress("m1", 42, false));
+    push_operations(&db, OWNER, "device-a", std::slice::from_ref(&operation))?;
+
+    let refused = push_operations(&db, "intruder", "device-z", &[operation]);
+    assert!(
+        matches!(
+            refused,
+            Err(learnvault_core::Error::InvalidSyncOperation { .. })
+        ),
+        "um op_id de outro dono não pode virar duplicata silenciosa"
+    );
+    assert_eq!(count(&db, "sync_operation"), 1);
+    Ok(())
+}
+
+#[test]
 fn pull_returns_new_operations_in_order_and_skips_the_own_device() -> TestResult {
     let db = database();
     push_operations(
@@ -188,8 +210,8 @@ fn progress_is_last_write_wins_with_clamping_and_monotonic_completion() -> TestR
     )?;
     assert_eq!((position, completed), (30, 1));
 
-    // A escrita mais nova desmarca a conclusão; uma escrita antiga posterior não a
-    // ressuscita nem retrocede a posição.
+    // Conclusão é monotônica: nem uma escrita mais nova desmarca o que já foi observado,
+    // e uma escrita antiga posterior não retrocede a posição.
     push_operations(
         &db,
         OWNER,
@@ -207,7 +229,7 @@ fn progress_is_last_write_wins_with_clamping_and_monotonic_completion() -> TestR
         [OWNER],
         |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
-    assert_eq!((position, completed), (40, 0));
+    assert_eq!((position, completed), (40, 1));
 
     // Valores fora da faixa são limitados, não recusados.
     push_operations(

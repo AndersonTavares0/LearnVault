@@ -50,11 +50,21 @@ describe('remote source settings', () => {
 		const create = vi.spyOn(transport, 'createSource');
 		renderApp('/settings#sources', { catalog, user: admin });
 		const form = (await screen.findByRole('heading', { name: 'Add a source' })).closest('form')!;
-		fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'SMB' } });
-		fireEvent.change(within(form).getByLabelText('Address'), { target: { value: 'smb://server/share' } });
+		fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'FTP' } });
+		fireEvent.change(within(form).getByLabelText('Address'), { target: { value: 'ftp://server/share' } });
 		expect(within(form).getByText(/Use a dav:\/\//)).toBeTruthy();
 		expect((within(form).getByRole('button', { name: 'Add source' }) as HTMLButtonElement).disabled).toBe(true);
 		expect(create).not.toHaveBeenCalled();
+	});
+
+	it('accepts an SMB address and warns about plain transports', async () => {
+		renderApp('/settings#sources', { catalog, user: admin });
+		const form = (await screen.findByRole('heading', { name: 'Add a source' })).closest('form')!;
+		fireEvent.change(within(form).getByLabelText('Address'), { target: { value: 'smb://server/share/cursos' } });
+		expect(screen.queryByText(/Use a dav:\/\//)).toBeNull();
+		expect((within(form).getByRole('button', { name: 'Add source' }) as HTMLButtonElement).disabled).toBe(false);
+		fireEvent.change(within(form).getByLabelText('Address'), { target: { value: 'dav://server/dav/' } });
+		expect(within(form).getByText(/without transport encryption/)).toBeTruthy();
 	});
 
 	it('tests the connection and reports success and failure', async () => {
