@@ -15,10 +15,10 @@
 
 # --- Áreas afetadas (zero ou várias por pull request) ---
 
-# SPA Svelte 5 + Vite.
+# SPA React 19 + Vite.
 "area:web":
   - changed-files:
-      - any-glob-to-any-file: 'apps/{web,web-next}/**'
+      - any-glob-to-any-file: 'apps/web-next/**'
 
 # Espaço de trabalho Rust (core, server, desktop) e manifesto da toolchain.
 # `crates/core` é compartilhado: a automação não o trata como servidor ou desktop.
@@ -77,7 +77,6 @@ tests:
   - changed-files:
       - any-glob-to-any-file:
           - 'crates/**/tests/**'
-          - 'apps/web/src/**/*.test.ts'
           - 'apps/web-next/src/**/*.test.ts?(x)'
           - 'tests/**'
           - 'testdata/**'
@@ -91,5 +90,4 @@ dependencies:
           - 'package.json'
           - 'pnpm-lock.yaml'
           - 'pnpm-workspace.yaml'
-          - 'apps/web/package.json'
           - 'apps/web-next/package.json'

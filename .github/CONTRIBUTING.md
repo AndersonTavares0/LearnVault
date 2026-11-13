@@ -27,10 +27,10 @@ pnpm verify                      # Run all PR checks (--fast skips builds and au
 
 - `pnpm dev` starts the Rust API at `http://127.0.0.1:8090` and the Vite SPA at `http://localhost:5173`.
 - `pnpm verify` executes:
-  1. `pnpm run check` (SvelteKit type and component check)
+  1. `pnpm run check` (SPA type and lint checks)
   2. `pnpm run build` (production SPA build)
   3. `pnpm run build:desktop` (embedded desktop SPA build)
-  4. `pnpm --filter learnvault-web test` (Vitest unit tests)
+  4. `pnpm --filter learnvault-web-next test` (Vitest unit tests)
   5. `pnpm run test:scripts` (scripts and plugin verification tests)
   6. `pnpm audit --audit-level=low` (dependency security check)
   7. `cargo fmt --all -- --check` (Rust code formatting)

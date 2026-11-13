@@ -1,6 +1,6 @@
 # LearnVault Design System
 
-The design record for the React app (`apps/web-next`). It describes the system as built. The Svelte app in `apps/web` keeps shipping until the cutover and follows the older tokens in its own CSS. Earlier directions (Stone + Emerald, Literata titles, the dark title band) are superseded by this file; `docs/design/` keeps their research as history.
+The design record for the app (`apps/web-next`). It describes the system as built. Earlier directions (Stone + Emerald, Literata titles, the dark title band) are superseded by this file; `docs/design/` keeps their research as history.
 
 ## Intent
 

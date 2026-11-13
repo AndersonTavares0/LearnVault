@@ -12,7 +12,7 @@
   [![Latest Release](https://img.shields.io/github/v/release/AndersonTavares0/LearnVault?include_prereleases&color=5C4229&label=release)](https://github.com/AndersonTavares0/LearnVault/releases)
   [![License](https://img.shields.io/badge/license-MIT-BC7F29.svg)](LICENSE)
   [![Rust](https://img.shields.io/badge/rust-1.99.0-black?logo=rust)](https://www.rust-lang.org)
-  [![Svelte 5](https://img.shields.io/badge/svelte-5-ff3e00?logo=svelte)](https://svelte.dev)
+  [![React 19](https://img.shields.io/badge/react-19-149eca?logo=react)](https://react.dev)
   [![Tauri 2](https://img.shields.io/badge/tauri-2-24c8db?logo=tauri)](https://tauri.app)
 
   [Features](#features) • [Design](#design) • [Downloads &amp; Deployment](#downloads--deployment) • [Quickstart](#quickstart) • [Development](#development) • [Documentation](docs/README.md)
@@ -38,9 +38,9 @@ LearnVault turns folders of video courses into a structured study environment. I
 
 ## Design
 
-LearnVault is moving to a new interface (`apps/web-next`, React). It is a warm, editorial study room: an off-white page and a warm-black dark theme, Playfair Display titles with an amber accent word, DM Sans text, tinted cards and a single "Next up" action on the home page. Light is the default; dark and "follow the system" are one click away, and the accent colour, corners, density and text size are yours to change. Notes and Review start from a course, the player keeps all its controls in one bar (with a cinema mode), and PDF lessons open in a reader with search, highlights, underlines and notes.
+LearnVault is a warm, editorial study room (`apps/web-next`, React): an off-white page and a warm-black dark theme, Playfair Display titles with an amber accent word, DM Sans text, tinted cards and a single "Next up" action on the home page. Light is the default; dark and "follow the system" are one click away, and the accent colour, corners, density and text size are yours to change. Notes and Review start from a course, the player keeps all its controls in one bar (with a cinema mode), and PDF lessons open in a reader with search, highlights, underlines and notes.
 
-The design record is [`DESIGN.md`](DESIGN.md) and the product record is [`PRODUCT.md`](PRODUCT.md). The interface that ships today is still the Svelte app in `apps/web`; the React app replaces it at the cutover tracked in the migration epic.
+The design record is [`DESIGN.md`](DESIGN.md) and the product record is [`PRODUCT.md`](PRODUCT.md). The React app is the shipped interface in the server, the container image, the release tarballs, and the desktop bundle.
 
 ---
 
@@ -58,13 +58,11 @@ The design record is [`DESIGN.md`](DESIGN.md) and the product record is [`PRODUC
 - **Catalog-Wide Search:** Query lesson titles, module folders, and study notes in real-time.
 - **Flashcard Review (SM-2):** Generate and drill flashcards per lesson with interval calculations driven by the SuperMemo-2 spaced repetition algorithm.
 
-### Study Forest and Focus Timer
-
-> The forest and nursery are features of the Svelte app that ships today. The new React interface (see [Design](#design)) replaces them with a streak, a weekly goal and quiet badges.
+### Focus Timer and Study Analytics
 
 - **Offline-Safe Pomodoro:** Built-in focus timer with local queuing and conflict-free state synchronization.
 - **Study Analytics:** Track daily focus minutes, completion streaks, and weekly consistency metrics.
-- **Botanical Forest Nursery:** Successful study blocks cultivate trees in a personal 2.5D isometric forest garden.
+- **Habit Progress:** A streak, a weekly goal, and quiet badges instead of a virtual garden.
 
 ### Multi-User Accounts and Permissions
 
@@ -145,12 +143,12 @@ tar -xzf learnvault-linux-amd64.tar.gz
 
 ## Development
 
-LearnVault is structured as a Rust workspace with a Svelte 5 frontend:
+LearnVault is structured as a Rust workspace with a React frontend:
 
 - `crates/core`: Domain engine, catalog scanner, media identification, SQLite migrations.
 - `crates/server`: Axum HTTP server, session cookies, media streaming, and SPA delivery.
 - `crates/desktop`: Tauri 2 desktop shell with native IPC commands.
-- `apps/web`: Svelte 5 + TypeScript single-page application built with Vite.
+- `apps/web-next`: React 19 + TypeScript single-page application built with Vite.
 
 ### Prerequisites
 
@@ -173,7 +171,7 @@ pnpm install --frozen-lockfile
 ```sh
 pnpm dev                     # Start Rust API server (8090) and Vite SPA (5173) with live reload
 pnpm dev:tauri               # Launch Tauri desktop application in development mode
-pnpm verify --fast           # Fast verification (Svelte check, Vitest unit tests, Cargo check/tests)
+pnpm verify --fast           # Fast verification (SPA checks, Vitest unit tests, Cargo check/tests)
 pnpm exec playwright test    # Run Playwright end-to-end browser tests
 pnpm run build               # Build production SPA assets
 pnpm run build:desktop       # Build embedded desktop SPA bundle
