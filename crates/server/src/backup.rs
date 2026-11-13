@@ -1,12 +1,18 @@
 //! Operações de backup e restauração do banco SQLite do LearnVault.
 
-use std::path::PathBuf;
+use std::{
+    path::PathBuf,
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 use axum::{
+    body::Body,
     extract::State,
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
+use tokio::io::{AsyncRead, ReadBuf};
 
 use crate::{
     AppState,
@@ -24,6 +30,28 @@ pub fn execute_backup(options: &BackupOptions) -> Result<PathBuf, learnvault_cor
 /// Restaura o banco de dados a partir de um backup via CLI.
 pub fn execute_restore(options: &RestoreOptions) -> Result<(), learnvault_core::Error> {
     learnvault_core::Database::restore_from(&options.backup_path, &options.database_path)
+}
+
+/// Arquivo temporário apagado quando a resposta termina, mesmo se o cliente desistir.
+struct CleanupFile {
+    file: tokio::fs::File,
+    path: PathBuf,
+}
+
+impl AsyncRead for CleanupFile {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        context: &mut Context<'_>,
+        buffer: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut self.file).poll_read(context, buffer)
+    }
+}
+
+impl Drop for CleanupFile {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
 }
 
 /// Handler HTTP autenticado (administrador) para download do backup transacional do banco.
@@ -53,30 +81,28 @@ pub(crate) async fn download_backup(State(state): State<AppState>, headers: Head
         getrandom::u32().unwrap_or(0)
     ));
 
-    {
-        let db = state.database.lock().await;
-        if let Err(error) = db.backup_to(&backup_temp_file) {
+    // The export runs on its own connection: the shared one stays free for requests, and
+    // SQLite's backup API gives a consistent snapshot without holding our mutex.
+    let database_path = state.config.database_path.clone();
+    let destination = backup_temp_file.clone();
+    let exported = tokio::task::spawn_blocking(move || {
+        let db = learnvault_core::Database::open(&database_path)?;
+        db.backup_to(&destination)
+    })
+    .await;
+    match exported {
+        Ok(Ok(())) => {}
+        Ok(Err(_)) | Err(_) => {
             let _ = std::fs::remove_file(&backup_temp_file);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("backup failed: {error}"),
-            )
-                .into_response();
+            return (StatusCode::INTERNAL_SERVER_ERROR, "backup unavailable").into_response();
         }
     }
 
-    let bytes = match std::fs::read(&backup_temp_file) {
-        Ok(bytes) => {
-            let _ = std::fs::remove_file(&backup_temp_file);
-            bytes
-        }
+    let file = match tokio::fs::File::open(&backup_temp_file).await {
+        Ok(file) => file,
         Err(_) => {
             let _ = std::fs::remove_file(&backup_temp_file);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "could not read generated backup file",
-            )
-                .into_response();
+            return (StatusCode::INTERNAL_SERVER_ERROR, "backup unavailable").into_response();
         }
     };
 
@@ -86,7 +112,11 @@ pub(crate) async fn download_backup(State(state): State<AppState>, headers: Head
         .unwrap_or(0);
     let filename = format!("learnvault-backup-{timestamp}.sqlite");
 
-    let mut response = (StatusCode::OK, bytes).into_response();
+    let stream = tokio_util::io::ReaderStream::new(CleanupFile {
+        file,
+        path: backup_temp_file,
+    });
+    let mut response = (StatusCode::OK, Body::from_stream(stream)).into_response();
     let headers_mut = response.headers_mut();
     headers_mut.insert(
         header::CONTENT_TYPE,
