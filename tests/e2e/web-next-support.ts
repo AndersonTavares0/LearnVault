@@ -42,7 +42,9 @@ export const createTest = (prepare: (library: string) => Promise<void>) => base.
 	origin: async ({}, use) => {
 		const root = await mkdtemp(join(tmpdir(), 'learnvault-web-next-'));
 		const library = join(root, 'library');
-		await prepare(library);
+		// Each top-level folder under the library root is registered as a course, so the
+		// fixtures live inside one folder and their own folders become its modules.
+		await prepare(join(library, 'Course'));
 		const binary = process.env.LEARNVAULT_SERVER_BIN ?? resolve(process.platform === 'win32' ? 'target/debug/learnvault-server.exe' : 'target/debug/learnvault-server');
 		const server = spawn(binary, ['--listen-addr', '127.0.0.1:0', '--database', join(root, 'db.sqlite'), '--library-root', library, '--web-root', resolve('crates/server/web/build'), '--insecure-http'], {
 			env: { ...process.env, ADMIN_USERNAME: 'admin', ADMIN_PASSWORD: PASSWORD },

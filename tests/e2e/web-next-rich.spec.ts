@@ -31,7 +31,7 @@ async function openCourse(page: Page, origin: string) {
 	await signIn(page, origin);
 	await page.getByRole('button', { name: 'Refresh courses' }).click();
 	await expect(page.getByText('Catalog updated.')).toBeVisible();
-	await page.getByRole('link', { name: 'library' }).first().click();
+	await page.getByRole('link', { name: 'Course' }).first().click();
 }
 
 async function openVideoLesson(page: Page, origin: string) {
@@ -99,7 +99,7 @@ test('notes take formatting, show it, and are found from the course card', async
 
 	await page.goto(`${origin}/#/notes`);
 	await expect(page.getByRole('heading', { name: /Choose a course to open its Notes/ })).toBeVisible();
-	await page.getByRole('link', { name: /^library/ }).click();
+	await page.getByRole('link', { name: /^Course/ }).click();
 	await expect(page.locator('span.font-bold', { hasText: 'remember this' })).toBeVisible();
 	await expectNoAxeViolations(page, 'notebook');
 });
