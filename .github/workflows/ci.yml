@@ -131,7 +131,7 @@ jobs:
     name: Rust server browser E2E
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [change-scope, web-artifacts]
+    needs: [change-scope]
     if: ${{ needs['change-scope'].outputs.docs_release_only != 'true' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -143,10 +143,6 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: spa-build
-          path: crates/server/web/build
       - name: Install Rust toolchain
         run: rustup toolchain install 1.99.0 --profile minimal
       # Same cache the Rust job saves: the server's dependencies are already compiled there.
@@ -161,6 +157,8 @@ jobs:
           restore-keys: |
             rust-${{ runner.os }}-1.99.0-workspace-
       - run: cargo build -p learnvault-server
+      # The server serves the shell from `--web-root` on disk, not from the compiled binary, so
+      # this job builds the SPA here instead of downloading `spa-build` and waiting for that job.
       - run: pnpm --filter learnvault-web-next build
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm exec playwright test tests/e2e/web-next.spec.ts tests/e2e/web-next-rich.spec.ts

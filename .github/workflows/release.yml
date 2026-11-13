@@ -13,10 +13,19 @@ on:
 permissions:
   contents: read
 
+# A published release and a manual repair of the same tag must not interleave: both build a
+# digest and then move the same tags and `gh release upload --clobber` the same asset names.
+# Queue instead of cancelling, so the last run wins as a whole. Waiting for the `release`
+# environment approval is outside the job timeout, so a long review does not cancel anything.
+concurrency:
+  group: release-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
 jobs:
   validate-tag:
     name: Validate release tag
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read
     outputs:
@@ -100,6 +109,7 @@ jobs:
     name: Build Linux assets
     needs: validate-tag
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -151,6 +161,7 @@ jobs:
     name: Build Linux arm64 assets
     needs: validate-tag
     runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -203,6 +214,7 @@ jobs:
     name: Build Windows NSIS installer
     needs: validate-tag
     runs-on: windows-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -301,6 +313,7 @@ jobs:
     # Every platform build must pass before the image is pushed, tagged or offered for approval.
     needs: [validate-tag, linux, linux-arm64, windows]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     # Waits for a reviewer approval in the `release` environment before anything is pushed or tagged.
     environment: release
     permissions:
@@ -424,6 +437,7 @@ jobs:
     name: Publish release assets
     needs: [validate-tag, linux, linux-arm64, windows, container]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment: release
     permissions:
       contents: write

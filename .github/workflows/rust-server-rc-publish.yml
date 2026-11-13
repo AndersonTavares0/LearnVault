@@ -29,6 +29,7 @@ jobs:
   publish:
     name: Publish unsigned Rust RC draft
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
       actions: read
