@@ -1437,8 +1437,8 @@ fn apply_flashcard_create(
 
 /// Edits a synced card when the received version is not older.
 ///
-/// A card this device does not have stays only in the journal, like a review, and applies
-/// if its create arrives later.
+/// A card this device does not have is skipped: the pull cursor advances and never replays it,
+/// so an edit only lands when its create already arrived in an earlier batch.
 fn apply_flashcard_update(
     conn: &Connection,
     owner_id: &str,
