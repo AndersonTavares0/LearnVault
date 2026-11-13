@@ -91,7 +91,7 @@ export function HomePage() {
 							{library.entries.length > 0 && <Filters categories={library.categories} category={category} onCategory={(value) => setParam('category', value)} view={view} onView={changeView} sort={sort} onSort={changeSort} />}
 						</div>
 						{library.entries.length > 0 && (
-							<div role="search" className="relative">
+							<div role="search" className="relative sm:max-w-md">
 								<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
 								<Input type="search" value={query} onChange={(event) => setParam('q', event.target.value || null)} placeholder={tr('Search courses and lessons', 'Buscar cursos e aulas')} aria-label={tr('Search courses', 'Buscar cursos')} className="pl-9" />
 							</div>
@@ -264,7 +264,7 @@ function Habit({ rewards, completedCourses }: { rewards: RewardSummary | undefin
 	const todayActive = study.days.find((day) => day.day === study.today)?.active ?? false;
 	const dayInitial = (day: string) => new Date(`${day}T12:00:00`).toLocaleDateString(getLocale(), { weekday: 'narrow' });
 	const cards = [
-		look.showStreak && <li key="s"><Stat tone="amber" icon={<Flame />} label={tr('Streak', 'Sequência')} value={study.currentStreak} unit={study.currentStreak === 1 ? tr('day', 'dia') : tr('days', 'dias')} note={todayActive ? tr('Today counted', 'Hoje já conta') : tr('Today counts', 'Hoje conta')} className="p-4 xl:p-5">
+		look.showStreak && <li key="s"><Stat tone="amber" icon={<Flame />} label={tr('Streak', 'Sequência')} value={study.currentStreak} unit={study.currentStreak === 1 ? tr('day', 'dia') : tr('days', 'dias')} note={todayActive ? tr('Today counted', 'Hoje já conta') : tr('Today counts', 'Hoje conta')} className="h-full p-4 xl:p-5">
 			<div role="img" aria-label={tr(`${study.weekActiveDays} of 7 days studied this week`, `${study.weekActiveDays} de 7 dias estudados nesta semana`)} className="flex justify-between gap-1">
 				{study.days.map((day) => (
 					<span key={day.day} className="flex flex-col items-center gap-1">
@@ -274,7 +274,7 @@ function Habit({ rewards, completedCourses }: { rewards: RewardSummary | undefin
 				))}
 			</div>
 		</Stat></li>,
-		look.showXp && <li key="x"><Stat tone="violet" icon={<Star />} label={tr(`Level ${game.level.level}`, `Nível ${game.level.level}`)} value={game.level.xp} unit="XP" progress={game.level.progress} note={tr(`${game.level.xpToNext} XP to Level ${game.level.level + 1}`, `${game.level.xpToNext} XP para o Nível ${game.level.level + 1}`)} className="p-4 xl:p-5" /></li>,
+		look.showXp && <li key="x"><Stat tone="violet" icon={<Star />} label={tr(`Level ${game.level.level}`, `Nível ${game.level.level}`)} value={game.level.xp} unit="XP" progress={game.level.progress} note={tr(`${game.level.xpToNext} XP to Level ${game.level.level + 1}`, `${game.level.xpToNext} XP para o Nível ${game.level.level + 1}`)} className="h-full p-4 xl:p-5" /></li>,
 		look.showGoal && <li key="g" className="col-span-2"><Stat tone="green" icon={<Target />} label={tr('Goal', 'Meta')} value={`${days}/${rewards.weeklyGoal}`} unit={tr('days this week', 'dias nesta semana')} bar={{ value: days, max: rewards.weeklyGoal }} note={remaining === 0 ? tr('Goal reached', 'Meta atingida') : remaining === 1 ? tr('1 more day', 'Mais 1 dia') : tr(`${remaining} more days`, `Mais ${remaining} dias`)} /></li>
 	].filter(Boolean);
 	if (cards.length === 0) return null;
