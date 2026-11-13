@@ -382,14 +382,34 @@ fn login_source(
         return "unbound-test-client".to_owned();
     };
     if trusted_proxies.contains(&peer.ip())
-        && let Some(client_ip) = headers
-            .get("x-real-ip")
-            .and_then(|value| value.to_str().ok())
-            .and_then(|value| value.trim().parse::<IpAddr>().ok())
+        && let Some(client_ip) = forwarded_client_ip(headers)
     {
         return client_ip.to_string();
     }
     peer.ip().to_string()
+}
+
+/// Endereço do cliente informado por um proxy confiável. `X-Real-IP` tem precedência;
+/// caso contrário usa a última entrada de `X-Forwarded-For`, que é a acrescentada pelo
+/// proxy mais próximo. Entradas anteriores são controladas pelo cliente e não entram.
+fn forwarded_client_ip(headers: &HeaderMap) -> Option<IpAddr> {
+    let direct = headers
+        .get("x-real-ip")
+        .and_then(|value| value.to_str().ok())
+        .and_then(parse_ip);
+    direct.or_else(|| {
+        let last = headers
+            .get_all("x-forwarded-for")
+            .iter()
+            .fold(None, |_, value| Some(value));
+        last.and_then(|value| value.to_str().ok())
+            .and_then(|value| value.split(',').next_back())
+            .and_then(parse_ip)
+    })
+}
+
+fn parse_ip(value: &str) -> Option<IpAddr> {
+    value.trim().trim_matches(['[', ']']).parse().ok()
 }
 
 #[cfg(test)]
@@ -410,6 +430,40 @@ mod login_rate_limit_tests {
         assert_eq!(
             login_source(Some(peer), &headers, &[peer.ip()]),
             client.to_string()
+        );
+    }
+
+    #[test]
+    fn forwarded_for_uses_the_hop_appended_by_the_trusted_proxy() {
+        let peer: SocketAddr = "192.0.2.1:8090".parse().unwrap();
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "x-forwarded-for",
+            HeaderValue::from_static("203.0.113.9, 198.51.100.7, 198.51.100.8"),
+        );
+
+        assert_eq!(
+            login_source(Some(peer), &headers, &[peer.ip()]),
+            "198.51.100.8"
+        );
+        assert_eq!(login_source(Some(peer), &headers, &[]), "192.0.2.1");
+    }
+
+    #[test]
+    fn forwarded_for_accepts_bracketed_and_unknown_values() {
+        let peer: SocketAddr = "192.0.2.1:8090".parse().unwrap();
+        let mut headers = HeaderMap::new();
+        headers.insert("x-forwarded-for", HeaderValue::from_static("[2001:db8::7]"));
+        assert_eq!(
+            login_source(Some(peer), &headers, &[peer.ip()]),
+            "2001:db8::7"
+        );
+
+        let mut unknown = HeaderMap::new();
+        unknown.insert("x-forwarded-for", HeaderValue::from_static("unknown"));
+        assert_eq!(
+            login_source(Some(peer), &unknown, &[peer.ip()]),
+            "192.0.2.1"
         );
     }
 }

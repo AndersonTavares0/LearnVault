@@ -22,7 +22,7 @@ Static file serving is disabled by default. Pass `--web-root` pointing to the di
 
 Initial bootstrap allows temporary credentials (`admin/admin`). The response marks `must_change_credentials: true`, and all protected endpoints return `403 credentials_change_required` until the password is changed.
 
-Temporary credentials are created only when the server listens on a loopback address. A non-loopback listener requires explicit bootstrap credentials; a persisted administrator still marked for credential change also prevents network startup. Login rate limiting uses the socket peer address. `X-Real-IP` is honored only when that peer is listed in `TRUSTED_PROXY_IPS`; `X-Forwarded-For` is not trusted.
+Temporary credentials are created only when the server listens on a loopback address. A non-loopback listener requires explicit bootstrap credentials; a persisted administrator still marked for credential change also prevents network startup. Login rate limiting is keyed on the resolved client address: the socket peer by default, or the forwarded address when that peer is listed in `TRUSTED_PROXY_IPS`. `X-Real-IP` wins; otherwise the last `X-Forwarded-For` entry (the hop appended by the closest proxy) is used, because earlier entries are client-controlled. Configure the proxy to overwrite both headers, and list only the proxy addresses, or a client can choose its own limiter key.
 
 ## Database Compatibility & Migration
 
