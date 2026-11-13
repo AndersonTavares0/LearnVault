@@ -1024,6 +1024,9 @@ pub(crate) async fn delete_note(
         if let Some(media_id) = learnvault_core::study_note_media_id(db, &note_id)? {
             require_media_access(db, &owner, admin, &media_id)?;
         }
+        // The core delete records a tombstone, so an offline create cannot resurrect the
+        // note. No journal operation is queued: the outbox belongs to the desktop side of
+        // the half-duplex sync, and this server is the journal. Tracked in #472.
         learnvault_core::delete_study_note(db, &owner, &note_id)
     })
     .await
@@ -1131,6 +1134,8 @@ pub(crate) async fn delete_bookmark(
         if let Some(media_id) = learnvault_core::media_bookmark_media_id(db, &bookmark_id)? {
             require_media_access(db, &owner, admin, &media_id)?;
         }
+        // Same choice as `delete_note`: the tombstone blocks a stale offline create, and a
+        // server-side delete has no outbox to enqueue into. Tracked in #472.
         learnvault_core::delete_media_bookmark(db, &owner, &bookmark_id)
     })
     .await

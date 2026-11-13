@@ -23,6 +23,9 @@
 //!   others become copies with the deterministic id `note_id~op_version`. So two devices
 //!   that saw the same set of versions converge to the same texts, without deleting
 //!   content;
+//! - deletions: a note or bookmark delete records a tombstone with the delete instant. A
+//!   create whose own instant is not newer than the tombstone is skipped, so an offline
+//!   create never resurrects a deleted row;
 //! - card reviews: append-only, applied in cursor order;
 //! - preferences: last write wins by `client_at`.
 //!
@@ -65,6 +68,12 @@ pub const MAX_SYNC_ID_CHARS: usize = 128;
 /// against corrupted values, not the lesson duration.
 pub const MAX_SYNC_POSITION_SECONDS: i64 = 24 * 60 * 60;
 
+/// Tombstone kind of a deleted note in `sync_tombstone`.
+pub(crate) const TOMBSTONE_NOTE: &str = "note";
+
+/// Tombstone kind of a deleted bookmark in `sync_tombstone`.
+pub(crate) const TOMBSTONE_BOOKMARK: &str = "bookmark";
+
 /// Study operation exchanged between devices.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -106,6 +115,16 @@ pub enum SyncPayload {
         /// Creation instant reported by the device.
         created_at: i64,
     },
+    /// Note deleted on the device.
+    NoteDeleted {
+        /// Opaque note identifier.
+        note_id: String,
+    },
+    /// Time bookmark deleted on the device.
+    BookmarkDeleted {
+        /// Opaque bookmark identifier.
+        bookmark_id: String,
+    },
     /// Card review, append-only.
     FlashcardReview {
         /// Opaque card identifier.
@@ -133,7 +152,10 @@ impl SyncPayload {
             Self::Progress { media_id, .. }
             | Self::Note { media_id, .. }
             | Self::Bookmark { media_id, .. } => Some(media_id),
-            Self::FlashcardReview { .. } | Self::Preference { .. } => None,
+            Self::NoteDeleted { .. }
+            | Self::BookmarkDeleted { .. }
+            | Self::FlashcardReview { .. }
+            | Self::Preference { .. } => None,
         }
     }
 }
@@ -546,6 +568,31 @@ fn queue_note(
     Ok(note)
 }
 
+/// Deletes a note and queues the deletion in the same transaction.
+///
+/// Returns `Ok(false)` when the note did not exist: there is nothing to synchronize and no
+/// tombstone is needed.
+pub fn queue_note_delete(
+    db: &Database,
+    owner_id: &str,
+    device_id: &str,
+    note_id: &str,
+) -> Result<bool> {
+    validate_owner(owner_id)?;
+    let conn = db.connection();
+    let transaction = conn.unchecked_transaction()?;
+    let Some(deleted_at) = crate::study::delete_study_note_on(&transaction, owner_id, note_id)?
+    else {
+        return Ok(false);
+    };
+    let payload = SyncPayload::NoteDeleted {
+        note_id: note_id.to_owned(),
+    };
+    enqueue_in(&transaction, owner_id, device_id, &payload, deleted_at)?;
+    transaction.commit()?;
+    Ok(true)
+}
+
 /// Creates a bookmark and queues the operation in a single transaction.
 pub fn queue_bookmark_create(
     db: &Database,
@@ -575,6 +622,31 @@ pub fn queue_bookmark_create(
             bookmark.created_at,
         ))
     })
+}
+
+/// Deletes a bookmark and queues the deletion in the same transaction.
+///
+/// Returns `Ok(false)` when the bookmark did not exist.
+pub fn queue_bookmark_delete(
+    db: &Database,
+    owner_id: &str,
+    device_id: &str,
+    bookmark_id: &str,
+) -> Result<bool> {
+    validate_owner(owner_id)?;
+    let conn = db.connection();
+    let transaction = conn.unchecked_transaction()?;
+    let Some(deleted_at) =
+        crate::study::delete_media_bookmark_on(&transaction, owner_id, bookmark_id)?
+    else {
+        return Ok(false);
+    };
+    let payload = SyncPayload::BookmarkDeleted {
+        bookmark_id: bookmark_id.to_owned(),
+    };
+    enqueue_in(&transaction, owner_id, device_id, &payload, deleted_at)?;
+    transaction.commit()?;
+    Ok(true)
 }
 
 /// Records a card review and queues the operation in a single transaction.
@@ -758,6 +830,12 @@ fn apply_payload(
             label,
             *created_at,
         ),
+        SyncPayload::NoteDeleted { note_id } => {
+            apply_note_delete(conn, owner_id, note_id, client_at)
+        }
+        SyncPayload::BookmarkDeleted { bookmark_id } => {
+            apply_bookmark_delete(conn, owner_id, bookmark_id, client_at)
+        }
         SyncPayload::FlashcardReview {
             card_id,
             rating,
@@ -861,6 +939,10 @@ fn apply_note(
     }
     let created_at = created_at.clamp(0, updated_at.max(0));
     let updated_at = updated_at.max(created_at);
+    // A delete at or after this version wins: an old create never resurrects a newer delete.
+    if tombstone_blocks(conn, owner_id, TOMBSTONE_NOTE, note_id, updated_at)? {
+        return Ok(());
+    }
 
     let existing: Option<(String, String, Option<String>, i64, i64, i64)> = conn
         .query_row(
@@ -1029,6 +1111,10 @@ fn apply_bookmark(
     {
         return Ok(());
     }
+    // A delete at or after this version wins: an old create never resurrects a newer delete.
+    if tombstone_blocks(conn, owner_id, TOMBSTONE_BOOKMARK, bookmark_id, created_at)? {
+        return Ok(());
+    }
     conn.execute(
         "INSERT OR IGNORE INTO media_bookmark
              (bookmark_id, owner_id, media_id, position_seconds, label, created_at)
@@ -1043,6 +1129,82 @@ fn apply_bookmark(
         ],
     )?;
     Ok(())
+}
+
+/// Deletes the owner's note and records the tombstone. An absent note is not an error:
+/// the delete converges.
+fn apply_note_delete(
+    conn: &Connection,
+    owner_id: &str,
+    note_id: &str,
+    deleted_at: i64,
+) -> Result<()> {
+    let note_id = note_id.trim();
+    if note_id.is_empty() {
+        return Ok(());
+    }
+    let deleted_at = deleted_at.max(0);
+    conn.execute(
+        "DELETE FROM study_note WHERE owner_id = ?1 AND note_id = ?2",
+        params![owner_id, note_id],
+    )?;
+    record_tombstone_on(conn, owner_id, TOMBSTONE_NOTE, note_id, deleted_at)
+}
+
+/// Deletes the owner's bookmark and records the tombstone; an absent row is not an error.
+fn apply_bookmark_delete(
+    conn: &Connection,
+    owner_id: &str,
+    bookmark_id: &str,
+    deleted_at: i64,
+) -> Result<()> {
+    let bookmark_id = bookmark_id.trim();
+    if bookmark_id.is_empty() {
+        return Ok(());
+    }
+    let deleted_at = deleted_at.max(0);
+    conn.execute(
+        "DELETE FROM media_bookmark WHERE owner_id = ?1 AND bookmark_id = ?2",
+        params![owner_id, bookmark_id],
+    )?;
+    record_tombstone_on(conn, owner_id, TOMBSTONE_BOOKMARK, bookmark_id, deleted_at)
+}
+
+/// Records a delete instant, keeping the newest one already stored.
+pub(crate) fn record_tombstone_on(
+    conn: &Connection,
+    owner_id: &str,
+    kind: &str,
+    target_id: &str,
+    deleted_at: i64,
+) -> Result<()> {
+    conn.execute(
+        "INSERT INTO sync_tombstone (owner_id, kind, target_id, deleted_at)
+         VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT (owner_id, kind, target_id) DO UPDATE SET
+             deleted_at = MAX(sync_tombstone.deleted_at, excluded.deleted_at)",
+        params![owner_id, kind, target_id, deleted_at],
+    )?;
+    Ok(())
+}
+
+/// Whether a delete at or after `version_at` already happened for this row.
+fn tombstone_blocks(
+    conn: &Connection,
+    owner_id: &str,
+    kind: &str,
+    target_id: &str,
+    version_at: i64,
+) -> Result<bool> {
+    Ok(conn
+        .query_row(
+            "SELECT 1 FROM sync_tombstone
+              WHERE owner_id = ?1 AND kind = ?2 AND target_id = ?3 AND deleted_at >= ?4",
+            params![owner_id, kind, target_id, version_at.max(0)],
+            |_| Ok(()),
+        )
+        .optional()?
+        .is_some())
 }
 
 fn apply_review(

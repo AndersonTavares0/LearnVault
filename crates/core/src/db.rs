@@ -689,6 +689,15 @@ const REQUIRED_TABLES: &[TableDefinition] = &[
             ("updated_at", "INTEGER", true, None, 0),
         ],
     },
+    TableDefinition {
+        name: "sync_tombstone",
+        columns: &[
+            ("owner_id", "TEXT", true, None, 1),
+            ("kind", "TEXT", true, None, 2),
+            ("target_id", "TEXT", true, None, 3),
+            ("deleted_at", "INTEGER", true, None, 0),
+        ],
+    },
 ];
 
 fn definition_matches(conn: &Connection, definition: &TableDefinition) -> Result<bool> {

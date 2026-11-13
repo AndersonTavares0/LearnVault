@@ -43,7 +43,7 @@ fn table_exists(db: &Database, name: &str) -> bool {
 #[test]
 fn in_memory_database_starts_at_the_current_schema_version() -> TestResult {
     let db = Database::open_in_memory()?;
-    assert_eq!(db.schema_version()?, 17);
+    assert_eq!(db.schema_version()?, 18);
     Ok(())
 }
 
@@ -52,8 +52,8 @@ fn in_memory_database_creates_all_domain_tables() -> TestResult {
     let db = Database::open_in_memory()?;
     assert_eq!(
         table_count(&db),
-        28,
-        "25 domain tables plus the 3 FTS5 virtual tables"
+        29,
+        "26 domain tables plus the 3 FTS5 virtual tables"
     );
     Ok(())
 }
@@ -82,7 +82,7 @@ fn persistent_database_is_created_and_uses_the_wal_journal() -> TestResult {
     assert!(path.exists(), "o arquivo do banco deve existir");
     assert_eq!(journal_mode(&db), "wal");
     assert_eq!(foreign_keys_enabled(&db), 1);
-    assert_eq!(db.schema_version()?, 17);
+    assert_eq!(db.schema_version()?, 18);
     Ok(())
 }
 
@@ -101,7 +101,7 @@ fn reopening_applies_migrations_once_and_preserves_data() -> TestResult {
 
     let db = Database::open(&path)?;
 
-    assert_eq!(db.schema_version()?, 17);
+    assert_eq!(db.schema_version()?, 18);
     let libraries: i64 = db
         .connection()
         .query_row("SELECT COUNT(*) FROM library", [], |row| row.get(0))?;
@@ -131,13 +131,13 @@ fn database_with_a_newer_schema_is_rejected_without_panicking() -> TestResult {
 
     {
         let conn = rusqlite::Connection::open(&path)?;
-        conn.pragma_update(None, "user_version", 18)?;
+        conn.pragma_update(None, "user_version", 19)?;
     }
 
     match Database::open(&path) {
         Err(Error::SchemaTooNew { found, known }) => {
-            assert_eq!(found, 18);
-            assert_eq!(known, 17);
+            assert_eq!(found, 19);
+            assert_eq!(known, 18);
         }
         other => panic!("esperava Error::SchemaTooNew, obtive {other:?}"),
     }
@@ -175,7 +175,7 @@ fn legacy_go_database_is_rejected_before_bootstrap_or_migration() -> TestResult 
 fn new_empty_database_is_not_mistaken_for_legacy_go() -> TestResult {
     let dir = tempfile::tempdir()?;
     let db = Database::open(dir.path().join("new.sqlite"))?;
-    assert_eq!(db.schema_version()?, 17);
+    assert_eq!(db.schema_version()?, 18);
     assert!(table_exists(&db, "user"));
     Ok(())
 }
@@ -187,7 +187,7 @@ fn rejecting_a_newer_schema_leaves_the_database_untouched() -> TestResult {
 
     {
         let conn = rusqlite::Connection::open(&path)?;
-        conn.pragma_update(None, "user_version", 18)?;
+        conn.pragma_update(None, "user_version", 19)?;
     }
 
     match Database::open(&path) {
@@ -206,7 +206,7 @@ fn rejecting_a_newer_schema_leaves_the_database_untouched() -> TestResult {
     assert_eq!(tables, 0, "nenhuma tabela deve ter sido criada");
 
     let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(version, 18, "a versão do banco não deve ser alterada");
+    assert_eq!(version, 19, "a versão do banco não deve ser alterada");
 
     let journal: String =
         conn.query_row("PRAGMA journal_mode", [], |row| row.get::<_, String>(0))?;
@@ -274,7 +274,7 @@ fn a_version_one_database_is_upgraded_additively_preserving_rows() -> TestResult
 
     assert_eq!(
         db.schema_version()?,
-        17,
+        18,
         "a cadeia deve aplicar a migração aditiva"
     );
     assert!(table_exists(&db, "scan_inaccessible"));
@@ -358,7 +358,7 @@ fn a_version_two_database_is_upgraded_additively_preserving_rows() -> TestResult
 
     assert_eq!(
         db.schema_version()?,
-        17,
+        18,
         "a cadeia deve aplicar a migração aditiva"
     );
     assert!(
@@ -399,7 +399,8 @@ fn a_version_sixteen_database_is_upgraded_without_losing_notes() -> TestResult {
              VALUES ('note-1', 'owner-a', 'mid-1', 10, 'anotação antiga', 1760000000, 1760000000);",
         )?;
         db.connection().execute_batch(
-            "DROP TABLE sync_operation; DROP TABLE sync_outbox; DROP TABLE sync_state;",
+            "DROP TABLE sync_operation; DROP TABLE sync_outbox; DROP TABLE sync_state;
+             DROP TABLE sync_tombstone;",
         )?;
         db.connection()
             .execute_batch("ALTER TABLE study_note DROP COLUMN sync_version;")?;
@@ -408,7 +409,7 @@ fn a_version_sixteen_database_is_upgraded_without_losing_notes() -> TestResult {
 
     let db = Database::open(&path)?;
 
-    assert_eq!(db.schema_version()?, 17, "a cadeia aplica a V17");
+    assert_eq!(db.schema_version()?, 18, "a cadeia aplica a V17 e a V18");
     assert!(table_exists(&db, "sync_operation"));
     assert!(table_exists(&db, "sync_outbox"));
     assert!(table_exists(&db, "sync_state"));

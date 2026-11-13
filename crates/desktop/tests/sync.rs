@@ -48,13 +48,21 @@ fn every_syncable_write_lands_in_the_durable_outbox() -> TestResult {
         ok(study::create_bookmark(&db, "m1", 30, "marcador"))?;
         ok(study::save_playback_preference(&db, 125, 100, "pt-BR"))?;
 
+        // As exclusões também são escritas sincronizáveis.
+        let deleted_note = ok(study::create_note(&db, "m1", 20, "nota descartada"))?;
+        ok(study::delete_note(&db, &deleted_note.note_id))?;
+        let deleted_bookmark = ok(study::create_bookmark(&db, "m1", 40, "marcador descartado"))?;
+        ok(study::delete_bookmark(&db, &deleted_bookmark.bookmark_id))?;
+
         let pending = ok(sync::pending(&db, 100))?;
         let kinds: Vec<&str> = pending
             .iter()
             .map(|operation| match operation.payload {
                 SyncPayload::Progress { .. } => "progress",
                 SyncPayload::Note { .. } => "note",
+                SyncPayload::NoteDeleted { .. } => "note_deleted",
                 SyncPayload::Bookmark { .. } => "bookmark",
+                SyncPayload::BookmarkDeleted { .. } => "bookmark_deleted",
                 SyncPayload::FlashcardReview { .. } => "flashcard_review",
                 SyncPayload::Preference { .. } => "preference",
             })
@@ -69,6 +77,10 @@ fn every_syncable_write_lands_in_the_durable_outbox() -> TestResult {
                 "flashcard_review",
                 "bookmark",
                 "preference",
+                "note",
+                "note_deleted",
+                "bookmark",
+                "bookmark_deleted",
             ]
         );
         // A versão sincronizada fica marcada na linha local.
@@ -86,7 +98,7 @@ fn every_syncable_write_lands_in_the_durable_outbox() -> TestResult {
     // Reabrir o aplicativo preserva a fila e a identidade do dispositivo.
     let db = database(&path);
     let pending = ok(sync::pending(&db, 100))?;
-    assert_eq!(pending.len(), 7, "o outbox sobrevive à reinicialização");
+    assert_eq!(pending.len(), 11, "o outbox sobrevive à reinicialização");
     let state = ok(sync::state(&db))?;
     assert!(!state.device_id.is_empty());
     assert_eq!(ok(sync::state(&db))?.device_id, state.device_id);

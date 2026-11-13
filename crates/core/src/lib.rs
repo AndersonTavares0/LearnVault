@@ -102,6 +102,7 @@ pub use sync::{
     MAX_PULL_BATCH, MAX_SYNC_BATCH, MAX_SYNC_ID_CHARS, MAX_SYNC_POSITION_SECONDS, PushOutcome,
     SyncBatch, SyncOperation, SyncOperationInput, SyncPayload, SyncState, acknowledge_operations,
     apply_operations, enqueue_operation, pending_count, pending_operations, pull_operations,
-    push_operations, queue_bookmark_create, queue_completed, queue_note_create, queue_note_update,
-    queue_position, queue_preference, queue_review, sync_state,
+    push_operations, queue_bookmark_create, queue_bookmark_delete, queue_completed,
+    queue_note_create, queue_note_delete, queue_note_update, queue_position, queue_preference,
+    queue_review, sync_state,
 };

@@ -610,14 +610,37 @@ pub(crate) fn update_study_note_on(
 }
 
 /// Remove uma anotação de estudo pertencente ao dono.
+///
+/// The tombstone is recorded here, not in the sync adapter, so every deletion path —
+/// including the server handler, which is the journal itself and has no outbox to drain —
+/// blocks a stale offline create from resurrecting the row. Tracked in #472.
 pub fn delete_study_note(db: &Database, owner_id: &str, note_id: &str) -> Result<bool> {
     validate_owner(owner_id)?;
-    let conn = db.connection();
+    Ok(delete_study_note_on(db.connection(), owner_id, note_id)?.is_some())
+}
+
+/// [`delete_study_note`] over an open connection; returns the delete instant.
+pub(crate) fn delete_study_note_on(
+    conn: &Connection,
+    owner_id: &str,
+    note_id: &str,
+) -> Result<Option<i64>> {
+    let deleted_at = now_unix_seconds();
     let changes = conn.execute(
         "DELETE FROM study_note WHERE owner_id = ?1 AND note_id = ?2",
         rusqlite::params![owner_id, note_id],
     )?;
-    Ok(changes > 0)
+    if changes == 0 {
+        return Ok(None);
+    }
+    crate::sync::record_tombstone_on(
+        conn,
+        owner_id,
+        crate::sync::TOMBSTONE_NOTE,
+        note_id,
+        deleted_at,
+    )?;
+    Ok(Some(deleted_at))
 }
 
 fn note_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StudyNote> {
@@ -1157,14 +1180,36 @@ pub(crate) fn create_media_bookmark_on(
 }
 
 /// Remove um marcador pertencente ao dono.
+///
+/// Records the tombstone for the same reason as [`delete_study_note`]: a bookmark created
+/// offline must not resurrect a deleted one. Tracked in #472.
 pub fn delete_media_bookmark(db: &Database, owner_id: &str, bookmark_id: &str) -> Result<bool> {
     validate_owner(owner_id)?;
-    let conn = db.connection();
+    Ok(delete_media_bookmark_on(db.connection(), owner_id, bookmark_id)?.is_some())
+}
+
+/// [`delete_media_bookmark`] over an open connection; returns the delete instant.
+pub(crate) fn delete_media_bookmark_on(
+    conn: &Connection,
+    owner_id: &str,
+    bookmark_id: &str,
+) -> Result<Option<i64>> {
+    let deleted_at = now_unix_seconds();
     let changes = conn.execute(
         "DELETE FROM media_bookmark WHERE owner_id = ?1 AND bookmark_id = ?2",
         rusqlite::params![owner_id, bookmark_id],
     )?;
-    Ok(changes > 0)
+    if changes == 0 {
+        return Ok(None);
+    }
+    crate::sync::record_tombstone_on(
+        conn,
+        owner_id,
+        crate::sync::TOMBSTONE_BOOKMARK,
+        bookmark_id,
+        deleted_at,
+    )?;
+    Ok(Some(deleted_at))
 }
 
 /// Finds the media linked to a bookmark without returning its contents.

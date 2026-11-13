@@ -737,7 +737,10 @@ impl DesktopState {
             .database
             .lock()
             .map_err(|_| IpcError::database_unavailable())?;
-        study::delete_note(&database, note_id)
+        study::delete_note(&database, note_id)?;
+        drop(database);
+        self.request_sync();
+        Ok(())
     }
 
     /// Lists the local owner's timestamp bookmarks for one lesson.
@@ -772,7 +775,10 @@ impl DesktopState {
             .database
             .lock()
             .map_err(|_| IpcError::database_unavailable())?;
-        study::delete_bookmark(&database, bookmark_id)
+        study::delete_bookmark(&database, bookmark_id)?;
+        drop(database);
+        self.request_sync();
+        Ok(())
     }
 
     /// Lists the local owner's annotations on one PDF.

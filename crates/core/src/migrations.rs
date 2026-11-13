@@ -672,10 +672,26 @@ CREATE TABLE sync_state (
 );
 ";
 
+/// Versão 18: tombstones of deleted notes and bookmarks.
+///
+/// Deleting a row is not an append-only effect: a create that is still pending on another
+/// device would resurrect it when it arrives. A tombstone (`kind` is `note` or `bookmark`)
+/// records the delete instant so an older create is skipped on apply, and it prevents
+/// resurrecting deleted rows without keeping the content itself.
+const V18: &str = "
+CREATE TABLE sync_tombstone (
+    owner_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    target_id TEXT NOT NULL,
+    deleted_at INTEGER NOT NULL,
+    PRIMARY KEY (owner_id, kind, target_id)
+);
+";
+
 /// Cadeia de migrações aplicada por [`crate::db::Database`]; o índice `n` leva o banco da
 /// versão `n` para `n + 1`.
 pub(crate) const MIGRATIONS: &[&str] = &[
-    V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17,
+    V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18,
 ];
 
 /// Versão do schema gravada em `PRAGMA user_version` (0 quando nunca migrado).
