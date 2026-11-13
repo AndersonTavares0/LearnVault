@@ -91,3 +91,9 @@ Top-level course nodes include `cover_version` when a cover exists, prompting th
 | `POST` | `/api/study/flashcards` | Session | Creates a spaced repetition flashcard |
 | `POST` | `/api/study/flashcards/{id}/review` | Session | Records flashcard review grade and calculates next interval |
 | `DELETE` | `/api/study/flashcards/{id}` | Session | Deletes a flashcard |
+
+## Search
+
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| `GET` | `/api/search?q=<text>&limit=<n>` | Session | Returns the session user's notes and shared course/lesson title matches, grouped as `notes`, `courses`, and `lessons`. Notes include a highlighted `snippet` and the lesson position; queries shorter than two characters return empty groups. |

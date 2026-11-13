@@ -20,7 +20,9 @@ fn foreign_keys_enabled(db: &Database) -> i64 {
 fn table_count(db: &Database) -> i64 {
     db.connection()
         .query_row(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+            "SELECT COUNT(*) FROM sqlite_master
+             WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+               AND name NOT LIKE '%\\_fts\\_%' ESCAPE '\\'",
             [],
             |row| row.get(0),
         )
@@ -41,14 +43,18 @@ fn table_exists(db: &Database, name: &str) -> bool {
 #[test]
 fn in_memory_database_starts_at_the_current_schema_version() -> TestResult {
     let db = Database::open_in_memory()?;
-    assert_eq!(db.schema_version()?, 12);
+    assert_eq!(db.schema_version()?, 13);
     Ok(())
 }
 
 #[test]
 fn in_memory_database_creates_all_domain_tables() -> TestResult {
     let db = Database::open_in_memory()?;
-    assert_eq!(table_count(&db), 20);
+    assert_eq!(
+        table_count(&db),
+        23,
+        "20 domain tables plus the 3 FTS5 virtual tables"
+    );
     Ok(())
 }
 
@@ -76,7 +82,7 @@ fn persistent_database_is_created_and_uses_the_wal_journal() -> TestResult {
     assert!(path.exists(), "o arquivo do banco deve existir");
     assert_eq!(journal_mode(&db), "wal");
     assert_eq!(foreign_keys_enabled(&db), 1);
-    assert_eq!(db.schema_version()?, 12);
+    assert_eq!(db.schema_version()?, 13);
     Ok(())
 }
 
@@ -95,7 +101,7 @@ fn reopening_applies_migrations_once_and_preserves_data() -> TestResult {
 
     let db = Database::open(&path)?;
 
-    assert_eq!(db.schema_version()?, 12);
+    assert_eq!(db.schema_version()?, 13);
     let libraries: i64 = db
         .connection()
         .query_row("SELECT COUNT(*) FROM library", [], |row| row.get(0))?;
@@ -125,13 +131,13 @@ fn database_with_a_newer_schema_is_rejected_without_panicking() -> TestResult {
 
     {
         let conn = rusqlite::Connection::open(&path)?;
-        conn.pragma_update(None, "user_version", 13)?;
+        conn.pragma_update(None, "user_version", 14)?;
     }
 
     match Database::open(&path) {
         Err(Error::SchemaTooNew { found, known }) => {
-            assert_eq!(found, 13);
-            assert_eq!(known, 12);
+            assert_eq!(found, 14);
+            assert_eq!(known, 13);
         }
         other => panic!("esperava Error::SchemaTooNew, obtive {other:?}"),
     }
@@ -169,7 +175,7 @@ fn legacy_go_database_is_rejected_before_bootstrap_or_migration() -> TestResult 
 fn new_empty_database_is_not_mistaken_for_legacy_go() -> TestResult {
     let dir = tempfile::tempdir()?;
     let db = Database::open(dir.path().join("new.sqlite"))?;
-    assert_eq!(db.schema_version()?, 12);
+    assert_eq!(db.schema_version()?, 13);
     assert!(table_exists(&db, "user"));
     Ok(())
 }
@@ -181,7 +187,7 @@ fn rejecting_a_newer_schema_leaves_the_database_untouched() -> TestResult {
 
     {
         let conn = rusqlite::Connection::open(&path)?;
-        conn.pragma_update(None, "user_version", 13)?;
+        conn.pragma_update(None, "user_version", 14)?;
     }
 
     match Database::open(&path) {
@@ -200,7 +206,7 @@ fn rejecting_a_newer_schema_leaves_the_database_untouched() -> TestResult {
     assert_eq!(tables, 0, "nenhuma tabela deve ter sido criada");
 
     let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(version, 13, "a versão do banco não deve ser alterada");
+    assert_eq!(version, 14, "a versão do banco não deve ser alterada");
 
     let journal: String =
         conn.query_row("PRAGMA journal_mode", [], |row| row.get::<_, String>(0))?;
@@ -247,6 +253,19 @@ fn a_version_one_database_is_upgraded_additively_preserving_rows() -> TestResult
                  updated_at INTEGER NOT NULL,
                  PRIMARY KEY (owner_id, media_id)
              );
+             CREATE TABLE library (
+                 library_id TEXT PRIMARY KEY NOT NULL,
+                 available INTEGER NOT NULL
+             );
+             CREATE TABLE media (
+                 media_id TEXT PRIMARY KEY NOT NULL,
+                 library_id TEXT NOT NULL,
+                 relative_path TEXT NOT NULL,
+                 relative_path_key TEXT NOT NULL,
+                 size INTEGER NOT NULL,
+                 mtime INTEGER NOT NULL,
+                 availability TEXT NOT NULL
+             );
              PRAGMA user_version = 1;",
         )?;
     }
@@ -255,7 +274,7 @@ fn a_version_one_database_is_upgraded_additively_preserving_rows() -> TestResult
 
     assert_eq!(
         db.schema_version()?,
-        12,
+        13,
         "a cadeia deve aplicar a migração aditiva"
     );
     assert!(table_exists(&db, "scan_inaccessible"));
@@ -318,6 +337,19 @@ fn a_version_two_database_is_upgraded_additively_preserving_rows() -> TestResult
                  updated_at INTEGER NOT NULL,
                  PRIMARY KEY (owner_id, media_id)
              );
+             CREATE TABLE library (
+                 library_id TEXT PRIMARY KEY NOT NULL,
+                 available INTEGER NOT NULL
+             );
+             CREATE TABLE media (
+                 media_id TEXT PRIMARY KEY NOT NULL,
+                 library_id TEXT NOT NULL,
+                 relative_path TEXT NOT NULL,
+                 relative_path_key TEXT NOT NULL,
+                 size INTEGER NOT NULL,
+                 mtime INTEGER NOT NULL,
+                 availability TEXT NOT NULL
+             );
              PRAGMA user_version = 2;",
         )?;
     }
@@ -326,7 +358,7 @@ fn a_version_two_database_is_upgraded_additively_preserving_rows() -> TestResult
 
     assert_eq!(
         db.schema_version()?,
-        12,
+        13,
         "a cadeia deve aplicar a migração aditiva"
     );
     assert!(

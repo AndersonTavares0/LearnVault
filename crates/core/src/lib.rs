@@ -28,6 +28,7 @@ pub mod pomodoro;
 pub mod removal;
 pub mod rescan;
 pub mod scanner;
+pub mod search;
 pub mod structure;
 pub mod study;
 pub mod titles;
@@ -71,6 +72,10 @@ pub use pomodoro::{
 pub use removal::{MediaRemovalImpact, MediaRemovalOutcome, media_removal_impact, remove_media};
 pub use rescan::{RescanSummary, apply_scan, rescan};
 pub use scanner::{MediaKind, ScanOutcome, ScannedFile, scan};
+pub use search::{
+    MAX_SEARCH_QUERY_CHARS, MAX_SEARCH_RESULTS, MIN_SEARCH_QUERY_CHARS, SearchLessonHit,
+    SearchNoteHit, SearchResults, fts_query, search, sync_course_index,
+};
 pub use study::{
     Flashcard, GlobalStudyNote, MAX_BOOKMARK_LABEL_CHARS, MAX_RECENT_STUDY, MediaBookmark,
     ReviewRating, StudyDay, StudyFavorites, StudyNote, StudyProgress, StudySummary,

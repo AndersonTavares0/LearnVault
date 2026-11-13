@@ -1593,7 +1593,7 @@ pub(crate) async fn capabilities(State(state): State<AppState>, headers: HeaderM
 }
 
 /// Falha da camada de estudo, antes da tradução para HTTP.
-enum StudyFailure {
+pub(crate) enum StudyFailure {
     /// Não há capacidade para iniciar outra tarefa blocking.
     Busy,
     /// A tarefa blocking não pôde concluir.
@@ -1626,7 +1626,7 @@ fn require_media_access(
 ///
 /// O permit e o guard do banco são movidos para a closure, então continuam contabilizados
 /// até o trabalho terminar, mesmo que a requisição HTTP expire antes.
-async fn run_study<T, F>(state: &AppState, work: F) -> Result<T, StudyFailure>
+pub(crate) async fn run_study<T, F>(state: &AppState, work: F) -> Result<T, StudyFailure>
 where
     F: FnOnce(&Database) -> learnvault_core::Result<T> + Send + 'static,
     T: Send + 'static,
@@ -1648,7 +1648,7 @@ where
     .map_err(StudyFailure::Core)
 }
 
-fn study_failure_response(failure: StudyFailure) -> Response {
+pub(crate) fn study_failure_response(failure: StudyFailure) -> Response {
     use learnvault_core::Error;
 
     match failure {

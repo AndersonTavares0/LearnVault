@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { DesktopTitlebar } from '@/components/desktop-titlebar';
+import { GlobalSearch } from '@/components/global-search';
 import { UpdateNotice } from '@/components/update-notice';
 import { FocusMenu } from '@/components/focus-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -67,7 +68,7 @@ export function AppShell() {
 						))}
 					</nav>
 					<div className="ml-auto flex items-center gap-1 md:ml-0">
-						<SearchBox />
+						{transportKind === 'http' ? <GlobalSearch /> : <SearchBox />}
 						<FocusMenu />
 						<ThemeToggle />
 						<AccountMenu username={user.username} userId={user.userId} />
@@ -146,7 +147,7 @@ function AccountMenu({ username, userId, wide }: { username: string; userId: str
 	);
 }
 
-/** Library search; `/` focuses it from anywhere except while typing (WCAG 2.1.4). */
+/** Desktop library filter; the server build uses the global palette instead. `/` focuses it (WCAG 2.1.4). */
 function SearchBox() {
 	const navigate = useNavigate();
 	const [params] = useSearchParams();
