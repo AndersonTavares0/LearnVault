@@ -15,6 +15,7 @@ use std::sync::{Arc, Mutex};
 
 use learnvault_core::{CourseRoot, Database, SyncOperation, SyncOperationInput};
 
+use crate::backup;
 use crate::command::catalog_with_orders;
 use crate::config::{DesktopConfigDto, database_path};
 use crate::courses::{CourseEntry, load_courses, store_courses};
@@ -48,6 +49,16 @@ pub struct DesktopState {
     sync: Arc<Mutex<SyncSettings>>,
     sync_flight: Arc<SyncFlight>,
     sync_result: Arc<Mutex<Option<SyncResultDto>>>,
+    pending_update: Arc<Mutex<Option<PendingUpdate>>>,
+}
+
+/// Signed update bytes downloaded ahead of the restart, held until the person asks to restart.
+///
+/// The bytes never cross the IPC and are installed only after a fresh check confirms the same
+/// version is still offered.
+pub(crate) struct PendingUpdate {
+    pub(crate) version: String,
+    pub(crate) bytes: Vec<u8>,
 }
 
 impl DesktopState {
@@ -60,8 +71,15 @@ impl DesktopState {
     /// criado sob demanda na primeira gravação.
     pub fn open(data_dir: &Path, config_dir: &Path) -> Result<Self, IpcError> {
         std::fs::create_dir_all(data_dir).map_err(|_| IpcError::database_unavailable())?;
-        let database = Database::open(database_path(data_dir))
-            .map_err(|_| IpcError::database_unavailable())?;
+        let database_file = database_path(data_dir);
+        // Before the first open on a new version migrates the schema, keep a rollback copy.
+        // A failed backup never blocks startup, but it must stay observable: no path, no
+        // database content, just the non-fatal warning.
+        if backup::backup_before_migration(&database_file).is_err() {
+            eprintln!("learnvault desktop: pre-migration database backup unavailable");
+        }
+        let database =
+            Database::open(database_file).map_err(|_| IpcError::database_unavailable())?;
         let courses = load_courses(config_dir);
         let orders = load_orders(data_dir);
         let sync_file = sync::settings_path(data_dir);
@@ -79,7 +97,27 @@ impl DesktopState {
             sync: Arc::new(Mutex::new(sync)),
             sync_flight: Arc::new(SyncFlight::default()),
             sync_result: Arc::new(Mutex::new(None)),
+            pending_update: Arc::new(Mutex::new(None)),
         })
+    }
+
+    /// Holds the downloaded, signature-verified update bytes until the restart.
+    pub(crate) fn hold_update(&self, version: String, bytes: Vec<u8>) -> Result<(), IpcError> {
+        let mut guard = self
+            .pending_update
+            .lock()
+            .map_err(|_| IpcError::update_unavailable())?;
+        *guard = Some(PendingUpdate { version, bytes });
+        Ok(())
+    }
+
+    /// Takes the held update bytes, leaving the state empty for the next download.
+    pub(crate) fn take_update(&self) -> Result<Option<PendingUpdate>, IpcError> {
+        Ok(self
+            .pending_update
+            .lock()
+            .map_err(|_| IpcError::update_unavailable())?
+            .take())
     }
 
     /// Diretório das capas personalizadas. Uso interno do Rust: nunca cruza o IPC.

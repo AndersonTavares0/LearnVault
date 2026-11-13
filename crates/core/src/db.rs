@@ -26,6 +26,20 @@ pub struct Database {
 pub const CURRENT_SCHEMA_VERSION: usize = SCHEMA_VERSION;
 const MAX_SCHEMA_SQL_BYTES: i64 = 64 * 1024;
 
+/// Reads `PRAGMA user_version` from a database file without creating, migrating, or writing it.
+///
+/// The connection is read-only, so a caller can decide whether to back the file up before
+/// [`Database::open`] applies the migration chain. A missing or unreadable file is an error.
+pub fn file_schema_version(path: impl AsRef<Path>) -> Result<usize> {
+    let path = path.as_ref();
+    let conn = Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|source| Error::OpenDatabase {
+            path: PathBuf::from(path),
+            source,
+        })?;
+    schema_version(&conn).map_err(read_schema_version)
+}
+
 impl Database {
     /// Abre (ou cria) o banco em `path` e aplica a cadeia de migrações.
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {

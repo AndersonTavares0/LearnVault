@@ -15,8 +15,8 @@ beforeEach(() => {
 
 describe('transport contract', () => {
 	it('exposes the HTTP transport seam without routing assumptions', () => {
-		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'studySummary', 'listNotes', 'search', 'createNote', 'updateNote', 'deleteNote', 'listBookmarks', 'createBookmark', 'deleteBookmark', 'listPdfAnnotations', 'createPdfAnnotation', 'updatePdfAnnotation', 'deletePdfAnnotation', 'listFlashcards', 'createFlashcard', 'updateFlashcard', 'deleteFlashcard', 'reviewFlashcard', 'listFavorites', 'setCourseFavorite', 'setLessonFavorite', 'recordFocusSession', 'listFocusSessions', 'focusSummary', 'rewardSummary', 'claimDailyMission', 'setWeeklyGoal', 'syncState', 'syncConfigure', 'syncSignIn', 'syncSignOut', 'syncNow', 'userAvatarUrl', 'uploadUserAvatar', 'deleteUserAvatar', 'checkUpdate', 'installUpdate', 'updateHistory', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover', 'mediaCapabilities', 'transcodeUrl', 'openInSystemPlayer'];
-		expect(methods).toHaveLength(58);
+		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'studySummary', 'listNotes', 'search', 'createNote', 'updateNote', 'deleteNote', 'listBookmarks', 'createBookmark', 'deleteBookmark', 'listPdfAnnotations', 'createPdfAnnotation', 'updatePdfAnnotation', 'deletePdfAnnotation', 'listFlashcards', 'createFlashcard', 'updateFlashcard', 'deleteFlashcard', 'reviewFlashcard', 'listFavorites', 'setCourseFavorite', 'setLessonFavorite', 'recordFocusSession', 'listFocusSessions', 'focusSummary', 'rewardSummary', 'claimDailyMission', 'setWeeklyGoal', 'syncState', 'syncConfigure', 'syncSignIn', 'syncSignOut', 'syncNow', 'userAvatarUrl', 'uploadUserAvatar', 'deleteUserAvatar', 'checkUpdate', 'downloadUpdate', 'restartToUpdate', 'updateHistory', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover', 'mediaCapabilities', 'transcodeUrl', 'openInSystemPlayer'];
+		expect(methods).toHaveLength(59);
 	});
 	it('tells a rate-limited sign-in apart from wrong credentials', async () => {
 		vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 429 })));
@@ -1170,8 +1170,13 @@ describe('desktop transport over IPC', () => {
 		expect(invoke).toHaveBeenCalledWith('desktop_check_update');
 
 		vi.mocked(invoke).mockResolvedValueOnce(true);
-		await expect(desktop.installUpdate?.()).resolves.toBe(true);
-		expect(invoke).toHaveBeenCalledWith('desktop_install_update');
+		await expect(desktop.downloadUpdate?.()).resolves.toBe(true);
+		expect(invoke).toHaveBeenCalledWith('desktop_download_update');
+
+		// Reiniciar instala os bytes retidos; o Tauri reinicia o processo no sucesso.
+		vi.mocked(invoke).mockResolvedValueOnce(true);
+		await expect(desktop.restartToUpdate?.()).resolves.toBe(true);
+		expect(invoke).toHaveBeenCalledWith('desktop_restart_to_update');
 
 		// Ausência de atualização (up-to-date): available é false e error é null
 		vi.mocked(invoke).mockResolvedValueOnce({
