@@ -1338,6 +1338,24 @@ describe('desktop transport over IPC', () => {
 		vi.unstubAllGlobals();
 	});
 
+	it('searches through the desktop IPC command with the HTTP-shaped payload', async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+		vi.mocked(invoke).mockResolvedValue({
+			notes: [{ note_id: 'n1', media_id: 'm1', course_id: 'c1', course_title: 'Curso', lesson_path: 'Aula/01.mp4', lesson_title: 'Aula', position_seconds: 42, updated_at: 7, snippet: '<mark>termo</mark>' }],
+			courses: [{ course_id: 'c1', title: 'Curso' }],
+			lessons: [{ course_id: 'c1', course_title: 'Curso', media_id: 'm1', path: 'Aula/01.mp4', title: 'Aula' }]
+		});
+
+		const results = await new DesktopStub().search('termo');
+
+		expect(invoke).toHaveBeenCalledWith('desktop_search', { query: 'termo' });
+		expect(fetchMock).not.toHaveBeenCalled();
+		expect(results.notes[0]).toMatchObject({ noteId: 'n1', positionSeconds: 42, snippet: '<mark>termo</mark>' });
+		expect(results.lessons[0].path).toBe('Aula/01.mp4');
+		vi.unstubAllGlobals();
+	});
+
 	it('localizes transport error messages to English when locale is en', async () => {
 		setLocale('en');
 		const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: 'course_already_registered' }), { status: 400 }));

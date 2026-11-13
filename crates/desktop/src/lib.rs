@@ -49,6 +49,7 @@ pub mod dto;
 pub mod error;
 pub mod media;
 pub mod ordering;
+pub mod search;
 pub mod state;
 pub mod study;
 
@@ -64,7 +65,7 @@ pub use command::{
     desktop_media_removal_impact, desktop_open_in_system_player, desktop_recent_study,
     desktop_record_focus_session, desktop_record_position, desktop_remove_course,
     desktop_remove_course_cover, desktop_remove_media, desktop_rescan, desktop_reset_course_order,
-    desktop_review_flashcard, desktop_reward_summary, desktop_set_completed,
+    desktop_review_flashcard, desktop_reward_summary, desktop_search, desktop_set_completed,
     desktop_set_course_favorite, desktop_set_course_order, desktop_set_lesson_favorite,
     desktop_set_weekly_goal, desktop_study_progress, desktop_study_summary,
     desktop_update_flashcard, desktop_update_note, desktop_update_pdf_annotation,
@@ -84,10 +85,12 @@ pub use dto::{
     DesktopMediaCapabilitiesDto, DesktopUpdateInfoDto, FlashcardDto, FocusDayDto, FocusSessionDto,
     FocusSummaryDto, MediaBookmarkDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto,
     NewPdfAnnotationDto, PdfAnnotationDto, PdfRectDto, RecentStudyDto, RescanSummaryDto,
-    RewardSummaryDto, StudyFavoritesDto, StudyNoteDto, StudyProgressDto, StudySummaryDto,
+    RewardSummaryDto, SearchCourseDto, SearchLessonDto, SearchNoteDto, SearchResultsDto,
+    StudyFavoritesDto, StudyNoteDto, StudyProgressDto, StudySummaryDto,
 };
 pub use error::{IpcError, IpcErrorCode};
 pub use ordering::{CourseOrders, OrderError, order_path};
+pub use search::DEFAULT_SEARCH_LIMIT;
 pub use state::{DesktopState, RescanGuard};
 pub use study::{DEFAULT_RECENT_LIMIT, LOCAL_OWNER_ID};
 
@@ -119,6 +122,7 @@ pub fn run() {
             command::desktop_import_course,
             command::desktop_remove_course,
             command::desktop_rescan,
+            command::desktop_search,
             command::desktop_study_progress,
             command::desktop_record_position,
             command::desktop_set_completed,

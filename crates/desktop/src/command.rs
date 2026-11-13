@@ -21,7 +21,7 @@ use crate::dto::{
     CatalogDto, CatalogNodeDto, CoverDto, CoverRemovalDto, FlashcardDto, FocusSessionDto,
     FocusSummaryDto, MediaBookmarkDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto,
     NewPdfAnnotationDto, PdfAnnotationDto, RecentStudyDto, RescanSummaryDto, RewardSummaryDto,
-    StudyFavoritesDto, StudyNoteDto, StudyProgressDto, StudySummaryDto,
+    SearchResultsDto, StudyFavoritesDto, StudyNoteDto, StudyProgressDto, StudySummaryDto,
 };
 use crate::error::IpcError;
 use crate::ordering::CourseOrders;
@@ -248,6 +248,23 @@ pub async fn desktop_rescan(state: State<'_, DesktopState>) -> Result<RescanSumm
     tauri::async_runtime::spawn_blocking(move || state.rescan())
         .await
         .map_err(|_| IpcError::rescan_unavailable())?
+}
+
+/// Comando IPC: busca global nas notas do dono local e nos títulos do catálogo.
+///
+/// O dono é o identificador local fixo resolvido no Rust; o webview só fornece a consulta
+/// e, opcionalmente, o limite. Indexação e busca rodam em `spawn_blocking` porque tocam o
+/// SQLite. Assim como no servidor, uma consulta curta devolve grupos vazios, não um erro.
+#[tauri::command]
+pub async fn desktop_search(
+    state: State<'_, DesktopState>,
+    query: String,
+    limit: Option<usize>,
+) -> Result<SearchResultsDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.search(&query, limit))
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
 }
 
 /// Comando IPC: lê o progresso de estudo do dono local em uma mídia conhecida.

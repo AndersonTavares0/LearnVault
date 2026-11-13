@@ -1,7 +1,7 @@
-import { BookOpen, ChartNoAxesColumn, History, Layers, CircleUser, LogOut, Moon, NotebookPen, Search, Settings, Sun, type LucideIcon } from 'lucide-react';
+import { BookOpen, ChartNoAxesColumn, History, Layers, CircleUser, LogOut, Moon, NotebookPen, Settings, Sun, type LucideIcon } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { DesktopTitlebar } from '@/components/desktop-titlebar';
 import { GlobalSearch } from '@/components/global-search';
 import { IndexingIndicator } from '@/components/indexing-indicator';
@@ -10,7 +10,6 @@ import { FocusMenu } from '@/components/focus-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Input } from '@/components/ui/input';
 import { useLocale } from '@/hooks/use-locale';
 import { useStore } from '@/hooks/use-store';
 import { appearanceStore, resolveTheme, updateAppearance } from '@/lib/appearance';
@@ -69,7 +68,7 @@ export function AppShell() {
 						))}
 					</nav>
 					<div className="ml-auto flex items-center gap-1 md:ml-0">
-						{transportKind === 'http' ? <GlobalSearch /> : <SearchBox />}
+						<GlobalSearch />
 						<FocusMenu />
 						<ThemeToggle />
 						<AccountMenu username={user.username} userId={user.userId} />
@@ -150,41 +149,6 @@ function AccountMenu({ username, userId, wide }: { username: string; userId: str
 	);
 }
 
-/** Desktop library filter; the server build uses the global palette instead. `/` focuses it (WCAG 2.1.4). */
-function SearchBox() {
-	const navigate = useNavigate();
-	const [params] = useSearchParams();
-	const location = useLocation();
-	const input = useRef<HTMLInputElement>(null);
-	const query = location.pathname === '/' ? params.get('q') ?? '' : '';
-
-	useEffect(() => {
-		const onKey = (event: KeyboardEvent) => {
-			const target = event.target as HTMLElement | null;
-			if (event.key !== '/' || event.ctrlKey || event.metaKey || event.altKey || target?.closest('input, textarea, select, [contenteditable="true"]')) return;
-			event.preventDefault();
-			input.current?.focus();
-		};
-		window.addEventListener('keydown', onKey);
-		return () => window.removeEventListener('keydown', onKey);
-	}, []);
-
-	return (
-		<div role="search" aria-label={tr('Library', 'Biblioteca')} className="relative hidden w-44 md:block lg:w-64 xl:w-72">
-			<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-			<Input
-				ref={input}
-				type="search"
-				value={query}
-				onChange={(event) => navigate(event.target.value ? `/?q=${encodeURIComponent(event.target.value)}` : '/', { replace: location.pathname === '/' })}
-				placeholder={tr('Search courses and lessons', 'Buscar cursos e aulas')}
-				aria-label={tr('Search courses', 'Buscar cursos')}
-				aria-keyshortcuts="/"
-				className="pl-9"
-			/>
-		</div>
-	);
-}
 
 function MobileTabs() {
 	const items: { to: string; label: string; icon: typeof BookOpen; end?: boolean }[] = [...navItems(), { to: '/settings', label: tr('Account', 'Conta'), icon: CircleUser }];

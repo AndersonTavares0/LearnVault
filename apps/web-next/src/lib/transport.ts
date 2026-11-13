@@ -1377,9 +1377,15 @@ export class DesktopStub implements Transport {
 			throw desktopError(cause, tr('Could not load notes.', 'Não foi possível carregar as anotações.'));
 		}
 	}
-	/** Global search is not wired to the desktop IPC yet; the UI only shows it on the server build. */
-	search(): Promise<SearchResults> {
-		return Promise.resolve({ notes: [], courses: [], lessons: [] });
+	// Sem limite informado, o comando usa o padrão do contrato; por isso o argumento é
+	// omitido em vez de enviado como `undefined`.
+	async search(query: string, limit?: number): Promise<SearchResults> {
+		try {
+			const res = await invoke<unknown>('desktop_search', limit === undefined ? { query } : { query, limit });
+			return normalizeSearchResults(res);
+		} catch (cause) {
+			throw desktopError(cause, tr('Search is unavailable right now.', 'A busca não está disponível agora.'));
+		}
 	}
 	async createNote(mediaId: string, positionSeconds: number, content: string): Promise<StudyNote> {
 		try {
