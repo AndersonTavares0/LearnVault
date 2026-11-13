@@ -100,7 +100,10 @@ described below. The desktop application is single-user and has no accounts.
 - Remote sources (WebDAV, SMB) keep this contract: read-only access, credentials encrypted at
   rest, never logged, and never echoed back in API responses. WebDAV refuses cross-host redirects
   and SMB disables DFS referrals for the same reason: credentials must not follow a server-chosen
-  redirect to another host.
+  redirect to another host. Source URLs with a link-local, multicast, broadcast or unspecified
+  host are rejected (`unsafe_source_target`), which keeps a source away from cloud metadata and
+  other non-library endpoints; private LAN and loopback addresses remain allowed by design, and
+  plain `http://`/`dav://` credentials are accepted with a warning in the admin UI.
 
 ## 6. Browser hardening
 

@@ -656,6 +656,7 @@ fn source_url_code(error: SourceUrlError) -> &'static str {
         | SourceUrlError::MissingShare
         | SourceUrlError::Traversal => "invalid_source_url",
         SourceUrlError::CredentialsInUrl => "source_url_contains_credentials",
+        SourceUrlError::UnsafeTarget => "unsafe_source_target",
         SourceUrlError::QueryOrFragment => "invalid_source_url",
     }
 }

@@ -394,6 +394,21 @@ async fn invalid_source_urls_are_refused_without_echoing_credentials() {
 }
 
 #[tokio::test]
+async fn link_local_targets_are_refused_without_echoing_credentials() {
+    let temp = tempfile::tempdir().unwrap();
+    let state = AppState::initialize(config(&temp)).await.unwrap();
+    let app = build_router(state);
+    let cookie = login(&app).await;
+
+    let refused = create_source(&app, &cookie, "dav://169.254.169.254/dav", PASSWORD).await;
+    assert_eq!(refused.status(), StatusCode::BAD_REQUEST);
+    let body = String::from_utf8_lossy(&refused.into_body().collect().await.unwrap().to_bytes())
+        .into_owned();
+    assert!(body.contains("unsafe_source_target"));
+    assert!(!body.contains(PASSWORD));
+}
+
+#[tokio::test]
 async fn sources_are_admin_only() {
     let temp = tempfile::tempdir().unwrap();
     let state = AppState::initialize(config(&temp)).await.unwrap();
