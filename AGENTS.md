@@ -2,7 +2,7 @@
 
 LearnVault organizes course folders that the user already owns into a self-hosted study space,
 without moving or altering the original files. The product is small, sustainable, and self-contained:
-Rust server (`crates/server`, Axum, SQLite), Svelte 5 SPA (`apps/web`), shared core domain
+Rust server (`crates/server`, Axum, SQLite), React 19 SPA (`apps/web-next`), shared core domain
 (`crates/core`), and offline desktop application Tauri 2 (`crates/desktop`). Docker/Podman are
 optional deployment adapters, not runtime requirements.
 
@@ -27,7 +27,7 @@ pnpm dev                             # Rust API at http://127.0.0.1:8090 + live 
 pnpm dev:tauri                       # desktop application (Tauri) during development
 pnpm verify                          # PR checks (SPA + Rust + desktop); --fast skips builds and audit
 pnpm run check                       # SPA linting and type checking
-pnpm --filter learnvault-web test    # Vitest web unit tests
+pnpm --filter learnvault-web-next test # Vitest SPA unit tests
 pnpm exec playwright test            # Playwright end-to-end browser tests
 pnpm run test:scripts                # node --test scripts/*.test.mjs (runs in CI on every PR)
 pnpm run build / build:desktop       # SPA and desktop bundle builds
@@ -47,7 +47,7 @@ Rust version is pinned by `rust-toolchain.toml`; Node.js 24 and pnpm 11.28.5 com
 - The application supports internationalization (i18n) with English (`en`) as the default language
   and Brazilian Portuguese (`pt-BR`) fully supported. All user-facing strings (UI copy, modals,
   validation alerts, error fallbacks, and transport messages) must use `tr(en, ptBr)` from
-  `apps/web/src/i18n.svelte.ts` (the React app, `apps/web-next`, has the same function in `src/lib/i18n.ts`). Raw untranslated strings in user-facing UI or error toasts are forbidden.
+  `apps/web-next/src/lib/i18n.ts`. Raw untranslated strings in user-facing UI or error toasts are forbidden.
 - **Mandatory use of Ponytail:** on all LearnVault development tasks, always use Ponytail to write,
   modify, and refactor code. Keep code clean, consistent with existing architecture, and focused on
   surgical changes without unnecessary refactorings or bloat.
@@ -78,7 +78,7 @@ agent and harness working in this repository.
 
 - `crates/` — Rust workspace: `core` (shared domain, catalog scanner, media identity, study engine, SQLite),
   `server` (Axum HTTP server, authentication cookies/sessions, media streaming, SPA delivery), `desktop` (Tauri 2 offline desktop application).
-- `apps/web/` — Svelte 5 + TypeScript + Vite SPA, pnpm workspace member (`crates/server/web/build` and `crates/desktop/frontend-dist`).
+- `apps/web-next/` — React 19 + TypeScript + Vite SPA, pnpm workspace member (`crates/server/web/build` and `crates/desktop/frontend-dist`).
 - `docs/` — Canonical documentation; navigate via [`docs/README.md`](docs/README.md).
 - `.agents/` — Shared policies, playbooks, checklists, and templates for autonomous and human agents.
 - `.opencode/agents/` — OpenCode-specific reviewer profiles.

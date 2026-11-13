@@ -13,7 +13,7 @@ Detailed requirements are in [requirements.md](requirements.md); technical archi
 
 ## Delivered
 
-- **Rust Core:** domain, SQLite, and catalog in `crates/core`; Axum HTTP server in `crates/server`; Svelte 5 + Vite web frontend in `apps/web`. The legacy Go service was fully replaced.
+- **Rust Core:** domain, SQLite, and catalog in `crates/core`; Axum HTTP server in `crates/server`; React 19 + Vite web frontend in `apps/web-next`. The legacy Go service was fully replaced.
 - **Offline Desktop (Tauri 2):** catalog, native library folder picker, per-course import and removal, explicit library rescan, local media protocol by opaque ID, and study progress via internal IPC. The desktop app requires no authentication and opens no network ports.
 - **Study Rules Engine:** shared progress tracking, streaks, and gamification across server, web UI, and desktop.
 - **Video & Audio Player:** media and subtitle selection per lesson, keyboard shortcuts (`J`/`K`/`L`, `0-9`, `M`, `N`, `F`, `P`, `[`/`]`), persistent playback rate, Picture-in-Picture, interactive timeline with note markers, optional auto-advance, on-demand FFmpeg remuxing/transcoding for extended formats (`.mkv`, `.avi`, `.wmv`, `.ts`, HEVC, AC3), and opening in the default system media player on desktop.

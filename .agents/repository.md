@@ -27,7 +27,7 @@ that area.
 
 - Follow `.agents/playbooks/testing.md` and the appropriate change playbook.
 - Always use Ponytail to write, modify, and refactor code across all development tasks when available, keeping changes surgical, clean, and consistent with existing architecture.
-- Ensure all user-facing strings (UI, modals, alerts, error fallbacks, and transport errors) use `tr(en, ptBr)` from `apps/web/src/i18n.svelte.ts` (the React app, `apps/web-next`, has the same function in `src/lib/i18n.ts`).
+- Ensure all user-facing strings (UI, modals, alerts, error fallbacks, and transport errors) use `tr(en, ptBr)` from `apps/web-next/src/lib/i18n.ts`.
 
 ## GitHub governance
 

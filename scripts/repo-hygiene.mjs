@@ -22,7 +22,6 @@ export const PROHIBITED_PATH_PREFIXES = [
 export const ALLOWED_IMAGE_DIRS = [
 	'crates/desktop/icons/',
 	'deploy/packages/',
-	'apps/web/public/',
 	'testdata/'
 ];
 
