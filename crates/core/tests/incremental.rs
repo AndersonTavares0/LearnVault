@@ -25,7 +25,9 @@ fn write(root: &Path, relative: &str, contents: &[u8]) -> std::io::Result<()> {
     fs::write(path, contents)
 }
 
-fn media_id(db: &Database, key: &str) -> Option<String> {
+fn media_id(db: &Database, path: &str) -> Option<String> {
+    let key =
+        learnvault_core::relative_path_key(path, learnvault_core::KeyMode::for_host()).ok()?;
     db.connection()
         .query_row(
             "SELECT media_id FROM media WHERE library_id = ?1 AND relative_path_key = ?2",

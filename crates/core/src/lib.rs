@@ -63,7 +63,7 @@ pub use media::{
     open_media_file, open_media_reference, validate_media_reference,
 };
 pub use ordering::{CatalogOrder, apply_order, order_siblings, sibling_paths, validate_siblings};
-pub use paths::KeyMode;
+pub use paths::{KeyMode, relative_path_key};
 pub use player::{
     DEFAULT_PLAYBACK_SPEED_PERCENT, MAX_PLAYBACK_SPEED_PERCENT, MAX_SUBTITLE_LANGUAGE_CHARS,
     MIN_PLAYBACK_SPEED_PERCENT, PlayerPreference, player_preference, set_player_preference,
