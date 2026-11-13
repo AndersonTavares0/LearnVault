@@ -323,9 +323,11 @@ pub fn create_flashcard(
     back: &str,
     position_seconds: Option<i64>,
 ) -> Result<FlashcardDto, IpcError> {
-    learnvault_core::create_flashcard(
+    let device = crate::sync::device(database)?;
+    learnvault_core::queue_flashcard_create(
         database,
         LOCAL_OWNER_ID,
+        &device,
         media_id,
         front,
         back,
@@ -342,15 +344,21 @@ pub fn update_flashcard(
     front: &str,
     back: &str,
 ) -> Result<FlashcardDto, IpcError> {
-    learnvault_core::update_flashcard(database, LOCAL_OWNER_ID, card_id, front, back)
+    let device = crate::sync::device(database)?;
+    learnvault_core::queue_flashcard_update(database, LOCAL_OWNER_ID, &device, card_id, front, back)
         .map(FlashcardDto::from)
         .map_err(study_error)
 }
 
 /// Exclui um cartão de memorização pertencente ao dono local.
+///
+/// The deletion enters the outbox in the same transaction as the local delete, so another
+/// device stops showing the card instead of pulling it back.
 pub fn delete_flashcard(database: &Database, card_id: &str) -> Result<(), IpcError> {
-    let deleted = learnvault_core::delete_flashcard(database, LOCAL_OWNER_ID, card_id)
-        .map_err(study_error)?;
+    let device = crate::sync::device(database)?;
+    let deleted =
+        learnvault_core::queue_flashcard_delete(database, LOCAL_OWNER_ID, &device, card_id)
+            .map_err(study_error)?;
     if deleted {
         Ok(())
     } else {

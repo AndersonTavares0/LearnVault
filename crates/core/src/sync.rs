@@ -23,11 +23,23 @@
 //!   others become copies with the deterministic id `note_id~op_version`. So two devices
 //!   that saw the same set of versions converge to the same texts, without deleting
 //!   content;
-//! - deletions: a note or bookmark delete records a tombstone with the delete instant. A
-//!   create whose own instant is not newer than the tombstone is skipped, so an offline
-//!   create never resurrects a deleted row;
+//! - flashcards: last write wins by `updated_at` (a create counts as `created_at`); a
+//!   review only reschedules the card, and an unknown card keeps the review journaled;
+//! - deletions: a note, bookmark or flashcard delete records a tombstone with the delete
+//!   instant. A create or update whose own instant is not newer than the tombstone is
+//!   skipped, so an offline create never resurrects a deleted row;
 //! - card reviews: append-only, applied in cursor order;
 //! - preferences: last write wins by `client_at`.
+//!
+//! Every received `client_at` is clamped to the server receive time, so a device with a
+//! clock far ahead cannot win last-write-wins until the real clock catches up.
+//!
+//! # Outbox
+//!
+//! The desktop queues each local write in `sync_outbox` in the same transaction. A second
+//! progress write for a lesson replaces the pending progress operation of that lesson:
+//! only the newest position matters and the queue is small, so a scan inside the same
+//! transaction is cheaper than pushing a stale position after the newest one.
 //!
 //! Media is not synced. An operation whose media does not exist yet in the local database
 //! stays in the journal and is ignored when applied: the data is not lost and convergence
@@ -35,8 +47,8 @@
 //!
 //! # Known limits
 //!
-//! - `client_at` comes from the device clock; a clock far ahead wins the following writes
-//!   until the real clock catches up.
+//! - `client_at` is clamped on push, but payload instants of notes and cards
+//!   (`created_at`, `updated_at`) still come from the device clock.
 //! - notes written before migration 17 have a null `sync_version`; they are never replaced
 //!   by a synced version (that version becomes a copy), so local work older than the
 //!   contract is not deleted.
@@ -73,6 +85,9 @@ pub(crate) const TOMBSTONE_NOTE: &str = "note";
 
 /// Tombstone kind of a deleted bookmark in `sync_tombstone`.
 pub(crate) const TOMBSTONE_BOOKMARK: &str = "bookmark";
+
+/// Tombstone kind of a deleted flashcard in `sync_tombstone`.
+pub(crate) const TOMBSTONE_FLASHCARD: &str = "flashcard";
 
 /// Study operation exchanged between devices.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -125,6 +140,37 @@ pub enum SyncPayload {
         /// Opaque bookmark identifier.
         bookmark_id: String,
     },
+    /// Flashcard created on the device.
+    FlashcardCreated {
+        /// Opaque card identifier.
+        card_id: String,
+        /// Opaque media identifier.
+        media_id: String,
+        /// Lesson instant the card came from, when informed.
+        position_seconds: Option<i64>,
+        /// Question side.
+        front: String,
+        /// Answer side.
+        back: String,
+        /// Creation instant reported by the device.
+        created_at: i64,
+    },
+    /// Flashcard text edited on the device.
+    FlashcardUpdated {
+        /// Opaque card identifier.
+        card_id: String,
+        /// Question side.
+        front: String,
+        /// Answer side.
+        back: String,
+        /// Last edit instant reported by the device.
+        updated_at: i64,
+    },
+    /// Flashcard deleted on the device.
+    FlashcardDeleted {
+        /// Opaque card identifier.
+        card_id: String,
+    },
     /// Card review, append-only.
     FlashcardReview {
         /// Opaque card identifier.
@@ -151,9 +197,12 @@ impl SyncPayload {
         match self {
             Self::Progress { media_id, .. }
             | Self::Note { media_id, .. }
-            | Self::Bookmark { media_id, .. } => Some(media_id),
+            | Self::Bookmark { media_id, .. }
+            | Self::FlashcardCreated { media_id, .. } => Some(media_id),
             Self::NoteDeleted { .. }
             | Self::BookmarkDeleted { .. }
+            | Self::FlashcardUpdated { .. }
+            | Self::FlashcardDeleted { .. }
             | Self::FlashcardReview { .. }
             | Self::Preference { .. } => None,
         }
@@ -244,6 +293,9 @@ pub fn push_operations(
     let mut duplicated = 0_usize;
     for operation in operations {
         validate_id(&operation.op_id, "op")?;
+        // A device clock far ahead must not win last-write-wins indefinitely: the received
+        // instant is capped at the server receive time.
+        let client_at = operation.client_at.clamp(0, now_unix_seconds());
         // `sync_operation.op_id` is a global primary key, so a colliding id from another owner
         // must be refused instead of silently swallowing this operation as a duplicate.
         let existing_owner: Option<String> = transaction
@@ -269,7 +321,7 @@ pub fn push_operations(
             &transaction,
             owner_id,
             &operation.payload,
-            operation.client_at,
+            client_at,
             &operation.op_id,
         )?;
         transaction.execute(
@@ -279,7 +331,7 @@ pub fn push_operations(
                 operation.op_id,
                 owner_id,
                 device_id,
-                operation.client_at.max(0),
+                client_at,
                 now_unix_seconds(),
                 encode(&operation.payload)?,
             ],
@@ -454,6 +506,9 @@ fn enqueue_in(
     client_at: i64,
 ) -> Result<String> {
     validate_id(device_id, "device")?;
+    if let SyncPayload::Progress { media_id, .. } = payload {
+        coalesce_progress(conn, owner_id, media_id)?;
+    }
     let op_id = crate::ids::new_sync_id();
     conn.execute(
         "INSERT INTO sync_outbox (op_id, owner_id, device_id, client_at, payload, queued_at)
@@ -468,6 +523,39 @@ fn enqueue_in(
         ],
     )?;
     Ok(op_id)
+}
+
+/// Drops the owner's pending progress operation for `media_id`.
+///
+/// Only the newest position matters, and a device that keeps playing would otherwise push
+/// older positions after newer ones. The scan is cheap: the pending queue is small and
+/// drained in batches of [`MAX_SYNC_BATCH`]. Notes, reviews and tombstones are never
+/// coalesced, because each one is a distinct version.
+fn coalesce_progress(conn: &Connection, owner_id: &str, media_id: &str) -> Result<()> {
+    let mut statement =
+        conn.prepare("SELECT op_id, payload FROM sync_outbox WHERE owner_id = ?1")?;
+    let rows = statement.query_map([owner_id], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    })?;
+    let mut stale = Vec::new();
+    for row in rows {
+        let (op_id, payload) = row?;
+        if let Ok(SyncPayload::Progress {
+            media_id: pending, ..
+        }) = decode(&payload)
+            && pending == media_id
+        {
+            stale.push(op_id);
+        }
+    }
+    drop(statement);
+    for op_id in stale {
+        conn.execute(
+            "DELETE FROM sync_outbox WHERE owner_id = ?1 AND op_id = ?2",
+            params![owner_id, op_id],
+        )?;
+    }
+    Ok(())
 }
 
 /// Records the resume position and queues the same change in a single transaction.
@@ -643,6 +731,88 @@ pub fn queue_bookmark_delete(
     };
     let payload = SyncPayload::BookmarkDeleted {
         bookmark_id: bookmark_id.to_owned(),
+    };
+    enqueue_in(&transaction, owner_id, device_id, &payload, deleted_at)?;
+    transaction.commit()?;
+    Ok(true)
+}
+
+/// Creates a card and queues the operation in a single transaction.
+pub fn queue_flashcard_create(
+    db: &Database,
+    owner_id: &str,
+    device_id: &str,
+    media_id: &str,
+    front: &str,
+    back: &str,
+    position_seconds: Option<i64>,
+) -> Result<Flashcard> {
+    queue_change(db, owner_id, device_id, |conn| {
+        let card = crate::study::create_flashcard_on(
+            conn,
+            owner_id,
+            media_id,
+            front,
+            back,
+            position_seconds,
+        )?;
+        Ok((
+            card.clone(),
+            SyncPayload::FlashcardCreated {
+                card_id: card.card_id,
+                media_id: card.media_id,
+                position_seconds: card.position_seconds,
+                front: card.front,
+                back: card.back,
+                created_at: card.created_at,
+            },
+            card.created_at,
+        ))
+    })
+}
+
+/// Edits a card and queues the operation in a single transaction.
+pub fn queue_flashcard_update(
+    db: &Database,
+    owner_id: &str,
+    device_id: &str,
+    card_id: &str,
+    front: &str,
+    back: &str,
+) -> Result<Flashcard> {
+    queue_change(db, owner_id, device_id, |conn| {
+        let card = crate::study::update_flashcard_on(conn, owner_id, card_id, front, back)?;
+        Ok((
+            card.clone(),
+            SyncPayload::FlashcardUpdated {
+                card_id: card.card_id,
+                front: card.front,
+                back: card.back,
+                updated_at: card.updated_at,
+            },
+            card.updated_at,
+        ))
+    })
+}
+
+/// Deletes a card and queues the deletion in the same transaction.
+///
+/// Returns `Ok(false)` when the card did not exist.
+pub fn queue_flashcard_delete(
+    db: &Database,
+    owner_id: &str,
+    device_id: &str,
+    card_id: &str,
+) -> Result<bool> {
+    validate_owner(owner_id)?;
+    let conn = db.connection();
+    let transaction = conn.unchecked_transaction()?;
+    let Some(deleted_at) = crate::study::delete_flashcard_on(&transaction, owner_id, card_id)?
+    else {
+        return Ok(false);
+    };
+    let payload = SyncPayload::FlashcardDeleted {
+        card_id: card_id.to_owned(),
     };
     enqueue_in(&transaction, owner_id, device_id, &payload, deleted_at)?;
     transaction.commit()?;
@@ -835,6 +1005,32 @@ fn apply_payload(
         }
         SyncPayload::BookmarkDeleted { bookmark_id } => {
             apply_bookmark_delete(conn, owner_id, bookmark_id, client_at)
+        }
+        SyncPayload::FlashcardCreated {
+            card_id,
+            media_id,
+            position_seconds,
+            front,
+            back,
+            created_at,
+        } => apply_flashcard_create(
+            conn,
+            owner_id,
+            card_id,
+            media_id,
+            *position_seconds,
+            front,
+            back,
+            *created_at,
+        ),
+        SyncPayload::FlashcardUpdated {
+            card_id,
+            front,
+            back,
+            updated_at,
+        } => apply_flashcard_update(conn, owner_id, card_id, front, back, *updated_at),
+        SyncPayload::FlashcardDeleted { card_id } => {
+            apply_flashcard_delete(conn, owner_id, card_id, client_at)
         }
         SyncPayload::FlashcardReview {
             card_id,
@@ -1170,6 +1366,134 @@ fn apply_bookmark_delete(
     record_tombstone_on(conn, owner_id, TOMBSTONE_BOOKMARK, bookmark_id, deleted_at)
 }
 
+/// Creates a synced card, or updates it when the received version is not older.
+///
+/// The create carries `created_at` as its version instant, so a card already rescheduled
+/// or edited locally keeps its schedule unless the received version is newer.
+#[allow(clippy::too_many_arguments)]
+fn apply_flashcard_create(
+    conn: &Connection,
+    owner_id: &str,
+    card_id: &str,
+    media_id: &str,
+    position_seconds: Option<i64>,
+    front: &str,
+    back: &str,
+    created_at: i64,
+) -> Result<()> {
+    let card_id = card_id.trim();
+    let (Ok(front), Ok(back)) = (
+        crate::study::validate_card_text(front),
+        crate::study::validate_card_text(back),
+    ) else {
+        return Ok(());
+    };
+    if card_id.is_empty()
+        || position_seconds.is_some_and(|position| position < 0)
+        || !media_known(conn, media_id)?
+    {
+        return Ok(());
+    }
+    let created_at = created_at.max(0);
+    // A delete at or after this version wins: an old create never resurrects a newer delete.
+    if tombstone_blocks(conn, owner_id, TOMBSTONE_FLASHCARD, card_id, created_at)? {
+        return Ok(());
+    }
+    // The card identity is global: another owner's row is never overwritten.
+    let existing_owner: Option<String> = conn
+        .query_row(
+            "SELECT owner_id FROM flashcard WHERE card_id = ?1",
+            [card_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    if existing_owner.is_some_and(|existing| existing != owner_id) {
+        return Ok(());
+    }
+    conn.execute(
+        "INSERT INTO flashcard
+             (card_id, owner_id, media_id, position_seconds, front, back, interval_days, next_due, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, ?7, ?7, ?7)
+         ON CONFLICT (card_id) DO UPDATE SET
+             media_id = excluded.media_id,
+             position_seconds = excluded.position_seconds,
+             front = excluded.front,
+             back = excluded.back,
+             created_at = MIN(flashcard.created_at, excluded.created_at),
+             updated_at = excluded.updated_at
+         WHERE excluded.updated_at >= flashcard.updated_at",
+        params![
+            card_id,
+            owner_id,
+            media_id,
+            position_seconds,
+            front,
+            back,
+            created_at
+        ],
+    )?;
+    Ok(())
+}
+
+/// Edits a synced card when the received version is not older.
+///
+/// A card this device does not have stays only in the journal, like a review, and applies
+/// if its create arrives later.
+fn apply_flashcard_update(
+    conn: &Connection,
+    owner_id: &str,
+    card_id: &str,
+    front: &str,
+    back: &str,
+    updated_at: i64,
+) -> Result<()> {
+    let card_id = card_id.trim();
+    let (Ok(front), Ok(back)) = (
+        crate::study::validate_card_text(front),
+        crate::study::validate_card_text(back),
+    ) else {
+        return Ok(());
+    };
+    if card_id.is_empty() {
+        return Ok(());
+    }
+    let updated_at = updated_at.max(0);
+    if tombstone_blocks(conn, owner_id, TOMBSTONE_FLASHCARD, card_id, updated_at)? {
+        return Ok(());
+    }
+    conn.execute(
+        "UPDATE flashcard
+            SET front = ?1, back = ?2, updated_at = ?3
+          WHERE owner_id = ?4 AND card_id = ?5 AND updated_at <= ?3",
+        params![front, back, updated_at, owner_id, card_id],
+    )?;
+    Ok(())
+}
+
+/// Deletes the owner's card and records the tombstone; an absent row is not an error.
+fn apply_flashcard_delete(
+    conn: &Connection,
+    owner_id: &str,
+    card_id: &str,
+    deleted_at: i64,
+) -> Result<()> {
+    let card_id = card_id.trim();
+    if card_id.is_empty() {
+        return Ok(());
+    }
+    conn.execute(
+        "DELETE FROM flashcard WHERE owner_id = ?1 AND card_id = ?2",
+        params![owner_id, card_id],
+    )?;
+    record_tombstone_on(
+        conn,
+        owner_id,
+        TOMBSTONE_FLASHCARD,
+        card_id,
+        deleted_at.max(0),
+    )
+}
+
 /// Records a delete instant, keeping the newest one already stored.
 pub(crate) fn record_tombstone_on(
     conn: &Connection,
@@ -1226,8 +1550,8 @@ fn apply_review(
         )
         .optional()?;
     let Some(previous_interval) = previous else {
-        // Cards are not synced, so a review of an unknown card cannot be applied anywhere;
-        // it stays only in the journal for audit. Tracked in #472.
+        // Cards travel now, but the create may reference media this device does not have
+        // yet. The review stays only in the journal and is audited when the card appears.
         return Ok(());
     };
     let (next_interval, next_due) =

@@ -44,6 +44,12 @@ fn every_syncable_write_lands_in_the_durable_outbox() -> TestResult {
         let note = ok(study::create_note(&db, "m1", 10, "primeira anotação"))?;
         ok(study::update_note(&db, &note.note_id, "anotação revisada"))?;
         let card = ok(study::create_flashcard(&db, "m1", "frente", "verso", None))?;
+        ok(study::update_flashcard(
+            &db,
+            &card.card_id,
+            "frente revisada",
+            "verso",
+        ))?;
         ok(study::review_flashcard(&db, &card.card_id, "good"))?;
         ok(study::create_bookmark(&db, "m1", 30, "marcador"))?;
         ok(study::save_playback_preference(&db, 125, 100, "pt-BR"))?;
@@ -51,6 +57,8 @@ fn every_syncable_write_lands_in_the_durable_outbox() -> TestResult {
         // As exclusões também são escritas sincronizáveis.
         let deleted_note = ok(study::create_note(&db, "m1", 20, "nota descartada"))?;
         ok(study::delete_note(&db, &deleted_note.note_id))?;
+        let deleted_card = ok(study::create_flashcard(&db, "m1", "frente", "verso", None))?;
+        ok(study::delete_flashcard(&db, &deleted_card.card_id))?;
         let deleted_bookmark = ok(study::create_bookmark(&db, "m1", 40, "marcador descartado"))?;
         ok(study::delete_bookmark(&db, &deleted_bookmark.bookmark_id))?;
 
@@ -63,6 +71,9 @@ fn every_syncable_write_lands_in_the_durable_outbox() -> TestResult {
                 SyncPayload::NoteDeleted { .. } => "note_deleted",
                 SyncPayload::Bookmark { .. } => "bookmark",
                 SyncPayload::BookmarkDeleted { .. } => "bookmark_deleted",
+                SyncPayload::FlashcardCreated { .. } => "flashcard_created",
+                SyncPayload::FlashcardUpdated { .. } => "flashcard_updated",
+                SyncPayload::FlashcardDeleted { .. } => "flashcard_deleted",
                 SyncPayload::FlashcardReview { .. } => "flashcard_review",
                 SyncPayload::Preference { .. } => "preference",
             })
@@ -71,14 +82,17 @@ fn every_syncable_write_lands_in_the_durable_outbox() -> TestResult {
             kinds,
             vec![
                 "progress",
-                "progress",
                 "note",
                 "note",
+                "flashcard_created",
+                "flashcard_updated",
                 "flashcard_review",
                 "bookmark",
                 "preference",
                 "note",
                 "note_deleted",
+                "flashcard_created",
+                "flashcard_deleted",
                 "bookmark",
                 "bookmark_deleted",
             ]
@@ -98,7 +112,7 @@ fn every_syncable_write_lands_in_the_durable_outbox() -> TestResult {
     // Reabrir o aplicativo preserva a fila e a identidade do dispositivo.
     let db = database(&path);
     let pending = ok(sync::pending(&db, 100))?;
-    assert_eq!(pending.len(), 11, "o outbox sobrevive à reinicialização");
+    assert_eq!(pending.len(), 14, "o outbox sobrevive à reinicialização");
     let state = ok(sync::state(&db))?;
     assert!(!state.device_id.is_empty());
     assert_eq!(ok(sync::state(&db))?.device_id, state.device_id);
@@ -115,23 +129,27 @@ fn a_retried_batch_is_not_duplicated_on_the_server() -> TestResult {
 
     let state = ok(sync::state(&desktop))?;
     let batch = ok(sync::pending(&desktop, 100))?;
-    assert_eq!(batch.len(), 2);
+    assert_eq!(
+        batch.len(),
+        1,
+        "a segunda escrita de progresso substitui a primeira na fila"
+    );
 
     // O servidor é outro banco; o mesmo lote é enviado duas vezes.
     let server_dir = tempfile::tempdir()?;
     let server = database(&server_dir.path().join("server.sqlite"));
     seed(&server);
     let first = push_operations(&server, "usr-1", &state.device_id, &batch)?;
-    assert_eq!((first.applied, first.duplicated), (2, 0));
+    assert_eq!((first.applied, first.duplicated), (1, 0));
     let retry = push_operations(&server, "usr-1", &state.device_id, &batch)?;
-    assert_eq!((retry.applied, retry.duplicated), (0, 2));
+    assert_eq!((retry.applied, retry.duplicated), (0, 1));
 
     // Somente depois do aceite o desktop limpa a fila.
     let accepted: Vec<String> = batch
         .iter()
         .map(|operation| operation.op_id.clone())
         .collect();
-    assert_eq!(ok(sync::acknowledge(&desktop, &accepted))?, 2);
+    assert_eq!(ok(sync::acknowledge(&desktop, &accepted))?, 1);
     assert!(ok(sync::pending(&desktop, 100))?.is_empty());
 
     let progress: (i64, i64) = server.connection().query_row(

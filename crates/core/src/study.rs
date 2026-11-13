@@ -708,7 +708,7 @@ pub struct Flashcard {
 }
 
 /// Valida o texto da frente ou do verso do cartão (1 a 4000 escalares Unicode, não-vazio).
-fn validate_card_text(text: &str) -> Result<String> {
+pub(crate) fn validate_card_text(text: &str) -> Result<String> {
     let trimmed = text.trim();
     if trimmed.is_empty() || trimmed.chars().count() > 4000 {
         return Err(Error::InvalidFlashcardContent);
@@ -778,6 +778,26 @@ pub fn create_flashcard(
     back: &str,
     position_seconds: Option<i64>,
 ) -> Result<Flashcard> {
+    create_flashcard_on(
+        db.connection(),
+        owner_id,
+        media_id,
+        front,
+        back,
+        position_seconds,
+    )
+}
+
+/// [`create_flashcard`] over an open connection, so the sync queue can reuse the rules
+/// inside its own transaction.
+pub(crate) fn create_flashcard_on(
+    conn: &Connection,
+    owner_id: &str,
+    media_id: &str,
+    front: &str,
+    back: &str,
+    position_seconds: Option<i64>,
+) -> Result<Flashcard> {
     validate_owner(owner_id)?;
     let front_trimmed = validate_card_text(front)?;
     let back_trimmed = validate_card_text(back)?;
@@ -789,7 +809,6 @@ pub fn create_flashcard(
         });
     }
 
-    let conn = db.connection();
     require_media(conn, media_id)?;
 
     let card_id = crate::ids::new_card_id();
@@ -838,11 +857,21 @@ pub fn update_flashcard(
     front: &str,
     back: &str,
 ) -> Result<Flashcard> {
+    update_flashcard_on(db.connection(), owner_id, card_id, front, back)
+}
+
+/// [`update_flashcard`] over an open connection.
+pub(crate) fn update_flashcard_on(
+    conn: &Connection,
+    owner_id: &str,
+    card_id: &str,
+    front: &str,
+    back: &str,
+) -> Result<Flashcard> {
     validate_owner(owner_id)?;
     let front_trimmed = validate_card_text(front)?;
     let back_trimmed = validate_card_text(back)?;
 
-    let conn = db.connection();
     let now = now_unix_seconds();
 
     let updated = conn
@@ -862,14 +891,36 @@ pub fn update_flashcard(
 }
 
 /// Remove um cartão de estudo pertencente ao dono.
+///
+/// Records the tombstone for the same reason as [`delete_study_note`]: a card created
+/// offline must not resurrect a deleted one.
 pub fn delete_flashcard(db: &Database, owner_id: &str, card_id: &str) -> Result<bool> {
     validate_owner(owner_id)?;
-    let conn = db.connection();
+    Ok(delete_flashcard_on(db.connection(), owner_id, card_id)?.is_some())
+}
+
+/// [`delete_flashcard`] over an open connection; returns the delete instant.
+pub(crate) fn delete_flashcard_on(
+    conn: &Connection,
+    owner_id: &str,
+    card_id: &str,
+) -> Result<Option<i64>> {
+    let deleted_at = now_unix_seconds();
     let changes = conn.execute(
         "DELETE FROM flashcard WHERE owner_id = ?1 AND card_id = ?2",
         rusqlite::params![owner_id, card_id],
     )?;
-    Ok(changes > 0)
+    if changes == 0 {
+        return Ok(None);
+    }
+    crate::sync::record_tombstone_on(
+        conn,
+        owner_id,
+        crate::sync::TOMBSTONE_FLASHCARD,
+        card_id,
+        deleted_at,
+    )?;
+    Ok(Some(deleted_at))
 }
 
 /// Registra uma revisão (Again ou Good) em um cartão existente.

@@ -1,10 +1,11 @@
 //! Contratos do diário de sincronização, do outbox local e das regras de conflito.
 
 use learnvault_core::{
-    Database, SyncOperation, SyncOperationInput, SyncPayload, acknowledge_operations,
+    Database, ReviewRating, SyncOperation, SyncOperationInput, SyncPayload, acknowledge_operations,
     apply_operations, enqueue_operation, pending_count, pending_operations, pull_operations,
-    push_operations, queue_bookmark_create, queue_bookmark_delete, queue_note_create,
-    queue_note_delete, set_completed, sync_state,
+    push_operations, queue_bookmark_create, queue_bookmark_delete, queue_flashcard_create,
+    queue_flashcard_delete, queue_note_create, queue_note_delete, queue_position, queue_review,
+    set_completed, sync_state,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -48,6 +49,36 @@ fn input(op_id: &str, client_at: i64, payload: SyncPayload) -> SyncOperationInpu
         client_at,
         payload,
     }
+}
+
+fn card_created(card_id: &str, front: &str, back: &str, created_at: i64) -> SyncPayload {
+    SyncPayload::FlashcardCreated {
+        card_id: card_id.to_owned(),
+        media_id: "m1".to_owned(),
+        position_seconds: Some(10),
+        front: front.to_owned(),
+        back: back.to_owned(),
+        created_at,
+    }
+}
+
+fn card_updated(card_id: &str, front: &str, back: &str, updated_at: i64) -> SyncPayload {
+    SyncPayload::FlashcardUpdated {
+        card_id: card_id.to_owned(),
+        front: front.to_owned(),
+        back: back.to_owned(),
+        updated_at,
+    }
+}
+
+fn card_front(db: &Database, card_id: &str) -> String {
+    db.connection()
+        .query_row(
+            "SELECT front FROM flashcard WHERE card_id = ?1",
+            [card_id],
+            |row| row.get(0),
+        )
+        .expect("o cartão deve existir")
 }
 
 fn count(db: &Database, table: &str) -> i64 {
@@ -801,5 +832,198 @@ fn deleting_an_absent_row_enqueues_nothing() -> TestResult {
 
     assert_eq!(pending_count(&db, OWNER)?, 0, "nada entra na fila");
     assert_eq!(count(&db, "sync_tombstone"), 0, "sem linha, sem tombstone");
+    Ok(())
+}
+
+#[test]
+fn a_card_from_one_device_applies_on_the_other_and_accepts_reviews() -> TestResult {
+    let device_a = database();
+    let card = queue_flashcard_create(
+        &device_a,
+        OWNER,
+        "device-a",
+        "m1",
+        "pergunta",
+        "resposta",
+        Some(10),
+    )?;
+    let created = pending_operations(&device_a, OWNER, 10)?;
+    let server = database();
+    push_operations(&server, OWNER, "device-a", &created)?;
+
+    let device_b = database();
+    let batch = pull_operations(&server, OWNER, "device-b", 0, 10)?;
+    apply_operations(&device_b, OWNER, &batch.items, batch.cursor)?;
+    assert_eq!(count(&device_b, "flashcard"), 1);
+    assert_eq!(card_front(&device_b, &card.card_id), "pergunta");
+
+    // A review of the synced card is no longer dropped: it schedules on both devices.
+    let reviewed = queue_review(
+        &device_b,
+        OWNER,
+        "device-b",
+        &card.card_id,
+        ReviewRating::Good,
+    )?;
+    assert_eq!(reviewed.interval_days, 1);
+    let operations = pending_operations(&device_b, OWNER, 10)?;
+    push_operations(&server, OWNER, "device-b", &operations)?;
+    let batch = pull_operations(&server, OWNER, "device-a", 0, 10)?;
+    apply_operations(&device_a, OWNER, &batch.items, batch.cursor)?;
+
+    assert_eq!(count(&device_a, "flashcard_review"), 1);
+    let (interval, due): (i64, i64) = device_a.connection().query_row(
+        "SELECT interval_days, next_due FROM flashcard WHERE card_id = ?1",
+        [&card.card_id],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+    assert_eq!(
+        (interval, due),
+        (reviewed.interval_days, reviewed.next_due),
+        "os dois dispositivos chegam ao mesmo agendamento"
+    );
+    Ok(())
+}
+
+#[test]
+fn card_updates_are_last_write_wins() -> TestResult {
+    let db = database();
+    push_operations(
+        &db,
+        OWNER,
+        "device-a",
+        &[input(
+            "op-1",
+            2_000,
+            card_created("card-1", "original", "verso", 2_000),
+        )],
+    )?;
+
+    // Uma edição mais antiga não sobrescreve.
+    push_operations(
+        &db,
+        OWNER,
+        "device-b",
+        &[input(
+            "op-2",
+            3_000,
+            card_updated("card-1", "antiga", "verso", 1_500),
+        )],
+    )?;
+    assert_eq!(card_front(&db, "card-1"), "original");
+
+    // Uma edição mais nova vence.
+    push_operations(
+        &db,
+        OWNER,
+        "device-b",
+        &[input(
+            "op-3",
+            4_000,
+            card_updated("card-1", "nova", "verso", 2_500),
+        )],
+    )?;
+    assert_eq!(card_front(&db, "card-1"), "nova");
+    Ok(())
+}
+
+#[test]
+fn a_deleted_card_leaves_a_tombstone_that_blocks_a_stale_create() -> TestResult {
+    let device_a = database();
+    let card = queue_flashcard_create(
+        &device_a, OWNER, "device-a", "m1", "pergunta", "resposta", None,
+    )?;
+    let created = pending_operations(&device_a, OWNER, 10)?;
+    let server = database();
+    push_operations(&server, OWNER, "device-a", &created)?;
+    let accepted: Vec<String> = created
+        .iter()
+        .map(|operation| operation.op_id.clone())
+        .collect();
+    acknowledge_operations(&device_a, OWNER, &accepted)?;
+
+    assert!(queue_flashcard_delete(
+        &device_a,
+        OWNER,
+        "device-a",
+        &card.card_id
+    )?);
+    assert_eq!(count(&device_a, "sync_tombstone"), 1);
+    let deleted = pending_operations(&device_a, OWNER, 10)?;
+    assert_eq!(deleted.len(), 1, "só a exclusão continua pendente");
+    push_operations(&server, OWNER, "device-a", &deleted)?;
+    assert_eq!(count(&server, "flashcard"), 0);
+    assert_eq!(count(&server, "sync_tombstone"), 1);
+
+    // Um create antigo que chega atrasado é ignorado.
+    push_operations(
+        &server,
+        OWNER,
+        "device-b",
+        &[input(
+            "op-stale",
+            4_000,
+            card_created(&card.card_id, "pergunta", "resposta", 100),
+        )],
+    )?;
+    assert_eq!(
+        count(&server, "flashcard"),
+        0,
+        "um create antigo não ressuscita o cartão"
+    );
+    Ok(())
+}
+
+#[test]
+fn consecutive_progress_writes_leave_one_pending_operation() -> TestResult {
+    let db = database();
+    let state = sync_state(&db, OWNER)?;
+
+    queue_position(&db, OWNER, &state.device_id, "m1", 10)?;
+    let newest = queue_position(&db, OWNER, &state.device_id, "m1", 42)?;
+
+    assert_eq!(pending_count(&db, OWNER)?, 1, "só a posição mais nova fica");
+    let pending = pending_operations(&db, OWNER, 10)?;
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].payload, progress("m1", 42, false));
+    assert_eq!(newest.position_seconds, 42);
+    Ok(())
+}
+
+#[test]
+fn a_future_client_clock_is_clamped_to_the_server_time() -> TestResult {
+    let db = database();
+    push_operations(
+        &db,
+        OWNER,
+        "device-a",
+        &[input("op-1", i64::MAX, progress("m1", 10, false))],
+    )?;
+    let stored_client_at: i64 = db.connection().query_row(
+        "SELECT client_at FROM sync_operation WHERE op_id = 'op-1'",
+        [],
+        |row| row.get(0),
+    )?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_secs() as i64;
+    assert!(
+        stored_client_at <= now,
+        "o instante recebido é limitado ao instante do servidor"
+    );
+
+    // Uma escrita com o relógio real ainda vence a escrita futura.
+    push_operations(
+        &db,
+        OWNER,
+        "device-b",
+        &[input("op-2", now, progress("m1", 77, false))],
+    )?;
+    let position: i64 = db.connection().query_row(
+        "SELECT position_seconds FROM study_state WHERE owner_id = ?1 AND media_id = 'm1'",
+        [OWNER],
+        |row| row.get(0),
+    )?;
+    assert_eq!(position, 77);
     Ok(())
 }

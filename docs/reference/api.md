@@ -168,7 +168,7 @@ The history endpoint is owner-scoped and read-only: `limit` defaults to 20 and i
 The desktop keeps an offline queue and reconciles it with the server through an
 append-only operation log. The owner is the authenticated session user; no endpoint accepts
 an `owner_id`. Media files are never synchronized: only progress, notes, bookmarks,
-flashcard reviews and playback preferences travel.
+flashcards (with their reviews) and playback preferences travel.
 
 | Method | Path | Auth | Purpose |
 | --- | --- | --- | --- |
@@ -185,6 +185,9 @@ with one of the payload kinds below:
 | `bookmark` | `bookmark_id`, `media_id`, `position_seconds`, `label`, `created_at` |
 | `note_deleted` | `note_id` |
 | `bookmark_deleted` | `bookmark_id` |
+| `flashcard_created` | `card_id`, `media_id`, `position_seconds` (nullable), `front`, `back`, `created_at` |
+| `flashcard_updated` | `card_id`, `front`, `back`, `updated_at` |
+| `flashcard_deleted` | `card_id` |
 | `flashcard_review` | `card_id`, `rating` (`again`/`good`), `reviewed_at` |
 | `preference` | `video_speed`, `audio_speed` (percent of normal), `subtitle_language` |
 
@@ -202,14 +205,22 @@ Conflict rules:
   conflict copy with the deterministic id `<note_id>~<op_id>`. No content is silently lost,
   and devices that saw the same versions converge on the same texts. Notes created before
   schema version 17 keep their row and never overwrite it;
-- **flashcard reviews**: append-only, applied in cursor order;
+- **flashcards**: last write wins by `updated_at`, where a create counts as its
+  `created_at`; an older create or edit never overwrites a newer one, and an edit always
+  preserves the review schedule (`interval_days`, `next_due`);
+- **flashcard reviews**: append-only, applied in cursor order. A review whose card is still
+  unknown stays journaled and is applied once the card arrives;
 - **preferences**: last write wins by `client_at`; speeds are clamped to 50–300 and an
   invalid subtitle language is skipped.
 
-Deleting a note or bookmark creates a `note_deleted` / `bookmark_deleted` operation and a
-tombstone holding the delete instant; a create or update whose own instant is not newer than
-the tombstone is skipped, so a row deleted on one device is not resurrected by an older
-operation that arrives later.
+Every pushed `client_at` is clamped to the server receive time, so a device with a clock
+far ahead cannot keep winning last-write-wins until the real clock catches up. Payload
+instants (`created_at`, `updated_at`, `reviewed_at`) are reported by the device as-is.
+
+Deleting a note, bookmark or flashcard creates a `note_deleted` / `bookmark_deleted` /
+`flashcard_deleted` operation and a tombstone holding the delete instant; a create or
+update whose own instant is not newer than the tombstone is skipped, so a row deleted on
+one device is not resurrected by an older operation that arrives later.
 
 An operation that references media the server does not know is still recorded in the log
 and applied when the media appears; media that exists but is outside the user's course access
