@@ -258,6 +258,7 @@ fn build_registers_the_app_commands_in_the_acl_manifest() {
         "desktop_import_course_cover",
         "desktop_remove_course_cover",
         "desktop_rescan",
+        "desktop_search",
         "desktop_study_progress",
         "desktop_record_position",
         "desktop_set_completed",
@@ -327,6 +328,7 @@ fn capability_grants_only_the_core_default_and_the_app_commands() {
     assert!(permissions.contains(&"allow-desktop-import-course-cover"));
     assert!(permissions.contains(&"allow-desktop-remove-course-cover"));
     assert!(permissions.contains(&"allow-desktop-rescan"));
+    assert!(permissions.contains(&"allow-desktop-search"));
     assert!(permissions.contains(&"allow-desktop-study-progress"));
     assert!(permissions.contains(&"allow-desktop-record-position"));
     assert!(permissions.contains(&"allow-desktop-set-completed"));
@@ -366,7 +368,7 @@ fn capability_grants_only_the_core_default_and_the_app_commands() {
     assert!(permissions.contains(&"allow-desktop-open-in-system-player"));
     assert_eq!(
         permissions.len(),
-        49,
+        50,
         "a capability não pode ampliar além do núcleo, dos controles da titlebar e dos comandos do app: {permissions:?}"
     );
 }
@@ -510,6 +512,7 @@ fn invoke_handler_registers_only_the_desktop_commands() {
         "o handler precisa registrar o comando de rescan explícito: {commands}"
     );
     for command in [
+        "desktop_search",
         "desktop_study_progress",
         "desktop_record_position",
         "desktop_set_completed",

@@ -18,6 +18,7 @@ fn main() {
             "desktop_import_course_cover",
             "desktop_remove_course_cover",
             "desktop_rescan",
+            "desktop_search",
             "desktop_study_progress",
             "desktop_record_position",
             "desktop_set_completed",

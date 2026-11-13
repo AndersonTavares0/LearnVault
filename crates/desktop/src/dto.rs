@@ -772,3 +772,63 @@ impl From<StudyFavorites> for StudyFavoritesDto {
         }
     }
 }
+
+/// A note matched by global search, shaped like the HTTP payload.
+///
+/// Fields stay snake_case so `normalizeSearchResults` in the SPA accepts both transports.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SearchNoteDto {
+    /// Identifier of the note.
+    pub note_id: String,
+    /// Media (lesson) the note belongs to.
+    pub media_id: String,
+    /// Course that owns the media.
+    pub course_id: String,
+    /// Title of that course.
+    pub course_title: String,
+    /// Lesson path used to open the player at the note timestamp.
+    pub lesson_path: String,
+    /// Cleaned lesson title.
+    pub lesson_title: String,
+    /// Player position in seconds.
+    pub position_seconds: i64,
+    /// Last edit in seconds since the Unix epoch.
+    pub updated_at: i64,
+    /// Matched fragment; `<mark>` and `</mark>` wrap the highlighted terms.
+    pub snippet: String,
+}
+
+/// A course whose title matched.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SearchCourseDto {
+    /// Stable course identity.
+    pub course_id: String,
+    /// Title presented in the results.
+    pub title: String,
+}
+
+/// A lesson whose path matched.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SearchLessonDto {
+    /// Course that owns the lesson.
+    pub course_id: String,
+    /// Title of that course.
+    pub course_title: String,
+    /// Media identity used to open the lesson.
+    pub media_id: String,
+    /// Lesson path inside the course.
+    pub path: String,
+    /// Cleaned lesson title.
+    pub title: String,
+}
+
+/// Grouped global search results.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct SearchResultsDto {
+    /// Notes of the local owner, best match first.
+    pub notes: Vec<SearchNoteDto>,
+    /// Courses whose title matched.
+    pub courses: Vec<SearchCourseDto>,
+    /// Lessons whose path matched.
+    pub lessons: Vec<SearchLessonDto>,
+}

@@ -24,11 +24,12 @@ use crate::covers::{
 use crate::dto::{
     CatalogDto, CoverDto, CoverRemovalDto, FlashcardDto, FocusSessionDto, FocusSummaryDto,
     MediaBookmarkDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto, NewPdfAnnotationDto,
-    PdfAnnotationDto, RecentStudyDto, RescanSummaryDto, RewardSummaryDto, StudyFavoritesDto,
-    StudyNoteDto, StudyProgressDto, StudySummaryDto,
+    PdfAnnotationDto, RecentStudyDto, RescanSummaryDto, RewardSummaryDto, SearchResultsDto,
+    StudyFavoritesDto, StudyNoteDto, StudyProgressDto, StudySummaryDto,
 };
 use crate::error::IpcError;
 use crate::ordering::{CourseOrders, load_orders, store_orders};
+use crate::search;
 use crate::study;
 
 /// Estado Tauri do desktop: banco local e cursos registrados.
@@ -397,6 +398,23 @@ impl DesktopState {
             .lock()
             .map_err(|_| IpcError::database_unavailable())?;
         study::list_notes(&database, media_id)
+    }
+
+    /// Busca global nas notas do dono local e nos títulos do catálogo.
+    ///
+    /// Os títulos dos cursos vêm do registro, então o índice é sincronizado a cada busca;
+    /// a consulta e o limite são validados pelo núcleo.
+    pub fn search(&self, query: &str, limit: Option<usize>) -> Result<SearchResultsDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        let courses: Vec<(String, String)> = self
+            .courses()
+            .iter()
+            .map(|course| (course.id.clone(), course.title()))
+            .collect();
+        search::search(&database, &courses, query, limit)
     }
 
     /// Cria uma nova anotação de estudo associada a uma mídia.
