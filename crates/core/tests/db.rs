@@ -52,8 +52,8 @@ fn in_memory_database_creates_all_domain_tables() -> TestResult {
     let db = Database::open_in_memory()?;
     assert_eq!(
         table_count(&db),
-        24,
-        "21 domain tables plus the 3 FTS5 virtual tables"
+        25,
+        "22 domain tables plus the 3 FTS5 virtual tables"
     );
     Ok(())
 }
