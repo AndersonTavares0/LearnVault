@@ -1,0 +1,160 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState, type FormEvent } from 'react';
+import { PasswordField } from '@/components/password-field';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { tr } from '@/lib/i18n';
+import { transport, type RemoteSource, type SourceConnectionTest } from '@/lib/transport';
+
+const sourcesKey = ['admin-sources'] as const;
+const SCHEMES = ['dav', 'davs', 'http', 'https'];
+const MAX_NAME = 120;
+const EMPTY_FORM = { name: '', url: '', username: '', password: '' };
+
+/** Mirrors the server's URL rules so a typo is caught before the request (crates/server/src/webdav.rs). */
+function urlIssue(value: string): string | null {
+	const url = value.trim();
+	if (!url.includes('://') || !SCHEMES.includes(url.split('://')[0].toLowerCase())) {
+		return tr('Use a dav://, davs://, http:// or https:// address.', 'Use um endereço dav://, davs://, http:// ou https://.');
+	}
+	try {
+		const parsed = new URL(url);
+		if (!parsed.hostname) return tr('Enter the server host in the address.', 'Informe o host do servidor no endereço.');
+		if (parsed.username || parsed.password) return tr('Remove the username and password from the address; use the fields below.', 'Remova o usuário e a senha do endereço; use os campos abaixo.');
+		if (parsed.search || parsed.hash) return tr('Remove the query string and fragment from the address.', 'Remova a consulta e o fragmento do endereço.');
+	} catch {
+		return tr('Enter a valid WebDAV address.', 'Informe um endereço WebDAV válido.');
+	}
+	return null;
+}
+
+function testFailure(error: string | null): string {
+	switch (error) {
+		case 'unreachable': return tr('The server could not be reached. Check the address and the network.', 'Não foi possível alcançar o servidor. Confira o endereço e a rede.');
+		case 'denied': return tr('The server refused these credentials.', 'O servidor recusou estas credenciais.');
+		case 'not_found': return tr('The path was not found on the server.', 'O caminho não foi encontrado no servidor.');
+		case 'invalid_response': return tr('The server did not answer a WebDAV request.', 'O servidor não respondeu a uma requisição WebDAV.');
+		case 'limit_exceeded': return tr('The folder is too large to list.', 'A pasta é grande demais para listar.');
+		case 'credentials_unavailable': return tr('The stored password cannot be read. Restore the encryption key or add the source again.', 'Não é possível ler a senha guardada. Restaure a chave de criptografia ou adicione a fonte de novo.');
+		case 'timeout': return tr('The server took too long to answer.', 'O servidor demorou demais para responder.');
+		default: return tr('The connection test failed.', 'O teste de conexão falhou.');
+	}
+}
+
+function testMessage(result: SourceConnectionTest): string {
+	const count = result.entries ?? 0;
+	return tr(`Reachable · ${count} ${count === 1 ? 'entry' : 'entries'}`, `Acessível · ${count} ${count === 1 ? 'entrada' : 'entradas'}`);
+}
+
+/**
+ * Remote WebDAV sources (server only). The list never carries the secret: it says whether one
+ * is stored, and a broken key is reported instead of silently testing without a password.
+ */
+export function SourceSettings() {
+	const client = useQueryClient();
+	const sources = useQuery({ queryKey: sourcesKey, queryFn: () => transport.listSources?.() ?? Promise.resolve([]) });
+	const [form, setForm] = useState(EMPTY_FORM);
+	const [message, setMessage] = useState('');
+	const create = useMutation({
+		mutationFn: () => transport.createSource!({
+			name: form.name.trim(),
+			url: form.url.trim(),
+			username: form.username.trim() || undefined,
+			password: form.password || undefined
+		}),
+		onSuccess: () => { setForm(EMPTY_FORM); setMessage(tr('Source added.', 'Fonte adicionada.')); return client.invalidateQueries({ queryKey: sourcesKey }); }
+	});
+
+	const nameIssue = form.name && [...form.name.trim()].length > MAX_NAME ? tr(`Use at most ${MAX_NAME} characters.`, `Use no máximo ${MAX_NAME} caracteres.`) : null;
+	const addressIssue = form.url ? urlIssue(form.url) : null;
+	const credentialsIssue = form.password && !form.username.trim() ? tr('A username is required when a password is set.', 'Um usuário é obrigatório quando há senha.') : null;
+	const blocked = Boolean(nameIssue || addressIssue || credentialsIssue);
+
+	const submit = (event: FormEvent) => {
+		event.preventDefault();
+		if (!blocked && !create.isPending) create.mutate();
+	};
+	const error = sources.error ?? create.error;
+
+	return (
+		<div className="space-y-6">
+			<p className="text-sm text-muted-foreground">{tr('A remote source is a read-only WebDAV folder. Its password is stored encrypted and is never shown again.', 'Uma fonte remota é uma pasta WebDAV somente leitura. A senha é guardada cifrada e nunca é mostrada de novo.')}</p>
+			{error && <p role="alert" className="text-sm text-destructive">{error.message}</p>}
+			<p role="status" aria-live="polite" className="text-sm empty:hidden">{message}</p>
+
+			{sources.isPending ? (
+				<p role="status" className="text-sm text-muted-foreground">{tr('Loading…', 'Carregando…')}</p>
+			) : (sources.data?.length ?? 0) === 0 ? (
+				<p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">{tr('No remote sources yet.', 'Nenhuma fonte remota ainda.')}</p>
+			) : (
+				<ul className="divide-y rounded-lg border bg-card">
+					{sources.data!.map((source) => <SourceRow key={source.id} source={source} onRemoved={() => { setMessage(tr(`Source “${source.name}” removed.`, `Fonte “${source.name}” removida.`)); void client.invalidateQueries({ queryKey: sourcesKey }); }} />)}
+				</ul>
+			)}
+
+			<form onSubmit={submit} className="space-y-4 rounded-lg border bg-card p-4">
+				<h3 className="font-medium">{tr('Add a source', 'Adicionar uma fonte')}</h3>
+				<div className="grid gap-4 sm:grid-cols-2">
+					<div className="space-y-2">
+						<Label htmlFor="source-name">{tr('Name', 'Nome')}</Label>
+						<Input id="source-name" required maxLength={MAX_NAME} autoComplete="off" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} aria-invalid={Boolean(nameIssue) || undefined} />
+						{nameIssue && <p className="text-sm text-destructive">{nameIssue}</p>}
+					</div>
+					<div className="space-y-2">
+						<Label htmlFor="source-url">{tr('Address', 'Endereço')}</Label>
+						<Input id="source-url" required type="text" inputMode="url" spellCheck={false} placeholder={tr('davs://server/dav/', 'davs://servidor/dav/')} value={form.url} onChange={(event) => setForm({ ...form, url: event.target.value })} aria-invalid={Boolean(addressIssue) || undefined} aria-describedby={addressIssue ? 'source-url-error' : undefined} />
+						{addressIssue && <p id="source-url-error" className="text-sm text-destructive">{addressIssue}</p>}
+					</div>
+					<div className="space-y-2">
+						<Label htmlFor="source-username">{tr('Username (optional)', 'Usuário (opcional)')}</Label>
+						<Input id="source-username" autoComplete="username" autoCapitalize="none" spellCheck={false} value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} />
+					</div>
+					<PasswordField id="source-password" label={tr('Password (optional)', 'Senha (opcional)')} autoComplete="new-password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} />
+				</div>
+				{credentialsIssue && <p className="text-sm text-destructive">{credentialsIssue}</p>}
+				<Button type="submit" disabled={create.isPending || blocked}>{create.isPending ? tr('Adding…', 'Adicionando…') : tr('Add source', 'Adicionar fonte')}</Button>
+			</form>
+		</div>
+	);
+}
+
+function SourceRow({ source, onRemoved }: { source: RemoteSource; onRemoved: () => void }) {
+	const [confirming, setConfirming] = useState(false);
+	const test = useMutation({ mutationFn: () => transport.testSource!(source.id) });
+	const remove = useMutation({
+		mutationFn: () => transport.deleteSource!(source.id),
+		onSuccess: (removed) => { if (removed) { setConfirming(false); onRemoved(); } }
+	});
+	return (
+		<li className="space-y-3 p-4">
+			<div className="flex flex-wrap items-start gap-2">
+				<div className="mr-auto min-w-0 space-y-1">
+					<p className="font-medium break-words">{source.name}</p>
+					<p className="text-sm break-all text-muted-foreground"><span className="font-mono">{source.url}</span>{source.username && ` · ${source.username}`}</p>
+				</div>
+				<Button variant="outline" size="sm" disabled={test.isPending} onClick={() => test.mutate()}>{test.isPending ? tr('Testing…', 'Testando…') : tr('Test connection', 'Testar conexão')}</Button>
+				<Button variant="ghost" size="sm" disabled={remove.isPending} onClick={() => setConfirming(true)}>{tr('Remove', 'Remover')}</Button>
+			</div>
+			<p className="text-sm text-muted-foreground">{source.hasPassword ? tr('Password saved', 'Senha salva') : tr('No password', 'Sem senha')}</p>
+			{source.credentialError && <p role="alert" className="text-sm text-destructive">{tr('The stored password cannot be read. Restore the encryption key or add the source again.', 'Não é possível ler a senha guardada. Restaure a chave de criptografia ou adicione a fonte de novo.')}</p>}
+			{test.data && <p role="status" className={test.data.ok ? 'text-sm' : 'text-sm text-destructive'}>{test.data.ok ? testMessage(test.data) : testFailure(test.data.error)}</p>}
+			{test.error && <p role="alert" className="text-sm text-destructive">{test.error.message}</p>}
+			{remove.error && <p role="alert" className="text-sm text-destructive">{remove.error.message}</p>}
+
+			<AlertDialog open={confirming} onOpenChange={(open) => !open && !remove.isPending && setConfirming(false)}>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>{tr(`Remove the source “${source.name}”?`, `Remover a fonte “${source.name}”?`)}</AlertDialogTitle>
+						<AlertDialogDescription>{tr('The stored address and credentials are deleted. The remote server and its files are not touched.', 'O endereço e as credenciais guardados são apagados. O servidor remoto e seus arquivos não são tocados.')}</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel>{tr('Cancel', 'Cancelar')}</AlertDialogCancel>
+						<AlertDialogAction variant="destructive" disabled={remove.isPending} onClick={() => remove.mutate()}>{remove.isPending ? tr('Removing…', 'Removendo…') : tr('Remove source', 'Remover fonte')}</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
+		</li>
+	);
+}

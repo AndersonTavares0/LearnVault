@@ -1338,6 +1338,52 @@ describe('desktop transport over IPC', () => {
 		vi.unstubAllGlobals();
 	});
 
+	it('lists, adds, tests and removes remote sources', async () => {
+		const fetchMock = vi.fn()
+			.mockResolvedValueOnce(new Response(JSON.stringify({
+				sources: [
+					{ id: 'src-1', name: 'Cursos', url: 'https://dav.example.test/cursos/', username: 'ana', has_password: true, credential_error: false },
+					{ id: 'src-2', name: 'Sem senha', url: 'dav://dav.example.test/', username: null, has_password: false, credential_error: true }
+				]
+			}), { status: 200 }))
+			.mockResolvedValueOnce(new Response(JSON.stringify({
+				id: 'src-3', name: 'Novo', url: 'davs://dav.example.test/novo/', username: 'bia', has_password: true, credential_error: false
+			}), { status: 201 }))
+			.mockResolvedValueOnce(new Response(JSON.stringify({ ok: true, entries: 3 }), { status: 200 }))
+			.mockResolvedValueOnce(new Response(JSON.stringify({ removed: true }), { status: 200 }));
+		vi.stubGlobal('fetch', fetchMock);
+		const http = new HttpTransport();
+
+		const sources = await http.listSources();
+		expect(sources[0]).toEqual({ id: 'src-1', name: 'Cursos', url: 'https://dav.example.test/cursos/', username: 'ana', hasPassword: true, credentialError: false });
+		expect(sources[1].hasPassword).toBe(false);
+		expect(sources[1].credentialError).toBe(true);
+
+		const created = await http.createSource({ name: 'Novo', url: 'davs://dav.example.test/novo/', username: 'bia', password: 'segredo' });
+		expect(created.id).toBe('src-3');
+		expect(fetchMock).toHaveBeenLastCalledWith('/api/admin/sources', expect.objectContaining({ method: 'POST', body: JSON.stringify({ name: 'Novo', url: 'davs://dav.example.test/novo/', username: 'bia', password: 'segredo' }) }));
+
+		expect(await http.testSource('src-1')).toEqual({ ok: true, entries: 3, error: null });
+		expect(fetchMock).toHaveBeenLastCalledWith('/api/admin/sources/src-1/test', { method: 'POST' });
+
+		expect(await http.deleteSource('src-1')).toBe(true);
+		expect(fetchMock).toHaveBeenLastCalledWith('/api/admin/sources/src-1', { method: 'DELETE' });
+		vi.unstubAllGlobals();
+	});
+
+	it('maps the stable source errors to actionable messages', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: 'unsupported_source_scheme' }), { status: 400 }));
+		vi.stubGlobal('fetch', fetchMock);
+		await expect(new HttpTransport().createSource({ name: 'SMB', url: 'smb://server/share' })).rejects.toThrow(/dav:\/\//);
+
+		fetchMock.mockResolvedValue(new Response(JSON.stringify({ error: 'username_required' }), { status: 400 }));
+		await expect(new HttpTransport().createSource({ name: 'Sem usuário', url: 'https://dav.example.test/', password: 'x' })).rejects.toThrow(/username is required|usuário é obrigatório/i);
+
+		fetchMock.mockResolvedValue(new Response(JSON.stringify({ ok: false, error: 'denied' }), { status: 200 }));
+		await expect(new HttpTransport().testSource('src-1')).resolves.toEqual({ ok: false, entries: null, error: 'denied' });
+		vi.unstubAllGlobals();
+	});
+
 	it('searches through the desktop IPC command with the HTTP-shaped payload', async () => {
 		const fetchMock = vi.fn();
 		vi.stubGlobal('fetch', fetchMock);

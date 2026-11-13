@@ -1,4 +1,4 @@
-import { BookOpen, Check, Database, Download, Palette, RefreshCw, Settings, Timer, UserRound, Users } from 'lucide-react';
+import { BookOpen, Check, Database, Download, Palette, RefreshCw, Server, Settings, Timer, UserRound, Users } from 'lucide-react';
 import { createContext, useContext, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router';
 import { Panel } from '@/components/panel';
@@ -14,6 +14,7 @@ import { PageHeader } from '@/app/shell';
 import { AppearanceSettings } from './appearance';
 import { AvatarSettings, CredentialsForm } from './account';
 import { FocusSettings } from './focus';
+import { SourceSettings } from './sources';
 import { UpdateSettings } from './updates';
 import { UserSettings } from './users';
 
@@ -41,7 +42,7 @@ export function SettingsPage() {
 		...(studySyncSupported ? [{ id: 'study', label: tr('Study', 'Estudo'), icon: BookOpen }] : []),
 		{ id: 'focus', label: tr('Focus timer', 'Timer de foco'), icon: Timer },
 		...(!server || admin ? [{ id: 'updates', label: tr('Updates', 'Atualizações'), icon: RefreshCw }] : []),
-		...(server && admin ? [{ id: 'users', label: tr('Users', 'Usuários'), icon: Users }, { id: 'backup', label: 'Backup', icon: Database }] : [])
+		...(server && admin ? [{ id: 'users', label: tr('Users', 'Usuários'), icon: Users }, { id: 'sources', label: tr('Remote sources', 'Fontes remotas'), icon: Server }, { id: 'backup', label: 'Backup', icon: Database }] : [])
 	];
 
 	return (
@@ -93,6 +94,9 @@ export function SettingsPage() {
 				<>
 					<Section id="users" title={tr('Accounts and course access', 'Contas e acesso a cursos')}>
 						<UserSettings courses={catalog.data?.nodes ?? []} />
+					</Section>
+					<Section id="sources" title={tr('Remote sources', 'Fontes remotas')} description={tr('Read-only WebDAV folders outside this machine.', 'Pastas WebDAV somente leitura fora desta máquina.')}>
+						<SourceSettings />
 					</Section>
 					<Section id="backup" title={tr('Backup', 'Backup')} description={tr('Download a consistent copy of the database (progress, notes, accounts), checked for integrity. Course files are not included.', 'Baixe uma cópia consistente do banco (progresso, notas, contas), verificada quanto à integridade. Os arquivos dos cursos não entram.')}>
 						<a href="/api/admin/backup" download className={buttonVariants({ variant: 'outline' })}><Download />{tr('Download backup (.sqlite)', 'Baixar backup (.sqlite)')}</a>

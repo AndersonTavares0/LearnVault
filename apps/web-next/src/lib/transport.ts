@@ -6,6 +6,9 @@ import { tr } from './i18n';
 
 export type User = { userId: string; username: string; role: string; isAdmin: boolean; mustChangeCredentials: boolean };
 export type LocalUser = { userId: string; username: string; isAdmin: boolean; createdAt: number; allowedCourseIds: string[] | null };
+/** A remote WebDAV source as the API reports it: never the secret, only whether one is stored. */
+export type RemoteSource = { id: string; name: string; url: string; username: string | null; hasPassword: boolean; credentialError: boolean };
+export type SourceConnectionTest = { ok: boolean; entries: number | null; error: string | null };
 export type FileEntry = { name: string; path: string; size: number; mediaId?: string; mtimeSeconds?: number; kind?: string; availability?: string; unverified?: boolean };
 export type Lesson = { title: string; path: string; media: FileEntry[]; subtitles: FileEntry[]; materials: FileEntry[]; availability?: string; unverified?: boolean };
 // Cada nó de topo do catálogo é um curso com identidade opaca (`courseId`). Nós internos
@@ -205,6 +208,10 @@ export interface Transport {
 	createUser?(username: string, password: string, allowedCourseIds?: string[] | null): Promise<LocalUser>;
 	setUserCourseAccess?(userId: string, allowedCourseIds: string[] | null): Promise<string[] | null>;
 	deleteUser?(userId: string): Promise<boolean>;
+	listSources?(): Promise<RemoteSource[]>;
+	createSource?(input: { name: string; url: string; username?: string; password?: string }): Promise<RemoteSource>;
+	testSource?(sourceId: string): Promise<SourceConnectionTest>;
+	deleteSource?(sourceId: string): Promise<boolean>;
 	studyProgress(mediaId: string): Promise<StudyProgress>;
 	recordPosition(mediaId: string, positionSeconds: number): Promise<StudyProgress>;
 	setCompleted(mediaId: string, completed: boolean): Promise<StudyProgress>;
@@ -496,6 +503,30 @@ export function normalizeLocalUser(value: unknown): LocalUser {
 		isAdmin: raw.is_admin === true,
 		createdAt: typeof raw.created_at === 'number' ? raw.created_at : 0,
 		allowedCourseIds: allowed
+	};
+}
+
+export function normalizeRemoteSource(value: unknown): RemoteSource {
+	if (!value || typeof value !== 'object') throw invalidPayload('fonte remota ausente.');
+	const raw = value as { id?: unknown; name?: unknown; url?: unknown; username?: unknown; has_password?: unknown; credential_error?: unknown };
+	if (typeof raw.id !== 'string' || typeof raw.name !== 'string' || typeof raw.url !== 'string') throw invalidPayload('fonte remota inválida.');
+	return {
+		id: raw.id,
+		name: raw.name,
+		url: raw.url,
+		username: typeof raw.username === 'string' && raw.username ? raw.username : null,
+		hasPassword: raw.has_password === true,
+		credentialError: raw.credential_error === true
+	};
+}
+
+export function normalizeSourceConnectionTest(value: unknown): SourceConnectionTest {
+	if (!value || typeof value !== 'object') throw invalidPayload('resultado do teste ausente.');
+	const raw = value as { ok?: unknown; entries?: unknown; error?: unknown };
+	return {
+		ok: raw.ok === true,
+		entries: typeof raw.entries === 'number' ? raw.entries : null,
+		error: typeof raw.error === 'string' ? raw.error : null
 	};
 }
 
@@ -895,6 +926,19 @@ async function importErrorMessage(response: Response): Promise<string> {
 	}
 }
 
+// Stable codes from the source endpoint, translated once at the transport seam.
+async function sourceErrorMessage(response: Response): Promise<string> {
+	switch (await responseError(response)) {
+		case 'invalid_source_name': return tr('Give the source a name of up to 120 characters.', 'Dê à fonte um nome de até 120 caracteres.');
+		case 'unsupported_source_scheme': return tr('Use a dav://, davs://, http:// or https:// address.', 'Use um endereço dav://, davs://, http:// ou https://.');
+		case 'source_url_contains_credentials': return tr('Remove the username and password from the address.', 'Remova o usuário e a senha do endereço.');
+		case 'invalid_source_url': return tr('Enter a valid WebDAV address.', 'Informe um endereço WebDAV válido.');
+		case 'username_required': return tr('A username is required when a password is set.', 'Um usuário é obrigatório quando há senha.');
+		default: return response.status === 503 ? tr('The server is busy; please try again in a moment.', 'O servidor está ocupado; tente de novo em instantes.') : tr('Could not add the source.', 'Não foi possível adicionar a fonte.');
+	}
+}
+
+
 // Mensagem acionável para o upload de capa. O servidor decide o formato pelos bytes iniciais,
 // então `415` cobre também o arquivo renomeado com uma extensão de imagem.
 function coverUploadErrorMessage(status: number): string {
@@ -994,6 +1038,31 @@ export class HttpTransport implements Transport {
 		if (!response.ok) throw new Error(tr('Could not remove user.', 'Não foi possível remover o usuário.'));
 		const data = await response.json();
 		return data?.deleted === true;
+	}
+	async listSources(): Promise<RemoteSource[]> {
+		const response = await fetch('/api/admin/sources');
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not load remote sources.', 'Não foi possível carregar as fontes remotas.'));
+		const data = await response.json();
+		return (Array.isArray(data?.sources) ? data.sources : []).map(normalizeRemoteSource);
+	}
+	async createSource(input: { name: string; url: string; username?: string; password?: string }): Promise<RemoteSource> {
+		const response = await fetch('/api/admin/sources', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(input)
+		});
+		if (!response.ok) throw new Error(await sourceErrorMessage(response));
+		return normalizeRemoteSource(await response.json());
+	}
+	async testSource(sourceId: string): Promise<SourceConnectionTest> {
+		const response = await fetch(`/api/admin/sources/${encodeURIComponent(sourceId)}/test`, { method: 'POST' });
+		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? tr('Source not found.', 'Fonte não encontrada.') : response.status === 503 ? tr('The server is busy; please try again in a moment.', 'O servidor está ocupado; tente de novo em instantes.') : tr('Could not test the source.', 'Não foi possível testar a fonte.'));
+		return normalizeSourceConnectionTest(await response.json());
+	}
+	async deleteSource(sourceId: string): Promise<boolean> {
+		const response = await fetch(`/api/admin/sources/${encodeURIComponent(sourceId)}`, { method: 'DELETE' });
+		if (!response.ok) throw new Error(tr('Could not remove the source.', 'Não foi possível remover a fonte.'));
+		return removalFlag(response);
 	}
 	async studyProgress(mediaId: string) { const response = await fetch(`/api/study/progress?media_id=${encodeURIComponent(mediaId)}`); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? tr('Media not found.', 'Mídia não encontrada.') : tr('Could not read progress.', 'Não foi possível ler o progresso.')); return normalizeStudyProgress(await response.json()); }
 	async getPlaybackPreferences() {
