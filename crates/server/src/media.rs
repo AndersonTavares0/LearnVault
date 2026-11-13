@@ -10,6 +10,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
+use tokio_stream::StreamExt;
 
 use crate::{
     AppState, StateError,
@@ -18,7 +19,9 @@ use crate::{
         authenticated_user, credentials_required, csrf_failed, internal_error, private_no_store,
         service_unavailable, status_private_no_store,
     },
+    sources::RemoteSource,
     stream::idle_timeout_stream,
+    webdav::WebDavClient,
 };
 
 #[derive(Debug, Deserialize)]
@@ -62,6 +65,15 @@ pub(crate) async fn media(
         .into_iter()
         .find(|course| course.id == query.course)
     else {
+        // A mesma rota serve os cursos locais e as fontes remotas: a identidade opaca do
+        // curso decide qual adaptador entrega os bytes.
+        if let Some(source) = state
+            .sources_snapshot()
+            .into_iter()
+            .find(|source| source.id == query.course)
+        {
+            return remote_media(state, user, source, query.path, headers, method).await;
+        }
         return error_private_no_store(StatusCode::NOT_FOUND);
     };
     let root = course.root;
@@ -182,6 +194,158 @@ pub(crate) async fn media(
         response_headers.insert(header::CONTENT_RANGE, content_range);
     }
     response
+}
+
+/// Entrega uma faixa de uma mídia de uma fonte WebDAV.
+///
+/// Só caminhos já catalogados no banco são repassados ao servidor remoto: o cliente HTTP
+/// nunca escolhe livremente um caminho no WebDAV. O corpo é transmitido em streaming, sem
+/// buffer do arquivo inteiro.
+async fn remote_media(
+    state: AppState,
+    user: learnvault_core::AuthSession,
+    source: RemoteSource,
+    path: String,
+    headers: HeaderMap,
+    method: Method,
+) -> Response {
+    if !state.has_blocking_capacity() {
+        return service_unavailable();
+    }
+    let database = state.database.clone().lock_owned().await;
+    let Some(blocking_task) = state.try_acquire_blocking_task() else {
+        return service_unavailable();
+    };
+    let library_id = source.id.clone();
+    let lookup_path = path;
+    let lookup = tokio::task::spawn_blocking(move || {
+        let _blocking_task = blocking_task;
+        if !learnvault_core::can_user_access_course(
+            &database,
+            &user.user_id,
+            user.is_admin,
+            &library_id,
+        )? {
+            return Ok(None);
+        }
+        learnvault_core::find_media_by_path(&database, &library_id, &lookup_path)
+    })
+    .await;
+    let reference = match lookup {
+        Ok(Ok(Some(reference))) => reference,
+        Ok(Ok(None)) => return error_private_no_store(StatusCode::NOT_FOUND),
+        Ok(Err(error)) => return media_error_response(&error),
+        Err(_) => return service_unavailable(),
+    };
+
+    let size = reference.size();
+    let Some((start, end)) = parse_range(headers.get(header::RANGE), size) else {
+        return range_not_satisfiable(size);
+    };
+    let partial = headers.get(header::RANGE).is_some();
+    if size == 0 {
+        return empty_remote_response(&reference.relative_path, partial, size);
+    }
+    let length = end - start + 1;
+
+    let client = match WebDavClient::new(
+        source.url.clone(),
+        source.username.as_deref(),
+        source.password(),
+    ) {
+        Ok(client) => client,
+        Err(_) => return remote_media_error(StatusCode::BAD_GATEWAY, "source_unavailable"),
+    };
+    let upstream = match client
+        .open_range(&reference.relative_path, start, end)
+        .await
+    {
+        Ok(upstream) => upstream,
+        Err(learnvault_core::SourceError::NotFound) => {
+            return error_private_no_store(StatusCode::NOT_FOUND);
+        }
+        Err(learnvault_core::SourceError::Denied) => {
+            return remote_media_error(StatusCode::BAD_GATEWAY, "source_denied");
+        }
+        Err(_) => {
+            return remote_media_error(StatusCode::BAD_GATEWAY, "source_unavailable");
+        }
+    };
+    if upstream
+        .content_length()
+        .is_some_and(|upstream_length| upstream_length != length)
+    {
+        return remote_media_error(StatusCode::BAD_GATEWAY, "source_range_mismatch");
+    }
+
+    let permit = if method == Method::HEAD {
+        None
+    } else {
+        match state.try_acquire_media_stream() {
+            Some(permit) => Some(permit),
+            None => return service_unavailable(),
+        }
+    };
+    let body = match permit {
+        Some(permit) => Body::from_stream(upstream.bytes_stream().map(move |chunk| {
+            // O permit vive enquanto o corpo for consumido e é liberado ao final.
+            let _ = &permit;
+            chunk.map_err(std::io::Error::other)
+        })),
+        None => Body::empty(),
+    };
+    let mut response = Response::new(body);
+    *response.status_mut() = if partial {
+        StatusCode::PARTIAL_CONTENT
+    } else {
+        StatusCode::OK
+    };
+    let response_headers = response.headers_mut();
+    response_headers.insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
+    response_headers.insert(header::CONTENT_LENGTH, HeaderValue::from(length));
+    response_headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static(content_type(&reference.relative_path)),
+    );
+    if let Some(disposition) = content_disposition(&reference.relative_path) {
+        response_headers.insert(header::CONTENT_DISPOSITION, disposition);
+    }
+    response_headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    if partial {
+        let Ok(content_range) = HeaderValue::from_str(&format!("bytes {start}-{end}/{size}"))
+        else {
+            return error_private_no_store(StatusCode::INTERNAL_SERVER_ERROR);
+        };
+        response_headers.insert(header::CONTENT_RANGE, content_range);
+    }
+    response
+}
+
+fn empty_remote_response(path: &str, partial: bool, size: u64) -> Response {
+    let mut response = Response::new(Body::empty());
+    *response.status_mut() = if partial {
+        StatusCode::PARTIAL_CONTENT
+    } else {
+        StatusCode::OK
+    };
+    let headers = response.headers_mut();
+    headers.insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
+    headers.insert(header::CONTENT_LENGTH, HeaderValue::from_static("0"));
+    headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static(content_type(path)),
+    );
+    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    if partial && let Ok(content_range) = HeaderValue::from_str(&format!("bytes 0-0/{size}")) {
+        headers.insert(header::CONTENT_RANGE, content_range);
+    }
+    response
+}
+
+fn remote_media_error(status: StatusCode, error: &'static str) -> Response {
+    error_response_private_no_store(
+        (status, axum::Json(serde_json::json!({ "error": error }))).into_response(),
+    )
 }
 
 fn error_credentials_required() -> Response {

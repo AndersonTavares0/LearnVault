@@ -40,6 +40,13 @@ pub struct MediaReference {
     mtime: i64,
 }
 
+impl MediaReference {
+    /// Tamanho em bytes observado na última varredura.
+    pub fn size(&self) -> u64 {
+        self.size
+    }
+}
+
 /// Resolve um caminho relativo indexado sem acessar o sistema de arquivos.
 ///
 /// A função só retorna mídias disponíveis e recusa componentes que poderiam transformar a

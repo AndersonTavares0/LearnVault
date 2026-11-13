@@ -19,6 +19,7 @@ use crate::{
     auth::{hash_session_token, request_token, same_origin},
     courses::RegisteredCourse,
     ordering::CourseOrders,
+    sources::RemoteSource,
 };
 
 /// Limite de corpo da requisição de ordenação, acima do limite padrão do roteador (8 KiB).
@@ -115,19 +116,19 @@ struct CatalogFileResponse {
 }
 
 #[derive(Serialize)]
-struct RescanResponse {
-    scan_id: i64,
-    complete: bool,
-    courses: usize,
-    failed_courses: usize,
-    inserted: usize,
-    updated: usize,
-    marked_missing: usize,
-    preserved: usize,
+pub(crate) struct RescanResponse {
+    pub(crate) scan_id: i64,
+    pub(crate) complete: bool,
+    pub(crate) courses: usize,
+    pub(crate) failed_courses: usize,
+    pub(crate) inserted: usize,
+    pub(crate) updated: usize,
+    pub(crate) marked_missing: usize,
+    pub(crate) preserved: usize,
     /// Quantidade de chaves relativas ambíguas recusadas nesta varredura.
     ///
     /// É apenas a contagem: as chaves em si são caminhos relativos e nunca cruzam a API.
-    ambiguous_count: usize,
+    pub(crate) ambiguous_count: usize,
 }
 
 pub(crate) async fn catalog(State(state): State<AppState>, headers: HeaderMap) -> Response {
@@ -143,6 +144,7 @@ pub(crate) async fn catalog(State(state): State<AppState>, headers: HeaderMap) -
         return service_unavailable();
     }
     let courses = state.courses_snapshot();
+    let sources = state.sources_snapshot();
     let orders = state.orders_snapshot();
     let database = state.database.clone().lock_owned().await;
     let Some(blocking_task) = state.try_acquire_blocking_task() else {
@@ -151,19 +153,31 @@ pub(crate) async fn catalog(State(state): State<AppState>, headers: HeaderMap) -
     let covers = crate::covers::covers_dir(&state.config.database_path);
     match tokio::task::spawn_blocking(move || {
         let _blocking_task = blocking_task;
-        let filtered_courses: Vec<RegisteredCourse> = if user.is_admin {
-            courses
-        } else if let Some(allowed) =
-            learnvault_core::list_user_course_access(&database, &user.user_id)?
-        {
-            courses
-                .into_iter()
-                .filter(|course| allowed.iter().any(|id| id == &course.id))
-                .collect()
+        let allowed = if user.is_admin {
+            None
         } else {
-            courses
+            learnvault_core::list_user_course_access(&database, &user.user_id)?
         };
-        build_course_catalog(&database, &filtered_courses, &orders, &covers)
+        let is_allowed = |id: &str| {
+            allowed
+                .as_ref()
+                .is_none_or(|allowed| allowed.iter().any(|candidate| candidate == id))
+        };
+        let filtered_courses: Vec<RegisteredCourse> = courses
+            .into_iter()
+            .filter(|course| is_allowed(&course.id))
+            .collect();
+        let filtered_sources: Vec<RemoteSource> = sources
+            .into_iter()
+            .filter(|source| is_allowed(&source.id))
+            .collect();
+        build_course_catalog(
+            &database,
+            &filtered_courses,
+            &filtered_sources,
+            &orders,
+            &covers,
+        )
     })
     .await
     {
@@ -186,6 +200,7 @@ pub(crate) async fn catalog(State(state): State<AppState>, headers: HeaderMap) -
 fn build_course_catalog(
     database: &learnvault_core::Database,
     courses: &[RegisteredCourse],
+    sources: &[RemoteSource],
     orders: &CourseOrders,
     covers_dir: &Path,
 ) -> Result<CatalogResponse, learnvault_core::Error> {
@@ -225,6 +240,34 @@ fn build_course_catalog(
             course_id: Some(course.id.clone()),
             cover_version: crate::covers::cover_version(covers_dir, &course.id),
             source_folder,
+            structure: Some(structure),
+            files: Vec::new(),
+            loose_files: loose_files.into_iter().map(Into::into).collect(),
+            children: children.into_iter().map(Into::into).collect(),
+        });
+    }
+    // Fontes remotas usam o mesmo catálogo derivado do banco; não têm pasta local, capa
+    // personalizada nem pasta de origem. A ordenação manual continua por identidade.
+    let mut sources: Vec<&RemoteSource> = sources.iter().collect();
+    sources.sort_by(|left, right| {
+        learnvault_core::natural_cmp(&left.name, &right.name).then_with(|| left.id.cmp(&right.id))
+    });
+    for source in sources {
+        let catalog = learnvault_core::build_catalog(database, &source.id)?;
+        complete = complete && catalog.complete;
+        let (mut children, loose_files) = learnvault_core::shape_course_catalog(catalog);
+        learnvault_core::apply_order(&mut children, orders.get(&source.id).unwrap_or(&empty));
+        let structure = structure_response(learnvault_core::structure::assess_parts(
+            &children,
+            &loose_files,
+        ));
+        nodes.push(CatalogNodeResponse {
+            title: source.name.clone(),
+            path: String::new(),
+            role: "course",
+            course_id: Some(source.id.clone()),
+            cover_version: None,
+            source_folder: None,
             structure: Some(structure),
             files: Vec::new(),
             loose_files: loose_files.into_iter().map(Into::into).collect(),

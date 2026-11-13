@@ -24,8 +24,15 @@ sha2 = "0.11"
 # API do GitHub). Sem `default-features` para não trazer OpenSSL nem o provedor de
 # criptografia `aws-lc-rs` (que exigiria CMake); o provedor `ring` é instalado pelo
 # próprio módulo `update`. Menor superfície possível: só o backend rustls.
-reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "stream"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+# Criptografia das credenciais de fontes remotas em repouso (ChaCha20-Poly1305). O `ring`
+# já entra pela cadeia do rustls; declarar direto só expõe a API de AEAD.
+ring = "0.17"
+quick-xml = "0.42"
+url = "2.5"
+percent-encoding = "2.3"
+uuid = { version = "1", features = ["v4"] }
 thiserror = "2"
 tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "signal", "time"] }
 tokio-stream = "0.1"

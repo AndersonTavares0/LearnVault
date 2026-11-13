@@ -243,7 +243,7 @@ fn extension(name: &str) -> Option<String> {
     Some(extension.to_ascii_lowercase())
 }
 
-fn is_ignored_directory(name: &str) -> bool {
+pub(crate) fn is_ignored_directory(name: &str) -> bool {
     let name = name.to_ascii_lowercase();
     IGNORED_DIRECTORY_NAMES.contains(&name.as_str()) || name.starts_with(IGNORED_DIRECTORY_PREFIX)
 }

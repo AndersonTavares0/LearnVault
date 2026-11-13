@@ -2093,7 +2093,10 @@ dependencies = [
  "http-body-util",
  "learnvault-core",
  "notify",
+ "percent-encoding",
+ "quick-xml 0.42.0",
  "reqwest",
+ "ring",
  "rustls",
  "serde",
  "serde_json",
@@ -2105,6 +2108,8 @@ dependencies = [
  "tokio-stream",
  "tokio-util",
  "tower",
+ "url",
+ "uuid",
 ]
 
 [[package]]

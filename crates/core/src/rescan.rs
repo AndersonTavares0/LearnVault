@@ -304,6 +304,22 @@ pub fn rescan(db: &mut Database, library_id: &str, root: &Path) -> Result<Rescan
     }
 }
 
+/// Aplica o resultado de uma fonte já percorrida, sem tocar a rede nem o disco.
+///
+/// Permite que um adaptador remoto leia a árvore fora do lock do banco e só então grave
+/// o catálogo. Uma falha da fonte é registrada no histórico exatamente como uma falha de
+/// varredura local, preservando a mídia e o progresso existentes.
+pub fn apply_source_scan(
+    db: &mut Database,
+    library_id: &str,
+    outcome: std::result::Result<ScanOutcome, crate::source::SourceError>,
+) -> Result<RescanSummary> {
+    match outcome {
+        Ok(outcome) => apply_scan(db, library_id, &outcome, KeyMode::for_host()),
+        Err(error) => Err(record_failed_scan(db, library_id, error.into())),
+    }
+}
+
 /// Registra a tentativa que falhou, preservando a falha original como causa.
 fn record_failed_scan(db: &mut Database, library_id: &str, scan_error: Error) -> Error {
     match write_failed_scan(db, library_id) {
