@@ -298,9 +298,6 @@ fn build_registers_the_app_commands_in_the_acl_manifest() {
         "desktop_playback_preferences",
         "desktop_save_playback_preferences",
         "desktop_sync_state",
-        "desktop_sync_pending",
-        "desktop_sync_acknowledge",
-        "desktop_sync_apply",
         "desktop_sync_configure",
         "desktop_sync_login",
         "desktop_sync_logout",
@@ -377,16 +374,13 @@ fn capability_grants_only_the_core_default_and_the_app_commands() {
     assert!(permissions.contains(&"allow-desktop-playback-preferences"));
     assert!(permissions.contains(&"allow-desktop-save-playback-preferences"));
     assert!(permissions.contains(&"allow-desktop-sync-state"));
-    assert!(permissions.contains(&"allow-desktop-sync-pending"));
-    assert!(permissions.contains(&"allow-desktop-sync-acknowledge"));
-    assert!(permissions.contains(&"allow-desktop-sync-apply"));
     assert!(permissions.contains(&"allow-desktop-sync-configure"));
     assert!(permissions.contains(&"allow-desktop-sync-login"));
     assert!(permissions.contains(&"allow-desktop-sync-logout"));
     assert!(permissions.contains(&"allow-desktop-sync-now"));
     assert_eq!(
         permissions.len(),
-        60,
+        57,
         "a capability não pode ampliar além do núcleo, dos controles da titlebar e dos comandos do app: {permissions:?}"
     );
 }

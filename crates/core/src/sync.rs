@@ -222,17 +222,26 @@ pub fn push_operations(
     let mut duplicated = 0_usize;
     for operation in operations {
         validate_id(&operation.op_id, "op")?;
-        let known = transaction
+        // `sync_operation.op_id` is a global primary key, so a colliding id from another owner
+        // must be refused instead of silently swallowing this operation as a duplicate.
+        let existing_owner: Option<String> = transaction
             .query_row(
-                "SELECT 1 FROM sync_operation WHERE op_id = ?1",
+                "SELECT owner_id FROM sync_operation WHERE op_id = ?1",
                 [&operation.op_id],
-                |_| Ok(()),
+                |row| row.get(0),
             )
-            .optional()?
-            .is_some();
-        if known {
-            duplicated += 1;
-            continue;
+            .optional()?;
+        match existing_owner.as_deref() {
+            Some(owner) if owner == owner_id => {
+                duplicated += 1;
+                continue;
+            }
+            Some(_) => {
+                return Err(Error::InvalidSyncOperation {
+                    reason: "op_id already used by another owner",
+                });
+            }
+            None => {}
         }
         apply_payload(
             &transaction,
@@ -806,15 +815,11 @@ fn apply_progress(
         return Ok(());
     };
 
-    // Posição: a escrita mais nova vence. Conclusão: a escrita mais nova decide, mas uma
-    // escrita antiga que chegue atrasada nunca apaga uma conclusão já observada.
+    // Posição: a escrita mais nova vence. Conclusão: uma vez observada, nunca é desfeita —
+    // nem por uma escrita mais nova nem por uma antiga que chegue atrasada.
     let newer = client_at >= current_updated_at;
     let next_position = if newer { position } else { current_position };
-    let next_completed = if newer {
-        completed
-    } else {
-        current_completed != 0 || completed
-    };
+    let next_completed = current_completed != 0 || completed;
     if next_position == current_position && next_completed == (current_completed != 0) {
         return Ok(());
     }
@@ -1059,21 +1064,12 @@ fn apply_review(
         )
         .optional()?;
     let Some(previous_interval) = previous else {
-        // O cartão ainda não existe aqui; a revisão continua no diário e será aplicada
-        // quando o cartão aparecer em outro dispositivo.
+        // Cards are not synced, so a review of an unknown card cannot be applied anywhere;
+        // it stays only in the journal for audit. Tracked in #472.
         return Ok(());
     };
-    let (next_interval, next_due) = match rating {
-        crate::study::ReviewRating::Again => (0, reviewed_at + 600),
-        crate::study::ReviewRating::Good => {
-            let interval = if previous_interval == 0 {
-                1
-            } else {
-                previous_interval.saturating_mul(2).min(365)
-            };
-            (interval, reviewed_at + interval.saturating_mul(86_400))
-        }
-    };
+    let (next_interval, next_due) =
+        crate::study::schedule_review(previous_interval, rating, reviewed_at);
     conn.execute(
         "UPDATE flashcard
             SET interval_days = ?1, next_due = ?2, updated_at = ?3

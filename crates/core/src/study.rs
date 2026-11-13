@@ -871,6 +871,31 @@ pub fn review_flashcard(
     Ok(card)
 }
 
+/// Próximo estado de agendamento de uma revisão: `(interval_days, next_due)`.
+///
+/// Compartilhado pela revisão local e pela revisão que chega pelo diário de sincronização,
+/// para que as duas nunca divirjam.
+pub(crate) fn schedule_review(
+    prev_interval: i64,
+    rating: ReviewRating,
+    reviewed_at: i64,
+) -> (i64, i64) {
+    match rating {
+        ReviewRating::Again => (0_i64, reviewed_at + 600),
+        ReviewRating::Good => {
+            let next_interval = if prev_interval == 0 {
+                1_i64
+            } else {
+                prev_interval.saturating_mul(2).min(365)
+            };
+            (
+                next_interval,
+                reviewed_at + next_interval.saturating_mul(86_400),
+            )
+        }
+    }
+}
+
 /// [`review_flashcard`] sobre uma conexão já dentro de uma transação.
 pub(crate) fn review_flashcard_on(
     conn: &Connection,
@@ -896,21 +921,7 @@ pub(crate) fn review_flashcard_on(
         });
     };
 
-    let (new_interval, next_due) = match rating {
-        ReviewRating::Again => {
-            let next_due = now + 600; // 10 minutos
-            (0_i64, next_due)
-        }
-        ReviewRating::Good => {
-            let next_interval = if prev_interval == 0 {
-                1_i64
-            } else {
-                (prev_interval.saturating_mul(2)).min(365)
-            };
-            let next_due = now + next_interval.saturating_mul(86400);
-            (next_interval, next_due)
-        }
-    };
+    let (new_interval, next_due) = schedule_review(prev_interval, rating, now);
 
     let updated = conn.query_row(
         "UPDATE flashcard

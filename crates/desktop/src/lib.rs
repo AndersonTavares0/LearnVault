@@ -70,9 +70,8 @@ pub use command::{
     desktop_review_flashcard, desktop_reward_summary, desktop_save_playback_preferences,
     desktop_search, desktop_set_completed, desktop_set_course_favorite, desktop_set_course_order,
     desktop_set_lesson_favorite, desktop_set_weekly_goal, desktop_study_progress,
-    desktop_study_summary, desktop_sync_acknowledge, desktop_sync_apply, desktop_sync_configure,
-    desktop_sync_login, desktop_sync_logout, desktop_sync_now, desktop_sync_pending,
-    desktop_sync_state, desktop_update_flashcard, desktop_update_note,
+    desktop_study_summary, desktop_sync_configure, desktop_sync_login, desktop_sync_logout,
+    desktop_sync_now, desktop_sync_state, desktop_update_flashcard, desktop_update_note,
     desktop_update_pdf_annotation, desktop_weekly_goal, open_in_system_player,
 };
 pub use config::{DATABASE_FILE_NAME, DesktopConfigDto, database_path};
@@ -177,9 +176,6 @@ pub fn run() {
             command::desktop_playback_preferences,
             command::desktop_save_playback_preferences,
             command::desktop_sync_state,
-            command::desktop_sync_pending,
-            command::desktop_sync_acknowledge,
-            command::desktop_sync_apply,
             command::desktop_sync_configure,
             command::desktop_sync_login,
             command::desktop_sync_logout,
