@@ -159,8 +159,8 @@ described below. The desktop application is single-user and has no accounts.
 - Four advisories are accepted with documented rationale rather than silently ignored:
   - `GHSA-g3hv-75wg-m249` (minimatch, dev tooling) is ignored in `pnpm-workspace.yaml`; forcing the
     patched major breaks `eslint-plugin-jsx-a11y`.
-  - `GHSA-gcqx-w48m-w2h4` (deepmerge, dev tooling) has no patched release and is ignored in
-    `pnpm-workspace.yaml`.
+  - `GHSA-gcqx-w48m-w2h4` (deepmerge) is ignored for the same reason: it is reachable only through the
+    `shadcn` component CLI, no patched release exists, and it never reaches the shipped bundles.
   - `RUSTSEC-2024-0429` (glib, reached through Tauri's GTK stack) is ignored in `.cargo/audit.toml`;
     the patched release needs a GTK major upgrade that no current Tauri version provides.
   - `RUSTSEC-2023-0071` (`rsa`, reached through `smb` → `sspi`) is ignored in `.cargo/audit.toml`.

@@ -58,7 +58,7 @@ Application code is organized in these directories:
 | Path | Responsibility |
 | --- | --- |
 | `crates/` | Rust workspace. `crates/core` contains the shared domain (SQLite, catalog, scanner, media identity, and study state); `crates/server` contains the Axum HTTP server; `crates/desktop` contains Tauri 2 desktop app |
-| `apps/web/` | Svelte 5 + TypeScript + Vite SPA (`src/`, `vite.config.ts`, `tsconfig.json`, `package.json`) |
+| `apps/web-next/` | React 19 + TypeScript + Vite SPA (`src/`, `vite.config.ts`, `tsconfig.json`, `package.json`) |
 | `testdata/` | Small synthetic test fixtures |
 | `deploy/container/` | Containerfile / OCI image definition |
 | `deploy/compose/` | Docker Compose stack and environment examples |

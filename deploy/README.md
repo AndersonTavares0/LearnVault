@@ -62,11 +62,15 @@ By default Compose uses the official image published on the GitHub Container Reg
 docker compose up -d
 
 # Option B: pin a version
-LEARNVAULT_IMAGE=ghcr.io/andersontavares0/learnvault:0.9.0 docker compose up -d
+LEARNVAULT_IMAGE=ghcr.io/andersontavares0/learnvault:0.9.0-rc.4 docker compose up -d
 
 # Option C: build the image from the source code (contributors)
 docker compose -f compose.yaml -f compose.build.yaml up -d --build
 ```
+
+> **Before 1.0:** releases are published as release candidates only, so a candidate publishes the exact
+> tag (`0.9.0-rc.4`) and never moves `latest`, `stable`, or the minor line. Until the first stable
+> release, Option A fails to pull and you must pin `LEARNVAULT_IMAGE` as in Option B.
 
 > **Upgrading from a setup that built the image locally:** if your `.env` still has `LEARNVAULT_IMAGE=learnvault-rust:local`, remove that line (the default is now the published image), or keep building by adding `-f compose.build.yaml` to every `docker compose` command.
 

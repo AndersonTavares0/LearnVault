@@ -4,8 +4,9 @@ packages:
   - "apps/*"
 allowBuilds:
   esbuild: true
-# GHSA-gcqx-w48m-w2h4: low-severity deepmerge (transitive via @sveltejs/vite-plugin-svelte in the
-# legacy apps/web). No patched version is published. Remove this entry when apps/web is deleted (#340).
+# GHSA-gcqx-w48m-w2h4: low-severity deepmerge prototype poisoning, transitive via the shadcn CLI
+# used for component scaffolding. Dev tooling only, not in the shipped SPA or desktop bundle, and no
+# patched version is published. Remove when shadcn drops deepmerge or ships a patched release.
 # GHSA-g3hv-75wg-m249: moderate minimatch ReDoS (>=7 <11.0.1), transitive via typescript-eslint and
 # eslint. Build and lint tooling only; not in the shipped SPA or desktop bundle. Overriding to
 # minimatch 11 breaks eslint-plugin-jsx-a11y. Remove when typescript-eslint ships a patched minimatch.
@@ -13,5 +14,3 @@ audit:
   ignore:
     - GHSA-gcqx-w48m-w2h4
     - GHSA-g3hv-75wg-m249
-minimumReleaseAgeExclude:
-  - '@sveltejs/kit@3.1.0'
