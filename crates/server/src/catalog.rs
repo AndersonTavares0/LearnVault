@@ -44,11 +44,8 @@ struct ErrorResponse {
 struct CatalogResponse {
     complete: bool,
     loose_files: Vec<CatalogFileResponse>,
-    /// Árvore recursiva canônica, o contrato preferido pela SPA.
+    /// Árvore recursiva canônica: os cursos de topo e suas subárvores.
     nodes: Vec<CatalogNodeResponse>,
-    /// Cursos, na ordem de importação. Cada nó de topo tem papel `course` e a
-    /// identidade opaca do curso em `course_id`.
-    categories: Vec<CatalogNodeResponse>,
 }
 
 #[derive(Serialize, Clone)]
@@ -181,9 +178,50 @@ pub(crate) async fn catalog(State(state): State<AppState>, headers: HeaderMap) -
     })
     .await
     {
-        Ok(Ok(catalog)) => private_no_store(Json(catalog).into_response()),
+        Ok(Ok(catalog)) => catalog_response(&headers, catalog),
         Ok(Err(_)) | Err(_) => internal_error("catalog unavailable"),
     }
+}
+
+/// Serializa o catálogo uma única vez e deixa o cliente revalidar pelo `ETag`.
+///
+/// A resposta continua sendo sempre revalidada (`private, no-cache`), então um `304`
+/// nunca serve dados velhos: ele só evita retransmitir a árvore inteira quando nada mudou.
+/// O hash cobre o corpo serializado, que inclui a ordenação e as capas aplicadas.
+fn catalog_response(request: &HeaderMap, catalog: CatalogResponse) -> Response {
+    let Ok(body) = serde_json::to_string(&catalog) else {
+        return internal_error("catalog unavailable");
+    };
+    let etag = HeaderValue::from_str(&format!("\"{}\"", crate::auth::hash_session_token(&body)))
+        .unwrap_or_else(|_| HeaderValue::from_static("\"0\""));
+    let matches = request
+        .get(header::IF_NONE_MATCH)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| {
+            let current = etag.to_str().unwrap_or_default();
+            value
+                .split(',')
+                .map(str::trim)
+                .any(|candidate| candidate == current)
+        });
+    let mut response = if matches {
+        StatusCode::NOT_MODIFIED.into_response()
+    } else {
+        (
+            [(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static("application/json"),
+            )],
+            body,
+        )
+            .into_response()
+    };
+    response.headers_mut().insert(header::ETAG, etag);
+    response.headers_mut().insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("private, no-cache"),
+    );
+    response
 }
 
 /// Agrega o catálogo dos cursos registrados.
@@ -195,8 +233,6 @@ pub(crate) async fn catalog(State(state): State<AppState>, headers: HeaderMap) -
 ///
 /// Cada subárvore recebe a preferência de ordenação manual do curso ([`CourseOrders`]),
 /// aplicada por sobreposição sobre a ordem natural; cursos continuam na ordem automática.
-/// A mesma lista de nós de topo alimenta `nodes` (árvore recursiva canônica) e `categories`
-/// (lista de cursos de topo): nenhum dos dois contratos perde aula, arquivo ou identidade.
 fn build_course_catalog(
     database: &learnvault_core::Database,
     courses: &[RegisteredCourse],
@@ -277,10 +313,7 @@ fn build_course_catalog(
     Ok(CatalogResponse {
         complete,
         loose_files: Vec::new(),
-        // O mesmo nó de topo de curso alimenta os dois contratos: `nodes` é a árvore
-        // canônica e `categories` é a lista de cursos de topo do contrato HTTP.
-        nodes: nodes.clone(),
-        categories: nodes,
+        nodes,
     })
 }
 

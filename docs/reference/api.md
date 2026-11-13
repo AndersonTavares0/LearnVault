@@ -34,7 +34,7 @@ It never creates `admin/admin` or overwrites existing data in this scenario. The
 
 | Method | Path | Auth | Purpose |
 | --- | --- | --- | --- |
-| `GET` | `/api/catalog` | Session | Returns top-level course nodes (`role: course` with opaque `course_id` and `title`), with modules, lessons, and materials |
+| `GET` | `/api/catalog` | Session | Returns top-level course nodes (`role: course` with opaque `course_id` and `title`), with modules, lessons, and materials. Carries a content `ETag` and `Cache-Control: private, no-cache`; a request with a matching `If-None-Match` gets `304 Not Modified` with an empty body |
 | `POST` | `/api/admin/courses` | Admin Session | Accepts `{ "path": "..." }` to register a course folder. Path must exist, be readable, and not be a symlink |
 | `DELETE` | `/api/admin/courses/{id}` | Admin Session | Unregisters a course folder without deleting course files or study progress |
 | `POST` | `/api/admin/catalog/rescan` | Admin Session | Explicitly rescans all registered courses in a preserving manner: registers new files, confirms known ones, marks missing ones without deleting records |

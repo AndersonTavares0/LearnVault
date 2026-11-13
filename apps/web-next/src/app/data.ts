@@ -17,7 +17,9 @@ export function useSession() {
 }
 
 export function useCatalog(enabled = true) {
-	return useQuery({ queryKey: keys.catalog, queryFn: () => transport.catalog(), enabled });
+	// The server revalidates the catalog by ETag; a short staleTime keeps navigation instant
+	// while every mutation and every finished index run still invalidates the query.
+	return useQuery({ queryKey: keys.catalog, queryFn: () => transport.catalog(), enabled, staleTime: 30_000 });
 }
 
 // The history covers the whole user: 100 items find the last lesson of any course.

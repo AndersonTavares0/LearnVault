@@ -101,7 +101,7 @@ async fn course_import_rescan_and_removal_flow() {
         .unwrap();
     assert_eq!(catalog.status(), StatusCode::OK);
     let json = json_body(catalog).await;
-    assert_eq!(json["categories"], serde_json::json!([]));
+    assert_eq!(json["nodes"], serde_json::json!([]));
 
     let empty_rescan = app
         .clone()
@@ -174,7 +174,7 @@ async fn course_import_rescan_and_removal_flow() {
         .await
         .unwrap();
     let json = json_body(catalog).await;
-    assert_eq!(json["categories"][0]["course_id"], course_id);
+    assert_eq!(json["nodes"][0]["course_id"], course_id);
 
     let rescan = app
         .clone()
@@ -204,7 +204,7 @@ async fn course_import_rescan_and_removal_flow() {
         .await
         .unwrap();
     let json = json_body(catalog).await;
-    let course_node = &json["categories"][0];
+    let course_node = &json["nodes"][0];
     assert_eq!(course_node["title"], "Física");
     assert_eq!(course_node["role"], "course");
     assert_eq!(course_node["course_id"], course_id);
@@ -283,10 +283,7 @@ async fn course_import_rescan_and_removal_flow() {
         )
         .await
         .unwrap();
-    assert_eq!(
-        json_body(catalog).await["categories"],
-        serde_json::json!([])
-    );
+    assert_eq!(json_body(catalog).await["nodes"], serde_json::json!([]));
     assert!(course.join("Aula 1/video.mp4").exists());
 }
 
@@ -407,7 +404,7 @@ async fn media_removal_impact_and_removal_flow() {
         .await
         .unwrap();
     let json = json_body(catalog).await;
-    let media_id = json["categories"][0]["children"][0]["children"][0]["files"][0]["media_id"]
+    let media_id = json["nodes"][0]["children"][0]["children"][0]["files"][0]["media_id"]
         .as_str()
         .unwrap()
         .to_owned();
@@ -539,10 +536,7 @@ async fn media_removal_impact_and_removal_flow() {
         .unwrap();
     let json = json_body(catalog).await;
     assert!(
-        json["categories"][0]["children"]
-            .as_array()
-            .unwrap()
-            .is_empty(),
+        json["nodes"][0]["children"].as_array().unwrap().is_empty(),
         "o nó de aula sem arquivos não é gerado, deixando children vazio"
     );
 
@@ -587,10 +581,7 @@ async fn media_removal_impact_and_removal_flow() {
         .unwrap();
     let json = json_body(catalog_after_rescan).await;
     assert!(
-        json["categories"][0]["children"]
-            .as_array()
-            .unwrap()
-            .is_empty(),
+        json["nodes"][0]["children"].as_array().unwrap().is_empty(),
         "a mídia removida continua fora do catálogo após rescan"
     );
 
@@ -723,9 +714,9 @@ async fn local_users_course_permissions_enforce_catalog_and_media_access() {
         .unwrap();
     assert_eq!(ana_catalog.status(), StatusCode::OK);
     let ana_cat_json = json_body(ana_catalog).await;
-    let categories = ana_cat_json["categories"].as_array().unwrap();
-    assert_eq!(categories.len(), 1);
-    assert_eq!(categories[0]["course_id"], course_a_id);
+    let courses = ana_cat_json["nodes"].as_array().unwrap();
+    assert_eq!(courses.len(), 1);
+    assert_eq!(courses[0]["course_id"], course_a_id);
 
     // 5. Ana consegue acessar mídia do curso A (200), mas recebe 404 para mídia do curso B
     let media_a = app
@@ -784,7 +775,7 @@ async fn local_users_course_permissions_enforce_catalog_and_media_access() {
         .await
         .unwrap();
     let ana_all_json = json_body(ana_catalog_all).await;
-    assert_eq!(ana_all_json["categories"].as_array().unwrap().len(), 2);
+    assert_eq!(ana_all_json["nodes"].as_array().unwrap().len(), 2);
 
     // 7. Admin remove a usuária Ana e a sessão dela deixa de funcionar
     let delete_res = app

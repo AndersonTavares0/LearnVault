@@ -58,6 +58,21 @@ async fn login(app: &axum::Router) -> String {
         .to_owned()
 }
 
+/// O catálogo é revalidado por `ETag`, então pode ficar no cache privado do navegador.
+fn assert_private_no_cache(response: &Response) {
+    assert_eq!(
+        response
+            .headers()
+            .get("cache-control")
+            .and_then(|value| value.to_str().ok()),
+        Some("private, no-cache")
+    );
+    assert!(
+        response.headers().get("etag").is_some(),
+        "a resposta do catálogo precisa de um ETag de conteúdo"
+    );
+}
+
 fn assert_private_no_store(response: &Response) {
     assert_eq!(
         response
@@ -316,7 +331,7 @@ async fn admin_rescan_populates_the_authenticated_catalog() {
         .await
         .unwrap();
     assert_eq!(catalog.status(), StatusCode::OK);
-    assert_private_no_store(&catalog);
+    assert_private_no_cache(&catalog);
     let body = catalog.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(json["complete"], true);
@@ -365,12 +380,10 @@ async fn admin_rescan_populates_the_authenticated_catalog() {
         "o arquivo solto também carrega identidade de mídia em nodes"
     );
 
-    // `categories` expõe a mesma lista de cursos de topo: cada nó tem papel `course`,
-    // `course_id` opaco e a subárvore escaneada sob ele.
-    assert_eq!(json["categories"], json["nodes"]);
-    assert_eq!(json["categories"][0]["role"], "course");
-    assert_eq!(json["categories"][0]["course_id"], "library-1");
-    let file = find_file(&json["categories"][0]).expect("lesson file in catalog");
+    // Cada nó de topo tem papel `course`, `course_id` opaco e a subárvore escaneada sob ele.
+    assert_eq!(json["nodes"][0]["role"], "course");
+    assert_eq!(json["nodes"][0]["course_id"], "library-1");
+    let file = find_file(&json["nodes"][0]).expect("lesson file in catalog");
     assert_eq!(file["name"], "lesson.mp4");
     assert_eq!(file["path"], "Categoria/Curso/lesson.mp4");
     assert_eq!(file["size"], 5);
@@ -564,4 +577,56 @@ fn find_file(value: &serde_json::Value) -> Option<&serde_json::Value> {
         }
     }
     None
+}
+
+#[tokio::test]
+async fn catalog_revalidates_by_etag_and_answers_not_modified() {
+    let temp = tempfile::tempdir().unwrap();
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let cookie = login(&app).await;
+
+    let first = app
+        .clone()
+        .oneshot(
+            Request::get("/api/catalog")
+                .header("cookie", &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(first.status(), StatusCode::OK);
+    assert_private_no_cache(&first);
+    let etag = first.headers()["etag"].to_str().unwrap().to_owned();
+    let body = first.into_body().collect().await.unwrap().to_bytes();
+    assert!(!body.is_empty());
+
+    let revalidated = app
+        .clone()
+        .oneshot(
+            Request::get("/api/catalog")
+                .header("cookie", &cookie)
+                .header("if-none-match", &etag)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(revalidated.status(), StatusCode::NOT_MODIFIED);
+    assert_private_no_cache(&revalidated);
+    assert_eq!(revalidated.headers()["etag"], etag.as_str());
+    let revalidated_body = revalidated.into_body().collect().await.unwrap().to_bytes();
+    assert!(revalidated_body.is_empty(), "um 304 não carrega corpo");
+
+    let changed = app
+        .oneshot(
+            Request::get("/api/catalog")
+                .header("cookie", &cookie)
+                .header("if-none-match", "\"stale\"")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(changed.status(), StatusCode::OK);
 }

@@ -111,7 +111,7 @@ async fn catalog(app: &axum::Router, cookie: &str) -> serde_json::Value {
 }
 
 fn module_paths(catalog: &serde_json::Value) -> Vec<String> {
-    catalog["categories"][0]["children"]
+    catalog["nodes"][0]["children"]
         .as_array()
         .unwrap()
         .iter()
