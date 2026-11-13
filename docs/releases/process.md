@@ -69,6 +69,29 @@ Release Please is the single source of truth for `docs/releases/CHANGELOG.md`. A
 Configuration is defined in `.github/release-please/release-please-config.json` and manifest in `.github/release-please/release-please-manifest.json`.
 Database schema migrations must always be documented in release notes. Releases must never contain course files, local databases, secrets, or cache artifacts.
 
+## Container Image Tags and Verification
+
+The image is built for `linux/amd64` and `linux/arm64` and pushed as a single multi-architecture index. Tags depend on the tag that produced the release:
+
+| Tag | When it is applied |
+| --- | --- |
+| `<version>` (e.g. `0.9.0-rc.5`) | Always. Points at the exact release. |
+| `rc` | Only for `-rc.N` tags; moves to the newest candidate. |
+| `<major>.<minor>` (e.g. `0.9`) | Only for stable tags; moves within the minor line. |
+| `stable`, `latest` | Only for stable tags. |
+
+Every tag points at a digest that was scanned for HIGH and CRITICAL vulnerabilities, signed with keyless cosign, and verified before tagging. Pre-1.0 candidates never move `stable`, `latest` or the minor line, so a deployment must pin the exact version (see `deploy/README.md`).
+
+Verify an image before deploying it:
+
+```sh
+cosign verify ghcr.io/andersontavares0/learnvault:<tag> \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp '^https://github\.com/AndersonTavares0/LearnVault/\.github/workflows/release\.yml@refs/(tags/v[0-9]+\.[0-9]+\.[0-9]+(-rc\.(0|[1-9][0-9]*))?|heads/main)$'
+```
+
+Provenance and the SBOM are attached to the same digest; inspect them with `docker buildx imagetools inspect ghcr.io/andersontavares0/learnvault:<tag>`.
+
 ## Troubleshooting
 
 - **Desktop update is not offered after a release.** The release must be published (not a draft) and not a pre-release, and `latest.json` must carry a version greater than the installed app. Check with `gh release view <tag> --json isDraft,isPrerelease`.

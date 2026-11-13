@@ -313,7 +313,8 @@ jobs:
     # Every platform build must pass before the image is pushed, tagged or offered for approval.
     needs: [validate-tag, linux, linux-arm64, windows]
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The arm64 half compiles Rust under QEMU emulation, which is far slower than native.
+    timeout-minutes: 120
     # Waits for a reviewer approval in the `release` environment before anything is pushed or tagged.
     environment: release
     permissions:
@@ -329,6 +330,9 @@ jobs:
           persist-credentials: false
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      # Registers binfmt handlers so buildx can run the arm64 stages on an amd64 runner.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
@@ -346,6 +350,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}},value=${{ needs.validate-tag.outputs.tag }},enable=${{ !contains(needs.validate-tag.outputs.tag, '-') }}
             type=raw,value=stable,enable=${{ github.event_name == 'release' && !contains(needs.validate-tag.outputs.tag, '-') }}
             type=raw,value=latest,enable=${{ github.event_name == 'release' && !contains(needs.validate-tag.outputs.tag, '-') }}
+            type=raw,value=rc,enable=${{ contains(needs.validate-tag.outputs.tag, '-rc.') }}
       - name: Confirm container release tag did not move
         shell: bash
         env:
@@ -373,7 +378,10 @@ jobs:
         with:
           context: .
           file: deploy/container/Containerfile
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
+          # Reuse the dependency layers between releases; the emulated arm64 build is the expensive half.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           build-args: |
             LEARNVAULT_BUILD_VERSION=${{ needs.validate-tag.outputs.tag }}
           provenance: mode=max
