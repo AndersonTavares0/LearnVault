@@ -1,5 +1,6 @@
 import { applyLocale, readLocale, setLocale } from '@/lib/i18n';
 import { playerPreferencesKey, playerPreferencesScope } from '@/lib/player-preferences';
+import { clearProgressOutbox } from '@/lib/progress-outbox';
 import { loadAppearance } from '@/lib/appearance';
 
 export function safeStorage(): Storage | null {
@@ -29,8 +30,9 @@ export function applyStoredPreferences(root: HTMLElement = document.documentElem
 
 /**
  * Clears what one user left in this browser (docs/design/security.md, "Shared computers"):
- * the cached avatar version and player preferences. The focus outbox is handled with the
- * Pomodoro port (#339), which must warn before dropping unsynced sessions.
+ * the cached avatar version, player preferences and unsaved positions. The focus outbox is
+ * kept for the next sign-in and handled by the Pomodoro port (#339), which warns before
+ * dropping unsynced sessions.
  */
 export function clearUserLocalData(userId: string, storage: Pick<Storage, 'removeItem'> | null = safeStorage()): void {
 	const scope = playerPreferencesScope('http', userId);
@@ -42,4 +44,5 @@ export function clearUserLocalData(userId: string, storage: Pick<Storage, 'remov
 			// Unavailable storage holds nothing to clear.
 		}
 	}
+	clearProgressOutbox();
 }

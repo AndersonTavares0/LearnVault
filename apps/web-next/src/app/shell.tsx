@@ -16,6 +16,7 @@ import { appearanceStore, resolveTheme, updateAppearance } from '@/lib/appearanc
 import { tr } from '@/lib/i18n';
 import { focusSaved, focusSync, retryFocusSessions, setFocusOutboxScope } from '@/lib/pomodoro-store';
 import { playerPreferencesScope } from '@/lib/player-preferences';
+import { progressOutbox, setProgressOutboxScope } from '@/lib/progress-outbox';
 import { transportKind } from '@/lib/transport';
 import { cn } from '@/lib/utils';
 import { keys, useSession, useSignOut } from './data';
@@ -40,9 +41,11 @@ export function AppShell() {
 
 	const client = useQueryClient();
 	const userId = session.data?.user?.userId ?? null;
-	// Focus sessions queue per user, so a shared browser never mixes accounts.
+	// Focus sessions and unsaved positions queue per user, so a shared browser never mixes accounts.
 	useEffect(() => {
-		setFocusOutboxScope(playerPreferencesScope(transportKind, userId));
+		const scope = playerPreferencesScope(transportKind, userId);
+		setFocusOutboxScope(scope);
+		setProgressOutboxScope(scope);
 	}, [userId]);
 	useEffect(() => focusSaved.subscribe(() => {
 		void client.invalidateQueries({ queryKey: ['focus-summary'] });
@@ -108,7 +111,7 @@ function AccountMenu({ username, userId, wide }: { username: string; userId: str
 	useLocale();
 	const navigate = useNavigate();
 	const signOut = useSignOut();
-	const [unsynced, setUnsynced] = useState(0);
+	const [unsynced, setUnsynced] = useState<{ sessions: number; positions: number } | null>(null);
 	const leave = () => signOut.mutate(undefined, { onSettled: () => { clearUserLocalData(userId); navigate('/login', { replace: true }); } });
 
 	return (
@@ -126,22 +129,31 @@ function AccountMenu({ username, userId, wide }: { username: string; userId: str
 					<DropdownMenuItem onClick={() => navigate('/history')}><History />{tr('Watch history', 'Histórico de aulas')}</DropdownMenuItem>
 					<DropdownMenuItem onClick={() => navigate('/settings')}><Settings />{tr('Settings', 'Ajustes')}</DropdownMenuItem>
 					{transportKind === 'http' && (
-						<DropdownMenuItem onClick={() => (focusSync.get().pending.length > 0 ? setUnsynced(focusSync.get().pending.length) : leave())}>
+						<DropdownMenuItem onClick={() => {
+							const counts = { sessions: focusSync.get().pending.length, positions: progressOutbox.get().length };
+							if (counts.sessions > 0 || counts.positions > 0) setUnsynced(counts);
+							else leave();
+						}}>
 							<LogOut />{tr('Sign out', 'Sair')}
 						</DropdownMenuItem>
 					)}
 				</DropdownMenuContent>
 			</DropdownMenu>
-			{/* Unsynced focus sessions stay queued for this user; sign-out warns instead of dropping them (docs/design/security.md). */}
-			<AlertDialog open={unsynced > 0} onOpenChange={(open) => !open && setUnsynced(0)}>
+			{/* Unsynced focus sessions stay queued for this user; unsaved positions are dropped. Sign-out warns first (docs/design/security.md). */}
+			<AlertDialog open={unsynced !== null} onOpenChange={(open) => !open && setUnsynced(null)}>
 				<AlertDialogContent>
 					<AlertDialogHeader>
-						<AlertDialogTitle>{tr('Some focus sessions are not saved yet', 'Algumas sessões de foco ainda não foram salvas')}</AlertDialogTitle>
-						<AlertDialogDescription>{tr(`${unsynced} session(s) are waiting to reach the server. If you sign out now they stay in this browser and sync the next time you sign in here.`, `${unsynced} sessão(ões) aguardam envio ao servidor. Se você sair agora, elas ficam neste navegador e sincronizam no próximo acesso por aqui.`)}</AlertDialogDescription>
+						<AlertDialogTitle>{tr('Some study data is not saved yet', 'Alguns dados de estudo ainda não foram salvos')}</AlertDialogTitle>
+						<AlertDialogDescription>
+							{[
+								unsynced?.sessions ? tr(`${unsynced.sessions} focus session(s) are waiting to reach the server. If you sign out now they stay in this browser and sync the next time you sign in here.`, `${unsynced.sessions} sessão(ões) de foco aguardam envio ao servidor. Se você sair agora, elas ficam neste navegador e sincronizam no próximo acesso por aqui.`) : '',
+								unsynced?.positions ? tr('Your latest lesson position is not saved and will be discarded if you sign out now.', 'Sua posição mais recente na aula não foi salva e será descartada se você sair agora.') : ''
+							].filter(Boolean).join(' ')}
+						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
 						<AlertDialogCancel onClick={() => void retryFocusSessions()}>{tr('Stay and sync', 'Ficar e sincronizar')}</AlertDialogCancel>
-						<AlertDialogAction onClick={() => { setUnsynced(0); leave(); }}>{tr('Sign out anyway', 'Sair mesmo assim')}</AlertDialogAction>
+						<AlertDialogAction onClick={() => { setUnsynced(null); leave(); }}>{tr('Sign out anyway', 'Sair mesmo assim')}</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>

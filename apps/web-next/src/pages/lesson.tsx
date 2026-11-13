@@ -24,6 +24,7 @@ import { formatDuration, selectPlayableMedia, shouldAutoAdvance, studySyncSuppor
 import { lessonPreferenceKey } from '@/lib/player-preferences';
 import { pomodoro, resetTimer, skipTimer, startTimer } from '@/lib/pomodoro-store';
 import { findLesson, findLessonLocation, href } from '@/lib/router';
+import { clearPosition, nextAttemptAt, progressOutbox, queuePosition } from '@/lib/progress-outbox';
 import { createPositionSaver } from '@/lib/study';
 import { transport, type Catalog, type CatalogNode, type FileEntry, type StudyProgress } from '@/lib/transport';
 import { cn } from '@/lib/utils';
@@ -77,22 +78,66 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 	const progress = useQuery({ queryKey: ['progress', mediaId], enabled: Boolean(mediaId) && studySyncSupported, queryFn: () => transport.studyProgress(mediaId!) });
 	const isDone = Boolean(mediaId && (progress.data?.completed ?? completed.has(mediaId)));
 	const overall = courseProgress(course, completed);
+	// A position the server rejected or never received still beats an older saved one.
+	const pending = useStore(progressOutbox);
+	const queued = pending.find((entry) => entry.mediaId === mediaId) ?? null;
+	const localPosition = queued && !progress.data?.completed &&
+		queued.positionSeconds > (progress.data?.recorded ? progress.data.positionSeconds : 0)
+		? queued.positionSeconds
+		: null;
 	// `?t=` (resume links, note timestamps) starts there; otherwise the saved position is
 	// applied automatically. A completed lesson starts from the beginning unless `?t=` says otherwise.
 	const queryTime = Number(params.get('t'));
 	const requestedPosition = Number.isFinite(queryTime) && queryTime > 0 ? queryTime : null;
 	const savedPosition = !requestedPosition && progress.data?.recorded && !progress.data.completed && progress.data.positionSeconds > 5 ? progress.data.positionSeconds : null;
-	const resumeAt = requestedPosition ?? savedPosition;
-	const pdfResumeAt = requestedPosition ?? (progress.data?.recorded && !progress.data.completed && progress.data.positionSeconds > 1 ? progress.data.positionSeconds : null);
+	const resumeAt = requestedPosition ?? (localPosition !== null && localPosition > 5 ? localPosition : null) ?? savedPosition;
+	const pdfResumeAt = requestedPosition ?? (localPosition !== null && localPosition > 1 ? localPosition : null) ?? (progress.data?.recorded && !progress.data.completed && progress.data.positionSeconds > 1 ? progress.data.positionSeconds : null);
 	const bookmarks = useBookmarks(mediaId);
 
-	// One saver per lesson keeps writes ordered; saved positions also refresh "Continue studying".
-	const saver = useMemo(() => createPositionSaver((id, seconds) => transport.recordPosition(id, seconds)), []);
+	// One saver per lesson keeps writes ordered; a failed or coalesced position stays in the
+	// durable outbox until the server has it, so leaving the lesson never loses progress.
+	const saver = useMemo(() => createPositionSaver(async (id, seconds) => {
+		const at = nextAttemptAt();
+		try {
+			const saved = await transport.recordPosition(id, seconds);
+			clearPosition(id, at);
+			return saved;
+		} catch (cause) {
+			queuePosition({ mediaId: id, positionSeconds: seconds, at });
+			throw cause;
+		}
+	}), []);
 	const recordPosition = async (id: string, seconds: number) => {
 		if (!studySyncSupported) return;
 		const result = await saver.request(id, seconds);
-		if (result.kind === 'saved') client.setQueryData<StudyProgress[]>(keys.recent, (items = []) => [result.progress, ...items.filter((item) => item.mediaId !== id)]);
+		if (result.kind === 'saved') {
+			client.setQueryData(['progress', id], result.progress);
+			client.setQueryData<StudyProgress[]>(keys.recent, (items = []) => [result.progress, ...items.filter((item) => item.mediaId !== id)]);
+		}
 	};
+
+	// Retry an unsaved position when the lesson opens and when the tab comes back. A newer
+	// server position wins over the queue; an older one leaves the local position as resume point.
+	useEffect(() => {
+		if (!mediaId || progress.isPending) return;
+		const flush = () => {
+			// A save in flight already carries a newer position; retrying now would only
+			// queue an older one behind it and let it land last.
+			if (saver.saving) return;
+			const entry = progressOutbox.get().find((item) => item.mediaId === mediaId);
+			if (!entry) return;
+			const remote = progress.data;
+			if (remote?.completed || (remote?.recorded && remote.positionSeconds >= entry.positionSeconds)) {
+				clearPosition(mediaId, entry.at);
+				return;
+			}
+			void recordPosition(mediaId, entry.positionSeconds);
+		};
+		flush();
+		const onVisibility = () => { if (document.visibilityState === 'visible') flush(); };
+		document.addEventListener('visibilitychange', onVisibility);
+		return () => document.removeEventListener('visibilitychange', onVisibility);
+	}, [mediaId, progress.isPending, progress.data]); // eslint-disable-line react-hooks/exhaustive-deps -- recordPosition is recreated each render; the effect follows the lesson and its saved progress
 
 	const noteCount = useLessonNotes(mediaId).data?.length ?? 0;
 	const goTo = (target: string) => navigate(path(href('course', courseId, target)));
@@ -226,6 +271,12 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 							/>
 						)}
 					</div>
+
+					{localPosition !== null && (
+						<p role="status" aria-live="polite" className="text-sm text-muted-foreground">
+							{tr('Progress is not saved yet. It will retry when the connection is back.', 'O progresso ainda não foi salvo. Vamos tentar de novo quando a conexão voltar.')}
+						</p>
+					)}
 
 					{countdown !== null && next && (
 						<div role="status" aria-live="polite" className="flex flex-wrap items-center gap-3 rounded-lg border bg-card p-4">
