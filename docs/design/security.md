@@ -97,8 +97,10 @@ described below. The desktop application is single-user and has no accounts.
   the course library; the scanner and indexer are read-only.
 - Subtitle sidecars are served through the same authenticated media route with the same confinement,
   not through a separate static handler.
-- Future remote sources (WebDAV, SMB) must keep this contract: read-only access, credentials encrypted
-  at rest, never logged, and never echoed back in API responses.
+- Remote sources (WebDAV, SMB) keep this contract: read-only access, credentials encrypted at
+  rest, never logged, and never echoed back in API responses. WebDAV refuses cross-host redirects
+  and SMB disables DFS referrals for the same reason: credentials must not follow a server-chosen
+  redirect to another host.
 
 ## 6. Browser hardening
 
@@ -149,13 +151,17 @@ described below. The desktop application is single-user and has no accounts.
   versions are pinned by `rust-toolchain.toml` and `packageManager`.
 - CI runs CodeQL, dependency review on pull requests, `cargo audit --deny unsound`, and
   `pnpm audit --audit-level=low`.
-- Three advisories are accepted with documented rationale rather than silently ignored:
+- Four advisories are accepted with documented rationale rather than silently ignored:
   - `GHSA-g3hv-75wg-m249` (minimatch, dev tooling) is ignored in `pnpm-workspace.yaml`; forcing the
     patched major breaks `eslint-plugin-jsx-a11y`.
   - `GHSA-gcqx-w48m-w2h4` (deepmerge) is ignored for the same reason: it is reachable only through the
     `shadcn` component CLI, no patched release exists, and it never reaches the shipped bundles.
   - `RUSTSEC-2024-0429` (glib, reached through Tauri's GTK stack) is ignored in `.cargo/audit.toml`;
     the patched release needs a GTK major upgrade that no current Tauri version provides.
+  - `RUSTSEC-2023-0071` (`rsa`, reached through `smb` → `sspi`) is ignored in `.cargo/audit.toml`.
+    `sspi` pins the release candidate `rsa = "=0.10.0-rc.18"` even in its newest release, and the
+    Marvin attack targets RSA private-key decryption, which the product never performs: SMB sources
+    authenticate with NTLM only and Kerberos is disabled.
 - Each new runtime dependency must be justified in its pull request, and Dependabot alerts stay open
   until the upgrade is actually possible.
 
@@ -183,8 +189,10 @@ described below. The desktop application is single-user and has no accounts.
 - **Desktop has no accounts and no at-rest encryption.** Anyone with access to the machine profile
   can read the local database.
 - **Three Dependabot advisories remain open** for the reasons in section 9.
-- **Remote course sources are pending.** When they land, their credential storage must be reviewed
-  against this document before release.
+- **Remote source coverage is uneven.** WebDAV and SMB credentials are encrypted at rest with the
+  same store, but remote sources have no custom cover, manual ordering, search indexing or
+  transcoding. SMB uses NTLM only (no Kerberos) and no end-to-end test against a real SMB server
+  runs in CI; URL validation, error mapping and credential non-disclosure are covered by unit tests.
 
 ## 12. Verification
 

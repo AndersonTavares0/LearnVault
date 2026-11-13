@@ -19,9 +19,8 @@ use crate::{
         authenticated_user, credentials_required, csrf_failed, internal_error, private_no_store,
         service_unavailable, status_private_no_store,
     },
-    sources::RemoteSource,
+    sources::{RemoteClient, RemoteSource},
     stream::idle_timeout_stream,
-    webdav::WebDavClient,
 };
 
 #[derive(Debug, Deserialize)]
@@ -248,35 +247,10 @@ async fn remote_media(
     }
     let length = end - start + 1;
 
-    let client = match WebDavClient::new(
-        source.url.clone(),
-        source.username.as_deref(),
-        source.password(),
-    ) {
+    let client = match RemoteClient::new(&source) {
         Ok(client) => client,
         Err(_) => return remote_media_error(StatusCode::BAD_GATEWAY, "source_unavailable"),
     };
-    let upstream = match client
-        .open_range(&reference.relative_path, start, end)
-        .await
-    {
-        Ok(upstream) => upstream,
-        Err(learnvault_core::SourceError::NotFound) => {
-            return error_private_no_store(StatusCode::NOT_FOUND);
-        }
-        Err(learnvault_core::SourceError::Denied) => {
-            return remote_media_error(StatusCode::BAD_GATEWAY, "source_denied");
-        }
-        Err(_) => {
-            return remote_media_error(StatusCode::BAD_GATEWAY, "source_unavailable");
-        }
-    };
-    if upstream
-        .content_length()
-        .is_some_and(|upstream_length| upstream_length != length)
-    {
-        return remote_media_error(StatusCode::BAD_GATEWAY, "source_range_mismatch");
-    }
 
     let permit = if method == Method::HEAD {
         None
@@ -286,13 +260,59 @@ async fn remote_media(
             None => return service_unavailable(),
         }
     };
-    let body = match permit {
-        Some(permit) => Body::from_stream(upstream.bytes_stream().map(move |chunk| {
-            // O permit vive enquanto o corpo for consumido e é liberado ao final.
-            let _ = &permit;
-            chunk.map_err(std::io::Error::other)
-        })),
-        None => Body::empty(),
+    let body = match client {
+        RemoteClient::WebDav(dav) => {
+            let upstream = match dav.open_range(&reference.relative_path, start, end).await {
+                Ok(upstream) => upstream,
+                Err(learnvault_core::SourceError::NotFound) => {
+                    return error_private_no_store(StatusCode::NOT_FOUND);
+                }
+                Err(learnvault_core::SourceError::Denied) => {
+                    return remote_media_error(StatusCode::BAD_GATEWAY, "source_denied");
+                }
+                Err(_) => {
+                    return remote_media_error(StatusCode::BAD_GATEWAY, "source_unavailable");
+                }
+            };
+            if upstream
+                .content_length()
+                .is_some_and(|upstream_length| upstream_length != length)
+            {
+                return remote_media_error(StatusCode::BAD_GATEWAY, "source_range_mismatch");
+            }
+            match permit {
+                Some(permit) => Body::from_stream(upstream.bytes_stream().map(move |chunk| {
+                    // O permit vive enquanto o corpo for consumido e é liberado ao final.
+                    let _ = &permit;
+                    chunk.map_err(std::io::Error::other)
+                })),
+                None => Body::empty(),
+            }
+        }
+        RemoteClient::Smb(smb) => {
+            let upstream = match smb
+                .open_stream(&reference.relative_path, start, length)
+                .await
+            {
+                Ok(upstream) => upstream,
+                Err(learnvault_core::SourceError::NotFound) => {
+                    return error_private_no_store(StatusCode::NOT_FOUND);
+                }
+                Err(learnvault_core::SourceError::Denied) => {
+                    return remote_media_error(StatusCode::BAD_GATEWAY, "source_denied");
+                }
+                Err(_) => {
+                    return remote_media_error(StatusCode::BAD_GATEWAY, "source_unavailable");
+                }
+            };
+            match permit {
+                Some(permit) => Body::from_stream(upstream.map(move |chunk| {
+                    let _ = &permit;
+                    chunk
+                })),
+                None => Body::empty(),
+            }
+        }
     };
     let mut response = Response::new(body);
     *response.status_mut() = if partial {

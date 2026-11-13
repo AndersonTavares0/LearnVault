@@ -74,22 +74,35 @@ A custom cover is stored by the application—on the server in `covers/<id>.cove
 
 Top-level course nodes include `cover_version` when a cover exists, prompting the SPA to bust client cache via `?v=`. Missing covers or unknown course IDs return `404` with an empty body.
 
-## Remote Course Sources (WebDAV)
+## Remote Course Sources (WebDAV and SMB)
 
-A remote source is a read-only course tree served by WebDAV. Administrators configure it with
-`dav://`, `davs://`, `http://` or `https://`; `dav` maps to `http` and `davs` to `https`. URLs
-with embedded credentials, a query string or a fragment are rejected, and the base path always
-ends in `/`. TLS certificates are always verified; there is no option to accept an invalid
-certificate. Redirects are refused so the `Authorization` header never reaches another host.
-`dav://` and `http://` send Basic credentials without transport encryption, so use them only on a
-trusted private network; prefer `davs://`/`https://`.
+A remote source is a read-only course tree served by WebDAV or SMB. Administrators configure it
+with `dav://`, `davs://`, `http://`, `https://` or `smb://`; `dav` maps to `http` and `davs` to
+`https`. URLs with embedded credentials, a query string or a fragment are rejected, and every
+source URL is limited to 2048 characters. A WebDAV base path always ends in `/`. TLS certificates
+are always verified; there is no option to accept an invalid certificate. Redirects are refused so
+the `Authorization` header never reaches another host. `dav://` and `http://` send Basic
+credentials without transport encryption, so use them only on a trusted private network; prefer
+`davs://`/`https://`.
 
-Discovery uses `PROPFIND` with `Depth: 1`; the tree is walked through the read-only
-`CourseSource` abstraction (the local filesystem has a reference implementation parity-tested
-against the local scanner), with hidden and temporary directories, symlinks and the media
-classification rules identical to the local scanner. Media bytes are read with `GET` plus a
-single `Range`; a server that ignores `Range` is rejected instead of streaming the wrong span.
-Only `PROPFIND` and `GET` are ever sent: the remote server is never written, renamed or deleted.
+SMB sources use `smb://host[:port]/share/path`. The share is mandatory; `.`/`..` segments, encoded
+separators and control characters are rejected before they become a UNC path. The server is
+contacted on TCP/445 with NTLM authentication and SMB signing support, and SMB3 encryption is used
+when the server requires it. Kerberos is not supported in this build. DFS referrals are disabled so
+credentials stay on the configured server instead of following a referral to another host.
+
+Discovery uses `PROPFIND` with `Depth: 1` over WebDAV and directory enumeration over SMB; the tree
+is walked through the read-only `CourseSource` abstraction (the local filesystem has a reference
+implementation parity-tested against the local scanner), with hidden and temporary directories,
+symlinks and the media classification rules identical to the local scanner. Media bytes are read
+with a single `Range` over WebDAV (a server that ignores `Range` is rejected instead of streaming
+the wrong span) or ranged SMB reads. Only `PROPFIND`, `GET` and read-only SMB operations are ever
+issued: the remote server is never written, renamed or deleted.
+
+All transports share the scan limits: at most 32 directory levels, 200,000 files, 8 MiB per
+`read_range` call, and 100,000 entries in a single directory listing. Connection setup is limited
+to 10 seconds and each listing or read block to 30 seconds; a full remote scan is limited to 120
+seconds and a connection test to 20 seconds.
 
 Configuration lives in `sources.json` next to the database, next to `courses.json`. Passwords are
 encrypted at rest with ChaCha20-Poly1305 under a 32-byte key in `sources.key` (`0600`), created on
@@ -102,22 +115,13 @@ ciphertext is preserved until the key is restored.
 | `GET` | `/api/admin/sources` | Admin Session | Lists sources as `{ id, name, url, username, has_password, credential_error }`; never returns the secret |
 | `POST` | `/api/admin/sources` | Admin Session | Accepts `{ name, url, username?, password? }` and returns `201` with the sanitized source |
 | `DELETE` | `/api/admin/sources/{id}` | Admin Session | Removes the source configuration; returns `{ removed: bool }` and touches no remote file |
-| `POST` | `/api/admin/sources/{id}/test` | Admin Session | Validates reachability and authentication with a root `PROPFIND`; returns `{ ok, entries }` or `{ ok: false, error }` (`unreachable`, `denied`, `not_found`, `invalid_response`, `limit_exceeded`, `credentials_unavailable`, `timeout`) |
+| `POST` | `/api/admin/sources/{id}/test` | Admin Session | Validates reachability and authentication with a root listing (`PROPFIND` or SMB directory enumeration); returns `{ ok, entries }` or `{ ok: false, error }` (`unreachable`, `denied`, `not_found`, `invalid_response`, `limit_exceeded`, `credentials_unavailable`, `timeout`) |
 | `POST` | `/api/admin/sources/{id}/scan` | Admin Session | Walks the remote tree and applies it to the catalog as a course; returns the same rescan counters as the local rescan |
 
 A scanned source appears in `GET /api/catalog` as a top-level `course` node with the source's
 opaque `id`; `GET`/`HEAD /api/media?course=<source-id>&path=<relative-path>` streams its bytes with
 `206` ranges. Only paths already present in the catalog are proxied to the remote server. Remote
 courses have no custom cover, manual ordering, search indexing or on-demand transcoding yet.
-
-### SMB
-
-SMB is not shipped in this increment. The `smb` 0.12.1 crate does compile with the pinned Rust
-1.99 toolchain, but integrating NTLM/Kerberos authentication, share discovery and range reads
-adds a large dependency tree and a second credential model without an end-to-end test harness.
-The supported fallback is to mount the share read-only with the operating system (`mount -t cifs
-... -o ro` or the desktop's network mount) and register the mount point as a local course; the
-library remains read-only because the mount itself is read-only.
 
 ## Study Progress, Focus & Gamification
 
