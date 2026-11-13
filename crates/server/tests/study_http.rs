@@ -813,7 +813,7 @@ async fn credentials_pending_flag_blocks_study_until_changed() {
     );
 }
 
-/// Uma base persistida já sai da cadeia de migrações na versão 6 e **já contém**
+/// Uma base persistida já sai da cadeia de migrações na versão atual e **já contém**
 /// `study_state` e `study_day`: a primeira nasce na V1 e a segunda na V5. Este teste
 /// prova isso no arquivo real (não em memória) e verifica as restrições que o adaptador
 /// HTTP depende.
@@ -827,7 +827,7 @@ async fn current_database_carries_study_tables_and_constraints() {
         .connection()
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 11, "o formato persistido está na versão 11");
+    assert_eq!(version, 12, "o formato persistido está na versão 12");
     let present: i64 = db
         .connection()
         .query_row(

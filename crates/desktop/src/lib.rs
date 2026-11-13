@@ -54,10 +54,11 @@ pub mod study;
 
 pub use command::{
     catalog, catalog_with_orders, desktop_catalog, desktop_check_update,
-    desktop_claim_daily_mission, desktop_create_flashcard, desktop_create_note,
-    desktop_create_pdf_annotation, desktop_delete_flashcard, desktop_delete_note,
-    desktop_delete_pdf_annotation, desktop_focus_summary, desktop_import_course,
-    desktop_import_course_cover, desktop_install_update, desktop_list_all_flashcards,
+    desktop_claim_daily_mission, desktop_create_bookmark, desktop_create_flashcard,
+    desktop_create_note, desktop_create_pdf_annotation, desktop_delete_bookmark,
+    desktop_delete_flashcard, desktop_delete_note, desktop_delete_pdf_annotation,
+    desktop_focus_summary, desktop_import_course, desktop_import_course_cover,
+    desktop_install_update, desktop_list_all_flashcards, desktop_list_bookmarks,
     desktop_list_favorites, desktop_list_flashcards, desktop_list_focus_sessions,
     desktop_list_notes, desktop_list_pdf_annotations, desktop_media_capabilities,
     desktop_media_removal_impact, desktop_open_in_system_player, desktop_recent_study,
@@ -81,9 +82,9 @@ pub use covers::{
 pub use dto::{
     CatalogDto, CatalogFileDto, CatalogNodeDto, CoverDto, CoverRemovalDto, DailyMissionDto,
     DesktopMediaCapabilitiesDto, DesktopUpdateInfoDto, FlashcardDto, FocusDayDto, FocusSessionDto,
-    FocusSummaryDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto, NewPdfAnnotationDto,
-    PdfAnnotationDto, PdfRectDto, RecentStudyDto, RescanSummaryDto, RewardSummaryDto,
-    StudyFavoritesDto, StudyNoteDto, StudyProgressDto, StudySummaryDto,
+    FocusSummaryDto, MediaBookmarkDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto,
+    NewPdfAnnotationDto, PdfAnnotationDto, PdfRectDto, RecentStudyDto, RescanSummaryDto,
+    RewardSummaryDto, StudyFavoritesDto, StudyNoteDto, StudyProgressDto, StudySummaryDto,
 };
 pub use error::{IpcError, IpcErrorCode};
 pub use ordering::{CourseOrders, OrderError, order_path};
@@ -127,6 +128,9 @@ pub fn run() {
             command::desktop_create_note,
             command::desktop_update_note,
             command::desktop_delete_note,
+            command::desktop_list_bookmarks,
+            command::desktop_create_bookmark,
+            command::desktop_delete_bookmark,
             command::desktop_list_pdf_annotations,
             command::desktop_create_pdf_annotation,
             command::desktop_update_pdf_annotation,

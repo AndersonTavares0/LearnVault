@@ -134,10 +134,47 @@ struct NotesResponse {
 }
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct PdfAnnotationsQuery {
+pub(crate) struct BookmarksQuery {
     media_id: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub(crate) struct CreateBookmarkRequest {
+    media_id: String,
+    position_seconds: i64,
+    label: String,
+}
+
+#[derive(Serialize)]
+pub(crate) struct MediaBookmarkResponse {
+    bookmark_id: String,
+    media_id: String,
+    position_seconds: i64,
+    label: String,
+    created_at: i64,
+}
+
+impl From<learnvault_core::MediaBookmark> for MediaBookmarkResponse {
+    fn from(bookmark: learnvault_core::MediaBookmark) -> Self {
+        Self {
+            bookmark_id: bookmark.bookmark_id,
+            media_id: bookmark.media_id,
+            position_seconds: bookmark.position_seconds,
+            label: bookmark.label,
+            created_at: bookmark.created_at,
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct BookmarksResponse {
+    items: Vec<MediaBookmarkResponse>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct PdfAnnotationsQuery {
+    media_id: String,
+}
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct PdfRectDto {
     x: f64,
@@ -997,6 +1034,108 @@ pub(crate) async fn delete_note(
     }
 }
 
+/// Lists the authenticated user's timestamp bookmarks for one lesson.
+pub(crate) async fn list_bookmarks(
+    State(state): State<AppState>,
+    RawQuery(raw): RawQuery,
+    headers: HeaderMap,
+) -> Response {
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let Some(query) =
+        serde_urlencoded::from_str::<BookmarksQuery>(raw.as_deref().unwrap_or_default()).ok()
+    else {
+        return invalid_query();
+    };
+    let owner = user.user_id;
+    let admin = user.is_admin;
+    let lookup = query.media_id.clone();
+    match run_study(&state, move |db| {
+        require_media_access(db, &owner, admin, &lookup)?;
+        learnvault_core::list_media_bookmarks(db, &owner, &query.media_id)
+    })
+    .await
+    {
+        Ok(items) => private_no_store(
+            Json(BookmarksResponse {
+                items: items.into_iter().map(MediaBookmarkResponse::from).collect(),
+            })
+            .into_response(),
+        ),
+        Err(failure) => study_failure_response(failure),
+    }
+}
+
+/// Creates a timestamp bookmark for the authenticated user.
+pub(crate) async fn create_bookmark(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<CreateBookmarkRequest>,
+) -> Response {
+    if !same_origin(&headers) {
+        return csrf_failed();
+    }
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let owner = user.user_id;
+    let admin = user.is_admin;
+    let lookup = request.media_id.clone();
+    match run_study(&state, move |db| {
+        require_media_access(db, &owner, admin, &lookup)?;
+        learnvault_core::create_media_bookmark(
+            db,
+            &owner,
+            &request.media_id,
+            request.position_seconds,
+            &request.label,
+        )
+    })
+    .await
+    {
+        Ok(bookmark) => private_no_store(
+            (
+                StatusCode::CREATED,
+                Json(MediaBookmarkResponse::from(bookmark)),
+            )
+                .into_response(),
+        ),
+        Err(failure) => study_failure_response(failure),
+    }
+}
+
+/// Deletes one of the authenticated user's timestamp bookmarks.
+pub(crate) async fn delete_bookmark(
+    State(state): State<AppState>,
+    Path(bookmark_id): Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    if !same_origin(&headers) {
+        return csrf_failed();
+    }
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let owner = user.user_id;
+    let admin = user.is_admin;
+    match run_study(&state, move |db| {
+        if let Some(media_id) = learnvault_core::media_bookmark_media_id(db, &bookmark_id)? {
+            require_media_access(db, &owner, admin, &media_id)?;
+        }
+        learnvault_core::delete_media_bookmark(db, &owner, &bookmark_id)
+    })
+    .await
+    {
+        Ok(true) => status_private_no_store(StatusCode::NO_CONTENT),
+        Ok(false) => error_response(StatusCode::NOT_FOUND, "bookmark_not_found"),
+        Err(failure) => study_failure_response(failure),
+    }
+}
+
 /// Lists the authenticated user's annotations on one PDF.
 pub(crate) async fn list_pdf_annotations(
     State(state): State<AppState>,
@@ -1548,6 +1687,12 @@ fn study_failure_response(failure: StudyFailure) -> Response {
         }
         StudyFailure::Core(Error::InvalidFavoriteTarget) => {
             error_response(StatusCode::UNPROCESSABLE_ENTITY, "invalid_favorite_target")
+        }
+        StudyFailure::Core(Error::InvalidBookmarkLabel) => {
+            error_response(StatusCode::UNPROCESSABLE_ENTITY, "invalid_bookmark_label")
+        }
+        StudyFailure::Core(Error::BookmarkNotFound { .. }) => {
+            error_response(StatusCode::NOT_FOUND, "bookmark_not_found")
         }
         StudyFailure::Core(_) => internal_error("study unavailable"),
     }

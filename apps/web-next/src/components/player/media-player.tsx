@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { tr } from '@/lib/i18n';
 import {
 	formatDuration, mediaAvailability, mediaPlaybackKind, nextSpeed, PLAYBACK_SPEEDS, playerShortcutAction, requiresTranscodingProbe,
-	seekPercentPosition, selectPlayableMedia, selectPlayableSubtitle, srtConversionSupported, srtToWebVtt, stepVolume, subtitleFormat, type PlaybackSpeed
+	resumeTarget, seekPercentPosition, selectPlayableMedia, selectPlayableSubtitle, shouldSavePosition, srtConversionSupported, srtToWebVtt, stepVolume, subtitleFormat, type PlaybackSpeed
 } from '@/lib/player';
 import { lessonPreferenceKey, updateLessonPreference, type PlayerPreferences } from '@/lib/player-preferences';
 import { transport, type FileEntry, type Lesson } from '@/lib/transport';
@@ -26,6 +26,8 @@ type Props = {
 	onEnded: (mediaId: string) => void;
 	onTime: (seconds: number) => void;
 	onOpenNotes: () => void;
+	/** Timestamp bookmarks drawn on the seek bar. */
+	markers?: { id: string; positionSeconds: number; label: string }[];
 	/** Cinema mode: the page gives the picture the whole width. The button shows only when the page offers it. */
 	cinema?: boolean;
 	onCinema?: () => void;
@@ -34,7 +36,6 @@ type Props = {
 };
 
 const SAVE_INTERVAL_MS = 5000;
-
 // HTTP build only. The inline build constant lets the bundler drop the `fetch` from the
 // desktop bundle, which must never open the network (src/build-output.test.ts).
 const loadSrtAsVtt = __LEARNVAULT_TRANSPORT__ === 'http'
@@ -68,7 +69,7 @@ function useCaptions(subtitle: FileEntry | null, courseId: string) {
 	return { src: null, message, download: url };
 }
 
-export function MediaPlayer({ lesson, courseId, initialPosition, preferences, onPreferencesChange, onPosition, onEnded, onTime, onOpenNotes, cinema = false, onCinema, handle }: Props) {
+export function MediaPlayer({ lesson, courseId, initialPosition, preferences, onPreferencesChange, onPosition, onEnded, onTime, onOpenNotes, markers = [], cinema = false, onCinema, handle }: Props) {
 	const lessonPreference = preferences.lessons[lessonPreferenceKey(courseId, lesson.path)] ?? {};
 	const available = (files: FileEntry[]) => files.filter((file) => file.availability?.trim().toLowerCase() !== 'missing');
 	const playable = selectPlayableMedia(lesson.media, lessonPreference.mediaId);
@@ -89,7 +90,14 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 	const media = useRef<HTMLVideoElement & HTMLAudioElement>(null);
 	const container = useRef<HTMLDivElement>(null);
 	const lastSave = useRef(0);
+	const lastKnown = useRef(0);
 	const appliedStart = useRef<string | null>(null);
+	// The unmount/visibility flush must see the latest media id and callback without
+	// re-registering its listeners on every render.
+	const positionSink = useRef({ mediaId: null as string | null, save: onPosition });
+	useEffect(() => {
+		positionSink.current = { mediaId: playable?.mediaId ?? null, save: onPosition };
+	});
 	const [pip, setPip] = useState(false);
 	// What the control bar shows; the element stays the source of truth.
 	const [playing, setPlaying] = useState(false);
@@ -128,6 +136,21 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 	const activeSource = playable && transcode ? transport.transcodeUrl(playable, courseId, transcode.offset, transcode.reencode) ?? source : source;
 	const absoluteTime = () => (media.current?.currentTime ?? 0) + (transcode?.offset ?? 0);
 
+	// Applies the saved position once the element knows its duration. A position inside the
+	// last two seconds means the lesson was finished, so playback starts from the beginning.
+	const applyStart = (position: number) => {
+		const element = media.current;
+		if (!element || !Number.isFinite(position) || position <= 0) return;
+		const key = `${activeSource}@${position}`;
+		if (appliedStart.current === key) return;
+		const target = resumeTarget(position, element.duration);
+		element.currentTime = target;
+		appliedStart.current = key;
+		lastKnown.current = target;
+		setNow(target);
+		onTime(target);
+	};
+
 	// A different file resets transcoding and errors.
 	const [currentSource, setCurrentSource] = useState(source);
 	if (source !== currentSource) {
@@ -136,6 +159,10 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 		setTranscode(null);
 		setErrorCode(null);
 	}
+	useEffect(() => {
+		lastKnown.current = 0;
+		lastSave.current = 0;
+	}, [source]);
 
 	const seek = (seconds: number) => {
 		const element = media.current;
@@ -143,6 +170,12 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 		const target = Math.max(0, element.duration ? Math.min(seconds, (transcode?.offset ?? 0) + element.duration) : seconds);
 		if (transcode) setTranscode({ ...transcode, offset: target });
 		else element.currentTime = target;
+		const id = playable?.mediaId;
+		if (id && target > 0) {
+			lastKnown.current = target;
+			lastSave.current = performance.now();
+			onPosition(id, Math.floor(target));
+		}
 	};
 	useEffect(() => {
 		handle({
@@ -152,6 +185,32 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 		});
 		return () => handle(null);
 	});
+
+	// Resume can arrive after the first metadata event (the saved position is a query).
+	// Only apply it while the lesson is still at the beginning, so it never yanks playback.
+	useEffect(() => {
+		const element = media.current;
+		if (!element || !initialPosition || transcode || element.readyState < 1 || element.currentTime > 2) return;
+		applyStart(initialPosition);
+	}, [initialPosition, activeSource, transcode]); // eslint-disable-line react-hooks/exhaustive-deps -- applyStart reads only refs
+
+	// A hidden tab or a lesson change stops playback without a pause event; flush the last
+	// known position once, so leaving the player never loses more than the current tick.
+	useEffect(() => {
+		const flush = () => {
+			const { mediaId: id, save } = positionSink.current;
+			const at = lastKnown.current;
+			if (id && at > 0) save(id, Math.floor(at));
+		};
+		const onVisibility = () => { if (document.visibilityState === 'hidden') flush(); };
+		document.addEventListener('visibilitychange', onVisibility);
+		window.addEventListener('pagehide', flush);
+		return () => {
+			document.removeEventListener('visibilitychange', onVisibility);
+			window.removeEventListener('pagehide', flush);
+			flush();
+		};
+	}, []);
 
 	useEffect(() => {
 		if (media.current) media.current.playbackRate = speed;
@@ -245,17 +304,15 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 			setPlaying(!element.paused);
 			setVolume(element.volume);
 			setMuted(element.muted);
-			if (!transcode && initialPosition && appliedStart.current !== `${activeSource}@${initialPosition}`) {
-				element.currentTime = initialPosition;
-				appliedStart.current = `${activeSource}@${initialPosition}`;
-			}
+			if (!transcode && initialPosition) applyStart(initialPosition);
 		},
 		onTimeUpdate: () => {
 			const at = absoluteTime();
 			if (loop?.b != null && at >= loop.b) { seek(loop.a); return; }
 			setNow(at);
+			lastKnown.current = at;
 			onTime(at);
-			if (mediaId && performance.now() - lastSave.current > SAVE_INTERVAL_MS && at > 0) {
+			if (mediaId && at >= 1 && shouldSavePosition(lastSave.current, performance.now(), SAVE_INTERVAL_MS)) {
 				lastSave.current = performance.now();
 				onPosition(mediaId, Math.floor(at));
 			}
@@ -264,7 +321,12 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 		onDurationChange: () => { const element = media.current; if (element && Number.isFinite(element.duration)) setTotal((transcode?.offset ?? 0) + element.duration); },
 		onVolumeChange: () => { const element = media.current; if (element) { setVolume(element.volume); setMuted(element.muted); } },
 		onPlay: () => setPlaying(true),
-		onPause: () => { setPlaying(false); if (mediaId && absoluteTime() > 0) onPosition(mediaId, Math.floor(absoluteTime())); },
+		onPause: () => {
+			setPlaying(false);
+			const at = absoluteTime();
+			lastKnown.current = at;
+			if (mediaId && at > 0) onPosition(mediaId, Math.floor(at));
+		},
 		onEnded: () => { setPlaying(false); if (mediaId) onEnded(mediaId); },
 		onError: () => setErrorCode(media.current?.error?.code ?? null),
 		className: 'w-full bg-black'
@@ -280,10 +342,24 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 		setCaptionsOn(!captionsOn);
 	};
 	const span = Math.max(1, Math.floor(total));
+	const timelineMarkers = markers.filter((marker) => marker.positionSeconds > 0 && marker.positionSeconds < span);
+	// Re-encoding is the fallback: it is offered only after on-demand transcoding failed.
+	const showReencode = Boolean(transcode && !transcode.reencode);
 	const bar = (
 		<div className={cn('space-y-1', onVideo ? 'relative bg-black px-3 pt-1 pb-2 text-white sm:absolute sm:inset-x-0 sm:bottom-0 sm:z-10 sm:bg-transparent sm:bg-gradient-to-t sm:from-black/85 sm:via-black/55 sm:to-transparent sm:pt-12 sm:transition-opacity' : 'rounded-[1.5rem] border bg-card p-3', onVideo && (playing ? 'sm:opacity-0 sm:group-hover/player:opacity-100 sm:group-focus-within/player:opacity-100 sm:[@media(hover:none)]:opacity-100' : ''))}>
-			<input type="range" aria-label={tr('Seek', 'Posição')} min={0} max={span} step={1} value={Math.min(Math.floor(now), span)} aria-valuetext={`${formatDuration(now)} / ${formatDuration(total)}`}
-				onChange={(event) => seek(Number(event.target.value))} className="block h-5 w-full cursor-pointer accent-[var(--reward-fill)]" />
+			<div className="relative">
+				<input type="range" aria-label={tr('Seek', 'Posição')} min={0} max={span} step={1} value={Math.min(Math.floor(now), span)} aria-valuetext={`${formatDuration(now)} / ${formatDuration(total)}`}
+					onChange={(event) => seek(Number(event.target.value))} className="block h-5 w-full cursor-pointer accent-[var(--reward-fill)]" />
+				{timelineMarkers.length > 0 && (
+					<div className="pointer-events-none absolute inset-x-0 top-0 flex h-5 items-center">
+						{timelineMarkers.map((marker) => (
+							<button key={marker.id} type="button" onClick={() => seek(marker.positionSeconds)} style={{ left: `${(marker.positionSeconds / span) * 100}%` }}
+								className="pointer-events-auto absolute size-3 -translate-x-1/2 rounded-full border border-black/40 bg-[var(--reward-fill)] hover:scale-125 focus-visible:ring-2 focus-visible:ring-ring"
+								aria-label={tr(`Jump to timestamp: ${marker.label}`, `Ir para o marcador: ${marker.label}`)} title={marker.label} />
+						))}
+					</div>
+				)}
+			</div>
 			<div role="toolbar" aria-label={tr('Player controls', 'Controles do player')} className="flex flex-wrap items-center gap-x-0.5">
 				<Button variant="ghost" size="icon" className={look} onClick={togglePlay} aria-label={playing ? tr('Pause', 'Pausar') : tr('Play', 'Reproduzir')} aria-keyshortcuts="k Space">{playing ? <Pause /> : <Play />}</Button>
 				<Button variant="ghost" size="icon" className={look} onClick={() => seek(absoluteTime() - 10)} aria-keyshortcuts="ArrowLeft j"><Rewind /><span className="sr-only">{tr('Back 10s', 'Voltar 10s')}</span></Button>
@@ -322,7 +398,7 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 					<div className="flex flex-wrap gap-2">
 						{errorCode !== 4 && <Button variant="outline" onClick={retry}>{tr('Try again', 'Tentar de novo')}</Button>}
 						{capabilities.data?.transcoding && <Button onClick={() => startTranscode(false)}><Zap />{tr('Play with on-demand transcoding', 'Reproduzir com transcodificação sob demanda')}</Button>}
-						{capabilities.data?.transcoding && <Button variant="outline" onClick={() => startTranscode(true)}>{tr('Re-encode video (H.264)', 'Recodificar vídeo (H.264)')}</Button>}
+						{capabilities.data?.transcoding && showReencode && <Button variant="outline" onClick={() => startTranscode(true)}>{tr('Re-encode video (H.264)', 'Recodificar vídeo (H.264)')}</Button>}
 						{capabilities.data?.systemPlayer && <Button variant="outline" onClick={openSystemPlayer}><ExternalLink />{tr('Open in system player', 'Abrir no player do sistema')}</Button>}
 						<Link to="/" className={buttonVariants({ variant: 'ghost' })}>{tr('Go to My learning', 'Ir para Meu aprendizado')}</Link>
 					</div>

@@ -132,6 +132,18 @@ impl Database {
                     ("created_at", "BINARY"),
                 ],
             )?
+            || !index_matches(
+                &self.conn,
+                "media_bookmark",
+                Some("media_bookmark_owner_media_idx"),
+                false,
+                &[
+                    ("owner_id", "BINARY"),
+                    ("media_id", "BINARY"),
+                    ("position_seconds", "BINARY"),
+                    ("created_at", "BINARY"),
+                ],
+            )?
         {
             return Ok(false);
         }
@@ -569,6 +581,17 @@ const REQUIRED_TABLES: &[TableDefinition] = &[
             ("course_id", "TEXT", true, None, 2),
         ],
     },
+    TableDefinition {
+        name: "media_bookmark",
+        columns: &[
+            ("bookmark_id", "TEXT", true, None, 1),
+            ("owner_id", "TEXT", true, None, 0),
+            ("media_id", "TEXT", true, None, 0),
+            ("position_seconds", "INTEGER", true, None, 0),
+            ("label", "TEXT", true, None, 0),
+            ("created_at", "INTEGER", true, None, 0),
+        ],
+    },
 ];
 
 fn definition_matches(conn: &Connection, definition: &TableDefinition) -> Result<bool> {
@@ -713,6 +736,10 @@ fn expected_checks(table: &str) -> &'static [&'static str] {
             "length(trim(target_id)) > 0 and length(target_id) <= 256",
         ],
         "user_course_access" => &["length(trim(course_id)) > 0 and length(course_id) <= 256"],
+        "media_bookmark" => &[
+            "position_seconds >= 0",
+            "length(trim(label)) > 0 and length(label) <= 200",
+        ],
         _ => &[],
     }
 }
@@ -736,6 +763,7 @@ fn expected_foreign_keys(
         "study_note" => &[("media_id", "media", "media_id", "NO ACTION")],
         "pdf_annotation" => &[("media_id", "media", "media_id", "NO ACTION")],
         "flashcard" => &[("media_id", "media", "media_id", "NO ACTION")],
+        "media_bookmark" => &[("media_id", "media", "media_id", "NO ACTION")],
         "user_course_access" => &[("user_id", "user", "user_id", "CASCADE")],
         _ => &[],
     }

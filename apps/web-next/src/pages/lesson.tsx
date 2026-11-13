@@ -6,6 +6,7 @@ import { safeStorage } from '@/app/preferences';
 import { Curriculum } from '@/components/curriculum';
 import { Materials } from '@/components/materials';
 import { BreakOverlay } from '@/components/player/break-overlay';
+import { Bookmarks } from '@/components/player/bookmarks';
 import { Flashcards } from '@/components/player/flashcards';
 import { PdfReader } from '@/components/player/pdf-reader';
 import { MediaPlayer, type PlayerHandle } from '@/components/player/media-player';
@@ -24,9 +25,9 @@ import { lessonPreferenceKey } from '@/lib/player-preferences';
 import { pomodoro, resetTimer, skipTimer, startTimer } from '@/lib/pomodoro-store';
 import { findLesson, findLessonLocation, href } from '@/lib/router';
 import { createPositionSaver } from '@/lib/study';
-import { transport, type CatalogNode, type FileEntry, type StudyProgress } from '@/lib/transport';
+import { transport, type Catalog, type CatalogNode, type FileEntry, type StudyProgress } from '@/lib/transport';
 import { cn } from '@/lib/utils';
-import { keys, useCatalog, useFavorites, useRecent, useSession, useSetLessonCompleted } from '@/app/data';
+import { keys, useCatalog, useFavorites, useRecent, useSession, useSetLessonCompleted, useBookmarks } from '@/app/data';
 
 const path = (hash: string) => hash.replace(/^#/, '');
 const AUTO_NEXT_SECONDS = 5;
@@ -76,10 +77,14 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 	const progress = useQuery({ queryKey: ['progress', mediaId], enabled: Boolean(mediaId) && studySyncSupported, queryFn: () => transport.studyProgress(mediaId!) });
 	const isDone = Boolean(mediaId && (progress.data?.completed ?? completed.has(mediaId)));
 	const overall = courseProgress(course, completed);
-	// `?t=` (resume links, note timestamps) starts there; otherwise offer the saved position.
+	// `?t=` (resume links, note timestamps) starts there; otherwise the saved position is
+	// applied automatically. A completed lesson starts from the beginning unless `?t=` says otherwise.
 	const queryTime = Number(params.get('t'));
-	const initialPosition = Number.isFinite(queryTime) && queryTime > 0 ? queryTime : null;
-	const savedPosition = !initialPosition && progress.data?.recorded && !progress.data.completed && progress.data.positionSeconds > 5 ? progress.data.positionSeconds : null;
+	const requestedPosition = Number.isFinite(queryTime) && queryTime > 0 ? queryTime : null;
+	const savedPosition = !requestedPosition && progress.data?.recorded && !progress.data.completed && progress.data.positionSeconds > 5 ? progress.data.positionSeconds : null;
+	const resumeAt = requestedPosition ?? savedPosition;
+	const pdfResumeAt = requestedPosition ?? (progress.data?.recorded && !progress.data.completed && progress.data.positionSeconds > 1 ? progress.data.positionSeconds : null);
+	const bookmarks = useBookmarks(mediaId);
 
 	// One saver per lesson keeps writes ordered; saved positions also refresh "Continue studying".
 	const saver = useMemo(() => createPositionSaver((id, seconds) => transport.recordPosition(id, seconds)), []);
@@ -156,7 +161,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 	const hasCards = studySyncSupported && Boolean(mediaId);
 	// Notes are tied to a moment in time, so a PDF lesson has cards but no timed notes.
 	const hasNotes = hasCards && !pdf;
-	const activeTab = (tab === 'notes' && !hasNotes) || (tab === 'cards' && !hasCards) ? 'lessons' : tab;
+	const activeTab = (tab === 'notes' && !hasNotes) || (tab === 'bookmarks' && !hasNotes) || (tab === 'cards' && !hasCards) ? 'lessons' : tab;
 	const openNotes = () => { setTab('notes'); setNoteRequest((value) => value + 1); };
 	const closeBreak = () => setBreakPhase(null);
 
@@ -186,19 +191,20 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 						{/* While the break screen is up, the player under it takes no focus or keys. */}
 						<div inert={Boolean(breakPhase)}>
 						{pdf ? (
-							<PdfLesson file={pdf} courseId={courseId} ready={!studySyncSupported || !progress.isPending} initialPage={initialPosition ?? (progress.data?.recorded && !progress.data.completed && progress.data.positionSeconds > 1 ? progress.data.positionSeconds : null)} onPage={(page) => void recordPosition(pdf.mediaId!, page)} />
+							<PdfLesson file={pdf} courseId={courseId} ready={!studySyncSupported || !progress.isPending} initialPage={pdfResumeAt} onPage={(page) => void recordPosition(pdf.mediaId!, page)} />
 						) : (
 						<MediaPlayer
 							key={`${courseId}/${lessonPath}`}
 							lesson={lesson}
 							courseId={courseId}
-							initialPosition={initialPosition}
+							initialPosition={resumeAt}
 							preferences={preferences}
 							onPreferencesChange={savePreferences}
 							onPosition={recordPosition}
 							onEnded={finished}
 							onTime={setTime}
 							onOpenNotes={openNotes}
+							markers={bookmarks.data?.map((bookmark) => ({ id: bookmark.bookmarkId, positionSeconds: bookmark.positionSeconds, label: bookmark.label }))}
 							cinema={cinema}
 							onCinema={() => setCinema(!cinema)}
 							handle={(value) => { player.current = value; }}
@@ -233,6 +239,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 						<TabsList variant="line" aria-label={tr('Lesson tools', 'Ferramentas da aula')} className="w-full justify-start border-b">
 							<TabsTrigger value="lessons">{tr('Overview', 'Visão geral')}</TabsTrigger>
 							{hasNotes && <TabsTrigger value="notes">{tr('Notes', 'Notas')}</TabsTrigger>}
+							{hasNotes && <TabsTrigger value="bookmarks">{tr('Timestamps', 'Marcadores')}</TabsTrigger>}
 							{hasCards && <TabsTrigger value="cards">{tr('Cards', 'Cartões')}</TabsTrigger>}
 							<TabsTrigger value="materials">{tr('Materials', 'Materiais')}</TabsTrigger>
 						</TabsList>
@@ -247,18 +254,24 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 								)}
 							</div>
 							<div className="flex flex-wrap items-center gap-2">
-								{!pdf && savedPosition !== null && time < savedPosition && (
-									<Button variant="secondary" onClick={() => player.current?.seek(savedPosition)}>{tr(`Resume from ${formatDuration(savedPosition)}`, `Retomar de ${formatDuration(savedPosition)}`)}</Button>
+								{!pdf && resumeAt !== null && time < resumeAt && (
+									<Button variant="secondary" onClick={() => player.current?.seek(resumeAt)}>{tr(`Resume from ${formatDuration(resumeAt)}`, `Retomar de ${formatDuration(resumeAt)}`)}</Button>
 								)}
 								<label className="flex min-h-11 items-center gap-3 rounded-xl border bg-card px-3 text-sm hover:bg-muted">
 									<input type="checkbox" className="size-5 accent-[var(--brand)]" checked={preferences.autoNext} onChange={(event) => savePreferences({ ...preferences, autoNext: event.target.checked })} />
 									{tr('Play the next lesson automatically', 'Reproduzir a próxima aula automaticamente')}
 								</label>
 							</div>
+							<RecentlyWatched items={recent.data ?? []} catalog={catalog.data ?? null} currentMediaId={mediaId} />
 						</TabsContent>
 						{hasNotes && mediaId && (
 							<TabsContent value="notes" keepMounted className="pt-5">
 								<StudyNotes mediaId={mediaId} currentTime={time} onSeek={(seconds) => player.current?.seek(seconds)} addRequest={noteRequest} title={lesson.title} trail={location?.moduleTitle ? `${course.title} · ${location.moduleTitle}` : course.title} allNotesTo={`/notes?course=${encodeURIComponent(courseId)}`} />
+							</TabsContent>
+						)}
+						{hasNotes && mediaId && (
+							<TabsContent value="bookmarks" keepMounted className="pt-5">
+								<Bookmarks mediaId={mediaId} currentTime={time} onSeek={(seconds) => player.current?.seek(seconds)} />
 							</TabsContent>
 						)}
 						{hasCards && mediaId && (
@@ -331,6 +344,44 @@ function PdfLesson({ file, courseId, ready, initialPage, onPage }: { file: FileE
 			</p>
 			{ready ? <PdfReader key={file.mediaId ?? file.path} file={file} courseId={courseId} initialPage={initialPage} onPage={onPage} /> : <p role="status" className="text-muted-foreground">{tr('Loading…', 'Carregando…')}</p>}
 		</div>
+	);
+}
+
+/**
+ * Recently watched lessons, other than the one open. It is a compact history, not a second
+ * resume card: each row is a plain link that returns to that lesson's saved position.
+ */
+function RecentlyWatched({ items, catalog, currentMediaId }: { items: StudyProgress[]; catalog: Catalog | null; currentMediaId: string | null }) {
+	const seen = new Set<string>();
+	const rows = items.flatMap((item) => {
+		if (item.mediaId === currentMediaId) return [];
+		const found = findLessonLocation(catalog, item.mediaId);
+		if (!found || found.lesson.media.length === 0) return [];
+		const key = `${found.courseId}/${found.lesson.path}`;
+		if (seen.has(key)) return [];
+		seen.add(key);
+		return [{ item, found, key }];
+	}).slice(0, 5);
+	if (rows.length === 0) return null;
+	return (
+		<section aria-labelledby="recently-watched-heading" className="border-t pt-4">
+			<h2 id="recently-watched-heading" className="font-heading text-lg font-semibold">{tr('Recently watched', 'Assistidas recentemente')}</h2>
+			<ul className="mt-3 divide-y">
+				{rows.map(({ item, found, key }) => (
+					<li key={key}>
+						<Link to={path(href('course', found.courseId, found.lesson.path, item.positionSeconds))} className="flex min-h-12 items-center gap-3 py-2 hover:text-primary focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
+							<span className="min-w-0 flex-1">
+								<span className="block truncate font-medium">{found.lesson.title}</span>
+								<span className="block truncate text-sm text-muted-foreground">{found.courseTitle}</span>
+							</span>
+							<span className="shrink-0 text-sm tabular-nums text-muted-foreground">
+								{item.completed ? tr('Completed', 'Concluída') : item.positionSeconds > 0 ? formatDuration(item.positionSeconds) : tr('Not started', 'Não iniciada')}
+							</span>
+						</Link>
+					</li>
+				))}
+			</ul>
+		</section>
 	);
 }
 

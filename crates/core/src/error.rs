@@ -370,6 +370,17 @@ pub enum Error {
     #[error("identificador de favorito inválido")]
     InvalidFavoriteTarget,
 
+    /// O rótulo de um marcador de tempo é vazio ou excede o limite.
+    #[error("rótulo do marcador inválido")]
+    InvalidBookmarkLabel,
+
+    /// O marcador de tempo não foi encontrado para o dono.
+    #[error("marcador não encontrado: {bookmark_id}")]
+    BookmarkNotFound {
+        /// Identificador consultado.
+        bookmark_id: String,
+    },
+
     /// O usuário solicitado não existe no banco local.
     #[error("usuário não encontrado")]
     UserNotFound,

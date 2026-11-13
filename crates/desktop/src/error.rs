@@ -73,6 +73,10 @@ pub enum IpcErrorCode {
     InvalidReviewRating,
     /// O alvo de favorito (curso ou mídia) é inválido.
     InvalidFavoriteTarget,
+    /// O marcador de tempo não foi encontrado ou não pertence ao usuário.
+    BookmarkNotFound,
+    /// O rótulo do marcador é vazio ou excede o limite aceito.
+    InvalidBookmarkLabel,
 }
 
 /// Erro IPC serializável devolvido ao webview.
@@ -330,6 +334,22 @@ impl IpcError {
         Self {
             code: IpcErrorCode::InvalidFavoriteTarget,
             message: "alvo de favorito inválido",
+        }
+    }
+
+    /// O marcador de tempo solicitado não foi encontrado.
+    pub fn bookmark_not_found() -> Self {
+        Self {
+            code: IpcErrorCode::BookmarkNotFound,
+            message: "marcador não encontrado",
+        }
+    }
+
+    /// O rótulo do marcador é inválido.
+    pub fn invalid_bookmark_label() -> Self {
+        Self {
+            code: IpcErrorCode::InvalidBookmarkLabel,
+            message: "rótulo do marcador inválido",
         }
     }
 }

@@ -7,7 +7,8 @@
 
 use learnvault_core::{
     Availability, Catalog, CatalogFile, CatalogNode, FocusKind, FocusSession, FocusSummary,
-    MediaKind, NodeRole, RescanSummary, RewardSummary, StudyFavorites, StudyProgress,
+    MediaBookmark, MediaKind, NodeRole, RescanSummary, RewardSummary, StudyFavorites,
+    StudyProgress,
 };
 use serde::{Deserialize, Serialize};
 
@@ -395,6 +396,33 @@ impl From<learnvault_core::GlobalStudyNote> for StudyNoteDto {
             content: note.content,
             created_at: note.created_at,
             updated_at: note.updated_at,
+        }
+    }
+}
+
+/// Marcador de tempo de uma aula para o dono local.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MediaBookmarkDto {
+    /// Identidade estável do marcador.
+    pub bookmark_id: String,
+    /// Identidade da mídia à qual o marcador pertence.
+    pub media_id: String,
+    /// Instante da mídia em segundos.
+    pub position_seconds: i64,
+    /// Rótulo curto escrito pelo aluno.
+    pub label: String,
+    /// Data de criação em segundos Unix.
+    pub created_at: i64,
+}
+
+impl From<MediaBookmark> for MediaBookmarkDto {
+    fn from(bookmark: MediaBookmark) -> Self {
+        Self {
+            bookmark_id: bookmark.bookmark_id,
+            media_id: bookmark.media_id,
+            position_seconds: bookmark.position_seconds,
+            label: bookmark.label,
+            created_at: bookmark.created_at,
         }
     }
 }

@@ -474,9 +474,28 @@ CREATE TABLE pdf_annotation (
 CREATE INDEX pdf_annotation_owner_media_idx ON pdf_annotation (owner_id, media_id, page);
 ";
 
+/// Versão 12: marcadores de tempo por aula e por dono.
+///
+/// Um marcador prende um rótulo curto a um instante da mídia. A linha é do aluno, não da
+/// biblioteca: o arquivo original nunca é escrito. O índice cobre a consulta do player, que
+/// lista os marcadores de uma mídia em ordem cronológica.
+const V12: &str = "
+CREATE TABLE media_bookmark (
+    bookmark_id TEXT PRIMARY KEY NOT NULL,
+    owner_id TEXT NOT NULL,
+    media_id TEXT NOT NULL REFERENCES media (media_id) ON DELETE NO ACTION,
+    position_seconds INTEGER NOT NULL CHECK (position_seconds >= 0),
+    label TEXT NOT NULL CHECK (length(trim(label)) > 0 AND length(label) <= 200),
+    created_at INTEGER NOT NULL
+);
+
+CREATE INDEX media_bookmark_owner_media_idx
+    ON media_bookmark (owner_id, media_id, position_seconds, created_at);
+";
+
 /// Cadeia de migrações aplicada por [`crate::db::Database`]; o índice `n` leva o banco da
 /// versão `n` para `n + 1`.
-pub(crate) const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11];
+pub(crate) const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12];
 
 /// Versão do schema gravada em `PRAGMA user_version` (0 quando nunca migrado).
 ///

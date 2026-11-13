@@ -18,6 +18,7 @@ beforeEach(() => {
 	vi.spyOn(transport, 'mediaCapabilities').mockResolvedValue({ transcoding: false });
 	vi.spyOn(transport, 'studyProgress').mockResolvedValue({ mediaId: 'one', positionSeconds: 0, completed: false, updatedAt: 1, recorded: false });
 	vi.spyOn(transport, 'listNotes').mockResolvedValue([]);
+	vi.spyOn(transport, 'listBookmarks').mockResolvedValue([]);
 	vi.spyOn(transport, 'listFlashcards').mockResolvedValue([]);
 	vi.spyOn(transport, 'rewardSummary').mockRejectedValue(new Error('not needed'));
 });

@@ -41,3 +41,8 @@ pub fn new_annotation_id() -> String {
 pub fn new_card_id() -> String {
     Uuid::now_v7().to_string()
 }
+
+/// Gera um identificador opaco de marcador de tempo.
+pub fn new_bookmark_id() -> String {
+    Uuid::now_v7().to_string()
+}

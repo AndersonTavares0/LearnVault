@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { resolveSession } from '@/lib/session';
 import { studySyncSupported } from '@/lib/player';
-import { STUDY_NOT_AVAILABLE, transport, transportKind, type MissionId, type NewPdfAnnotation, type PdfAnnotationColor, type StudyFavorites, type StudyProgress } from '@/lib/transport';
+import { STUDY_NOT_AVAILABLE, transport, transportKind, type MediaBookmark, type MissionId, type NewPdfAnnotation, type PdfAnnotationColor, type StudyFavorites, type StudyProgress } from '@/lib/transport';
 
 /** Query keys shared by every screen; invalidating one refreshes all its readers. */
 export const keys = {
@@ -176,6 +176,20 @@ export function useCourseCover() {
 /** The reader's marks on one PDF; they are per owner, so the key includes the media. */
 export function usePdfAnnotations(mediaId: string | null) {
 	return useQuery({ queryKey: ['pdf-annotations', mediaId], enabled: Boolean(mediaId) && studySyncSupported, queryFn: () => transport.listPdfAnnotations(mediaId!) });
+}
+
+/** The owner's timestamp bookmarks for one lesson. */
+export function useBookmarks(mediaId: string | null) {
+	return useQuery({ queryKey: ['bookmarks', mediaId], enabled: Boolean(mediaId) && studySyncSupported, queryFn: () => transport.listBookmarks(mediaId!) });
+}
+
+export function useBookmarkMutations(mediaId: string | null) {
+	const client = useQueryClient();
+	const refresh = () => client.invalidateQueries({ queryKey: ['bookmarks', mediaId] });
+	return {
+		create: useMutation({ mutationFn: ({ positionSeconds, label }: { positionSeconds: number; label: string }) => transport.createBookmark(mediaId!, positionSeconds, label), onSuccess: (bookmark) => client.setQueryData<MediaBookmark[]>(['bookmarks', mediaId], (items = []) => [...items, bookmark]), onSettled: refresh }),
+		remove: useMutation({ mutationFn: (bookmarkId: string) => transport.deleteBookmark(bookmarkId), onSuccess: (_, bookmarkId) => client.setQueryData<MediaBookmark[]>(['bookmarks', mediaId], (items = []) => items.filter((item) => item.bookmarkId !== bookmarkId)), onSettled: refresh })
+	};
 }
 
 export function usePdfAnnotationMutations(mediaId: string | null) {
