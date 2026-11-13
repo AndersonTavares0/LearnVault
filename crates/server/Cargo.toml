@@ -30,6 +30,9 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 # já entra pela cadeia do rustls; declarar direto só expõe a API de AEAD.
 ring = "0.17"
 quick-xml = "0.42"
+# Leitura do `getlastmodified` do PROPFIND, que vem como data RFC 1123. O crate já estava
+# na árvore de dependências; declarar direto só expõe o parser.
+httpdate = "1"
 # Cliente SMB2/3 puro em Rust para as fontes de curso SMB. Sem Kerberos nem NetBIOS:
 # a fonte usa TCP/445 com NTLM, assinatura e criptografia SMB3 quando o servidor exige.
 smb = { version = "0.12.1", default-features = false, features = ["async", "sign", "encrypt"] }
