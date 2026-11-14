@@ -40,6 +40,17 @@ describe('course page', () => {
 		expect(within(panel).getByRole('link', { name: 'Download slides.pdf' })).toBeTruthy();
 	});
 
+	it('links the PDFs that no lesson holds, including inside modules', async () => {
+		const pdf = (path: string): FileEntry => ({ name: path.split('/').pop()!, path, size: 1, mediaId: `id-${path}`, kind: 'material', availability: 'available' });
+		const reading: Catalog = { complete: true, looseFiles: [], nodes: [{
+			title: 'Reading', path: 'reading', role: 'course', courseId: 'reading', files: [], looseFiles: [pdf('reading/Ownership notes.pdf')],
+			children: [{ title: 'Guides', path: 'reading/Guides', role: 'category', files: [], looseFiles: [pdf('reading/Guides/Borrowing.pdf')], children: [] }]
+		}] };
+		renderApp('/course/reading', { catalog: reading });
+		expect((await screen.findByRole('link', { name: 'Ownership notes.pdf' })).getAttribute('href')).toBe('/course/reading/reading%2FOwnership%20notes.pdf');
+		expect(screen.getByRole('link', { name: 'Borrowing.pdf' }).getAttribute('href')).toBe('/course/reading/reading%2FGuides%2FBorrowing.pdf');
+	});
+
 	it('offers course management to admins only', async () => {
 		renderApp('/course/rust', { catalog, user: { userId: 'u2', username: 'ana', role: 'user', isAdmin: false, mustChangeCredentials: false } });
 		await screen.findByRole('heading', { level: 1, name: 'Rust from zero' });
