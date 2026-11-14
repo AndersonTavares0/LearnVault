@@ -82,6 +82,7 @@ pub use removal::{MediaRemovalImpact, MediaRemovalOutcome, media_removal_impact,
 pub use rescan::{RescanSummary, apply_incremental_scan, apply_scan, apply_source_scan, rescan};
 pub use roots::{
     Partition, RootError, SourceRoot, demote_root, list_roots, partition_scan, promote_root,
+    root_source,
 };
 pub use scanner::{MediaKind, ScanOutcome, ScannedFile, scan};
 pub use search::{

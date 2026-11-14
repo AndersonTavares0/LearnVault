@@ -71,7 +71,14 @@ fn xml_for(dir: &str, children: &[(&str, Option<u64>)]) -> String {
     xml
 }
 
+type Tree = HashMap<&'static str, Vec<(&'static str, Option<u64>)>>;
+
 async fn dav_server() -> (String, tokio::task::JoinHandle<()>) {
+    dav_server_with(tree()).await
+}
+
+async fn dav_server_with(tree: Tree) -> (String, tokio::task::JoinHandle<()>) {
+    let tree = std::sync::Arc::new(tree);
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     let task = tokio::spawn(async move {
@@ -79,6 +86,7 @@ async fn dav_server() -> (String, tokio::task::JoinHandle<()>) {
             let Ok((mut stream, _)) = listener.accept().await else {
                 return;
             };
+            let tree = std::sync::Arc::clone(&tree);
             tokio::spawn(async move {
                 let mut request = Vec::new();
                 loop {
@@ -101,12 +109,41 @@ async fn dav_server() -> (String, tokio::task::JoinHandle<()>) {
                     .unwrap_or("")
                     .trim_matches('/')
                     .to_owned();
-                let payload = match tree().get(dir.as_str()) {
+                let lower = text.to_ascii_lowercase();
+                let is_file = |dir: &str| {
+                    let (parent, name) = dir.rsplit_once('/').unwrap_or(("", dir));
+                    tree.get(parent).is_some_and(|children| {
+                        children
+                            .iter()
+                            .any(|(n, size)| *n == name && size.is_some())
+                    })
+                };
+                let payload = match tree.get(dir.as_str()) {
                     Some(children) if text.starts_with("PROPFIND") => {
                         let xml = xml_for(&dir, children);
                         format!(
                             "HTTP/1.1 207 Multi-Status\r\ncontent-type: application/xml\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{xml}",
                             xml.len()
+                        )
+                    }
+                    _ if text.starts_with("GET") && is_file(&dir) => {
+                        // The client always asks for a range; answer it like a real server.
+                        let range = lower
+                            .lines()
+                            .find_map(|line| line.strip_prefix("range: bytes="))
+                            .and_then(|spec| spec.split_once('-'))
+                            .and_then(|(from, to)| {
+                                Some((
+                                    from.trim().parse::<usize>().ok()?,
+                                    to.trim().parse::<usize>().ok()?,
+                                ))
+                            });
+                        let (from, to) = range.unwrap_or((0, 9));
+                        let to = to.min(9);
+                        let body = &"0123456789"[from..=to];
+                        format!(
+                            "HTTP/1.1 206 Partial Content\r\ncontent-range: bytes {from}-{to}/10\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                            body.len()
                         )
                     }
                     _ => "HTTP/1.1 404 Not Found\r\ncontent-length: 0\r\nconnection: close\r\n\r\n"
@@ -171,8 +208,12 @@ async fn json(response: Response) -> serde_json::Value {
 }
 
 async fn harness() -> Harness {
+    harness_with(tree()).await
+}
+
+async fn harness_with(tree: Tree) -> Harness {
     let temp = tempfile::tempdir().unwrap();
-    let (url, server) = dav_server().await;
+    let (url, server) = dav_server_with(tree).await;
     let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
     let cookie = login(&app, "admin", "uma senha local muito segura").await;
     let created = app
@@ -208,10 +249,21 @@ impl Harness {
         body: Option<serde_json::Value>,
         origin: bool,
     ) -> Response {
+        self.call_as(&self.cookie, method, uri, body, origin).await
+    }
+
+    async fn call_as(
+        &self,
+        cookie: &str,
+        method: &str,
+        uri: &str,
+        body: Option<serde_json::Value>,
+        origin: bool,
+    ) -> Response {
         let mut request = Request::builder()
             .method(method)
             .uri(uri)
-            .header("cookie", self.cookie.clone());
+            .header("cookie", cookie);
         if origin {
             request = request.header("origin", "http://localhost");
         }
@@ -227,6 +279,54 @@ impl Harness {
             .oneshot(request.body(body).unwrap())
             .await
             .unwrap()
+    }
+
+    async fn student(&self, name: &str, allowed: &[&str]) -> String {
+        let created = self
+            .call(
+                "POST",
+                "/api/admin/users",
+                Some(serde_json::json!({
+                    "username": name,
+                    "password": "uma senha de aluno bem longa",
+                    "allowed_course_ids": allowed,
+                })),
+                true,
+            )
+            .await;
+        assert_eq!(created.status(), StatusCode::CREATED);
+        login(&self.app, name, "uma senha de aluno bem longa").await
+    }
+
+    async fn catalog(&self, cookie: &str) -> Vec<serde_json::Value> {
+        let response = self
+            .call_as(cookie, "GET", "/api/catalog", None, false)
+            .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        json(response).await["nodes"].as_array().unwrap().clone()
+    }
+
+    async fn media(
+        &self,
+        cookie: &str,
+        course: &str,
+        path: &str,
+        range: Option<&str>,
+    ) -> (StatusCode, String) {
+        let mut request = Request::get(format!("/api/media?course={course}&path={path}"))
+            .header("cookie", cookie);
+        if let Some(range) = range {
+            request = request.header("range", range);
+        }
+        let response = self
+            .app
+            .clone()
+            .oneshot(request.body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        let status = response.status();
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        (status, String::from_utf8_lossy(&body).into_owned())
     }
 
     async fn browse(&self, path: &str) -> Response {
@@ -697,5 +797,199 @@ async fn removing_a_source_detaches_its_roots_and_keeps_every_media_row() {
     assert_eq!(
         h.library_of("Cursos/Infra/Linux/aula.mp4").as_deref(),
         Some(h.source.as_str())
+    );
+}
+
+fn titles(nodes: &[serde_json::Value]) -> Vec<String> {
+    nodes
+        .iter()
+        .map(|node| node["title"].as_str().unwrap().to_owned())
+        .collect()
+}
+
+fn files_of(node: &serde_json::Value) -> Vec<String> {
+    let mut paths: Vec<String> = ["files", "loose_files"]
+        .iter()
+        .flat_map(|key| node[*key].as_array().into_iter().flatten())
+        .map(|file| file["path"].as_str().unwrap().to_owned())
+        .collect();
+    for child in node["children"].as_array().into_iter().flatten() {
+        paths.extend(files_of(child));
+    }
+    paths.sort();
+    paths
+}
+
+#[tokio::test]
+async fn the_catalog_shows_one_course_per_root_and_keeps_the_rest_of_the_source() {
+    let h = harness().await;
+    h.scan().await;
+    let redes = json(h.pick("Cursos/Pentest/Redes", "course").await).await["created"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let linux = json(h.pick("Cursos/Infra/Linux", "course").await).await["created"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    h.scan().await;
+
+    let nodes = h.catalog(&h.cookie).await;
+    assert_eq!(titles(&nodes), ["Linux", "Redes", "Cursos remotos"]);
+    assert_eq!(nodes[0]["course_id"], linux.as_str());
+    assert_eq!(nodes[1]["course_id"], redes.as_str());
+    assert_eq!(nodes[2]["course_id"], h.source.as_str());
+    // Each node carries only its own lessons, with paths relative to the source.
+    assert_eq!(
+        files_of(&nodes[1]),
+        [
+            "Cursos/Pentest/Redes/Sub/extra.mp4",
+            "Cursos/Pentest/Redes/aula1.mp4",
+            "Cursos/Pentest/Redes/aula2.mp4"
+        ]
+    );
+    assert_eq!(files_of(&nodes[0]), ["Cursos/Infra/Linux/aula.mp4"]);
+    assert_eq!(
+        files_of(&nodes[2]),
+        [
+            "Cursos/Pentest/Web/aula.mp4",
+            "Cursos/leia.txt",
+            "Solto.mp4"
+        ]
+    );
+}
+
+#[tokio::test]
+async fn a_split_source_with_nothing_left_shows_only_its_courses_and_tells_equal_names_apart() {
+    let tree: Tree = HashMap::from([
+        ("", vec![("A", None), ("B", None), ("Solo", None)]),
+        ("A", vec![("Redes", None)]),
+        ("A/Redes", vec![("1.mp4", Some(10))]),
+        ("B", vec![("Redes", None)]),
+        ("B/Redes", vec![("1.mp4", Some(10))]),
+        ("Solo", vec![("1.mp4", Some(10))]),
+    ]);
+    let h = harness_with(tree).await;
+    h.scan().await;
+    for path in ["A/Redes", "B/Redes", "Solo"] {
+        assert_eq!(h.pick(path, "course").await.status(), StatusCode::CREATED);
+    }
+    h.scan().await;
+    assert_eq!(
+        titles(&h.catalog(&h.cookie).await),
+        ["Redes (A)", "Redes (B)", "Solo"]
+    );
+
+    // A source without roots is still one course, even before its first scan.
+    let plain = harness().await;
+    assert_eq!(
+        titles(&plain.catalog(&plain.cookie).await),
+        ["Cursos remotos"]
+    );
+}
+
+#[tokio::test]
+async fn access_is_decided_by_the_id_of_each_course() {
+    let h = harness().await;
+    let whole = h.student("ana", &[h.source.as_str()]).await;
+    h.scan().await;
+    let redes = json(h.pick("Cursos/Pentest/Redes", "course").await).await["created"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    h.scan().await;
+
+    // A student who had the source receives the new course and keeps the rest of the source.
+    assert_eq!(
+        titles(&h.catalog(&whole).await),
+        ["Redes", "Cursos remotos"]
+    );
+    // A student granted only the root sees only that course, never the rest of the source.
+    let only_root = h.student("bia", &[redes.as_str()]).await;
+    assert_eq!(titles(&h.catalog(&only_root).await), ["Redes"]);
+    // A student granted something else sees neither.
+    let other = h.student("cia", &["unrelated"]).await;
+    assert!(h.catalog(&other).await.is_empty());
+}
+
+#[tokio::test]
+async fn media_of_a_root_streams_through_its_source_and_stays_inside_its_folder() {
+    let h = harness().await;
+    h.scan().await;
+    let redes = json(h.pick("Cursos/Pentest/Redes", "course").await).await["created"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    h.scan().await;
+    let inside = "Cursos/Pentest/Redes/aula1.mp4";
+
+    assert_eq!(
+        h.media(&h.cookie, &redes, inside, None).await,
+        (StatusCode::OK, "0123456789".to_owned())
+    );
+    assert_eq!(
+        h.media(&h.cookie, &redes, inside, Some("bytes=2-5")).await,
+        (StatusCode::PARTIAL_CONTENT, "2345".to_owned())
+    );
+    // A file of the source outside the root's folder is not reachable through the root, and a
+    // file of the root is not reachable through the source.
+    assert_eq!(
+        h.media(&h.cookie, &redes, "Cursos/Pentest/Web/aula.mp4", None)
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        h.media(&h.cookie, &redes, "Solto.mp4", None).await.0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        h.media(&h.cookie, &h.source, inside, None).await.0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        h.media(&h.cookie, &h.source, "Cursos/Pentest/Web/aula.mp4", None)
+            .await
+            .0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        h.media(&h.cookie, "unknown-id", inside, None).await.0,
+        StatusCode::NOT_FOUND
+    );
+
+    // A student granted only the root can read it and nothing else of the source.
+    let only_root = h.student("bia", &[redes.as_str()]).await;
+    assert_eq!(
+        h.media(&only_root, &redes, inside, None).await.0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        h.media(&only_root, &h.source, "Cursos/Pentest/Web/aula.mp4", None)
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
+    let other = h.student("cia", &["unrelated"]).await;
+    assert_eq!(
+        h.media(&other, &redes, inside, None).await.0,
+        StatusCode::NOT_FOUND
+    );
+
+    // Removing the root sends its lessons back to the source course.
+    h.call(
+        "DELETE",
+        &format!("/api/admin/sources/{}/roots/{redes}", h.source),
+        None,
+        true,
+    )
+    .await;
+    assert_eq!(
+        h.media(&h.cookie, &h.source, inside, None).await.0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        h.media(&h.cookie, &redes, inside, None).await.0,
+        StatusCode::NOT_FOUND
     );
 }

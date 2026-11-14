@@ -164,14 +164,11 @@ pub(crate) async fn catalog(State(state): State<AppState>, headers: HeaderMap) -
             .into_iter()
             .filter(|course| is_allowed(&course.id))
             .collect();
-        let filtered_sources: Vec<RemoteSource> = sources
-            .into_iter()
-            .filter(|source| is_allowed(&source.id))
-            .collect();
         build_course_catalog(
             &database,
             &filtered_courses,
-            &filtered_sources,
+            &sources,
+            &is_allowed,
             &orders,
             &covers,
         )
@@ -237,6 +234,7 @@ fn build_course_catalog(
     database: &learnvault_core::Database,
     courses: &[RegisteredCourse],
     sources: &[RemoteSource],
+    is_allowed: &dyn Fn(&str) -> bool,
     orders: &CourseOrders,
     covers_dir: &Path,
 ) -> Result<CatalogResponse, learnvault_core::Error> {
@@ -284,37 +282,101 @@ fn build_course_catalog(
     }
     // Fontes remotas usam o mesmo catálogo derivado do banco; não têm pasta local, capa
     // personalizada nem pasta de origem. A ordenação manual continua por identidade.
+    //
+    // Uma fonte sem raízes é um curso só. Com raízes (ADR 0004), cada pasta escolhida é um
+    // curso próprio, com a identidade da raiz, e o resto da fonte continua visível como o
+    // curso da fonte enquanto tiver algum arquivo. O acesso é decidido por identidade.
     let mut sources: Vec<&RemoteSource> = sources.iter().collect();
     sources.sort_by(|left, right| {
         learnvault_core::natural_cmp(&left.name, &right.name).then_with(|| left.id.cmp(&right.id))
     });
     for source in sources {
-        let catalog = learnvault_core::build_catalog(database, &source.id)?;
-        complete = complete && catalog.complete;
-        let (mut children, loose_files) = learnvault_core::shape_course_catalog(catalog);
-        learnvault_core::apply_order(&mut children, orders.get(&source.id).unwrap_or(&empty));
-        let structure = structure_response(learnvault_core::structure::assess_parts(
-            &children,
-            &loose_files,
-        ));
-        nodes.push(CatalogNodeResponse {
-            title: source.name.clone(),
-            path: String::new(),
-            role: "course",
-            course_id: Some(source.id.clone()),
-            cover_version: None,
-            source_folder: None,
-            structure: Some(structure),
-            files: Vec::new(),
-            loose_files: loose_files.into_iter().map(Into::into).collect(),
-            children: children.into_iter().map(Into::into).collect(),
+        let roots = learnvault_core::list_roots(database, &source.id)?;
+        let titles = root_titles(&roots);
+        let mut chosen: Vec<_> = roots.iter().zip(titles).collect();
+        chosen.sort_by(|(left, left_title), (right, right_title)| {
+            learnvault_core::natural_cmp(left_title, right_title)
+                .then_with(|| left.library_id.cmp(&right.library_id))
         });
+        for (root, title) in chosen {
+            if !is_allowed(&root.library_id) {
+                continue;
+            }
+            let (node, node_complete) =
+                remote_node(database, orders, &empty, title, &root.library_id)?;
+            complete = complete && node_complete;
+            nodes.push(node);
+        }
+        if !is_allowed(&source.id) {
+            continue;
+        }
+        let (node, node_complete) =
+            remote_node(database, orders, &empty, source.name.clone(), &source.id)?;
+        let has_files = !node.children.is_empty() || !node.loose_files.is_empty();
+        // The rest of a split source only shows while something is left in it.
+        if roots.is_empty() || has_files {
+            complete = complete && node_complete;
+            nodes.push(node);
+        }
     }
     Ok(CatalogResponse {
         complete,
         loose_files: Vec::new(),
         nodes,
     })
+}
+
+/// Course node of a remote library (a whole source, or one root of it) and whether its last
+/// scan was complete.
+fn remote_node(
+    database: &learnvault_core::Database,
+    orders: &CourseOrders,
+    empty: &learnvault_core::CatalogOrder,
+    title: String,
+    library_id: &str,
+) -> Result<(CatalogNodeResponse, bool), learnvault_core::Error> {
+    let catalog = learnvault_core::build_catalog(database, library_id)?;
+    let complete = catalog.complete;
+    let (mut children, loose_files) = learnvault_core::shape_course_catalog(catalog);
+    learnvault_core::apply_order(&mut children, orders.get(library_id).unwrap_or(empty));
+    let structure = structure_response(learnvault_core::structure::assess_parts(
+        &children,
+        &loose_files,
+    ));
+    let node = CatalogNodeResponse {
+        title,
+        path: String::new(),
+        role: "course",
+        course_id: Some(library_id.to_owned()),
+        cover_version: None,
+        source_folder: None,
+        structure: Some(structure),
+        files: Vec::new(),
+        loose_files: loose_files.into_iter().map(Into::into).collect(),
+        children: children.into_iter().map(Into::into).collect(),
+    };
+    Ok((node, complete))
+}
+
+/// Titles of the roots of one source: the folder name, plus the parent folder in parentheses
+/// when two roots share a name (`Redes (Pentest)` and `Redes (Infra)`).
+fn root_titles(roots: &[learnvault_core::SourceRoot]) -> Vec<String> {
+    let name = |prefix: &str| prefix.rsplit('/').next().unwrap_or(prefix).to_owned();
+    roots
+        .iter()
+        .map(|root| {
+            let title = name(&root.prefix);
+            let shared = roots
+                .iter()
+                .filter(|other| name(&other.prefix) == title)
+                .count()
+                > 1;
+            match root.prefix.rsplit('/').nth(1) {
+                Some(parent) if shared => format!("{title} ({parent})"),
+                _ => title,
+            }
+        })
+        .collect()
 }
 
 pub(crate) async fn rescan(State(state): State<AppState>, headers: HeaderMap) -> Response {
