@@ -25,6 +25,7 @@ function urlIssue(value: string): string | null {
 		if (!parsed.hostname) return tr('Enter the server host in the address.', 'Informe o host do servidor no endereço.');
 		if (parsed.username || parsed.password) return tr('Remove the username and password from the address; use the fields below.', 'Remova o usuário e a senha do endereço; use os campos abaixo.');
 		if (parsed.search || parsed.hash) return tr('Remove the query string and fragment from the address.', 'Remova a consulta e o fragmento do endereço.');
+		if (parsed.protocol === 'smb:' && !parsed.pathname.replace(/\//g, '')) return tr('Add the share name after the host, as in smb://server/share/folder.', 'Informe o nome do compartilhamento após o host, como em smb://servidor/compartilhamento/pasta.');
 	} catch {
 		return tr('Enter a valid remote address.', 'Informe um endereço remoto válido.');
 	}
@@ -41,7 +42,7 @@ function testFailure(error: string | null): string {
 		case 'unreachable': return tr('The server could not be reached. Check the address and the network.', 'Não foi possível alcançar o servidor. Confira o endereço e a rede.');
 		case 'denied': return tr('The server refused these credentials.', 'O servidor recusou estas credenciais.');
 		case 'not_found': return tr('The path was not found on the server.', 'O caminho não foi encontrado no servidor.');
-		case 'invalid_response': return tr('The server did not answer a WebDAV request.', 'O servidor não respondeu a uma requisição WebDAV.');
+		case 'invalid_response': return tr('The server did not answer as a WebDAV or SMB share.', 'O servidor não respondeu como um compartilhamento WebDAV ou SMB.');
 		case 'limit_exceeded': return tr('The folder is too large to list.', 'A pasta é grande demais para listar.');
 		case 'credentials_unavailable': return tr('The stored password cannot be read. Restore the encryption key or add the source again.', 'Não é possível ler a senha guardada. Restaure a chave de criptografia ou adicione a fonte de novo.');
 		case 'timeout': return tr('The server took too long to answer.', 'O servidor demorou demais para responder.');
@@ -110,9 +111,10 @@ export function SourceSettings() {
 					</div>
 					<div className="space-y-2">
 						<Label htmlFor="source-url">{tr('Address', 'Endereço')}</Label>
-						<Input id="source-url" required type="text" inputMode="url" spellCheck={false} placeholder={tr('davs://server/dav/', 'davs://servidor/dav/')} value={form.url} onChange={(event) => setForm({ ...form, url: event.target.value })} aria-invalid={Boolean(addressIssue) || undefined} aria-describedby={addressIssue ? 'source-url-error' : undefined} />
+						<Input id="source-url" required type="text" inputMode="url" spellCheck={false} placeholder={tr('davs://server/dav/', 'davs://servidor/dav/')} value={form.url} onChange={(event) => setForm({ ...form, url: event.target.value })} aria-invalid={Boolean(addressIssue) || undefined} aria-describedby={addressIssue ? 'source-url-error' : 'source-url-hint'} />
 						{addressIssue && <p id="source-url-error" className="text-sm text-destructive">{addressIssue}</p>}
-						{!addressIssue && isPlainScheme(form.url) && <p className="text-sm text-muted-foreground">{tr('Plain http:// and dav:// send the password without transport encryption.', 'http:// e dav:// enviam a senha sem criptografia de transporte.')}</p>}
+						{!addressIssue && form.url.toLowerCase().startsWith('smb://') && <p id="source-url-hint" className="text-sm text-muted-foreground">{tr('Format: smb://server/share/folder. The share is required; the connection is read-only.', 'Formato: smb://servidor/compartilhamento/pasta. O compartilhamento é obrigatório; a conexão é somente leitura.')}</p>}
+						{!addressIssue && isPlainScheme(form.url) && <p id="source-url-hint" className="text-sm text-muted-foreground">{tr('Plain http:// and dav:// send the password without transport encryption.', 'http:// e dav:// enviam a senha sem criptografia de transporte.')}</p>}
 					</div>
 					<div className="space-y-2">
 						<Label htmlFor="source-username">{tr('Username (optional)', 'Usuário (opcional)')}</Label>
@@ -147,8 +149,8 @@ function SourceRow({ source, onRemoved }: { source: RemoteSource; onRemoved: () 
 			<p className="text-sm text-muted-foreground">{source.hasPassword ? tr('Password saved', 'Senha salva') : tr('No password', 'Sem senha')}</p>
 			{source.credentialError && <p role="alert" className="text-sm text-destructive">{tr('The stored password cannot be read. Restore the encryption key or add the source again.', 'Não é possível ler a senha guardada. Restaure a chave de criptografia ou adicione a fonte de novo.')}</p>}
 			{test.data && <p role="status" className={test.data.ok ? 'text-sm' : 'text-sm text-destructive'}>{test.data.ok ? testMessage(test.data) : testFailure(test.data.error)}</p>}
-			{test.error && <p role="alert" className="text-sm text-destructive">{test.error.message}</p>}
-			{remove.error && <p role="alert" className="text-sm text-destructive">{remove.error.message}</p>}
+			{test.error && <p role="alert" className="text-sm text-destructive">{testFailure(null)}</p>}
+			{remove.error && <p role="alert" className="text-sm text-destructive">{tr('The source could not be removed. Try again.', 'Não foi possível remover a fonte. Tente novamente.')}</p>}
 
 			<AlertDialog open={confirming} onOpenChange={(open) => !open && !remove.isPending && setConfirming(false)}>
 				<AlertDialogContent>
