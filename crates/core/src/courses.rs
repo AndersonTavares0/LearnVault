@@ -115,10 +115,19 @@ pub fn course_title(root: &Path) -> String {
         return fallback.to_owned();
     };
     let cleaned = crate::catalog::clean_title(name);
-    if cleaned.is_empty() {
+    if !cleaned.is_empty() {
+        return cleaned;
+    }
+    // Uma pasta chamada "2024" ou "01" perde tudo na limpeza; o número é o único título
+    // que diferencia os cursos de uma biblioteca por ano, então ele é preservado.
+    let trimmed = name
+        .trim()
+        .trim_end_matches(|character: char| "._- •\t".contains(character))
+        .trim();
+    if trimmed.is_empty() {
         fallback.to_owned()
     } else {
-        cleaned
+        trimmed.to_owned()
     }
 }
 
@@ -151,6 +160,18 @@ mod tests {
 
     use super::{CourseRoot, CourseRootError, course_id_from_path, course_title};
     use tempfile::tempdir;
+
+    #[test]
+    fn keeps_a_numeric_folder_name_as_the_course_title() {
+        // Uma biblioteca organizada por ano usa pastas como "2024"; a limpeza remove
+        // todo o nome, e sem preservar o numero todos os cursos ficariam iguais.
+        assert_eq!(course_title(Path::new("/cursos/ENEM/2024")), "2024");
+        assert_eq!(course_title(Path::new("/cursos/ENEM/01")), "01");
+        assert_eq!(
+            course_title(Path::new("/cursos/ENEM/01 - Fisica")),
+            "Fisica"
+        );
+    }
 
     #[test]
     fn resolve_rejects_missing_files_and_directories_pass() {
@@ -199,6 +220,7 @@ mod tests {
     #[test]
     fn title_falls_back_when_the_folder_has_no_usable_name() {
         assert_eq!(course_title(Path::new("/")), "Curso");
-        assert_eq!(course_title(Path::new("42")), "Curso");
+        // Um nome puramente numerico e um titulo valido: so a ausencia de nome cai no neutro.
+        assert_eq!(course_title(Path::new("42")), "42");
     }
 }
