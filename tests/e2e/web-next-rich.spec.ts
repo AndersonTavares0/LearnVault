@@ -151,6 +151,48 @@ test('every main page passes axe on the dark theme', async ({ page, origin }) =>
 	await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
 });
 
+test('main pages keep their content inside narrow and desktop viewports', async ({ page, origin }, testInfo) => {
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	await signIn(page, origin);
+	await page.getByRole('button', { name: 'Refresh courses' }).click();
+	await expect(page.getByText('Catalog updated.')).toBeVisible();
+	for (const width of [320, 390, 768, 1440]) {
+		await page.setViewportSize({ width, height: 900 });
+		for (const route of ['/', '/progress', '/notes', '/review', '/history', '/settings', '/settings#users']) {
+			await page.goto(`${origin}/#${route}`);
+			await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+			if (route === '/settings' && width < 1024) {
+				await page.getByLabel('Settings section', { exact: true }).selectOption('users');
+				await expect(page.getByRole('heading', { name: 'Accounts and course access' })).toBeVisible();
+			}
+			expect(await page.locator('main section, main form').evaluateAll((elements) =>
+				elements.filter((element) => {
+					const box = element.getBoundingClientRect();
+					return box.width > 0 && (box.left < -1 || box.right > innerWidth + 1);
+				}).map((element) => element.getAttribute('aria-labelledby') || element.id || element.tagName)
+			), `${width}px ${route}: clipped content`).toEqual([]);
+			await page.screenshot({ path: testInfo.outputPath(`${width}-${route.replaceAll('/', '').replaceAll('#', '-') || 'home'}.png`), fullPage: true });
+			expect(await page.evaluate(() => document.documentElement.scrollWidth), `${width}px ${route}`).toBeLessThanOrEqual(width);
+		}
+	}
+});
+
+test('mobile settings stay usable in Portuguese and the dark theme', async ({ page, origin }, testInfo) => {
+	await signIn(page, origin);
+	await page.getByRole('button', { name: 'Switch to the dark theme' }).click();
+	await page.goto(`${origin}/#/settings`);
+	await page.getByRole('button', { name: 'Português (Brasil)' }).click();
+	for (const width of [320, 390]) {
+		await page.setViewportSize({ width, height: 900 });
+		await page.getByLabel('Seção dos ajustes', { exact: true }).selectOption('users');
+		await expect(page.getByRole('heading', { name: 'Contas e acesso a cursos' })).toBeVisible();
+		await expect(page.getByRole('navigation', { name: 'Seções', exact: true }).getByRole('link', { name: 'Meu aprendizado' })).toContainText('Biblioteca');
+		expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+		await page.screenshot({ path: testInfo.outputPath(`${width}-settings-pt-dark.png`), fullPage: true });
+		await expectNoAxeViolations(page, `mobile settings pt-BR dark ${width}`);
+	}
+});
+
 // Module rows are native disclosures: they open to show their lessons and close again.
 test('a module row opens to show its lessons and closes again', async ({ page, origin }) => {
 	await page.emulateMedia({ reducedMotion: 'reduce' });

@@ -49,10 +49,18 @@ export function SettingsPage() {
 
 	return (
 		<ActiveSection.Provider value={active}>
+		<div className="space-y-8">
+		<PageHeader icon={Settings} title={tr('Settings', 'Ajustes')} />
 		<div className="lg:grid lg:grid-cols-[12rem_1fr] lg:gap-10">
 			{/* Buttons, not `#id` links: the hash belongs to the router. */}
 			<nav aria-label={tr('Settings sections', 'Seções dos ajustes')} className="mb-6 lg:sticky lg:top-24 lg:mb-0 lg:self-start">
-				<ul className="flex flex-wrap gap-1 lg:block lg:space-y-1">
+				<div className="space-y-2 lg:hidden">
+					<label htmlFor="settings-section" className="block text-sm font-medium">{tr('Settings section', 'Seção dos ajustes')}</label>
+					<select id="settings-section" value={active} onChange={(event) => setActive(event.target.value)} className="h-11 w-full rounded-lg border border-input bg-background px-3 text-sm">
+						{sections.map((section) => <option key={section.id} value={section.id}>{section.label}</option>)}
+					</select>
+				</div>
+				<ul className="hidden lg:block lg:space-y-1">
 					{sections.map((section) => (
 						<li key={section.id}>
 							<button type="button" aria-current={active === section.id ? 'page' : undefined} onClick={() => setActive(section.id)} className={cn('flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-medium whitespace-nowrap hover:bg-muted', active === section.id ? 'bg-brand-tint text-foreground' : 'text-muted-foreground hover:text-foreground')}>
@@ -64,7 +72,6 @@ export function SettingsPage() {
 				</ul>
 			</nav>
 			<div className="min-w-0 space-y-10">
-			<PageHeader icon={Settings} title={tr('Settings', 'Ajustes')} />
 			<Section id="appearance" title={tr('Appearance', 'Aparência')} framed={false}>
 				<AppearanceSettings />
 				<Panel className="p-5 sm:p-6">
@@ -111,6 +118,7 @@ export function SettingsPage() {
 				</>
 			)}
 			</div>
+		</div>
 		</div>
 		</ActiveSection.Provider>
 	);

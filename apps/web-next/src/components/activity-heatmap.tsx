@@ -50,18 +50,20 @@ export function ActivityHeatmap({ today, activeDays }: { today: string; activeDa
 				<h2 id="heatmap-heading" className="text-base font-medium">{tr('Study days', 'Dias de estudo')}</h2>
 				<p className="text-sm text-muted-foreground">{summary}</p>
 			</div>
-			<div aria-hidden="true" className="relative ml-8 h-4 text-[10px] whitespace-nowrap text-muted-foreground">
-				{months.map((month) => <span key={month.key} className="absolute" style={{ left: `${(month.week / WEEKS) * 100}%` }}>{month.label}</span>)}
-			</div>
 			<div className="flex gap-2">
-				<div aria-hidden="true" className="grid w-6 shrink-0 grid-rows-7 gap-[3px] text-[10px] leading-none text-muted-foreground">
+				<div aria-hidden="true" className="mt-7 mb-2 grid w-6 shrink-0 grid-rows-7 gap-[3px] text-[10px] leading-none text-muted-foreground">
 					{weekdays.map((day, index) => <span key={index} className="flex items-center">{day}</span>)}
 				</div>
 				<div ref={scroller} className="min-w-0 flex-1 overflow-x-auto pb-2">
-					<div data-heatmap-grid aria-hidden="true" className="grid w-max grid-flow-col grid-rows-7 gap-[3px] sm:w-full sm:auto-cols-fr">
-						{days.map((day) => (
-							<span key={day} className={cn('size-3 rounded-[3px] sm:size-auto sm:aspect-square', active.has(day) ? 'bg-primary' : 'bg-muted ring-1 ring-inset ring-border-strong')} />
-						))}
+					<div aria-hidden="true" className="w-max sm:w-full">
+						<div className="relative mb-3 h-4 text-[10px] whitespace-nowrap text-muted-foreground">
+							{months.map((month) => <span key={month.key} className="absolute" style={{ left: `${(month.week / WEEKS) * 100}%` }}>{month.label}</span>)}
+						</div>
+						<div data-heatmap-grid className="grid grid-flow-col grid-rows-7 gap-[3px] sm:auto-cols-fr">
+							{days.map((day) => (
+								<span key={day} className={cn('size-3 rounded-[3px] sm:size-auto sm:aspect-square', active.has(day) ? 'bg-primary' : 'bg-muted ring-1 ring-inset ring-border-strong')} />
+							))}
+						</div>
 					</div>
 				</div>
 			</div>

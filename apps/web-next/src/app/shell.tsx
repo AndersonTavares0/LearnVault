@@ -177,9 +177,9 @@ function MobileTabs() {
 			<ul className="grid grid-cols-5">
 				{navItems().map((item) => (
 					<li key={item.to}>
-						<NavLink to={item.to} end={item.end} className={({ isActive }) => cn('flex min-h-14 flex-col items-center justify-center gap-0.5 text-xs text-muted-foreground', isActive && 'font-medium text-primary')}>
+						<NavLink to={item.to} end={item.end} aria-label={item.to === '/' ? tr(`Library: ${item.label}`, `Biblioteca: ${item.label}`) : item.label} className={({ isActive }) => cn('flex min-h-14 flex-col items-center justify-center gap-0.5 px-1 text-center text-xs text-muted-foreground', isActive && 'font-medium text-primary')}>
 							<item.icon className="size-5" aria-hidden="true" />
-							{item.label}
+							{item.to === '/' ? tr('Library', 'Biblioteca') : item.label}
 						</NavLink>
 					</li>
 				))}
