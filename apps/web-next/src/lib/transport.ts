@@ -2,6 +2,7 @@
 // eliminado por dead-code elimination junto com este import, de modo que nem o Tauri entra
 // na SPA web nem um `fetch` entra no desktop.
 import { invoke } from '@tauri-apps/api/core';
+import { isSourceFailure, sourceFailure } from '@/lib/source-failure';
 import { tr } from './i18n';
 
 export type User = { userId: string; username: string; role: string; isAdmin: boolean; mustChangeCredentials: boolean };
@@ -9,6 +10,12 @@ export type LocalUser = { userId: string; username: string; isAdmin: boolean; cr
 /** A remote WebDAV source as the API reports it: never the secret, only whether one is stored. */
 export type RemoteSource = { id: string; name: string; url: string; username: string | null; hasPassword: boolean; credentialError: boolean };
 export type SourceConnectionTest = { ok: boolean; entries: number | null; error: string | null };
+/** `free` can be chosen; the others already are, or contain, a chosen course. */
+export type SourceFolder = { name: string; path: string; state: 'free' | 'root' | 'inside_root' | 'contains_root' };
+export type SourceListing = { path: string; folders: SourceFolder[]; mediaFiles: number; otherFiles: number; truncated: boolean };
+export type SourceRootEntry = { id: string; name: string; path: string };
+export type SourceRootsResult = { created: SourceRootEntry[]; skipped: { path: string; reason: string }[] };
+export type SourceScanSummary = { complete: boolean; inserted: number };
 export type FileEntry = { name: string; path: string; size: number; mediaId?: string; mtimeSeconds?: number; kind?: string; availability?: string; unverified?: boolean };
 export type Lesson = { title: string; path: string; media: FileEntry[]; subtitles: FileEntry[]; materials: FileEntry[]; availability?: string; unverified?: boolean };
 // Cada nó de topo do catálogo é um curso com identidade opaca (`courseId`). Nós internos
@@ -239,6 +246,11 @@ export interface Transport {
 	createSource?(input: { name: string; url: string; username?: string; password?: string }): Promise<RemoteSource>;
 	testSource?(sourceId: string): Promise<SourceConnectionTest>;
 	deleteSource?(sourceId: string): Promise<boolean>;
+	browseSource?(sourceId: string, path: string): Promise<SourceListing>;
+	listSourceRoots?(sourceId: string): Promise<SourceRootEntry[]>;
+	chooseSourceRoots?(sourceId: string, path: string, mode: 'course' | 'children'): Promise<SourceRootsResult>;
+	removeSourceRoot?(sourceId: string, rootId: string): Promise<boolean>;
+	scanSource?(sourceId: string): Promise<SourceScanSummary>;
 	studyProgress(mediaId: string): Promise<StudyProgress>;
 	recordPosition(mediaId: string, positionSeconds: number): Promise<StudyProgress>;
 	setCompleted(mediaId: string, completed: boolean): Promise<StudyProgress>;
@@ -573,6 +585,47 @@ export function normalizeSourceConnectionTest(value: unknown): SourceConnectionT
 		entries: typeof raw.entries === 'number' ? raw.entries : null,
 		error: typeof raw.error === 'string' ? raw.error : null
 	};
+}
+
+const FOLDER_STATES = ['free', 'root', 'inside_root', 'contains_root'] as const;
+
+function rootEntry(value: unknown): SourceRootEntry {
+	const raw = (value && typeof value === 'object' ? value : {}) as { id?: unknown; name?: unknown; path?: unknown };
+	if (typeof raw.id !== 'string' || typeof raw.name !== 'string' || typeof raw.path !== 'string') throw invalidPayload('invalid course folder.', 'pasta de curso inválida.');
+	return { id: raw.id, name: raw.name, path: raw.path };
+}
+
+export function normalizeSourceListing(value: unknown): SourceListing {
+	if (!value || typeof value !== 'object') throw invalidPayload('missing folder listing.', 'listagem da pasta ausente.');
+	const raw = value as { path?: unknown; folders?: unknown; media_files?: unknown; other_files?: unknown; truncated?: unknown };
+	if (typeof raw.path !== 'string' || !Array.isArray(raw.folders)) throw invalidPayload('invalid folder listing.', 'listagem da pasta inválida.');
+	const folders = raw.folders.map((folder): SourceFolder => {
+		const entry = (folder && typeof folder === 'object' ? folder : {}) as { name?: unknown; path?: unknown; state?: unknown };
+		if (typeof entry.name !== 'string' || typeof entry.path !== 'string') throw invalidPayload('invalid folder.', 'pasta inválida.');
+		const state = FOLDER_STATES.find((known) => known === entry.state);
+		// An unknown state is treated as not choosable rather than guessed.
+		return { name: entry.name, path: entry.path, state: state ?? 'inside_root' };
+	});
+	return { path: raw.path, folders, mediaFiles: typeof raw.media_files === 'number' ? raw.media_files : 0, otherFiles: typeof raw.other_files === 'number' ? raw.other_files : 0, truncated: raw.truncated === true };
+}
+
+export function normalizeSourceRoots(value: unknown): SourceRootEntry[] {
+	const raw = (value && typeof value === 'object' ? value : {}) as { roots?: unknown };
+	return Array.isArray(raw.roots) ? raw.roots.map(rootEntry) : [];
+}
+
+export function normalizeSourceRootsResult(value: unknown): SourceRootsResult {
+	const raw = (value && typeof value === 'object' ? value : {}) as { created?: unknown; skipped?: unknown };
+	const skipped = Array.isArray(raw.skipped) ? raw.skipped.flatMap((item) => {
+		const entry = (item && typeof item === 'object' ? item : {}) as { path?: unknown; reason?: unknown };
+		return typeof entry.path === 'string' ? [{ path: entry.path, reason: typeof entry.reason === 'string' ? entry.reason : '' }] : [];
+	}) : [];
+	return { created: Array.isArray(raw.created) ? raw.created.map(rootEntry) : [], skipped };
+}
+
+export function normalizeSourceScan(value: unknown): SourceScanSummary {
+	const raw = (value && typeof value === 'object' ? value : {}) as { complete?: unknown; inserted?: unknown };
+	return { complete: raw.complete === true, inserted: typeof raw.inserted === 'number' ? raw.inserted : 0 };
 }
 
 export function normalizeStudyProgress(value: unknown): StudyProgress {
@@ -1051,6 +1104,22 @@ async function sourceErrorMessage(response: Response): Promise<string> {
 }
 
 
+// Stable codes from the course-root endpoints, translated once at the transport seam.
+async function rootsErrorMessage(response: Response, fallback: string): Promise<string> {
+	if (response.status === 403) return 'credentials_change_required';
+	const code = await responseError(response);
+	switch (code) {
+		case 'invalid_path': return tr('That folder path is not valid.', 'O caminho dessa pasta não é válido.');
+		case 'not_found': return tr('That folder was not found on the source.', 'Essa pasta não foi encontrada na fonte.');
+		case 'overlaps_existing_root': return tr('That folder overlaps a course you already chose.', 'Essa pasta se sobrepõe a um curso que você já escolheu.');
+		case 'too_many_folders': return tr('There are too many folders to choose at once. Open a folder and choose fewer.', 'Há pastas demais para escolher de uma vez. Abra uma pasta e escolha menos.');
+		case 'source_scan_timeout': return tr('Reading the source took too long. Try again.', 'Ler a fonte demorou demais. Tente de novo.');
+		default:
+			if (isSourceFailure(code)) return sourceFailure(code);
+			return response.status === 503 ? tr('The server is busy; please try again in a moment.', 'O servidor está ocupado; tente de novo em instantes.') : fallback;
+	}
+}
+
 // Mensagem acionável para o upload de capa. O servidor decide o formato pelos bytes iniciais,
 // então `415` cobre também o arquivo renomeado com uma extensão de imagem.
 function coverUploadErrorMessage(status: number): string {
@@ -1175,6 +1244,35 @@ export class HttpTransport implements Transport {
 		const response = await fetch(`/api/admin/sources/${encodeURIComponent(sourceId)}`, { method: 'DELETE' });
 		if (!response.ok) throw new Error(tr('Could not remove the source.', 'Não foi possível remover a fonte.'));
 		return removalFlag(response);
+	}
+	async browseSource(sourceId: string, path: string): Promise<SourceListing> {
+		const response = await fetch(`/api/admin/sources/${encodeURIComponent(sourceId)}/browse?path=${encodeURIComponent(path)}`);
+		if (!response.ok) throw new Error(await rootsErrorMessage(response, tr('Could not read the folder.', 'Não foi possível ler a pasta.')));
+		return normalizeSourceListing(await response.json());
+	}
+	async listSourceRoots(sourceId: string): Promise<SourceRootEntry[]> {
+		const response = await fetch(`/api/admin/sources/${encodeURIComponent(sourceId)}/roots`);
+		if (!response.ok) throw new Error(await rootsErrorMessage(response, tr('Could not load the chosen courses.', 'Não foi possível carregar os cursos escolhidos.')));
+		return normalizeSourceRoots(await response.json());
+	}
+	async chooseSourceRoots(sourceId: string, path: string, mode: 'course' | 'children'): Promise<SourceRootsResult> {
+		const response = await fetch(`/api/admin/sources/${encodeURIComponent(sourceId)}/roots`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ path, mode })
+		});
+		if (!response.ok) throw new Error(await rootsErrorMessage(response, tr('Could not choose the course.', 'Não foi possível escolher o curso.')));
+		return normalizeSourceRootsResult(await response.json());
+	}
+	async removeSourceRoot(sourceId: string, rootId: string): Promise<boolean> {
+		const response = await fetch(`/api/admin/sources/${encodeURIComponent(sourceId)}/roots/${encodeURIComponent(rootId)}`, { method: 'DELETE' });
+		if (!response.ok) throw new Error(await rootsErrorMessage(response, tr('Could not undo the choice.', 'Não foi possível desfazer a escolha.')));
+		return removalFlag(response);
+	}
+	async scanSource(sourceId: string): Promise<SourceScanSummary> {
+		const response = await fetch(`/api/admin/sources/${encodeURIComponent(sourceId)}/scan`, { method: 'POST' });
+		if (!response.ok) throw new Error(await rootsErrorMessage(response, tr('Could not read the source.', 'Não foi possível ler a fonte.')));
+		return normalizeSourceScan(await response.json());
 	}
 	async studyProgress(mediaId: string) { const response = await fetch(`/api/study/progress?media_id=${encodeURIComponent(mediaId)}`); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 404 ? tr('Media not found.', 'Mídia não encontrada.') : tr('Could not read progress.', 'Não foi possível ler o progresso.')); return normalizeStudyProgress(await response.json()); }
 	async getPlaybackPreferences() {

@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { tr } from '@/lib/i18n';
+import { sourceFailure } from '@/lib/source-failure';
+import { SourceCourses } from '@/pages/settings/source-courses';
 import { transport, type RemoteSource, type SourceConnectionTest } from '@/lib/transport';
 
 const sourcesKey = ['admin-sources'] as const;
@@ -35,19 +37,6 @@ function urlIssue(value: string): string | null {
 /** Plain http/dav carry the Basic credentials in clear text; the server allows it, so warn here. */
 function isPlainScheme(value: string): boolean {
 	return PLAIN_SCHEMES.includes(value.split('://')[0]?.toLowerCase() ?? '');
-}
-
-function testFailure(error: string | null): string {
-	switch (error) {
-		case 'unreachable': return tr('The server could not be reached. Check the address and the network.', 'Não foi possível alcançar o servidor. Confira o endereço e a rede.');
-		case 'denied': return tr('The server refused these credentials.', 'O servidor recusou estas credenciais.');
-		case 'not_found': return tr('The path was not found on the server.', 'O caminho não foi encontrado no servidor.');
-		case 'invalid_response': return tr('The server did not answer as a WebDAV or SMB share.', 'O servidor não respondeu como um compartilhamento WebDAV ou SMB.');
-		case 'limit_exceeded': return tr('The folder is too large to list.', 'A pasta é grande demais para listar.');
-		case 'credentials_unavailable': return tr('The stored password cannot be read. Restore the encryption key or add the source again.', 'Não é possível ler a senha guardada. Restaure a chave de criptografia ou adicione a fonte de novo.');
-		case 'timeout': return tr('The server took too long to answer.', 'O servidor demorou demais para responder.');
-		default: return tr('The connection test failed.', 'O teste de conexão falhou.');
-	}
 }
 
 function testMessage(result: SourceConnectionTest): string {
@@ -97,7 +86,7 @@ export function SourceSettings() {
 				<p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">{tr('No remote sources yet.', 'Nenhuma fonte remota ainda.')}</p>
 			) : (
 				<ul className="divide-y rounded-lg border bg-card">
-					{sources.data!.map((source) => <SourceRow key={source.id} source={source} onRemoved={() => { setMessage(tr(`Source “${source.name}” removed.`, `Fonte “${source.name}” removida.`)); void client.invalidateQueries({ queryKey: sourcesKey }); }} />)}
+					{sources.data!.map((source) => <SourceRow key={source.id} source={source} onMessage={setMessage} onRemoved={() => { setMessage(tr(`Source “${source.name}” removed.`, `Fonte “${source.name}” removida.`)); void client.invalidateQueries({ queryKey: sourcesKey }); }} />)}
 				</ul>
 			)}
 
@@ -129,7 +118,7 @@ export function SourceSettings() {
 	);
 }
 
-function SourceRow({ source, onRemoved }: { source: RemoteSource; onRemoved: () => void }) {
+function SourceRow({ source, onRemoved, onMessage }: { source: RemoteSource; onRemoved: () => void; onMessage: (message: string) => void }) {
 	const [confirming, setConfirming] = useState(false);
 	const test = useMutation({ mutationFn: () => transport.testSource!(source.id) });
 	const remove = useMutation({
@@ -144,12 +133,13 @@ function SourceRow({ source, onRemoved }: { source: RemoteSource; onRemoved: () 
 					<p className="text-sm break-all text-muted-foreground"><span className="font-mono">{source.url}</span>{source.username && ` · ${source.username}`}</p>
 				</div>
 				<Button variant="outline" size="sm" disabled={test.isPending} onClick={() => test.mutate()}>{test.isPending ? tr('Testing…', 'Testando…') : tr('Test connection', 'Testar conexão')}</Button>
+				{!source.credentialError && <SourceCourses source={source} onMessage={onMessage} />}
 				<Button variant="ghost" size="sm" disabled={remove.isPending} onClick={() => setConfirming(true)}>{tr('Remove', 'Remover')}</Button>
 			</div>
 			<p className="text-sm text-muted-foreground">{source.hasPassword ? tr('Password saved', 'Senha salva') : tr('No password', 'Sem senha')}</p>
 			{source.credentialError && <p role="alert" className="text-sm text-destructive">{tr('The stored password cannot be read. Restore the encryption key or add the source again.', 'Não é possível ler a senha guardada. Restaure a chave de criptografia ou adicione a fonte de novo.')}</p>}
-			{test.data && <p role="status" className={test.data.ok ? 'text-sm' : 'text-sm text-destructive'}>{test.data.ok ? testMessage(test.data) : testFailure(test.data.error)}</p>}
-			{test.error && <p role="alert" className="text-sm text-destructive">{testFailure(null)}</p>}
+			{test.data && <p role="status" className={test.data.ok ? 'text-sm' : 'text-sm text-destructive'}>{test.data.ok ? testMessage(test.data) : sourceFailure(test.data.error)}</p>}
+			{test.error && <p role="alert" className="text-sm text-destructive">{sourceFailure(null)}</p>}
 			{remove.error && <p role="alert" className="text-sm text-destructive">{tr('The source could not be removed. Try again.', 'Não foi possível remover a fonte. Tente novamente.')}</p>}
 
 			<AlertDialog open={confirming} onOpenChange={(open) => !open && !remove.isPending && setConfirming(false)}>
