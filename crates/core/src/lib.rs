@@ -28,6 +28,7 @@ pub mod player;
 pub mod pomodoro;
 pub mod removal;
 pub mod rescan;
+pub mod roots;
 pub mod scanner;
 pub mod search;
 pub mod source;
@@ -79,6 +80,7 @@ pub use pomodoro::{
 };
 pub use removal::{MediaRemovalImpact, MediaRemovalOutcome, media_removal_impact, remove_media};
 pub use rescan::{RescanSummary, apply_incremental_scan, apply_scan, apply_source_scan, rescan};
+pub use roots::{Partition, RootError, SourceRoot, partition_scan};
 pub use scanner::{MediaKind, ScanOutcome, ScannedFile, scan};
 pub use search::{
     MAX_SEARCH_QUERY_CHARS, MAX_SEARCH_RESULTS, MIN_SEARCH_QUERY_CHARS, SearchLessonHit,
