@@ -79,7 +79,7 @@ Marks live in the database per user; the file and the library are untouched.
 
 ## Customisation
 
-One JSON object in `localStorage` (`learnvault-appearance`), validated on read and applied to `<html>` before first paint: theme (light, dark or follow the system), accent (8 presets or any colour), reward colour, corners, density, text size, font, lesson sidebar side, library layout, and which habit cards show. Everything has a default and can be reset.
+One JSON object in `localStorage` (`learnvault-appearance`), validated on read and applied to `<html>` before first paint: theme (light, dark or follow the system), accent (8 presets or any colour), reward colour, corners, density, text size, font, lesson sidebar side, and which habit cards show. Everything has a default and can be reset. Library view is managed separately by `learnvault-library-view`; the legacy `homeLayout` field remains accepted for storage compatibility but is not a current control.
 
 ## Gamification
 

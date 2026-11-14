@@ -324,6 +324,11 @@ export function LibraryActions({ onMessage }: { onMessage: (message: string) => 
 	const [importOpen, setImportOpen] = useState(false);
 	const [importPath, setImportPath] = useState('');
 	const [importError, setImportError] = useState('');
+	const failure = (error: unknown) => {
+		const code = error instanceof Error ? error.message : '';
+		if (code === 'credentials_change_required') return tr('Change your password on the server before managing courses.', 'Troque sua senha no servidor antes de gerenciar cursos.');
+		return tr('The library action failed. Try again.', 'A ação da biblioteca falhou. Tente novamente.');
+	};
 
 	const runImport = (folder?: string) =>
 		importCourse.mutate(folder, {
@@ -333,7 +338,7 @@ export function LibraryActions({ onMessage }: { onMessage: (message: string) => 
 				setImportPath('');
 				navigate('/');
 			},
-			onError: (error) => { if (transportKind === 'http') setImportError(error.message); else onMessage(error.message); }
+			onError: (error) => { if (transportKind === 'http') setImportError(failure(error)); else onMessage(failure(error)); }
 		});
 	const submit = (event: FormEvent) => {
 		event.preventDefault();
@@ -342,7 +347,7 @@ export function LibraryActions({ onMessage }: { onMessage: (message: string) => 
 
 	return (
 		<>
-			<Button variant="outline" disabled={rescan.isPending} onClick={() => { onMessage(tr('Reading courses…', 'Lendo os cursos…')); rescan.mutate(undefined, { onSuccess: () => onMessage(tr('Catalog updated.', 'Catálogo atualizado.')), onError: (error) => onMessage(error.message) }); }}>
+			<Button variant="outline" disabled={rescan.isPending} onClick={() => { onMessage(tr('Reading courses…', 'Lendo os cursos…')); rescan.mutate(undefined, { onSuccess: () => onMessage(tr('Catalog updated.', 'Catálogo atualizado.')), onError: (error) => onMessage(failure(error)) }); }}>
 				<RefreshCw className={cn(rescan.isPending && 'motion-safe:animate-spin')} />{tr('Refresh courses', 'Atualizar cursos')}
 			</Button>
 			<Button disabled={importCourse.isPending} aria-haspopup={transportKind === 'http' ? 'dialog' : undefined} onClick={() => (transportKind === 'desktop' ? runImport() : setImportOpen(true))}>
