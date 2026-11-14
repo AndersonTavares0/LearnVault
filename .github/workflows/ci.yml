@@ -161,7 +161,7 @@ jobs:
       # this job builds the SPA here instead of downloading `spa-build` and waiting for that job.
       - run: pnpm --filter learnvault-web-next build
       - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm exec playwright test tests/e2e/web-next.spec.ts tests/e2e/web-next-rich.spec.ts
+      - run: pnpm exec playwright test tests/e2e/web-next.spec.ts tests/e2e/web-next-rich.spec.ts tests/e2e/web-next-pdf.spec.ts
       - name: Upload E2E diagnostics
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

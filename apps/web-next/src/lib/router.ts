@@ -1,3 +1,4 @@
+import { isPdf } from './pdf';
 import { courseIdOf, lessonFromNode, type Catalog, type CatalogNode, type FileEntry, type Lesson } from './transport';
 
 export type Route = 'login' | 'home' | 'course' | 'player' | 'settings' | 'statistics' | 'notes' | 'history';
@@ -139,6 +140,9 @@ export function findLesson(catalog: Catalog | null, courseId: string | null, les
 	if (!catalog || !lessonPath) return null;
 	const playable = (file: FileEntry) =>
 		file.kind === 'media' && file.availability?.trim().toLowerCase() !== 'missing' && file.path === lessonPath;
+	// A PDF kept loose in the course or a module has no lesson node; it still opens in the reader.
+	const readablePdf = (file: FileEntry) =>
+		isPdf(file) && Boolean(file.mediaId) && file.availability?.trim().toLowerCase() !== 'missing' && file.path === lessonPath;
 	if (courseId) {
 		const course = findCourse(catalog, courseId);
 		if (!course) return null;
@@ -146,15 +150,14 @@ export function findLesson(catalog: Catalog | null, courseId: string | null, les
 			if (node.role === 'lesson' && node.path === lessonPath) return lessonFromNode(node);
 			const loose = node.looseFiles.find(playable);
 			if (loose) return { title: loose.name, path: loose.path, media: [loose], subtitles: [], materials: [] };
+			const document = node.looseFiles.find(readablePdf);
+			if (document) return { title: cleanMediaTitle(document.name), path: document.path, media: [], subtitles: [], materials: [document] };
 			for (const child of node.children) {
 				const found = visit(child);
 				if (found) return found;
 			}
 			return null;
 		}
-		if (course.role === 'lesson' && course.path === lessonPath) return lessonFromNode(course);
-		const ownLoose = course.looseFiles.find(playable);
-		if (ownLoose) return { title: ownLoose.name, path: ownLoose.path, media: [ownLoose], subtitles: [], materials: [] };
 		return visit(course);
 	}
 	return standaloneMedia(catalog, (file) => file.path === lessonPath);

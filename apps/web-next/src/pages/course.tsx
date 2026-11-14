@@ -1,4 +1,4 @@
-import { ChevronLeft, Star } from 'lucide-react';
+import { ChevronLeft, FileText, Star } from 'lucide-react';
 import { useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { CourseCover } from '@/components/course-cover';
@@ -13,15 +13,32 @@ import { useLocale } from '@/hooks/use-locale';
 import { collectMaterials, countCatalogNode, formatCount, formatCourseMeta } from '@/lib/catalog';
 import { tr } from '@/lib/i18n';
 import { buildLibrary } from '@/lib/library';
+import { isPdf } from '@/lib/pdf';
 import { formatDuration, studySyncSupported } from '@/lib/player';
 import { findCourse, findLessonLocation, href } from '@/lib/router';
-import { COVER_ACCEPT, MAX_COVER_BYTES, transportKind, type CatalogNode, type CourseStructure } from '@/lib/transport';
+import { COVER_ACCEPT, MAX_COVER_BYTES, transportKind, type CatalogNode, type CourseStructure, type FileEntry } from '@/lib/transport';
 import { cn } from '@/lib/utils';
 import { LessonPage } from './lesson';
 import { useCatalog, useCourseCover, useFavorites, useNotes, useRecent, useRemoveCourse, useResetCourseOrder, useSession, useToggleCourseFavorite } from '@/app/data';
 
 const path = (hash: string) => hash.replace(/^#/, '');
 /** Buttons that sit on the dark course header. */
+
+/**
+ * PDFs kept loose in the course or in its modules: no lesson holds them, so the course page
+ * links each one to the reader. Other loose files stay in the Materials tab as downloads.
+ */
+function loosePdfs(node: CatalogNode): FileEntry[] {
+	const files: FileEntry[] = [];
+	const walk = (current: CatalogNode) => {
+		for (const file of current.looseFiles) {
+			if (isPdf(file) && file.mediaId && file.availability?.trim().toLowerCase() !== 'missing') files.push(file);
+		}
+		current.children.forEach(walk);
+	};
+	walk(node);
+	return files;
+}
 
 export function CourseRoute() {
 	useLocale();
@@ -62,6 +79,7 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 	const lastStudied = (recent.data ?? []).map((item) => ({ item, location: findLessonLocation(catalog.data ?? null, item.mediaId) })).find(({ location }) => location?.courseId === courseId);
 	const counts = countCatalogNode(course);
 	const materials = collectMaterials(course);
+	const documents = loosePdfs(course);
 	const percent = entry?.total ? Math.round((entry.done / entry.total) * 100) : 0;
 	const resumeAt = lastStudied && !lastStudied.item.completed ? lastStudied.item.positionSeconds : null;
 	const continuePath = lastStudied?.location && !lastStudied.item.completed ? lastStudied.location.lesson.path : entry?.next?.path;
@@ -122,7 +140,7 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 					<TabsTrigger value="materials">{tr('Materials', 'Materiais')}{materials.length > 0 && <span className="tabular-nums">{materials.length}</span>}</TabsTrigger>
 					{studySyncSupported && <TabsTrigger value="notes">{tr('Notes', 'Notas')}</TabsTrigger>}
 				</TabsList>
-				<TabsContent value="content" className="pt-4">
+				<TabsContent value="content" className="space-y-6 pt-4">
 					{course.children.length > 0 ? (
 						<div className="space-y-3">
 							<div className="flex flex-wrap items-center justify-between gap-2">
@@ -134,7 +152,22 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 							</div>
 							<Curriculum nodes={course.children} courseId={courseId} completed={completed} favorites={favoriteMedia} activePath={continuePath} signal={signal} />
 						</div>
-					) : <p className="text-muted-foreground">{tr('This course has not been indexed yet.', 'Este curso ainda não foi indexado.')}</p>}
+					) : documents.length === 0 ? <p className="text-muted-foreground">{tr('This course has not been indexed yet.', 'Este curso ainda não foi indexado.')}</p> : null}
+					{documents.length > 0 && (
+						<section aria-labelledby="course-documents" className="space-y-3">
+							<h2 id="course-documents" className="font-heading text-lg font-bold">{tr('Documents', 'Documentos')}</h2>
+							<ul className="divide-y rounded-lg border bg-card">
+								{documents.map((file) => (
+									<li key={file.path}>
+										<Link to={path(href('course', courseId, file.path))} className="flex min-h-11 items-center gap-3 px-4 py-2 text-sm font-medium text-primary hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
+											<FileText className="size-4 shrink-0" aria-hidden="true" />
+											<span className="min-w-0 break-words">{file.name}</span>
+										</Link>
+									</li>
+								))}
+							</ul>
+						</section>
+					)}
 				</TabsContent>
 				<TabsContent value="materials" className="pt-4">
 					<Materials files={materials} courseId={courseId} />
