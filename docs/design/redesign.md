@@ -23,8 +23,7 @@ or pixel-level layout.
 | Viewport | Global navigation | Course context |
 | --- | --- | --- |
 | Desktop (≥ 1024px) | Topbar with logo, search (`/`), My learning, Progress, Notes, Pomodoro, language, account menu | Curriculum sidebar on the course page and in the player, collapsible |
-| Tablet (640–1023px) | Topbar; secondary items move into the account menu | Curriculum opens as a sheet |
-| Mobile (< 640px) | Bottom tab bar: My learning, Progress, Notes, Account | Curriculum appears below the player |
+| Below `lg` (< 1024px) | Bottom tab bar with the four destinations and Search (full-screen palette); the account menu stays in the topbar | Course content stacks below the player |
 
 The account menu holds Settings, Admin (admins only), and Sign out. The desktop build has no
 Sign out and adds the custom titlebar.
