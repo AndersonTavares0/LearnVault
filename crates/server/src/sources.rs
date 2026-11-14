@@ -456,8 +456,16 @@ pub(crate) async fn remove(
     let sources = Arc::clone(&state.sources);
     let sources_file = state.sources_file.clone();
     let key_path = state.source_key_path.clone();
+    let database = Arc::clone(&state.database);
     let outcome = tokio::task::spawn_blocking(move || {
         let _blocking_task = blocking_task;
+        // The roots of the source go first, so none is left pointing at a removed source. The
+        // database lock is released before the sources lock is taken: they are never nested.
+        {
+            let mut database = database.blocking_lock();
+            crate::source_roots::demote_all(&mut database, &source_id)
+                .map_err(|_| SourcesError::WriteFailed)?;
+        }
         let mut guard = sources.write().map_err(|_| SourcesError::WriteFailed)?;
         let next: Vec<RemoteSource> = guard
             .iter()

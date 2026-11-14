@@ -36,7 +36,7 @@ const MAX_PATH_CHARS: usize = 1024;
 /// Folders listed by one browse request; the rest is reported as truncated.
 const MAX_BROWSE_FOLDERS: usize = 2000;
 /// Folders turned into roots by one "every folder inside" request.
-const MAX_ROOTS_PER_REQUEST: usize = 500;
+const MAX_ROOTS_PER_REQUEST: usize = 100;
 
 /// Normalizes a client path to a clean relative path that keeps its case, or `None`.
 /// The empty string is the source root.
@@ -336,7 +336,10 @@ pub(crate) async fn create(
     let Some(path) = clean_path(&request.path) else {
         return json_error(StatusCode::BAD_REQUEST, "invalid_path");
     };
-    if path.is_empty() && matches!(request.mode, Pick::Course) {
+    if matches!(request.mode, Pick::Course)
+        && (path.is_empty() || is_ignored_directory(last_segment(&path)))
+    {
+        // The scan skips ignored folders, so such a course could never get any lesson.
         return json_error(StatusCode::BAD_REQUEST, "invalid_path");
     }
     // The folder is listed first: it proves it exists and is readable, and gives the children.
@@ -363,7 +366,8 @@ pub(crate) async fn create(
         let _blocking_task = blocking_task;
         let mut database = database;
         let (mut created, mut skipped) = (Vec::new(), Vec::new());
-        for target in targets {
+        let mut targets = targets.into_iter();
+        while let Some(target) = targets.next() {
             let library_id = new_library_id();
             match promote_root(
                 &mut database,
@@ -381,7 +385,22 @@ pub(crate) async fn create(
                     path: target,
                     reason: root_reason(&error),
                 }),
-                Err(error) => return Err(error),
+                Err(error) => {
+                    // Earlier roots are already committed, so report them instead of a bare
+                    // failure: the rest is skipped and can be chosen again.
+                    if created.is_empty() {
+                        return Err(error);
+                    }
+                    skipped.push(Skipped {
+                        path: target,
+                        reason: "unavailable",
+                    });
+                    skipped.extend(targets.map(|path| Skipped {
+                        path,
+                        reason: "unavailable",
+                    }));
+                    break;
+                }
             }
         }
         Ok((created, skipped))
@@ -447,6 +466,15 @@ pub(crate) async fn remove(
     }
 }
 
+/// Detaches every root of a source (its media returns to the source library). Used when the
+/// source is removed from the configuration, so no root outlives it.
+pub(crate) fn demote_all(database: &mut Database, source_id: &str) -> learnvault_core::Result<()> {
+    for root in list_roots(database, source_id)? {
+        demote_root(database, &root.library_id)?;
+    }
+    Ok(())
+}
+
 /// Applies a finished scan of a source: split by its roots, one library each, plus the files
 /// outside every root for the source itself. A source without roots is applied as a whole.
 /// A failed scan is recorded for every library so none of them looks verified.
@@ -477,17 +505,29 @@ pub(crate) fn apply_scan_by_roots(
         .roots
         .into_iter()
         .chain(std::iter::once((source_id.to_owned(), part.remainder)));
+    // Each library is applied in its own transaction and independently: one that fails does
+    // not stop the others, and the first failure is returned once all were tried.
+    let mut first_failure = None;
     for (library_id, scan) in libraries {
-        let summary = apply_source_scan(database, &library_id, Ok(scan))?;
-        total.scan_id = total.scan_id.max(summary.scan_id);
-        total.complete &= summary.complete;
-        total.inserted += summary.inserted;
-        total.updated += summary.updated;
-        total.changed += summary.changed;
-        total.moved += summary.moved;
-        total.marked_missing += summary.marked_missing;
-        total.preserved += summary.preserved;
-        total.ambiguous.extend(summary.ambiguous);
+        match apply_source_scan(database, &library_id, Ok(scan)) {
+            Ok(summary) => {
+                total.scan_id = total.scan_id.max(summary.scan_id);
+                total.complete &= summary.complete;
+                total.inserted += summary.inserted;
+                total.updated += summary.updated;
+                total.changed += summary.changed;
+                total.moved += summary.moved;
+                total.marked_missing += summary.marked_missing;
+                total.preserved += summary.preserved;
+                total.ambiguous.extend(summary.ambiguous);
+            }
+            Err(error) => {
+                first_failure.get_or_insert(error);
+            }
+        }
+    }
+    if let Some(error) = first_failure {
+        return Err(error);
     }
     Ok(total)
 }

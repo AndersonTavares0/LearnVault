@@ -33,8 +33,13 @@ fn tree() -> HashMap<&'static str, Vec<(&'static str, Option<u64>)>> {
         ("Cursos/Pentest", vec![("Redes", None), ("Web", None)]),
         (
             "Cursos/Pentest/Redes",
-            vec![("aula1.mp4", Some(10)), ("aula2.mp4", Some(10))],
+            vec![
+                ("aula1.mp4", Some(10)),
+                ("aula2.mp4", Some(10)),
+                ("Sub", None),
+            ],
         ),
+        ("Cursos/Pentest/Redes/Sub", vec![("extra.mp4", Some(10))]),
         ("Cursos/Pentest/Web", vec![("aula.mp4", Some(10))]),
         ("Cursos/Infra", vec![("Linux", None)]),
         ("Cursos/Infra/Linux", vec![("aula.mp4", Some(10))]),
@@ -387,7 +392,11 @@ async fn choosing_a_course_checks_the_folder_and_rejects_overlaps() {
     assert!(!body["created"][0]["id"].as_str().unwrap().is_empty());
 
     // The same folder, a folder inside it and a folder containing it all overlap.
-    for path in ["Cursos/Pentest/Redes", "Cursos/Pentest"] {
+    for path in [
+        "Cursos/Pentest/Redes",
+        "Cursos/Pentest",
+        "Cursos/Pentest/Redes/Sub",
+    ] {
         let conflict = h.pick(path, "course").await;
         assert_eq!(conflict.status(), StatusCode::CONFLICT, "{path}");
         assert_eq!(json(conflict).await["error"], "overlaps_existing_root");
@@ -576,4 +585,117 @@ async fn removing_a_course_returns_its_media_to_the_source_and_only_works_throug
     )
     .await;
     assert!(listed["roots"].as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn an_ignored_folder_cannot_be_chosen_as_a_course() {
+    let h = harness().await;
+    let refused = h.pick("Cursos/temp", "course").await;
+    assert_eq!(refused.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(json(refused).await["error"], "invalid_path");
+}
+
+#[tokio::test]
+async fn a_root_cannot_be_removed_through_another_source() {
+    let h = harness().await;
+    let id = json(h.pick("Cursos/Pentest/Redes", "course").await).await["created"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let (url, _server) = dav_server().await;
+    let other = json(
+        h.call(
+            "POST",
+            "/api/admin/sources",
+            Some(serde_json::json!({"name": "Outra", "url": url})),
+            true,
+        )
+        .await,
+    )
+    .await["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+
+    let wrong = h
+        .call(
+            "DELETE",
+            &format!("/api/admin/sources/{other}/roots/{id}"),
+            None,
+            true,
+        )
+        .await;
+    assert_eq!(wrong.status(), StatusCode::NOT_FOUND);
+    let still = json(
+        h.call(
+            "GET",
+            &format!("/api/admin/sources/{}/roots", h.source),
+            None,
+            false,
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(still["roots"].as_array().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn a_failed_scan_is_recorded_for_the_source_and_every_root() {
+    let h = harness().await;
+    h.scan().await;
+    let id = json(h.pick("Cursos/Pentest/Redes", "course").await).await["created"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    h._server.abort();
+
+    let failed = h.scan().await;
+    assert_eq!(failed.status(), StatusCode::BAD_GATEWAY);
+    assert_eq!(json(failed).await["error"], "unreachable");
+
+    let db = learnvault_core::Database::open(h.temp.path().join("roots.sqlite")).unwrap();
+    for library in [id.as_str(), h.source.as_str()] {
+        let status: String = db
+            .connection()
+            .query_row(
+                "SELECT status FROM scan WHERE library_id = ?1 ORDER BY scan_id DESC LIMIT 1",
+                [library],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(status, "failed", "{library}");
+    }
+}
+
+#[tokio::test]
+async fn removing_a_source_detaches_its_roots_and_keeps_every_media_row() {
+    let h = harness().await;
+    h.scan().await;
+    h.pick("Cursos/Pentest/Redes", "course").await;
+    h.pick("Cursos/Infra/Linux", "course").await;
+
+    let removed = h
+        .call(
+            "DELETE",
+            &format!("/api/admin/sources/{}", h.source),
+            None,
+            true,
+        )
+        .await;
+    assert_eq!(removed.status(), StatusCode::OK);
+
+    let db = learnvault_core::Database::open(h.temp.path().join("roots.sqlite")).unwrap();
+    let roots: i64 = db
+        .connection()
+        .query_row("SELECT COUNT(*) FROM library_root", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(roots, 0);
+    assert_eq!(
+        h.library_of("Cursos/Pentest/Redes/aula1.mp4").as_deref(),
+        Some(h.source.as_str())
+    );
+    assert_eq!(
+        h.library_of("Cursos/Infra/Linux/aula.mp4").as_deref(),
+        Some(h.source.as_str())
+    );
 }
