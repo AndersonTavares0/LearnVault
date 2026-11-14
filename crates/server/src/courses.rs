@@ -459,6 +459,16 @@ mod tests {
         let seeded = seeded_courses(&library);
         let titles: Vec<&str> = seeded.iter().map(|course| course.title.as_str()).collect();
         assert_eq!(titles, ["Física", "Matemática"]);
+        // Nomes que a limpeza zeraria continuam distintos: sem isso uma biblioteca por
+        // ano registraria varios cursos chamados "Curso".
+        std::fs::create_dir(library.join("2024")).unwrap();
+        std::fs::create_dir(library.join("2025")).unwrap();
+        let years: Vec<String> = seeded_courses(&library)
+            .into_iter()
+            .map(|course| course.title)
+            .filter(|title| title.chars().all(|character| character.is_ascii_digit()))
+            .collect();
+        assert_eq!(years, ["2024", "2025"]);
         assert!(
             seeded
                 .iter()
