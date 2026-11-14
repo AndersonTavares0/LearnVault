@@ -46,7 +46,7 @@ Wide and soft: panels and the hero use a 2rem radius, stat cards 1.75rem, pills 
 
 ## Layout
 
-- **Navigation.** A top bar with the wordmark (text, no logo tile), centred destinations (My learning, Review, Progress, Notes) with the current page in a cream pill, the search box (`/` focuses it), the Pomodoro timer, the theme button and the account menu. Below 768 px the destinations move to a bottom tab bar. The language switch is in Settings.
+- **Navigation.** A top bar with the wordmark (text, no logo tile), centred destinations (My learning, Review, Progress, Notes) with the current page in a cream pill, the search box (`/` focuses it), the Pomodoro timer, the theme button and the account menu. Below the `lg` breakpoint (1024 px) the destinations move to a bottom tab bar. The language switch is in Settings.
 - **Page title.** An optional icon tile, the serif title with its accent word, and an optional line under it (`PageHeader`).
 - **Home.** Title and admin actions, outlined filter pills (counts only when above zero; one scrolling row on phones), then two columns: the "Next up" hero (lesson, course, Resume, a progress ring) above the library, and beside them the habit cards (streak, level and XP, weekly goal) and a Bookmarks panel with starred lessons. The library is a grid of course cards or a list.
 - **Course.** A tinted header card (title, progress, Continue, favourite, cover), then tabs for Content, Materials and Notes.
