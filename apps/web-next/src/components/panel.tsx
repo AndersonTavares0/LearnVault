@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 
 /** The look every page shares: wide rounded cards on the cream page, warm hairlines, small tracked labels. */
 export const Panel = ({ children, className }: { children: ReactNode; className?: string }) => (
-	<div className={cn('rounded-[2rem] border bg-card p-6 sm:p-8', className)}>{children}</div>
+	<div className={cn('min-w-0 rounded-[2rem] border bg-card p-6 sm:p-8', className)}>{children}</div>
 );
 
 /** A tinted card for the one thing a page wants you to do first. */
