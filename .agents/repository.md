@@ -56,7 +56,7 @@ that area.
 - Release Please follows Conventional Commit version bumps before `1.0.0`: `feat:`, `fix:`, and
   `perf:` increment patch, while breaking changes increment minor. From `1.0.0`, breaking changes
   increment major. Release tags and names use `vMAJOR.MINOR.PATCH`.
-- Release Please prepares one release candidate on the first day of each month (UTC). Merge its
-  release PR to publish; urgently needed security releases can prepare a candidate early by
+- Release Please prepares one release PR on the first day of each month (UTC). Merge its
+  release PR to publish; urgently needed security releases can prepare the release PR early by
   manually running the `Release Please` workflow on `main`.
 - GitHub Wiki is permanently removed; do not recreate wiki sync scripts or workflows.
