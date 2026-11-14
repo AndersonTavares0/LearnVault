@@ -362,9 +362,19 @@ pub(crate) async fn create(
         return service_unavailable();
     };
     let single = matches!(request.mode, Pick::Course);
+    let configured = std::sync::Arc::clone(&state.sources);
     let outcome = tokio::task::spawn_blocking(move || {
         let _blocking_task = blocking_task;
         let mut database = database;
+        // Re-checked under the database lock: removing a source detaches its roots after it
+        // leaves the configuration, so a source that is gone here must not get a new root.
+        let exists = configured
+            .read()
+            .map(|sources| sources.iter().any(|configured| configured.id == source.id))
+            .unwrap_or(false);
+        if !exists {
+            return Ok(None);
+        }
         let (mut created, mut skipped) = (Vec::new(), Vec::new());
         let mut targets = targets.into_iter();
         while let Some(target) = targets.next() {
@@ -403,16 +413,17 @@ pub(crate) async fn create(
                 }
             }
         }
-        Ok((created, skipped))
+        Ok(Some((created, skipped)))
     })
     .await;
     match outcome {
         // A single chosen folder that cannot become a root is a conflict, not a partial success.
-        Ok(Ok((created, skipped))) if single && created.is_empty() => {
+        Ok(Ok(None)) => status_private_no_store(StatusCode::NOT_FOUND),
+        Ok(Ok(Some((created, skipped)))) if single && created.is_empty() => {
             let reason = skipped.first().map_or("invalid_root", |skip| skip.reason);
             json_error(StatusCode::CONFLICT, reason)
         }
-        Ok(Ok((created, skipped))) => private_no_store(
+        Ok(Ok(Some((created, skipped)))) => private_no_store(
             (
                 StatusCode::CREATED,
                 Json(CreatedResponse { created, skipped }),

@@ -459,23 +459,28 @@ pub(crate) async fn remove(
     let database = Arc::clone(&state.database);
     let outcome = tokio::task::spawn_blocking(move || {
         let _blocking_task = blocking_task;
-        // The roots of the source go first, so none is left pointing at a removed source. The
-        // database lock is released before the sources lock is taken: they are never nested.
+        let removed = {
+            let mut guard = sources.write().map_err(|_| SourcesError::WriteFailed)?;
+            let next: Vec<RemoteSource> = guard
+                .iter()
+                .filter(|source| source.id != source_id)
+                .cloned()
+                .collect();
+            let removed = next.len() != guard.len();
+            if removed {
+                store_sources(&sources_file, &key_path, &next)?;
+                *guard = next;
+            }
+            removed
+        };
+        // The roots go after the configuration, with the sources lock already released (the
+        // two locks are never nested). A root created while the source was being removed is
+        // caught because creating one re-checks the source under the database lock. If this
+        // fails the source is already gone and repeating the request finishes the cleanup.
         {
             let mut database = database.blocking_lock();
             crate::source_roots::demote_all(&mut database, &source_id)
                 .map_err(|_| SourcesError::WriteFailed)?;
-        }
-        let mut guard = sources.write().map_err(|_| SourcesError::WriteFailed)?;
-        let next: Vec<RemoteSource> = guard
-            .iter()
-            .filter(|source| source.id != source_id)
-            .cloned()
-            .collect();
-        let removed = next.len() != guard.len();
-        if removed {
-            store_sources(&sources_file, &key_path, &next)?;
-            *guard = next;
         }
         Ok::<_, SourcesError>(removed)
     })
