@@ -46,6 +46,16 @@ fn library(temp: &TempDir) -> std::path::PathBuf {
     library
 }
 
+/// Registra a biblioteca inteira como o curso `library-1`, sem depender da semeadura por
+/// pasta de topo. Os módulos ficam na raiz do curso, que é o que estes casos ordenam.
+fn seed_registry(temp: &TempDir, library: &Path) {
+    let registry = serde_json::json!({
+        "version": 1,
+        "courses": [{ "id": "library-1", "path": library }],
+    });
+    std::fs::write(temp.path().join("courses.json"), registry.to_string()).unwrap();
+}
+
 async fn login(app: &axum::Router) -> String {
     let response = app
         .clone()
@@ -181,6 +191,7 @@ fn snapshot(root: &Path) -> Vec<String> {
 async fn order_requires_authentication_and_same_origin() {
     let temp = tempfile::tempdir().unwrap();
     let library = library(&temp);
+    seed_registry(&temp, &library);
     let app = build_router(AppState::initialize(config(&temp, &library)).await.unwrap());
 
     let unauthenticated = put_order(&app, "learnvault_session=invalid", "library-1", "", &[]).await;
@@ -209,6 +220,7 @@ async fn order_requires_authentication_and_same_origin() {
 async fn order_round_trips_persists_across_rescan_and_restart() {
     let temp = tempfile::tempdir().unwrap();
     let library = library(&temp);
+    seed_registry(&temp, &library);
     let app = build_router(AppState::initialize(config(&temp, &library)).await.unwrap());
     let cookie = login(&app).await;
     rescan(&app, &cookie).await;
@@ -265,6 +277,7 @@ async fn order_round_trips_persists_across_rescan_and_restart() {
 async fn order_rejects_lists_that_are_not_a_permutation_of_siblings() {
     let temp = tempfile::tempdir().unwrap();
     let library = library(&temp);
+    seed_registry(&temp, &library);
     let app = build_router(AppState::initialize(config(&temp, &library)).await.unwrap());
     let cookie = login(&app).await;
     rescan(&app, &cookie).await;
@@ -300,6 +313,7 @@ async fn order_rejects_lists_that_are_not_a_permutation_of_siblings() {
 async fn order_rejects_an_unknown_course() {
     let temp = tempfile::tempdir().unwrap();
     let library = library(&temp);
+    seed_registry(&temp, &library);
     let app = build_router(AppState::initialize(config(&temp, &library)).await.unwrap());
     let cookie = login(&app).await;
 
@@ -312,6 +326,7 @@ async fn order_rejects_an_unknown_course() {
 async fn reset_restores_the_automatic_order() {
     let temp = tempfile::tempdir().unwrap();
     let library = library(&temp);
+    seed_registry(&temp, &library);
     let app = build_router(AppState::initialize(config(&temp, &library)).await.unwrap());
     let cookie = login(&app).await;
     rescan(&app, &cookie).await;
@@ -363,6 +378,7 @@ async fn order_accepts_a_large_sibling_list_above_the_default_body_limit() {
         std::fs::write(directory.join("aula.mp4"), b"video").unwrap();
     }
 
+    seed_registry(&temp, &library);
     let app = build_router(AppState::initialize(config(&temp, &library)).await.unwrap());
     let cookie = login(&app).await;
     rescan(&app, &cookie).await;

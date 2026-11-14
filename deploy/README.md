@@ -51,7 +51,7 @@ Edite o arquivo `.env` e defina suas credenciais de administrador e caminhos:
 - `ADMIN_USERNAME`: Usuário administrador inicial.
 - `ADMIN_PASSWORD`: Senha forte (mínimo de 12 caracteres).
 - `DATA_DIR`: Onde o banco de dados e metadados serão armazenados.
-- `LIBRARY_DIR`: Folder on the host, mounted read-only at `/library`. It sets the root the server is allowed to read; it does not register your course folders by itself. On the first start the folder itself appears as one course (named after it). To list each course folder under it, sign in as the administrator, use **Import course** for each one, then **Refresh courses**. Once your course folders are imported, remove the root course (**Manage course**, then remove) so every file is not indexed twice. See #318.
+- `LIBRARY_DIR`: Folder on the host, mounted read-only at `/library`. It sets the root the server is allowed to read and, on the first start, registers each course folder directly under it as a course — no manual import step. A folder that keeps the media files directly in the root is registered as a single course instead. Importing a subfolder also works (for example when your course folders are nested one level deeper); folders added after the first start are not registered automatically.
 
 ### 2. Executar com Docker Compose
 

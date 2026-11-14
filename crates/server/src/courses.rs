@@ -121,6 +121,45 @@ pub(crate) fn legacy_seed(root: &Path) -> Option<RegisteredCourse> {
     })
 }
 
+/// Cursos semeados a partir da raiz configurada no primeiro start.
+///
+/// Cada pasta de primeiro nível sob a raiz vira um curso: uma biblioteca de cursos
+/// costuma ser um diretório com uma pasta por curso, e exigir um import manual por pasta
+/// deixava a biblioteca vazia logo depois do deploy. Quando não há subpasta válida, a
+/// própria raiz é semeada como antes, preservando layouts que guardam as mídias
+/// diretamente nela e a identidade histórica `library-1`.
+pub(crate) fn seeded_courses(root: &Path) -> Vec<RegisteredCourse> {
+    let Ok(entries) = fs::read_dir(root) else {
+        return legacy_seed(root).into_iter().collect();
+    };
+    let mut folders: Vec<PathBuf> = entries
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
+        .map(|entry| entry.path())
+        .collect();
+    // A ordem do sistema de arquivos varia; ordenar mantém a lista semeada estável.
+    folders.sort();
+    let mut courses: Vec<RegisteredCourse> = Vec::new();
+    for folder in folders {
+        let Ok(course_root) = CourseRoot::resolve(&folder) else {
+            continue;
+        };
+        let course = RegisteredCourse {
+            id: course_id_from_path(course_root.as_path()),
+            title: course_title(course_root.as_path()),
+            root: course_root,
+        };
+        if courses.iter().any(|registered| registered.id == course.id) {
+            continue;
+        }
+        courses.push(course);
+    }
+    if courses.is_empty() {
+        return legacy_seed(root).into_iter().collect();
+    }
+    courses
+}
+
 /// Grava o registro de forma serializada e atômica.
 ///
 /// O temporário é criado exclusivamente (`create_new`) e trocado por `rename`; no Windows,
@@ -401,11 +440,44 @@ mod tests {
 
     use super::{
         ImportFailure, RegisteredCourse, RegistryFile, import_course, load_registry, registry_path,
-        remove_course, store_registry,
+        remove_course, seeded_courses, store_registry,
     };
 
     fn write_registry_file(path: &std::path::Path, contents: &str) {
         std::fs::write(path, contents).unwrap();
+    }
+
+    #[test]
+    fn seeding_registers_each_top_level_folder_as_a_course() {
+        let temp = tempdir().unwrap();
+        let library = temp.path().join("library");
+        std::fs::create_dir(&library).unwrap();
+        std::fs::create_dir(library.join("01 - Física")).unwrap();
+        std::fs::create_dir(library.join("02 - Matemática")).unwrap();
+        std::fs::write(library.join("leia-me.txt"), "solto").unwrap();
+
+        let seeded = seeded_courses(&library);
+        let titles: Vec<&str> = seeded.iter().map(|course| course.title.as_str()).collect();
+        assert_eq!(titles, ["Física", "Matemática"]);
+        assert!(
+            seeded
+                .iter()
+                .all(|course| course.id != learnvault_core::LEGACY_LIBRARY_ID),
+            "pastas de curso usam a identidade derivada do caminho"
+        );
+    }
+
+    #[test]
+    fn seeding_falls_back_to_the_library_root_when_there_is_no_subfolder() {
+        let temp = tempdir().unwrap();
+        let library = temp.path().join("library");
+        std::fs::create_dir(&library).unwrap();
+        std::fs::write(library.join("aula.mp4"), "mídia").unwrap();
+
+        let seeded = seeded_courses(&library);
+        assert_eq!(seeded.len(), 1);
+        assert_eq!(seeded[0].id, learnvault_core::LEGACY_LIBRARY_ID);
+        assert_eq!(seeded[0].root.as_path(), library.canonicalize().unwrap());
     }
 
     #[test]

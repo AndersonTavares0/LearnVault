@@ -23,8 +23,8 @@ test('signs in, indexes the library and resumes a lesson from My learning', asyn
 	await page.getByRole('link', { name: 'My learning' }).first().click();
 	await page.getByRole('button', { name: 'Refresh courses' }).click();
 	await expect(page.getByText('Catalog updated.')).toBeVisible();
-	// The library root registers as one course; its folders become modules.
-	await expect(page.getByRole('heading', { name: 'library', level: 3 })).toHaveCount(1);
+	// A top-level folder registers as one course; its folders become modules.
+	await expect(page.getByRole('heading', { name: 'Course', level: 3 })).toHaveCount(1);
 	await expectNoAxeViolations(page, 'home');
 
 	const catalog = await (await page.request.get(`${origin}/api/catalog`)).json();
@@ -55,7 +55,7 @@ test('signs in, indexes the library and resumes a lesson from My learning', asyn
 
 	await page.goto(`${origin}/#/notes`);
 	await expectNoAxeViolations(page, 'notes courses');
-	await page.getByRole('link', { name: /^library/ }).click();
+	await page.getByRole('link', { name: /^Course/ }).click();
 	await expect(page.getByText('Ownership moves values.')).toBeVisible();
 	await expectNoAxeViolations(page, 'notes');
 	await page.getByRole('button', { name: /^Pomodoro:/ }).click();
@@ -68,8 +68,8 @@ test('signs in, indexes the library and resumes a lesson from My learning', asyn
 	await expect(timer).toBeHidden();
 	await page.goto(`${origin}/#/`);
 
-	await page.getByRole('link', { name: 'library' }).click();
-	await expect(page.getByRole('heading', { level: 1, name: 'library' })).toBeVisible();
+	await page.getByRole('link', { name: 'Course', exact: true }).click();
+	await expect(page.getByRole('heading', { level: 1, name: 'Course' })).toBeVisible();
 	// The module holding the lesson to continue starts expanded.
 	await expect(page.getByRole('link', { name: /Borrowing/ })).toBeVisible();
 	await page.getByRole('button', { name: 'Mark “Borrowing” as completed' }).click();
