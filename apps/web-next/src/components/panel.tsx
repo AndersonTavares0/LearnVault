@@ -3,12 +3,12 @@ import { cn } from '@/lib/utils';
 
 /** The look every page shares: wide rounded cards on the cream page, warm hairlines, small tracked labels. */
 export const Panel = ({ children, className }: { children: ReactNode; className?: string }) => (
-	<div className={cn('min-w-0 rounded-[2rem] border bg-card p-6 sm:p-8', className)}>{children}</div>
+	<div data-panel className={cn('min-w-0 rounded-[2rem] border bg-card p-6 sm:p-8', className)}>{children}</div>
 );
 
 /** A tinted card for the one thing a page wants you to do first. */
 export const Hero = ({ children, className }: { children: ReactNode; className?: string }) => (
-	<div className={cn('rounded-[2rem] border border-brand-soft bg-panel p-6 sm:p-10', className)}>{children}</div>
+	<div data-panel className={cn('rounded-[2rem] border border-brand-soft bg-panel p-6 sm:p-10', className)}>{children}</div>
 );
 
 export const Eyebrow = ({ children, className }: { children: ReactNode; className?: string }) => (
@@ -19,7 +19,7 @@ export const Eyebrow = ({ children, className }: { children: ReactNode; classNam
 export function Stat({ label, value, unit, note, icon, tone, bar, progress, children, className }: { label: string; value: ReactNode; unit?: string; note?: string; icon?: ReactNode; tone?: 'amber' | 'violet' | 'green'; bar?: { value: number; max: number }; progress?: number; children?: ReactNode; className?: string }) {
 	const percent = Math.round(Math.min(1, Math.max(0, progress ?? 0)) * 100);
 	return (
-		<div className={cn('rounded-[1.75rem] border border-border bg-card p-5', tone && `stat-${tone}`, className)}>
+		<div data-panel className={cn('rounded-[1.75rem] border border-border bg-card p-5', tone && `stat-${tone}`, className)}>
 			{icon && <div data-stat-icon className="mb-3 grid size-9 place-items-center rounded-xl bg-brand-tint text-primary [&_svg]:size-5" aria-hidden="true">{icon}</div>}
 			<Eyebrow>{label}</Eyebrow>
 			<p data-stat-value className="mt-2 font-heading text-3xl font-semibold">{value}{unit && <span className="ml-1.5 font-sans text-base font-medium text-muted-foreground">{unit}</span>}</p>

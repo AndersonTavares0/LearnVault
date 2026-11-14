@@ -2,7 +2,7 @@ import { Award, ChartNoAxesColumn, Check, Lock } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { ActivityHeatmap } from '@/components/activity-heatmap';
-import { Eyebrow, Panel, Stat } from '@/components/panel';
+import { Eyebrow, Panel } from '@/components/panel';
 import { ProgressBar, routerPath } from '@/components/course-card';
 import { Button } from '@/components/ui/button';
 import { useLocale } from '@/hooks/use-locale';
@@ -47,7 +47,8 @@ export function ProgressPage() {
 	const weekDays = study.days.map((day) => ({ day: day.day, label: weekday(day.day), minutes: minutes.get(day.day) ?? 0, active: day.active }));
 	const total = range === 'week' ? focus.data?.weekMinutes ?? weekDays.reduce((sum, day) => sum + day.minutes, 0) : focus.data?.totalMinutes ?? 0;
 	const best = weekDays.reduce<(typeof weekDays)[number] | null>((top, day) => (day.minutes > (top?.minutes ?? 0) ? day : top), null);
-	const noFocus = weekDays.every((day) => day.minutes === 0);
+	const focusFailed = Boolean(focus.error);
+	const noFocus = !focusFailed && weekDays.every((day) => day.minutes === 0);
 	const resume = library.resume[0];
 	const focusHref = resume
 		? routerPath(href('course', resume.location.courseId, resume.location.lesson.path, resume.progress.positionSeconds))
@@ -58,7 +59,7 @@ export function ProgressPage() {
 			<PageHeader icon={ChartNoAxesColumn} title={tr('Your progress', 'Seu progresso')} description={`${tr(`Level ${game.level.level}`, `Nível ${game.level.level}`)} · ${game.level.xp} XP`} />
 
 			<div className="grid items-start gap-6 lg:grid-cols-12">
-				<Panel className="space-y-6 lg:col-span-8">
+				<Panel className="order-1 space-y-4 p-5 sm:p-6 lg:col-span-8">
 					<div className="flex flex-wrap items-start justify-between gap-4">
 						<div className="min-w-0">
 							<Eyebrow>{tr('This week', 'Esta semana')}</Eyebrow>
@@ -76,9 +77,20 @@ export function ProgressPage() {
 						</div>
 					</div>
 
-					<div className="rounded-[1.75rem] border border-panel-edge bg-panel p-5">
-						<Eyebrow>{tr('Focus time, this week', 'Tempo de foco, nesta semana')}</Eyebrow>
-						<FocusChart days={weekDays} />
+					<dl aria-label={tr('At a glance', 'Visão geral')} className="grid grid-cols-3 gap-3 border-y py-3 text-sm">
+						<div><dt className="text-muted-foreground">{tr('Busiest day', 'Dia mais forte')}</dt><dd className="mt-1 font-semibold">{best ? `${best.label} · ${formatMinutes(best.minutes)}` : '–'}</dd></div>
+						<div><dt className="text-muted-foreground">{tr('Days studied', 'Dias estudados')}</dt><dd className="mt-1 font-semibold">{study.weekActiveDays} / 7</dd></div>
+						<div><dt className="text-muted-foreground">{tr('Day streak', 'Dias seguidos')}</dt><dd className="mt-1 font-semibold">{study.currentStreak} {study.currentStreak === 1 ? tr('day', 'dia') : tr('days', 'dias')}</dd></div>
+					</dl>
+					<div className="rounded-2xl border border-panel-edge bg-panel p-4">
+						<Eyebrow>{range === 'week' ? tr('Focus time, this week', 'Tempo de foco, nesta semana') : tr('Weekly breakdown', 'Detalhamento semanal')}</Eyebrow>
+						{focus.isPending ? (
+							<p role="status" className="mt-2 text-sm text-muted-foreground">{tr('Loading focus statistics…', 'Carregando estatísticas de foco…')}</p>
+						) : focusFailed ? (
+							<p role="alert" className="mt-2 text-sm text-destructive">{tr('Focus statistics could not be loaded.', 'Não foi possível carregar as estatísticas de foco.')}</p>
+						) : (
+							<FocusChart days={weekDays} />
+						)}
 						{noFocus && (
 							<Link to={focusHref} className="mt-4 inline-flex h-11 items-center rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground hover:bg-brand-deep focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
 								{tr('Start a focus session', 'Iniciar uma sessão de foco')}
@@ -87,28 +99,17 @@ export function ProgressPage() {
 					</div>
 				</Panel>
 
-				<Panel className="space-y-4 lg:col-span-4">
-					<Eyebrow>{tr('At a glance', 'Visão geral')}</Eyebrow>
-					<div className="grid gap-3">
-						<Stat tone="amber" label={tr('Busiest day', 'Dia mais forte')} value={best ? best.label : '–'} note={best && best.minutes > 0 ? formatMinutes(best.minutes) : undefined} />
-						<Stat tone="violet" label={tr('Days studied', 'Dias estudados')} value={study.weekActiveDays} unit={tr('of 7', 'de 7')} />
-						<Stat tone="green" label={tr('Day streak', 'Dias seguidos')} value={study.currentStreak} unit={study.currentStreak === 1 ? tr('day', 'dia') : tr('days', 'dias')} />
-					</div>
-				</Panel>
-			</div>
-
-			<div className="grid items-start gap-6 lg:grid-cols-12">
-				<Panel className="lg:col-span-8">
+				<Panel className="order-4 lg:col-span-12">
 					<ActivityHeatmap today={study.today} activeDays={study.activeDaysYear} />
 				</Panel>
 
-				<Panel className="min-w-0 lg:col-span-4"><section aria-labelledby="missions-heading" className="space-y-3">
+				<Panel className="order-2 min-w-0 p-5 sm:p-6 lg:col-span-4 lg:row-span-2"><section aria-labelledby="missions-heading" className="space-y-3">
 					<h2 id="missions-heading" className="font-heading text-2xl font-semibold">{tr('Today', 'Hoje')}</h2>
 					<ul className="divide-y border-y">
 						{game.missions.map((mission) => {
 							const done = mission.progress >= mission.target;
 							return (
-								<li key={mission.id} className="flex flex-wrap items-start gap-3 py-4">
+								<li key={mission.id} className="flex flex-wrap items-start gap-3 py-3">
 									<span className={cn('mt-0.5 grid size-6 shrink-0 place-items-center rounded-full border-2', done ? 'border-success bg-success text-white dark:text-[var(--background)]' : 'border-border-strong')}>{done && <Check className="size-4" aria-hidden="true" />}</span>
 									<div className="min-w-0 flex-1">
 										<p className="font-semibold">{mission.title}</p>
@@ -124,14 +125,13 @@ export function ProgressPage() {
 						})}
 					</ul>
 				</section></Panel>
-			</div>
-
-			<Panel><section aria-labelledby="badges-heading" className="space-y-3">
+			<Panel className="order-3 p-5 sm:p-6 lg:col-span-8"><section aria-labelledby="badges-heading" className="space-y-3">
 				<h2 id="badges-heading" className="font-heading text-2xl font-semibold">{tr('Badges', 'Emblemas')}</h2>
-				<ul className="grid grid-cols-2 gap-x-4 sm:grid-cols-3 lg:grid-cols-6">
+				<ul className="grid grid-cols-2 gap-x-3 sm:grid-cols-3 xl:grid-cols-6">
 					{game.badges.map((badge) => <BadgeTile key={badge.id} badge={badge} />)}
 				</ul>
 			</section></Panel>
+			</div>
 		</div>
 	);
 }
@@ -186,7 +186,7 @@ function FocusChart({ days }: { days: ChartDay[] }) {
 			</svg>
 			)}
 			{empty && <p className="mt-2 text-sm text-muted-foreground">{tr('No focus time yet. Start the timer in a lesson and it will show up here.', 'Ainda sem tempo de foco. Inicie o cronômetro numa aula e ele aparece aqui.')}</p>}
-			<table className="sr-only">
+			<table className="sr-only" aria-label={tr('Focus minutes by day', 'Minutos de foco por dia')}>
 				<caption>{tr('Focus minutes by day', 'Minutos de foco por dia')}</caption>
 				<thead><tr><th scope="col">{tr('Day', 'Dia')}</th><th scope="col">{tr('Minutes', 'Minutos')}</th></tr></thead>
 				<tbody>{days.map((day) => <tr key={day.day}><th scope="row">{day.label}</th><td>{day.minutes}</td></tr>)}</tbody>

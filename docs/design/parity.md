@@ -89,4 +89,5 @@ Decide in Phase 5 whether to expose these or leave them unused:
 
 - Forest, 2.5D island, tree species, nursery, drops, guardian messages, ecosystem bands, and the level
   crest illustration. Their data lived only in browser storage.
-- Library views "Compact" and "Shelf". Grid and list remain.
+- Library views from the earlier Svelte cutover are superseded by the current React library. The current
+  product intentionally supports Covers, List, Compact and Shelf; see `apps/web-next/src/lib/library-view.ts`.

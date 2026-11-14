@@ -1,5 +1,6 @@
-import { cleanup, fireEvent, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
+import { appearanceStore, updateAppearance } from '@/lib/appearance';
 import { setLocale } from '@/lib/i18n';
 import type { Catalog, CatalogNode, FileEntry, RewardSummary } from '@/lib/transport';
 import { renderApp } from '@/test/render-app';
@@ -53,6 +54,44 @@ describe('My learning', () => {
 		renderApp('/');
 		expect(await screen.findByRole('button', { name: 'Import course' })).toBeTruthy();
 		expect(screen.getByRole('button', { name: 'Refresh courses' })).toBeTruthy();
+	});
+
+	it('shows course management on library cards for admins without opening the course', async () => {
+		renderApp('/', { catalog });
+		const courses = await screen.findByRole('region', { name: 'Your library' });
+		expect(within(courses).getAllByRole('button', { name: /^Manage / })).toHaveLength(2);
+	});
+
+	it('keeps the course visible when an admin opens and cancels library management', async () => {
+		renderApp('/', { catalog });
+		const courses = await screen.findByRole('region', { name: 'Your library' });
+		fireEvent.click(within(courses).getByRole('button', { name: 'Manage Rust from zero' }));
+		fireEvent.click(await screen.findByRole('menuitem', { name: 'Remove course' }));
+		const dialog = await screen.findByRole('alertdialog', { name: /Remove “Rust from zero” from the library/ });
+		expect(within(dialog).getByText(/original files on disk are not deleted/)).toBeTruthy();
+		fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+		expect(screen.getByRole('heading', { name: 'Rust from zero' })).toBeTruthy();
+	});
+
+	it('does not expose library management to non-admins with courses', async () => {
+		renderApp('/', { catalog, user: { userId: 'u2', username: 'ana', role: 'user', isAdmin: false, mustChangeCredentials: false } });
+		const courses = await screen.findByRole('region', { name: 'Your library' });
+		expect(within(courses).queryByRole('button', { name: /^Manage / })).toBeNull();
+		expect(screen.queryByRole('button', { name: 'Import course' })).toBeNull();
+		expect(screen.queryByRole('button', { name: 'Refresh courses' })).toBeNull();
+	});
+
+	it('honors the badges visibility setting on My learning', async () => {
+		const previous = appearanceStore.get();
+		try {
+			updateAppearance({ showBadges: true }, null);
+			renderApp('/', { catalog, rewards });
+			expect(await screen.findByText('Badges')).toBeTruthy();
+			updateAppearance({ showBadges: false }, null);
+			await waitFor(() => expect(screen.queryByText('Badges')).toBeNull());
+		} finally {
+			updateAppearance(previous, null);
+		}
 	});
 
 	it('opens the import dialog, says files stay read-only and closes on cancel', async () => {

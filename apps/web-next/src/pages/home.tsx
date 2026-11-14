@@ -1,4 +1,4 @@
-import { BookOpen, ChevronRight, Flame, FolderPlus, LayoutGrid, LibraryBig, List, Play, RefreshCw, Rows3, Search, Star, Target } from 'lucide-react';
+import { Award, BookOpen, ChevronRight, Flame, FolderPlus, LayoutGrid, LibraryBig, List, Play, RefreshCw, Rows3, Search, Star, Target } from 'lucide-react';
 import { useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { BrandMark } from '@/components/brand';
@@ -104,10 +104,10 @@ export function HomePage() {
 								<Button variant="outline" className="mt-4" onClick={() => setParams({}, { replace: true })}>{tr('Clear filters and search', 'Limpar filtros e busca')}</Button>
 							</div>
 						) : view === 'shelf' ? (
-							<Shelf entries={sorted} profile={profile} />
+							<Shelf entries={sorted} profile={profile} canManage={Boolean(user?.isAdmin)} />
 						) : (
-							<ul className={view === 'covers' ? 'grid grid-cols-1 gap-x-5 gap-y-[calc(var(--density)*2rem)] sm:grid-cols-2 xl:grid-cols-3' : 'divide-y border-y'}>
-								{sorted.map((entry) => <CourseCard key={entry.courseId} entry={entry} profile={profile} variant={view === 'covers' ? 'grid' : view} />)}
+							<ul className={view === 'covers' ? 'grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3' : 'divide-y border-y'}>
+								{sorted.map((entry) => <CourseCard key={entry.courseId} entry={entry} profile={profile} canManage={Boolean(user?.isAdmin)} variant={view === 'covers' ? 'grid' : view} />)}
 							</ul>
 						)}
 					</section>
@@ -199,7 +199,7 @@ function ResumeCard({ items, entries }: { items: ResumeEntry[]; entries: CourseE
 }
 
 /** Courses as horizontal shelves, grouped by how far the reader has got. */
-function Shelf({ entries, profile }: { entries: CourseEntry[]; profile: string }) {
+function Shelf({ entries, profile, canManage }: { entries: CourseEntry[]; profile: string; canManage: boolean }) {
 	const groups = [
 		{ status: 'in_progress', label: tr('In progress', 'Em andamento') },
 		{ status: 'not_started', label: tr('Not started', 'Não iniciados') },
@@ -217,7 +217,7 @@ function Shelf({ entries, profile }: { entries: CourseEntry[]; profile: string }
 							<span className="text-sm text-muted-foreground tabular-nums">{items.length}</span>
 						</div>
 						<ul className="flex snap-x gap-5 overflow-x-auto pb-2">
-							{items.map((entry) => <CourseCard key={entry.courseId} entry={entry} profile={profile} variant="shelf" />)}
+							{items.map((entry) => <CourseCard key={entry.courseId} entry={entry} profile={profile} canManage={canManage} variant="shelf" />)}
 						</ul>
 					</section>
 				);
@@ -275,7 +275,8 @@ function Habit({ rewards, completedCourses }: { rewards: RewardSummary | undefin
 			</div>
 		</Stat></li>,
 		look.showXp && <li key="x"><Stat tone="violet" icon={<Star />} label={tr(`Level ${game.level.level}`, `Nível ${game.level.level}`)} value={game.level.xp} unit="XP" progress={game.level.progress} note={tr(`${game.level.xpToNext} XP to Level ${game.level.level + 1}`, `${game.level.xpToNext} XP para o Nível ${game.level.level + 1}`)} className="h-full p-4 xl:p-5" /></li>,
-		look.showGoal && <li key="g" className="col-span-2"><Stat tone="green" icon={<Target />} label={tr('Goal', 'Meta')} value={`${days}/${rewards.weeklyGoal}`} unit={tr('days this week', 'dias nesta semana')} bar={{ value: days, max: rewards.weeklyGoal }} note={remaining === 0 ? tr('Goal reached', 'Meta atingida') : remaining === 1 ? tr('1 more day', 'Mais 1 dia') : tr(`${remaining} more days`, `Mais ${remaining} dias`)} /></li>
+		look.showGoal && <li key="g" className="col-span-2"><Stat tone="green" icon={<Target />} label={tr('Goal', 'Meta')} value={`${days}/${rewards.weeklyGoal}`} unit={tr('days this week', 'dias nesta semana')} bar={{ value: days, max: rewards.weeklyGoal }} note={remaining === 0 ? tr('Goal reached', 'Meta atingida') : remaining === 1 ? tr('1 more day', 'Mais 1 dia') : tr(`${remaining} more days`, `Mais ${remaining} dias`)} /></li>,
+		look.showBadges && <li key="b" className="col-span-2"><Link to="/progress" className="block h-full rounded-[1.75rem] focus-visible:ring-3 focus-visible:ring-ring focus-visible:outline-none"><Stat tone="amber" icon={<Award />} label={tr('Badges', 'Emblemas')} value={game.badges.filter((badge) => badge.earned).length} unit={tr('earned', 'conquistados')} note={tr(`${game.badges.length} milestones to explore`, `${game.badges.length} marcos para explorar`)} /></Link></li>
 	].filter(Boolean);
 	if (cards.length === 0) return null;
 	return <ul aria-label={tr('Your habit', 'Seu hábito')} className="grid grid-cols-2 gap-3">{cards}</ul>;
