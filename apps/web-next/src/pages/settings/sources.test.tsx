@@ -67,6 +67,26 @@ describe('remote source settings', () => {
 		expect(within(form).getByText(/without transport encryption/)).toBeTruthy();
 	});
 
+	it('requires a share name in an SMB address', async () => {
+		renderApp('/settings#sources', { catalog, user: admin });
+		const form = (await screen.findByRole('heading', { name: 'Add a source' })).closest('form')!;
+		const address = within(form).getByLabelText('Address');
+		fireEvent.change(address, { target: { value: 'smb://server/' } });
+		expect(within(form).getByText(/Add the share name/)).toBeTruthy();
+		expect((within(form).getByRole('button', { name: 'Add source' }) as HTMLButtonElement).disabled).toBe(true);
+		fireEvent.change(address, { target: { value: 'smb://server/share' } });
+		expect(within(form).getByText(/Format: smb:\/\/server\/share\/folder/)).toBeTruthy();
+	});
+
+	it('shows a localized message instead of a raw error when the test request fails', async () => {
+		vi.spyOn(transport, 'testSource').mockRejectedValue(new Error('ECONNRESET 10.0.0.5'));
+		renderApp('/settings#sources', { catalog, user: admin });
+		const row = (await screen.findByText(source.name)).closest('li')!;
+		fireEvent.click(within(row).getByRole('button', { name: 'Test connection' }));
+		expect(await screen.findByText('The connection test failed.')).toBeTruthy();
+		expect(screen.queryByText(/ECONNRESET/)).toBeNull();
+	});
+
 	it('tests the connection and reports success and failure', async () => {
 		vi.spyOn(transport, 'testSource')
 			.mockResolvedValueOnce({ ok: true, entries: 3, error: null })
