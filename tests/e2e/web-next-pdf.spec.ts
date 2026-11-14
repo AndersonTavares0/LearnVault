@@ -59,6 +59,8 @@ test('opens the PDF of a course that only holds materials and keeps its marks', 
 	await expect(page.getByText('The selected text could not be extracted reliably. The mark is still saved on its page.')).toBeVisible();
 	await expect(page.getByRole('textbox', { name: 'Note for the mark on page 1' }).last()).toHaveValue('Keep this note');
 	await page.setViewportSize({ width: 390, height: 844 });
+	await expect.poll(() => page.getByRole('img', { name: 'Page 1 of 1' }).evaluate((canvas) => canvas.getBoundingClientRect().width)).toBeLessThan(390);
+	await expect(page.locator('.pdf-text-layer')).toContainText('Ownership moves values.');
 	await page.screenshot({ path: testInfo.outputPath('unreadable-quote-mobile.png'), fullPage: true });
 	await expectNoAxeViolations(page, 'pdf unreadable quote');
 	const stored = await page.request.get(`${origin}/api/study/pdf-annotations?media_id=${encodeURIComponent(saved.media_id)}`);
