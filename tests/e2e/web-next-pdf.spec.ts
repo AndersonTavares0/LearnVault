@@ -7,8 +7,8 @@ import { collectCspViolations, createTest, expectNoAxeViolations, signIn } from 
 // A course folder that holds only documents: the catalog keeps the PDF as a loose material of
 // the course folder, so the course page itself has to link it to the reader.
 const test = createTest(async (library) => {
-	await mkdir(join(library, 'Reading'), { recursive: true });
-	await writeFile(join(library, 'Reading', 'Ownership notes.pdf'), makePdf(['Ownership moves values.', 'Borrowing shares a value.']));
+	await mkdir(library, { recursive: true });
+	await writeFile(join(library, 'Ownership notes.pdf'), makePdf(['Ownership moves values.', 'Borrowing shares a value.']));
 });
 
 test('opens the PDF of a course that only holds materials and keeps its marks', async ({ page, origin }) => {
@@ -17,8 +17,8 @@ test('opens the PDF of a course that only holds materials and keeps its marks', 
 	await signIn(page, origin);
 	await page.getByRole('button', { name: 'Refresh courses' }).click();
 	await expect(page.getByText('Catalog updated.')).toBeVisible();
-	await page.getByRole('link', { name: 'library' }).first().click();
-	await expect(page.getByRole('heading', { level: 1, name: 'library' })).toBeVisible();
+	await page.getByRole('link', { name: 'Course', exact: true }).first().click();
+	await expect(page.getByRole('heading', { level: 1, name: 'Course' })).toBeVisible();
 	await expectNoAxeViolations(page, 'course of documents');
 	await page.getByRole('link', { name: 'Ownership notes.pdf' }).click();
 
