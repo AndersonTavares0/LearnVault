@@ -168,7 +168,8 @@ function FocusChart({ days }: { days: ChartDay[] }) {
 	const peak = days.findIndex((day) => day.minutes === max && day.minutes > 0);
 	return (
 		<div>
-			<svg viewBox={`0 0 ${width} ${height + 24}`} role="img" aria-label={tr('Chart of focus minutes for each day this week; the same numbers are in the table below.', 'Gráfico dos minutos de foco em cada dia desta semana; os mesmos números estão na tabela abaixo.')} className="mt-2 w-full">
+			{!empty && (
+				<svg viewBox={`0 0 ${width} ${height + 24}`} role="img" aria-label={tr('Chart of focus minutes for each day this week; the same numbers are in the table below.', 'Gráfico dos minutos de foco em cada dia desta semana; os mesmos números estão na tabela abaixo.')} className="mt-2 w-full">
 				<path d={area} className="fill-brand-soft" />
 				<path d={line} fill="none" strokeWidth="3" strokeLinecap="round" className="stroke-primary" />
 				{peak >= 0 && (
@@ -183,7 +184,8 @@ function FocusChart({ days }: { days: ChartDay[] }) {
 					</g>
 				))}
 			</svg>
-			{empty && <p className="text-sm text-muted-foreground">{tr('No focus time yet. Start the timer in a lesson and it will show up here.', 'Ainda sem tempo de foco. Inicie o cronômetro numa aula e ele aparece aqui.')}</p>}
+			)}
+			{empty && <p className="mt-2 text-sm text-muted-foreground">{tr('No focus time yet. Start the timer in a lesson and it will show up here.', 'Ainda sem tempo de foco. Inicie o cronômetro numa aula e ele aparece aqui.')}</p>}
 			<table className="sr-only">
 				<caption>{tr('Focus minutes by day', 'Minutos de foco por dia')}</caption>
 				<thead><tr><th scope="col">{tr('Day', 'Dia')}</th><th scope="col">{tr('Minutes', 'Minutos')}</th></tr></thead>

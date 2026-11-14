@@ -12,6 +12,12 @@ const usersKey = ['admin-users'] as const;
 
 /** Course access for one account: everything, or exactly the ticked courses. */
 function AccessPicker({ id, courses, unrestricted, selected, onChange }: { id: string; courses: CatalogNode[]; unrestricted: boolean; selected: string[]; onChange: (next: { unrestricted: boolean; selected: string[] }) => void }) {
+	// A long list of checkboxes pushes the rest of the form off the screen, so the ticked
+	// courses live in a bounded box with a filter once there are more than a handful.
+	const [filter, setFilter] = useState('');
+	const query = filter.trim().toLowerCase();
+	const visible = query ? courses.filter((course) => course.title.toLowerCase().includes(query)) : courses;
+	const toggle = (courseId: string, checked: boolean) => onChange({ unrestricted, selected: checked ? [...selected, courseId] : selected.filter((item) => item !== courseId) });
 	return (
 		<fieldset className="space-y-2">
 			<legend className="text-sm font-medium">{tr('Course access', 'Acesso a cursos')}</legend>
@@ -20,19 +26,28 @@ function AccessPicker({ id, courses, unrestricted, selected, onChange }: { id: s
 				{tr('All courses, including ones added later', 'Todos os cursos, inclusive os adicionados depois')}
 			</label>
 			{!unrestricted && (
-				<ul className="grid gap-1 sm:grid-cols-2">
-					{courses.map((course) => {
-						const courseId = courseIdOf(course);
-						return (
-							<li key={courseId}>
-								<label htmlFor={`${id}-${courseId}`} className="flex min-h-11 items-center gap-3 text-sm">
-									<input id={`${id}-${courseId}`} type="checkbox" className="size-5 accent-[var(--primary)]" checked={selected.includes(courseId)} onChange={(event) => onChange({ unrestricted, selected: event.target.checked ? [...selected, courseId] : selected.filter((item) => item !== courseId) })} />
-									{course.title}
-								</label>
-							</li>
-						);
-					})}
-				</ul>
+				<div className="space-y-2 rounded-xl border bg-background p-2">
+					<div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+						{courses.length > 8 && (
+							<Input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder={tr('Filter courses', 'Filtrar cursos')} aria-label={tr('Filter courses', 'Filtrar cursos')} className="h-9 min-w-0 flex-1 basis-[10rem]" />
+						)}
+						<p className="ms-auto shrink-0 pe-1 text-xs text-muted-foreground tabular-nums">{tr(`${selected.length} of ${courses.length} selected`, `${selected.length} de ${courses.length} selecionados`)}</p>
+					</div>
+					<ul className="grid max-h-56 gap-1 overflow-y-auto overscroll-contain pe-1 scroll-py-1 [scrollbar-color:var(--border)_transparent] [scrollbar-width:thin] sm:grid-cols-2">
+						{visible.map((course) => {
+							const courseId = courseIdOf(course);
+							return (
+								<li key={courseId}>
+									<label htmlFor={`${id}-${courseId}`} className="flex min-h-11 items-center gap-3 rounded-lg px-1 text-sm hover:bg-accent/40">
+										<input id={`${id}-${courseId}`} type="checkbox" className="size-5 shrink-0 accent-[var(--primary)]" checked={selected.includes(courseId)} onChange={(event) => toggle(courseId, event.target.checked)} />
+										<span className="truncate">{course.title}</span>
+									</label>
+								</li>
+							);
+						})}
+					</ul>
+					{visible.length === 0 && <p className="px-1 text-sm text-muted-foreground">{tr('No course matches that filter.', 'Nenhum curso corresponde a esse filtro.')}</p>}
+				</div>
 			)}
 		</fieldset>
 	);

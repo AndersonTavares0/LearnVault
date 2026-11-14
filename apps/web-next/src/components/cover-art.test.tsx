@@ -11,9 +11,9 @@ describe('CoverArt', () => {
 		expect(container.querySelectorAll('rect')).toHaveLength(2);
 	});
 
-	it('uses one letter on small thumbnails', () => {
+	it('keeps the whole monogram on small thumbnails so a year is not cropped', () => {
 		const { container } = render(<CoverArt title="Rust from Zero" done={0} total={4} compact />);
-		expect(container.querySelector('text')?.textContent).toBe('R');
+		expect(container.querySelector('text')?.textContent).toBe('RF');
 	});
 
 	it('draws one block per lesson in map mode and no title', () => {
