@@ -506,9 +506,27 @@ fn enqueue_in(
     client_at: i64,
 ) -> Result<String> {
     validate_id(device_id, "device")?;
-    if let SyncPayload::Progress { media_id, .. } = payload {
-        coalesce_progress(conn, owner_id, media_id)?;
-    }
+    // A coalesced position keeps the completion flag seen in the dropped operations:
+    // completion is monotonic per media, and dropping it would hide it from every
+    // other device when the lesson finished before the previous sync.
+    let payload = match payload {
+        SyncPayload::Progress {
+            media_id,
+            position_seconds,
+            completed,
+        } => {
+            // Coalescing must run even when this payload is already complete, so the
+            // dropped operation cannot stay queued behind it.
+            let seen = coalesce_progress(conn, owner_id, media_id)?;
+            SyncPayload::Progress {
+                media_id: media_id.clone(),
+                position_seconds: *position_seconds,
+                completed: *completed || seen,
+            }
+        }
+        other => other.clone(),
+    };
+    let payload = &payload;
     let op_id = crate::ids::new_sync_id();
     conn.execute(
         "INSERT INTO sync_outbox (op_id, owner_id, device_id, client_at, payload, queued_at)
@@ -531,23 +549,28 @@ fn enqueue_in(
 /// older positions after newer ones. The scan is cheap: the pending queue is small and
 /// drained in batches of [`MAX_SYNC_BATCH`]. Notes, reviews and tombstones are never
 /// coalesced, because each one is a distinct version.
-fn coalesce_progress(conn: &Connection, owner_id: &str, media_id: &str) -> Result<()> {
+fn coalesce_progress(conn: &Connection, owner_id: &str, media_id: &str) -> Result<bool> {
     let mut statement =
         conn.prepare("SELECT op_id, payload FROM sync_outbox WHERE owner_id = ?1")?;
     let rows = statement.query_map([owner_id], |row| {
         Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
     })?;
     let mut stale = Vec::new();
+    let mut completed = false;
     for row in rows {
         let (op_id, payload) = row?;
         if let Ok(SyncPayload::Progress {
-            media_id: pending, ..
+            media_id: pending,
+            completed: done,
+            ..
         }) = decode(&payload)
             && pending == media_id
         {
+            completed = completed || done;
             stale.push(op_id);
         }
     }
+
     drop(statement);
     for op_id in stale {
         conn.execute(
@@ -555,7 +578,7 @@ fn coalesce_progress(conn: &Connection, owner_id: &str, media_id: &str) -> Resul
             params![owner_id, op_id],
         )?;
     }
-    Ok(())
+    Ok(completed)
 }
 
 /// Records the resume position and queues the same change in a single transaction.

@@ -3,9 +3,9 @@
 use learnvault_core::{
     Database, ReviewRating, SyncOperation, SyncOperationInput, SyncPayload, acknowledge_operations,
     apply_operations, enqueue_operation, pending_count, pending_operations, pull_operations,
-    push_operations, queue_bookmark_create, queue_bookmark_delete, queue_flashcard_create,
-    queue_flashcard_delete, queue_note_create, queue_note_delete, queue_position, queue_review,
-    set_completed, sync_state,
+    push_operations, queue_bookmark_create, queue_bookmark_delete, queue_completed,
+    queue_flashcard_create, queue_flashcard_delete, queue_note_create, queue_note_delete,
+    queue_position, queue_review, set_completed, sync_state,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -987,6 +987,24 @@ fn consecutive_progress_writes_leave_one_pending_operation() -> TestResult {
     assert_eq!(pending.len(), 1);
     assert_eq!(pending[0].payload, progress("m1", 42, false));
     assert_eq!(newest.position_seconds, 42);
+    Ok(())
+}
+
+#[test]
+fn coalescing_keeps_the_completion_flag_of_the_dropped_operation() -> TestResult {
+    let db = database();
+    let state = sync_state(&db, OWNER)?;
+
+    queue_completed(&db, OWNER, &state.device_id, "m1", true)?;
+    queue_position(&db, OWNER, &state.device_id, "m1", 5)?;
+
+    let pending = pending_operations(&db, OWNER, 10)?;
+    assert_eq!(pending.len(), 1, "só uma posição pendente por mídia");
+    assert_eq!(
+        pending[0].payload,
+        progress("m1", 5, true),
+        "a conclusão não pode sumir ao coalescer a posição"
+    );
     Ok(())
 }
 
