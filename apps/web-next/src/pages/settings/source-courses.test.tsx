@@ -51,6 +51,36 @@ describe('choosing the courses of a remote source', () => {
 		expect(within(path).queryByRole('button', { name: 'Pentest' })).toBeNull();
 	});
 
+	it('moves the keyboard focus to the new level of the path when a folder opens', async () => {
+		const dialog = await openDialog();
+		fireEvent.click(await within(dialog).findByRole('button', { name: 'Open Pentest' }));
+		const path = within(dialog).getByRole('navigation', { name: 'Folder path' });
+		await waitFor(() => expect(document.activeElement).toBe(within(path).getByRole('button', { name: 'Pentest' })));
+
+		fireEvent.click(within(path).getByRole('button', { name: source.name }));
+		await waitFor(() => expect(document.activeElement).toBe(within(path).getByRole('button', { name: source.name })));
+	});
+
+	it('keeps the previous folder on screen, inactive, while the next one loads', async () => {
+		let finish: (value: SourceListing) => void = () => {};
+		vi.mocked(transport.browseSource!).mockImplementation((_id, path) => path === 'Pentest' ? new Promise<SourceListing>((resolve) => { finish = resolve; }) : Promise.resolve(tree[path] ?? listing(path, [])));
+		const dialog = await openDialog();
+		fireEvent.click(await within(dialog).findByRole('button', { name: 'Open Pentest' }));
+
+		// Still the root listing, but nothing in it can be chosen and it is marked busy.
+		const choose = await within(dialog).findByRole('button', { name: 'Choose Infra as a course' });
+		expect((choose as HTMLButtonElement).disabled).toBe(true);
+		// The bulk action still belongs to the root listing that is shown, and it is inactive too.
+		const bulkOfRoot = within(dialog).getByRole('button', { name: `Make each of the 2 folders in “${source.name}” a course` });
+		expect((bulkOfRoot as HTMLButtonElement).disabled).toBe(true);
+		expect(dialog.querySelector('[aria-busy="true"]')).toBeTruthy();
+
+		finish(tree.Pentest);
+		const bulk = await within(dialog).findByRole('button', { name: 'Make each of the 2 folders in “Pentest” a course' });
+		expect((bulk as HTMLButtonElement).disabled).toBe(false);
+		expect(dialog.querySelector('[aria-busy="true"]')).toBeNull();
+	});
+
 	it('chooses a folder as a course and reloads the list', async () => {
 		const choose = vi.spyOn(transport, 'chooseSourceRoots').mockImplementation(async () => {
 			roots = [{ id: 'root-1', name: 'Redes', path: 'Pentest/Redes' }];

@@ -269,7 +269,7 @@ function Habit({ rewards, completedCourses }: { rewards: RewardSummary | undefin
 				{study.days.map((day) => (
 					<span key={day.day} className="flex flex-col items-center gap-1">
 						<span className={cn('size-2.5 rounded-full', day.active ? 'bg-reward-fill' : 'border border-border-strong')} />
-						<span className="text-[10px] text-muted-foreground">{dayInitial(day.day)}</span>
+						<span className="text-xs text-muted-foreground">{dayInitial(day.day)}</span>
 					</span>
 				))}
 			</div>

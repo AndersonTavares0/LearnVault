@@ -52,7 +52,7 @@ export function Ring({ value, label, caption, center, size = 132 }: { value: num
 			</svg>
 			<div className="absolute inset-0 grid place-content-center text-center" aria-hidden="true">
 				{center ?? <span className="font-heading text-3xl leading-none font-bold">{percent}<span className="text-base">%</span></span>}
-				{caption && <span className="mt-1 text-[0.65rem] font-semibold tracking-[0.12em] text-muted-foreground uppercase">{caption}</span>}
+				{caption && <span className="mt-1 text-xs font-semibold tracking-[0.1em] text-muted-foreground uppercase">{caption}</span>}
 			</div>
 		</div>
 	);
