@@ -14,7 +14,9 @@ The release workflow receives the published tag via environment variables and va
 
 ## How releases are prepared
 
-Release Please runs in stable mode (`.github/release-please/release-please-config.json`: `versioning: default`, `prerelease: false`). Each release pull request writes the English changelog section and, once merged and approved, publishes the `vX.Y.Z` tag. Nothing is published by preparing the pull request: the tag exists only after the release pull request is merged and the `release` environment approvals are granted.
+Release Please runs in stable mode (`.github/release-please/release-please-config.json`: `versioning: default`, `prerelease: false`). Preparing a release pull request updates version files and the English changelog without publishing anything. Merging that PR creates the `vX.Y.Z` tag and publishes the GitHub Release; the subsequent asset and container publication jobs wait for approval in the `release` environment. That environment does not gate the initial tag or GitHub Release.
+
+The next stable release is planned as `0.9.0`. Keep its generated release PR unmerged until the final review and explicit maintainer authorization to publish. Routine code and configuration PRs are not that authorization.
 
 ## Entering candidate mode again
 

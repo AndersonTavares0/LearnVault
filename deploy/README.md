@@ -68,10 +68,10 @@ LEARNVAULT_IMAGE=ghcr.io/andersontavares0/learnvault:0.9.0-rc.4 docker compose u
 docker compose -f compose.yaml -f compose.build.yaml up -d --build
 ```
 
-> **Canais de tag:** o primeiro estável (`0.9.0`) move `latest`, `stable` e a linha minor no momento
-> da publicação. Enquanto nenhum estável existir, a Option A falha ao baixar; fixe `LEARNVAULT_IMAGE`
-> como na Option B ou acompanhe os candidatos pela tag móvel `:rc`. Candidatos (`0.9.0-rc.N`) nunca
-> movem `latest`, `stable` nem a linha minor.
+> **Tag channels:** the first stable release (`0.9.0`) moves `latest`, `stable`, and the minor
+> line when published. Until a stable release exists, Option A fails to pull; pin `LEARNVAULT_IMAGE`
+> as in Option B or follow candidates through the moving `:rc` tag. Candidates (`0.9.0-rc.N`) never
+> move `latest`, `stable`, or the minor line.
 
 > **Upgrading from a setup that built the image locally:** if your `.env` still has `LEARNVAULT_IMAGE=learnvault-rust:local`, remove that line (the default is now the published image), or keep building by adding `-f compose.build.yaml` to every `docker compose` command.
 

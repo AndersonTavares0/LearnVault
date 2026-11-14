@@ -11,9 +11,9 @@ const workflow = readFileSync(resolve(root, '.github/workflows/release-please.ym
 test('Release Please uses SemVer pre-major bumps, generated names, and categorized notes', () => {
     assert.equal(release['bump-minor-pre-major'], true);
     assert.equal(release['bump-patch-for-minor-pre-major'], true);
-    assert.equal(release.versioning, 'prerelease');
-    assert.equal(release.prerelease, true);
-    assert.equal(release['prerelease-type'], 'rc');
+    assert.equal(release.versioning, 'default');
+    assert.equal(release.prerelease, false);
+    assert.equal(release['prerelease-type'], undefined);
     assert.equal(release['include-v-in-tag'], true);
     assert.equal(release['include-v-in-release-name'], true);
     assert.equal(release['changelog-path'], 'docs/releases/CHANGELOG.md');
