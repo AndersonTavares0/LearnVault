@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clampPage, findLessonPdf, formatFileSize, isPdf, lessonPdfId, marksToMarkdown, pagesMatching, selectionBoxes, stepZoom } from './pdf';
+import { clampPage, findLessonPdf, formatFileSize, isPdf, lessonPdfId, marksToMarkdown, pagesMatching, sanitizeQuote, selectionBoxes, stepZoom } from './pdf';
 import type { FileEntry, Lesson, PdfAnnotation } from './transport';
 
 const file = (name: string, extra: Partial<FileEntry> = {}): FileEntry => ({ name, path: `c/${name}`, size: 1, mediaId: name, kind: 'material', availability: 'available', ...extra });
@@ -89,6 +89,24 @@ describe('selection boxes', () => {
 	});
 });
 
+describe('PDF quote extraction', () => {
+	it('rejects broken text maps rather than pretending byte removal repairs the quote', () => {
+		expect(sanitizeQuote('HUD\u0003GR\u0003/HVWH\u000f\u0003(V')).toBe('');
+		expect(sanitizeQuote('text\u0000text')).toBe('');
+		expect(sanitizeQuote('text\u0085text')).toBe('');
+	});
+
+	it.each(['HTTP CSS XML', '中文 日本語', 'Привет мир', 'مرحبا بالعالم', 'می\u200cروم', 'ação e educação', 'x + y = 2'])('preserves valid text: %s', (text) => {
+		expect(sanitizeQuote(text)).toBe(text);
+	});
+
+	it('normalizes layout whitespace and keeps the existing quote length limit', () => {
+		expect(sanitizeQuote(' \tfirst\r\nsecond  ')).toBe('first second');
+		expect(sanitizeQuote('   ')).toBe('');
+		expect(sanitizeQuote('a'.repeat(5000))).toHaveLength(4000);
+	});
+});
+
 describe('pagesMatching and marksToMarkdown', () => {
 	it('finds pages by text, ignoring case and blank queries', () => {
 		expect(pagesMatching(['The Owl', 'nothing', 'an OWL again'], ' owl ')).toEqual([1, 3]);
@@ -99,5 +117,11 @@ describe('pagesMatching and marksToMarkdown', () => {
 		const item = (annotationId: string, page: number, kind: 'highlight' | 'note', quote: string, content: string): PdfAnnotation => ({ annotationId, mediaId: 'm', page, kind, color: 'yellow', rects: [], quote, content, createdAt: page, updatedAt: page });
 		const text = marksToMarkdown('Guide.pdf', [item('b', 4, 'note', 'late', 'check this\nand that'), item('a', 2, 'highlight', 'early  text', '')]);
 		expect(text).toBe('# Marks in Guide.pdf\n\n## Page 2\n\n- **Highlight**: “early text”\n\n## Page 4\n\n- **Note**: “late”\n  > check this\n  > and that\n');
+	});
+
+	it('exports a corrupt quote with its page and user note intact', () => {
+		const item: PdfAnnotation = { annotationId: 'a', mediaId: 'm', page: 2, kind: 'highlight', color: 'yellow', rects: [], quote: 'HUD\u0003GR', content: 'Keep my note', createdAt: 1, updatedAt: 1 };
+		expect(marksToMarkdown('Guide.pdf', [item])).toBe('# Marks in Guide.pdf\n\n## Page 2\n\n- **Highlight**\n  > Keep my note\n');
+		expect(item.quote).toBe('HUD\u0003GR');
 	});
 });

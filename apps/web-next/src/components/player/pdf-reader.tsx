@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { studySyncSupported } from '@/lib/player';
 import { tr } from '@/lib/i18n';
-import { clampPage, loadPdfJs, pagesMatching, PDF_MARK_COLORS, selectionBoxes, stepZoom } from '@/lib/pdf';
+import { clampPage, loadPdfJs, pagesMatching, PDF_MARK_COLORS, sanitizeQuote, selectionBoxes, stepZoom } from '@/lib/pdf';
 import { transport, type FileEntry, type PdfAnnotationColor, type PdfRect } from '@/lib/transport';
 import { cn } from '@/lib/utils';
 
@@ -137,7 +137,7 @@ export function PdfReader({ file, courseId, initialPage, onPage }: Props) {
 		const range = selectionIn(textLayer.current);
 		if (!range || !canvas.current || !mediaId) return;
 		const rects = selectionBoxes(range.getClientRects(), canvas.current.getBoundingClientRect());
-		const quote = range.toString().trim().slice(0, 4000);
+		const quote = sanitizeQuote(range.toString());
 		if (rects.length > 0) {
 			if (kind === 'note') setDraft({ page: current, rects, quote, text: '' });
 			else create.mutate({ page: current, kind, color: markColor, rects, quote });
