@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed (2026-11-14). Needs maintainer approval before any code. Refs #509, #441.
+Accepted (2026-11-14), approved by the maintainer. Files outside every chosen root stay visible as a course of the source. Refs #509, #441.
 
 ## Context
 
