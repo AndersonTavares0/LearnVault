@@ -993,3 +993,126 @@ async fn media_of_a_root_streams_through_its_source_and_stays_inside_its_folder(
         StatusCode::NOT_FOUND
     );
 }
+
+fn all_titles(node: &serde_json::Value) -> Vec<String> {
+    let mut titles = vec![node["title"].as_str().unwrap().to_owned()];
+    for child in node["children"].as_array().into_iter().flatten() {
+        titles.extend(all_titles(child));
+    }
+    titles
+}
+
+#[tokio::test]
+async fn a_root_starts_at_its_own_folder_and_never_shows_the_folders_above_it() {
+    let h = harness().await;
+    h.scan().await;
+    let redes = json(h.pick("Cursos/Pentest/Redes", "course").await).await["created"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    h.scan().await;
+
+    let nodes = h.catalog(&h.cookie).await;
+    let node = nodes
+        .iter()
+        .find(|node| node["course_id"] == redes.as_str())
+        .unwrap();
+    let below = all_titles(node);
+    assert!(
+        below
+            .iter()
+            .all(|title| title != "Cursos" && title != "Pentest"),
+        "{below:?}"
+    );
+    assert_eq!(below, ["Redes", "aula1", "aula2", "Sub", "extra"]);
+    // Files keep their path relative to the source, which is what media requests use.
+    assert_eq!(
+        files_of(node),
+        [
+            "Cursos/Pentest/Redes/Sub/extra.mp4",
+            "Cursos/Pentest/Redes/aula1.mp4",
+            "Cursos/Pentest/Redes/aula2.mp4"
+        ]
+    );
+    // The student granted only this root sees the same tree, with no ancestor folder.
+    let only_root = h.student("bia", &[redes.as_str()]).await;
+    let seen = h.catalog(&only_root).await;
+    assert_eq!(
+        all_titles(&seen[0]),
+        ["Redes", "aula1", "aula2", "Sub", "extra"]
+    );
+}
+
+#[tokio::test]
+async fn an_unreadable_area_outside_every_root_keeps_the_catalog_incomplete_even_when_the_rest_is_hidden()
+ {
+    let tree: Tree = HashMap::from([
+        ("", vec![("Curso", None), ("Quebrada", None)]),
+        ("Curso", vec![("aula.mp4", Some(10))]),
+    ]);
+    let h = harness_with(tree).await;
+    assert_eq!(
+        h.pick("Curso", "course").await.status(),
+        StatusCode::CREATED
+    );
+    assert_eq!(h.scan().await.status(), StatusCode::OK);
+
+    let response = h.call("GET", "/api/catalog", None, false).await;
+    let catalog = json(response).await;
+    assert_eq!(
+        titles(catalog["nodes"].as_array().unwrap()),
+        ["Curso"],
+        "the rest has nothing to show"
+    );
+    assert_eq!(catalog["complete"], false);
+}
+
+#[tokio::test]
+async fn titles_are_told_apart_only_among_the_roots_a_user_can_see() {
+    let tree: Tree = HashMap::from([
+        ("", vec![("A", None), ("B", None)]),
+        ("A", vec![("Redes", None)]),
+        ("A/Redes", vec![("1.mp4", Some(10))]),
+        ("B", vec![("Redes", None)]),
+        ("B/Redes", vec![("1.mp4", Some(10))]),
+    ]);
+    let h = harness_with(tree).await;
+    h.scan().await;
+    let a = json(h.pick("A/Redes", "course").await).await["created"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    json(h.pick("B/Redes", "course").await).await;
+    h.scan().await;
+
+    assert_eq!(
+        titles(&h.catalog(&h.cookie).await),
+        ["Redes (A)", "Redes (B)"]
+    );
+    let only_a = h.student("bia", &[a.as_str()]).await;
+    assert_eq!(
+        titles(&h.catalog(&only_a).await),
+        ["Redes"],
+        "no hint that another Redes exists"
+    );
+}
+
+#[tokio::test]
+async fn a_user_granted_the_source_after_the_split_does_not_receive_the_roots() {
+    // Documented behavior: only choosing a root copies access; later grants are by id.
+    let h = harness().await;
+    h.scan().await;
+    let redes = json(h.pick("Cursos/Pentest/Redes", "course").await).await["created"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    h.scan().await;
+    let late = h.student("ana", &[h.source.as_str()]).await;
+    assert_eq!(titles(&h.catalog(&late).await), ["Cursos remotos"]);
+    assert_eq!(
+        h.media(&late, &redes, "Cursos/Pentest/Redes/aula1.mp4", None)
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
+}

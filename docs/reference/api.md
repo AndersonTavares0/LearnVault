@@ -133,11 +133,15 @@ courses have no custom cover, manual ordering, search indexing or on-demand tran
 A source can be split into several courses by choosing folders as roots (ADR 0004). Choosing a folder
 moves its already scanned media to a course of its own and every later scan of the source is applied
 per root, so progress, notes and flashcards follow each lesson. In `GET /api/catalog` each root is a
-top-level `course` node with its own opaque `id` (the folder name is the title, and `Name (Parent)`
-when two roots of a source share a name); the rest of the source stays a course with the source's
-`id` only while it still holds a file. Lesson paths stay relative to the source. Per-user access is
-decided by the id of each course: a user who had the source receives each new root, and one granted
-only a root never sees the rest of the source. `GET`/`HEAD /api/media?course=<root-id>&path=` streams
+top-level `course` node with its own opaque `id`. The tree of a root starts at its own folder, so
+the folders above it never appear, while every file keeps its path relative to the source (the path
+media requests use). The title is the folder name, with as many parent folders in parentheses as it
+takes to tell roots of a source apart (`Redes (Pentest)`), counted only among the roots the user can
+see. The rest of the source stays a course with the source's `id` only while it still holds a file,
+and an unreadable area outside every root still makes `complete` false. Per-user access is decided
+by the id of each course: a user who had the source when a root was chosen receives that root, one
+granted only a root never sees the rest of the source, and a user granted the source later must be
+granted each root by its own id. `GET`/`HEAD /api/media?course=<root-id>&path=` streams
 through the owning source and only finds files inside the root's folder. A scan applies each chosen
 folder and the rest of the source as separate libraries, each in its own transaction: if one fails
 the others are still applied and the request reports the failure, and the next scan converges.
