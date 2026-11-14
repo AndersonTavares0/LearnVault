@@ -12,13 +12,13 @@ Before `1.0.0`, Release Please increments the patch version for `feat:`, `fix:`,
 
 The release workflow receives the published tag via environment variables and validates that it strictly matches `vMAJOR.MINOR.PATCH` with non-negative numeric components and no leading zeros.
 
-## How candidates are created
+## How releases are prepared
 
-Release Please runs in pre-release mode (`.github/release-please/release-please-config.json`: `versioning: prerelease`, `prerelease: true`, `prerelease-type: rc`). Each release pull request writes the English changelog section and the `vX.Y.Z-rc.N` tag when merged. Merging it publishes the pre-release, which then waits for approval in the `release` environment.
+Release Please runs in stable mode (`.github/release-please/release-please-config.json`: `versioning: default`, `prerelease: false`). Each release pull request writes the English changelog section and, once merged and approved, publishes the `vX.Y.Z` tag. Nothing is published by preparing the pull request: the tag exists only after the release pull request is merged and the `release` environment approvals are granted.
 
-## Promoting a candidate to stable
+## Entering candidate mode again
 
-While `prerelease` is `true`, every release is a candidate. To publish the stable release, open one pull request that sets `"prerelease": false` and `"versioning": "default"` in the config. Its release pull request then produces `vX.Y.Z`, which reuses the tested image digest.
+To cut a candidate instead of a stable release, open one pull request that sets `"prerelease": true`, `"versioning": "prerelease"` and `"prerelease-type": "rc"` in the config. Its release pull request then produces `vX.Y.Z-rc.N`, which never moves `:stable`, `:latest` or `:MAJOR.MINOR`. Returning to the stable track is the same edit in reverse.
 
 ## Release candidates (rc)
 
