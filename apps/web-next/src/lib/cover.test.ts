@@ -20,6 +20,11 @@ describe('generated course covers', () => {
 		expect(courseCover('Ação e Reação').monogram).toBe('AR');
 	});
 
+	it('uses the digits of a year-named course as its monogram', () => {
+		expect(courseMonogram('2010')).toBe('2010');
+		expect(courseMonogram('2024.2')).toBe('2024');
+	});
+
 	it('uses gradient colors from the product palette and varies by title', () => {
 		const first = courseCover('Física');
 		const second = courseCover('História da Arte');

@@ -80,6 +80,20 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 	const counts = countCatalogNode(course);
 	const materials = collectMaterials(course);
 	const documents = loosePdfs(course);
+	// Files keep their folder in the path; grouping restores the reading list's own structure.
+	const documentGroups = useMemo(() => {
+		const groups = new Map<string, FileEntry[]>();
+		for (const file of documents) {
+			const folder = file.path.includes('/') ? file.path.slice(0, file.path.lastIndexOf('/')) : '';
+			const list = groups.get(folder);
+			if (list) list.push(file);
+			else groups.set(folder, [file]);
+		}
+		return [...groups];
+	}, [documents]);
+	// A course made only of PDFs is a reading list, not a broken course: no notice, no empty map,
+	// and the documents become the primary content.
+	const readingOnly = counts.lessons === 0 && documents.length > 0;
 	const percent = entry?.total ? Math.round((entry.done / entry.total) * 100) : 0;
 	const resumeAt = lastStudied && !lastStudied.item.completed ? lastStudied.item.positionSeconds : null;
 	const continuePath = lastStudied?.location && !lastStudied.item.completed ? lastStudied.location.lesson.path : entry?.next?.path;
@@ -97,7 +111,7 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 							<h1 className="font-heading text-4xl leading-tight font-bold text-balance">{course.title}</h1>
 							<p className="text-muted-foreground">{formatCourseMeta(counts)}</p>
 						</div>
-						{course.structure && course.structure.confidence !== 'high' && <StructureNotice structure={course.structure} />}
+						{!readingOnly && course.structure && course.structure.confidence !== 'high' && <StructureNotice structure={course.structure} />}
 						{entry && entry.total > 0 && (
 							<div className="max-w-md space-y-1">
 								<div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-labelledby="course-progress" className="h-2 overflow-hidden rounded-full bg-brand-soft">
@@ -117,6 +131,10 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 								<Link to={path(href('course', courseId, continuePath, resumeAt))} className="inline-flex h-12 items-center justify-center rounded-full bg-primary px-7 text-base font-semibold text-primary-foreground hover:bg-brand-deep focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
 									{lastStudied ? tr('Continue studying', 'Continuar estudando') : tr('Start course', 'Começar curso')}
 								</Link>
+							) : documents.length > 0 ? (
+								<Link to={path(href('course', courseId, documents[0].path))} className="inline-flex h-12 items-center justify-center rounded-full bg-primary px-7 text-base font-semibold text-primary-foreground hover:bg-brand-deep focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
+									{tr('Start reading', 'Começar a ler')}
+								</Link>
 							) : (
 								<p className="text-sm text-muted-foreground">{tr('No lessons available', 'Nenhuma aula disponível')}</p>
 							)}
@@ -129,7 +147,7 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 							{user?.isAdmin && <ManageCourse course={course} courseId={courseId} lessons={counts.lessons} />}
 						</div>
 					</div>
-					<div className="order-1 max-w-md lg:order-2 lg:max-w-none"><CourseCover course={course} profile={user?.userId ?? ''} eager done={entry?.done ?? 0} total={entry?.total ?? 0} map /></div>
+					<div className="order-1 max-w-md lg:order-2 lg:max-w-none"><CourseCover course={course} profile={user?.userId ?? ''} eager done={entry?.done ?? 0} total={entry?.total ?? 0} map={!readingOnly} className={readingOnly ? 'hidden sm:block' : undefined} /></div>
 				</div>
 			</div>
 			</Hero>
@@ -141,7 +159,7 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 					{studySyncSupported && <TabsTrigger value="notes">{tr('Notes', 'Notas')}</TabsTrigger>}
 				</TabsList>
 				<TabsContent value="content" className="space-y-6 pt-4">
-					{course.children.length > 0 ? (
+					{course.children.length > 0 && !readingOnly ? (
 						<div className="space-y-3">
 							<div className="flex flex-wrap items-center justify-between gap-2">
 								<p className="text-sm text-muted-foreground">{formatCourseMeta(counts)}</p>
@@ -154,18 +172,26 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 						</div>
 					) : documents.length === 0 ? <p className="text-muted-foreground">{tr('This course has not been indexed yet.', 'Este curso ainda não foi indexado.')}</p> : null}
 					{documents.length > 0 && (
-						<section aria-labelledby="course-documents" className="space-y-3">
-							<h2 id="course-documents" className="font-heading text-lg font-bold">{tr('Documents', 'Documentos')}</h2>
-							<ul className="divide-y rounded-lg border bg-card">
-								{documents.map((file) => (
-									<li key={file.path}>
-										<Link to={path(href('course', courseId, file.path))} className="flex min-h-11 items-center gap-3 px-4 py-2 text-sm font-medium text-primary hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
-											<FileText className="size-4 shrink-0" aria-hidden="true" />
-											<span className="min-w-0 break-words">{file.name}</span>
-										</Link>
-									</li>
-								))}
-							</ul>
+						<section aria-labelledby="course-documents" className="space-y-4">
+							<h2 id="course-documents" className="flex items-baseline gap-2 font-heading text-lg font-bold">
+								{readingOnly ? tr('Reading list', 'Lista de leitura') : tr('Documents', 'Documentos')}
+								<span className="text-sm font-normal text-muted-foreground tabular-nums">{documents.length}</span>
+							</h2>
+							{documentGroups.map(([folder, files]) => (
+								<div key={folder || 'root'} className="space-y-2">
+									{folder && <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">{folder.split('/').pop()!.replace(/_/g, ' ')}</h3>}
+									<ul className="divide-y rounded-lg border bg-card">
+										{files.map((file) => (
+											<li key={file.path}>
+												<Link to={path(href('course', courseId, file.path))} className="flex min-h-11 items-center gap-3 px-4 py-2 text-sm font-medium text-primary hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
+													<FileText className="size-4 shrink-0" aria-hidden="true" />
+													<span className="min-w-0 break-words">{file.name}</span>
+												</Link>
+											</li>
+										))}
+									</ul>
+								</div>
+							))}
 						</section>
 					)}
 				</TabsContent>

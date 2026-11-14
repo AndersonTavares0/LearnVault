@@ -55,7 +55,9 @@ export function courseMonogram(title: string): string {
 		.filter((word) => /\p{L}/u.test(word) && !STOPWORDS.has(word.toLowerCase()))
 		.slice(0, 2);
 	const initials = words.map((word) => word[0]?.toUpperCase() ?? '').join('');
-	return initials || '?';
+	// A year-named course ("2010") has no initials; its digits are the title on the cover.
+	const digits = normalize(title).replace(/\D/g, '').slice(0, 4);
+	return initials || digits || '?';
 }
 
 /** Fonte efetiva da capa, na ordem de precedência definida na ADR 0002. */
