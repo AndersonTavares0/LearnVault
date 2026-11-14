@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fakePdfjs } from '@/test/fake-pdfjs';
+import { createDefaultPlayerPreferences } from '@/lib/player-preferences';
 import { transport, type FileEntry, type PdfAnnotation } from '@/lib/transport';
 import { PdfReader } from './pdf-reader';
 
@@ -16,10 +17,10 @@ afterEach(() => {
 	vi.restoreAllMocks();
 });
 
-const open = async (props: Partial<{ initialPage: number | null; onPage: (page: number, pages: number) => void }> = {}) => {
+const open = async (props: Partial<{ initialPage: number | null; onPage: (page: number, pages: number) => void; onPreferencesChange: (next: unknown) => void }> = {}) => {
 	const onPage = props.onPage ?? vi.fn();
 	const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-	render(<QueryClientProvider client={client}><PdfReader file={file} courseId="c" initialPage={props.initialPage ?? null} onPage={onPage} /></QueryClientProvider>);
+	render(<QueryClientProvider client={client}><PdfReader file={file} courseId="c" initialPage={props.initialPage ?? null} onPage={onPage} preferences={createDefaultPlayerPreferences()} onPreferencesChange={props.onPreferencesChange ?? vi.fn()} /></QueryClientProvider>);
 	await screen.findByText('of 5');
 	return onPage;
 };
@@ -57,6 +58,21 @@ describe('PdfReader', () => {
 		expect(screen.getByText('Fit')).toBeTruthy();
 	});
 
+	it('moves a page with j and k, jumps with g and G and opens the shortcut sheet with ?', async () => {
+		await open();
+		const reader = screen.getByRole('group', { name: 'PDF page' });
+		fireEvent.keyDown(reader, { key: 'j' });
+		expect((screen.getByLabelText('Page') as HTMLInputElement).value).toBe('2');
+		fireEvent.keyDown(reader, { key: 'k' });
+		expect((screen.getByLabelText('Page') as HTMLInputElement).value).toBe('1');
+		fireEvent.keyDown(reader, { key: 'G' });
+		expect((screen.getByLabelText('Page') as HTMLInputElement).value).toBe('5');
+		fireEvent.keyDown(reader, { key: 'g' });
+		expect((screen.getByLabelText('Page') as HTMLInputElement).value).toBe('1');
+		fireEvent.keyDown(reader, { key: '?' });
+		expect(await screen.findByRole('dialog')).toBeTruthy();
+	});
+
 	it('lists the marks, jumps to their page and deletes one', async () => {
 		vi.spyOn(transport, 'listPdfAnnotations').mockResolvedValue([mark('a1', 4), mark('a2', 2)]);
 		const remove = vi.spyOn(transport, 'deletePdfAnnotation').mockResolvedValue(undefined);
@@ -71,6 +87,7 @@ describe('PdfReader', () => {
 	it('keeps the mark buttons off until text is selected', async () => {
 		vi.spyOn(transport, 'listPdfAnnotations').mockResolvedValue([]);
 		await open();
+		fireEvent.click(screen.getByRole('button', { name: 'Annotate' }));
 		expect((screen.getByRole('button', { name: 'Highlight' }) as HTMLButtonElement).disabled).toBe(true);
 		expect((screen.getByRole('button', { name: 'Underline' }) as HTMLButtonElement).disabled).toBe(true);
 		expect(await screen.findByText(/No marks yet/)).toBeTruthy();
@@ -79,6 +96,7 @@ describe('PdfReader', () => {
 	it('searches the text of every page and steps between the pages that match', async () => {
 		vi.spyOn(transport, 'listPdfAnnotations').mockResolvedValue([]);
 		await open();
+		fireEvent.click(screen.getByRole('button', { name: 'Find in the document' }));
 		fireEvent.change(screen.getByRole('searchbox', { name: 'Search in the document' }), { target: { value: 'OWL' } });
 		fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 		expect(await screen.findByText('Found on 1 page: now on page 3.')).toBeTruthy();
@@ -115,6 +133,7 @@ describe('PdfReader', () => {
 		const box = { left: 10, top: 10, width: 100, height: 10 } as DOMRect;
 		const range = { collapsed: false, commonAncestorContainer: null, getClientRects: () => [box], toString: () => 'some text' };
 		await open();
+		fireEvent.click(screen.getByRole('button', { name: 'Annotate' }));
 		const layer = document.querySelector('.pdf-text-layer') as HTMLElement;
 		const selection = { rangeCount: 1, getRangeAt: () => ({ ...range, commonAncestorContainer: layer }), removeAllRanges: vi.fn() };
 		vi.spyOn(window, 'getSelection').mockReturnValue(selection as unknown as Selection);

@@ -272,6 +272,17 @@ html, body { overflow-x: clip; }
   transform-origin: 0 0;
   opacity: 1;
 }
+
+/* The page jump field is a small stepper: hide the native spinners so the digits stay legible. */
+.pdf-page-field { appearance: textfield; }
+.pdf-page-field::-webkit-inner-spin-button,
+.pdf-page-field::-webkit-outer-spin-button { appearance: none; margin: 0; }
+
+/* The reader scrollbar follows the palette instead of the browser default. */
+.pdf-scroll {
+  scrollbar-color: var(--border-strong) transparent;
+  scrollbar-width: thin;
+}
 .pdf-text-layer :is(span, br) {
   position: absolute;
   color: transparent;

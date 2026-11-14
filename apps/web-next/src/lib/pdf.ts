@@ -39,6 +39,69 @@ export function lessonPdfId(node: { files: FileEntry[]; looseFiles: FileEntry[] 
 
 export const PDF_ZOOMS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3] as const;
 
+/** Reading modes: one page at a time, or the whole document in one vertical column. */
+export type PdfView = 'single' | 'continuous';
+
+/** Reading surfaces: the white page, warm paper, or a dimmed night page. */
+export type PdfTheme = 'paper' | 'sepia' | 'night';
+
+/** Gap between the pages of the continuous column, matching `space-y-4`. */
+export const PDF_PAGE_GAP = 16;
+
+/** 0-based first and last page to paint for a scroll position, with `overscan` pages on each side. */
+export function pageWindow(scrollTop: number, viewport: number, stride: number, pages: number, overscan = 1): { first: number; last: number } {
+	if (pages < 1) return { first: 0, last: -1 };
+	// Before the column is measured there is no geometry to virtualize with.
+	if (!(stride > 0)) return { first: 0, last: pages - 1 };
+	const top = Math.max(0, scrollTop);
+	const first = Math.max(0, Math.floor(top / stride) - overscan);
+	const last = Math.min(pages - 1, Math.floor((top + Math.max(0, viewport)) / stride) + overscan);
+	return { first, last: Math.max(first, last) };
+}
+
+/**
+ * 1-based page under the reading anchor, a third down the viewport. At the bottom of the
+ * scroll the last page wins, because the column cannot scroll the final page to its top.
+ */
+export function pageAt(scrollTop: number, viewport: number, stride: number, pages: number, maxScroll = Number.POSITIVE_INFINITY): number {
+	if (!(stride > 0) || pages < 1) return 1;
+	if (scrollTop >= maxScroll - 1) return pages;
+	const anchor = Math.max(0, scrollTop) + Math.min(viewport / 3, stride / 2);
+	return clampPage(Math.floor(anchor / stride) + 1, pages);
+}
+
+/** Scroll offset of a page's top inside the continuous column. */
+export function pageScroll(page: number, stride: number): number {
+	return Math.max(0, page - 1) * stride;
+}
+
+/** The next page of `order` from `page` in a direction, wrapping around; null when there is none. */
+export function nextPage(page: number, order: number[], direction: 1 | -1): number | null {
+	const list = [...new Set(order)].sort((a, b) => a - b);
+	if (list.length === 0) return null;
+	return direction > 0
+		? list.find((item) => item > page) ?? list[0]
+		: [...list].reverse().find((item) => item < page) ?? list[list.length - 1];
+}
+
+export type PdfCommand = 'pagePrevious' | 'pageNext' | 'pageFirst' | 'pageLast' | 'zoomIn' | 'zoomOut' | 'stopNext' | 'stopPrevious' | 'highlight' | 'underline' | 'help';
+
+/** The reader command bound to a key. Modified keys stay with the browser and are filtered out first. */
+const PDF_COMMANDS: Record<string, PdfCommand> = {
+	ArrowLeft: 'pagePrevious', PageUp: 'pagePrevious', k: 'pagePrevious',
+	ArrowRight: 'pageNext', PageDown: 'pageNext', j: 'pageNext',
+	Home: 'pageFirst', g: 'pageFirst',
+	End: 'pageLast', G: 'pageLast',
+	'+': 'zoomIn', '=': 'zoomIn',
+	'-': 'zoomOut',
+	n: 'stopNext', p: 'stopPrevious',
+	h: 'highlight', u: 'underline', '?': 'help'
+};
+
+export function pdfCommand(key: string): PdfCommand | null {
+	return PDF_COMMANDS[key] ?? null;
+}
+
 export function clampPage(page: number, pages: number): number {
 	if (!Number.isFinite(page) || pages < 1) return 1;
 	return Math.min(pages, Math.max(1, Math.round(page)));
@@ -62,12 +125,12 @@ export function formatFileSize(bytes: number): string {
 	return `${value.toLocaleString(getLocale(), { maximumFractionDigits: value < 10 ? 1 : 0 })} ${units[unit]}`;
 }
 
-/** Marker colors, as CSS backgrounds for highlights (the server accepts only these four names). */
+/** Marker colors as CSS backgrounds: warm amber, brass, steel and clay inks, never neon. */
 export const PDF_MARK_COLORS = {
-	yellow: '#fde047',
-	green: '#86efac',
-	blue: '#93c5fd',
-	pink: '#f9a8d4'
+	yellow: '#E8C06A',
+	green: '#BCC58C',
+	blue: '#A8BFD2',
+	pink: '#DCA997'
 } as const;
 
 const unit = (value: number) => Math.min(1, Math.max(0, value));

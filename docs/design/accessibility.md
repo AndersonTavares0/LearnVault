@@ -97,6 +97,8 @@ required before cutover.
 | `M` | Mute |
 | `0`–`9` | Jump to a point in the lesson |
 | `←` / `→` / `PgUp` / `PgDn` | Previous or next page (PDF reader) |
+| `j` / `k` / `g` / `G` | Next or previous page, first or last page (PDF reader) |
+| `n` / `p` / `h` / `u` / `?` | Next/previous search hit or mark, highlight, underline, shortcut sheet (PDF reader) |
 
 Keep this table in sync with the player's shortcut handler.
 

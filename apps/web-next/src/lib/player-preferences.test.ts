@@ -24,6 +24,8 @@ describe('player preferences', () => {
 			videoSpeed: 1,
 			autoNext: false,
 			subtitleLanguage: '',
+			pdfView: 'continuous',
+			pdfTheme: 'paper',
 			lessons: {}
 		});
 	});
@@ -71,10 +73,22 @@ describe('player preferences', () => {
 			audioSpeed: 3,
 			videoSpeed: 'fast',
 			autoNext: 'yes',
+			pdfView: 'scroll',
+			pdfTheme: 'midnight',
 			lessons: { broken: { mediaId: 12, subtitleId: 42 } }
 		}));
 
 		expect(readPlayerPreferences(storage, 'http-user:user-a')).toEqual(createDefaultPlayerPreferences());
+	});
+
+	it('keeps the PDF reading mode and theme per user', () => {
+		const storage = new MemoryStorage();
+		const preferences = { ...createDefaultPlayerPreferences(), pdfView: 'single' as const, pdfTheme: 'night' as const };
+		expect(writePlayerPreferences(storage, 'http-user:user-a', preferences)).toBe(true);
+		expect(readPlayerPreferences(storage, 'http-user:user-a')).toEqual(preferences);
+		// Another learner on the same browser starts from the defaults.
+		expect(readPlayerPreferences(storage, 'http-user:user-b').pdfView).toBe('continuous');
+		expect(readPlayerPreferences(storage, 'http-user:user-b').pdfTheme).toBe('paper');
 	});
 
 	it('treats unavailable storage as an optional preference instead of breaking playback', () => {

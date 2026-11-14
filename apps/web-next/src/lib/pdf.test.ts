@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clampPage, findLessonPdf, formatFileSize, isPdf, lessonPdfId, marksToMarkdown, pagesMatching, selectionBoxes, stepZoom } from './pdf';
+import { clampPage, findLessonPdf, formatFileSize, isPdf, lessonPdfId, marksToMarkdown, nextPage, pageAt, pagesMatching, pageScroll, pageWindow, pdfCommand, selectionBoxes, stepZoom } from './pdf';
 import type { FileEntry, Lesson, PdfAnnotation } from './transport';
 
 const file = (name: string, extra: Partial<FileEntry> = {}): FileEntry => ({ name, path: `c/${name}`, size: 1, mediaId: name, kind: 'material', availability: 'available', ...extra });
@@ -36,6 +36,60 @@ describe('pdf navigation', () => {
 		expect(stepZoom(3, 1)).toBe(3);
 		expect(stepZoom(0.5, -1)).toBe(0.5);
 		expect(stepZoom('fit', 1)).toBe(1.25);
+	});
+});
+
+describe('pdf continuous column', () => {
+	it('paints only the pages around the viewport, with one page of overscan', () => {
+		// Ten pages of 100px plus a 16px gap: 116px apart.
+		expect(pageWindow(0, 300, 116, 10)).toEqual({ first: 0, last: 3 });
+		expect(pageWindow(116 * 5, 300, 116, 10)).toEqual({ first: 4, last: 8 });
+		// The end of the document never reports a page that does not exist.
+		expect(pageWindow(116 * 9, 300, 116, 10)).toEqual({ first: 8, last: 9 });
+	});
+
+	it('paints every page before the column has a size, and nothing for an empty document', () => {
+		expect(pageWindow(0, 0, 0, 4)).toEqual({ first: 0, last: 3 });
+		expect(pageWindow(0, 0, 0, 0)).toEqual({ first: 0, last: -1 });
+	});
+
+	it('reports the page under the reading anchor and the last page at the bottom', () => {
+		expect(pageAt(0, 300, 116, 10)).toBe(1);
+		expect(pageAt(116, 300, 116, 10)).toBe(2);
+		expect(pageAt(116 * 2 + 40, 300, 116, 10)).toBe(3);
+		// The final page can never reach the top of the column, so the bottom wins.
+		expect(pageAt(116 * 6, 300, 116, 10, 116 * 6)).toBe(10);
+	});
+
+	it('maps a page to its scroll offset', () => {
+		expect(pageScroll(1, 116)).toBe(0);
+		expect(pageScroll(4, 116)).toBe(348);
+	});
+
+	it('steps between search hits or marks and wraps around', () => {
+		expect(nextPage(2, [2, 5, 9], 1)).toBe(5);
+		expect(nextPage(9, [2, 5, 9], 1)).toBe(2);
+		expect(nextPage(5, [2, 5, 9], -1)).toBe(2);
+		expect(nextPage(2, [2, 5, 9], -1)).toBe(9);
+		expect(nextPage(4, [], 1)).toBeNull();
+	});
+});
+
+describe('pdf keyboard map', () => {
+	it('maps the reader keys and ignores everything else', () => {
+		expect(pdfCommand('j')).toBe('pageNext');
+		expect(pdfCommand('k')).toBe('pagePrevious');
+		expect(pdfCommand('PageDown')).toBe('pageNext');
+		expect(pdfCommand('PageUp')).toBe('pagePrevious');
+		expect(pdfCommand('g')).toBe('pageFirst');
+		expect(pdfCommand('G')).toBe('pageLast');
+		expect(pdfCommand('+')).toBe('zoomIn');
+		expect(pdfCommand('-')).toBe('zoomOut');
+		expect(pdfCommand('n')).toBe('stopNext');
+		expect(pdfCommand('p')).toBe('stopPrevious');
+		expect(pdfCommand('h')).toBe('highlight');
+		expect(pdfCommand('?')).toBe('help');
+		expect(pdfCommand('x')).toBeNull();
 	});
 });
 
