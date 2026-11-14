@@ -7,6 +7,10 @@
 
 use std::collections::HashSet;
 
+use rusqlite::{OptionalExtension, params};
+
+use crate::db::Database;
+use crate::error::Result;
 use crate::paths::{KeyMode, is_under_area, relative_path_key};
 use crate::scanner::ScanOutcome;
 
@@ -31,6 +35,12 @@ pub enum RootError {
     /// Two roots use the same library id.
     #[error("duplicate root library id: {0:?}")]
     DuplicateLibrary(String),
+    /// The new root would use the id of the source itself or of a library that exists.
+    #[error("library id already in use: {0:?}")]
+    LibraryExists(String),
+    /// No root has this library id.
+    #[error("unknown root: {0:?}")]
+    UnknownRoot(String),
     /// One root is the same folder as another or lies inside it.
     #[error("root {inner:?} overlaps root {outer:?}")]
     Overlap {
@@ -61,7 +71,7 @@ pub fn partition_scan(
     outcome: ScanOutcome,
     roots: &[SourceRoot],
     mode: KeyMode,
-) -> Result<Partition, RootError> {
+) -> std::result::Result<Partition, RootError> {
     let keys = validated_keys(roots, mode)?;
     let mut parts: Vec<ScanOutcome> = roots.iter().map(|_| empty()).collect();
     let mut remainder = empty();
@@ -111,7 +121,10 @@ fn empty() -> ScanOutcome {
     }
 }
 
-fn validated_keys(roots: &[SourceRoot], mode: KeyMode) -> Result<Vec<String>, RootError> {
+fn validated_keys(
+    roots: &[SourceRoot],
+    mode: KeyMode,
+) -> std::result::Result<Vec<String>, RootError> {
     let mut ids = HashSet::new();
     let mut keys: Vec<String> = Vec::with_capacity(roots.len());
     for root in roots {
@@ -135,6 +148,217 @@ fn validated_keys(roots: &[SourceRoot], mode: KeyMode) -> Result<Vec<String>, Ro
         keys.push(key);
     }
     Ok(keys)
+}
+
+/// Rows of `media` under a prefix key: the folder itself or anything inside it. Done in SQL
+/// with `substr` (no `LIKE`), so `%`, `_` and `\` in folder names are plain text.
+const UNDER_PREFIX: &str =
+    "(relative_path_key = ?3 OR substr(relative_path_key, 1, length(?3) + 1) = ?3 || '/')";
+
+/// Roots of a source, ordered by prefix.
+pub fn list_roots(db: &Database, source_id: &str) -> Result<Vec<SourceRoot>> {
+    let mut statement = db.connection().prepare(
+        "SELECT library_id, prefix FROM library_root WHERE source_id = ?1 ORDER BY prefix_key",
+    )?;
+    let rows = statement.query_map([source_id], |row| {
+        Ok(SourceRoot {
+            library_id: row.get(0)?,
+            prefix: row.get(1)?,
+        })
+    })?;
+    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+/// Makes `library_id` the library of the part of `source_id` under `prefix`.
+///
+/// One transaction: the matching `media` rows (and their `media_removal` rows) move to the
+/// new library, `media_id` never changes, so study state, notes, bookmarks, annotations and
+/// flashcards follow without being touched. The new library gets the source's last scan
+/// narrowed to the prefix, so it is not shown as verified when the source was not. A user
+/// restricted to the source gets the same access to the new library. Returns how many media
+/// rows moved.
+///
+/// The id must be new, and the prefix must not overlap a root the source already has.
+pub fn promote_root(
+    db: &mut Database,
+    source_id: &str,
+    library_id: &str,
+    prefix: &str,
+    mode: KeyMode,
+) -> Result<usize> {
+    let prefix_key =
+        relative_path_key(prefix, mode).map_err(|_| RootError::InvalidPrefix(prefix.to_owned()))?;
+    let tx = db.conn.transaction()?;
+
+    let exists = |id: &str| -> rusqlite::Result<bool> {
+        tx.query_row("SELECT 1 FROM library WHERE library_id = ?1", [id], |_| {
+            Ok(())
+        })
+        .optional()
+        .map(|row| row.is_some())
+    };
+    if library_id == source_id || exists(library_id)? {
+        return Err(RootError::LibraryExists(library_id.to_owned()).into());
+    }
+
+    let mut roots = {
+        let mut statement =
+            tx.prepare("SELECT library_id, prefix FROM library_root WHERE source_id = ?1")?;
+        let rows = statement.query_map([source_id], |row| {
+            Ok(SourceRoot {
+                library_id: row.get(0)?,
+                prefix: row.get(1)?,
+            })
+        })?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()?
+    };
+    roots.push(SourceRoot {
+        library_id: library_id.to_owned(),
+        prefix: prefix.to_owned(),
+    });
+    validated_keys(&roots, mode)?;
+
+    // The source row may not exist before its first scan; the roots then start empty.
+    tx.execute(
+        "INSERT INTO library (library_id, available) VALUES (?1, 0) ON CONFLICT (library_id) DO NOTHING",
+        [source_id],
+    )?;
+    tx.execute(
+        "INSERT INTO library (library_id, available)
+         SELECT ?1, available FROM library WHERE library_id = ?2",
+        [library_id, source_id],
+    )?;
+    tx.execute(
+        "INSERT INTO library_root (library_id, source_id, prefix, prefix_key) VALUES (?1, ?2, ?3, ?4)",
+        params![library_id, source_id, prefix, prefix_key],
+    )?;
+
+    let moved = tx.execute(
+        &format!("UPDATE media SET library_id = ?1 WHERE library_id = ?2 AND {UNDER_PREFIX}"),
+        params![library_id, source_id, prefix_key],
+    )?;
+    tx.execute(
+        "UPDATE media_removal SET library_id = ?1
+          WHERE library_id = ?2 AND media_id IN (SELECT media_id FROM media WHERE library_id = ?1)",
+        [library_id, source_id],
+    )?;
+    copy_scan_history(&tx, source_id, library_id, &prefix_key, mode)?;
+    tx.execute(
+        "INSERT OR IGNORE INTO user_course_access (user_id, course_id)
+         SELECT user_id, ?1 FROM user_course_access WHERE course_id = ?2",
+        [library_id, source_id],
+    )?;
+    tx.commit()?;
+    Ok(moved)
+}
+
+/// Gives the last scan of the source to the new root, narrowed to its prefix.
+fn copy_scan_history(
+    tx: &rusqlite::Transaction<'_>,
+    source_id: &str,
+    library_id: &str,
+    prefix_key: &str,
+    mode: KeyMode,
+) -> rusqlite::Result<()> {
+    let last: Option<(i64, String, i64, i64)> = tx
+        .query_row(
+            "SELECT scan_id, status, complete, completed_at FROM scan
+              WHERE library_id = ?1 ORDER BY scan_id DESC LIMIT 1",
+            [source_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .optional()?;
+    let Some((scan_id, status, complete, completed_at)) = last else {
+        return Ok(());
+    };
+    let mut areas = Vec::new();
+    {
+        let mut statement =
+            tx.prepare("SELECT relative_path FROM scan_inaccessible WHERE scan_id = ?1")?;
+        let paths = statement.query_map([scan_id], |row| row.get::<_, String>(0))?;
+        for path in paths {
+            let path = path?;
+            let Ok(key) = relative_path_key(&path, mode) else {
+                continue;
+            };
+            if is_under_area(&key, prefix_key) {
+                areas.push(path);
+            } else if is_under_area(prefix_key, &key) {
+                areas.push(".".to_owned());
+            }
+        }
+    }
+    areas.sort();
+    areas.dedup();
+    let verified = status != "failed" && (complete != 0 || areas.is_empty());
+    tx.execute(
+        "INSERT INTO scan (library_id, status, completed_at, complete) VALUES (?1, ?2, ?3, ?4)",
+        params![
+            library_id,
+            status,
+            completed_at,
+            verified && areas.is_empty()
+        ],
+    )?;
+    let new_scan = tx.last_insert_rowid();
+    for area in areas {
+        tx.execute(
+            "INSERT INTO scan_inaccessible (scan_id, relative_path) VALUES (?1, ?2)",
+            params![new_scan, area],
+        )?;
+    }
+    Ok(())
+}
+
+/// Undoes [`promote_root`]: the media (and removals) go back to the source, the root's
+/// scan history and access rows are dropped, its course favorites move to the source
+/// course, and the root disappears. Source files are never touched. Returns how many media
+/// rows moved back.
+pub fn demote_root(db: &mut Database, library_id: &str) -> Result<usize> {
+    let tx = db.conn.transaction()?;
+    let source_id: String = tx
+        .query_row(
+            "SELECT source_id FROM library_root WHERE library_id = ?1",
+            [library_id],
+            |row| row.get(0),
+        )
+        .optional()?
+        .ok_or_else(|| RootError::UnknownRoot(library_id.to_owned()))?;
+
+    let moved = tx.execute(
+        "UPDATE media SET library_id = ?1 WHERE library_id = ?2",
+        [&source_id, library_id],
+    )?;
+    tx.execute(
+        "UPDATE media_removal SET library_id = ?1 WHERE library_id = ?2",
+        [&source_id, library_id],
+    )?;
+    tx.execute(
+        "DELETE FROM scan_inaccessible WHERE scan_id IN (SELECT scan_id FROM scan WHERE library_id = ?1)",
+        [library_id],
+    )?;
+    tx.execute("DELETE FROM scan WHERE library_id = ?1", [library_id])?;
+    tx.execute(
+        "DELETE FROM user_course_access WHERE course_id = ?1",
+        [library_id],
+    )?;
+    tx.execute(
+        "INSERT OR IGNORE INTO study_favorite (owner_id, target_kind, target_id, created_at)
+         SELECT owner_id, 'course', ?1, created_at FROM study_favorite
+          WHERE target_kind = 'course' AND target_id = ?2",
+        [&source_id, library_id],
+    )?;
+    tx.execute(
+        "DELETE FROM study_favorite WHERE target_kind = 'course' AND target_id = ?1",
+        [library_id],
+    )?;
+    tx.execute(
+        "DELETE FROM library_root WHERE library_id = ?1",
+        [library_id],
+    )?;
+    tx.execute("DELETE FROM library WHERE library_id = ?1", [library_id])?;
+    tx.commit()?;
+    Ok(moved)
 }
 
 #[cfg(test)]

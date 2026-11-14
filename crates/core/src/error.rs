@@ -426,6 +426,10 @@ pub enum Error {
         /// Stable rejection reason.
         reason: &'static str,
     },
+
+    /// The requested course roots cannot be applied to the source.
+    #[error(transparent)]
+    SourceRoot(#[from] crate::roots::RootError),
 }
 
 /// Resultado das operações do domínio.

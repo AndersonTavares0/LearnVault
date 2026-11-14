@@ -565,6 +565,15 @@ const REQUIRED_TABLES: &[TableDefinition] = &[
         ],
     },
     TableDefinition {
+        name: "library_root",
+        columns: &[
+            ("library_id", "TEXT", true, None, 1),
+            ("source_id", "TEXT", true, None, 0),
+            ("prefix", "TEXT", true, None, 0),
+            ("prefix_key", "TEXT", true, None, 0),
+        ],
+    },
+    TableDefinition {
         name: "study_note",
         columns: &[
             ("note_id", "TEXT", true, None, 1),
@@ -805,6 +814,7 @@ fn expected_checks(table: &str) -> &'static [&'static str] {
         "library" => &["available in (0, 1)"],
         "media" => &["availability in ('available', 'missing')"],
         "scan" => &["status in ('completed', 'failed')", "complete in (0, 1)"],
+        "library_root" => &["library_id <> source_id"],
         "study_state" => &["completed in (0, 1)"],
         "focus_session" => &[
             "kind in ('focus', 'short', 'long')",
@@ -874,6 +884,10 @@ fn expected_foreign_keys(
         // observada em vez de depender de `id` como se fosse semântico.
         "media_removal" => &[
             ("media_id", "media", "media_id", "NO ACTION"),
+            ("library_id", "library", "library_id", "NO ACTION"),
+        ],
+        "library_root" => &[
+            ("source_id", "library", "library_id", "NO ACTION"),
             ("library_id", "library", "library_id", "NO ACTION"),
         ],
         "study_note" => &[("media_id", "media", "media_id", "NO ACTION")],
