@@ -8,7 +8,7 @@ use rusqlite::{OptionalExtension, TransactionBehavior};
 
 use crate::{Database, Error, Result};
 
-const NO_COURSE_ACCESS_SENTINEL: &str = "__none__";
+pub(crate) const NO_COURSE_ACCESS_SENTINEL: &str = "__none__";
 
 /// Resumo de um usuário local para administração e permissões de cursos.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -44,6 +44,8 @@ Why a root is a library and not a side table: the course identity is `media.libr
 
 - No change to existing tables; one new table, plus a transactional promote and demote of media rows.
 - The catalog emits one course per root (and the leftover source course if it still has files); ordering is keyed by the root `library_id` and search, access and removal work unchanged. Covers stay unsupported for remote roots until decided separately.
+- Data keyed by the course id that promote and demote do not move, and that later slices must handle: the course search index (`course_fts`), cover files, the manual order files (keyed by the source id) and course favorites set on the source. The source library must never rescan a root's prefix once the root exists (the scan is split by the roots), because demote would otherwise collide on duplicate paths.
+- Access: promote gives a restricted user the root when they had the source; demote never leaves a user with no rows (that would mean unrestricted), so a user who only had the root ends with no access until an administrator grants the source again.
 - More administrator work (confirm roots) in exchange for no silent mistakes.
 - Rejected: a side table with media left in the source library (touches every `library_id` query), content-based auto-splitting (wrong boundaries would silently hide or reset study state) and keeping only the source-level view (does not solve the problem).
 

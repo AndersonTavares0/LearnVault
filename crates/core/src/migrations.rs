@@ -688,10 +688,26 @@ CREATE TABLE sync_tombstone (
 );
 ";
 
+/// Version 19: course roots of a source (ADR 0004).
+///
+/// Additive. A root is a library of its own that owns the part of a source under `prefix`.
+/// `media.relative_path` keeps being relative to the source, so reads do not change.
+/// `prefix_key` is the comparison key of `prefix` for the host's [`crate::paths::KeyMode`].
+const V19: &str = "
+CREATE TABLE library_root (
+    library_id TEXT PRIMARY KEY NOT NULL REFERENCES library (library_id) ON DELETE NO ACTION,
+    source_id TEXT NOT NULL REFERENCES library (library_id) ON DELETE NO ACTION,
+    prefix TEXT NOT NULL,
+    prefix_key TEXT NOT NULL,
+    CHECK (library_id <> source_id),
+    UNIQUE (source_id, prefix_key)
+);
+";
+
 /// Cadeia de migrações aplicada por [`crate::db::Database`]; o índice `n` leva o banco da
 /// versão `n` para `n + 1`.
 pub(crate) const MIGRATIONS: &[&str] = &[
-    V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18,
+    V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19,
 ];
 
 /// Versão do schema gravada em `PRAGMA user_version` (0 quando nunca migrado).

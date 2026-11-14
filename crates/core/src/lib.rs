@@ -80,7 +80,9 @@ pub use pomodoro::{
 };
 pub use removal::{MediaRemovalImpact, MediaRemovalOutcome, media_removal_impact, remove_media};
 pub use rescan::{RescanSummary, apply_incremental_scan, apply_scan, apply_source_scan, rescan};
-pub use roots::{Partition, RootError, SourceRoot, partition_scan};
+pub use roots::{
+    Partition, RootError, SourceRoot, demote_root, list_roots, partition_scan, promote_root,
+};
 pub use scanner::{MediaKind, ScanOutcome, ScannedFile, scan};
 pub use search::{
     MAX_SEARCH_QUERY_CHARS, MAX_SEARCH_RESULTS, MIN_SEARCH_QUERY_CHARS, SearchLessonHit,
