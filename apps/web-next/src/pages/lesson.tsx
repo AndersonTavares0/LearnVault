@@ -21,7 +21,7 @@ import { tr } from '@/lib/i18n';
 import { lessonSequence, neighboringLessons } from '@/lib/navigation';
 import { findLessonPdf, formatFileSize } from '@/lib/pdf';
 import { formatDuration, selectPlayableMedia, shouldAutoAdvance, studySyncSupported } from '@/lib/player';
-import { lessonPreferenceKey } from '@/lib/player-preferences';
+import { lessonPreferenceKey, type PlayerPreferences } from '@/lib/player-preferences';
 import { pomodoro, resetTimer, skipTimer, startTimer } from '@/lib/pomodoro-store';
 import { findLesson, findLessonLocation, href } from '@/lib/router';
 import { clearPosition, nextAttemptAt, progressOutbox, queuePosition } from '@/lib/progress-outbox';
@@ -236,7 +236,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 						{/* While the break screen is up, the player under it takes no focus or keys. */}
 						<div inert={Boolean(breakPhase)}>
 						{pdf ? (
-							<PdfLesson file={pdf} courseId={courseId} ready={!studySyncSupported || !progress.isPending} initialPage={pdfResumeAt} onPage={(page) => void recordPosition(pdf.mediaId!, page)} />
+							<PdfLesson file={pdf} courseId={courseId} ready={!studySyncSupported || !progress.isPending} initialPage={pdfResumeAt} onPage={(page) => void recordPosition(pdf.mediaId!, page)} preferences={preferences} onPreferencesChange={savePreferences} />
 						) : (
 						<MediaPlayer
 							key={`${courseId}/${lessonPath}`}
@@ -385,7 +385,7 @@ function LessonRail({ sequence, current, isDone }: { sequence: { path: string }[
 }
 
 /** The reader for a PDF lesson, with its type said out loud and the read-only promise. */
-function PdfLesson({ file, courseId, ready, initialPage, onPage }: { file: FileEntry; courseId: string; ready: boolean; initialPage: number | null; onPage: (page: number, pages: number) => void }) {
+function PdfLesson({ file, courseId, ready, initialPage, onPage, preferences, onPreferencesChange }: { file: FileEntry; courseId: string; ready: boolean; initialPage: number | null; onPage: (page: number, pages: number) => void; preferences: PlayerPreferences; onPreferencesChange: (next: PlayerPreferences) => void }) {
 	return (
 		<div className="space-y-3">
 			<p role="note" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
@@ -393,7 +393,7 @@ function PdfLesson({ file, courseId, ready, initialPage, onPage }: { file: FileE
 				<span>{formatFileSize(file.size)}</span>
 				<span>{tr('Read it here; the original file is never changed.', 'Leia aqui; o arquivo original nunca é alterado.')}</span>
 			</p>
-			{ready ? <PdfReader key={file.mediaId ?? file.path} file={file} courseId={courseId} initialPage={initialPage} onPage={onPage} /> : <p role="status" className="text-muted-foreground">{tr('Loading…', 'Carregando…')}</p>}
+			{ready ? <PdfReader key={file.mediaId ?? file.path} file={file} courseId={courseId} initialPage={initialPage} onPage={onPage} preferences={preferences} onPreferencesChange={onPreferencesChange} /> : <p role="status" className="text-muted-foreground">{tr('Loading…', 'Carregando…')}</p>}
 		</div>
 	);
 }
