@@ -113,7 +113,7 @@ Reinstalling or updating preserves this data. The uninstaller includes an opt-in
 - The web SPA is built into `crates/server/web/build` and `crates/desktop/frontend-dist`.
 - Container definitions live in `deploy/container/`, `deploy/compose/`, and `deploy/quadlet/`.
 - Containers never define behavior absent from the binary.
-- Release Please manages changelogs and release candidate PRs.
+- Release Please manages changelogs and release PRs.
 - `.github/workflows/release.yml` triggers when a release is published on GitHub, validating tag format `vMAJOR.MINOR.PATCH`.
 
 ## Read-Only Verification
