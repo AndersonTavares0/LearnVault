@@ -2,6 +2,7 @@ import { Star } from 'lucide-react';
 import { useId } from 'react';
 import { Link } from 'react-router';
 import { CourseCover } from '@/components/course-cover';
+import { CourseManagement } from '@/components/course-management';
 import { Button } from '@/components/ui/button';
 import { formatCount } from '@/lib/catalog';
 import { getLocale, tr } from '@/lib/i18n';
@@ -36,7 +37,7 @@ export function progressLabel(entry: CourseEntry): string {
 	return `${tr(`${percent}% complete`, `${percent}% concluído`)} · ${left}`;
 }
 
-type Props = { entry: CourseEntry; profile: string; variant?: 'grid' | 'shelf' | 'list' | 'compact' };
+type Props = { entry: CourseEntry; profile: string; variant?: 'grid' | 'shelf' | 'list' | 'compact'; canManage?: boolean };
 
 /**
  * One course. The cover is the only heavy object; everything else is plain text, so a row
@@ -44,7 +45,7 @@ type Props = { entry: CourseEntry; profile: string; variant?: 'grid' | 'shelf' |
  * carries the title, so the heading beside it collapses to nothing visible but stays in the
  * accessibility tree and keeps the whole-card link (`sr-only` would clip it); the card shows focus.
  */
-export function CourseCard({ entry, profile, variant = 'grid' }: Props) {
+export function CourseCard({ entry, profile, variant = 'grid', canManage = false }: Props) {
 	const toggle = useToggleCourseFavorite();
 	const listed = variant === 'list';
 	const lastStudied = entry.lastStudiedAt ? new Date(entry.lastStudiedAt * 1000).toLocaleDateString(getLocale(), { month: 'short', day: 'numeric' }) : '–';
@@ -64,12 +65,13 @@ export function CourseCard({ entry, profile, variant = 'grid' }: Props) {
 				</div>
 				<p className="hidden w-20 shrink-0 text-right text-xs text-muted-foreground lg:block">{lastStudied}</p>
 				<span className="shrink-0 text-xs font-semibold text-primary">{tr('Resume', 'Retomar')}</span>
+				{canManage && <div className="relative z-10"><CourseManagement course={entry.course} courseId={entry.courseId} lessons={entry.total} compact /></div>}
 			</li>
 		);
 	}
 	return (
-		<li className={cn('group/card relative [content-visibility:auto] has-focus-visible:ring-3 has-focus-visible:ring-ring', !listed && 'overflow-hidden rounded-[1.75rem] border bg-card transition-[border-color,box-shadow] hover:border-[color:var(--border-strong)] hover:shadow-md', variant === 'shelf' && 'w-64 shrink-0 snap-start sm:w-72', listed && 'flex items-center gap-4 rounded-2xl p-3')}>
-			<div className={cn('relative', listed && 'w-20 shrink-0')}>
+		<li className={cn('group/card relative flex items-center gap-3 p-3 has-focus-visible:ring-3 has-focus-visible:ring-ring', !listed && 'rounded-2xl border bg-card transition-[border-color,box-shadow] hover:border-[color:var(--border-strong)] hover:shadow-md', variant === 'shelf' && 'w-64 shrink-0 snap-start', listed && 'rounded-xl')}>
+			<div className="relative w-16 shrink-0">
 				<CourseCover course={entry.course} profile={profile} done={entry.done} total={entry.total} compact={listed} />
 			</div>
 			{/* The star lives beside the title, so it never sits on the year drawn on the cover. */}
@@ -82,8 +84,9 @@ export function CourseCard({ entry, profile, variant = 'grid' }: Props) {
 					</Button>
 				</div>
 			)}
-			<div className={cn('min-w-0 space-y-2', !listed && 'p-5', listed && 'flex-1')}>
-				<h3 className={cn('card-heading font-heading leading-snug font-semibold text-balance', listed ? 'text-base' : 'text-lg')}>
+			{canManage && <div className="absolute top-1 right-12 z-10"><CourseManagement course={entry.course} courseId={entry.courseId} lessons={entry.total} compact /></div>}
+			<div className={cn('min-w-0 flex-1 space-y-1', !listed && 'pr-10')}>
+				<h3 className="card-heading font-heading text-base leading-snug font-semibold text-balance">
 					{/* The link covers the whole card; the favorite button sits above it. */}
 					<Link to={routerPath(href('course', entry.courseId))} className="line-clamp-2 after:absolute after:inset-0 after:content-[''] hover:underline">{entry.course.title}</Link>
 				</h3>

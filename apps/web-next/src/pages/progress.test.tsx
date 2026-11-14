@@ -26,7 +26,7 @@ describe('progress', () => {
 		renderApp('/progress', { catalog, rewards, recent: [done('a'), done('b')] });
 		expect(await screen.findByRole('heading', { name: '1 of 3 days this week' })).toBeTruthy();
 		expect(screen.getByText(/2 more days to reach your goal\./)).toBeTruthy();
-		expect(within(screen.getByRole('table', { name: 'Focus minutes by day' })).getAllByRole('row')).toHaveLength(8);
+		expect(within(await screen.findByRole('table', { name: 'Focus minutes by day', hidden: true })).getAllByRole('row')).toHaveLength(8);
 		expect(screen.getByText('First course finished').parentElement?.textContent).toContain('Earned');
 		expect(screen.getByText(/Level 2 · /)).toBeTruthy();
 	});
@@ -38,5 +38,20 @@ describe('progress', () => {
 		expect(screen.getAllByRole('button', { name: /^Claim/ })).toHaveLength(1);
 		fireEvent.click(button);
 		await waitFor(() => expect(claim).toHaveBeenCalledWith('lesson'));
+	});
+
+	it('labels the all-time total separately from its weekly breakdown', async () => {
+		vi.spyOn(transport, 'focusSummary').mockResolvedValue({ todayMinutes: 25, weekMinutes: 50, weekSessions: 2, totalMinutes: 200, totalSessions: 8, completionRate: 1, bestDay: null, days: [] });
+		renderApp('/progress', { catalog, rewards });
+		fireEvent.click(await screen.findByRole('button', { name: 'All time' }));
+		expect(screen.getByText('3h 20m', { exact: true })).toBeTruthy();
+		expect(screen.getByText('Weekly breakdown')).toBeTruthy();
+	});
+
+	it('reports a focus summary failure instead of showing zero activity', async () => {
+		vi.spyOn(transport, 'focusSummary').mockRejectedValue(new Error('focus unavailable'));
+		renderApp('/progress', { catalog, rewards });
+		expect((await screen.findByRole('alert')).textContent).toContain('Focus statistics could not be loaded.');
+		expect(screen.queryByText('No focus time yet. Start the timer in a lesson and it will show up here.')).toBeNull();
 	});
 });
