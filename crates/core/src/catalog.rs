@@ -124,6 +124,14 @@ pub struct Catalog {
 /// Não recebe a raiz da biblioteca de propósito: sem um caminho, esta função não tem como
 /// ler o disco. Ela também não escreve no banco.
 pub fn build_catalog(db: &Database, library_id: &str) -> Result<Catalog> {
+    build_catalog_below(db, library_id, 0)
+}
+
+/// Like [`build_catalog`], for a library that owns only the part of a source under a folder
+/// of `skip` segments (a course root): the tree starts below that folder, so the folders above
+/// it never appear. Every file keeps its path relative to the source, which is what media
+/// requests use, and its unverified marker is still judged on that path.
+pub fn build_catalog_below(db: &Database, library_id: &str, skip: usize) -> Result<Catalog> {
     let mode = KeyMode::for_host();
     let scan = last_scan(db, library_id, mode)?;
     let rows = media_rows(db, library_id)?;
@@ -155,6 +163,8 @@ pub fn build_catalog(db: &Database, library_id: &str) -> Result<Catalog> {
         let mut segments: Vec<&str> = row.relative_path.split('/').collect();
         // O último segmento é o nome do arquivo; o diretório é o restante.
         segments.pop();
+        // A course root starts below its own folder.
+        segments.drain(..skip.min(segments.len()));
 
         match segments.len() {
             0 => loose_files.push(file),

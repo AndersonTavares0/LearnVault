@@ -164,14 +164,11 @@ pub(crate) async fn catalog(State(state): State<AppState>, headers: HeaderMap) -
             .into_iter()
             .filter(|course| is_allowed(&course.id))
             .collect();
-        let filtered_sources: Vec<RemoteSource> = sources
-            .into_iter()
-            .filter(|source| is_allowed(&source.id))
-            .collect();
         build_course_catalog(
             &database,
             &filtered_courses,
-            &filtered_sources,
+            &sources,
+            &is_allowed,
             &orders,
             &covers,
         )
@@ -237,6 +234,7 @@ fn build_course_catalog(
     database: &learnvault_core::Database,
     courses: &[RegisteredCourse],
     sources: &[RemoteSource],
+    is_allowed: &dyn Fn(&str) -> bool,
     orders: &CourseOrders,
     covers_dir: &Path,
 ) -> Result<CatalogResponse, learnvault_core::Error> {
@@ -284,37 +282,127 @@ fn build_course_catalog(
     }
     // Fontes remotas usam o mesmo catálogo derivado do banco; não têm pasta local, capa
     // personalizada nem pasta de origem. A ordenação manual continua por identidade.
+    //
+    // Uma fonte sem raízes é um curso só. Com raízes (ADR 0004), cada pasta escolhida é um
+    // curso próprio, com a identidade da raiz, e o resto da fonte continua visível como o
+    // curso da fonte enquanto tiver algum arquivo. O acesso é decidido por identidade.
     let mut sources: Vec<&RemoteSource> = sources.iter().collect();
     sources.sort_by(|left, right| {
         learnvault_core::natural_cmp(&left.name, &right.name).then_with(|| left.id.cmp(&right.id))
     });
     for source in sources {
-        let catalog = learnvault_core::build_catalog(database, &source.id)?;
-        complete = complete && catalog.complete;
-        let (mut children, loose_files) = learnvault_core::shape_course_catalog(catalog);
-        learnvault_core::apply_order(&mut children, orders.get(&source.id).unwrap_or(&empty));
-        let structure = structure_response(learnvault_core::structure::assess_parts(
-            &children,
-            &loose_files,
-        ));
-        nodes.push(CatalogNodeResponse {
-            title: source.name.clone(),
-            path: String::new(),
-            role: "course",
-            course_id: Some(source.id.clone()),
-            cover_version: None,
-            source_folder: None,
-            structure: Some(structure),
-            files: Vec::new(),
-            loose_files: loose_files.into_iter().map(Into::into).collect(),
-            children: children.into_iter().map(Into::into).collect(),
+        let roots = learnvault_core::list_roots(database, &source.id)?;
+        // Titles are told apart only among the roots this user can see, so a name never hints
+        // at a course the user has no access to.
+        let visible: Vec<_> = roots
+            .iter()
+            .filter(|root| is_allowed(&root.library_id))
+            .cloned()
+            .collect();
+        let titles = root_titles(&visible);
+        let mut chosen: Vec<_> = visible.iter().zip(titles).collect();
+        chosen.sort_by(|(left, left_title), (right, right_title)| {
+            learnvault_core::natural_cmp(left_title, right_title)
+                .then_with(|| left.library_id.cmp(&right.library_id))
         });
+        for (root, title) in chosen {
+            let skip = root.prefix.split('/').count();
+            let (node, node_complete) =
+                remote_node(database, orders, &empty, title, &root.library_id, skip)?;
+            complete = complete && node_complete;
+            nodes.push(node);
+        }
+        if !is_allowed(&source.id) {
+            continue;
+        }
+        let (node, node_complete) =
+            remote_node(database, orders, &empty, source.name.clone(), &source.id, 0)?;
+        // An unreadable area outside every root still makes the answer incomplete, even when
+        // the rest of the source has nothing to show.
+        complete = complete && node_complete;
+        let has_files = !node.children.is_empty() || !node.loose_files.is_empty();
+        // The rest of a split source only shows while something is left in it.
+        if roots.is_empty() || has_files {
+            nodes.push(node);
+        }
     }
     Ok(CatalogResponse {
         complete,
         loose_files: Vec::new(),
         nodes,
     })
+}
+
+/// Course node of a remote library (a whole source, or one root of it) and whether its last
+/// scan was complete.
+fn remote_node(
+    database: &learnvault_core::Database,
+    orders: &CourseOrders,
+    empty: &learnvault_core::CatalogOrder,
+    title: String,
+    library_id: &str,
+    skip: usize,
+) -> Result<(CatalogNodeResponse, bool), learnvault_core::Error> {
+    let catalog = learnvault_core::build_catalog_below(database, library_id, skip)?;
+    let complete = catalog.complete;
+    let (mut children, loose_files) = learnvault_core::shape_course_catalog(catalog);
+    learnvault_core::apply_order(&mut children, orders.get(library_id).unwrap_or(empty));
+    let structure = structure_response(learnvault_core::structure::assess_parts(
+        &children,
+        &loose_files,
+    ));
+    let node = CatalogNodeResponse {
+        title,
+        path: String::new(),
+        role: "course",
+        course_id: Some(library_id.to_owned()),
+        cover_version: None,
+        source_folder: None,
+        structure: Some(structure),
+        files: Vec::new(),
+        loose_files: loose_files.into_iter().map(Into::into).collect(),
+        children: children.into_iter().map(Into::into).collect(),
+    };
+    Ok((node, complete))
+}
+
+/// Titles of the roots of one source: the folder name, plus as many parent folders in
+/// parentheses as it takes to tell equal names apart (`Redes (Pentest)`, `Redes (A/x)`).
+fn root_titles(roots: &[learnvault_core::SourceRoot]) -> Vec<String> {
+    let segments: Vec<Vec<&str>> = roots
+        .iter()
+        .map(|root| root.prefix.split('/').collect())
+        .collect();
+    let title = |parts: &[&str], depth: usize| {
+        let (parents, name) = parts.split_at(parts.len() - 1);
+        let keep = depth.saturating_sub(1).min(parents.len());
+        match keep {
+            0 => name[0].to_owned(),
+            _ => format!(
+                "{} ({})",
+                name[0],
+                parents[parents.len() - keep..].join("/")
+            ),
+        }
+    };
+    segments
+        .iter()
+        .enumerate()
+        .map(|(index, parts)| {
+            // The shallowest depth at which no other visible root has the same title.
+            for depth in 1..=parts.len() {
+                let mine = title(parts, depth);
+                let clash = segments
+                    .iter()
+                    .enumerate()
+                    .any(|(other, others)| other != index && title(others, depth) == mine);
+                if !clash {
+                    return mine;
+                }
+            }
+            title(parts, parts.len())
+        })
+        .collect()
 }
 
 pub(crate) async fn rescan(State(state): State<AppState>, headers: HeaderMap) -> Response {
@@ -652,5 +740,53 @@ mod tests {
         let json = serde_json::to_value(&response).unwrap();
         assert_eq!(json["confidence"], "medium");
         assert_eq!(json["concerns"][0], "lessons_without_numbering");
+    }
+}
+
+#[cfg(test)]
+mod title_tests {
+    use super::root_titles;
+    use learnvault_core::SourceRoot;
+
+    fn roots(prefixes: &[&str]) -> Vec<SourceRoot> {
+        prefixes
+            .iter()
+            .enumerate()
+            .map(|(index, prefix)| SourceRoot {
+                library_id: index.to_string(),
+                prefix: (*prefix).to_owned(),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_unique_name_is_the_folder_name() {
+        assert_eq!(
+            root_titles(&roots(&["Cursos/Rust", "Cursos/Go"])),
+            ["Rust", "Go"]
+        );
+    }
+
+    #[test]
+    fn equal_names_get_as_many_parents_as_needed() {
+        assert_eq!(
+            root_titles(&roots(&["A/Redes", "B/Redes", "Solo"])),
+            ["Redes (A)", "Redes (B)", "Solo"]
+        );
+        assert_eq!(
+            root_titles(&roots(&["A/x/Redes", "B/x/Redes"])),
+            ["Redes (A/x)", "Redes (B/x)"]
+        );
+        // Three roots with one name: the shortest title that no other root shares.
+        assert_eq!(
+            root_titles(&roots(&["A/x/Redes", "B/x/Redes", "B/y/Redes"])),
+            ["Redes (A/x)", "Redes (B/x)", "Redes (y)"]
+        );
+    }
+
+    #[test]
+    fn a_root_alone_is_never_decorated() {
+        assert_eq!(root_titles(&roots(&["A/B/Redes"])), ["Redes"]);
+        assert!(root_titles(&[]).is_empty());
     }
 }

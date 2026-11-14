@@ -52,8 +52,8 @@ pub use auth::{
     update_credentials_and_session,
 };
 pub use catalog::{
-    Availability, Catalog, CatalogFile, CatalogNode, NodeRole, build_catalog, course_file_lessons,
-    natural_cmp, shape_course_catalog,
+    Availability, Catalog, CatalogFile, CatalogNode, NodeRole, build_catalog, build_catalog_below,
+    course_file_lessons, natural_cmp, shape_course_catalog,
 };
 pub use courses::{
     CourseRoot, CourseRootError, LEGACY_LIBRARY_ID, course_id_from_path, course_source_folder,
@@ -82,6 +82,7 @@ pub use removal::{MediaRemovalImpact, MediaRemovalOutcome, media_removal_impact,
 pub use rescan::{RescanSummary, apply_incremental_scan, apply_scan, apply_source_scan, rescan};
 pub use roots::{
     Partition, RootError, SourceRoot, demote_root, list_roots, partition_scan, promote_root,
+    root_source,
 };
 pub use scanner::{MediaKind, ScanOutcome, ScannedFile, scan};
 pub use search::{

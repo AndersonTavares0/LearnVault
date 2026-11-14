@@ -208,6 +208,18 @@ fn validated_keys(
 const UNDER_PREFIX: &str =
     "(relative_path_key = ?3 OR substr(relative_path_key, 1, length(?3) + 1) = ?3 || '/')";
 
+/// The source that owns `library_id` when it is a root, or `None` when it is not one.
+pub fn root_source(db: &Database, library_id: &str) -> Result<Option<String>> {
+    Ok(db
+        .connection()
+        .query_row(
+            "SELECT source_id FROM library_root WHERE library_id = ?1",
+            [library_id],
+            |row| row.get(0),
+        )
+        .optional()?)
+}
+
 /// Roots of a source, ordered by prefix.
 pub fn list_roots(db: &Database, source_id: &str) -> Result<Vec<SourceRoot>> {
     let mut statement = db.connection().prepare(

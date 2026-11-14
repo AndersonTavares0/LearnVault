@@ -71,7 +71,26 @@ pub(crate) async fn media(
             .into_iter()
             .find(|source| source.id == query.course)
         {
-            return remote_media(state, user, source, query.path, headers, method).await;
+            let library_id = source.id.clone();
+            return remote_media(state, user, source, library_id, query.path, headers, method)
+                .await;
+        }
+        // A root of a split source is its own course; its bytes come from the source.
+        match source_of_root(&state, &query.course).await {
+            Ok(Some(source)) => {
+                return remote_media(
+                    state,
+                    user,
+                    source,
+                    query.course,
+                    query.path,
+                    headers,
+                    method,
+                )
+                .await;
+            }
+            Ok(None) => {}
+            Err(response) => return *response,
         }
         return error_private_no_store(StatusCode::NOT_FOUND);
     };
@@ -195,6 +214,37 @@ pub(crate) async fn media(
     response
 }
 
+/// The configured source that owns `course` when it is a root, or `None`. The media lookup
+/// that follows only knows the files of that root, so a path outside its folder is not found.
+async fn source_of_root(
+    state: &AppState,
+    course: &str,
+) -> Result<Option<RemoteSource>, Box<Response>> {
+    if !state.has_blocking_capacity() {
+        return Err(Box::new(service_unavailable()));
+    }
+    let database = state.database.clone().lock_owned().await;
+    let Some(blocking_task) = state.try_acquire_blocking_task() else {
+        return Err(Box::new(service_unavailable()));
+    };
+    let course = course.to_owned();
+    let owner = match tokio::task::spawn_blocking(move || {
+        let _blocking_task = blocking_task;
+        learnvault_core::root_source(&database, &course)
+    })
+    .await
+    {
+        Ok(Ok(owner)) => owner,
+        _ => return Err(Box::new(service_unavailable())),
+    };
+    Ok(owner.and_then(|owner| {
+        state
+            .sources_snapshot()
+            .into_iter()
+            .find(|source| source.id == owner)
+    }))
+}
+
 /// Entrega uma faixa de uma mídia de uma fonte WebDAV.
 ///
 /// Só caminhos já catalogados no banco são repassados ao servidor remoto: o cliente HTTP
@@ -204,6 +254,7 @@ async fn remote_media(
     state: AppState,
     user: learnvault_core::AuthSession,
     source: RemoteSource,
+    library_id: String,
     path: String,
     headers: HeaderMap,
     method: Method,
@@ -215,7 +266,6 @@ async fn remote_media(
     let Some(blocking_task) = state.try_acquire_blocking_task() else {
         return service_unavailable();
     };
-    let library_id = source.id.clone();
     let lookup_path = path;
     let lookup = tokio::task::spawn_blocking(move || {
         let _blocking_task = blocking_task;
