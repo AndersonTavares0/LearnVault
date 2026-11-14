@@ -1,7 +1,7 @@
 import { Download, MessageSquareText, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { marksToMarkdown, PDF_MARK_COLORS } from '@/lib/pdf';
+import { marksToMarkdown, PDF_MARK_COLORS, sanitizeQuote } from '@/lib/pdf';
 import { tr } from '@/lib/i18n';
 import type { PdfAnnotation, PdfAnnotationColor } from '@/lib/transport';
 import { cn } from '@/lib/utils';
@@ -65,21 +65,26 @@ export function PdfMarks({ title, items, page, onGo, onChange, onDelete, pending
 				<p className="text-sm text-muted-foreground">{tr('No marks on this page.', 'Nenhuma marcação nesta página.')}</p>
 			) : (
 				<ul className="space-y-3">
-					{shown.map((item) => (
-						<li key={item.annotationId} className="space-y-3 rounded-2xl border bg-card p-4">
-							<div className="flex flex-wrap items-center gap-2">
-								<span aria-hidden="true" className="size-3 shrink-0 rounded-full" style={{ backgroundColor: PDF_MARK_COLORS[item.color] }} />
-								<span className="text-xs font-semibold tracking-[0.12em] text-muted-foreground uppercase">{kindName(item.kind)}</span>
-								<Button variant="link" size="sm" className="h-auto p-0" onClick={() => onGo(item.page)}>{tr(`Page ${item.page}`, `Página ${item.page}`)}</Button>
-								<div className="ml-auto flex items-center">
-									<ColorSwatches size="sm" label={tr(`Color of the mark on page ${item.page}`, `Cor da marcação da página ${item.page}`)} value={item.color} onChange={(color) => onChange(item.annotationId, { color })} />
-									<Button variant="ghost" size="icon" disabled={pending} aria-label={tr(`Delete mark on page ${item.page}`, `Excluir marcação da página ${item.page}`)} onClick={() => onDelete(item.annotationId)}><Trash2 /></Button>
+					{shown.map((item) => {
+						const quote = sanitizeQuote(item.quote);
+						return (
+							<li key={item.annotationId} className="space-y-3 rounded-2xl border bg-card p-4">
+								<div className="flex flex-wrap items-center gap-2">
+									<span aria-hidden="true" className="size-3 shrink-0 rounded-full" style={{ backgroundColor: PDF_MARK_COLORS[item.color] }} />
+									<span className="text-xs font-semibold tracking-[0.12em] text-muted-foreground uppercase">{kindName(item.kind)}</span>
+									<Button variant="link" size="sm" className="h-auto p-0" onClick={() => onGo(item.page)}>{tr(`Page ${item.page}`, `Página ${item.page}`)}</Button>
+									<div className="ml-auto flex items-center">
+										<ColorSwatches size="sm" label={tr(`Color of the mark on page ${item.page}`, `Cor da marcação da página ${item.page}`)} value={item.color} onChange={(color) => onChange(item.annotationId, { color })} />
+										<Button variant="ghost" size="icon" disabled={pending} aria-label={tr(`Delete mark on page ${item.page}`, `Excluir marcação da página ${item.page}`)} onClick={() => onDelete(item.annotationId)}><Trash2 /></Button>
+									</div>
 								</div>
-							</div>
-							{item.quote && <blockquote className="border-l-4 pl-3 text-sm" style={{ borderColor: PDF_MARK_COLORS[item.color] }}>{item.quote}</blockquote>}
-							<NoteField item={item} onSave={(content) => onChange(item.annotationId, { content })} />
-						</li>
-					))}
+								{quote ? <blockquote className="border-l-4 pl-3 text-sm" style={{ borderColor: PDF_MARK_COLORS[item.color] }}>{quote}</blockquote> : (
+									<p className="text-sm text-muted-foreground">{tr('The selected text could not be extracted reliably. The mark is still saved on its page.', 'Não foi possível extrair o texto selecionado com segurança. A marcação continua salva na página.')}</p>
+								)}
+								<NoteField item={item} onSave={(content) => onChange(item.annotationId, { content })} />
+							</li>
+						);
+					})}
 				</ul>
 			)}
 		</div>

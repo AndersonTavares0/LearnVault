@@ -11,7 +11,7 @@ const test = createTest(async (library) => {
 	await writeFile(join(library, 'Ownership notes.pdf'), makePdf(['Ownership moves values.', 'Borrowing shares a value.']));
 });
 
-test('opens the PDF of a course that only holds materials and keeps its marks', async ({ page, origin }) => {
+test('opens the PDF of a course that only holds materials and keeps its marks', async ({ page, origin }, testInfo) => {
 	const violations = collectCspViolations(page);
 	await page.emulateMedia({ reducedMotion: 'reduce' });
 	await signIn(page, origin);
@@ -36,7 +36,9 @@ test('opens the PDF of a course that only holds materials and keeps its marks', 
 		selection?.removeAllRanges();
 		selection?.addRange(range);
 	});
+	const savedResponse = page.waitForResponse((response) => response.url().endsWith('/api/study/pdf-annotations') && response.request().method() === 'POST');
 	await page.getByRole('button', { name: 'Highlight' }).click();
+	const saved = await (await savedResponse).json();
 	await expect(page.getByRole('list').getByText('Ownership moves values.')).toBeVisible({ timeout: 10_000 });
 	await expectNoAxeViolations(page, 'pdf lesson');
 
@@ -44,5 +46,24 @@ test('opens the PDF of a course that only holds materials and keeps its marks', 
 	await page.reload();
 	await expect(page.locator('.pdf-text-layer')).toContainText('Ownership moves values.', { timeout: 15_000 });
 	await expect(page.getByRole('list').getByText('Ownership moves values.')).toBeVisible();
+
+	// Existing marks may contain broken ToUnicode extraction. Keep their geometry and notes.
+	const brokenQuote = 'HUD\u0003GR';
+	const legacy = await page.request.post(`${origin}/api/study/pdf-annotations`, {
+		headers: { Origin: origin },
+		data: { media_id: saved.media_id, page: saved.page, kind: saved.kind, color: saved.color, rects: saved.rects, quote: brokenQuote, content: 'Keep this note' }
+	});
+	await expect(legacy).toBeOK();
+	await page.reload();
+	await expect(page.locator('.pdf-text-layer')).toContainText('Ownership moves values.', { timeout: 15_000 });
+	await expect(page.getByText('The selected text could not be extracted reliably. The mark is still saved on its page.')).toBeVisible();
+	await expect(page.getByRole('textbox', { name: 'Note for the mark on page 1' }).last()).toHaveValue('Keep this note');
+	await page.setViewportSize({ width: 390, height: 844 });
+	await expect.poll(() => page.getByRole('img', { name: 'Page 1 of 1' }).evaluate((canvas) => canvas.getBoundingClientRect().width)).toBeLessThan(390);
+	await expect(page.locator('.pdf-text-layer')).toContainText('Ownership moves values.');
+	await page.screenshot({ path: testInfo.outputPath('unreadable-quote-mobile.png'), fullPage: true });
+	await expectNoAxeViolations(page, 'pdf unreadable quote');
+	const stored = await page.request.get(`${origin}/api/study/pdf-annotations?media_id=${encodeURIComponent(saved.media_id)}`);
+	expect((await stored.json()).items.some((item: { quote: string; content: string }) => item.quote === brokenQuote && item.content === 'Keep this note')).toBeTruthy();
 	expect(violations).toEqual([]);
 });

@@ -119,6 +119,14 @@ export function pagesMatching(pageTexts: string[], query: string): number[] {
 
 const KIND_NAMES = () => ({ highlight: tr('Highlight', 'Destaque'), underline: tr('Underline', 'Sublinhado'), note: tr('Note', 'Nota') });
 
+/** Hide extraction containing invalid control bytes, without guessing the quote's language. */
+export function sanitizeQuote(raw: string): string {
+	// Broken ToUnicode maps can shift letters as well as spaces; deleting bytes cannot repair them.
+	// eslint-disable-next-line no-control-regex -- these bytes identify corrupt PDF text extraction
+	if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/.test(raw)) return '';
+	return raw.replace(/\s+/g, ' ').trim().slice(0, 4000);
+}
+
 /** The marks as a Markdown document, in page order, so they can be kept outside the app. */
 export function marksToMarkdown(title: string, items: PdfAnnotation[]): string {
 	const names = KIND_NAMES();
@@ -130,7 +138,7 @@ export function marksToMarkdown(title: string, items: PdfAnnotation[]): string {
 			page = item.page;
 			lines.push('', `## ${tr('Page', 'Página')} ${page}`, '');
 		}
-		const quote = item.quote.replace(/\s+/g, ' ').trim();
+		const quote = sanitizeQuote(item.quote);
 		lines.push(`- **${names[item.kind]}**${quote ? `: “${quote}”` : ''}`);
 		const note = item.content.trim();
 		if (note) lines.push(...note.split('\n').map((line) => `  > ${line}`));

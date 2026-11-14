@@ -76,6 +76,16 @@ describe('PdfReader', () => {
 		expect(await screen.findByText(/No marks yet/)).toBeTruthy();
 	});
 
+	it('explains corrupt extracted quotes without changing the saved mark or its note', async () => {
+		const saved = { ...mark('broken', 2), quote: 'HUD\u0003GR', content: 'My own note' };
+		vi.spyOn(transport, 'listPdfAnnotations').mockResolvedValue([saved]);
+		await open();
+		expect(await screen.findByText(/The selected text could not be extracted reliably/)).toBeTruthy();
+		expect(screen.queryByText(saved.quote)).toBeNull();
+		expect((screen.getByRole('textbox', { name: 'Note for the mark on page 2' }) as HTMLTextAreaElement).value).toBe('My own note');
+		expect(saved.quote).toBe('HUD\u0003GR');
+	});
+
 	it('searches the text of every page and steps between the pages that match', async () => {
 		vi.spyOn(transport, 'listPdfAnnotations').mockResolvedValue([]);
 		await open();
