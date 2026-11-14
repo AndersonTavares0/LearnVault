@@ -20,6 +20,7 @@ mod reviews;
 mod search;
 mod secret;
 mod smb;
+mod source_roots;
 mod sources;
 mod spa;
 mod state;
@@ -233,6 +234,15 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/api/admin/sources/{id}/test", post(sources::test))
         .route("/api/admin/sources/{id}/scan", post(sources::scan))
+        .route("/api/admin/sources/{id}/browse", get(source_roots::browse))
+        .route(
+            "/api/admin/sources/{id}/roots",
+            get(source_roots::list).post(source_roots::create),
+        )
+        .route(
+            "/api/admin/sources/{id}/roots/{root_id}",
+            axum::routing::delete(source_roots::remove),
+        )
         .route("/api/admin/backup", get(backup::download_backup))
         .route("/api/update", get(update::update))
         .route("/api/update/history", get(update::update_history))

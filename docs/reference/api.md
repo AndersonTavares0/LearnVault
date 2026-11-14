@@ -117,14 +117,25 @@ ciphertext is preserved until the key is restored.
 | --- | --- | --- | --- |
 | `GET` | `/api/admin/sources` | Admin Session | Lists sources as `{ id, name, url, username, has_password, credential_error }`; never returns the secret |
 | `POST` | `/api/admin/sources` | Admin Session | Accepts `{ name, url, username?, password? }` and returns `201` with the sanitized source |
-| `DELETE` | `/api/admin/sources/{id}` | Admin Session | Removes the source configuration; returns `{ removed: bool }` and touches no remote file |
+| `DELETE` | `/api/admin/sources/{id}` | Admin Session | Removes the source configuration and detaches its roots (their media returns to the source library); returns `{ removed: bool }` and touches no remote file |
 | `POST` | `/api/admin/sources/{id}/test` | Admin Session | Validates reachability and authentication with a root listing (`PROPFIND` or SMB directory enumeration); returns `{ ok, entries }` or `{ ok: false, error }` (`unreachable`, `denied`, `not_found`, `invalid_response`, `limit_exceeded`, `credentials_unavailable`, `timeout`) |
 | `POST` | `/api/admin/sources/{id}/scan` | Admin Session | Walks the remote tree and applies it to the catalog as a course; returns the same rescan counters as the local rescan |
+| `GET` | `/api/admin/sources/{id}/browse?path=` | Admin Session | Lists one folder level of the source (`path` is relative, empty for the source root): `{ path, folders: [{ name, path, state }], media_files, other_files, truncated }`. `state` is `root`, `inside_root`, `contains_root` or `free`. Ignored folders are hidden and at most 2000 folders are listed (`truncated`). A path is relative, `\` is read as `/`, and an unclean one (`..`, absolute, `//`, a drive prefix, NUL, over 1024 characters) returns `400 invalid_path`; a missing folder returns `404 not_found`, unreadable credentials `400 credentials_unavailable`, and a remote failure `502` or `504` with the same sanitized codes as the connection test |
+| `GET` | `/api/admin/sources/{id}/roots` | Admin Session | Lists the folders chosen as courses: `{ roots: [{ id, name, path }] }` |
+| `POST` | `/api/admin/sources/{id}/roots` | Admin Session | Accepts `{ path, mode }` with `mode` `course` (the folder is a course) or `children` (every folder directly inside is a course). The folder must exist on the source. `course` on an ignored folder (such as `temp`) returns `400 invalid_path`; more than 100 folders in `children` return `400 too_many_folders`. Returns `201 { created, skipped }` where `skipped` lists `{ path, reason }` (`overlaps_existing_root`, `invalid_path`, `invalid_root` or `unavailable` when a database failure stopped the rest); a single `course` that cannot be created returns `409` with the reason. Changing requests need the same origin |
+| `DELETE` | `/api/admin/sources/{id}/roots/{root_id}` | Admin Session | The folder stops being a course of its own and its media returns to the source course; returns `{ removed: true }`, `404` when the root does not belong to that source, and touches no remote file |
 
 A scanned source appears in `GET /api/catalog` as a top-level `course` node with the source's
 opaque `id`; `GET`/`HEAD /api/media?course=<source-id>&path=<relative-path>` streams its bytes with
 `206` ranges. Only paths already present in the catalog are proxied to the remote server. Remote
 courses have no custom cover, manual ordering, search indexing or on-demand transcoding yet.
+
+A source can be split into several courses by choosing folders as roots (ADR 0004). Choosing a folder
+moves its already scanned media to a course of its own and every later scan of the source is applied
+per root, so progress, notes and flashcards follow each lesson. The catalog, media and access
+endpoints still treat the whole source as one course until the catalog slice lands. A scan applies each
+chosen folder and the rest of the source as separate libraries, each in its own transaction: if one
+fails the others are still applied and the request reports the failure, and the next scan converges.
 
 ## Study Progress, Focus & Gamification
 

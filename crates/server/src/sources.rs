@@ -47,7 +47,7 @@ const MAX_SOURCE_NAME_CHARS: usize = 120;
 /// Maximum time to walk a remote source.
 const SOURCE_SCAN_TIMEOUT: Duration = Duration::from_secs(120);
 /// Maximum time of the connection test.
-const PROBE_TIMEOUT: Duration = Duration::from_secs(20);
+pub(crate) const PROBE_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// Remote course source loaded in memory.
 #[derive(Clone)]
@@ -456,18 +456,31 @@ pub(crate) async fn remove(
     let sources = Arc::clone(&state.sources);
     let sources_file = state.sources_file.clone();
     let key_path = state.source_key_path.clone();
+    let database = Arc::clone(&state.database);
     let outcome = tokio::task::spawn_blocking(move || {
         let _blocking_task = blocking_task;
-        let mut guard = sources.write().map_err(|_| SourcesError::WriteFailed)?;
-        let next: Vec<RemoteSource> = guard
-            .iter()
-            .filter(|source| source.id != source_id)
-            .cloned()
-            .collect();
-        let removed = next.len() != guard.len();
-        if removed {
-            store_sources(&sources_file, &key_path, &next)?;
-            *guard = next;
+        let removed = {
+            let mut guard = sources.write().map_err(|_| SourcesError::WriteFailed)?;
+            let next: Vec<RemoteSource> = guard
+                .iter()
+                .filter(|source| source.id != source_id)
+                .cloned()
+                .collect();
+            let removed = next.len() != guard.len();
+            if removed {
+                store_sources(&sources_file, &key_path, &next)?;
+                *guard = next;
+            }
+            removed
+        };
+        // The roots go after the configuration, with the sources lock already released (the
+        // two locks are never nested). A root created while the source was being removed is
+        // caught because creating one re-checks the source under the database lock. If this
+        // fails the source is already gone and repeating the request finishes the cleanup.
+        {
+            let mut database = database.blocking_lock();
+            crate::source_roots::demote_all(&mut database, &source_id)
+                .map_err(|_| SourcesError::WriteFailed)?;
         }
         Ok::<_, SourcesError>(removed)
     })
@@ -578,7 +591,7 @@ pub(crate) async fn scan(
     let blocking = tokio::task::spawn_blocking(move || {
         let _blocking_task = blocking_task;
         let mut database = database;
-        learnvault_core::apply_source_scan(&mut database, &library_id, outcome)
+        crate::source_roots::apply_scan_by_roots(&mut database, &library_id, outcome)
     })
     .await;
 
@@ -598,14 +611,14 @@ pub(crate) async fn scan(
 }
 
 /// Rejection reason of an administrative session, translated only in the handler.
-enum AdminFailure {
+pub(crate) enum AdminFailure {
     Unauthenticated,
     Forbidden,
     CredentialsRequired,
     Capacity,
 }
 
-async fn require_admin(
+pub(crate) async fn require_admin(
     state: &AppState,
     headers: &HeaderMap,
 ) -> Result<learnvault_core::AuthSession, AdminFailure> {
@@ -618,7 +631,7 @@ async fn require_admin(
     }
 }
 
-fn admin_failure_response(failure: AdminFailure) -> Response {
+pub(crate) fn admin_failure_response(failure: AdminFailure) -> Response {
     match failure {
         AdminFailure::Unauthenticated => status_private_no_store(StatusCode::UNAUTHORIZED),
         AdminFailure::Forbidden => status_private_no_store(StatusCode::FORBIDDEN),
@@ -661,7 +674,7 @@ fn source_url_code(error: SourceUrlError) -> &'static str {
     }
 }
 
-fn source_error_code(error: SourceError) -> &'static str {
+pub(crate) fn source_error_code(error: SourceError) -> &'static str {
     match error {
         SourceError::Unreachable => "unreachable",
         SourceError::Denied => "denied",
@@ -671,7 +684,7 @@ fn source_error_code(error: SourceError) -> &'static str {
     }
 }
 
-fn json_error(status: StatusCode, error: &'static str) -> Response {
+pub(crate) fn json_error(status: StatusCode, error: &'static str) -> Response {
     private_no_store((status, Json(ErrorBody { error })).into_response())
 }
 
