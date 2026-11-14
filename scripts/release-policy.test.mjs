@@ -14,6 +14,7 @@ test('Release Please uses SemVer pre-major bumps, generated names, and categoriz
     assert.equal(release.versioning, 'default');
     assert.equal(release.prerelease, false);
     assert.equal(release['prerelease-type'], undefined);
+    assert.equal(release['release-as'], '0.9.0');
     assert.equal(release['include-v-in-tag'], true);
     assert.equal(release['include-v-in-release-name'], true);
     assert.equal(release['changelog-path'], 'docs/releases/CHANGELOG.md');

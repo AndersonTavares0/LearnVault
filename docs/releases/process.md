@@ -16,7 +16,7 @@ The release workflow receives the published tag via environment variables and va
 
 Release Please runs in stable mode (`.github/release-please/release-please-config.json`: `versioning: default`, `prerelease: false`). Preparing a release pull request updates version files and the English changelog without publishing anything. Merging that PR creates the `vX.Y.Z` tag and publishes the GitHub Release; the subsequent asset and container publication jobs wait for approval in the `release` environment. That environment does not gate the initial tag or GitHub Release.
 
-The next stable release is planned as `0.9.0`. Keep its generated release PR unmerged until the final review and explicit maintainer authorization to publish. Routine code and configuration PRs are not that authorization.
+The next stable release is explicitly pinned with `release-as: 0.9.0` to promote `0.9.0-rc.5` without carrying its prerelease suffix into a new version. Keep its generated release PR unmerged until the final review and explicit maintainer authorization to publish. Routine code and configuration PRs are not that authorization. Before merging the generated `0.9.0` PR, remove this one-time `release-as` override in that same PR while keeping its generated `0.9.0` version files; otherwise later release preparation would keep proposing `0.9.0`.
 
 ## Entering candidate mode again
 
@@ -24,9 +24,9 @@ To cut a candidate instead of a stable release, open one pull request that sets 
 
 ## Release candidates (rc)
 
-Before a release candidate or a stable release is pushed or published, its container and publish jobs wait for approval in the `release` GitHub environment (required reviewer). No tag moves without that approval.
+Container and asset publication jobs wait for approval in the `release` GitHub environment (required reviewer). This gate protects container tags and asset uploads, not the initial Git tag or GitHub Release created by Release Please when the release PR is merged.
 
-Soak policy: a release candidate runs for 3 to 7 days before its stable release. The stable tag reuses the tested image digest, and any fix found during the soak gets a new candidate (`rc.N+1`) instead of an edit to the candidate.
+Candidate soak policy: a release candidate runs for 3 to 7 days before its stable release. The stable workflow rebuilds assets and the container with the stable version; it does not promote the candidate's image digest. Validate the rebuilt stable artifacts and checksums before distribution. Published candidates are immutable. The `0.9.0` candidate cycle is closed: remaining fixes are reviewed on `main`, with no further RC publication planned.
 
 A release candidate is a manually created GitHub pre-release tagged `vMAJOR.MINOR.PATCH-rc.N` (for example `v0.9.0-rc.1`) on a commit of `main`. The workflow requires its GitHub release to be published and marked as a pre-release, and a stable tag to be a published non-pre-release.
 

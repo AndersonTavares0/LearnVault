@@ -12,6 +12,7 @@
       "bump-patch-for-minor-pre-major": true,
       "versioning": "default",
       "prerelease": false,
+      "release-as": "0.9.0",
       "pull-request-title-pattern": "chore: release ${version}",
       "pull-request-header": "Release Please generated this release from Conventional Commits.",
       "changelog-sections": [
