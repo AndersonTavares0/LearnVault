@@ -49,6 +49,11 @@ describe('course page', () => {
 		renderApp('/course/reading', { catalog: reading });
 		expect((await screen.findByRole('link', { name: 'Ownership notes.pdf' })).getAttribute('href')).toBe('/course/reading/reading%2FOwnership%20notes.pdf');
 		expect(screen.getByRole('link', { name: 'Borrowing.pdf' }).getAttribute('href')).toBe('/course/reading/reading%2FGuides%2FBorrowing.pdf');
+		// A course made only of documents reads as a list, not as a broken course.
+		expect(screen.getByRole('heading', { name: /Reading list/ })).toBeTruthy();
+		expect(screen.queryByText('The structure of this course was hard to read.')).toBeNull();
+		expect(screen.queryByText('No lessons available')).toBeNull();
+		expect(screen.getByRole('link', { name: 'Start reading' }).getAttribute('href')).toBe('/course/reading/reading%2FOwnership%20notes.pdf');
 	});
 
 	it('offers course management to admins only', async () => {
