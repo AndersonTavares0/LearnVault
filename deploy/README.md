@@ -70,8 +70,9 @@ docker compose -f compose.yaml -f compose.build.yaml up -d --build
 
 > **Tag channels:** the first stable release (`0.9.0`) moves `latest`, `stable`, and the minor
 > line when published. Until a stable release exists, Option A fails to pull; pin `LEARNVAULT_IMAGE`
-> as in Option B or follow candidates through the moving `:rc` tag. Candidates (`0.9.0-rc.N`) never
-> move `latest`, `stable`, or the minor line.
+> to an exact published version as in Option B. Release candidates are no longer published, and the
+> `:rc` tag is not updated any more; the existing `0.9.0-rc.N` tags never move `latest`, `stable`, or
+> the minor line.
 
 > **Upgrading from a setup that built the image locally:** if your `.env` still has `LEARNVAULT_IMAGE=learnvault-rust:local`, remove that line (the default is now the published image), or keep building by adding `-f compose.build.yaml` to every `docker compose` command.
 
