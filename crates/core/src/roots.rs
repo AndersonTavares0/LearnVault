@@ -7,12 +7,16 @@
 
 use std::collections::HashSet;
 
-use rusqlite::{OptionalExtension, params};
+use rusqlite::{OptionalExtension, TransactionBehavior, params};
 
+use crate::auth::NO_COURSE_ACCESS_SENTINEL;
 use crate::db::Database;
 use crate::error::Result;
 use crate::paths::{KeyMode, is_under_area, relative_path_key};
 use crate::scanner::ScanOutcome;
+
+/// Longest id the `user_course_access` and `study_favorite` tables accept.
+const MAX_LIBRARY_ID: usize = 256;
 
 /// Maps `library_id` to the part of a source under `prefix`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -32,12 +36,18 @@ pub enum RootError {
     /// The prefix is empty or is not a clean relative path.
     #[error("invalid root prefix: {0:?}")]
     InvalidPrefix(String),
+    /// The library id is longer than the 256 characters the access and favorite tables accept.
+    #[error("library id too long: {0} characters")]
+    LibraryIdTooLong(usize),
     /// Two roots use the same library id.
     #[error("duplicate root library id: {0:?}")]
     DuplicateLibrary(String),
     /// The new root would use the id of the source itself or of a library that exists.
     #[error("library id already in use: {0:?}")]
     LibraryExists(String),
+    /// The source id is itself a root, so roots would nest.
+    #[error("source is already a root: {0:?}")]
+    SourceIsRoot(String),
     /// No root has this library id.
     #[error("unknown root: {0:?}")]
     UnknownRoot(String),
@@ -87,19 +97,19 @@ pub fn partition_scan(
     }
 
     for path in outcome.inaccessible {
-        let key = relative_path_key(&path, mode).ok();
-        let mut placed = false;
+        let mut inside = false;
         for (index, root_key) in keys.iter().enumerate() {
-            let Some(key) = key.as_deref() else { break };
-            if is_under_area(key, root_key) {
-                parts[index].inaccessible.push(path.clone());
-                placed = true;
-            } else if is_under_area(root_key, key) {
-                parts[index].inaccessible.push(".".to_owned());
+            match relation(&path, root_key, mode) {
+                Relation::Inside => {
+                    parts[index].inaccessible.push(path.clone());
+                    inside = true;
+                }
+                Relation::Above => push_unverified(&mut parts[index].inaccessible),
+                Relation::Other => {}
             }
         }
-        // A path that is inside a root is not also reported for the source's own course.
-        if !placed {
+        // A path inside a root is not also reported for the source's own course.
+        if !inside {
             remainder.inaccessible.push(path);
         }
     }
@@ -112,6 +122,48 @@ pub fn partition_scan(
             .collect(),
         remainder,
     })
+}
+
+/// How an unreadable area relates to a root.
+enum Relation {
+    /// The area is the root folder or lies inside it.
+    Inside,
+    /// The area contains the root (or is the whole source, `.`), so the root was not verified.
+    Above,
+    /// The area has nothing to do with the root.
+    Other,
+}
+
+fn relation(path: &str, root_key: &str, mode: KeyMode) -> Relation {
+    // The scanner reports the source root itself as `.`; it cannot be keyed and it covers every root.
+    if path == "." {
+        return Relation::Above;
+    }
+    match relative_path_key(path, mode) {
+        Ok(key) if is_under_area(&key, root_key) => Relation::Inside,
+        Ok(key) if is_under_area(root_key, &key) => Relation::Above,
+        Ok(_) => Relation::Other,
+        // A name the domain refuses cannot be keyed, but it can still sit under a root. An
+        // ancestor of a clean prefix is made of clean names, so only `Inside` is possible here.
+        Err(_) => {
+            let slashed = path.replace('\\', "/");
+            let folded = match mode {
+                KeyMode::Sensitive => slashed,
+                KeyMode::Insensitive => slashed.to_ascii_lowercase(),
+            };
+            if is_under_area(&folded, root_key) {
+                Relation::Inside
+            } else {
+                Relation::Other
+            }
+        }
+    }
+}
+
+fn push_unverified(areas: &mut Vec<String>) {
+    if !areas.iter().any(|area| area == ".") {
+        areas.push(".".to_owned());
+    }
 }
 
 fn empty() -> ScanOutcome {
@@ -128,7 +180,7 @@ fn validated_keys(
     let mut ids = HashSet::new();
     let mut keys: Vec<String> = Vec::with_capacity(roots.len());
     for root in roots {
-        if root.library_id.is_empty() {
+        if root.library_id.trim().is_empty() {
             return Err(RootError::EmptyLibraryId);
         }
         if !ids.insert(root.library_id.as_str()) {
@@ -151,7 +203,8 @@ fn validated_keys(
 }
 
 /// Rows of `media` under a prefix key: the folder itself or anything inside it. Done in SQL
-/// with `substr` (no `LIKE`), so `%`, `_` and `\` in folder names are plain text.
+/// with `substr` (no `LIKE`), so `%` and `_` in folder names are plain text. (`\` is a path
+/// separator here as everywhere in this crate: `relative_path_key` turns it into `/`.)
 const UNDER_PREFIX: &str =
     "(relative_path_key = ?3 OR substr(relative_path_key, 1, length(?3) + 1) = ?3 || '/')";
 
@@ -169,6 +222,16 @@ pub fn list_roots(db: &Database, source_id: &str) -> Result<Vec<SourceRoot>> {
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
+fn exists_root(tx: &rusqlite::Transaction<'_>, library_id: &str) -> rusqlite::Result<bool> {
+    tx.query_row(
+        "SELECT 1 FROM library_root WHERE library_id = ?1",
+        [library_id],
+        |_| Ok(()),
+    )
+    .optional()
+    .map(|row| row.is_some())
+}
+
 /// Makes `library_id` the library of the part of `source_id` under `prefix`.
 ///
 /// One transaction: the matching `media` rows (and their `media_removal` rows) move to the
@@ -178,7 +241,9 @@ pub fn list_roots(db: &Database, source_id: &str) -> Result<Vec<SourceRoot>> {
 /// restricted to the source gets the same access to the new library. Returns how many media
 /// rows moved.
 ///
-/// The id must be new, and the prefix must not overlap a root the source already has.
+/// The id must be new (callers generate a fresh opaque id), the source must not itself be a
+/// root, and the prefix must not overlap a root the source already has. `mode` must be the
+/// mode the media keys were stored with (`KeyMode::for_host()`), or nothing will match.
 pub fn promote_root(
     db: &mut Database,
     source_id: &str,
@@ -186,9 +251,21 @@ pub fn promote_root(
     prefix: &str,
     mode: KeyMode,
 ) -> Result<usize> {
+    if source_id.trim().is_empty() || library_id.trim().is_empty() {
+        return Err(RootError::EmptyLibraryId.into());
+    }
+    if library_id.len() > MAX_LIBRARY_ID {
+        return Err(RootError::LibraryIdTooLong(library_id.len()).into());
+    }
     let prefix_key =
         relative_path_key(prefix, mode).map_err(|_| RootError::InvalidPrefix(prefix.to_owned()))?;
-    let tx = db.conn.transaction()?;
+    // Immediate: the checks below read before they write, so take the write lock first.
+    let tx = db
+        .conn
+        .transaction_with_behavior(TransactionBehavior::Immediate)?;
+    if exists_root(&tx, source_id)? {
+        return Err(RootError::SourceIsRoot(source_id.to_owned()).into());
+    }
 
     let exists = |id: &str| -> rusqlite::Result<bool> {
         tx.query_row("SELECT 1 FROM library WHERE library_id = ?1", [id], |_| {
@@ -244,7 +321,7 @@ pub fn promote_root(
     )?;
     copy_scan_history(&tx, source_id, library_id, &prefix_key, mode)?;
     tx.execute(
-        "INSERT OR IGNORE INTO user_course_access (user_id, course_id)
+        "INSERT INTO user_course_access (user_id, course_id)
          SELECT user_id, ?1 FROM user_course_access WHERE course_id = ?2",
         [library_id, source_id],
     )?;
@@ -268,7 +345,7 @@ fn copy_scan_history(
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
         )
         .optional()?;
-    let Some((scan_id, status, complete, completed_at)) = last else {
+    let Some((scan_id, status, _complete, completed_at)) = last else {
         return Ok(());
     };
     let mut areas = Vec::new();
@@ -278,27 +355,20 @@ fn copy_scan_history(
         let paths = statement.query_map([scan_id], |row| row.get::<_, String>(0))?;
         for path in paths {
             let path = path?;
-            let Ok(key) = relative_path_key(&path, mode) else {
-                continue;
-            };
-            if is_under_area(&key, prefix_key) {
-                areas.push(path);
-            } else if is_under_area(prefix_key, &key) {
-                areas.push(".".to_owned());
+            match relation(&path, prefix_key, mode) {
+                Relation::Inside => areas.push(path),
+                Relation::Above => push_unverified(&mut areas),
+                Relation::Other => {}
             }
         }
     }
     areas.sort();
     areas.dedup();
-    let verified = status != "failed" && (complete != 0 || areas.is_empty());
+    // A failed scan verified nothing; otherwise the root is verified when none of its area was unreadable.
+    let verified = status != "failed" && areas.is_empty();
     tx.execute(
         "INSERT INTO scan (library_id, status, completed_at, complete) VALUES (?1, ?2, ?3, ?4)",
-        params![
-            library_id,
-            status,
-            completed_at,
-            verified && areas.is_empty()
-        ],
+        params![library_id, status, completed_at, verified],
     )?;
     let new_scan = tx.last_insert_rowid();
     for area in areas {
@@ -314,8 +384,17 @@ fn copy_scan_history(
 /// scan history and access rows are dropped, its course favorites move to the source
 /// course, and the root disappears. Source files are never touched. Returns how many media
 /// rows moved back.
+///
+/// A user whose only access was this root is left with the "no course" marker, so removing a
+/// root never turns a restricted user into an unrestricted one; an administrator grants the
+/// source again if they want it. The source's own last scan is kept as it was before the
+/// promote and is refreshed by its next scan. The source library must not hold a row with the
+/// same path as a moved one (it cannot after a scan split by the roots); if it does, the whole
+/// call fails and nothing changes.
 pub fn demote_root(db: &mut Database, library_id: &str) -> Result<usize> {
-    let tx = db.conn.transaction()?;
+    let tx = db
+        .conn
+        .transaction_with_behavior(TransactionBehavior::Immediate)?;
     let source_id: String = tx
         .query_row(
             "SELECT source_id FROM library_root WHERE library_id = ?1",
@@ -338,10 +417,24 @@ pub fn demote_root(db: &mut Database, library_id: &str) -> Result<usize> {
         [library_id],
     )?;
     tx.execute("DELETE FROM scan WHERE library_id = ?1", [library_id])?;
+    let granted: Vec<String> = {
+        let mut statement =
+            tx.prepare("SELECT user_id FROM user_course_access WHERE course_id = ?1")?;
+        let rows = statement.query_map([library_id], |row| row.get(0))?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()?
+    };
     tx.execute(
         "DELETE FROM user_course_access WHERE course_id = ?1",
         [library_id],
     )?;
+    for user_id in granted {
+        // No rows would mean "unrestricted", so a user left with none gets the marker.
+        tx.execute(
+            "INSERT INTO user_course_access (user_id, course_id)
+             SELECT ?1, ?2 WHERE NOT EXISTS (SELECT 1 FROM user_course_access WHERE user_id = ?1)",
+            [&user_id, NO_COURSE_ACCESS_SENTINEL],
+        )?;
+    }
     tx.execute(
         "INSERT OR IGNORE INTO study_favorite (owner_id, target_kind, target_id, created_at)
          SELECT owner_id, 'course', ?1, created_at FROM study_favorite
@@ -549,6 +642,28 @@ mod tests {
             run(&[root("x", "a"), root("x", "b")]),
             RootError::DuplicateLibrary("x".into())
         );
+    }
+
+    #[test]
+    fn an_unreadable_source_root_leaves_every_root_unverified() {
+        let part = split(
+            scan(&["R/1.mp4", "S/1.mp4"], &["."]),
+            &[root("r", "R"), root("s", "S")],
+        );
+        assert_eq!(part.roots[0].1.inaccessible, ["."]);
+        assert_eq!(part.roots[1].1.inaccessible, ["."]);
+        assert_eq!(part.remainder.inaccessible, ["."]);
+    }
+
+    #[test]
+    fn a_name_the_domain_refuses_still_follows_the_root_that_contains_it() {
+        // A NUL byte cannot be keyed, so the path is matched by its leading folders.
+        let part = split(
+            scan(&["R/1.mp4"], &["R/bad\0name", "Other/bad\0name"]),
+            &[root("r", "R")],
+        );
+        assert_eq!(part.roots[0].1.inaccessible, ["R/bad\0name"]);
+        assert_eq!(part.remainder.inaccessible, ["Other/bad\0name"]);
     }
 
     #[test]

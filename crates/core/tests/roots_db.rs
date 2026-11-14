@@ -383,3 +383,133 @@ fn promoting_before_the_first_scan_creates_an_empty_root_that_a_later_scan_fills
     assert_eq!(library_of(&db, "Cursos/Go/1.mp4"), SRC);
     Ok(())
 }
+
+fn root_scan(db: &Database, library: &str) -> (i64, String, Vec<String>) {
+    let (id, status, complete): (i64, String, i64) = db
+        .connection()
+        .query_row(
+            "SELECT scan_id, status, complete FROM scan WHERE library_id = ?1 ORDER BY scan_id DESC LIMIT 1",
+            [library],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .unwrap();
+    let mut statement = db
+        .connection()
+        .prepare("SELECT relative_path FROM scan_inaccessible WHERE scan_id = ?1")
+        .unwrap();
+    let areas = statement
+        .query_map([id], |row| row.get(0))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+    (complete, status, areas)
+}
+
+#[test]
+fn an_unreadable_source_root_never_leaves_a_root_looking_verified() -> TestResult {
+    let mut db = scanned_with(TREE, &["."])?;
+    promote_root(&mut db, SRC, "rust", "Cursos/Rust", MODE)?;
+    let (complete, status, areas) = root_scan(&db, "rust");
+    assert_eq!(
+        (complete, status.as_str(), areas),
+        (0, "completed", vec![".".to_owned()])
+    );
+    Ok(())
+}
+
+#[test]
+fn a_failed_source_scan_gives_the_root_a_failed_scan() -> TestResult {
+    let mut db = scanned(TREE)?;
+    db.connection().execute(
+        "INSERT INTO scan (library_id, status, completed_at, complete) VALUES (?1, 'failed', 5, 0)",
+        [SRC],
+    )?;
+    promote_root(&mut db, SRC, "rust", "Cursos/Rust", MODE)?;
+    let (complete, status, _) = root_scan(&db, "rust");
+    assert_eq!((complete, status.as_str()), (0, "failed"));
+    Ok(())
+}
+
+#[test]
+fn demoting_never_turns_a_user_restricted_to_the_root_into_an_unrestricted_one() -> TestResult {
+    let mut db = scanned(TREE)?;
+    create_user(&mut db, "u1", "ana", "hash", 1, Some(&[SRC.to_owned()]))?;
+    promote_root(&mut db, SRC, "rust", "Cursos/Rust", MODE)?;
+    // An administrator narrows the user to the root only.
+    learnvault_core::set_user_course_access(&mut db, "u1", Some(&["rust".to_owned()]))?;
+    assert_eq!(
+        list_user_course_access(&db, "u1")?,
+        Some(vec!["rust".to_owned()])
+    );
+
+    demote_root(&mut db, "rust")?;
+
+    // Still restricted (to nothing), not unrestricted.
+    assert_eq!(list_user_course_access(&db, "u1")?, Some(vec![]));
+    Ok(())
+}
+
+#[test]
+fn an_id_the_access_tables_would_reject_is_refused_up_front() -> TestResult {
+    let mut db = scanned(TREE)?;
+    create_user(&mut db, "u1", "ana", "hash", 1, Some(&[SRC.to_owned()]))?;
+    let long = "x".repeat(257);
+    assert!(matches!(
+        promote_root(&mut db, SRC, &long, "Cursos/Rust", MODE).unwrap_err(),
+        Error::SourceRoot(RootError::LibraryIdTooLong(257))
+    ));
+    assert_eq!(count(&db, "SELECT COUNT(*) FROM library_root"), 0);
+    // 256 is the limit and still works, and the restricted user receives it.
+    let edge = "y".repeat(256);
+    promote_root(&mut db, SRC, &edge, "Cursos/Rust", MODE)?;
+    assert!(list_user_course_access(&db, "u1")?.unwrap().contains(&edge));
+    Ok(())
+}
+
+#[test]
+fn a_failure_halfway_through_demote_changes_nothing() -> TestResult {
+    let mut db = scanned(TREE)?;
+    let lesson = media_id(&db, "Cursos/Rust/01 Intro/1.mp4");
+    promote_root(&mut db, SRC, "rust", "Cursos/Rust", MODE)?;
+    // A stale removal row for the same media under the source makes the second move collide
+    // after the first one (the media rows) already ran.
+    db.connection().execute(
+        "INSERT INTO media_removal (library_id, media_id, removed_at) VALUES (?1, ?2, 1)",
+        [SRC, &lesson],
+    )?;
+    db.connection().execute(
+        "INSERT INTO media_removal (library_id, media_id, removed_at) VALUES ('rust', ?1, 2)",
+        [&lesson],
+    )?;
+
+    assert!(demote_root(&mut db, "rust").is_err());
+
+    assert_eq!(library_of(&db, "Cursos/Rust/01 Intro/1.mp4"), "rust");
+    assert_eq!(list_roots(&db, SRC)?.len(), 1);
+    assert_eq!(
+        count(
+            &db,
+            "SELECT COUNT(*) FROM library WHERE library_id = 'rust'"
+        ),
+        1
+    );
+    Ok(())
+}
+
+#[test]
+fn a_source_that_is_a_root_and_blank_ids_are_rejected() -> TestResult {
+    let mut db = scanned(TREE)?;
+    promote_root(&mut db, SRC, "cursos", "Cursos", MODE)?;
+    assert!(matches!(
+        promote_root(&mut db, "cursos", "nested", "Cursos/Rust", MODE).unwrap_err(),
+        Error::SourceRoot(RootError::SourceIsRoot(_))
+    ));
+    for (source, library) in [("", "a"), ("  ", "a"), (SRC, ""), (SRC, "  ")] {
+        assert!(matches!(
+            promote_root(&mut db, source, library, "Solto", MODE).unwrap_err(),
+            Error::SourceRoot(RootError::EmptyLibraryId)
+        ));
+    }
+    assert_eq!(count(&db, "SELECT COUNT(*) FROM library_root"), 1);
+    Ok(())
+}
