@@ -38,7 +38,7 @@ export function AppearanceSettings() {
 						const selected = value.accent === preset.hex;
 						return (
 							<button key={preset.id} type="button" aria-pressed={selected} onClick={() => { change({ accent: preset.hex }); setCustom(preset.hex); }} className={cn('flex min-h-11 items-center gap-2 rounded-lg border px-3 text-sm font-medium hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring focus-visible:outline-none', selected && 'border-primary bg-brand-tint')}>
-								<span aria-hidden="true" className={cn('grid size-5 place-items-center rounded-full', dark ? 'text-[#1C1209]' : 'text-white')} style={{ backgroundColor: dark ? preset.dark : preset.hex }}>{selected && <Check className="size-3.5" />}</span>
+								<span aria-hidden="true" className="grid size-5 place-items-center rounded-full text-brand-foreground" style={{ backgroundColor: dark ? preset.dark : preset.hex }}>{selected && <Check className="size-3.5" />}</span>
 								{accentNames()[preset.id]}
 							</button>
 						);

@@ -51,12 +51,12 @@ export function ActivityHeatmap({ today, activeDays }: { today: string; activeDa
 				<p className="text-sm text-muted-foreground">{summary}</p>
 			</div>
 			<div className="flex gap-2">
-				<div aria-hidden="true" className="mt-7 mb-2 grid w-6 shrink-0 grid-rows-7 gap-[3px] text-[10px] leading-none text-muted-foreground">
+				<div aria-hidden="true" className="mt-7 mb-2 grid w-6 shrink-0 grid-rows-7 gap-[3px] text-xs leading-none text-muted-foreground">
 					{weekdays.map((day, index) => <span key={index} className="flex items-center">{day}</span>)}
 				</div>
 				<div ref={scroller} className="min-w-0 flex-1 overflow-x-auto pb-2">
 					<div aria-hidden="true" className="w-max sm:w-full">
-						<div className="relative mb-3 h-4 text-[10px] whitespace-nowrap text-muted-foreground">
+						<div className="relative mb-3 h-4 text-xs whitespace-nowrap text-muted-foreground">
 							{months.map((month) => <span key={month.key} className="absolute" style={{ left: `${(month.week / WEEKS) * 100}%` }}>{month.label}</span>)}
 						</div>
 						<div data-heatmap-grid className="grid grid-flow-col grid-rows-7 gap-[3px] sm:auto-cols-fr">

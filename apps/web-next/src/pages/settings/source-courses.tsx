@@ -1,6 +1,6 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, Folder, RefreshCw } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { formatCount } from '@/lib/catalog';
@@ -29,7 +29,16 @@ export function SourceCourses({ source, onMessage }: { source: RemoteSource; onM
 	const [open, setOpen] = useState(false);
 	const [path, setPath] = useState('');
 	const [notice, setNotice] = useState('');
-	const listing = useQuery({ queryKey: [...browseKey(source.id), path], queryFn: () => transport.browseSource!(source.id, path), enabled: open, retry: false });
+	// The previous folder stays on screen while the next one loads, so the list does not flash away and
+	// the keyboard focus is not dropped to the page behind the dialog.
+	const listing = useQuery({ queryKey: [...browseKey(source.id), path], queryFn: () => transport.browseSource!(source.id, path), enabled: open, retry: false, placeholderData: keepPreviousData });
+	const pathBar = useRef<HTMLElement>(null);
+	const walked = useRef(false);
+	// Opening a folder replaces the buttons that were focused, so focus moves to the new level of the path.
+	useEffect(() => {
+		if (!walked.current) { walked.current = true; return; }
+		pathBar.current?.querySelector<HTMLElement>('[aria-current="page"]')?.focus();
+	}, [path]);
 	const roots = useQuery({ queryKey: rootsKey(source.id), queryFn: () => transport.listSourceRoots!(source.id), enabled: open, retry: false });
 	const changed = () => Promise.all([
 		client.invalidateQueries({ queryKey: browseKey(source.id) }),
@@ -62,7 +71,9 @@ export function SourceCourses({ source, onMessage }: { source: RemoteSource; onM
 	const segments = path ? path.split('/') : [];
 	const folders = listing.data?.folders ?? [];
 	const freeFolders = folders.filter((folder) => folder.state === 'free');
-	const here = segments.at(-1) ?? source.name;
+	// What the list shows (not the path being opened) decides the label and the target of the bulk action.
+	const shown = listing.data?.path ?? '';
+	const here = shown ? shown.split('/').at(-1)! : source.name;
 	const error = listing.error ?? roots.error ?? choose.error ?? remove.error;
 
 	return (
@@ -78,7 +89,7 @@ export function SourceCourses({ source, onMessage }: { source: RemoteSource; onM
 						<DialogDescription>{tr('Open folders to find each course, then choose it. Your files are only read, and you can undo any choice.', 'Abra as pastas para achar cada curso e escolha. Seus arquivos só são lidos, e você pode desfazer qualquer escolha.')}</DialogDescription>
 					</DialogHeader>
 
-					<nav aria-label={tr('Folder path', 'Caminho da pasta')} className="flex flex-wrap items-center gap-1 text-sm">
+					<nav ref={pathBar} aria-label={tr('Folder path', 'Caminho da pasta')} className="flex flex-wrap items-center gap-1 text-sm">
 						<Button variant="ghost" size="sm" onClick={() => setPath('')} aria-current={path === '' ? 'page' : undefined}>{source.name}</Button>
 						{segments.map((segment, index) => (
 							<span key={segments.slice(0, index + 1).join('/')} className="flex items-center gap-1">
@@ -94,24 +105,24 @@ export function SourceCourses({ source, onMessage }: { source: RemoteSource; onM
 					{listing.isPending ? (
 						<p role="status" className="text-sm text-muted-foreground">{tr('Loading…', 'Carregando…')}</p>
 					) : listing.data && (
-						<div className="space-y-3">
+						<div className="space-y-3" aria-busy={listing.isPlaceholderData}>
 							<p className="text-sm text-muted-foreground">{tr(`${formatCount(listing.data.mediaFiles, 'video or audio file', 'video or audio files')} directly in this folder.`, `${formatCount(listing.data.mediaFiles, 'arquivo de vídeo ou áudio', 'arquivos de vídeo ou áudio')} direto nesta pasta.`)}</p>
 							{freeFolders.length > 1 && (
-								<Button variant="outline" disabled={choose.isPending} onClick={() => choose.mutate({ path, mode: 'children' })}>
+								<Button variant="outline" disabled={choose.isPending || listing.isPlaceholderData} onClick={() => choose.mutate({ path: shown, mode: 'children' })}>
 									{tr(`Make each of the ${freeFolders.length} folders in “${here}” a course`, `Tornar cada uma das ${freeFolders.length} pastas de “${here}” um curso`)}
 								</Button>
 							)}
 							{folders.length === 0 ? (
 								<p className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">{tr('No folders here.', 'Nenhuma pasta aqui.')}</p>
 							) : (
-								<ul className="divide-y rounded-lg border bg-card">
+								<ul className="max-h-[40dvh] divide-y overflow-y-auto rounded-lg border bg-card">
 									{folders.map((folder) => (
 										<li key={folder.path} className="flex flex-wrap items-center gap-2 p-2">
 											<Button variant="ghost" className="mr-auto min-w-0 justify-start" onClick={() => setPath(folder.path)} aria-label={tr(`Open ${folder.name}`, `Abrir ${folder.name}`)}>
 												<Folder aria-hidden="true" /><span className="truncate">{folder.name}</span>
 											</Button>
 											{folder.state === 'free' ? (
-												<Button variant="outline" size="sm" disabled={choose.isPending} onClick={() => choose.mutate({ path: folder.path, mode: 'course' })} aria-label={tr(`Choose ${folder.name} as a course`, `Escolher ${folder.name} como um curso`)}>{tr('Choose as course', 'Escolher como curso')}</Button>
+												<Button variant="outline" size="sm" disabled={choose.isPending || listing.isPlaceholderData} onClick={() => choose.mutate({ path: folder.path, mode: 'course' })} aria-label={tr(`Choose ${folder.name} as a course`, `Escolher ${folder.name} como um curso`)}>{tr('Choose as course', 'Escolher como curso')}</Button>
 											) : (
 												<span className="text-sm text-muted-foreground">{stateLabel(folder.state)}</span>
 											)}
@@ -128,7 +139,7 @@ export function SourceCourses({ source, onMessage }: { source: RemoteSource; onM
 						{(roots.data?.length ?? 0) === 0 ? (
 							<p className="text-sm text-muted-foreground">{tr('None yet. Without a choice, the whole source is one course.', 'Nenhum ainda. Sem escolha, a fonte inteira é um curso só.')}</p>
 						) : (
-							<ul className="divide-y rounded-lg border bg-card">
+							<ul className="max-h-[25dvh] divide-y overflow-y-auto rounded-lg border bg-card">
 								{roots.data!.map((root) => (
 									<li key={root.id} className="flex flex-wrap items-center gap-2 p-2">
 										<span className="mr-auto min-w-0"><span className="block font-medium break-words">{root.name}</span><span className="block text-xs break-all text-muted-foreground">{root.path}</span></span>
