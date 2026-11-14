@@ -120,11 +120,20 @@ ciphertext is preserved until the key is restored.
 | `DELETE` | `/api/admin/sources/{id}` | Admin Session | Removes the source configuration; returns `{ removed: bool }` and touches no remote file |
 | `POST` | `/api/admin/sources/{id}/test` | Admin Session | Validates reachability and authentication with a root listing (`PROPFIND` or SMB directory enumeration); returns `{ ok, entries }` or `{ ok: false, error }` (`unreachable`, `denied`, `not_found`, `invalid_response`, `limit_exceeded`, `credentials_unavailable`, `timeout`) |
 | `POST` | `/api/admin/sources/{id}/scan` | Admin Session | Walks the remote tree and applies it to the catalog as a course; returns the same rescan counters as the local rescan |
+| `GET` | `/api/admin/sources/{id}/browse?path=` | Admin Session | Lists one folder level of the source (`path` is relative, empty for the source root): `{ path, folders: [{ name, path, state }], media_files, other_files, truncated }`. `state` is `root`, `inside_root`, `contains_root` or `free`. Ignored folders are hidden; unclean paths return `400 invalid_path`, a missing folder `404 not_found` |
+| `GET` | `/api/admin/sources/{id}/roots` | Admin Session | Lists the folders chosen as courses: `{ roots: [{ id, name, path }] }` |
+| `POST` | `/api/admin/sources/{id}/roots` | Admin Session | Accepts `{ path, mode }` with `mode` `course` (the folder is a course) or `children` (every folder directly inside is a course). The folder must exist on the source. Returns `201 { created, skipped }`; a single `course` that overlaps an existing root returns `409` |
+| `DELETE` | `/api/admin/sources/{id}/roots/{root_id}` | Admin Session | The folder stops being a course of its own and its media returns to the source course; returns `{ removed: true }` and touches no remote file |
 
 A scanned source appears in `GET /api/catalog` as a top-level `course` node with the source's
 opaque `id`; `GET`/`HEAD /api/media?course=<source-id>&path=<relative-path>` streams its bytes with
 `206` ranges. Only paths already present in the catalog are proxied to the remote server. Remote
 courses have no custom cover, manual ordering, search indexing or on-demand transcoding yet.
+
+A source can be split into several courses by choosing folders as roots (ADR 0004). Choosing a folder
+moves its already scanned media to a course of its own and every later scan of the source is applied
+per root, so progress, notes and flashcards follow each lesson. The catalog, media and access
+endpoints still treat the whole source as one course until the catalog slice lands.
 
 ## Study Progress, Focus & Gamification
 

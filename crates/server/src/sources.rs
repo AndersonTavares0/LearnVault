@@ -47,7 +47,7 @@ const MAX_SOURCE_NAME_CHARS: usize = 120;
 /// Maximum time to walk a remote source.
 const SOURCE_SCAN_TIMEOUT: Duration = Duration::from_secs(120);
 /// Maximum time of the connection test.
-const PROBE_TIMEOUT: Duration = Duration::from_secs(20);
+pub(crate) const PROBE_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// Remote course source loaded in memory.
 #[derive(Clone)]
@@ -578,7 +578,7 @@ pub(crate) async fn scan(
     let blocking = tokio::task::spawn_blocking(move || {
         let _blocking_task = blocking_task;
         let mut database = database;
-        learnvault_core::apply_source_scan(&mut database, &library_id, outcome)
+        crate::source_roots::apply_scan_by_roots(&mut database, &library_id, outcome)
     })
     .await;
 
@@ -598,14 +598,14 @@ pub(crate) async fn scan(
 }
 
 /// Rejection reason of an administrative session, translated only in the handler.
-enum AdminFailure {
+pub(crate) enum AdminFailure {
     Unauthenticated,
     Forbidden,
     CredentialsRequired,
     Capacity,
 }
 
-async fn require_admin(
+pub(crate) async fn require_admin(
     state: &AppState,
     headers: &HeaderMap,
 ) -> Result<learnvault_core::AuthSession, AdminFailure> {
@@ -618,7 +618,7 @@ async fn require_admin(
     }
 }
 
-fn admin_failure_response(failure: AdminFailure) -> Response {
+pub(crate) fn admin_failure_response(failure: AdminFailure) -> Response {
     match failure {
         AdminFailure::Unauthenticated => status_private_no_store(StatusCode::UNAUTHORIZED),
         AdminFailure::Forbidden => status_private_no_store(StatusCode::FORBIDDEN),
@@ -661,7 +661,7 @@ fn source_url_code(error: SourceUrlError) -> &'static str {
     }
 }
 
-fn source_error_code(error: SourceError) -> &'static str {
+pub(crate) fn source_error_code(error: SourceError) -> &'static str {
     match error {
         SourceError::Unreachable => "unreachable",
         SourceError::Denied => "denied",
@@ -671,7 +671,7 @@ fn source_error_code(error: SourceError) -> &'static str {
     }
 }
 
-fn json_error(status: StatusCode, error: &'static str) -> Response {
+pub(crate) fn json_error(status: StatusCode, error: &'static str) -> Response {
     private_no_store((status, Json(ErrorBody { error })).into_response())
 }
 
