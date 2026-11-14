@@ -36,7 +36,7 @@ Why a root is a library and not a side table: the course identity is `media.libr
 1. A new additive table `library_root(library_id, source_id, prefix)` says that `library_id` is the part of `source_id` under `prefix` (the full relative path, so equal folder names under different parents never collide). `media.relative_path` stays relative to the source, so reads and range requests are unchanged.
 2. A source with no roots behaves exactly as today: one course whose `course_id` is the source id. Existing IDs, favorites, access lists, ordering and study state stay valid.
 3. Confirming a root moves the matching `media` rows (and their `media_removal` and scan history rows) to the new `library_id` in one transaction. `media_id` does not change, so study state, notes, bookmarks, annotations and flashcards follow. Removing a root reverses it. Files outside every root stay in the source library and remain a course while any exist. Overlapping roots are rejected; a path belongs to the longest matching prefix.
-4. Only an administrator creates roots, through a review screen. The scan produces suggestions from the bottom-up rule above, marked high confidence or uncertain, never applied automatically. The review offers per suggestion: Confirm, Skip, and mark a different folder by hand, plus a bulk "select all folders at this level" shortcut that only ticks items in the review and stores no rule. High-confidence suggestions are pre-selected; uncertain ones are not. Ambiguous trees stay as the single source view.
+4. Only an administrator creates roots, by **browsing the source like a file picker**: the screen lists one folder level at a time (listing is lazy, so a huge tree is never scanned to pick a course) and the administrator walks to the folder and picks it. Two picks are offered on a folder: "This folder is a course" and "Every folder inside is a course" (for groups such as `Cursos/Pentest`, `Cursos/Infra`, `Cursos/DevOps`). Picking is always explicit and nothing is guessed. Automatic suggestions (the bottom-up rule above) are an optional later helper that only highlights folders in the browser; they are never required and never applied by themselves.
 5. Scan reads the source once and applies the result per library by prefix. Media and transcode requests resolve the `course` to a root, then require the path to be inside its prefix after normalization. Per-user access is checked on the root's `library_id`, and a root is only reachable if its source is.
 6. Rescan keeps a root while its prefix exists. A missing prefix marks the root unavailable and keeps history. A rename or move is never guessed: an administrator re-points the root. Removing a root only removes the mapping, never source files or study rows.
 
@@ -49,13 +49,14 @@ Why a root is a library and not a side table: the course identity is `media.libr
 
 ## Implementation slices
 
-Each slice is its own small PR; slices 2 to 4 need independent review (persistence, identity, authorization, media confinement).
+Each slice is its own small PR; slices 2 to 4 need independent review (persistence, identity, authorization, media confinement). The picker needs no heuristic, so the heuristic is the last and optional slice.
 
-1. Core, pure: partition a `ScanOutcome` by prefixes (longest match, overlap rejection) and suggest roots with the bottom-up rule (lessons, modules, courses, groups), marking the uncertain cases (reusing `structure.rs`). Synthetic fixtures: flat, grouped, multi-group, direct-media, mixed-depth, duplicate-name, empty and ambiguous.
+1. Core, pure: partition a `ScanOutcome` by prefixes (longest match, overlap rejection), with synthetic fixtures: flat, grouped, multi-group, direct-media, mixed-depth, duplicate-name, empty.
 2. Core, persistence: `library_root` migration and the transactional promote and demote. Tests prove study state, notes, flashcards and favorites survive both directions.
-3. Server: admin API for suggestions and roots, per-root scan, catalog assembly, media and access resolution with prefix confinement. Security tests: no escape from the prefix, no access bypass, no cross-root reads.
-4. Web: in Remote sources, a "Find courses" action lists suggestions and the administrator confirms; `tr(en, ptBr)` copy and component tests.
-5. Docs and a final independent review.
+3. Server: admin-only browse endpoint (one level of a source, folders first, with a per-folder media count of that level only; the path must stay inside the source), roots API, per-root scan, catalog assembly, media and access resolution with prefix confinement. Security tests: no escape from the prefix or the source in browse, no access bypass, no cross-root reads.
+4. Web: in Remote sources, a "Choose courses" folder browser with the two picks and a review before confirming; `tr(en, ptBr)` copy and component tests.
+5. Optional: highlight suggested folders in the browser from the bottom-up rule.
+6. Docs and a final independent review.
 
 ## Validation and rollback
 
