@@ -60,12 +60,15 @@ type Props = {
 export function CoverArt({ title, done, total, compact = false, map = false }: Props) {
 	const ground = `var(--cover-${hash(title.normalize('NFD').toLowerCase()) % GROUND_COUNT})`;
 	if (map) return <svg viewBox="0 0 160 100" aria-hidden="true" focusable="false" className="absolute inset-0 size-full" preserveAspectRatio="xMidYMid slice"><rect width="160" height="100" style={{ fill: ground }} />{lessonMap(done, total)}</svg>;
-	const letters = compact ? (title.trim()[0] ?? '?').toUpperCase() : courseMonogram(title);
+	const letters = courseMonogram(title);
+	// A four-character monogram (a year such as "2010") is wider than two initials, so the
+	// type scales with the string to stay inside the cover.
+	const size = letters.length >= 4 ? 44 : letters.length === 3 ? 48 : compact ? 48 : 52;
 	return (
 		<svg viewBox="0 0 160 100" aria-hidden="true" focusable="false" className="absolute inset-0 size-full" preserveAspectRatio="xMidYMid slice">
 			<rect width="160" height="100" style={{ fill: ground }} />
 			<rect x="14" y="18" width="22" height="2.5" rx="1.25" className="fill-[var(--reward-fill)]" />
-			<text x="12" y="80" fontSize={compact ? 56 : 52} className="fill-foreground font-heading font-bold">{letters}</text>
+			<text x="12" y="80" fontSize={size} className="fill-foreground font-heading font-bold">{letters}</text>
 		</svg>
 	);
 }

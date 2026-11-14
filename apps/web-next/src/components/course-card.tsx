@@ -68,19 +68,20 @@ export function CourseCard({ entry, profile, variant = 'grid' }: Props) {
 		);
 	}
 	return (
-		<li className={cn('group/card relative [content-visibility:auto] has-focus-visible:ring-3 has-focus-visible:ring-ring', !listed && 'overflow-hidden rounded-[1.75rem] border bg-card transition-[border-color,box-shadow] hover:border-[color:var(--border-strong)] hover:shadow-md', variant === 'shelf' && 'w-64 shrink-0 snap-start sm:w-72', listed && 'flex items-center gap-4 rounded-2xl py-2.5')}>
+		<li className={cn('group/card relative [content-visibility:auto] has-focus-visible:ring-3 has-focus-visible:ring-ring', !listed && 'overflow-hidden rounded-[1.75rem] border bg-card transition-[border-color,box-shadow] hover:border-[color:var(--border-strong)] hover:shadow-md', variant === 'shelf' && 'w-64 shrink-0 snap-start sm:w-72', listed && 'flex items-center gap-4 rounded-2xl p-3')}>
 			<div className={cn('relative', listed && 'w-20 shrink-0')}>
 				<CourseCover course={entry.course} profile={profile} done={entry.done} total={entry.total} compact={listed} />
-				{studySyncSupported && !listed && (
-					<div className="absolute top-1 right-1 z-10">
-						<Button variant="ghost" size="icon" aria-pressed={entry.favorite} disabled={toggle.isPending} onClick={() => toggle.mutate({ courseId: entry.courseId, favorite: !entry.favorite })}
-							aria-label={entry.favorite ? tr(`Remove ${entry.course.title} from favorites`, `Remover ${entry.course.title} dos favoritos`) : tr(`Add ${entry.course.title} to favorites`, `Adicionar ${entry.course.title} aos favoritos`)}
-							className="rounded-full bg-black/35 text-white hover:bg-black/55 hover:text-white aria-pressed:bg-black/55">
-							<Star className={cn(entry.favorite && 'fill-white')} />
-						</Button>
-					</div>
-				)}
 			</div>
+			{/* The star lives beside the title, so it never sits on the year drawn on the cover. */}
+			{studySyncSupported && !listed && (
+				<div className="absolute top-1 right-1 z-10">
+					<Button variant="ghost" size="icon" aria-pressed={entry.favorite} disabled={toggle.isPending} onClick={() => toggle.mutate({ courseId: entry.courseId, favorite: !entry.favorite })}
+						aria-label={entry.favorite ? tr(`Remove ${entry.course.title} from favorites`, `Remover ${entry.course.title} dos favoritos`) : tr(`Add ${entry.course.title} to favorites`, `Adicionar ${entry.course.title} aos favoritos`)}
+						className="rounded-full bg-card/85 text-foreground ring-1 ring-border backdrop-blur hover:bg-card aria-pressed:bg-brand-tint">
+						<Star className={cn(entry.favorite && 'fill-current')} />
+					</Button>
+				</div>
+			)}
 			<div className={cn('min-w-0 space-y-2', !listed && 'p-5', listed && 'flex-1')}>
 				<h3 className={cn('card-heading font-heading leading-snug font-semibold text-balance', listed ? 'text-base' : 'text-lg')}>
 					{/* The link covers the whole card; the favorite button sits above it. */}
