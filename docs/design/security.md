@@ -114,6 +114,14 @@ described below. The desktop application is single-user and has no accounts.
 
 ## 6. Browser hardening
 
+- Course roots of a remote source (ADR 0004) keep the same boundary. Browsing a source and choosing
+  its folders as courses is administrator-only (and same-origin for changes), lists one folder
+  level per request and never writes to the source. A client path must be a clean relative path
+  (no `..`, absolute, drive or NUL), the remote server only receives paths under the source's own
+  base URL, and a root's media is found only inside its folder because the lookup runs on the
+  root's own library. Access to a root is decided by the root's own id, so a user granted only a
+  root never sees the rest of the source, and removing a root never turns a restricted user into
+  an unrestricted one.
 - Each response carries a Content Security Policy: `default-src 'self'`; `script-src 'self'` plus
   per-build inline hashes; `style-src 'self' 'unsafe-hashes'` plus the same hash mechanism;
   `img-src 'self' data: blob:`; `media-src 'self' data: blob:`; `frame-ancestors 'none'`.

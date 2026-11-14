@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { setLocale } from './i18n';
 import type { NewPdfAnnotation } from './transport';
 import { findLesson } from './router';
-import { desktopCoverUrl, desktopMediaUrl, DesktopStub, FocusSessionConflict, HttpTransport, InvalidFocusSession, lessonFromNode, MAX_COVER_BYTES, normalizeBookmark, normalizeCatalog, normalizeFocusSession, normalizeFocusSummary, normalizeRecentStudy, normalizeRewardSummary, normalizeSearchResults, normalizeStudyProgress, normalizeStudySummary, normalizeSyncResult, normalizeSyncState, normalizeUpdateStatus, normalizeUser, STUDY_NOT_AVAILABLE, CATALOG_LIMITS, validSyncServerUrl, type Transport } from './transport';
+import { desktopCoverUrl, desktopMediaUrl, DesktopStub, FocusSessionConflict, HttpTransport, InvalidFocusSession, lessonFromNode, MAX_COVER_BYTES, normalizeBookmark, normalizeCatalog, normalizeFocusSession, normalizeFocusSummary, normalizeRecentStudy, normalizeRewardSummary, normalizeSearchResults, normalizeSourceListing, normalizeSourceRoots, normalizeSourceRootsResult, normalizeSourceScan, normalizeStudyProgress, normalizeStudySummary, normalizeSyncResult, normalizeSyncState, normalizeUpdateStatus, normalizeUser, STUDY_NOT_AVAILABLE, CATALOG_LIMITS, validSyncServerUrl, type Transport } from './transport';
 
 // O Tauri só é carregado no desktop: fora dele o módulo é substituído pelo mock, de modo
 // que a suíte nunca toca `window.__TAURI_INTERNALS__`.
@@ -1607,5 +1607,27 @@ describe('sync payload normalization', () => {
 		expect(normalizeSyncState({ device_id: 'd', pull_cursor: 0, server_url: '', signed_in: false, pending: 0, last_error: 'session_expired', last_result: { pushed: 0, pulled: 0, pending: 0, error: 'session_expired' } })).toEqual({
 			deviceId: 'd', pullCursor: 0, serverUrl: '', signedIn: false, pending: 0, lastError: 'session_expired', lastResult: { pushed: 0, pulled: 0, pending: 0, error: 'session_expired' }
 		});
+	});
+});
+
+describe('remote source folders', () => {
+	it('reads a folder listing and treats an unknown state as not choosable', () => {
+		const listing = normalizeSourceListing({ path: 'A', folders: [{ name: 'B', path: 'A/B', state: 'free' }, { name: 'C', path: 'A/C', state: 'surprise' }], media_files: 2, other_files: 1, truncated: true });
+		expect(listing).toEqual({ path: 'A', folders: [{ name: 'B', path: 'A/B', state: 'free' }, { name: 'C', path: 'A/C', state: 'inside_root' }], mediaFiles: 2, otherFiles: 1, truncated: true });
+	});
+
+	it('rejects a listing or a folder that is not well formed', () => {
+		expect(() => normalizeSourceListing(null)).toThrow();
+		expect(() => normalizeSourceListing({ path: 'A' })).toThrow();
+		expect(() => normalizeSourceListing({ path: 'A', folders: [{ name: 'B' }] })).toThrow();
+	});
+
+	it('reads the chosen courses, the result of a choice and the scan summary', () => {
+		expect(normalizeSourceRoots({ roots: [{ id: 'r', name: 'Redes', path: 'A/Redes' }] })).toEqual([{ id: 'r', name: 'Redes', path: 'A/Redes' }]);
+		expect(normalizeSourceRoots({})).toEqual([]);
+		expect(() => normalizeSourceRoots({ roots: [{ id: 'r' }] })).toThrow();
+		expect(normalizeSourceRootsResult({ created: [{ id: 'r', name: 'N', path: 'P' }], skipped: [{ path: 'Q', reason: 'overlaps_existing_root' }, { reason: 'x' }] })).toEqual({ created: [{ id: 'r', name: 'N', path: 'P' }], skipped: [{ path: 'Q', reason: 'overlaps_existing_root' }] });
+		expect(normalizeSourceScan({ complete: true, inserted: 4 })).toEqual({ complete: true, inserted: 4 });
+		expect(normalizeSourceScan({})).toEqual({ complete: false, inserted: 0 });
 	});
 });
