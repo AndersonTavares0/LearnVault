@@ -39,12 +39,12 @@ required before cutover.
       neighbours (2.4.7, 2.4.13).
 - [ ] Sticky headers, the sidebar, and toasts never cover the focused element (2.4.11).
 - [ ] Interactive targets are at least 44 × 44 px, a project rule stricter than 2.5.8.
-- [ ] Text is never set below `text-xs` (12 px) and is sized in `rem`, so it follows the Text size setting; fixed `px` font sizes are not used.
 - [ ] Dialogs are capped at the viewport height (`max-h-[calc(100dvh-2rem)]`) and scroll inside it, so a long list never pushes the title or the close button off a short screen.
 - [ ] When a dialog replaces the list the keyboard was on (drill-down navigation), focus moves to a stable element of the new level instead of falling back to the page behind.
 
 ## Color and text
 
+- [ ] Text is never set below `text-xs` (12 px) and is sized in `rem`, so it follows the Text size setting; fixed `px` font sizes are not used.
 - [ ] Body text contrast ≥ 4.5:1, and large text and UI components ≥ 3:1 (1.4.3, 1.4.11), checked for
       every palette in both modes.
 - [ ] State is never shown by color alone. Completed lessons have an icon and accessible text
