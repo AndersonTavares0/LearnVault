@@ -34,7 +34,6 @@ export function SettingsPage() {
 
 	// One section at a time keeps the page short. `#/settings#focus` (from the Pomodoro dialog) opens that section.
 	const [picked, setPicked] = useState({ hash: location.hash, id: '' });
-	const active = picked.id && picked.hash === location.hash ? picked.id : location.hash.slice(1) || 'appearance';
 	const setActive = (id: string) => setPicked({ hash: location.hash, id });
 
 	const sections = [
@@ -44,8 +43,10 @@ export function SettingsPage() {
 		{ id: 'focus', label: tr('Focus timer', 'Timer de foco'), icon: Timer },
 		...(!server || admin ? [{ id: 'updates', label: tr('Updates', 'Atualizações'), icon: RefreshCw }] : []),
 		...(!server ? [{ id: 'sync', label: tr('Sync', 'Sincronização'), icon: Cloud }] : []),
-		...(server && admin ? [{ id: 'users', label: tr('Users', 'Usuários'), icon: Users }, { id: 'sources', label: tr('Remote sources', 'Fontes remotas'), icon: Server }, { id: 'backup', label: 'Backup', icon: Database }] : [])
+		...(server && admin ? [{ id: 'users', label: tr('Users', 'Usuários'), icon: Users }, { id: 'sources', label: tr('Remote sources', 'Fontes remotas'), icon: Server }, { id: 'backup', label: tr('Backup', 'Backup'), icon: Database }] : [])
 	];
+	const requested = picked.id && picked.hash === location.hash ? picked.id : location.hash.slice(1) || 'appearance';
+	const active = sections.some((section) => section.id === requested) ? requested : 'appearance';
 
 	return (
 		<ActiveSection.Provider value={active}>

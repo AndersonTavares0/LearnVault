@@ -65,6 +65,12 @@ describe('settings', () => {
 		expect(await screen.findByText('You are using the latest version.')).toBeTruthy();
 	});
 
+	it('falls back to Appearance for a section the account cannot access', async () => {
+		renderApp('/settings#users', { catalog, user: student });
+		expect(await screen.findByRole('heading', { name: 'Appearance' })).toBeTruthy();
+		expect(screen.queryByRole('heading', { name: 'Accounts and course access' })).toBeNull();
+	});
+
 	it('rejects a short new password before sending it', async () => {
 		const update = vi.spyOn(transport, 'updateCredentials');
 		renderApp('/settings#profile', { catalog, user: student });

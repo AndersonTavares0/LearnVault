@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { ACCENT_PRESETS, DEFAULT_APPEARANCE, contrast, parseAppearance, readAppearance, readableAccent, updateAppearance } from '@/lib/appearance';
+import { describe, expect, it, vi } from 'vitest';
+import { ACCENT_PRESETS, appearanceStore, DEFAULT_APPEARANCE, contrast, loadAppearance, parseAppearance, readAppearance, readableAccent, updateAppearance } from '@/lib/appearance';
 
 describe('appearance', () => {
 	it('falls back to the defaults for anything missing or invalid', () => {
@@ -32,5 +32,33 @@ describe('appearance', () => {
 		expect(root.dataset.radius).toBe('round');
 		expect(root.dataset.density).toBe('compact');
 		expect(JSON.parse(saved.get('learnvault-appearance')!)).toMatchObject({ accent: '#6A32C9' });
+	});
+
+	it('publishes a new snapshot when the system theme changes', () => {
+		const root = document.createElement('html');
+		let dark = false;
+		let changed = () => {};
+		const matchMedia = vi.fn().mockImplementation(() => ({
+			matches: dark,
+			media: '(prefers-color-scheme: dark)',
+			onchange: null,
+			addListener: () => {},
+			removeListener: () => {},
+			addEventListener: (_type: string, listener: EventListenerOrEventListenerObject) => { changed = listener as unknown as () => void; },
+			removeEventListener: () => {},
+			dispatchEvent: () => false
+		}) as MediaQueryList);
+		vi.stubGlobal('matchMedia', matchMedia);
+		const unsubscribe = appearanceStore.subscribe(() => {});
+		loadAppearance({ getItem: () => JSON.stringify({ ...DEFAULT_APPEARANCE, theme: 'system' }) } as unknown as Storage, root);
+		dark = true;
+		let notifications = 0;
+		const stop = appearanceStore.subscribe(() => { notifications += 1; });
+		changed();
+		expect(root.dataset.theme).toBe('dark');
+		expect(notifications).toBe(1);
+		stop();
+		unsubscribe();
+		vi.unstubAllGlobals();
 	});
 });

@@ -194,7 +194,14 @@ export function loadAppearance(storage: Storage | null, root: HTMLElement = docu
 	// "Follow the system" tracks the browser's setting while the app is open.
 	if (!watching && typeof window !== 'undefined' && window.matchMedia) {
 		watching = true;
-		window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => { if (store.get().theme === 'system') applyAppearance(store.get(), root); });
+		window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => {
+			const current = store.get();
+			if (current.theme !== 'system') return;
+			applyAppearance(current, root);
+			// The resolved theme is part of the rendered appearance, so notify React even though
+			// the saved preference itself ("system") did not change.
+			store.set({ ...current });
+		});
 	}
 	return appearance;
 }

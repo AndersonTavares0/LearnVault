@@ -51,7 +51,7 @@ Terminology: *library* (everything), *course* (an imported folder), *module* (a 
 
 Undecided: a yearly study heatmap and rest days need backend changes (issue #341).
 
-Customisation is part of the product: the learner picks the accent colour, corners, density, text size, font, lesson sidebar side and library layout, and chooses which habit cards show (Settings, stored only in this browser).
+Customisation is part of the product: the learner picks the accent colour, corners, density, text size, font, lesson sidebar side and which habit cards show (Settings, stored only in this browser). Library view is a separate local preference managed by the library toolbar.
 
 ## Brand Commitments
 

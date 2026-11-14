@@ -27,8 +27,7 @@ works in both builds where it applies. The builds are **S** (server, HTTP) and *
 - [ ] Catalog load with limits (`CATALOG_LIMITS`), course tree, and loose files.
 - [ ] Continue studying (recent lessons).
 - [ ] Filters by progress and category, and search with accent-insensitive matching.
-- [ ] Views: grid and list. The four old views are reduced to two, and the `learnvault-library-view`
-      value is migrated.
+- [ ] Views: Covers, List, Compact and Shelf, stored in the `learnvault-library-view` preference.
 - [ ] Course covers: generated, automatic thumbnail (IndexedDB, ADR 0002), custom upload, change,
       and remove.
 - [ ] Import course (S: admin; D: folder picker), remove course, rescan.
