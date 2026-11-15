@@ -10,7 +10,7 @@ const mark = (id: string, page: number, quote: string): PdfAnnotation => ({
 });
 
 function show(items = [mark('a1', 2, 'Ownership moves values.'), mark('a2', 5, 'Borrowing is explicit.')]) {
-	const handlers = { onGo: vi.fn(), onChange: vi.fn(), onDelete: vi.fn(), onRestore: vi.fn() };
+	const handlers = { onGo: vi.fn(), onChange: vi.fn(), onDelete: vi.fn(), onRestore: vi.fn(), onSendToNotes: vi.fn(), onExportPdf: vi.fn() };
 	render(<PdfMarks title="Notes.pdf" items={items} page={1} pending={false} {...handlers} />);
 	return handlers;
 }
@@ -56,5 +56,13 @@ describe('PdfMarks', () => {
 		const { onGo } = show();
 		fireEvent.click(screen.getByRole('button', { name: 'Page 5' }));
 		expect(onGo).toHaveBeenCalledWith(5, 'a2');
+	});
+
+	it('sends a mark to the notes and exports the annotated PDF', () => {
+		const { onSendToNotes, onExportPdf } = show();
+		fireEvent.click(screen.getByRole('button', { name: 'Send mark on page 2 to notes' }));
+		expect(onSendToNotes).toHaveBeenCalledWith(expect.objectContaining({ annotationId: 'a1' }));
+		fireEvent.click(screen.getByRole('button', { name: 'Save PDF with marks' }));
+		expect(onExportPdf).toHaveBeenCalled();
 	});
 });

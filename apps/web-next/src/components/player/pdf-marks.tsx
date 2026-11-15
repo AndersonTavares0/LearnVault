@@ -1,4 +1,4 @@
-import { Download, MessageSquareText, Trash2 } from 'lucide-react';
+import { Download, FileDown, MessageSquareText, NotebookPen, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
@@ -35,6 +35,10 @@ type Props = {
 	onDelete: (annotationId: string) => void;
 	/** Puts back a mark that was deleted in this session. */
 	onRestore: (item: PdfAnnotation) => void;
+	/** Saves the PDF with the marks added as annotations; absent when the document is not loaded. */
+	onExportPdf?: () => void;
+	/** Keeps a mark, with its page, as a lesson note. */
+	onSendToNotes: (item: PdfAnnotation) => void;
 	pending: boolean;
 };
 
@@ -42,7 +46,7 @@ type Props = {
  * The marks in this PDF, in page order: edit the note and the colour of each, jump to its page,
  * delete it, or keep them all as a Markdown file. None of it changes the PDF itself.
  */
-export function PdfMarks({ title, items, page, onGo, onChange, onDelete, onRestore, pending }: Props) {
+export function PdfMarks({ title, items, page, onGo, onChange, onDelete, onRestore, onExportPdf, onSendToNotes, pending }: Props) {
 	const [scope, setScope] = useState<'page' | 'all'>('all');
 	const [confirming, setConfirming] = useState<PdfAnnotation | null>(null);
 	// The last deleted mark can be put back until another one is deleted or the reader is closed.
@@ -65,6 +69,7 @@ export function PdfMarks({ title, items, page, onGo, onChange, onDelete, onResto
 					))}
 				</div>
 				<Button variant="outline" size="sm" className="ml-auto" disabled={items.length === 0} onClick={exportMarks}><Download />{tr('Export as Markdown', 'Exportar em Markdown')}</Button>
+				{onExportPdf && <Button variant="outline" size="sm" disabled={items.length === 0} onClick={onExportPdf}><FileDown />{tr('Save PDF with marks', 'Salvar PDF com marcações')}</Button>}
 			</div>
 			{items.length === 0 ? (
 				<p className="text-sm text-muted-foreground">{tr('No marks yet. Select text in the document to highlight it, underline it or attach a note.', 'Nenhuma marcação ainda. Selecione um texto no documento para destacá-lo, sublinhá-lo ou anexar uma nota.')}</p>
@@ -82,6 +87,7 @@ export function PdfMarks({ title, items, page, onGo, onChange, onDelete, onResto
 									<Button variant="link" size="sm" className="h-auto p-0" onClick={() => onGo(item.page, item.annotationId)}>{tr(`Page ${item.page}`, `Página ${item.page}`)}</Button>
 									<div className="ml-auto flex items-center">
 										<ColorSwatches size="sm" label={tr(`Color of the mark on page ${item.page}`, `Cor da marcação da página ${item.page}`)} value={item.color} onChange={(color) => onChange(item.annotationId, { color })} />
+										<Button variant="ghost" size="icon" aria-label={tr(`Send mark on page ${item.page} to notes`, `Enviar marcação da página ${item.page} para as notas`)} onClick={() => onSendToNotes(item)}><NotebookPen /></Button>
 										<Button variant="ghost" size="icon" disabled={pending} aria-label={tr(`Delete mark on page ${item.page}`, `Excluir marcação da página ${item.page}`)} onClick={() => setConfirming(item)}><Trash2 /></Button>
 									</div>
 								</div>

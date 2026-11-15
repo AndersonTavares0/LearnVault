@@ -285,3 +285,34 @@ export function activeOutlineIndex(items: OutlineItem[], page: number): number {
 	});
 	return active;
 }
+
+/** Highlight editor values for one mark, in PDF user space (points, origin at the bottom left of the page box). */
+export function markToEditorValues(item: PdfAnnotation, view: [number, number, number, number], index: number) {
+	const [x0, y0, x1, y1] = view;
+	const [w, h] = [x1 - x0, y1 - y0];
+	const hex = PDF_MARK_COLORS[item.color];
+	const color = [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16));
+	return item.rects.map((rect, at) => {
+		// An underline is a thin band at the foot of its line; there is no plain underline in pdf.js's editor.
+		const top = item.kind === 'underline' ? rect.y + rect.height * 0.85 : rect.y;
+		const height = item.kind === 'underline' ? rect.height * 0.15 : rect.height;
+		const [left, right, upper, lower] = [x0 + rect.x * w, x0 + (rect.x + rect.width) * w, y1 - top * h, y1 - (top + height) * h];
+		return {
+			id: `pdfjs_internal_editor_${index}_${at}`,
+			value: { annotationType: 9, color, opacity: item.kind === 'underline' ? 1 : 0.4, thickness: 12, quadPoints: [left, upper, right, upper, left, lower, right, lower], outlines: [[left, upper, right, upper, right, lower, left, lower]], pageIndex: item.page - 1, rect: [left, lower, right, upper], rotation: 0, structTreeParentId: null }
+		};
+	});
+}
+
+type SavableDocument = { annotationStorage: { setValue(key: string, value: unknown): void }; getPage(number: number): Promise<{ view: number[] }>; saveDocument(): Promise<Uint8Array> };
+
+/** The PDF with the marks added as standard highlight annotations. The file on disk is untouched: pdf.js appends an incremental update to a copy in memory. */
+export async function exportAnnotatedPdf(doc: SavableDocument, items: PdfAnnotation[]): Promise<Uint8Array> {
+	const views = new Map<number, [number, number, number, number]>();
+	let index = 0;
+	for (const item of items) {
+		if (!views.has(item.page)) views.set(item.page, (await doc.getPage(item.page)).view as [number, number, number, number]);
+		for (const { id, value } of markToEditorValues(item, views.get(item.page)!, index++)) doc.annotationStorage.setValue(id, value);
+	}
+	return doc.saveDocument();
+}

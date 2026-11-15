@@ -1,9 +1,11 @@
 import { ChevronDown, Copy, ListTree, Quote, ChevronLeft, ChevronRight, ChevronUp, ExternalLink, Highlighter, Keyboard, Maximize2, Minus, Moon, MoreVertical, PanelRight, Plus, Rows3, Search, Square, StickyNote, Sun, Underline, X } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 import { usePdfAnnotationMutations, usePdfAnnotations } from '@/app/data';
 import { PdfContents } from '@/components/player/pdf-contents';
 import { ColorSwatches, PdfMarks } from '@/components/player/pdf-marks';
+import { lessonNotesKey } from '@/components/player/study-notes';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -11,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { studySyncSupported } from '@/lib/player';
 import { tr } from '@/lib/i18n';
-import { clampPage, loadPdfJs, nextPage, pageAt, pageScroll, pagesMatching, pageWindow, markHits, pdfCommand, readOutline, type OutlineItem, type OutlineSource, PDF_MARK_COLORS, PDF_PAGE_GAP, quoteWithPage, sanitizeQuote, selectionBoxes, stepZoom, type PdfTheme, type PdfView } from '@/lib/pdf';
+import { clampPage, exportAnnotatedPdf, loadPdfJs, nextPage, pageAt, pageScroll, pagesMatching, pageWindow, markHits, pdfCommand, readOutline, type OutlineItem, type OutlineSource, PDF_MARK_COLORS, PDF_PAGE_GAP, quoteWithPage, sanitizeQuote, selectionBoxes, stepZoom, type PdfTheme, type PdfView } from '@/lib/pdf';
 import { transport, type FileEntry, type PdfAnnotation, type PdfAnnotationColor, type PdfRect } from '@/lib/transport';
 import { cn } from '@/lib/utils';
 import type { PlayerPreferences } from '@/lib/player-preferences';
@@ -125,7 +127,8 @@ export function PdfReader({ file, courseId, initialPage, onPage, preferences, on
 	const [flash, setFlash] = useState<string | null>(null);
 	const [contentsOpen, setContentsOpen] = useState(false);
 	const [outline, setOutline] = useState<{ docKey: string; items: OutlineItem[] } | null>(null);
-	const [copied, setCopied] = useState<'text' | 'quote' | null>(null);
+	const [copied, setCopied] = useState<'text' | 'quote' | 'notes' | 'failed' | null>(null);
+	const client = useQueryClient();
 	const findInput = useRef<HTMLInputElement>(null);
 	const timers = useRef<number[]>([]);
 	const mediaId = file.mediaId ?? null;
@@ -305,6 +308,35 @@ export function PdfReader({ file, courseId, initialPage, onPage, preferences, on
 			setCopied(null);
 		}
 	};
+	const flashNotice = (kind: 'notes' | 'failed') => {
+		setCopied(kind);
+		timers.current.push(window.setTimeout(() => setCopied(null), 2500));
+	};
+	const sendToNotes = async (item: PdfAnnotation) => {
+		const quote = sanitizeQuote(item.quote);
+		const text = [quote ? quoteWithPage(quote, file.name, item.page) : `${file.name.replace(/\.pdf$/i, '')}, p. ${item.page}`, item.content.trim()].filter(Boolean).join('\n\n');
+		try {
+			await transport.createNote(mediaId!, 0, text);
+			await client.invalidateQueries({ queryKey: lessonNotesKey(mediaId!) });
+			flashNotice('notes');
+		} catch {
+			flashNotice('failed');
+		}
+	};
+	const downloadAnnotated = async () => {
+		if (load.state !== 'ready') return;
+		try {
+			const bytes = await exportAnnotatedPdf(load.doc as unknown as Parameters<typeof exportAnnotatedPdf>[0], marks.data ?? []);
+			const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'application/pdf' }));
+			const link = document.createElement('a');
+			link.href = url;
+			link.download = `${file.name.replace(/\.pdf$/i, '')}-annotated.pdf`;
+			link.click();
+			URL.revokeObjectURL(url);
+		} catch {
+			flashNotice('failed');
+		}
+	};
 	const stepMatch = (direction: 1 | -1) => {
 		if (!search || search.pages.length === 0) return;
 		const at = (search.at + direction + search.pages.length) % search.pages.length;
@@ -482,7 +514,7 @@ export function PdfReader({ file, courseId, initialPage, onPage, preferences, on
 							<Button variant="outline" size="sm" disabled={!hasSelection} onMouseDown={(event: MouseEvent) => event.preventDefault()} onClick={() => void copySelection('quote')}><Quote />{tr('Copy as quote', 'Copiar como citação')}</Button>
 						</>
 					)}
-					<span role="status" aria-live="polite" className="text-sm text-muted-foreground empty:hidden">{copied ? tr('Copied.', 'Copiado.') : ''}</span>
+					<span role="status" aria-live="polite" className="text-sm text-muted-foreground empty:hidden">{copied === 'notes' ? tr('Saved to the lesson notes.', 'Salvo nas notas da aula.') : copied === 'failed' ? tr('That did not work. Try again.', 'Não funcionou. Tente de novo.') : copied ? tr('Copied.', 'Copiado.') : ''}</span>
 					{(create.error || update.error || remove.error) && <p role="alert" className="text-sm text-destructive">{(create.error ?? update.error ?? remove.error)?.message}</p>}
 				</div>
 			)}
@@ -530,7 +562,7 @@ export function PdfReader({ file, courseId, initialPage, onPage, preferences, on
 			{studySyncSupported && mediaId && panelOpen && (
 				<section aria-labelledby="pdf-marks-heading" className="space-y-3 rounded-[1.75rem] border bg-card p-5">
 					<h2 id="pdf-marks-heading" className="font-heading text-xl font-bold">{tr('Marks in this document', 'Marcações neste documento')}</h2>
-					<PdfMarks title={file.name} items={marks.data ?? []} page={current} onGo={(target, annotationId) => { go(target); if (annotationId) flashMark(annotationId); }} onChange={(annotationId, change) => update.mutate({ annotationId, ...change })} onDelete={(annotationId) => remove.mutate(annotationId)} onRestore={(item) => create.mutate({ page: item.page, kind: item.kind, color: item.color, rects: item.rects, quote: item.quote, ...(item.content ? { content: item.content } : {}) })} pending={remove.isPending || create.isPending} />
+					<PdfMarks title={file.name} items={marks.data ?? []} page={current} onGo={(target, annotationId) => { go(target); if (annotationId) flashMark(annotationId); }} onChange={(annotationId, change) => update.mutate({ annotationId, ...change })} onDelete={(annotationId) => remove.mutate(annotationId)} onExportPdf={() => void downloadAnnotated()} onSendToNotes={(item) => void sendToNotes(item)} onRestore={(item) => create.mutate({ page: item.page, kind: item.kind, color: item.color, rects: item.rects, quote: item.quote, ...(item.content ? { content: item.content } : {}) })} pending={remove.isPending || create.isPending} />
 				</section>
 			)}
 
