@@ -38,7 +38,7 @@ LearnVault turns folders of video courses into a structured study environment. I
 
 ## Design
 
-LearnVault is a warm, editorial study room (`apps/web-next`, React): an off-white page and a warm-black dark theme, Playfair Display titles with an amber accent word, DM Sans text, tinted cards and a single "Next up" action on the home page. Light is the default; dark and "follow the system" are one click away, and the accent colour, corners, density and text size are yours to change. Notes and Review start from a course, the player keeps all its controls in one bar (with a cinema mode), and PDF lessons open in a reader with search, highlights, underlines and notes.
+LearnVault is a warm, editorial study room (`apps/web-next`, React): an off-white page and a warm-black dark theme, Playfair Display titles with an amber accent word, DM Sans text, tinted cards and a single "Resume" strip on the home page that goes straight to the saved lesson and point. Light is the default; dark and "follow the system" are one click away, and the accent colour, corners, density and text size are yours to change. Notes open as a notebook of every course, lesson and timestamp, Review starts from a course, the player keeps its everyday controls in one bar with a settings menu for the rest (and a cinema mode on a black stage), and PDF lessons open in a reader with search, highlights, underlines and notes. Sign in is a single centred form.
 
 The design record is [`DESIGN.md`](DESIGN.md) and the product record is [`PRODUCT.md`](PRODUCT.md). The React app is the shipped interface in the server, the container image, the release tarballs, and the desktop bundle.
 
