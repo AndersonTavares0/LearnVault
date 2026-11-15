@@ -52,7 +52,7 @@ describe('lesson page', () => {
 		expect(video.hasAttribute('controls')).toBe(false);
 		expect(screen.getByRole('slider', { name: 'Seek' })).toBeTruthy();
 		expect(screen.getByRole('slider', { name: 'Volume' })).toBeTruthy();
-		for (const name of ['Play', 'Back 10s', 'Forward 10s', 'Mute', 'Loop', 'Cinema mode', 'Fullscreen']) expect(screen.getAllByRole('button', { name }).length).toBe(1);
+		for (const name of ['Play', 'Back 10s', 'Forward 10s', 'Mute', 'Player settings', 'Cinema mode', 'Fullscreen']) expect(screen.getAllByRole('button', { name }).length).toBe(1);
 		expect(screen.getByRole('combobox', { name: 'Speed' })).toBeTruthy();
 	});
 
@@ -100,8 +100,9 @@ describe('lesson page', () => {
 
 	it('walks the A-B loop control through start, end and clear', async () => {
 		renderApp('/course/c/c%2FOne', { catalog });
-		fireEvent.click(await screen.findByRole('button', { name: 'Loop' }));
-		expect(screen.getByRole('button', { name: /Loop from 0:00: set end/ }).getAttribute('aria-pressed')).toBe('true');
+		fireEvent.click(await screen.findByRole('button', { name: 'Player settings' }));
+		fireEvent.click(await screen.findByRole('menuitem', { name: 'Loop a section' }));
+		expect((await screen.findByRole('button', { name: /Loop from 0:00: set end/ })).getAttribute('aria-pressed')).toBe('true');
 		fireEvent.click(screen.getByRole('button', { name: /Loop from 0:00: set end/ }));
 		// End must be after the start, so with no playback time the loop stays open.
 		expect(screen.getByRole('button', { name: /Loop from 0:00: set end/ })).toBeTruthy();

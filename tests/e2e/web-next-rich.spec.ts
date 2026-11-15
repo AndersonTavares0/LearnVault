@@ -46,7 +46,7 @@ test('the player has one control bar that works, keeps cinema mode and passes ax
 	await openVideoLesson(page, origin);
 	const video = page.locator('video');
 	expect(await video.getAttribute('controls')).toBeNull();
-	await page.getByRole('button', { name: 'Play' }).click();
+	await page.getByRole('button', { name: 'Play', exact: true }).click();
 	await expect.poll(() => video.evaluate((element: HTMLVideoElement) => !element.paused)).toBe(true);
 	await page.getByRole('button', { name: 'Pause' }).click();
 	await page.getByLabel('Speed').selectOption('1.5');
@@ -79,6 +79,17 @@ test('the player has one control bar that works, keeps cinema mode and passes ax
 	await expect(page.getByLabel('Speed')).toHaveValue('1.5');
 	await expect(page.locator('video track')).toHaveCount(1);
 	expect(violations).toEqual([]);
+});
+
+test('the player settings menu opens inside the fullscreen player', async ({ page, origin }) => {
+	await openVideoLesson(page, origin);
+	await page.getByRole('button', { name: 'Fullscreen' }).click();
+	await expect.poll(() => page.evaluate(() => Boolean(document.fullscreenElement))).toBe(true);
+	await page.getByRole('button', { name: 'Player settings' }).click();
+	const item = page.getByRole('menuitem', { name: 'Loop a section' });
+	await expect(item).toBeVisible();
+	// A menu mounted outside the fullscreen element would be open but invisible.
+	expect(await item.evaluate((element) => Boolean(document.fullscreenElement?.contains(element)))).toBe(true);
 });
 
 test('the lesson page fits a phone screen', async ({ page, origin }) => {
@@ -251,13 +262,15 @@ test('switching to another video of the lesson keeps the bar in step and clears 
 	const video = page.locator('video');
 	await page.getByRole('button', { name: 'Play', exact: true }).click();
 	await expect.poll(() => video.evaluate((element: HTMLVideoElement) => !element.paused)).toBe(true);
-	await page.getByRole('button', { name: 'Loop' }).click();
-	await expect(page.getByRole('button', { name: 'Loop' })).toHaveAttribute('aria-pressed', 'true');
+	await page.getByRole('button', { name: 'Player settings' }).click();
+	await page.getByRole('menuitem', { name: 'Loop a section' }).click();
+	const loopChip = page.getByRole('button', { name: /^Loop from|^Looping/ });
+	await expect(loopChip).toHaveAttribute('aria-pressed', 'true');
 
 	await page.getByLabel('Video', { exact: true }).selectOption({ index: 1 });
 	await expect(page.getByRole('slider', { name: 'Seek' })).toBeVisible();
 	await expectBarMatchesVideo(page);
-	await expect(page.getByRole('button', { name: 'Loop' })).toHaveAttribute('aria-pressed', 'false');
+	await expect(loopChip).toHaveCount(0);
 	// The new video plays from the bar.
 	await page.getByRole('button', { name: 'Play', exact: true }).click();
 	await expect.poll(() => video.evaluate((element: HTMLVideoElement) => !element.paused)).toBe(true);
