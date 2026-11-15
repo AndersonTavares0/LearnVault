@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, CircleCheck, Circle, CircleHelp, FileText, PenLine, Search, SquarePlus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CircleCheck, Circle, FileText, PenLine, Search, SquarePlus } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { safeStorage } from '@/app/preferences';
@@ -66,7 +66,6 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 	const found = useMemo(() => (needle ? filterLessons(course.children, needle) : course.children), [course.children, needle]);
 	const wide = cinema || !contentOpen;
 	const [quickNote, setQuickNote] = useState<{ position: number; content: string } | null>(null);
-	const [showHelp, setShowHelp] = useState(false);
 	const [cardRequest, setCardRequest] = useState(0);
 	const [breakPhase, setBreakPhase] = useState<'break' | 'over' | null>(null);
 	const timer = useStore(pomodoro);
@@ -333,21 +332,9 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 								<input type="checkbox" className="size-5 accent-[var(--brand)]" checked={preferences.autoNext} onChange={(event) => savePreferences({ ...preferences, autoNext: event.target.checked })} />
 								{tr('Autoplay next', 'Reproduzir a próxima')}
 							</label>
-							<Button type="button" variant="ghost" size="sm" aria-expanded={showHelp} onClick={() => setShowHelp((open) => !open)} className="h-11 gap-1 px-2.5 text-muted-foreground">
-								<CircleHelp className="size-4" aria-hidden="true" />{tr('How controls work', 'Como funciona')}
-							</Button>
 						</div>
 					</div>
 
-					{showHelp && (
-						<div className="rounded-2xl border bg-card p-4 text-sm text-muted-foreground space-y-1.5">
-							<p><strong className="text-foreground">{tr('Next:', 'Próxima:')}</strong> {tr('jumps to the next lesson without marking this one completed.', 'pula para a próxima aula sem marcar esta como concluída.')}</p>
-							<p><strong className="text-foreground">{tr('Mark as completed:', 'Marcar como concluída:')}</strong> {tr('marks or unmarks this lesson regardless of where you stopped.', 'marca ou desmarca esta aula independente de onde o vídeo parou.')}</p>
-							<p><strong className="text-foreground">{tr('Autoplay next:', 'Reproduzir a próxima:')}</strong> {tr('when playback reaches the end, marks it completed and counts down 5 s to the next lesson.', 'ao chegar ao fim da aula, marca como concluída e inicia a contagem de 5 s para a próxima.')}</p>
-							<p><strong className="text-foreground">{tr('Completed lessons:', 'Aulas concluídas:')}</strong> {tr('reopening a completed lesson starts from the beginning unless you open a saved timestamp.', 'ao voltar a uma aula concluída, ela começa do início, a menos que você abra um marcador/nota.')}</p>
-							<p><strong className="text-foreground">{tr('Notes vs. Timestamps:', 'Notas vs. Marcadores:')}</strong> {tr('Notes hold longer Markdown study text; Timestamps mark quick moments on the timeline.', 'Notas guardam texto de estudo em Markdown; Marcadores salvam momentos rápidos na linha do tempo.')}</p>
-						</div>
-					)}
 
 					{hasNotes && mediaId && quickNote && (
 						<form

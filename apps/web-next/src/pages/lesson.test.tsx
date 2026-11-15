@@ -92,13 +92,6 @@ describe('lesson page', () => {
 		expect(localStorage.getItem('learnvault-cinema')).toBe('0');
 	});
 
-	it('explains Next, Mark as completed and Autoplay next on demand', async () => {
-		renderApp('/course/c/c%2FOne', { catalog });
-		fireEvent.click(await screen.findByRole('button', { name: 'How controls work' }));
-		expect(screen.getByText(/jumps to the next lesson without marking this one completed/)).toBeTruthy();
-		expect(screen.getByText(/reopening a completed lesson starts from the beginning/)).toBeTruthy();
-	});
-
 	it('shows loading and paused player states and keeps notes usable on media error', async () => {
 		renderApp('/course/c/c%2FOne', { catalog });
 		const video = await screen.findByLabelText('Lesson player: One');
