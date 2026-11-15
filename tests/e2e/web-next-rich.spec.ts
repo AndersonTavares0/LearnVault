@@ -81,6 +81,14 @@ test('the player has one control bar that works, keeps cinema mode and passes ax
 	expect(violations).toEqual([]);
 });
 
+test('the lesson page fits a phone screen', async ({ page, origin }) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+	await openVideoLesson(page, origin);
+	// Nothing may push the page wider than the screen: a long course title or the lesson tabs used to.
+	const widths = await page.evaluate(() => ({ screen: document.documentElement.clientWidth, body: document.body.scrollWidth }));
+	expect(widths.body).toBeLessThanOrEqual(widths.screen);
+});
+
 test('notes take formatting, show it, and are found from the course card', async ({ page, origin }) => {
 	await page.emulateMedia({ reducedMotion: 'reduce' });
 	await openVideoLesson(page, origin);
