@@ -1,18 +1,20 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, CircleCheck, Circle, FileText, PenLine, Search, SquarePlus } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ChevronLeft, ChevronRight, CircleCheck, Circle, CircleHelp, FileText, PenLine, Search, SquarePlus } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { safeStorage } from '@/app/preferences';
 import { Curriculum } from '@/components/curriculum';
 import { Materials } from '@/components/materials';
+import { NoteEditor } from '@/components/note-editor';
 import { BreakOverlay } from '@/components/player/break-overlay';
 import { Bookmarks } from '@/components/player/bookmarks';
 import { Flashcards } from '@/components/player/flashcards';
 import { PdfReader } from '@/components/player/pdf-reader';
 import { MediaPlayer, type PlayerHandle } from '@/components/player/media-player';
-import { StudyNotes, useLessonNotes } from '@/components/player/study-notes';
+import { lessonNotesKey, StudyNotes, useLessonNotes } from '@/components/player/study-notes';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { usePlayerPreferences } from '@/hooks/use-player-preferences';
 import { useLocale } from '@/hooks/use-locale';
@@ -63,7 +65,8 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 	const needle = normalizeForSearch(find.trim());
 	const found = useMemo(() => (needle ? filterLessons(course.children, needle) : course.children), [course.children, needle]);
 	const wide = cinema || !contentOpen;
-	const [noteRequest, setNoteRequest] = useState(0);
+	const [quickNote, setQuickNote] = useState<{ position: number; content: string } | null>(null);
+	const [showHelp, setShowHelp] = useState(false);
 	const [cardRequest, setCardRequest] = useState(0);
 	const [breakPhase, setBreakPhase] = useState<'break' | 'over' | null>(null);
 	const timer = useStore(pomodoro);
@@ -94,8 +97,9 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 		: null;
 	// `?t=` (resume links, note timestamps) starts there; otherwise the saved position is
 	// applied automatically. A completed lesson starts from the beginning unless `?t=` says otherwise.
-	const queryTime = Number(params.get('t'));
-	const requestedPosition = Number.isFinite(queryTime) && queryTime > 0 ? queryTime : null;
+	const rawT = params.get('t');
+	const queryTime = rawT === null ? Number.NaN : Number(rawT);
+	const requestedPosition = Number.isFinite(queryTime) && queryTime >= 0 ? queryTime : null;
 	const savedPosition = !requestedPosition && progress.data?.recorded && !progress.data.completed && progress.data.positionSeconds > 5 ? progress.data.positionSeconds : null;
 	const resumeAt = requestedPosition ?? (localPosition !== null && localPosition > 5 ? localPosition : null) ?? savedPosition;
 	const pdfResumeAt = requestedPosition ?? (localPosition !== null && localPosition > 1 ? localPosition : null) ?? (progress.data?.recorded && !progress.data.completed && progress.data.positionSeconds > 1 ? progress.data.positionSeconds : null);
@@ -148,6 +152,17 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 
 	const lessonNotes = useLessonNotes(mediaId);
 	const noteCount = lessonNotes.data?.length ?? 0;
+	const createQuickNote = useMutation({
+		mutationFn: (note: { position: number; content: string }) => transport.createNote(mediaId!, note.position, note.content),
+		onSuccess: () => {
+			setQuickNote(null);
+			if (!mediaId) return;
+			void Promise.all([
+				client.invalidateQueries({ queryKey: lessonNotesKey(mediaId) }),
+				client.invalidateQueries({ queryKey: ['notes'], exact: true })
+			]);
+		}
+	});
 	const goTo = (target: string) => navigate(path(href('course', courseId, target)));
 	const finished = (id: string) => {
 		if (studySyncSupported) setCompleted.mutate({ mediaId: id, completed: true }, { onSuccess: (updated) => client.setQueryData(['progress', id], updated) });
@@ -159,6 +174,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 	if (shownLesson !== lessonPath) {
 		setShownLesson(lessonPath);
 		setCountdown(null);
+		setQuickNote(null);
 		setTime(0);
 	}
 
@@ -215,7 +231,11 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 	// Notes are tied to a moment in time, so a PDF lesson has cards but no timed notes.
 	const hasNotes = hasCards && !pdf;
 	const activeTab = (tab === 'notes' && !hasNotes) || (tab === 'bookmarks' && !hasNotes) || (tab === 'cards' && !hasCards) ? 'lessons' : tab;
-	const openNotes = () => { setTab('notes'); setNoteRequest((value) => value + 1); };
+	const openNotes = () => {
+		if (hasNotes) {
+			setQuickNote((current) => current ?? { position: Math.floor(time), content: '' });
+		}
+	};
 	const closeBreak = () => setBreakPhase(null);
 
 	return (
@@ -231,8 +251,11 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 					<div className="flex flex-wrap items-center gap-2">
 						{position >= 0 && <span className="mr-2 text-sm text-muted-foreground tabular-nums">{tr(`Lesson ${position + 1} of ${sequence.length}`, `Aula ${position + 1} de ${sequence.length}`)}</span>}
 						<Button variant="outline" className="h-11 rounded-full px-5 disabled:opacity-60" disabled={!previous} onClick={() => previous && goTo(previous.path)}><ChevronLeft />{tr('Previous', 'Anterior')}</Button>
-						<Button className="h-11 rounded-full px-5" disabled={!next} onClick={() => next && goTo(next.path)}>{tr('Next', 'Próxima')}<ChevronRight /></Button>
-						<Button variant="outline" className="hidden h-11 rounded-full px-5 lg:inline-flex" aria-pressed={contentOpen} onClick={() => setContentOpen(!contentOpen)} aria-label={contentOpen ? tr('Hide contents', 'Ocultar conteúdo') : tr('Show contents', 'Mostrar conteúdo')}>{tr('Contents', 'Conteúdo')}</Button>
+						<Button className="h-11 rounded-full px-5" disabled={!next} title={tr('Jump to the next lesson without marking this one completed', 'Ir para a próxima aula sem marcar esta como concluída')} onClick={() => next && goTo(next.path)}>{tr('Next', 'Próxima')}<ChevronRight /></Button>
+						{cinema && (
+							<Button variant="secondary" className="h-11 rounded-full px-5" onClick={() => setCinema(false)}>{tr('Exit cinema mode', 'Sair do modo cinema')}</Button>
+						)}
+						<Button variant="outline" className="hidden h-11 rounded-full px-5 lg:inline-flex" aria-pressed={contentOpen} title={tr('Expand player width by hiding the course content sidebar', 'Ampliar a largura do player ocultando a barra de conteúdo')} onClick={() => setContentOpen(!contentOpen)} aria-label={contentOpen ? tr('Hide contents', 'Ocultar conteúdo') : tr('Show contents', 'Mostrar conteúdo')}>{tr('Contents', 'Conteúdo')}</Button>
 					</div>
 				</div>
 				<LessonRail sequence={sequence} current={position} isDone={(path) => donePaths.has(path)} />
@@ -298,18 +321,68 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 
 					<div className="flex flex-wrap items-center gap-2">
 						{studySyncSupported && mediaId && (
-								<Button variant={isDone ? 'secondary' : 'default'} aria-pressed={isDone} disabled={setCompleted.isPending} onClick={() => setCompleted.mutate({ mediaId, completed: !isDone }, { onSuccess: (updated) => client.setQueryData(['progress', mediaId], updated) })}>
+								<Button variant={isDone ? 'secondary' : 'default'} aria-pressed={isDone} disabled={setCompleted.isPending} title={tr('Mark or unmark this lesson completed regardless of playback position', 'Marcar ou desmarcar esta aula como concluída, independente da posição do vídeo')} onClick={() => setCompleted.mutate({ mediaId, completed: !isDone }, { onSuccess: (updated) => client.setQueryData(['progress', mediaId], updated) })}>
 									{isDone ? <CircleCheck /> : <Circle />}{isDone ? tr('Completed', 'Concluída') : tr('Mark as completed', 'Marcar como concluída')}
 								</Button>
 								)}
-						{hasNotes && <Button variant="outline" onClick={() => { player.current?.pause(); openNotes(); }} aria-keyshortcuts="n"><PenLine />{tr('Note', 'Nota')}<kbd aria-hidden="true" className="ml-1 rounded border px-1.5 text-xs text-muted-foreground">N</kbd></Button>}
+						{hasNotes && <Button variant="outline" title={tr('Write a Markdown note tied to this moment without leaving the video', 'Escrever uma nota em Markdown presa a este momento sem sair do vídeo')} onClick={() => { openNotes(); }} aria-keyshortcuts="n"><PenLine />{tr('Note', 'Nota')}<kbd aria-hidden="true" className="ml-1 rounded border px-1.5 text-xs text-muted-foreground">N</kbd></Button>}
 						{hasCards && <Button variant="outline" onClick={() => { player.current?.pause(); setTab('cards'); setCardRequest((value) => value + 1); }}><SquarePlus />{tr('Card', 'Cartão')}</Button>}
-						{hasNotes && <Button variant="outline" onClick={() => { player.current?.pause(); setTab('bookmarks'); }}>{tr(`Bookmark ${formatDuration(time)}`, `Marcar ${formatDuration(time)}`)}</Button>}
-						<label className="ml-auto flex min-h-11 items-center gap-2 text-sm text-muted-foreground">
-							<input type="checkbox" className="size-5 accent-[var(--brand)]" checked={preferences.autoNext} onChange={(event) => savePreferences({ ...preferences, autoNext: event.target.checked })} />
-							{tr('Autoplay next', 'Reproduzir a próxima')}
-						</label>
+						{hasNotes && <Button variant="outline" title={tr('Save a labelled timestamp on the timeline', 'Salvar um marcador de tempo rotulado na linha do tempo')} onClick={() => { player.current?.pause(); setTab('bookmarks'); }}>{tr(`Timestamp ${formatDuration(time)}`, `Marcador ${formatDuration(time)}`)}</Button>}
+						<div className="ml-auto flex flex-wrap items-center gap-2">
+							<label className="flex min-h-11 items-center gap-2 text-sm text-muted-foreground" title={tr('When playback ends, mark completed and advance after 5 s', 'Ao chegar ao fim, marca como concluída e avança em 5 s')}>
+								<input type="checkbox" className="size-5 accent-[var(--brand)]" checked={preferences.autoNext} onChange={(event) => savePreferences({ ...preferences, autoNext: event.target.checked })} />
+								{tr('Autoplay next', 'Reproduzir a próxima')}
+							</label>
+							<Button type="button" variant="ghost" size="sm" aria-expanded={showHelp} onClick={() => setShowHelp((open) => !open)} className="h-11 gap-1 px-2.5 text-muted-foreground">
+								<CircleHelp className="size-4" aria-hidden="true" />{tr('How controls work', 'Como funciona')}
+							</Button>
+						</div>
 					</div>
+
+					{showHelp && (
+						<div className="rounded-2xl border bg-card p-4 text-sm text-muted-foreground space-y-1.5">
+							<p><strong className="text-foreground">{tr('Next:', 'Próxima:')}</strong> {tr('jumps to the next lesson without marking this one completed.', 'pula para a próxima aula sem marcar esta como concluída.')}</p>
+							<p><strong className="text-foreground">{tr('Mark as completed:', 'Marcar como concluída:')}</strong> {tr('marks or unmarks this lesson regardless of where you stopped.', 'marca ou desmarca esta aula independente de onde o vídeo parou.')}</p>
+							<p><strong className="text-foreground">{tr('Autoplay next:', 'Reproduzir a próxima:')}</strong> {tr('when playback reaches the end, marks it completed and counts down 5 s to the next lesson.', 'ao chegar ao fim da aula, marca como concluída e inicia a contagem de 5 s para a próxima.')}</p>
+							<p><strong className="text-foreground">{tr('Completed lessons:', 'Aulas concluídas:')}</strong> {tr('reopening a completed lesson starts from the beginning unless you open a saved timestamp.', 'ao voltar a uma aula concluída, ela começa do início, a menos que você abra um marcador/nota.')}</p>
+							<p><strong className="text-foreground">{tr('Notes vs. Timestamps:', 'Notas vs. Marcadores:')}</strong> {tr('Notes hold longer Markdown study text; Timestamps mark quick moments on the timeline.', 'Notas guardam texto de estudo em Markdown; Marcadores salvam momentos rápidos na linha do tempo.')}</p>
+						</div>
+					)}
+
+					{hasNotes && mediaId && quickNote && (
+						<form
+							onSubmit={(event) => {
+								event.preventDefault();
+								if (quickNote.content.trim() && !createQuickNote.isPending) createQuickNote.mutate({ position: quickNote.position, content: quickNote.content.trim() });
+							}}
+							className="space-y-3 rounded-[1.5rem] border bg-card p-4"
+						>
+							<div className="flex flex-wrap items-center justify-between gap-2">
+								<Label htmlFor="quick-note-draft" className="font-semibold">
+									{tr(`Note at ${formatDuration(quickNote.position)}`, `Nota em ${formatDuration(quickNote.position)}`)}
+								</Label>
+								<span className="text-xs text-muted-foreground">{tr('Time captured when opened. Video stays in view; Ctrl+Enter saves.', 'Tempo capturado ao abrir. O vídeo continua visível; Ctrl+Enter salva.')}</span>
+							</div>
+							<NoteEditor
+								id="quick-note-draft"
+								focusOnOpen
+								rows={2}
+								value={quickNote.content}
+								onChange={(content) => setQuickNote({ ...quickNote, content })}
+								onKeyDown={(event) => {
+									if ((event.ctrlKey || event.metaKey) && event.key === 'Enter' && quickNote.content.trim() && !createQuickNote.isPending) {
+										event.preventDefault();
+										createQuickNote.mutate({ position: quickNote.position, content: quickNote.content.trim() });
+									}
+								}}
+							/>
+							{createQuickNote.error && <p role="alert" className="text-sm text-destructive">{createQuickNote.error.message}</p>}
+							<div className="flex justify-end gap-2">
+								<Button type="button" variant="outline" onClick={() => setQuickNote(null)} disabled={createQuickNote.isPending}>{tr('Cancel', 'Cancelar')}</Button>
+								<Button type="submit" disabled={createQuickNote.isPending || !quickNote.content.trim()}>{createQuickNote.isPending ? tr('Saving…', 'Salvando…') : tr('Save note', 'Salvar nota')}</Button>
+							</div>
+						</form>
+					)}
 
 					<Tabs value={activeTab} onValueChange={(value) => setTab(String(value))}>
 						<TabsList variant="line" aria-label={tr('Lesson tools', 'Ferramentas da aula')} className="w-full justify-start overflow-x-auto border-b">
@@ -343,7 +416,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 						</TabsContent>
 						{hasNotes && mediaId && (
 							<TabsContent value="notes" keepMounted className="pt-5">
-								<StudyNotes mediaId={mediaId} currentTime={time} onSeek={(seconds) => player.current?.seek(seconds)} addRequest={noteRequest} title={lesson.title} trail={location?.moduleTitle ? `${course.title} · ${location.moduleTitle}` : course.title} allNotesTo={`/notes?course=${encodeURIComponent(courseId)}`} />
+								<StudyNotes mediaId={mediaId} currentTime={time} onSeek={(seconds) => player.current?.seek(seconds)} addRequest={0} title={lesson.title} trail={location?.moduleTitle ? `${course.title} · ${location.moduleTitle}` : course.title} allNotesTo={`/notes?course=${encodeURIComponent(courseId)}`} />
 							</TabsContent>
 						)}
 						{hasNotes && mediaId && (

@@ -88,6 +88,28 @@ describe('lesson page', () => {
 		cleanup();
 		renderApp('/course/c/c%2FOne', { catalog });
 		expect((await screen.findByRole('button', { name: 'Cinema mode' })).getAttribute('aria-pressed')).toBe('true');
+		fireEvent.click(screen.getByRole('button', { name: 'Exit cinema mode' }));
+		expect(localStorage.getItem('learnvault-cinema')).toBe('0');
+	});
+
+	it('explains Next, Mark as completed and Autoplay next on demand', async () => {
+		renderApp('/course/c/c%2FOne', { catalog });
+		fireEvent.click(await screen.findByRole('button', { name: 'How controls work' }));
+		expect(screen.getByText(/jumps to the next lesson without marking this one completed/)).toBeTruthy();
+		expect(screen.getByText(/reopening a completed lesson starts from the beginning/)).toBeTruthy();
+	});
+
+	it('shows loading and paused player states and keeps notes usable on media error', async () => {
+		renderApp('/course/c/c%2FOne', { catalog });
+		const video = await screen.findByLabelText('Lesson player: One');
+		expect(screen.getByText('Paused')).toBeTruthy();
+		fireEvent.loadStart(video);
+		expect(screen.getByText('Loading…')).toBeTruthy();
+		Object.defineProperty(video, 'error', { value: { code: 3 }, configurable: true });
+		fireEvent.error(video);
+		expect(await screen.findByRole('alert')).toBeTruthy();
+		fireEvent.click(screen.getByRole('button', { name: /^Note/ }));
+		expect(await screen.findByLabelText('Note at 0:00')).toBeTruthy();
 	});
 
 	it('marks the lesson completed from the page', async () => {
