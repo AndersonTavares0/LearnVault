@@ -59,7 +59,9 @@ pub(crate) async fn push(
     let operations = request.operations;
     match run_study(&state, move |db| {
         require_sync_access(db, &owner, admin, &operations)?;
-        learnvault_core::push_operations(db, &owner, &device_id, &operations)
+        let outcome = learnvault_core::push_operations(db, &owner, &device_id, &operations)?;
+        prune_once_a_day(db);
+        Ok(outcome)
     })
     .await
     {
@@ -88,18 +90,43 @@ pub(crate) async fn pull(
     }
     let owner = user.user_id;
     match run_study(&state, move |db| {
-        learnvault_core::pull_operations(
+        let batch = learnvault_core::pull_operations(
             db,
             &owner,
             &query.device,
             query.cursor.unwrap_or(0),
             query.limit.unwrap_or(DEFAULT_PULL_LIMIT),
-        )
+        )?;
+        prune_once_a_day(db);
+        Ok(batch)
     })
     .await
     {
         Ok(batch) => private_no_store(Json(batch).into_response()),
         Err(failure) => study_failure_response(failure),
+    }
+}
+
+/// Retention housekeeping (old tombstones, idle devices) at most once a day per process. It runs on a
+/// sync request, like the session cleanup on login, so no scheduler is needed; a failure is not
+/// worth failing the request for and is retried the next day.
+fn prune_once_a_day(db: &Database) {
+    static LAST: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_secs() as i64);
+    let last = LAST.load(std::sync::atomic::Ordering::Relaxed);
+    if now - last >= 24 * 60 * 60
+        && LAST
+            .compare_exchange(
+                last,
+                now,
+                std::sync::atomic::Ordering::Relaxed,
+                std::sync::atomic::Ordering::Relaxed,
+            )
+            .is_ok()
+    {
+        let _ = learnvault_core::prune_sync(db, learnvault_core::DEFAULT_RETENTION_SECS);
     }
 }
 

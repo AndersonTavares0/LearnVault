@@ -144,9 +144,10 @@ fn pull_returns_new_operations_in_order_and_skips_the_own_device() -> TestResult
         OWNER,
         "device-a",
         &[
+            // Three different lessons: a newer progress of the same lesson would replace the older one.
             input("op-1", 100, progress("m1", 10, false)),
-            input("op-2", 110, progress("m1", 20, false)),
-            input("op-3", 120, progress("m1", 30, false)),
+            input("op-2", 110, progress("m2", 20, false)),
+            input("op-3", 120, progress("m3", 30, false)),
         ],
     )?;
 

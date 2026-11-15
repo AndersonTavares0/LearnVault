@@ -676,6 +676,15 @@ const REQUIRED_TABLES: &[TableDefinition] = &[
             ("client_at", "INTEGER", true, None, 0),
             ("received_at", "INTEGER", true, None, 0),
             ("payload", "TEXT", true, None, 0),
+            ("coalesce_key", "TEXT", false, None, 0),
+        ],
+    },
+    TableDefinition {
+        name: "sync_device",
+        columns: &[
+            ("owner_id", "TEXT", true, None, 1),
+            ("device_id", "TEXT", true, None, 2),
+            ("last_seen_at", "INTEGER", true, None, 0),
         ],
     },
     TableDefinition {
