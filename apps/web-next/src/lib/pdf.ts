@@ -173,11 +173,37 @@ export function selectionBoxes(rects: ArrayLike<DOMRect>, page: DOMRect): { x: n
 	return lines.slice(0, MAX_MARK_RECTS);
 }
 
-/** 1-based numbers of the pages whose text contains the query, ignoring case. */
+/** Lowercase and without accents, the form in which a query is compared with page text. */
+export function foldText(text: string): string {
+	return text.normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase();
+}
+
+/** True when `text` contains `query`, ignoring case and accents. An empty query matches nothing. */
+export function containsText(text: string, query: string): boolean {
+	const needle = foldText(query.trim());
+	return needle !== '' && foldText(text).includes(needle);
+}
+
+/** 1-based numbers of the pages whose text contains the query, ignoring case and accents. */
 export function pagesMatching(pageTexts: string[], query: string): number[] {
-	const needle = query.trim().toLocaleLowerCase();
-	if (!needle) return [];
-	return pageTexts.flatMap((text, index) => (text.toLocaleLowerCase().includes(needle) ? [index + 1] : []));
+	return pageTexts.flatMap((text, index) => (containsText(text, query) ? [index + 1] : []));
+}
+
+/** Marks the text runs of a rendered page that contain the query (and clears the others). */
+export function markHits(layer: HTMLElement | null, query: string): number {
+	if (!layer) return 0;
+	let hits = 0;
+	for (const run of layer.querySelectorAll<HTMLElement>('span')) {
+		const hit = containsText(run.textContent ?? '', query);
+		run.classList.toggle('pdf-hit', hit);
+		if (hit) hits += 1;
+	}
+	return hits;
+}
+
+/** A selection with its place, ready to paste: “text” — Title, p. 4. */
+export function quoteWithPage(text: string, title: string, page: number): string {
+	return `“${text}” — ${title.replace(/\.pdf$/i, '')}, p. ${page}`;
 }
 
 const KIND_NAMES = () => ({ highlight: tr('Highlight', 'Destaque'), underline: tr('Underline', 'Sublinhado'), note: tr('Note', 'Nota') });

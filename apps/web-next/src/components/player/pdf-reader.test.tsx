@@ -81,6 +81,9 @@ describe('PdfReader', () => {
 		fireEvent.click(screen.getByRole('button', { name: 'Page 4' }));
 		expect((screen.getByLabelText('Page') as HTMLInputElement).value).toBe('4');
 		fireEvent.click(screen.getByRole('button', { name: 'Delete mark on page 2' }));
+		// Deleting asks first; nothing is removed until it is confirmed.
+		expect(remove).not.toHaveBeenCalled();
+		fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete mark' }));
 		await waitFor(() => expect(remove).toHaveBeenCalledWith('a2'));
 	});
 
