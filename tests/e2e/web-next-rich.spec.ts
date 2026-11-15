@@ -114,10 +114,13 @@ test('the PDF editor searches, marks, takes a note and exports the marks', async
 	const text = page.locator('.pdf-text-layer span').first();
 	await expect(text).toBeVisible();
 
+	// Finding and annotating are panels of the reader: open them first.
+	await page.getByRole('button', { name: 'Find in the document' }).click();
 	await page.getByRole('searchbox', { name: 'Search in the document' }).fill('LONGEST');
 	await page.getByRole('button', { name: 'Search', exact: true }).click();
 	await expect(page.getByText('Found on 1 page: now on page 1.')).toBeVisible();
 
+	await page.getByRole('button', { name: 'Annotate' }).click();
 	await text.dblclick();
 	await page.getByRole('button', { name: 'Highlight' }).click();
 	await expect(page.getByRole('button', { name: /^All \(1\)/ })).toBeVisible();
