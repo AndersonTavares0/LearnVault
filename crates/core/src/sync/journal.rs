@@ -101,6 +101,7 @@ pub(super) fn insert_journal(
         drop(statement);
         let existing: Vec<(i64, i64, SyncPayload)> = existing
             .into_iter()
+            // A row that cannot be decoded cannot have been written by this code; it is left alone.
             .filter_map(|(seq, at, text)| decode(&text).ok().map(|decoded| (seq, at, decoded)))
             .collect();
         let own_flag = completed_of(&payload);
