@@ -1,7 +1,8 @@
-import { ChevronDown, Copy, Quote, ChevronLeft, ChevronRight, ChevronUp, ExternalLink, Highlighter, Keyboard, Maximize2, Minus, Moon, MoreVertical, PanelRight, Plus, Rows3, Search, Square, StickyNote, Sun, Underline, X } from 'lucide-react';
+import { ChevronDown, Copy, ListTree, Quote, ChevronLeft, ChevronRight, ChevronUp, ExternalLink, Highlighter, Keyboard, Maximize2, Minus, Moon, MoreVertical, PanelRight, Plus, Rows3, Search, Square, StickyNote, Sun, Underline, X } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent } from 'react';
 import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 import { usePdfAnnotationMutations, usePdfAnnotations } from '@/app/data';
+import { PdfContents } from '@/components/player/pdf-contents';
 import { ColorSwatches, PdfMarks } from '@/components/player/pdf-marks';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
@@ -10,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { studySyncSupported } from '@/lib/player';
 import { tr } from '@/lib/i18n';
-import { clampPage, loadPdfJs, nextPage, pageAt, pageScroll, pagesMatching, pageWindow, markHits, pdfCommand, PDF_MARK_COLORS, PDF_PAGE_GAP, quoteWithPage, sanitizeQuote, selectionBoxes, stepZoom, type PdfTheme, type PdfView } from '@/lib/pdf';
+import { clampPage, loadPdfJs, nextPage, pageAt, pageScroll, pagesMatching, pageWindow, markHits, pdfCommand, readOutline, type OutlineItem, type OutlineSource, PDF_MARK_COLORS, PDF_PAGE_GAP, quoteWithPage, sanitizeQuote, selectionBoxes, stepZoom, type PdfTheme, type PdfView } from '@/lib/pdf';
 import { transport, type FileEntry, type PdfAnnotation, type PdfAnnotationColor, type PdfRect } from '@/lib/transport';
 import { cn } from '@/lib/utils';
 import type { PlayerPreferences } from '@/lib/player-preferences';
@@ -122,6 +123,8 @@ export function PdfReader({ file, courseId, initialPage, onPage, preferences, on
 	const [viewport, setViewport] = useState(0);
 	const [help, setHelp] = useState(false);
 	const [flash, setFlash] = useState<string | null>(null);
+	const [contentsOpen, setContentsOpen] = useState(false);
+	const [outline, setOutline] = useState<{ docKey: string; items: OutlineItem[] } | null>(null);
 	const [copied, setCopied] = useState<'text' | 'quote' | null>(null);
 	const findInput = useRef<HTMLInputElement>(null);
 	const timers = useRef<number[]>([]);
@@ -201,6 +204,13 @@ export function PdfReader({ file, courseId, initialPage, onPage, preferences, on
 		cancelAnimationFrame(frame.current);
 		timers.current.forEach((timer) => window.clearTimeout(timer));
 	}, []);
+	// The table of contents is read the first time the panel opens, once per document.
+	useEffect(() => {
+		if (!contentsOpen || load.state !== 'ready' || outline?.docKey === docKey) return;
+		let active = true;
+		void readOutline(load.doc as unknown as OutlineSource).then((items) => { if (active) setOutline({ docKey, items }); });
+		return () => { active = false; };
+	}, [contentsOpen, load, docKey, outline?.docKey]);
 	// Opening the find panel puts the cursor in its field, whichever way it was opened.
 	useEffect(() => { if (findOpen) findInput.current?.focus(); }, [findOpen]);
 
@@ -397,6 +407,9 @@ export function PdfReader({ file, courseId, initialPage, onPage, preferences, on
 					{load.state === 'ready' && (
 						<Button {...bar.tab('find')} variant={findOpen ? 'selected' : 'ghost'} size="icon" aria-label={tr('Find in the document', 'Localizar no documento')} aria-expanded={findOpen} onClick={() => setFindOpen(!findOpen)}><Search /></Button>
 					)}
+					{load.state === 'ready' && (
+						<Button {...bar.tab('contents')} variant={contentsOpen ? 'selected' : 'ghost'} size="icon" aria-label={tr('Contents', 'Conteúdo')} aria-expanded={contentsOpen} onClick={() => setContentsOpen(!contentsOpen)}><ListTree /></Button>
+					)}
 					{wide && studySyncSupported && mediaId && (
 						<Button {...bar.tab('panel')} variant="ghost" size="icon" aria-label={tr('Marks panel', 'Painel de marcações')} aria-expanded={panelOpen} onClick={() => setPanelOpen(!panelOpen)}><PanelRight /></Button>
 					)}
@@ -422,6 +435,7 @@ export function PdfReader({ file, courseId, initialPage, onPage, preferences, on
 								<DropdownMenuItem onClick={() => setZoom(stepZoom(zoom, 1))}><Plus />{tr('Zoom in', 'Aumentar zoom')}</DropdownMenuItem>
 								<DropdownMenuItem onClick={() => setZoom(stepZoom(zoom, -1))}><Minus />{tr('Zoom out', 'Diminuir zoom')}</DropdownMenuItem>
 								<DropdownMenuItem onClick={() => setZoom('fit')}><Maximize2 />{tr('Fit to width', 'Ajustar à largura')}</DropdownMenuItem>
+								{load.state === 'ready' && <DropdownMenuItem onClick={() => setContentsOpen(!contentsOpen)}><ListTree />{tr('Contents', 'Conteúdo')}</DropdownMenuItem>}
 								{studySyncSupported && mediaId && <DropdownMenuItem onClick={() => setPanelOpen(!panelOpen)}><PanelRight />{tr('Marks panel', 'Painel de marcações')}</DropdownMenuItem>}
 								<DropdownMenuItem onClick={() => setHelp(true)}><Keyboard />{tr('Keyboard shortcuts', 'Atalhos de teclado')}</DropdownMenuItem>
 							</DropdownMenuContent>
@@ -484,6 +498,8 @@ export function PdfReader({ file, courseId, initialPage, onPage, preferences, on
 					</div>
 				</form>
 			)}
+
+			{contentsOpen && load.state === 'ready' && <PdfContents doc={load.doc} page={current} pages={pages} outline={outline?.docKey === docKey ? outline.items : null} onGo={go} />}
 
 			{load.state === 'error' ? (
 				<p role="alert" className="rounded-2xl border border-destructive/50 p-4 text-destructive">{load.message}</p>

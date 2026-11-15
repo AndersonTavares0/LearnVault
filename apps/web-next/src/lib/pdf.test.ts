@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clampPage, containsText, foldText, markHits, quoteWithPage, findLessonPdf, formatFileSize, isPdf, lessonPdfId, marksToMarkdown, nextPage, pageAt, pagesMatching, pageScroll, pageWindow, pdfCommand, sanitizeQuote, selectionBoxes, stepZoom } from './pdf';
+import { activeOutlineIndex, MAX_OUTLINE_DEPTH, MAX_OUTLINE_ITEMS, readOutline, type OutlineSource, clampPage, containsText, foldText, markHits, quoteWithPage, findLessonPdf, formatFileSize, isPdf, lessonPdfId, marksToMarkdown, nextPage, pageAt, pagesMatching, pageScroll, pageWindow, pdfCommand, sanitizeQuote, selectionBoxes, stepZoom } from './pdf';
 import type { FileEntry, Lesson, PdfAnnotation } from './transport';
 
 const file = (name: string, extra: Partial<FileEntry> = {}): FileEntry => ({ name, path: `c/${name}`, size: 1, mediaId: name, kind: 'material', availability: 'available', ...extra });
@@ -204,5 +204,62 @@ describe('searching the text of a document', () => {
 
 	it('quotes a selection with the document title and the page', () => {
 		expect(quoteWithPage('Ownership moves values.', 'Ownership notes.pdf', 4)).toBe('“Ownership moves values.” — Ownership notes, p. 4');
+	});
+});
+
+describe('the table of contents', () => {
+	const doc = (outline: unknown, pages: Record<string, number> = { a: 0, b: 2 }): OutlineSource => ({
+		getOutline: async () => outline as never,
+		getDestination: async (id) => (id in pages ? [pages[id], { name: 'Fit' }] : null),
+		getPageIndex: async (ref) => (ref as { num: number }).num
+	});
+
+	it('is empty when the document has no outline', async () => {
+		expect(await readOutline(doc(null))).toEqual([]);
+		expect(await readOutline({ ...doc(null), getOutline: async () => { throw new Error('broken'); } })).toEqual([]);
+	});
+
+	it('reads titles, nesting and pages whether the destination is named, explicit or a page reference', async () => {
+		const items = await readOutline(doc([
+			{ title: ' Intro  ', dest: 'a', items: [{ title: 'Deep', dest: [{ num: 4 }, { name: 'Fit' }], items: [] }] },
+			{ title: 'Third', dest: [1, { name: 'Fit' }] },
+			{ title: 'Nowhere', dest: 'missing' },
+			{ title: '   ', dest: 'a' }
+		]));
+		expect(items).toEqual([
+			{ title: 'Intro', page: 1, depth: 0 },
+			{ title: 'Deep', page: 5, depth: 1 },
+			{ title: 'Third', page: 2, depth: 0 },
+			{ title: 'Nowhere', page: null, depth: 0 }
+		]);
+	});
+
+	it('survives a destination that cannot be resolved and bounds depth and size', async () => {
+		const broken: OutlineSource = { ...doc([{ title: 'Bad', dest: [{ num: 1 }] }]), getPageIndex: async () => { throw new Error('no page'); } };
+		expect(await readOutline(broken)).toEqual([{ title: 'Bad', page: null, depth: 0 }]);
+
+		let nested: Record<string, unknown> = { title: 'leaf', dest: [0] };
+		for (let level = 0; level < 20; level += 1) nested = { title: `level ${level}`, dest: [0], items: [nested] };
+		const deep = await readOutline(doc([nested]));
+		expect(Math.max(...deep.map((item) => item.depth))).toBe(MAX_OUTLINE_DEPTH - 1);
+
+		const many = Array.from({ length: MAX_OUTLINE_ITEMS + 50 }, (_, index) => ({ title: `Item ${index}`, dest: [0] }));
+		expect(await readOutline(doc(many))).toHaveLength(MAX_OUTLINE_ITEMS);
+	});
+
+	it('finds the heading that holds a page', () => {
+		const items = [
+			{ title: 'One', page: 1, depth: 0 },
+			{ title: 'Two', page: 3, depth: 0 },
+			{ title: 'Two.1', page: 4, depth: 1 },
+			{ title: 'Lost', page: null, depth: 0 },
+			{ title: 'Three', page: 8, depth: 0 }
+		];
+		expect(activeOutlineIndex(items, 1)).toBe(0);
+		expect(activeOutlineIndex(items, 3)).toBe(1);
+		expect(activeOutlineIndex(items, 5)).toBe(2);
+		expect(activeOutlineIndex(items, 9)).toBe(4);
+		expect(activeOutlineIndex(items, 0)).toBe(-1);
+		expect(activeOutlineIndex([], 3)).toBe(-1);
 	});
 });
