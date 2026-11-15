@@ -64,6 +64,16 @@ export function CoverArt({ title, done, total, compact = false, map = false }: P
 	// A four-character monogram (a year such as "2010") is wider than two initials, so the
 	// type scales with the string to stay inside the cover.
 	const size = letters.length >= 4 ? 44 : letters.length === 3 ? 48 : compact ? 48 : 52;
+	// A small thumbnail is cropped to a square or a wide strip, so its initials sit in the middle, where no crop reaches.
+	if (compact) {
+		const small = letters.length >= 4 ? 26 : letters.length === 3 ? 32 : 40;
+		return (
+			<svg viewBox="0 0 100 100" aria-hidden="true" focusable="false" className="absolute inset-0 size-full" preserveAspectRatio="xMidYMid slice">
+				<rect width="100" height="100" style={{ fill: ground }} />
+				<text x="50" y="50" fontSize={small} textAnchor="middle" dominantBaseline="central" className="fill-foreground font-heading font-bold">{letters}</text>
+			</svg>
+		);
+	}
 	return (
 		<svg viewBox="0 0 160 100" aria-hidden="true" focusable="false" className="absolute inset-0 size-full" preserveAspectRatio="xMidYMid slice">
 			<rect width="160" height="100" style={{ fill: ground }} />
