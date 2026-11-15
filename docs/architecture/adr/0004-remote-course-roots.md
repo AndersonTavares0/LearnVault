@@ -84,3 +84,6 @@ detection is applied by itself, and the picker stays as the way to correct it.
   scan does not bring it back; choosing it again forgets the removal.
 - Known limit: a library whose courses are themselves numbered ("01 Rust", "02 Go") and whose courses have
   modules looks like one course with numbered parts, and is not split; the picker handles it.
+- Known limits found in review: a source course the user marked as a favorite, and its manual order, do not
+  follow the split (study state, notes and flashcards do); the course is simply favorited again. A source with
+  more than 100 detected courses is left for the picker instead of being reshaped.

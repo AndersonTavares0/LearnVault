@@ -24,8 +24,9 @@ use crate::roots::{list_roots, promote_root};
 use crate::scanner::{MediaKind, ScanOutcome, ScannedFile};
 use rusqlite::params;
 
-/// Most folders one scan turns into courses; a source with more is left for the picker.
-const MAX_AUTO_COURSES: usize = 200;
+/// Most courses detection makes of a source at once; a source with more is left for the picker,
+/// so a rule that misfires on a huge tree cannot reshape it.
+const MAX_AUTO_COURSES: usize = 100;
 
 /// A subfolder named like a module: an optional short word, then a number ("01 - Intro",
 /// "Module 15", "Lesson 41", "3. Calculus").
@@ -184,16 +185,17 @@ pub fn auto_promote_roots(
         .cloned()
         .collect();
     let dismissed = dismissed_keys(db, source_id)?;
+    let found = detect_course_folders(&outside);
+    if found.len() > MAX_AUTO_COURSES {
+        return Ok(0);
+    }
     let mut created = 0;
-    for folder in detect_course_folders(&outside) {
+    for folder in found {
         let Ok(key) = relative_path_key(&folder, mode) else {
             continue;
         };
         if dismissed.contains(&key) {
             continue;
-        }
-        if created >= MAX_AUTO_COURSES {
-            break;
         }
         match promote_root(db, source_id, &new_library_id(), &folder, mode) {
             Ok(_) => created += 1,
