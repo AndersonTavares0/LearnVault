@@ -56,11 +56,22 @@ describe('lesson page', () => {
 		expect(screen.getByRole('combobox', { name: 'Speed' })).toBeTruthy();
 	});
 
+	it('opens the module that holds the lesson even when module and lesson paths differ', async () => {
+		// A course picked inside a remote source: the module path is relative to the course, the lesson keeps the source path.
+		const module = (title: string, lessons: CatalogNode[]): CatalogNode => ({ title, path: title, role: 'module', files: [], looseFiles: [], children: lessons });
+		const inModule = (moduleTitle: string, title: string): CatalogNode => ({ title, path: `Source/Course/${moduleTitle}/${title}.mp4`, role: 'lesson', files: [media(`${title}.mp4`)], looseFiles: [], children: [] });
+		const modules: Catalog = { complete: true, looseFiles: [], nodes: [{ title: 'Course', path: '', role: 'course', courseId: 'c', files: [], looseFiles: [], children: [module('A', [inModule('A', 'One')]), module('B', [inModule('B', 'Two')])] }] };
+		renderApp('/course/c/Source%2FCourse%2FB%2FTwo.mp4', { catalog: modules });
+		const current = await screen.findByRole('link', { name: 'Two', current: 'page' });
+		expect(current.closest('details')?.open).toBe(true);
+		expect(screen.getByRole('link', { name: 'One' }).closest('details')?.open).toBe(false);
+	});
+
 	it('keeps cinema mode and hidden course content between visits', async () => {
 		renderApp('/course/c/c%2FOne', { catalog });
 		fireEvent.click(await screen.findByRole('button', { name: 'Cinema mode' }));
 		expect(localStorage.getItem('learnvault-cinema')).toBe('1');
-		fireEvent.click(screen.getAllByRole('button', { name: 'Hide course content' })[0]);
+		fireEvent.click(screen.getByRole('button', { name: 'Hide course content' }));
 		expect(localStorage.getItem('learnvault-lesson-content')).toBe('0');
 		expect(screen.queryByRole('complementary', { name: 'Course content' })).toBeNull();
 		cleanup();

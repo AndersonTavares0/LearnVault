@@ -107,10 +107,10 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 				<Link to="/" className="mb-4 inline-flex min-h-11 items-center gap-1 text-sm text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">
 					<ChevronLeft className="size-4" aria-hidden="true" />{tr('My learning', 'Meu aprendizado')}
 				</Link>
-				<div className="grid gap-8 lg:grid-cols-[1fr_minmax(0,22rem)] lg:items-center">
+				<div className="grid gap-8 lg:grid-cols-[1fr_minmax(0,15rem)] lg:items-center">
 					<div className="order-2 min-w-0 space-y-5 lg:order-1">
 						<div className="space-y-2">
-							<h1 className="font-heading text-4xl leading-tight font-bold text-balance">{course.title}</h1>
+							<h1 className="font-heading text-3xl leading-tight font-bold text-balance">{course.title}</h1>
 							<p className="text-muted-foreground">{formatCourseMeta(counts)}</p>
 						</div>
 						{!readingOnly && concerns.length > 0 && <StructureNotice concerns={concerns} />}
