@@ -202,6 +202,15 @@ flashcards (with their reviews) and playback preferences travel.
 | `POST` | `/api/sync/push` | Session | Accepts `{ "device_id": "...", "operations": [...] }` and applies each new operation, returning `{ applied, duplicated, cursor }` |
 | `GET` | `/api/sync/pull?device=<id>&cursor=<seq>&limit=<n>` | Session | Returns `{ cursor, has_more, items }` with the operations after `cursor`, excluding the requesting device |
 
+Writes made in a browser reach the journal too (ADR 0005). Once an owner has registered a device (any push
+or pull registers it), the server records the owner's own study writes as operations of the reserved device
+`server`, so a pull delivers them to the desktop; `server` is refused as a `device_id`. The first
+registration also backfills what was written before (progress, bookmarks, flashcards without their review
+schedule, preferences and notes that have no synced version yet). A newer `progress` replaces the older
+ones of the same media and a newer `preference` the older ones, with `completed` staying set, so autosaves do
+not grow the log; notes, bookmarks, flashcards, reviews and deletions are kept. Deletion tombstones and
+idle devices older than 180 days are removed (a device that is the owner's latest is kept).
+
 Each operation is `{ "op_id": "...", "client_at": <unix-seconds>, "payload": { "kind": ... } }`
 with one of the payload kinds below:
 

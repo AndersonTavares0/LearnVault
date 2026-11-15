@@ -53,6 +53,13 @@
 //!   by a synced version (that version becomes a copy), so local work older than the
 //!   contract is not deleted.
 
+mod journal;
+
+pub use journal::{
+    DEFAULT_RETENTION_SECS, PruneOutcome, SERVER_DEVICE_ID, browser_write, journal_enabled,
+    prune_sync,
+};
+
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 
@@ -289,6 +296,9 @@ pub fn push_operations(
 
     let conn = db.connection();
     let transaction = conn.unchecked_transaction()?;
+    // The device is registered before its operations: the first one of an owner backfills the
+    // state written so far, which must not include what this very push is about to apply.
+    journal::register_device(&transaction, owner_id, device_id, None)?;
     let mut applied = 0_usize;
     let mut duplicated = 0_usize;
     for operation in operations {
@@ -324,17 +334,13 @@ pub fn push_operations(
             client_at,
             &operation.op_id,
         )?;
-        transaction.execute(
-            "INSERT INTO sync_operation (op_id, owner_id, device_id, client_at, received_at, payload)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![
-                operation.op_id,
-                owner_id,
-                device_id,
-                client_at,
-                now_unix_seconds(),
-                encode(&operation.payload)?,
-            ],
+        journal::insert_journal(
+            &transaction,
+            owner_id,
+            device_id,
+            &operation.op_id,
+            client_at,
+            &operation.payload,
         )?;
         applied += 1;
     }
@@ -368,7 +374,11 @@ pub fn pull_operations(
     validate_id(device_id, "device")?;
     let limit = limit.clamp(1, MAX_PULL_BATCH) as i64;
 
-    let conn = db.connection();
+    // Registering the device (and draining the server's own writes into the journal) happens in
+    // the same transaction as the read, so the page below already includes them.
+    let transaction = db.connection().unchecked_transaction()?;
+    journal::register_device(&transaction, owner_id, device_id, Some(cursor))?;
+    let conn: &Connection = &transaction;
     let mut statement = conn.prepare(
         "SELECT seq, op_id, device_id, client_at, payload
            FROM sync_operation
@@ -409,6 +419,8 @@ pub fn pull_operations(
         .optional()?
         .is_some();
 
+    drop(statement);
+    transaction.commit()?;
     Ok(SyncBatch {
         cursor: next_cursor,
         has_more,

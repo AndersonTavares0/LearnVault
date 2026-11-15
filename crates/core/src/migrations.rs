@@ -704,10 +704,35 @@ CREATE TABLE library_root (
 );
 ";
 
+/// Version 20: server journal of browser writes and its retention (ADR 0005).
+///
+/// Additive. `coalesce_key` lets a newer progress or preference replace the older ones with an
+/// index lookup instead of a scan. `sync_device` records which devices an owner syncs with: the
+/// server journals the owner's writes only while one exists.
+const V20: &str = "
+ALTER TABLE sync_operation ADD COLUMN coalesce_key TEXT;
+
+CREATE INDEX sync_operation_key_idx ON sync_operation (owner_id, coalesce_key)
+    WHERE coalesce_key IS NOT NULL;
+
+UPDATE sync_operation SET coalesce_key = 'p:' || json_extract(payload, '$.media_id')
+ WHERE json_extract(payload, '$.kind') = 'progress';
+UPDATE sync_operation SET coalesce_key = 'pref'
+ WHERE json_extract(payload, '$.kind') = 'preference';
+
+CREATE TABLE sync_device (
+    owner_id TEXT NOT NULL,
+    device_id TEXT NOT NULL,
+    pull_cursor INTEGER NOT NULL DEFAULT 0,
+    last_seen_at INTEGER NOT NULL,
+    PRIMARY KEY (owner_id, device_id)
+);
+";
+
 /// Cadeia de migrações aplicada por [`crate::db::Database`]; o índice `n` leva o banco da
 /// versão `n` para `n + 1`.
 pub(crate) const MIGRATIONS: &[&str] = &[
-    V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19,
+    V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20,
 ];
 
 /// Versão do schema gravada em `PRAGMA user_version` (0 quando nunca migrado).

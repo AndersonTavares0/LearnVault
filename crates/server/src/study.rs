@@ -845,7 +845,14 @@ pub(crate) async fn record_position(
     let position_seconds = request.position_seconds;
     match run_study(&state, move |db| {
         require_media_access(db, &owner, admin, &lookup)?;
-        learnvault_core::record_position(db, &owner, &media_id, position_seconds)
+        learnvault_core::browser_write(
+            db,
+            &owner,
+            || learnvault_core::record_position(db, &owner, &media_id, position_seconds),
+            |device| {
+                learnvault_core::queue_position(db, &owner, device, &media_id, position_seconds)
+            },
+        )
     })
     .await
     {
@@ -876,7 +883,12 @@ pub(crate) async fn set_completed(
     let completed = request.completed;
     match run_study(&state, move |db| {
         require_media_access(db, &owner, admin, &lookup)?;
-        learnvault_core::set_completed(db, &owner, &media_id, completed)
+        learnvault_core::browser_write(
+            db,
+            &owner,
+            || learnvault_core::set_completed(db, &owner, &media_id, completed),
+            |device| learnvault_core::queue_completed(db, &owner, device, &media_id, completed),
+        )
     })
     .await
     {
@@ -959,12 +971,28 @@ pub(crate) async fn create_note(
     let lookup = request.media_id.clone();
     match run_study(&state, move |db| {
         require_media_access(db, &owner, admin, &lookup)?;
-        learnvault_core::create_study_note(
+        learnvault_core::browser_write(
             db,
             &owner,
-            &request.media_id,
-            request.position_seconds,
-            &request.content,
+            || {
+                learnvault_core::create_study_note(
+                    db,
+                    &owner,
+                    &request.media_id,
+                    request.position_seconds,
+                    &request.content,
+                )
+            },
+            |device| {
+                learnvault_core::queue_note_create(
+                    db,
+                    &owner,
+                    device,
+                    &request.media_id,
+                    request.position_seconds,
+                    &request.content,
+                )
+            },
         )
     })
     .await
@@ -996,7 +1024,14 @@ pub(crate) async fn update_note(
         if let Some(media_id) = learnvault_core::study_note_media_id(db, &note_id)? {
             require_media_access(db, &owner, admin, &media_id)?;
         }
-        learnvault_core::update_study_note(db, &owner, &note_id, &request.content)
+        learnvault_core::browser_write(
+            db,
+            &owner,
+            || learnvault_core::update_study_note(db, &owner, &note_id, &request.content),
+            |device| {
+                learnvault_core::queue_note_update(db, &owner, device, &note_id, &request.content)
+            },
+        )
     })
     .await
     {
@@ -1027,7 +1062,12 @@ pub(crate) async fn delete_note(
         // The core delete records a tombstone, so an offline create cannot resurrect the
         // note. No journal operation is queued: the outbox belongs to the desktop side of
         // the half-duplex sync, and this server is the journal. Tracked in #472.
-        learnvault_core::delete_study_note(db, &owner, &note_id)
+        learnvault_core::browser_write(
+            db,
+            &owner,
+            || learnvault_core::delete_study_note(db, &owner, &note_id),
+            |device| learnvault_core::queue_note_delete(db, &owner, device, &note_id),
+        )
     })
     .await
     {
@@ -1094,12 +1134,28 @@ pub(crate) async fn create_bookmark(
     let lookup = request.media_id.clone();
     match run_study(&state, move |db| {
         require_media_access(db, &owner, admin, &lookup)?;
-        learnvault_core::create_media_bookmark(
+        learnvault_core::browser_write(
             db,
             &owner,
-            &request.media_id,
-            request.position_seconds,
-            &request.label,
+            || {
+                learnvault_core::create_media_bookmark(
+                    db,
+                    &owner,
+                    &request.media_id,
+                    request.position_seconds,
+                    &request.label,
+                )
+            },
+            |device| {
+                learnvault_core::queue_bookmark_create(
+                    db,
+                    &owner,
+                    device,
+                    &request.media_id,
+                    request.position_seconds,
+                    &request.label,
+                )
+            },
         )
     })
     .await
@@ -1136,7 +1192,12 @@ pub(crate) async fn delete_bookmark(
         }
         // Same choice as `delete_note`: the tombstone blocks a stale offline create, and a
         // server-side delete has no outbox to enqueue into. Tracked in #472.
-        learnvault_core::delete_media_bookmark(db, &owner, &bookmark_id)
+        learnvault_core::browser_write(
+            db,
+            &owner,
+            || learnvault_core::delete_media_bookmark(db, &owner, &bookmark_id),
+            |device| learnvault_core::queue_bookmark_delete(db, &owner, device, &bookmark_id),
+        )
     })
     .await
     {
@@ -1361,13 +1422,30 @@ pub(crate) async fn create_flashcard(
     let lookup = request.media_id.clone();
     match run_study(&state, move |db| {
         require_media_access(db, &owner, admin, &lookup)?;
-        learnvault_core::create_flashcard(
+        learnvault_core::browser_write(
             db,
             &owner,
-            &request.media_id,
-            &request.front,
-            &request.back,
-            request.position_seconds,
+            || {
+                learnvault_core::create_flashcard(
+                    db,
+                    &owner,
+                    &request.media_id,
+                    &request.front,
+                    &request.back,
+                    request.position_seconds,
+                )
+            },
+            |device| {
+                learnvault_core::queue_flashcard_create(
+                    db,
+                    &owner,
+                    device,
+                    &request.media_id,
+                    &request.front,
+                    &request.back,
+                    request.position_seconds,
+                )
+            },
         )
     })
     .await
@@ -1399,7 +1477,29 @@ pub(crate) async fn update_flashcard(
         if let Some(media_id) = learnvault_core::flashcard_media_id(db, &card_id)? {
             require_media_access(db, &owner, admin, &media_id)?;
         }
-        learnvault_core::update_flashcard(db, &owner, &card_id, &request.front, &request.back)
+        learnvault_core::browser_write(
+            db,
+            &owner,
+            || {
+                learnvault_core::update_flashcard(
+                    db,
+                    &owner,
+                    &card_id,
+                    &request.front,
+                    &request.back,
+                )
+            },
+            |device| {
+                learnvault_core::queue_flashcard_update(
+                    db,
+                    &owner,
+                    device,
+                    &card_id,
+                    &request.front,
+                    &request.back,
+                )
+            },
+        )
     })
     .await
     {
@@ -1427,7 +1527,12 @@ pub(crate) async fn delete_flashcard(
         if let Some(media_id) = learnvault_core::flashcard_media_id(db, &card_id)? {
             require_media_access(db, &owner, admin, &media_id)?;
         }
-        learnvault_core::delete_flashcard(db, &owner, &card_id)
+        learnvault_core::browser_write(
+            db,
+            &owner,
+            || learnvault_core::delete_flashcard(db, &owner, &card_id),
+            |device| learnvault_core::queue_flashcard_delete(db, &owner, device, &card_id),
+        )
     })
     .await
     {
@@ -1465,7 +1570,12 @@ pub(crate) async fn review_flashcard(
         if let Some(media_id) = learnvault_core::flashcard_media_id(db, &card_id)? {
             require_media_access(db, &owner, admin, &media_id)?;
         }
-        learnvault_core::review_flashcard(db, &owner, &card_id, rating)
+        learnvault_core::browser_write(
+            db,
+            &owner,
+            || learnvault_core::review_flashcard(db, &owner, &card_id, rating),
+            |device| learnvault_core::queue_review(db, &owner, device, &card_id, rating),
+        )
     })
     .await
     {

@@ -335,3 +335,142 @@ async fn an_operation_for_unknown_media_is_logged_without_a_progress_row() {
         .unwrap();
     assert_eq!(logged, 1, "a operação continua no diário");
 }
+
+fn study_post(uri: &str, cookie: &str, body: Value) -> Request<Body> {
+    Request::post(uri)
+        .header("origin", "http://localhost")
+        .header("cookie", cookie)
+        .header("content-type", "application/json")
+        .body(Body::from(body.to_string()))
+        .unwrap()
+}
+
+#[tokio::test]
+async fn a_browser_write_reaches_a_device_that_syncs_and_is_not_returned_to_the_writer() {
+    let temp = tempfile::tempdir().unwrap();
+    seed(&temp);
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let cookie = login(&app, ADMIN, ADMIN_PASSWORD).await;
+
+    // Before any device exists, a browser write is plain: nothing is journaled.
+    let plain = app
+        .clone()
+        .oneshot(study_post(
+            "/api/study/position",
+            &cookie,
+            json!({ "media_id": "m1", "position_seconds": 11 }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(plain.status(), StatusCode::OK);
+
+    // A desktop connects: it gets the state that existed (the 11 seconds) in its first pull.
+    let first = json_body(
+        app.clone()
+            .oneshot(pull_request("/api/sync/pull?device=desktop", &cookie))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(first["items"].as_array().unwrap().len(), 1);
+    assert_eq!(first["items"][0]["payload"]["position_seconds"], 11);
+    let cursor = first["cursor"].as_i64().unwrap();
+
+    // Now a browser write is journaled and delivered, and a note travels with its version.
+    app.clone()
+        .oneshot(study_post(
+            "/api/study/position",
+            &cookie,
+            json!({ "media_id": "m1", "position_seconds": 95 }),
+        ))
+        .await
+        .unwrap();
+    let note = app
+        .clone()
+        .oneshot(study_post(
+            "/api/study/notes",
+            &cookie,
+            json!({ "media_id": "m1", "position_seconds": 3, "content": "from the browser" }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(note.status(), StatusCode::CREATED);
+
+    let next = json_body(
+        app.clone()
+            .oneshot(pull_request(
+                &format!("/api/sync/pull?device=desktop&cursor={cursor}"),
+                &cookie,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let kinds: Vec<&str> = next["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["payload"]["kind"].as_str().unwrap())
+        .collect();
+    assert_eq!(kinds.len(), 2, "{next}");
+    assert!(kinds.contains(&"progress") && kinds.contains(&"note"));
+    assert!(
+        next["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|item| item["device_id"] == "server")
+    );
+
+    // Delivered once.
+    let again = json_body(
+        app.clone()
+            .oneshot(pull_request(
+                &format!("/api/sync/pull?device=desktop&cursor={}", next["cursor"]),
+                &cookie,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(again["items"].as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn the_server_device_id_is_reserved_and_another_user_never_sees_the_journal() {
+    let temp = tempfile::tempdir().unwrap();
+    seed(&temp);
+    seed_user(&temp, "u2", READER, READER_PASSWORD);
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let admin = login(&app, ADMIN, ADMIN_PASSWORD).await;
+    let reader = login(&app, READER, READER_PASSWORD).await;
+
+    let reserved = app
+        .clone()
+        .oneshot(pull_request("/api/sync/pull?device=server", &admin))
+        .await
+        .unwrap();
+    assert_eq!(reserved.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+    // The admin syncs a device and writes in a browser; the reader's pull stays empty.
+    app.clone()
+        .oneshot(pull_request("/api/sync/pull?device=desktop", &admin))
+        .await
+        .unwrap();
+    app.clone()
+        .oneshot(study_post(
+            "/api/study/position",
+            &admin,
+            json!({ "media_id": "m1", "position_seconds": 50 }),
+        ))
+        .await
+        .unwrap();
+    let theirs = json_body(
+        app.clone()
+            .oneshot(pull_request("/api/sync/pull?device=reader-pc", &reader))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(theirs["items"].as_array().unwrap().is_empty());
+}

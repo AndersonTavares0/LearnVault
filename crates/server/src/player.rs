@@ -78,12 +78,28 @@ pub(crate) async fn write(
     };
     let owner = user.user_id;
     match run_study(&state, move |db| {
-        learnvault_core::set_player_preference(
+        learnvault_core::browser_write(
             db,
             &owner,
-            request.video_speed,
-            request.audio_speed,
-            &request.subtitle_language,
+            || {
+                learnvault_core::set_player_preference(
+                    db,
+                    &owner,
+                    request.video_speed,
+                    request.audio_speed,
+                    &request.subtitle_language,
+                )
+            },
+            |device| {
+                learnvault_core::queue_preference(
+                    db,
+                    &owner,
+                    device,
+                    request.video_speed,
+                    request.audio_speed,
+                    &request.subtitle_language,
+                )
+            },
         )
     })
     .await
