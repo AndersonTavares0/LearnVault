@@ -6,7 +6,7 @@ import { GONE } from '@/components/course-picker';
 import { ConfirmDelete } from '@/components/confirm-delete';
 import { Markdown } from '@/components/markdown';
 import { NoteEditor } from '@/components/note-editor';
-import { Eyebrow, Panel } from '@/components/panel';
+import { Panel } from '@/components/panel';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useLocale } from '@/hooks/use-locale';
@@ -127,16 +127,9 @@ function Notebook({ courseId }: { courseId: string | null }) {
 	return (
 		<div className="space-y-8">
 			{courseId !== null && <Link to="/notes" className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" aria-hidden="true" />{tr('All notes', 'Todas as notas')}</Link>}
-			<PageHeader icon={NotebookPen} title={courseId === null ? tr('Notes', 'Notas') : tr(`${courseTitle} notes`, `Notas de ${courseTitle}`)} description={courseId === null ? tr(`${total} ${total === 1 ? 'note' : 'notes'} across ${courses.length} ${courses.length === 1 ? 'course' : 'courses'}.`, `${total} ${total === 1 ? 'nota' : 'notas'} em ${courses.length} ${courses.length === 1 ? 'curso' : 'cursos'}.`) : tr(`${total} ${total === 1 ? 'note' : 'notes'} in this course.`, `${total} ${total === 1 ? 'nota' : 'notas'} neste curso.`)} />
-			<div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
+			<PageHeader icon={NotebookPen} title={courseId === null ? tr('Notes', 'Notas') : tr(`${courseTitle} notes`, `Notas de ${courseTitle}`)} description={(courseId === null ? tr(`${total} ${total === 1 ? 'note' : 'notes'} across ${courses.length} ${courses.length === 1 ? 'course' : 'courses'}`, `${total} ${total === 1 ? 'nota' : 'notas'} em ${courses.length} ${courses.length === 1 ? 'curso' : 'cursos'}`) : tr(`${total} ${total === 1 ? 'note' : 'notes'} in this course`, `${total} ${total === 1 ? 'nota' : 'notas'} neste curso`)) + ` · ${tr(`${groups.length} ${groups.length === 1 ? 'lesson' : 'lessons'}`, `${groups.length} ${groups.length === 1 ? 'aula' : 'aulas'}`)} · ${tr(`${weekCount} this week`, `${weekCount} nesta semana`)}`} />
+			<div className="grid items-start gap-6">
 				<div className="min-w-0 space-y-6">
-					<div className="flex flex-wrap items-center gap-3">
-						<div role="group" aria-label={tr('Group notes', 'Agrupar notas')} className="flex gap-2">
-							<Button size="sm" variant={view === 'lesson' ? 'selected' : 'outline'} aria-pressed={view === 'lesson'} onClick={() => setView('lesson')}>{tr('By lesson', 'Por aula')}{view === 'lesson' && <Check className="size-3.5 text-primary" aria-hidden="true" />}</Button>
-							<Button size="sm" variant={view === 'date' ? 'selected' : 'outline'} aria-pressed={view === 'date'} onClick={() => setView('date')}>{tr('By date', 'Por data')}{view === 'date' && <Check className="size-3.5 text-primary" aria-hidden="true" />}</Button>
-						</div>
-						{matches.length > 0 && <Button size="sm" variant="outline" className="ml-auto" onClick={exportMarkdown}><Download />{tr('Export as Markdown', 'Exportar em Markdown')}</Button>}
-					</div>
 					<div className="flex flex-wrap items-center gap-3">
 						<div role="search" aria-label={tr('Notes', 'Notas')} className="relative min-w-0 max-w-md flex-1 basis-60">
 							<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
@@ -148,6 +141,11 @@ function Notebook({ courseId }: { courseId: string | null }) {
 								{courses.map((course) => <option key={course.id} value={course.id}>{course.title} ({course.count})</option>)}
 							</select>
 						)}
+						<div role="group" aria-label={tr('Group notes', 'Agrupar notas')} className="flex gap-2">
+							<Button size="sm" variant={view === 'lesson' ? 'selected' : 'outline'} aria-pressed={view === 'lesson'} onClick={() => setView('lesson')}>{tr('By lesson', 'Por aula')}{view === 'lesson' && <Check className="size-3.5 text-primary" aria-hidden="true" />}</Button>
+							<Button size="sm" variant={view === 'date' ? 'selected' : 'outline'} aria-pressed={view === 'date'} onClick={() => setView('date')}>{tr('By date', 'Por data')}{view === 'date' && <Check className="size-3.5 text-primary" aria-hidden="true" />}</Button>
+						</div>
+						{matches.length > 0 && <Button size="sm" variant="outline" className="ml-auto" onClick={exportMarkdown}><Download />{tr('Export as Markdown', 'Exportar em Markdown')}</Button>}
 					</div>
 					{(update.error || remove.error) && <p role="alert" className="text-sm text-destructive">{(update.error ?? remove.error)?.message}</p>}
 					{notes.isPending ? (
@@ -182,29 +180,6 @@ function Notebook({ courseId }: { courseId: string | null }) {
 						))
 					)}
 				</div>
-				<aside className="space-y-6 lg:sticky lg:top-24">
-					<Panel className="space-y-4 p-5 sm:p-6">
-						<Eyebrow>{tr('Notebook', 'Caderno')}</Eyebrow>
-						<dl className="space-y-3 text-sm">
-							<div className="flex items-baseline justify-between gap-3"><dt className="text-muted-foreground">{tr('Notes', 'Notas')}</dt><dd className="font-semibold tabular-nums">{total}</dd></div>
-							<div className="flex items-baseline justify-between gap-3"><dt className="text-muted-foreground">{tr('Lessons', 'Aulas')}</dt><dd className="font-semibold tabular-nums">{groups.length}</dd></div>
-							<div className="flex items-baseline justify-between gap-3"><dt className="text-muted-foreground">{tr('This week', 'Esta semana')}</dt><dd className="font-semibold tabular-nums">{weekCount}</dd></div>
-						</dl>
-					</Panel>
-					{groups.length > 0 && (
-						<Panel className="space-y-3 p-5 sm:p-6">
-							<Eyebrow>{tr('Lessons', 'Aulas')}</Eyebrow>
-							<ul className="space-y-2 text-sm">
-								{groups.slice(0, 8).map((group) => (
-									<li key={group.items[0].note.mediaId} className="flex items-baseline justify-between gap-3">
-										<span className="truncate">{group.lesson}</span>
-										<span className="text-muted-foreground tabular-nums">{group.items.length}</span>
-									</li>
-								))}
-							</ul>
-						</Panel>
-					)}
-				</aside>
 			</div>
 			<ConfirmDelete
 				open={deleting !== null}
