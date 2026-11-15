@@ -160,7 +160,7 @@ describe('Sign in', () => {
 			vi.spyOn(transport, 'scanSource').mockRejectedValue(new Error('The server could not be reached.'));
 			renderApp('/', { catalog });
 			fireEvent.click(await screen.findByRole('button', { name: 'Refresh courses' }));
-			expect(await screen.findByText('Catalog updated, but this source could not be read: “NAS”. The server could not be reached.')).toBeTruthy();
+			expect(await screen.findByText('Catalog updated, but this source could not be read: “NAS”. The server could not be reached. Unavailable courses and your study progress are kept.')).toBeTruthy();
 		});
 
 		it('keeps the specific message when a rescan is already running', async () => {

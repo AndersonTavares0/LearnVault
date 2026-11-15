@@ -67,7 +67,11 @@ export function CourseCard({ entry, profile, variant = 'grid', canManage = false
 					<div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${percent}%` }} /></div>
 				</div>
 				<p className="hidden w-20 shrink-0 text-right text-xs text-muted-foreground lg:block">{lastStudied}</p>
-				<span className="shrink-0 text-xs font-semibold text-primary">{tr('Resume', 'Retomar')}</span>
+				{entry.status === 'in_progress' && entry.next ? (
+					<Link to={routerPath(href('course', entry.courseId, entry.next.path))} className="relative z-10 shrink-0 text-xs font-semibold text-primary hover:underline" aria-label={tr(`Resume ${entry.course.title}: ${entry.next.title}`, `Retomar ${entry.course.title}: ${entry.next.title}`)}>{tr('Resume', 'Retomar')}</Link>
+				) : (
+					<span className="shrink-0 text-xs font-semibold text-primary">{tr('Open', 'Abrir')}</span>
+				)}
 				{manageable && <div className="relative z-10"><CourseManagement course={entry.course} courseId={entry.courseId} lessons={entry.total} compact /></div>}
 			</li>
 		);
@@ -80,7 +84,7 @@ export function CourseCard({ entry, profile, variant = 'grid', canManage = false
 					<h3 className="text-base font-semibold">
 						<Link to={routerPath(href('course', entry.courseId))} title={entry.course.title} className="line-clamp-2 [overflow-wrap:anywhere] after:absolute after:inset-0 after:content-[''] hover:underline">{entry.course.title}</Link>
 					</h3>
-					<p className="truncate text-sm text-muted-foreground">{entry.next && entry.status === 'in_progress' ? `${tr('Next:', 'Próxima:')} ${entry.next.title}` : entry.status === 'not_started' ? tr('Not started', 'Não iniciado') : progressLabel(entry)}</p>
+					<p className="truncate text-sm text-muted-foreground">{entry.next && entry.status === 'in_progress' ? `${tr('Next:', 'Próxima:')} ${entry.next.title}` : entry.total === 0 ? tr('No lessons found', 'Sem aulas') : entry.status === 'not_started' ? tr('Not started', 'Não iniciado') : progressLabel(entry)}</p>
 				</div>
 				<div className="hidden w-56 shrink-0 sm:block">{entry.done > 0 ? <ProgressBar value={entry.done / Math.max(1, entry.total)} label={progressLabel(entry)} /> : <p className="text-sm text-muted-foreground">{progressLabel(entry)}</p>}</div>
 				<span className="hidden w-32 shrink-0 text-sm text-muted-foreground md:block">{entry.lastStudiedAt ? tr(`Studied ${lastStudied}`, `Estudado ${lastStudied}`) : tr('Not studied', 'Não estudado')}</span>
@@ -119,8 +123,17 @@ export function CourseCard({ entry, profile, variant = 'grid', canManage = false
 						<span className="ml-auto text-sm font-semibold text-primary">{tr('Resume', 'Retomar')}</span>
 					</div>
 				) : entry.total > 0 ? (
-					<ProgressBar value={entry.done / Math.max(1, entry.total)} label={progressLabel(entry)} />
-				) : null}
+					<div className="space-y-1">
+						<ProgressBar value={entry.done / Math.max(1, entry.total)} label={progressLabel(entry)} />
+						{entry.status === 'in_progress' && entry.next && (
+							<Link to={routerPath(href('course', entry.courseId, entry.next.path))} className="relative z-10 inline-flex items-center text-sm font-semibold text-primary hover:underline" aria-label={tr(`Resume ${entry.course.title}: ${entry.next.title}`, `Retomar ${entry.course.title}: ${entry.next.title}`)}>
+								{tr('Resume', 'Retomar')}
+							</Link>
+						)}
+					</div>
+				) : (
+					<p className="text-sm text-muted-foreground">{tr('No lessons found', 'Sem aulas')}</p>
+				)}
 				{listed && entry.next && entry.status === 'in_progress' && <p className="truncate text-sm">{tr('Next:', 'Próxima:')} {entry.next.title}</p>}
 			</div>
 		</li>

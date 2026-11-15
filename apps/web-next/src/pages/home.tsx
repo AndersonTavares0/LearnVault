@@ -366,7 +366,7 @@ export function LibraryActions({ onMessage }: { onMessage: (message: string) => 
 	const runImport = (folder?: string) =>
 		importCourse.mutate(folder, {
 			onSuccess: () => {
-				onMessage(tr('Course imported.', 'Curso importado.'));
+				onMessage(tr('Course imported. Existing files are read in place; unsupported files are skipped without changing your folder.', 'Curso importado. Os arquivos são lidos no lugar; arquivos não suportados são ignorados sem alterar sua pasta.'));
 				setImportOpen(false);
 				setImportPath('');
 				navigate('/');
