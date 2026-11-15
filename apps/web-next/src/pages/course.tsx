@@ -144,7 +144,7 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 									{entry.favorite ? tr('Favorited', 'Favoritado') : tr('Favorite course', 'Favoritar curso')}
 								</Button>
 							)}
-							{user?.isAdmin && <CourseManagement course={course} courseId={courseId} lessons={counts.lessons} onRemoved={() => navigate('/', { replace: true })} />}
+							{user?.isAdmin && !course.remote && <CourseManagement course={course} courseId={courseId} lessons={counts.lessons} onRemoved={() => navigate('/', { replace: true })} />}
 						</div>
 					</div>
 					<div className="order-1 max-w-md lg:order-2 lg:max-w-none"><CourseCover course={course} profile={user?.userId ?? ''} eager done={entry?.done ?? 0} total={entry?.total ?? 0} map={!readingOnly} className={readingOnly ? 'hidden sm:block' : undefined} /></div>

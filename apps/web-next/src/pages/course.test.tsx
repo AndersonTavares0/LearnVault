@@ -65,6 +65,13 @@ describe('course page', () => {
 		expect(await screen.findByRole('button', { name: 'Manage course' })).toBeTruthy();
 	});
 
+	it('does not offer local-only management for a course that lives on a remote source', async () => {
+		const remote: Catalog = { complete: true, looseFiles: [], nodes: [{ ...catalog.nodes[0], courseId: 'remote-1', title: 'Redes', remote: true }] };
+		renderApp('/course/remote-1', { catalog: remote });
+		await screen.findByRole('heading', { level: 1, name: 'Redes' });
+		expect(screen.queryByRole('button', { name: 'Manage course' })).toBeNull();
+	});
+
 	it('explains a course that is gone', async () => {
 		renderApp('/course/unknown', { catalog });
 		expect(await screen.findByRole('heading', { name: 'Course not found' })).toBeTruthy();

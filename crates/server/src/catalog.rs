@@ -65,6 +65,11 @@ struct CatalogNodeResponse {
     /// Avaliação da organização do curso. Presente só nos nós de curso.
     #[serde(skip_serializing_if = "Option::is_none")]
     structure: Option<StructureResponse>,
+    /// Verdadeiro nos cursos que vivem em uma fonte remota (a fonte ou uma pasta escolhida dela).
+    /// Ausente nos cursos locais; a SPA usa o campo para não oferecer ações que só existem para
+    /// cursos locais (capa, ordem, remoção do registro).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    remote: bool,
     files: Vec<CatalogFileResponse>,
     loose_files: Vec<CatalogFileResponse>,
     children: Vec<CatalogNodeResponse>,
@@ -275,6 +280,7 @@ fn build_course_catalog(
             cover_version: crate::covers::cover_version(covers_dir, &course.id),
             source_folder,
             structure: Some(structure),
+            remote: false,
             files: Vec::new(),
             loose_files: loose_files.into_iter().map(Into::into).collect(),
             children: children.into_iter().map(Into::into).collect(),
@@ -359,6 +365,7 @@ fn remote_node(
         cover_version: None,
         source_folder: None,
         structure: Some(structure),
+        remote: true,
         files: Vec::new(),
         loose_files: loose_files.into_iter().map(Into::into).collect(),
         children: children.into_iter().map(Into::into).collect(),
@@ -603,6 +610,7 @@ impl From<CatalogNode> for CatalogNodeResponse {
             cover_version: None,
             source_folder: None,
             structure: None,
+            remote: false,
             files: node.files.into_iter().map(Into::into).collect(),
             loose_files: node.loose_files.into_iter().map(Into::into).collect(),
             children: node.children.into_iter().map(Into::into).collect(),
@@ -705,6 +713,7 @@ mod tests {
             cover_version: None,
             source_folder: Some("Cursos 2026".to_owned()),
             structure: None,
+            remote: false,
             files: Vec::new(),
             loose_files: Vec::new(),
             children: Vec::new(),
@@ -721,6 +730,7 @@ mod tests {
             cover_version: None,
             source_folder: None,
             structure: None,
+            remote: false,
             files: Vec::new(),
             loose_files: Vec::new(),
             children: Vec::new(),
@@ -728,6 +738,27 @@ mod tests {
 
         let json_without = serde_json::to_value(without).unwrap();
         assert!(json_without.get("source_folder").is_none());
+        // A local course carries no `remote` key at all; only a remote one says so.
+        assert!(json_without.get("remote").is_none());
+        assert!(json.get("remote").is_none());
+    }
+
+    #[test]
+    fn a_remote_course_node_says_it_is_remote() {
+        let node = CatalogNodeResponse {
+            title: "Redes".to_owned(),
+            path: String::new(),
+            role: "course",
+            course_id: Some("r1".to_owned()),
+            cover_version: None,
+            source_folder: None,
+            structure: None,
+            remote: true,
+            files: Vec::new(),
+            loose_files: Vec::new(),
+            children: Vec::new(),
+        };
+        assert_eq!(serde_json::to_value(node).unwrap()["remote"], true);
     }
 
     #[test]

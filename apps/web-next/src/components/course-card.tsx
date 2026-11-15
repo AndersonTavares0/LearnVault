@@ -47,6 +47,8 @@ type Props = { entry: CourseEntry; profile: string; variant?: 'grid' | 'shelf' |
  */
 export function CourseCard({ entry, profile, variant = 'grid', canManage = false }: Props) {
 	const toggle = useToggleCourseFavorite();
+	// Cover, lesson order and registry removal only exist for local courses; a remote course is managed from Settings.
+	const manageable = canManage && !entry.course.remote;
 	const listed = variant === 'list';
 	const lastStudied = entry.lastStudiedAt ? new Date(entry.lastStudiedAt * 1000).toLocaleDateString(getLocale(), { month: 'short', day: 'numeric' }) : '–';
 	if (variant === 'compact') {
@@ -65,7 +67,7 @@ export function CourseCard({ entry, profile, variant = 'grid', canManage = false
 				</div>
 				<p className="hidden w-20 shrink-0 text-right text-xs text-muted-foreground lg:block">{lastStudied}</p>
 				<span className="shrink-0 text-xs font-semibold text-primary">{tr('Resume', 'Retomar')}</span>
-				{canManage && <div className="relative z-10"><CourseManagement course={entry.course} courseId={entry.courseId} lessons={entry.total} compact /></div>}
+				{manageable && <div className="relative z-10"><CourseManagement course={entry.course} courseId={entry.courseId} lessons={entry.total} compact /></div>}
 			</li>
 		);
 	}
@@ -84,7 +86,7 @@ export function CourseCard({ entry, profile, variant = 'grid', canManage = false
 					</Button>
 				</div>
 			)}
-			{canManage && <div className="absolute top-1 right-12 z-10"><CourseManagement course={entry.course} courseId={entry.courseId} lessons={entry.total} compact /></div>}
+			{manageable && <div className="absolute top-1 right-12 z-10"><CourseManagement course={entry.course} courseId={entry.courseId} lessons={entry.total} compact /></div>}
 			<div className={cn('min-w-0 flex-1 space-y-1', !listed && 'pr-10')}>
 				<h3 className="card-heading font-heading text-base leading-snug font-semibold text-balance">
 					{/* The link covers the whole card; the favorite button sits above it. */}

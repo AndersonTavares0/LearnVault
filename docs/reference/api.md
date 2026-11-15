@@ -133,7 +133,9 @@ courses have no custom cover, manual ordering, search indexing or on-demand tran
 A source can be split into several courses by choosing folders as roots (ADR 0004). Choosing a folder
 moves its already scanned media to a course of its own and every later scan of the source is applied
 per root, so progress, notes and flashcards follow each lesson. In `GET /api/catalog` each root is a
-top-level `course` node with its own opaque `id`. The tree of a root starts at its own folder, so
+top-level `course` node with its own opaque `id`. Every course that lives on a remote source (a root or
+the source itself) carries `remote: true`; local courses have no such key, and the SPA does not offer
+them the local-only actions (cover, lesson order, removal from the registry). The tree of a root starts at its own folder, so
 the folders above it never appear, while every file keeps its path relative to the source (the path
 media requests use). The title is the folder name, with as many parent folders in parentheses as it
 takes to tell roots of a source apart (`Redes (Pentest)`), counted only among the roots the user can

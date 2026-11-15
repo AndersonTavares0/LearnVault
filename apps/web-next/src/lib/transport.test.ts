@@ -1610,6 +1610,16 @@ describe('sync payload normalization', () => {
 	});
 });
 
+describe('remote courses in the catalog', () => {
+	it('keeps the remote flag only when the server sends it', () => {
+		const node = (extra: object) => ({ title: 'Redes', path: '', role: 'course', course_id: 'c', files: [], loose_files: [], children: [], ...extra });
+		const [remote, local, falsy] = normalizeCatalog({ complete: true, nodes: [node({ remote: true }), node({}), node({ remote: 'yes' })] }).nodes;
+		expect(remote.remote).toBe(true);
+		expect('remote' in local).toBe(false);
+		expect('remote' in falsy).toBe(false);
+	});
+});
+
 describe('remote source folders', () => {
 	it('reads a folder listing and treats an unknown state as not choosable', () => {
 		const listing = normalizeSourceListing({ path: 'A', folders: [{ name: 'B', path: 'A/B', state: 'free' }, { name: 'C', path: 'A/C', state: 'surprise' }], media_files: 2, other_files: 1, truncated: true });
