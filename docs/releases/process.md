@@ -10,13 +10,13 @@ Before `1.0.0`, Release Please increments the patch version for `feat:`, `fix:`,
 4. The published release workflow builds Linux server tarballs and the Windows desktop NSIS installer, verifies checksums with `SHA256SUMS`, and generates the contributors list.
 5. Verify assets, checksums, and the Contributors section before general distribution.
 
-The release workflow receives the published tag via environment variables and validates that it strictly matches `vMAJOR.MINOR.PATCH` with non-negative numeric components and no leading zeros; pre-release tags are refused.
+The release workflow receives the published tag via environment variables and validates that it strictly matches `vMAJOR.MINOR.PATCH` with non-negative numeric components and no leading zeros; tags with a pre-release suffix such as `-rc.1` are refused. A GitHub pre-release of a plain `vX.Y.Z` tag is accepted: it is built and published under its exact version only, and never moves `:stable`, `:latest` or the `<major>.<minor>` image tags.
 
 ## How releases are prepared
 
-Release Please runs in stable mode (`.github/release-please/release-please-config.json`: `versioning: default`, `prerelease: false`). Preparing a release pull request updates version files and the English changelog without publishing anything. Merging that PR creates the `vX.Y.Z` tag and publishes the GitHub Release; the subsequent asset and container publication jobs wait for approval in the `release` environment. That environment does not gate the initial tag or GitHub Release.
+Release Please runs with `versioning: default` and `prerelease: true`, so every release before `1.0.0` is created as a GitHub pre-release. Remove `prerelease` when `1.0.0` is cut. Preparing a release pull request updates version files and the English changelog without publishing anything. Merging that PR creates the `vX.Y.Z` tag and publishes the GitHub Release; the subsequent asset and container publication jobs wait for approval in the `release` environment. That environment does not gate the initial tag or GitHub Release.
 
-The next stable release is explicitly pinned with `release-as: 0.9.0` to move on from `0.9.0-rc.5` without carrying its prerelease suffix into a new version. Keep its generated release PR unmerged until the final review and explicit maintainer authorization to publish. Routine code and configuration PRs are not that authorization. Before merging the generated `0.9.0` PR, remove this one-time `release-as` override in that same PR while keeping its generated `0.9.0` version files; otherwise later release preparation would keep proposing `0.9.0`. In that same PR, update the matching assertion in `scripts/release-policy.test.mjs` to require the override to be absent, then run `pnpm run test:scripts`.
+The next release is explicitly pinned with `release-as: 0.9.0` to move on from `0.9.0-rc.5` without carrying its prerelease suffix into a new version. It is published as a GitHub pre-release: the desktop updater reads `releases/latest`, which skips pre-releases, so installed apps are not offered it, and the image keeps only its `0.9.0` tag. To make a version the general stable one, publish a later release that is not a pre-release (after 1.0.0 or by removing `prerelease`); editing a pre-release into a stable one does not trigger the publication workflow. Keep its generated release PR unmerged until the final review and explicit maintainer authorization to publish. Routine code and configuration PRs are not that authorization. Before merging the generated `0.9.0` PR, remove this one-time `release-as` override in that same PR while keeping its generated `0.9.0` version files; otherwise later release preparation would keep proposing `0.9.0`. In that same PR, update the matching assertion in `scripts/release-policy.test.mjs` to require the override to be absent, then run `pnpm run test:scripts`.
 
 ## Publication approval
 
@@ -70,8 +70,8 @@ The image is built for `linux/amd64` and `linux/arm64` and pushed as a single mu
 | Tag | When it is applied |
 | --- | --- |
 | `<version>` (e.g. `0.9.0`) | Always. Points at the exact release. |
-| `<major>.<minor>` (e.g. `0.9`) | Only for stable tags; moves within the minor line. |
-| `stable`, `latest` | Only for stable tags. |
+| `<major>.<minor>` (e.g. `0.9`) | Only for stable (not pre-release) releases; moves within the minor line. |
+| `stable`, `latest` | Only for stable (not pre-release) releases. |
 
 Every tag points at a digest that was scanned for HIGH and CRITICAL vulnerabilities, signed with keyless cosign, and verified before tagging. A deployment that needs a fixed build must pin the exact version (see `deploy/README.md`).
 
@@ -88,7 +88,7 @@ Provenance and the SBOM are attached to the same digest; inspect them with `dock
 ## Troubleshooting
 
 - **Desktop update is not offered after a release.** The release must be published (not a draft) and not a pre-release, and `latest.json` must carry a version greater than the installed app. Check with `gh release view <tag> --json isDraft,isPrerelease`.
-- **The release workflow refuses the tag.** The tag must match `vX.Y.Z` exactly and be a published non-pre-release.
+- **The release workflow refuses the tag.** The tag must match `vX.Y.Z` exactly and be a published, non-draft release.
 - **Signature verification fails in the updater or in `update.sh`.** The image or the update file was not signed by this repository's release workflow on a release tag or `main`. Re-run the release workflow for the tag instead of editing the assets by hand.
 - **The container image has no version tag.** The image is pushed by digest first and tagged only after the vulnerability scan and the signature check pass. If the scan fails, no tag is applied, which is intended.
 - **Windows installer build fails.** Check the NSIS build log. A failure stops before the publish job, so nothing is published.

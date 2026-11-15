@@ -41,18 +41,19 @@ test('manual release repair only runs from main', t => {
     assert.equal(releaseEvent.status, 0, releaseEvent.stderr);
 });
 
-test('release repair rejects missing, draft, and prerelease targets without creating or publishing releases', t => {
+test('release repair rejects missing and draft targets, and reports pre-releases, without creating or publishing releases', t => {
     const { directory } = fixture(t);
-    const script = runBlock('Require an existing published stable release');
+    const script = runBlock('Require an existing published release');
     const wrapped = `gh() { printf '%s' "$GH_RESULT"; }\n${script}`;
     const runWithFunction = metadata => spawnSync('bash', ['-c', wrapped], {
         cwd: directory, encoding: 'utf8',
-        env: { PATH: process.env.PATH, GH_TOKEN: 'synthetic', GITHUB_REPOSITORY: 'owner/repo', RELEASE_TAG: 'v1.2.3', GH_RESULT: metadata }
+        env: { PATH: process.env.PATH, GH_TOKEN: 'synthetic', GITHUB_REPOSITORY: 'owner/repo', RELEASE_TAG: 'v1.2.3', GH_RESULT: metadata, GITHUB_OUTPUT: join(directory, 'kind-output') }
     });
     const published = runWithFunction('{"isDraft":false,"isPrerelease":false}');
     assert.equal(published.status, 0, published.stderr);
     assert.notEqual(runWithFunction('{"isDraft":true,"isPrerelease":false}').status, 0);
-    assert.notEqual(runWithFunction('{"isDraft":false,"isPrerelease":true}').status, 0);
+    assert.equal(runWithFunction('{"isDraft":false,"isPrerelease":true}').status, 0);
+    assert.notEqual(runWithFunction('{"isDraft":false}').status, 0);
     const missing = spawnSync('bash', ['-c', `gh() { return 1; }\n${script}`], {
         cwd: directory, encoding: 'utf8',
         env: { PATH: process.env.PATH, GH_TOKEN: 'synthetic', GITHUB_REPOSITORY: 'owner/repo', RELEASE_TAG: 'v1.2.3' }
@@ -92,7 +93,7 @@ test('updater notes use the selected release body with a fallback and repair lea
 
 test('manual repair does not move latest or publish before the post-build tag check', () => {
     assert.match(workflow, /flavor: latest=false/);
-    assert.match(workflow, /type=raw,value=latest,enable=\$\{\{ github\.event_name == 'release' && !contains\(needs\.validate-tag\.outputs\.tag, '-'\) \}\}/);
+    assert.match(workflow, /type=raw,value=latest,enable=\$\{\{ github\.event_name == 'release' && needs\.validate-tag\.outputs\.prerelease == 'false' \}\}/);
     const containerCheck = workflow.indexOf('- name: Confirm container release tag did not move');
     const containerPush = workflow.indexOf('- name: Build and push the image by digest');
     const containerScan = workflow.indexOf('- name: Scan the pushed image for HIGH and CRITICAL vulnerabilities');
@@ -163,8 +164,8 @@ test('release tags accept strict stable versions only', t => {
     }
 });
 
-test('pre-release tags never move stable, latest or minor image tags and no rc tag is applied', () => {
-    const stableOnly = "!contains(needs.validate-tag.outputs.tag, '-')";
+test('pre-releases never move stable, latest or minor image tags and no rc tag is applied', () => {
+    const stableOnly = "needs.validate-tag.outputs.prerelease == 'false'";
     assert.equal(workflow.split(stableOnly).length - 1, 3);
     assert.doesNotMatch(workflow, /value=rc\b/);
 });
@@ -188,16 +189,18 @@ test('pushing and publishing wait for approval in the release environment', () =
     }
 });
 
-test('a release must be published and must not be a draft or a pre-release', t => {
+test('a release must be published and not a draft; a pre-release is flagged so it keeps the moving tags', t => {
     const { directory } = fixture(t);
-    const script = runBlock('Require an existing published stable release');
+    const script = runBlock('Require an existing published release');
+    const output = join(directory, 'kind-output');
     const wrapped = `gh() { printf '%s' "$GH_RESULT"; }\n${script}`;
     const run = (tag, metadata) => spawnSync('bash', ['-c', wrapped], {
         cwd: directory, encoding: 'utf8',
-        env: { PATH: process.env.PATH, GH_TOKEN: 'synthetic', GITHUB_REPOSITORY: 'owner/repo', RELEASE_TAG: tag, GH_RESULT: metadata }
+        env: { PATH: process.env.PATH, GH_TOKEN: 'synthetic', GITHUB_REPOSITORY: 'owner/repo', RELEASE_TAG: tag, GH_RESULT: metadata, GITHUB_OUTPUT: output }
     });
-    assert.notEqual(run('v0.9.0-rc.1', '{"isDraft":false,"isPrerelease":true}').status, 0);
+    assert.notEqual(run('v0.9.0', '{"isDraft":true,"isPrerelease":true}').status, 0);
     assert.notEqual(run('v0.9.0', '{"isDraft":true,"isPrerelease":false}').status, 0);
     assert.equal(run('v0.9.0', '{"isDraft":false,"isPrerelease":false}').status, 0);
-    assert.notEqual(run('v0.9.0', '{"isDraft":false,"isPrerelease":true}').status, 0);
+    assert.equal(run('v0.9.0', '{"isDraft":false,"isPrerelease":true}').status, 0);
+    assert.match(readFileSync(output, 'utf8'), /prerelease=false\nprerelease=true\n$/);
 });
