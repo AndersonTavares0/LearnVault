@@ -104,7 +104,7 @@ export function HomePage() {
 						) : view === 'shelf' ? (
 							<Shelf entries={sorted} profile={profile} canManage={Boolean(user?.isAdmin)} />
 						) : (
-							<ul className={view === 'covers' ? 'grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3' : 'divide-y border-y'}>
+							<ul className={view === 'covers' ? 'grid grid-cols-[repeat(auto-fill,minmax(12rem,1fr))] gap-4' : 'divide-y border-y'}>
 								{sorted.map((entry) => <CourseCard key={entry.courseId} entry={entry} profile={profile} canManage={Boolean(user?.isAdmin)} variant={view === 'covers' ? 'grid' : view} />)}
 							</ul>
 						)}
