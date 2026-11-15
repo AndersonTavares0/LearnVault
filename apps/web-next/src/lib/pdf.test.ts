@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeOutlineIndex, MAX_OUTLINE_DEPTH, MAX_OUTLINE_ITEMS, readOutline, type OutlineSource, clampPage, containsText, foldText, markHits, quoteWithPage, findLessonPdf, formatFileSize, isPdf, lessonPdfId, marksToMarkdown, nextPage, pageAt, pagesMatching, pageScroll, pageWindow, pdfCommand, sanitizeQuote, selectionBoxes, stepZoom } from './pdf';
+import { activeOutlineIndex, MAX_OUTLINE_DEPTH, MAX_OUTLINE_ITEMS, readOutline, type OutlineSource, clampPage, containsText, foldText, markHits, quoteWithPage, findLessonPdf, formatFileSize, isPdf, lessonPdfId, marksToMarkdown, markToEditorValues, nextPage, pageAt, pagesMatching, pageScroll, pageWindow, pdfCommand, sanitizeQuote, selectionBoxes, stepZoom } from './pdf';
 import type { FileEntry, Lesson, PdfAnnotation } from './transport';
 
 const file = (name: string, extra: Partial<FileEntry> = {}): FileEntry => ({ name, path: `c/${name}`, size: 1, mediaId: name, kind: 'material', availability: 'available', ...extra });
@@ -261,5 +261,20 @@ describe('the table of contents', () => {
 		expect(activeOutlineIndex(items, 9)).toBe(4);
 		expect(activeOutlineIndex(items, 0)).toBe(-1);
 		expect(activeOutlineIndex([], 3)).toBe(-1);
+	});
+});
+
+describe('markToEditorValues', () => {
+	const item = { annotationId: 'a', mediaId: 'm', page: 2, kind: 'highlight', color: 'yellow', rects: [{ x: 0.1, y: 0.2, width: 0.5, height: 0.1 }], quote: '', content: '', createdAt: 1, updatedAt: 1 } satisfies PdfAnnotation;
+	it('flips the top-left fractions into PDF user space', () => {
+		const [one] = markToEditorValues(item, [0, 0, 400, 300], 0);
+		expect(one.value.rect).toEqual([40, 210, 240, 240]);
+		expect(one.value.pageIndex).toBe(1);
+		expect(one.value.color).toEqual([232, 192, 106]);
+	});
+	it('turns an underline into a thin band at the foot of the line', () => {
+		const [one] = markToEditorValues({ ...item, kind: 'underline' }, [0, 0, 400, 300], 0);
+		expect(one.value.rect[3] - one.value.rect[1]).toBeCloseTo(4.5);
+		expect(one.value.rect[1]).toBeCloseTo(210);
 	});
 });

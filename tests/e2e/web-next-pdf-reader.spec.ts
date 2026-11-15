@@ -1,5 +1,5 @@
 import { expect, type Page } from '@playwright/test';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { buildPdf } from './fixtures/make-pdf';
 import { collectCspViolations, createTest, expectNoAxeViolations, signIn } from './web-next-support';
@@ -230,6 +230,23 @@ test('the selection is copied as plain text or as a quote with its page', async 
 	await selectFirstLine(page);
 	await page.getByRole('button', { name: 'Copy as quote' }).click();
 	expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(/^“Page one: ownership\.” — .+, p\. 1$/);
+});
+
+test('a mark is exported as an annotated PDF and sent to the lesson notes', async ({ page, origin }) => {
+	await openReader(page, origin);
+	await selectFirstLine(page);
+	await page.getByRole('button', { name: 'Annotate' }).click();
+	await page.getByRole('button', { name: 'Highlight' }).click();
+	await expect(page.getByRole('list').getByText('Page one: ownership.')).toBeVisible({ timeout: 10_000 });
+
+	const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Save PDF with marks' }).click()]);
+	expect(download.suggestedFilename()).toMatch(/-annotated\.pdf$/);
+	const bytes = await readFile((await download.path())!);
+	expect(bytes.subarray(0, 5).toString()).toBe('%PDF-');
+	expect(bytes.toString('latin1')).toContain('/Subtype /Highlight');
+
+	await page.getByRole('button', { name: 'Send mark on page 1 to notes' }).click();
+	await expect(page.getByText('Saved to the lesson notes.')).toBeVisible();
 });
 
 
