@@ -31,6 +31,19 @@ describe('progress', () => {
 		expect(screen.getByText(/Level 2 · /)).toBeTruthy();
 	});
 
+	it('lists the courses under way with their progress and counts finished lessons', async () => {
+		renderApp('/progress', { catalog, rewards, recent: [done('a')] });
+		const courses = within(await screen.findByRole('region', { name: 'Courses' }));
+		expect(courses.getByRole('link', { name: 'Rust' }).getAttribute('href')).toBe('/course/rust');
+		expect(courses.getByText('50% complete · 1 lesson left')).toBeTruthy();
+		expect(courses.getByText('Lessons completed').nextElementSibling?.textContent).toBe('1');
+	});
+
+	it('says so when no course is under way', async () => {
+		renderApp('/progress', { catalog, rewards });
+		expect(await screen.findByText(/No course under way/)).toBeTruthy();
+	});
+
 	it('offers to claim only a finished mission', async () => {
 		const claim = vi.spyOn(transport, 'claimDailyMission').mockResolvedValue(true);
 		renderApp('/progress', { catalog, rewards });
