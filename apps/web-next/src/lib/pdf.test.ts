@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clampPage, findLessonPdf, formatFileSize, isPdf, lessonPdfId, marksToMarkdown, nextPage, pageAt, pagesMatching, pageScroll, pageWindow, pdfCommand, sanitizeQuote, selectionBoxes, stepZoom } from './pdf';
+import { clampPage, containsText, foldText, markHits, quoteWithPage, findLessonPdf, formatFileSize, isPdf, lessonPdfId, marksToMarkdown, nextPage, pageAt, pagesMatching, pageScroll, pageWindow, pdfCommand, sanitizeQuote, selectionBoxes, stepZoom } from './pdf';
 import type { FileEntry, Lesson, PdfAnnotation } from './transport';
 
 const file = (name: string, extra: Partial<FileEntry> = {}): FileEntry => ({ name, path: `c/${name}`, size: 1, mediaId: name, kind: 'material', availability: 'available', ...extra });
@@ -177,5 +177,32 @@ describe('pagesMatching and marksToMarkdown', () => {
 		const item: PdfAnnotation = { annotationId: 'a', mediaId: 'm', page: 2, kind: 'highlight', color: 'yellow', rects: [], quote: 'HUD\u0003GR', content: 'Keep my note', createdAt: 1, updatedAt: 1 };
 		expect(marksToMarkdown('Guide.pdf', [item])).toBe('# Marks in Guide.pdf\n\n## Page 2\n\n- **Highlight**\n  > Keep my note\n');
 		expect(item.quote).toBe('HUD\u0003GR');
+	});
+});
+
+describe('searching the text of a document', () => {
+	it('ignores case and accents in both directions', () => {
+		expect(foldText('Ação Rápida')).toBe('acao rapida');
+		expect(containsText('Introdução à Física', 'INTRODUCAO')).toBe(true);
+		expect(containsText('Introducao', 'introdução')).toBe(true);
+		expect(containsText('anything', '   ')).toBe(false);
+		expect(pagesMatching(['Ownership', 'Física', 'ownership again'], 'fisica')).toEqual([2]);
+		expect(pagesMatching(['Ownership', 'x', 'ownership again'], 'OWNERSHIP')).toEqual([1, 3]);
+	});
+
+	it('marks the text runs that hold the query and clears the others', () => {
+		const layer = document.createElement('div');
+		layer.innerHTML = '<span>Moves values</span><span>Other text</span><span>Values again</span>';
+		expect(markHits(layer, 'values')).toBe(2);
+		expect([...layer.querySelectorAll('span')].map((run) => run.classList.contains('pdf-hit'))).toEqual([true, false, true]);
+		expect(markHits(layer, 'other')).toBe(1);
+		expect([...layer.querySelectorAll('span.pdf-hit')].map((run) => run.textContent)).toEqual(['Other text']);
+		expect(markHits(layer, '')).toBe(0);
+		expect(layer.querySelectorAll('.pdf-hit')).toHaveLength(0);
+		expect(markHits(null, 'x')).toBe(0);
+	});
+
+	it('quotes a selection with the document title and the page', () => {
+		expect(quoteWithPage('Ownership moves values.', 'Ownership notes.pdf', 4)).toBe('“Ownership moves values.” — Ownership notes, p. 4');
 	});
 });

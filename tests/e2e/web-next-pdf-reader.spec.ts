@@ -129,3 +129,82 @@ test('the night theme dims the pages, persists per user, and passes axe in the d
 	await page.getByRole('button', { name: 'Reading theme' }).click();
 	await expect(page.getByRole('menuitemradio', { name: 'Night' })).toHaveAttribute('aria-checked', 'true');
 });
+
+const selectFirstLine = (page: Page, pageNumber = 1) => page.evaluate((number) => {
+	const line = document.querySelector(`[data-page="${number}"] .pdf-text-layer span`);
+	const range = document.createRange();
+	range.selectNodeContents(line!);
+	const selection = window.getSelection();
+	selection?.removeAllRanges();
+	selection?.addRange(range);
+}, pageNumber);
+
+test('Ctrl+F finds inside the document, marks the hits on the page and Escape clears the search', async ({ page, origin }) => {
+	await openReader(page, origin);
+	await page.locator('[data-page="1"]').click();
+	await page.keyboard.press('Control+f');
+	const field = page.getByRole('searchbox', { name: 'Search in the document' });
+	await expect(field).toBeFocused();
+
+	await field.fill('BORROWING');
+	await field.press('Enter');
+	await expect(page.getByText(/Found on 1 page: now on page 2/)).toBeVisible();
+	// The hit is marked in the text of the page it is on, and the query survives the page change.
+	await expect(page.locator('[data-page="2"] .pdf-text-layer span.pdf-hit')).toContainText('borrowing');
+	await expect(pageField(page)).toHaveValue('2');
+	await expect(field).toHaveValue('BORROWING');
+
+	await field.press('Escape');
+	await expect(page.getByRole('searchbox', { name: 'Search in the document' })).toHaveCount(0);
+	await expect(page.locator('.pdf-text-layer span.pdf-hit')).toHaveCount(0);
+});
+
+test('a mark is deleted only after confirming, and the deletion can be undone', async ({ page, origin }) => {
+	await openReader(page, origin);
+	await selectFirstLine(page);
+	await page.getByRole('button', { name: 'Annotate' }).click();
+	await page.getByRole('button', { name: 'Highlight' }).click();
+	const listed = page.getByRole('list').getByText('Page one: ownership.');
+	await expect(listed).toBeVisible({ timeout: 10_000 });
+
+	await page.getByRole('button', { name: 'Delete mark on page 1' }).click();
+	const dialog = page.getByRole('alertdialog', { name: 'Delete this mark?' });
+	await expect(dialog).toBeVisible();
+	await dialog.getByRole('button', { name: 'Cancel' }).click();
+	await expect(listed).toBeVisible();
+
+	await page.getByRole('button', { name: 'Delete mark on page 1' }).click();
+	await page.getByRole('alertdialog').getByRole('button', { name: 'Delete mark' }).click();
+	await expect(listed).toHaveCount(0);
+	await expect(page.getByText('Mark on page 1 deleted.')).toBeVisible();
+
+	await page.getByRole('button', { name: 'Undo' }).click();
+	await expect(page.getByRole('list').getByText('Page one: ownership.')).toBeVisible({ timeout: 10_000 });
+	await expect(page.getByText('Mark on page 1 deleted.')).toHaveCount(0);
+});
+
+test('jumping to a mark flashes it on its page', async ({ page, origin }) => {
+	await openReader(page, origin);
+	await selectFirstLine(page);
+	await page.getByRole('button', { name: 'Annotate' }).click();
+	await page.getByRole('button', { name: 'Highlight' }).click();
+	await expect(page.getByRole('list').getByText('Page one: ownership.')).toBeVisible({ timeout: 10_000 });
+	await page.getByRole('button', { name: 'Page 1', exact: true }).last().click();
+	await expect(page.locator('[data-page="1"] .ring-foreground').first()).toBeVisible();
+	await expect(page.locator('[data-page="1"] .ring-foreground')).toHaveCount(0, { timeout: 5_000 });
+});
+
+test('the selection is copied as plain text or as a quote with its page', async ({ page, origin, context }) => {
+	await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+	await openReader(page, origin);
+	await selectFirstLine(page);
+	await page.getByRole('button', { name: 'Annotate' }).click();
+
+	await page.getByRole('button', { name: 'Copy text' }).click();
+	await expect(page.getByText('Copied.')).toBeVisible();
+	expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('Page one: ownership.');
+
+	await selectFirstLine(page);
+	await page.getByRole('button', { name: 'Copy as quote' }).click();
+	expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(/^“Page one: ownership\.” — .+, p\. 1$/);
+});

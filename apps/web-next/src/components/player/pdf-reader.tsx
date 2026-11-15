@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ExternalLink, Highlighter, Keyboard, Maximize2, Minus, Moon, MoreVertical, PanelRight, Plus, Rows3, Search, Square, StickyNote, Sun, Underline, X } from 'lucide-react';
+import { ChevronDown, Copy, Quote, ChevronLeft, ChevronRight, ChevronUp, ExternalLink, Highlighter, Keyboard, Maximize2, Minus, Moon, MoreVertical, PanelRight, Plus, Rows3, Search, Square, StickyNote, Sun, Underline, X } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent } from 'react';
 import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 import { usePdfAnnotationMutations, usePdfAnnotations } from '@/app/data';
@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { studySyncSupported } from '@/lib/player';
 import { tr } from '@/lib/i18n';
-import { clampPage, loadPdfJs, nextPage, pageAt, pageScroll, pagesMatching, pageWindow, pdfCommand, PDF_MARK_COLORS, PDF_PAGE_GAP, sanitizeQuote, selectionBoxes, stepZoom, type PdfTheme, type PdfView } from '@/lib/pdf';
+import { clampPage, loadPdfJs, nextPage, pageAt, pageScroll, pagesMatching, pageWindow, markHits, pdfCommand, PDF_MARK_COLORS, PDF_PAGE_GAP, quoteWithPage, sanitizeQuote, selectionBoxes, stepZoom, type PdfTheme, type PdfView } from '@/lib/pdf';
 import { transport, type FileEntry, type PdfAnnotation, type PdfAnnotationColor, type PdfRect } from '@/lib/transport';
 import { cn } from '@/lib/utils';
 import type { PlayerPreferences } from '@/lib/player-preferences';
@@ -121,6 +121,10 @@ export function PdfReader({ file, courseId, initialPage, onPage, preferences, on
 	const [scrollTop, setScrollTop] = useState(0);
 	const [viewport, setViewport] = useState(0);
 	const [help, setHelp] = useState(false);
+	const [flash, setFlash] = useState<string | null>(null);
+	const [copied, setCopied] = useState<'text' | 'quote' | null>(null);
+	const findInput = useRef<HTMLInputElement>(null);
+	const timers = useRef<number[]>([]);
 	const mediaId = file.mediaId ?? null;
 	const marks = usePdfAnnotations(mediaId);
 	const { create, update, remove } = usePdfAnnotationMutations(mediaId);
@@ -193,7 +197,12 @@ export function PdfReader({ file, courseId, initialPage, onPage, preferences, on
 		if (pages) onPage(current, pages);
 	}, [current, pages]); // eslint-disable-line react-hooks/exhaustive-deps -- report the page, not the callback identity
 
-	useEffect(() => () => cancelAnimationFrame(frame.current), []);
+	useEffect(() => () => {
+		cancelAnimationFrame(frame.current);
+		timers.current.forEach((timer) => window.clearTimeout(timer));
+	}, []);
+	// Opening the find panel puts the cursor in its field, whichever way it was opened.
+	useEffect(() => { if (findOpen) findInput.current?.focus(); }, [findOpen]);
 
 	const ratio = base && base.width > 0 ? base.height / base.width : DEFAULT_RATIO;
 	const pageWidth = Math.max(0, zoom === 'fit' ? Math.floor(width) : Math.round((base?.width ?? 0) * zoom));
@@ -267,6 +276,25 @@ export function PdfReader({ file, courseId, initialPage, onPage, preferences, on
 			setSearching(false);
 		}
 	};
+	/** Escape in the field: forget the search and close the panel. */
+	const closeFind = () => { setQuery(''); setSearch(null); setFindOpen(false); };
+	/** Flashes a mark on its page for a moment, so a jump from the panel shows where it landed. */
+	const flashMark = (annotationId: string) => {
+		setFlash(annotationId);
+		timers.current.push(window.setTimeout(() => setFlash(null), 1600));
+	};
+	const copySelection = async (as: 'text' | 'quote') => {
+		const selected = selectionIn(stage.current);
+		const text = selected ? sanitizeQuote(selected.range.toString()) : '';
+		if (!selected || !text || !navigator.clipboard) return;
+		try {
+			await navigator.clipboard.writeText(as === 'quote' ? quoteWithPage(text, file.name, selected.page) : text);
+			setCopied(as);
+			timers.current.push(window.setTimeout(() => setCopied(null), 2000));
+		} catch {
+			setCopied(null);
+		}
+	};
 	const stepMatch = (direction: 1 | -1) => {
 		if (!search || search.pages.length === 0) return;
 		const at = (search.at + direction + search.pages.length) % search.pages.length;
@@ -295,6 +323,14 @@ export function PdfReader({ file, courseId, initialPage, onPage, preferences, on
 		}
 	};
 	const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+		// Ctrl/Cmd+F finds inside the document while the reader has focus, and leaves the browser's own find alone elsewhere.
+		if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'f' && load.state === 'ready') {
+			event.preventDefault();
+			setFindOpen(true);
+			findInput.current?.focus();
+			findInput.current?.select();
+			return;
+		}
 		// Typing in a field or the page search is never a shortcut.
 		if ((event.target as HTMLElement).closest('input, select, textarea, [contenteditable="true"]')) return;
 		// Browser shortcuts such as Ctrl+- and Ctrl+N are not ours to take.
@@ -398,7 +434,7 @@ export function PdfReader({ file, courseId, initialPage, onPage, preferences, on
 				<form role="search" aria-label={tr('Search in the document', 'Buscar no documento')} onSubmit={(event) => void runSearch(event)} className="flex flex-wrap items-center gap-2 rounded-2xl border bg-card p-2">
 					<div className="relative min-w-0 flex-1">
 						<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-						<Input type="search" value={query} onChange={(event) => setQuery(event.target.value)} aria-label={tr('Search in the document', 'Buscar no documento')} placeholder={tr('Search in the document', 'Buscar no documento')} className="h-11 pl-9" />
+						<Input ref={findInput} type="search" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); closeFind(); } }} aria-label={tr('Search in the document', 'Buscar no documento')} placeholder={tr('Search in the document', 'Buscar no documento')} className="h-11 pl-9" />
 					</div>
 					<Button type="submit" variant="outline" size="sm" disabled={searching || !query.trim()}>{tr('Search', 'Buscar')}</Button>
 					{search && search.pages.length > 0 && (
@@ -426,6 +462,13 @@ export function PdfReader({ file, courseId, initialPage, onPage, preferences, on
 					<Button variant="outline" size="sm" aria-keyshortcuts="h" disabled={!hasSelection || create.isPending} onMouseDown={(event: MouseEvent) => event.preventDefault()} onClick={() => mark('highlight')}><Highlighter />{tr('Highlight', 'Destacar')}</Button>
 					<Button variant="outline" size="sm" aria-keyshortcuts="u" disabled={!hasSelection || create.isPending} onMouseDown={(event: MouseEvent) => event.preventDefault()} onClick={() => mark('underline')}><Underline />{tr('Underline', 'Sublinhar')}</Button>
 					<Button variant="outline" size="sm" disabled={!hasSelection || create.isPending} onMouseDown={(event: MouseEvent) => event.preventDefault()} onClick={() => mark('note')}><StickyNote />{tr('Add note', 'Adicionar nota')}</Button>
+					{typeof navigator !== 'undefined' && navigator.clipboard && (
+						<>
+							<Button variant="outline" size="sm" disabled={!hasSelection} onMouseDown={(event: MouseEvent) => event.preventDefault()} onClick={() => void copySelection('text')}><Copy />{tr('Copy text', 'Copiar texto')}</Button>
+							<Button variant="outline" size="sm" disabled={!hasSelection} onMouseDown={(event: MouseEvent) => event.preventDefault()} onClick={() => void copySelection('quote')}><Quote />{tr('Copy as quote', 'Copiar como citação')}</Button>
+						</>
+					)}
+					<span role="status" aria-live="polite" className="text-sm text-muted-foreground empty:hidden">{copied ? tr('Copied.', 'Copiado.') : ''}</span>
 					{(create.error || update.error || remove.error) && <p role="alert" className="text-sm text-destructive">{(create.error ?? update.error ?? remove.error)?.message}</p>}
 				</div>
 			)}
@@ -455,7 +498,7 @@ export function PdfReader({ file, courseId, initialPage, onPage, preferences, on
 								{(mode === 'continuous' ? Array.from({ length: pages }, (_, index) => index + 1) : [current]).map((number) => (
 									<div key={number} className="mx-auto" style={{ width: pageWidth || undefined }}>
 										{number - 1 >= paint.first && number - 1 <= paint.last ? (
-											<PdfPage doc={load.doc} page={number} pages={pages} width={width} zoom={zoom} ratio={ratio} pageTheme={theme} marks={(marks.data ?? []).filter((item) => item.page === number)} />
+											<PdfPage doc={load.doc} page={number} pages={pages} width={width} zoom={zoom} ratio={ratio} pageTheme={theme} marks={(marks.data ?? []).filter((item) => item.page === number)}  hits={search?.query ?? ''} flashId={flash} />
 										) : (
 											// A placeholder with the document's page shape keeps the scrollbar still.
 											<div aria-hidden="true" className="w-full shadow-sm" style={{ aspectRatio: `1 / ${ratio}`, backgroundColor: PAGE_SURFACES[theme] }} />
@@ -471,7 +514,7 @@ export function PdfReader({ file, courseId, initialPage, onPage, preferences, on
 			{studySyncSupported && mediaId && panelOpen && (
 				<section aria-labelledby="pdf-marks-heading" className="space-y-3 rounded-[1.75rem] border bg-card p-5">
 					<h2 id="pdf-marks-heading" className="font-heading text-xl font-bold">{tr('Marks in this document', 'Marcações neste documento')}</h2>
-					<PdfMarks title={file.name} items={marks.data ?? []} page={current} onGo={go} onChange={(annotationId, change) => update.mutate({ annotationId, ...change })} onDelete={(annotationId) => remove.mutate(annotationId)} pending={remove.isPending} />
+					<PdfMarks title={file.name} items={marks.data ?? []} page={current} onGo={(target, annotationId) => { go(target); if (annotationId) flashMark(annotationId); }} onChange={(annotationId, change) => update.mutate({ annotationId, ...change })} onDelete={(annotationId) => remove.mutate(annotationId)} onRestore={(item) => create.mutate({ page: item.page, kind: item.kind, color: item.color, rects: item.rects, quote: item.quote, ...(item.content ? { content: item.content } : {}) })} pending={remove.isPending || create.isPending} />
 				</section>
 			)}
 
@@ -503,13 +546,19 @@ type PdfPageProps = {
 	ratio: number;
 	pageTheme: PdfTheme;
 	marks: PdfAnnotation[];
+	/** The active search, so its hits are marked in the page text. */
+	hits: string;
+	/** The mark to flash for a moment after a jump from the panel. */
+	flashId: string | null;
 };
 
 /** One page: its canvas, its marks and its text layer. Mounted only while the page is on screen. */
-function PdfPage({ doc, page, pages, width, zoom, ratio, pageTheme, marks }: PdfPageProps) {
+function PdfPage({ doc, page, pages, width, zoom, ratio, pageTheme, marks, hits, flashId }: PdfPageProps) {
 	const canvas = useRef<HTMLCanvasElement>(null);
 	const textLayer = useRef<HTMLDivElement>(null);
 	const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+	const hitsRef = useRef(hits);
+	useEffect(() => { hitsRef.current = hits; }, [hits]);
 
 	useEffect(() => {
 		if (!width) return;
@@ -537,6 +586,7 @@ function PdfPage({ doc, page, pages, width, zoom, ratio, pageTheme, marks }: Pdf
 			await render.promise;
 			if (cancelled) return;
 			await new pdfjs.TextLayer({ textContentSource: pageProxy.streamTextContent(), container: textTarget, viewport }).render();
+			markHits(textTarget, hitsRef.current);
 		})().catch(() => undefined); // a cancelled render rejects; a real failure leaves the page blank and the toolbar usable
 		return () => {
 			cancelled = true;
@@ -544,11 +594,14 @@ function PdfPage({ doc, page, pages, width, zoom, ratio, pageTheme, marks }: Pdf
 		};
 	}, [doc, page, width, zoom]);
 
+	// A new search marks the text that is already on the page; the render marks the text it draws later.
+	useEffect(() => { markHits(textLayer.current, hits); }, [hits]);
+
 	return (
 		<div data-page={page} className="relative w-full shadow-sm" style={{ backgroundColor: PAGE_SURFACES[pageTheme], ...(size ? {} : { aspectRatio: `1 / ${ratio}` }) }}>
 			<canvas ref={canvas} role="img" aria-label={tr(`Page ${page} of ${pages}`, `Página ${page} de ${pages}`)} style={{ filter: PAGE_FILTER[pageTheme] }} className={cn('block', !size && 'hidden')} />
 			{size && marks.flatMap((item) => item.rects.map((rect, index) => (
-				<span key={`${item.annotationId}-${index}`} aria-hidden="true" className={cn('pointer-events-none absolute', item.kind === 'underline' ? 'border-b-2' : pageTheme === 'night' ? 'mix-blend-screen' : 'mix-blend-multiply', item.kind === 'note' && 'outline-1 outline-dashed outline-foreground/40')}
+				<span key={`${item.annotationId}-${index}`} aria-hidden="true" className={cn('pointer-events-none absolute', item.kind === 'underline' ? 'border-b-2' : pageTheme === 'night' ? 'mix-blend-screen' : 'mix-blend-multiply', item.annotationId === flashId && 'ring-2 ring-foreground motion-safe:animate-pulse', item.kind === 'note' && 'outline-1 outline-dashed outline-foreground/40')}
 					style={{ left: `${rect.x * 100}%`, top: `${rect.y * 100}%`, width: `${rect.width * 100}%`, height: `${rect.height * 100}%`, ...(item.kind === 'underline' ? { borderColor: PDF_MARK_COLORS[item.color] } : { backgroundColor: PDF_MARK_COLORS[item.color] }) }} />
 			)))}
 			<div ref={textLayer} className="pdf-text-layer" />

@@ -1,5 +1,6 @@
 import { Download, MessageSquareText, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { marksToMarkdown, PDF_MARK_COLORS, sanitizeQuote } from '@/lib/pdf';
 import { tr } from '@/lib/i18n';
@@ -28,9 +29,12 @@ type Props = {
 	title: string;
 	items: PdfAnnotation[];
 	page: number;
-	onGo: (page: number) => void;
+	/** Goes to the page of a mark; the id lets the reader flash that mark. */
+	onGo: (page: number, annotationId?: string) => void;
 	onChange: (annotationId: string, change: { color?: PdfAnnotationColor; content?: string }) => void;
 	onDelete: (annotationId: string) => void;
+	/** Puts back a mark that was deleted in this session. */
+	onRestore: (item: PdfAnnotation) => void;
 	pending: boolean;
 };
 
@@ -38,8 +42,11 @@ type Props = {
  * The marks in this PDF, in page order: edit the note and the colour of each, jump to its page,
  * delete it, or keep them all as a Markdown file. None of it changes the PDF itself.
  */
-export function PdfMarks({ title, items, page, onGo, onChange, onDelete, pending }: Props) {
+export function PdfMarks({ title, items, page, onGo, onChange, onDelete, onRestore, pending }: Props) {
 	const [scope, setScope] = useState<'page' | 'all'>('all');
+	const [confirming, setConfirming] = useState<PdfAnnotation | null>(null);
+	// The last deleted mark can be put back until another one is deleted or the reader is closed.
+	const [undo, setUndo] = useState<PdfAnnotation | null>(null);
 	const shown = [...(scope === 'page' ? items.filter((item) => item.page === page) : items)].sort((a, b) => a.page - b.page || a.createdAt - b.createdAt);
 	const exportMarks = () => {
 		const url = URL.createObjectURL(new Blob([marksToMarkdown(title, items)], { type: 'text/markdown' }));
@@ -72,10 +79,10 @@ export function PdfMarks({ title, items, page, onGo, onChange, onDelete, pending
 								<div className="flex flex-wrap items-center gap-2">
 									<span aria-hidden="true" className="size-3 shrink-0 rounded-full" style={{ backgroundColor: PDF_MARK_COLORS[item.color] }} />
 									<span className="text-xs font-semibold tracking-[0.12em] text-muted-foreground uppercase">{kindName(item.kind)}</span>
-									<Button variant="link" size="sm" className="h-auto p-0" onClick={() => onGo(item.page)}>{tr(`Page ${item.page}`, `Página ${item.page}`)}</Button>
+									<Button variant="link" size="sm" className="h-auto p-0" onClick={() => onGo(item.page, item.annotationId)}>{tr(`Page ${item.page}`, `Página ${item.page}`)}</Button>
 									<div className="ml-auto flex items-center">
 										<ColorSwatches size="sm" label={tr(`Color of the mark on page ${item.page}`, `Cor da marcação da página ${item.page}`)} value={item.color} onChange={(color) => onChange(item.annotationId, { color })} />
-										<Button variant="ghost" size="icon" disabled={pending} aria-label={tr(`Delete mark on page ${item.page}`, `Excluir marcação da página ${item.page}`)} onClick={() => onDelete(item.annotationId)}><Trash2 /></Button>
+										<Button variant="ghost" size="icon" disabled={pending} aria-label={tr(`Delete mark on page ${item.page}`, `Excluir marcação da página ${item.page}`)} onClick={() => setConfirming(item)}><Trash2 /></Button>
 									</div>
 								</div>
 								{quote ? <blockquote className="border-l-4 pl-3 text-sm" style={{ borderColor: PDF_MARK_COLORS[item.color] }}>{quote}</blockquote> : (
@@ -87,6 +94,26 @@ export function PdfMarks({ title, items, page, onGo, onChange, onDelete, pending
 					})}
 				</ul>
 			)}
+			<div role="status" aria-live="polite" className="empty:hidden">
+				{undo && (
+					<p className="flex flex-wrap items-center gap-2 rounded-xl bg-muted px-3 py-2 text-sm">
+						{tr(`Mark on page ${undo.page} deleted.`, `Marcação da página ${undo.page} excluída.`)}
+						<Button variant="link" size="sm" className="h-auto p-0" disabled={pending} onClick={() => { onRestore(undo); setUndo(null); }}>{tr('Undo', 'Desfazer')}</Button>
+					</p>
+				)}
+			</div>
+			<AlertDialog open={confirming !== null} onOpenChange={(open) => { if (!open) setConfirming(null); }}>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>{tr('Delete this mark?', 'Excluir esta marcação?')}</AlertDialogTitle>
+						<AlertDialogDescription>{tr('Its note is deleted with it. You can undo this until you leave the document. The PDF itself is never changed.', 'A nota dela também é excluída. Você pode desfazer até sair do documento. O PDF em si nunca é alterado.')}</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel>{tr('Cancel', 'Cancelar')}</AlertDialogCancel>
+						<AlertDialogAction variant="destructive" onClick={() => { if (confirming) { onDelete(confirming.annotationId); setUndo(confirming); } setConfirming(null); }}>{tr('Delete mark', 'Excluir marcação')}</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
 		</div>
 	);
 }
