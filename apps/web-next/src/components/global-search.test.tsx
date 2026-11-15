@@ -52,12 +52,12 @@ describe('global search', () => {
 		const { router } = renderApp('/', {});
 		fireEvent.change(searchbox(), { target: { value: 'own' } });
 		const options = await screen.findAllByRole('option');
-		fireEvent.click(options.find((option) => option.textContent === 'RustCourse · Opens curriculum')!);
+		fireEvent.click(options.find((option) => option.textContent === 'RustCourse')!);
 		await waitFor(() => expect(router.state.location.pathname).toBe('/course/rust'));
 
 		fireEvent.change(searchbox(), { target: { value: 'own' } });
 		const lessons = await screen.findAllByRole('option');
-		fireEvent.click(lessons.find((option) => option.textContent === 'OwnershipRust · Opens lesson')!);
+		fireEvent.click(lessons.find((option) => option.textContent === 'OwnershipRust')!);
 		await waitFor(() => expect(router.state.location.pathname).toBe('/course/rust/r%2Fown.mp4'));
 	});
 

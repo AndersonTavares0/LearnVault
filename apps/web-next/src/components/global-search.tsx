@@ -167,7 +167,7 @@ export function GlobalSearch() {
 								return (
 									<Option key={course.courseId} id={`global-search-${index}`} active={active === index} onClick={() => openItem({ kind: 'course', course })}>
 										<span className="mt-0.5 text-primary" aria-hidden="true"><BookOpen className="size-4" /></span>
-										<span className="min-w-0 flex-1"><span className="block font-medium">{course.title}</span><span className="text-xs text-muted-foreground">{tr('Course · Opens curriculum', 'Curso · Abre o currículo')}</span></span>
+										<span className="min-w-0 flex-1"><span className="block font-medium">{course.title}</span><span className="text-xs text-muted-foreground">{tr('Course', 'Curso')}</span></span>
 									</Option>
 								);
 							})}
@@ -180,7 +180,7 @@ export function GlobalSearch() {
 								return (
 									<Option key={lesson.mediaId} id={`global-search-${index}`} active={active === index} onClick={() => openItem({ kind: 'lesson', lesson })}>
 										<span className="mt-0.5 text-primary" aria-hidden="true"><Play className="size-4" /></span>
-										<span className="min-w-0 flex-1"><span className="block font-medium">{lesson.title}</span><span className="text-xs text-muted-foreground">{lesson.courseTitle} · {tr('Opens lesson', 'Abre a aula')}</span></span>
+										<span className="min-w-0 flex-1"><span className="block font-medium">{lesson.title}</span><span className="text-xs text-muted-foreground">{lesson.courseTitle}</span></span>
 									</Option>
 								);
 							})}
