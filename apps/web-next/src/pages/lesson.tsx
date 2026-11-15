@@ -217,8 +217,8 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 			<header className="mb-6 space-y-4">
 				<div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
 					<div className="min-w-0 space-y-1">
-						<Link to={path(href('course', courseId))} className="inline-flex min-h-11 items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground">
-							<ChevronLeft className="size-4 shrink-0" aria-hidden="true" /><span className="max-w-[28rem] truncate">{location?.moduleTitle ? `${course.title} · ${location.moduleTitle}` : course.title}</span>
+						<Link to={path(href('course', courseId))} className="inline-flex min-h-11 max-w-full items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground">
+							<ChevronLeft className="size-4 shrink-0" aria-hidden="true" /><span className="min-w-0 max-w-[28rem] truncate">{location?.moduleTitle ? `${course.title} · ${location.moduleTitle}` : course.title}</span>
 						</Link>
 						<h1 className="font-heading text-3xl leading-tight font-bold text-balance sm:text-4xl">{lesson.title}</h1>
 					</div>
@@ -291,7 +291,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 					)}
 
 					<Tabs value={activeTab} onValueChange={(value) => setTab(String(value))}>
-						<TabsList variant="line" aria-label={tr('Lesson tools', 'Ferramentas da aula')} className="w-full justify-start border-b">
+						<TabsList variant="line" aria-label={tr('Lesson tools', 'Ferramentas da aula')} className="w-full justify-start overflow-x-auto border-b">
 							<TabsTrigger value="lessons">{tr('Overview', 'Visão geral')}</TabsTrigger>
 							{hasNotes && <TabsTrigger value="notes">{tr('Notes', 'Notas')}</TabsTrigger>}
 							{hasNotes && <TabsTrigger value="bookmarks">{tr('Timestamps', 'Marcadores')}</TabsTrigger>}
