@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { ActivityHeatmap } from '@/components/activity-heatmap';
 import { Eyebrow, Panel } from '@/components/panel';
-import { ProgressBar, routerPath } from '@/components/course-card';
+import { progressLabel, ProgressBar, routerPath } from '@/components/course-card';
 import { Button } from '@/components/ui/button';
 import { useLocale } from '@/hooks/use-locale';
 import { formatCount } from '@/lib/catalog';
@@ -59,7 +59,8 @@ export function ProgressPage() {
 			<PageHeader icon={ChartNoAxesColumn} title={tr('Your progress', 'Seu progresso')} description={`${tr(`Level ${game.level.level}`, `Nível ${game.level.level}`)} · ${game.level.xp} XP`} />
 
 			<div className="grid items-start gap-6 lg:grid-cols-12">
-				<Panel className="order-1 space-y-4 p-5 sm:p-6 lg:col-span-8">
+				<div className="order-1 min-w-0 space-y-6 lg:col-span-8">
+				<Panel className="space-y-4 p-5 sm:p-6">
 					<div className="flex flex-wrap items-start justify-between gap-4">
 						<div className="min-w-0">
 							<Eyebrow>{tr('This week', 'Esta semana')}</Eyebrow>
@@ -98,12 +99,11 @@ export function ProgressPage() {
 						)}
 					</div>
 				</Panel>
+				<CoursesPanel entries={library.entries} />
+				</div>
 
-				<Panel className="order-4 lg:col-span-12">
-					<ActivityHeatmap today={study.today} activeDays={study.activeDaysYear} />
-				</Panel>
-
-				<Panel className="order-2 min-w-0 p-5 sm:p-6 lg:col-span-4 lg:row-span-2"><section aria-labelledby="missions-heading" className="space-y-3">
+				<div className="order-2 min-w-0 space-y-6 lg:col-span-4">
+				<Panel className="min-w-0 p-5 sm:p-6"><section aria-labelledby="missions-heading" className="space-y-3">
 					<h2 id="missions-heading" className="font-heading text-2xl font-semibold">{tr('Today', 'Hoje')}</h2>
 					<ul className="divide-y border-y">
 						{game.missions.map((mission) => {
@@ -125,14 +125,53 @@ export function ProgressPage() {
 						})}
 					</ul>
 				</section></Panel>
-			<Panel className="order-3 p-5 sm:p-6 lg:col-span-8"><section aria-labelledby="badges-heading" className="space-y-3">
-				<h2 id="badges-heading" className="font-heading text-2xl font-semibold">{tr('Badges', 'Emblemas')}</h2>
-				<ul className="grid grid-cols-2 gap-x-3 sm:grid-cols-3 xl:grid-cols-6">
-					{game.badges.map((badge) => <BadgeTile key={badge.id} badge={badge} />)}
-				</ul>
-			</section></Panel>
+				<Panel className="p-5 sm:p-6"><section aria-labelledby="badges-heading" className="space-y-3">
+					<h2 id="badges-heading" className="font-heading text-2xl font-semibold">{tr('Badges', 'Emblemas')}</h2>
+					<ul className="grid grid-cols-3 gap-x-2 gap-y-4 lg:grid-cols-2 xl:grid-cols-3">
+						{game.badges.map((badge) => <BadgeTile key={badge.id} badge={badge} />)}
+					</ul>
+				</section></Panel>
+				</div>
+
+				<Panel className="order-3 lg:col-span-12">
+					<ActivityHeatmap today={study.today} activeDays={study.activeDaysYear} />
+				</Panel>
 			</div>
 		</div>
+	);
+}
+
+type LibraryEntries = ReturnType<typeof buildLibrary>['entries'];
+
+/** Where the learner stands in the library: lessons done, courses under way and finished, most recent first. */
+function CoursesPanel({ entries }: { entries: LibraryEntries }) {
+	const lessonsDone = entries.reduce((sum, entry) => sum + entry.done, 0);
+	const finished = entries.filter((entry) => entry.status === 'completed').length;
+	const active = entries.filter((entry) => entry.status === 'in_progress').sort((a, b) => (b.lastStudiedAt ?? 0) - (a.lastStudiedAt ?? 0));
+	return (
+		<Panel className="space-y-4 p-5 sm:p-6"><section aria-labelledby="courses-heading" className="space-y-4">
+			<div className="flex flex-wrap items-end justify-between gap-2">
+				<h2 id="courses-heading" className="font-heading text-2xl font-semibold">{tr('Courses', 'Cursos')}</h2>
+				<Link to={routerPath(href('home'))} className="inline-flex min-h-11 items-center text-sm font-semibold text-primary hover:underline">{tr('All courses', 'Todos os cursos')}</Link>
+			</div>
+			<dl className="grid grid-cols-3 gap-3 border-y py-3 text-sm">
+				<div><dt className="text-muted-foreground">{tr('Lessons completed', 'Aulas concluídas')}</dt><dd className="mt-1 font-semibold tabular-nums">{lessonsDone}</dd></div>
+				<div><dt className="text-muted-foreground">{tr('In progress', 'Em andamento')}</dt><dd className="mt-1 font-semibold tabular-nums">{active.length}</dd></div>
+				<div><dt className="text-muted-foreground">{tr('Finished', 'Concluídos')}</dt><dd className="mt-1 font-semibold tabular-nums">{finished}</dd></div>
+			</dl>
+			{active.length === 0 ? (
+				<p className="text-sm text-muted-foreground">{tr('No course under way. Open a lesson and it shows up here.', 'Nenhum curso em andamento. Abra uma aula e ele aparece aqui.')}</p>
+			) : (
+				<ul className="divide-y">
+					{active.slice(0, 6).map((entry) => (
+						<li key={entry.courseId} className="relative space-y-2 py-3 first:pt-0 last:pb-0">
+							<Link to={routerPath(href('course', entry.courseId))} title={entry.course.title} className="line-clamp-1 font-semibold after:absolute after:inset-0 after:content-[''] hover:underline">{entry.course.title}</Link>
+							<ProgressBar value={entry.done / Math.max(1, entry.total)} label={progressLabel(entry)} />
+						</li>
+					))}
+				</ul>
+			)}
+		</section></Panel>
 	);
 }
 
