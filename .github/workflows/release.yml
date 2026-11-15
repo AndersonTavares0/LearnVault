@@ -314,6 +314,12 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
+  flatpak:
+    needs: validate-tag
+    uses: ./.github/workflows/flatpak.yml
+    with:
+      ref: ${{ needs.validate-tag.outputs.commit_sha }}
+
   container:
     name: Build and publish container image (GHCR)
     # Every platform build must pass before the image is pushed, tagged or offered for approval.
@@ -448,7 +454,7 @@ jobs:
 
   publish:
     name: Publish release assets
-    needs: [validate-tag, linux, linux-arm64, windows, container]
+    needs: [validate-tag, linux, linux-arm64, windows, flatpak, container]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: release
@@ -477,6 +483,8 @@ jobs:
             "learnvault-windows-${RELEASE_TAG}.exe"
             "learnvault-windows-${RELEASE_TAG}.nsis.zip"
             "learnvault-windows-${RELEASE_TAG}.nsis.zip.sig"
+            "learnvault-linux-desktop-amd64.flatpak"
+            "learnvault-linux-desktop-arm64.flatpak"
             "latest.json"
           )
           mapfile -t actual < <(find dist -maxdepth 1 -type f -printf '%f\n' | sort)
@@ -518,6 +526,8 @@ jobs:
             "learnvault-windows-${RELEASE_TAG}.exe"
             "learnvault-windows-${RELEASE_TAG}.nsis.zip"
             "learnvault-windows-${RELEASE_TAG}.nsis.zip.sig"
+            "learnvault-linux-desktop-amd64.flatpak"
+            "learnvault-linux-desktop-arm64.flatpak"
             "latest.json"
           )
           upload_args=()

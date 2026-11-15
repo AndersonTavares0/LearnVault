@@ -40,12 +40,14 @@ The repair workflow never moves or recreates tags. The Contributors section is i
 
 ## Published Release Assets
 
-Each release publishes seven files on GitHub Releases, alongside the OCI container image on GHCR (`ghcr.io/andersontavares0/learnvault`):
+Each release publishes nine files on GitHub Releases, alongside the OCI container image on GHCR (`ghcr.io/andersontavares0/learnvault`):
 
 | Asset | File Name |
 | --- | --- |
 | Linux Server, x86-64 | `learnvault-linux-amd64.tar.gz` |
 | Linux Server, ARM64 | `learnvault-linux-arm64.tar.gz` |
+| Linux Desktop, x86-64 (Flatpak bundle) | `learnvault-linux-desktop-amd64.flatpak` |
+| Linux Desktop, ARM64 (Flatpak bundle) | `learnvault-linux-desktop-arm64.flatpak` |
 | Windows Installer (NSIS) | `learnvault-windows-vMAJOR.MINOR.PATCH.exe` |
 | Windows Updater Bundle | `learnvault-windows-vMAJOR.MINOR.PATCH.nsis.zip` |
 | Windows Updater Ed25519 Signature | `learnvault-windows-vMAJOR.MINOR.PATCH.nsis.zip.sig` |

@@ -4,10 +4,16 @@
   <name>LearnVault</name>
   <summary>Biblioteca de estudos local</summary>
   <metadata_license>CC0-1.0</metadata_license>
+  <developer id="app.learnvault">
+    <name>LearnVault</name>
+  </developer>
   <project_license>MIT</project_license>
   <description>
     <p>Aplicativo desktop offline para organizar e estudar uma biblioteca local.</p>
   </description>
+  <url type="homepage">https://github.com/AndersonTavares0/LearnVault</url>
+  <url type="bugtracker">https://github.com/AndersonTavares0/LearnVault/issues</url>
+  <content_rating type="oars-1.1"/>
   <launchable type="desktop-id">app.learnvault.desktop.desktop</launchable>
   <provides>
     <binary>learnvault-desktop</binary>

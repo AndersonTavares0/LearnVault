@@ -783,6 +783,17 @@ fn pick_cover(app: &tauri::AppHandle) -> Option<PathBuf> {
         .and_then(|path| path.into_path().ok())
 }
 
+/// Dentro de um Flatpak a atualização é entregue pela loja/Flathub e o instalado não pode trocar
+/// o próprio binário. `FLATPAK_ID` é definido pelo runtime do Flatpak.
+pub(crate) fn runs_in_flatpak() -> bool {
+    std::env::var_os("FLATPAK_ID").is_some()
+}
+
+/// O updater embutido só roda fora do Flatpak.
+pub(crate) fn updater_enabled(in_flatpak: bool) -> bool {
+    !in_flatpak
+}
+
 /// Consulta a disponibilidade de nova versão via tauri-plugin-updater de forma não-bloqueante e segura.
 ///
 /// Diferencia a ausência de atualização (`available: false`) de falhas de conexão/rede (`IpcError::update_check_failed()`),
@@ -794,6 +805,15 @@ pub async fn desktop_check_update(
     use tauri_plugin_updater::UpdaterExt;
 
     let current_version = app.package_info().version.to_string();
+    if !updater_enabled(runs_in_flatpak()) {
+        return Ok(crate::dto::DesktopUpdateInfoDto {
+            available: false,
+            current_version,
+            version: None,
+            date: None,
+            body: None,
+        });
+    }
     let updater = match app.updater() {
         Ok(updater) => updater,
         Err(_) => {
@@ -837,6 +857,9 @@ pub async fn desktop_download_update(
 ) -> Result<bool, IpcError> {
     use tauri_plugin_updater::UpdaterExt;
 
+    if !updater_enabled(runs_in_flatpak()) {
+        return Err(IpcError::update_unavailable());
+    }
     let updater = app.updater().map_err(|_| IpcError::update_unavailable())?;
     let update = match updater.check().await {
         Ok(Some(update)) => update,
@@ -896,6 +919,10 @@ pub fn open_in_system_player(
     courses: &[CourseEntry],
     media_id: &str,
 ) -> Result<bool, IpcError> {
+    // Dentro do Flatpak o caminho do arquivo é do host e não está no sandbox: não tentamos abri-lo.
+    if runs_in_flatpak() {
+        return Ok(false);
+    }
     let Some(library_id) = learnvault_core::find_media_library_id(database, media_id)
         .map_err(|_| IpcError::study_unavailable())?
     else {
@@ -1034,4 +1061,15 @@ pub async fn desktop_sync_now(state: State<'_, DesktopState>) -> Result<SyncResu
     tauri::async_runtime::spawn_blocking(move || state.sync_now())
         .await
         .map_err(|_| IpcError::sync_unavailable())?
+}
+
+#[cfg(test)]
+mod flatpak_gate_tests {
+    use super::updater_enabled;
+
+    #[test]
+    fn the_updater_is_off_inside_flatpak_and_on_elsewhere() {
+        assert!(!updater_enabled(true));
+        assert!(updater_enabled(false));
+    }
 }

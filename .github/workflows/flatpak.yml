@@ -1,0 +1,120 @@
+name: Flatpak desktop
+
+# Builds the Linux desktop app as a Flatpak bundle on both architectures and checks it in a
+# sandbox. Used by the release workflow (workflow_call) and runnable on its own (workflow_dispatch)
+# to test the packaging without publishing anything.
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Commit to build.
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or commit to build.
+        required: true
+        type: string
+        default: main
+
+permissions:
+  contents: read
+
+jobs:
+  flatpak:
+    name: Flatpak ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    env:
+      RUNTIME_BRANCH: "51"
+      FLATHUB_REPO: https://dl.flathub.org/repo/flathub.flatpakrepo
+      APP_ID: app.learnvault.desktop
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Install system packages
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev patchelf \
+            flatpak flatpak-builder appstream xvfb dbus-x11
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install 1.99.0 --profile minimal
+          rustup default 1.99.0
+      - name: Build the desktop binary
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+          pnpm run build:desktop
+          cargo build --release --locked -p learnvault-desktop
+          test -x target/release/learnvault-desktop
+      - name: Validate the AppStream metainfo
+        run: appstreamcli validate --no-net deploy/packages/app.learnvault.desktop.metainfo.xml
+      - name: Add Flathub and check the runtime branch exists
+        run: |
+          set -euo pipefail
+          flatpak remote-add --user --if-not-exists flathub "$FLATHUB_REPO"
+          flatpak remote-info --user flathub "runtime/org.gnome.Platform/$(uname -m)/$RUNTIME_BRANCH" >/dev/null
+      - name: Build the Flatpak
+        run: |
+          set -euo pipefail
+          flatpak-builder --user --force-clean --install-deps-from=flathub \
+            --repo=repo build-dir deploy/packages/app.learnvault.desktop.yml
+      - name: Export the bundle
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          flatpak build-bundle repo "dist/learnvault-linux-desktop-${{ matrix.arch }}.flatpak" "$APP_ID" \
+            --runtime-repo="$FLATHUB_REPO"
+          ls -l dist
+      - name: "Sandbox: install the bundle and check its permissions"
+        run: |
+          set -euo pipefail
+          flatpak install --user -y --bundle "dist/learnvault-linux-desktop-${{ matrix.arch }}.flatpak"
+          perms="$(flatpak info --user --show-permissions "$APP_ID")"
+          echo "$perms"
+          if grep -Eq 'filesystems=.*(home|host)' <<<"$perms"; then
+            echo "::error::the bundle grants broad filesystem access" >&2
+            exit 1
+          fi
+          if ! grep -q 'pulseaudio' <<<"$perms"; then
+            echo "::error::the bundle does not grant audio (pulseaudio)" >&2
+            exit 1
+          fi
+      - name: "Sandbox: start the app under a virtual display"
+        run: |
+          set -euo pipefail
+          # The app must keep running: exit code 124 means timeout reached while still alive.
+          set +e
+          dbus-run-session -- xvfb-run -a timeout 40 flatpak run --user "$APP_ID"
+          code=$?
+          set -e
+          echo "exit code: $code"
+          if [[ "$code" -ne 124 ]]; then
+            echo "::error::the app stopped during startup (exit $code)" >&2
+            exit 1
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-linux-desktop-${{ matrix.arch }}
+          path: dist/*.flatpak
+          if-no-files-found: error
