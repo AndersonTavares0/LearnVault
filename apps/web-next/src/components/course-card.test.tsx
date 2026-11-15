@@ -53,9 +53,14 @@ describe('CourseCard variants', () => {
 		expect(screen.queryByRole('progressbar')).toBeNull();
 	});
 
-	it('hides progress for a course without lessons', () => {
+	it('hides progress and labels zero-lesson courses distinctly', () => {
 		show('grid', { total: 0, done: 0, status: 'not_started' });
 		expect(screen.queryByRole('progressbar')).toBeNull();
+		expect(screen.getByText('No lessons found')).toBeTruthy();
+		cleanup();
+		show('list', { total: 0, done: 0, status: 'not_started' });
+		expect(screen.getAllByText('No lessons found').length).toBeGreaterThan(0);
+		expect(screen.queryByText('Not started')).toBeNull();
 	});
 
 	it('marks a favorite as pressed and offers removal', () => {

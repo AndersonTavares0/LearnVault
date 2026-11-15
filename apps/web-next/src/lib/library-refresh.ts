@@ -42,8 +42,8 @@ export function refreshMessage(outcome: RefreshOutcome): string {
 		const names = outcome.failed.map((source) => `“${source.name}”`).join(', ');
 		const one = outcome.failed.length === 1;
 		return tr(
-			`Catalog updated, but ${one ? 'this source' : 'these sources'} could not be read: ${names}. ${outcome.failed[0].message}`,
-			`Catálogo atualizado, mas ${one ? 'esta fonte não pôde' : 'estas fontes não puderam'} ser lida${one ? '' : 's'}: ${names}. ${outcome.failed[0].message}`
+			`Catalog updated, but ${one ? 'this source' : 'these sources'} could not be read: ${names}. ${outcome.failed[0].message} Unavailable courses and your study progress are kept.`,
+			`Catálogo atualizado, mas ${one ? 'esta fonte não pôde' : 'estas fontes não puderam'} ser lida${one ? '' : 's'}: ${names}. ${outcome.failed[0].message} Cursos indisponíveis e seu progresso de estudo são preservados.`
 		).trim();
 	}
 	if (outcome.sources === 0) return tr('Catalog updated.', 'Catálogo atualizado.');
