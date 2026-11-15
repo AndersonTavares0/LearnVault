@@ -24,8 +24,10 @@ afterEach(() => {
 describe('progress', () => {
 	it('shows the week, a finished course with its badge and the level', async () => {
 		renderApp('/progress', { catalog, rewards, recent: [done('a'), done('b')] });
-		expect(await screen.findByRole('heading', { name: '1 of 3 days this week' })).toBeTruthy();
-		expect(screen.getByText(/2 more days to reach your goal\./)).toBeTruthy();
+		const glance = within(await screen.findByLabelText('At a glance'));
+		expect(glance.getByText('Active days').nextElementSibling?.textContent).toContain('1of 3-day goal');
+		expect(glance.getByText('Lessons completed').nextElementSibling?.textContent).toBe('2in 1 course you started');
+		expect(glance.getByText(/Streak: 1 day\. Busiest day: none yet\./)).toBeTruthy();
 		expect(within(await screen.findByRole('table', { name: 'Focus minutes by day', hidden: true })).getAllByRole('row')).toHaveLength(8);
 		expect(screen.getByText('First course finished').parentElement?.textContent).toContain('Earned');
 		expect(screen.getByText(/Level 2 · /)).toBeTruthy();
@@ -36,7 +38,7 @@ describe('progress', () => {
 		const courses = within(await screen.findByRole('region', { name: 'Courses' }));
 		expect(courses.getByRole('link', { name: 'Rust' }).getAttribute('href')).toBe('/course/rust');
 		expect(courses.getByText('50% complete · 1 lesson left')).toBeTruthy();
-		expect(courses.getByText('Lessons completed').nextElementSibling?.textContent).toBe('1');
+		expect(courses.getByText('1 in progress · 0 finished')).toBeTruthy();
 	});
 
 	it('says so when no course is under way', async () => {

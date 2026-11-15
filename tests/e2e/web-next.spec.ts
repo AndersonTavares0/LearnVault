@@ -49,7 +49,7 @@ test('signs in, indexes the library and resumes a lesson from My learning', asyn
 	await expectNoAxeViolations(page, 'lesson');
 
 	await page.goto(`${origin}/#/progress`);
-	await expect(page.getByRole('heading', { name: /days this week/ })).toBeVisible();
+	await expect(page.getByLabel('At a glance').getByText('Active days')).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'Badges' })).toBeVisible();
 	await expectNoAxeViolations(page, 'progress');
 
