@@ -67,3 +67,23 @@ Each slice is its own small PR; slices 2 to 4 need independent review (persisten
 - Cover media/range/transcode, favorites, notes, bookmarks, PDF annotations, flashcards, search and course removal through a root.
 - Independent read-only review of persistence, identity, authorization and media confinement before merge.
 - Rollback: the table is additive; dropping it restores the single-source view.
+
+## Addendum (2026-11-15): automatic course folders
+
+Real use of a share of about 15,700 files showed that a source held as one course, with every category as a
+"module", was the wrong default: one course with 223 modules, when the courses were folders three levels
+down. The maintainer asked for the courses to be found without anyone choosing them, so decision 4 changes:
+detection is applied by itself, and the picker stays as the way to correct it.
+
+- The rule is in `crates/core/src/course_detect.rs` and in `docs/reference/api.md`. It reads media only and
+  looks at the height of the tree and at whether subfolders are numbered like modules, so it does not depend
+  on language or on a fixed depth. On the real share it found 30 courses; a course with parts, modules and
+  lesson folders (four levels, all numbered) stays whole, and a numbered list of categories is still a group.
+- It is safe to be wrong: a root keeps `media_id`, so study state follows the lesson, and removing a root
+  moves the media back. A removed folder is remembered in `library_root_dismissed` (migration V21) so the next
+  scan does not bring it back; choosing it again forgets the removal.
+- Known limit: a library whose courses are themselves numbered ("01 Rust", "02 Go") and whose courses have
+  modules looks like one course with numbered parts, and is not split; the picker handles it.
+- Known limits found in review: a source course the user marked as a favorite, and its manual order, do not
+  follow the split (study state, notes and flashcards do); the course is simply favorited again. A source with
+  more than 100 detected courses is left for the picker instead of being reshaped.

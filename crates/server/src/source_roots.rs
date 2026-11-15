@@ -12,9 +12,9 @@ use axum::{
 };
 use learnvault_core::{
     CourseSource, Database, Error, KeyMode, RescanSummary, RootError, ScanOutcome, SourceError,
-    SourceRoot, apply_source_scan, demote_root,
+    SourceRoot, apply_source_scan, auto_promote_roots, demote_root, dismiss_root_prefix,
     ids::new_library_id,
-    list_roots, natural_cmp, partition_scan, promote_root, relative_path_key,
+    list_roots, natural_cmp, partition_scan, promote_root, relative_path_key, restore_root_prefix,
     scanner::{MediaKind, classify, is_ignored_directory},
 };
 use serde::{Deserialize, Serialize};
@@ -391,11 +391,16 @@ pub(crate) async fn create(
                 &target,
                 KeyMode::for_host(),
             ) {
-                Ok(_) => created.push(RootResponse {
-                    id: library_id,
-                    name: last_segment(&target).to_owned(),
-                    path: target,
-                }),
+                Ok(_) => {
+                    // Choosing a folder again undoes an earlier removal of it.
+                    let _ =
+                        restore_root_prefix(&database, &source.id, &target, KeyMode::for_host());
+                    created.push(RootResponse {
+                        id: library_id,
+                        name: last_segment(&target).to_owned(),
+                        path: target,
+                    });
+                }
                 Err(Error::SourceRoot(error)) => skipped.push(Skipped {
                     path: target,
                     reason: root_reason(&error),
@@ -466,12 +471,12 @@ pub(crate) async fn remove(
         let _blocking_task = blocking_task;
         let mut database = database;
         // Only a root of this very source can be removed through it.
-        if !list_roots(&database, &source.id)?
-            .iter()
-            .any(|root| root.library_id == root_id)
-        {
+        let roots = list_roots(&database, &source.id)?;
+        let Some(root) = roots.iter().find(|root| root.library_id == root_id) else {
             return Ok(false);
-        }
+        };
+        // A folder the administrator takes back must not become a course again by itself.
+        dismiss_root_prefix(&database, &source.id, &root.prefix, KeyMode::for_host())?;
         demote_root(&mut database, &root_id).map(|_| true)
     })
     .await;
@@ -488,6 +493,10 @@ pub(crate) fn demote_all(database: &mut Database, source_id: &str) -> learnvault
     for root in list_roots(database, source_id)? {
         demote_root(database, &root.library_id)?;
     }
+    database.connection().execute(
+        "DELETE FROM library_root_dismissed WHERE source_id = ?1",
+        [source_id],
+    )?;
     Ok(())
 }
 
@@ -499,6 +508,11 @@ pub(crate) fn apply_scan_by_roots(
     source_id: &str,
     outcome: Result<ScanOutcome, SourceError>,
 ) -> learnvault_core::Result<RescanSummary> {
+    // A source that is a whole library of courses is split into one course per folder by
+    // itself; folders the administrator took back or chose are respected.
+    if let Ok(scan) = &outcome {
+        auto_promote_roots(database, source_id, scan, KeyMode::for_host())?;
+    }
     let roots = list_roots(database, source_id)?;
     if roots.is_empty() {
         return apply_source_scan(database, source_id, outcome);

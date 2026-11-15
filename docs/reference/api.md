@@ -140,6 +140,16 @@ on a share appear without pressing the button. A source that is busy (a manual r
 unreachable is skipped until the next round, and a scan lists up to 8 folders at once. A scan of a source is
 limited to 120 seconds, and its HTTP request to 130 seconds.
 
+A source that is a whole library (categories, sub-categories, then courses) is split into one course per
+course folder by itself on its scan (`course_detect`, ADR 0004). A folder holds courses, instead of being one,
+when it has no media of its own, at least two levels of media-bearing folders below it, and its subfolders are
+not mostly numbered like modules ("01 Intro", "Module 15", "Lesson 41"), or one of them already holds
+courses. A numbered sequence of modules makes its parent a course at any depth. It reads only media, never
+names or a fixed depth. Files under a root the administrator chose are left alone, and a scan that could not
+read some folders does not change the split. A folder removed with `DELETE .../roots/{root_id}` is
+remembered (`library_root_dismissed`) and is not found again; choosing it again forgets that. A source that is
+one course, or has media at its top level, is not split.
+
 A source can be split into several courses by choosing folders as roots (ADR 0004). Choosing a folder
 moves its already scanned media to a course of its own and every later scan of the source is applied
 per root, so progress, notes and flashcards follow each lesson. In `GET /api/catalog` each root is a

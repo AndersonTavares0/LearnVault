@@ -876,7 +876,7 @@ async fn a_split_source_with_nothing_left_shows_only_its_courses_and_tells_equal
         ("Solo", vec![("1.mp4", Some(10))]),
     ]);
     let h = harness_with(tree).await;
-    h.scan().await;
+    // Chosen before the first scan, so the automatic detection has nothing left to decide.
     for path in ["A/Redes", "B/Redes", "Solo"] {
         assert_eq!(h.pick(path, "course").await.status(), StatusCode::CREATED);
     }
@@ -1083,7 +1083,6 @@ async fn titles_are_told_apart_only_among_the_roots_a_user_can_see() {
         ("B/Redes", vec![("1.mp4", Some(10))]),
     ]);
     let h = harness_with(tree).await;
-    h.scan().await;
     let a = json(h.pick("A/Redes", "course").await).await["created"][0]["id"]
         .as_str()
         .unwrap()
@@ -1138,4 +1137,74 @@ async fn a_source_is_read_in_the_background_without_a_manual_scan() {
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }
     panic!("the background refresh never read the source");
+}
+
+/// A library: two courses, each with numbered modules, and no folder of lessons above them.
+fn library_tree() -> Tree {
+    HashMap::from([
+        ("", vec![("Rust", None), ("Go", None)]),
+        ("Rust", vec![("01_Intro", None), ("02_Types", None)]),
+        ("Rust/01_Intro", vec![("a.mp4", Some(10))]),
+        ("Rust/02_Types", vec![("a.mp4", Some(10))]),
+        ("Go", vec![("01_Intro", None), ("02_Types", None)]),
+        ("Go/01_Intro", vec![("a.mp4", Some(10))]),
+        ("Go/02_Types", vec![("a.mp4", Some(10))]),
+    ])
+}
+
+#[tokio::test]
+async fn a_source_that_is_a_library_of_courses_is_split_by_itself() {
+    let h = harness_with(library_tree()).await;
+    assert_eq!(h.scan().await.status(), StatusCode::OK);
+    assert_eq!(titles(&h.catalog(&h.cookie).await), ["Go", "Rust"]);
+    // Each course keeps only its own lessons.
+    let nodes = h.catalog(&h.cookie).await;
+    assert_eq!(
+        files_of(&nodes[1]),
+        ["Rust/01_Intro/a.mp4", "Rust/02_Types/a.mp4"]
+    );
+}
+
+#[tokio::test]
+async fn a_source_that_is_one_course_is_not_split() {
+    let tree: Tree = HashMap::from([
+        ("", vec![("01_Intro", None), ("02_Types", None)]),
+        ("01_Intro", vec![("a.mp4", Some(10))]),
+        ("02_Types", vec![("a.mp4", Some(10))]),
+    ]);
+    let h = harness_with(tree).await;
+    assert_eq!(h.scan().await.status(), StatusCode::OK);
+    assert_eq!(titles(&h.catalog(&h.cookie).await), ["Cursos remotos"]);
+}
+
+#[tokio::test]
+async fn a_course_taken_back_stays_back_until_it_is_chosen_again() {
+    let h = harness_with(library_tree()).await;
+    h.scan().await;
+    let uri = format!("/api/admin/sources/{}/roots", h.source);
+    let roots = json(h.call("GET", &uri, None, false).await).await;
+    let rust = roots["roots"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|root| root["path"] == "Rust")
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let removed = h.call("DELETE", &format!("{uri}/{rust}"), None, true).await;
+    assert_eq!(removed.status(), StatusCode::OK);
+
+    // The next scans do not bring it back as a course of its own.
+    h.scan().await;
+    h.scan().await;
+    assert_eq!(
+        titles(&h.catalog(&h.cookie).await),
+        ["Go", "Cursos remotos"]
+    );
+
+    // Choosing it again undoes the removal.
+    assert_eq!(h.pick("Rust", "course").await.status(), StatusCode::CREATED);
+    h.scan().await;
+    assert_eq!(titles(&h.catalog(&h.cookie).await), ["Go", "Rust"]);
 }
