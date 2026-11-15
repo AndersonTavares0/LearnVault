@@ -34,11 +34,11 @@ Tokens live once in `src/styles/app.css` as shadcn variables, mapped by Tailwind
 
 | Role | Face | Use |
 | --- | --- | --- |
-| Display | Playfair Display (variable) | Page titles, card and panel titles, big numbers |
+| Display | Playfair Display (variable) | Page titles (h1), the wordmark and big numbers; panel, card and item titles use DM Sans |
 | Interface and body | DM Sans (variable) | Everything else |
 | Technical | JetBrains Mono (variable) | Timer clock, shortcuts |
 
-Page titles carry the accent: the last word is set in italic amber (`<em>`), as in "My *learning*". Small labels above numbers are 12 px, bold, tracked and uppercase (`Eyebrow`). Fonts are bundled with the app; the server's CSP would block third-party fonts and the desktop build is offline. The learner can switch to the system font or to a serif reading face.
+Page titles are plain Playfair, with no icon tile and no accent word. Small labels above numbers are 12 px, bold, tracked and uppercase (`Eyebrow`). Fonts are bundled with the app; the server's CSP would block third-party fonts and the desktop build is offline. The learner can switch to the system font or to a serif reading face.
 
 ## Shape and space
 

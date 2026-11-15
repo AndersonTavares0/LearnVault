@@ -91,7 +91,7 @@ function PickerCard({ entry, title: given, footer, to }: { entry?: CourseEntry; 
 					</Button>
 				)}
 			</div>
-			<h3 className="line-clamp-2 min-h-[4.25rem] [overflow-wrap:anywhere] px-4 pb-4 font-heading text-lg leading-snug font-bold">
+			<h3 className="line-clamp-2 min-h-[4.25rem] [overflow-wrap:anywhere] px-4 pb-4 text-lg leading-snug font-bold">
 				<Link to={to} title={title} className="after:absolute after:inset-0 after:content-[''] focus-visible:outline-none">{title}<span className="sr-only">: {footer}</span></Link>
 			</h3>
 			<div className="tone flex items-center justify-between px-4 py-2.5 text-xs font-bold" style={tone} aria-hidden="true">

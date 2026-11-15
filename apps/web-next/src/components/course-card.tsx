@@ -57,7 +57,7 @@ export function CourseCard({ entry, profile, variant = 'grid', canManage = false
 			<li className="relative flex items-center gap-3 py-2.5">
 				<CourseCover course={entry.course} profile={profile} done={entry.done} total={entry.total} compact className="w-10 shrink-0" />
 				<div className="min-w-0 flex-1">
-					<h3 className="truncate font-heading text-sm font-semibold">
+					<h3 className="truncate text-sm font-semibold">
 						<Link to={routerPath(href('course', entry.courseId))} className="after:absolute after:inset-0 after:content-[''] hover:underline">{entry.course.title}</Link>
 					</h3>
 					<p className="truncate text-xs text-muted-foreground">{progressLabel(entry)}</p>
@@ -89,8 +89,8 @@ export function CourseCard({ entry, profile, variant = 'grid', canManage = false
 		);
 	}
 	return (
-		<li className={cn('group/card relative flex items-center gap-3 p-3 has-focus-visible:ring-3 has-focus-visible:ring-ring', !listed && 'rounded-2xl border bg-card transition-[border-color,box-shadow] hover:border-[color:var(--border-strong)] hover:shadow-md', variant === 'shelf' && 'w-64 shrink-0 snap-start', listed && 'rounded-xl')}>
-			<div className="relative w-14 shrink-0">
+		<li className={cn('group/card relative flex items-center gap-3.5 p-3.5 has-focus-visible:ring-3 has-focus-visible:ring-ring', !listed && 'rounded-[0.875rem] border bg-card transition-[border-color,box-shadow] hover:border-[color:var(--border-strong)] hover:shadow-md', variant === 'shelf' && 'w-64 shrink-0 snap-start', listed && 'rounded-xl')}>
+			<div className="relative w-[3.25rem] shrink-0">
 				<CourseCover course={entry.course} profile={profile} done={entry.done} total={entry.total} compact className="aspect-square rounded-xl" />
 			</div>
 			{/* The star lives beside the title, so it never sits on the year drawn on the cover. */}
@@ -98,14 +98,14 @@ export function CourseCard({ entry, profile, variant = 'grid', canManage = false
 				<div className="absolute top-1 right-1 z-10">
 					<Button variant="ghost" size="icon" aria-pressed={entry.favorite} disabled={toggle.isPending} onClick={() => toggle.mutate({ courseId: entry.courseId, favorite: !entry.favorite })}
 						aria-label={entry.favorite ? tr(`Remove ${entry.course.title} from favorites`, `Remover ${entry.course.title} dos favoritos`) : tr(`Add ${entry.course.title} to favorites`, `Adicionar ${entry.course.title} aos favoritos`)}
-						className="rounded-full bg-card/85 text-foreground ring-1 ring-border backdrop-blur hover:bg-card aria-pressed:bg-brand-tint">
+						className="text-muted-foreground opacity-0 transition-opacity group-hover/card:opacity-100 hover:text-foreground focus-visible:opacity-100 aria-pressed:text-primary aria-pressed:opacity-100 [@media(hover:none)]:opacity-100">
 						<Star className={cn(entry.favorite && 'fill-current')} />
 					</Button>
 				</div>
 			)}
 			{manageable && <div className="absolute top-1 right-12 z-10"><CourseManagement course={entry.course} courseId={entry.courseId} lessons={entry.total} compact /></div>}
-			<div className={cn('min-w-0 flex-1 space-y-1', !listed && 'pr-10')}>
-				<h3 className="card-heading font-heading text-base leading-snug font-semibold text-balance">
+			<div className={cn('min-w-0 flex-1 space-y-1', !listed && 'pr-8')}>
+				<h3 className="card-heading text-base leading-snug font-semibold text-balance">
 					{/* The link covers the whole card; the favorite button sits above it. */}
 					<Link to={routerPath(href('course', entry.courseId))} title={entry.course.title} className="line-clamp-3 [overflow-wrap:anywhere] after:absolute after:inset-0 after:content-[''] hover:underline">{entry.course.title}</Link>
 				</h3>
