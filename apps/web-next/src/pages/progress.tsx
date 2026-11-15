@@ -60,9 +60,9 @@ export function ProgressPage() {
 			<PageHeader icon={ChartNoAxesColumn} title={tr('Your progress', 'Seu progresso')} description={`${tr(`Level ${game.level.level}`, `Nível ${game.level.level}`)} · ${game.level.xp} XP`} />
 
 			<dl aria-label={tr('At a glance', 'Visão geral')} className="grid gap-4 sm:grid-cols-3">
-				<Metric label={tr('Lessons completed', 'Aulas concluídas')} value={String(lessonsDone)} caption={tr(`In total, across ${startedCourses} ${startedCourses === 1 ? 'course' : 'courses'} you started.`, `No total, em ${startedCourses} ${startedCourses === 1 ? 'curso iniciado' : 'cursos iniciados'}.`)} />
-				<Metric label={tr('Active days', 'Dias ativos')} value={String(Math.min(study.weekActiveDays, goal))} suffix={tr(`of ${goal}-day goal`, `da meta de ${goal} dias`)} caption={`${missing === 0 ? tr('Goal reached. ', 'Meta atingida. ') : ''}${tr(`Streak: ${study.currentStreak} ${study.currentStreak === 1 ? 'day' : 'days'}. Busiest day: ${best ? best.label : 'none yet'}.`, `Sequência: ${study.currentStreak} ${study.currentStreak === 1 ? 'dia' : 'dias'}. Dia mais forte: ${best ? best.label : 'nenhum ainda'}.`)}`} />
-				<Metric label={tr('Focus time', 'Tempo de foco')} value={formatMinutes(total)} caption={`${range === 'week' ? tr('This week.', 'Nesta semana.') : tr('In total.', 'No total.')} ${tr('Only the Pomodoro timer counts here.', 'Só o cronômetro Pomodoro conta aqui.')}`} />
+				<Metric label={tr('Lessons completed (all time)', 'Aulas concluídas (total)')} value={String(lessonsDone)} caption={tr(`In total, across ${startedCourses} ${startedCourses === 1 ? 'course' : 'courses'} you started.`, `No total, em ${startedCourses} ${startedCourses === 1 ? 'curso iniciado' : 'cursos iniciados'}.`)} />
+				<Metric label={tr('Active days (this week)', 'Dias ativos (esta semana)')} value={String(Math.min(study.weekActiveDays, goal))} suffix={tr(`of ${goal}-day goal`, `da meta de ${goal} dias`)} caption={`${missing === 0 ? tr('Goal reached. ', 'Meta atingida. ') : ''}${tr(`Streak: ${study.currentStreak} ${study.currentStreak === 1 ? 'day' : 'days'}. Busiest day: ${best ? best.label : 'none yet'}.`, `Sequência: ${study.currentStreak} ${study.currentStreak === 1 ? 'dia' : 'dias'}. Dia mais forte: ${best ? best.label : 'nenhum ainda'}.`)}`} />
+				<Metric label={range === 'week' ? tr('Focus time (this week)', 'Tempo de foco (esta semana)') : tr('Focus time (all time)', 'Tempo de foco (total)')} value={formatMinutes(total)} caption={`${range === 'week' ? tr('This week.', 'Nesta semana.') : tr('In total.', 'No total.')} ${tr('Only the Pomodoro timer counts here.', 'Só o cronômetro Pomodoro conta aqui.')}`} />
 			</dl>
 
 			<div className="grid gap-6 lg:grid-cols-12 lg:items-stretch">
@@ -186,8 +186,8 @@ function formatMinutes(total: number): string {
 function FocusChart({ days }: { days: ChartDay[] }) {
 	const width = 700;
 	const empty = days.every((day) => day.minutes === 0);
-	const height = empty ? 24 : 170;
-	const top = empty ? 8 : 28;
+	const height = 170;
+	const top = 28;
 	const max = Math.max(1, ...days.map((day) => day.minutes));
 	const step = days.length > 1 ? (width - 40) / (days.length - 1) : 0;
 	const points = days.map((day, index) => ({ x: 20 + index * step, y: top + (1 - day.minutes / max) * (height - top - 8) }));
