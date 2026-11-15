@@ -836,6 +836,8 @@ async fn the_catalog_shows_one_course_per_root_and_keeps_the_rest_of_the_source(
 
     let nodes = h.catalog(&h.cookie).await;
     assert_eq!(titles(&nodes), ["Linux", "Redes", "Cursos remotos"]);
+    // The catalog says these courses live on a remote source, so the SPA offers no local-only actions.
+    assert!(nodes.iter().all(|node| node["remote"] == true));
     assert_eq!(nodes[0]["course_id"], linux.as_str());
     assert_eq!(nodes[1]["course_id"], redes.as_str());
     assert_eq!(nodes[2]["course_id"], h.source.as_str());

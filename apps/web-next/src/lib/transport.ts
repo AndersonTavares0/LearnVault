@@ -22,7 +22,7 @@ export type Lesson = { title: string; path: string; media: FileEntry[]; subtitle
 // não carregam a identidade: a árvore inteira pertence ao curso do topo.
 /** How clear the course folder's organization is, and the facts that lowered it. */
 export type CourseStructure = { confidence: 'high' | 'medium' | 'low'; concerns: string[] };
-export type CatalogNode = { title: string; path: string; role: string; courseId?: string; coverVersion?: number; sourceFolder?: string; structure?: CourseStructure; files: FileEntry[]; looseFiles: FileEntry[]; children: CatalogNode[] };
+export type CatalogNode = { title: string; path: string; role: string; courseId?: string; coverVersion?: number; sourceFolder?: string; remote?: boolean; structure?: CourseStructure; files: FileEntry[]; looseFiles: FileEntry[]; children: CatalogNode[] };
 export type Catalog = { complete: boolean; looseFiles: FileEntry[]; nodes: CatalogNode[] };
 // A seleção nativa de uma pasta de curso é específica do desktop: no HTTP o servidor
 // registra cursos por caminho e nenhum caminho cruza o frontend.
@@ -327,7 +327,7 @@ export interface Transport {
 }
 
 type RustFile = { media_id?: string; name?: string; path?: string; size?: number; mtime_seconds?: number; kind?: string; availability?: string; unverified?: boolean };
-type RustNode = { title?: string; path?: string; role?: string; course_id?: string; cover_version?: number; source_folder?: string; structure?: { confidence?: unknown; concerns?: unknown }; files?: RustFile[]; loose_files?: RustFile[]; children?: RustNode[] };
+type RustNode = { title?: string; path?: string; role?: string; course_id?: string; cover_version?: number; source_folder?: string; remote?: unknown; structure?: { confidence?: unknown; concerns?: unknown }; files?: RustFile[]; loose_files?: RustFile[]; children?: RustNode[] };
 type RustCatalog = { complete?: boolean; categories?: RustNode[]; nodes?: RustNode[]; loose_files?: RustFile[]; looseFiles?: RustFile[] };
 
 // The detail is technical and stays as written; only the prefix follows the locale. The
@@ -508,6 +508,8 @@ function normalizeRustNode(value: unknown, depth: number, budget: CatalogBudget)
 		courseId: node.course_id,
 		coverVersion: optionalCoverVersion(node.cover_version),
 		sourceFolder: optionalFileString(node.source_folder, 'source_folder'),
+		// Only remote courses carry the flag, so the normalized local node is unchanged.
+		...(node.remote === true ? { remote: true } : {}),
 		structure: parseStructure(node.structure),
 		files: optionalArray(value, 'files').map((file) => normalizeRustFile(file, budget)),
 		looseFiles: optionalArray(value, 'loose_files').map((file) => normalizeRustFile(file, budget)),

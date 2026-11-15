@@ -63,6 +63,14 @@ describe('CourseCard variants', () => {
 		expect(screen.getByRole('button', { name: 'Remove Rust from Zero from favorites' }).getAttribute('aria-pressed')).toBe('true');
 	});
 
+	it('never offers local-only management for a course on a remote source', () => {
+		show('grid', { course: { ...entry().course, remote: true } }, true);
+		expect(screen.queryByRole('button', { name: 'Manage Rust from Zero' })).toBeNull();
+		cleanup();
+		show('compact', { course: { ...entry().course, remote: true } }, true);
+		expect(screen.queryByRole('button', { name: 'Manage Rust from Zero' })).toBeNull();
+	});
+
 	it('shows the management menu only when the account can manage', () => {
 		show('grid');
 		expect(screen.queryByRole('button', { name: 'Manage Rust from Zero' })).toBeNull();
