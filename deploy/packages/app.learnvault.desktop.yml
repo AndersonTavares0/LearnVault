@@ -1,12 +1,13 @@
 app-id: app.learnvault.desktop
 runtime: org.gnome.Platform
-runtime-version: '48'
+runtime-version: '51'
 sdk: org.gnome.Sdk
 command: learnvault-desktop
 finish-args:
   - --share=ipc
   - --socket=wayland
   - --socket=fallback-x11
+  - --socket=pulseaudio
   - --device=dri
 modules:
   - name: learnvault-desktop

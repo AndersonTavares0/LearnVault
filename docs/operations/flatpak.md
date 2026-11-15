@@ -1,13 +1,13 @@
 # Flatpak desktop plan (Linux)
 
-**Status:** planned. Nothing in this document is shipped yet. The manifest in `deploy/packages/` exists, but no CI job builds the Linux desktop binary, runs `flatpak-builder`, or publishes a bundle.
+**Status:** implemented in CI, shipped as a release asset with the next release. The bundle is distributed only through GitHub Releases; there is no store submission (no Flathub). The desktop updater is off inside the Flatpak.
 
 ## Scope across systems
 
 | System | Desktop app | Plan |
 | :--- | :--- | :--- |
 | Windows | NSIS installer with signed updater | Available. No change. |
-| Linux (x86_64, aarch64) | Flatpak from Flathub or a release bundle | This plan. |
+| Linux (x86_64, aarch64) | Flatpak bundle attached to each GitHub Release | Implemented in `.github/workflows/flatpak.yml`. |
 | macOS | none | Not planned. No build job exists and the Tauri config targets `nsis` only. |
 | Any OS (server) | Linux tarball and OCI image | Available. Flatpak does not replace them. |
 
@@ -27,16 +27,20 @@ The Flatpak is the desktop app only. The server keeps its tarball and container 
 2. **Flatpak build in CI.** `flatpak-builder` on the GNOME 48 runtime, using `deploy/packages/app.learnvault.desktop.yml`, for both architectures.
 3. **Audio and media.** Add `--socket=pulseaudio` (PipeWire goes through it). Lesson playback needs it; the current manifest does not grant it.
 4. **Portals instead of host calls.** FileChooser for importing a course folder. OpenURI instead of `xdg-open`. No direct filesystem grant.
-5. **Updater off in Flatpak.** The in-app updater reads `latest.json` and replaces the binary. Flathub owns updates for a Flatpak, so the updater must be disabled when running inside one (detect `FLATPAK_ID`).
-6. **Metainfo for Flathub.** Screenshots, release notes per version, OARS content rating, licence, and developer information. Validate with `appstream-util validate-relax`.
+5. **Updater off in Flatpak.** The in-app updater would replace the binary, which a Flatpak must not do. Updates arrive as a new bundle from the next release. The updater is gated on `FLATPAK_ID` (done in `crates/desktop/src/command.rs`).
+6. **Metainfo.** Validated with `appstreamcli` in CI. No store screenshots or age rating are required, since nothing is submitted to a store.
 7. **Smoke test in a sandbox.** Install the built bundle with `flatpak install --user`, start it, import a synthetic course folder through the portal, play a lesson, close and reopen. This is a CI job, not a manual step, and it runs on both architectures.
 8. **Release asset.** Add `learnvault-linux-desktop-<arch>.flatpak` and its checksum to `SHA256SUMS`, and update the asset table in `docs/releases/process.md`.
 
-## Decisions for the maintainer
+## Decisions (resolved)
 
-- **Distribution channel:** a bundle attached to GitHub Releases only, or also a Flathub submission. Flathub implies review and a stable app id, and the id `app.learnvault.desktop` is already fixed in the manifest.
-- **Which GNOME runtime** to keep current. Runtime 48 needs a bump on each GNOME release.
-- **Whether a Flatpak release is gated by the same `release` environment** as the container and assets. The plan assumes yes.
+- **Channel:** GitHub Release asset only. No Flathub or other store.
+- **Runtime:** `org.gnome.Platform` branch 51, the current release. GNOME 48 reached end of life in March 2026. The CI job checks the branch exists on Flathub before building.
+- **Release gate:** the bundle is published by the same `publish` job as the other assets, so it waits for the `release` environment approval.
+
+## Open decisions
+
+None blocking. Whether to add a Flathub submission later is a separate decision and would need its own review.
 
 ## Acceptance
 
@@ -52,5 +56,5 @@ The Flatpak is the desktop app only. The server keeps its tarball and container 
 1. Linux desktop build job (no packaging yet). Proves the binary builds on both architectures.
 2. Portals (FileChooser, OpenURI) and the pulseaudio socket, tested with a local Flatpak build.
 3. `flatpak-builder` job and the sandbox smoke test.
-4. Updater disabled in Flatpak, metainfo validation.
+4. Updater disabled in Flatpak, metainfo validation (both done).
 5. Release asset wiring, then the docs switch from planned to available.
