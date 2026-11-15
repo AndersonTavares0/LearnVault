@@ -116,7 +116,7 @@ pub fn course_title(root: &Path) -> String {
     };
     let cleaned = crate::catalog::clean_title(name);
     if !cleaned.is_empty() {
-        return cleaned;
+        return crate::titles::presentable(&cleaned);
     }
     // Uma pasta chamada "2024" ou "01" perde tudo na limpeza; o número é o único título
     // que diferencia os cursos de uma biblioteca por ano, então ele é preservado.
@@ -215,6 +215,18 @@ mod tests {
         std::fs::create_dir(&course).unwrap();
 
         assert_eq!(course_title(&course), "Física");
+    }
+
+    #[test]
+    fn title_reads_a_release_style_folder_name_as_words() {
+        assert_eq!(
+            course_title(Path::new("/cursos/Quimica_Para_Disciplinas")),
+            "Quimica Para Disciplinas"
+        );
+        assert_eq!(
+            course_title(Path::new("/cursos/Go.Golang.Do.zero")),
+            "Go Golang Do zero"
+        );
     }
 
     #[test]

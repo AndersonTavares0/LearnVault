@@ -106,8 +106,7 @@ test('notes take formatting, show it, and are found from the course card', async
 	await expect(page.getByText('Saved · just now')).toBeVisible();
 
 	await page.goto(`${origin}/#/notes`);
-	await expect(page.getByRole('heading', { name: /Choose a course to open its Notes/ })).toBeVisible();
-	await page.getByRole('link', { name: /^Course/ }).click();
+	await expect(page.getByRole('heading', { name: 'Notes', level: 1 })).toBeVisible();
 	await expect(page.locator('span.font-bold', { hasText: 'remember this' })).toBeVisible();
 	await expectNoAxeViolations(page, 'notebook');
 });

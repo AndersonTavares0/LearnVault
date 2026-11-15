@@ -383,13 +383,10 @@ fn root_titles(roots: &[learnvault_core::SourceRoot]) -> Vec<String> {
     let title = |parts: &[&str], depth: usize| {
         let (parents, name) = parts.split_at(parts.len() - 1);
         let keep = depth.saturating_sub(1).min(parents.len());
+        let name = learnvault_core::titles::presentable(name[0]);
         match keep {
-            0 => name[0].to_owned(),
-            _ => format!(
-                "{} ({})",
-                name[0],
-                parents[parents.len() - keep..].join("/")
-            ),
+            0 => name,
+            _ => format!("{} ({})", name, parents[parents.len() - keep..].join("/")),
         }
     };
     segments
@@ -788,6 +785,17 @@ mod title_tests {
                 prefix: (*prefix).to_owned(),
             })
             .collect()
+    }
+
+    #[test]
+    fn a_release_style_folder_name_reads_as_words() {
+        assert_eq!(
+            root_titles(&roots(&[
+                "Cursos/Go.Golang.Do.zero",
+                "Cursos/Quimica_Para_Disc"
+            ])),
+            ["Go Golang Do zero", "Quimica Para Disc"]
+        );
     }
 
     #[test]

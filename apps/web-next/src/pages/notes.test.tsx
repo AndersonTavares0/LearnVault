@@ -66,15 +66,19 @@ describe('notes', () => {
 		expect(screen.queryByText('note lost')).toBeNull();
 	});
 
-	it('starts from the courses, with the note count of each, and opens one', async () => {
-		renderApp('/notes', { catalog });
-		expect(await screen.findByRole('heading', { level: 1, name: /Choose a course to open its Notes/ })).toBeTruthy();
-		const link = await screen.findByRole('link', { name: /^Rust/ });
-		expect(link.getAttribute('href')).toBe('/notes?course=rust');
-		expect(screen.getAllByText('2 notes').length).toBeGreaterThan(0);
-		expect(screen.getByText(/No pinned courses yet/)).toBeTruthy();
-		fireEvent.change(screen.getByRole('searchbox', { name: 'Filter courses' }), { target: { value: 'zzz' } });
-		expect(screen.getByText('No courses match your search.')).toBeTruthy();
+	it('starts from every note and filters them by course', async () => {
+		const other: Catalog = { ...catalog, nodes: [...catalog.nodes, { title: 'Go', path: 'g', role: 'course', courseId: 'go', files: [], looseFiles: [], children: [
+			{ title: 'Channels', path: 'g/ch', role: 'lesson', files: [{ name: 'ch.mp4', path: 'g/ch.mp4', size: 1, mediaId: 'ch', kind: 'media', availability: 'available' }], looseFiles: [], children: [] }
+		] }] };
+		vi.mocked(transport.listNotes).mockResolvedValue([note('n1', 'Borrow checker rules'), note('n3', 'Goroutines are cheap', 'ch')]);
+		renderApp('/notes', { catalog: other });
+		expect(await screen.findByRole('heading', { level: 1, name: 'Notes' })).toBeTruthy();
+		expect(screen.getByText('Borrow checker rules')).toBeTruthy();
+		expect(screen.getByText('Goroutines are cheap')).toBeTruthy();
+		expect(screen.queryByText(/No pinned courses/)).toBeNull();
+		fireEvent.change(screen.getByRole('combobox', { name: 'Filter by course' }), { target: { value: 'go' } });
+		expect(await screen.findByRole('heading', { level: 1, name: /Go notes/ })).toBeTruthy();
+		expect(screen.queryByText('Borrow checker rules')).toBeNull();
 	});
 
 	it('edits a note in place', async () => {

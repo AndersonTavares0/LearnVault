@@ -18,7 +18,7 @@ test('signs in, indexes the library and resumes a lesson from My learning', asyn
 	await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
 	await page.getByRole('button', { name: 'Sign in' }).click();
 	// Sign-in returns to the page that asked for it.
-	await expect(page.getByRole('heading', { name: /Choose a course to open its Notes/ })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Notes', level: 1 })).toBeVisible();
 
 	await page.getByRole('link', { name: 'My learning' }).first().click();
 	await page.getByRole('button', { name: 'Refresh courses' }).click();
@@ -55,7 +55,6 @@ test('signs in, indexes the library and resumes a lesson from My learning', asyn
 
 	await page.goto(`${origin}/#/notes`);
 	await expectNoAxeViolations(page, 'notes courses');
-	await page.getByRole('link', { name: /^Course/ }).click();
 	await expect(page.getByText('Ownership moves values.')).toBeVisible();
 	await expectNoAxeViolations(page, 'notes');
 	await page.getByRole('button', { name: /^Pomodoro:/ }).click();
