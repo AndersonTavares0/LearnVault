@@ -2,11 +2,10 @@ import { Award, ChartNoAxesColumn, Check, Lock } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { ActivityHeatmap } from '@/components/activity-heatmap';
-import { Eyebrow, Panel } from '@/components/panel';
+import { Panel } from '@/components/panel';
 import { progressLabel, ProgressBar, routerPath } from '@/components/course-card';
 import { Button } from '@/components/ui/button';
 import { useLocale } from '@/hooks/use-locale';
-import { formatCount } from '@/lib/catalog';
 import { buildGamification, type Badge } from '@/lib/gamification';
 import { getLocale, tr } from '@/lib/i18n';
 import { buildLibrary } from '@/lib/library';
@@ -49,6 +48,8 @@ export function ProgressPage() {
 	const best = weekDays.reduce<(typeof weekDays)[number] | null>((top, day) => (day.minutes > (top?.minutes ?? 0) ? day : top), null);
 	const focusFailed = Boolean(focus.error);
 	const noFocus = !focusFailed && weekDays.every((day) => day.minutes === 0);
+	const lessonsDone = library.entries.reduce((sum, entry) => sum + entry.done, 0);
+	const startedCourses = library.entries.filter((entry) => entry.status !== 'not_started').length;
 	const resume = library.resume[0];
 	const focusHref = resume
 		? routerPath(href('course', resume.location.courseId, resume.location.lesson.path, resume.progress.positionSeconds))
@@ -56,53 +57,45 @@ export function ProgressPage() {
 
 	return (
 		<div className="space-y-6">
-			<PageHeader icon={ChartNoAxesColumn} title={tr('Your progress', 'Seu progresso')} description={`${tr(`Level ${game.level.level}`, `Nível ${game.level.level}`)} · ${game.level.xp} XP`} />
+			<PageHeader icon={ChartNoAxesColumn} title={tr('Your progress', 'Seu progresso')} description={`${tr(`Level ${game.level.level}`, `Nível ${game.level.level}`)} · ${game.level.xp} XP`} actions={
+				<div role="group" aria-label={tr('Period', 'Período')} className="flex gap-1 rounded-2xl border bg-card p-1">
+					{([['week', tr('This week', 'Esta semana')], ['all', tr('All time', 'Todo o tempo')]] as const).map(([value, text]) => (
+						<button key={value} type="button" aria-pressed={range === value} onClick={() => setRange(value)} className={cn('min-h-11 rounded-xl px-4 text-sm font-semibold focus-visible:ring-3 focus-visible:ring-ring/60 focus-visible:outline-none', range === value ? 'bg-brand-tint text-foreground ring-1 ring-primary' : 'text-muted-foreground hover:text-foreground')}>{text}</button>
+					))}
+				</div>
+			} />
 
-			<div className="grid items-start gap-6 lg:grid-cols-12">
-				<div className="order-1 min-w-0 space-y-6 lg:col-span-8">
-				<Panel className="space-y-4 p-5 sm:p-6">
-					<div className="flex flex-wrap items-start justify-between gap-4">
-						<div className="min-w-0">
-							<Eyebrow>{tr('This week', 'Esta semana')}</Eyebrow>
-							<p className="mt-2 font-heading text-4xl font-semibold tabular-nums sm:text-5xl">{formatMinutes(total)}<span className="ml-3 font-sans text-base font-medium text-muted-foreground">{range === 'week' ? tr('of focus this week', 'de foco nesta semana') : tr('of focus in all', 'de foco no total')}</span></p>
-							<h2 id="week-heading" className="mt-3 text-base font-medium">{tr(`${Math.min(study.weekActiveDays, goal)} of ${goal} days this week`, `${Math.min(study.weekActiveDays, goal)} de ${goal} dias nesta semana`)}</h2>
-							<p className="text-sm text-muted-foreground">{missing === 0 ? tr('You reached your weekly goal.', 'Você atingiu a meta semanal.') : tr(`${formatCount(missing, 'more day', 'more days')} to reach your goal.`, `Mais ${formatCount(missing, 'dia', 'dias')} para a meta.`)}</p>
-							<div role="progressbar" aria-valuemin={0} aria-valuemax={goal} aria-valuenow={Math.min(study.weekActiveDays, goal)} aria-label={tr('Weekly goal', 'Meta semanal')} className="mt-4 flex w-full max-w-xs gap-1">
-								{Array.from({ length: goal }, (_, index) => <span key={index} className={cn('h-2 flex-1 rounded-full', index < study.weekActiveDays ? 'bg-primary' : 'bg-muted')} />)}
-							</div>
-						</div>
-						<div role="group" aria-label={tr('Period', 'Período')} className="flex gap-1 rounded-2xl border bg-card p-1">
-							{([['week', tr('This week', 'Esta semana')], ['all', tr('All time', 'Todo o tempo')]] as const).map(([value, text]) => (
-								<button key={value} type="button" aria-pressed={range === value} onClick={() => setRange(value)} className={cn('min-h-11 rounded-xl px-4 text-sm font-semibold focus-visible:ring-3 focus-visible:ring-ring/60 focus-visible:outline-none', range === value ? 'bg-brand-tint text-foreground ring-1 ring-primary/40' : 'text-muted-foreground hover:text-foreground')}>{text}</button>
-							))}
-						</div>
-					</div>
+			<dl aria-label={tr('At a glance', 'Visão geral')} className="grid gap-4 sm:grid-cols-3">
+				<Metric label={tr('Lessons completed', 'Aulas concluídas')} value={String(lessonsDone)} caption={tr(`in ${startedCourses} ${startedCourses === 1 ? 'course' : 'courses'} you started`, `em ${startedCourses} ${startedCourses === 1 ? 'curso iniciado' : 'cursos iniciados'}`)} />
+				<Metric label={tr('Active days', 'Dias ativos')} value={String(Math.min(study.weekActiveDays, goal))} suffix={tr(`of ${goal}-day goal`, `da meta de ${goal} dias`)} caption={`${missing === 0 ? tr('Goal reached. ', 'Meta atingida. ') : ''}${tr(`Streak: ${study.currentStreak} ${study.currentStreak === 1 ? 'day' : 'days'}. Busiest day: ${best ? best.label : 'none yet'}.`, `Sequência: ${study.currentStreak} ${study.currentStreak === 1 ? 'dia' : 'dias'}. Dia mais forte: ${best ? best.label : 'nenhum ainda'}.`)}`} />
+				<Metric label={tr('Focus time', 'Tempo de foco')} value={formatMinutes(total)} caption={tr('Only the Pomodoro timer counts here.', 'Só o cronômetro Pomodoro conta aqui.')} />
+			</dl>
 
-					<dl aria-label={tr('At a glance', 'Visão geral')} className="grid grid-cols-3 gap-3 border-y py-3 text-sm">
-						<div><dt className="text-muted-foreground">{tr('Busiest day', 'Dia mais forte')}</dt><dd className="mt-1 font-semibold">{best ? `${best.label} · ${formatMinutes(best.minutes)}` : '–'}</dd></div>
-						<div><dt className="text-muted-foreground">{tr('Days studied', 'Dias estudados')}</dt><dd className="mt-1 font-semibold">{study.weekActiveDays} / 7</dd></div>
-						<div><dt className="text-muted-foreground">{tr('Day streak', 'Dias seguidos')}</dt><dd className="mt-1 font-semibold">{study.currentStreak} {study.currentStreak === 1 ? tr('day', 'dia') : tr('days', 'dias')}</dd></div>
-					</dl>
-					<div className="rounded-2xl border border-panel-edge bg-panel p-4">
-						<Eyebrow>{range === 'week' ? tr('Focus time, this week', 'Tempo de foco, nesta semana') : tr('Weekly breakdown', 'Detalhamento semanal')}</Eyebrow>
-						{focus.isPending ? (
-							<p role="status" className="mt-2 text-sm text-muted-foreground">{tr('Loading focus statistics…', 'Carregando estatísticas de foco…')}</p>
-						) : focusFailed ? (
-							<p role="alert" className="mt-2 text-sm text-destructive">{tr('Focus statistics could not be loaded.', 'Não foi possível carregar as estatísticas de foco.')}</p>
-						) : (
-							<FocusChart days={weekDays} />
-						)}
-						{noFocus && (
-							<Link to={focusHref} className="mt-4 inline-flex h-11 items-center rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground hover:bg-brand-deep focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
-								{tr('Start a focus session', 'Iniciar uma sessão de foco')}
-							</Link>
-						)}
+			<div className="grid gap-6 lg:grid-cols-12 lg:items-stretch">
+				<div className="order-1 flex min-w-0 flex-col gap-6 lg:col-span-8">
+				<Panel className="space-y-4 p-5 sm:p-6"><section aria-labelledby="focus-heading" className="space-y-4">
+					<div className="flex flex-wrap items-baseline justify-between gap-2">
+						<h2 id="focus-heading" className="font-heading text-2xl font-semibold">{range === 'week' ? tr('Focus time by day', 'Tempo de foco por dia') : tr('Weekly breakdown', 'Detalhamento semanal')}</h2>
+						<span className="text-sm text-muted-foreground">{range === 'week' ? tr(`${formatMinutes(total)} this week`, `${formatMinutes(total)} nesta semana`) : tr(`${formatMinutes(total)} in all`, `${formatMinutes(total)} no total`)}</span>
 					</div>
-				</Panel>
+					{focus.isPending ? (
+						<p role="status" className="text-sm text-muted-foreground">{tr('Loading focus statistics…', 'Carregando estatísticas de foco…')}</p>
+					) : focusFailed ? (
+						<p role="alert" className="text-sm text-destructive">{tr('Focus statistics could not be loaded.', 'Não foi possível carregar as estatísticas de foco.')}</p>
+					) : (
+						<FocusChart days={weekDays} />
+					)}
+					{noFocus && (
+						<Link to={focusHref} className="inline-flex h-11 items-center rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground hover:bg-brand-deep focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
+							{tr('Start a focus session', 'Iniciar uma sessão de foco')}
+						</Link>
+					)}
+				</section></Panel>
 				<CoursesPanel entries={library.entries} />
+				<Panel><ActivityHeatmap today={study.today} activeDays={study.activeDaysYear} /></Panel>
 				</div>
 
-				<div className="order-2 min-w-0 space-y-6 lg:col-span-4">
+				<div className="order-2 flex min-w-0 flex-col gap-6 lg:col-span-4">
 				<Panel className="min-w-0 p-5 sm:p-6"><section aria-labelledby="missions-heading" className="space-y-3">
 					<h2 id="missions-heading" className="font-heading text-2xl font-semibold">{tr('Today', 'Hoje')}</h2>
 					<ul className="divide-y border-y">
@@ -125,7 +118,7 @@ export function ProgressPage() {
 						})}
 					</ul>
 				</section></Panel>
-				<Panel className="p-5 sm:p-6"><section aria-labelledby="badges-heading" className="space-y-3">
+				<Panel className="flex-1 p-5 sm:p-6"><section aria-labelledby="badges-heading" className="space-y-3">
 					<h2 id="badges-heading" className="font-heading text-2xl font-semibold">{tr('Badges', 'Emblemas')}</h2>
 					<ul className="grid grid-cols-3 gap-x-2 gap-y-4 lg:grid-cols-2 xl:grid-cols-3">
 						{game.badges.map((badge) => <BadgeTile key={badge.id} badge={badge} />)}
@@ -133,11 +126,21 @@ export function ProgressPage() {
 				</section></Panel>
 				</div>
 
-				<Panel className="order-3 lg:col-span-12">
-					<ActivityHeatmap today={study.today} activeDays={study.activeDaysYear} />
-				</Panel>
 			</div>
 		</div>
+	);
+}
+
+/** One number with its label and what it counts, so lessons, active days and focus time are never confused. */
+function Metric({ label, value, suffix, caption }: { label: string; value: string; suffix?: string; caption: string }) {
+	return (
+		<Panel className="space-y-1 p-5">
+			<dt className="font-semibold">{label}</dt>
+			<dd className="space-y-1">
+				<p className="font-heading text-4xl font-semibold tabular-nums">{value}{suffix && <span className="ml-2 font-sans text-base font-medium text-muted-foreground">{suffix}</span>}</p>
+				<p className="text-sm text-muted-foreground">{caption}</p>
+			</dd>
+		</Panel>
 	);
 }
 
@@ -145,20 +148,14 @@ type LibraryEntries = ReturnType<typeof buildLibrary>['entries'];
 
 /** Where the learner stands in the library: lessons done, courses under way and finished, most recent first. */
 function CoursesPanel({ entries }: { entries: LibraryEntries }) {
-	const lessonsDone = entries.reduce((sum, entry) => sum + entry.done, 0);
 	const finished = entries.filter((entry) => entry.status === 'completed').length;
 	const active = entries.filter((entry) => entry.status === 'in_progress').sort((a, b) => (b.lastStudiedAt ?? 0) - (a.lastStudiedAt ?? 0));
 	return (
 		<Panel className="space-y-4 p-5 sm:p-6"><section aria-labelledby="courses-heading" className="space-y-4">
 			<div className="flex flex-wrap items-end justify-between gap-2">
-				<h2 id="courses-heading" className="font-heading text-2xl font-semibold">{tr('Courses', 'Cursos')}</h2>
+				<div><h2 id="courses-heading" className="font-heading text-2xl font-semibold">{tr('Courses', 'Cursos')}</h2><p className="text-sm text-muted-foreground">{tr(`${active.length} in progress · ${finished} finished`, `${active.length} em andamento · ${finished} concluídos`)}</p></div>
 				<Link to={routerPath(href('home'))} className="inline-flex min-h-11 items-center text-sm font-semibold text-primary hover:underline">{tr('All courses', 'Todos os cursos')}</Link>
 			</div>
-			<dl className="grid grid-cols-3 gap-3 border-y py-3 text-sm">
-				<div><dt className="text-muted-foreground">{tr('Lessons completed', 'Aulas concluídas')}</dt><dd className="mt-1 font-semibold tabular-nums">{lessonsDone}</dd></div>
-				<div><dt className="text-muted-foreground">{tr('In progress', 'Em andamento')}</dt><dd className="mt-1 font-semibold tabular-nums">{active.length}</dd></div>
-				<div><dt className="text-muted-foreground">{tr('Finished', 'Concluídos')}</dt><dd className="mt-1 font-semibold tabular-nums">{finished}</dd></div>
-			</dl>
 			{active.length === 0 ? (
 				<p className="text-sm text-muted-foreground">{tr('No course under way. Open a lesson and it shows up here.', 'Nenhum curso em andamento. Abra uma aula e ele aparece aqui.')}</p>
 			) : (
