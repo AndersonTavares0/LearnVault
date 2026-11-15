@@ -32,6 +32,7 @@ jobs:
       tag: ${{ steps.tag.outputs.tag }}
       commit_sha: ${{ steps.commit.outputs.commit_sha }}
       release_notes_base64: ${{ steps.release-notes.outputs.release_notes_base64 }}
+      prerelease: ${{ steps.release-kind.outputs.prerelease }}
     steps:
       - name: Require the trusted release workflow ref
         shell: bash
@@ -56,8 +57,10 @@ jobs:
             exit 1
           fi
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
-      # Only stable releases exist: a draft or pre-release tag can never be repaired or published as the latest release.
-      - name: Require an existing published stable release
+      # A draft is never built. A pre-release is built and published under its exact version only:
+      # it never moves :stable, :latest or the minor tag, and the updater (releases/latest) never sees it.
+      - name: Require an existing published release
+        id: release-kind
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -65,10 +68,16 @@ jobs:
         run: |
           set -euo pipefail
           meta="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease)"
-          if [[ "$(jq -r .isDraft <<<"$meta")" != "false" || "$(jq -r .isPrerelease <<<"$meta")" != "false" ]]; then
-            echo "::error::$RELEASE_TAG must be a published stable release (not a draft or pre-release)" >&2
+          if [[ "$(jq -r .isDraft <<<"$meta")" != "false" ]]; then
+            echo "::error::$RELEASE_TAG must be a published release (not a draft)" >&2
             exit 1
           fi
+          prerelease="$(jq -r .isPrerelease <<<"$meta")"
+          if [[ "$prerelease" != "true" && "$prerelease" != "false" ]]; then
+            echo "::error::Could not tell whether $RELEASE_TAG is a pre-release" >&2
+            exit 1
+          fi
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
       - name: Resolve release notes
         id: release-notes
         shell: bash
@@ -344,9 +353,9 @@ jobs:
           flavor: latest=false
           tags: |
             type=semver,pattern={{version}},value=${{ needs.validate-tag.outputs.tag }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ needs.validate-tag.outputs.tag }},enable=${{ !contains(needs.validate-tag.outputs.tag, '-') }}
-            type=raw,value=stable,enable=${{ github.event_name == 'release' && !contains(needs.validate-tag.outputs.tag, '-') }}
-            type=raw,value=latest,enable=${{ github.event_name == 'release' && !contains(needs.validate-tag.outputs.tag, '-') }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.validate-tag.outputs.tag }},enable=${{ needs.validate-tag.outputs.prerelease == 'false' }}
+            type=raw,value=stable,enable=${{ github.event_name == 'release' && needs.validate-tag.outputs.prerelease == 'false' }}
+            type=raw,value=latest,enable=${{ github.event_name == 'release' && needs.validate-tag.outputs.prerelease == 'false' }}
       - name: Confirm container release tag did not move
         shell: bash
         env:

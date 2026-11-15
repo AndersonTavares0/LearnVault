@@ -12,7 +12,8 @@ test('Release Please uses SemVer pre-major bumps, generated names, and categoriz
     assert.equal(release['bump-minor-pre-major'], true);
     assert.equal(release['bump-patch-for-minor-pre-major'], true);
     assert.equal(release.versioning, 'default');
-    assert.equal(release.prerelease, false);
+    // Before 1.0.0 every release is marked as a pre-release on GitHub, so it never becomes `latest` for the updater.
+    assert.equal(release.prerelease, true);
     assert.equal(release['prerelease-type'], undefined);
     assert.equal(release['release-as'], '0.9.0');
     assert.equal(release['include-v-in-tag'], true);
