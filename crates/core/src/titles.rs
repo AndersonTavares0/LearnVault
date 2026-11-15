@@ -18,7 +18,12 @@ const RELEASE_TAGS: &[&str] = &[
 /// Se a limpeza apagar tudo (por exemplo, um nome que é só `1080p`), devolve a entrada
 /// original, para que o nó nunca fique sem título.
 pub fn presentable(title: &str) -> String {
-    let spaced = title.replace('_', " ");
+    let mut spaced = title.replace('_', " ");
+    // shortcut: a title with no spaces and 2+ dots is a release-style name ("Go.Golang.Course");
+    // one dot ("Node.js") or a title with spaces keeps its dots.
+    if !spaced.trim().contains(char::is_whitespace) && spaced.matches('.').count() >= 2 {
+        spaced = spaced.replace('.', " ");
+    }
     let kept: Vec<&str> = spaced
         .split_whitespace()
         .filter(|token| !is_release_tag(token))
@@ -101,6 +106,16 @@ mod tests {
     fn turns_underscores_into_spaces_and_collapses_spaces() {
         assert_eq!(presentable("Intro_to__Rust"), "Intro to Rust");
         assert_eq!(presentable("  Lifetimes   basics "), "Lifetimes basics");
+    }
+
+    #[test]
+    fn turns_the_dots_of_a_release_style_name_into_spaces() {
+        assert_eq!(
+            presentable("Algoritmos.e.Logica.de.Programacao-O.Curso.COMPLETO-CL"),
+            "Algoritmos e Logica de Programacao-O Curso COMPLETO-CL"
+        );
+        assert_eq!(presentable("Node.js"), "Node.js");
+        assert_eq!(presentable("Python 3.12.1 basics"), "Python 3.12.1 basics");
     }
 
     #[test]
