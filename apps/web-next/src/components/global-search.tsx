@@ -128,7 +128,7 @@ export function GlobalSearch() {
 					aria-activedescendant={showPanel && active >= 0 ? `global-search-${active}` : undefined}
 					aria-label={tr('Search notes, courses and lessons', 'Buscar notas, cursos e aulas')}
 					aria-keyshortcuts="/ Control+K Meta+K"
-					placeholder={tr('Search everything', 'Buscar em tudo')}
+					placeholder={tr('Search courses, lessons and notes', 'Buscar cursos, aulas e notas')}
 					onFocus={() => setOpen(true)}
 					onChange={(event) => { setQuery(event.target.value); setOpen(true); setActive(-1); }}
 					onKeyDown={onKeyDown}
@@ -141,6 +141,9 @@ export function GlobalSearch() {
 					{search.isPending && <p role="status" className="px-3 py-4 text-sm text-muted-foreground">{tr('Searching…', 'Buscando…')}</p>}
 					{search.isError && <p role="alert" className="px-3 py-4 text-sm text-destructive">{tr('Search is unavailable right now.', 'A busca não está disponível agora.')}</p>}
 					{!search.isPending && !search.isError && total === 0 && <p role="status" className="px-3 py-4 text-sm text-muted-foreground">{tr(`No results for “${query.trim()}”.`, `Nenhum resultado para “${query.trim()}”.`)}</p>}
+					{!search.isPending && !search.isError && total > 0 && (
+						<p className="px-3 pt-1 pb-2 text-xs text-muted-foreground">{tr('Searches courses, lessons and notes.', 'Procura em cursos, aulas e notas.')}</p>
+					)}
 					{!search.isPending && !search.isError && results.notes.length > 0 && (
 						<Group label={tr('Notes', 'Notas')}>
 							{results.notes.map((note, index) => (
@@ -149,7 +152,7 @@ export function GlobalSearch() {
 									<span className="min-w-0 flex-1 space-y-0.5">
 										<span className="flex flex-wrap items-baseline gap-x-2">
 											<span className="font-medium">{note.lessonTitle}</span>
-											<span className="text-xs text-muted-foreground">{note.courseTitle} · {formatDuration(note.positionSeconds)}</span>
+											<span className="text-xs text-muted-foreground">{note.courseTitle} · {tr(`Opens at ${formatDuration(note.positionSeconds)}`, `Abre em ${formatDuration(note.positionSeconds)}`)}</span>
 										</span>
 										<Marked text={note.snippet} />
 									</span>
@@ -164,7 +167,7 @@ export function GlobalSearch() {
 								return (
 									<Option key={course.courseId} id={`global-search-${index}`} active={active === index} onClick={() => openItem({ kind: 'course', course })}>
 										<span className="mt-0.5 text-primary" aria-hidden="true"><BookOpen className="size-4" /></span>
-										<span className="min-w-0 flex-1"><span className="block font-medium">{course.title}</span><span className="text-xs text-muted-foreground">{tr('Course', 'Curso')}</span></span>
+										<span className="min-w-0 flex-1"><span className="block font-medium">{course.title}</span><span className="text-xs text-muted-foreground">{tr('Course · Opens curriculum', 'Curso · Abre o currículo')}</span></span>
 									</Option>
 								);
 							})}
@@ -177,7 +180,7 @@ export function GlobalSearch() {
 								return (
 									<Option key={lesson.mediaId} id={`global-search-${index}`} active={active === index} onClick={() => openItem({ kind: 'lesson', lesson })}>
 										<span className="mt-0.5 text-primary" aria-hidden="true"><Play className="size-4" /></span>
-										<span className="min-w-0 flex-1"><span className="block font-medium">{lesson.title}</span><span className="text-xs text-muted-foreground">{lesson.courseTitle}</span></span>
+										<span className="min-w-0 flex-1"><span className="block font-medium">{lesson.title}</span><span className="text-xs text-muted-foreground">{lesson.courseTitle} · {tr('Opens lesson', 'Abre a aula')}</span></span>
 									</Option>
 								);
 							})}
