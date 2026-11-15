@@ -62,7 +62,7 @@ describe('notes', () => {
 		vi.mocked(transport.listNotes).mockResolvedValue([at('late', 300, 50), at('early', 10, 40), at('mid', 100, 30), at('oldest', 200, 5), at('lost', 1, 60, 'gone')]);
 		renderApp('/notes?course=rust', { catalog });
 		const lesson = await screen.findByRole('region', { name: 'Ownership' });
-		expect(within(lesson).getAllByRole('listitem').map((item) => item.textContent?.match(/note \w+/)?.[0])).toEqual(['note early', 'note mid', 'note oldest', 'note late']);
+		expect(within(lesson).getAllByRole('listitem').map((item) => within(item).getByText(/^note \w+$/).textContent)).toEqual(['note early', 'note mid', 'note oldest', 'note late']);
 		expect(screen.queryByText('note lost')).toBeNull();
 	});
 

@@ -78,6 +78,17 @@ function Notebook({ courseId }: { courseId: string | null }) {
 		return { groups, matches, courseTitle, courses, inScope };
 	}, [notes.data, catalog.data, query, courseId]);
 
+	const courseSections = useMemo(() => {
+		const sections = new Map<string, { id: string; title: string; count: number; groups: typeof groups }>();
+		for (const group of groups) {
+			const id = noteCourse(group.location);
+			const section = sections.get(id) ?? { id, title: group.location?.courseTitle ?? goneTitle(), count: 0, groups: [] };
+			section.count += group.items.length;
+			section.groups.push(group);
+			sections.set(id, section);
+		}
+		return [...sections.values()];
+	}, [groups]);
 	const total = matches.length;
 	const dayGroups = [...new Set(matches.map((entry) => dayKey(entry.note.updatedAt)))].sort().reverse().map((day) => ({ day, items: matches.filter((entry) => dayKey(entry.note.updatedAt) === day).sort((a, b) => b.note.updatedAt - a.note.updatedAt) }));
 	const weekCount = notesThisWeek(matches.map(({ note }) => note));
@@ -92,22 +103,18 @@ function Notebook({ courseId }: { courseId: string | null }) {
 	};
 
 	const renderItem = ({ note, location }: Entry, showLesson: boolean) => (
-			<li key={note.noteId} className="space-y-2 py-4 first:pt-0 last:pb-0">
-			{showLesson && <p className="text-sm text-muted-foreground">{location ? `${location.courseTitle} · ${location.lesson.title}` : note.relativePath ?? tr('Unknown lesson', 'Aula desconhecida')}</p>}
-				<div className="flex flex-wrap items-center gap-3 text-sm">
+		<li key={note.noteId} className="group -mx-3 flex gap-4 rounded-xl px-3 py-3 focus-within:bg-muted/50 hover:bg-muted/50">
+			<div className="w-14 shrink-0 pt-0.5">
 					{location ? (
-						<Link to={href('course', location.courseId, location.lesson.path, note.positionSeconds).replace(/^#/, '')} aria-label={tr(`Open ${location.lesson.title} at ${formatDuration(note.positionSeconds)}`, `Abrir ${location.lesson.title} em ${formatDuration(note.positionSeconds)}`)} className="inline-flex min-h-11 items-center font-semibold text-primary tabular-nums hover:underline">
+						<Link to={href('course', location.courseId, location.lesson.path, note.positionSeconds).replace(/^#/, '')} aria-label={tr(`Open ${location.lesson.title} at ${formatDuration(note.positionSeconds)}`, `Abrir ${location.lesson.title} em ${formatDuration(note.positionSeconds)}`)} className="relative inline-flex h-8 min-w-14 items-center justify-center rounded-lg bg-brand-soft px-2 text-sm font-semibold text-primary tabular-nums after:absolute after:-inset-y-2 after:inset-x-0 after:content-[''] hover:underline">
 							{formatDuration(note.positionSeconds)}
 						</Link>
 					) : (
-						<span className="text-muted-foreground tabular-nums">{formatDuration(note.positionSeconds)}</span>
+						<span className="inline-flex h-8 min-w-14 items-center justify-center rounded-lg bg-muted px-2 text-sm text-muted-foreground tabular-nums">{formatDuration(note.positionSeconds)}</span>
 					)}
-					<span className="text-muted-foreground">{new Date(note.updatedAt * 1000).toLocaleDateString(getLocale(), { dateStyle: 'medium' })}</span>
-					<span className="ml-auto flex gap-1">
-						<Button variant="ghost" size="icon" onClick={() => setEditing({ id: note.noteId, content: note.content })} aria-label={tr('Edit note', 'Editar nota')}><Pencil /></Button>
-						<Button variant="ghost" size="icon" disabled={remove.isPending} onClick={() => setDeleting(note)} aria-label={tr('Delete note', 'Excluir nota')}><Trash2 /></Button>
-					</span>
-				</div>
+			</div>
+			<div className="min-w-0 flex-1 space-y-1">
+				{showLesson && <p className="text-sm text-muted-foreground">{location ? `${location.courseTitle} · ${location.lesson.title}` : note.relativePath ?? tr('Unknown lesson', 'Aula desconhecida')}</p>}
 				{editing?.id === note.noteId ? (
 					<form className="space-y-2" onSubmit={(event) => { event.preventDefault(); if (editing.content.trim()) update.mutate({ id: editing.id, content: editing.content.trim() }); }}>
 						<label htmlFor={`edit-${note.noteId}`} className="sr-only">{tr('Note text', 'Texto da nota')}</label>
@@ -118,11 +125,16 @@ function Notebook({ courseId }: { courseId: string | null }) {
 						</div>
 					</form>
 				) : (
-					<Markdown text={note.content} className="max-w-prose font-serif text-lg leading-relaxed" />
+					<Markdown text={note.content} className="max-w-prose font-[Literata_Variable,Georgia,serif] text-[1.0625rem] leading-relaxed" />
 				)}
-			</li>
+				<p className="text-xs text-muted-foreground">{new Date(note.updatedAt * 1000).toLocaleDateString(getLocale(), { dateStyle: 'medium' })}</p>
+			</div>
+			<span className="flex shrink-0 gap-1 self-start opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100">
+				<Button variant="ghost" size="icon" onClick={() => setEditing({ id: note.noteId, content: note.content })} aria-label={tr('Edit note', 'Editar nota')}><Pencil /></Button>
+				<Button variant="ghost" size="icon" disabled={remove.isPending} onClick={() => setDeleting(note)} aria-label={tr('Delete note', 'Excluir nota')}><Trash2 /></Button>
+			</span>
+		</li>
 	);
-
 
 	return (
 		<div className="space-y-8">
@@ -164,20 +176,23 @@ function Notebook({ courseId }: { courseId: string | null }) {
 							</section>
 						))
 					) : (
-						groups.map((group) => (
-							<section key={group.items[0].note.mediaId} aria-label={group.lesson}>
-								<Panel className="space-y-3">
-									<div className="flex flex-wrap items-end justify-between gap-2">
-										<div className="min-w-0">
-											{courseId === null && group.location && <p className="text-sm text-muted-foreground">{group.location.courseTitle}</p>}
-											<h2 className="font-heading text-xl font-semibold text-balance">{group.lesson}</h2>
-										</div>
+						courseSections.map((section) => {
+							const lessons = section.groups.map((group) => (
+								<section key={group.items[0].note.mediaId} aria-label={group.lesson} className="border-t pt-5 pb-3">
+									<div className="flex flex-wrap items-baseline justify-between gap-2">
+										<h3 className="text-lg font-semibold text-balance">{group.lesson}</h3>
 										{group.location && <Link to={href('course', group.location.courseId, group.location.lesson.path).replace(/^#/, '')} className="inline-flex min-h-11 items-center text-sm font-semibold text-primary hover:underline">{tr('Open lesson', 'Abrir aula')}</Link>}
 									</div>
-									<ul className="divide-y">{group.items.map((entry) => renderItem(entry, false))}</ul>
-								</Panel>
-							</section>
-						))
+									<ul>{group.items.map((entry) => renderItem(entry, false))}</ul>
+								</section>
+							));
+							return courseId === null ? (
+								<section key={section.id} aria-label={section.title} className="space-y-1">
+									<h2 className="pt-4 font-heading text-2xl font-semibold text-balance">{section.title}<span className="ml-3 font-sans text-sm font-medium text-muted-foreground">{tr(`${section.count} ${section.count === 1 ? 'note' : 'notes'}`, `${section.count} ${section.count === 1 ? 'nota' : 'notas'}`)}</span></h2>
+									{lessons}
+								</section>
+							) : <div key={section.id}>{lessons}</div>;
+						})
 					)}
 				</div>
 			</div>
