@@ -30,6 +30,7 @@ export function ProgressBar({ value, label, className }: { value: number; label:
 
 /** "42% complete · 3 lessons left", or its not-started and completed forms. */
 export function progressLabel(entry: CourseEntry): string {
+	if (entry.total === 0) return tr('No lessons found', 'Nenhuma aula encontrada');
 	const percent = entry.total ? Math.round((entry.done / entry.total) * 100) : 0;
 	const left = formatCount(entry.total - entry.done, tr('lesson left', 'aula restante'), tr('lessons left', 'aulas restantes'));
 	if (entry.status === 'completed') return tr('Completed', 'Concluído');
@@ -81,9 +82,11 @@ export function CourseCard({ entry, profile, variant = 'grid', canManage = false
 					</h3>
 					<p className="truncate text-sm text-muted-foreground">{entry.next && entry.status === 'in_progress' ? `${tr('Next:', 'Próxima:')} ${entry.next.title}` : entry.status === 'not_started' ? tr('Not started', 'Não iniciado') : progressLabel(entry)}</p>
 				</div>
-				{entry.total > 0 && <div className="hidden w-56 shrink-0 sm:block"><ProgressBar value={entry.done / Math.max(1, entry.total)} label={progressLabel(entry)} /></div>}
+				<div className="hidden w-56 shrink-0 sm:block">{entry.done > 0 ? <ProgressBar value={entry.done / Math.max(1, entry.total)} label={progressLabel(entry)} /> : <p className="text-sm text-muted-foreground">{progressLabel(entry)}</p>}</div>
 				<span className="hidden w-32 shrink-0 text-sm text-muted-foreground md:block">{entry.lastStudiedAt ? tr(`Studied ${lastStudied}`, `Estudado ${lastStudied}`) : tr('Not studied', 'Não estudado')}</span>
-				<span className="w-16 shrink-0 text-right text-sm font-semibold text-primary">{entry.status === 'not_started' ? tr('Start', 'Começar') : tr('Resume', 'Retomar')}</span>
+				{entry.status === 'in_progress' && entry.next ? (
+					<Link to={routerPath(href('course', entry.courseId, entry.next.path))} className="relative z-10 inline-flex min-h-11 w-16 shrink-0 items-center justify-end text-sm font-semibold text-primary hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none" aria-label={tr(`Resume ${entry.course.title}: ${entry.next.title}`, `Retomar ${entry.course.title}: ${entry.next.title}`)}>{tr('Resume', 'Retomar')}</Link>
+				) : <span className="w-16 shrink-0 text-right text-sm font-semibold text-primary">{tr('Open', 'Abrir')}</span>}
 				{manageable && <div className="relative z-10"><CourseManagement course={entry.course} courseId={entry.courseId} lessons={entry.total} compact /></div>}
 			</li>
 		);

@@ -1,5 +1,5 @@
 import { ChevronRight, FolderPlus, Play, RefreshCw, Search, Star } from 'lucide-react';
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { BrandMark } from '@/components/brand';
 import { Stat } from '@/components/panel';
@@ -26,6 +26,8 @@ import { PageHeader } from '@/app/shell';
 
 // Four views share one filter and sort state (docs/design/parity.md).
 
+const LIBRARY_RETURN_KEY = 'learnvault-library-return';
+
 export function HomePage() {
 	useLocale();
 	const session = useSession();
@@ -35,6 +37,8 @@ export function HomePage() {
 	const favorites = useFavorites();
 	const rewards = useRewards();
 	const [params, setParams] = useSearchParams();
+	// The filter and search stay one click away: the course page's breadcrumb returns to them.
+	useEffect(() => { try { safeStorage()?.setItem(LIBRARY_RETURN_KEY, params.toString()); } catch { /* storage is optional */ } }, [params]);
 	const [view, setView] = useState<LibraryView>(() => readLibraryView(safeStorage()));
 	const [sort, setSort] = useState<LibrarySort>(() => readLibrarySort(safeStorage()));
 	const [message, setMessage] = useState('');

@@ -1,6 +1,7 @@
 import { FileText, Star } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
+import { safeStorage } from '@/app/preferences';
 import { CourseManagement } from '@/components/course-management';
 import { CourseCover } from '@/components/course-cover';
 import { Hero } from '@/components/panel';
@@ -103,7 +104,7 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 	return (
 		<div className="space-y-8">
 			<div className="space-y-4">
-				<p className="text-sm text-muted-foreground"><Link to="/" className="inline-flex min-h-11 items-center hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">{tr('My learning', 'Meu aprendizado')}</Link> / {course.title}</p>
+				<p className="text-sm text-muted-foreground"><Link to={libraryReturn()} className="inline-flex min-h-11 items-center hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">{tr('My learning', 'Meu aprendizado')}</Link> / {course.title}</p>
 				<Hero className="p-6">
 					<div className="grid gap-6 lg:grid-cols-[12.5rem_minmax(0,1fr)_auto] lg:items-center">
 					<div className="max-w-xs lg:w-[12.5rem] lg:max-w-none"><CourseCover course={course} profile={user?.userId ?? ''} eager done={entry?.done ?? 0} total={entry?.total ?? 0} map={!readingOnly} className={readingOnly ? 'hidden sm:block' : undefined} /></div>
@@ -125,8 +126,8 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 						</div>
 						<div className="flex flex-col items-stretch gap-2 lg:w-52">
 							{continuePath ? (
-								<Link to={path(href('course', courseId, continuePath, resumeAt))} className="inline-flex h-11 items-center justify-center rounded-xl bg-primary px-5 text-base font-semibold text-primary-foreground hover:bg-brand-deep focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
-									{lastStudied ? tr('Continue studying', 'Continuar estudando') : tr('Start course', 'Começar curso')}
+								<Link to={path(href('course', courseId, continuePath, resumeAt))} className="inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-5 py-2 text-center text-base leading-snug font-semibold text-primary-foreground hover:bg-brand-deep focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
+									{lastStudied?.location && !lastStudied.item.completed ? `${tr('Resume', 'Retomar')} ${lastStudied.location.lesson.title}${resumeAt ? ` · ${formatDuration(resumeAt)}` : ''}` : lastStudied ? tr('Continue studying', 'Continuar estudando') : tr('Start course', 'Começar curso')}
 								</Link>
 							) : documents.length > 0 ? (
 								<Link to={path(href('course', courseId, documents[0].path))} className="inline-flex h-11 items-center justify-center rounded-xl bg-primary px-5 text-base font-semibold text-primary-foreground hover:bg-brand-deep focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
@@ -231,6 +232,16 @@ function CourseNotes({ course, courseId }: { course: CatalogNode; courseId: stri
 }
 
 /** Why the course's organization may not match what the learner expects, in plain words. */
+/** The library as the learner left it (filter and search), or its start. */
+function libraryReturn(): string {
+	try {
+		const saved = safeStorage()?.getItem('learnvault-library-return');
+		return saved ? `/?${saved}` : '/';
+	} catch {
+		return '/';
+	}
+}
+
 function StructureNotice({ concerns }: { concerns: string[] }) {
 	const hard = concerns.length > 1 || concerns.includes('no_lessons') || concerns.includes('loose_media');
 	const headline = hard

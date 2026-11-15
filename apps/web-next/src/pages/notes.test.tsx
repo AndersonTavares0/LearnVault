@@ -39,7 +39,7 @@ describe('notes', () => {
 		vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: create, revokeObjectURL: vi.fn() }));
 		const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
 		renderApp('/notes?course=rust', { catalog });
-		fireEvent.click(await screen.findByRole('button', { name: 'Export as Markdown' }));
+		fireEvent.click(await screen.findByRole('button', { name: /^Export \d+ notes? as Markdown$/ }));
 		expect(create).toHaveBeenCalledOnce();
 		const blob = (create.mock.calls[0] as unknown as [Blob])[0];
 		expect(await blob.text()).toContain('## Rust\n\n### Ownership\n\n- **1:15** Borrow checker rules');

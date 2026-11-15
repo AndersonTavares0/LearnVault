@@ -44,13 +44,7 @@ export function LoginPage() {
 				<span className="font-heading text-3xl font-semibold">LearnVault</span>
 				<div className="max-w-md space-y-5">
 					<p className="font-heading text-4xl leading-tight font-semibold text-balance">{tr('Your courses, where you left them.', 'Seus cursos, de onde você parou.')}</p>
-					<ul className="space-y-3 text-lg">
-						<li>{tr('Resume the right lesson in one click.', 'Retome a aula certa com um clique.')}</li>
-						<li>{tr('Your course folders are read, never changed.', 'Suas pastas de cursos são lidas, nunca alteradas.')}</li>
-						<li>{tr('Notes, cards and progress stay on your own server.', 'Notas, cartões e progresso ficam no seu próprio servidor.')}</li>
-					</ul>
 				</div>
-				<p className="text-sm text-muted-foreground">{tr('Accounts are created by the administrator.', 'As contas são criadas pelo administrador.')}</p>
 			</section>
 			<div className="grid place-items-center px-4 py-10">
 				<div className="flex w-full max-w-sm flex-col items-center gap-6">
@@ -76,7 +70,7 @@ export function LoginPage() {
 						</Button>
 
 					</form>
-					<p className="text-center text-sm text-muted-foreground lg:hidden">{tr('Accounts are created by the administrator. Nothing leaves this server.', 'As contas são criadas pelo administrador. Nada sai deste servidor.')}</p>
+					<p className="text-center text-sm text-muted-foreground">{tr('Accounts are created by the administrator. Nothing leaves this server.', 'As contas são criadas pelo administrador. Nada sai deste servidor.')}</p>
 					<Button variant="ghost" onClick={() => setLocale(otherLocale)} aria-label={tr(`Switch language to ${LOCALE_LABELS[otherLocale]}`, `Mudar idioma para ${LOCALE_LABELS[otherLocale]}`)}>
 						{LOCALE_LABELS[otherLocale]}
 					</Button>

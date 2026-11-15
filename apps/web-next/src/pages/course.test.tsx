@@ -25,12 +25,19 @@ describe('course page', () => {
 		renderApp('/course/rust', { catalog, recent: [{ mediaId: 'borrow.mp4', positionSeconds: 70, completed: false, updatedAt: 2, recorded: true }, { mediaId: 'own.mp4', positionSeconds: 0, completed: true, updatedAt: 1, recorded: true }] });
 		expect(await screen.findByRole('heading', { level: 1, name: 'Rust from zero' })).toBeTruthy();
 		expect(screen.getByRole('progressbar', { name: '1 of 2 lessons completed (50%)' })).toBeTruthy();
-		expect(screen.getByRole('link', { name: 'Continue studying' }).getAttribute('href')).toBe('/course/rust/rust%2FBorrowing?t=70');
+		expect(screen.getByRole('link', { name: /^Resume Borrowing/ }).getAttribute('href')).toBe('/course/rust/rust%2FBorrowing?t=70');
 		expect(screen.getByText('You are here')).toBeTruthy();
 		expect(screen.getByText('2 lessons')).toBeTruthy();
 		expect(screen.getByRole('button', { name: 'Mark “Ownership” as not completed' }).getAttribute('aria-pressed')).toBe('true');
-		expect(screen.getByRole('link', { name: /Borrowing/ }).getAttribute('aria-current')).toBe('page');
+		expect(screen.getByRole('link', { name: /^Borrowing/ }).getAttribute('aria-current')).toBe('page');
 		expect(screen.getByText('Missing media')).toBeTruthy();
+	});
+
+	it('returns to the library with the filter and search the learner left', async () => {
+		localStorage.setItem('learnvault-library-return', 'filter=in_progress&q=rust');
+		renderApp('/course/rust', { catalog });
+		expect((await within(await screen.findByRole('main')).findByRole('link', { name: 'My learning' })).getAttribute('href')).toBe('/?filter=in_progress&q=rust');
+		localStorage.removeItem('learnvault-library-return');
 	});
 
 	it('lists course materials with a download link', async () => {

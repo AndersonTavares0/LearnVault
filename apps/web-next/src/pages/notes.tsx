@@ -157,7 +157,7 @@ function Notebook({ courseId }: { courseId: string | null }) {
 							<Button size="sm" variant={view === 'lesson' ? 'selected' : 'outline'} aria-pressed={view === 'lesson'} onClick={() => setView('lesson')}>{tr('By lesson', 'Por aula')}{view === 'lesson' && <Check className="size-3.5 text-primary" aria-hidden="true" />}</Button>
 							<Button size="sm" variant={view === 'date' ? 'selected' : 'outline'} aria-pressed={view === 'date'} onClick={() => setView('date')}>{tr('By date', 'Por data')}{view === 'date' && <Check className="size-3.5 text-primary" aria-hidden="true" />}</Button>
 						</div>
-						{matches.length > 0 && <Button size="sm" variant="outline" className="ml-auto" onClick={exportMarkdown}><Download />{tr('Export as Markdown', 'Exportar em Markdown')}</Button>}
+						{matches.length > 0 && <Button size="sm" variant="outline" className="ml-auto" onClick={exportMarkdown}><Download />{tr(`Export ${total} ${total === 1 ? 'note' : 'notes'} as Markdown`, `Exportar ${total} ${total === 1 ? 'nota' : 'notas'} em Markdown`)}</Button>}
 					</div>
 					{(update.error || remove.error) && <p role="alert" className="text-sm text-destructive">{(update.error ?? remove.error)?.message}</p>}
 					{notes.isPending ? (
