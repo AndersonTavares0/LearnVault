@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, CircleCheck, Circle, FileText, PanelRightClose, PanelRightOpen, PenLine, SquarePlus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CircleCheck, Circle, FileText, PanelRightClose, PanelRightOpen, PenLine, Search, SquarePlus } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { safeStorage } from '@/app/preferences';
@@ -12,6 +12,7 @@ import { PdfReader } from '@/components/player/pdf-reader';
 import { MediaPlayer, type PlayerHandle } from '@/components/player/media-player';
 import { StudyNotes, useLessonNotes } from '@/components/player/study-notes';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { usePlayerPreferences } from '@/hooks/use-player-preferences';
 import { useLocale } from '@/hooks/use-locale';
@@ -23,6 +24,7 @@ import { findLessonPdf, formatFileSize } from '@/lib/pdf';
 import { findLessonText, loadText } from '@/lib/text-lesson';
 import { formatDuration, selectPlayableMedia, shouldAutoAdvance, studySyncSupported } from '@/lib/player';
 import { lessonPreferenceKey, type PlayerPreferences } from '@/lib/player-preferences';
+import { normalizeForSearch } from '@/lib/search';
 import { pomodoro, resetTimer, skipTimer, startTimer } from '@/lib/pomodoro-store';
 import { findLesson, findLessonLocation, href } from '@/lib/router';
 import { clearPosition, nextAttemptAt, progressOutbox, queuePosition } from '@/lib/progress-outbox';
@@ -57,6 +59,9 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 	// Cinema gives the picture the whole width; the course content can also be hidden. Both are remembered.
 	const [cinema, setCinema] = useStoredFlag('learnvault-cinema', false);
 	const [contentOpen, setContentOpen] = useStoredFlag('learnvault-lesson-content', true);
+	const [find, setFind] = useState('');
+	const needle = normalizeForSearch(find.trim());
+	const found = useMemo(() => (needle ? filterLessons(course.children, needle) : course.children), [course.children, needle]);
 	const wide = cinema || !contentOpen;
 	const [noteRequest, setNoteRequest] = useState(0);
 	const [cardRequest, setCardRequest] = useState(0);
@@ -347,12 +352,25 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 								<p className="text-sm text-muted-foreground">{tr(`${overall.done} of ${overall.total} lessons completed`, `${overall.done} de ${overall.total} aulas concluídas`)}</p>
 							</div>
 						</div>
-						<Curriculum compact nodes={course.children} courseId={courseId} completed={completed} favorites={favoriteMedia} activePath={lessonPath} />
+						<div role="search" className="relative px-1">
+							<Search className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+							<Input type="search" value={find} onChange={(event) => setFind(event.target.value)} placeholder={tr('Find a lesson', 'Buscar aula')} aria-label={tr('Find a lesson', 'Buscar aula')} className="h-10 pl-9" />
+						</div>
+						{found.length === 0 ? <p role="status" className="px-2 py-3 text-sm text-muted-foreground">{tr('No lesson matches.', 'Nenhuma aula corresponde.')}</p> : <Curriculum compact nodes={found} courseId={courseId} completed={completed} favorites={favoriteMedia} activePath={lessonPath} signal={needle ? { open: true, n: needle.length } : undefined} />}
 					</aside>
 				)}
 			</div>
 		</div>
 	);
+}
+
+/** The modules and lessons whose titles contain the text; a module is kept when one of its lessons matches. */
+function filterLessons(nodes: CatalogNode[], needle: string): CatalogNode[] {
+	return nodes.flatMap((node) => {
+		if (node.role === 'lesson') return normalizeForSearch(node.title).includes(needle) ? [node] : [];
+		const children = filterLessons(node.children, needle);
+		return children.length > 0 ? [{ ...node, children }] : [];
+	});
 }
 
 /** A yes/no choice kept in this browser; unreadable storage just means the default. */
