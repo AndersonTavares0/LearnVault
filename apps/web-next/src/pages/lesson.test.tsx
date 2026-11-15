@@ -88,7 +88,7 @@ describe('lesson page', () => {
 		cleanup();
 		renderApp('/course/c/c%2FOne', { catalog });
 		expect((await screen.findByRole('button', { name: 'Cinema mode' })).getAttribute('aria-pressed')).toBe('true');
-		fireEvent.click(screen.getByRole('button', { name: 'Exit cinema mode' }));
+		fireEvent.click(screen.getByRole('button', { name: 'Exit cinema' }));
 		expect(localStorage.getItem('learnvault-cinema')).toBe('0');
 	});
 

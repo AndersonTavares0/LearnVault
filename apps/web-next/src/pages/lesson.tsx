@@ -253,7 +253,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 						<Button variant="outline" className="h-11 rounded-full px-5 disabled:opacity-60" disabled={!previous} onClick={() => previous && goTo(previous.path)}><ChevronLeft />{tr('Previous', 'Anterior')}</Button>
 						<Button className="h-11 rounded-full px-5" disabled={!next} title={tr('Jump to the next lesson without marking this one completed', 'Ir para a próxima aula sem marcar esta como concluída')} onClick={() => next && goTo(next.path)}>{tr('Next', 'Próxima')}<ChevronRight /></Button>
 						{cinema && (
-							<Button variant="secondary" className="h-11 rounded-full px-5" onClick={() => setCinema(false)}>{tr('Exit cinema mode', 'Sair do modo cinema')}</Button>
+							<Button variant="secondary" className="h-11 rounded-full px-5" onClick={() => setCinema(false)}>{tr('Exit cinema', 'Sair do cinema')}</Button>
 						)}
 						<Button variant="outline" className="hidden h-11 rounded-full px-5 lg:inline-flex" aria-pressed={contentOpen} title={tr('Expand player width by hiding the course content sidebar', 'Ampliar a largura do player ocultando a barra de conteúdo')} onClick={() => setContentOpen(!contentOpen)} aria-label={contentOpen ? tr('Hide contents', 'Ocultar conteúdo') : tr('Show contents', 'Mostrar conteúdo')}>{tr('Contents', 'Conteúdo')}</Button>
 					</div>
