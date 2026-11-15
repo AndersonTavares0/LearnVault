@@ -57,18 +57,12 @@ export function ProgressPage() {
 
 	return (
 		<div className="space-y-6">
-			<PageHeader icon={ChartNoAxesColumn} title={tr('Your progress', 'Seu progresso')} description={`${tr(`Level ${game.level.level}`, `Nível ${game.level.level}`)} · ${game.level.xp} XP`} actions={
-				<div role="group" aria-label={tr('Period', 'Período')} className="flex gap-1 rounded-2xl border bg-card p-1">
-					{([['week', tr('This week', 'Esta semana')], ['all', tr('All time', 'Todo o tempo')]] as const).map(([value, text]) => (
-						<button key={value} type="button" aria-pressed={range === value} onClick={() => setRange(value)} className={cn('min-h-11 rounded-xl px-4 text-sm font-semibold focus-visible:ring-3 focus-visible:ring-ring/60 focus-visible:outline-none', range === value ? 'bg-brand-tint text-foreground ring-1 ring-primary' : 'text-muted-foreground hover:text-foreground')}>{text}</button>
-					))}
-				</div>
-			} />
+			<PageHeader icon={ChartNoAxesColumn} title={tr('Your progress', 'Seu progresso')} description={`${tr(`Level ${game.level.level}`, `Nível ${game.level.level}`)} · ${game.level.xp} XP`} />
 
 			<dl aria-label={tr('At a glance', 'Visão geral')} className="grid gap-4 sm:grid-cols-3">
-				<Metric label={tr('Lessons completed', 'Aulas concluídas')} value={String(lessonsDone)} caption={tr(`in ${startedCourses} ${startedCourses === 1 ? 'course' : 'courses'} you started`, `em ${startedCourses} ${startedCourses === 1 ? 'curso iniciado' : 'cursos iniciados'}`)} />
+				<Metric label={tr('Lessons completed', 'Aulas concluídas')} value={String(lessonsDone)} caption={tr(`In total, across ${startedCourses} ${startedCourses === 1 ? 'course' : 'courses'} you started.`, `No total, em ${startedCourses} ${startedCourses === 1 ? 'curso iniciado' : 'cursos iniciados'}.`)} />
 				<Metric label={tr('Active days', 'Dias ativos')} value={String(Math.min(study.weekActiveDays, goal))} suffix={tr(`of ${goal}-day goal`, `da meta de ${goal} dias`)} caption={`${missing === 0 ? tr('Goal reached. ', 'Meta atingida. ') : ''}${tr(`Streak: ${study.currentStreak} ${study.currentStreak === 1 ? 'day' : 'days'}. Busiest day: ${best ? best.label : 'none yet'}.`, `Sequência: ${study.currentStreak} ${study.currentStreak === 1 ? 'dia' : 'dias'}. Dia mais forte: ${best ? best.label : 'nenhum ainda'}.`)}`} />
-				<Metric label={tr('Focus time', 'Tempo de foco')} value={formatMinutes(total)} caption={tr('Only the Pomodoro timer counts here.', 'Só o cronômetro Pomodoro conta aqui.')} />
+				<Metric label={tr('Focus time', 'Tempo de foco')} value={formatMinutes(total)} caption={`${range === 'week' ? tr('This week.', 'Nesta semana.') : tr('In total.', 'No total.')} ${tr('Only the Pomodoro timer counts here.', 'Só o cronômetro Pomodoro conta aqui.')}`} />
 			</dl>
 
 			<div className="grid gap-6 lg:grid-cols-12 lg:items-stretch">
@@ -76,7 +70,11 @@ export function ProgressPage() {
 				<Panel className="space-y-4 p-5 sm:p-6"><section aria-labelledby="focus-heading" className="space-y-4">
 					<div className="flex flex-wrap items-baseline justify-between gap-2">
 						<h2 id="focus-heading" className="text-lg font-bold">{range === 'week' ? tr('Focus time by day', 'Tempo de foco por dia') : tr('Weekly breakdown', 'Detalhamento semanal')}</h2>
-						<span className="text-sm text-muted-foreground">{range === 'week' ? tr(`${formatMinutes(total)} this week`, `${formatMinutes(total)} nesta semana`) : tr(`${formatMinutes(total)} in all`, `${formatMinutes(total)} no total`)}</span>
+						<div role="group" aria-label={tr('Period', 'Período')} className="flex gap-1 rounded-2xl border bg-card p-1">
+							{([['week', tr('This week', 'Esta semana')], ['all', tr('All time', 'Todo o tempo')]] as const).map(([value, text]) => (
+								<button key={value} type="button" aria-pressed={range === value} onClick={() => setRange(value)} className={cn('min-h-11 rounded-xl px-4 text-sm font-semibold focus-visible:ring-3 focus-visible:ring-ring/60 focus-visible:outline-none', range === value ? 'bg-brand-tint text-foreground ring-1 ring-primary' : 'text-muted-foreground hover:text-foreground')}>{text}</button>
+							))}
+				</div>
 					</div>
 					{focus.isPending ? (
 						<p role="status" className="text-sm text-muted-foreground">{tr('Loading focus statistics…', 'Carregando estatísticas de foco…')}</p>
