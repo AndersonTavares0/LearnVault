@@ -15,7 +15,7 @@ import { buildLibrary } from '@/lib/library';
 import { isPdf } from '@/lib/pdf';
 import { formatDuration, studySyncSupported } from '@/lib/player';
 import { findCourse, findLessonLocation, href } from '@/lib/router';
-import type { CatalogNode, CourseStructure, FileEntry } from '@/lib/transport';
+import type { CatalogNode, FileEntry } from '@/lib/transport';
 import { cn } from '@/lib/utils';
 import { LessonPage } from './lesson';
 import { useCatalog, useFavorites, useNotes, useRecent, useSession, useToggleCourseFavorite } from '@/app/data';
@@ -94,6 +94,8 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 	// A course made only of PDFs is a reading list, not a broken course: no notice, no empty map,
 	// and the documents become the primary content.
 	const readingOnly = counts.lessons === 0 && documents.length > 0;
+	// A material beside the course (a syllabus, a guide) is normal and already in Materials, so it is no warning.
+	const concerns = (course.structure?.concerns ?? []).filter((concern) => concern !== 'loose_materials');
 	const percent = entry?.total ? Math.round((entry.done / entry.total) * 100) : 0;
 	const resumeAt = lastStudied && !lastStudied.item.completed ? lastStudied.item.positionSeconds : null;
 	const continuePath = lastStudied?.location && !lastStudied.item.completed ? lastStudied.location.lesson.path : entry?.next?.path;
@@ -111,7 +113,7 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 							<h1 className="font-heading text-4xl leading-tight font-bold text-balance">{course.title}</h1>
 							<p className="text-muted-foreground">{formatCourseMeta(counts)}</p>
 						</div>
-						{!readingOnly && course.structure && course.structure.confidence !== 'high' && <StructureNotice structure={course.structure} />}
+						{!readingOnly && concerns.length > 0 && <StructureNotice concerns={concerns} />}
 						{entry && entry.total > 0 && (
 							<div className="max-w-md space-y-1">
 								<div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-labelledby="course-progress" className="h-2 overflow-hidden rounded-full bg-brand-soft">
@@ -231,15 +233,16 @@ function CourseNotes({ course, courseId }: { course: CatalogNode; courseId: stri
 }
 
 /** Why the course's organization may not match what the learner expects, in plain words. */
-function StructureNotice({ structure }: { structure: CourseStructure }) {
-	const headline = structure.confidence === 'low'
+function StructureNotice({ concerns }: { concerns: string[] }) {
+	const hard = concerns.length > 1 || concerns.includes('no_lessons') || concerns.includes('loose_media');
+	const headline = hard
 		? tr('The structure of this course was hard to read.', 'A estrutura deste curso foi difícil de interpretar.')
 		: tr('The organization of this course may not be the one you expect.', 'A organização deste curso pode não ser a que você espera.');
 	return (
 		<div role="note" className="max-w-xl space-y-1 text-sm">
 			<p className="font-medium">{headline}</p>
 			<ul className="list-disc space-y-0.5 pl-5 text-muted-foreground">
-				{structure.concerns.map((concern) => <li key={concern}>{concernText(concern)}</li>)}
+				{concerns.map((concern) => <li key={concern}>{concernText(concern)}</li>)}
 			</ul>
 		</div>
 	);
