@@ -29,7 +29,7 @@ export function Flashcards({ mediaId, currentTime = 0, addRequest = 0 }: { media
 	const [form, setForm] = useState<{ cardId: string | null; front: string; back: string; position: number | null } | null>(null);
 	const [deleting, setDeleting] = useState<Flashcard | null>(null);
 	const [now, setNow] = useState(nowSeconds);
-	// The lesson's "Make card" button asks this panel to open a blank card at the player time.
+	// The lesson's "Card" button asks this panel to open a blank card at the player time.
 	const [lastRequest, setLastRequest] = useState(addRequest);
 	if (addRequest !== lastRequest) {
 		setLastRequest(addRequest);

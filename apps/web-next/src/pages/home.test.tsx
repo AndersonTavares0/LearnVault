@@ -41,6 +41,12 @@ describe('My learning', () => {
 		expect(within(courses).getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent)).toEqual(['Drawing basics']);
 
 		cleanup();
+		renderApp('/?filter=favorites', { catalog });
+		expect(await screen.findByText('No favorite courses yet')).toBeTruthy();
+		fireEvent.click(screen.getByRole('button', { name: 'Show all courses' }));
+		expect(await screen.findByRole('heading', { name: 'Rust from zero' })).toBeTruthy();
+
+		cleanup();
 		renderApp('/?q=nothing-matches', { catalog });
 		expect(await screen.findByText('No results found')).toBeTruthy();
 		fireEvent.click(screen.getByRole('button', { name: 'Clear filters and search' }));
