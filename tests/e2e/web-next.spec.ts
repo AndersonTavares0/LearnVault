@@ -55,7 +55,6 @@ test('signs in, indexes the library and resumes a lesson from My learning', asyn
 
 	await page.goto(`${origin}/#/notes`);
 	await expectNoAxeViolations(page, 'notes courses');
-	await page.getByRole('link', { name: /^Course/ }).click();
 	await expect(page.getByText('Ownership moves values.')).toBeVisible();
 	await expectNoAxeViolations(page, 'notes');
 	await page.getByRole('button', { name: /^Pomodoro:/ }).click();
