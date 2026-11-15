@@ -16,6 +16,7 @@
 pub mod annotations;
 pub mod auth;
 pub mod catalog;
+pub mod course_detect;
 pub mod courses;
 pub mod db;
 pub mod error;
@@ -54,6 +55,10 @@ pub use auth::{
 pub use catalog::{
     Availability, Catalog, CatalogFile, CatalogNode, NodeRole, build_catalog, build_catalog_below,
     course_file_lessons, natural_cmp, shape_course_catalog,
+};
+pub use course_detect::{
+    auto_promote_roots, detect_course_folders, dismiss_root_prefix, dismissed_keys,
+    restore_root_prefix,
 };
 pub use courses::{
     CourseRoot, CourseRootError, LEGACY_LIBRARY_ID, course_id_from_path, course_source_folder,

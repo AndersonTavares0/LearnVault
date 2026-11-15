@@ -574,6 +574,13 @@ const REQUIRED_TABLES: &[TableDefinition] = &[
         ],
     },
     TableDefinition {
+        name: "library_root_dismissed",
+        columns: &[
+            ("source_id", "TEXT", true, None, 1),
+            ("prefix_key", "TEXT", true, None, 2),
+        ],
+    },
+    TableDefinition {
         name: "study_note",
         columns: &[
             ("note_id", "TEXT", true, None, 1),

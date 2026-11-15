@@ -728,10 +728,23 @@ CREATE TABLE sync_device (
 );
 ";
 
+/// Version 21: folders the administrator took back from automatic course detection (ADR 0004).
+///
+/// Additive. Without it, removing an automatically found course would bring it back on the
+/// next scan. Plain keys, no foreign key: a source that is removed leaves nothing worth keeping,
+/// and the rows are tiny.
+const V21: &str = "
+CREATE TABLE library_root_dismissed (
+    source_id TEXT NOT NULL,
+    prefix_key TEXT NOT NULL,
+    PRIMARY KEY (source_id, prefix_key)
+);
+";
+
 /// Cadeia de migrações aplicada por [`crate::db::Database`]; o índice `n` leva o banco da
 /// versão `n` para `n + 1`.
 pub(crate) const MIGRATIONS: &[&str] = &[
-    V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20,
+    V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21,
 ];
 
 /// Versão do schema gravada em `PRAGMA user_version` (0 quando nunca migrado).
