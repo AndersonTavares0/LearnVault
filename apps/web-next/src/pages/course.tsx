@@ -1,4 +1,4 @@
-import { ChevronLeft, FileText, Star } from 'lucide-react';
+import { FileText, Star } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { CourseManagement } from '@/components/course-management';
@@ -102,13 +102,12 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 
 	return (
 		<div className="space-y-8">
-			<Hero>
-			<div>
-				<Link to="/" className="mb-4 inline-flex min-h-11 items-center gap-1 text-sm text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">
-					<ChevronLeft className="size-4" aria-hidden="true" />{tr('My learning', 'Meu aprendizado')}
-				</Link>
-				<div className="grid gap-8 lg:grid-cols-[1fr_minmax(0,15rem)] lg:items-center">
-					<div className="order-2 min-w-0 space-y-5 lg:order-1">
+			<div className="space-y-4">
+				<p className="text-sm text-muted-foreground"><Link to="/" className="inline-flex min-h-11 items-center hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">{tr('My learning', 'Meu aprendizado')}</Link> / {course.title}</p>
+				<Hero className="p-6">
+					<div className="grid gap-6 lg:grid-cols-[12.5rem_minmax(0,1fr)_auto] lg:items-center">
+					<div className="max-w-xs lg:w-[12.5rem] lg:max-w-none"><CourseCover course={course} profile={user?.userId ?? ''} eager done={entry?.done ?? 0} total={entry?.total ?? 0} map={!readingOnly} className={readingOnly ? 'hidden sm:block' : undefined} /></div>
+						<div className="min-w-0 space-y-3">
 						<div className="space-y-2">
 							<h1 className="font-heading text-3xl leading-tight font-bold text-balance">{course.title}</h1>
 							<p className="text-muted-foreground">{formatCourseMeta(counts)}</p>
@@ -123,25 +122,21 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 								{entry.done === entry.total && <p role="status" className="text-sm font-medium text-primary">{tr('Course complete. Well done.', 'Curso concluído. Muito bem.')}</p>}
 							</div>
 						)}
-						{lastStudied?.location && (
-							<p className="text-sm text-muted-foreground">
-								{tr('Last lesson:', 'Última aula:')} <span className="text-foreground">{lastStudied.location.lesson.title}</span>, {lastStudied.item.completed ? tr('completed', 'concluída') : tr(`stopped at ${formatDuration(lastStudied.item.positionSeconds)}`, `parou em ${formatDuration(lastStudied.item.positionSeconds)}`)}
-							</p>
-						)}
-						<div className="flex flex-wrap gap-2">
+						</div>
+						<div className="flex flex-col items-stretch gap-2 lg:w-52">
 							{continuePath ? (
-								<Link to={path(href('course', courseId, continuePath, resumeAt))} className="inline-flex h-12 items-center justify-center rounded-full bg-primary px-7 text-base font-semibold text-primary-foreground hover:bg-brand-deep focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
+								<Link to={path(href('course', courseId, continuePath, resumeAt))} className="inline-flex h-11 items-center justify-center rounded-xl bg-primary px-5 text-base font-semibold text-primary-foreground hover:bg-brand-deep focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
 									{lastStudied ? tr('Continue studying', 'Continuar estudando') : tr('Start course', 'Começar curso')}
 								</Link>
 							) : documents.length > 0 ? (
-								<Link to={path(href('course', courseId, documents[0].path))} className="inline-flex h-12 items-center justify-center rounded-full bg-primary px-7 text-base font-semibold text-primary-foreground hover:bg-brand-deep focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
+								<Link to={path(href('course', courseId, documents[0].path))} className="inline-flex h-11 items-center justify-center rounded-xl bg-primary px-5 text-base font-semibold text-primary-foreground hover:bg-brand-deep focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
 									{tr('Start reading', 'Começar a ler')}
 								</Link>
 							) : (
 								<p className="text-sm text-muted-foreground">{tr('No lessons available', 'Nenhuma aula disponível')}</p>
 							)}
 							{studySyncSupported && entry && (
-								<Button variant="outline" size="lg" aria-pressed={entry.favorite} disabled={toggleFavorite.isPending} onClick={() => toggleFavorite.mutate({ courseId, favorite: !entry.favorite })}>
+								<Button variant="outline" className="h-11 rounded-xl" aria-pressed={entry.favorite} disabled={toggleFavorite.isPending} onClick={() => toggleFavorite.mutate({ courseId, favorite: !entry.favorite })}>
 									<Star className={cn(entry.favorite && 'fill-current')} />
 									{entry.favorite ? tr('Favorited', 'Favoritado') : tr('Favorite course', 'Favoritar curso')}
 								</Button>
@@ -149,10 +144,13 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 							{user?.isAdmin && !course.remote && <CourseManagement course={course} courseId={courseId} lessons={counts.lessons} onRemoved={() => navigate('/', { replace: true })} />}
 						</div>
 					</div>
-					<div className="order-1 max-w-md lg:order-2 lg:max-w-none"><CourseCover course={course} profile={user?.userId ?? ''} eager done={entry?.done ?? 0} total={entry?.total ?? 0} map={!readingOnly} className={readingOnly ? 'hidden sm:block' : undefined} /></div>
-				</div>
+				</Hero>
+						{lastStudied?.location && (
+							<p className="text-sm text-muted-foreground">
+								{tr('Last lesson:', 'Última aula:')} <span className="text-foreground">{lastStudied.location.lesson.title}</span>, {lastStudied.item.completed ? tr('completed', 'concluída') : tr(`stopped at ${formatDuration(lastStudied.item.positionSeconds)}`, `parou em ${formatDuration(lastStudied.item.positionSeconds)}`)}
+							</p>
+						)}
 			</div>
-			</Hero>
 
 			<Tabs defaultValue="content">
 				<TabsList variant="line" aria-label={tr('Course sections', 'Seções do curso')}>

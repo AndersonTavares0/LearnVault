@@ -64,20 +64,27 @@ function CurriculumNode({ node, index, ...props }: Props & { node: CatalogNode; 
 		<li>
 			<details open={open} onToggle={(event) => setOpen(event.currentTarget.open)} className="group">
 				<summary className={cn('flex cursor-pointer list-none items-center gap-3 hover:bg-muted [&::-webkit-details-marker]:hidden', props.compact ? 'min-h-14 px-3 py-2' : 'min-h-14 bg-muted/50 px-4 py-3', current && 'bg-brand-tint')}>
-					{props.compact ? (
+					{index !== undefined ? (
 						<span className={cn('grid size-8 shrink-0 place-items-center rounded-full text-sm font-bold', complete ? 'bg-primary text-primary-foreground' : 'bg-brand-soft', current && 'ring-2 ring-primary ring-offset-2 ring-offset-card')} aria-hidden="true">{complete ? <Check className="size-4" /> : index}</span>
 					) : (
 						<ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden="true" />
 					)}
-					<span className={cn('min-w-0 flex-1 font-bold', props.compact ? 'text-sm leading-snug font-semibold' : 'text-base font-semibold')}>{node.title}{current && <span className="sr-only">{tr(' (current module)', ' (módulo atual)')}</span>}</span>
+					<span className="min-w-0 flex-1">
+						<span className={cn('block font-semibold', props.compact ? 'text-sm leading-snug' : 'text-base')}>{node.title}{current && <span className="sr-only">{tr(' (current module)', ' (módulo atual)')}</span>}</span>
+						{!props.compact && total > 0 && <span className="block text-sm text-muted-foreground">{tr(`${total} ${total === 1 ? 'lesson' : 'lessons'}`, `${total} ${total === 1 ? 'aula' : 'aulas'}`)}</span>}
+					</span>
 					{total > 0 && props.compact ? (
 						<>
 							<span className="shrink-0 text-xs text-muted-foreground tabular-nums"><span className="sr-only">{tr(`${done} of ${total} done`, `${done} de ${total} concluídas`)}</span><span aria-hidden="true">{done}/{total}</span></span>
-							<span aria-hidden="true" className="h-1.5 w-10 shrink-0 overflow-hidden rounded-full bg-muted"><span className="block h-full rounded-full bg-primary" style={{ width: `${(done / total) * 100}%` }} /></span>
 							<ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden="true" />
 						</>
 					) : total > 0 ? (
-						<span className="shrink-0 text-sm text-muted-foreground tabular-nums">{tr(`${done} of ${total} done`, `${done} de ${total} concluídas`)}</span>
+						<>
+							<span className={cn('shrink-0 text-sm tabular-nums', complete || current ? 'font-semibold text-primary' : 'text-muted-foreground')}>
+								{complete ? tr('Completed', 'Concluído') : current ? tr('You are here', 'Você está aqui') : done === 0 ? tr('Not started', 'Não iniciado') : tr(`${done} of ${total} done`, `${done} de ${total} concluídas`)}
+							</span>
+							{index !== undefined && <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden="true" />}
+						</>
 					) : null}
 				</summary>
 				{node.children.length > 0 && (
