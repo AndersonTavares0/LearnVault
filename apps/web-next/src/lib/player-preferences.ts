@@ -1,3 +1,4 @@
+import type { PdfTheme, PdfView } from './pdf';
 import { clampSpeed, type PlaybackSpeed } from './player';
 import type { TransportKind } from './transport';
 
@@ -27,11 +28,15 @@ export type PlayerPreferences = {
 	autoNext: boolean;
 	/** Last chosen subtitle language; empty means no preference. */
 	subtitleLanguage: string;
+	/** How the PDF reader lays its pages out, remembered per user. */
+	pdfView: PdfView;
+	/** Reading surface of the PDF reader, remembered per user. */
+	pdfTheme: PdfTheme;
 	lessons: Record<string, LessonPlayerPreference>;
 };
 
 export function createDefaultPlayerPreferences(): PlayerPreferences {
-	return { audioSpeed: 1, videoSpeed: 1, autoNext: false, subtitleLanguage: '', lessons: {} };
+	return { audioSpeed: 1, videoSpeed: 1, autoNext: false, subtitleLanguage: '', pdfView: 'continuous', pdfTheme: 'paper', lessons: {} };
 }
 
 /** Preferências web são separadas por usuário; o desktop tem um perfil local fixo. */
@@ -103,6 +108,8 @@ function normalizePreferences(value: unknown): PlayerPreferences {
 		videoSpeed: clampSpeed(typeof value.videoSpeed === 'number' ? value.videoSpeed : 1),
 		autoNext: typeof value.autoNext === 'boolean' ? value.autoNext : false,
 		subtitleLanguage: normalizeSubtitleLanguage(value.subtitleLanguage),
+		pdfView: value.pdfView === 'single' ? 'single' : 'continuous',
+		pdfTheme: value.pdfTheme === 'sepia' || value.pdfTheme === 'night' ? value.pdfTheme : 'paper',
 		lessons
 	};
 }
