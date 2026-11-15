@@ -622,6 +622,7 @@ async fn scan_one(state: &AppState, source: RemoteSource) -> Response {
 /// new files on a share appear without anyone pressing "Refresh courses".
 const SOURCE_REFRESH_DELAY: Duration = Duration::from_secs(30);
 const SOURCE_REFRESH_INTERVAL: Duration = Duration::from_secs(3600);
+const SOURCE_REFRESH_PAUSE: Duration = Duration::from_secs(5);
 
 impl AppState {
     /// Starts the periodic refresh of remote sources with the default timing.
@@ -640,10 +641,25 @@ impl AppState {
                     if source.credential_error {
                         continue;
                     }
-                    let Ok(_lock) = state.rescan_lock.clone().try_lock_owned() else {
+                    let Ok(lock) = state.rescan_lock.clone().try_lock_owned() else {
                         continue;
                     };
-                    let _ = scan_one(&state, source).await;
+                    // The source may have been removed while an earlier one was scanned.
+                    let id = source.id.clone();
+                    if state
+                        .sources_snapshot()
+                        .iter()
+                        .all(|current| current.id != id || current.credential_error)
+                    {
+                        continue;
+                    }
+                    let status = scan_one(&state, source).await.status();
+                    if !status.is_success() {
+                        eprintln!("background refresh of a remote source failed: {status}");
+                    }
+                    drop(lock);
+                    // Leaves the lock free for a manual refresh between two sources.
+                    tokio::time::sleep(SOURCE_REFRESH_PAUSE).await;
                 }
                 tokio::time::sleep(interval).await;
             }
