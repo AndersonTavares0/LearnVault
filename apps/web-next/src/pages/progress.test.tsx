@@ -25,8 +25,9 @@ describe('progress', () => {
 	it('shows the week, a finished course with its badge and the level', async () => {
 		renderApp('/progress', { catalog, rewards, recent: [done('a'), done('b')] });
 		const glance = within(await screen.findByLabelText('At a glance'));
-		expect(glance.getByText('Active days').nextElementSibling?.textContent).toContain('1of 3-day goal');
-		expect(glance.getByText('Lessons completed').nextElementSibling?.textContent).toBe('2In total, across 1 course you started.');
+		expect(glance.getByText('Active days (this week)').nextElementSibling?.textContent).toContain('1of 3-day goal');
+		expect(glance.getByText('Lessons completed (all time)').nextElementSibling?.textContent).toBe('2In total, across 1 course you started.');
+		expect(glance.getByText('Focus time (this week)')).toBeTruthy();
 		expect(glance.getByText(/Streak: 1 day\. Busiest day: none yet\./)).toBeTruthy();
 		expect(within(await screen.findByRole('table', { name: 'Focus minutes by day', hidden: true })).getAllByRole('row')).toHaveLength(8);
 		expect(screen.getByText('First course finished').parentElement?.textContent).toContain('Earned');

@@ -43,15 +43,22 @@ export function Flashcards({ mediaId, currentTime = 0, addRequest = 0 }: { media
 
 	const patch = (card: Flashcard) => client.setQueryData<Flashcard[]>(key, (list = []) => (list.some((item) => item.cardId === card.cardId) ? list.map((item) => (item.cardId === card.cardId ? card : item)) : [...list, card]));
 	const review = useMutation({ mutationFn: ({ cardId, rating }: { cardId: string; rating: ReviewRating }) => transport.reviewFlashcard(cardId, rating), onSuccess: (card) => { patch(card); setRevealed(false); setNow(nowSeconds()); } });
+	const [importMessage, setImportMessage] = useState('');
 	const save = useMutation({
 		mutationFn: (input: { cardId: string | null; front: string; back: string; position: number | null }) => (input.cardId ? transport.updateFlashcard(input.cardId, input.front, input.back) : transport.createFlashcard(mediaId, input.front, input.back, input.position)),
-		onSuccess: (card) => { patch(card); setForm(null); }
+		onSuccess: (card, variables) => {
+			patch(card);
+			setForm(null);
+			const when = dueLabel(card.nextDue, nowSeconds());
+			setImportMessage(variables.cardId
+				? tr(`Card updated. Next review: ${when}.`, `Cartão atualizado. Próxima revisão: ${when}.`)
+				: tr(`Card saved to this lesson's deck (and Review). Next review: ${when}.`, `Cartão salvo no baralho desta aula (e em Revisão). Próxima revisão: ${when}.`));
+		}
 	});
 	const remove = useMutation({ mutationFn: (cardId: string) => transport.deleteFlashcard(cardId), onSuccess: (_, cardId) => { setDeleting(null); client.setQueryData<Flashcard[]>(key, (list = []) => list.filter((item) => item.cardId !== cardId)); } });
 
 	// Import: an Anki text export (tab-separated) or a simple CSV, added to this lesson's deck.
 	const fileInput = useRef<HTMLInputElement>(null);
-	const [importMessage, setImportMessage] = useState('');
 	const importCards = useMutation({
 		mutationFn: async (file: File) => {
 			const parsed = parseCards(await file.text());
