@@ -2537,6 +2537,7 @@ name = "learnvault-core"
 version = "0.0.0"
 dependencies = [
  "cap-std",
+ "futures-util",
  "rusqlite",
  "rustix",
  "serde",
