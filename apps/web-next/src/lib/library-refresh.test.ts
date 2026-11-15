@@ -80,9 +80,9 @@ describe('refreshMessage', () => {
 		expect(refreshMessage({ sources: 0, failed: [] })).toBe('Catalog updated.');
 		expect(refreshMessage({ sources: 2, failed: [] })).toBe('Catalog updated, including 2 remote sources.');
 		expect(refreshMessage({ sources: 1, failed: [] })).toBe('Catalog updated, including 1 remote source.');
-		expect(refreshMessage({ sources: 2, failed: [{ name: 'Cursos', message: 'The server took too long to answer.' }] })).toBe('Catalog updated, but this source could not be read: “Cursos”. The server took too long to answer.');
+		expect(refreshMessage({ sources: 2, failed: [{ name: 'Cursos', message: 'The server took too long to answer.' }] })).toBe('Catalog updated, but this source could not be read: “Cursos”. The server took too long to answer. Unavailable courses and your study progress are kept.');
 		setLocale('pt-BR');
 		expect(refreshMessage({ sources: 1, failed: [] })).toBe('Catálogo atualizado, incluindo 1 fonte remota.');
-		expect(refreshMessage({ sources: 2, failed: [{ name: 'A', message: 'x' }, { name: 'B', message: 'y' }] })).toBe('Catálogo atualizado, mas estas fontes não puderam ser lidas: “A”, “B”. x');
+		expect(refreshMessage({ sources: 2, failed: [{ name: 'A', message: 'x' }, { name: 'B', message: 'y' }] })).toBe('Catálogo atualizado, mas estas fontes não puderam ser lidas: “A”, “B”. x Cursos indisponíveis e seu progresso de estudo são preservados.');
 	});
 });
