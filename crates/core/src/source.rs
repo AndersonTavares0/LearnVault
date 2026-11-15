@@ -16,6 +16,8 @@ use std::{
     pin::Pin,
 };
 
+use futures_util::{StreamExt, stream::FuturesUnordered};
+
 use crate::error::Error;
 use crate::paths::{KeyMode, relative_path_key, resolve_within};
 use crate::scanner::{ScanOutcome, ScannedFile, classify, is_ignored_directory};
@@ -214,6 +216,12 @@ impl CourseSource for LocalSource {
     }
 }
 
+/// Directories listed at the same time while scanning a source.
+const SCAN_CONCURRENCY: usize = 8;
+
+/// Extra attempts for a directory whose listing failed on the network.
+const LIST_RETRIES: usize = 2;
+
 /// Percorre `source` e devolve o mesmo resultado que [`crate::scanner::scan`] para uma
 /// árvore local equivalente.
 ///
@@ -225,17 +233,38 @@ pub async fn scan_source(source: &dyn CourseSource) -> SourceResult<ScanOutcome>
     let mut files = Vec::new();
     let mut inaccessible = Vec::new();
     let mut directories = VecDeque::from([String::new()]);
+    // A remote listing is a network round trip, so several run at once; the order they
+    // finish in does not matter because the result is sorted at the end.
+    let mut listings = FuturesUnordered::new();
 
-    while let Some(directory) = directories.pop_front() {
-        let entries = match source.list(&directory).await {
+    loop {
+        while listings.len() < SCAN_CONCURRENCY {
+            let Some(directory) = directories.pop_front() else {
+                break;
+            };
+            listings.push(async move {
+                let mut listed = source.list(&directory).await;
+                // A network blip on one folder must not leave it out of the whole scan.
+                for _ in 0..LIST_RETRIES {
+                    if !matches!(
+                        listed,
+                        Err(SourceError::Unreachable | SourceError::InvalidResponse)
+                    ) {
+                        break;
+                    }
+                    listed = source.list(&directory).await;
+                }
+                (directory, listed)
+            });
+        }
+        let Some((directory, listed)) = listings.next().await else {
+            break;
+        };
+        let entries = match listed {
             Ok(entries) => entries,
             Err(error) if directory.is_empty() => return Err(error),
             Err(_) => {
-                inaccessible.push(if directory.is_empty() {
-                    ".".to_owned()
-                } else {
-                    directory
-                });
+                inaccessible.push(directory);
                 continue;
             }
         };
@@ -279,6 +308,7 @@ pub async fn scan_source(source: &dyn CourseSource) -> SourceResult<ScanOutcome>
     }
 
     files.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
+    inaccessible.sort();
     Ok(ScanOutcome {
         files,
         inaccessible,
@@ -360,6 +390,73 @@ mod tests {
             size,
             mtime: 0,
         }
+    }
+
+    /// Fails the first listing of one folder, like a dropped connection, then answers.
+    struct FlakySource {
+        inner: FixtureSource,
+        failures_left: std::sync::atomic::AtomicUsize,
+        failing: &'static str,
+    }
+
+    impl CourseSource for FlakySource {
+        fn list<'a>(
+            &'a self,
+            directory: &'a str,
+        ) -> std::pin::Pin<
+            Box<dyn Future<Output = super::SourceResult<Vec<SourceEntry>>> + Send + 'a>,
+        > {
+            use std::sync::atomic::Ordering;
+            if directory == self.failing
+                && self
+                    .failures_left
+                    .try_update(Ordering::SeqCst, Ordering::SeqCst, |left| {
+                        left.checked_sub(1)
+                    })
+                    .is_ok()
+            {
+                return Box::pin(async { Err(SourceError::Unreachable) });
+            }
+            self.inner.list(directory)
+        }
+
+        fn read_range<'a>(
+            &'a self,
+            path: &'a str,
+            offset: u64,
+            length: usize,
+        ) -> std::pin::Pin<Box<dyn Future<Output = super::SourceResult<Vec<u8>>> + Send + 'a>>
+        {
+            self.inner.read_range(path, offset, length)
+        }
+    }
+
+    fn flaky(failures: usize) -> FlakySource {
+        FlakySource {
+            inner: FixtureSource {
+                entries: vec![
+                    entry("Curso", true, 0),
+                    entry("Curso/Modulo", true, 0),
+                    entry("Curso/Modulo/aula.mp4", false, 10),
+                ],
+            },
+            failures_left: failures.into(),
+            failing: "Curso/Modulo",
+        }
+    }
+
+    #[test]
+    fn a_folder_that_fails_once_is_listed_again() {
+        let outcome = block_on(scan_source(&flaky(1))).unwrap();
+        assert_eq!(outcome.files.len(), 1);
+        assert!(outcome.inaccessible.is_empty());
+    }
+
+    #[test]
+    fn a_folder_that_keeps_failing_is_reported_and_the_rest_is_kept() {
+        let outcome = block_on(scan_source(&flaky(10))).unwrap();
+        assert!(outcome.files.is_empty());
+        assert_eq!(outcome.inaccessible, vec!["Curso/Modulo".to_owned()]);
     }
 
     #[test]

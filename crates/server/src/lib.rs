@@ -43,15 +43,14 @@ pub use state::{AppState, StateError};
 use std::{future::Future, time::Duration};
 
 use axum::{
-    BoxError, Router,
-    error_handling::HandleErrorLayer,
+    Router,
     extract::{DefaultBodyLimit, Request},
     http::{
         StatusCode,
         header::{CACHE_CONTROL, HeaderName, HeaderValue},
     },
     middleware::{Next, from_fn, map_response},
-    response::Response,
+    response::{IntoResponse, Response},
     routing::{get, post},
 };
 use tokio::net::TcpListener;
@@ -259,14 +258,26 @@ pub fn build_router(state: AppState) -> Router {
         .with_state(state)
 }
 
+/// A source scan walks a remote tree and has its own 120 s limit; the request limit must not cut it short.
+const SOURCE_SCAN_REQUEST_TIMEOUT: Duration = Duration::from_secs(130);
+
 fn with_request_limits(router: Router, timeout: Duration) -> Router {
     router.layer(
         ServiceBuilder::new()
             .layer(from_fn(api_cache_headers))
-            .layer(HandleErrorLayer::new(|_: BoxError| async {
-                (StatusCode::REQUEST_TIMEOUT, "request timeout")
-            }))
-            .timeout(timeout),
+            .layer(from_fn(move |request: Request, next: Next| async move {
+                let path = request.uri().path();
+                let is_scan = path.starts_with("/api/admin/sources/") && path.ends_with("/scan");
+                let limit = if is_scan {
+                    timeout.max(SOURCE_SCAN_REQUEST_TIMEOUT)
+                } else {
+                    timeout
+                };
+                match tokio::time::timeout(limit, next.run(request)).await {
+                    Ok(response) => response,
+                    Err(_) => (StatusCode::REQUEST_TIMEOUT, "request timeout").into_response(),
+                }
+            })),
     )
 }
 
@@ -349,6 +360,7 @@ where
     // Indexação automática: eventos do sistema de arquivos com reconciliação periódica.
     // O desktop não abre este laço; ele continua usando o rescan explícito.
     state.indexer.start(state.clone());
+    state.start_source_refresh_default();
     let app = with_request_limits(build_router(state), Duration::from_secs(30));
     // Stable machine-readable handoff for process-level smoke tests. It is emitted only for
     // an explicitly ephemeral listener, after the OS assigned the address and the application
@@ -761,6 +773,34 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(response.headers()["cache-control"], "no-store");
+    }
+
+    #[tokio::test]
+    async fn a_source_scan_outlives_the_general_request_limit() {
+        let temp = tempfile::tempdir().unwrap();
+        let slow = || async {
+            tokio::time::sleep(Duration::from_millis(60)).await;
+            "done"
+        };
+        let router = build_router(AppState::new(config_fixture(&temp)))
+            .route("/api/admin/sources/s1/scan", get(slow))
+            .route("/api/other", get(slow));
+        let limited = with_request_limits(router, Duration::from_millis(10));
+        let scan = limited
+            .clone()
+            .oneshot(
+                Request::get("/api/admin/sources/s1/scan")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(scan.status(), StatusCode::OK);
+        let other = limited
+            .oneshot(Request::get("/api/other").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(other.status(), StatusCode::REQUEST_TIMEOUT);
     }
 
     #[tokio::test]

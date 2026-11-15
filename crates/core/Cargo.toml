@@ -16,6 +16,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # Sampled content hash used to keep a lesson identity when its file moves.
 sha2 = "0.11"
+# Lists several remote directories at once while scanning a source.
+futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
 thiserror = "2"
 uuid = { version = "1.28", features = ["v5", "v7"] }
 walkdir = "2.5"

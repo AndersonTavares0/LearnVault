@@ -110,7 +110,7 @@ export function SettingsPage() {
 					<Section id="users" title={tr('Accounts and course access', 'Contas e acesso a cursos')}>
 						<UserSettings courses={catalog.data?.nodes ?? []} />
 					</Section>
-					<Section id="sources" title={tr('Remote sources', 'Fontes remotas')} description={tr('Read-only WebDAV folders outside this machine.', 'Pastas WebDAV somente leitura fora desta máquina.')}>
+					<Section id="sources" title={tr('Remote sources', 'Fontes remotas')} description={tr('Read-only WebDAV or SMB folders outside this machine.', 'Pastas WebDAV ou SMB somente leitura fora desta máquina.')}>
 						<SourceSettings />
 					</Section>
 					<Section id="backup" title={tr('Backup', 'Backup')} description={tr('Download a consistent copy of the database (progress, notes, accounts), checked for integrity. Course files are not included.', 'Baixe uma cópia consistente do banco (progresso, notas, contas), verificada quanto à integridade. Os arquivos dos cursos não entram.')}>
