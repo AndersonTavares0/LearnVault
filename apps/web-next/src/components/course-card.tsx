@@ -90,7 +90,7 @@ export function CourseCard({ entry, profile, variant = 'grid', canManage = false
 			<div className={cn('min-w-0 flex-1 space-y-1', !listed && 'pr-10')}>
 				<h3 className="card-heading font-heading text-base leading-snug font-semibold text-balance">
 					{/* The link covers the whole card; the favorite button sits above it. */}
-					<Link to={routerPath(href('course', entry.courseId))} className="line-clamp-2 after:absolute after:inset-0 after:content-[''] hover:underline">{entry.course.title}</Link>
+					<Link to={routerPath(href('course', entry.courseId))} title={entry.course.title} className="line-clamp-3 [overflow-wrap:anywhere] after:absolute after:inset-0 after:content-[''] hover:underline">{entry.course.title}</Link>
 				</h3>
 				{listed ? (
 					<div className="flex flex-wrap items-center gap-x-4 gap-y-1">
