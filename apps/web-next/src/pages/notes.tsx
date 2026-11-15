@@ -90,7 +90,29 @@ function Notebook({ courseId }: { courseId: string | null }) {
 		return [...sections.values()];
 	}, [groups]);
 	const total = matches.length;
-	const dayGroups = [...new Set(matches.map((entry) => dayKey(entry.note.updatedAt)))].sort().reverse().map((day) => ({ day, items: matches.filter((entry) => dayKey(entry.note.updatedAt) === day).sort((a, b) => b.note.updatedAt - a.note.updatedAt) }));
+	const isFiltered = courseId !== null || query.trim().length > 0;
+	const dayGroups = useMemo(() => {
+		const days = [...new Set(matches.map((entry) => dayKey(entry.note.updatedAt)))].sort().reverse();
+		return days.map((day) => {
+			const items = matches.filter((entry) => dayKey(entry.note.updatedAt) === day).sort((a, b) => b.note.updatedAt - a.note.updatedAt);
+			const byCourse = new Map<string, { id: string; title: string; lessons: Map<string, { title: string; location: LessonLocation | null; items: Entry[] }> }>();
+			for (const entry of items) {
+				const cId = noteCourse(entry.location);
+				const cTitle = entry.location?.courseTitle ?? goneTitle();
+				const course = byCourse.get(cId) ?? { id: cId, title: cTitle, lessons: new Map() };
+				const lKey = entry.note.mediaId;
+				const lTitle = entry.location?.lesson.title ?? entry.note.relativePath ?? tr('Unknown lesson', 'Aula desconhecida');
+				const lesson = course.lessons.get(lKey) ?? { title: lTitle, location: entry.location, items: [] };
+				lesson.items.push(entry);
+				course.lessons.set(lKey, lesson);
+				byCourse.set(cId, course);
+			}
+			return {
+				day,
+				courses: [...byCourse.values()].map((course) => ({ ...course, lessons: [...course.lessons.values()] }))
+			};
+		});
+	}, [matches]);
 	const weekCount = notesThisWeek(matches.map(({ note }) => note));
 	const exportMarkdown = () => {
 		const rows = matches.map(({ note, location }) => ({ course: location?.courseTitle ?? goneTitle(), lesson: location?.lesson.title ?? note.relativePath ?? tr('Unknown lesson', 'Aula desconhecida'), positionSeconds: note.positionSeconds, updatedAt: note.updatedAt, content: note.content }));
@@ -102,7 +124,7 @@ function Notebook({ courseId }: { courseId: string | null }) {
 		URL.revokeObjectURL(url);
 	};
 
-	const renderItem = ({ note, location }: Entry, showLesson: boolean) => (
+	const renderItem = ({ note, location }: Entry) => (
 		<li key={note.noteId} className="group -mx-3 flex gap-4 rounded-xl px-3 py-3 focus-within:bg-muted/50 hover:bg-muted/50">
 			<div className="w-14 shrink-0 pt-0.5">
 					{location ? (
@@ -114,7 +136,6 @@ function Notebook({ courseId }: { courseId: string | null }) {
 					)}
 			</div>
 			<div className="min-w-0 flex-1 space-y-1">
-				{showLesson && <p className="text-sm text-muted-foreground">{location ? `${location.courseTitle} · ${location.lesson.title}` : note.relativePath ?? tr('Unknown lesson', 'Aula desconhecida')}</p>}
 				{editing?.id === note.noteId ? (
 					<form className="space-y-2" onSubmit={(event) => { event.preventDefault(); if (editing.content.trim()) update.mutate({ id: editing.id, content: editing.content.trim() }); }}>
 						<label htmlFor={`edit-${note.noteId}`} className="sr-only">{tr('Note text', 'Texto da nota')}</label>
@@ -129,7 +150,7 @@ function Notebook({ courseId }: { courseId: string | null }) {
 				)}
 				<p className="text-xs text-muted-foreground">{new Date(note.updatedAt * 1000).toLocaleDateString(getLocale(), { dateStyle: 'medium' })}</p>
 			</div>
-			<span className="flex shrink-0 gap-1 self-start opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100">
+			<span className="flex shrink-0 gap-1 self-start">
 				<Button variant="ghost" size="icon" onClick={() => setEditing({ id: note.noteId, content: note.content })} aria-label={tr('Edit note', 'Editar nota')}><Pencil /></Button>
 				<Button variant="ghost" size="icon" disabled={remove.isPending} onClick={() => setDeleting(note)} aria-label={tr('Delete note', 'Excluir nota')}><Trash2 /></Button>
 			</span>
@@ -157,7 +178,14 @@ function Notebook({ courseId }: { courseId: string | null }) {
 							<Button size="sm" variant={view === 'lesson' ? 'selected' : 'outline'} aria-pressed={view === 'lesson'} onClick={() => setView('lesson')}>{tr('By lesson', 'Por aula')}{view === 'lesson' && <Check className="size-3.5 text-primary" aria-hidden="true" />}</Button>
 							<Button size="sm" variant={view === 'date' ? 'selected' : 'outline'} aria-pressed={view === 'date'} onClick={() => setView('date')}>{tr('By date', 'Por data')}{view === 'date' && <Check className="size-3.5 text-primary" aria-hidden="true" />}</Button>
 						</div>
-						{matches.length > 0 && <Button size="sm" variant="outline" className="ml-auto" onClick={exportMarkdown}><Download />{tr(`Export ${total} ${total === 1 ? 'note' : 'notes'} as Markdown`, `Exportar ${total} ${total === 1 ? 'nota' : 'notas'} em Markdown`)}</Button>}
+						{matches.length > 0 && (
+							<Button size="sm" variant="outline" className="ml-auto" onClick={exportMarkdown}>
+								<Download />
+								{isFiltered
+									? tr(`Export ${total} filtered ${total === 1 ? 'note' : 'notes'} as Markdown`, `Exportar ${total} ${total === 1 ? 'nota filtrada' : 'notas filtradas'} em Markdown`)
+									: tr(`Export all ${total} ${total === 1 ? 'note' : 'notes'} as Markdown`, `Exportar todas as notas (${total}) em Markdown`)}
+							</Button>
+						)}
 					</div>
 					{(update.error || remove.error) && <p role="alert" className="text-sm text-destructive">{(update.error ?? remove.error)?.message}</p>}
 					{notes.isPending ? (
@@ -167,11 +195,26 @@ function Notebook({ courseId }: { courseId: string | null }) {
 					) : groups.length === 0 ? (
 						<p role="status" className="text-muted-foreground">{tr('No notes match your search.', 'Nenhuma nota corresponde à busca.')}</p>
 					) : view === 'date' ? (
-						dayGroups.map(({ day, items }) => (
+						dayGroups.map(({ day, courses: dayCourses }) => (
 							<section key={day} aria-label={day}>
-								<Panel className="space-y-3">
+								<Panel className="space-y-4">
 									<h2 className="font-heading text-xl font-semibold">{new Date(`${day}T12:00:00`).toLocaleDateString(getLocale(), { dateStyle: 'full' })}</h2>
-									<ul className="divide-y">{items.map((entry) => renderItem(entry, true))}</ul>
+									<div className="space-y-4">
+										{dayCourses.map((course) => (
+											<div key={course.id} className="space-y-3 border-t pt-3 first:border-t-0 first:pt-0">
+												<h3 className="text-sm font-semibold text-muted-foreground">{course.title}</h3>
+												{course.lessons.map((lesson) => (
+													<div key={lesson.items[0].note.mediaId} className="space-y-1">
+														<div className="flex flex-wrap items-baseline justify-between gap-2">
+															<h4 className="text-base font-semibold text-balance">{lesson.title}</h4>
+															{lesson.location && <Link to={href('course', lesson.location.courseId, lesson.location.lesson.path).replace(/^#/, '')} className="inline-flex min-h-11 items-center text-sm font-semibold text-primary hover:underline">{tr('Open lesson', 'Abrir aula')}</Link>}
+														</div>
+														<ul className="divide-y">{lesson.items.map((entry) => renderItem(entry))}</ul>
+													</div>
+												))}
+											</div>
+										))}
+									</div>
 								</Panel>
 							</section>
 						))
@@ -183,7 +226,7 @@ function Notebook({ courseId }: { courseId: string | null }) {
 										<h3 className="text-lg font-semibold text-balance">{group.lesson}</h3>
 										{group.location && <Link to={href('course', group.location.courseId, group.location.lesson.path).replace(/^#/, '')} className="inline-flex min-h-11 items-center text-sm font-semibold text-primary hover:underline">{tr('Open lesson', 'Abrir aula')}</Link>}
 									</div>
-									<ul>{group.items.map((entry) => renderItem(entry, false))}</ul>
+									<ul>{group.items.map((entry) => renderItem(entry))}</ul>
 								</section>
 							));
 							return courseId === null ? (
