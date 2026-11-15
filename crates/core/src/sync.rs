@@ -295,10 +295,12 @@ pub fn push_operations(
     }
 
     let conn = db.connection();
-    let transaction = conn.unchecked_transaction()?;
+    // Immediate: registering and draining write before anything reads, so take the write lock first.
+    let transaction =
+        rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)?;
     // The device is registered before its operations: the first one of an owner backfills the
     // state written so far, which must not include what this very push is about to apply.
-    journal::register_device(&transaction, owner_id, device_id, None)?;
+    journal::register_device(&transaction, owner_id, device_id)?;
     let mut applied = 0_usize;
     let mut duplicated = 0_usize;
     for operation in operations {
@@ -376,8 +378,11 @@ pub fn pull_operations(
 
     // Registering the device (and draining the server's own writes into the journal) happens in
     // the same transaction as the read, so the page below already includes them.
-    let transaction = db.connection().unchecked_transaction()?;
-    journal::register_device(&transaction, owner_id, device_id, Some(cursor))?;
+    let transaction = rusqlite::Transaction::new_unchecked(
+        db.connection(),
+        rusqlite::TransactionBehavior::Immediate,
+    )?;
+    journal::register_device(&transaction, owner_id, device_id)?;
     let conn: &Connection = &transaction;
     let mut statement = conn.prepare(
         "SELECT seq, op_id, device_id, client_at, payload

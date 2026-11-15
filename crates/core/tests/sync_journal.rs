@@ -9,6 +9,8 @@ use learnvault_core::{
     queue_position, record_position, set_completed, set_player_preference, study_progress,
 };
 
+use learnvault_core::queue_preference;
+
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 const OWNER: &str = "ana";
@@ -505,5 +507,174 @@ fn retention_removes_old_tombstones_and_idle_devices_but_keeps_the_latest_device
     let again = prune_sync(&server, 0)?;
     assert_eq!(again.devices, 0);
     assert_eq!(count(&server, "SELECT COUNT(*) FROM sync_device"), 1);
+    Ok(())
+}
+
+fn progress_op(id: &str, at: i64, completed: bool) -> SyncOperationInput {
+    SyncOperationInput {
+        op_id: id.into(),
+        client_at: at,
+        payload: SyncPayload::Progress {
+            media_id: "m1".into(),
+            position_seconds: at,
+            completed,
+        },
+    }
+}
+
+fn journaled_progress(db: &Database) -> (i64, String, bool) {
+    let (count, device, payload): (i64, String, String) = db
+        .connection()
+        .query_row("SELECT COUNT(*), MAX(device_id), MAX(payload) FROM sync_operation WHERE coalesce_key = 'p:m1'", [], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+        .unwrap();
+    (count, device, payload.contains("\"completed\":true"))
+}
+
+#[test]
+fn a_late_completion_still_reaches_every_device() -> TestResult {
+    let server = database();
+    // Device B journals a newer, not completed progress; device A, offline until now, pushes an older completion.
+    push_operations(&server, OWNER, "b", &[progress_op("b-1", 200, false)])?;
+    push_operations(&server, OWNER, "a", &[progress_op("a-1", 100, true)])?;
+    // Still a single row, now saying completed, and a device that never saw either gets it.
+    assert_eq!(journaled_progress(&server), (1, "server".to_owned(), true));
+    let batch = pull_operations(&server, OWNER, "c", 0, 500)?;
+    assert_eq!(batch.items.len(), 1);
+    assert!(matches!(
+        batch.items[0].payload,
+        SyncPayload::Progress {
+            completed: true,
+            position_seconds: 200,
+            ..
+        }
+    ));
+    Ok(())
+}
+
+#[test]
+fn a_newer_progress_that_merges_a_completion_is_delivered_to_its_own_device_too() -> TestResult {
+    let server = database();
+    push_operations(&server, OWNER, "a", &[progress_op("a-1", 100, true)])?;
+    let seen = pull_operations(&server, OWNER, "b", 0, 500)?.cursor;
+    // B pushes a newer progress that does not say completed; the merged row says it, and B must learn it.
+    push_operations(&server, OWNER, "b", &[progress_op("b-1", 200, false)])?;
+    assert_eq!(journaled_progress(&server), (1, "server".to_owned(), true));
+    let batch = pull_operations(&server, OWNER, "b", seen, 500)?;
+    assert_eq!(
+        batch.items.len(),
+        1,
+        "B does not get its own row, but gets the merged completion"
+    );
+    assert!(matches!(
+        batch.items[0].payload,
+        SyncPayload::Progress {
+            completed: true,
+            ..
+        }
+    ));
+    Ok(())
+}
+
+#[test]
+fn a_progress_without_a_completion_to_merge_keeps_the_device_that_wrote_it() -> TestResult {
+    let server = database();
+    push_operations(&server, OWNER, "a", &[progress_op("a-1", 100, false)])?;
+    push_operations(&server, OWNER, "b", &[progress_op("b-1", 200, false)])?;
+    assert_eq!(journaled_progress(&server), (1, "b".to_owned(), false));
+    Ok(())
+}
+
+#[test]
+fn a_client_that_invents_device_ids_cannot_grow_the_device_table() {
+    let server = database();
+    for index in 0..60 {
+        pull_operations(&server, OWNER, &format!("device-{index:02}"), 0, 1).unwrap();
+    }
+    assert_eq!(count(&server, "SELECT COUNT(*) FROM sync_device"), 32);
+    // The most recently seen ones are the ones kept.
+    assert_eq!(
+        count(
+            &server,
+            "SELECT COUNT(*) FROM sync_device WHERE device_id = 'device-59'"
+        ),
+        1
+    );
+    assert_eq!(
+        count(
+            &server,
+            "SELECT COUNT(*) FROM sync_device WHERE device_id = 'device-00'"
+        ),
+        0
+    );
+}
+
+#[test]
+fn two_writes_in_the_same_second_leave_the_later_one_in_the_journal() -> TestResult {
+    let server = database();
+    register(&server, "desktop");
+    for speed in [120, 150] {
+        browser_write(
+            &server,
+            OWNER,
+            || set_player_preference(&server, OWNER, speed, 100, ""),
+            |device| queue_preference(&server, OWNER, device, speed, 100, ""),
+        )?;
+    }
+    let batch = pull_operations(&server, OWNER, "desktop", 0, 500)?;
+    let speeds: Vec<i64> = batch
+        .items
+        .iter()
+        .filter_map(|item| match item.payload {
+            SyncPayload::Preference { video_speed, .. } => Some(video_speed),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        speeds,
+        [150],
+        "the journal ends on the last write, as the database does"
+    );
+    assert_eq!(player_preference(&server, OWNER)?.video_speed, 150);
+    Ok(())
+}
+
+#[test]
+fn owners_never_touch_each_others_journal() -> TestResult {
+    let server = database();
+    let other = |id: &str, at: i64| SyncOperationInput {
+        op_id: id.into(),
+        client_at: at,
+        payload: SyncPayload::Progress {
+            media_id: "m1".into(),
+            position_seconds: at,
+            completed: false,
+        },
+    };
+    push_operations(&server, "bia", "pc", &[other("b-1", 100)])?;
+    record_position(&server, OWNER, "m1", 5)?;
+    // Registering OWNER's first device backfills only OWNER's rows; coalescing OWNER's progress leaves bia's alone.
+    pull_operations(&server, OWNER, "laptop", 0, 500)?;
+    push_operations(&server, OWNER, "laptop", &[other("a-2", 300)])?;
+    assert_eq!(
+        count(
+            &server,
+            "SELECT COUNT(*) FROM sync_operation WHERE owner_id = 'bia' AND coalesce_key = 'p:m1'"
+        ),
+        1
+    );
+    assert_eq!(
+        count(
+            &server,
+            "SELECT COUNT(*) FROM sync_operation WHERE owner_id = 'ana' AND coalesce_key = 'p:m1'"
+        ),
+        1
+    );
+    assert_eq!(
+        count(
+            &server,
+            "SELECT COUNT(*) FROM sync_device WHERE owner_id = 'bia'"
+        ),
+        1
+    );
     Ok(())
 }

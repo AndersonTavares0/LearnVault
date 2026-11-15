@@ -723,7 +723,6 @@ UPDATE sync_operation SET coalesce_key = 'pref'
 CREATE TABLE sync_device (
     owner_id TEXT NOT NULL,
     device_id TEXT NOT NULL,
-    pull_cursor INTEGER NOT NULL DEFAULT 0,
     last_seen_at INTEGER NOT NULL,
     PRIMARY KEY (owner_id, device_id)
 );

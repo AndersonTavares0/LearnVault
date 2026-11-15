@@ -209,7 +209,7 @@ registration also backfills what was written before (progress, bookmarks, flashc
 schedule, preferences and notes that have no synced version yet). A newer `progress` replaces the older
 ones of the same media and a newer `preference` the older ones, with `completed` staying set, so autosaves do
 not grow the log; notes, bookmarks, flashcards, reviews and deletions are kept. Deletion tombstones and
-idle devices older than 180 days are removed (a device that is the owner's latest is kept).
+idle devices older than 180 days are removed (a device that is the owner's latest is kept), and an owner keeps at most 32 registered devices.
 
 Each operation is `{ "op_id": "...", "client_at": <unix-seconds>, "payload": { "kind": ... } }`
 with one of the payload kinds below:

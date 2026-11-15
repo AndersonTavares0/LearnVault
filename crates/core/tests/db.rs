@@ -598,3 +598,45 @@ fn restore_refuses_existing_rollback_paths_without_modifying_files() -> TestResu
     );
     Ok(())
 }
+
+#[test]
+fn a_version_nineteen_database_gets_the_coalesce_keys_of_its_journal() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("learnvault.sqlite");
+    {
+        let db = Database::open(&path)?;
+        // Rebuild the shape of version 19 from the current schema, with journal rows already in it.
+        db.connection().execute_batch(
+            "DROP TABLE sync_device;
+             DROP INDEX sync_operation_key_idx;
+             ALTER TABLE sync_operation DROP COLUMN coalesce_key;
+             INSERT INTO sync_operation (op_id, owner_id, device_id, client_at, received_at, payload) VALUES
+               ('o1', 'ana', 'pc', 1, 1, '{\"kind\":\"progress\",\"media_id\":\"m1\",\"position_seconds\":5,\"completed\":false}'),
+               ('o2', 'ana', 'pc', 2, 2, '{\"kind\":\"preference\",\"video_speed\":120,\"audio_speed\":100,\"subtitle_language\":\"\"}'),
+               ('o3', 'ana', 'pc', 3, 3, '{\"kind\":\"note_deleted\",\"note_id\":\"n\"}');",
+        )?;
+        db.connection().pragma_update(None, "user_version", 19)?;
+    }
+
+    let db = Database::open(&path)?;
+    assert_eq!(db.schema_version()?, 20);
+    let key = |op: &str| -> Option<String> {
+        db.connection()
+            .query_row(
+                "SELECT coalesce_key FROM sync_operation WHERE op_id = ?1",
+                [op],
+                |row| row.get(0),
+            )
+            .unwrap()
+    };
+    assert_eq!(key("o1").as_deref(), Some("p:m1"));
+    assert_eq!(key("o2").as_deref(), Some("pref"));
+    assert_eq!(
+        key("o3"),
+        None,
+        "an operation that is never replaced has no key"
+    );
+    assert!(table_exists(&db, "sync_device"));
+    assert!(db.has_current_schema()?);
+    Ok(())
+}

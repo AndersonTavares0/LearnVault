@@ -37,11 +37,42 @@ fn coalesce_key(payload: &SyncPayload) -> Option<String> {
     }
 }
 
+/// The completion flag a progress operation carries; anything else carries none.
+fn completed_of(payload: &SyncPayload) -> bool {
+    matches!(
+        payload,
+        SyncPayload::Progress {
+            completed: true,
+            ..
+        }
+    )
+}
+
+fn insert_row(
+    conn: &Connection,
+    owner_id: &str,
+    device_id: &str,
+    op_id: &str,
+    client_at: i64,
+    payload: &SyncPayload,
+    key: Option<&str>,
+) -> Result<()> {
+    conn.execute(
+        "INSERT INTO sync_operation (op_id, owner_id, device_id, client_at, received_at, payload, coalesce_key)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![op_id, owner_id, device_id, client_at, now_unix_seconds(), encode(payload)?, key],
+    )?;
+    Ok(())
+}
+
 /// Records an operation in the journal and removes the operations it supersedes.
 ///
 /// A progress that replaces older ones keeps the `completed` flag they carried (completion is
-/// monotonic). An operation that is itself older than one already journaled is not recorded:
-/// its effect is decided by last-write-wins when applied, and it would only add a row.
+/// monotonic). When that merge adds a completion the writing device did not author, the row is
+/// recorded under the server device, so the writer (whose own pull skips its own rows) and every
+/// other device receive it. An operation older than one already journaled adds no row, because
+/// last-write-wins decides its effect; the one exception is an older completion, which is folded
+/// into the newer row (again as the server device) so no device misses it.
 pub(super) fn insert_journal(
     conn: &Connection,
     owner_id: &str,
@@ -52,49 +83,70 @@ pub(super) fn insert_journal(
 ) -> Result<()> {
     let key = coalesce_key(payload);
     let mut payload = payload.clone();
+    let mut device_id = device_id;
     let mut superseded: Vec<i64> = Vec::new();
     if let Some(key) = &key {
-        let newer: bool = conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM sync_operation WHERE owner_id = ?1 AND coalesce_key = ?2 AND client_at > ?3)",
-            params![owner_id, key, client_at],
-            |row| row.get(0),
-        )?;
-        if newer {
-            return Ok(());
-        }
         let mut statement = conn.prepare(
-            "SELECT seq, payload FROM sync_operation WHERE owner_id = ?1 AND coalesce_key = ?2",
+            "SELECT seq, client_at, payload FROM sync_operation WHERE owner_id = ?1 AND coalesce_key = ?2",
         )?;
-        let older = statement
+        let existing = statement
             .query_map(params![owner_id, key], |row| {
-                Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         drop(statement);
-        let mut completed = false;
-        for (seq, old) in older {
-            if let Ok(SyncPayload::Progress {
-                completed: done, ..
-            }) = decode(&old)
-            {
-                completed |= done;
-            }
-            superseded.push(seq);
-        }
-        if let SyncPayload::Progress {
-            completed: flag, ..
-        } = &mut payload
+        let existing: Vec<(i64, i64, SyncPayload)> = existing
+            .into_iter()
+            .filter_map(|(seq, at, text)| decode(&text).ok().map(|decoded| (seq, at, decoded)))
+            .collect();
+        let own_flag = completed_of(&payload);
+        if let Some((_, newest_at, newest)) = existing.iter().max_by_key(|row| row.1)
+            && *newest_at > client_at
         {
-            *flag |= completed;
+            if own_flag && !completed_of(newest) {
+                let mut merged = newest.clone();
+                if let SyncPayload::Progress { completed, .. } = &mut merged {
+                    *completed = true;
+                }
+                insert_row(
+                    conn,
+                    owner_id,
+                    SERVER_DEVICE_ID,
+                    &crate::ids::new_sync_id(),
+                    *newest_at,
+                    &merged,
+                    Some(key),
+                )?;
+                for (seq, ..) in &existing {
+                    conn.execute("DELETE FROM sync_operation WHERE seq = ?1", [seq])?;
+                }
+            }
+            return Ok(());
+        }
+        let merged_flag = own_flag || existing.iter().any(|row| completed_of(&row.2));
+        superseded = existing.iter().map(|row| row.0).collect();
+        if let SyncPayload::Progress { completed, .. } = &mut payload {
+            *completed = merged_flag;
+        }
+        if merged_flag != own_flag {
+            device_id = SERVER_DEVICE_ID;
         }
     }
     // The new row goes in BEFORE the old ones are removed. `seq` is a plain rowid: deleting the
     // highest row first would let the next insert reuse that number, and a device whose cursor
     // is already past it would never receive the replacement.
-    conn.execute(
-        "INSERT INTO sync_operation (op_id, owner_id, device_id, client_at, received_at, payload, coalesce_key)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        params![op_id, owner_id, device_id, client_at, now_unix_seconds(), encode(&payload)?, key],
+    insert_row(
+        conn,
+        owner_id,
+        device_id,
+        op_id,
+        client_at,
+        &payload,
+        key.as_deref(),
     )?;
     for seq in superseded {
         conn.execute("DELETE FROM sync_operation WHERE seq = ?1", [seq])?;
@@ -106,7 +158,7 @@ pub(super) fn insert_journal(
 pub(super) fn drain_server_outbox(conn: &Connection, owner_id: &str) -> Result<usize> {
     let mut statement = conn.prepare(
         "SELECT op_id, client_at, payload FROM sync_outbox
-          WHERE owner_id = ?1 AND device_id = ?2 ORDER BY queued_at, op_id",
+          WHERE owner_id = ?1 AND device_id = ?2 ORDER BY rowid",
     )?;
     let pending = statement
         .query_map(params![owner_id, SERVER_DEVICE_ID], |row| {
@@ -132,14 +184,13 @@ pub(super) fn drain_server_outbox(conn: &Connection, owner_id: &str) -> Result<u
     Ok(pending.len())
 }
 
+/// Most devices remembered per owner; the least recently seen are forgotten beyond it, so a
+/// client that invents device ids cannot grow the table.
+const MAX_DEVICES_PER_OWNER: i64 = 32;
+
 /// Registers (or refreshes) a device of the owner and drains the server outbox. The first device of
 /// an owner also backfills the existing state, so a device that connects later converges.
-pub(super) fn register_device(
-    conn: &Connection,
-    owner_id: &str,
-    device_id: &str,
-    cursor: Option<i64>,
-) -> Result<()> {
+pub(super) fn register_device(conn: &Connection, owner_id: &str, device_id: &str) -> Result<()> {
     if device_id == SERVER_DEVICE_ID {
         return Err(Error::InvalidSyncOperation {
             reason: "reserved device id",
@@ -154,11 +205,15 @@ pub(super) fn register_device(
         backfill(conn, owner_id)?;
     }
     conn.execute(
-        "INSERT INTO sync_device (owner_id, device_id, pull_cursor, last_seen_at) VALUES (?1, ?2, ?3, ?4)
-         ON CONFLICT (owner_id, device_id) DO UPDATE SET
-             pull_cursor = MAX(sync_device.pull_cursor, excluded.pull_cursor),
-             last_seen_at = excluded.last_seen_at",
-        params![owner_id, device_id, cursor.unwrap_or(0).max(0), now_unix_seconds()],
+        "INSERT INTO sync_device (owner_id, device_id, last_seen_at) VALUES (?1, ?2, ?3)
+         ON CONFLICT (owner_id, device_id) DO UPDATE SET last_seen_at = excluded.last_seen_at",
+        params![owner_id, device_id, now_unix_seconds()],
+    )?;
+    conn.execute(
+        "DELETE FROM sync_device WHERE owner_id = ?1 AND device_id IN (
+             SELECT device_id FROM sync_device WHERE owner_id = ?1
+              ORDER BY last_seen_at DESC, device_id DESC LIMIT -1 OFFSET ?2)",
+        params![owner_id, MAX_DEVICES_PER_OWNER],
     )?;
     drain_server_outbox(conn, owner_id)?;
     Ok(())

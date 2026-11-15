@@ -684,7 +684,6 @@ const REQUIRED_TABLES: &[TableDefinition] = &[
         columns: &[
             ("owner_id", "TEXT", true, None, 1),
             ("device_id", "TEXT", true, None, 2),
-            ("pull_cursor", "INTEGER", true, Some("0"), 0),
             ("last_seen_at", "INTEGER", true, None, 0),
         ],
     },
