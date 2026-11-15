@@ -117,7 +117,7 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 								<div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-labelledby="course-progress" className="h-2 overflow-hidden rounded-full bg-brand-soft">
 									<div className="h-full bg-primary" style={{ width: `${percent}%` }} />
 								</div>
-								<p id="course-progress" className="text-sm text-muted-foreground">{tr(`${entry.done} of ${entry.total} lessons completed (${percent}%)`, `${entry.done} de ${entry.total} aulas concluídas (${percent}%)`)}</p>
+								<p id="course-progress" className="text-sm text-muted-foreground">{entry.total === counts.lessons ? tr(`${entry.done} of ${entry.total} lessons completed (${percent}%)`, `${entry.done} de ${entry.total} aulas concluídas (${percent}%)`) : tr(`${entry.done} of ${entry.total} video lessons completed (${percent}%)`, `${entry.done} de ${entry.total} aulas em vídeo concluídas (${percent}%)`)}</p>
 								{entry.done === entry.total && <p role="status" className="text-sm font-medium text-primary">{tr('Course complete. Well done.', 'Curso concluído. Muito bem.')}</p>}
 							</div>
 						)}
