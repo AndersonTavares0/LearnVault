@@ -80,7 +80,7 @@ Release assets are compiled automatically by GitHub Actions CI:
 | **Windows** | Desktop Application | Installer (`.exe`) | **Available** | Per-user NSIS package with signed auto-updater |
 | **Linux** | Self-Hosted Server | Standalone Tarball (`.tar.gz`) | **Available** | `x86_64` and `aarch64` binaries with embedded web SPA |
 | **Any OS** | Containerized Server | OCI Image | **Available** | Published on GHCR (`ghcr.io/andersontavares0/learnvault`) |
-| **Linux** | Desktop Application | Flatpak | *In Development* | Desktop Linux Flatpak sandbox packaging is currently on roadmap |
+| **Linux** | Desktop Application | Flatpak | *Planned* | Plan and remaining work in [`docs/operations/flatpak.md`](docs/operations/flatpak.md) |
 
 Release checksums are available in the `SHA256SUMS` file accompanying each [GitHub Release](https://github.com/AndersonTavares0/LearnVault/releases).
 
