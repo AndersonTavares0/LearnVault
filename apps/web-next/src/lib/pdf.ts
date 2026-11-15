@@ -234,3 +234,54 @@ export function marksToMarkdown(title: string, items: PdfAnnotation[]): string {
 	}
 	return `${lines.join('\n')}\n`;
 }
+
+/** One entry of a document's table of contents, in reading order. `page` is null when the target cannot be resolved. */
+export type OutlineItem = { title: string; page: number | null; depth: number };
+
+/** The few pdf.js calls the outline needs, so it can be read (and tested) without a real document. */
+export type OutlineSource = {
+	getOutline(): Promise<{ title: string; dest: string | unknown[] | null; items?: unknown[] }[] | null>;
+	getDestination(id: string): Promise<unknown[] | null>;
+	getPageIndex(ref: never): Promise<number>;
+};
+
+/** Deepest nesting and most entries kept: a hostile or huge outline cannot stall the reader. */
+export const MAX_OUTLINE_DEPTH = 6;
+export const MAX_OUTLINE_ITEMS = 1000;
+
+async function outlinePage(doc: OutlineSource, dest: string | unknown[] | null): Promise<number | null> {
+	try {
+		const explicit = typeof dest === 'string' ? await doc.getDestination(dest) : dest;
+		const target = explicit?.[0];
+		if (typeof target === 'number') return target + 1;
+		if (target && typeof target === 'object') return (await doc.getPageIndex(target as never)) + 1;
+	} catch {
+		// A broken destination leaves the title without a page rather than failing the whole outline.
+	}
+	return null;
+}
+
+/** Reads the table of contents as a flat list in reading order; empty when the document has none. */
+export async function readOutline(doc: OutlineSource): Promise<OutlineItem[]> {
+	const root = await doc.getOutline().catch(() => null);
+	const items: OutlineItem[] = [];
+	const walk = async (nodes: { title: string; dest: string | unknown[] | null; items?: unknown[] }[], depth: number): Promise<void> => {
+		for (const node of nodes) {
+			if (items.length >= MAX_OUTLINE_ITEMS) return;
+			const title = (node.title ?? '').replace(/\s+/g, ' ').trim();
+			if (title) items.push({ title, page: await outlinePage(doc, node.dest), depth });
+			if (node.items?.length && depth + 1 < MAX_OUTLINE_DEPTH) await walk(node.items as typeof nodes, depth + 1);
+		}
+	};
+	if (root) await walk(root, 0);
+	return items;
+}
+
+/** Index of the heading that holds `page`: the last entry whose page is at or before it. */
+export function activeOutlineIndex(items: OutlineItem[], page: number): number {
+	let active = -1;
+	items.forEach((item, index) => {
+		if (item.page !== null && item.page <= page) active = index;
+	});
+	return active;
+}

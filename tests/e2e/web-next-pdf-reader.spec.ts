@@ -22,7 +22,30 @@ function makePages(lines: string[]): Buffer {
 	return buildPdf(objects);
 }
 
+/** Like `makePages`, with a table of contents: Ownership (page 1), Borrowing (page 2) holding Lifetimes (page 3). */
+function makeOutlined(lines: string[]): Buffer {
+	const n = lines.length;
+	const font = 3 + n * 2;
+	const root = font + 1;
+	const [one, two, three] = [root + 1, root + 2, root + 3];
+	const page = (index: number) => `${3 + index * 2} 0 R`;
+	const objects = [`<< /Type /Catalog /Pages 2 0 R /Outlines ${root} 0 R >>`, `<< /Type /Pages /Kids [${lines.map((_, index) => page(index)).join(' ')}] /Count ${n} >>`];
+	lines.forEach((line, index) => {
+		const content = `BT /F1 24 Tf 20 240 Td (${line.replace(/[()\\]/g, '\\$&')}) Tj ET`;
+		objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 300] /Contents ${4 + index * 2} 0 R /Resources << /Font << /F1 ${font} 0 R >> >> >>`);
+		objects.push(`<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
+	});
+	objects.push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+	objects.push(`<< /Type /Outlines /First ${one} 0 R /Last ${two} 0 R /Count 3 >>`);
+	objects.push(`<< /Title (Ownership) /Parent ${root} 0 R /Next ${two} 0 R /Dest [${page(0)} /Fit] >>`);
+	objects.push(`<< /Title (Borrowing) /Parent ${root} 0 R /Prev ${one} 0 R /First ${three} 0 R /Last ${three} 0 R /Count 1 /Dest [${page(1)} /Fit] >>`);
+	objects.push(`<< /Title (Lifetimes) /Parent ${two} 0 R /Dest [${page(2)} /Fit] >>`);
+	return buildPdf(objects);
+}
+
 const test = createTest(async (library) => {
+	await mkdir(join(library, 'Reading', 'Outlined'), { recursive: true });
+	await writeFile(join(library, 'Reading', 'Outlined', 'Outlined.pdf'), makeOutlined(['Page one: ownership.', 'Page two: borrowing.', 'Page three: lifetimes.', 'Page four: traits.', 'Page five: closures.']));
 	await mkdir(join(library, 'Reading', 'Continuous'), { recursive: true });
 	await writeFile(join(library, 'Reading', 'Continuous', 'Continuous.pdf'), makePages([
 		'Page one: ownership.',
@@ -36,13 +59,13 @@ const test = createTest(async (library) => {
 const reader = (page: Page) => page.getByRole('group', { name: 'PDF page' });
 const pageField = (page: Page) => page.getByLabel('Page', { exact: true });
 
-async function openReader(page: Page, origin: string) {
+async function openReader(page: Page, origin: string, name = 'Continuous') {
 	await signIn(page, origin);
 	await page.getByRole('button', { name: 'Refresh courses' }).click();
 	await expect(page.getByText('Catalog updated.')).toBeVisible();
 	await page.getByRole('link', { name: 'Course' }).first().click();
 	await page.getByRole('button', { name: 'Expand all' }).click();
-	await page.getByRole('link', { name: /Continuous/ }).first().click();
+	await page.getByRole('link', { name: new RegExp(name) }).first().click();
 	await expect(reader(page)).toBeVisible();
 	await expect(page.locator('[data-page="1"] .pdf-text-layer')).toContainText('Page one: ownership.', { timeout: 15_000 });
 }
@@ -207,4 +230,42 @@ test('the selection is copied as plain text or as a quote with its page', async 
 	await selectFirstLine(page);
 	await page.getByRole('button', { name: 'Copy as quote' }).click();
 	expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(/^“Page one: ownership\.” — .+, p\. 1$/);
+});
+
+
+test('the table of contents jumps to a heading and follows the page, and the thumbnails jump to a page', async ({ page, origin }) => {
+	await openReader(page, origin, 'Outlined');
+	await page.getByRole('button', { name: 'Contents' }).click();
+	const contents = page.getByRole('region', { name: 'Contents' });
+	await expect(contents.getByRole('button', { name: /^Ownership/ })).toBeVisible();
+	await expect(contents.getByRole('button', { name: /^Lifetimes/ })).toBeVisible();
+	await expect(contents.getByRole('button', { name: /^Ownership/ })).toHaveAttribute('aria-current', 'location');
+
+	await contents.getByRole('button', { name: /^Borrowing/ }).click();
+	await expect(pageField(page)).toHaveValue('2');
+	await expect(contents.getByRole('button', { name: /^Borrowing/ })).toHaveAttribute('aria-current', 'location');
+	// Reading on moves the marked heading: page 3 belongs to its own entry.
+	await reader(page).focus();
+	await page.keyboard.press('j');
+	await expect(pageField(page)).toHaveValue('3');
+	await expect(contents.getByRole('button', { name: /^Lifetimes/ })).toHaveAttribute('aria-current', 'location');
+	await expectNoAxeViolations(page, 'pdf outline');
+
+	await contents.getByRole('button', { name: 'Pages', exact: true }).click();
+	await expect(contents.getByRole('button', { name: /^Go to page/ })).toHaveCount(5);
+	await expect(contents.getByRole('button', { name: 'Go to page 3' })).toHaveAttribute('aria-current', 'page');
+	await contents.getByRole('button', { name: 'Go to page 5' }).click();
+	await expect(pageField(page)).toHaveValue('5');
+	await expect(contents.getByRole('button', { name: 'Go to page 5' })).toHaveAttribute('aria-current', 'page');
+	await expectNoAxeViolations(page, 'pdf thumbnails');
+});
+
+test('a document without a table of contents falls back to the page list', async ({ page, origin }) => {
+	await openReader(page, origin);
+	await page.getByRole('button', { name: 'Contents' }).click();
+	const contents = page.getByRole('region', { name: 'Contents' });
+	await expect(contents.getByText('This document has no table of contents, so here are its pages.')).toBeVisible();
+	await expect(contents.getByRole('button', { name: 'Outline' })).toHaveCount(0);
+	await contents.getByRole('button', { name: 'Go to page 4' }).click();
+	await expect(pageField(page)).toHaveValue('4');
 });
