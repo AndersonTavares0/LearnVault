@@ -242,10 +242,14 @@ html, body { overflow-x: clip; }
   html {
     @apply font-sans;
   }
-  h1, h2, h3 {
+  /* Playfair is for the page title and the wordmark; panel, card and item titles use the interface face. */
+  h1 {
     font-family: var(--heading-font);
     font-weight: 600;
     letter-spacing: -0.02em;
+  }
+  h2, h3 {
+    font-weight: 600;
   }
   @media (prefers-reduced-motion: reduce) {
     *,

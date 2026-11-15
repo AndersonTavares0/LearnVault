@@ -175,7 +175,7 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 					) : documents.length === 0 ? <p className="text-muted-foreground">{tr('This course has not been indexed yet.', 'Este curso ainda não foi indexado.')}</p> : null}
 					{documents.length > 0 && (
 						<section aria-labelledby="course-documents" className="space-y-4">
-							<h2 id="course-documents" className="flex items-baseline gap-2 font-heading text-lg font-bold">
+							<h2 id="course-documents" className="flex items-baseline gap-2 text-lg font-bold">
 								{readingOnly ? tr('Reading list', 'Lista de leitura') : tr('Documents', 'Documentos')}
 								<span className="text-sm font-normal text-muted-foreground tabular-nums">{documents.length}</span>
 							</h2>

@@ -1,4 +1,4 @@
-import { BookOpen, ChartNoAxesColumn, History, Layers, CircleUser, LogOut, Moon, NotebookPen, Search, Settings, Sun, UserRound, type LucideIcon } from 'lucide-react';
+import { BookOpen, ChartNoAxesColumn, History, Layers, LogOut, Moon, NotebookPen, Search, Settings, Sun, UserRound, type LucideIcon } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
@@ -127,7 +127,7 @@ function AccountMenu({ username, userId, wide }: { username: string; userId: str
 		<>
 			<DropdownMenu>
 				<DropdownMenuTrigger render={wide ? <Button variant="ghost" className="min-w-0 flex-1 justify-start gap-2" aria-label={tr(`Account: ${username}`, `Conta: ${username}`)} /> : <Button variant="ghost" size="icon" aria-label={tr(`Account: ${username}`, `Conta: ${username}`)} />}>
-					<CircleUser />{wide && <span className="truncate">{username}</span>}
+					<span className="grid size-8 shrink-0 place-items-center rounded-full bg-primary text-sm font-bold text-primary-foreground" aria-hidden="true">{username.trim()[0]?.toUpperCase() ?? '?'}</span>{wide && <span className="truncate">{username}</span>}
 				</DropdownMenuTrigger>
 				<DropdownMenuContent align="end" className="w-56">
 					{/* Base UI requires group labels inside a group. */}
@@ -197,16 +197,12 @@ function MobileTabs() {
 }
 
 /** Page title: a tinted icon tile, the title in serif with its last word in the accent, and an optional line under it. */
-export function PageHeader({ title, description, actions, icon: Icon, className }: { title: string; description?: ReactNode; actions?: ReactNode; icon?: LucideIcon; className?: string }) {
-	const cut = title.lastIndexOf(' ') + 1;
+export function PageHeader({ title, description, actions, className }: { title: string; description?: ReactNode; actions?: ReactNode; icon?: LucideIcon; className?: string }) {
 	return (
 		<div className={cn('mb-8 flex flex-wrap items-end justify-between gap-4', className)}>
-			<div className="flex min-w-0 items-center gap-4">
-				{Icon && <span className="hidden size-14 shrink-0 place-items-center rounded-2xl bg-brand-soft text-primary sm:grid" aria-hidden="true"><Icon className="size-7" /></span>}
-				<div className="min-w-0 space-y-1">
-					<h1 className="font-heading text-3xl font-semibold text-balance sm:text-4xl">{cut > 0 ? <>{title.slice(0, cut)}<em className="text-primary">{title.slice(cut)}</em></> : title}</h1>
-					{description && <div className="text-muted-foreground">{description}</div>}
-				</div>
+			<div className="min-w-0 space-y-1">
+				<h1 className="font-heading text-3xl font-bold text-balance sm:text-4xl">{title}</h1>
+				{description && <div className="text-muted-foreground">{description}</div>}
 			</div>
 			{actions && <div className="flex flex-wrap gap-2">{actions}</div>}
 		</div>

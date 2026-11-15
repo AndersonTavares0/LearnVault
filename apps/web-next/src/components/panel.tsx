@@ -16,13 +16,12 @@ export const Eyebrow = ({ children, className }: { children: ReactNode; classNam
 );
 
 /** A small tinted number card: the label, the value, and optional extra context. */
-export function Stat({ label, value, unit, note, icon, tone, bar, progress, children, className }: { label: string; value: ReactNode; unit?: string; note?: string; icon?: ReactNode; tone?: 'amber' | 'violet' | 'green'; bar?: { value: number; max: number }; progress?: number; children?: ReactNode; className?: string }) {
+export function Stat({ label, value, unit, note, tone, bar, progress, children, className }: { label: string; value: ReactNode; unit?: string; note?: string; icon?: ReactNode; tone?: 'amber' | 'violet' | 'green'; bar?: { value: number; max: number }; progress?: number; children?: ReactNode; className?: string }) {
 	const percent = Math.round(Math.min(1, Math.max(0, progress ?? 0)) * 100);
 	return (
-		<div data-panel className={cn('rounded-[1.75rem] border border-border bg-card p-5', tone && `stat-${tone}`, className)}>
-			{icon && <div data-stat-icon className="mb-3 grid size-9 place-items-center rounded-xl bg-brand-tint text-primary [&_svg]:size-5" aria-hidden="true">{icon}</div>}
-			<Eyebrow>{label}</Eyebrow>
-			<p data-stat-value className="mt-2 font-heading text-3xl font-semibold">{value}{unit && <span className="ml-1.5 font-sans text-base font-medium text-muted-foreground">{unit}</span>}</p>
+		<div data-panel className={cn('rounded-2xl border border-border bg-card p-4', tone && `stat-${tone}`, className)}>
+			<p className="text-[0.9375rem] font-bold">{label}</p>
+			<p data-stat-value className="mt-1.5 font-heading text-3xl leading-none font-bold">{value}{unit && <span className="ml-1.5 font-sans text-base font-medium text-muted-foreground">{unit}</span>}</p>
 			{bar && (
 				<div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={bar.max} aria-valuenow={bar.value} className="mt-3 flex gap-1">
 					{Array.from({ length: bar.max }, (_, index) => <span key={index} className={cn('h-1.5 flex-1 rounded-full', index < bar.value ? 'bg-primary' : 'bg-border')} />)}
@@ -33,8 +32,8 @@ export function Stat({ label, value, unit, note, icon, tone, bar, progress, chil
 					<div className="h-full rounded-full bg-primary" style={{ width: `${percent}%` }} />
 				</div>
 			)}
-			{note && <p className="mt-1 text-sm text-muted-foreground">{note}</p>}
-			{children && <div className="mt-3">{children}</div>}
+			{note && <p className="mt-1.5 text-xs text-muted-foreground">{note}</p>}
+			{children && <div className="mt-2.5">{children}</div>}
 		</div>
 	);
 }

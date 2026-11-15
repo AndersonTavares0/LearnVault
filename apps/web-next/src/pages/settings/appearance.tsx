@@ -29,7 +29,7 @@ export function AppearanceSettings() {
 		<div className="space-y-6">
 			<div className="grid gap-6 xl:grid-cols-2">
 			<Panel className="space-y-6 p-5 sm:p-6">
-				<h2 className="font-heading text-xl font-semibold">{tr('Colour', 'Cor')}</h2>
+				<h2 className="text-lg font-bold">{tr('Colour', 'Cor')}</h2>
 			<Choice legend={tr('Theme', 'Tema')} options={THEMES} value={value.theme} label={(option) => ({ light: tr('Light', 'Claro'), dark: tr('Dark', 'Escuro'), system: tr('Follow the system', 'Seguir o sistema') })[option]} onChange={(theme) => change({ theme })} />
 			<fieldset className="space-y-3">
 				<legend className="text-sm font-semibold">{tr('Accent color', 'Cor de destaque')}</legend>
@@ -60,14 +60,14 @@ export function AppearanceSettings() {
 			<Choice legend={tr('Rewards (streak, XP, badges)', 'Recompensas (sequência, XP, emblemas)')} options={REWARD_COLORS} value={value.reward} label={(option) => (option === 'amber' ? tr('Amber', 'Âmbar') : tr('Same as accent', 'Igual ao destaque'))} onChange={(reward) => change({ reward })} />
 			</Panel>
 			<Panel className="space-y-6 p-5 sm:p-6">
-				<h2 className="font-heading text-xl font-semibold">{tr('Shape and text', 'Forma e texto')}</h2>
+				<h2 className="text-lg font-bold">{tr('Shape and text', 'Forma e texto')}</h2>
 			<Choice legend={tr('Corners', 'Cantos')} options={RADII} value={value.radius} label={(option) => ({ square: tr('Square', 'Retos'), soft: tr('Soft', 'Suaves'), round: tr('Round', 'Arredondados') })[option]} onChange={(radius) => change({ radius })} />
 			<Choice legend={tr('Density', 'Densidade')} options={DENSITIES} value={value.density} label={(option) => (option === 'comfortable' ? tr('Comfortable', 'Confortável') : tr('Compact', 'Compacta'))} onChange={(density) => change({ density })} />
 			<Choice legend={tr('Text size', 'Tamanho do texto')} options={TEXT_SIZES} value={value.textSize} label={(option) => ({ small: tr('Small', 'Pequeno'), medium: tr('Medium', 'Médio'), large: tr('Large', 'Grande') })[option]} onChange={(textSize) => change({ textSize })} />
 			<Choice legend={tr('Font', 'Fonte')} options={FONTS} value={value.font} label={(option) => ({ sans: tr('DM Sans with serif titles', 'DM Sans com títulos serifados'), system: tr('System font', 'Fonte do sistema'), serif: tr('Reading serif', 'Serifada de leitura') })[option]} onChange={(font) => change({ font })} />
 			</Panel>
 			<Panel className="space-y-6 p-5 sm:p-6 xl:col-span-2">
-				<h2 className="font-heading text-xl font-semibold">{tr('My learning layout', 'Layout do Meu aprendizado')}</h2>
+				<h2 className="text-lg font-bold">{tr('My learning layout', 'Layout do Meu aprendizado')}</h2>
 			<Choice legend={tr('Course content in a lesson', 'Conteúdo do curso na aula')} options={SIDEBARS} value={value.sidebar} label={(option) => (option === 'right' ? tr('On the right', 'À direita') : tr('On the left', 'À esquerda'))} onChange={(sidebar) => change({ sidebar })} />
 			<fieldset className="space-y-2">
 				<legend className="text-sm font-semibold">{tr('What My learning shows', 'O que Meu aprendizado mostra')}</legend>

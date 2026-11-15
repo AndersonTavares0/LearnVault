@@ -561,7 +561,7 @@ export function PdfReader({ file, courseId, initialPage, onPage, preferences, on
 			<p role="status" aria-live="polite" className="sr-only">{pages ? tr(`Page ${current} of ${pages}`, `Página ${current} de ${pages}`) : ''}</p>
 			{studySyncSupported && mediaId && panelOpen && (
 				<section aria-labelledby="pdf-marks-heading" className="space-y-3 rounded-[1.75rem] border bg-card p-5">
-					<h2 id="pdf-marks-heading" className="font-heading text-xl font-bold">{tr('Marks in this document', 'Marcações neste documento')}</h2>
+					<h2 id="pdf-marks-heading" className="text-xl font-bold">{tr('Marks in this document', 'Marcações neste documento')}</h2>
 					<PdfMarks title={file.name} items={marks.data ?? []} page={current} onGo={(target, annotationId) => { go(target); if (annotationId) flashMark(annotationId); }} onChange={(annotationId, change) => update.mutate({ annotationId, ...change })} onDelete={(annotationId) => remove.mutate(annotationId)} onExportPdf={() => void downloadAnnotated()} onSendToNotes={(item) => void sendToNotes(item)} onRestore={(item) => create.mutate({ page: item.page, kind: item.kind, color: item.color, rects: item.rects, quote: item.quote, ...(item.content ? { content: item.content } : {}) })} pending={remove.isPending || create.isPending} />
 				</section>
 			)}

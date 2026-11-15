@@ -75,7 +75,7 @@ export function ProgressPage() {
 				<div className="order-1 flex min-w-0 flex-col gap-6 lg:col-span-8">
 				<Panel className="space-y-4 p-5 sm:p-6"><section aria-labelledby="focus-heading" className="space-y-4">
 					<div className="flex flex-wrap items-baseline justify-between gap-2">
-						<h2 id="focus-heading" className="font-heading text-2xl font-semibold">{range === 'week' ? tr('Focus time by day', 'Tempo de foco por dia') : tr('Weekly breakdown', 'Detalhamento semanal')}</h2>
+						<h2 id="focus-heading" className="text-lg font-bold">{range === 'week' ? tr('Focus time by day', 'Tempo de foco por dia') : tr('Weekly breakdown', 'Detalhamento semanal')}</h2>
 						<span className="text-sm text-muted-foreground">{range === 'week' ? tr(`${formatMinutes(total)} this week`, `${formatMinutes(total)} nesta semana`) : tr(`${formatMinutes(total)} in all`, `${formatMinutes(total)} no total`)}</span>
 					</div>
 					{focus.isPending ? (
@@ -97,7 +97,7 @@ export function ProgressPage() {
 
 				<div className="order-2 flex min-w-0 flex-col gap-6 lg:col-span-4">
 				<Panel className="min-w-0 p-5 sm:p-6"><section aria-labelledby="missions-heading" className="space-y-3">
-					<h2 id="missions-heading" className="font-heading text-2xl font-semibold">{tr('Today', 'Hoje')}</h2>
+					<h2 id="missions-heading" className="text-lg font-bold">{tr('Today', 'Hoje')}</h2>
 					<ul className="divide-y border-y">
 						{game.missions.map((mission) => {
 							const done = mission.progress >= mission.target;
@@ -119,7 +119,7 @@ export function ProgressPage() {
 					</ul>
 				</section></Panel>
 				<Panel className="flex-1 p-5 sm:p-6"><section aria-labelledby="badges-heading" className="space-y-3">
-					<h2 id="badges-heading" className="font-heading text-2xl font-semibold">{tr('Badges', 'Emblemas')}</h2>
+					<h2 id="badges-heading" className="text-lg font-bold">{tr('Badges', 'Emblemas')}</h2>
 					<ul className="grid grid-cols-3 gap-x-2 gap-y-4 lg:grid-cols-2 xl:grid-cols-3">
 						{game.badges.map((badge) => <BadgeTile key={badge.id} badge={badge} />)}
 					</ul>
@@ -137,7 +137,7 @@ function Metric({ label, value, suffix, caption }: { label: string; value: strin
 		<Panel className="space-y-1 p-5">
 			<dt className="font-semibold">{label}</dt>
 			<dd className="space-y-1">
-				<p className="font-heading text-4xl font-semibold tabular-nums">{value}{suffix && <span className="ml-2 font-sans text-base font-medium text-muted-foreground">{suffix}</span>}</p>
+				<p className="text-4xl font-bold tabular-nums">{value}{suffix && <span className="ml-2 font-sans text-base font-medium text-muted-foreground">{suffix}</span>}</p>
 				<p className="text-sm text-muted-foreground">{caption}</p>
 			</dd>
 		</Panel>
@@ -153,7 +153,7 @@ function CoursesPanel({ entries }: { entries: LibraryEntries }) {
 	return (
 		<Panel className="space-y-4 p-5 sm:p-6"><section aria-labelledby="courses-heading" className="space-y-4">
 			<div className="flex flex-wrap items-end justify-between gap-2">
-				<div><h2 id="courses-heading" className="font-heading text-2xl font-semibold">{tr('Courses', 'Cursos')}</h2><p className="text-sm text-muted-foreground">{tr(`${active.length} in progress · ${finished} finished`, `${active.length} em andamento · ${finished} concluídos`)}</p></div>
+				<div><h2 id="courses-heading" className="text-lg font-bold">{tr('Courses', 'Cursos')}</h2><p className="text-sm text-muted-foreground">{tr(`${active.length} in progress · ${finished} finished`, `${active.length} em andamento · ${finished} concluídos`)}</p></div>
 				<Link to={routerPath(href('home'))} className="inline-flex min-h-11 items-center text-sm font-semibold text-primary hover:underline">{tr('All courses', 'Todos os cursos')}</Link>
 			</div>
 			{active.length === 0 ? (
