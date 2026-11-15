@@ -27,6 +27,7 @@ fn tree() -> HashMap<&'static str, Vec<(&'static str, Option<u64>)>> {
                 ("Pentest", None),
                 ("Infra", None),
                 ("temp", None),
+                (".oculta", None),
                 ("leia.txt", Some(5)),
             ],
         ),
@@ -390,7 +391,7 @@ async fn browsing_lists_one_level_with_counts_and_hides_ignored_folders() {
     assert_eq!(
         names,
         ["Infra", "Pentest"],
-        "sorted, and `temp` is never listed"
+        "sorted, and `temp` and hidden folders are never listed"
     );
     assert_eq!(cursos["other_files"], 1);
     assert_eq!(cursos["folders"][1]["path"], "Cursos/Pentest");

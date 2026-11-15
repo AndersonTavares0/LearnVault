@@ -32,6 +32,11 @@ use crate::{
 };
 
 /// Longest relative path accepted from a client.
+/// The scan skips hidden and temporary folders, so they are neither listed nor accepted as courses.
+fn skipped_by_scan(name: &str) -> bool {
+    name.starts_with('.') || is_ignored_directory(name)
+}
+
 const MAX_PATH_CHARS: usize = 1024;
 /// Folders listed by one browse request; the rest is reported as truncated.
 const MAX_BROWSE_FOLDERS: usize = 2000;
@@ -116,7 +121,7 @@ async fn list_folder(
     for entry in entries {
         let name = last_segment(&entry.path);
         if entry.is_dir {
-            if !is_ignored_directory(name) {
+            if !skipped_by_scan(name) {
                 folders.push(entry.path);
             }
         } else if classify(name, entry.size) == MediaKind::Media {
@@ -337,7 +342,7 @@ pub(crate) async fn create(
         return json_error(StatusCode::BAD_REQUEST, "invalid_path");
     };
     if matches!(request.mode, Pick::Course)
-        && (path.is_empty() || is_ignored_directory(last_segment(&path)))
+        && (path.is_empty() || skipped_by_scan(last_segment(&path)))
     {
         // The scan skips ignored folders, so such a course could never get any lesson.
         return json_error(StatusCode::BAD_REQUEST, "invalid_path");
