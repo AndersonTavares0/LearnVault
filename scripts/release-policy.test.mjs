@@ -15,8 +15,7 @@ test('Release Please uses SemVer pre-major bumps, generated names, and categoriz
     // Before 1.0.0 every release is marked as a pre-release on GitHub, so it never becomes `latest` for the updater.
     assert.equal(release.prerelease, true);
     assert.equal(release['prerelease-type'], undefined);
-    // The one-time override that moved the line off 0.9.0-rc.5 is gone; later releases are computed from commits.
-    assert.equal(release['release-as'], undefined);
+    assert.equal(release['release-as'], '0.9.0');
     assert.equal(release['include-v-in-tag'], true);
     assert.equal(release['include-v-in-release-name'], true);
     assert.equal(release['changelog-path'], 'docs/releases/CHANGELOG.md');
