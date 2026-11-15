@@ -71,34 +71,27 @@ export function CourseCard({ entry, profile, variant = 'grid', canManage = false
 			</li>
 		);
 	}
-	if (variant === 'grid') {
-		// Poster card: the cover leads, the title and progress sit under it. The star floats on the cover.
+	if (listed) {
 		return (
-			<li className="group/card relative flex flex-col gap-3 rounded-2xl border bg-card p-3 transition-[border-color,box-shadow] has-focus-visible:ring-3 has-focus-visible:ring-ring hover:border-[color:var(--border-strong)] hover:shadow-md">
-				<CourseCover course={entry.course} profile={profile} done={entry.done} total={entry.total} className="w-full" />
-				{studySyncSupported && (
-					<div className="absolute top-5 right-5 z-10">
-						<Button variant="ghost" size="icon" aria-pressed={entry.favorite} disabled={toggle.isPending} onClick={() => toggle.mutate({ courseId: entry.courseId, favorite: !entry.favorite })}
-							aria-label={entry.favorite ? tr(`Remove ${entry.course.title} from favorites`, `Remover ${entry.course.title} dos favoritos`) : tr(`Add ${entry.course.title} to favorites`, `Adicionar ${entry.course.title} aos favoritos`)}
-							className="rounded-full bg-card/90 text-foreground shadow-sm ring-1 ring-border backdrop-blur hover:bg-card aria-pressed:bg-brand-tint">
-							<Star className={cn(entry.favorite && 'fill-current')} />
-						</Button>
-					</div>
-				)}
-				{manageable && <div className="absolute top-5 right-16 z-10"><CourseManagement course={entry.course} courseId={entry.courseId} lessons={entry.total} compact /></div>}
-				<div className="min-w-0 space-y-2 px-1 pb-1">
-					<h3 className="card-heading font-heading text-base leading-snug font-semibold text-balance">
+			<li className="relative flex items-center gap-4 border-b py-3 first:border-t has-focus-visible:ring-3 has-focus-visible:ring-ring">
+				<div className="w-11 shrink-0"><CourseCover course={entry.course} profile={profile} done={entry.done} total={entry.total} compact className="aspect-square rounded-xl" /></div>
+				<div className="min-w-0 flex-1">
+					<h3 className="text-base font-semibold">
 						<Link to={routerPath(href('course', entry.courseId))} title={entry.course.title} className="line-clamp-2 [overflow-wrap:anywhere] after:absolute after:inset-0 after:content-[''] hover:underline">{entry.course.title}</Link>
 					</h3>
-					{entry.total > 0 ? <ProgressBar value={entry.done / Math.max(1, entry.total)} label={progressLabel(entry)} /> : <p className="text-sm text-muted-foreground">{progressLabel(entry)}</p>}
+					<p className="truncate text-sm text-muted-foreground">{entry.next && entry.status === 'in_progress' ? `${tr('Next:', 'Próxima:')} ${entry.next.title}` : entry.status === 'not_started' ? tr('Not started', 'Não iniciado') : progressLabel(entry)}</p>
 				</div>
+				{entry.total > 0 && <div className="hidden w-56 shrink-0 sm:block"><ProgressBar value={entry.done / Math.max(1, entry.total)} label={progressLabel(entry)} /></div>}
+				<span className="hidden w-32 shrink-0 text-sm text-muted-foreground md:block">{entry.lastStudiedAt ? tr(`Studied ${lastStudied}`, `Estudado ${lastStudied}`) : tr('Not studied', 'Não estudado')}</span>
+				<span className="w-16 shrink-0 text-right text-sm font-semibold text-primary">{entry.status === 'not_started' ? tr('Start', 'Começar') : tr('Resume', 'Retomar')}</span>
+				{manageable && <div className="relative z-10"><CourseManagement course={entry.course} courseId={entry.courseId} lessons={entry.total} compact /></div>}
 			</li>
 		);
 	}
 	return (
 		<li className={cn('group/card relative flex items-center gap-3 p-3 has-focus-visible:ring-3 has-focus-visible:ring-ring', !listed && 'rounded-2xl border bg-card transition-[border-color,box-shadow] hover:border-[color:var(--border-strong)] hover:shadow-md', variant === 'shelf' && 'w-64 shrink-0 snap-start', listed && 'rounded-xl')}>
-			<div className="relative w-16 shrink-0">
-				<CourseCover course={entry.course} profile={profile} done={entry.done} total={entry.total} compact={listed} />
+			<div className="relative w-14 shrink-0">
+				<CourseCover course={entry.course} profile={profile} done={entry.done} total={entry.total} compact className="aspect-square rounded-xl" />
 			</div>
 			{/* The star lives beside the title, so it never sits on the year drawn on the cover. */}
 			{studySyncSupported && !listed && (
