@@ -135,6 +135,11 @@ The library's "Refresh courses" button therefore also calls `POST /api/admin/sou
 source whose password can be read, one request at a time, and treats `400` as fine when remote sources
 exist, so a server with only remote sources can still be refreshed from the library page.
 
+The server also reads every remote source by itself, 30 seconds after it starts and then every hour, so new files
+on a share appear without pressing the button. A source that is busy (a manual refresh is running) or
+unreachable is skipped until the next round, and a scan lists up to 8 folders at once. A scan of a source is
+limited to 120 seconds, and its HTTP request to 130 seconds.
+
 A source can be split into several courses by choosing folders as roots (ADR 0004). Choosing a folder
 moves its already scanned media to a course of its own and every later scan of the source is applied
 per root, so progress, notes and flashcards follow each lesson. In `GET /api/catalog` each root is a

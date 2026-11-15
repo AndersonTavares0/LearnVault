@@ -360,6 +360,7 @@ where
     // Indexação automática: eventos do sistema de arquivos com reconciliação periódica.
     // O desktop não abre este laço; ele continua usando o rescan explícito.
     state.indexer.start(state.clone());
+    state.start_source_refresh_default();
     let app = with_request_limits(build_router(state), Duration::from_secs(30));
     // Stable machine-readable handoff for process-level smoke tests. It is emitted only for
     // an explicitly ephemeral listener, after the OS assigned the address and the application

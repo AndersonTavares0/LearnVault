@@ -173,6 +173,7 @@ fn config(temp: &TempDir) -> Config {
 }
 
 struct Harness {
+    state: AppState,
     app: axum::Router,
     cookie: String,
     source: String,
@@ -215,7 +216,8 @@ async fn harness() -> Harness {
 async fn harness_with(tree: Tree) -> Harness {
     let temp = tempfile::tempdir().unwrap();
     let (url, server) = dav_server_with(tree).await;
-    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let state = AppState::initialize(config(&temp)).await.unwrap();
+    let app = build_router(state.clone());
     let cookie = login(&app, "admin", "uma senha local muito segura").await;
     let created = app
         .clone()
@@ -234,6 +236,7 @@ async fn harness_with(tree: Tree) -> Harness {
     assert_eq!(created.status(), StatusCode::CREATED);
     let source = json(created).await["id"].as_str().unwrap().to_owned();
     Harness {
+        state,
         app,
         cookie,
         source,
@@ -1118,4 +1121,21 @@ async fn a_user_granted_the_source_after_the_split_does_not_receive_the_roots() 
             .0,
         StatusCode::NOT_FOUND
     );
+}
+
+#[tokio::test]
+async fn a_source_is_read_in_the_background_without_a_manual_scan() {
+    let h = harness().await;
+    assert!(h.library_of("Solto.mp4").is_none());
+    h.state.start_source_refresh(
+        std::time::Duration::from_millis(10),
+        std::time::Duration::from_secs(3600),
+    );
+    for _ in 0..100 {
+        if h.library_of("Solto.mp4").is_some() {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    panic!("the background refresh never read the source");
 }

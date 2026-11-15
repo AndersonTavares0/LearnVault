@@ -564,6 +564,14 @@ pub(crate) async fn scan(
     if source.credential_error {
         return json_error(StatusCode::BAD_REQUEST, "credentials_unavailable");
     }
+    scan_one(&state, source).await
+}
+
+/// Scans one source and applies the result to the catalog. The caller holds `rescan_lock`.
+async fn scan_one(state: &AppState, source: RemoteSource) -> Response {
+    if source.credential_error {
+        return json_error(StatusCode::BAD_REQUEST, "credentials_unavailable");
+    }
     let client = match RemoteClient::new(&source) {
         Ok(client) => client,
         Err(_) => return json_error(StatusCode::BAD_REQUEST, "invalid_source"),
@@ -607,6 +615,39 @@ pub(crate) async fn scan(
             None => internal_error("source_scan_failed"),
         },
         Err(_) => internal_error("source_scan_failed"),
+    }
+}
+
+/// How long after start, and how often, the server reads every remote source by itself, so
+/// new files on a share appear without anyone pressing "Refresh courses".
+const SOURCE_REFRESH_DELAY: Duration = Duration::from_secs(30);
+const SOURCE_REFRESH_INTERVAL: Duration = Duration::from_secs(3600);
+
+impl AppState {
+    /// Starts the periodic refresh of remote sources with the default timing.
+    pub fn start_source_refresh_default(&self) {
+        self.start_source_refresh(SOURCE_REFRESH_DELAY, SOURCE_REFRESH_INTERVAL);
+    }
+
+    /// Reads every remote source after `delay` and then every `interval`. A source that is
+    /// busy (a manual refresh holds the lock) or fails is skipped until the next round.
+    pub fn start_source_refresh(&self, delay: Duration, interval: Duration) {
+        let state = self.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(delay).await;
+            loop {
+                for source in state.sources_snapshot() {
+                    if source.credential_error {
+                        continue;
+                    }
+                    let Ok(_lock) = state.rescan_lock.clone().try_lock_owned() else {
+                        continue;
+                    };
+                    let _ = scan_one(&state, source).await;
+                }
+                tokio::time::sleep(interval).await;
+            }
+        });
     }
 }
 
