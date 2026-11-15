@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Check, Download, NotebookPen, Pencil, Search, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import { CoursePicker, GONE } from '@/components/course-picker';
+import { GONE } from '@/components/course-picker';
 import { ConfirmDelete } from '@/components/confirm-delete';
 import { Markdown } from '@/components/markdown';
 import { NoteEditor } from '@/components/note-editor';
@@ -24,46 +24,25 @@ type Entry = { note: StudyNote; location: LessonLocation | null };
 const goneTitle = () => tr('Lessons no longer in the library', 'Aulas que não estão mais na biblioteca');
 const noteCourse = (location: LessonLocation | null) => location?.courseId ?? GONE;
 
-/** Notes start from a course: pick one to open its notebook. */
+/** Notes start from the notes: every note, newest lesson first, filtered by course on demand. */
 export function NotesPage() {
 	useLocale();
 	const [params] = useSearchParams();
-	const courseId = params.get('course');
 	const notes = useNotes();
 	const catalog = useCatalog();
-	const counts = useMemo(() => {
-		const map = new Map<string, number>();
-		for (const note of notes.data ?? []) {
-			const id = noteCourse(findLessonLocation(catalog.data ?? null, note.mediaId));
-			map.set(id, (map.get(id) ?? 0) + 1);
-		}
-		return map;
-	}, [notes.data, catalog.data]);
 	if (!studySyncSupported) return <PageHeader icon={NotebookPen} title={tr('Notes', 'Notas')} description={tr('Study tracking is off on this server.', 'O acompanhamento de estudo está desligado neste servidor.')} />;
 	// Wait for both lists: without the catalog every note would look like it belongs to a lesson that is gone.
 	if (notes.isPending || catalog.isPending) return <p role="status" className="text-muted-foreground">{tr('Loading notes…', 'Carregando notas…')}</p>;
 	if (notes.isError) return <p role="alert" className="text-destructive">{notes.error.message}</p>;
-	if (courseId) return <Notebook courseId={courseId} />;
-	const total = notes.data?.length ?? 0;
-	const count = (id: string) => counts.get(id) ?? 0;
-	return (
-		<CoursePicker
-			icon={NotebookPen}
-			title={tr('Choose a course to open its Notes', 'Escolha um curso para abrir suas Notas')}
-			description={tr(`${total} ${total === 1 ? 'note' : 'notes'} in all. This week you wrote ${notesThisWeek(notes.data ?? [])}.`, `${total} ${total === 1 ? 'nota' : 'notas'} no total. Nesta semana você escreveu ${notesThisWeek(notes.data ?? [])}.`)}
-			footer={(id) => tr(`${count(id)} ${count(id) === 1 ? 'note' : 'notes'}`, `${count(id)} ${count(id) === 1 ? 'nota' : 'notas'}`)}
-			to={(id) => `/notes?course=${encodeURIComponent(id)}`}
-			hasGone={counts.has(GONE)}
-			goneTitle={goneTitle()}
-		/>
-	);
+	return <Notebook courseId={params.get('course')} />;
 }
 
 /**
- * The notes of one course, as a notebook: grouped by lesson (or by date) and ordered by the
- * moment in the lesson, searchable by text or lesson.
+ * The notes as a notebook, of every course or of one: grouped by lesson (or by date) and ordered
+ * by the moment in the lesson, searchable by text or lesson.
  */
-function Notebook({ courseId }: { courseId: string }) {
+function Notebook({ courseId }: { courseId: string | null }) {
+	const [, setParams] = useSearchParams();
 	const notes = useNotes();
 	const catalog = useCatalog();
 	const client = useQueryClient();
@@ -75,11 +54,18 @@ function Notebook({ courseId }: { courseId: string }) {
 	const update = useMutation({ mutationFn: ({ id, content }: { id: string; content: string }) => transport.updateNote(id, content), onSuccess: () => { setEditing(null); return refresh(); } });
 	const remove = useMutation({ mutationFn: (id: string) => transport.deleteNote(id), onSuccess: () => { setDeleting(null); return refresh(); } });
 
-	const { groups, matches, courseTitle } = useMemo(() => {
+	const { groups, matches, courseTitle, courses, inScope } = useMemo(() => {
 		const needle = normalizeForSearch(query.trim());
 		const entries: Entry[] = (notes.data ?? []).map((note) => ({ note, location: findLessonLocation(catalog.data ?? null, note.mediaId) }));
-		const courseTitle = entries.find((entry) => entry.location?.courseId === courseId)?.location?.courseTitle ?? (courseId === GONE ? goneTitle() : (catalog.data?.nodes ?? []).find((node) => node.courseId === courseId)?.title ?? courseId);
-		const matches = entries.filter(({ note, location }) => noteCourse(location) === courseId && (!needle || [note.content, location?.courseTitle, location?.lesson.title, note.relativePath].some((text) => text && normalizeForSearch(text).includes(needle))));
+		const named = new Map<string, { title: string; count: number }>();
+		for (const { location } of entries) {
+			const id = noteCourse(location);
+			named.set(id, { title: location?.courseTitle ?? goneTitle(), count: (named.get(id)?.count ?? 0) + 1 });
+		}
+		const courses = [...named].map(([id, value]) => ({ id, ...value })).sort((a, b) => a.title.localeCompare(b.title, getLocale()));
+		const courseTitle = courseId === null ? tr('All courses', 'Todos os cursos') : named.get(courseId)?.title ?? (courseId === GONE ? goneTitle() : (catalog.data?.nodes ?? []).find((node) => node.courseId === courseId)?.title ?? courseId);
+		const inScope = entries.filter(({ location }) => courseId === null || noteCourse(location) === courseId).length;
+		const matches = entries.filter(({ note, location }) => (courseId === null || noteCourse(location) === courseId) && (!needle || [note.content, location?.courseTitle, location?.lesson.title, note.relativePath].some((text) => text && normalizeForSearch(text).includes(needle))));
 		const byLesson = new Map<string, { lesson: string; location: LessonLocation | null; updatedAt: number; items: Entry[] }>();
 		for (const entry of matches) {
 			const group = byLesson.get(entry.note.mediaId) ?? { lesson: entry.location?.lesson.title ?? entry.note.relativePath ?? tr('Unknown lesson', 'Aula desconhecida'), location: entry.location, updatedAt: 0, items: [] };
@@ -89,7 +75,7 @@ function Notebook({ courseId }: { courseId: string }) {
 		}
 		const groups = [...byLesson.values()].sort((a, b) => b.updatedAt - a.updatedAt);
 		for (const group of groups) group.items.sort((a, b) => a.note.positionSeconds - b.note.positionSeconds);
-		return { groups, matches, courseTitle };
+		return { groups, matches, courseTitle, courses, inScope };
 	}, [notes.data, catalog.data, query, courseId]);
 
 	const total = matches.length;
@@ -140,8 +126,8 @@ function Notebook({ courseId }: { courseId: string }) {
 
 	return (
 		<div className="space-y-8">
-			<Link to="/notes" className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" aria-hidden="true" />{tr('All courses', 'Todos os cursos')}</Link>
-			<PageHeader icon={NotebookPen} title={tr(`${courseTitle} notes`, `Notas de ${courseTitle}`)} description={tr(`${total} ${total === 1 ? 'note' : 'notes'} in this course.`, `${total} ${total === 1 ? 'nota' : 'notas'} neste curso.`)} />
+			{courseId !== null && <Link to="/notes" className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" aria-hidden="true" />{tr('All notes', 'Todas as notas')}</Link>}
+			<PageHeader icon={NotebookPen} title={courseId === null ? tr('Notes', 'Notas') : tr(`${courseTitle} notes`, `Notas de ${courseTitle}`)} description={courseId === null ? tr(`${total} ${total === 1 ? 'note' : 'notes'} across ${courses.length} ${courses.length === 1 ? 'course' : 'courses'}.`, `${total} ${total === 1 ? 'nota' : 'notas'} em ${courses.length} ${courses.length === 1 ? 'curso' : 'cursos'}.`) : tr(`${total} ${total === 1 ? 'note' : 'notes'} in this course.`, `${total} ${total === 1 ? 'nota' : 'notas'} neste curso.`)} />
 			<div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
 				<div className="min-w-0 space-y-6">
 					<div className="flex flex-wrap items-center gap-3">
@@ -151,14 +137,22 @@ function Notebook({ courseId }: { courseId: string }) {
 						</div>
 						{matches.length > 0 && <Button size="sm" variant="outline" className="ml-auto" onClick={exportMarkdown}><Download />{tr('Export as Markdown', 'Exportar em Markdown')}</Button>}
 					</div>
-					<div role="search" aria-label={tr('Notes', 'Notas')} className="relative max-w-md">
-						<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-						<Input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={tr('Search notes or lessons', 'Buscar notas ou aulas')} aria-label={tr('Search notes', 'Buscar notas')} className="pl-9" />
+					<div className="flex flex-wrap items-center gap-3">
+						<div role="search" aria-label={tr('Notes', 'Notas')} className="relative min-w-0 max-w-md flex-1 basis-60">
+							<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+							<Input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={tr('Search notes or lessons', 'Buscar notas ou aulas')} aria-label={tr('Search notes', 'Buscar notas')} className="pl-9" />
+						</div>
+						{courses.length > 1 && (
+							<select aria-label={tr('Filter by course', 'Filtrar por curso')} value={courseId ?? ''} onChange={(event) => setParams(event.target.value ? { course: event.target.value } : {})} className="h-11 min-w-0 max-w-full rounded-lg border border-input bg-background px-3 text-sm sm:max-w-xs">
+								<option value="">{tr('All courses', 'Todos os cursos')}</option>
+								{courses.map((course) => <option key={course.id} value={course.id}>{course.title} ({course.count})</option>)}
+							</select>
+						)}
 					</div>
 					{(update.error || remove.error) && <p role="alert" className="text-sm text-destructive">{(update.error ?? remove.error)?.message}</p>}
 					{notes.isPending ? (
 						<p role="status" className="text-muted-foreground">{tr('Loading notes…', 'Carregando notas…')}</p>
-					) : notes.data?.every((note) => noteCourse(findLessonLocation(catalog.data ?? null, note.mediaId)) !== courseId) ? (
+					) : inScope === 0 ? (
 						<Panel className="p-5 text-sm text-muted-foreground">{tr('No notes yet. While watching a lesson, open the Notes tab or press n to write one tied to that moment.', 'Ainda não há notas. Assistindo a uma aula, abra a aba Notas ou aperte n para escrever uma presa àquele momento.')}</Panel>
 					) : groups.length === 0 ? (
 						<p role="status" className="text-muted-foreground">{tr('No notes match your search.', 'Nenhuma nota corresponde à busca.')}</p>
@@ -176,7 +170,10 @@ function Notebook({ courseId }: { courseId: string }) {
 							<section key={group.items[0].note.mediaId} aria-label={group.lesson}>
 								<Panel className="space-y-3">
 									<div className="flex flex-wrap items-end justify-between gap-2">
-										<h2 className="font-heading text-xl font-semibold text-balance">{group.lesson}</h2>
+										<div className="min-w-0">
+											{courseId === null && group.location && <p className="text-sm text-muted-foreground">{group.location.courseTitle}</p>}
+											<h2 className="font-heading text-xl font-semibold text-balance">{group.lesson}</h2>
+										</div>
 										{group.location && <Link to={href('course', group.location.courseId, group.location.lesson.path).replace(/^#/, '')} className="inline-flex min-h-11 items-center text-sm font-semibold text-primary hover:underline">{tr('Open lesson', 'Abrir aula')}</Link>}
 									</div>
 									<ul className="divide-y">{group.items.map((entry) => renderItem(entry, false))}</ul>
