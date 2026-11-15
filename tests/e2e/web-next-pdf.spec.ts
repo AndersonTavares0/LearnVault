@@ -27,7 +27,9 @@ test('opens the PDF of a course that only holds materials and keeps its marks', 
 	// pdf.js drew the page and laid real text over it.
 	await expect(page.locator('.pdf-text-layer')).toContainText('Ownership moves values.', { timeout: 15_000 });
 	await expect(page.getByLabel('Page', { exact: true })).toHaveValue('1');
-	// Select the first line of text and highlight it. The mark is saved, drawn over the page, and listed.
+	// Marking is a mode of the reader: turn it on, select the first line of text and highlight it. The
+	// mark is saved, drawn over the page, and listed.
+	await page.getByRole('button', { name: 'Annotate' }).click();
 	await page.evaluate(() => {
 		const line = document.querySelector('.pdf-text-layer span');
 		const range = document.createRange();
