@@ -26,7 +26,8 @@ describe('course page', () => {
 		expect(await screen.findByRole('heading', { level: 1, name: 'Rust from zero' })).toBeTruthy();
 		expect(screen.getByRole('progressbar', { name: '1 of 2 lessons completed (50%)' })).toBeTruthy();
 		expect(screen.getByRole('link', { name: 'Continue studying' }).getAttribute('href')).toBe('/course/rust/rust%2FBorrowing?t=70');
-		expect(screen.getByText('1 of 2 done')).toBeTruthy();
+		expect(screen.getByText('You are here')).toBeTruthy();
+		expect(screen.getByText('2 lessons')).toBeTruthy();
 		expect(screen.getByRole('button', { name: 'Mark “Ownership” as not completed' }).getAttribute('aria-pressed')).toBe('true');
 		expect(screen.getByRole('link', { name: /Borrowing/ }).getAttribute('aria-current')).toBe('page');
 		expect(screen.getByText('Missing media')).toBeTruthy();

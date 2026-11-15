@@ -82,7 +82,7 @@ describe('lesson page', () => {
 		renderApp('/course/c/c%2FOne', { catalog });
 		fireEvent.click(await screen.findByRole('button', { name: 'Cinema mode' }));
 		expect(localStorage.getItem('learnvault-cinema')).toBe('1');
-		fireEvent.click(screen.getByRole('button', { name: 'Hide course content' }));
+		fireEvent.click(screen.getByRole('button', { name: 'Hide contents' }));
 		expect(localStorage.getItem('learnvault-lesson-content')).toBe('0');
 		expect(screen.queryByRole('complementary', { name: 'Course content' })).toBeNull();
 		cleanup();
@@ -117,7 +117,7 @@ describe('lesson page', () => {
 	it('counts down to the next lesson when auto-advance is on', async () => {
 		vi.spyOn(transport, 'setCompleted').mockImplementation(async (id, completed) => progress(id, completed));
 		const { router } = renderApp('/course/c/c%2FOne', { catalog });
-		fireEvent.click(await screen.findByRole('checkbox', { name: 'Play the next lesson automatically' }));
+		fireEvent.click(await screen.findByRole('checkbox', { name: 'Autoplay next' }));
 		vi.useFakeTimers();
 		fireEvent.ended(screen.getByLabelText('Lesson player: One'));
 		expect(screen.getByText('Next lesson in 5 s: Two')).toBeTruthy();

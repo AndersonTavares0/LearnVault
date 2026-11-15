@@ -252,7 +252,7 @@ test('a mark is exported as an annotated PDF and sent to the lesson notes', asyn
 
 test('the table of contents jumps to a heading and follows the page, and the thumbnails jump to a page', async ({ page, origin }) => {
 	await openReader(page, origin, 'Outlined');
-	await page.getByRole('button', { name: 'Contents' }).click();
+	await page.getByRole('button', { name: 'Contents', exact: true }).click();
 	const contents = page.getByRole('region', { name: 'Contents' });
 	await expect(contents.getByRole('button', { name: /^Ownership/ })).toBeVisible();
 	await expect(contents.getByRole('button', { name: /^Lifetimes/ })).toBeVisible();
@@ -279,7 +279,7 @@ test('the table of contents jumps to a heading and follows the page, and the thu
 
 test('a document without a table of contents falls back to the page list', async ({ page, origin }) => {
 	await openReader(page, origin);
-	await page.getByRole('button', { name: 'Contents' }).click();
+	await page.getByRole('button', { name: 'Contents', exact: true }).click();
 	const contents = page.getByRole('region', { name: 'Contents' });
 	await expect(contents.getByText('This document has no table of contents, so here are its pages.')).toBeVisible();
 	await expect(contents.getByRole('button', { name: 'Outline' })).toHaveCount(0);

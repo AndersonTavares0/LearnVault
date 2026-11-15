@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, CircleCheck, Circle, FileText, PanelRightClose, PanelRightOpen, PenLine, Search, SquarePlus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CircleCheck, Circle, FileText, PenLine, Search, SquarePlus } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { safeStorage } from '@/app/preferences';
@@ -146,7 +146,8 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 		return () => document.removeEventListener('visibilitychange', onVisibility);
 	}, [mediaId, progress.isPending, progress.data]); // eslint-disable-line react-hooks/exhaustive-deps -- recordPosition is recreated each render; the effect follows the lesson and its saved progress
 
-	const noteCount = useLessonNotes(mediaId).data?.length ?? 0;
+	const lessonNotes = useLessonNotes(mediaId);
+	const noteCount = lessonNotes.data?.length ?? 0;
 	const goTo = (target: string) => navigate(path(href('course', courseId, target)));
 	const finished = (id: string) => {
 		if (studySyncSupported) setCompleted.mutate({ mediaId: id, completed: true }, { onSuccess: (updated) => client.setQueryData(['progress', id], updated) });
@@ -231,7 +232,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 						{position >= 0 && <span className="mr-2 text-sm text-muted-foreground tabular-nums">{tr(`Lesson ${position + 1} of ${sequence.length}`, `Aula ${position + 1} de ${sequence.length}`)}</span>}
 						<Button variant="outline" className="h-11 rounded-full px-5 disabled:opacity-60" disabled={!previous} onClick={() => previous && goTo(previous.path)}><ChevronLeft />{tr('Previous', 'Anterior')}</Button>
 						<Button className="h-11 rounded-full px-5" disabled={!next} onClick={() => next && goTo(next.path)}>{tr('Next', 'Próxima')}<ChevronRight /></Button>
-						<Button variant="outline" size="icon" className="hidden size-11 rounded-full lg:inline-flex" aria-pressed={contentOpen} onClick={() => setContentOpen(!contentOpen)} aria-label={contentOpen ? tr('Hide course content', 'Ocultar conteúdo do curso') : tr('Show course content', 'Mostrar conteúdo do curso')}>{contentOpen ? <PanelRightClose /> : <PanelRightOpen />}</Button>
+						<Button variant="outline" className="hidden h-11 rounded-full px-5 lg:inline-flex" aria-pressed={contentOpen} onClick={() => setContentOpen(!contentOpen)} aria-label={contentOpen ? tr('Hide contents', 'Ocultar conteúdo') : tr('Show contents', 'Mostrar conteúdo')}>{tr('Contents', 'Conteúdo')}</Button>
 					</div>
 				</div>
 				<LessonRail sequence={sequence} current={position} isDone={(path) => donePaths.has(path)} />
@@ -295,33 +296,50 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 						</div>
 					)}
 
+					<div className="flex flex-wrap items-center gap-2">
+						{studySyncSupported && mediaId && (
+								<Button variant={isDone ? 'secondary' : 'default'} aria-pressed={isDone} disabled={setCompleted.isPending} onClick={() => setCompleted.mutate({ mediaId, completed: !isDone }, { onSuccess: (updated) => client.setQueryData(['progress', mediaId], updated) })}>
+									{isDone ? <CircleCheck /> : <Circle />}{isDone ? tr('Completed', 'Concluída') : tr('Mark as completed', 'Marcar como concluída')}
+								</Button>
+								)}
+						{hasNotes && <Button variant="outline" onClick={() => { player.current?.pause(); openNotes(); }} aria-keyshortcuts="n"><PenLine />{tr('Note', 'Nota')}<kbd aria-hidden="true" className="ml-1 rounded border px-1.5 text-xs text-muted-foreground">N</kbd></Button>}
+						{hasCards && <Button variant="outline" onClick={() => { player.current?.pause(); setTab('cards'); setCardRequest((value) => value + 1); }}><SquarePlus />{tr('Card', 'Cartão')}</Button>}
+						{hasNotes && <Button variant="outline" onClick={() => { player.current?.pause(); setTab('bookmarks'); }}>{tr(`Bookmark ${formatDuration(time)}`, `Marcar ${formatDuration(time)}`)}</Button>}
+						<label className="ml-auto flex min-h-11 items-center gap-2 text-sm text-muted-foreground">
+							<input type="checkbox" className="size-5 accent-[var(--brand)]" checked={preferences.autoNext} onChange={(event) => savePreferences({ ...preferences, autoNext: event.target.checked })} />
+							{tr('Autoplay next', 'Reproduzir a próxima')}
+						</label>
+					</div>
+
 					<Tabs value={activeTab} onValueChange={(value) => setTab(String(value))}>
 						<TabsList variant="line" aria-label={tr('Lesson tools', 'Ferramentas da aula')} className="w-full justify-start overflow-x-auto border-b">
 							<TabsTrigger value="lessons">{tr('Overview', 'Visão geral')}</TabsTrigger>
-							{hasNotes && <TabsTrigger value="notes">{tr('Notes', 'Notas')}</TabsTrigger>}
-							{hasNotes && <TabsTrigger value="bookmarks">{tr('Timestamps', 'Marcadores')}</TabsTrigger>}
+							{hasNotes && <TabsTrigger value="notes">{tr('Notes', 'Notas')}{noteCount > 0 && ` (${noteCount})`}</TabsTrigger>}
+							{hasNotes && <TabsTrigger value="bookmarks">{tr('Timestamps', 'Marcadores')}{(bookmarks.data?.length ?? 0) > 0 && ` (${bookmarks.data?.length})`}</TabsTrigger>}
 							{hasCards && <TabsTrigger value="cards">{tr('Cards', 'Cartões')}</TabsTrigger>}
-							<TabsTrigger value="materials">{tr('Materials', 'Materiais')}</TabsTrigger>
+							<TabsTrigger value="materials">{tr('Materials', 'Materiais')}{lesson.materials.length + lesson.subtitles.length > 0 && ` (${lesson.materials.length + lesson.subtitles.length})`}</TabsTrigger>
 						</TabsList>
 						<TabsContent value="lessons" className="space-y-4 pt-5">
-							<div className="flex flex-wrap items-center gap-3">
-								{hasCards && hasNotes && <Button variant="outline" onClick={() => { player.current?.pause(); openNotes(); }} aria-keyshortcuts="n"><PenLine />{tr('Note', 'Nota')}<kbd aria-hidden="true" className="ml-1 rounded border px-1.5 text-xs text-muted-foreground">N</kbd></Button>}
-								{hasCards && <Button variant="outline" onClick={() => { player.current?.pause(); setTab('cards'); setCardRequest((value) => value + 1); }}><SquarePlus />{tr('Card', 'Cartão')}</Button>}
-								{studySyncSupported && mediaId && (
-									<Button variant={isDone ? 'secondary' : 'default'} aria-pressed={isDone} disabled={setCompleted.isPending} onClick={() => setCompleted.mutate({ mediaId, completed: !isDone }, { onSuccess: (updated) => client.setQueryData(['progress', mediaId], updated) })}>
-										{isDone ? <CircleCheck /> : <Circle />}{isDone ? tr('Completed', 'Concluída') : tr('Mark as completed', 'Marcar como concluída')}
-									</Button>
-								)}
-							</div>
-							<div className="flex flex-wrap items-center gap-2">
-								{!pdf && resumeAt !== null && time < resumeAt && (
+							{!pdf && resumeAt !== null && time < resumeAt && (
 									<Button variant="secondary" onClick={() => player.current?.seek(resumeAt)}>{tr(`Resume from ${formatDuration(resumeAt)}`, `Retomar de ${formatDuration(resumeAt)}`)}</Button>
 								)}
-								<label className="flex min-h-11 items-center gap-3 rounded-xl border bg-card px-3 text-sm hover:bg-muted">
-									<input type="checkbox" className="size-5 accent-[var(--brand)]" checked={preferences.autoNext} onChange={(event) => savePreferences({ ...preferences, autoNext: event.target.checked })} />
-									{tr('Play the next lesson automatically', 'Reproduzir a próxima aula automaticamente')}
-								</label>
+							<div className="grid gap-4 md:grid-cols-3">
+								<LessonPanel title={tr('Your notes', 'Suas notas')} empty={tr('Press N to add a note at the current time.', 'Aperte N para anotar neste momento.')}>
+									{(lessonNotes.data ?? []).slice(0, 3).map((note) => <li key={note.noteId} className="flex gap-3"><button type="button" onClick={() => player.current?.seek(note.positionSeconds)} className="font-semibold text-primary tabular-nums hover:underline">{formatDuration(note.positionSeconds)}</button><span className="min-w-0 truncate">{note.content}</span></li>)}
+								</LessonPanel>
+								<LessonPanel title={tr('Timestamps', 'Marcadores')} empty={tr('Mark a moment to come back to it.', 'Marque um momento para voltar a ele.')}>
+									{(bookmarks.data ?? []).slice(0, 4).map((bookmark) => <li key={bookmark.bookmarkId} className="flex gap-3"><button type="button" onClick={() => player.current?.seek(bookmark.positionSeconds)} className="font-semibold text-primary tabular-nums hover:underline">{formatDuration(bookmark.positionSeconds)}</button><span className="min-w-0 truncate">{bookmark.label}</span></li>)}
+								</LessonPanel>
+								<LessonPanel title={tr('Materials in this lesson', 'Materiais desta aula')} empty={tr('No files with this lesson.', 'Nenhum arquivo nesta aula.')}>
+									{lesson.materials.slice(0, 4).map((file) => <li key={file.path} className="truncate">{file.name}</li>)}
+								</LessonPanel>
 							</div>
+							{next && (
+								<div className="flex flex-wrap items-center gap-4 rounded-2xl border bg-card p-4">
+									<div className="min-w-0 flex-1"><p className="text-sm text-muted-foreground">{tr('Up next', 'A seguir')}</p><p className="truncate font-semibold">{next.title}</p></div>
+									<Button variant="outline" onClick={() => goTo(next.path)}>{tr('Go to next lesson', 'Ir para a próxima aula')}</Button>
+								</div>
+							)}
 						</TabsContent>
 						{hasNotes && mediaId && (
 							<TabsContent value="notes" keepMounted className="pt-5">
@@ -361,6 +379,16 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 				)}
 			</div>
 		</div>
+	);
+}
+
+/** A small panel of the Overview: a title and a few rows, or one line saying how to fill it. */
+function LessonPanel({ title, empty, children }: { title: string; empty: string; children: React.ReactNode[] }) {
+	return (
+		<section aria-label={title} className="rounded-2xl border bg-card p-4">
+			<h2 className="mb-2 text-base font-bold">{title}</h2>
+			{children.length > 0 ? <ul className="space-y-1.5 text-sm">{children}</ul> : <p className="text-sm text-muted-foreground">{empty}</p>}
+		</section>
 	);
 }
 
