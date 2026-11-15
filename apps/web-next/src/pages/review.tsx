@@ -65,7 +65,7 @@ export function ReviewPage() {
 				<PageHeader icon={Layers} title={tr('Cards to review', 'Cartões para revisar')} />
 				<div className="rounded-[2rem] border border-dashed p-8">
 					<p className="font-heading text-2xl font-bold">{tr('No cards yet', 'Nenhum cartão ainda')}</p>
-					<p className="mt-2 max-w-prose text-muted-foreground">{tr('Open a lesson and press “Make card”, or import a file in the Cards tab of a lesson. Each card comes back here when it is due.', 'Abra uma aula e use “Criar cartão”, ou importe um arquivo na aba Cartões de uma aula. Cada cartão volta aqui quando vence.')}</p>
+					<p className="mt-2 max-w-prose text-muted-foreground">{tr('Open a lesson and press “Card”, or import a file in the Cards tab of a lesson. Each card comes back here when it is due.', 'Abra uma aula e use “Cartão”, ou importe um arquivo na aba Cartões de uma aula. Cada cartão volta aqui quando vence.')}</p>
 				</div>
 			</div>
 		);

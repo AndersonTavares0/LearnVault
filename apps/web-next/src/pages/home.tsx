@@ -100,10 +100,7 @@ export function HomePage() {
 						{library.entries.length === 0 ? (
 							<EmptyLibrary isAdmin={Boolean(user?.isAdmin)} onMessage={setMessage} />
 						) : library.visible.length === 0 ? (
-							<div className="rounded-[2rem] border border-dashed p-8 text-center">
-								<p className="font-medium">{tr('No results found', 'Nenhum resultado encontrado')}</p>
-								<Button variant="outline" className="mt-4" onClick={() => setParams({}, { replace: true })}>{tr('Clear filters and search', 'Limpar filtros e busca')}</Button>
-							</div>
+							<EmptyResults filter={query || category ? 'all' : filter} onClear={() => setParams({}, { replace: true })} />
 						) : view === 'shelf' ? (
 							<Shelf entries={sorted} profile={profile} canManage={Boolean(user?.isAdmin)} />
 						) : (
@@ -283,6 +280,24 @@ function Habit({ rewards, completedCourses }: { rewards: RewardSummary | undefin
 	return <ul aria-label={tr('Your habit', 'Seu hábito')} className="grid grid-cols-2 gap-3">{cards}</ul>;
 }
 
+/** Why a filter shows nothing: say what the tab means and how to fill it, instead of a bare "no results". */
+function EmptyResults({ filter, onClear }: { filter: LibraryFilter; onClear: () => void }) {
+	const copy: Partial<Record<LibraryFilter, [string, string]>> = {
+		completed: [tr('No completed courses yet', 'Nenhum curso concluído ainda'), tr('Finish every lesson of a course and it shows up here.', 'Conclua todas as aulas de um curso e ele aparece aqui.')],
+		in_progress: [tr('Nothing in progress', 'Nada em andamento'), tr('Start a lesson and its course shows up here.', 'Comece uma aula e o curso dela aparece aqui.')],
+		favorites: [tr('No favorite courses yet', 'Nenhum curso favorito ainda'), tr('Star a course to keep it here.', 'Marque um curso com estrela para mantê-lo aqui.')],
+		not_started: [tr('Every course has been started', 'Todos os cursos já foram iniciados'), tr('Courses you have not opened yet would be listed here.', 'Os cursos que você ainda não abriu apareceriam aqui.')]
+	};
+	const [title, hint] = copy[filter] ?? [tr('No results found', 'Nenhum resultado encontrado'), ''];
+	return (
+		<div className="rounded-[2rem] border border-dashed p-8 text-center">
+			<p className="font-medium">{title}</p>
+			{hint && <p className="mt-1 text-sm text-muted-foreground">{hint}</p>}
+			<Button variant="outline" className="mt-4" onClick={onClear}>{filter === 'all' ? tr('Clear filters and search', 'Limpar filtros e busca') : tr('Show all courses', 'Mostrar todos os cursos')}</Button>
+		</div>
+	);
+}
+
 function Filters(props: { categories: string[]; category: string | null; onCategory: (value: string | null) => void; view: LibraryView; onView: (view: LibraryView) => void; sort: LibrarySort; onSort: (sort: LibrarySort) => void }) {
 	const views: [LibraryView, typeof LayoutGrid, string][] = [
 		['covers', LayoutGrid, tr('Covers', 'Capas')],
@@ -310,7 +325,7 @@ function Filters(props: { categories: string[]; category: string | null; onCateg
 				</select>
 				<div role="group" aria-label={tr('View', 'Visualização')} className="flex gap-1">
 					{views.map(([value, Icon, label]) => (
-						<Button key={value} size="icon" variant={props.view === value ? 'secondary' : 'ghost'} aria-pressed={props.view === value} aria-label={label} onClick={() => props.onView(value)}><Icon /></Button>
+						<Button key={value} size="icon" variant={props.view === value ? 'secondary' : 'ghost'} aria-pressed={props.view === value} aria-label={label} title={label} onClick={() => props.onView(value)}><Icon /></Button>
 					))}
 				</div>
 			</div>
