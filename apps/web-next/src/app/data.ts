@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { refreshLibrary } from '@/lib/library-refresh';
 import { resolveSession } from '@/lib/session';
 import { studySyncSupported } from '@/lib/player';
 import { STUDY_NOT_AVAILABLE, transport, transportKind, type MediaBookmark, type MissionId, type NewPdfAnnotation, type PdfAnnotationColor, type StudyFavorites, type StudyProgress } from '@/lib/transport';
@@ -69,10 +70,11 @@ export function useToggleCourseFavorite() {
 }
 
 /** Reindexes the library and refreshes everything that depends on the catalog. */
+/** Refreshes the local courses and every remote source (see `refreshLibrary`). */
 export function useRescan() {
 	const client = useQueryClient();
 	return useMutation({
-		mutationFn: () => transport.rescan(),
+		mutationFn: (options?: { onProgress?: (message: string) => void }) => refreshLibrary(transport, options?.onProgress),
 		onSuccess: () => Promise.all([client.invalidateQueries({ queryKey: keys.catalog }), client.invalidateQueries({ queryKey: keys.recent })])
 	});
 }

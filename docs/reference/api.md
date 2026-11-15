@@ -130,6 +130,11 @@ opaque `id`; `GET`/`HEAD /api/media?course=<source-id>&path=<relative-path>` str
 `206` ranges. Only paths already present in the catalog are proxied to the remote server. Remote
 courses have no custom cover, manual ordering, search indexing or on-demand transcoding yet.
 
+`POST /api/admin/catalog/rescan` rescans only the local courses (and answers `400` when none is registered).
+The library's "Refresh courses" button therefore also calls `POST /api/admin/sources/{id}/scan` for each
+source whose password can be read, one request at a time, and treats `400` as fine when remote sources
+exist, so a server with only remote sources can still be refreshed from the library page.
+
 A source can be split into several courses by choosing folders as roots (ADR 0004). Choosing a folder
 moves its already scanned media to a course of its own and every later scan of the source is applied
 per root, so progress, notes and flashcards follow each lesson. In `GET /api/catalog` each root is a
