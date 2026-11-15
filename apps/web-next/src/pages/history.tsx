@@ -59,7 +59,7 @@ export function HistoryPage() {
 								<li key={`${location.courseId}/${location.lesson.path}`} className="flex flex-wrap items-center gap-x-6 gap-y-3 p-5 sm:p-6">
 									<div className="min-w-0 flex-1">
 										<p className="text-xs font-semibold tracking-[0.12em] text-muted-foreground uppercase">{formatLocationContext(location.courseTitle, location.moduleTitle)}</p>
-										<h2 className="mt-1 font-heading text-xl font-semibold">
+										<h2 className="mt-1 text-xl font-semibold">
 											<Link to={routerPath(href('course', location.courseId, location.lesson.path, resumeAt))} className="hover:text-primary focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">{location.lesson.title}</Link>
 										</h2>
 										<p className="mt-1 text-sm text-muted-foreground">
