@@ -25,9 +25,9 @@ works in both builds where it applies. The builds are **S** (server, HTTP) and *
 ## Library
 
 - [ ] Catalog load with limits (`CATALOG_LIMITS`), course tree, and loose files.
-- [ ] Continue studying (recent lessons).
+- [ ] Resume strip: the most recent lesson, its course, the saved point, and a Resume action.
 - [ ] Filters by progress and category, and search with accent-insensitive matching.
-- [ ] Views: Covers, List, Compact and Shelf, stored in the `learnvault-library-view` preference.
+- [ ] Views: Grid (covers), List, Compact and Shelf, stored in the `learnvault-library-view` preference.
 - [ ] Course covers: generated, automatic thumbnail (IndexedDB, ADR 0002), custom upload, change,
       and remove.
 - [ ] Import course (S: admin; D: folder picker), remove course, rescan.

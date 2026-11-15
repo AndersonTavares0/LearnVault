@@ -29,7 +29,7 @@ Detailed requirements are in [requirements.md](requirements.md); technical archi
 ## In Progress: Polish & Production Quality
 
 - [x] Streamlined library → lesson → focus → habit loop on Web and desktop.
-- [x] "Continue studying" hero section on home screen with status filters.
+- [x] Resume strip on the home screen with status filters.
 - [x] Timestamped notes, global notes search, and spaced repetition cards.
 - [x] Extended media format support, on-demand server transcoding, and desktop external player.
 - [x] Local multi-user student accounts with course access permissions.
