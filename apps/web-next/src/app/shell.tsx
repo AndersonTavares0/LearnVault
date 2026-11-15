@@ -1,4 +1,4 @@
-import { BookOpen, ChartNoAxesColumn, History, Layers, CircleUser, LogOut, Moon, NotebookPen, Search, Settings, Sun, type LucideIcon } from 'lucide-react';
+import { BookOpen, ChartNoAxesColumn, History, Layers, CircleUser, LogOut, Moon, NotebookPen, Search, Settings, Sun, UserRound, type LucideIcon } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
@@ -135,6 +135,7 @@ function AccountMenu({ username, userId, wide }: { username: string; userId: str
 						<DropdownMenuLabel className="truncate">{username}</DropdownMenuLabel>
 					</DropdownMenuGroup>
 					<DropdownMenuSeparator />
+					<DropdownMenuItem onClick={() => navigate('/settings#profile')}><UserRound />{tr('Profile', 'Perfil')}</DropdownMenuItem>
 					<DropdownMenuItem onClick={() => navigate('/history')}><History />{tr('Watch history', 'Histórico de aulas')}</DropdownMenuItem>
 					<DropdownMenuItem onClick={() => navigate('/settings')}><Settings />{tr('Settings', 'Ajustes')}</DropdownMenuItem>
 					{transportKind === 'http' && (
