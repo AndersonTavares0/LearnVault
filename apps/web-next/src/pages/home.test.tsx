@@ -1,8 +1,8 @@
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { appearanceStore, updateAppearance } from '@/lib/appearance';
 import { setLocale } from '@/lib/i18n';
-import type { Catalog, CatalogNode, FileEntry, RewardSummary } from '@/lib/transport';
+import { transport, type Catalog, type CatalogNode, type FileEntry, type RemoteSource, type RewardSummary } from '@/lib/transport';
 import { renderApp } from '@/test/render-app';
 
 const media = (id: string): FileEntry => ({ name: `${id}.mp4`, path: `${id}.mp4`, size: 1, mediaId: id, kind: 'media', availability: 'available' });
@@ -19,6 +19,7 @@ const rewards: RewardSummary = {
 };
 
 afterEach(() => {
+	vi.restoreAllMocks();
 	cleanup();
 	setLocale('en');
 });
@@ -124,5 +125,53 @@ describe('Sign in', () => {
 		cleanup();
 		renderApp('/', { catalog, rewards });
 		expect(await screen.findByText(/Nothing saved yet/)).toBeTruthy();
+	});
+
+	describe('Refresh courses', () => {
+		const remote: RemoteSource = { id: 'src-1', name: 'NAS', url: 'smb://nas.example.test/cursos', username: null, hasPassword: false, credentialError: false };
+
+		// A successful refresh invalidates the catalog and the recent study, which are fetched again.
+		beforeEach(() => {
+			vi.spyOn(transport, 'catalog').mockResolvedValue(catalog);
+			vi.spyOn(transport, 'recentStudy').mockResolvedValue({ items: [] });
+		});
+
+		it('also reads the remote sources and says so', async () => {
+			const rescan = vi.spyOn(transport, 'rescan').mockResolvedValue();
+			vi.spyOn(transport, 'listSources').mockResolvedValue([remote]);
+			const scan = vi.spyOn(transport, 'scanSource').mockResolvedValue({ complete: true, inserted: 2 });
+			renderApp('/', { catalog });
+			fireEvent.click(await screen.findByRole('button', { name: 'Refresh courses' }));
+
+			await waitFor(() => expect(scan).toHaveBeenCalledWith('src-1'));
+			expect(rescan).toHaveBeenCalledTimes(1);
+			expect(await screen.findByText('Catalog updated, including 1 remote source.')).toBeTruthy();
+		});
+
+		it('names a source that could not be read instead of claiming success', async () => {
+			vi.spyOn(transport, 'rescan').mockResolvedValue();
+			vi.spyOn(transport, 'listSources').mockResolvedValue([remote]);
+			vi.spyOn(transport, 'scanSource').mockRejectedValue(new Error('The server could not be reached.'));
+			renderApp('/', { catalog });
+			fireEvent.click(await screen.findByRole('button', { name: 'Refresh courses' }));
+			expect(await screen.findByText('Catalog updated, but this source could not be read: “NAS”. The server could not be reached.')).toBeTruthy();
+		});
+
+		it('keeps the specific message when a rescan is already running', async () => {
+			vi.spyOn(transport, 'listSources').mockResolvedValue([]);
+			vi.spyOn(transport, 'rescan').mockRejectedValue(Object.assign(new Error('A rescan is already in progress.'), { name: 'RescanBusyError' }));
+			renderApp('/', { catalog });
+			fireEvent.click(await screen.findByRole('button', { name: 'Refresh courses' }));
+			expect(await screen.findByText('A rescan is already in progress.')).toBeTruthy();
+		});
+
+		it('hides an unexpected failure behind a generic message', async () => {
+			vi.spyOn(transport, 'listSources').mockResolvedValue([]);
+			vi.spyOn(transport, 'rescan').mockRejectedValue(new TypeError('Failed to fetch'));
+			renderApp('/', { catalog });
+			fireEvent.click(await screen.findByRole('button', { name: 'Refresh courses' }));
+			expect(await screen.findByText('The library action failed. Try again.')).toBeTruthy();
+			expect(screen.queryByText('Failed to fetch')).toBeNull();
+		});
 	});
 });

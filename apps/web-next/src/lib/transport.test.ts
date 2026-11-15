@@ -128,8 +128,13 @@ describe('transport contract', () => {
 		expect(fetchMock).toHaveBeenCalledWith('/api/admin/catalog/rescan', { method: 'POST' });
 		fetchMock.mockResolvedValue(new Response(null, { status: 409 }));
 		await expect(new HttpTransport().rescan()).rejects.toThrow('Já existe um rescan em andamento.');
+		await expect(new HttpTransport().rescan()).rejects.toMatchObject({ name: 'RescanBusyError' });
 		fetchMock.mockResolvedValue(new Response(null, { status: 400 }));
 		await expect(new HttpTransport().rescan()).rejects.toThrow('Nenhum curso foi importado ainda.');
+		await expect(new HttpTransport().rescan()).rejects.toMatchObject({ name: 'NoCoursesError' });
+		// Any other failure stays an ordinary error with no special name.
+		fetchMock.mockResolvedValue(new Response(null, { status: 500 }));
+		await expect(new HttpTransport().rescan()).rejects.toMatchObject({ name: 'Error' });
 		vi.unstubAllGlobals();
 	});
 	it('normalizes the Rust user and recursive catalog contract', () => {

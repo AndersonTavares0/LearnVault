@@ -1172,7 +1172,15 @@ export class HttpTransport implements Transport {
 		if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not remove course.', 'Não foi possível remover o curso.'));
 	}
 	async catalog() { const response = await fetch('/api/catalog'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not load catalog.', 'Não foi possível carregar o catálogo.')); return normalizeCatalog(await response.json()); }
-	async rescan() { const response = await fetch('/api/admin/catalog/rescan', { method: 'POST' }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 409 ? tr('A rescan is already in progress.', 'Já existe um rescan em andamento.') : response.status === 400 ? tr('No courses imported yet.', 'Nenhum curso foi importado ainda.') : tr('Could not index courses.', 'Não foi possível indexar os cursos.')); }
+	async rescan() {
+		const response = await fetch('/api/admin/catalog/rescan', { method: 'POST' });
+		if (response.ok) return;
+		const error = new Error(response.status === 403 ? 'credentials_change_required' : response.status === 409 ? tr('A rescan is already in progress.', 'Já existe um rescan em andamento.') : response.status === 400 ? tr('No courses imported yet.', 'Nenhum curso foi importado ainda.') : tr('Could not index courses.', 'Não foi possível indexar os cursos.'));
+		// These two have names of their own, so callers never match translated text.
+		if (response.status === 400) error.name = 'NoCoursesError';
+		if (response.status === 409) error.name = 'RescanBusyError';
+		throw error;
+	}
 	async indexingStatus() { const response = await fetch('/api/indexing'); if (!response.ok) throw new Error(tr('Could not load indexing status.', 'Não foi possível carregar o estado da indexação.')); return normalizeIndexingStatus(await response.json()); }
 	async cancelIndexing() {
 		const response = await fetch('/api/indexing/cancel', { method: 'POST' });
