@@ -3,7 +3,7 @@
 **Target audience:** operators publishing, installing, or deploying LearnVault.
 If you are developing or studying the architecture, start with the [README](../../README.md) and [Architecture Overview](../architecture/overview.md).
 
-**Summary:** LearnVault publishes a Windows desktop installer (NSIS), Linux server tarballs, and an optional OCI container image. Flatpak Linux desktop packaging is planned (see [`flatpak.md`](flatpak.md)). Docker and Podman are optional deployment adapters, not runtime requirements.
+**Summary:** LearnVault publishes a Windows desktop installer (NSIS), Linux server tarballs, and an optional OCI container image. Flatpak Linux desktop bundles are attached to each release (see [`flatpak.md`](flatpak.md)). Docker and Podman are optional deployment adapters, not runtime requirements.
 
 ## Current Release Targets
 
@@ -12,14 +12,14 @@ If you are developing or studying the architecture, start with the [README](../.
 | Linux Server | Rust Linux tarball (`learnvault-linux-<arch>.tar.gz`) | Primary supported Linux server deployment | Available |
 | Self-hosted | OCI container image via Compose (Docker/Podman) | Containerized server deployment | Supported; local or published image |
 | Windows Desktop | NSIS installer (`.exe`) | Local desktop usage; per-user installation without admin rights | Automated, verified with SHA256SUMS |
-| Linux Desktop | Flatpak | Desktop application for Linux | Planned; see [`flatpak.md`](flatpak.md) |
+| Linux Desktop | Flatpak bundle (amd64, arm64) | Desktop application for Linux | Available from the release that ships it; built and sandbox-checked in CI, see [`flatpak.md`](flatpak.md) |
 
 ## Choosing a Distribution Target
 
 - **Windows Desktop:** use the NSIS installer. It installs per-user in `%LOCALAPPDATA%\LearnVault` without requiring administrator privileges.
 - **Linux Server:** use the `learnvault-linux-<arch>.tar.gz` tarball.
 - **Container Deployments:** use Docker Compose or systemd Quadlet.
-- **Linux Desktop:** Flatpak packaging is planned; the plan, gaps and acceptance criteria are in [`flatpak.md`](flatpak.md).
+- **Linux Desktop:** install the `learnvault-linux-desktop-<arch>.flatpak` bundle with `flatpak install --user <file>`. The GNOME runtime comes from Flathub. Details and checks are in [`flatpak.md`](flatpak.md).
 
 ### Update Notifications
 
