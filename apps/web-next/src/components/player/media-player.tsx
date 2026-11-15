@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { Captions, Clapperboard, ExternalLink, Maximize, Minimize, Pause, PictureInPicture2, Play, Repeat, Rewind, FastForward, Volume2, VolumeX, Zap } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { Captions, Clapperboard, ExternalLink, Maximize, Minimize, Pause, PictureInPicture2, Play, Repeat, Rewind, FastForward, Settings, Volume2, VolumeX, Zap } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { cn } from '@/lib/utils';
 import { Link } from 'react-router';
 import { Button, buttonVariants } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
 import { tr } from '@/lib/i18n';
 import {
@@ -91,6 +92,8 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 	const [notice, setNotice] = useState('');
 	const media = useRef<HTMLVideoElement & HTMLAudioElement>(null);
 	const container = useRef<HTMLDivElement>(null);
+	const [stage, setStage] = useState<HTMLDivElement | null>(null);
+	const setContainer = useCallback((element: HTMLDivElement | null) => { container.current = element; setStage(element); }, []);
 	const lastSave = useRef(0);
 	const lastKnown = useRef(0);
 	const appliedStart = useRef<string | null>(null);
@@ -351,6 +354,7 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 	// On the picture the bar is white on a dark fade; under audio it is an ordinary card.
 	const look = cn('size-11 rounded-full', onVideo && 'text-white hover:bg-white/20 hover:text-white aria-pressed:bg-white/25');
 	const loopText = !loop ? null : loop.b === null ? tr(`Loop from ${formatDuration(loop.a)}: set end`, `Laço de ${formatDuration(loop.a)}: marcar fim`) : tr(`Looping ${formatDuration(loop.a)}–${formatDuration(loop.b)}: clear`, `Repetindo ${formatDuration(loop.a)}–${formatDuration(loop.b)}: limpar`);
+	const cycleLoop = () => setLoop(!loop ? { a: absoluteTime(), b: null } : loop.b === null ? (absoluteTime() > loop.a + 1 ? { a: loop.a, b: absoluteTime() } : loop) : null);
 	const togglePlay = () => { const element = media.current; if (element) void (element.paused ? element.play().catch(() => undefined) : element.pause()); };
 	const toggleCaptions = () => {
 		setCaptionsOn(!captionsOn);
@@ -383,18 +387,22 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 				<span className="mx-2 text-sm tabular-nums"><span className="sr-only">{tr('Time', 'Tempo')}: </span>{formatDuration(now)} <span className={onVideo ? 'text-white/70' : 'text-muted-foreground'}>/ {formatDuration(total)}</span></span>
 				<div className="ml-auto flex flex-wrap items-center justify-end">
 					{captions.src && <Button variant="ghost" size="icon" className={look} aria-pressed={captionsOn} onClick={toggleCaptions} aria-label={tr('Subtitles', 'Legendas')}><Captions /></Button>}
-					<Button variant="ghost" size={loopText ? 'sm' : 'icon'} className={cn(look, loopText && 'h-11 w-auto px-3 text-xs')} aria-pressed={Boolean(loop)} onClick={() => setLoop(!loop ? { a: absoluteTime(), b: null } : loop.b === null ? (absoluteTime() > loop.a + 1 ? { a: loop.a, b: absoluteTime() } : loop) : null)}>
-						<Repeat />{loopText ?? <span className="sr-only">{tr('Loop', 'Laço')}</span>}
-					</Button>
+					{loopText && (
+						<Button variant="ghost" size="sm" className={cn(look, 'h-11 w-auto px-3 text-xs')} aria-pressed onClick={cycleLoop}><Repeat />{loopText}</Button>
+					)}
 					<Label htmlFor="player-speed" className="sr-only">{tr('Speed', 'Velocidade')}</Label>
 					<select id="player-speed" value={speed} onChange={(event) => changeSpeed(Number(event.target.value) as PlaybackSpeed)} className={cn('h-11 w-16 cursor-pointer appearance-none rounded-full bg-transparent px-2 text-center text-sm font-medium', onVideo ? 'text-white hover:bg-white/20 [&>option]:bg-card [&>option]:text-foreground' : 'hover:bg-muted')} aria-keyshortcuts="[ ]">
 						{PLAYBACK_SPEEDS.map((value) => <option key={value} value={value}>{value}×</option>)}
 					</select>
-					{capabilities.data?.transcoding && (
-						<Button variant="ghost" size="icon" className={look} aria-pressed={Boolean(transcode)} onClick={() => (transcode ? setTranscode(null) : startTranscode(false))}><Zap /><span className="sr-only">{tr('Transcode', 'Transcodificar')}</span></Button>
-					)}
-					{capabilities.data?.systemPlayer && <Button variant="ghost" size="icon" className={look} onClick={openSystemPlayer} aria-label={tr('Open in system player', 'Abrir no player do sistema')}><ExternalLink /></Button>}
-					{onVideo && supportsPip && <Button variant="ghost" size="icon" className={look} aria-pressed={pip} onClick={togglePip} aria-label={tr('Picture-in-picture', 'Picture-in-picture')} aria-keyshortcuts="p"><PictureInPicture2 /></Button>}
+					<DropdownMenu>
+						<DropdownMenuTrigger render={<Button variant="ghost" size="icon" className={look} aria-label={tr('Player settings', 'Configurações do player')} />}><Settings /></DropdownMenuTrigger>
+						<DropdownMenuContent align="end" side="top" container={stage} className="w-64">
+							<DropdownMenuItem onClick={cycleLoop}><Repeat />{loop ? tr('Loop: next step', 'Laço: próximo passo') : tr('Loop a section', 'Repetir um trecho')}</DropdownMenuItem>
+							{onVideo && supportsPip && <DropdownMenuItem onClick={togglePip}><PictureInPicture2 />{pip ? tr('Close picture-in-picture', 'Fechar picture-in-picture') : tr('Picture-in-picture', 'Picture-in-picture')}</DropdownMenuItem>}
+							{capabilities.data?.transcoding && <DropdownMenuItem onClick={() => (transcode ? setTranscode(null) : startTranscode(false))}><Zap />{transcode ? tr('Stop transcoding', 'Parar a transcodificação') : tr('Play with transcoding', 'Reproduzir com transcodificação')}</DropdownMenuItem>}
+							{capabilities.data?.systemPlayer && <DropdownMenuItem onClick={openSystemPlayer}><ExternalLink />{tr('Open in system player', 'Abrir no player do sistema')}</DropdownMenuItem>}
+						</DropdownMenuContent>
+					</DropdownMenu>
 					{onVideo && onCinema && <Button variant="ghost" size="icon" className={cn(look, 'hidden lg:inline-flex')} aria-pressed={cinema} onClick={onCinema} aria-label={tr('Cinema mode', 'Modo cinema')} aria-keyshortcuts="t"><Clapperboard /></Button>}
 					{onVideo && <Button variant="ghost" size="icon" className={look} onClick={toggleFullscreen} aria-label={fullscreen ? tr('Exit fullscreen', 'Sair da tela cheia') : tr('Fullscreen', 'Tela cheia')} aria-keyshortcuts="f">{fullscreen ? <Minimize /> : <Maximize />}</Button>}
 				</div>
@@ -420,7 +428,7 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 			) : (
 				// The group takes focus so single-key shortcuts only act on the player (WCAG 2.1.4).
 				// eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-noninteractive-element-interactions
-				<div ref={container} role="group" tabIndex={0} onKeyDown={onKeyDown} data-player aria-label={tr('Media player', 'Player de mídia')} aria-describedby="player-shortcuts" aria-keyshortcuts="Space ArrowLeft ArrowRight ArrowUp ArrowDown k j l [ ] f p m n 0 1 2 3 4 5 6 7 8 9" className="relative group/player overflow-hidden rounded-xl bg-black focus-visible:ring-3 focus-visible:ring-ring">
+				<div ref={setContainer} role="group" tabIndex={0} onKeyDown={onKeyDown} data-player aria-label={tr('Media player', 'Player de mídia')} aria-describedby="player-shortcuts" aria-keyshortcuts="Space ArrowLeft ArrowRight ArrowUp ArrowDown k j l [ ] f p m n 0 1 2 3 4 5 6 7 8 9" className="relative group/player overflow-hidden rounded-xl bg-black focus-visible:ring-3 focus-visible:ring-ring">
 					{/* Captions come from the course's own subtitle files; many lessons have none (WCAG 1.2.2 depends on the content). */}
 					{kind === 'audio' ? (
 						// eslint-disable-next-line jsx-a11y/media-has-caption
