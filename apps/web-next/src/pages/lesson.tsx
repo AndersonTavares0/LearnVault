@@ -27,7 +27,7 @@ import { pomodoro, resetTimer, skipTimer, startTimer } from '@/lib/pomodoro-stor
 import { findLesson, findLessonLocation, href } from '@/lib/router';
 import { clearPosition, nextAttemptAt, progressOutbox, queuePosition } from '@/lib/progress-outbox';
 import { createPositionSaver } from '@/lib/study';
-import { transport, type Catalog, type CatalogNode, type FileEntry, type StudyProgress } from '@/lib/transport';
+import { transport, type CatalogNode, type FileEntry, type StudyProgress } from '@/lib/transport';
 import { cn } from '@/lib/utils';
 import { keys, useCatalog, useFavorites, useRecent, useSession, useSetLessonCompleted, useBookmarks } from '@/app/data';
 
@@ -317,7 +317,6 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 									{tr('Play the next lesson automatically', 'Reproduzir a próxima aula automaticamente')}
 								</label>
 							</div>
-							<RecentlyWatched items={recent.data ?? []} catalog={catalog.data ?? null} currentMediaId={mediaId} />
 						</TabsContent>
 						{hasNotes && mediaId && (
 							<TabsContent value="notes" keepMounted className="pt-5">
@@ -347,7 +346,6 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 								<h2 className="font-heading text-lg font-bold">{tr('Course content', 'Conteúdo do curso')}</h2>
 								<p className="text-sm text-muted-foreground">{tr(`${overall.done} of ${overall.total} lessons completed`, `${overall.done} de ${overall.total} aulas concluídas`)}</p>
 							</div>
-							<Button variant="ghost" size="icon" className="hidden size-11 rounded-full lg:inline-flex" onClick={() => setContentOpen(false)} aria-label={tr('Hide course content', 'Ocultar conteúdo do curso')}><PanelRightClose /></Button>
 						</div>
 						<Curriculum compact nodes={course.children} courseId={courseId} completed={completed} favorites={favoriteMedia} activePath={lessonPath} />
 					</aside>
@@ -422,47 +420,6 @@ function TextLesson({ file, courseId }: { file: FileEntry; courseId: string }) {
 				</article>
 			)}
 		</div>
-	);
-}
-
-/**
- * Recently watched lessons, other than the one open. It is a compact history, not a second
- * resume card: each row is a plain link that returns to that lesson's saved position.
- */
-function RecentlyWatched({ items, catalog, currentMediaId }: { items: StudyProgress[]; catalog: Catalog | null; currentMediaId: string | null }) {
-	const seen = new Set<string>();
-	const rows = items.flatMap((item) => {
-		if (item.mediaId === currentMediaId) return [];
-		const found = findLessonLocation(catalog, item.mediaId);
-		if (!found || found.lesson.media.length === 0) return [];
-		const key = `${found.courseId}/${found.lesson.path}`;
-		if (seen.has(key)) return [];
-		seen.add(key);
-		return [{ item, found, key }];
-	}).slice(0, 5);
-	if (rows.length === 0) return null;
-	return (
-		<section aria-labelledby="recently-watched-heading" className="border-t pt-4">
-			<div className="flex items-center justify-between gap-3">
-				<h2 id="recently-watched-heading" className="font-heading text-lg font-semibold">{tr('Recently watched', 'Assistidas recentemente')}</h2>
-				<Link to="/history" className="text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">{tr('View all', 'Ver tudo')}</Link>
-			</div>
-			<ul className="mt-3 divide-y">
-				{rows.map(({ item, found, key }) => (
-					<li key={key}>
-						<Link to={path(href('course', found.courseId, found.lesson.path, item.positionSeconds))} className="flex min-h-12 items-center gap-3 py-2 hover:text-primary focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
-							<span className="min-w-0 flex-1">
-								<span className="block truncate font-medium">{found.lesson.title}</span>
-								<span className="block truncate text-sm text-muted-foreground">{found.courseTitle}</span>
-							</span>
-							<span className="shrink-0 text-sm tabular-nums text-muted-foreground">
-								{item.completed ? tr('Completed', 'Concluída') : item.positionSeconds > 0 ? formatDuration(item.positionSeconds) : tr('Not started', 'Não iniciada')}
-							</span>
-						</Link>
-					</li>
-				))}
-			</ul>
-		</section>
 	);
 }
 
