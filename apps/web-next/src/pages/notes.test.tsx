@@ -22,7 +22,7 @@ afterEach(() => {
 });
 
 describe('notes', () => {
-	it('regroups notes by date, newest first, naming each lesson', async () => {
+	it('regroups notes by date, newest first, keeping course to lesson context', async () => {
 		const at = (id: string, updatedAt: number): StudyNote => ({ ...note(id, `note ${id}`), updatedAt });
 		vi.mocked(transport.listNotes).mockResolvedValue([at('old', new Date(2026, 9, 1, 10).getTime() / 1000), at('new', new Date(2026, 10, 5, 10).getTime() / 1000)]);
 		renderApp('/notes?course=rust', { catalog });
@@ -30,20 +30,24 @@ describe('notes', () => {
 		const days = await screen.findAllByRole('region');
 		expect(days).toHaveLength(2);
 		expect(within(days[0]).getByText('note new')).toBeTruthy();
-		expect(within(days[0]).getByText('Rust · Ownership')).toBeTruthy();
+		expect(within(days[0]).getByRole('heading', { level: 3, name: 'Rust' })).toBeTruthy();
+		expect(within(days[0]).getByRole('heading', { level: 4, name: 'Ownership' })).toBeTruthy();
+		expect(within(days[0]).getByRole('link', { name: 'Open lesson' }).getAttribute('href')).toBe('/course/rust/r%2Fown');
 		expect(within(days[1]).getByText('note old')).toBeTruthy();
 	});
 
-	it('exports the notes on screen as a Markdown file', async () => {
+	it('exports the notes on screen as a Markdown file and states whether it is filtered or all', async () => {
 		const create = vi.fn(() => 'blob:notes');
 		vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: create, revokeObjectURL: vi.fn() }));
 		const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
-		renderApp('/notes?course=rust', { catalog });
-		fireEvent.click(await screen.findByRole('button', { name: /^Export \d+ notes? as Markdown$/ }));
+		renderApp('/notes', { catalog });
+		fireEvent.click(await screen.findByRole('button', { name: /^Export all \d+ notes? as Markdown$/ }));
 		expect(create).toHaveBeenCalledOnce();
 		const blob = (create.mock.calls[0] as unknown as [Blob])[0];
 		expect(await blob.text()).toContain('## Rust\n\n### Ownership\n\n- **1:15** Borrow checker rules');
 		expect(click).toHaveBeenCalled();
+		fireEvent.change(screen.getByRole('searchbox', { name: 'Search notes' }), { target: { value: 'Borrow' } });
+		expect(screen.getByRole('button', { name: 'Export 1 filtered note as Markdown' })).toBeTruthy();
 		vi.unstubAllGlobals();
 	});
 
