@@ -20,6 +20,7 @@ import { courseProgress } from '@/lib/catalog';
 import { tr } from '@/lib/i18n';
 import { lessonSequence, neighboringLessons } from '@/lib/navigation';
 import { findLessonPdf, formatFileSize } from '@/lib/pdf';
+import { findLessonText, loadText } from '@/lib/text-lesson';
 import { formatDuration, selectPlayableMedia, shouldAutoAdvance, studySyncSupported } from '@/lib/player';
 import { lessonPreferenceKey, type PlayerPreferences } from '@/lib/player-preferences';
 import { pomodoro, resetTimer, skipTimer, startTimer } from '@/lib/pomodoro-store';
@@ -67,6 +68,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 	const lesson = findLesson(catalog.data ?? null, courseId, lessonPath);
 	// A lesson with nothing to play and a PDF is a PDF lesson: the PDF is read here and drives progress.
 	const pdf = lesson ? findLessonPdf(lesson) : null;
+	const text = lesson && loadText ? findLessonText(lesson, Boolean(pdf)) : null;
 	const location = useMemo(() => {
 		const media = lesson?.media.find((file) => file.mediaId) ?? pdf;
 		return media?.mediaId ? findLessonLocation(catalog.data ?? null, media.mediaId) : null;
@@ -237,6 +239,8 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 						<div inert={Boolean(breakPhase)}>
 						{pdf ? (
 							<PdfLesson file={pdf} courseId={courseId} ready={!studySyncSupported || !progress.isPending} initialPage={pdfResumeAt} onPage={(page) => void recordPosition(pdf.mediaId!, page)} preferences={preferences} onPreferencesChange={savePreferences} />
+						) : text ? (
+							<TextLesson file={text} courseId={courseId} />
 						) : (
 						<MediaPlayer
 							key={`${courseId}/${lessonPath}`}
@@ -394,6 +398,29 @@ function PdfLesson({ file, courseId, ready, initialPage, onPage, preferences, on
 				<span>{tr('Read it here; the original file is never changed.', 'Leia aqui; o arquivo original nunca é alterado.')}</span>
 			</p>
 			{ready ? <PdfReader key={file.mediaId ?? file.path} file={file} courseId={courseId} initialPage={initialPage} onPage={onPage} preferences={preferences} onPreferencesChange={onPreferencesChange} /> : <p role="status" className="text-muted-foreground">{tr('Loading…', 'Carregando…')}</p>}
+		</div>
+	);
+}
+
+/** A lesson that is a text file: shown as plain text, never as HTML, and the original is never changed. */
+function TextLesson({ file, courseId }: { file: FileEntry; courseId: string }) {
+	const url = transport.mediaUrl(file, courseId);
+	const content = useQuery({ queryKey: ['lesson-text', url], enabled: Boolean(url && loadText), staleTime: Infinity, queryFn: () => loadText!(url!) });
+	return (
+		<div className="space-y-3">
+			<p role="note" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+				<span className="inline-flex items-center gap-1.5 rounded-full bg-brand-soft px-2.5 py-0.5 font-semibold"><FileText className="size-3.5" aria-hidden="true" />{tr('Text', 'Texto')}</span>
+				<span>{formatFileSize(file.size)}</span>
+				<span>{tr('Read it here; the original file is never changed.', 'Leia aqui; o arquivo original nunca é alterado.')}</span>
+			</p>
+			{content.isPending ? <p role="status" className="text-muted-foreground">{tr('Loading…', 'Carregando…')}</p> : content.isError ? (
+				<p role="alert" className="rounded-lg border bg-card p-4">{tr('Could not load this text.', 'Não foi possível carregar este texto.')}</p>
+			) : (
+				<article aria-label={file.name} className="max-h-[70vh] overflow-auto rounded-lg border bg-card p-5">
+					<pre className="font-sans text-[15px] leading-relaxed break-words whitespace-pre-wrap">{content.data.text}</pre>
+					{content.data.truncated && <p className="mt-4 text-sm text-muted-foreground">{tr('This file is long; only the beginning is shown. Open it from Materials to read all of it.', 'Este arquivo é longo; só o começo é mostrado. Abra-o em Materiais para ler tudo.')}</p>}
+				</article>
+			)}
 		</div>
 	);
 }
