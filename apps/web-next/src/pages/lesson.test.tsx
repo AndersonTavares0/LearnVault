@@ -67,6 +67,17 @@ describe('lesson page', () => {
 		expect(screen.getByRole('link', { name: 'One' }).closest('details')?.open).toBe(false);
 	});
 
+	it('finds a lesson in the course content and says when nothing matches', async () => {
+		renderApp('/course/c/c%2FOne', { catalog });
+		const sidebar = within(await screen.findByRole('complementary', { name: 'Course content' }));
+		expect(sidebar.getByRole('link', { name: 'Two' })).toBeTruthy();
+		fireEvent.change(sidebar.getByRole('searchbox', { name: 'Find a lesson' }), { target: { value: 'tw' } });
+		expect(sidebar.queryByRole('link', { name: 'One' })).toBeNull();
+		expect(sidebar.getByRole('link', { name: 'Two' })).toBeTruthy();
+		fireEvent.change(sidebar.getByRole('searchbox', { name: 'Find a lesson' }), { target: { value: 'zzz' } });
+		expect(sidebar.getByText('No lesson matches.')).toBeTruthy();
+	});
+
 	it('keeps cinema mode and hidden course content between visits', async () => {
 		renderApp('/course/c/c%2FOne', { catalog });
 		fireEvent.click(await screen.findByRole('button', { name: 'Cinema mode' }));
