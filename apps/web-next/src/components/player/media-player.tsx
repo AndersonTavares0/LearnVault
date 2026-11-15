@@ -106,6 +106,7 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 	const [pip, setPip] = useState(false);
 	// What the control bar shows; the element stays the source of truth.
 	const [playing, setPlaying] = useState(false);
+	const [loading, setLoading] = useState(false);
 	const [now, setNow] = useState(0);
 	const [total, setTotal] = useState(0);
 	const [volume, setVolume] = useState(1);
@@ -326,7 +327,12 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 				onPosition(mediaId, Math.floor(at));
 			}
 		},
-		onEmptied: () => setPlaying(false),
+		onLoadStart: () => setLoading(true),
+		onWaiting: () => setLoading(true),
+		onCanPlay: () => setLoading(false),
+		onLoadedData: () => setLoading(false),
+		onPlaying: () => { setLoading(false); setPlaying(true); },
+		onEmptied: () => { setLoading(false); setPlaying(false); },
 		onDurationChange: () => { const element = media.current; if (element && Number.isFinite(element.duration)) setTotal((transcode?.offset ?? 0) + element.duration); },
 		onVolumeChange: () => { const element = media.current; if (element) { setVolume(element.volume); setMuted(element.muted); } },
 		onPlay: () => setPlaying(true),
@@ -336,8 +342,9 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 			lastKnown.current = at;
 			if (mediaId && at > 0) onPosition(mediaId, Math.floor(at));
 		},
-		onEnded: () => { setPlaying(false); if (mediaId) onEnded(mediaId); },
+		onEnded: () => { setLoading(false); setPlaying(false); if (mediaId) onEnded(mediaId); },
 		onError: () => {
+			setLoading(false);
 			const code = media.current?.error?.code ?? null;
 			setErrorCode(code);
 			// The element error carries no HTTP status; a HEAD probe tells a saturated server (503)
@@ -436,6 +443,11 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 					) : (
 						// eslint-disable-next-line jsx-a11y/media-has-caption
 						<video key={attempt} {...mediaProps} onClick={togglePlay} className="aspect-video w-full cursor-pointer bg-black lg:max-h-[calc(100svh-19rem)]">{captions.src && <track kind="captions" src={captions.src} label={tr('Subtitles', 'Legenda')} default />}</video>
+					)}
+					{kind === 'video' && (loading || !playing) && (
+						<div role="status" aria-live="polite" className="pointer-events-none absolute top-3 left-3 rounded-full bg-black/75 px-3 py-1 text-xs font-medium text-white">
+							{loading ? tr('Loading…', 'Carregando…') : tr('Paused', 'Pausado')}
+						</div>
 					)}
 					{bar}
 				</div>

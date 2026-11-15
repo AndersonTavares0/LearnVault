@@ -88,6 +88,21 @@ describe('lesson page', () => {
 		cleanup();
 		renderApp('/course/c/c%2FOne', { catalog });
 		expect((await screen.findByRole('button', { name: 'Cinema mode' })).getAttribute('aria-pressed')).toBe('true');
+		fireEvent.click(screen.getByRole('button', { name: 'Exit cinema' }));
+		expect(localStorage.getItem('learnvault-cinema')).toBe('0');
+	});
+
+	it('shows loading and paused player states and keeps notes usable on media error', async () => {
+		renderApp('/course/c/c%2FOne', { catalog });
+		const video = await screen.findByLabelText('Lesson player: One');
+		expect(screen.getByText('Paused')).toBeTruthy();
+		fireEvent.loadStart(video);
+		expect(screen.getByText('Loading…')).toBeTruthy();
+		Object.defineProperty(video, 'error', { value: { code: 3 }, configurable: true });
+		fireEvent.error(video);
+		expect(await screen.findByRole('alert')).toBeTruthy();
+		fireEvent.click(screen.getByRole('button', { name: /^Note/ }));
+		expect(await screen.findByLabelText('Note at 0:00')).toBeTruthy();
 	});
 
 	it('marks the lesson completed from the page', async () => {
