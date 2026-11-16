@@ -121,6 +121,16 @@ pub(crate) fn legacy_seed(root: &Path) -> Option<RegisteredCourse> {
     })
 }
 
+fn is_ignored_seed_dir(path: &Path) -> bool {
+    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+        return true;
+    };
+    name.starts_with('.')
+        || name == "@eaDir"
+        || name.eq_ignore_ascii_case("$RECYCLE.BIN")
+        || name.eq_ignore_ascii_case("System Volume Information")
+}
+
 /// Cursos semeados a partir da raiz configurada no primeiro start.
 ///
 /// Cada pasta de primeiro nível sob a raiz vira um curso: uma biblioteca de cursos
@@ -136,6 +146,7 @@ pub(crate) fn seeded_courses(root: &Path) -> Vec<RegisteredCourse> {
         .filter_map(Result::ok)
         .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
         .map(|entry| entry.path())
+        .filter(|path| !is_ignored_seed_dir(path))
         .collect();
     // A ordem do sistema de arquivos varia; ordenar mantém a lista semeada estável.
     folders.sort();
@@ -475,6 +486,23 @@ mod tests {
                 .all(|course| course.id != learnvault_core::LEGACY_LIBRARY_ID),
             "pastas de curso usam a identidade derivada do caminho"
         );
+    }
+
+    #[test]
+    fn seeding_ignores_hidden_and_system_metadata_directories() {
+        let temp = tempdir().unwrap();
+        let library = temp.path().join("library");
+        std::fs::create_dir(&library).unwrap();
+        std::fs::create_dir(library.join(".hidden-statfs")).unwrap();
+        std::fs::create_dir(library.join(".Trash")).unwrap();
+        std::fs::create_dir(library.join("@eaDir")).unwrap();
+        std::fs::create_dir(library.join("$RECYCLE.BIN")).unwrap();
+        std::fs::create_dir(library.join("System Volume Information")).unwrap();
+        std::fs::create_dir(library.join("Valid Course")).unwrap();
+
+        let seeded = seeded_courses(&library);
+        let titles: Vec<&str> = seeded.iter().map(|course| course.title.as_str()).collect();
+        assert_eq!(titles, ["Valid Course"]);
     }
 
     #[test]
