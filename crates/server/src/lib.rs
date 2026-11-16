@@ -267,7 +267,8 @@ fn with_request_limits(router: Router, timeout: Duration) -> Router {
             .layer(from_fn(api_cache_headers))
             .layer(from_fn(move |request: Request, next: Next| async move {
                 let path = request.uri().path();
-                let is_scan = path.starts_with("/api/admin/sources/") && path.ends_with("/scan");
+                let is_scan = (path.starts_with("/api/admin/sources/") && path.ends_with("/scan"))
+                    || path == "/api/admin/catalog/rescan";
                 let limit = if is_scan {
                     timeout.max(SOURCE_SCAN_REQUEST_TIMEOUT)
                 } else {
