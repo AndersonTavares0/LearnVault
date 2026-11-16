@@ -153,9 +153,9 @@ function Notebook({ courseId }: { courseId: string | null }) {
 			<div className="ml-auto flex shrink-0 items-center gap-1 self-start text-xs text-muted-foreground">
 				<span className="whitespace-nowrap">{new Date(note.updatedAt * 1000).toLocaleDateString(getLocale(), { dateStyle: 'medium' })}</span>
 				<span aria-hidden="true" className="opacity-50">·</span>
-				<Button variant="ghost" size="xs" className="h-9 px-1.5 text-xs font-medium text-muted-foreground opacity-75 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100 hover:text-foreground [@media(hover:none)]:opacity-100" onClick={() => setEditing({ id: note.noteId, content: note.content })} aria-label={tr('Edit note', 'Editar nota')}>{tr('Edit', 'Editar')}</Button>
+				<Button variant="ghost" size="xs" className="h-9 px-1.5 text-xs font-medium text-muted-foreground hover:text-foreground" onClick={() => setEditing({ id: note.noteId, content: note.content })} aria-label={tr('Edit note', 'Editar nota')}>{tr('Edit', 'Editar')}</Button>
 				<span aria-hidden="true" className="opacity-50">·</span>
-				<Button variant="ghost" size="xs" className="h-9 px-1.5 text-xs font-medium text-muted-foreground opacity-75 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100 hover:text-destructive [@media(hover:none)]:opacity-100" disabled={remove.isPending} onClick={() => setDeleting(note)} aria-label={tr('Delete note', 'Excluir nota')}>{tr('Delete', 'Excluir')}</Button>
+				<Button variant="ghost" size="xs" className="h-9 px-1.5 text-xs font-medium text-muted-foreground hover:text-destructive" disabled={remove.isPending} onClick={() => setDeleting(note)} aria-label={tr('Delete note', 'Excluir nota')}>{tr('Delete', 'Excluir')}</Button>
 			</div>
 		</li>
 	);
