@@ -19,6 +19,7 @@
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-fg);
   --color-brand-deep: var(--brand-deep);
+  --color-brand-ink: var(--brand-ink);
   --color-brand-tint: var(--brand-tint);
   --color-brand-soft: var(--brand-soft);
   --color-reward: var(--reward);
@@ -86,6 +87,7 @@
   --brand: #5C4229;
   --brand-fg: #FFFFFF;
   --brand-deep: color-mix(in oklch, var(--brand) 55%, black);
+  --brand-ink: color-mix(in oklch, var(--brand) 60%, black);
   --brand-tint: color-mix(in oklch, var(--brand) 12%, var(--background));
   --brand-soft: color-mix(in oklch, var(--brand) 22%, var(--background));
   --reward: #A96F2E;
@@ -152,7 +154,8 @@
 /* Carvão quente: graphite with a warm undertone, warm hairlines, brass accent. */
 :root[data-theme="dark"] {
   --background: color-mix(in oklch, var(--brand) 6%, #0B0A09);
-  --brand-soft: color-mix(in oklch, var(--brand) 28%, var(--background));
+  --brand-ink: color-mix(in oklch, var(--brand) 50%, white);
+  --brand-soft: color-mix(in oklch, var(--brand) 24%, var(--background));
   --foreground: #F4EFE6;
   --card: color-mix(in oklch, var(--brand) 5%, #161311);
   --card-foreground: #F4EFE6;

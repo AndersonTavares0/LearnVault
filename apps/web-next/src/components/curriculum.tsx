@@ -80,7 +80,7 @@ function CurriculumNode({ node, index, ...props }: Props & { node: CatalogNode; 
 						</>
 					) : total > 0 ? (
 						<>
-							<span className={cn('shrink-0 text-sm tabular-nums', (complete || current) ? 'rounded-full bg-brand-soft px-2.5 py-0.5 text-xs font-semibold text-primary' : 'text-muted-foreground')}>
+							<span className={cn('shrink-0 text-sm tabular-nums', (complete || current) ? 'rounded-full bg-brand-soft px-2.5 py-0.5 text-xs font-semibold text-brand-ink' : 'text-muted-foreground')}>
 								{complete ? tr('Completed', 'Concluído') : current ? tr('You are here', 'Você está aqui') : done === 0 ? tr('Not started', 'Não iniciado') : tr(`${done} of ${total} done`, `${done} de ${total} concluídas`)}
 							</span>
 							{index !== undefined && <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] group-open:rotate-180" aria-hidden="true" />}

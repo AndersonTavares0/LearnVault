@@ -56,12 +56,12 @@ export function FocusSettings() {
 								onClick={() => setDraft({ ...draft, focusMinutes: preset.focusMinutes, shortMinutes: preset.shortMinutes, longMinutes: preset.longMinutes })}
 								className={cn(
 									'flex min-h-14 flex-col items-start justify-center gap-0.5 rounded-2xl border px-4 py-3 text-left transition-colors duration-150 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none',
-									active ? 'border-primary bg-brand-soft text-primary ring-1 ring-primary/20' : 'border-border bg-background hover:bg-muted/60'
+									active ? 'border-primary bg-brand-soft text-brand-ink ring-1 ring-primary/20' : 'border-border bg-background hover:bg-muted/60'
 								)}
 							>
 								<span className="flex w-full items-center justify-between text-sm font-semibold">
 									<span>{preset.name()}</span>
-									{active && <Check className="size-4 text-primary" aria-hidden="true" />}
+									{active && <Check className="size-4 text-brand-ink" aria-hidden="true" />}
 								</span>
 								<span className={cn('text-xs tabular-nums', active ? 'text-primary/85' : 'text-muted-foreground')}>
 									{tr(`${preset.focusMinutes} min focus · ${preset.shortMinutes}m break`, `${preset.focusMinutes} min foco · ${preset.shortMinutes}m pausa`)}

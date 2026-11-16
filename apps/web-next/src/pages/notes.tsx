@@ -129,7 +129,7 @@ function Notebook({ courseId }: { courseId: string | null }) {
 		<li key={note.noteId} className="group -mx-3 flex flex-wrap items-start gap-4 rounded-xl px-3 py-3 transition-colors duration-150 focus-within:bg-panel/60 hover:bg-panel/60 sm:flex-nowrap">
 			<div className="w-14 shrink-0 pt-0.5">
 					{location ? (
-						<Link to={href('course', location.courseId, location.lesson.path, note.positionSeconds).replace(/^#/, '')} aria-label={tr(`Open ${location.lesson.title} at ${formatDuration(note.positionSeconds)}`, `Abrir ${location.lesson.title} em ${formatDuration(note.positionSeconds)}`)} className="relative inline-flex h-8 min-w-14 items-center justify-center rounded-lg bg-brand-soft px-2 text-sm font-semibold text-primary tabular-nums after:absolute after:-inset-y-2 after:inset-x-0 after:content-[''] hover:underline">
+						<Link to={href('course', location.courseId, location.lesson.path, note.positionSeconds).replace(/^#/, '')} aria-label={tr(`Open ${location.lesson.title} at ${formatDuration(note.positionSeconds)}`, `Abrir ${location.lesson.title} em ${formatDuration(note.positionSeconds)}`)} className="relative inline-flex h-8 min-w-14 items-center justify-center rounded-lg bg-brand-soft px-2 text-sm font-semibold text-brand-ink tabular-nums after:absolute after:-inset-y-2 after:inset-x-0 after:content-[''] hover:underline">
 							{formatDuration(note.positionSeconds)}
 						</Link>
 					) : (

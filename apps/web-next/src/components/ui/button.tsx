@@ -14,7 +14,7 @@ const buttonVariants = cva(
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
         selected:
-          "border-primary bg-brand-soft text-primary font-semibold ring-1 ring-primary/20 hover:bg-brand-soft/80",
+          "border-primary bg-brand-soft text-brand-ink font-semibold ring-1 ring-primary/20 hover:bg-brand-soft/80",
         ghost:
           "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
         // Solid fill: shadcn's tinted default (red text on red/10) measures 3.8:1, below AA.

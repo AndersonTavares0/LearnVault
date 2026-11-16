@@ -64,7 +64,7 @@ export function SettingsPage() {
 				<ul className="hidden lg:block lg:space-y-1">
 					{sections.map((section) => (
 						<li key={section.id}>
-							<button type="button" aria-current={active === section.id ? 'page' : undefined} onClick={() => setActive(section.id)} className={cn('flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted', active === section.id ? 'bg-brand-tint font-semibold text-primary' : 'text-muted-foreground hover:text-foreground')}>
+							<button type="button" aria-current={active === section.id ? 'page' : undefined} onClick={() => setActive(section.id)} className={cn('flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted', active === section.id ? 'bg-brand-tint font-semibold text-brand-ink' : 'text-muted-foreground hover:text-foreground')}>
 								<section.icon className="size-4 shrink-0" aria-hidden="true" />
 								{section.label}
 							</button>
@@ -84,7 +84,7 @@ export function SettingsPage() {
 						{LOCALES.map((value) => (
 							<Button key={value} variant={value === locale ? 'selected' : 'outline'} aria-pressed={value === locale} onClick={() => setLocale(value)}>
 								{LOCALE_LABELS[value]}
-								{value === locale && <Check className="size-3.5 text-primary" aria-hidden="true" />}
+								{value === locale && <Check className="size-3.5 text-brand-ink" aria-hidden="true" />}
 							</Button>
 						))}
 					</div>

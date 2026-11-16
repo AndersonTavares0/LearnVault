@@ -58,7 +58,7 @@ export function AppearanceSettings() {
 								onClick={() => change({ surface })}
 								className={cn(
 									'flex min-h-11 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring focus-visible:outline-none',
-									selected && 'border-primary bg-brand-soft font-semibold text-primary'
+									selected && 'border-primary bg-brand-soft font-semibold text-brand-ink'
 								)}
 							>
 								<span
@@ -70,7 +70,7 @@ export function AppearanceSettings() {
 									}}
 								/>
 								<span>{surfaceNames()[surface]}</span>
-								{selected && <Check className="size-3.5 text-primary" aria-hidden="true" />}
+								{selected && <Check className="size-3.5 text-brand-ink" aria-hidden="true" />}
 							</button>
 						);
 					})}

@@ -505,7 +505,7 @@ function PdfLesson({ file, courseId, ready, initialPage, onPage, preferences, on
 	return (
 		<div className="space-y-3">
 			<p role="note" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-				<span className="inline-flex items-center gap-1.5 rounded-full bg-brand-soft px-2.5 py-0.5 font-semibold text-foreground"><FileText className="size-3.5" aria-hidden="true" />{tr('PDF document', 'Documento PDF')}</span>
+				<span className="inline-flex items-center gap-1.5 rounded-full bg-brand-soft px-2.5 py-0.5 font-semibold text-brand-ink"><FileText className="size-3.5" aria-hidden="true" />{tr('PDF document', 'Documento PDF')}</span>
 				<span>{formatFileSize(file.size)}</span>
 				<span>{tr('Read it here; the original file is never changed.', 'Leia aqui; o arquivo original nunca é alterado.')}</span>
 			</p>
@@ -521,7 +521,7 @@ function TextLesson({ file, courseId }: { file: FileEntry; courseId: string }) {
 	return (
 		<div className="space-y-3">
 			<p role="note" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-				<span className="inline-flex items-center gap-1.5 rounded-full bg-brand-soft px-2.5 py-0.5 font-semibold text-foreground"><FileText className="size-3.5" aria-hidden="true" />{tr('Text', 'Texto')}</span>
+				<span className="inline-flex items-center gap-1.5 rounded-full bg-brand-soft px-2.5 py-0.5 font-semibold text-brand-ink"><FileText className="size-3.5" aria-hidden="true" />{tr('Text', 'Texto')}</span>
 				<span>{formatFileSize(file.size)}</span>
 				<span>{tr('Read it here; the original file is never changed.', 'Leia aqui; o arquivo original nunca é alterado.')}</span>
 			</p>

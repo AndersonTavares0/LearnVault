@@ -174,8 +174,8 @@ function FilterTabs({ counts, filter, onFilter }: { counts: Record<LibraryFilter
 	return (
 		<div role="group" aria-label={tr('Show', 'Mostrar')} className="flex flex-wrap gap-2 sm:gap-3">
 			{options.map(([value, label]) => (
-				<button key={value} type="button" aria-pressed={filter === value} onClick={() => onFilter(value)} className={cn('min-h-11 shrink-0 rounded-full border border-border bg-card px-4 text-[0.9375rem] font-medium transition-[background-color,border-color,color,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-brand-tint focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none active:scale-[0.97]', filter === value && 'border-primary bg-brand-soft font-semibold text-primary')}>
-					{label}{counts[value] > 0 && <span className="ml-1.5 text-sm font-normal text-muted-foreground">{counts[value]}</span>}
+				<button key={value} type="button" aria-pressed={filter === value} onClick={() => onFilter(value)} className={cn('min-h-11 shrink-0 rounded-full border border-border bg-card px-4 text-[0.9375rem] font-medium transition-[background-color,border-color,color,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-brand-tint focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none active:scale-[0.97]', filter === value && 'border-primary bg-brand-soft font-semibold text-brand-ink')}>
+					{label}{counts[value] > 0 && <span className={cn('ml-1.5 text-sm font-normal', filter === value ? 'text-brand-ink' : 'text-muted-foreground')}>{counts[value]}</span>}
 				</button>
 			))}
 		</div>
@@ -380,7 +380,7 @@ function Filters(props: { categories: string[]; category: string | null; onCateg
 				</select>
 				<div role="group" aria-label={tr('View', 'Visualização')} className="flex overflow-hidden rounded-xl border">
 					{views.map(([value, label]) => (
-						<button key={value} type="button" aria-pressed={props.view === value} onClick={() => props.onView(value)} className={cn('inline-flex h-11 items-center border-l px-2.5 text-sm first:border-l-0 sm:px-3 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none', props.view === value ? 'bg-brand-soft font-bold text-primary' : 'font-medium hover:bg-muted')}>{label}</button>
+						<button key={value} type="button" aria-pressed={props.view === value} onClick={() => props.onView(value)} className={cn('inline-flex h-11 items-center border-l px-2.5 text-sm first:border-l-0 sm:px-3 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none', props.view === value ? 'bg-brand-soft font-bold text-brand-ink' : 'font-medium hover:bg-muted')}>{label}</button>
 					))}
 				</div>
 			</div>
