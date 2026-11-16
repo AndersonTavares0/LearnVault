@@ -296,9 +296,21 @@ fn apply(
 /// Se a raiz não puder ser lida, a tentativa é registrada como uma varredura com falha,
 /// sem alterar a mídia, o estado de estudo ou a disponibilidade da biblioteca.
 pub fn rescan(db: &mut Database, library_id: &str, root: &Path) -> Result<RescanSummary> {
-    match scan(root) {
-        // O modo vem do próprio host, exatamente como dentro do scanner: a chave usada
-        // para interpretar as áreas não verificadas nunca pode divergir da chave gravada.
+    apply_rescan_result(db, library_id, scan(root), root)
+}
+
+/// Applies a pre-scanned local filesystem outcome to the catalog database.
+///
+/// Allows callers to walk the filesystem outside the database lock and acquire it only
+/// for the persistence transaction.
+pub fn apply_rescan_result(
+    db: &mut Database,
+    library_id: &str,
+    outcome: Result<ScanOutcome>,
+    root: &Path,
+) -> Result<RescanSummary> {
+    match outcome {
+        // The host key mode must match the one used during directory scanning.
         Ok(outcome) => apply_incremental_scan(db, library_id, &outcome, KeyMode::for_host(), root),
         Err(scan_error) => Err(record_failed_scan(db, library_id, scan_error)),
     }

@@ -139,6 +139,8 @@ fn is_ignored_seed_dir(path: &Path) -> bool {
 /// própria raiz é semeada como antes, preservando layouts que guardam as mídias
 /// diretamente nela e a identidade histórica `library-1`.
 pub(crate) fn seeded_courses(root: &Path) -> Vec<RegisteredCourse> {
+    const MAX_AUTO_NESTED: usize = 100;
+
     let Ok(entries) = fs::read_dir(root) else {
         return legacy_seed(root).into_iter().collect();
     };
@@ -152,23 +154,46 @@ pub(crate) fn seeded_courses(root: &Path) -> Vec<RegisteredCourse> {
     folders.sort();
     let mut courses: Vec<RegisteredCourse> = Vec::new();
     for folder in folders {
-        let Ok(course_root) = CourseRoot::resolve(&folder) else {
+        let Ok(folder_root) = CourseRoot::resolve(&folder) else {
             continue;
         };
-        let course = RegisteredCourse {
-            id: course_id_from_path(course_root.as_path()),
-            title: course_title(course_root.as_path()),
-            root: course_root,
-        };
-        if courses.iter().any(|registered| registered.id == course.id) {
-            continue;
+        let nested = learnvault_core::scan(folder_root.as_path())
+            .map(|outcome| learnvault_core::detect_course_folders(&outcome.files))
+            .unwrap_or_default();
+        // Only split a top-level folder when it contains multiple nested courses; a single
+        // nested subfolder keeps the top-level directory as the course root.
+        if nested.len() > 1 && nested.len() <= MAX_AUTO_NESTED {
+            let before = courses.len();
+            for rel in nested {
+                push_seeded_course(&mut courses, &folder_root.as_path().join(rel));
+            }
+            if courses.len() > before {
+                continue;
+            }
         }
-        courses.push(course);
+        push_seeded_course_root(&mut courses, folder_root);
     }
     if courses.is_empty() {
         return legacy_seed(root).into_iter().collect();
     }
     courses
+}
+
+fn push_seeded_course(courses: &mut Vec<RegisteredCourse>, candidate: &Path) {
+    if let Ok(course_root) = CourseRoot::resolve(candidate) {
+        push_seeded_course_root(courses, course_root);
+    }
+}
+
+fn push_seeded_course_root(courses: &mut Vec<RegisteredCourse>, root: CourseRoot) {
+    let course = RegisteredCourse {
+        id: course_id_from_path(root.as_path()),
+        title: course_title(root.as_path()),
+        root,
+    };
+    if !courses.iter().any(|registered| registered.id == course.id) {
+        courses.push(course);
+    }
 }
 
 /// Grava o registro de forma serializada e atômica.
@@ -503,6 +528,50 @@ mod tests {
         let seeded = seeded_courses(&library);
         let titles: Vec<&str> = seeded.iter().map(|course| course.title.as_str()).collect();
         assert_eq!(titles, ["Valid Course"]);
+    }
+
+    #[test]
+    fn seeding_detects_nested_courses_under_category_folders() {
+        let temp = tempdir().unwrap();
+        let library = temp.path().join("library");
+
+        // Category folder with two nested courses under a subcategory
+        for rel in [
+            "01 - Tech/Security/Course Alpha/01 Intro/01.mp4",
+            "01 - Tech/Security/Course Alpha/02 Next/02.mp4",
+            "01 - Tech/Security/Course Beta/01 Start/01.mp4",
+            "01 - Tech/Security/Course Beta/02 End/02.mp4",
+            // Direct course folder under root
+            "02 - Math/01 Algebra/01.mp4",
+            "02 - Math/02 Calculus/02.mp4",
+        ] {
+            let p = library.join(rel);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, b"video").unwrap();
+        }
+
+        let seeded = seeded_courses(&library);
+        let titles: Vec<&str> = seeded.iter().map(|course| course.title.as_str()).collect();
+        assert_eq!(titles, ["Course Alpha", "Course Beta", "Math"]);
+    }
+
+    #[test]
+    fn seeding_preserves_top_level_course_with_single_nested_folder() {
+        let temp = tempdir().unwrap();
+        let library = temp.path().join("library");
+
+        for rel in [
+            "Course/Rust from zero/01 Ownership/Lesson.mp4",
+            "Course/Rust from zero/02 Borrowing/Lesson.mp4",
+        ] {
+            let p = library.join(rel);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, b"video").unwrap();
+        }
+
+        let seeded = seeded_courses(&library);
+        let titles: Vec<&str> = seeded.iter().map(|course| course.title.as_str()).collect();
+        assert_eq!(titles, ["Course"]);
     }
 
     #[test]
