@@ -24,6 +24,7 @@ use std::{
     fs::{self, Metadata, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
+    process::{Command, Stdio},
     time::UNIX_EPOCH,
 };
 
@@ -312,7 +313,96 @@ pub(crate) fn auto_detect_course_cover(
         }
     }
 
+    if let Some(bytes) = extract_fallback_video_cover(course_root) {
+        store_cover(covers_dir, course_id, &bytes)?;
+        return Ok(true);
+    }
+
     Ok(false)
+}
+
+/// Finds the first regular video file within a bounded depth under `course_root`,
+/// skipping hidden folders and symlinks so the read-only course boundary is preserved.
+fn find_first_video_file(course_root: &Path) -> Option<PathBuf> {
+    const MAX_DEPTH: usize = 4;
+    const VIDEO_EXTS: &[&str] = &["mp4", "mkv", "webm", "mov", "avi", "m4v", "ts"];
+
+    let mut stack = vec![(course_root.to_path_buf(), 0usize)];
+    while let Some((dir, depth)) = stack.pop() {
+        let Ok(entries) = fs::read_dir(&dir) else {
+            continue;
+        };
+        let mut children: Vec<PathBuf> = entries.flatten().map(|e| e.path()).collect();
+        children.sort();
+
+        let mut subdirs = Vec::new();
+        for path in children {
+            let Some(name) = path.file_name().and_then(|s| s.to_str()) else {
+                continue;
+            };
+            if name.starts_with('.') {
+                continue;
+            }
+            let Ok(meta) = fs::symlink_metadata(&path) else {
+                continue;
+            };
+            if meta.file_type().is_symlink() {
+                continue;
+            }
+            if meta.is_file() {
+                let is_video = path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .is_some_and(|ext| VIDEO_EXTS.contains(&ext.to_ascii_lowercase().as_str()));
+                if is_video {
+                    return Some(path);
+                }
+            } else if meta.is_dir() && depth < MAX_DEPTH {
+                subdirs.push(path);
+            }
+        }
+        // Push in reverse so the lexicographically first directory is popped first.
+        for subdir in subdirs.into_iter().rev() {
+            stack.push((subdir, depth + 1));
+        }
+    }
+    None
+}
+
+/// Extracts a single JPEG frame from the course's first video via `ffmpeg`, returning `None`
+/// when no video exists or `ffmpeg` cannot decode a frame (e.g., unavailable or dummy file).
+fn extract_fallback_video_cover(course_root: &Path) -> Option<Vec<u8>> {
+    let video_path = find_first_video_file(course_root)?;
+    for seek in ["00:00:05", "00:00:00"] {
+        let output = Command::new("ffmpeg")
+            .args(["-nostdin", "-loglevel", "error", "-ss", seek, "-i"])
+            .arg(&video_path)
+            .args([
+                "-frames:v",
+                "1",
+                "-vf",
+                "scale=640:-2:force_original_aspect_ratio=decrease",
+                "-f",
+                "image2pipe",
+                "-vcodec",
+                "mjpeg",
+                "pipe:1",
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .output()
+            .ok()?;
+
+        if output.status.success()
+            && !output.stdout.is_empty()
+            && output.stdout.len() <= MAX_COVER_BYTES
+            && detect_image_type(&output.stdout).is_some()
+        {
+            return Some(output.stdout);
+        }
+    }
+    None
 }
 
 /// Verdadeiro quando a identidade é segura e corresponde a um curso registrado.
@@ -782,5 +872,22 @@ mod tests {
         assert!(!auto_detect_course_cover(&covers, "course-web", &course_dir).unwrap());
         let (stored_bytes_after, _) = read_cover(&covers, "course-web").unwrap().unwrap();
         assert_eq!(stored_bytes_after, png_bytes);
+    }
+
+    #[test]
+    fn find_first_video_file_walks_in_order_and_skips_hidden_dirs() {
+        use super::{auto_detect_course_cover, find_first_video_file};
+        let temp = tempdir().unwrap();
+        let covers = covers_dir(&temp.path().join("learnvault.sqlite"));
+        let course_dir = temp.path().join("curso_video");
+        fs::create_dir_all(course_dir.join(".hidden")).unwrap();
+        fs::write(course_dir.join(".hidden/secret.mp4"), b"dummy").unwrap();
+        fs::create_dir_all(course_dir.join("01 Intro")).unwrap();
+        let expected = course_dir.join("01 Intro/01.mp4");
+        fs::write(&expected, b"not-a-real-mp4").unwrap();
+
+        assert_eq!(find_first_video_file(&course_dir), Some(expected));
+        // Dummy non-video bytes must gracefully return Ok(false) without failing scans.
+        assert!(!auto_detect_course_cover(&covers, "course-video", &course_dir).unwrap());
     }
 }
