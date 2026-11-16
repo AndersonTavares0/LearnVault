@@ -20,23 +20,41 @@ export const ACCENT_PRESETS = [
 ] as const;
 
 export const THEMES = ['light', 'dark', 'system'] as const;
+export const SURFACES = ['warm', 'stone', 'crisp', 'sepia', 'sage', 'nord', 'rose', 'solarized'] as const;
+
+export const SURFACE_SWATCHES: Record<(typeof SURFACES)[number], { light: string; dark: string; edgeLight: string; edgeDark: string }> = {
+	warm: { light: '#FBF7F1', dark: '#0B0A09', edgeLight: '#E7D8C6', edgeDark: '#38322B' },
+	stone: { light: '#F4F5F7', dark: '#0E1014', edgeLight: '#DCE0E8', edgeDark: '#2B313E' },
+	crisp: { light: '#FFFFFF', dark: '#060607', edgeLight: '#E5E7EB', edgeDark: '#27272A' },
+	sepia: { light: '#F4ECD8', dark: '#18130D', edgeLight: '#DFD1B4', edgeDark: '#3B2F22' },
+	sage: { light: '#F2F6F0', dark: '#181F1A', edgeLight: '#D5E0D3', edgeDark: '#2F3D33' },
+	nord: { light: '#ECEFF4', dark: '#2E3440', edgeLight: '#D0D8E4', edgeDark: '#434C5E' },
+	rose: { light: '#FAF4ED', dark: '#191724', edgeLight: '#E8DCE0', edgeDark: '#393552' },
+	solarized: { light: '#FDF6E3', dark: '#002B36', edgeLight: '#E6DEC4', edgeDark: '#0C4654' }
+};
 
 export const REWARD_COLORS = ['amber', 'accent'] as const;
 export const RADII = ['square', 'soft', 'round'] as const;
+export const CARD_STYLES = ['bordered', 'elevated', 'soft'] as const;
 export const DENSITIES = ['comfortable', 'compact'] as const;
 export const TEXT_SIZES = ['small', 'medium', 'large'] as const;
-export const FONTS = ['sans', 'system', 'serif'] as const;
+export const FONTS = ['sans', 'modern', 'system', 'serif'] as const;
+export const PAGE_WIDTHS = ['focused', 'standard', 'wide'] as const;
 export const SIDEBARS = ['right', 'left'] as const;
 export const HOME_LAYOUTS = ['grid', 'list'] as const;
 
 export type Appearance = {
 	theme: (typeof THEMES)[number];
+	surface: (typeof SURFACES)[number];
 	accent: string;
 	reward: (typeof REWARD_COLORS)[number];
 	radius: (typeof RADII)[number];
+	cardStyle: (typeof CARD_STYLES)[number];
 	density: (typeof DENSITIES)[number];
 	textSize: (typeof TEXT_SIZES)[number];
 	font: (typeof FONTS)[number];
+	pageWidth: (typeof PAGE_WIDTHS)[number];
+	reduceMotion: boolean;
 	sidebar: (typeof SIDEBARS)[number];
 	homeLayout: (typeof HOME_LAYOUTS)[number];
 	showContinue: boolean;
@@ -44,23 +62,33 @@ export type Appearance = {
 	showStreak: boolean;
 	showXp: boolean;
 	showBadges: boolean;
+	showBookmarks: boolean;
+	showProgress: boolean;
+	showCategories: boolean;
 };
 
 export const DEFAULT_APPEARANCE: Appearance = {
 	theme: 'light',
+	surface: 'warm',
 	accent: ACCENT_PRESETS[0].hex,
 	reward: 'amber',
 	radius: 'soft',
+	cardStyle: 'bordered',
 	density: 'comfortable',
 	textSize: 'medium',
 	font: 'sans',
+	pageWidth: 'standard',
+	reduceMotion: false,
 	sidebar: 'right',
 	homeLayout: 'grid',
 	showContinue: true,
 	showGoal: true,
 	showStreak: true,
 	showXp: true,
-	showBadges: true
+	showBadges: true,
+	showBookmarks: true,
+	showProgress: true,
+	showCategories: true
 };
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
@@ -74,19 +102,26 @@ export function parseAppearance(value: unknown): Appearance {
 	const d = DEFAULT_APPEARANCE;
 	return {
 		theme: pick(raw.theme, THEMES, d.theme),
+		surface: pick(raw.surface, SURFACES, d.surface),
 		accent: typeof raw.accent === 'string' && HEX.test(raw.accent) ? raw.accent.toUpperCase() : d.accent,
 		reward: pick(raw.reward, REWARD_COLORS, d.reward),
 		radius: pick(raw.radius, RADII, d.radius),
+		cardStyle: pick(raw.cardStyle, CARD_STYLES, d.cardStyle),
 		density: pick(raw.density, DENSITIES, d.density),
 		textSize: pick(raw.textSize, TEXT_SIZES, d.textSize),
 		font: pick(raw.font, FONTS, d.font),
+		pageWidth: pick(raw.pageWidth, PAGE_WIDTHS, d.pageWidth),
+		reduceMotion: flag(raw.reduceMotion, d.reduceMotion),
 		sidebar: pick(raw.sidebar, SIDEBARS, d.sidebar),
 		homeLayout: pick(raw.homeLayout, HOME_LAYOUTS, d.homeLayout),
 		showContinue: flag(raw.showContinue, d.showContinue),
 		showGoal: flag(raw.showGoal, d.showGoal),
 		showStreak: flag(raw.showStreak, d.showStreak),
 		showXp: flag(raw.showXp, d.showXp),
-		showBadges: flag(raw.showBadges, d.showBadges)
+		showBadges: flag(raw.showBadges, d.showBadges),
+		showBookmarks: flag(raw.showBookmarks, d.showBookmarks),
+		showProgress: flag(raw.showProgress, d.showProgress),
+		showCategories: flag(raw.showCategories, d.showCategories)
 	};
 }
 
@@ -127,7 +162,6 @@ export const appearanceStore = {
 };
 
 const DARK_PANEL = '#1C1510';
-const DARK_PAGE = '#0B0A09';
 
 /** "Follow the system" resolves to what the browser says right now. */
 export function resolveTheme(theme: Appearance['theme']): 'light' | 'dark' {
@@ -153,7 +187,10 @@ export function applyAppearance(appearance: Appearance, root: HTMLElement = docu
 	const dark = resolveTheme(appearance.theme) === 'dark';
 	root.dataset.theme = dark ? 'dark' : 'light';
 	root.style.colorScheme = dark ? 'dark' : 'light';
-	if (root === document.documentElement) document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? DARK_PAGE : '#FBF7F1');
+	if (root === document.documentElement) {
+		const metaColor = dark ? SURFACE_SWATCHES[appearance.surface].dark : SURFACE_SWATCHES[appearance.surface].light;
+		document.querySelector('meta[name="theme-color"]')?.setAttribute('content', metaColor);
+	}
 	const accent = dark ? darkAccent(appearance.accent) : readableAccent(appearance.accent);
 	root.style.setProperty('--brand', accent);
 	root.style.setProperty('--brand-fg', dark ? '#1C1209' : '#FFFFFF');
@@ -162,7 +199,8 @@ export function applyAppearance(appearance: Appearance, root: HTMLElement = docu
 	root.style.setProperty('--reward-fill', own ? 'var(--brand)' : dark ? '#C08A4E' : '#A96F2E');
 	root.style.setProperty('--reward-fill-fg', own ? 'var(--brand-fg)' : dark ? '#201C18' : '#FFFFFF');
 	root.style.setProperty('--reward-tint', own ? 'var(--brand-tint)' : dark ? '#3A2A18' : '#F3E3CB');
-	for (const key of ['radius', 'density', 'textSize', 'font', 'sidebar', 'homeLayout'] as const) root.dataset[key] = appearance[key];
+	for (const key of ['surface', 'radius', 'cardStyle', 'density', 'textSize', 'font', 'pageWidth', 'sidebar', 'homeLayout'] as const) root.dataset[key] = appearance[key];
+	root.dataset.motion = appearance.reduceMotion ? 'reduced' : 'normal';
 }
 
 export function readAppearance(storage: Pick<Storage, 'getItem'> | null | undefined): Appearance {

@@ -16,31 +16,31 @@ export const Eyebrow = ({ children, className }: { children: ReactNode; classNam
 );
 
 /** A small tinted number card: the label, the value, and optional extra context. */
-export function Stat({ label, value, unit, note, icon, tone, bar, progress, children, className }: { label: string; value: ReactNode; unit?: string; note?: string; icon?: ReactNode; tone?: 'amber' | 'violet' | 'green'; bar?: { value: number; max: number }; progress?: number; children?: ReactNode; className?: string }) {
+export function Stat({ label, value, unit, note, icon, tone, bar, progress, compact = false, children, className }: { label: string; value: ReactNode; unit?: string; note?: string; icon?: ReactNode; tone?: 'amber' | 'violet' | 'green'; bar?: { value: number; max: number }; progress?: number; compact?: boolean; children?: ReactNode; className?: string }) {
 	const percent = Math.round(Math.min(1, Math.max(0, progress ?? 0)) * 100);
 	return (
-		<div data-panel className={cn('rounded-2xl border border-border bg-card p-4', tone && `stat-${tone}`, className)}>
+		<div data-panel className={cn('rounded-2xl border border-border bg-card', compact ? 'p-3.5' : 'p-4', tone && `stat-${tone}`, className)}>
 			<div className="flex items-center justify-between gap-2">
-				<p className="min-w-0 text-[0.875rem] font-semibold text-foreground/85">{label}</p>
+				<p className={cn('min-w-0 truncate font-semibold text-foreground/85', compact ? 'text-xs' : 'text-[0.875rem]')}>{label}</p>
 				{icon && (
-					<span data-stat-icon aria-hidden="true" className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg border border-border/80 bg-panel/70 text-muted-foreground [&>svg]:size-3.5">
+					<span data-stat-icon aria-hidden="true" className={cn('inline-flex shrink-0 items-center justify-center rounded-lg border border-border/80 bg-panel/70 text-muted-foreground', compact ? 'size-6 [&>svg]:size-3' : 'size-7 [&>svg]:size-3.5')}>
 						{icon}
 					</span>
 				)}
 			</div>
-			<p data-stat-value className="mt-2 font-heading text-3xl leading-none font-bold tabular-nums">{value}{unit && <span className="ml-1.5 font-sans text-base font-medium text-muted-foreground">{unit}</span>}</p>
+			<p data-stat-value className={cn('font-heading leading-none font-bold tabular-nums', compact ? 'mt-1.5 text-2xl' : 'mt-2 text-3xl')}>{value}{unit && <span className={cn('ml-1 font-sans font-medium text-muted-foreground', compact ? 'text-xs' : 'text-base')}>{unit}</span>}</p>
 			{bar && (
-				<div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={bar.max} aria-valuenow={bar.value} className="mt-3 flex gap-1">
+				<div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={bar.max} aria-valuenow={bar.value} className={cn('flex gap-1', compact ? 'mt-2' : 'mt-3')}>
 					{Array.from({ length: bar.max }, (_, index) => <span key={index} className={cn('h-1.5 flex-1 rounded-full', index < bar.value ? 'bg-primary' : 'bg-border')} />)}
 				</div>
 			)}
 			{progress !== undefined && (
-				<div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} className="mt-3 h-1.5 overflow-hidden rounded-full bg-border">
+				<div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} className={cn('h-1.5 overflow-hidden rounded-full bg-border', compact ? 'mt-2' : 'mt-3')}>
 					<div className="h-full rounded-full bg-primary" style={{ width: `${percent}%` }} />
 				</div>
 			)}
-			{note && <p className="mt-1.5 text-xs text-muted-foreground">{note}</p>}
-			{children && <div className="mt-2.5">{children}</div>}
+			{note && <p className="mt-1.5 truncate text-xs text-muted-foreground">{note}</p>}
+			{children && <div className={compact ? 'mt-2' : 'mt-2.5'}>{children}</div>}
 		</div>
 	);
 }

@@ -38,13 +38,17 @@ describe('settings', () => {
 		expect(document.documentElement.dataset.radius).toBe('soft');
 	});
 
-	it('changes the weekly goal', async () => {
-		const goal = vi.spyOn(transport, 'setWeeklyGoal').mockResolvedValue(5);
+	it('changes the weekly goal and surfaces save or failure feedback', async () => {
+		const goal = vi.spyOn(transport, 'setWeeklyGoal').mockResolvedValueOnce(5).mockRejectedValueOnce(new Error('Could not save weekly goal.'));
 		renderApp('/settings#study', { catalog, rewards: { xp: 0, completedLessons: 0, weeklyGoal: 3, missions: [], study: { currentStreak: 0, longestStreak: 0, today: '2026-11-09', todayActive: false, atRisk: false, weekActiveDays: 0, completedLessons: 0, activeDaysYear: [], days: [] } } });
 		const group = await screen.findByRole('group', { name: 'Weekly goal, in study days' });
 		expect(within(group).getByRole('button', { name: '3' }).getAttribute('aria-pressed')).toBe('true');
 		fireEvent.click(within(group).getByRole('button', { name: '5' }));
 		await waitFor(() => expect(goal).toHaveBeenCalledWith(5));
+		expect(await screen.findByText('Weekly goal set to 5 study days.')).toBeTruthy();
+
+		fireEvent.click(within(group).getByRole('button', { name: '6' }));
+		expect((await screen.findByRole('alert')).textContent).toContain('Could not save weekly goal.');
 	});
 
 

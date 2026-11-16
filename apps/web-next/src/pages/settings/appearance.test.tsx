@@ -15,13 +15,25 @@ const press = (name: string, option: string) => fireEvent.click(group(name).getB
 
 describe('AppearanceSettings', () => {
 	it.each([
+		['Surface palette', 'Cool stone', 'surface', 'stone'],
+		['Surface palette', 'Crisp contrast', 'surface', 'crisp'],
+		['Surface palette', 'Kindle sepia', 'surface', 'sepia'],
+		['Surface palette', 'Forest mist', 'surface', 'sage'],
+		['Surface palette', 'Nord frost', 'surface', 'nord'],
+		['Surface palette', 'Rosé pine', 'surface', 'rose'],
+		['Surface palette', 'Solarized', 'surface', 'solarized'],
 		['Corners', 'Square', 'radius', 'square'],
 		['Corners', 'Round', 'radius', 'round'],
+		['Card style', 'Elevated', 'cardStyle', 'elevated'],
+		['Card style', 'Soft fill', 'cardStyle', 'soft'],
 		['Density', 'Compact', 'density', 'compact'],
+		['Page width', 'Wide', 'pageWidth', 'wide'],
 		['Text size', 'Large', 'textSize', 'large'],
 		['Text size', 'Small', 'textSize', 'small'],
+		['Font', 'Clean sans-serif', 'font', 'modern'],
 		['Font', 'System font', 'font', 'system'],
 		['Font', 'Reading serif', 'font', 'serif'],
+		['Default My learning view', 'List', 'homeLayout', 'list'],
 		['Course content in a lesson', 'On the left', 'sidebar', 'left']
 	] as const)('%s → %s applies and saves %s=%s', (legend, option, key, expected) => {
 		render(<AppearanceSettings />);
@@ -60,7 +72,10 @@ describe('AppearanceSettings', () => {
 		['Weekly goal', 'showGoal'],
 		['Streak', 'showStreak'],
 		['Level and XP', 'showXp'],
-		['Badges', 'showBadges']
+		['Badges', 'showBadges'],
+		['Bookmarks', 'showBookmarks'],
+		['Course progress bars', 'showProgress'],
+		['Course categories', 'showCategories']
 	] as const)('the %s toggle saves %s', (label, key) => {
 		render(<AppearanceSettings />);
 		const box = screen.getByRole('checkbox', { name: label }) as HTMLInputElement;
@@ -88,6 +103,15 @@ describe('AppearanceSettings', () => {
 		render(<AppearanceSettings />);
 		fireEvent.change(screen.getByLabelText('Your own color'), { target: { value: '#FFEE00' } });
 		expect(screen.getByText(/too light for white text/)).toBeTruthy();
+	});
+
+	it('toggles reduced motion cleanly on the root element', () => {
+		render(<AppearanceSettings />);
+		const toggle = screen.getByRole('checkbox', { name: 'Reduce motion & animations' }) as HTMLInputElement;
+		expect(toggle.checked).toBe(false);
+		fireEvent.click(toggle);
+		expect(root.dataset.motion).toBe('reduced');
+		expect(saved().reduceMotion).toBe(true);
 	});
 
 	it('resets every choice, the custom field and the saved value', () => {

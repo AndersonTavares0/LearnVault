@@ -1,17 +1,30 @@
 import { Check } from 'lucide-react';
-import { useId, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import { SwitchCard } from './switch-card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useLocale } from '@/hooks/use-locale';
 import { useStore } from '@/hooks/use-store';
 import { Panel } from '@/components/panel';
-import { ACCENT_PRESETS, appearanceStore, darkAccent, DENSITIES, FONTS, RADII, readableAccent, resetAppearance, resolveTheme, REWARD_COLORS, SIDEBARS, TEXT_SIZES, THEMES, updateAppearance, type Appearance } from '@/lib/appearance';
+import { ACCENT_PRESETS, appearanceStore, CARD_STYLES, darkAccent, DENSITIES, FONTS, HOME_LAYOUTS, PAGE_WIDTHS, RADII, readableAccent, resetAppearance, resolveTheme, REWARD_COLORS, SIDEBARS, SURFACE_SWATCHES, SURFACES, TEXT_SIZES, THEMES, updateAppearance, type Appearance } from '@/lib/appearance';
 import { tr } from '@/lib/i18n';
+import { persistLibraryView } from '@/lib/library-view';
 import { cn } from '@/lib/utils';
 import { safeStorage } from '@/app/preferences';
 
 const accentNames = (): Record<(typeof ACCENT_PRESETS)[number]['id'], string> => ({ brown: tr('Brown', 'Marrom'), amber: tr('Amber', 'Âmbar'), forest: tr('Forest', 'Floresta'), terracotta: tr('Terracotta', 'Terracota'), navy: tr('Navy', 'Azul-marinho'), plum: tr('Plum', 'Ameixa'), teal: tr('Teal', 'Verde-azulado'), slate: tr('Slate', 'Ardósia') });
+
+const surfaceNames = (): Record<(typeof SURFACES)[number], string> => ({
+	warm: tr('Warm paper', 'Papel quente'),
+	stone: tr('Cool stone', 'Pedra neutra'),
+	crisp: tr('Crisp contrast', 'Alto contraste'),
+	sepia: tr('Kindle sepia', 'Sépia Kindle'),
+	sage: tr('Forest mist', 'Névoa verde'),
+	nord: tr('Nord frost', 'Nord ártico'),
+	rose: tr('Rosé pine', 'Rosé pine'),
+	solarized: tr('Solarized', 'Solarized')
+});
 
 /**
  * Customize: the colour, shape, size and layout of the app, and which parts of the habit tools show.
@@ -31,6 +44,38 @@ export function AppearanceSettings() {
 			<Panel className="space-y-6 p-5 sm:p-6">
 				<h2 className="text-lg font-bold">{tr('Colour', 'Cor')}</h2>
 			<Choice legend={tr('Theme', 'Tema')} options={THEMES} value={value.theme} label={(option) => ({ light: tr('Light', 'Claro'), dark: tr('Dark', 'Escuro'), system: tr('Follow the system', 'Seguir o sistema') })[option]} onChange={(theme) => change({ theme })} />
+			<fieldset className="space-y-2.5">
+				<legend className="text-sm font-semibold">{tr('Surface palette', 'Paleta de fundo')}</legend>
+				<div className="flex flex-wrap gap-2">
+					{SURFACES.map((surface) => {
+						const selected = value.surface === surface;
+						const swatch = SURFACE_SWATCHES[surface];
+						return (
+							<button
+								key={surface}
+								type="button"
+								aria-pressed={selected}
+								onClick={() => change({ surface })}
+								className={cn(
+									'flex min-h-11 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring focus-visible:outline-none',
+									selected && 'border-primary bg-brand-soft font-semibold text-primary'
+								)}
+							>
+								<span
+									aria-hidden="true"
+									className="size-5 rounded-md border"
+									style={{
+										backgroundColor: dark ? swatch.dark : swatch.light,
+										borderColor: dark ? swatch.edgeDark : swatch.edgeLight
+									}}
+								/>
+								<span>{surfaceNames()[surface]}</span>
+								{selected && <Check className="size-3.5 text-primary" aria-hidden="true" />}
+							</button>
+						);
+					})}
+				</div>
+			</fieldset>
 			<fieldset className="space-y-3">
 				<legend className="text-sm font-semibold">{tr('Accent color', 'Cor de destaque')}</legend>
 				<div className="flex flex-wrap gap-2">
@@ -48,7 +93,7 @@ export function AppearanceSettings() {
 					<div className="space-y-1.5">
 						<Label htmlFor="accent-custom" className="text-sm">{tr('Your own color', 'Sua própria cor')}</Label>
 						<div className="flex items-center gap-2">
-							<input aria-label={tr('Pick a color', 'Escolher uma cor')} type="color" value={custom} onChange={(event) => setCustom(event.target.value.toUpperCase())} className="size-11 cursor-pointer rounded-lg border border-input bg-background p-1" />
+							<input aria-label={tr('Pick a color', 'Escolher uma cor')} type="color" value={custom} onChange={(event) => { const hex = event.target.value.toUpperCase(); setCustom(hex); change({ accent: hex }); }} className="size-11 cursor-pointer rounded-lg border border-input bg-background p-1" />
 							<Input id="accent-custom" value={custom} onChange={(event) => setCustom(event.target.value.toUpperCase())} spellCheck={false} maxLength={7} className="w-32 font-mono" />
 							<Button variant="outline" disabled={!/^#[0-9A-F]{6}$/.test(custom)} onClick={() => change({ accent: custom })}>{tr('Use this color', 'Usar esta cor')}</Button>
 						</div>
@@ -62,24 +107,46 @@ export function AppearanceSettings() {
 			<Panel className="space-y-6 p-5 sm:p-6">
 				<h2 className="text-lg font-bold">{tr('Shape and text', 'Forma e texto')}</h2>
 			<Choice legend={tr('Corners', 'Cantos')} options={RADII} value={value.radius} label={(option) => ({ square: tr('Square', 'Retos'), soft: tr('Soft', 'Suaves'), round: tr('Round', 'Arredondados') })[option]} onChange={(radius) => change({ radius })} />
-			<Choice legend={tr('Density', 'Densidade')} options={DENSITIES} value={value.density} label={(option) => (option === 'comfortable' ? tr('Comfortable', 'Confortável') : tr('Compact', 'Compacta'))} onChange={(density) => change({ density })} />
-			<Choice legend={tr('Text size', 'Tamanho do texto')} options={TEXT_SIZES} value={value.textSize} label={(option) => ({ small: tr('Small', 'Pequeno'), medium: tr('Medium', 'Médio'), large: tr('Large', 'Grande') })[option]} onChange={(textSize) => change({ textSize })} />
-			<Choice legend={tr('Font', 'Fonte')} options={FONTS} value={value.font} label={(option) => ({ sans: tr('DM Sans with serif titles', 'DM Sans com títulos serifados'), system: tr('System font', 'Fonte do sistema'), serif: tr('Reading serif', 'Serifada de leitura') })[option]} onChange={(font) => change({ font })} />
+			<Choice legend={tr('Card style', 'Estilo dos cartões')} options={CARD_STYLES} value={value.cardStyle} label={(option) => ({ bordered: tr('Bordered', 'Com borda'), elevated: tr('Elevated', 'Elevado'), soft: tr('Soft fill', 'Fundo suave') })[option]} onChange={(cardStyle) => change({ cardStyle })} />
+			<div className="grid gap-5 sm:grid-cols-2">
+				<Choice legend={tr('Density', 'Densidade')} options={DENSITIES} value={value.density} label={(option) => (option === 'comfortable' ? tr('Comfortable', 'Confortável') : tr('Compact', 'Compacta'))} onChange={(density) => change({ density })} />
+				<Choice legend={tr('Text size', 'Tamanho do texto')} options={TEXT_SIZES} value={value.textSize} label={(option) => ({ small: tr('Small', 'Pequeno'), medium: tr('Medium', 'Médio'), large: tr('Large', 'Grande') })[option]} onChange={(textSize) => change({ textSize })} />
+			</div>
+			<Choice legend={tr('Page width', 'Largura da página')} options={PAGE_WIDTHS} value={value.pageWidth} label={(option) => ({ focused: tr('Focused', 'Focada'), standard: tr('Standard', 'Padrão'), wide: tr('Wide', 'Ampla') })[option]} onChange={(pageWidth) => change({ pageWidth })} />
+			<Choice legend={tr('Font', 'Fonte')} options={FONTS} value={value.font} label={(option) => ({ sans: tr('DM Sans with serif titles', 'DM Sans com títulos serifados'), modern: tr('Clean sans-serif', 'Sans-serif limpa'), system: tr('System font', 'Fonte do sistema'), serif: tr('Reading serif', 'Serifada de leitura') })[option]} onChange={(font) => change({ font })} />
+						<SwitchCard label={tr('Reduce motion & animations', 'Reduzir animações e movimento')} checked={value.reduceMotion} onChange={(reduceMotion) => change({ reduceMotion })} />
 			</Panel>
 			<Panel className="space-y-6 p-5 sm:p-6 xl:col-span-2">
 				<h2 className="text-lg font-bold">{tr('My learning layout', 'Layout do Meu aprendizado')}</h2>
-			<Choice legend={tr('Course content in a lesson', 'Conteúdo do curso na aula')} options={SIDEBARS} value={value.sidebar} label={(option) => (option === 'right' ? tr('On the right', 'À direita') : tr('On the left', 'À esquerda'))} onChange={(sidebar) => change({ sidebar })} />
-			<fieldset className="space-y-2">
-				<legend className="text-sm font-semibold">{tr('What My learning shows', 'O que Meu aprendizado mostra')}</legend>
-				<Toggle label={tr('Continue learning row', 'Linha “Continuar estudando”')} checked={value.showContinue} onChange={(showContinue) => change({ showContinue })} />
-				<Toggle label={tr('Weekly goal', 'Meta semanal')} checked={value.showGoal} onChange={(showGoal) => change({ showGoal })} />
-				<Toggle label={tr('Streak', 'Sequência')} checked={value.showStreak} onChange={(showStreak) => change({ showStreak })} />
-				<Toggle label={tr('Level and XP', 'Nível e XP')} checked={value.showXp} onChange={(showXp) => change({ showXp })} />
-				<Toggle label={tr('Badges', 'Emblemas')} checked={value.showBadges} onChange={(showBadges) => change({ showBadges })} />
-			</fieldset>
+				<div className="grid gap-6 sm:grid-cols-2">
+					<Choice
+						legend={tr('Default My learning view', 'Visualização padrão de Meu aprendizado')}
+						options={HOME_LAYOUTS}
+						value={value.homeLayout}
+						label={(option) => (option === 'grid' ? tr('Grid', 'Grade') : tr('List', 'Lista'))}
+						onChange={(homeLayout) => {
+							change({ homeLayout });
+							persistLibraryView(safeStorage(), homeLayout === 'list' ? 'list' : 'covers');
+						}}
+					/>
+					<Choice legend={tr('Course content in a lesson', 'Conteúdo do curso na aula')} options={SIDEBARS} value={value.sidebar} label={(option) => (option === 'right' ? tr('On the right', 'À direita') : tr('On the left', 'À esquerda'))} onChange={(sidebar) => change({ sidebar })} />
+				</div>
+				<fieldset className="space-y-3">
+					<legend className="text-sm font-semibold">{tr('What My learning shows', 'O que Meu aprendizado mostra')}</legend>
+					<div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+						<SwitchCard label={tr('Continue learning row', 'Linha “Continuar estudando”')} checked={value.showContinue} onChange={(showContinue) => change({ showContinue })} />
+						<SwitchCard label={tr('Weekly goal', 'Meta semanal')} checked={value.showGoal} onChange={(showGoal) => change({ showGoal })} />
+						<SwitchCard label={tr('Streak', 'Sequência')} checked={value.showStreak} onChange={(showStreak) => change({ showStreak })} />
+						<SwitchCard label={tr('Level and XP', 'Nível e XP')} checked={value.showXp} onChange={(showXp) => change({ showXp })} />
+						<SwitchCard label={tr('Badges', 'Emblemas')} checked={value.showBadges} onChange={(showBadges) => change({ showBadges })} />
+						<SwitchCard label={tr('Bookmarks', 'Favoritos')} checked={value.showBookmarks} onChange={(showBookmarks) => change({ showBookmarks })} />
+						<SwitchCard label={tr('Course progress bars', 'Barras de progresso nos cursos')} checked={value.showProgress} onChange={(showProgress) => change({ showProgress })} />
+						<SwitchCard label={tr('Course categories', 'Categorias dos cursos')} checked={value.showCategories} onChange={(showCategories) => change({ showCategories })} />
+					</div>
+				</fieldset>
 			</Panel>
 			</div>
-			<Button variant="outline" onClick={() => { const next = resetAppearance(safeStorage()); setCustom(next.accent); }}>{tr('Reset to the default look', 'Voltar ao visual padrão')}</Button>
+			<Button variant="outline" onClick={() => { const next = resetAppearance(safeStorage()); persistLibraryView(safeStorage(), 'covers'); setCustom(next.accent); }}>{tr('Reset to the default look', 'Voltar ao visual padrão')}</Button>
 		</div>
 	);
 }
@@ -97,15 +164,5 @@ function Choice<T extends string>({ legend, options, value, label, onChange }: {
 				))}
 			</div>
 		</fieldset>
-	);
-}
-
-function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
-	const id = useId();
-	return (
-		<label htmlFor={id} className="flex min-h-11 cursor-pointer items-center gap-3 text-sm">
-			<input id={id} type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="size-5 accent-[var(--brand)]" />
-			{label}
-		</label>
 	);
 }

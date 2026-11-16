@@ -3,17 +3,19 @@
  * "- " and "1. " lists. It is parsed into plain data and drawn by React (components/markdown.tsx),
  * so note text never becomes HTML.
  */
-export type Inline = { text: string; bold?: boolean; italic?: boolean; underline?: boolean };
+export type Inline = { text: string; bold?: boolean; italic?: boolean; underline?: boolean; code?: boolean };
 export type Block =
 	| { kind: 'paragraph'; lines: Inline[][] }
 	| { kind: 'heading'; level: 2 | 3; inlines: Inline[] }
 	| { kind: 'list'; ordered: boolean; items: Inline[][] };
 
+// Inline code runs first so asterisks or double underscores inside code stay literal.
 // Underline needs a boundary on both sides, so a name like __init__ or snake__case stays as typed.
-const TOKEN = /(\*\*[^*]+\*\*|(?<![\p{L}\p{N}_])__[^_]+__(?![\p{L}\p{N}_])|\*[^*\s][^*]*\*)/gu;
+const TOKEN = /(`[^`\n]+`|\*\*[^*]+\*\*|(?<![\p{L}\p{N}_])__[^_]+__(?![\p{L}\p{N}_])|\*[^*\s][^*]*\*)/gu;
 
 export function parseInline(text: string): Inline[] {
 	return text.split(TOKEN).filter(Boolean).map((part) => {
+		if (part.startsWith('`') && part.endsWith('`') && part.length > 2) return { text: part.slice(1, -1), code: true };
 		if (part.startsWith('**') && part.endsWith('**') && part.length > 4) return { text: part.slice(2, -2), bold: true };
 		if (part.startsWith('__') && part.endsWith('__') && part.length > 4) return { text: part.slice(2, -2), underline: true };
 		if (part.startsWith('*') && part.endsWith('*') && part.length > 2) return { text: part.slice(1, -1), italic: true };
@@ -41,6 +43,18 @@ export function parseMarkdown(source: string): Block[] {
 		else blocks.push({ kind: 'paragraph', lines: [parseInline(line)] });
 	}
 	return blocks.filter((block) => block.kind !== 'paragraph' || block.lines.length > 0);
+}
+
+/** Strips inline and block Markdown delimiters into a single clean text line for compact previews. */
+export function plainTextMarkdown(source: string): string {
+	return parseMarkdown(source)
+		.map((block) => {
+			if (block.kind === 'heading') return block.inlines.map((part) => part.text).join('');
+			if (block.kind === 'list') return block.items.map((item) => item.map((part) => part.text).join('')).join(' · ');
+			return block.lines.map((line) => line.map((part) => part.text).join('')).join(' ');
+		})
+		.join(' ')
+		.trim();
 }
 
 export type Format = 'bold' | 'italic' | 'underline' | 'h2' | 'h3' | 'bullets' | 'numbered';

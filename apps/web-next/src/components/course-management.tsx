@@ -2,6 +2,7 @@ import { MoreHorizontal } from 'lucide-react';
 import { useRef, useState, type ChangeEvent } from 'react';
 import { useNavigate } from 'react-router';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { CourseCategoryDialog } from '@/components/course-category-dialog';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { formatCount } from '@/lib/catalog';
@@ -30,6 +31,7 @@ export function CourseManagement({ course, courseId, lessons, compact = false, o
 	const reset = useResetCourseOrder();
 	const navigate = useNavigate();
 	const [confirming, setConfirming] = useState(false);
+	const [categorizing, setCategorizing] = useState(false);
 	const [message, setMessage] = useState('');
 	const cover = useCourseCover();
 	const fileInput = useRef<HTMLInputElement>(null);
@@ -59,6 +61,9 @@ export function CourseManagement({ course, courseId, lessons, compact = false, o
 					{compact ? <MoreHorizontal aria-hidden="true" /> : tr('Manage course', 'Gerenciar curso')}
 				</DropdownMenuTrigger>
 				<DropdownMenuContent align="end">
+					<DropdownMenuItem onClick={() => setCategorizing(true)}>
+						{tr('Set category', 'Definir categoria')}
+					</DropdownMenuItem>
 					<DropdownMenuItem disabled={reset.isPending} onClick={() => reset.mutate(courseId, {
 						onSuccess: (changed) => setMessage(changed ? tr('Lesson order restored.', 'Ordem das aulas restaurada.') : tr('Lesson order was already at its default.', 'A ordem das aulas já estava no padrão.')),
 						onError: (error) => setMessage(actionError(error, tr('Could not restore lesson order.', 'Não foi possível restaurar a ordem das aulas.')))
@@ -100,6 +105,7 @@ export function CourseManagement({ course, courseId, lessons, compact = false, o
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>
+			<CourseCategoryDialog course={course} courseId={courseId} open={categorizing} onOpenChange={setCategorizing} />
 		</>
 	);
 }
