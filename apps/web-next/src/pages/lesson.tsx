@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, CircleCheck, Circle, FileText, PenLine, Search, SquarePlus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CircleCheck, Circle, Clock, FileText, PenLine, Search, SquarePlus, type LucideIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { safeStorage } from '@/app/preferences';
@@ -21,6 +21,7 @@ import { useLocale } from '@/hooks/use-locale';
 import { useStore } from '@/hooks/use-store';
 import { courseProgress } from '@/lib/catalog';
 import { tr } from '@/lib/i18n';
+import { plainTextMarkdown } from '@/lib/markdown';
 import { lessonSequence, neighboringLessons } from '@/lib/navigation';
 import { findLessonPdf, formatFileSize } from '@/lib/pdf';
 import { findLessonText, loadText } from '@/lib/text-lesson';
@@ -328,8 +329,11 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 						{hasCards && <Button variant="outline" onClick={() => { player.current?.pause(); setTab('cards'); setCardRequest((value) => value + 1); }}><SquarePlus />{tr('Card', 'Cartão')}</Button>}
 						{hasNotes && <Button variant="outline" title={tr('Save a labelled timestamp on the timeline', 'Salvar um marcador de tempo rotulado na linha do tempo')} onClick={() => { player.current?.pause(); setTab('bookmarks'); }}>{tr(`Timestamp ${formatDuration(time)}`, `Marcador ${formatDuration(time)}`)}</Button>}
 						<div className="ml-auto flex flex-wrap items-center gap-2">
-							<label className="flex min-h-11 items-center gap-2 text-sm text-muted-foreground" title={tr('When playback ends, mark completed and advance after 5 s', 'Ao chegar ao fim, marca como concluída e avança em 5 s')}>
-								<input type="checkbox" className="size-5 accent-[var(--brand)]" checked={preferences.autoNext} onChange={(event) => savePreferences({ ...preferences, autoNext: event.target.checked })} />
+							<label className="inline-flex min-h-11 cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-card px-3 text-sm font-medium text-foreground/85 transition-colors duration-150 hover:bg-muted/60 has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring/50" title={tr('When playback ends, mark completed and advance after 5 s', 'Ao chegar ao fim, marca como concluída e avança em 5 s')}>
+								<input type="checkbox" className="peer sr-only" checked={preferences.autoNext} onChange={(event) => savePreferences({ ...preferences, autoNext: event.target.checked })} />
+								<span aria-hidden="true" className="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full bg-border-strong/45 transition-colors duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] peer-checked:bg-primary">
+									<span className={cn('size-3.5 translate-x-0.5 rounded-full bg-card shadow-xs transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)]', preferences.autoNext && 'translate-x-[1.125rem]')} />
+								</span>
 								{tr('Autoplay next', 'Reproduzir a próxima')}
 							</label>
 						</div>
@@ -384,14 +388,14 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 									<Button variant="secondary" onClick={() => player.current?.seek(resumeAt)}>{tr(`Resume from ${formatDuration(resumeAt)}`, `Retomar de ${formatDuration(resumeAt)}`)}</Button>
 								)}
 							<div className="grid gap-4 md:grid-cols-3">
-								<LessonPanel title={tr('Your notes', 'Suas notas')} empty={tr('Press N to add a note at the current time.', 'Aperte N para anotar neste momento.')}>
-									{(lessonNotes.data ?? []).slice(0, 3).map((note) => <li key={note.noteId} className="flex gap-3"><button type="button" onClick={() => player.current?.seek(note.positionSeconds)} className="font-semibold text-primary tabular-nums hover:underline">{formatDuration(note.positionSeconds)}</button><span className="min-w-0 truncate">{note.content}</span></li>)}
+								<LessonPanel icon={PenLine} count={lessonNotes.data?.length} title={tr('Your notes', 'Suas notas')} empty={tr('Press N to add a note at the current time.', 'Aperte N para anotar neste momento.')}>
+									{(lessonNotes.data ?? []).slice(0, 3).map((note) => <li key={note.noteId} className="flex items-baseline gap-2.5"><button type="button" onClick={() => player.current?.seek(note.positionSeconds)} className="shrink-0 font-semibold text-primary tabular-nums hover:underline">{formatDuration(note.positionSeconds)}</button><span className="min-w-0 truncate text-foreground/90">{plainTextMarkdown(note.content)}</span></li>)}
 								</LessonPanel>
-								<LessonPanel title={tr('Timestamps', 'Marcadores')} empty={tr('Mark a moment to come back to it.', 'Marque um momento para voltar a ele.')}>
-									{(bookmarks.data ?? []).slice(0, 4).map((bookmark) => <li key={bookmark.bookmarkId} className="flex gap-3"><button type="button" onClick={() => player.current?.seek(bookmark.positionSeconds)} className="font-semibold text-primary tabular-nums hover:underline">{formatDuration(bookmark.positionSeconds)}</button><span className="min-w-0 truncate">{bookmark.label}</span></li>)}
+								<LessonPanel icon={Clock} count={bookmarks.data?.length} title={tr('Timestamps', 'Marcadores')} empty={tr('Mark a moment to come back to it.', 'Marque um momento para voltar a ele.')}>
+									{(bookmarks.data ?? []).slice(0, 4).map((bookmark) => <li key={bookmark.bookmarkId} className="flex items-baseline gap-2.5"><button type="button" onClick={() => player.current?.seek(bookmark.positionSeconds)} className="shrink-0 font-semibold text-primary tabular-nums hover:underline">{formatDuration(bookmark.positionSeconds)}</button><span className="min-w-0 truncate text-foreground/90">{bookmark.label}</span></li>)}
 								</LessonPanel>
-								<LessonPanel title={tr('Materials in this lesson', 'Materiais desta aula')} empty={tr('No files with this lesson.', 'Nenhum arquivo nesta aula.')}>
-									{lesson.materials.slice(0, 4).map((file) => <li key={file.path} className="truncate">{file.name}</li>)}
+								<LessonPanel icon={FileText} count={lesson.materials.length} title={tr('Materials in this lesson', 'Materiais desta aula')} empty={tr('No files with this lesson.', 'Nenhum arquivo nesta aula.')}>
+									{lesson.materials.slice(0, 4).map((file) => <li key={file.path} className="truncate text-foreground/90">{file.name}</li>)}
 								</LessonPanel>
 							</div>
 							{next && (
@@ -443,11 +447,15 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 }
 
 /** A small panel of the Overview: a title and a few rows, or one line saying how to fill it. */
-function LessonPanel({ title, empty, children }: { title: string; empty: string; children: React.ReactNode[] }) {
+function LessonPanel({ icon: Icon, count, title, empty, children }: { icon?: LucideIcon; count?: number; title: string; empty: string; children: React.ReactNode[] }) {
 	return (
 		<section aria-label={title} className="rounded-2xl border bg-card p-4">
-			<h2 className="mb-2 text-base font-bold">{title}</h2>
-			{children.length > 0 ? <ul className="space-y-1.5 text-sm">{children}</ul> : <p className="text-sm text-muted-foreground">{empty}</p>}
+			<div className="mb-3 flex items-center gap-2">
+				{Icon && <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
+				<h2 className="text-sm font-bold tracking-tight">{title}</h2>
+				{count !== undefined && count > 0 && <span className="ml-auto rounded-full bg-panel px-2 py-0.5 text-xs font-medium text-muted-foreground tabular-nums">{count}</span>}
+			</div>
+			{children.length > 0 ? <ul className="space-y-2 text-sm">{children}</ul> : <p className="text-sm text-muted-foreground">{empty}</p>}
 		</section>
 	);
 }
@@ -487,7 +495,7 @@ function LessonRail({ sequence, current, isDone }: { sequence: { path: string }[
 	if (sequence.length < 2 || sequence.length > 60) return null;
 	return (
 		<div aria-hidden="true" className="flex gap-1">
-			{sequence.map((item, index) => <span key={item.path} className={cn('h-1.5 flex-1 rounded-full', isDone(item.path) ? 'bg-primary' : index === current ? 'bg-[var(--reward-fill)]' : 'bg-border')} />)}
+			{sequence.map((item, index) => <span key={item.path} className={cn('h-1.5 flex-1 rounded-full transition-colors duration-200', isDone(item.path) ? 'bg-primary' : index === current ? 'bg-[var(--reward-fill)] ring-2 ring-[var(--reward-fill)]/25' : 'bg-border')} />)}
 		</div>
 	);
 }
@@ -497,7 +505,7 @@ function PdfLesson({ file, courseId, ready, initialPage, onPage, preferences, on
 	return (
 		<div className="space-y-3">
 			<p role="note" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-				<span className="inline-flex items-center gap-1.5 rounded-full bg-brand-soft px-2.5 py-0.5 font-semibold"><FileText className="size-3.5" aria-hidden="true" />{tr('PDF document', 'Documento PDF')}</span>
+				<span className="inline-flex items-center gap-1.5 rounded-full bg-brand-soft px-2.5 py-0.5 font-semibold text-brand-ink"><FileText className="size-3.5" aria-hidden="true" />{tr('PDF document', 'Documento PDF')}</span>
 				<span>{formatFileSize(file.size)}</span>
 				<span>{tr('Read it here; the original file is never changed.', 'Leia aqui; o arquivo original nunca é alterado.')}</span>
 			</p>
@@ -513,7 +521,7 @@ function TextLesson({ file, courseId }: { file: FileEntry; courseId: string }) {
 	return (
 		<div className="space-y-3">
 			<p role="note" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-				<span className="inline-flex items-center gap-1.5 rounded-full bg-brand-soft px-2.5 py-0.5 font-semibold"><FileText className="size-3.5" aria-hidden="true" />{tr('Text', 'Texto')}</span>
+				<span className="inline-flex items-center gap-1.5 rounded-full bg-brand-soft px-2.5 py-0.5 font-semibold text-brand-ink"><FileText className="size-3.5" aria-hidden="true" />{tr('Text', 'Texto')}</span>
 				<span>{formatFileSize(file.size)}</span>
 				<span>{tr('Read it here; the original file is never changed.', 'Leia aqui; o arquivo original nunca é alterado.')}</span>
 			</p>

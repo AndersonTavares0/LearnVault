@@ -4,7 +4,9 @@ import { cn } from '@/lib/utils';
 
 const Inlines = ({ items }: { items: Inline[] }) => (
 	<>
-		{items.map((item, index) => (
+		{items.map((item, index) => item.code ? (
+			<code key={index} className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground">{item.text}</code>
+		) : (
 			<span key={index} className={cn(item.bold && 'font-bold', item.italic && 'italic', item.underline && 'underline underline-offset-2')}>{item.text}</span>
 		))}
 	</>

@@ -1,14 +1,16 @@
 import { ArrowRight, Pin, Search, type LucideIcon } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
+import { CourseCover } from '@/components/course-cover';
 import { courseTone } from '@/components/cover-art';
 import { Eyebrow } from '@/components/panel';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { courseMonogram } from '@/lib/cover';
 import { tr } from '@/lib/i18n';
 import { buildLibrary, type CourseEntry } from '@/lib/library';
 import { normalizeForSearch } from '@/lib/search';
-import { useCatalog, useFavorites, useRecent, useToggleCourseFavorite } from '@/app/data';
+import { useCatalog, useFavorites, useRecent, useSession, useToggleCourseFavorite } from '@/app/data';
 import { PageHeader } from '@/app/shell';
 
 /** The id of the group of items whose lessons are no longer in the library. */
@@ -78,13 +80,19 @@ export function CoursePicker({ icon, title, description, actions, footer, to, ha
 }
 
 function PickerCard({ entry, title: given, footer, to }: { entry?: CourseEntry; title?: string; footer: string; to: string }) {
+	const session = useSession();
 	const toggle = useToggleCourseFavorite();
 	const title = entry?.course.title ?? given ?? '';
 	const tone = courseTone(title);
+	const profile = session.data?.user?.userId ?? '';
 	return (
-		<li className="group/pick relative overflow-hidden rounded-[1.5rem] border bg-card transition-shadow focus-within:ring-3 focus-within:ring-ring hover:shadow-md">
+		<li className="group/pick relative flex flex-col overflow-hidden rounded-[1.5rem] border bg-card transition-all duration-150 focus-within:ring-3 focus-within:ring-ring hover:shadow-md">
 			<div className="flex items-center gap-3 p-4 pb-2">
-				<span className="tone grid size-9 place-items-center rounded-xl font-heading text-sm font-bold" style={tone} aria-hidden="true">{title.trim()[0]?.toUpperCase()}</span>
+				{entry ? (
+					<CourseCover course={entry.course} profile={profile} compact className="size-10 shrink-0 rounded-lg" />
+				) : (
+					<span className="tone grid size-10 shrink-0 place-items-center rounded-lg font-heading text-xs font-bold tracking-wider" style={tone} aria-hidden="true">{courseMonogram(title)}</span>
+				)}
 				{entry && (
 					<Button variant="ghost" size="icon" className="relative z-10 ml-auto size-11" aria-pressed={entry.favorite} disabled={toggle.isPending} onClick={() => toggle.mutate({ courseId: entry.courseId, favorite: !entry.favorite })} aria-label={entry.favorite ? tr(`Unpin ${title}`, `Desafixar ${title}`) : tr(`Pin ${title}`, `Fixar ${title}`)}>
 						<Pin className={entry.favorite ? 'fill-current' : ''} />
@@ -94,7 +102,7 @@ function PickerCard({ entry, title: given, footer, to }: { entry?: CourseEntry; 
 			<h3 className="line-clamp-2 min-h-[4.25rem] [overflow-wrap:anywhere] px-4 pb-4 text-lg leading-snug font-bold">
 				<Link to={to} title={title} className="after:absolute after:inset-0 after:content-[''] focus-visible:outline-none">{title}<span className="sr-only">: {footer}</span></Link>
 			</h3>
-			<div className="tone flex items-center justify-between px-4 py-2.5 text-xs font-bold" style={tone} aria-hidden="true">
+			<div className="mt-auto flex items-center justify-between border-t bg-panel/45 px-4 py-2.5 text-xs font-medium text-muted-foreground transition-colors group-hover/pick:text-foreground" aria-hidden="true">
 				<span>{footer}</span><ArrowRight className="size-4 transition-transform group-hover/pick:translate-x-0.5" />
 			</div>
 		</li>

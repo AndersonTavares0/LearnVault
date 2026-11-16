@@ -34,12 +34,14 @@ describe('progress', () => {
 		expect(screen.getByText(/Level 2 · /)).toBeTruthy();
 	});
 
-	it('lists the courses under way with their progress and counts finished lessons', async () => {
+	it('lists the courses under way with their progress, resume target and study days heatmap', async () => {
 		renderApp('/progress', { catalog, rewards, recent: [done('a')] });
 		const courses = within(await screen.findByRole('region', { name: 'Courses' }));
 		expect(courses.getByRole('link', { name: 'Rust' }).getAttribute('href')).toBe('/course/rust');
+		expect(courses.getByRole('link', { name: 'Resume' }).getAttribute('href')).toBe('/course/rust/c%2Fa');
 		expect(courses.getByText('50% complete · 1 lesson left')).toBeTruthy();
 		expect(courses.getByText('1 in progress · 0 finished')).toBeTruthy();
+		expect(screen.getByRole('heading', { name: 'Study days' })).toBeTruthy();
 	});
 
 	it('says so when no course is under way', async () => {

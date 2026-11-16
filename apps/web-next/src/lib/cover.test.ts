@@ -11,6 +11,7 @@ describe('generated course covers', () => {
 	it('derives a two-letter monogram from significant words', () => {
 		expect(courseMonogram('Física Quântica')).toBe('FQ');
 		expect(courseMonogram('01 - Programação em Go')).toBe('PG');
+		expect(courseMonogram('Go (Golang) do zero ao avançado')).toBe('GG');
 		expect(courseMonogram('Matemática')).toBe('M');
 	});
 

@@ -36,7 +36,7 @@ const contains = (node: CatalogNode, path: string | null | undefined): boolean =
  */
 export function Curriculum(props: Props) {
 	return (
-		<ul className={cn('divide-y', props.compact ? 'border-y' : 'rounded-lg border bg-card')}>
+		<ul className={cn('divide-y', props.compact ? 'border-y' : 'overflow-hidden rounded-[1.25rem] border bg-card')}>
 			{props.nodes.map((node, index) => <CurriculumNode key={node.path} node={node} index={index + 1} {...props} />)}
 		</ul>
 	);
@@ -63,11 +63,11 @@ function CurriculumNode({ node, index, ...props }: Props & { node: CatalogNode; 
 	return (
 		<li>
 			<details open={open} onToggle={(event) => setOpen(event.currentTarget.open)} className="group">
-				<summary className={cn('flex cursor-pointer list-none items-center gap-3 hover:bg-muted [&::-webkit-details-marker]:hidden', props.compact ? 'min-h-14 px-3 py-2' : 'min-h-14 bg-muted/50 px-4 py-3', current && 'bg-brand-tint')}>
+				<summary className={cn('flex cursor-pointer list-none items-center gap-3 transition-colors duration-150 hover:bg-muted [&::-webkit-details-marker]:hidden', props.compact ? 'min-h-14 px-3 py-2' : 'min-h-14 bg-muted/50 px-4 py-3', current && 'bg-brand-tint')}>
 					{index !== undefined ? (
-						<span className={cn('grid size-8 shrink-0 place-items-center rounded-full text-sm font-bold', complete ? 'bg-primary text-primary-foreground' : 'bg-brand-soft', current && 'ring-2 ring-primary ring-offset-2 ring-offset-card')} aria-hidden="true">{complete ? <Check className="size-4" /> : index}</span>
+						<span className={cn('grid size-8 shrink-0 place-items-center rounded-full text-sm font-bold transition-colors duration-150', complete ? 'bg-primary text-primary-foreground' : 'bg-brand-soft', current && 'ring-2 ring-primary ring-offset-2 ring-offset-card')} aria-hidden="true">{complete ? <Check className="size-4" /> : index}</span>
 					) : (
-						<ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden="true" />
+						<ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] group-open:rotate-180" aria-hidden="true" />
 					)}
 					<span className="min-w-0 flex-1">
 						<span className={cn('block font-semibold', props.compact ? 'text-sm leading-snug' : 'text-base')}>{node.title}{current && <span className="sr-only">{tr(' (current module)', ' (módulo atual)')}</span>}</span>
@@ -76,14 +76,14 @@ function CurriculumNode({ node, index, ...props }: Props & { node: CatalogNode; 
 					{total > 0 && props.compact ? (
 						<>
 							<span className="shrink-0 text-xs text-muted-foreground tabular-nums"><span className="sr-only">{tr(`${done} of ${total} done`, `${done} de ${total} concluídas`)}</span><span aria-hidden="true">{done}/{total}</span></span>
-							<ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden="true" />
+							<ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] group-open:rotate-180" aria-hidden="true" />
 						</>
 					) : total > 0 ? (
 						<>
-							<span className={cn('shrink-0 text-sm tabular-nums', complete || current ? 'font-semibold text-primary' : 'text-muted-foreground')}>
+							<span className={cn('shrink-0 text-sm tabular-nums', (complete || current) ? 'rounded-full bg-brand-soft px-2.5 py-0.5 text-xs font-semibold text-brand-ink' : 'text-muted-foreground')}>
 								{complete ? tr('Completed', 'Concluído') : current ? tr('You are here', 'Você está aqui') : done === 0 ? tr('Not started', 'Não iniciado') : tr(`${done} of ${total} done`, `${done} de ${total} concluídas`)}
 							</span>
-							{index !== undefined && <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden="true" />}
+							{index !== undefined && <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] group-open:rotate-180" aria-hidden="true" />}
 						</>
 					) : null}
 				</summary>
@@ -118,7 +118,7 @@ function LessonRow({ node, courseId, completed, favorites, activePath, compact }
 	}, [active, compact]);
 
 	return (
-		<li ref={row} className={cn('flex items-center gap-1 pr-2', active && 'bg-brand-tint')}>
+		<li ref={row} className={cn('flex items-center gap-1 pr-2 transition-colors duration-150', active ? 'bg-brand-tint' : 'hover:bg-muted/40')}>
 			{studySyncSupported && mediaId && !missing ? (
 				<Button variant="ghost" size="icon" aria-pressed={isDone} disabled={setCompleted.isPending} onClick={() => setCompleted.mutate({ mediaId, completed: !isDone })}
 					aria-label={isDone ? tr(`Mark “${node.title}” as not completed`, `Marcar “${node.title}” como não concluída`) : tr(`Mark “${node.title}” as completed`, `Marcar “${node.title}” como concluída`)}>

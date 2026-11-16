@@ -86,12 +86,12 @@ describe('CourseCard variants', () => {
 
 	it('reserves trailing title space for every visible top-right action', () => {
 		show('grid', undefined, true);
-		const titleBlock = screen.getByRole('heading', { name: 'Rust from Zero' }).parentElement;
-		expect(titleBlock?.className).toContain('pr-[5.75rem]');
+		const heading = screen.getByRole('heading', { name: 'Rust from Zero' });
+		expect(heading.querySelector('[data-action-reserve]')?.className).toContain('w-[5.25rem]');
 		cleanup();
 		show('grid', undefined, false);
-		const favoriteOnlyTitle = screen.getByRole('heading', { name: 'Rust from Zero' }).parentElement;
-		expect(favoriteOnlyTitle?.className).toContain('pr-12');
+		const favoriteOnlyHeading = screen.getByRole('heading', { name: 'Rust from Zero' });
+		expect(favoriteOnlyHeading.querySelector('[data-action-reserve]')?.className).toContain('w-11');
 	});
 });
 

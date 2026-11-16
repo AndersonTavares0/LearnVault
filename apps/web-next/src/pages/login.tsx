@@ -40,25 +40,30 @@ export function LoginPage() {
 	const error = signIn.error?.message || session.data?.error;
 	return (
 		<main id="main" className="grid min-h-dvh place-items-center bg-background px-4 py-10">
-			<div className="flex w-full max-w-sm flex-col gap-8">
-				<span className="text-center font-heading text-2xl font-semibold">LearnVault</span>
-				<form onSubmit={submit} className="space-y-5">
-					<h1 className="text-center text-2xl font-bold">{tr('Sign in', 'Entrar')}</h1>
-					{error && (
-						<p id="login-error" role="alert" className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
-							<CircleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0" />
-							<span>{error}</span>
-						</p>
-					)}
-					<div className="space-y-1.5">
-						<Label htmlFor="username">{tr('Username', 'Usuário')}</Label>
-						<Input id="username" name="username" autoComplete="username" autoCapitalize="none" spellCheck={false} required value={username} onChange={(event) => setUsername(event.target.value)} aria-describedby={error ? 'login-error' : undefined} />
+			<div className="flex w-full max-w-sm flex-col gap-6">
+				<div className="rounded-[2rem] border bg-card p-7 shadow-sm sm:p-9">
+					<div className="mb-7 flex flex-col items-center gap-2 text-center">
+						<span aria-hidden="true" className="h-0.5 w-8 rounded-full bg-[var(--reward-fill)]" />
+						<span className="font-heading text-2xl font-semibold tracking-tight">LearnVault</span>
 					</div>
-					<PasswordField id="password" label={tr('Password', 'Senha')} autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} aria-describedby={error ? 'login-error' : undefined} />
-					<Button type="submit" size="lg" className="w-full" disabled={signIn.isPending}>
-						{signIn.isPending ? tr('Signing in…', 'Entrando…') : tr('Sign in', 'Entrar')}
-					</Button>
-				</form>
+					<form onSubmit={submit} className="space-y-5">
+						<h1 className="text-center text-2xl font-bold">{tr('Sign in', 'Entrar')}</h1>
+						{error && (
+							<p id="login-error" role="alert" className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+								<CircleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0" />
+								<span>{error}</span>
+							</p>
+						)}
+						<div className="space-y-1.5">
+							<Label htmlFor="username">{tr('Username', 'Usuário')}</Label>
+							<Input id="username" name="username" autoComplete="username" autoCapitalize="none" spellCheck={false} required value={username} onChange={(event) => setUsername(event.target.value)} aria-describedby={error ? 'login-error' : undefined} />
+						</div>
+						<PasswordField id="password" label={tr('Password', 'Senha')} autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} aria-describedby={error ? 'login-error' : undefined} />
+						<Button type="submit" size="lg" className="w-full" disabled={signIn.isPending}>
+							{signIn.isPending ? tr('Signing in…', 'Entrando…') : tr('Sign in', 'Entrar')}
+						</Button>
+					</form>
+				</div>
 				<Button variant="ghost" className="mx-auto" onClick={() => setLocale(otherLocale)} aria-label={tr(`Switch language to ${LOCALE_LABELS[otherLocale]}`, `Mudar idioma para ${LOCALE_LABELS[otherLocale]}`)}>
 					{LOCALE_LABELS[otherLocale]}
 				</Button>

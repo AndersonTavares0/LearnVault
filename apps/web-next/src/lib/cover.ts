@@ -52,6 +52,7 @@ function normalize(value: string): string {
 export function courseMonogram(title: string): string {
 	const words = normalize(title)
 		.split(/[\s._-]+/)
+		.map((word) => word.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ''))
 		.filter((word) => /\p{L}/u.test(word) && !STOPWORDS.has(word.toLowerCase()))
 		.slice(0, 2);
 	const initials = words.map((word) => word[0]?.toUpperCase() ?? '').join('');

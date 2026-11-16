@@ -66,15 +66,15 @@ export function AppShell() {
 
 	const user = session.data.user;
 	return (
-		<div className="min-h-dvh pb-16 lg:pb-0">
+		<div className="min-h-dvh pb-20 lg:pb-0">
 			<SkipLink />
 			<DesktopTitlebar />
 			<header className="border-b print:hidden">
-				<div className="mx-auto flex h-[4.5rem] max-w-[88rem] items-center gap-x-8 px-5 sm:px-10">
+				<div className="mx-auto flex h-[4.5rem] max-w-[var(--container-max,88rem)] items-center gap-x-8 px-5 sm:px-10">
 					<Link to="/" className="rounded-md font-heading text-2xl font-bold tracking-tight" aria-label={tr('LearnVault home', 'Início do LearnVault')}>LearnVault</Link>
 					<nav aria-label={tr('Main', 'Principal')} className="hidden flex-1 justify-center gap-1 lg:flex">
 						{navItems().map((item) => (
-							<NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => cn('inline-flex min-h-11 items-center rounded-xl px-4 text-[0.95rem] font-medium whitespace-nowrap text-muted-foreground hover:bg-brand-tint hover:text-foreground', isActive && 'bg-panel font-semibold text-foreground')}>
+							<NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => cn('inline-flex min-h-11 items-center rounded-xl px-4 text-[0.95rem] font-medium whitespace-nowrap text-muted-foreground transition-colors duration-150 hover:bg-brand-tint hover:text-foreground', isActive && 'bg-brand-soft font-semibold text-brand-ink')}>
 								{item.label}
 							</NavLink>
 						))}
@@ -89,7 +89,7 @@ export function AppShell() {
 			</header>
 			<UpdateNotice isAdmin={Boolean(user.isAdmin)} />
 			<IndexingIndicator isAdmin={Boolean(user.isAdmin)} />
-			<main id="main" tabIndex={-1} className="mx-auto w-full max-w-[88rem] px-5 py-8 outline-none sm:px-10 sm:py-10">
+			<main id="main" tabIndex={-1} className="mx-auto w-full max-w-[var(--container-max,88rem)] px-5 py-8 outline-none sm:px-10 sm:py-10">
 				<Outlet />
 			</main>
 			<MobileTabs />
@@ -174,7 +174,7 @@ function AccountMenu({ username, userId, wide }: { username: string; userId: str
 
 function MobileTabs() {
 	return (
-		<nav aria-label={tr('Sections', 'Seções')} className="fixed inset-x-0 bottom-0 z-40 border-t bg-background pb-[env(safe-area-inset-bottom)] lg:hidden print:hidden">
+		<nav aria-label={tr('Sections', 'Seções')} className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xs lg:hidden print:hidden">
 			<ul className="grid grid-cols-5">
 				{navItems().map((item) => (
 					<li key={item.to}>
@@ -197,12 +197,19 @@ function MobileTabs() {
 }
 
 /** Page title: a tinted icon tile, the title in serif with its last word in the accent, and an optional line under it. */
-export function PageHeader({ title, description, actions, className }: { title: string; description?: ReactNode; actions?: ReactNode; icon?: LucideIcon; className?: string }) {
+export function PageHeader({ icon: Icon, title, description, actions, className }: { title: string; description?: ReactNode; actions?: ReactNode; icon?: LucideIcon; className?: string }) {
 	return (
 		<div className={cn('mb-8 flex flex-wrap items-end justify-between gap-4', className)}>
-			<div className="min-w-0 space-y-1">
-				<h1 className="font-heading text-3xl font-bold text-balance sm:text-4xl">{title}</h1>
-				{description && <div className="text-muted-foreground">{description}</div>}
+			<div className="flex min-w-0 items-center gap-3.5">
+				{Icon && (
+					<span aria-hidden="true" className="grid size-11 shrink-0 place-items-center rounded-2xl bg-brand-soft text-brand-ink ring-1 ring-primary/20">
+						<Icon className="size-5" />
+					</span>
+				)}
+				<div className="min-w-0 space-y-1">
+					<h1 className="font-heading text-3xl font-bold text-balance sm:text-4xl">{title}</h1>
+					{description && <div className="text-muted-foreground">{description}</div>}
+				</div>
 			</div>
 			{actions && <div className="flex flex-wrap gap-2">{actions}</div>}
 		</div>

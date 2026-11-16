@@ -85,6 +85,19 @@ describe('notes', () => {
 		expect(screen.queryByText('Borrow checker rules')).toBeNull();
 	});
 
+	it('filters notes from the desktop course sidebar', async () => {
+		const other: Catalog = { ...catalog, nodes: [...catalog.nodes, { title: 'Go', path: 'g', role: 'course', courseId: 'go', files: [], looseFiles: [], children: [
+			{ title: 'Channels', path: 'g/ch', role: 'lesson', files: [{ name: 'ch.mp4', path: 'g/ch.mp4', size: 1, mediaId: 'ch', kind: 'media', availability: 'available' }], looseFiles: [], children: [] }
+		] }] };
+		vi.mocked(transport.listNotes).mockResolvedValue([note('n1', 'Borrow checker rules'), note('n3', 'Goroutines are cheap', 'ch')]);
+		renderApp('/notes', { catalog: other });
+		const aside = await screen.findByRole('complementary', { name: 'Courses' });
+		fireEvent.click(within(aside).getByRole('button', { name: /Go/ }));
+		expect(await screen.findByRole('heading', { level: 1, name: /Go notes/ })).toBeTruthy();
+		expect(screen.getByText('Goroutines are cheap')).toBeTruthy();
+		expect(screen.queryByText('Borrow checker rules')).toBeNull();
+	});
+
 	it('edits a note in place', async () => {
 		const update = vi.spyOn(transport, 'updateNote').mockImplementation(async (id, content) => ({ ...note(id, content) }));
 		renderApp('/notes?course=rust', { catalog });

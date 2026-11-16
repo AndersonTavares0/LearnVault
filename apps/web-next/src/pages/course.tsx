@@ -1,7 +1,8 @@
-import { FileText, Star } from 'lucide-react';
+import { FileText, Star, Tag } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { safeStorage } from '@/app/preferences';
+import { CourseCategoryDialog } from '@/components/course-category-dialog';
 import { CourseManagement } from '@/components/course-management';
 import { CourseCover } from '@/components/course-cover';
 import { Hero } from '@/components/panel';
@@ -10,7 +11,9 @@ import { Materials } from '@/components/materials';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useLocale } from '@/hooks/use-locale';
+import { useStore } from '@/hooks/use-store';
 import { collectMaterials, countCatalogNode, formatCourseMeta } from '@/lib/catalog';
+import { courseCategoriesStore, resolveCourseCategory } from '@/lib/course-categories';
 import { tr } from '@/lib/i18n';
 import { buildLibrary } from '@/lib/library';
 import { isPdf } from '@/lib/pdf';
@@ -71,6 +74,9 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 	const user = session.data?.user;
 	const [signal, setSignal] = useState({ open: false, n: 0 });
 	const [heroImage, setHeroImage] = useState<string | null>(null);
+	const [categorizing, setCategorizing] = useState(false);
+	const customCategories = useStore(courseCategoriesStore);
+	const category = resolveCourseCategory(course, customCategories);
 
 	const completed = useMemo(() => new Set((recent.data ?? []).filter((item) => item.completed).map((item) => item.mediaId)), [recent.data]);
 	const favoriteMedia = useMemo(() => new Set(favorites.data?.mediaIds ?? []), [favorites.data]);
@@ -118,8 +124,16 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 						<div className="min-w-0 space-y-3">
 						<div className="space-y-2">
 							<h1 className="font-heading text-3xl leading-tight font-bold text-balance">{course.title}</h1>
-							<p className="text-muted-foreground">{formatCourseMeta(counts)}</p>
+							<div className="flex flex-wrap items-center gap-2 text-muted-foreground">
+								<span>{formatCourseMeta(counts)}</span>
+								<span aria-hidden="true">·</span>
+								<button type="button" onClick={() => setCategorizing(true)} className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-border bg-card/80 px-3 py-0.5 text-xs font-medium text-foreground transition-colors hover:bg-brand-tint focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">
+									<Tag className="size-3 text-primary" aria-hidden="true" />
+									{category ?? tr('Add category', 'Adicionar categoria')}
+								</button>
+							</div>
 						</div>
+						<CourseCategoryDialog course={course} courseId={courseId} open={categorizing} onOpenChange={setCategorizing} />
 						{!readingOnly && concerns.length > 0 && <StructureNotice concerns={concerns} />}
 						{entry && entry.total > 0 && (
 							<div className="max-w-md space-y-1">

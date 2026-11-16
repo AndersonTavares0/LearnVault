@@ -1,4 +1,5 @@
 import { courseProgress, getCourseProgressStatus } from './catalog';
+import { resolveCourseCategory, type CourseCategoryMap } from './course-categories';
 import { defaultLessonPath } from './navigation';
 import { findLesson, findLessonLocation, type LessonLocation } from './router';
 import { filterCatalog } from './search';
@@ -9,6 +10,7 @@ export type LibraryFilter = 'all' | 'in_progress' | 'not_started' | 'completed' 
 export type CourseEntry = {
 	course: CatalogNode;
 	courseId: string;
+	category?: string | null;
 	status: 'completed' | 'in_progress' | 'not_started';
 	done: number;
 	total: number;
@@ -34,6 +36,7 @@ export function buildLibrary(input: {
 	catalog: Catalog | null | undefined;
 	recent: StudyProgress[];
 	favoriteCourseIds: ReadonlySet<string>;
+	courseCategories?: CourseCategoryMap;
 	query?: string;
 	filter?: LibraryFilter;
 	category?: string | null;
@@ -48,6 +51,7 @@ export function buildLibrary(input: {
 		if (location) lastStudied.set(location.courseId, Math.max(lastStudied.get(location.courseId) ?? 0, progress.updatedAt ?? 0));
 	}
 
+	const categoriesMap = input.courseCategories ?? {};
 	const entries = nodes.map((course): CourseEntry => {
 		const courseId = courseIdOf(course);
 		const { done, total } = courseProgress(course, completed);
@@ -56,6 +60,7 @@ export function buildLibrary(input: {
 		return {
 			course,
 			courseId,
+			category: resolveCourseCategory(course, categoriesMap),
 			status: getCourseProgressStatus(course, completed, started),
 			done,
 			total,
@@ -71,7 +76,7 @@ export function buildLibrary(input: {
 	const visible = entries.filter((entry) =>
 		matching.has(entry.courseId) &&
 		(filter === 'all' || (filter === 'favorites' ? entry.favorite : entry.status === filter)) &&
-		(!input.category || entry.course.sourceFolder === input.category)
+		(!input.category || entry.category === input.category)
 	);
 
 	const counts: Record<LibraryFilter, number> = { all: entries.length, in_progress: 0, not_started: 0, completed: 0, favorites: 0 };
@@ -80,7 +85,7 @@ export function buildLibrary(input: {
 		if (entry.favorite) counts.favorites += 1;
 	}
 
-	const categories = [...new Set(nodes.map((node) => node.sourceFolder).filter((folder): folder is string => Boolean(folder)))].sort((a, b) => a.localeCompare(b));
+	const categories = [...new Set(entries.map((entry) => entry.category).filter((name): name is string => Boolean(name)))].sort((a, b) => a.localeCompare(b));
 
 	// One resume card per course, most recent first, skipping lessons already completed.
 	const seen = new Set<string>();

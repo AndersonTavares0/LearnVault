@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyFormat, parseMarkdown } from './markdown';
+import { applyFormat, parseMarkdown, plainTextMarkdown } from './markdown';
 
 describe('markdown', () => {
 	it('reads headings, lists, paragraphs and inline marks', () => {
@@ -37,5 +37,15 @@ describe('markdown', () => {
 	it('leaves double underscores inside a word alone', () => {
 		expect(parseMarkdown('call __init__ now')).toEqual([{ kind: 'paragraph', lines: [[{ text: 'call ' }, { text: 'init', underline: true }, { text: ' now' }]] }]);
 		expect(parseMarkdown('snake__case__name')).toEqual([{ kind: 'paragraph', lines: [[{ text: 'snake__case__name' }]] }]);
+	});
+
+	it('parses inline code spans and keeps inner markers literal', () => {
+		expect(parseMarkdown('Run `docker image prune` or `a * b`')).toEqual([
+			{ kind: 'paragraph', lines: [[{ text: 'Run ' }, { text: 'docker image prune', code: true }, { text: ' or ' }, { text: 'a * b', code: true }]] }
+		]);
+	});
+
+	it('strips block and inline markers for compact plain-text previews', () => {
+		expect(plainTextMarkdown('## Summary\nRun **important** `docker image prune`\n- first\n- second')).toBe('Summary Run important docker image prune first · second');
 	});
 });

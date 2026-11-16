@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { refreshLibrary } from '@/lib/library-refresh';
 import { resolveSession } from '@/lib/session';
 import { studySyncSupported } from '@/lib/player';
-import { STUDY_NOT_AVAILABLE, transport, transportKind, type MediaBookmark, type MissionId, type NewPdfAnnotation, type PdfAnnotationColor, type StudyFavorites, type StudyProgress } from '@/lib/transport';
+import { STUDY_NOT_AVAILABLE, transport, transportKind, type MediaBookmark, type MissionId, type NewPdfAnnotation, type PdfAnnotationColor, type RewardSummary, type StudyFavorites, type StudyProgress } from '@/lib/transport';
 
 /** Query keys shared by every screen; invalidating one refreshes all its readers. */
 export const keys = {
@@ -176,7 +176,13 @@ export function useClaimMission() {
 
 export function useSetWeeklyGoal() {
 	const client = useQueryClient();
-	return useMutation({ mutationFn: (goal: number) => transport.setWeeklyGoal(goal), onSuccess: () => client.invalidateQueries({ queryKey: keys.rewards }) });
+	return useMutation({
+		mutationFn: (goal: number) => transport.setWeeklyGoal(goal),
+		onSuccess: (weeklyGoal) => {
+			client.setQueryData<RewardSummary>(keys.rewards, (current) => (current ? { ...current, weeklyGoal } : current));
+			void client.invalidateQueries({ queryKey: keys.rewards });
+		}
+	});
 }
 
 /** Desktop opens the native image picker in Rust (no file crosses IPC); the server uploads the chosen file. */

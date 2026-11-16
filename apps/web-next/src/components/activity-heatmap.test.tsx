@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ActivityHeatmap } from './activity-heatmap';
 
@@ -16,5 +16,31 @@ describe('ActivityHeatmap', () => {
 	it('uses the singular for a single study day', () => {
 		render(<ActivityHeatmap today="2026-11-01" activeDays={['2026-11-01']} />);
 		expect(screen.getByText('1 day with study in the last year')).toBeTruthy();
+	});
+
+	it('scales cell intensity across levels and shows details in a hover tooltip', () => {
+		const { container } = render(
+			<ActivityHeatmap
+				today="2026-11-01"
+				activeDays={['2026-10-29', '2026-10-30', '2026-10-31', '2026-11-01']}
+				activity={{
+					'2026-10-29': { score: 1, lessons: 1 },
+					'2026-10-30': { score: 2, lessons: 1, focusMinutes: 15 },
+					'2026-10-31': { score: 4, lessons: 2, focusMinutes: 30 },
+					'2026-11-01': { score: 6, lessons: 3, focusMinutes: 50 }
+				}}
+			/>
+		);
+		expect(container.querySelector('[data-day="2026-10-29"]')?.getAttribute('data-level')).toBe('1');
+		expect(container.querySelector('[data-day="2026-10-30"]')?.getAttribute('data-level')).toBe('2');
+		expect(container.querySelector('[data-day="2026-10-31"]')?.getAttribute('data-level')).toBe('3');
+		const heavy = container.querySelector('[data-day="2026-11-01"]')!;
+		expect(heavy.getAttribute('data-level')).toBe('4');
+
+		fireEvent.mouseEnter(heavy);
+		expect(screen.getByRole('tooltip').textContent).toContain('3 lessons, 50 min focus');
+
+		fireEvent.mouseLeave(container.querySelector('[data-heatmap-grid]')!);
+		expect(screen.queryByRole('tooltip')).toBeNull();
 	});
 });
