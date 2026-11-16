@@ -8,6 +8,7 @@ services:
     container_name: learnvault
     restart: unless-stopped
     environment:
+      TZ: ${TZ:-UTC}
       LISTEN_ADDR: ${LISTEN_ADDR:-0.0.0.0}
       PORT: ${PORT:-8090}
       DATA_DIR: /data
