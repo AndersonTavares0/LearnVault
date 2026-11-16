@@ -121,18 +121,24 @@ jobs:
           dbus-run-session -- xvfb-run -a bash -c '
             set -euo pipefail
             export XDG_CURRENT_DESKTOP=GNOME
+            # D-Bus starts the GTK backend with the activation environment, which must include the virtual display.
+            dbus-update-activation-environment DISPLAY XDG_CURRENT_DESKTOP
             /usr/libexec/xdg-desktop-portal-gtk &
             /usr/libexec/xdg-desktop-portal &
             introspect() {
               flatpak run --user --command=gdbus "$APP_ID" introspect --session \
-                --dest org.freedesktop.portal.Desktop --object-path /org/freedesktop/portal/desktop 2>/dev/null
+                --dest org.freedesktop.portal.Desktop --object-path /org/freedesktop/portal/desktop
             }
             for _ in $(seq 1 30); do
-              if introspect > portal.xml && grep -q "org.freedesktop.portal.FileChooser" portal.xml; then break; fi
+              if introspect > portal.xml 2> portal.err && grep -q "org.freedesktop.portal.FileChooser" portal.xml; then break; fi
               sleep 1
             done
-            grep -q "org.freedesktop.portal.FileChooser" portal.xml || { echo "::error::FileChooser portal not reachable from the sandbox" >&2; exit 1; }
-            grep -q "org.freedesktop.portal.OpenURI" portal.xml || { echo "::error::OpenURI portal not reachable from the sandbox" >&2; exit 1; }
+            if ! grep -q "org.freedesktop.portal.FileChooser" portal.xml || ! grep -q "org.freedesktop.portal.OpenURI" portal.xml; then
+              echo "::error::FileChooser or OpenURI portal not reachable from the sandbox" >&2
+              cat portal.err >&2 || true
+              cat portal.xml >&2 || true
+              exit 1
+            fi
             echo "FileChooser and OpenURI portals answer inside the sandbox"
           '
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
