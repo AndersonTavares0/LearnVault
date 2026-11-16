@@ -95,6 +95,9 @@ describe('lesson page', () => {
 	it('shows loading and paused player states and keeps notes usable on media error', async () => {
 		renderApp('/course/c/c%2FOne', { catalog });
 		const video = await screen.findByLabelText('Lesson player: One');
+		const toolbar = screen.getByRole('toolbar', { name: 'Player controls' });
+		expect(toolbar.parentElement?.className).toContain('sm:bg-transparent');
+		expect(toolbar.parentElement?.className).toContain('sm:bg-linear-to-t');
 		expect(screen.getByText('Paused')).toBeTruthy();
 		fireEvent.loadStart(video);
 		expect(screen.getByText('Loading…')).toBeTruthy();
