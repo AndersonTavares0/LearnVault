@@ -113,10 +113,18 @@ fn collect<'a>(
     if node.role == NodeRole::Lesson {
         lessons.push(node);
     }
+    let has_children = !node.children.is_empty();
     for file in &node.loose_files {
         match file.kind {
             MediaKind::Media => *loose_media = true,
-            MediaKind::Subtitle | MediaKind::Material => *loose_materials = true,
+            MediaKind::Subtitle => *loose_materials = true,
+            MediaKind::Material => {
+                // Supplementary handouts inside a structured module that contains child
+                // lessons/submodules are expected course materials, not misplaced root files.
+                if !(node.role == NodeRole::Category && has_children) {
+                    *loose_materials = true;
+                }
+            }
         }
     }
     for child in &node.children {
@@ -252,5 +260,30 @@ mod tests {
             assessment.concerns,
             vec![Concern::LessonsWithoutNumbering, Concern::LooseMaterials]
         );
+    }
+
+    #[test]
+    fn module_level_supplementary_materials_keep_high_confidence() {
+        let module = CatalogNode {
+            title: "01 Module".to_owned(),
+            path: "Cat/Course/01 Module".to_owned(),
+            role: NodeRole::Category,
+            files: Vec::new(),
+            loose_files: vec![file("handout.pdf", MediaKind::Material)],
+            children: vec![
+                lesson(
+                    "Cat/Course/01 Module/01 Intro",
+                    vec![file("a.mp4", MediaKind::Media)],
+                ),
+                lesson(
+                    "Cat/Course/01 Module/02 Next",
+                    vec![file("b.mp4", MediaKind::Media)],
+                ),
+            ],
+        };
+        let tree = course(vec![module], Vec::new());
+        let assessment = assess(&tree);
+        assert_eq!(assessment.confidence, Confidence::High);
+        assert!(assessment.concerns.is_empty());
     }
 }
