@@ -501,10 +501,11 @@ jobs:
           amd64="$(tr -d '[:space:]' < digests/amd64.txt)"
           arm64="$(tr -d '[:space:]' < digests/arm64.txt)"
           test -n "$amd64" && test -n "$arm64"
-          docker buildx imagetools create --metadata-file index-metadata.json \
+          docker buildx imagetools create \
             --tag "${IMAGE}:staging-${RUN_ID}" "${IMAGE}@${amd64}" "${IMAGE}@${arm64}"
-          digest="$(jq -r '."containerimage.digest"' index-metadata.json)"
-          test -n "$digest" && test "$digest" != null
+          # Read the digest back from the registry: the metadata file written by imagetools is not reliable here.
+          digest="$(docker buildx imagetools inspect "${IMAGE}:staging-${RUN_ID}" --format '{{.Manifest.Digest}}')"
+          [[ "$digest" == sha256:* ]]
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
       - name: Check that both architectures and their attestations are in the index
         shell: bash
