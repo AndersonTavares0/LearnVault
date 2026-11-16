@@ -637,3 +637,61 @@ async fn catalog_revalidates_by_etag_and_answers_not_modified() {
         .unwrap();
     assert_eq!(changed.status(), StatusCode::OK);
 }
+
+#[tokio::test]
+async fn admin_rescan_keeps_healthz_responsive_across_multiple_courses() {
+    let temp = tempfile::tempdir().unwrap();
+    let library = temp.path().join("library");
+    for i in 0..10 {
+        let dir = library.join(format!("Course {i:02}")).join("01 Intro");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("01.mp4"), b"video").unwrap();
+    }
+    let mut cfg = Config::from_args([
+        "learnvault-server",
+        "--database",
+        temp.path().join("catalog.sqlite").to_str().unwrap(),
+        "--library-root",
+        library.to_str().unwrap(),
+    ])
+    .unwrap();
+    cfg.admin_username = Some("admin".to_owned());
+    cfg.admin_password = Some("uma senha local muito segura".to_owned());
+    cfg.cookie_secure = false;
+
+    let app = build_router(AppState::initialize(cfg).await.unwrap());
+    let cookie = login(&app).await;
+
+    let rescan_fut = app.clone().oneshot(
+        Request::post("/api/admin/catalog/rescan")
+            .header("origin", "http://localhost")
+            .header("cookie", &cookie)
+            .body(Body::empty())
+            .unwrap(),
+    );
+    tokio::pin!(rescan_fut);
+
+    let mut healthz_ok_during_rescan = 0usize;
+    let rescan = loop {
+        tokio::select! {
+            res = &mut rescan_fut => break res.unwrap(),
+            health = app.clone().oneshot(Request::get("/api/healthz").body(Body::empty()).unwrap()) => {
+                if health.unwrap().status() == StatusCode::OK {
+                    healthz_ok_during_rescan += 1;
+                }
+                tokio::task::yield_now().await;
+            }
+        }
+    };
+
+    assert_eq!(rescan.status(), StatusCode::OK);
+    let body: serde_json::Value =
+        serde_json::from_slice(&rescan.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(body["courses"], 10);
+    assert_eq!(body["failed_courses"], 0);
+    assert_eq!(body["complete"], true);
+    assert!(
+        healthz_ok_during_rescan >= 1,
+        "expected /api/healthz to succeed while multi-course rescan ran"
+    );
+}
