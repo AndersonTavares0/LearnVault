@@ -160,7 +160,9 @@ pub(crate) fn seeded_courses(root: &Path) -> Vec<RegisteredCourse> {
         let nested = learnvault_core::scan(folder_root.as_path())
             .map(|outcome| learnvault_core::detect_course_folders(&outcome.files))
             .unwrap_or_default();
-        if !nested.is_empty() && nested.len() <= MAX_AUTO_NESTED {
+        // Only split a top-level folder when it contains multiple nested courses; a single
+        // nested subfolder keeps the top-level directory as the course root.
+        if nested.len() > 1 && nested.len() <= MAX_AUTO_NESTED {
             let before = courses.len();
             for rel in nested {
                 push_seeded_course(&mut courses, &folder_root.as_path().join(rel));
@@ -551,6 +553,25 @@ mod tests {
         let seeded = seeded_courses(&library);
         let titles: Vec<&str> = seeded.iter().map(|course| course.title.as_str()).collect();
         assert_eq!(titles, ["Course Alpha", "Course Beta", "Math"]);
+    }
+
+    #[test]
+    fn seeding_preserves_top_level_course_with_single_nested_folder() {
+        let temp = tempdir().unwrap();
+        let library = temp.path().join("library");
+
+        for rel in [
+            "Course/Rust from zero/01 Ownership/Lesson.mp4",
+            "Course/Rust from zero/02 Borrowing/Lesson.mp4",
+        ] {
+            let p = library.join(rel);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, b"video").unwrap();
+        }
+
+        let seeded = seeded_courses(&library);
+        let titles: Vec<&str> = seeded.iter().map(|course| course.title.as_str()).collect();
+        assert_eq!(titles, ["Course"]);
     }
 
     #[test]
