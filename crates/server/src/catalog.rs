@@ -31,8 +31,8 @@ pub(crate) const ORDER_BODY_LIMIT: usize = 512 * 1024;
 
 enum RescanFailure {
     Busy,
+    Capacity,
     Failed,
-    NoCourses,
 }
 
 #[derive(Serialize)]
@@ -428,74 +428,13 @@ pub(crate) async fn rescan(State(state): State<AppState>, headers: HeaderMap) ->
     if !state.has_blocking_capacity() {
         return service_unavailable();
     }
-    let Ok(local_lock) = state.rescan_lock.clone().try_lock_owned() else {
+    let Ok(_local_lock) = state.rescan_lock.clone().try_lock_owned() else {
         return status_private_no_store(StatusCode::CONFLICT);
     };
 
-    let database = state.database.clone();
     let courses = state.courses_snapshot();
-    let covers_dir = crate::covers::covers_dir(&state.config.database_path);
-    let lock_path = rescan_lock_path(&state.config.database_path);
-    let mut database = database.lock_owned().await;
-    let Some(blocking_task) = state.try_acquire_blocking_task() else {
-        return service_unavailable();
-    };
-    match tokio::task::spawn_blocking(move || {
-        // Os guards e o permit pertencem deliberadamente à tarefa blocking. Tokio continua
-        // executando-a depois que o JoinHandle é descartado, então um timeout HTTP não libera
-        // a capacidade nem os locks enquanto o scan ainda usa o banco.
-        let _blocking_task = blocking_task;
-        let _local_lock = local_lock;
-        let _file_lock = try_rescan_file_lock(&lock_path)?;
-        if courses.is_empty() {
-            return Err(RescanFailure::NoCourses);
-        }
-        let mut aggregate = RescanSummary {
-            complete: true,
-            ..RescanSummary::default()
-        };
-        let mut failed_courses = 0usize;
-        for course in &courses {
-            // A raiz é revalidada antes de cada varredura: um curso removido, inacessível
-            // ou substituído por link/junction conta como falha sem seguir o alvo.
-            let Ok(root) = learnvault_core::CourseRoot::resolve(course.root.as_path()) else {
-                failed_courses += 1;
-                aggregate.complete = false;
-                continue;
-            };
-            match learnvault_core::rescan(&mut database, &course.id, root.as_path()) {
-                Ok(summary) => {
-                    let _ = crate::covers::auto_detect_course_cover(
-                        &covers_dir,
-                        &course.id,
-                        root.as_path(),
-                    );
-                    aggregate.scan_id = aggregate.scan_id.max(summary.scan_id);
-                    aggregate.complete = aggregate.complete && summary.complete;
-                    aggregate.inserted += summary.inserted;
-                    aggregate.updated += summary.updated;
-                    aggregate.marked_missing += summary.marked_missing;
-                    aggregate.preserved += summary.preserved;
-                    aggregate.ambiguous.extend(summary.ambiguous);
-                }
-                Err(_) => {
-                    failed_courses += 1;
-                    aggregate.complete = false;
-                }
-            }
-        }
-        // A resposta é a projeção sanitizada do resumo agregado: só as contagens cruzam a
-        // API, inclusive a quantidade de chaves ambíguas, nunca as chaves em si.
-        let mut response = RescanResponse::from(aggregate);
-        response.courses = courses.len();
-        response.failed_courses = failed_courses;
-        Ok(response)
-    })
-    .await
-    {
-        Ok(Ok(summary)) => private_no_store(Json(summary).into_response()),
-        Ok(Err(RescanFailure::Busy)) => status_private_no_store(StatusCode::CONFLICT),
-        Ok(Err(RescanFailure::NoCourses)) => private_no_store(
+    if courses.is_empty() {
+        return private_no_store(
             (
                 StatusCode::BAD_REQUEST,
                 Json(ErrorResponse {
@@ -503,9 +442,113 @@ pub(crate) async fn rescan(State(state): State<AppState>, headers: HeaderMap) ->
                 }),
             )
                 .into_response(),
-        ),
-        Ok(Err(RescanFailure::Failed)) | Err(_) => internal_error("rescan failed"),
+        );
     }
+
+    let covers_dir = crate::covers::covers_dir(&state.config.database_path);
+    let lock_path = rescan_lock_path(&state.config.database_path);
+    let Some(lock_permit) = state.try_acquire_blocking_task() else {
+        return service_unavailable();
+    };
+    let _file_lock = match tokio::task::spawn_blocking(move || {
+        let _lock_permit = lock_permit;
+        try_rescan_file_lock(&lock_path)
+    })
+    .await
+    {
+        Ok(Ok(file)) => file,
+        Ok(Err(RescanFailure::Busy)) => return status_private_no_store(StatusCode::CONFLICT),
+        Ok(Err(RescanFailure::Capacity)) => return service_unavailable(),
+        Ok(Err(RescanFailure::Failed)) | Err(_) => return internal_error("rescan failed"),
+    };
+
+    match run_rescan_courses(&state, &courses, &covers_dir).await {
+        Ok(summary) => private_no_store(Json(summary).into_response()),
+        Err(RescanFailure::Busy) => status_private_no_store(StatusCode::CONFLICT),
+        Err(RescanFailure::Capacity) => service_unavailable(),
+        Err(RescanFailure::Failed) => internal_error("rescan failed"),
+    }
+}
+
+/// Scans each registered course outside the database lock and acquires it only per course write.
+async fn run_rescan_courses(
+    state: &AppState,
+    courses: &[RegisteredCourse],
+    covers_dir: &Path,
+) -> Result<RescanResponse, RescanFailure> {
+    let mut aggregate = RescanSummary {
+        complete: true,
+        ..RescanSummary::default()
+    };
+    let mut failed_courses = 0usize;
+
+    for course in courses {
+        let scan_permit = state
+            .try_acquire_blocking_task()
+            .ok_or(RescanFailure::Capacity)?;
+        let course_path = course.root.as_path().to_path_buf();
+        let scanned = tokio::task::spawn_blocking(move || {
+            let _scan_permit = scan_permit;
+            let root = learnvault_core::CourseRoot::resolve(&course_path).ok()?;
+            let outcome = learnvault_core::scan(root.as_path());
+            Some((root, outcome))
+        })
+        .await
+        .map_err(|_| RescanFailure::Failed)?;
+
+        let Some((root, outcome)) = scanned else {
+            failed_courses += 1;
+            aggregate.complete = false;
+            continue;
+        };
+
+        let mut database = state.database.clone().lock_owned().await;
+        let db_permit = state
+            .try_acquire_blocking_task()
+            .ok_or(RescanFailure::Capacity)?;
+        let course_id = course.id.clone();
+        let covers_dir = covers_dir.to_path_buf();
+        let applied = tokio::task::spawn_blocking(move || {
+            let _db_permit = db_permit;
+            let result = learnvault_core::apply_rescan_result(
+                &mut database,
+                &course_id,
+                outcome,
+                root.as_path(),
+            );
+            if result.is_ok() {
+                let _ = crate::covers::auto_detect_course_cover(
+                    &covers_dir,
+                    &course_id,
+                    root.as_path(),
+                );
+            }
+            result
+        })
+        .await
+        .map_err(|_| RescanFailure::Failed)?;
+
+        match applied {
+            Ok(summary) => {
+                aggregate.scan_id = aggregate.scan_id.max(summary.scan_id);
+                aggregate.complete = aggregate.complete && summary.complete;
+                aggregate.inserted += summary.inserted;
+                aggregate.updated += summary.updated;
+                aggregate.marked_missing += summary.marked_missing;
+                aggregate.preserved += summary.preserved;
+                aggregate.ambiguous.extend(summary.ambiguous);
+            }
+            Err(_) => {
+                failed_courses += 1;
+                aggregate.complete = false;
+            }
+        }
+    }
+
+    let mut response = RescanResponse::from(aggregate);
+    response.courses = courses.len();
+    response.failed_courses = failed_courses;
+    Ok(response)
 }
 
 pub(crate) async fn authenticated_user(
