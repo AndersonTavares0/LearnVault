@@ -306,18 +306,21 @@ async fn apply_course(
     let permit = app.try_acquire_blocking_task()?;
     let library_id = library_id.to_owned();
     let root = root.to_path_buf();
+    let covers_dir = crate::covers::covers_dir(&app.config.database_path);
     tokio::task::spawn_blocking(move || {
         let _permit = permit;
         let mut database = database;
         // O modo vem do host, o mesmo usado pelo scanner da varredura.
-        learnvault_core::apply_incremental_scan(
+        let summary = learnvault_core::apply_incremental_scan(
             &mut database,
             &library_id,
             &outcome,
             KeyMode::for_host(),
             &root,
         )
-        .ok()
+        .ok()?;
+        let _ = crate::covers::auto_detect_course_cover(&covers_dir, &library_id, &root);
+        Some(summary)
     })
     .await
     .ok()
