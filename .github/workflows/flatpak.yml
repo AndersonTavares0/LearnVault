@@ -55,7 +55,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev patchelf \
-            flatpak flatpak-builder appstream elfutils xvfb dbus-x11
+            flatpak flatpak-builder appstream elfutils xvfb dbus-x11 \
+            xdg-desktop-portal xdg-desktop-portal-gtk
       - name: Install Rust toolchain
         run: |
           rustup toolchain install 1.99.0 --profile minimal
@@ -113,6 +114,27 @@ jobs:
             echo "::error::the app stopped during startup (exit $code)" >&2
             exit 1
           fi
+      # The app opens the folder picker and external links through the desktop portals. A host backend answers them here.
+      - name: "Sandbox: check that the file chooser and URI portals answer"
+        run: |
+          set -euo pipefail
+          dbus-run-session -- xvfb-run -a bash -c '
+            set -euo pipefail
+            export XDG_CURRENT_DESKTOP=GNOME
+            /usr/libexec/xdg-desktop-portal-gtk &
+            /usr/libexec/xdg-desktop-portal &
+            introspect() {
+              flatpak run --user --command=gdbus "$APP_ID" introspect --session \
+                --dest org.freedesktop.portal.Desktop --object-path /org/freedesktop/portal/desktop 2>/dev/null
+            }
+            for _ in $(seq 1 30); do
+              if introspect > portal.xml && grep -q "org.freedesktop.portal.FileChooser" portal.xml; then break; fi
+              sleep 1
+            done
+            grep -q "org.freedesktop.portal.FileChooser" portal.xml || { echo "::error::FileChooser portal not reachable from the sandbox" >&2; exit 1; }
+            grep -q "org.freedesktop.portal.OpenURI" portal.xml || { echo "::error::OpenURI portal not reachable from the sandbox" >&2; exit 1; }
+            echo "FileChooser and OpenURI portals answer inside the sandbox"
+          '
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-linux-desktop-${{ matrix.arch }}
