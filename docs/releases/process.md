@@ -67,7 +67,7 @@ Database schema migrations must always be documented in release notes. Releases 
 
 ## Container Image Tags and Verification
 
-The image is built for `linux/amd64` and `linux/arm64` and pushed as a single multi-architecture index. Tags depend on the tag that produced the release:
+The image is built for `linux/amd64` and `linux/arm64`, each architecture on its own native runner (no QEMU emulation), and combined into a single multi-architecture index. Tags depend on the tag that produced the release:
 
 | Tag | When it is applied |
 | --- | --- |
@@ -92,5 +92,5 @@ Provenance and the SBOM are attached to the same digest; inspect them with `dock
 - **Desktop update is not offered after a release.** The release must be published (not a draft) and not a pre-release, and `latest.json` must carry a version greater than the installed app. Check with `gh release view <tag> --json isDraft,isPrerelease`.
 - **The release workflow refuses the tag.** The tag must match `vX.Y.Z` exactly and be a published, non-draft release.
 - **Signature verification fails in the updater or in `update.sh`.** The image or the update file was not signed by this repository's release workflow on a release tag or `main`. Re-run the release workflow for the tag instead of editing the assets by hand.
-- **The container image has no version tag.** The image is pushed by digest first and tagged only after the vulnerability scan and the signature check pass. If the scan fails, no tag is applied, which is intended.
+- **The container image has no version tag.** Each architecture is pushed by digest and scanned before anything names it. The combined index is then given a temporary `staging-<run id>` tag (it is not a release tag and is never used by a deployment), and the release tags are applied only after the signature check passes. If the scan fails, no release tag is applied, which is intended. Staging tags are left in GHCR and can be removed by hand.
 - **Windows installer build fails.** Check the NSIS build log. A failure stops before the publish job, so nothing is published.

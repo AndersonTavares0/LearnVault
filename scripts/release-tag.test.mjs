@@ -166,7 +166,7 @@ test('release tags accept strict stable versions only', t => {
 
 test('pre-releases never move stable, latest or minor image tags and no rc tag is applied', () => {
     const stableOnly = "needs.validate-tag.outputs.prerelease == 'false'";
-    assert.equal(workflow.split(stableOnly).length - 1, 3);
+    assert.equal(workflow.split(stableOnly).length - 1, 6);
     assert.doesNotMatch(workflow, /value=rc\b/);
 });
 
@@ -180,7 +180,7 @@ test('the cosign identity accepts stable release tags, and nothing else', () => 
 });
 
 test('pushing and publishing wait for approval in the release environment', () => {
-    for (const job of ['container:', 'publish:']) {
+    for (const job of ['container-approval:', 'publish:']) {
         const start = workflow.indexOf(`\n  ${job}\n`);
         assert.ok(start >= 0, `missing job ${job}`);
         const next = workflow.slice(start + 1).search(/\n {2}[a-z-]+:\n/);
