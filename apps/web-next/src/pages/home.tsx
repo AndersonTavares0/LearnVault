@@ -1,4 +1,4 @@
-import { ChevronRight, FolderPlus, Play, RefreshCw, Search, Star } from 'lucide-react';
+import { Award, Bookmark, ChevronRight, Flame, FolderPlus, Play, RefreshCw, Search, Sparkles, Star, Target } from 'lucide-react';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { BrandMark } from '@/components/brand';
@@ -99,12 +99,10 @@ export function HomePage() {
 
 			<div className="grid items-start gap-6 lg:grid-cols-12">
 				<div className={cn('min-w-0 space-y-5', wide ? 'lg:col-span-12' : 'lg:col-span-8')}>
-					{wide && library.entries.length > 0 ? (
-						<div className="grid gap-4 lg:grid-cols-[1.1fr_1fr]">
-							{resume}
-							<HabitStrip rewards={rewards.data} completedCourses={completedCourses} bookmarks={favorites.data?.mediaIds.length ?? 0} />
-						</div>
-					) : resume}
+					{resume}
+					{wide && library.entries.length > 0 && (
+						<HabitStrip rewards={rewards.data} completedCourses={completedCourses} bookmarks={favorites.data?.mediaIds.length ?? 0} />
+					)}
 
 					<section aria-labelledby="courses-heading" className="space-y-4">
 						<h2 id="courses-heading" className="sr-only">{filtered ? tr('Results', 'Resultados') : tr('Your library', 'Sua biblioteca')}</h2>
@@ -256,7 +254,7 @@ function Habit({ rewards, completedCourses }: { rewards: RewardSummary | undefin
 	const todayActive = study.days.find((day) => day.day === study.today)?.active ?? false;
 	const dayInitial = (day: string) => new Date(`${day}T12:00:00`).toLocaleDateString(getLocale(), { weekday: 'narrow' });
 	const cards = [
-		look.showStreak && <li key="s"><Stat tone="amber" label={tr('Streak', 'Sequência')} value={study.currentStreak} unit={study.currentStreak === 1 ? tr('day', 'dia') : tr('days', 'dias')} note={todayActive ? tr('Today counted', 'Hoje já conta') : tr('Today counts', 'Hoje conta')} className="h-full p-4 xl:p-5">
+		look.showStreak && <li key="s"><Stat tone="amber" icon={<Flame />} label={tr('Streak', 'Sequência')} value={study.currentStreak} unit={study.currentStreak === 1 ? tr('day', 'dia') : tr('days', 'dias')} note={todayActive ? tr('Today counted', 'Hoje já conta') : tr('Today counts', 'Hoje conta')} className="h-full p-4 xl:p-5">
 			<div role="img" aria-label={tr(`${study.weekActiveDays} of 7 days studied this week`, `${study.weekActiveDays} de 7 dias estudados nesta semana`)} className="flex justify-between gap-1">
 				{study.days.map((day) => (
 					<span key={day.day} className="flex flex-col items-center gap-1">
@@ -266,9 +264,9 @@ function Habit({ rewards, completedCourses }: { rewards: RewardSummary | undefin
 				))}
 			</div>
 		</Stat></li>,
-		look.showXp && <li key="x"><Stat tone="violet" label={tr(`Level ${game.level.level}`, `Nível ${game.level.level}`)} value={game.level.xp} unit="XP" progress={game.level.progress} note={tr(`${game.level.xpToNext} XP to Level ${game.level.level + 1}`, `${game.level.xpToNext} XP para o Nível ${game.level.level + 1}`)} className="h-full p-4 xl:p-5" /></li>,
-		look.showGoal && <li key="g" className="col-span-2"><Stat tone="green" label={tr('Goal', 'Meta')} value={`${days}/${rewards.weeklyGoal}`} unit={tr('days this week', 'dias nesta semana')} bar={{ value: days, max: rewards.weeklyGoal }} note={remaining === 0 ? tr('Goal reached', 'Meta atingida') : remaining === 1 ? tr('1 more day', 'Mais 1 dia') : tr(`${remaining} more days`, `Mais ${remaining} dias`)} /></li>,
-		look.showBadges && <li key="b" className="col-span-2"><Link to="/progress" className="block h-full rounded-[1.75rem] focus-visible:ring-3 focus-visible:ring-ring focus-visible:outline-none"><Stat tone="amber" label={tr('Badges', 'Emblemas')} value={game.badges.filter((badge) => badge.earned).length} unit={tr('earned', 'conquistados')} note={tr(`${game.badges.length} milestones to explore`, `${game.badges.length} marcos para explorar`)} /></Link></li>
+		look.showXp && <li key="x"><Stat tone="violet" icon={<Sparkles />} label={tr(`Level ${game.level.level}`, `Nível ${game.level.level}`)} value={game.level.xp} unit="XP" progress={game.level.progress} note={tr(`${game.level.xpToNext} XP to Level ${game.level.level + 1}`, `${game.level.xpToNext} XP para o Nível ${game.level.level + 1}`)} className="h-full p-4 xl:p-5" /></li>,
+		look.showGoal && <li key="g" className="col-span-2"><Stat tone="green" icon={<Target />} label={tr('Goal', 'Meta')} value={`${days}/${rewards.weeklyGoal}`} unit={tr('days this week', 'dias nesta semana')} bar={{ value: days, max: rewards.weeklyGoal }} note={remaining === 0 ? tr('Goal reached', 'Meta atingida') : remaining === 1 ? tr('1 more day', 'Mais 1 dia') : tr(`${remaining} more days`, `Mais ${remaining} dias`)} /></li>,
+		look.showBadges && <li key="b" className="col-span-2"><Link to="/progress" className="block h-full rounded-[1.75rem] focus-visible:ring-3 focus-visible:ring-ring focus-visible:outline-none"><Stat tone="amber" icon={<Award />} label={tr('Badges', 'Emblemas')} value={game.badges.filter((badge) => badge.earned).length} unit={tr('earned', 'conquistados')} note={tr(`${game.badges.length} milestones to explore`, `${game.badges.length} marcos para explorar`)} /></Link></li>
 	].filter(Boolean);
 	if (cards.length === 0) return null;
 	return <ul aria-label={tr('Your habit', 'Seu hábito')} className="grid grid-cols-2 gap-3">{cards}</ul>;
@@ -281,16 +279,85 @@ function HabitStrip({ rewards, completedCourses, bookmarks }: { rewards: RewardS
 	const game = buildGamification({ rewards, completedCourses });
 	const earned = game.badges.filter((badge) => badge.earned).length;
 	const days = Math.min(study.weekActiveDays, rewards.weeklyGoal);
-	const items: [string, string][] = [
-		[tr('Streak', 'Sequência'), `${study.currentStreak} ${study.currentStreak === 1 ? tr('day', 'dia') : tr('days', 'dias')}`],
-		[tr(`Level ${game.level.level}`, `Nível ${game.level.level}`), `${game.level.xp} XP`],
-		[tr('Goal', 'Meta'), `${days}/${rewards.weeklyGoal} ${tr('days', 'dias')}`],
-		[tr('Badges', 'Emblemas'), tr(`${earned} earned`, `${earned} conquistados`)],
-		[tr('Bookmarks', 'Favoritos'), String(bookmarks)]
+	const goalPercent = rewards.weeklyGoal > 0 ? Math.round((days / rewards.weeklyGoal) * 100) : 0;
+	const levelPercent = Math.round(Math.min(1, Math.max(0, game.level.progress)) * 100);
+	const items = [
+		{
+			key: 'streak',
+			tone: 'amber' as const,
+			icon: <Flame />,
+			label: tr('Streak', 'Sequência'),
+			value: String(study.currentStreak),
+			unit: study.currentStreak === 1 ? tr('day', 'dia') : tr('days', 'dias'),
+			meta: study.currentStreak > 0 ? tr('Active run', 'Em andamento') : tr('Start today', 'Comece hoje')
+		},
+		{
+			key: 'level',
+			tone: 'violet' as const,
+			icon: <Sparkles />,
+			label: tr(`Level ${game.level.level}`, `Nível ${game.level.level}`),
+			value: String(game.level.xp),
+			unit: 'XP',
+			progress: levelPercent,
+			meta: tr(`${game.level.xpToNext} XP to next`, `${game.level.xpToNext} XP p/ próximo`)
+		},
+		{
+			key: 'goal',
+			tone: 'green' as const,
+			icon: <Target />,
+			label: tr('Goal', 'Meta'),
+			value: `${days}/${rewards.weeklyGoal}`,
+			unit: tr('days', 'dias'),
+			progress: goalPercent,
+			meta: days >= rewards.weeklyGoal ? tr('Goal reached', 'Meta atingida') : tr(`${rewards.weeklyGoal - days} left this week`, `Faltam ${rewards.weeklyGoal - days} na semana`)
+		},
+		{
+			key: 'badges',
+			tone: 'amber' as const,
+			icon: <Award />,
+			label: tr('Badges', 'Emblemas'),
+			value: String(earned),
+			unit: tr('earned', 'conquistados'),
+			meta: tr(`${game.badges.length} total`, `${game.badges.length} no total`)
+		},
+		{
+			key: 'bookmarks',
+			tone: undefined,
+			icon: <Bookmark />,
+			label: tr('Bookmarks', 'Favoritos'),
+			value: String(bookmarks),
+			unit: bookmarks === 1 ? tr('saved', 'salvo') : tr('saved', 'salvos'),
+			meta: tr('Lesson queue', 'Aulas marcadas')
+		}
 	];
 	return (
-		<dl aria-label={tr('Your habit', 'Seu hábito')} className="grid grid-cols-2 content-center gap-4 rounded-[1.5rem] border bg-card p-4 sm:grid-cols-5">
-			{items.map(([label, value]) => <div key={label}><dt className="text-sm text-muted-foreground">{label}</dt><dd className="text-xl font-semibold">{value}</dd></div>)}
+		<dl aria-label={tr('Your habit', 'Seu hábito')} className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+			{items.map((item) => (
+				<div key={item.key} data-panel className={cn('flex min-w-0 flex-col justify-between gap-2.5 rounded-2xl border border-border bg-card p-3.5', item.tone && `stat-${item.tone}`)}>
+					<dt className="flex items-center justify-between gap-2 text-xs font-semibold text-muted-foreground">
+						<span className="truncate">{item.label}</span>
+						<span data-stat-icon aria-hidden="true" className="inline-flex size-6 shrink-0 items-center justify-center rounded-lg border border-border/80 bg-panel/70 text-muted-foreground [&>svg]:size-3.5">
+							{item.icon}
+						</span>
+					</dt>
+					<dd className="min-w-0 space-y-2">
+						<p className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 font-heading text-2xl leading-none font-bold tabular-nums">
+							<span>{item.value}</span>
+							<span className="font-sans text-xs font-medium text-muted-foreground">{item.unit}</span>
+						</p>
+						{typeof item.progress === 'number' ? (
+							<div className="space-y-1">
+								<div className="h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+									<div className="h-full rounded-full bg-primary transition-[width] duration-300" style={{ width: `${item.progress}%` }} />
+								</div>
+								<p className="truncate text-[0.75rem] text-muted-foreground">{item.meta}</p>
+							</div>
+						) : (
+							<p className="truncate text-[0.75rem] text-muted-foreground">{item.meta}</p>
+						)}
+					</dd>
+				</div>
+			))}
 		</dl>
 	);
 }

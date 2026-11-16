@@ -23,6 +23,8 @@ type Props = {
 	compact?: boolean;
 	/** Draw the lessons as a map instead of the title, where the course name is already the heading. */
 	map?: boolean;
+	/** Notifies the parent when the resolved cover or thumbnail image URL changes. */
+	onImageChange?: (src: string | null) => void;
 };
 
 /**
@@ -32,7 +34,7 @@ type Props = {
  * is drawn on the cover the element carries `data-titled`, so the heading beside it can be
  * visually hidden instead of repeating the name.
  */
-export function CourseCover({ course, profile, className, eager = false, done = 0, total = 0, compact = false, map = false }: Props) {
+export function CourseCover({ course, profile, className, eager = false, done = 0, total = 0, compact = false, map = false, onImageChange }: Props) {
 	const element = useRef<HTMLSpanElement>(null);
 	const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
 	const manualCoverUrl = transport.coverUrl(courseIdOf(course), course.coverVersion ?? null);
@@ -59,6 +61,9 @@ export function CourseCover({ course, profile, className, eager = false, done = 
 	}, [course, profile, manualCoverUrl]);
 
 	const image = source === 'manual' ? manualCoverUrl : source === 'thumbnail' ? thumbnailUrl : null;
+	useEffect(() => {
+		onImageChange?.(image);
+	}, [image, onImageChange]);
 	return (
 		<span ref={element} aria-hidden="true" className={cn('relative block aspect-[16/10] overflow-hidden rounded-[1.25rem] bg-muted', className)}>
 			{image ? (

@@ -83,6 +83,16 @@ describe('CourseCard variants', () => {
 		show('grid', undefined, true);
 		expect(screen.getByRole('button', { name: 'Manage Rust from Zero' })).toBeTruthy();
 	});
+
+	it('reserves trailing title space for every visible top-right action', () => {
+		show('grid', undefined, true);
+		const titleBlock = screen.getByRole('heading', { name: 'Rust from Zero' }).parentElement;
+		expect(titleBlock?.className).toContain('pr-[5.75rem]');
+		cleanup();
+		show('grid', undefined, false);
+		const favoriteOnlyTitle = screen.getByRole('heading', { name: 'Rust from Zero' }).parentElement;
+		expect(favoriteOnlyTitle?.className).toContain('pr-12');
+	});
 });
 
 describe('progressLabel', () => {

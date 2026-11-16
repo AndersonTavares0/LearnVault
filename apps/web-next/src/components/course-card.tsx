@@ -110,8 +110,8 @@ export function CourseCard({ entry, profile, variant = 'grid', canManage = false
 					</Button>
 				</div>
 			)}
-			{manageable && <div className="absolute top-1 right-12 z-10"><CourseManagement course={entry.course} courseId={entry.courseId} lessons={entry.total} compact /></div>}
-			<div className={cn('min-w-0 flex-1 space-y-1', !listed && 'pr-8')}>
+			{manageable && <div className={cn('absolute top-1 z-10', studySyncSupported && !listed ? 'right-12' : 'right-1')}><CourseManagement course={entry.course} courseId={entry.courseId} lessons={entry.total} compact /></div>}
+			<div className={cn('min-w-0 flex-1 space-y-1', manageable ? (studySyncSupported && !listed ? 'pr-[5.75rem]' : 'pr-12') : (studySyncSupported && !listed ? 'pr-12' : undefined))}>
 				<h3 className="card-heading text-base leading-snug font-semibold text-balance">
 					{/* The link covers the whole card; the favorite button sits above it. */}
 					<Link to={routerPath(href('course', entry.courseId))} title={entry.course.title} className="line-clamp-3 [overflow-wrap:anywhere] after:absolute after:inset-0 after:content-[''] hover:underline">{entry.course.title}</Link>

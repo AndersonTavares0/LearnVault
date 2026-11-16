@@ -16,12 +16,19 @@ export const Eyebrow = ({ children, className }: { children: ReactNode; classNam
 );
 
 /** A small tinted number card: the label, the value, and optional extra context. */
-export function Stat({ label, value, unit, note, tone, bar, progress, children, className }: { label: string; value: ReactNode; unit?: string; note?: string; icon?: ReactNode; tone?: 'amber' | 'violet' | 'green'; bar?: { value: number; max: number }; progress?: number; children?: ReactNode; className?: string }) {
+export function Stat({ label, value, unit, note, icon, tone, bar, progress, children, className }: { label: string; value: ReactNode; unit?: string; note?: string; icon?: ReactNode; tone?: 'amber' | 'violet' | 'green'; bar?: { value: number; max: number }; progress?: number; children?: ReactNode; className?: string }) {
 	const percent = Math.round(Math.min(1, Math.max(0, progress ?? 0)) * 100);
 	return (
 		<div data-panel className={cn('rounded-2xl border border-border bg-card p-4', tone && `stat-${tone}`, className)}>
-			<p className="text-[0.9375rem] font-bold">{label}</p>
-			<p data-stat-value className="mt-1.5 font-heading text-3xl leading-none font-bold">{value}{unit && <span className="ml-1.5 font-sans text-base font-medium text-muted-foreground">{unit}</span>}</p>
+			<div className="flex items-center justify-between gap-2">
+				<p className="min-w-0 text-[0.875rem] font-semibold text-foreground/85">{label}</p>
+				{icon && (
+					<span data-stat-icon aria-hidden="true" className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg border border-border/80 bg-panel/70 text-muted-foreground [&>svg]:size-3.5">
+						{icon}
+					</span>
+				)}
+			</div>
+			<p data-stat-value className="mt-2 font-heading text-3xl leading-none font-bold tabular-nums">{value}{unit && <span className="ml-1.5 font-sans text-base font-medium text-muted-foreground">{unit}</span>}</p>
 			{bar && (
 				<div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={bar.max} aria-valuenow={bar.value} className="mt-3 flex gap-1">
 					{Array.from({ length: bar.max }, (_, index) => <span key={index} className={cn('h-1.5 flex-1 rounded-full', index < bar.value ? 'bg-primary' : 'bg-border')} />)}
