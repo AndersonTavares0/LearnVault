@@ -84,4 +84,16 @@ describe('course page', () => {
 		renderApp('/course/unknown', { catalog });
 		expect(await screen.findByRole('heading', { name: 'Course not found' })).toBeTruthy();
 	});
+
+	it('adds a blurred backdrop to the course hero when artwork is available', async () => {
+		const withCover: Catalog = { complete: true, looseFiles: [], nodes: [{ ...catalog.nodes[0], coverVersion: 3 }] };
+		renderApp('/course/rust', { catalog: withCover });
+		const heading = await screen.findByRole('heading', { level: 1, name: 'Rust from zero' });
+		const hero = heading.closest('[data-panel]');
+		expect(hero?.querySelectorAll('img[src*="/cover"]').length).toBe(2);
+		cleanup();
+		renderApp('/course/rust', { catalog });
+		const plainHeading = await screen.findByRole('heading', { level: 1, name: 'Rust from zero' });
+		expect(plainHeading.closest('[data-panel]')?.querySelectorAll('img[src*="/cover"]').length).toBe(0);
+	});
 });

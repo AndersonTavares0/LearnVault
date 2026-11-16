@@ -1,5 +1,5 @@
-import { Award, ChartNoAxesColumn, Check, Lock } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { Award, BookCheck, CalendarCheck, ChartNoAxesColumn, Check, Lock, Timer } from 'lucide-react';
+import { type ReactNode, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { ActivityHeatmap } from '@/components/activity-heatmap';
 import { Panel } from '@/components/panel';
@@ -60,9 +60,9 @@ export function ProgressPage() {
 			<PageHeader icon={ChartNoAxesColumn} title={tr('Your progress', 'Seu progresso')} description={`${tr(`Level ${game.level.level}`, `Nível ${game.level.level}`)} · ${game.level.xp} XP`} />
 
 			<dl aria-label={tr('At a glance', 'Visão geral')} className="grid gap-4 sm:grid-cols-3">
-				<Metric label={tr('Lessons completed (all time)', 'Aulas concluídas (total)')} value={String(lessonsDone)} caption={tr(`In total, across ${startedCourses} ${startedCourses === 1 ? 'course' : 'courses'} you started.`, `No total, em ${startedCourses} ${startedCourses === 1 ? 'curso iniciado' : 'cursos iniciados'}.`)} />
-				<Metric label={tr('Active days (this week)', 'Dias ativos (esta semana)')} value={String(Math.min(study.weekActiveDays, goal))} suffix={tr(`of ${goal}-day goal`, `da meta de ${goal} dias`)} caption={`${missing === 0 ? tr('Goal reached. ', 'Meta atingida. ') : ''}${tr(`Streak: ${study.currentStreak} ${study.currentStreak === 1 ? 'day' : 'days'}. Busiest day: ${best ? best.label : 'none yet'}.`, `Sequência: ${study.currentStreak} ${study.currentStreak === 1 ? 'dia' : 'dias'}. Dia mais forte: ${best ? best.label : 'nenhum ainda'}.`)}`} />
-				<Metric label={range === 'week' ? tr('Focus time (this week)', 'Tempo de foco (esta semana)') : tr('Focus time (all time)', 'Tempo de foco (total)')} value={formatMinutes(total)} caption={`${range === 'week' ? tr('This week.', 'Nesta semana.') : tr('In total.', 'No total.')} ${tr('Only the Pomodoro timer counts here.', 'Só o cronômetro Pomodoro conta aqui.')}`} />
+				<Metric tone="violet" icon={<BookCheck />} label={tr('Lessons completed (all time)', 'Aulas concluídas (total)')} value={String(lessonsDone)} caption={tr(`In total, across ${startedCourses} ${startedCourses === 1 ? 'course' : 'courses'} you started.`, `No total, em ${startedCourses} ${startedCourses === 1 ? 'curso iniciado' : 'cursos iniciados'}.`)} />
+				<Metric tone="green" icon={<CalendarCheck />} progress={goal > 0 ? Math.min(1, study.weekActiveDays / goal) : 0} label={tr('Active days (this week)', 'Dias ativos (esta semana)')} value={String(Math.min(study.weekActiveDays, goal))} suffix={tr(`of ${goal}-day goal`, `da meta de ${goal} dias`)} caption={`${missing === 0 ? tr('Goal reached. ', 'Meta atingida. ') : ''}${tr(`Streak: ${study.currentStreak} ${study.currentStreak === 1 ? 'day' : 'days'}. Busiest day: ${best ? best.label : 'none yet'}.`, `Sequência: ${study.currentStreak} ${study.currentStreak === 1 ? 'dia' : 'dias'}. Dia mais forte: ${best ? best.label : 'nenhum ainda'}.`)}`} />
+				<Metric tone="amber" icon={<Timer />} label={range === 'week' ? tr('Focus time (this week)', 'Tempo de foco (esta semana)') : tr('Focus time (all time)', 'Tempo de foco (total)')} value={formatMinutes(total)} caption={`${range === 'week' ? tr('This week.', 'Nesta semana.') : tr('In total.', 'No total.')} ${tr('Only the Pomodoro timer counts here.', 'Só o cronômetro Pomodoro conta aqui.')}`} />
 			</dl>
 
 			<div className="grid gap-6 lg:grid-cols-12 lg:items-stretch">
@@ -130,13 +130,26 @@ export function ProgressPage() {
 }
 
 /** One number with its label and what it counts, so lessons, active days and focus time are never confused. */
-function Metric({ label, value, suffix, caption }: { label: string; value: string; suffix?: string; caption: string }) {
+function Metric({ label, value, suffix, caption, icon, tone, progress }: { label: string; value: string; suffix?: string; caption: string; icon?: ReactNode; tone?: 'amber' | 'violet' | 'green'; progress?: number }) {
+	const percent = typeof progress === 'number' ? Math.round(Math.min(1, Math.max(0, progress)) * 100) : null;
 	return (
-		<Panel className="space-y-1 p-5">
-			<dt className="font-semibold">{label}</dt>
-			<dd className="space-y-1">
-				<p className="text-4xl font-bold tabular-nums">{value}{suffix && <span className="ml-2 font-sans text-base font-medium text-muted-foreground">{suffix}</span>}</p>
+		<Panel className={cn('flex flex-col justify-between gap-2 p-5', tone && `stat-${tone}`)}>
+			<dt className="flex items-center justify-between gap-2 text-sm font-semibold text-foreground/85">
+				{label}
+				{icon && (
+					<span data-stat-icon aria-hidden="true" className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg border border-border/80 bg-panel/70 text-muted-foreground [&>svg]:size-3.5">
+						{icon}
+					</span>
+				)}
+			</dt>
+			<dd className="space-y-1.5">
+				<p className="font-heading text-4xl leading-none font-bold tabular-nums">{value}{suffix && <span className="ml-2 font-sans text-base font-medium text-muted-foreground">{suffix}</span>}</p>
 				<p className="text-sm text-muted-foreground">{caption}</p>
+				{percent !== null && (
+					<div className="h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+						<div className="h-full rounded-full bg-primary transition-[width] duration-300" style={{ width: `${percent}%` }} />
+					</div>
+				)}
 			</dd>
 		</Panel>
 	);

@@ -133,6 +133,20 @@ describe('Sign in', () => {
 		expect(await screen.findByText(/Nothing saved yet/)).toBeTruthy();
 	});
 
+	it('lays out the habit strip full-width below resume in list view', async () => {
+		localStorage.setItem('learnvault-library-view', 'list');
+		renderApp('/', { catalog, rewards, favorites: { courseIds: [], mediaIds: ['r2'] } });
+		const habit = await screen.findByLabelText('Your habit');
+		expect(habit.tagName).toBe('DL');
+		expect(habit.className).toContain('lg:grid-cols-5');
+		expect(within(habit).getByText('Streak')).toBeTruthy();
+		expect(within(habit).getByText('Level 1')).toBeTruthy();
+		expect(within(habit).getByText('Goal')).toBeTruthy();
+		expect(within(habit).getByText('Badges')).toBeTruthy();
+		expect(within(habit).getByText('Bookmarks')).toBeTruthy();
+		localStorage.removeItem('learnvault-library-view');
+	});
+
 	describe('Refresh courses', () => {
 		const remote: RemoteSource = { id: 'src-1', name: 'NAS', url: 'smb://nas.example.test/cursos', username: null, hasPassword: false, credentialError: false };
 

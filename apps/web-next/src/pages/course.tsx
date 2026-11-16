@@ -70,6 +70,7 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 	const toggleFavorite = useToggleCourseFavorite();
 	const user = session.data?.user;
 	const [signal, setSignal] = useState({ open: false, n: 0 });
+	const [heroImage, setHeroImage] = useState<string | null>(null);
 
 	const completed = useMemo(() => new Set((recent.data ?? []).filter((item) => item.completed).map((item) => item.mediaId)), [recent.data]);
 	const favoriteMedia = useMemo(() => new Set(favorites.data?.mediaIds ?? []), [favorites.data]);
@@ -105,9 +106,15 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 		<div className="space-y-8">
 			<div className="space-y-4">
 				<p className="text-sm text-muted-foreground"><Link to={libraryReturn()} className="inline-flex min-h-11 items-center hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">{tr('My learning', 'Meu aprendizado')}</Link> / {course.title}</p>
-				<Hero className="p-6">
-					<div className="grid gap-6 lg:grid-cols-[12.5rem_minmax(0,1fr)_auto] lg:items-center">
-					<div className="max-w-xs lg:w-[12.5rem] lg:max-w-none"><CourseCover course={course} profile={user?.userId ?? ''} eager done={entry?.done ?? 0} total={entry?.total ?? 0} map={!readingOnly} className={readingOnly ? 'hidden sm:block' : undefined} /></div>
+				<Hero className="relative overflow-hidden p-6 sm:p-8">
+					{heroImage && (
+						<div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+							<img src={heroImage} alt="" className="size-full scale-110 object-cover opacity-25 blur-2xl saturate-125 dark:opacity-20" />
+							<div className="absolute inset-0 bg-linear-to-r from-panel/80 via-panel/90 to-panel/95" />
+						</div>
+					)}
+					<div className="relative grid gap-6 lg:grid-cols-[14.5rem_minmax(0,1fr)_auto] lg:items-center">
+					<div className="max-w-xs lg:w-[14.5rem] lg:max-w-none"><CourseCover course={course} profile={user?.userId ?? ''} eager done={entry?.done ?? 0} total={entry?.total ?? 0} map={!readingOnly} onImageChange={setHeroImage} className={cn('shadow-sm ring-1 ring-border/75', heroImage && 'shadow-lg ring-foreground/10', readingOnly && 'hidden sm:block')} /></div>
 						<div className="min-w-0 space-y-3">
 						<div className="space-y-2">
 							<h1 className="font-heading text-3xl leading-tight font-bold text-balance">{course.title}</h1>
