@@ -1,59 +1,59 @@
-# LearnVault - Guia de Deploy e Self-Hosting com Docker
+# LearnVault - Deployment and Self-Hosting Guide with Docker
 
-Este diretório contém os artefatos de implantação oficial do **LearnVault** para ambientes de produção e self-hosting com Docker e Podman.
-
----
-
-## Princípios de Arquitetura
-
-1. **Biblioteca Somente Leitura (`/library:ro`)**: O LearnVault nunca grava, move, renomeia ou exclui seus arquivos de cursos originais.
-2. **Segurança por Padrão (Zero Privilégios)**:
-   - Execução como usuário não-root (`UID 10001:10001`).
-   - `read_only: true` no sistema de arquivos do container (apenas `/tmp` montado como tmpfs estrito).
-   - `no-new-privileges: true` e `cap_drop: ALL`.
-   - Isolamento em rede interna (`learnvault_net`).
-   - Sem montagem do Docker Socket dentro do container da aplicação.
-3. **Confiabilidade e Persistência**:
-   - SQLite em modo WAL com integridade transacional.
-   - Ferramenta nativa de backup e restauração com verificação de integridade (`PRAGMA integrity_check`).
-4. **Atualizações Confiáveis**:
-   - Detecção de novas versões via GitHub Releases API sem vazar dados locais.
-   - Script de atualização com **backup preventivo automático**, teste de healthcheck e **rollback imediato** em caso de falha.
+This directory contains the official deployment artifacts for **LearnVault** in production and self-hosting environments with Docker and Podman.
 
 ---
 
-## Estrutura de Arquivos
+## Architecture Principles
 
-- `compose/compose.yaml`: Arquivo principal do Docker Compose.
-- `compose/compose.proxy.yaml`: Reverse proxy Caddy com HTTPS automático e headers OWASP.
-- `compose/compose.secrets.yaml`: Configuração opcional via Docker Secrets.
-- `compose/compose.updater.yaml`: Serviço companion opcional (opt-in) para atualizações automáticas.
-- `compose/Caddyfile`: Configuração de proxy reverso com otimização de streaming HTTP Range.
-- `compose/.env.example`: Modelo de variáveis de ambiente.
-- `container/Containerfile`: Definição OCI multi-stage (Node.js + Rust Alpine).
-- `scripts/backup.sh`: Utilitário de backup transacional.
-- `scripts/restore.sh`: Utilitário de restauração segura com validação.
-- `scripts/update.sh`: Script de atualização com backup preventivo e rollback.
-- `scripts/updater-daemon.sh`: Daemon de atualização automática agendada.
+1. **Read-only library (`/library:ro`)**: LearnVault never writes, moves, renames or deletes your original course files.
+2. **Secure by default (zero privileges)**:
+   - Runs as a non-root user (`UID 10001:10001`).
+   - `read_only: true` on the container filesystem (only `/tmp` is mounted, as a strict tmpfs).
+   - `no-new-privileges: true` and `cap_drop: ALL`.
+   - Isolation on an internal network (`learnvault_net`).
+   - The Docker socket is never mounted inside the application container.
+3. **Reliability and persistence**:
+   - SQLite in WAL mode with transactional integrity.
+   - A native backup and restore tool with an integrity check (`PRAGMA integrity_check`).
+4. **Trustworthy updates**:
+   - New versions are detected through the GitHub Releases API without leaking local data.
+   - The update script takes an **automatic pre-update backup**, runs a healthcheck and **rolls back immediately** on failure.
 
 ---
 
-## Como Iniciar a Aplicação
+## File Layout
 
-### 1. Configuração Inicial
+- `compose/compose.yaml`: Main Docker Compose file.
+- `compose/compose.proxy.yaml`: Caddy reverse proxy with automatic HTTPS and OWASP headers.
+- `compose/compose.secrets.yaml`: Optional configuration through Docker Secrets.
+- `compose/compose.updater.yaml`: Optional (opt-in) companion service for automatic updates.
+- `compose/Caddyfile`: Reverse proxy configuration tuned for HTTP Range streaming.
+- `compose/.env.example`: Environment variable template.
+- `container/Containerfile`: Multi-stage OCI definition (Node.js + Rust on Alpine).
+- `scripts/backup.sh`: Transactional backup utility.
+- `scripts/restore.sh`: Safe restore utility with validation.
+- `scripts/update.sh`: Update script with a pre-update backup and rollback.
+- `scripts/updater-daemon.sh`: Scheduled automatic update daemon.
+
+---
+
+## Getting Started
+
+### 1. Initial setup
 
 ```sh
 cd deploy/compose
 cp .env.example .env
 ```
 
-Edite o arquivo `.env` e defina suas credenciais de administrador e caminhos:
-- `ADMIN_USERNAME`: Usuário administrador inicial.
-- `ADMIN_PASSWORD`: Senha forte (mínimo de 12 caracteres).
-- `DATA_DIR`: Onde o banco de dados e metadados serão armazenados.
+Edit the `.env` file and set your administrator credentials and paths:
+- `ADMIN_USERNAME`: The initial administrator user.
+- `ADMIN_PASSWORD`: A strong password (at least 12 characters).
+- `DATA_DIR`: Where the database and metadata are stored.
 - `LIBRARY_DIR`: Folder on the host, mounted read-only at `/library`. It sets the root the server is allowed to read and, on the first start, registers each course folder directly under it as a course — no manual import step. A folder that keeps the media files directly in the root is registered as a single course instead. Importing a subfolder also works (for example when your course folders are nested one level deeper); folders added after the first start are not registered automatically.
 
-### 2. Executar com Docker Compose
+### 2. Run with Docker Compose
 
 By default Compose uses the official image published on the GitHub Container Registry (GHCR), so a new release is one `docker compose pull && docker compose up -d` away (or automatic, with the opt-in updater below). You can also pin a version or build the image yourself:
 
@@ -62,7 +62,7 @@ By default Compose uses the official image published on the GitHub Container Reg
 docker compose up -d
 
 # Option B: pin a version
-LEARNVAULT_IMAGE=ghcr.io/andersontavares0/learnvault:0.9.0-rc.4 docker compose up -d
+LEARNVAULT_IMAGE=ghcr.io/andersontavares0/learnvault:0.9.2 docker compose up -d
 
 # Option C: build the image from the source code (contributors)
 docker compose -f compose.yaml -f compose.build.yaml up -d --build
@@ -77,81 +77,81 @@ docker compose -f compose.yaml -f compose.build.yaml up -d --build
 
 > **Upgrading from a setup that built the image locally:** if your `.env` still has `LEARNVAULT_IMAGE=learnvault-rust:local`, remove that line (the default is now the published image), or keep building by adding `-f compose.build.yaml` to every `docker compose` command.
 
-Acesse no seu navegador: `http://localhost:8090`.
+Open `http://localhost:8090` in your browser.
 
-### 3. Executar com Proxy Reverso Caddy (HTTPS Automático)
+### 3. Run with the Caddy reverse proxy (automatic HTTPS)
 
-Para ambientes expostos na rede local ou na internet com domínio próprio e certificados TLS automáticos:
+For deployments exposed on the local network or on the internet with your own domain and automatic TLS certificates:
 
 ```sh
-DOMAIN=cursos.meudominio.com docker compose -f compose.yaml -f compose.proxy.yaml up -d
+DOMAIN=courses.example.com docker compose -f compose.yaml -f compose.proxy.yaml up -d
 ```
 
-O Caddy cuidará automaticamente da renovação de certificados SSL/TLS, compressão zstd/gzip e cabeçalhos de proteção (HSTS, CSP, X-Frame-Options, X-Content-Type-Options).
+Caddy automatically handles SSL/TLS certificate renewal, zstd/gzip compression and protective headers (HSTS, CSP, X-Frame-Options, X-Content-Type-Options).
 
 ---
 
-## Backup e Restauração
+## Backup and Restore
 
-### Criando um Backup Transacional
+### Creating a transactional backup
 
-Para criar um backup a quente do banco de dados sem interromper a reprodução dos usuários:
+To take a hot backup of the database without interrupting users' playback:
 
 ```sh
-# Via utilitário script
+# With the helper script
 ../../deploy/scripts/backup.sh
 
-# Ou diretamente pelo CLI do container
-docker compose exec learnvault /app/learnvault-server backup --database /data/learnvault.sqlite --output /data/backups/meu-backup.sqlite
+# Or directly through the container CLI
+docker compose exec learnvault /app/learnvault-server backup --database /data/learnvault.sqlite --output /data/backups/my-backup.sqlite
 ```
 
-O comando realiza o backup online via API do SQLite e roda `PRAGMA integrity_check` antes de finalizar.
+The command performs the online backup through the SQLite API and runs `PRAGMA integrity_check` before finishing.
 
-### Restaurando a Partir de um Backup
+### Restoring from a backup
 
 ```sh
-# Via script (com validação prévia de integridade e swap atômico)
-../../deploy/scripts/restore.sh /caminho/para/meu-backup.sqlite
+# With the script (integrity is validated first, and the swap is atomic)
+../../deploy/scripts/restore.sh /path/to/my-backup.sqlite
 ```
 
 ---
 
-## Sistema de Atualizações
+## Update System
 
-### Atualização Manual com Rollback Seguro
+### Manual update with safe rollback
 
-Quando uma nova versão for publicada, você pode executar o script de atualização:
+When a new version is published, you can run the update script:
 
 ```sh
-../../deploy/scripts/update.sh [versao-opcional]
+../../deploy/scripts/update.sh [optional-version]
 ```
 
-O script executa:
-1. Consulta da versão atual instalada.
-2. Backup pré-atualização transacional.
-3. Download da imagem versionada.
-4. Reinicialização dos containers.
-5. Verificação de `healthcheck` durante 60 segundos.
-6. **Rollback automático**: se o novo container falhar no healthcheck ou a migração for incompatível, o banco pré-atualização é restaurado e a imagem anterior volta a rodar.
-7. Registro de log em `/data/update-history.json`.
+The script:
+1. Reads the currently installed version.
+2. Takes a transactional pre-update backup.
+3. Downloads the versioned image.
+4. Restarts the containers.
+5. Checks the `healthcheck` for 60 seconds.
+6. **Rolls back automatically**: if the new container fails the healthcheck or the migration is incompatible, the pre-update database is restored and the previous image runs again.
+7. Writes a log entry to `/data/update-history.json`.
 
-### Atualização Automática Opt-in
+### Opt-in automatic updates
 
-Caso deseje que o LearnVault verifique e atualize autonomamente durante a madrugada:
-1. No `.env`, defina:
+If you want LearnVault to check for and apply updates on its own during the night:
+1. In `.env`, set:
    ```env
    AUTO_UPDATE=true
    AUTO_UPDATE_WINDOW=03:00-05:00
-   # stable (padrão) instala apenas versões finais; rc também aceita candidatas.
+   # stable (default) installs only final releases; rc also accepts candidates.
    LEARNVAULT_CHANNEL=stable
    ```
-2. Inicie o container companion:
+2. Start the companion container:
    ```sh
    docker compose -f compose.yaml -f compose.updater.yaml --profile updater up -d
    ```
-O container companion updater roda isoladamente, consulta a API e só aplica atualizações dentro da janela de manutenção definida. Ele nunca monta o socket do Docker: quem fala com o daemon é um proxy que libera apenas os endpoints necessários.
+The companion updater container runs in isolation, queries the API and applies updates only inside the configured maintenance window. It never mounts the Docker socket: a proxy that only allows the required endpoints talks to the daemon.
 
-`LEARNVAULT_CHANNEL` limita o que pode ser instalado: `stable` recusa candidatas e `rc` também as aceita. Nos dois casos a imagem precisa de uma assinatura válida do workflow de release, e o updater não rebaixa uma instalação: um alvo igual ou mais antigo é ignorado.
+`LEARNVAULT_CHANNEL` limits what can be installed: `stable` refuses candidates and `rc` also accepts them. In both cases the image needs a valid signature from the release workflow, and the updater never downgrades an installation: a target that is equal or older is ignored.
 
 **Docker socket security.** The updater never mounts the host socket: it talks to `docker-proxy` (`tecnativa/docker-socket-proxy`, pinned by digest), which only enables the API sections used by `update.sh` (containers, start/stop, images, networks, volumes and exec) and refuses the rest (secrets, swarm, build, commit and plugins). This reduces the surface; it does not eliminate the risk: anyone able to create containers through the API could, in theory, mount the host. Therefore the updater is opt-in and should run only on machines you control. For a stronger guarantee, prefer the Quadlet with `podman-auto-update.timer`, which does not use a socket.
 
