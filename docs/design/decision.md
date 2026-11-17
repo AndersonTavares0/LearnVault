@@ -2,6 +2,8 @@
 
 > **Superseded in part (2026-11-11).** The palette, themes, navigation and gamification described here were replaced by the direction in [`DESIGN.md`](../../DESIGN.md) and [`PRODUCT.md`](../../PRODUCT.md): light and dark themes, brown and amber, Playfair Display and DM Sans, top navigation, no forest. Where this file names a palette, a theme or a layout, those two files win. It is kept as history and for the research and the accessibility and security rules, which still apply.
 
+> **Brand superseded (2026-11).** The LV monogram mentioned below was replaced by the Academy Portico mark and the *Sapere aude* motto; see the Brand section of [`DESIGN.md`](../../DESIGN.md) and [`branding/`](branding/).
+
 ## Critério
 
 Conceitos foram avaliados em screenshots, não em testes com usuários. Aprovação exige média ponderada ≥4,00/5 e nenhuma dimensão abaixo de 3/5:
