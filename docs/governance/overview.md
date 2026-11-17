@@ -28,6 +28,13 @@ Forks are not part of the standard maintainer flow. Contributors with write acce
 branches within this repository. `.github/CODEOWNERS` indicates subsystem ownership. Every open
 issue must have an assigned owner.
 
+## Release governance
+
+The [release and versioning policy](../../.agents/policies/releases.md) sets the rules for version numbers (the line
+only moves forward), release pacing (monthly, with a short list of off-cycle reasons), pre-release retention, the
+changelog and release notes format, approvals and rollback. [ADR 0006](../architecture/adr/0006-release-versioning-and-prerelease-retention.md)
+records why. The mechanics are in [`docs/releases/process.md`](../releases/process.md).
+
 ## Agent review policy
 
 The canonical [agent collaboration policy](../../.agents/policies/agent-collaboration.md)
