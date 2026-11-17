@@ -690,7 +690,7 @@ jobs:
             mapfile -t contributors <<< "$contributors_text"
             if [[ -n "$contributors_text" ]]; then
               {
-                printf '\n\n---\n\n<!-- learnvault:contributors -->\n## Contribuidores\n\n'
+                printf '\n\n---\n\n<!-- learnvault:contributors -->\n## Contributors\n\n'
                 for contributor in "${contributors[@]}"; do
                   escaped="$(printf '%s' "$contributor" | sed -e 's/\\/\\\\/g' -e 's/`/\\`/g' -e 's/\*/\\*/g' -e 's/_/\\_/g' -e 's/{/\\{/g' -e 's/}/\\}/g' -e 's/\[/\\[/g' -e 's/\]/\\]/g' -e 's/</\\</g' -e 's/>/\\>/g' -e 's/|/\\|/g')"
                   printf -- '- %s\n' "$escaped"

@@ -38,3 +38,9 @@ test('Release Please prepares releases monthly and publishes merged release PRs 
     assert.match(workflow, /skip-github-release: \$\{\{ github\.event_name != 'push' \}\}/);
     assert.match(workflow, /skip-github-pull-request: \$\{\{ github\.event_name == 'push' \}\}/);
 });
+
+test('the release notes contributors section is written in English', () => {
+    const releaseWorkflow = readFileSync(resolve(root, '.github/workflows/release.yml'), 'utf8');
+    assert.match(releaseWorkflow, /<!-- learnvault:contributors -->\\n## Contributors\\n/);
+    assert.doesNotMatch(releaseWorkflow, /Contribuidores/);
+});
