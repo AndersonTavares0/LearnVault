@@ -1,6 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none" role="img" aria-labelledby="title">
-  <title id="title">LearnVault</title>
-  <rect width="128" height="128" rx="30" fill="#000000"/>
-  <path d="M18 28H40V82H64V102H18Z" fill="#FFFFFF"/>
-  <path d="M54 28H78L89 72L100 28H124L100 102H78Z" fill="#FFFFFF"/>
+<title id="title">LearnVault</title>
+<rect width="128" height="128" rx="30" fill="#1C1815"/>
+<rect x="1" y="1" width="126" height="126" rx="29" stroke="#4A4038" stroke-width="2"/>
+<g transform="translate(12.8 12.8) scale(0.8)">
+<path d="M64 14L116 44H12Z" fill="#F5EEE2"/>
+<path d="M16 50H112V58H16Z" fill="#F5EEE2"/>
+<path d="M22 64H40V104H22ZM88 64H106V104H88Z" fill="#F5EEE2"/>
+<path d="M50 104V86A14 14 0 0 1 78 86V104Z" fill="#E0A83E"/>
+<path d="M10 104H118V114H10Z" fill="#F5EEE2"/>
+</g>
 </svg>

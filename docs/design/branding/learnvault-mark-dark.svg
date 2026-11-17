@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none" role="img" aria-labelledby="title desc">
+<title id="title">LearnVault</title>
+<desc id="desc">The Academy Portico on a dark surface.</desc>
+<path d="M64 12L118 42H10Z" fill="#F5EEE2"/>
+<circle cx="64" cy="33" r="4.5" fill="#E0A83E"/>
+<path d="M14 46H114V53H14Z" fill="#F5EEE2"/>
+<path d="M20 58H32V104H20ZM40 58H52V104H40ZM76 58H88V104H76ZM96 58H108V104H96Z" fill="#F5EEE2"/>
+<path d="M55 104V84A9 9 0 0 1 73 84V104Z" fill="#E0A83E"/>
+<path d="M12 104H116V110H12ZM8 110H120V117H8Z" fill="#F5EEE2"/>
+</svg>
