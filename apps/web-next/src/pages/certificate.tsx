@@ -44,7 +44,7 @@ export function CertificatePage() {
 				<Button onClick={() => window.print()}><Printer />{tr('Print or save as PDF', 'Imprimir ou salvar como PDF')}</Button>
 			</div>
 			<article className="mx-auto max-w-3xl space-y-8 rounded-xl border-2 border-primary bg-card p-10 text-center print:border-black">
-				<BrandMark className="mx-auto size-14 text-primary" />
+				<BrandMark className="mx-auto size-14 text-foreground" />
 				<p className="text-sm tracking-widest text-muted-foreground uppercase">{tr('Certificate of completion', 'Certificado de conclusão')}</p>
 				<h1 className="text-3xl font-semibold text-balance">{entry.course.title}</h1>
 				<p className="text-lg">

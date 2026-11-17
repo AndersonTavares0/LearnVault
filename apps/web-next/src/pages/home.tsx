@@ -1,7 +1,7 @@
 import { Award, ChevronRight, Flame, FolderPlus, Play, RefreshCw, Search, Sparkles, Star, Target } from 'lucide-react';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
-import { BrandMark } from '@/components/brand';
+import { BrandMark, Motto } from '@/components/brand';
 import { CourseCover } from '@/components/course-cover';
 import { Stat } from '@/components/panel';
 import { CourseCard, ProgressBar, routerPath } from '@/components/course-card';
@@ -431,6 +431,7 @@ export function LibraryActions({ onMessage }: { onMessage: (message: string) => 
 					<DialogHeader>
 						<DialogTitle className="font-serif text-2xl">{tr('Import a course', 'Importar um curso')}</DialogTitle>
 						<DialogDescription>{tr('Point LearnVault at a folder you already own. Your files are read, never moved, renamed or changed.', 'Aponte o LearnVault para uma pasta que você já tem. Seus arquivos são lidos, nunca movidos, renomeados ou alterados.')}</DialogDescription>
+						<Motto name="adFontes" />
 					</DialogHeader>
 					<form onSubmit={submit} className="space-y-4">
 						<div className="space-y-2">
@@ -454,7 +455,7 @@ export function LibraryActions({ onMessage }: { onMessage: (message: string) => 
 function EmptyLibrary({ isAdmin, onMessage }: { isAdmin: boolean; onMessage: (message: string) => void }) {
 	return (
 		<div className="mx-auto max-w-xl space-y-5 rounded-2xl border border-dashed p-8 text-center sm:p-12">
-			<BrandMark className="mx-auto size-12 text-primary" />
+			<BrandMark className="mx-auto size-12 text-foreground" />
 			<p className="font-serif text-2xl font-semibold text-balance">{tr('Bring in the courses you already have', 'Traga os cursos que você já tem')}</p>
 			<p className="text-muted-foreground">
 				{isAdmin
@@ -462,6 +463,7 @@ function EmptyLibrary({ isAdmin, onMessage }: { isAdmin: boolean; onMessage: (me
 					: tr('Ask an administrator to give you access to a course.', 'Peça a um administrador acesso a um curso.')}
 			</p>
 			{isAdmin && <div className="flex flex-wrap justify-center gap-2"><LibraryActions onMessage={onMessage} /></div>}
+			<Motto name="archeHemisy" />
 		</div>
 	);
 }
