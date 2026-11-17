@@ -151,8 +151,8 @@ A redesigned study space for course folders you already own, with PDF reading, r
 - **brand:** adopt the new LearnVault icon set ([#323](https://github.com/AndersonTavares0/LearnVault/issues/323))
 - **i18n:** localize transport errors and refine UI accessibility ([#313](https://github.com/AndersonTavares0/LearnVault/issues/313))
 - **i18n:** add en/pt-BR internationalization, set English default, and remove wiki ([#306](https://github.com/AndersonTavares0/LearnVault/issues/306))
-- contas locais de estudantes e permissoes de acesso a cursos ([#305](https://github.com/AndersonTavares0/LearnVault/issues/305))
-- favoritos de cursos e aulas no núcleo, servidor, desktop e SPA ([#304](https://github.com/AndersonTavares0/LearnVault/issues/304))
+- local student accounts and per-course access permissions ([#305](https://github.com/AndersonTavares0/LearnVault/issues/305))
+- favorites for courses and lessons across the core, server, desktop and SPA ([#304](https://github.com/AndersonTavares0/LearnVault/issues/304))
 
 #### Bug Fixes
 
