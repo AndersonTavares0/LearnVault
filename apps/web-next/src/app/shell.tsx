@@ -2,6 +2,7 @@ import { BookOpen, ChartNoAxesColumn, History, Layers, LogOut, Moon, NotebookPen
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
+import { BrandMark } from '@/components/brand';
 import { DesktopTitlebar } from '@/components/desktop-titlebar';
 import { GlobalSearch } from '@/components/global-search';
 import { IndexingIndicator } from '@/components/indexing-indicator';
@@ -71,7 +72,7 @@ export function AppShell() {
 			<DesktopTitlebar />
 			<header className="border-b print:hidden">
 				<div className="mx-auto flex h-[4.5rem] max-w-[var(--container-max,88rem)] items-center gap-x-8 px-5 sm:px-10">
-					<Link to="/" className="rounded-md font-heading text-2xl font-bold tracking-tight" aria-label={tr('LearnVault home', 'Início do LearnVault')}>LearnVault</Link>
+					<Link to="/" className="inline-flex items-center gap-2.5 rounded-md font-heading text-2xl font-bold tracking-tight" aria-label={tr('LearnVault home', 'Início do LearnVault')}><BrandMark className="size-8 text-foreground" />LearnVault</Link>
 					<nav aria-label={tr('Main', 'Principal')} className="hidden flex-1 justify-center gap-1 lg:flex">
 						{navItems().map((item) => (
 							<NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => cn('inline-flex min-h-11 items-center rounded-xl px-4 text-[0.95rem] font-medium whitespace-nowrap text-muted-foreground transition-colors duration-150 hover:bg-brand-tint hover:text-foreground', isActive && 'bg-brand-soft font-semibold text-brand-ink')}>

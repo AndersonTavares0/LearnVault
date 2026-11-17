@@ -1,5 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none" role="img" aria-labelledby="title">
-  <title id="title">LearnVault — LV monogram</title>
-  <path d="M20 30H38V84H62V100H20Z" fill="currentColor"/>
-  <path d="M56 30H75L87 76L99 30H118L97 100H77Z" fill="currentColor" fill-opacity="0.75"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none" role="img" aria-labelledby="title desc">
+<title id="title">LearnVault</title>
+<desc id="desc">The Academy Portico: a Greek school front with a gold arched door.</desc>
+<path d="M64 12L118 42H10Z" fill="#1C1815"/>
+<circle cx="64" cy="33" r="4.5" fill="#A8761F"/>
+<path d="M14 46H114V53H14Z" fill="#1C1815"/>
+<path d="M20 58H32V104H20ZM40 58H52V104H40ZM76 58H88V104H76ZM96 58H108V104H96Z" fill="#1C1815"/>
+<path d="M55 104V84A9 9 0 0 1 73 84V104Z" fill="#A8761F"/>
+<path d="M12 104H116V110H12ZM8 110H120V117H8Z" fill="#1C1815"/>
 </svg>

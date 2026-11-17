@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router';
 import { CircleAlert } from 'lucide-react';
+import { BrandMark, Motto } from '@/components/brand';
 import { PasswordField } from '@/components/password-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -43,7 +44,7 @@ export function LoginPage() {
 			<div className="flex w-full max-w-sm flex-col gap-6">
 				<div className="rounded-[2rem] border bg-card p-7 shadow-sm sm:p-9">
 					<div className="mb-7 flex flex-col items-center gap-2 text-center">
-						<span aria-hidden="true" className="h-0.5 w-8 rounded-full bg-[var(--reward-fill)]" />
+						<BrandMark className="size-12 text-foreground" />
 						<span className="font-heading text-2xl font-semibold tracking-tight">LearnVault</span>
 					</div>
 					<form onSubmit={submit} className="space-y-5">
@@ -64,6 +65,7 @@ export function LoginPage() {
 						</Button>
 					</form>
 				</div>
+				<Motto name="sapereAude" className="text-center" />
 				<Button variant="ghost" className="mx-auto" onClick={() => setLocale(otherLocale)} aria-label={tr(`Switch language to ${LOCALE_LABELS[otherLocale]}`, `Mudar idioma para ${LOCALE_LABELS[otherLocale]}`)}>
 					{LOCALE_LABELS[otherLocale]}
 				</Button>

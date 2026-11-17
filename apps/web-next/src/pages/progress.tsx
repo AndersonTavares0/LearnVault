@@ -2,6 +2,7 @@ import { Award, ChartNoAxesColumn, Check, Lock } from 'lucide-react';
 import { type ReactNode, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { ActivityHeatmap, type DayActivity } from '@/components/activity-heatmap';
+import { Motto } from '@/components/brand';
 import { Panel } from '@/components/panel';
 import { progressLabel, ProgressBar, routerPath } from '@/components/course-card';
 import { Button } from '@/components/ui/button';
@@ -94,6 +95,7 @@ export function ProgressPage() {
 				<Metric label={tr('Active days (this week)', 'Dias ativos (esta semana)')} value={String(Math.min(study.weekActiveDays, goal))} suffix={tr(`of ${goal}-day goal`, `da meta de ${goal} dias`)} caption={`${missing === 0 ? tr('Goal reached. ', 'Meta atingida. ') : ''}${tr(`Streak: ${study.currentStreak} ${study.currentStreak === 1 ? 'day' : 'days'}. Busiest day: ${best ? best.label : 'none yet'}.`, `Sequência: ${study.currentStreak} ${study.currentStreak === 1 ? 'dia' : 'dias'}. Dia mais forte: ${best ? best.label : 'nenhum ainda'}.`)}`} />
 				<Metric label={range === 'week' ? tr('Focus time (this week)', 'Tempo de foco (esta semana)') : tr('Focus time (all time)', 'Tempo de foco (total)')} value={formatMinutes(total)} caption={`${range === 'week' ? tr('This week.', 'Nesta semana.') : tr('In total.', 'No total.')} ${tr('Only the Pomodoro timer counts here.', 'Só o cronômetro Pomodoro conta aqui.')}`} />
 			</dl>
+			<Motto name="nullaDies" />
 
 			<div className="grid gap-6 lg:grid-cols-12 lg:items-stretch">
 				<div className="min-w-0 lg:col-span-8 [&>[data-panel]]:h-full">

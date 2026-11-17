@@ -6,7 +6,9 @@
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 @import "@fontsource-variable/dm-sans";
 @import "@fontsource-variable/playfair-display";
+@import "@fontsource-variable/playfair-display/wght-italic.css";
 @import "@fontsource-variable/literata/opsz.css";
+@import "@fontsource-variable/literata/opsz-italic.css";
 @import "@fontsource-variable/jetbrains-mono";
 
 /* Light by default; dark is a warm black. Accent colours come from the learner's choice (src/lib/appearance.ts). */
@@ -15,6 +17,7 @@
   --font-heading: var(--heading-font);
   --font-sans: var(--ui-font);
   --font-serif: var(--heading-font);
+  --font-reading: "Literata Variable", ui-serif, Georgia, serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, "Cascadia Code", monospace;
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-fg);
