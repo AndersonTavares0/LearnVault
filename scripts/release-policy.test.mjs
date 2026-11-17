@@ -12,8 +12,9 @@ test('Release Please uses SemVer pre-major bumps, generated names, and categoriz
     assert.equal(release['bump-minor-pre-major'], true);
     assert.equal(release['bump-patch-for-minor-pre-major'], true);
     assert.equal(release.versioning, 'default');
-    // Before 1.0.0 every release is marked as a pre-release on GitHub, so it never becomes `latest` for the updater.
-    assert.equal(release.prerelease, true);
+    // Releases are normal GitHub releases from 0.9.5 on, so each one becomes `latest` for the updater and moves the
+    // `latest`, `stable` and minor-line image tags. 0.9.4 and earlier were published as pre-releases.
+    assert.equal(release.prerelease, false);
     assert.equal(release['prerelease-type'], undefined);
     // The one-time override that pinned 0.9.1 is gone; later releases are computed from commits.
     assert.equal(release['release-as'], undefined);

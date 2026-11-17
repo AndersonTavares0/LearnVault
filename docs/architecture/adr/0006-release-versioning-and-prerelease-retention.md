@@ -53,8 +53,9 @@ retention rule; tags that reached users should stay), and the Release Please gui
 - The five `v0.9.0-rc.N` releases, their tags and the unpublished draft `rust-rc-v0.4.0-rc.1` are removed after this change
   merges. Their changes are described in the `0.9.1` section of the changelog, whose compare link starts at `v0.8.0`.
 - The release process document no longer calls the candidate tags immutable and points to the policy.
-- All `0.y.z` releases remain GitHub pre-releases, so `releases/latest` still resolves to `v0.8.0`. Fixing that is a separate
-  decision (see the policy); it is not changed here.
+- Amended 2026-11-17: all `0.y.z` releases had been GitHub pre-releases, so `releases/latest` and the `latest` image tag
+  still pointed at `v0.8.0` (an amd64-only image) and the desktop updater never offered `0.9.x`. `prerelease` is now `false`,
+  effective from the first release made after that change; `0.9.4` was already publishing as a pre-release.
 - Unpublished container and asset work for `v0.9.3` is not affected by this decision.
 
 ## Validation and rollback

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import test from 'node:test';
-import { groupCommits, parseCommit, parseTag, previousTag, renderChanges, renderMigrations, renderNotes, splitHighlights } from './release-notes.mjs';
+import { groupCommits, isPrerelease, parseCommit, parseTag, previousTag, renderChanges, renderMigrations, renderNotes, splitHighlights } from './release-notes.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const read = (path) => readFileSync(resolve(root, path), 'utf8');
@@ -79,4 +79,12 @@ test('the template lists the asset names the release workflow publishes', () => 
 	}
 	assert.ok(workflow.includes('learnvault-windows-$env:RELEASE_TAG.exe'));
 	assert.ok(template.includes('learnvault-windows-{{tag}}.exe') && template.includes('learnvault-windows-{{tag}}.nsis.zip'));
+});
+
+test('marks the notes as a pre-release only when the Release Please configuration does', () => {
+	assert.equal(isPrerelease({ packages: { '.': { prerelease: true } } }), true);
+	assert.equal(isPrerelease({ packages: { '.': { prerelease: false } } }), false);
+	assert.equal(isPrerelease({ packages: { '.': {} } }), false);
+	const config = JSON.parse(read('.github/release-please/release-please-config.json'));
+	assert.equal(isPrerelease(config), false);
 });

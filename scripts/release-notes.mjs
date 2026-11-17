@@ -1,6 +1,6 @@
 // Release notes generator. Fills docs/releases/release-notes.template.md for one release tag.
 //
-//   node scripts/release-notes.mjs v0.9.4 [--from v0.9.3] [--stable]
+//   node scripts/release-notes.mjs v0.9.4 [--from v0.9.3] [--stable | --pre-release]
 //
 // The grouped changes come from Conventional Commits between the previous release and the tag (or HEAD while the tag does
 // not exist yet). Hand-written highlights are read from docs/releases/highlights/<version>.md when that file exists.
@@ -103,7 +103,12 @@ function readCommits(range) {
 	}).filter(Boolean);
 }
 
-export function generate({ tag, from, stable = false, root = process.cwd() }) {
+/** Whether releases are published as pre-releases, from the Release Please configuration. */
+export function isPrerelease(config) {
+	return config.packages?.['.']?.prerelease === true;
+}
+
+export function generate({ tag, from, stable, root = process.cwd() }) {
 	parseTag(tag);
 	const tags = git('tag', '--list').split('\n').filter(Boolean);
 	const base = from ?? previousTag(tag, tags);
@@ -117,7 +122,7 @@ export function generate({ tag, from, stable = false, root = process.cwd() }) {
 	return renderNotes(template, {
 		version,
 		tag,
-		prerelease: stable ? '' : ' (pre-release)',
+		prerelease: (stable === undefined ? isPrerelease(JSON.parse(readFileSync(resolve(root, '.github/release-please/release-please-config.json'), 'utf8'))) : !stable) ? ' (pre-release)' : '',
 		summary,
 		highlights,
 		changes: renderChanges(groupCommits(readCommits(`${base}..${head}`))),
@@ -131,11 +136,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 	const tag = args.find((arg) => !arg.startsWith('--'));
 	const fromIndex = args.indexOf('--from');
 	if (!tag) {
-		console.error('Usage: node scripts/release-notes.mjs vX.Y.Z [--from vX.Y.Z] [--stable]');
+		console.error('Usage: node scripts/release-notes.mjs vX.Y.Z [--from vX.Y.Z] [--stable | --pre-release]');
 		process.exit(2);
 	}
 	try {
-		process.stdout.write(generate({ tag, from: fromIndex === -1 ? undefined : args[fromIndex + 1], stable: args.includes('--stable') }));
+		process.stdout.write(generate({ tag, from: fromIndex === -1 ? undefined : args[fromIndex + 1], stable: args.includes('--stable') ? true : args.includes('--pre-release') ? false : undefined }));
 	} catch (error) {
 		console.error(error.message);
 		process.exit(1);
