@@ -11,3 +11,4 @@ The reusable template is located at [`.agents/templates/adr.md`](../../../.agent
 | [0003](0003-react-frontend.md) | Replace the Svelte SPA with a React SPA | Accepted | 2026-11-09 |
 | [0004](0004-remote-course-roots.md) | Virtual course roots for remote sources | Accepted | 2026-11-14 |
 | [0005](0005-sync-journal-for-browser-writes.md) | Journal browser writes and bound the sync log | Accepted | 2026-11-14 |
+| [0006](0006-release-versioning-and-prerelease-retention.md) | Release versioning, pacing and pre-release retention | Accepted | 2026-11-17 |

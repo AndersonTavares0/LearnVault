@@ -35,6 +35,8 @@ that area.
   `.agents/policies/agent-collaboration.md`.
 
 - Follow `.agents/policies/governance.md` and `.agents/checklists/pull-request.md`.
+- For version numbers, release pacing, pre-release retention, changelog and release notes, follow
+  `.agents/policies/releases.md`.
 - For pull requests, replace every template prompt with factual content and record only
   validations that actually ran.
 
