@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ACCENT_PRESETS, appearanceStore, DEFAULT_APPEARANCE, contrast, loadAppearance, parseAppearance, readAppearance, readableAccent, updateAppearance } from '@/lib/appearance';
+import { ACCENT_PRESETS, applyAppearance, appearanceStore, DEFAULT_APPEARANCE, SURFACES, SURFACE_SWATCHES, contrast, darkAccent, loadAppearance, parseAppearance, readAppearance, readableAccent, updateAppearance } from '@/lib/appearance';
 
 describe('appearance', () => {
 	it('falls back to the defaults for anything missing or invalid', () => {
@@ -60,5 +60,46 @@ describe('appearance', () => {
 		stop();
 		unsubscribe();
 		vi.unstubAllGlobals();
+	});
+});
+
+describe('brand palette', () => {
+	it('defaults to the warm ink accent, with its gold twin on the dark page', () => {
+		expect(DEFAULT_APPEARANCE.accent).toBe('#1C1815');
+		expect(ACCENT_PRESETS[0]).toMatchObject({ id: 'ink', hex: '#1C1815', dark: '#E0A83E', tone: '#5C4229' });
+		expect(darkAccent('#1C1815')).toBe('#E0A83E');
+	});
+
+	it('keeps white text on the ink accent and the gold accent on the dark panel above 4.5:1', () => {
+		expect(contrast('#FFFFFF', readableAccent('#1C1815'))).toBeGreaterThanOrEqual(4.5);
+		expect(contrast('#1C1510', '#E0A83E')).toBeGreaterThanOrEqual(4.5);
+		expect(contrast('#1C1209', '#E0A83E')).toBeGreaterThanOrEqual(4.5);
+	});
+
+	it('gives the reward colour at least 3:1 as a graphic on every surface, light and dark', () => {
+		for (const surface of SURFACES) {
+			expect(contrast('#A8761F', SURFACE_SWATCHES[surface].light), `${surface} light`).toBeGreaterThanOrEqual(3);
+			expect(contrast('#E0A83E', SURFACE_SWATCHES[surface].dark), `${surface} dark`).toBeGreaterThanOrEqual(3);
+		}
+	});
+
+	it('puts ink on the gold reward fill, the higher-contrast choice on each page', () => {
+		// The text colour on the fill is not used by any component today. On the light page the gold is
+		// only 4.4:1 under ink, which is enough for large text and UI parts but not for body text, so it
+		// must not carry small text; it still beats white (4.0:1).
+		expect(contrast('#1C1815', '#A8761F')).toBeGreaterThan(contrast('#FFFFFF', '#A8761F'));
+		expect(contrast('#1C1815', '#A8761F')).toBeGreaterThanOrEqual(3);
+		expect(contrast('#1C1815', '#E0A83E')).toBeGreaterThanOrEqual(4.5);
+	});
+
+	it('tints the light page from brown for the ink accent, and from the accent itself for every other colour', () => {
+		const root = document.createElement('html');
+		applyAppearance(parseAppearance({ accent: '#1C1815', theme: 'light' }), root);
+		expect(root.style.getPropertyValue('--brand')).toBe('#1C1815');
+		expect(root.style.getPropertyValue('--brand-tone')).toBe('#5C4229');
+		applyAppearance(parseAppearance({ accent: '#1C1815', theme: 'dark' }), root);
+		expect(root.style.getPropertyValue('--brand-tone')).toBe(root.style.getPropertyValue('--brand'));
+		applyAppearance(parseAppearance({ accent: '#27508F', theme: 'light' }), root);
+		expect(root.style.getPropertyValue('--brand-tone')).toBe('#27508F');
 	});
 });
