@@ -1,10 +1,10 @@
-//! Avatares personalizados de usuários: leitura, upload e remoção por dono autenticado.
+//! Custom user avatars: read, upload and removal by the authenticated owner.
 //!
-//! Cada usuário autenticado pode gravar um único arquivo de avatar, armazenado no diretório
-//! de dados do servidor em `<diretório de dados>/avatars/<user_id>.avatar`, sem tocar a
-//! biblioteca de cursos (somente-leitura). O formato é validado estritamente por magic bytes
-//! (PNG, JPEG ou WebP) e limitado a 2 MiB ([`MAX_AVATAR_BYTES`]). Nenhum caminho interno é
-//! exposto na API.
+//! Each authenticated user can store a single avatar file, kept in the server's data
+//! directory at `<data directory>/avatars/<user_id>.avatar`, without touching the (read-only)
+//! course library. The format is strictly validated by magic bytes
+//! (PNG, JPEG or WebP) and limited to 2 MiB ([`MAX_AVATAR_BYTES`]). No internal path is
+//! exposed in the API.
 
 use std::{
     fs::{self, OpenOptions},
@@ -37,19 +37,19 @@ fn json_error(status: StatusCode, error: &'static str) -> Response {
     private_no_store((status, Json(serde_json::json!({ "error": error }))).into_response())
 }
 
-/// Tamanho máximo aceito para o avatar de um usuário (2 MiB).
+/// Maximum size accepted for a user's avatar (2 MiB).
 pub(crate) const MAX_AVATAR_BYTES: usize = 2 * 1024 * 1024;
 
-/// Nome do diretório de avatares dentro da pasta de dados do servidor.
+/// Name of the avatars directory inside the server's data folder.
 pub(crate) const AVATARS_DIR_NAME: &str = "avatars";
 
-/// Sufixo do arquivo de avatar dentro do diretório de avatares.
+/// Suffix of the avatar file inside the avatars directory.
 const AVATAR_FILE_SUFFIX: &str = ".avatar";
 
-/// Comprimento máximo da identidade de usuário aceita para caminhos seguros.
+/// Maximum length of the user identity accepted for safe paths.
 const MAX_USER_ID_LEN: usize = 128;
 
-/// Falha nas operações de persistência do avatar.
+/// Failure in the avatar persistence operations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum AvatarError {
     Rejected,
@@ -62,7 +62,7 @@ pub(crate) struct AvatarResponse {
     pub(crate) version: i64,
 }
 
-/// Caminho do diretório de avatares, ao lado do banco de dados.
+/// Path of the avatars directory, next to the database.
 pub(crate) fn avatars_dir(database_path: &Path) -> PathBuf {
     let parent = database_path
         .parent()
@@ -71,7 +71,7 @@ pub(crate) fn avatars_dir(database_path: &Path) -> PathBuf {
     parent.join(AVATARS_DIR_NAME)
 }
 
-/// Valida se o identificador do usuário é seguro como segmento de arquivo.
+/// Validates whether the user identifier is safe as a file segment.
 pub(crate) fn valid_user_id(user_id: &str) -> bool {
     if user_id.is_empty() || user_id.len() > MAX_USER_ID_LEN {
         return false;
@@ -85,7 +85,7 @@ fn avatar_file(avatars_dir: &Path, user_id: &str) -> PathBuf {
     avatars_dir.join(format!("{user_id}{AVATAR_FILE_SUFFIX}"))
 }
 
-/// Grava o avatar de forma atômica no disco e devolve a versão resultante (mtime em segundos).
+/// Writes the avatar atomically to disk and returns the resulting version (mtime in seconds).
 pub(crate) fn store_avatar(
     avatars_dir: &Path,
     user_id: &str,
@@ -128,7 +128,7 @@ pub(crate) fn store_avatar(
     }
 }
 
-/// Lê o avatar de um usuário do disco, retornando bytes, tipo detectado e mtime.
+/// Reads a user's avatar from disk, returning bytes, detected type and mtime.
 pub(crate) fn read_avatar(
     avatars_dir: &Path,
     user_id: &str,
@@ -153,7 +153,7 @@ pub(crate) fn read_avatar(
     Ok(Some((bytes, image_type, mtime)))
 }
 
-/// Remove o avatar de um usuário do disco. Retorna se o arquivo existia.
+/// Removes a user's avatar from disk. Returns whether the file existed.
 pub(crate) fn remove_avatar(avatars_dir: &Path, user_id: &str) -> Result<bool, AvatarError> {
     if !valid_user_id(user_id) {
         return Ok(false);
@@ -185,7 +185,7 @@ async fn read_avatar_body(body: Body) -> Result<Vec<u8>, AvatarBodyError> {
     Ok(bytes)
 }
 
-/// `GET /api/user/avatar` — serve a imagem do avatar do usuário logado.
+/// `GET /api/user/avatar` — serves the signed-in user's avatar image.
 pub(crate) async fn get_avatar(State(state): State<AppState>, headers: HeaderMap) -> Response {
     let user = match authenticated_user(&state, &headers).await {
         Ok(Some(user)) if !user.must_change_credentials => user,
@@ -236,7 +236,7 @@ pub(crate) async fn get_avatar(State(state): State<AppState>, headers: HeaderMap
     }
 }
 
-/// `PUT /api/user/avatar` — envia e atualiza o avatar do usuário logado.
+/// `PUT /api/user/avatar` — uploads and updates the signed-in user's avatar.
 pub(crate) async fn put_avatar(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -303,7 +303,7 @@ pub(crate) async fn put_avatar(
     }
 }
 
-/// `DELETE /api/user/avatar` — remove o avatar do usuário logado.
+/// `DELETE /api/user/avatar` — removes the signed-in user's avatar.
 pub(crate) async fn delete_avatar(State(state): State<AppState>, headers: HeaderMap) -> Response {
     let user = match authenticated_user(&state, &headers).await {
         Ok(Some(user)) if !user.must_change_credentials => user,
@@ -375,7 +375,7 @@ mod tests {
         // Inicialmente ausente
         assert_eq!(read_avatar(&avatars, "user-1").unwrap(), None);
 
-        // Gravação bem-sucedida
+        // Successful write
         let png = sample_png();
         let v1 = store_avatar(&avatars, "user-1", &png).unwrap();
         assert!(v1 > 0);
@@ -385,14 +385,14 @@ mod tests {
         assert_eq!(img_type, ImageType::Png);
         assert_eq!(v_read, v1);
 
-        // Atualização com WebP
+        // Update with WebP
         let webp = sample_webp();
         store_avatar(&avatars, "user-1", &webp).unwrap();
         let (loaded2, img_type2, _) = read_avatar(&avatars, "user-1").unwrap().unwrap();
         assert_eq!(loaded2, webp);
         assert_eq!(img_type2, ImageType::Webp);
 
-        // Remoção
+        // Removal
         assert!(remove_avatar(&avatars, "user-1").unwrap());
         assert!(
             !remove_avatar(&avatars, "user-1").unwrap(),

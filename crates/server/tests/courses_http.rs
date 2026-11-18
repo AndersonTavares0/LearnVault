@@ -88,7 +88,7 @@ async fn course_import_rescan_and_removal_flow() {
     let app = build_router(state);
     let cookie = login(&app).await;
 
-    // Sem cursos registrados o catálogo é vazio e o rescan é recusado.
+    // With no courses registered the catalog is empty and the rescan is refused.
     let catalog = app
         .clone()
         .oneshot(
@@ -120,7 +120,7 @@ async fn course_import_rescan_and_removal_flow() {
         "no_courses_registered"
     );
 
-    // Importar sem origem é recusado como CSRF; com origem, registra o curso.
+    // Importing without an origin is refused as CSRF; with an origin, it registers the course.
     let no_origin = app
         .clone()
         .oneshot(
@@ -148,7 +148,7 @@ async fn course_import_rescan_and_removal_flow() {
         "a identidade nunca carrega o caminho"
     );
 
-    // Importar a mesma pasta de novo é recusado; um caminho inválido também.
+    // Importing the same folder again is refused; an invalid path too.
     let duplicate = import(&app, &cookie, &course).await;
     assert_eq!(duplicate.status(), StatusCode::BAD_REQUEST);
     assert_eq!(
@@ -160,7 +160,7 @@ async fn course_import_rescan_and_removal_flow() {
     assert_eq!(missing.status(), StatusCode::BAD_REQUEST);
     assert_eq!(json_body(missing).await["error"], "invalid_course_path");
 
-    // O registro sobrevive a uma reinicialização do estado antes de qualquer varredura.
+    // The registry survives a restart of the state before any scan.
     let restarted = AppState::initialize(server_config).await.unwrap();
     let app = build_router(restarted);
     let catalog = app
@@ -208,9 +208,9 @@ async fn course_import_rescan_and_removal_flow() {
     assert_eq!(course_node["title"], "Física");
     assert_eq!(course_node["role"], "course");
     assert_eq!(course_node["course_id"], course_id);
-    // Dentro do curso a hierarquia se reancora: uma pasta de topo que contém apenas
-    // arquivos vira módulo, e cada arquivo vira uma aula própria (apresentação
-    // recolhível da interface), em vez de uma lista plana de soltos.
+    // Inside the course the hierarchy re-anchors: a top-level folder that contains only
+    // files becomes a module, and each file becomes a lesson of its own (the interface's
+    // collapsible presentation), instead of a flat list of loose files.
     let module_node = &course_node["children"][0];
     assert_eq!(module_node["role"], "module");
     assert_eq!(module_node["children"][0]["role"], "lesson");
@@ -219,7 +219,7 @@ async fn course_import_rescan_and_removal_flow() {
         "Aula 1/video.mp4"
     );
 
-    // Mídia do curso é servida com o par curso+caminho; um curso desconhecido é 404.
+    // Course media is served with the course+path pair; an unknown course is 404.
     let media = app
         .clone()
         .oneshot(
@@ -246,7 +246,7 @@ async fn course_import_rescan_and_removal_flow() {
         .unwrap();
     assert_eq!(unknown_course.status(), StatusCode::NOT_FOUND);
 
-    // Remover é idempotente e deixa o catálogo vazio; os arquivos ficam intactos.
+    // Removing is idempotent and leaves the catalog empty; the files stay intact.
     let remove = app
         .clone()
         .oneshot(
@@ -409,7 +409,7 @@ async fn media_removal_impact_and_removal_flow() {
         .unwrap()
         .to_owned();
 
-    // 1. Consultar impacto sem progresso
+    // 1. Query the impact with no progress
     let impact = app
         .clone()
         .oneshot(
@@ -427,7 +427,7 @@ async fn media_removal_impact_and_removal_flow() {
     assert_eq!(impact_json["progress_owners"], 0);
     assert_eq!(impact_json["already_removed"], false);
 
-    // 2. Grava progresso na mídia para exigir confirmação
+    // 2. Record progress on the media to require confirmation
     let record = app
         .clone()
         .oneshot(
@@ -448,7 +448,7 @@ async fn media_removal_impact_and_removal_flow() {
         .unwrap();
     assert_eq!(record.status(), StatusCode::OK);
 
-    // 3. Consultar impacto com progresso
+    // 3. Query the impact with progress
     let impact = app
         .clone()
         .oneshot(
@@ -463,7 +463,7 @@ async fn media_removal_impact_and_removal_flow() {
     let impact_json = json_body(impact).await;
     assert_eq!(impact_json["progress_owners"], 1);
 
-    // 4. Tentar remover sem confirmação deve falhar com 409 Conflict
+    // 4. Trying to remove without confirmation must fail with 409 Conflict
     let unconfirmed_remove = app
         .clone()
         .oneshot(
@@ -483,7 +483,7 @@ async fn media_removal_impact_and_removal_flow() {
     assert_eq!(err_json["error"], "media_removal_needs_confirmation");
     assert_eq!(err_json["progress_owners"], 1);
 
-    // 5. Remover com confirm_progress: true tem sucesso
+    // 5. Removing with confirm_progress: true succeeds
     let confirmed_remove = app
         .clone()
         .oneshot(
@@ -504,7 +504,7 @@ async fn media_removal_impact_and_removal_flow() {
     assert_eq!(outcome_json["removed_now"], true);
     assert_eq!(outcome_json["preserved_owners"], 1);
 
-    // 6. Repetir remoção é idempotente (removed_now: false)
+    // 6. Repeating the removal is idempotent (removed_now: false)
     let repeat_remove = app
         .clone()
         .oneshot(
@@ -523,7 +523,7 @@ async fn media_removal_impact_and_removal_flow() {
     let repeat_json = json_body(repeat_remove).await;
     assert_eq!(repeat_json["removed_now"], false);
 
-    // 7. Catálogo passa a omitir a mídia removida
+    // 7. The catalog now omits the removed media
     let catalog = app
         .clone()
         .oneshot(
@@ -540,7 +540,7 @@ async fn media_removal_impact_and_removal_flow() {
         "o nó de aula sem arquivos não é gerado, deixando children vazio"
     );
 
-    // 8. /api/media passa a responder 404 para a mídia removida
+    // 8. /api/media now answers 404 for the removed media
     let media = app
         .clone()
         .oneshot(
@@ -555,7 +555,7 @@ async fn media_removal_impact_and_removal_flow() {
         .unwrap();
     assert_eq!(media.status(), StatusCode::NOT_FOUND);
 
-    // 9. Rescan não recria nem desfaz a remoção
+    // 9. A rescan neither recreates nor undoes the removal
     let rescan = app
         .clone()
         .oneshot(
@@ -585,7 +585,7 @@ async fn media_removal_impact_and_removal_flow() {
         "a mídia removida continua fora do catálogo após rescan"
     );
 
-    // 10. Progresso continua preservado na leitura de Study
+    // 10. Progress is still preserved in the Study read
     let progress = app
         .clone()
         .oneshot(
@@ -635,7 +635,7 @@ async fn local_users_course_permissions_enforce_catalog_and_media_access() {
         .unwrap();
     assert_eq!(rescan.status(), StatusCode::OK);
 
-    // 1. Admin cria uma estudante restrita apenas ao curso A
+    // 1. Admin creates a student restricted to course A only
     let create_res = app
         .clone()
         .oneshot(
@@ -688,7 +688,7 @@ async fn local_users_course_permissions_enforce_catalog_and_media_access() {
         .unwrap()
         .to_owned();
 
-    // 3. Ana não pode acessar rotas administrativas de usuários
+    // 3. Ana cannot access the administrative user routes
     let forbidden_users = app
         .clone()
         .oneshot(
@@ -701,7 +701,7 @@ async fn local_users_course_permissions_enforce_catalog_and_media_access() {
         .unwrap();
     assert_eq!(forbidden_users.status(), StatusCode::FORBIDDEN);
 
-    // 4. Catálogo da Ana contém apenas o curso A
+    // 4. Ana's catalog contains only course A
     let ana_catalog = app
         .clone()
         .oneshot(
@@ -718,7 +718,7 @@ async fn local_users_course_permissions_enforce_catalog_and_media_access() {
     assert_eq!(courses.len(), 1);
     assert_eq!(courses[0]["course_id"], course_a_id);
 
-    // 5. Ana consegue acessar mídia do curso A (200), mas recebe 404 para mídia do curso B
+    // 5. Ana can access media of course A (200), but gets 404 for media of course B
     let media_a = app
         .clone()
         .oneshot(
@@ -747,7 +747,7 @@ async fn local_users_course_permissions_enforce_catalog_and_media_access() {
         .unwrap();
     assert_eq!(media_b.status(), StatusCode::NOT_FOUND);
 
-    // 6. Admin libera acesso irrestrito (allowed_course_ids: null) para Ana
+    // 6. Admin grants unrestricted access (allowed_course_ids: null) to Ana
     let update_res = app
         .clone()
         .oneshot(
@@ -777,7 +777,7 @@ async fn local_users_course_permissions_enforce_catalog_and_media_access() {
     let ana_all_json = json_body(ana_catalog_all).await;
     assert_eq!(ana_all_json["nodes"].as_array().unwrap().len(), 2);
 
-    // 7. Admin remove a usuária Ana e a sessão dela deixa de funcionar
+    // 7. Admin removes the user Ana and her session stops working
     let delete_res = app
         .clone()
         .oneshot(

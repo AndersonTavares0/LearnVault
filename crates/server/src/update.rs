@@ -1,19 +1,19 @@
-//! Verificação de atualização do LearnVault.
+//! LearnVault update check.
 //!
-//! A checagem acontece **no servidor local**: o processo consulta a API pública de
-//! releases do GitHub por HTTPS e devolve o resultado à SPA, que apenas o exibe. Nada é
-//! baixado, verificado por checksum ou instalado automaticamente — o produto avisa e
-//! oferece o link da release, e a atualização continua manual, como descrito em
+//! The check happens **on the local server**: the process queries GitHub's public releases
+//! API over HTTPS and returns the result to the SPA, which only displays it. Nothing is
+//! downloaded, checksum-verified or installed automatically — the product notifies and
+//! offers the release link, and the update stays manual, as described in
 //! `docs/operations/distribution.md`.
 //!
-//! O destino é fixo: somente HTTPS, host constante no código e sem nenhuma URL vinda da
-//! requisição (o que evita SSRF). Falhas de rede nunca viram erro HTTP: a resposta
-//! continua `200`, com `available: false`, `latest: null` e um `error` curto em pt-BR,
-//! para que estar offline não quebre nem trave a tela de Configurações.
+//! The destination is fixed: HTTPS only, host constant in the code and no URL coming from the
+//! request (which avoids SSRF). Network failures never become an HTTP error: the response
+//! stays `200`, with `available: false`, `latest: null` and a short `error` in pt-BR,
+//! so that being offline does not break or hang the Settings screen.
 //!
-//! Checagens externas respeitam um intervalo mínimo em processo (padrão de uma hora) e
-//! requisições concorrentes são coalescidas em um único `fetch`. O botão manual usa
-//! `?force=1`, que ignora o intervalo mínimo.
+//! External checks respect a minimum in-process interval (default one hour) and
+//! concurrent requests are coalesced into a single `fetch`. The manual button uses
+//! `?force=1`, which ignores the minimum interval.
 
 use std::{future::Future, pin::Pin, sync::Arc, sync::OnceLock, time::Duration};
 
@@ -29,22 +29,22 @@ use tokio::time::Instant;
 
 use crate::{AppState, VERSION};
 
-/// Endpoint público de release do repositório. Constante: nenhuma URL vem da requisição.
+/// Public release endpoint of the repository. Constant: no URL comes from the request.
 pub(crate) const RELEASES_URL: &str =
     "https://api.github.com/repos/AndersonTavares0/LearnVault/releases/latest";
 
-/// Intervalo mínimo entre checagens externas quando o cliente não força uma nova.
+/// Minimum interval between external checks when the client does not force a new one.
 pub(crate) const DEFAULT_CACHE_INTERVAL: Duration = Duration::from_secs(3600);
 
-/// Orçamento de rede de cada checagem. Estar offline não pode segurar a tela.
+/// Network budget of each check. Being offline cannot hold the screen.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
-/// Limite defensivo do JSON da API de releases.
+/// Defensive limit of the releases API's JSON.
 const MAX_RESPONSE_BYTES: usize = 64 * 1024;
 
-/// Motivo genérico quando não há um erro mais específico do último attempt.
+/// Generic reason when there is no more specific error from the last attempt.
 const FALLBACK_ERROR: &str = "não foi possível verificar a atualização";
 
-/// Release publicado, reduzido aos campos que a decisão consome.
+/// Published release, reduced to the fields the decision consumes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct ReleaseInfo {
     pub(crate) tag_name: String,
@@ -54,15 +54,15 @@ pub(crate) struct ReleaseInfo {
     pub(crate) changelog: Option<String>,
 }
 
-/// Busca a release mais recente. Devolve um motivo curto e sanitizado em pt-BR ao falhar.
+/// Fetches the latest release. Returns a short, sanitized reason in pt-BR on failure.
 ///
-/// É um closure injetável para que os testes exercitem parsing, decisão, cache, coerção e
-/// erro sem tocar a rede.
+/// It is an injectable closure so that tests exercise parsing, decision, cache, coalescing and
+/// error without touching the network.
 pub(crate) type Fetcher = Arc<
     dyn Fn() -> Pin<Box<dyn Future<Output = Result<ReleaseInfo, String>> + Send>> + Send + Sync,
 >;
 
-/// Resposta do endpoint `/api/update`.
+/// Response of the `/api/update` endpoint.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct UpdateResponse {
@@ -77,7 +77,7 @@ pub(crate) struct UpdateResponse {
     error: Option<String>,
 }
 
-/// Resultado de uma checagem bem-sucedida mantido em memória.
+/// Result of a successful check kept in memory.
 #[derive(Clone, Debug)]
 struct Success {
     available: bool,
@@ -85,7 +85,7 @@ struct Success {
     released_at: Option<String>,
     url: Option<String>,
     changelog: Option<String>,
-    /// Instante da checagem em segundos desde a época Unix, como string opaca.
+    /// Instant of the check in seconds since the Unix epoch, as an opaque string.
     checked_at: String,
     checked_instant: Instant,
 }
@@ -97,8 +97,8 @@ struct Cache {
     last_error: Option<String>,
 }
 
-/// Checador em processo: cache do último sucesso, coerção de concorrentes e limite de
-/// frequência entre chamadas externas.
+/// In-process checker: cache of the last success, coalescing of concurrent callers and
+/// rate limit between external calls.
 #[derive(Clone)]
 pub(crate) struct UpdateChecker {
     enabled: bool,
@@ -118,7 +118,7 @@ impl std::fmt::Debug for UpdateChecker {
 }
 
 impl UpdateChecker {
-    /// Cria o checador com o intervalo padrão.
+    /// Creates the checker with the default interval.
     pub(crate) fn new(enabled: bool, fetch: Fetcher) -> Self {
         Self::with_interval(enabled, DEFAULT_CACHE_INTERVAL, fetch)
     }
@@ -132,13 +132,13 @@ impl UpdateChecker {
         }
     }
 
-    /// Estado atual da verificação, disparando uma checagem externa se necessário.
+    /// Current state of the check, triggering an external check if needed.
     pub(crate) async fn snapshot(&self, force: bool) -> UpdateResponse {
         if !self.enabled {
             return UpdateResponse::disabled();
         }
-        // O instante de chegada é capturado antes do cadeado: uma checagem concluída
-        // enquanto esta requisição esperava já responde por ela (coerção/single-flight).
+        // The arrival instant is captured before the lock: a check that finished
+        // while this request was waiting already answers for it (coalescing/single-flight).
         let arrival = Instant::now();
         let mut cache = self.cache.lock().await;
         if let Some(success) = cache.success.clone() {
@@ -181,10 +181,10 @@ impl UpdateChecker {
     }
 }
 
-/// Consulta autenticada do estado da atualização.
+/// Authenticated query of the update state.
 ///
-/// Usa a mesma proteção das rotas de estudo: sessão válida e sem troca de credenciais
-/// pendente. A resposta é sempre `private, no-store`.
+/// It uses the same protection as the study routes: a valid session with no pending
+/// credentials change. The response is always `private, no-store`.
 pub(crate) async fn update(
     State(state): State<AppState>,
     Query(query): Query<UpdateQuery>,
@@ -196,7 +196,7 @@ pub(crate) async fn update(
     private_no_store(Json(state.update.snapshot(query.force()).await).into_response())
 }
 
-/// Entrada de histórico de atualização (gerada pelo script autônomo de atualização).
+/// Update history entry (generated by the standalone update script).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct UpdateHistoryEntry {
     pub(crate) timestamp: String,
@@ -206,13 +206,13 @@ pub(crate) struct UpdateHistoryEntry {
     pub(crate) message: String,
 }
 
-/// Resposta da listagem do histórico de atualizações.
+/// Response of the update-history listing.
 #[derive(Debug, Serialize)]
 pub(crate) struct UpdateHistoryResponse {
     pub(crate) items: Vec<UpdateHistoryEntry>,
 }
 
-/// Consulta autenticada (apenas administrador) do histórico de atualizações no volume de dados.
+/// Authenticated query (administrator only) of the update history on the data volume.
 pub(crate) async fn update_history(State(state): State<AppState>, headers: HeaderMap) -> Response {
     let user = match crate::study::user_or_response(&state, &headers).await {
         Ok(user) => user,
@@ -241,7 +241,7 @@ pub(crate) async fn update_history(State(state): State<AppState>, headers: Heade
     private_no_store(Json(UpdateHistoryResponse { items }).into_response())
 }
 
-/// Consulta do endpoint. `force=1` (ou `force=true`) ignora o intervalo mínimo de cache.
+/// Endpoint query. `force=1` (or `force=true`) ignores the minimum cache interval.
 #[derive(Debug, Deserialize)]
 pub(crate) struct UpdateQuery {
     force: Option<String>,
@@ -300,7 +300,7 @@ impl UpdateResponse {
     }
 }
 
-/// Decisão da checagem: uma versão publicada mais nova, ou nada a avisar.
+/// Decision of the check: a published version that is newer, or nothing to notify.
 #[derive(Debug, PartialEq, Eq)]
 enum Evaluation {
     UpToDate,
@@ -321,8 +321,8 @@ fn success_from(release: &ReleaseInfo, evaluation: Evaluation, checked_at: Strin
     Success {
         available,
         latest,
-        // O link só faz sentido quando há uma versão nova; fora disso a resposta não
-        // carrega a release mais recente nem a sua data.
+        // The link only makes sense when there is a new version; otherwise the response does not
+        // carry the latest release nor its date.
         released_at: if available {
             release.published_at.clone()
         } else {
@@ -339,10 +339,10 @@ fn success_from(release: &ReleaseInfo, evaluation: Evaluation, checked_at: Strin
     }
 }
 
-/// Decide se a release publicada é mais nova que a versão em execução.
+/// Decides whether the published release is newer than the running version.
 ///
-/// Rascunhos e pré-lançamentos são ignorados como se não existissem: o canal estável só
-/// anuncia releases publicados.
+/// Drafts and pre-releases are ignored as if they did not exist: the stable channel only
+/// announces published releases.
 fn evaluate(release: &ReleaseInfo, current: &str) -> Result<Evaluation, String> {
     if release.draft || release.prerelease {
         return Ok(Evaluation::UpToDate);
@@ -359,7 +359,7 @@ fn evaluate(release: &ReleaseInfo, current: &str) -> Result<Evaluation, String> 
     })
 }
 
-/// Interpreta o corpo JSON do endpoint de release do GitHub.
+/// Parses the JSON body of GitHub's release endpoint.
 fn parse_release(body: &str) -> Result<ReleaseInfo, ()> {
     #[derive(Deserialize)]
     struct Payload {
@@ -400,13 +400,13 @@ fn parse_release(body: &str) -> Result<ReleaseInfo, ()> {
     })
 }
 
-/// Versão com os componentes numéricos e o pré-lançamento opcional.
+/// Version with the numeric components and the optional pre-release.
 ///
-/// Comparação própria: numérica por componente e, pela regra do SemVer, um
-/// pré-lançamento sempre precede o lançamento correspondente.
+/// Own comparison: numeric per component and, by the SemVer rule, a
+/// pre-release always precedes the corresponding release.
 #[derive(Clone, Debug)]
 struct Version {
-    /// Texto normalizado (sem `v` inicial) usado na mensagem ao usuário.
+    /// Normalized text (without a leading `v`) used in the message to the user.
     original: String,
     release: Vec<u64>,
     pre: Option<Vec<PreId>>,
@@ -431,7 +431,7 @@ impl Ord for Version {
         }
         match (&self.pre, &other.pre) {
             (None, None) => std::cmp::Ordering::Equal,
-            // Um lançamento tem precedência sobre o seu pré-lançamento.
+            // A release takes precedence over its pre-release.
             (None, Some(_)) => std::cmp::Ordering::Greater,
             (Some(_), None) => std::cmp::Ordering::Less,
             (Some(left), Some(right)) => compare_pre(left, right),
@@ -457,7 +457,7 @@ fn compare_pre(left: &[PreId], right: &[PreId]) -> std::cmp::Ordering {
     for (a, b) in left.iter().zip(right.iter()) {
         let order = match (a, b) {
             (PreId::Number(a), PreId::Number(b)) => a.cmp(b),
-            // Identificador numérico sempre precede um alfanumérico.
+            // A numeric identifier always precedes an alphanumeric one.
             (PreId::Number(_), PreId::Text(_)) => std::cmp::Ordering::Less,
             (PreId::Text(_), PreId::Number(_)) => std::cmp::Ordering::Greater,
             (PreId::Text(a), PreId::Text(b)) => a.cmp(b),
@@ -466,11 +466,11 @@ fn compare_pre(left: &[PreId], right: &[PreId]) -> std::cmp::Ordering {
             return order;
         }
     }
-    // Um conjunto maior de identificadores tem precedência quando o prefixo é igual.
+    // A larger set of identifiers takes precedence when the prefix is equal.
     left.len().cmp(&right.len())
 }
 
-/// Interpreta SemVer estrito aceitando `v` inicial opcional (convenção das tags GitHub).
+/// Parses strict SemVer accepting an optional leading `v` (the GitHub tags convention).
 fn parse_version(value: &str) -> Option<Version> {
     let value = value.strip_prefix('v').unwrap_or(value);
     let (without_build, build) = match value.split_once('+') {
@@ -500,7 +500,7 @@ fn parse_version(value: &str) -> Option<Version> {
         release.push(component.parse::<u64>().ok()?);
     }
     let pre = match pre {
-        // `1.0.0-` não é um pré-lançamento válido.
+        // `1.0.0-` is not a valid pre-release.
         Some("") => return None,
         Some(value) => Some(parse_pre(value)?),
         None => None,
@@ -567,7 +567,7 @@ fn append_body_chunk(body: &mut Vec<u8>, chunk: &[u8]) -> Result<(), ()> {
     Ok(())
 }
 
-/// Instante da checagem como segundos desde a época Unix (string opaca para o cliente).
+/// Instant of the check as seconds since the Unix epoch (an opaque string for the client).
 fn checked_at_now() -> String {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -575,12 +575,12 @@ fn checked_at_now() -> String {
         .unwrap_or_else(|_| "0".to_owned())
 }
 
-/// Cliente HTTPS compartilhado. Construído na primeira checagem, já dentro do runtime.
+/// Shared HTTPS client. Built on the first check, already inside the runtime.
 fn github_client() -> Result<&'static reqwest::Client, String> {
     static CLIENT: OnceLock<Result<reqwest::Client, ()>> = OnceLock::new();
     let slot = CLIENT.get_or_init(|| {
-        // O provedor `ring` evita o `aws-lc-rs` (que exigiria CMake para compilar) e
-        // mantém o binário sem OpenSSL.
+        // The `ring` provider avoids `aws-lc-rs` (which would require CMake to build) and
+        // keeps the binary free of OpenSSL.
         let _ = rustls::crypto::ring::default_provider().install_default();
         reqwest::Client::builder()
             .timeout(REQUEST_TIMEOUT)
@@ -592,7 +592,7 @@ fn github_client() -> Result<&'static reqwest::Client, String> {
         .map_err(|_| "cliente HTTP indisponível".to_owned())
 }
 
-/// Fetcher real: uma requisição GET fixa à API de releases do GitHub.
+/// Real fetcher: a fixed GET request to GitHub's releases API.
 pub(crate) fn github_fetcher() -> Fetcher {
     Arc::new(|| {
         Box::pin(async {
@@ -657,7 +657,7 @@ mod tests {
         }
     }
 
-    /// Fetcher controlado pelo teste: conta chamadas e devolve um resultado roteirizado.
+    /// Test-controlled fetcher: counts calls and returns a scripted result.
     fn counting_fetcher(
         calls: Arc<AtomicUsize>,
         results: Vec<Result<ReleaseInfo, String>>,
@@ -715,7 +715,7 @@ mod tests {
             parse_version("v1.2.3").unwrap(),
             parse_version("1.2.3").unwrap()
         );
-        // Metadados de build não participam da comparação.
+        // Build metadata does not take part in the comparison.
         assert_eq!(
             parse_version("1.2.3+build.7").unwrap(),
             parse_version("1.2.3").unwrap()
@@ -839,7 +839,7 @@ mod tests {
                 latest: "0.4.0".to_owned()
             }
         );
-        // Igual ou mais antiga não é atualização.
+        // Equal or older is not an update.
         assert_eq!(
             evaluate(&release("v0.3.0"), "0.3.0").unwrap(),
             Evaluation::UpToDate
@@ -848,7 +848,7 @@ mod tests {
             evaluate(&release("v0.2.9"), "0.3.0").unwrap(),
             Evaluation::UpToDate
         );
-        // Um pré-lançamento publicado nunca é anunciado.
+        // A published pre-release is never announced.
         assert_eq!(
             evaluate(
                 &ReleaseInfo {
@@ -943,8 +943,8 @@ mod tests {
             checker.snapshot(false).await.latest.as_deref(),
             Some("9.9.9")
         );
-        // Avança o relógio para que a nova tentativa force uma checagem (sem isso, a
-        // conclusão capturada seria tratada como coerção da mesma requisição).
+        // Advances the clock so that the new attempt forces a check (without this, the
+        // captured completion would be treated as coalescing of the same request).
         tokio::time::advance(Duration::from_millis(1)).await;
         assert_eq!(
             checker.snapshot(true).await.latest.as_deref(),
@@ -964,8 +964,8 @@ mod tests {
                 let results = results.clone();
                 Box::pin(async move {
                     calls.fetch_add(1, Ordering::SeqCst);
-                    // Cede a vez para que as demais requisições cheguem e esperem o
-                    // cadeado em vez de disparar a própria chamada externa.
+                    // Yields so that the other requests arrive and wait on the
+                    // lock instead of firing their own external call.
                     tokio::task::yield_now().await;
                     tokio::task::yield_now().await;
                     results.lock().await.remove(0)
@@ -1012,15 +1012,15 @@ mod tests {
         assert_eq!(failed.checked_at, None);
         assert_eq!(failed.error.as_deref(), Some("sem ligação ao GitHub"));
 
-        // A falha não pode apagar o último sucesso conhecido.
+        // A failure cannot erase the last known success.
         assert!(checker.cache.lock().await.success.is_some());
 
-        // Dentro do intervalo, a resposta seguinte repete o erro sem nova chamada.
+        // Within the interval, the next response repeats the error without a new call.
         let repeated = checker.snapshot(false).await;
         assert_eq!(repeated.error.as_deref(), Some("sem ligação ao GitHub"));
         assert_eq!(calls.load(Ordering::SeqCst), 2);
 
-        // O botão manual continua podendo tentar de novo.
+        // The manual button can still try again.
         assert!(checker.snapshot(true).await.error.is_some());
         assert_eq!(calls.load(Ordering::SeqCst), 3);
     }
@@ -1070,7 +1070,7 @@ mod tests {
         );
     }
 
-    /// Bloco `async` mínimo para o teste síncrono do caminho de sucesso.
+    /// Minimal `async` block for the synchronous test of the success path.
     fn futures_block_on<T>(future: impl Future<Output = T>) -> T {
         tokio::runtime::Builder::new_current_thread()
             .enable_all()

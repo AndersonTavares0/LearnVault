@@ -1,4 +1,4 @@
-//! Servidor HTTP do LearnVault.
+//! LearnVault HTTP server.
 
 #![forbid(unsafe_code)]
 
@@ -56,14 +56,14 @@ use axum::{
 use tokio::net::TcpListener;
 use tower::ServiceBuilder;
 
-/// Identidade de versão do servidor: o Release Please é o dono da versão de release;
-/// o `0.0.0` do manifesto nunca deve ser publicado, e builds empacotados injetam a versão.
+/// Version identity of the server: Release Please owns the release version;
+/// the manifest's `0.0.0` must never be published, and packaged builds inject the version.
 pub const VERSION: &str = match option_env!("LEARNVAULT_BUILD_VERSION") {
     Some(version) if !version.is_empty() => version,
     _ => env!("CARGO_PKG_VERSION"),
 };
 
-/// Monta as rotas públicas mínimas do servidor.
+/// Assembles the server's minimal public routes.
 pub fn build_router(state: AppState) -> Router {
     let inline_script_hashes = state.inline_script_hashes.clone();
     let inline_style_hashes = state.inline_style_hashes.clone();
@@ -125,8 +125,8 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/api/study/recent", get(study::recent))
         .route("/api/study/summary", get(study::summary))
-        // O lote de sincronização carrega até 200 operações com texto de anotação, então
-        // tem um limite próprio, muito acima do padrão das rotas pequenas.
+        // The sync batch carries up to 200 operations with note text, so it
+        // has a limit of its own, far above the default of the small routes.
         .route(
             "/api/sync/push",
             post(sync::push).layer(DefaultBodyLimit::max(4 * 1024 * 1024)),
@@ -282,10 +282,10 @@ fn with_request_limits(router: Router, timeout: Duration) -> Router {
     )
 }
 
-/// Garante que nenhuma resposta `/api` possa ser armazenada, incluindo as
-/// rejeições produzidas antes do handler (`Json` e `DefaultBodyLimit`) e as
-/// respostas do healthz ou de rotas desconhecidas. Um handler que já escolheu
-/// uma política mais restritiva (`private, no-store`) é preservado.
+/// Guarantees that no `/api` response can be stored, including the
+/// rejections produced before the handler (`Json` and `DefaultBodyLimit`) and the
+/// responses of healthz or of unknown routes. A handler that already chose
+/// a stricter policy (`private, no-store`) is preserved.
 async fn api_cache_headers(request: Request, next: Next) -> Response {
     let is_api = request.uri().path() == "/api" || request.uri().path().starts_with("/api/");
     let mut response = next.run(request).await;
@@ -324,29 +324,29 @@ async fn security_headers(
     csp.push_str(
         "; img-src 'self' data: blob:; media-src 'self' data: blob:; frame-ancestors 'none'",
     );
-    // Os hashes são base64 por construção, então a conversão é infalível na
-    // prática; ainda assim, prefira responder sem CSP a travar o worker.
+    // The hashes are base64 by construction, so the conversion is infallible in
+    // practice; even so, prefer answering without CSP to hanging the worker.
     if let Ok(csp) = csp.parse() {
         headers.insert(HeaderName::from_static("content-security-policy"), csp);
     }
     response
 }
 
-/// Erros públicos do ciclo de vida do servidor.
+/// Public errors of the server's lifecycle.
 #[derive(Debug, thiserror::Error)]
 pub enum ServeError {
-    /// O listener HTTP não pôde ser criado.
+    /// The HTTP listener could not be created.
     #[error("could not bind HTTP listener")]
     Bind(#[source] std::io::Error),
-    /// O servidor HTTP terminou com erro.
+    /// The HTTP server ended with an error.
     #[error("HTTP server failed")]
     Serve(#[source] std::io::Error),
-    /// A autenticação não pôde ser inicializada com segurança.
+    /// Authentication could not be initialized safely.
     #[error("server startup failed: {0}")]
     Startup(String),
 }
 
-/// Inicia o servidor e aguarda o futuro de encerramento fornecido pelo processo.
+/// Starts the server and waits for the shutdown future supplied by the process.
 pub async fn serve<F>(config: Config, shutdown: F) -> Result<(), ServeError>
 where
     F: Future<Output = ()> + Send + 'static,
@@ -358,8 +358,8 @@ where
     let state = AppState::initialize(config)
         .await
         .map_err(|error| ServeError::Startup(error.to_string()))?;
-    // Indexação automática: eventos do sistema de arquivos com reconciliação periódica.
-    // O desktop não abre este laço; ele continua usando o rescan explícito.
+    // Automatic indexing: file-system events with periodic reconciliation.
+    // The desktop does not open this loop; it keeps using the explicit rescan.
     state.indexer.start(state.clone());
     state.start_source_refresh_default();
     let app = with_request_limits(build_router(state), Duration::from_secs(30));
@@ -453,8 +453,8 @@ mod tests {
             temp.path().join("learnvault.sqlite").to_str().unwrap(),
             "--library-root",
             temp.path().to_str().unwrap(),
-            // Nenhum teste de rota pode sair para a rede: a verificação de atualização
-            // fica desligada por padrão nas fixtures.
+            // No route test may reach the network: the update check
+            // is off by default in the fixtures.
             "--no-update-check",
         ])
         .expect("configuração de teste válida");
@@ -575,7 +575,7 @@ mod tests {
             .unwrap();
         assert_eq!(unauth_res.status(), StatusCode::UNAUTHORIZED);
 
-        // Escreve histórico simulado
+        // Writes simulated history
         let history_file = temp.path().join("update-history.json");
         std::fs::write(
             &history_file,
@@ -998,8 +998,8 @@ mod tests {
         config.admin_password = Some("uma senha local muito segura".to_owned());
         config.cookie_secure = false;
         let state = AppState::initialize(config).await.unwrap();
-        // O segundo curso entra no registro como a interface faria; as duas pastas têm o
-        // mesmo caminho relativo e o parâmetro `course` decide qual mídia é servida.
+        // The second course enters the registry as the interface would do it; the two folders have the
+        // same relative path and the `course` parameter decides which media is served.
         let other_id = learnvault_core::course_id_from_path(&other_root.canonicalize().unwrap());
         state
             .courses
@@ -1111,8 +1111,8 @@ mod tests {
     async fn media_reports_a_corrupt_stored_size_as_a_sanitized_internal_error() {
         let (app, _temp, state) = media_app().await;
         let cookie = media_cookie(&app).await;
-        // Um tamanho negativo é corrupção de catálogo: a resolução precisa falhar
-        // alto (500) em vez de tratar a linha como arquivo vazio.
+        // A negative size is catalog corruption: the resolution must fail
+        // loudly (500) instead of treating the row as an empty file.
         state
             .database
             .try_lock()
@@ -1246,9 +1246,9 @@ mod tests {
             .unwrap();
         assert_eq!(saturated.status(), StatusCode::SERVICE_UNAVAILABLE);
 
-        // Avança em passos de 1s para que os produtores sejam escalonados e enfileirem
-        // o primeiro chunk antes do deadline de 30s; um único yield + advance(30s)
-        // é racy sob carga (os produtores podem expirar sem nunca escrever).
+        // Advances in 1s steps so that the producers are scheduled and queue
+        // the first chunk before the 30s deadline; a single yield + advance(30s)
+        // is racy under load (the producers may expire without ever writing).
         for _ in 0..30 {
             tokio::task::yield_now().await;
             tokio::time::advance(Duration::from_secs(1)).await;
@@ -1267,11 +1267,11 @@ mod tests {
         assert_eq!(recovered.status(), StatusCode::OK);
 
         let mut timed_out = idle_responses.pop().unwrap();
-        // O primeiro chunk já lido é sempre entregue (o envio tem prioridade sobre o
-        // deadline expirado). Ao retirá-lo, o consumidor libera espaço e o produtor pode
-        // enfileirar o chunk seguinte antes de observar o fim do arquivo — comportamento
-        // previsto: o deadline mede ociosidade do transporte, não descarta dados lidos.
-        // Por isso drenamos até o encerramento em vez de exigir um único frame.
+        // The first chunk already read is always delivered (the send takes priority over the
+        // expired deadline). On taking it out, the consumer frees space and the producer can
+        // queue the next chunk before observing the end of the file — expected
+        // behaviour: the deadline measures transport idleness, it does not discard data already read.
+        // That is why we drain until the end instead of requiring a single frame.
         assert!(timed_out.body_mut().frame().await.unwrap().is_ok());
         while let Some(frame) = timed_out.body_mut().frame().await {
             assert!(
@@ -1287,10 +1287,10 @@ mod tests {
         let (app, temp, _state) = media_app().await;
         let cookie = media_cookie(&app).await;
 
-        // 1. Apaga o arquivo físico no disco após o scan para simular arquivo desaparecido ou ilegível
+        // 1. Deletes the physical file on disk after the scan to simulate a vanished or unreadable file
         fs::remove_file(temp.path().join("lesson.mp4")).unwrap();
 
-        // 2. Requisição para a mídia deve devolver erro por arquivo (404 Not Found), nunca 503
+        // 2. A request for the media must return a per-file error (404 Not Found), never 503
         let media_resp = app
             .clone()
             .oneshot(
@@ -1303,7 +1303,7 @@ mod tests {
             .unwrap();
         assert_eq!(media_resp.status(), StatusCode::NOT_FOUND);
 
-        // 3. /api/healthz deve continuar respondendo 200 OK sem ser afetado
+        // 3. /api/healthz must keep answering 200 OK without being affected
         let health_resp = app
             .clone()
             .oneshot(Request::get("/api/healthz").body(Body::empty()).unwrap())
@@ -1311,7 +1311,7 @@ mod tests {
             .unwrap();
         assert_eq!(health_resp.status(), StatusCode::OK);
 
-        // 4. /api/catalog deve continuar respondendo 200 OK sem ser bloqueado
+        // 4. /api/catalog must keep answering 200 OK without being blocked
         let catalog_resp = app
             .clone()
             .oneshot(
@@ -1330,7 +1330,7 @@ mod tests {
         let (app, _temp, state) = media_app().await;
         let cookie = media_cookie(&app).await;
 
-        // Inicia streaming de mídia
+        // Starts media streaming
         let media_resp = app
             .clone()
             .oneshot(
@@ -1343,8 +1343,8 @@ mod tests {
             .unwrap();
         assert_eq!(media_resp.status(), StatusCode::OK);
 
-        // Enquanto o stream está ativo (corpo ainda retido), o mutex do banco DEVE
-        // estar imediatamente disponível (não bloqueado por I/O de arquivo):
+        // While the stream is active (body still held), the database mutex MUST
+        // be immediately available (not blocked by file I/O):
         assert!(
             state.database.try_lock().is_ok(),
             "database lock must not be held during media opening or streaming"
@@ -1532,7 +1532,7 @@ mod tests {
             png_cover()
         );
 
-        // O catálogo expõe a versão da capa para a SPA compor a URL `?v=`.
+        // The catalog exposes the cover version for the SPA to compose the `?v=` URL.
         let catalog: serde_json::Value = serde_json::from_slice(
             &app.clone()
                 .oneshot(
@@ -1668,7 +1668,7 @@ mod tests {
             .unwrap();
         assert_eq!(oversized.status(), StatusCode::PAYLOAD_TOO_LARGE);
 
-        // Nenhuma das duas tentativas pode ter gravado uma capa.
+        // Neither of the two attempts can have written a cover.
         let get = app
             .oneshot(
                 Request::get("/api/courses/library-1/cover")
@@ -1698,8 +1698,8 @@ mod tests {
             .unwrap();
         assert_eq!(no_origin.status(), StatusCode::FORBIDDEN);
 
-        // `unknown-course` não existe; `%2e%2e` e `a%2fb` decodificam para segmentos
-        // inseguros e são recusados como se o curso fosse desconhecido, sem revelar nada.
+        // `unknown-course` does not exist; `%2e%2e` and `a%2fb` decode to unsafe
+        // segments and are refused as if the course were unknown, revealing nothing.
         for id in ["unknown-course", "%2e%2e", "a%2fb"] {
             let put = app
                 .clone()
@@ -1760,8 +1760,8 @@ mod tests {
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     }
 
-    /// Sessão de um usuário comum (não administrador), criada direto no banco: não existe
-    /// caminho de API para criar um leitor, e o objetivo do teste é a autorização da capa.
+    /// Session of an ordinary (non-administrator) user, created straight in the database: there is no
+    /// API path to create a reader, and the test's goal is the cover's authorization.
     async fn reader_cookie(state: &AppState) -> String {
         let token = "token-de-leitor-para-testes-de-capa";
         let mut database = state.database.lock().await;
@@ -1781,7 +1781,7 @@ mod tests {
         )
         .unwrap();
         drop(database);
-        // Mesmo nome do cookie de sessão do servidor (`auth::COOKIE_NAME`).
+        // Same name as the server's session cookie (`auth::COOKIE_NAME`).
         format!("learnvault_session={token}")
     }
 
@@ -1822,7 +1822,7 @@ mod tests {
             .unwrap();
         assert_eq!(delete.status(), StatusCode::FORBIDDEN);
 
-        // A leitura é liberada para qualquer usuário autenticado; sem capa, é 404.
+        // Reading is allowed for any authenticated user; without a cover, it is 404.
         let get = app
             .oneshot(
                 Request::get("/api/courses/library-1/cover")
@@ -1834,7 +1834,7 @@ mod tests {
             .unwrap();
         assert_eq!(get.status(), StatusCode::NOT_FOUND);
 
-        // O leitor não conseguiu gravar nada.
+        // The reader could not write anything.
         assert!(
             super::covers::cover_version(
                 &super::covers::covers_dir(&state.config.database_path),

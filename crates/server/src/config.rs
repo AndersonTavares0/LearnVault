@@ -8,102 +8,102 @@ use thiserror::Error;
 
 use learnvault_core::LegacyImportOptions;
 
-/// Configuração validada necessária para iniciar o servidor.
+/// Validated configuration needed to start the server.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Config {
-    /// Endereço TCP do listener HTTP.
+    /// TCP address of the HTTP listener.
     pub listen_addr: SocketAddr,
-    /// Caminho do banco SQLite.
+    /// Path of the SQLite database.
     pub database_path: PathBuf,
-    /// Raiz opcional usada para semear o primeiro curso quando o registro ainda não
-    /// existe. É apenas uma conveniência de implantação: a gestão normal acontece pela
-    /// interface, que registra cursos individualmente em um arquivo ao lado do banco.
+    /// Optional root used to seed the first course when the registry does not
+    /// exist yet. It is only a deployment convenience: normal management happens through the
+    /// interface, which registers courses individually in a file next to the database.
     pub library_root: Option<PathBuf>,
-    /// Raiz opcional dos arquivos estáticos da interface web.
+    /// Optional root of the web interface's static files.
     pub web_root: Option<PathBuf>,
-    /// Usuário inicial usado somente quando o banco ainda não possui administrador.
-    /// `ADMIN_USERNAME_FILE` carrega o mesmo valor de um arquivo de segredo.
+    /// Initial user used only when the database does not yet have an administrator.
+    /// `ADMIN_USERNAME_FILE` loads the same value from a secret file.
     pub admin_username: Option<String>,
-    /// Senha inicial usada somente quando o banco ainda não possui administrador.
-    /// `ADMIN_PASSWORD_FILE` carrega o mesmo valor de um arquivo de segredo.
+    /// Initial password used only when the database does not yet have an administrator.
+    /// `ADMIN_PASSWORD_FILE` loads the same value from a secret file.
     pub admin_password: Option<String>,
-    /// Define se cookies de sessão recebem o atributo `Secure`.
+    /// Defines whether session cookies get the `Secure` attribute.
     pub cookie_secure: bool,
-    /// Define se o servidor consulta a release mais recente do LearnVault. Desligada,
-    /// nenhuma chamada de rede sai do processo.
+    /// Defines whether the server queries LearnVault's latest release. When off,
+    /// no network call leaves the process.
     pub update_check: bool,
 }
 
-/// Comando aceito pelo executável antes de iniciar o listener.
+/// Command accepted by the executable before starting the listener.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Command {
-    /// Imprime a versão compilada e encerra.
+    /// Prints the compiled version and exits.
     Version,
-    /// Importa um banco Go sem iniciar o servidor HTTP.
+    /// Imports a Go database without starting the HTTP server.
     MigrateGo(LegacyImportOptions),
-    /// Realiza o backup íntegro do banco SQLite.
+    /// Takes an intact backup of the SQLite database.
     Backup(BackupOptions),
-    /// Restaura o banco SQLite a partir de um backup.
+    /// Restores the SQLite database from a backup.
     Restore(RestoreOptions),
-    /// Inicia o servidor com a configuração validada.
+    /// Starts the server with the validated configuration.
     Run(Config),
 }
 
-/// Opções para o comando de backup via linha de comando.
+/// Options for the backup command on the command line.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BackupOptions {
-    /// Caminho do banco SQLite a ser copiado.
+    /// Path of the SQLite database to be copied.
     pub database_path: PathBuf,
-    /// Caminho do arquivo de backup de saída.
+    /// Path of the output backup file.
     pub output_path: PathBuf,
 }
 
-/// Opções para o comando de restauração via linha de comando.
+/// Options for the restore command on the command line.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RestoreOptions {
-    /// Caminho do arquivo de backup fonte.
+    /// Path of the source backup file.
     pub backup_path: PathBuf,
-    /// Caminho do banco de destino onde restaurar.
+    /// Path of the destination database to restore into.
     pub database_path: PathBuf,
 }
 
-/// Erros seguros de configuração e argumentos.
+/// Safe errors of configuration and arguments.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum ConfigError {
-    /// O endereço de escuta não pôde ser interpretado.
+    /// The listen address could not be interpreted.
     #[error("invalid listen address")]
     InvalidListenAddress,
-    /// O caminho do banco está vazio ou contém valor inválido.
+    /// The database path is empty or contains an invalid value.
     #[error("invalid database path")]
     InvalidDatabasePath,
-    /// A raiz da biblioteca não existe ou não é um diretório.
+    /// The library root does not exist or is not a directory.
     #[error("invalid library root")]
     InvalidLibraryRoot,
-    /// A raiz da interface web não existe ou não é um diretório.
+    /// The web interface root does not exist or is not a directory.
     #[error("invalid web root")]
     InvalidWebRoot,
-    /// Um argumento exige um valor seguinte.
+    /// An argument requires a following value.
     #[error("missing argument value")]
     MissingArgumentValue,
-    /// O argumento não é reconhecido.
+    /// The argument is not recognized.
     #[error("unknown argument")]
     UnknownArgument,
-    /// O argumento contém texto que não pôde ser interpretado.
+    /// The argument contains text that could not be interpreted.
     #[error("invalid argument")]
     InvalidArgument,
-    /// Segredo não pode ser exposto na lista de processos.
+    /// A secret cannot be exposed in the process list.
     #[error("admin password must be supplied through ADMIN_PASSWORD or a secret file")]
     InsecureAdminPasswordArgument,
-    /// Uma credencial inicial não pôde ser carregada com segurança.
+    /// An initial credential could not be loaded safely.
     #[error("invalid bootstrap credential configuration")]
     InvalidBootstrapCredential,
-    /// `--version` não representa uma configuração de execução.
+    /// `--version` does not represent a run configuration.
     #[error("version requested")]
     VersionRequested,
 }
 
 impl Config {
-    /// Lê e valida uma configuração a partir de argumentos de linha de comando.
+    /// Reads and validates a configuration from command-line arguments.
     pub fn from_args<I, S>(args: I) -> Result<Self, ConfigError>
     where
         I: IntoIterator<Item = S>,
@@ -119,7 +119,7 @@ impl Config {
     }
 }
 
-/// Interpreta os argumentos do executável sem iniciar o servidor.
+/// Parses the executable's arguments without starting the server.
 pub fn parse_command<I, S>(args: I) -> Result<Command, ConfigError>
 where
     I: IntoIterator<Item = S>,

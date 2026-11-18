@@ -31,34 +31,34 @@ const MAX_SPA_ASSET_STREAMS: usize = 3;
 const MAX_SPA_SHELL_STREAMS: usize = 1;
 const MAX_MEDIA_STREAMS: usize = 4;
 
-/// Estado compartilhado mínimo da aplicação HTTP.
+/// Minimal shared state of the HTTP application.
 #[derive(Clone, Debug)]
 pub struct AppState {
-    /// Configuração validada usada pelo servidor.
+    /// Validated configuration used by the server.
     pub config: Config,
-    /// Cursos registrados, na ordem de importação. A leitura é rápida (snapshot) e a
-    /// escrita acontece apenas na importação/remoção, fora das threads Tokio.
+    /// Registered courses, in import order. Reading is fast (a snapshot) and
+    /// writing happens only on import/removal, off the Tokio threads.
     pub(crate) courses: Arc<RwLock<Vec<RegisteredCourse>>>,
-    /// Arquivo versionado do registro de cursos, ao lado do banco.
+    /// Versioned file of the course registry, next to the database.
     pub(crate) courses_file: PathBuf,
-    /// Preferências de ordenação manual, por identidade opaca do curso.
+    /// Manual ordering preferences, by the course's opaque identity.
     pub(crate) orders: Arc<RwLock<CourseOrders>>,
-    /// Arquivo versionado das preferências de ordenação, ao lado do banco.
+    /// Versioned file of the ordering preferences, next to the database.
     pub(crate) orders_file: PathBuf,
-    /// Fontes remotas configuradas, com segredos apenas em memória.
+    /// Configured remote sources, with secrets only in memory.
     pub(crate) sources: Arc<RwLock<Vec<RemoteSource>>>,
-    /// Arquivo versionado das fontes remotas, ao lado do banco.
+    /// Versioned file of the remote sources, next to the database.
     pub(crate) sources_file: PathBuf,
-    /// Arquivo da chave que cifra os segredos das fontes.
+    /// File of the key that encrypts the sources' secrets.
     pub(crate) source_key_path: PathBuf,
     pub(crate) database: Arc<Mutex<Database>>,
     pub(crate) login_attempts: Arc<Mutex<HashMap<String, (u32, Instant)>>>,
     pub(crate) rescan_lock: Arc<Mutex<()>>,
-    /// Job de indexação automática. Inerte até [`Indexer::start`] ser chamado pelo servidor.
+    /// Automatic indexing job. Inert until [`Indexer::start`] is called by the server.
     pub(crate) indexer: Indexer,
     pub(crate) inline_script_hashes: Arc<[String]>,
     pub(crate) inline_style_hashes: Arc<[String]>,
-    /// Checagem de atualização do produto, feita pelo servidor local.
+    /// Product update check, done by the local server.
     pub(crate) update: UpdateChecker,
     spa_shell: Option<Arc<SpaShell>>,
     spa_shell_too_large: bool,
@@ -68,31 +68,31 @@ pub struct AppState {
     media_streams: Arc<Semaphore>,
 }
 
-/// Erro de inicialização seguro para logs do servidor.
+/// Initialization error that is safe for the server's logs.
 #[derive(Debug, thiserror::Error)]
 pub enum StateError {
-    /// Falha de persistência do core.
+    /// Persistence failure of the core.
     #[error("database initialization failed")]
     Database(#[source] CoreError),
-    /// O diretório pai do banco não pôde ser criado.
+    /// The database's parent directory could not be created.
     #[error("database directory initialization failed")]
     DatabaseDirectory,
-    /// Não existe administrador e não foram fornecidas credenciais válidas.
+    /// There is no administrator and no valid credentials were provided.
     #[error("administrator credentials are required for first startup")]
     MissingAdministrator,
-    /// A senha inicial não pôde ser transformada em hash.
+    /// The initial password could not be turned into a hash.
     #[error("initial administrator password is invalid")]
     InvalidAdministrator,
-    /// A thread de trabalho não pôde concluir.
+    /// The worker thread could not finish.
     #[error("blocking authentication task failed")]
     Blocking(#[source] tokio::task::JoinError),
-    /// Não há capacidade para iniciar outra tarefa blocking.
+    /// There is no capacity to start another blocking task.
     #[error("blocking task capacity exhausted")]
     Capacity,
 }
 
 impl AppState {
-    /// Cria o estado inicial da aplicação.
+    /// Creates the application's initial state.
     pub fn new(config: Config) -> Self {
         let database = Database::open_in_memory().expect("in-memory database must initialize");
         let spa_shell_too_large = shell_too_large(config.web_root.as_deref());
@@ -125,8 +125,8 @@ impl AppState {
         }
     }
 
-    /// Abre o banco, carrega o registro de cursos e executa o bootstrap administrativo
-    /// fora das threads Tokio.
+    /// Opens the database, loads the course registry and runs the administrative bootstrap
+    /// off the Tokio threads.
     pub async fn initialize(config: Config) -> Result<Self, StateError> {
         let setup = config.clone();
         let (
@@ -149,9 +149,9 @@ impl AppState {
             {
                 std::fs::create_dir_all(parent).map_err(|_| StateError::DatabaseDirectory)?;
             }
-            // O registro é carregado ao lado do banco; as raízes semeadas só entram em
-            // cena quando nenhum registro foi persistido ainda, e nunca são regravadas
-            // aqui: uma remoção explícita de um curso semeado não volta no próximo start.
+            // The registry is loaded next to the database; the seeded roots only come into
+            // play when no registry has been persisted yet, and are never rewritten
+            // here: an explicit removal of a seeded course does not come back on the next start.
             let courses_file = registry_path(&setup.database_path);
             let mut courses = load_registry(&courses_file);
             if !courses_file.exists()
@@ -159,9 +159,9 @@ impl AppState {
             {
                 courses.extend(seeded_courses(seed));
             }
-            // As preferências de ordenação vivem ao lado do banco, no arquivo de
-            // ordenação; um curso removido do catálogo mantém a preferência, que só
-            // volta a valer se o mesmo curso for reimportado.
+            // The ordering preferences live next to the database, in the ordering
+            // file; a course removed from the catalog keeps its preference, which only
+            // applies again if the same course is re-imported.
             let orders = load_orders(&order_path(&setup.database_path));
             let sources_file = sources_path(&setup.database_path);
             let source_key_path = SecretKey::path_for(&setup.database_path);
@@ -256,10 +256,10 @@ impl AppState {
         })
     }
 
-    /// Fotografia imutável dos cursos registrados.
+    /// Immutable snapshot of the registered courses.
     ///
-    /// Uma leitura de catálogo, rescan ou mídia usa a fotografia e nunca segura o cadeado
-    /// de escrita enquanto lê arquivos ou o banco.
+    /// A catalog read, rescan or media request uses the snapshot and never holds the write
+    /// lock while reading files or the database.
     pub(crate) fn courses_snapshot(&self) -> Vec<RegisteredCourse> {
         self.courses
             .read()
@@ -267,10 +267,10 @@ impl AppState {
             .unwrap_or_default()
     }
 
-    /// Fotografia imutável das fontes remotas.
+    /// Immutable snapshot of the remote sources.
     ///
-    /// Inclui a senha em claro apenas em memória para montar o cabeçalho de autenticação;
-    /// nunca é serializada.
+    /// It includes the plain-text password only in memory, to build the authentication header;
+    /// it is never serialized.
     pub(crate) fn sources_snapshot(&self) -> Vec<RemoteSource> {
         self.sources
             .read()
@@ -278,10 +278,10 @@ impl AppState {
             .unwrap_or_default()
     }
 
-    /// Fotografia imutável das preferências de ordenação.
+    /// Immutable snapshot of the ordering preferences.
     ///
-    /// Uma leitura de catálogo usa a fotografia e nunca segura o cadeado de escrita durante
-    /// a leitura do banco ou a montagem da árvore.
+    /// A catalog read uses the snapshot and never holds the write lock while
+    /// reading the database or assembling the tree.
     pub(crate) fn orders_snapshot(&self) -> CourseOrders {
         self.orders
             .read()
@@ -289,26 +289,26 @@ impl AppState {
             .unwrap_or_default()
     }
 
-    /// Reserva capacidade para uma tarefa que pode sobreviver ao timeout HTTP.
+    /// Reserves capacity for a task that may outlive the HTTP timeout.
     ///
-    /// O permit deve ser movido para a closure de `spawn_blocking`, para continuar
-    /// contabilizado até que o trabalho efetivamente termine.
+    /// The permit must be moved into the `spawn_blocking` closure, so it stays
+    /// accounted for until the work actually finishes.
     pub fn try_acquire_blocking_task(&self) -> Option<OwnedSemaphorePermit> {
         self.blocking_tasks.clone().try_acquire_owned().ok()
     }
 
-    /// Peek barato de capacidade para evitar segurar mutexes quando o servidor
-    /// já está saturado. É apenas uma verificação (sujeita a corrida); a
-    /// aquisição real continua via `try_acquire_*` após os locks.
+    /// Cheap capacity peek to avoid holding mutexes when the server
+    /// is already saturated. It is only a check (subject to a race); the real
+    /// acquisition still goes through `try_acquire_*` after the locks.
     pub(crate) fn has_blocking_capacity(&self) -> bool {
         self.blocking_tasks.available_permits() > 0
     }
 
-    /// Verifica a prontidão do banco sem expor o erro de persistência ao cliente.
+    /// Checks the database's readiness without exposing the persistence error to the client.
     ///
-    /// O health check não espera por uma operação que já esteja usando o banco:
-    /// nesse caso o processo ainda está vivo, mas a dependência não está pronta
-    /// para responder de forma determinística.
+    /// The health check does not wait for an operation already using the database:
+    /// in that case the process is still alive, but the dependency is not ready
+    /// to answer deterministically.
     pub(crate) async fn database_ready(&self) -> bool {
         let database = match self.database.clone().try_lock_owned() {
             Ok(database) => database,
@@ -326,10 +326,10 @@ impl AppState {
         .unwrap_or(false)
     }
 
-    /// Reserva uma conexão da SPA até que o corpo HTTP seja consumido, descartado ou fique ocioso.
+    /// Reserves a SPA connection until the HTTP body is consumed, dropped or goes idle.
     ///
-    /// O shell recebe uma reserva própria para que clientes lentos baixando assets não o impeçam
-    /// de carregar uma rota da aplicação.
+    /// The shell gets a reservation of its own so that slow clients downloading assets do not keep it
+    /// from loading an application route.
     pub(crate) fn try_acquire_spa_stream(&self, shell: bool) -> Option<OwnedSemaphorePermit> {
         let streams = if shell {
             &self.spa_shell_streams
@@ -339,16 +339,16 @@ impl AppState {
         streams.clone().try_acquire_owned().ok()
     }
 
-    /// Aguarda (sem bloquear o executor) até uma reserva de stream de asset da SPA
-    /// ficar disponível, devolvendo o permit.
+    /// Waits (without blocking the executor) until a SPA asset-stream reservation
+    /// becomes available, returning the permit.
     ///
-    /// É o irmão *aguardável* de [`Self::try_acquire_spa_stream`]: em vez de falhar
-    /// de imediato, registra no semáforo e resolve exatamente quando o watchdog
-    /// ocioso devolve a reserva. Exposto para que o teste de integração observe de
-    /// forma determinística a liberação de capacidade pelo watchdog, em vez de
-    /// assumir que um avanço fixo do relógio virtual basta para o produtor alcançar
-    /// o deadline depois do IO de leitura real (issue #154). A admissão de `serve`
-    /// continua usando `try_acquire_spa_stream`; nenhuma lógica de backpressure muda.
+    /// It is the *awaitable* sibling of [`Self::try_acquire_spa_stream`]: instead of failing
+    /// immediately, it registers on the semaphore and resolves exactly when the idle
+    /// watchdog returns the reservation. Exposed so that the integration test observes
+    /// the watchdog's release of capacity deterministically, instead of
+    /// assuming that a fixed advance of the virtual clock is enough for the producer to reach
+    /// the deadline after the real read IO (issue #154). `serve`'s admission
+    /// still uses `try_acquire_spa_stream`; no backpressure logic changes.
     #[doc(hidden)]
     pub async fn acquire_spa_asset_stream_permit(&self) -> OwnedSemaphorePermit {
         self.spa_asset_streams
@@ -358,22 +358,22 @@ impl AppState {
             .expect("o semáforo de streams de asset da SPA nunca é fechado")
     }
 
-    /// Reserva um stream autenticado de mídia até que o corpo seja consumido ou descartado.
+    /// Reserves an authenticated media stream until the body is consumed or dropped.
     pub(crate) fn try_acquire_media_stream(&self) -> Option<OwnedSemaphorePermit> {
         self.media_streams.clone().try_acquire_owned().ok()
     }
 
-    /// Retorna o shell imutável carregado na inicialização apenas se o arquivo configurado ainda
-    /// tiver os mesmos bytes. Assim, uma troca de `200.html` não pode ser servida com hashes CSP
-    /// antigos; o deploy deve reiniciar o processo para publicar um novo shell.
+    /// Returns the immutable shell loaded at startup only if the configured file still
+    /// has the same bytes. This way, a swap of `200.html` cannot be served with old CSP hashes;
+    /// the deploy must restart the process to publish a new shell.
     pub(crate) fn current_spa_shell(&self) -> Option<Arc<[u8]>> {
         let shell = self.spa_shell.as_ref()?;
         (load_spa_shell(self.config.web_root.as_deref()).as_ref()? == shell.as_ref())
             .then(|| shell.bytes.clone())
     }
 
-    /// O tamanho do shell é validado na inicialização, antes de disputar a capacidade blocking.
-    /// Isso preserva o 413 para uma configuração inválida mesmo sob saturação operacional.
+    /// The shell's size is validated at startup, before contending for blocking capacity.
+    /// This preserves the 413 for an invalid configuration even under operational saturation.
     pub(crate) fn spa_shell_is_too_large(&self) -> bool {
         self.spa_shell_too_large
     }
@@ -520,10 +520,10 @@ struct SpaShell {
     style_hashes: Vec<String>,
 }
 
-/// Carrega o shell pelo mesmo conteúdo que é usado para os hashes CSP. Falhas de I/O ou um
-/// shell ausente deixam a política sem hashes, preservando o fallback HTTP sem revelar caminhos
-/// locais. A raiz web precisa permanecer sem escrita não confiável: essa verificação detecta
-/// alterações entre requisições, mas não substitui contenção atômica contra um processo hostil.
+/// Loads the shell from the same content that is used for the CSP hashes. I/O failures or a
+/// missing shell leave the policy with no hashes, preserving the HTTP fallback without revealing local
+/// paths. The web root must remain free of untrusted writes: this check detects
+/// changes between requests, but does not replace atomic containment against a hostile process.
 fn load_spa_shell(web_root: Option<&Path>) -> Option<SpaShell> {
     let root = web_root?;
     let shell = root.join("200.html");
@@ -688,9 +688,9 @@ fn attribute_values<'a>(tag: &'a [u8], name: &[u8]) -> Vec<&'a [u8]> {
             offset += 1;
         }
         if tag.get(offset) != Some(&b'=') {
-            // O nome e todo separador que o sucede já foram consumidos. Manter `offset` nesse
-            // ponto garante que atributos booleanos (por exemplo `hidden` e `defer`) avancem
-            // para o próximo atributo em vez de reprocessar o nome atual.
+            // The name and every separator that follows it have already been consumed. Keeping `offset` at that
+            // point guarantees that boolean attributes (for example `hidden` and `defer`) advance
+            // to the next attribute instead of reprocessing the current name.
             continue;
         }
         offset += 1;
