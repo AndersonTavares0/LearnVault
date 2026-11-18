@@ -1,6 +1,6 @@
 [package]
 name = "learnvault-core"
-description = "Domínio do LearnVault: bibliotecas, catálogo, identidade de mídia e estado de estudo."
+description = "LearnVault domain: libraries, catalog, media identity and study state."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
