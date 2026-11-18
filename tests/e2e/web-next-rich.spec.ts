@@ -92,12 +92,24 @@ test('the player settings menu opens inside the fullscreen player', async ({ pag
 	expect(await item.evaluate((element) => Boolean(document.fullscreenElement?.contains(element)))).toBe(true);
 });
 
-test('the lesson page fits a phone screen', async ({ page, origin }) => {
-	await page.setViewportSize({ width: 390, height: 844 });
+test('every lesson tool fits without horizontal scrolling at narrow widths', async ({ page, origin }) => {
 	await openVideoLesson(page, origin);
-	// Nothing may push the page wider than the screen: a long course title or the lesson tabs used to.
-	const widths = await page.evaluate(() => ({ screen: document.documentElement.clientWidth, body: document.body.scrollWidth }));
-	expect(widths.body).toBeLessThanOrEqual(widths.screen);
+	const tools = page.getByRole('tablist', { name: 'Lesson tools' });
+	await expect(tools.getByRole('tab')).toHaveCount(5);
+	await page.evaluate(() => document.fonts.ready.then(() => undefined));
+	for (const theme of ['light', 'dark']) {
+		if (theme === 'dark') await page.getByRole('button', { name: 'Switch to the dark theme' }).click();
+		await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+		for (const width of [320, 390, 768]) {
+			await page.setViewportSize({ width, height: 844 });
+			const context = `${width}px ${theme}`;
+			expect(await tools.evaluate((list) => list.scrollWidth - list.clientWidth), context).toBeLessThanOrEqual(1);
+			expect(await page.getByRole('main').evaluate((main) => main.scrollWidth - main.clientWidth), context).toBeLessThanOrEqual(1);
+			for (const tab of await tools.getByRole('tab').all()) {
+				expect(await tab.evaluate((el) => el.getBoundingClientRect().height), context).toBeGreaterThanOrEqual(44);
+			}
+		}
+	}
 });
 
 test('notes take formatting, show it, and are found from the course card', async ({ page, origin }) => {
@@ -182,6 +194,9 @@ test('main pages keep their content inside narrow and desktop viewports', async 
 		for (const route of ['/', '/progress', '/notes', '/review', '/history', '/settings', '/settings#users']) {
 			await page.goto(`${origin}/#${route}`);
 			await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+			// Measured before switching section: Appearance is the first one, and the one that overflowed.
+			// The content region scrolls now, so a control wider than its card widens it without widening the document.
+			expect(await page.locator('#main').evaluate((element) => element.scrollWidth - element.clientWidth), `${width}px ${route}: content region scrolls sideways`).toBeLessThanOrEqual(1);
 			if (route === '/settings' && width < 1024) {
 				await page.getByLabel('Settings section', { exact: true }).selectOption('users');
 				await expect(page.getByRole('heading', { name: 'Accounts and course access' })).toBeVisible();

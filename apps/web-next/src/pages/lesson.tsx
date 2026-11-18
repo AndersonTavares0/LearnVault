@@ -376,7 +376,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 					)}
 
 					<Tabs value={activeTab} onValueChange={(value) => setTab(String(value))}>
-						<TabsList variant="line" aria-label={tr('Lesson tools', 'Ferramentas da aula')} className="w-full justify-start overflow-x-auto border-b">
+						<TabsList variant="line" aria-label={tr('Lesson tools', 'Ferramentas da aula')} className="w-full flex-wrap justify-start border-b group-data-horizontal/tabs:h-auto [&>[role=tab]]:min-h-11">
 							<TabsTrigger value="lessons">{tr('Overview', 'Visão geral')}</TabsTrigger>
 							{hasNotes && <TabsTrigger value="notes">{tr('Notes', 'Notas')}{noteCount > 0 && ` (${noteCount})`}</TabsTrigger>}
 							{hasNotes && <TabsTrigger value="bookmarks">{tr('Timestamps', 'Marcadores')}{(bookmarks.data?.length ?? 0) > 0 && ` (${bookmarks.data?.length})`}</TabsTrigger>}
