@@ -442,11 +442,16 @@
   scroll-behavior: auto !important;
 }
 
-/* The document never scrolls: the app shell owns the viewport and its content region scrolls
-   (issue #607). A window scrollbar would otherwise sit beside the app one, above the top bar. */
-html, body { height: 100%; overflow: hidden; }
+html, body { overflow-x: clip; }
+
+/* While the app shell is on screen the document never scrolls: the shell owns the viewport and its
+   content region scrolls (issue #607). A window scrollbar would otherwise sit beside the app one,
+   above the top bar. `AppShell` sets `data-app-shell` on <html>; the sign-in page and the route error
+   page sit outside the shell and keep a scrollable document, so a short or zoomed viewport can still
+   reach their controls. */
+html[data-app-shell], html[data-app-shell] body { height: 100%; overflow: hidden; }
 @media print {
-  html, body { height: auto; overflow: visible; }
+  html[data-app-shell], html[data-app-shell] body { height: auto; overflow: visible; }
 }
 
 /* The app scrolls its content region, not the document (issue #607): the bar starts below the

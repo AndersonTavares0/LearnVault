@@ -133,6 +133,19 @@ test('keeps legacy links working', async ({ page, origin }) => {
 	await expect(page.getByRole('heading', { name: 'Progress' })).toBeVisible();
 });
 
+test('keeps the sign-in page scrollable on a short viewport', async ({ page, origin }) => {
+	// About 400% browser zoom on a 1280 x 1024 window, or a phone held sideways. The document is not
+	// locked outside the shell, so the wheel still reaches the button (issue #607).
+	await page.setViewportSize({ width: 360, height: 260 });
+	await page.goto(`${origin}/#/notes`);
+	const signInButton = page.getByRole('button', { name: 'Sign in' });
+	await expect(signInButton).toBeVisible();
+	expect(await page.evaluate(() => getComputedStyle(document.documentElement).overflowY)).not.toBe('hidden');
+	await page.mouse.move(180, 130);
+	await page.mouse.wheel(0, 600);
+	await expect(signInButton).toBeInViewport();
+});
+
 test('pins the top bar and scrolls the content region below it', async ({ page, origin }) => {
 	await signIn(page, origin);
 	await page.goto(`${origin}/#/settings`);

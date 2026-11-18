@@ -1,6 +1,6 @@
 import { BookOpen, ChartNoAxesColumn, History, Layers, LogOut, Moon, NotebookPen, Search, Settings, Sun, UserRound, type LucideIcon } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useState, type ReactNode } from 'react';
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { BrandMark } from '@/components/brand';
 import { DesktopTitlebar } from '@/components/desktop-titlebar';
@@ -36,6 +36,22 @@ const navItems = () => [
  * search and account menu; on phones a bottom tab bar replaces the topbar links.
  * Server builds require a session; the desktop build has a local identity.
  */
+/**
+ * Stops the document from scrolling while the shell is on screen (see app.css): the content region
+ * scrolls instead. The sign-in page and the route error page sit outside the shell, so they keep
+ * a scrollable document, which a short or zoomed viewport needs to reach their controls.
+ */
+function DocumentLock() {
+	useLayoutEffect(() => {
+		const root = document.documentElement;
+		root.dataset.appShell = '';
+		return () => {
+			delete root.dataset.appShell;
+		};
+	}, []);
+	return null;
+}
+
 export function AppShell() {
 	useLocale();
 	const session = useSession();
@@ -70,6 +86,7 @@ export function AppShell() {
 		// The bar and the banners stay put and the content region owns the scroll, so the page
 		// scrollbar starts below the top bar instead of crossing it (issue #607).
 		<div className="flex h-dvh flex-col print:block print:h-auto">
+			<DocumentLock />
 			<SkipLink />
 			<DesktopTitlebar />
 			<header className="shrink-0 border-b print:hidden">

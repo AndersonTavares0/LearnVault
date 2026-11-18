@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { cleanup, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { renderApp } from '@/test/render-app';
@@ -27,5 +30,21 @@ describe('app shell', () => {
 
 		// The phone tab bar floats over the bottom edge, so the scroller keeps the clearance.
 		expect(main.firstElementChild?.className).toContain('pb-28');
+	});
+
+	it('locks the document only while the shell is on screen', () => {
+		expect(document.documentElement.dataset.appShell).toBeUndefined();
+		renderApp('/');
+		expect(document.documentElement.dataset.appShell).toBeDefined();
+		cleanup();
+		// The sign-in page and the route error page render without the shell: their document must scroll.
+		expect(document.documentElement.dataset.appShell).toBeUndefined();
+	});
+
+	it('scopes the scroll lock in the stylesheet to the shell', () => {
+		const css = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../styles/app.css'), 'utf8');
+		expect(css).toMatch(/html\[data-app-shell\], html\[data-app-shell\] body \{ height: 100%; overflow: hidden; \}/);
+		// No rule may lock every page: that made the sign-in button unreachable on a short viewport.
+		expect(css).not.toMatch(/^html, body \{[^}]*overflow: hidden/m);
 	});
 });
