@@ -1,10 +1,10 @@
 // Testes do gate local `pnpm verify` (scripts/verify.mjs).
 //
-// Cobrem duas garantias que o atalho do Windows (`cmd.exe verify`, saída 0)
-// tornaria silenciosamente falsas: o comando executa os checks pretendidos e
-// falha com código não zero quando um passo falha ou não pode rodar.
+// They cover two guarantees that the Windows shortcut (`cmd.exe verify`, exit 0)
+// would silently make false: the command runs the intended checks and
+// fails with a non-zero code when a step fails or cannot run.
 //
-// Execução: `pnpm test:scripts` (ou `node --test scripts/verify.test.mjs`).
+// Run: `pnpm test:scripts` (or `node --test scripts/verify.test.mjs`).
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -19,7 +19,7 @@ import { buildSteps, runSteps } from './verify.mjs';
 const scriptsDir = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(scriptsDir, '..');
 
-// spawn falso: registra as chamadas e resolve cada filho com o resultado pedido.
+// fake spawn: records the calls and resolves each child with the requested result.
 function fakeSpawn(results) {
 	const calls = [];
 	const spawnImpl = (command, args) => {
@@ -27,7 +27,7 @@ function fakeSpawn(results) {
 		calls.push([command, ...args]);
 		const { code = 0, error } = results[index] ?? {};
 		const child = new EventEmitter();
-		// Emitir em microtask garante que runSteps já anexou os listeners.
+		// Emitting in a microtask guarantees that runSteps has already attached the listeners.
 		queueMicrotask(() => {
 			if (error) {
 				child.emit('error', error);
@@ -40,7 +40,7 @@ function fakeSpawn(results) {
 	return { spawnImpl, calls };
 }
 
-test('o plano padrão roda os checks pretendidos, sem Go nem desktop', () => {
+test('the default plan runs the intended checks, without Go or desktop', () => {
 	const labels = buildSteps().map((step) => step.label);
 
 	assert.equal(labels[0], 'pnpm run check');
@@ -53,7 +53,7 @@ test('o plano padrão roda os checks pretendidos, sem Go nem desktop', () => {
 	assert.ok(labels.every((label) => !label.includes('learnvault-desktop')));
 });
 
-test('--fast mantém check, testes e lints, e remove builds e audit', () => {
+test('--fast keeps check, tests and lints, and removes builds and audit', () => {
 	const labels = buildSteps({ fast: true }).map((step) => step.label);
 
 	assert.ok(labels.includes('pnpm run check'));
@@ -63,7 +63,7 @@ test('--fast mantém check, testes e lints, e remove builds e audit', () => {
 	assert.ok(!labels.includes('pnpm audit --audit-level=low'));
 });
 
-test('runSteps devolve 0 e executa na ordem quando tudo passa', async () => {
+test('runSteps returns 0 and runs in order when everything passes', async () => {
 	const plan = buildSteps({ fast: true });
 	const { spawnImpl, calls } = fakeSpawn(plan.map(() => ({ code: 0 })));
 
@@ -74,14 +74,14 @@ test('runSteps devolve 0 e executa na ordem quando tudo passa', async () => {
 	assert.deepEqual(calls[0], ['pnpm', 'run', 'check']);
 });
 
-test('runSteps devolve não zero e para no primeiro passo com falha', async () => {
+test('runSteps returns non-zero and stops at the first failing step', async () => {
 	const plan = buildSteps({ fast: true });
 	const { spawnImpl, calls } = fakeSpawn([{ code: 0 }, { code: 2 }]);
 
 	const code = await runSteps(plan, { spawnImpl, log() {}, errorLog() {} });
 
 	assert.equal(code, 1);
-	// Falhou no segundo passo: o terceiro não deve rodar.
+	// It failed on the second step: the third must not run.
 	assert.equal(calls.length, 2);
 });
 
@@ -113,9 +113,9 @@ test('node scripts/verify.mjs --list anuncia os comandos pretendidos', () => {
 	assert.match(result.stdout, /^pnpm --filter learnvault-web-next test$/m);
 });
 
-test('pnpm verify resolve para o script do projeto (nunca o builtin do cmd.exe)', () => {
-	// No Windows `pnpm` é um .cmd; chamar via ComSpec evita `shell: true` e o
-	// aviso de depreciação DEP0190 sem reintroduzir o builtin `verify`.
+test('pnpm verify resolves to the project script (never the cmd.exe builtin)', () => {
+	// On Windows `pnpm` is a .cmd; calling it through ComSpec avoids `shell: true` and the
+	// DEP0190 deprecation warning without reintroducing the `verify` builtin.
 	const isWindows = process.platform === 'win32';
 	const command = isWindows ? process.env.ComSpec : 'pnpm';
 	const args = isWindows

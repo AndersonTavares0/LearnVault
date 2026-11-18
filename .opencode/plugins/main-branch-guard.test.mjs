@@ -8,15 +8,15 @@ import { after, test } from "node:test"
 const guardModule = await import(new URL("./main-branch-guard.ts", import.meta.url).href)
 const { MainBranchGuard } = guardModule
 
-// Mesmo caminho usado pelo plugin. A constante não é exportada porque o carregador do
-// opencode trata todo export do módulo como plugin e exige uma função.
+// Same path the plugin uses. The constant is not exported because opencode's loader
+// treats every export of the module as a plugin and requires a function.
 const DIAGNOSTIC_LOG = path.join(tmpdir(), "learnvault-main-branch-guard.log")
 
 const OUTSIDE = path.join(tmpdir(), "learnvault-guard-test-outside.ts")
 
-// Repositórios reais temporários: a guarda lê a branch pelo git de verdade, como em
-// produção — foi um mock de shell que escondeu a regressão de ambiente que motivou a
-// troca para `node:child_process`.
+// Real temporary repositories: the guard reads the branch through real git, as in
+// production — it was a shell mock that hid the environment regression that motivated
+// the switch to `node:child_process`.
 const tempRoots = []
 
 function repoWithBranch(branch) {
@@ -55,12 +55,12 @@ const attempt = async (hook, tool, args) => {
 const patchText = (...targets) => targets.map((target) => `*** Update File: ${target}`).join("\n")
 
 test("exports only plugin functions, as the opencode loader requires", async () => {
-  // Espelha getServerPlugin() do opencode: todo export precisa ser uma função ou um
-  // objeto com `server` função; um export a mais derruba o carregamento do arquivo.
+  // Mirrors opencode's getServerPlugin(): every export must be a function or an
+  // object with a `server` function; one extra export brings down the load of the file.
   for (const value of Object.values(guardModule)) {
     const isPlugin =
       typeof value === "function" || (value !== null && typeof value === "object" && typeof value.server === "function")
-    assert.equal(isPlugin, true, "todo export do módulo precisa ser uma função de plugin")
+    assert.equal(isPlugin, true, "every export of the module must be a plugin function")
   }
 })
 
@@ -75,7 +75,7 @@ test("blocks file tools that touch the worktree on protected branches", async ()
   for (const [tool, args] of cases) {
     const result = await attempt(hook, tool, args)
     assert.equal(result.blocked, true, `${tool} deveria ser bloqueado`)
-    assert.match(result.message, /protegida/)
+    assert.match(result.message, /protected/)
   }
 })
 
@@ -135,15 +135,15 @@ test("blocks writes to the project directory when the worktree is not a reposito
   const hooks = await MainBranchGuard({ directory: repo, worktree: plainDirectory() })
   const hook = hooks["tool.execute.before"]
 
-  // O caminho do agente é relativo ao diretório do projeto: mesmo com o worktree
-  // apontando para outro lugar, a escrita dentro do repositório precisa ser bloqueada.
+  // The agent's path is relative to the project directory: even with the worktree
+  // pointing elsewhere, a write inside the repository must be blocked.
   for (const filePath of ["README.md", path.join(repo, "README.md")]) {
     const result = await attempt(hook, "edit", { filePath })
     assert.equal(result.blocked, true, `"${filePath}" deveria ser bloqueado`)
-    assert.match(result.message, /protegida/)
+    assert.match(result.message, /protected/)
   }
 
-  // Fora do repositório continua permitido.
+  // Outside the repository it is still allowed.
   const outside = await attempt(hook, "edit", { filePath: OUTSIDE })
   assert.equal(outside.blocked, false)
 })
@@ -155,7 +155,7 @@ test("fails closed and writes a diagnostic when the branch cannot be verified", 
 
   const edit = await attempt(hook, "edit", { filePath: "README.md" })
   assert.equal(edit.blocked, true)
-  assert.match(edit.message, /Não foi possível confirmar/)
+  assert.match(edit.message, /Could not confirm/)
   assert.ok(edit.message.includes(DIAGNOSTIC_LOG))
 
   const commit = await attempt(hook, "bash", { command: 'git commit -m "x"' })
@@ -167,16 +167,16 @@ test("fails closed and writes a diagnostic when the branch cannot be verified", 
   const read = await attempt(hook, "read", { filePath: "README.md" })
   assert.equal(read.blocked, false)
 
-  // O diagnóstico registra o motivo para depuração futura, sem tocar o repositório.
-  assert.match(readFileSync(DIAGNOSTIC_LOG, "utf8"), /não foi possível confirmar a branch atual/)
+  // The diagnostic records the reason for future debugging, without touching the repository.
+  assert.match(readFileSync(DIAGNOSTIC_LOG, "utf8"), /could not confirm the current branch/)
 })
 
 test("instructs the agent to ask the user before creating a branch", async () => {
   const hook = await hookFor({ branch: "main" })
   const result = await attempt(hook, "edit", { filePath: "README.md" })
   assert.equal(result.blocked, true)
-  assert.match(result.message, /Informe o usuário/)
-  assert.match(result.message, /antes de criar/)
+  assert.match(result.message, /Inform the user/)
+  assert.match(result.message, /before creating/)
 })
 
 test("blocks writes to a file whose name starts with two dots inside the worktree", async () => {
@@ -184,14 +184,14 @@ test("blocks writes to a file whose name starts with two dots inside the worktre
   const hooks = await MainBranchGuard({ directory: repo, worktree: repo })
   const hook = hooks["tool.execute.before"]
 
-  // "..env" está dentro do repositório: o nome começa com dois pontos, mas não sobe de nível.
+  // "..env" is inside the repository: the name starts with two dots, but does not go up a level.
   for (const filePath of ["..env", path.join(repo, "..env")]) {
     const result = await attempt(hook, "edit", { filePath })
     assert.equal(result.blocked, true, `"${filePath}" deveria ser bloqueado`)
-    assert.match(result.message, /protegida/)
+    assert.match(result.message, /protected/)
   }
 
-  // Subir de nível sai do worktree e continua permitido.
+  // Going up a level leaves the worktree and is still allowed.
   const outside = await attempt(hook, "edit", { filePath: path.join(repo, "..", "fora.ts") })
   assert.equal(outside.blocked, false)
 })
@@ -200,11 +200,11 @@ test("fails closed when a bash call has no readable command", async () => {
   const hook = await hookFor({ branch: "main" })
   for (const args of [{}, { command: 42 }, { command: null }, { command: {} }, { command: ["git", "commit"] }]) {
     const result = await attempt(hook, "bash", args)
-    assert.equal(result.blocked, true, "bash sem comando legível deveria ser bloqueado")
-    assert.match(result.message, /protegida/)
+    assert.equal(result.blocked, true, "bash without a readable command should be blocked")
+    assert.match(result.message, /protected/)
   }
 
-  // Em branch de trabalho a guarda não bloqueia: a proteção é da branch protegida.
+  // On a working branch the guard does not block: the protection is for the protected branch.
   const featureHook = await hookFor({ branch: "feat/x" })
   const allowed = await attempt(featureHook, "bash", { command: 42 })
   assert.equal(allowed.blocked, false)
@@ -216,10 +216,10 @@ test("blocks git mutations when the shell tool is named shell", async () => {
   for (const command of commands) {
     const result = await attempt(hook, "shell", { command })
     assert.equal(result.blocked, true, `"${command}" deveria ser bloqueado`)
-    assert.match(result.message, /protegida/)
+    assert.match(result.message, /protected/)
   }
 
-  // Leitura continua permitida e comando ilegível falha fechado.
+  // Reading is still allowed and an unreadable command fails closed.
   const read = await attempt(hook, "shell", { command: "git status" })
   assert.equal(read.blocked, false)
   const unreadable = await attempt(hook, "shell", {})
@@ -230,9 +230,9 @@ test("blocks patch writes when the patch tool is named patch", async () => {
   const hook = await hookFor({ branch: "main" })
   const blocked = await attempt(hook, "patch", { patchText: patchText("apps/web-next/src/app.tsx") })
   assert.equal(blocked.blocked, true, "escrita via patch deveria ser bloqueada")
-  assert.match(blocked.message, /protegida/)
+  assert.match(blocked.message, /protected/)
 
-  // Patch que aponta para fora do repositório continua permitido.
+  // A patch that points outside the repository is still allowed.
   const outside = await attempt(hook, "patch", { patchText: patchText(OUTSIDE) })
   assert.equal(outside.blocked, false)
 })
@@ -241,11 +241,11 @@ test("fails closed when a patch call has no readable patch text", async () => {
   const hook = await hookFor({ branch: "main" })
   for (const args of [{}, { patchText: 42 }, { patchText: null }, { patchText: {} }]) {
     const result = await attempt(hook, "patch", args)
-    assert.equal(result.blocked, true, "patch sem texto legível deveria ser bloqueado")
-    assert.match(result.message, /protegida/)
+    assert.equal(result.blocked, true, "a patch without readable text should be blocked")
+    assert.match(result.message, /protected/)
   }
 
-  // Em branch de trabalho a guarda não bloqueia: a proteção é da branch protegida.
+  // On a working branch the guard does not block: the protection is for the protected branch.
   const featureHook = await hookFor({ branch: "feat/x" })
   const allowed = await attempt(featureHook, "patch", {})
   assert.equal(allowed.blocked, false)
@@ -256,8 +256,8 @@ test("treats a path on another Windows drive as outside the worktree", { skip: p
   const hooks = await MainBranchGuard({ directory: repo, worktree: repo })
   const hook = hooks["tool.execute.before"]
 
-  // Outra unidade não é o mesmo repositório: `path.relative` devolve um caminho
-  // absoluto e a escrita ali segue permitida.
+  // Another drive is not the same repository: `path.relative` returns an
+  // absolute path and a write there stays allowed.
   const current = path.parse(repo).root
   const other = current.toUpperCase().startsWith("C:") ? "Z:\\" : "C:\\"
   const result = await attempt(hook, "edit", { filePath: path.join(other, "fora.ts") })

@@ -1,11 +1,11 @@
-// Regressão do gate de segurança do workflow `Dependabot safe auto-merge`.
+// Regression test for the security gate of the `Dependabot safe auto-merge` workflow.
 //
-// O gate de alerta deve falhar fechado: só uma PR é elegível quando o estado
-// de alerta é explicitamente `null`. Estados ausentes, vazios ou desconhecidos
-// precisam desqualificar a PR. Este teste trava a regressão em que um estado
-// vazio era tratado como "sem alerta" (fail-open) no passo `eligibility`.
+// The alert gate must fail closed: a PR is only eligible when the alert state
+// is explicitly `null`. Missing, empty or unknown states
+// must disqualify the PR. This test locks in the regression where an empty state
+// was treated as "no alert" (fail-open) in the `eligibility` step.
 //
-// Execução: `pnpm test:scripts` (ou `node --test scripts/`).
+// Run: `pnpm test:scripts` (or `node --test scripts/`).
 
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -16,48 +16,48 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const workflowPath = path.join(root, '.github', 'workflows', 'dependabot-automerge.yml');
 
-// Recorta o bloco shell do passo `eligibility` para inspecionar a lógica exata
-// do gate de alerta sem depender de um parser YAML completo.
+// Cuts out the shell block of the `eligibility` step to inspect the exact logic
+// of the alert gate without depending on a full YAML parser.
 function eligibilityScript() {
 	const source = readFileSync(workflowPath, 'utf8');
 	const start = source.indexOf('id: eligibility');
 	assert.notEqual(start, -1, 'passo eligibility ausente no workflow');
 	const end = source.indexOf('Confirm clean current pull request', start);
-	assert.notEqual(end, -1, 'fim do passo eligibility não localizado');
+	assert.notEqual(end, -1, 'end of the eligibility step not found');
 	return source.slice(start, end);
 }
 
-test('o gate de alerta exige o valor explícito null', () => {
+test('the alert gate requires the explicit value null', () => {
 	const script = eligibilityScript();
 	assert.match(
 		script,
 		/\[\s*"\$ALERT_STATE"\s*!=\s*"null"\s*\]/,
-		'o gate deve comparar ALERT_STATE com "null" de forma explícita'
+		'the gate must compare ALERT_STATE with "null" explicitly'
 	);
 });
 
-test('o gate de alerta desqualifica a PR quando o estado não é null', () => {
+test('the alert gate disqualifies the PR when the state is not null', () => {
 	const script = eligibilityScript();
-	// A comparação estrita precisa zerar eligible; caso contrário o gate seria
-	// decorativo e uma PR seguiria elegível mesmo com alerta/estado inválido.
+	// The strict comparison must reset eligible; otherwise the gate would be
+	// decorative and a PR would stay eligible even with an alert/invalid state.
 	const guard = script.match(/if\s*\[\s*"\$ALERT_STATE"\s*!=\s*"null"\s*\]\s*;?\s*then([\s\S]*?)fi/);
-	assert.ok(guard, 'bloco `if [ "$ALERT_STATE" != "null" ]` não encontrado');
-	assert.match(guard[1], /eligible=false/, 'o gate deve definir eligible=false');
+	assert.ok(guard, 'block `if [ "$ALERT_STATE" != "null" ]` not found');
+	assert.match(guard[1], /eligible=false/, 'the gate must set eligible=false');
 });
 
-test('o gate de alerta falha fechado para estado vazio ou desconhecido', () => {
+test('the alert gate fails closed for an empty or unknown state', () => {
 	const script = eligibilityScript();
-	// O padrão antigo `[ -n "$ALERT_STATE" ] && [ ... != null ]` tratava um
-	// estado vazio como seguro (fail-open); ele não pode voltar.
+	// The old pattern `[ -n "$ALERT_STATE" ] && [ ... != null ]` treated an
+	// empty state as safe (fail-open); it must not come back.
 	assert.doesNotMatch(
 		script,
 		/-n\s+"\$ALERT_STATE"/,
 		'gate voltou a tolerar ALERT_STATE vazio (fail-open)'
 	);
-	// Nenhum curto-circuito de "vazio é seguro" pode preceder a comparação estrita.
+	// No "empty is safe" short circuit may precede the strict comparison.
 	assert.doesNotMatch(
 		script,
 		/\$ALERT_STATE"\s*\]\s*\|\|\s*eligible=true/,
-		'ALERT_STATE vazio não pode tornar a PR elegível'
+		'an empty ALERT_STATE cannot make the PR eligible'
 	);
 });

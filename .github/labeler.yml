@@ -1,27 +1,27 @@
-# Regras do actions/labeler para classificar pull requests pelos arquivos alterados.
-# Documentação: docs/governance/overview.md (seção "Labels automáticas").
+# actions/labeler rules to classify pull requests by the files changed.
+# Documentation: docs/governance/overview.md (section "Automatic labels").
 #
-# Limites explícitos desta automação:
-# - É informacional: rotula a pull request; não aprova, não bloqueia merge e não é check
-#   obrigatório.
-# - Não classifica tipo de trabalho (`bug`, `enhancement`, `documentation`) nem segurança;
-#   essas categorias continuam sendo decisões humanas.
-# - O workflow usa `sync-labels: false`: nenhuma label é removida automaticamente.
-# - A configuração é lida da base confiável (`pull_request_target`, sem checkout).
+# Explicit limits of this automation:
+# - It is informational: it labels the pull request; it does not approve, does not block merge and is not a
+#   required check.
+# - It does not classify the type of work (`bug`, `enhancement`, `documentation`) nor security;
+#   those categories remain human decisions.
+# - The workflow uses `sync-labels: false`: no label is removed automatically.
+# - The configuration is read from the trusted base (`pull_request_target`, no checkout).
 #
-# Toda label referenciada aqui precisa existir no repositório antes da primeira execução:
-# o workflow tem apenas `pull-requests: write`, não cria labels e falha ao tentar aplicar
-# uma label inexistente.
+# Every label referenced here must exist in the repository before the first run:
+# the workflow has only `pull-requests: write`, does not create labels and fails when trying to apply
+# a label that does not exist.
 
-# --- Áreas afetadas (zero ou várias por pull request) ---
+# --- Areas affected (zero or several per pull request) ---
 
 # SPA React 19 + Vite.
 "area:web":
   - changed-files:
       - any-glob-to-any-file: 'apps/web-next/**'
 
-# Espaço de trabalho Rust (core, server, desktop) e manifesto da toolchain.
-# `crates/core` é compartilhado: a automação não o trata como servidor ou desktop.
+# Rust workspace (core, server, desktop) and the toolchain manifest.
+# `crates/core` is shared: the automation does not treat it as server or desktop.
 "area:rust":
   - changed-files:
       - any-glob-to-any-file:
@@ -36,7 +36,7 @@
       - any-glob-to-any-file: 'crates/desktop/**'
 
 
-# Documentação e política do repositório. Sem `**/*.md` genérico: só caminhos explícitos.
+# Documentation and repository policy. No generic `**/*.md`: explicit paths only.
 "area:docs":
   - changed-files:
       - any-glob-to-any-file:
@@ -48,7 +48,7 @@
           - '.github/CODE_OF_CONDUCT.md'
           - '.github/SECURITY.md'
 
-# Workflows, ações e configuração de automação do GitHub.
+# GitHub workflows, actions and automation configuration.
 "area:ci":
   - changed-files:
       - any-glob-to-any-file:
@@ -62,17 +62,17 @@
           - '.github/CODEOWNERS'
           - 'scripts/**'
 
-# Imagem OCI, Compose, Quadlet e empacotamento.
+# OCI image, Compose, Quadlet and packaging.
 "area:deploy":
   - changed-files:
       - any-glob-to-any-file:
           - 'deploy/**'
           - '.dockerignore'
 
-# --- Testes e dependências ---
+# --- Tests and dependencies ---
 
-# Arquivos de teste detectáveis por caminho. Testes unitários inline em Rust
-# (`#[cfg(test)]` dentro de `src/`) não são detectáveis e podem não receber esta label.
+# Test files detectable by path. Inline Rust unit tests
+# (`#[cfg(test)]` inside `src/`) are not detectable and may not receive this label.
 tests:
   - changed-files:
       - any-glob-to-any-file:
