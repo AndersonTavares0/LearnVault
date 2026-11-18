@@ -1,44 +1,44 @@
-# LearnVault — direções visuais
+# LearnVault — visual directions
 
 > **Superseded in part (2026-11-11).** The palette, themes, navigation and gamification described here were replaced by the direction in [`DESIGN.md`](../../DESIGN.md) and [`PRODUCT.md`](../../PRODUCT.md): light and dark themes, brown and amber, Playfair Display and DM Sans, top navigation, no forest. Where this file names a palette, a theme or a layout, those two files win. It is kept as history and for the research and the accessibility and security rules, which still apply.
 
-## Escopo e evidência
+## Scope and evidence
 
-Os protótipos A/B/C foram iniciados como documentos independentes vazios e comparados em Biblioteca, Curso e Player, desktop e mobile. O Open Design MCP foi usado para criar/recuperar artefatos HTML; a integração observada não expõe canvas vetorial nativo. As capturas abaixo são renders locais desses artefatos em Chromium, com dados sintéticos. Elas comprovam a composição, não playback, persistência ou comportamento do produto.
+Prototypes A/B/C were started as independent empty documents and compared on Library, Course and Player, desktop and mobile. The Open Design MCP was used to create/retrieve HTML artifacts; the observed integration does not expose a native vector canvas. The captures below are local renders of those artifacts in Chromium, with synthetic data. They prove the composition, not playback, persistence or product behavior.
 
-A pesquisa verificável e o inventário funcional estão em [research.md](research.md). A avaliação ponderada e a decisão estão em [decision.md](decision.md). Os três conceitos iniciais não passaram o limiar; K foi escolhido após exploração posterior e crítica independente documentada.
+The verifiable research and the functional inventory are in [research.md](research.md). The weighted evaluation and the decision are in [decision.md](decision.md). The three initial concepts did not pass the threshold; K was chosen after later exploration and a documented independent critique.
 
-## A — Biblioteca editorial
+## A — Editorial library
 
-- **Navegação:** topbar persistente; Biblioteca, Curso e Player.
-- **Composição:** cabeçalho editorial, capas proporcionais, curso tratado como publicação e baixa/média densidade.
-- **Identidade:** display serifado, papel claro e tons terrosos.
-- **Limite:** navegação de cards e controles do Player eram estáticos; outras telas e estados essenciais não estavam cobertos.
-- **Resultado:** Rejeitado na avaliação comparativa.
+- **Navigation:** persistent topbar; Library, Course and Player.
+- **Composition:** editorial header, proportional covers, a course treated as a publication, and low/medium density.
+- **Identity:** serif display, light paper and earthy tones.
+- **Limit:** card navigation and Player controls were static; other screens and essential states were not covered.
+- **Result:** Rejected in the comparative evaluation.
 
-## B — Workbench de estudo
+## B — Study workbench
 
-- **Navegação:** rail vertical mais topbar compacta com busca e perfil.
-- **Composição:** colunas simultâneas para catálogo, currículo, sessão e mídia; densidade alta, orientada à retomada.
-- **Identidade:** sans funcional, paleta fria e acento verde.
-- **Limite:** ações do Player eram simulações; no mobile, salvar e estudar ficaram ambíguos.
-- **Resultado:** Rejeitado na avaliação comparativa.
+- **Navigation:** vertical rail plus a compact topbar with search and profile.
+- **Composition:** simultaneous columns for catalog, curriculum, session and media; high density, oriented to resuming.
+- **Identity:** functional sans, cool palette and a green accent.
+- **Limit:** Player actions were simulations; on mobile, saving and studying became ambiguous.
+- **Result:** Rejected in the comparative evaluation.
 
-## C — Atlas de aprendizagem
+## C — Learning atlas
 
-- **Navegação:** dock inferior; não usa sidebar nem topbar de destinos.
-- **Composição:** mapa espacial de cursos e percurso visual de aulas; densidade baixa.
-- **Identidade:** display condensado, grade cartográfica, verde profundo e papel marfim.
-- **Limite:** a tela chamada Player era uma folha de aula sem timeline, retomada ou controles; a navegação por ponteiro mobile não foi comprovada.
-- **Resultado:** Rejeitado na avaliação comparativa.
+- **Navigation:** bottom dock; uses neither a sidebar nor a destinations topbar.
+- **Composition:** spatial map of courses and a visual path of lessons; low density.
+- **Identity:** condensed display, cartographic grid, deep green and ivory paper.
+- **Limit:** the screen called Player was a lesson sheet without a timeline, resume or controls; pointer navigation on mobile was not proven.
+- **Result:** Rejected in the comparative evaluation.
 
-## K — fluxo linear de plataforma de cursos
+## K — linear course-platform flow
 
-K aproxima a navegação de padrões familiares de plataformas de aprendizado sem incorporar marketplace ou cloud: topbar compacta, retomada curta, catálogo em prateleiras, curso integral com objetivos e currículo e Player centrado em stage 16:9. A identidade usa azul cobalto funcional, saffron reservado a estado, superfícies navy e wordmark monocromático. A direção não reaproveita o layout dos conceitos anteriores.
+K brings the navigation closer to familiar learning-platform patterns without incorporating a marketplace or cloud: compact topbar, short resume strip, catalog in shelves, a full course page with goals and curriculum, and a Player centred on a 16:9 stage. The identity uses a functional cobalt blue, saffron reserved for state, navy surfaces and a monochrome wordmark. The direction does not reuse the layout of the earlier concepts.
 
-- **Seleção:** a crítica independente da candidatura K v5 pontuou 4,05/5, acima do mínimo de 4,00 e sem dimensão abaixo de 3/5. Os pontos e limites estão em [decision.md](decision.md); não são resultado de teste com usuários.
-- **Implementação real:** telas finais, temas, viewports e estados estão formalizados em [DESIGN.md](DESIGN.md) e [final-review.md](final-review.md).
+- **Selection:** the independent critique of candidate K v5 scored 4.05/5, above the 4.00 minimum and with no dimension below 3/5. The points and limits are in [decision.md](decision.md); they are not a user-testing result.
+- **Real implementation:** final screens, themes, viewports and states are formalized in [DESIGN.md](DESIGN.md) and [final-review.md](final-review.md).
 
-## Critério de conclusão
+## Completion criterion
 
-A direção está selecionada e implementada. O refinamento final encerrou quando a revisão das capturas não encontrou P0/P1 visual; limites que screenshots não provam — teste com pessoas, acessibilidade certificada, persistência com dados reais e playback real — continuam explicitamente fora das alegações.
+The direction is selected and implemented. The final refinement ended when the review of the captures found no visual P0/P1; limits that screenshots do not prove — testing with people, certified accessibility, persistence with real data and real playback — remain explicitly outside the claims.

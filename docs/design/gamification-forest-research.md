@@ -1,101 +1,101 @@
-# Pesquisa de Gamificação: Modelo Forest App para o LearnVault
+# Gamification research: the Forest app model for LearnVault
 
 > **Superseded in part (2026-11-11).** The palette, themes, navigation and gamification described here were replaced by the direction in [`DESIGN.md`](../../DESIGN.md) and [`PRODUCT.md`](../../PRODUCT.md): light and dark themes, brown and amber, Playfair Display and DM Sans, top navigation, no forest. Where this file names a palette, a theme or a layout, those two files win. It is kept as history and for the research and the accessibility and security rules, which still apply.
 
-Este documento consolida a pesquisa comportamental, de interface e de arquitetura de software sobre o modelo de gamificação do aplicativo **Forest: Stay Focused** (Seekrtech Co., Ltd.), estruturando a sua transposição em conformidade com a política de referência estrutural para a **Floresta de Estudos** do LearnVault.
+This document consolidates the behavioral, interface and software-architecture research on the gamification model of the **Forest: Stay Focused** app (Seekrtech Co., Ltd.), structuring its transposition, in line with the structural-reference policy, into LearnVault's **Study Forest**.
 
 ---
 
-## 1. Fontes Primárias e Referências
+## 1. Primary sources and references
 
-| Fonte | Tipo | Citação / Identificador | Relevância para o LearnVault |
+| Source | Type | Citation / identifier | Relevance for LearnVault |
 |---|---|---|---|
-| **Seekrtech Co., Ltd.** | Documentação oficial do produto / App Store & Google Play | [forestapp.cc](https://www.forestapp.cc/) | Especificação de mecânica: plantio, ciclo de crescimento (10–120 min), aversão à perda (árvore seca), economia de moedas virtuais e viveiro de espécies. |
-| **Yu-kai Chou** | Framework teórico de gamificação | *Actionable Gamification: Beyond Points, Badges, and Leaderboards* (2015), Octalysis Group | Mapeamento dos 8 Motivadores Centrais (*Core Drives*): equilíbrio entre motivação positiva (*White Hat*) e senso de urgência/aversão à perda (*Black Hat*). |
-| **Cirillo, Francesco** | Metodologia de produtividade | *The Pomodoro Technique* (2006) | Ciclos de timeboxing (25 min foco / 5 min pausa curta / 15 min pausa longa), redução da sobrecarga cognitiva e intervalos biológicos. |
-| **W3C WAI** | Acessibilidade normativa | [WCAG 2.2](https://www.w3.org/TR/WCAG22/) | Requisitos de contraste de cores (AA/AAA), navegação por teclado (`Enter`, `Space`, `Escape`), suporte a `prefers-reduced-motion` para animações botânicas e anúncios via `aria-live`. |
+| **Seekrtech Co., Ltd.** | Official product documentation / App Store & Google Play | [forestapp.cc](https://www.forestapp.cc/) | Mechanics specification: planting, growth cycle (10–120 min), loss aversion (withered tree), virtual-coin economy and species nursery. |
+| **Yu-kai Chou** | Gamification theory framework | *Actionable Gamification: Beyond Points, Badges, and Leaderboards* (2015), Octalysis Group | Mapping of the 8 Core Drives: balance between positive motivation (*White Hat*) and urgency/loss aversion (*Black Hat*). |
+| **Cirillo, Francesco** | Productivity methodology | *The Pomodoro Technique* (2006) | Timeboxing cycles (25 min focus / 5 min short break / 15 min long break), reduced cognitive load and biological intervals. |
+| **W3C WAI** | Normative accessibility | [WCAG 2.2](https://www.w3.org/TR/WCAG22/) | Colour contrast requirements (AA/AAA), keyboard navigation (`Enter`, `Space`, `Escape`), `prefers-reduced-motion` support for botanical animations and announcements through `aria-live`. |
 
 ---
 
-## 2. Anatomia do Modelo de Gamificação do Forest
+## 2. Anatomy of Forest's gamification model
 
-O sucesso do app Forest reside na fusão harmoniosa de **timeboxing rigoroso** com uma **metáfora ecológica tangível**, onde cada minuto de abstinência de distrações gera vida virtual.
+Forest's success lies in the harmonious fusion of **strict timeboxing** with a **tangible ecological metaphor**, where each minute of abstaining from distractions generates virtual life.
 
 ```mermaid
 flowchart TD
-    A["Intenção de Estudo"] --> B["Fase Pré-Foco: Escolha da Semente e Tempo (10-120m)"]
-    B --> C["Início do Plantio: Semente fincada no solo"]
-    C --> D{"Usuário mantém o foco?"}
-    D -- "Sim (100% do tempo)" --> E["Fase de Crescimento: Broto -> Haste -> Copa -> Árvore Madura"]
-    E --> F["Celebração & Recompensa: Árvore sadia no bosque + Moedas de Foco"]
-    F --> G["Viveiro Botânico: Desbloqueio de novas espécies raras"]
-    D -- "Não (Desiste / Sai)" --> H["Loss Aversion: Árvore seca e morre instantaneamente"]
-    H --> I["Registro Permanente: Árvore seca permanece no bosque do dia (0 moedas)"]
+    A["Study intention"] --> B["Pre-focus phase: choose the seed and the time (10-120m)"]
+    B --> C["Planting starts: seed set in the soil"]
+    C --> D{"Does the user keep focus?"}
+    D -- "Yes (100% of the time)" --> E["Growth phase: Sprout -> Stem -> Crown -> Mature tree"]
+    E --> F["Celebration & reward: healthy tree in the grove + Focus coins"]
+    F --> G["Botanical nursery: unlocking new rare species"]
+    D -- "No (gives up / leaves)" --> H["Loss aversion: the tree withers and dies instantly"]
+    H --> I["Permanent record: the withered tree stays in the day's grove (0 coins)"]
 ```
 
-### 2.1 Os Quatro Pilares Comportamentais
+### 2.1 The four behavioral pillars
 
-#### 1. Aversão à Perda Ativa (*Loss Aversion* / Core Drive 8)
-- Em cronômetros comuns, interromper uma sessão não gera consequência palpável além de um contador zerado.
-- No Forest, interromper a sessão aciona uma perda emocional imediata: **a planta é assassinada**.
-- O diálogo de desistência confronta o usuário: *"Deseja realmente desistir? Sua árvorezinha secará e morrerá."*
-- A árvore morta **não desaparece**: ela permanece no canteiro daquele dia como um toco cinzento e ressecado, servindo de lembrete visual de vulnerabilidade à distração.
+#### 1. Active loss aversion (*Loss Aversion* / Core Drive 8)
+- In ordinary timers, interrupting a session has no tangible consequence beyond a counter reset to zero.
+- In Forest, interrupting the session triggers an immediate emotional loss: **the plant is killed**.
+- The give-up dialog confronts the user: *"Do you really want to give up? Your little tree will wither and die."*
+- The dead tree **does not disappear**: it stays in that day's plot as a grey, dried-out stump, serving as a visual reminder of vulnerability to distraction.
 
-#### 2. Progressão Visual em Tempo Real (*Live Growth Stages* / Core Drive 2)
-O processo não é uma barra de progresso numérica abstrata, mas uma transformação botânica contínua:
-- **Estágio 1 (0% a 25%):** Semente germinada com brotinho rompendo o solo.
-- **Estágio 2 (25% a 50%):** Caule verde se alongando com primeiras folhas jovens.
-- **Estágio 3 (50% a 75%):** Ramificação de galhos e copa jovem.
-- **Estágio 4 (75% a 100%):** Florescimento pleno da copa madura (folhagem densa, frutos, flores ou aura).
+#### 2. Real-time visual progression (*Live Growth Stages* / Core Drive 2)
+The process is not an abstract numeric progress bar, but a continuous botanical transformation:
+- **Stage 1 (0% to 25%):** Germinated seed with a sprout breaking the soil.
+- **Stage 2 (25% to 50%):** Green stem lengthening with the first young leaves.
+- **Stage 3 (50% to 75%):** Branching and a young crown.
+- **Stage 4 (75% to 100%):** Full flowering of the mature crown (dense foliage, fruit, flowers or an aura).
 
-#### 3. Economia Circular Fechada (*Virtuous Currency Loop* / Core Drive 4)
-- **Ganho de Moedas:** Concluir uma sessão sadia rende moedas proporcionais ao tempo focado:
-  $$\text{Moedas} = \max\left(1, \lfloor \text{Minutos} \times 0.5 \rfloor\right) + \text{Bônus de Sequência}$$
-- **Sessões Secas / Canceladas:** 0 moedas.
-- **Viveiro / Loja de Desbloqueio:** As moedas não compram poder ou atalhos; compram **diversidade botânica estética** (espécies novas como Cerejeira, Salgueiro, Ginkgo, Bétula, Árvore Ancestral).
-- **Sem Pay-to-Win:** No LearnVault, toda a economia é local, gratuita e fruto exclusivo do esforço do estudante.
+#### 3. Closed circular economy (*Virtuous Currency Loop* / Core Drive 4)
+- **Earning coins:** Completing a healthy session yields coins proportional to the time focused:
+  $$\text{Coins} = \max\left(1, \lfloor \text{Minutes} \times 0.5 \rfloor\right) + \text{Streak bonus}$$
+- **Withered / cancelled sessions:** 0 coins.
+- **Nursery / unlock shop:** Coins do not buy power or shortcuts; they buy **aesthetic botanical diversity** (new species such as Cherry, Willow, Ginkgo, Birch, Ancient Tree).
+- **No pay-to-win:** In LearnVault, the whole economy is local, free and the exclusive fruit of the student's effort.
 
-#### 4. Frases Sentinelas de Concentração (*Guardiões do Foco*)
-Durante a contagem regressiva, frases curtas e expressivas alternam-se no visor para proteger o estudante contra impulsos de procrastinação:
-- *"Não olhe para cá, continue prestando atenção na aula!"*
-- *"Sua mudinha está criando raízes profundas no solo..."*
-- *"Resista à tentação de trocar de janela!"*
-- *"Mais um pouco de foco e sua árvore florescerá radiante."*
+#### 4. Concentration sentinel phrases (*Focus Guardians*)
+During the countdown, short, expressive phrases alternate on the display to protect the student against procrastination impulses:
+- *"Don't look over here, keep paying attention to the lesson!"*
+- *"Your little sapling is putting down deep roots in the soil..."*
+- *"Resist the temptation to switch windows!"*
+- *"A little more focus and your tree will bloom radiantly."*
 
 ---
 
-## 3. Avaliação no Octalysis Framework (Yu-kai Chou)
+## 3. Evaluation in the Octalysis Framework (Yu-kai Chou)
 
-| Motivador (Core Drive) | Aplicação no Forest | Transposição para o LearnVault |
+| Core Drive | Application in Forest | Transposition to LearnVault |
 |---|---|---|
-| **CD1: Significado Maior (*Epic Meaning*)** | Parceria com ONGs para plantio de árvores reais na África. | Compromisso com o domínio autônomo do conhecimento e formação profissional sem dependência de plataformas proprietárias. |
-| **CD2: Desenvolvimento e Conquista** | Mudas crescem para árvores; estatísticas diárias, semanais e anuais. | Floresta dinâmica com ecossistemas (Clareira → Bosque → Reserva → Santuário), insígnias de nível e herbanário. |
-| **CD3: Empoderamento da Criatividade** | Escolha de espécies e layout personalizado da ilha. | O estudante escolhe previamente qual semente plantar em cada aula ou bloco de estudo. |
-| **CD4: Propriedade e Posse** | Catálogo colecionável de árvores desbloqueadas com moedas. | Sistema de "Gotas de Foco / Sementes" acumuladas para desbloquear novas espécies no Viveiro Botânico local. |
-| **CD5: Influência Social** | Modo "Plantar Juntos" com amigos. | No LearnVault (local-first / auto-hospedado), o foco é introspectivo e individual, com compartilhamento opcional de badges de síntese. |
-| **CD6: Escassez e Desafio** | Árvores raras que exigem altas quantias de moedas ou eventos sazonais. | Espécies nobres (como Ginkgo Dourado e Árvore Ancestral) exigem horas consistentes de estudo para desbloqueio. |
-| **CD7: Curiosidade e Imprevisibilidade** | Gotas de bônus esporádicas e frases motivacionais surpresa. | Mensagens de sabedoria e reflexão sobre o conteúdo estudado ao concluir ciclos. |
-| **CD8: Aversão à Perda (*Loss Aversion*)** | Árvore morre se sair do aplicativo. | Ao abandonar a sessão no meio, a árvore seca e é gravada no histórico como monumento de reflexão. |
+| **CD1: Epic Meaning** | Partnership with NGOs to plant real trees in Africa. | Commitment to autonomous mastery of knowledge and professional training without dependence on proprietary platforms. |
+| **CD2: Development and Accomplishment** | Saplings grow into trees; daily, weekly and yearly statistics. | A dynamic forest with ecosystems (Clearing → Grove → Reserve → Sanctuary), level badges and a herbarium. |
+| **CD3: Empowerment of Creativity** | Choice of species and a personalized island layout. | The student chooses beforehand which seed to plant for each lesson or study block. |
+| **CD4: Ownership and Possession** | Collectible catalog of trees unlocked with coins. | A system of "Focus Drops / Seeds" accumulated to unlock new species in the local Botanical Nursery. |
+| **CD5: Social Influence** | "Plant Together" mode with friends. | In LearnVault (local-first / self-hosted), the focus is introspective and individual, with optional sharing of summary badges. |
+| **CD6: Scarcity and Challenge** | Rare trees that require large amounts of coins or seasonal events. | Noble species (such as Golden Ginkgo and Ancient Tree) require consistent hours of study to unlock. |
+| **CD7: Curiosity and Unpredictability** | Sporadic bonus drops and surprise motivational phrases. | Messages of wisdom and reflection on the content studied when completing cycles. |
+| **CD8: Loss Aversion** | The tree dies if you leave the app. | Abandoning the session midway makes the tree wither, and it is recorded in the history as a monument for reflection. |
 
 ---
 
-## 4. Arquitetura Original Proposta para o LearnVault
+## 4. Original architecture proposed for LearnVault
 
-Para implementar a experiência do Forest no LearnVault sem ferir a política de referência estrutural e mantendo a leveza do ecossistema Rust + Svelte:
+To implement the Forest experience in LearnVault without breaching the structural-reference policy and while keeping the lightness of the Rust + Svelte ecosystem:
 
 ```mermaid
 graph LR
     subgraph CoreDomain["crates/core (Rust / SQLite)"]
-        FocusTable["tabela focus_sessions"]
-        RewardsTable["tabela user_rewards (moedas, desbloqueios)"]
+        FocusTable["focus_sessions table"]
+        RewardsTable["user_rewards table (coins, unlocks)"]
     end
 
     subgraph WebSPA["apps/web (SvelteKit)"]
-        PomodoroStore["pomodoro-store.ts (Timer, Sementes, Gotas)"]
-        ForestStore["forest.ts (Estatísticas, Biomas, Catálogo Botânico)"]
-        NurseryComponent["ForestNursery.svelte (Viveiro & Desbloqueios)"]
-        LiveGrowthComponent["ForestGrowthStage.svelte (Animação de Crescimento)"]
-        ForestComponent["Forest.svelte (Canteiro Diário, Filtros, Inspetor)"]
+        PomodoroStore["pomodoro-store.ts (Timer, Seeds, Drops)"]
+        ForestStore["forest.ts (Statistics, Biomes, Botanical Catalog)"]
+        NurseryComponent["ForestNursery.svelte (Nursery & Unlocks)"]
+        LiveGrowthComponent["ForestGrowthStage.svelte (Growth Animation)"]
+        ForestComponent["Forest.svelte (Daily Plot, Filters, Inspector)"]
     end
 
     PomodoroStore <--> FocusTable
@@ -105,39 +105,39 @@ graph LR
     ForestStore --> ForestComponent
 ```
 
-### 4.1 Especificação das Novas Capacidades
+### 4.1 Specification of the new capabilities
 
-1. **Catálogo de Espécies do Viveiro Botânico (`forest-catalog.ts`):**
-   - **Brotinho (Sapling):** Desbloqueado por padrão (custo 0). Ideal para sessões de 10 a 20 min.
-   - **Carvalho Frondoso (Oak):** Desbloqueado por padrão (custo 0). Porte clássico para 25 a 35 min.
-   - **Pinheiro Nobre (Pine):** Desbloqueável por 40 Gotas de Foco.
-   - **Cerejeira em Flor (Sakura):** Desbloqueável por 80 Gotas de Foco.
-   - **Salgueiro Chorão (Willow):** Desbloqueável por 120 Gotas de Foco.
-   - **Ginkgo Biloba Dourado (Ginkgo):** Desbloqueável por 200 Gotas de Foco.
-   - **Árvore Ancestral / Milenar (Ancient):** Desbloqueável por 350 Gotas de Foco.
+1. **Botanical Nursery species catalog (`forest-catalog.ts`):**
+   - **Sapling:** Unlocked by default (cost 0). Ideal for sessions of 10 to 20 min.
+   - **Leafy Oak (Oak):** Unlocked by default (cost 0). Classic size for 25 to 35 min.
+   - **Noble Pine (Pine):** Unlockable for 40 Focus Drops.
+   - **Blossoming Cherry (Sakura):** Unlockable for 80 Focus Drops.
+   - **Weeping Willow (Willow):** Unlockable for 120 Focus Drops.
+   - **Golden Ginkgo Biloba (Ginkgo):** Unlockable for 200 Focus Drops.
+   - **Ancient / Millennial Tree (Ancient):** Unlockable for 350 Focus Drops.
 
-2. **Seletor de Semente Pré-Foco (`FocusMenu.svelte` & `Forest.svelte`):**
-   - Antes de iniciar o timer, o usuário pode clicar no ícone da semente ativa para alternar entre as espécies desbloqueadas do seu acervo.
-   - Vinculação contextual: se o usuário estiver assistindo a uma aula de um curso, a sessão herda o ID e nome do curso automaticamente como etiqueta temática.
+2. **Pre-focus seed selector (`FocusMenu.svelte` & `Forest.svelte`):**
+   - Before starting the timer, the user can click the active seed's icon to switch among the unlocked species in their collection.
+   - Contextual linking: if the user is watching a lesson of a course, the session inherits the course's ID and name automatically as a thematic label.
 
-3. **Animação Botânica de Crescimento em Tempo Real:**
-   - Durante a contagem decrescente do Pomodoro, um componente dinâmico exibe os 4 estágios da semente escolhida, recalculando com base em `(tempoDecorrido / tempoTotal)`.
-   - Se a sessão for abortada, uma transição de desfolhamento suave transforma a árvore na variante seca (`withered`).
+3. **Real-time botanical growth animation:**
+   - During the Pomodoro countdown, a dynamic component shows the 4 stages of the chosen seed, recalculating from `(elapsedTime / totalTime)`.
+   - If the session is aborted, a smooth defoliation transition turns the tree into the withered variant (`withered`).
 
-4. **Moedas Botânicas ("Gotas de Foco"):**
-   - Persistidas localmente e sincronizáveis no perfil do estudante.
-   - Exibidas no cabeçalho da floresta ao lado do brasão do ecossistema.
+4. **Botanical coins ("Focus Drops"):**
+   - Persisted locally and syncable to the student's profile.
+   - Shown in the forest header beside the ecosystem's crest.
 
-5. **Paisagens Sonoras Sintetizadas (Soundscapes via Web Audio API):**
-   - Sem dependência de MP3s externos pesados: síntese procedural de áudio para chuva suave (*pink noise* com filtro passa-baixa) e brisa marinha (*brown noise* modulado em amplitude).
+5. **Synthesized soundscapes (Soundscapes via the Web Audio API):**
+   - No dependence on heavy external MP3s: procedural audio synthesis for soft rain (*pink noise* with a low-pass filter) and a sea breeze (*brown noise* with amplitude modulation).
 
 ---
 
-## 5. Diretrizes de Acessibilidade e Desempenho
+## 5. Accessibility and performance guidelines
 
-- **Redução de Movimento (`prefers-reduced-motion: reduce`):** As transições de crescimento de folhas e ramos devem ser estáticas ou em saltos discretos sem interpolação contínua quando a preferência do sistema estiver ativada.
-- **Leitores de Tela (`aria-live` e descrições semânticas):**
-  - O início de um plantio anuncia: *"Plantio de [Espécie] iniciado para ciclo de [X] minutos."*
-  - A conclusão anuncia: *"Parabéns! Sua árvore de [Espécie] floresceu com sucesso. Você recebeu [X] gotas de foco."*
-  - O abandono anuncia: *"Sessão interrompida. A árvore de [Espécie] secou."*
-- **Teto de Código:** Componentes divididos em submódulos coesos com menos de 400 linhas (respeitando rigorosamente o teto de 800 linhas do repositório).
+- **Reduced motion (`prefers-reduced-motion: reduce`):** The growth transitions of leaves and branches must be static or in discrete jumps without continuous interpolation when the system preference is on.
+- **Screen readers (`aria-live` and semantic descriptions):**
+  - The start of a planting announces: *"Planting of [Species] started for a cycle of [X] minutes."*
+  - Completion announces: *"Congratulations! Your [Species] tree bloomed successfully. You received [X] focus drops."*
+  - Abandoning announces: *"Session interrupted. The [Species] tree withered."*
+- **Code ceiling:** Components split into cohesive submodules of under 400 lines (strictly respecting the repository's 800-line ceiling).
