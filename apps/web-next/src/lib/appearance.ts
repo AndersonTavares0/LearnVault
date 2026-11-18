@@ -9,6 +9,9 @@ export const APPEARANCE_STORAGE_KEY = 'learnvault-appearance';
 
 /** Each preset has the colour used on the light page and a lighter one for the dark page. */
 export const ACCENT_PRESETS = [
+	// Warm ink, the brand's near-black. `tone` is what the page, panels and tints are mixed from on the light page:
+	// mixing from a near-black would darken them (less text contrast) and, with so little chroma, turn them pink.
+	{ id: 'ink', hex: '#1C1815', dark: '#E0A83E', tone: '#5C4229' },
 	{ id: 'brown', hex: '#5C4229', dark: '#E3A857' },
 	{ id: 'amber', hex: '#A5540A', dark: '#F0B35A' },
 	{ id: 'forest', hex: '#2F6B3F', dark: '#6FBF86' },
@@ -182,6 +185,12 @@ export function darkAccent(hex: string): string {
 	return text(r, g, b);
 }
 
+/** The colour a preset's tints are mixed from on the light page, when it differs from the accent itself. */
+function toneFor(hex: string): string | undefined {
+	const preset = ACCENT_PRESETS.find((item) => item.hex === hex.toUpperCase());
+	return preset && 'tone' in preset ? preset.tone : undefined;
+}
+
 /** Writes the choices to <html>: colours as custom properties, the rest as data attributes the CSS reads. */
 export function applyAppearance(appearance: Appearance, root: HTMLElement = document.documentElement): void {
 	const dark = resolveTheme(appearance.theme) === 'dark';
@@ -193,11 +202,12 @@ export function applyAppearance(appearance: Appearance, root: HTMLElement = docu
 	}
 	const accent = dark ? darkAccent(appearance.accent) : readableAccent(appearance.accent);
 	root.style.setProperty('--brand', accent);
+	root.style.setProperty('--brand-tone', dark ? accent : toneFor(appearance.accent) ?? accent);
 	root.style.setProperty('--brand-fg', dark ? '#1C1209' : '#FFFFFF');
 	const own = appearance.reward === 'accent';
-	root.style.setProperty('--reward', own ? 'var(--brand)' : dark ? '#C08A4E' : '#A96F2E');
-	root.style.setProperty('--reward-fill', own ? 'var(--brand)' : dark ? '#C08A4E' : '#A96F2E');
-	root.style.setProperty('--reward-fill-fg', own ? 'var(--brand-fg)' : dark ? '#201C18' : '#FFFFFF');
+	root.style.setProperty('--reward', own ? 'var(--brand)' : dark ? '#E0A83E' : '#A8761F');
+	root.style.setProperty('--reward-fill', own ? 'var(--brand)' : dark ? '#E0A83E' : '#A8761F');
+	root.style.setProperty('--reward-fill-fg', own ? 'var(--brand-fg)' : '#1C1815');
 	root.style.setProperty('--reward-tint', own ? 'var(--brand-tint)' : dark ? '#3A2A18' : '#F3E3CB');
 	for (const key of ['surface', 'radius', 'cardStyle', 'density', 'textSize', 'font', 'pageWidth', 'sidebar', 'homeLayout'] as const) root.dataset[key] = appearance[key];
 	root.dataset.motion = appearance.reduceMotion ? 'reduced' : 'normal';

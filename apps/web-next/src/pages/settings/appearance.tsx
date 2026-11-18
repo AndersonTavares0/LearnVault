@@ -13,7 +13,7 @@ import { persistLibraryView } from '@/lib/library-view';
 import { cn } from '@/lib/utils';
 import { safeStorage } from '@/app/preferences';
 
-const accentNames = (): Record<(typeof ACCENT_PRESETS)[number]['id'], string> => ({ brown: tr('Brown', 'Marrom'), amber: tr('Amber', 'Âmbar'), forest: tr('Forest', 'Floresta'), terracotta: tr('Terracotta', 'Terracota'), navy: tr('Navy', 'Azul-marinho'), plum: tr('Plum', 'Ameixa'), teal: tr('Teal', 'Verde-azulado'), slate: tr('Slate', 'Ardósia') });
+const accentNames = (): Record<(typeof ACCENT_PRESETS)[number]['id'], string> => ({ ink: tr('Ink', 'Tinta'), brown: tr('Brown', 'Marrom'), amber: tr('Amber', 'Âmbar'), forest: tr('Forest', 'Floresta'), terracotta: tr('Terracotta', 'Terracota'), navy: tr('Navy', 'Azul-marinho'), plum: tr('Plum', 'Ameixa'), teal: tr('Teal', 'Verde-azulado'), slate: tr('Slate', 'Ardósia') });
 
 const surfaceNames = (): Record<(typeof SURFACES)[number], string> => ({
 	warm: tr('Warm paper', 'Papel quente'),
