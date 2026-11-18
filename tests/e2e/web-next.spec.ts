@@ -141,7 +141,9 @@ test('pins the top bar and scrolls the content region below it', async ({ page, 
 	// The document no longer scrolls: the region under the bar does (issue #607).
 	const bar = page.locator('header');
 	const scroller = page.locator('#main');
-	await expect.poll(() => page.evaluate(() => document.scrollingElement!.scrollHeight - window.innerHeight)).toBeLessThanOrEqual(1);
+	expect(await page.evaluate(() => getComputedStyle(document.documentElement).overflowY)).toBe('hidden');
+	await page.evaluate(() => window.scrollTo(0, 500));
+	expect(await page.evaluate(() => window.scrollY)).toBe(0);
 	expect(await scroller.evaluate((main) => getComputedStyle(main).overflowY)).toBe('auto');
 	expect(await scroller.evaluate((main) => main.scrollHeight > main.clientHeight)).toBe(true);
 

@@ -439,7 +439,12 @@
   scroll-behavior: auto !important;
 }
 
-html, body { overflow-x: clip; }
+/* The document never scrolls: the app shell owns the viewport and its content region scrolls
+   (issue #607). A window scrollbar would otherwise sit beside the app one, above the top bar. */
+html, body { height: 100%; overflow: hidden; }
+@media print {
+  html, body { height: auto; overflow: visible; }
+}
 
 /* The app scrolls its content region, not the document (issue #607): the bar starts below the
    top bar instead of crossing it, and it follows the learner's palette like the reader's. */
