@@ -87,15 +87,15 @@
 :root {
   --ui-font: "DM Sans Variable", ui-sans-serif, system-ui, sans-serif;
   --heading-font: "Playfair Display Variable", ui-serif, Georgia, serif;
-  --brand: #5C4229;
+  --brand: #2A1D14;
   --brand-fg: #FFFFFF;
   --brand-deep: color-mix(in oklch, var(--brand) 55%, black);
   --brand-ink: color-mix(in oklch, var(--brand) 60%, black);
   --brand-tint: color-mix(in oklch, var(--brand) 12%, var(--background));
   --brand-soft: color-mix(in oklch, var(--brand) 22%, var(--background));
-  --reward: #A96F2E;
-  --reward-fill: #A96F2E;
-  --reward-fill-fg: #FFFFFF;
+  --reward: #A8761F;
+  --reward-fill: #A8761F;
+  --reward-fill-fg: #1C1815;
   --reward-tint: #F3E3CB;
   --radius: 0.875rem;
   --density: 1;
@@ -180,9 +180,9 @@
   --warning-tint: #3A2A18;
   --info: #9DB4D8;
   --info-tint: #1E2A3A;
-  --reward: #C08A4E;
-  --reward-fill: #C08A4E;
-  --reward-fill-fg: #201C18;
+  --reward: #E0A83E;
+  --reward-fill: #E0A83E;
+  --reward-fill-fg: #1C1815;
   --reward-tint: #3A2A18;
   --chart-2: #BFB5A7;
   --chart-4: #8A7A68;

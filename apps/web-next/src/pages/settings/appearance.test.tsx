@@ -53,10 +53,10 @@ describe('AppearanceSettings', () => {
 		render(<AppearanceSettings />);
 		press('Theme', 'Dark');
 		expect(root.dataset.theme).toBe('dark');
-		expect(root.style.getPropertyValue('--brand')).toBe('#E3A857');
+		expect(root.style.getPropertyValue('--brand')).toBe('#E0A83E');
 		press('Theme', 'Light');
 		expect(root.dataset.theme).toBe('light');
-		expect(root.style.getPropertyValue('--brand')).toBe('#5C4229');
+		expect(root.style.getPropertyValue('--brand')).toBe('#2A1D14');
 	});
 
 	it('follows the reward colour choice', () => {
@@ -64,7 +64,7 @@ describe('AppearanceSettings', () => {
 		press('Rewards (streak, XP, badges)', 'Same as accent');
 		expect(root.style.getPropertyValue('--reward')).toBe('var(--brand)');
 		press('Rewards (streak, XP, badges)', 'Amber');
-		expect(root.style.getPropertyValue('--reward')).toBe('#A96F2E');
+		expect(root.style.getPropertyValue('--reward')).toBe('#A8761F');
 	});
 
 	it.each([
