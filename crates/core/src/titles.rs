@@ -1,22 +1,22 @@
-//! Limpeza visual de títulos de cursos, módulos e aulas.
+//! Visual cleanup of course, module and lesson titles.
 //!
-//! Remove só o ruído típico de nomes de arquivo: tags de resolução e de codificação
-//! (`1080p`, `x265`, `WEB-DL`), sublinhados usados como espaço e espaços repetidos. Não
-//! altera o nome no disco nem o caminho que identifica o nó; é apenas apresentação.
+//! It removes only the typical noise of file names: resolution and encoding tags
+//! (`1080p`, `x265`, `WEB-DL`), underscores used as spaces and repeated spaces. It does not
+//! change the name on disk nor the path that identifies the node; it is presentation only.
 
-/// Tags de release e codificação de vídeo que não fazem parte do título de uma aula.
+/// Release and video-encoding tags that are not part of a lesson's title.
 ///
-/// Áudio (`aac`, `mp3`) e termos como `4K` ficam de fora de propósito: podem ser parte do
-/// assunto de uma aula.
+/// Audio (`aac`, `mp3`) and terms such as `4K` are left out on purpose: they may be part of a
+/// lesson's subject.
 const RELEASE_TAGS: &[&str] = &[
     "webrip", "web-dl", "webdl", "hdtv", "bluray", "brrip", "dvdrip", "hdrip", "hevc", "avc",
     "x264", "x265", "h264", "h265", "10bit", "8bit",
 ];
 
-/// Título sem tags de release, com sublinhados trocados por espaços.
+/// Title without release tags, with underscores swapped for spaces.
 ///
-/// Se a limpeza apagar tudo (por exemplo, um nome que é só `1080p`), devolve a entrada
-/// original, para que o nó nunca fique sem título.
+/// If the cleanup erases everything (for example, a name that is just `1080p`), it returns the original
+/// input, so the node never ends up with no title.
 pub fn presentable(title: &str) -> String {
     let mut spaced = title.replace('_', " ");
     // shortcut: a title with no spaces and 2+ dots is a release-style name ("Go.Golang.Course");
@@ -35,11 +35,11 @@ pub fn presentable(title: &str) -> String {
     }
 }
 
-/// Remove do início de todos os títulos as palavras que eles têm em comum, como o nome do
-/// curso repetido em cada aula ("Rust Course – Ownership", "Rust Course – Borrowing").
+/// Removes from the start of all titles the words they have in common, such as the name of the
+/// course repeated on every lesson ("Rust Course – Ownership", "Rust Course – Borrowing").
 ///
-/// Só age com pelo menos três títulos, mantém ao menos uma palavra em cada um e não muda
-/// nada se algum título ficaria vazio ou só com separadores.
+/// It only acts with at least three titles, keeps at least one word in each and changes
+/// nothing if some title would end up empty or with only separators.
 pub fn strip_shared_prefix(titles: &mut [String]) {
     if titles.len() < 3 {
         return;
@@ -76,7 +76,7 @@ pub fn strip_shared_prefix(titles: &mut [String]) {
     }
 }
 
-/// Verdadeiro para uma palavra que é só uma tag de release, mesmo entre colchetes.
+/// True for a word that is only a release tag, even between brackets.
 fn is_release_tag(token: &str) -> bool {
     let word = token
         .trim_matches(|character: char| "[](){}".contains(character))
@@ -84,7 +84,7 @@ fn is_release_tag(token: &str) -> bool {
     !word.is_empty() && (RELEASE_TAGS.contains(&word.as_str()) || is_resolution(&word))
 }
 
-/// `720p`, `1080p`, `2160p`: três ou quatro dígitos seguidos de `p`.
+/// `720p`, `1080p`, `2160p`: three or four digits followed by `p`.
 fn is_resolution(word: &str) -> bool {
     word.strip_suffix('p').is_some_and(|digits| {
         matches!(digits.len(), 3 | 4) && digits.bytes().all(|byte| byte.is_ascii_digit())

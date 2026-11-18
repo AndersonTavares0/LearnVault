@@ -1,9 +1,9 @@
-//! Ordenação manual de módulos e aulas sobre a ordem automática do catálogo.
+//! Manual ordering of modules and lessons over the catalog's automatic order.
 //!
-//! Os casos simulam um curso: os caminhos são relativos à raiz do curso, então a lista
-//! de topo do catálogo é exatamente a lista de módulos do curso — a mesma fatia que o
-//! adaptador passa a [`apply_order`]. A ordenação manual é aplicada sobre o catálogo
-//! derivado, nunca sobre o disco.
+//! The cases simulate a course: paths are relative to the course root, so the top-level
+//! list of the catalog is exactly the course's list of modules — the same slice the
+//! adapter passes to [`apply_order`]. Manual ordering is applied over the derived
+//! catalog, never over the disk.
 
 use learnvault_core::paths::relative_path_key;
 use learnvault_core::{
@@ -47,7 +47,7 @@ fn child_paths(nodes: &[CatalogNode]) -> Vec<String> {
     nodes.iter().map(|node| node.path.clone()).collect()
 }
 
-/// Catálogo de um curso com três módulos em ordem natural: 2, 3 e 10.
+/// Catalog of a course with three modules in natural order: 2, 3 and 10.
 fn three_module_catalog() -> Result<(Database, Catalog), Box<dyn std::error::Error>> {
     let db = library_db()?;
     for (id, path) in [
@@ -76,8 +76,8 @@ fn automatic_order_is_natural_and_ties_break_by_name() -> TestResult {
     let module = &catalog.categories[0];
     assert_eq!(module.path, "Modulo 1");
 
-    // `Aula 2` precede `Aula 10`; o empate de zeros à esquerda é resolvido de forma
-    // determinística pelo nome original ("Aula 02" antes de "Aula 2"), sem locale.
+    // `Lesson 2` precedes `Lesson 10`; the tie of leading zeros is resolved
+    // deterministically by the original name ("Lesson 02" before "Lesson 2"), with no locale.
     assert_eq!(
         child_paths(&module.children),
         ["Modulo 1/Aula 02", "Modulo 1/Aula 2", "Modulo 1/Aula 10",]
@@ -109,7 +109,7 @@ fn manual_order_moves_only_the_listed_siblings() -> TestResult {
         ["Modulo 10", "Modulo 2", "Modulo 3"]
     );
 
-    // A ordem manual nunca altera o conteúdo nem a identidade dos arquivos.
+    // Manual order never changes the content nor the identity of the files.
     let lesson = node(&catalog.categories[0].children, "Modulo 10/Aula 1");
     assert_eq!(lesson.files[0].media_id, "m10");
     assert_eq!(lesson.files[0].path, "Modulo 10/Aula 1/aula.mp4");
@@ -122,8 +122,8 @@ fn manual_order_moves_only_the_listed_siblings() -> TestResult {
 fn unlisted_children_keep_the_automatic_order() -> TestResult {
     let (_db, mut catalog) = three_module_catalog()?;
 
-    // Apenas um filho é citado: ele vai para o topo e os demais permanecem na ordem
-    // automática, sem sumir nem duplicar.
+    // Only one child is cited: it goes to the top and the others keep the automatic
+    // order, without vanishing or duplicating.
     let mut order = CatalogOrder::new();
     order.set_children("", vec!["Modulo 10".to_owned()]);
     apply_order(&mut catalog.categories, &order);
@@ -175,8 +175,8 @@ fn declaring_a_parent_again_replaces_the_previous_preference() -> TestResult {
         ["Modulo 3", "Modulo 2", "Modulo 10"]
     );
 
-    // Remover a preferência restaura a ordem automática: o catálogo é rederivado a
-    // cada leitura e `apply_order` de uma preferência vazia preserva a ordem natural.
+    // Removing the preference restores the automatic order: the catalog is rederived on
+    // every read and `apply_order` of an empty preference preserves the natural order.
     assert!(order.remove(""));
     let mut fresh = build_catalog(&_db, LIB)?;
     apply_order(&mut fresh.categories, &order);
@@ -206,8 +206,8 @@ fn reset_restores_the_automatic_order() -> TestResult {
         ["Modulo 10", "Modulo 2", "Modulo 3"]
     );
 
-    // Restaurar a ordem automática significa remover a preferência; a próxima
-    // derivação do catálogo já vem natural e nenhuma sobreposição é aplicada.
+    // Restoring the automatic order means removing the preference; the next
+    // derivation of the catalog already comes natural and no overlay is applied.
     order.clear();
     assert!(order.is_empty());
     let mut fresh = build_catalog(&db, LIB)?;
@@ -223,7 +223,7 @@ fn reset_restores_the_automatic_order() -> TestResult {
 fn sibling_paths_returns_children_of_a_parent_and_the_top_level() -> TestResult {
     let (_db, catalog) = three_module_catalog()?;
 
-    // `""` é a lista de topo passada a `apply_order`.
+    // `""` is the top-level list passed to `apply_order`.
     assert_eq!(
         sibling_paths(&catalog.categories, ""),
         Some(vec![
@@ -232,7 +232,7 @@ fn sibling_paths_returns_children_of_a_parent_and_the_top_level() -> TestResult 
             "Modulo 10".to_owned(),
         ])
     );
-    // Um pai existente devolve os filhos; um pai desconhecido não existe.
+    // An existing parent returns its children; an unknown parent does not exist.
     assert_eq!(
         sibling_paths(&catalog.categories, "Modulo 2"),
         Some(vec!["Modulo 2/Aula 1".to_owned()])
@@ -256,19 +256,19 @@ fn validate_siblings_accepts_permutations_and_rejects_foreign_or_partial_lists()
         &existing,
         &owned(&["Modulo 10", "Modulo 2", "Modulo 3"])
     ));
-    // Omitir um irmão não é uma permutação válida.
+    // Omitting a sibling is not a valid permutation.
     assert!(!validate_siblings(&existing, &owned(&["Modulo 10"])));
-    // Caminho de outro pai é recusado.
+    // A path from another parent is refused.
     assert!(!validate_siblings(
         &existing,
         &owned(&["Modulo 10", "Modulo 2", "Modulo Outro"])
     ));
-    // Repetição é recusada.
+    // Repetition is refused.
     assert!(!validate_siblings(
         &existing,
         &owned(&["Modulo 2", "Modulo 2", "Modulo 3"])
     ));
-    // Lista vazia para um pai sem filhos é aceita (nada a reordenar).
+    // An empty list for a parent with no children is accepted (nothing to reorder).
     assert!(validate_siblings(&[], &[]));
     Ok(())
 }

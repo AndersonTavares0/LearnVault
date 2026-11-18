@@ -1,8 +1,8 @@
-//! Testes da resolução segura de mídia.
+//! Tests of safe media resolution.
 //!
-//! O núcleo recebe `library_id` e `media_id`, valida o caminho persistido, confina o
-//! arquivo sob a raiz e devolve o arquivo já aberto em modo somente leitura, com os
-//! metadados lidos do próprio descritor.
+//! The core receives `library_id` and `media_id`, validates the persisted path, confines the
+//! file under the root and returns the file already open read-only, with the
+//! metadata read from the descriptor itself.
 
 use std::io::{Read, Write};
 use std::path::Path;
@@ -17,8 +17,8 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 const LIB: &str = "bib-1";
 
 fn key(path: &str) -> String {
-    // Caminhos que o domínio recusa são gravados como estão: os testes que precisam deles
-    // verificam justamente que a resolução revalida o que está no banco.
+    // Paths the domain refuses are stored as they are: the tests that need them
+    // check precisely that the resolution revalidates what is in the database.
     relative_path_key(path, KeyMode::for_host()).unwrap_or_else(|_| path.to_owned())
 }
 
@@ -72,7 +72,7 @@ fn mtime_seconds(metadata: &std::fs::Metadata) -> i64 {
         .unwrap_or(0)
 }
 
-/// Manifesto dos arquivos da árvore, usado para provar que a resolução não escreve.
+/// Manifest of the files in the tree, used to prove that the resolution does not write.
 fn manifest(root: &Path) -> Vec<(String, u64)> {
     let mut entries = Vec::new();
     let mut stack = vec![root.to_path_buf()];
@@ -397,7 +397,7 @@ fn a_root_replaced_by_a_symlink_does_not_authorize_outside_files() -> TestResult
     let db = library_db()?;
     insert_media(&db, LIB, "m1", "segredo.png", 18, 10, "available")?;
 
-    // A raiz é substituída por um link para a pasta externa depois de ter sido resolvida.
+    // The root is replaced by a link to the external folder after it was resolved.
     std::fs::remove_dir(&root)?;
     std::os::unix::fs::symlink(&outside, &root)?;
 
@@ -441,7 +441,7 @@ fn a_file_changed_only_in_mtime_is_flagged() -> TestResult {
     write_file(root, "Curso/Aula/aula.mp4", b"conteudo")?;
 
     let db = library_db()?;
-    // Tamanho correto e mtime antigo: só o mtime diverge do que a varredura registrou.
+    // Correct size and old mtime: only the mtime diverges from what the scan recorded.
     insert_media(&db, LIB, "m1", "Curso/Aula/aula.mp4", 8, 1, "available")?;
 
     let media = open_media(&db, LIB, "m1", root)?;
@@ -541,10 +541,10 @@ fn opening_does_not_modify_the_library() -> TestResult {
     Ok(())
 }
 
-/// O caminho usado pelo servidor HTTP (`open_media_reference`) recusa um diretório
-/// como `MediaNotAFile` nas duas plataformas. No Windows, sem esta classificação
-/// pré-abertura, `File::open` de um diretório devolveria `PermissionDenied` e o erro
-/// viraria `MediaUnreadable`.
+/// The path used by the HTTP server (`open_media_reference`) refuses a directory
+/// as `MediaNotAFile` on both platforms. On Windows, without this pre-open
+/// classification, `File::open` of a directory would return `PermissionDenied` and the error
+/// would become `MediaUnreadable`.
 #[test]
 fn a_directory_reference_in_place_of_a_file_is_refused() -> TestResult {
     let directory = tempfile::tempdir()?;
@@ -564,8 +564,8 @@ fn a_directory_reference_in_place_of_a_file_is_refused() -> TestResult {
     Ok(())
 }
 
-/// Um arquivo comum com o atributo somente leitura continua legível: a correção não
-/// pode confundir "sem permissão de escrita" com "inacessível".
+/// A regular file with the read-only attribute is still readable: the fix must
+/// not confuse "no write permission" with "inaccessible".
 #[test]
 fn a_read_only_regular_file_is_still_opened() -> TestResult {
     let directory = tempfile::tempdir()?;
@@ -593,14 +593,14 @@ fn a_read_only_regular_file_is_still_opened() -> TestResult {
     assert_eq!(opened.size, bytes.len() as u64);
     assert_eq!(read_all(opened.file)?, bytes);
 
-    // Restaura a escrita para que a limpeza do `TempDir` não tropece no Windows,
-    // onde apagar um arquivo somente leitura é recusado.
+    // Restores write access so that cleaning up the `TempDir` does not trip on Windows,
+    // where deleting a read-only file is refused.
     restore_writable(&path)?;
     Ok(())
 }
 
-/// Restaura a permissão de escrita sem `set_readonly(false)`, que o clippy recusa
-/// por tornar o arquivo gravável por todos no Unix.
+/// Restores write permission without `set_readonly(false)`, which clippy refuses
+/// because it makes the file writable by everyone on Unix.
 fn restore_writable(path: &Path) -> std::io::Result<()> {
     let mut permissions = std::fs::metadata(path)?.permissions();
     #[cfg(unix)]
@@ -610,18 +610,18 @@ fn restore_writable(path: &Path) -> std::io::Result<()> {
     }
     #[cfg(windows)]
     {
-        // No Windows, `set_readonly(false)` apenas limpa FILE_ATTRIBUTE_READONLY; a
-        // preocupação do lint (tornar o arquivo gravável por todos) é específica do
-        // Unix, então o silêncio é local e justificado.
+        // On Windows, `set_readonly(false)` only clears FILE_ATTRIBUTE_READONLY; the
+        // lint's concern (making the file writable by everyone) is Unix-specific,
+        // so the silencing is local and justified.
         #[allow(clippy::permissions_set_readonly_false)]
         permissions.set_readonly(false);
     }
     std::fs::set_permissions(path, permissions)
 }
 
-/// Um arquivo comum que não pode ser aberto continua sendo um erro operacional
-/// (`MediaUnreadable`), nunca `MediaNotAFile`: a classificação pré-abertura olha o
-/// tipo do caminho, não o resultado da abertura, então não mascara permissão negada.
+/// A regular file that cannot be opened is still an operational error
+/// (`MediaUnreadable`), never `MediaNotAFile`: the pre-open classification looks at the
+/// path's type, not at the result of the open, so it does not mask a permission denial.
 #[cfg(unix)]
 #[test]
 fn an_unreadable_regular_file_is_reported_as_unreadable() -> TestResult {
@@ -634,9 +634,9 @@ fn an_unreadable_regular_file_is_reported_as_unreadable() -> TestResult {
     let path = root.join("Curso/Aula/aula.mp4");
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o000))?;
 
-    // `root` (uid 0) ignora as permissões; sem a pré-condição real, não invente o
-    // resultado: restaure o modo e saia sem afirmar um contrato que o ambiente não
-    // permite observar. Runners de CI não-root exercitam a asserção abaixo.
+    // `root` (uid 0) ignores permissions; without the real precondition, do not invent the
+    // result: restore the mode and leave without asserting a contract the environment does not
+    // let us observe. Non-root CI runners exercise the assertion below.
     if std::fs::File::open(&path).is_ok() {
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
         return Ok(());
@@ -666,9 +666,9 @@ fn an_unreadable_regular_file_is_reported_as_unreadable() -> TestResult {
     Ok(())
 }
 
-/// No Windows, junctions são pontos de reanálise criáveis sem privilégio. Uma
-/// junction que escapa da biblioteca é recusada, provando que a validação de
-/// reparse/canonicalização não é contornada no Windows.
+/// On Windows, junctions are reparse points that can be created without privilege. A
+/// junction that escapes the library is refused, proving that the reparse/
+/// canonicalization validation is not bypassed on Windows.
 #[cfg(windows)]
 #[test]
 fn a_junction_that_escapes_the_library_is_refused() -> TestResult {

@@ -1,30 +1,30 @@
-//! Cadeia única de migrações do banco SQLite.
+//! Single migration chain of the SQLite database.
 //!
-//! Toda a evolução do schema acontece aqui, sobre um único arquivo SQLite. Versões já
-//! publicadas nunca são editadas: uma mudança de schema acrescenta um passo novo. O
-//! domínio não escreve DDL em nenhum outro lugar.
+//! All schema evolution happens here, over a single SQLite file. Versions already
+//! published are never edited: a schema change adds a new step. The
+//! domain writes DDL nowhere else.
 
 use rusqlite::Connection;
 
-/// Versão do schema conhecida por este programa.
+/// Schema version known to this program.
 ///
-/// É sempre o tamanho de [`MIGRATIONS`]: um banco acima dela foi gravado por uma versão
-/// mais nova e é recusado com [`crate::Error::SchemaTooNew`].
+/// It is always the length of [`MIGRATIONS`]: a database above it was written by a newer
+/// version and is refused with [`crate::Error::SchemaTooNew`].
 pub(crate) const SCHEMA_VERSION: usize = MIGRATIONS.len();
 
-/// Versão 1: bibliotecas, mídia, varreduras e estado de estudo.
+/// Version 1: libraries, media, scans and study state.
 ///
-/// As tabelas `user` e `session` são declaradas nesta mesma cadeia para manter um único
-/// caminho de migração sobre um único banco, mas são usadas apenas pelo servidor; o
-/// domínio compartilhado não as acessa.
+/// The `user` and `session` tables are declared in this same chain to keep a single
+/// migration path over a single database, but they are used only by the server; the
+/// shared domain does not access them.
 ///
-/// Nenhuma chave estrangeira usa exclusão em cascata: remover bibliotecas ou mídia exige
-/// ação explícita e preserva os dados associados, então a exclusão física de linhas não
-/// faz parte da política do domínio e falha alto em vez de propagar remoções. O
-/// `ON DELETE NO ACTION` é o padrão do SQLite, mas é escrito para ficar auditável.
+/// No foreign key uses cascading deletes: removing libraries or media requires an
+/// explicit action and preserves the associated data, so physical deletion of rows is not
+/// part of the domain's policy and fails loudly instead of propagating removals. The
+/// `ON DELETE NO ACTION` is SQLite's default, but it is written out to stay auditable.
 ///
-/// Todas as colunas de tempo (`mtime`, `completed_at`, `updated_at`, `expires_at`) são
-/// epoch Unix em segundos, em inteiros, sem fuso.
+/// All time columns (`mtime`, `completed_at`, `updated_at`, `expires_at`) are
+/// Unix epoch in seconds, as integers, with no time zone.
 const V1: &str = "
 -- Bibliotecas cadastradas. A raiz física é configuração da plataforma, não dado do domínio.
 CREATE TABLE library (
@@ -83,17 +83,17 @@ CREATE TABLE session (
 CREATE INDEX session_expires_at_idx ON session (expires_at);
 ";
 
-/// Versão 2: registro da cobertura de cada varredura.
+/// Version 2: record of each scan's coverage.
 ///
-/// A migração é aditiva e não toca a versão 1. `scan.complete` distingue uma varredura
-/// completa de uma parcial: `0` significa que alguma área da biblioteca não pôde ser
-/// lida, e não que nenhuma ausência possa ser registrada. `scan_inaccessible` guarda os
-/// caminhos relativos que não puderam ser verificados, para que uma leitura futura
-/// consiga separar os registros preservados por falta de informação daqueles que foram
-/// encontrados.
+/// The migration is additive and does not touch version 1. `scan.complete` tells a complete
+/// scan from a partial one: `0` means some area of the library could not be
+/// read, and not that no absence can be recorded. `scan_inaccessible` keeps the
+/// relative paths that could not be verified, so that a later read
+/// can separate the records preserved for lack of information from those that were
+/// found.
 ///
-/// A coluna nasce com `DEFAULT 1` para que as linhas gravadas pela versão 1 continuem
-/// válidas: uma varredura só era registrada quando terminava.
+/// The column is created with `DEFAULT 1` so that the rows written by version 1 stay
+/// valid: a scan was only recorded when it finished.
 const V2: &str = "
 ALTER TABLE scan ADD COLUMN complete INTEGER NOT NULL DEFAULT 1 CHECK (complete IN (0, 1));
 
@@ -105,24 +105,24 @@ CREATE TABLE scan_inaccessible (
 );
 ";
 
-/// Versão 3: remoção explícita de mídia.
+/// Version 3: explicit removal of media.
 ///
-/// A migração é aditiva e não toca as versões anteriores. A presença do par
-/// `(library_id, media_id)` nesta tabela é o fato da remoção: a linha de `media` e o
-/// `study_state` associado permanecem intactos, porque remover do catálogo não é apagar
-/// dados. Por isso a tabela é separada em vez de ser um novo valor no `CHECK` de
-/// `media.availability`, que exigiria reconstruir `media` inteira para alterar a
-/// restrição.
+/// The migration is additive and does not touch the previous versions. The presence of the pair
+/// `(library_id, media_id)` in this table is the fact of the removal: the `media` row and the associated
+/// `study_state` stay intact, because removing from the catalog is not deleting
+/// data. That is why the table is separate instead of being a new value in the `CHECK` of
+/// `media.availability`, which would require rebuilding all of `media` to change the
+/// constraint.
 ///
-/// A chave primária composta é a chave natural da operação: ela garante a idempotência
-/// (não existe remoção duplicada), delimita o escopo por biblioteca e serve de índice
-/// para a consulta do catálogo, que filtra por `library_id`.
+/// The composite primary key is the natural key of the operation: it guarantees idempotence
+/// (no duplicate removal exists), bounds the scope by library and serves as an index
+/// for the catalog query, which filters by `library_id`.
 ///
-/// As duas chaves estrangeiras garantem que a biblioteca e a mídia existem. O vínculo
-/// entre elas é garantido por quem escreve: a inserção seleciona o par direto de
-/// `media`, de modo que o `library_id` gravado é o da própria mídia. Uma chave
-/// estrangeira composta seria a alternativa, mas exigiria declarar
-/// `UNIQUE (library_id, media_id)` em `media`, o que obriga a reconstruir a tabela.
+/// The two foreign keys guarantee that the library and the media exist. The link
+/// between them is guaranteed by whoever writes: the insert selects the pair straight from
+/// `media`, so that the stored `library_id` is that of the media itself. A composite
+/// foreign key would be the alternative, but it would require declaring
+/// `UNIQUE (library_id, media_id)` on `media`, which forces rebuilding the table.
 const V3: &str = "
 -- Mídia removida explicitamente do catálogo. Nenhuma varredura cria ou apaga esta linha.
 CREATE TABLE media_removal (
@@ -138,8 +138,8 @@ const V4: &str = "
 ALTER TABLE user ADD COLUMN must_change_credentials INTEGER NOT NULL DEFAULT 0 CHECK (must_change_credentials IN (0, 1));
 ";
 
-// `study_state` guarda só a última interação por aula, então não serve para
-// reconstruir ofensiva. `study_day` agrega um registro por dono e dia local.
+// `study_state` keeps only the last interaction per lesson, so it cannot be used to
+// rebuild a streak. `study_day` aggregates one record per owner and local day.
 const V5: &str = "
 CREATE TABLE study_day (
     owner_id TEXT NOT NULL,
@@ -171,8 +171,8 @@ BEGIN
 END;
 ";
 
-// Sessões e recompensas são fatos imutáveis e idempotentes; `study_state` continua sendo
-// somente o estado atual de retomada/conclusão.
+// Sessions and rewards are immutable, idempotent facts; `study_state` remains
+// only the current resume/completion state.
 const V6: &str = "
 CREATE TABLE focus_session (
     owner_id TEXT NOT NULL,
@@ -383,10 +383,10 @@ BEGIN
 END;
 ";
 
-/// Versão 7: anotações de estudo na linha do tempo das aulas.
+/// Version 7: study notes on the lessons' timeline.
 ///
-/// Permite ao aluno registrar anotações e marcadores temporais vinculados a uma mídia
-/// durante o estudo, ordenáveis pela posição do player em segundos.
+/// Lets the learner record notes and time markers linked to a media
+/// while studying, sortable by the player position in seconds.
 const V7: &str = "
 CREATE TABLE study_note (
     note_id TEXT PRIMARY KEY NOT NULL,
@@ -401,10 +401,10 @@ CREATE TABLE study_note (
 CREATE INDEX study_note_owner_media_idx ON study_note (owner_id, media_id, position_seconds);
 ";
 
-/// Versão 8: cartões pessoais de estudo com repetição espaçada.
+/// Version 8: personal study cards with spaced repetition.
 ///
-/// Permite ao aluno criar cartões de memorização (flashcards) com frente e verso vinculados
-/// a uma aula, com agendamento de revisão espaçada (next_due e interval_days).
+/// Lets the learner create memorization cards (flashcards) with a front and back linked
+/// to a lesson, with spaced-review scheduling (next_due and interval_days).
 const V8: &str = "
 CREATE TABLE flashcard (
     card_id TEXT PRIMARY KEY NOT NULL,
@@ -421,10 +421,10 @@ CREATE TABLE flashcard (
 CREATE INDEX flashcard_owner_media_due_idx ON flashcard (owner_id, media_id, next_due);
 ";
 
-/// Versão 9: favoritos de cursos e aulas por dono.
+/// Version 9: favourites of courses and lessons per owner.
 ///
-/// Permite ao aluno marcar cursos (`course_id`) e aulas (`media_id`) como favoritos
-/// para filtragem rápida na biblioteca e no índice do curso.
+/// Lets the learner mark courses (`course_id`) and lessons (`media_id`) as favourites
+/// for quick filtering in the library and in the course index.
 const V9: &str = "
 CREATE TABLE study_favorite (
     owner_id TEXT NOT NULL,
@@ -437,11 +437,11 @@ CREATE TABLE study_favorite (
 CREATE INDEX study_favorite_owner_kind_idx ON study_favorite (owner_id, target_kind, created_at);
 ";
 
-/// Versão 10: permissões de acesso a cursos por usuário local.
+/// Version 10: course access permissions per local user.
 ///
-/// Quando não há linhas para `user_id` em `user_course_access`, o usuário possui acesso
-/// irrestrito a todos os cursos. Quando há linhas, apenas os `course_id` listados são
-/// autorizados (usando a sentinela `__none__` quando restrito a zero cursos).
+/// When there are no rows for `user_id` in `user_course_access`, the user has unrestricted
+/// access to every course. When there are rows, only the listed `course_id`s are
+/// authorized (using the `__none__` sentinel when restricted to zero courses).
 const V10: &str = "
 CREATE TABLE user_course_access (
     user_id TEXT NOT NULL REFERENCES user (user_id) ON DELETE CASCADE,
@@ -450,12 +450,12 @@ CREATE TABLE user_course_access (
 );
 ";
 
-/// Versão 11: anotações do aluno sobre páginas de PDF.
+/// Version 11: the learner's annotations on PDF pages.
 ///
-/// O arquivo do curso nunca é alterado: marca-textos, sublinhados e notas ficam aqui, presos
-/// a uma mídia e a uma página. `rects` guarda os retângulos como texto `x,y,largura,altura`
-/// separados por `;`, em frações da página (0 a 1), para sobreviver a qualquer zoom.
-/// A regra de que uma nota exige texto é validada no domínio, não no banco.
+/// The course file is never altered: highlights, underlines and notes live here, tied
+/// to a media and a page. `rects` stores the rectangles as `x,y,width,height` text
+/// separated by `;`, in fractions of the page (0 to 1), so they survive any zoom.
+/// The rule that a note requires text is validated in the domain, not in the database.
 const V11: &str = "
 CREATE TABLE pdf_annotation (
     annotation_id TEXT PRIMARY KEY NOT NULL,
@@ -474,11 +474,11 @@ CREATE TABLE pdf_annotation (
 CREATE INDEX pdf_annotation_owner_media_idx ON pdf_annotation (owner_id, media_id, page);
 ";
 
-/// Versão 12: marcadores de tempo por aula e por dono.
+/// Version 12: time markers per lesson and per owner.
 ///
-/// Um marcador prende um rótulo curto a um instante da mídia. A linha é do aluno, não da
-/// biblioteca: o arquivo original nunca é escrito. O índice cobre a consulta do player, que
-/// lista os marcadores de uma mídia em ordem cronológica.
+/// A marker ties a short label to an instant of the media. The row belongs to the learner, not to the
+/// library: the original file is never written. The index covers the player's query, which
+/// lists a media's markers in chronological order.
 const V12: &str = "
 CREATE TABLE media_bookmark (
     bookmark_id TEXT PRIMARY KEY NOT NULL,
@@ -493,7 +493,7 @@ CREATE INDEX media_bookmark_owner_media_idx
     ON media_bookmark (owner_id, media_id, position_seconds, created_at);
 ";
 
-/// Versão 13: índice de busca global em FTS5.
+/// Version 13: global search index in FTS5.
 ///
 /// `study_note_fts` and `media_fts` are external-content indexes over the tables that own
 /// the text, so the content is not duplicated. Triggers keep both indexes correct on every
@@ -570,14 +570,14 @@ CREATE VIRTUAL TABLE course_fts USING fts5(
 );
 ";
 
-/// Versão 14: vínculo do cartão com um instante da aula e histórico de revisões.
+/// Version 14: the card's link to an instant of the lesson and the review history.
 ///
-/// O cartão continua preso à mídia (a aula); `position_seconds` registra o momento do player
-/// em que ele foi criado, e não altera o agendamento. `flashcard_review` é um log somente de
-/// acréscimo: cada revisão guarda a avaliação, o intervalo anterior e o próximo vencimento,
-/// para que o histórico não dependa do estado atual do cartão. Sem chave estrangeira para
-/// `flashcard`, como as demais tabelas de eventos: excluir um cartão não apaga o passado nem
-/// falha por causa dele.
+/// The card stays tied to the media (the lesson); `position_seconds` records the moment in the player
+/// when it was created, and does not change the schedule. `flashcard_review` is an append-only
+/// log: each review keeps the rating, the previous interval and the next due date,
+/// so the history does not depend on the card's current state. No foreign key to
+/// `flashcard`, like the other event tables: deleting a card does not erase the past nor
+/// fail because of it.
 const V14: &str = "
 ALTER TABLE flashcard ADD COLUMN position_seconds INTEGER
     CHECK (position_seconds IS NULL OR position_seconds >= 0);
@@ -596,12 +596,12 @@ CREATE INDEX flashcard_review_owner_card_idx
     ON flashcard_review (owner_id, card_id, reviewed_at);
 ";
 
-/// Versão 15: preferências de reprodução por dono.
+/// Version 15: playback preferences per owner.
 ///
-/// Velocidades são guardadas em porcentagem inteira da velocidade normal (100 = 1×), sem
-/// ponto flutuante. `subtitle_language` guarda a última língua escolhida (por exemplo
-/// `pt-BR`); vazio significa "sem preferência". O desktop não tem contas e continua usando
-/// o armazenamento local do webview.
+/// Speeds are stored as a whole percentage of normal speed (100 = 1×), with no
+/// floating point. `subtitle_language` keeps the last language chosen (for example
+/// `pt-BR`); empty means "no preference". The desktop has no accounts and keeps using
+/// the webview's local storage.
 const V15: &str = "
 CREATE TABLE player_preference (
     owner_id TEXT PRIMARY KEY NOT NULL,
@@ -612,32 +612,32 @@ CREATE TABLE player_preference (
 );
 ";
 
-/// Versão 16: hash amostral do conteúdo da mídia.
+/// Version 16: sampled hash of the media content.
 ///
-/// A identidade da aula continua sendo o `media_id`; o hash permite reconhecer o mesmo
-/// arquivo quando ele muda de caminho, sem depender do nome. A coluna é anulável porque
-/// linhas anteriores à migração e arquivos ilegíveis não têm hash; a comparação de
-/// tamanho e mtime continua valendo nesses casos. Nenhum arquivo do curso é alterado:
-/// o hash é lido somente das pontas do arquivo.
+/// The lesson's identity is still the `media_id`; the hash makes it possible to recognize the same
+/// file when it changes path, without depending on the name. The column is nullable because
+/// rows from before the migration and unreadable files have no hash; the comparison of
+/// size and mtime still applies in those cases. No course file is altered:
+/// the hash is read only from the ends of the file.
 const V16: &str = "
 ALTER TABLE media ADD COLUMN content_hash TEXT;
 ";
 
-/// Versão 17: diário de sincronização entre desktop e servidor.
+/// Version 17: sync journal between desktop and server.
 ///
-/// O diário (`sync_operation`) é somente de acréscimo: cada linha tem um `op_id` estável
-/// e único, e `seq` é o cursor monotônico da leitura incremental. `payload` guarda a
-/// operação tipada como JSON; a linha é gravada pelo servidor depois de aplicada, na
-/// mesma transação, para que um replay do mesmo `op_id` não duplique o efeito.
+/// The journal (`sync_operation`) is append-only: each row has a stable, unique `op_id`,
+/// and `seq` is the monotonic cursor of the incremental read. `payload` keeps the
+/// typed operation as JSON; the row is written by the server after it is applied, in the
+/// same transaction, so that a replay of the same `op_id` does not duplicate the effect.
 ///
-/// `sync_outbox` é a fila local do desktop: sobrevive a reinicializações e mantém o
-/// `op_id` entre tentativas, então reenviar nunca duplica. `sync_state` guarda o
-/// dispositivo local e o cursor do servidor por dono.
+/// `sync_outbox` is the desktop's local queue: it survives restarts and keeps the
+/// `op_id` across attempts, so resending never duplicates. `sync_state` keeps the
+/// local device and the server cursor per owner.
 ///
-/// `study_note.sync_version` identifica a versão sincronizada que ocupa a linha
-/// principal; a versão perdedora vira uma cópia com identidade determinística, para que
-/// dois dispositivos convirjam sem perder texto. Linhas anteriores à migração ficam com
-/// a coluna nula e nunca são substituídas.
+/// `study_note.sync_version` identifies the synced version that occupies the
+/// main row; the losing version becomes a copy with a deterministic identity, so that
+/// two devices converge without losing text. Rows from before the migration keep
+/// the column null and are never replaced.
 const V17: &str = "
 ALTER TABLE study_note ADD COLUMN sync_version TEXT;
 
@@ -672,7 +672,7 @@ CREATE TABLE sync_state (
 );
 ";
 
-/// Versão 18: tombstones of deleted notes and bookmarks.
+/// Version 18: tombstones of deleted notes and bookmarks.
 ///
 /// Deleting a row is not an append-only effect: a create that is still pending on another
 /// device would resurrect it when it arrives. A tombstone (`kind` is `note` or `bookmark`)
@@ -741,22 +741,22 @@ CREATE TABLE library_root_dismissed (
 );
 ";
 
-/// Cadeia de migrações aplicada por [`crate::db::Database`]; o índice `n` leva o banco da
-/// versão `n` para `n + 1`.
+/// Migration chain applied by [`crate::db::Database`]; index `n` takes the database from
+/// version `n` to `n + 1`.
 pub(crate) const MIGRATIONS: &[&str] = &[
     V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21,
 ];
 
-/// Versão do schema gravada em `PRAGMA user_version` (0 quando nunca migrado).
+/// Schema version stored in `PRAGMA user_version` (0 when never migrated).
 ///
-/// O mesmo pragma usado pela antiga dependência `rusqlite_migration`, então bancos
-/// existentes continuam na versão que já tinham.
+/// The same pragma used by the old `rusqlite_migration` dependency, so existing
+/// databases stay at the version they already had.
 pub(crate) fn schema_version(conn: &Connection) -> rusqlite::Result<usize> {
     let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
     usize::try_from(version).map_err(|_| rusqlite::Error::IntegralValueOutOfRange(0, version))
 }
 
-/// Aplica as migrações pendentes numa única transação: ou todas entram, ou nenhuma.
+/// Applies the pending migrations in a single transaction: either all go in, or none do.
 pub(crate) fn migrate_to_latest(conn: &mut Connection) -> rusqlite::Result<()> {
     let current = schema_version(conn)?;
     if current >= SCHEMA_VERSION {

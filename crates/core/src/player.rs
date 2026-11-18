@@ -86,7 +86,7 @@ pub fn set_player_preference(
     )
 }
 
-/// [`set_player_preference`] sobre uma conexão já aberta.
+/// [`set_player_preference`] over an already-open connection.
 ///
 /// Lets the caller's transaction group the preference write with its sync operation.
 pub(crate) fn set_player_preference_on(
