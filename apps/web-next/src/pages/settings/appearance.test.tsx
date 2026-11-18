@@ -56,7 +56,7 @@ describe('AppearanceSettings', () => {
 		expect(root.style.getPropertyValue('--brand')).toBe('#E0A83E');
 		press('Theme', 'Light');
 		expect(root.dataset.theme).toBe('light');
-		expect(root.style.getPropertyValue('--brand')).toBe('#2A1D14');
+		expect(root.style.getPropertyValue('--brand')).toBe('#1C1815');
 	});
 
 	it('follows the reward colour choice', () => {

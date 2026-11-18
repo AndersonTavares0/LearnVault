@@ -22,7 +22,7 @@ Tokens live once in `src/styles/app.css` as shadcn variables, mapped by Tailwind
 | `muted-foreground` | `#6A5745` | Secondary text (above 4.5:1 on every surface) |
 | `border` | `#E5DDD2` (+ `16%` `--brand`) | Subtle hairlines |
 | `input` | `#8C7F6C` | Form-field outline (3:1 non-text contrast) |
-| `primary` / `--brand` | `#2A1D14` (warm ink) | Buttons, active tabs, progress, the current step; the learner can change it (Ink is the first preset, Brown and the others remain) |
+| `primary` / `--brand` | `#1C1815` (warm ink) | Buttons, active tabs, progress, the current step; the learner can change it (Ink is the first preset, Brown and the others remain) |
 | `reward-fill` | `#A8761F` (brass) | Rewards, accent highlights and the door of the mark (switches to `--brand` when matching accent is selected). Used as a graphic fill, so it needs 3:1, which it has on every surface |
 | `destructive` | `#A33A32` | Destructive actions, solid fill |
 
@@ -53,7 +53,7 @@ LearnVault is a private academy kept in a vault: the learner's own course librar
 | `apps/web-next/public/favicon.svg` | The reduced cut on the tile. Source of the 16 px and 32 px `icon.ico` sizes |
 | `docs/design/branding/learnvault-banner.svg`, `learnvault-banner-light.svg` | README header, text converted to outlines so it needs no font |
 
-Brand colours: warm ink `#1C1815`, cream `#F5EEE2`, gold `#E0A83E` on dark surfaces and `#A8761F` on light ones. The assets use them directly. The app's reward colour uses the same golds, and its default accent (the Ink preset) is `#2A1D14`, a touch browner than the logo's ink: page and panel tints are mixed from the accent in `oklch`, and a near-neutral ink turns them pink. A learner who saved another accent keeps it.
+Brand colours: warm ink `#1C1815`, cream `#F5EEE2`, gold `#E0A83E` on dark surfaces and `#A8761F` on light ones. The assets use them directly. The app's reward colour uses the same golds, and its default accent (the Ink preset) is the logo's ink. The page, panels and tints are mixed from `--brand-tone`, which is the accent itself except for Ink on the light page, where it stays brown: a near-black accent would darken every tint (the muted text fell to 4.3:1 on panels) and, with almost no chroma, turn them pink in `oklch`. A learner who saved another accent keeps it.
 
 **Motto.** *Sapere aude* ("dare to know", Horace, *Epistles*; Kant, 1784) sits beside the mark on the sign-in page, never inside it. A few other lines appear in context, always with a translation through `tr(en, ptBr)`, one per screen, never a rotating quote. `Motto` (`components/brand.tsx`) sets the quotation in italic with its `lang` attribute and the translation in the learner's language.
 

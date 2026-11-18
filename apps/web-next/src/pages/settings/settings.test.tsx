@@ -34,7 +34,7 @@ describe('settings', () => {
 		fireEvent.click(screen.getByRole('checkbox', { name: 'Streak' }));
 		expect(JSON.parse(localStorage.getItem('learnvault-appearance')!)).toMatchObject({ accent: '#7A3B7B', radius: 'round', sidebar: 'left', showStreak: false });
 		fireEvent.click(screen.getByRole('button', { name: 'Reset to the default look' }));
-		expect(document.documentElement.style.getPropertyValue('--brand')).toBe('#2A1D14');
+		expect(document.documentElement.style.getPropertyValue('--brand')).toBe('#1C1815');
 		expect(document.documentElement.dataset.radius).toBe('soft');
 	});
 
