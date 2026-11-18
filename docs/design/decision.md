@@ -1,63 +1,63 @@
-# Decisão de direção visual
+# Visual direction decision
 
 > **Superseded in part (2026-11-11).** The palette, themes, navigation and gamification described here were replaced by the direction in [`DESIGN.md`](../../DESIGN.md) and [`PRODUCT.md`](../../PRODUCT.md): light and dark themes, brown and amber, Playfair Display and DM Sans, top navigation, no forest. Where this file names a palette, a theme or a layout, those two files win. It is kept as history and for the research and the accessibility and security rules, which still apply.
 
 > **Brand superseded (2026-11).** The LV monogram mentioned below was replaced by the Academy Portico mark and the *Sapere aude* motto; see the Brand section of [`DESIGN.md`](../../DESIGN.md) and [`branding/`](branding/).
 
-## Critério
+## Criterion
 
-Conceitos foram avaliados em screenshots, não em testes com usuários. Aprovação exige média ponderada ≥4,00/5 e nenhuma dimensão abaixo de 3/5:
+Concepts were evaluated on screenshots, not in tests with users. Approval requires a weighted average ≥4.00/5 and no dimension below 3/5:
 
-| Dimensão | Peso |
+| Dimension | Weight |
 |---|---:|
-| Usabilidade e clareza | 30% |
-| Hierarquia e arquitetura visual | 25% |
-| Identidade e qualidade estética | 20% |
-| Consistência e acessibilidade | 15% |
-| Viabilidade técnica | 10% |
+| Usability and clarity | 30% |
+| Hierarchy and visual architecture | 25% |
+| Identity and aesthetic quality | 20% |
+| Consistency and accessibility | 15% |
+| Technical feasibility | 10% |
 
-## A/B/C — três propostas independentes
+## A/B/C — three independent proposals
 
-| Conceito | Usabilidade | Hierarquia | Identidade | Consistência | Viabilidade | Média | Decisão |
+| Concept | Usability | Hierarchy | Identity | Consistency | Feasibility | Average | Decision |
 |---|---:|---:|---:|---:|---:|---:|---|
-| A — Biblioteca editorial | 2 | 3 | 4 | 3 | 3 | **2,90/5** | Rejeitado |
-| B — Workbench de estudo | 4 | 4 | 3 | 3 | 4 | **3,65/5** | Rejeitado |
-| C — Atlas de aprendizagem | 2,5 | 3 | 4 | 2 | 3 | **2,90/5** | Rejeitado |
+| A — Editorial library | 2 | 3 | 4 | 3 | 3 | **2.90/5** | Rejected |
+| B — Study workbench | 4 | 4 | 3 | 3 | 4 | **3.65/5** | Rejected |
+| C — Learning atlas | 2.5 | 3 | 4 | 2 | 3 | **2.90/5** | Rejected |
 
-B organizava melhor currículo, aula atual e sessão, mas o Player simulava ações, não persistia progresso e tornava “Salvar” ambíguo em mobile. A tinha identidade editorial, mas navegação/player incompletos e ausência de fluxos essenciais. C era visualmente distintivo, porém a metáfora espacial enfraquecia retomada, controles e navegação por ponteiro. Nenhum atendia o limiar; as propostas foram descartadas, não refinadas como solução final. Ver capturas A/B/C em [concepts.md](concepts.md).
+B organized the curriculum, the current lesson and the session better, but the Player simulated actions, did not persist progress and made "Save" ambiguous on mobile. A had an editorial identity, but incomplete navigation/player and no essential flows. C was visually distinctive, but the spatial metaphor weakened resuming, controls and pointer navigation. None met the threshold; the proposals were discarded, not refined as a final solution. See the A/B/C captures in [concepts.md](concepts.md).
 
-## K — proposta escolhida
+## K — the chosen proposal
 
-A direção K usa padrões reconhecíveis de plataforma de cursos com arquitetura local-first: Biblioteca em prateleiras com retomada curta, Curso como página integral com objetivos/progresso/currículo e Player centrado na mídia com currículo contextual. Evita marketplace, avaliações, matrícula, métricas decorativas e dependência de conta remota. Topbar compacta em vez de sidebar persistente; os destinos globais cabem em telas largas e reorganizam em mobile.
+Direction K uses recognizable course-platform patterns with a local-first architecture: a Library in shelves with a short resume strip, a Course as a full page with goals/progress/curriculum and a media-centred Player with a contextual curriculum. It avoids a marketplace, ratings, enrollment, decorative metrics and dependence on a remote account. A compact topbar instead of a persistent sidebar; the global destinations fit on wide screens and reorganize on mobile.
 
-A crítica independente da candidatura K v5 pontuou:
+The independent critique of candidate K v5 scored:
 
-| Dimensão | Peso | Nota | Parcela |
+| Dimension | Weight | Score | Share |
 |---|---:|---:|---:|
-| Usabilidade e clareza | 30% | 4,0 | 1,20 |
-| Hierarquia e arquitetura visual | 25% | 4,2 | 1,05 |
-| Identidade e qualidade estética | 20% | 4,1 | 0,82 |
-| Consistência e acessibilidade | 15% | 3,5 | 0,525 |
-| Viabilidade técnica | 10% | 4,5 | 0,45 |
-| **Total** | **100%** |  | **4,045 ≈ 4,05/5** |
+| Usability and clarity | 30% | 4.0 | 1.20 |
+| Hierarchy and visual architecture | 25% | 4.2 | 1.05 |
+| Identity and aesthetic quality | 20% | 4.1 | 0.82 |
+| Consistency and accessibility | 15% | 3.5 | 0.525 |
+| Technical feasibility | 10% | 4.5 | 0.45 |
+| **Total** | **100%** |  | **4.045 ≈ 4.05/5** |
 
-**Gate aprovado.** A avaliação foi especializada e cega a justificativas/código; não equivale a teste de usuários. A crítica da implementação real é uma etapa distinta: o ciclo final de screenshots não encontrou P0/P1, com limitações de conteúdo abaixo da dobra e gesture de carrossel explicitadas no [review final](final-review.md).
+**Gate passed.** The evaluation was specialized and blind to the justifications/code; it is not equivalent to user testing. The critique of the real implementation is a distinct stage: the final screenshot cycle found no P0/P1, with the limitations of content below the fold and the carousel gesture stated in the [final review](final-review.md).
 
-## Motivos da seleção
+## Reasons for the selection
 
-- Equilibra familiaridade com plataforma de cursos e identidade própria, sem importar affordances de marketplace que não pertencem à biblioteca local.
-- Coloca próximo passo e retomada antes de métricas, preserva o contexto curso → aula → progresso e mantém o stage 16:9 como área principal do Player.
-- Cobalto indica ação; saffron indica posição/estado. Wordmark LV é monocromático e discreto.
-- Interface em pt-BR; títulos e descrições fornecidos pelos arquivos mantêm idioma original e recebem rótulo contextual.
-- A implementação K v7 e o sistema de tokens estão formalizados em [DESIGN.md](DESIGN.md); as evidências do review final estão registradas em [final-review.md](final-review.md).
+- It balances familiarity with a course platform and an identity of its own, without importing marketplace affordances that do not belong to the local library.
+- It puts the next step and resuming before metrics, preserves the course → lesson → progress context and keeps the 16:9 stage as the Player's main area.
+- Cobalt indicates action; saffron indicates position/state. The LV wordmark is monochrome and discreet.
+- The interface is in pt-BR; titles and descriptions supplied by the files keep their original language and receive a contextual label.
+- The K v7 implementation and the token system are formalized in [DESIGN.md](DESIGN.md); the evidence of the final review is recorded in [final-review.md](final-review.md).
 
-## Riscos e limites aceitos
+## Accepted risks and limits
 
-- A nota de K veio da candidatura v5; versões posteriores ajustaram composição e conteúdo. A implementação final recebeu avaliação visual separada, sem novos P0/P1 aparentes.
-- Screenshots não demonstram navegação completa com teclado/leitor de tela, playback real, persistência fora da fixture nem qualidade em todos os conteúdos do usuário.
-- Não houve pesquisa com participantes nem certificação WCAG 2.2 AA. A cobertura automatizada e suas limitações constam em [final-review.md](final-review.md).
+- K's score came from candidate v5; later versions adjusted composition and content. The final implementation received a separate visual evaluation, with no apparent new P0/P1.
+- Screenshots do not demonstrate full keyboard/screen-reader navigation, real playback, persistence beyond the fixture, or quality across all of the user's content.
+- There was no research with participants and no WCAG 2.2 AA certification. The automated coverage and its limitations are in [final-review.md](final-review.md).
 
-**Decisão:** manter K como direção final e não abrir outra exploração visual sem falha funcional ou bloqueio de acessibilidade confirmado.
+**Decision:** keep K as the final direction and do not open another visual exploration without a confirmed functional failure or accessibility blocker.
 
 ## Post-K review (reopening, see #330)
 

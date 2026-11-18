@@ -1,138 +1,138 @@
 # LearnVault — design review
 
-## Resultado
+## Result
 
-**Direção K implementada; refinamento visual encerrado nesta revisão.** Não há P0/P1 confirmado nas capturas finais. Não serão abertas direções visuais novas sem falha funcional ou bloqueio de acessibilidade reproduzido.
+**Direction K implemented; visual refinement closed in this review.** There is no confirmed P0/P1 in the final captures. No new visual directions will be opened without a reproduced functional failure or accessibility blocker.
 
-A preferência por uma experiência familiar de plataforma de cursos orientou uma biblioteca course-first, sem marketplace: navegação global compacta, retomada curta, prateleiras de cursos, página de curso completa e Player centrado no conteúdo. A exploração comparou três propostas independentes — editorial, workbench e atlas — antes da escolha. A matriz e a justificativa estão em [`docs/design/decision.md`](design/decision.md); o público, a pesquisa e padrões observados estão em [`docs/design/research.md`](design/research.md).
+The preference for a familiar course-platform experience led to a course-first library with no marketplace: compact global navigation, a short resume strip, course shelves, a full course page and a content-centred Player. The exploration compared three independent proposals — editorial, workbench and atlas — before the choice. The matrix and the reasoning are in [`docs/design/decision.md`](design/decision.md); the audience, the research and the observed patterns are in [`docs/design/research.md`](design/research.md).
 
-## Exploração e decisão
+## Exploration and decision
 
-- **A — editorial:** topbar, composição de publicação e capas; falhou em fluxos de navegação e Player.
-- **B — workbench:** rail + topbar e alta densidade; organizou bem a sessão, mas perdeu clareza em mobile e simulava ações.
-- **C — atlas:** dock e mapa de aprendizagem; diferenciou a identidade, mas não sustentou contexto e controles do Player.
-- A/B/C receberam médias de **2,90**, **3,65** e **2,90/5**, abaixo do gate de 4,00. K atingiu **4,05/5** na crítica independente, com nenhuma dimensão abaixo de 3/5. A nota não é teste de usuários.
-- A direção K v7 foi implementada nas seis superfícies: Biblioteca, Curso, Player, Estatísticas, Ajustes e Login. As decisões estão em [`docs/design/concepts.md`](design/concepts.md); tokens e componentes em [`docs/design/DESIGN.md`](design/DESIGN.md) e [`DESIGN.md`](../DESIGN.md).
+- **A — editorial:** topbar, publication-style composition and covers; it failed in navigation flows and the Player.
+- **B — workbench:** rail + topbar and high density; it organized the session well, but lost clarity on mobile and simulated actions.
+- **C — atlas:** dock and learning map; it differentiated the identity, but did not sustain the Player's context and controls.
+- A/B/C received averages of **2.90**, **3.65** and **2.90/5**, below the 4.00 gate. K reached **4.05/5** in the independent critique, with no dimension below 3/5. The score is not user testing.
+- Direction K v7 was implemented on the six surfaces: Library, Course, Player, Statistics, Settings and Sign in. The decisions are in [`docs/design/concepts.md`](design/concepts.md); tokens and components in [`docs/design/DESIGN.md`](design/DESIGN.md) and [`DESIGN.md`](../DESIGN.md).
 
-## Crítica visual e correções finais
+## Visual critique and final fixes
 
-A revisão final serial das capturas reais identificou concorrência entre título/ação no Curso móvel, barra do Player alta, estado de conclusão separado dos controles, meta semanal distante do contexto e busca móvel estreita. Correções aplicadas:
+The final serial review of the real captures found competition between title and action on mobile Course, a tall Player bar, a completion state separated from the controls, a weekly goal far from its context and a narrow mobile search. Fixes applied:
 
-- Reorganização do Curso mobile: título/contexto separados da ação principal, CTA de largura integral.
-- Controles do Player agrupados em uma faixa compacta; conclusão e ação relacionadas permanecem próximas.
-- Meta semanal movida antes do histórico de streak; métricas mobile reorganizadas para reduzir quebras e altura.
-- Busca ampliada; ao pesquisar, a faixa de retomada alheia à consulta desaparece.
-- Empty state usa título estável e mensagem explicativa separada; busca vazia preserva “Limpar busca” e não deixa cards/recents contraditórios.
-- Aula sem arquivo recebe estado “Mídia ausente”; o Player explica recuperação, não oferece reprodução indisponível e preserva progresso.
+- Mobile Course reorganized: title/context separated from the main action, full-width CTA.
+- Player controls grouped in a compact strip; completion and its related action stay close together.
+- Weekly goal moved before the streak history; mobile metrics reorganized to reduce wrapping and height.
+- Search widened; when searching, the resume strip unrelated to the query disappears.
+- Empty state uses a stable title and a separate explanatory message; an empty search keeps "Clear search" and leaves no contradictory cards/recents.
+- A lesson without a file gets a "Media missing" state; the Player explains recovery, does not offer unavailable playback and preserves progress.
 
-O gate visual final não encontrou P0/P1. Partes abaixo da dobra nas telas Course/Estatísticas não foram avaliadas pelas capturas; o cartão seguinte da faixa de retomada aparece parcialmente cortado por rolagem horizontal, mas o gesto não foi testado. Isso é limite de evidência, não alegação de comportamento validado.
+The final visual gate found no P0/P1. Parts below the fold on the Course/Statistics screens were not assessed by the captures; the next card in the resume strip appears partly cut off by horizontal scrolling, but the gesture was not tested. This is a limit of the evidence, not a claim of validated behavior.
 
-## Evidências e Validação
+## Evidence and validation
 
-As verificações visuais da direção K foram realizadas em ambiente de homologação com biblioteca e mídia sintéticas isoladas, cobrindo:
-- Biblioteca, Curso, Player, Estatísticas e Ajustes em 390px, 1280px, 1440px e 1920px nos temas claro e escuro.
-- Estados de login, mídia ausente e busca sem resultados (sem cards órfãos e com ação de limpar busca visível).
-- Ausência de overflow horizontal e cumprimento dos alvos mínimos de 44×44px.
-- Evidências e capturas comparativas registradas no histórico de PRs; a identidade vetorial oficial de produção está fixada em `docs/design/branding/learnvault-banner.svg`.
+The visual checks of direction K were carried out in a staging environment with isolated synthetic library and media, covering:
+- Library, Course, Player, Statistics and Settings at 390px, 1280px, 1440px and 1920px in the light and dark themes.
+- Sign-in, missing-media and no-results-search states (no orphan cards, with the clear-search action visible).
+- No horizontal overflow and compliance with the minimum 44×44px targets.
+- Evidence and comparative captures recorded in the PR history; the official production vector identity is fixed in `docs/design/branding/learnvault-banner.svg`.
 
-## Verificações
+## Checks
 
-- `pnpm --filter learnvault-web check`: passou, 0 erros e 0 warnings.
-- `pnpm --filter learnvault-web test`: passou, 22 arquivos / 313 testes.
-- `pnpm exec playwright test tests/e2e/server.spec.ts --retries=0`: passou, 4/4 cenários.
-- `pnpm --filter learnvault-web build` e `pnpm --filter learnvault-web build:desktop`: passaram.
-- `git diff --check`: passou; Git apenas avisou conversão LF→CRLF em arquivos do checkout Windows.
-- Detector visual final retornou `[]` para os alvos de UI.
-- O check remoto do PR falhou somente no `pnpm audit --audit-level=low` por advisory baixo transitivo em `deepmerge` (`GHSA-gcqx-w48m-w2h4`), via `@sveltejs/vite-plugin-svelte`; o audit reporta sem versão corrigida. Não foi suprimido nem alterado como parte da mudança visual.
+- `pnpm --filter learnvault-web check`: passed, 0 errors and 0 warnings.
+- `pnpm --filter learnvault-web test`: passed, 22 files / 313 tests.
+- `pnpm exec playwright test tests/e2e/server.spec.ts --retries=0`: passed, 4/4 scenarios.
+- `pnpm --filter learnvault-web build` and `pnpm --filter learnvault-web build:desktop`: passed.
+- `git diff --check`: passed; Git only warned about LF→CRLF conversion in files of the Windows checkout.
+- The final visual detector returned `[]` for the UI targets.
+- The PR's remote check failed only on `pnpm audit --audit-level=low` because of a low transitive advisory in `deepmerge` (`GHSA-gcqx-w48m-w2h4`), via `@sveltejs/vite-plugin-svelte`; the audit reports no fixed version. It was not suppressed or changed as part of the visual change.
 
-## Limites
+## Limits
 
-Sem teste com usuários, certificação WCAG 2.2 AA, validação de mídia real, verificação de persistência em dados reais ou execução interativa nativa do binário desktop. A revisão especializada de screenshots não substitui esses testes.
+No user testing, no WCAG 2.2 AA certification, no real-media validation, no persistence check on real data and no interactive native run of the desktop binary. The specialized review of screenshots does not replace these tests.
 
-## Refinamento posterior — 2026-10-29
+## Later refinement — 2026-10-29
 
-### Crítica e decisão
+### Critique and decision
 
-Uma revisão visual independente da captura de 390 px apontou catálogo abaixo da primeira dobra útil e a faixa horizontal de retomada parcialmente cortada. A decisão foi preservar a ordem de retomada → catálogo e as capas compactadas já existentes no mobile; tornar Compacto o padrão esconderia a identidade das capas sem aproximar o início do catálogo. O refinamento reduziu apenas o espaçamento vertical da introdução, busca e seções em até 620 px.
+An independent visual review of the 390 px capture pointed out the catalog below the first useful fold and the horizontal resume strip partly cut off. The decision was to preserve the resume → catalog order and the compact covers already present on mobile; making Compact the default would hide the covers' identity without bringing the start of the catalog closer. The refinement reduced only the vertical spacing of the introduction, search and sections up to 620 px.
 
-A revisão de implementação encontrou uma regressão funcional confirmada: a regra `hover: none` que exibia as ações de capa era sobrescrita mais abaixo pela regra compartilhada de opacidade zero. O problema foi reproduzido no Playwright antes da correção (`opacity: 0`). A regra touch final agora mantém o controle visível e com alvo de 44×44 px; mouse e foco por teclado continuam com seus estados existentes.
+The implementation review found a confirmed functional regression: the `hover: none` rule that showed the cover actions was overridden further down by the shared zero-opacity rule. The problem was reproduced in Playwright before the fix (`opacity: 0`). The final touch rule now keeps the control visible and with a 44×44 px target; mouse and keyboard focus keep their existing states.
 
-### Evidência visual e interação
+### Visual and interaction evidence
 
-- Validações do fluxo isolado em viewport móvel de 390×844: controle touch de capa visível e menu de capa acionável.
-- O fixture deste smoke contém um curso e não tem retomadas; o teste evidencia o espaçamento reduzido e o controle touch visível e acionável.
-- O teste touch confirma `hover: none`, opacidade 1, alvo de 44 px e abertura do menu por toque.
+- Isolated-flow validations on a 390×844 mobile viewport: touch cover control visible and cover menu operable.
+- This smoke's fixture contains one course and no resumes; the test shows the reduced spacing and the visible, operable touch control.
+- The touch test confirms `hover: none`, opacity 1, a 44 px target and the menu opening by touch.
 
-### Verificação
+### Verification
 
-- Falha reproduzida antes: Playwright esperava o controle touch visível e recebeu opacidade 0.
-- Após a correção: `pnpm exec playwright test tests/e2e/server.spec.ts --retries=0` passou, 5/5 cenários.
-- `pnpm --filter learnvault-web test`: 22 arquivos / 313 testes; `check`: 0 erros / 0 warnings; build web e build desktop passaram.
-- Impeccable detector executado em `src/redesign.css`. O relatório contém avisos legados de tokens/radii/tipografia em outras partes da folha; nenhum aviso aponta para as novas regras no final do arquivo. O CSS anterior não foi reformatado nem alterado fora do escopo.
+- Failure reproduced before: Playwright expected the touch control to be visible and received opacity 0.
+- After the fix: `pnpm exec playwright test tests/e2e/server.spec.ts --retries=0` passed, 5/5 scenarios.
+- `pnpm --filter learnvault-web test`: 22 files / 313 tests; `check`: 0 errors / 0 warnings; web build and desktop build passed.
+- Impeccable detector run on `src/redesign.css`. The report contains legacy token/radii/typography warnings in other parts of the sheet; no warning points to the new rules at the end of the file. The earlier CSS was not reformatted or changed outside the scope.
 
-### Limitação de integração
+### Integration limitation
 
-O Open Design MCP não está exposto como ferramenta utilizável neste runtime; não houve chamada nem avaliação atribuída a ele nesta iteração. A crítica independente veio de dois agentes separados e a validação visual/interativa veio do Playwright. Nenhuma avaliação de Open Design foi inventada.
+The Open Design MCP is not exposed as a usable tool in this runtime; there was no call to it and no evaluation attributed to it in this iteration. The independent critique came from two separate agents and the visual/interactive validation came from Playwright. No Open Design evaluation was invented.
 
-## Diagnóstico revisado do Open Design MCP — 2026-10-29
+## Revised diagnosis of the Open Design MCP — 2026-10-29
 
-A nota anterior descrevia corretamente que o runtime desta conversa não forneceu uma ferramenta MCP de topo, mas concluía incorretamente que a integração não estava utilizável. A configuração do usuário está ativa e o bridge STDIO real respondeu; nenhuma configuração ou credencial foi alterada.
+The previous note correctly described that this conversation's runtime did not provide a top-level MCP tool, but wrongly concluded that the integration was not usable. The user's configuration is active and the real STDIO bridge responded; no configuration or credential was changed.
 
-- `~/.omp/agent/mcp.json` contém `open-design` habilitado, transporte STDIO e timeout de 120 s. O processo do Open Design estava ativo e seu daemon local escutava na porta configurada.
-- O handshake MCP `2025-11-25` passou pelo comando configurado. `tools/list` retornou 22 ferramentas; `list_projects` e `get_project` responderam para `learnvault-concept-k-course-library-fresh-20261029`.
-- `get_active_context` informou que não havia projeto ativo naquele momento. O projeto pode ser selecionado explicitamente no argumento `project`, sem ativar ou alterar o canvas.
-- `mcp://opendesign` consulta recursos MCP, não a lista de ferramentas; a ausência de recursos é normal neste servidor e não indica falha de conexão.
-- Esta investigação não criou nem editou projetos ou artefatos.
+- `~/.omp/agent/mcp.json` contains `open-design` enabled, STDIO transport and a 120 s timeout. The Open Design process was active and its local daemon was listening on the configured port.
+- The `2025-11-25` MCP handshake passed through the configured command. `tools/list` returned 22 tools; `list_projects` and `get_project` answered for `learnvault-concept-k-course-library-fresh-20261029`.
+- `get_active_context` reported that there was no active project at that moment. The project can be selected explicitly in the `project` argument, without activating or changing the canvas.
+- `mcp://opendesign` queries MCP resources, not the tool list; the absence of resources is normal on this server and does not indicate a connection failure.
+- This investigation did not create or edit projects or artifacts.
 
-## Refinamento da Biblioteca mobile — 2026-10-29
+## Mobile Library refinement — 2026-10-29
 
-A revisão independente das capturas reais (390×844 claro/escuro e 1440×900 claro; Open Design run `0a06d008-94e5-4c67-9e39-871a311c7798`) não encontrou P0/P1. Registrou três P2 observáveis: metadados da capa mobile visualmente recuados, 8 px entre seletor e grade, e CTAs ocupando 310 px de uma coluna útil de 366 px.
+The independent review of the real captures (390×844 light/dark and 1440×900 light; Open Design run `0a06d008-94e5-4c67-9e39-871a311c7798`) found no P0/P1. It recorded three observable P2s: mobile cover metadata visually indented, 8 px between the selector and the grid, and CTAs taking 310 px of a 366 px useful column.
 
-Correções aplicadas:
+Fixes applied:
 
-- Capas mobile agora esticam o conteúdo pela largura do cartão; título e metadados alinham com a capa e ganham espaço para nomes longos.
-- O intervalo entre seletor e grade sobe para 14 px.
-- Importar e Atualizar formam duas colunas iguais na largura disponível; abaixo de 340 px, padding e fonte diminuem, com os dois rótulos verificados em viewport de 320 px.
-- Importar mantém hierarquia secundária quando há retomada e volta a ser primário sem retomada ou durante uma busca.
+- Mobile covers now stretch the content across the card width; the title and metadata align with the cover and gain room for long names.
+- The gap between the selector and the grid rises to 14 px.
+- Import and Refresh form two equal columns across the available width; below 340 px, padding and font shrink, with both labels checked on a 320 px viewport.
+- Import keeps a secondary hierarchy when there is a resume and becomes primary again with no resume or during a search.
 
-O E2E verifica o alinhamento do título (≤16 px), o intervalo (≥12 px), igualdade das colunas e texto sem overflow em viewports de 320/390 px; também aguarda o fim das transições CSS antes de medir contraste para não ler valores intermediários. Verificado em fixtures sintéticas com capturas registradas no histórico de PRs.
+The E2E checks the title alignment (≤16 px), the gap (≥12 px), column equality and text without overflow on 320/390 px viewports; it also waits for CSS transitions to finish before measuring contrast so as not to read intermediate values. Verified on synthetic fixtures with captures recorded in the PR history.
 
-### Segunda crítica visual
+### Second visual critique
 
-Reavaliação serial após as correções no Open Design run `3b1428ea-0000-48c3-8fb7-8d715b79987d`: aprovada, sem P0/P1. A segunda rodada confirmou CTAs em duas colunas de 179 px com 8 px de intervalo (antes 148/154 px), 14 px entre seletor e grade (antes 8 px) e conteúdo da capa alinhado com recuo interno de 11 px. A ressalva P2 sobre títulos longos foi tratada como hipótese a verificar, não como defeito confirmado.
+Serial re-evaluation after the fixes in Open Design run `3b1428ea-0000-48c3-8fb7-8d715b79987d`: approved, with no P0/P1. The second round confirmed CTAs in two 179 px columns with an 8 px gap (before 148/154 px), 14 px between the selector and the grid (before 8 px) and cover content aligned with an 11 px inner inset. The P2 caveat about long titles was treated as a hypothesis to verify, not as a confirmed defect.
 
-Um E2E com título português longo confirmou o tratamento atual: texto serifado de 15 px, limite de duas linhas com reticências e nenhuma largura excedente no cartão; ao abrir o curso, o título integral aparece no cabeçalho. A abreviação na capa é deliberada para manter a grade compacta; o conteúdo completo permanece acessível no fluxo de Curso.
+An E2E with a long Portuguese title confirmed the current handling: 15 px serif text, a two-line limit with an ellipsis and no excess width in the card; on opening the course, the full title appears in the header. The abbreviation on the cover is deliberate to keep the grid compact; the full content stays accessible in the Course flow.
 
-### Verificação final
+### Final verification
 
-- `pnpm --filter learnvault-web check`: 0 erros, 0 warnings.
-- `pnpm --filter learnvault-web test`: 22 arquivos, 313 testes.
-- `pnpm --filter learnvault-web build` e `pnpm --filter learnvault-web build:desktop`: passaram.
-- `pnpm exec playwright test tests/e2e/server.spec.ts --retries=0`: 6/6 cenários; inclui CTA sem overflow em 320/390 px, controles touch, título longo sem overflow e acesso ao título integral na tela de Curso.
-- As duas rodadas de crítica independente não encontraram P0/P1; os pontos P2 mensuráveis foram corrigidos e a hipótese sobre nomes longos foi reproduzida, mitigada e verificada.
-- A validação não cobre dados pessoais reais nem equivale a teste com usuários.
+- `pnpm --filter learnvault-web check`: 0 errors, 0 warnings.
+- `pnpm --filter learnvault-web test`: 22 files, 313 tests.
+- `pnpm --filter learnvault-web build` and `pnpm --filter learnvault-web build:desktop`: passed.
+- `pnpm exec playwright test tests/e2e/server.spec.ts --retries=0`: 6/6 scenarios; includes CTA without overflow at 320/390 px, touch controls, a long title without overflow and access to the full title on the Course screen.
+- The two rounds of independent critique found no P0/P1; the measurable P2 points were fixed and the hypothesis about long names was reproduced, mitigated and verified.
+- The validation does not cover real personal data and is not equivalent to user testing.
 
-## Terceira rodada de crítica e faixa de retomada — 2026-10-29
+## Third round of critique and the resume strip — 2026-10-29
 
-Uma terceira leitura independente das mesmas capturas de 390×844 propôs catorze achados. Sete não se sustentaram na verificação do código:
+A third independent reading of the same 390×844 captures proposed fourteen findings. Seven did not hold up when checked against the code:
 
-- **Contraste do seletor e das bordas no tema escuro:** os tokens `--blue-soft`, `--blue`, `--ink` e `--line` já entregam cerca de 13:1 para o texto selecionado e 7:1 para a borda; substituí-los por hex fixos teria saído da paleta. Nenhuma alteração aplicada.
-- **Escala tipográfica achatada:** o `h1` da página é 32 px e os `h2` de seção são 24 px no mobile; existe degrau. Nenhuma alteração aplicada.
-- **Título truncado em duas linhas:** é decisão registrada, com o título integral no cabeçalho do Curso e cobertura E2E. Mantido.
-- **Paridade de CTAs:** a alternância primário/secundário é intencional quando há retomada e é verificada por E2E. Mantida.
-- **Badge de status:** “Em andamento” e “Catálogo atualizado.” têm semânticas diferentes (estado persistente e aviso transitório); unificá-las seria abstração sem demanda.
-- **Busca fixa ao rolar:** o topbar quebra em duas linhas a ≤820 px com alturas mínimas diferentes, então qualquer `top` fixo esconde o campo atrás dele. Sem JS ou reorganização de layout, a alternativa seria uma sobreposição incorreta. Descartada.
-- **Esqueletos de carregamento:** o catálogo é carregado uma vez; não há caminho assíncrono que justifique shimmer.
+- **Contrast of the selector and borders in the dark theme:** the tokens `--blue-soft`, `--blue`, `--ink` and `--line` already deliver about 13:1 for the selected text and 7:1 for the border; replacing them with fixed hex values would have left the palette. No change applied.
+- **Flattened type scale:** the page `h1` is 32 px and the section `h2`s are 24 px on mobile; there is a step. No change applied.
+- **Title truncated to two lines:** it is a recorded decision, with the full title in the Course header and E2E coverage. Kept.
+- **CTA parity:** the primary/secondary alternation is intentional when there is a resume and is verified by E2E. Kept.
+- **Status badge:** "In progress" and "Catalog updated." have different semantics (a persistent state and a transient notice); unifying them would be abstraction without demand.
+- **Search pinned while scrolling:** the topbar wraps onto two lines at ≤820 px with different minimum heights, so any fixed `top` hides the field behind it. Without JS or a layout reorganization, the alternative would be an incorrect overlay. Discarded.
+- **Loading skeletons:** the catalog is loaded once; there is no asynchronous path that justifies a shimmer.
 
-O achado que correspondia a uma lacuna real já documentada era a faixa de retomada no mobile: a rolagem horizontal nunca havia sido exercida. A correção foi `scroll-snap-type: x mandatory` (antes `proximity`), escolhida por comportamento determinístico entre Chromium e WebKit, e não por ganho medido no Chromium.
+The finding that corresponded to a real gap already documented was the resume strip on mobile: horizontal scrolling had never been exercised. The fix was `scroll-snap-type: x mandatory` (before `proximity`), chosen for deterministic behavior across Chromium and WebKit, not for a gain measured in Chromium.
 
-O E2E novo usa fixture com duas aulas e quatro retomadas, faz um gesto real de roda horizontal sobre a faixa, confirma `scrollLeft > 0`, verifica que o repouso casa com o alinhamento de referência do primeiro cartão (≤1 px) e que cada cartão, ao ser alcançado, permanece dentro das bordas da faixa. Para provar que o teste não é vazio, a faixa foi temporariamente trocada para `overflow-x: visible`: o cenário falhou com `scrollLeft` em 0, como esperado.
+The new E2E uses a fixture with two lessons and four resumes, makes a real horizontal wheel gesture over the strip, confirms `scrollLeft > 0`, checks that the resting position matches the first card's reference alignment (≤1 px) and that each card, when reached, stays inside the strip's edges. To prove the test is not empty, the strip was temporarily changed to `overflow-x: visible`: the scenario failed with `scrollLeft` at 0, as expected.
 
-Limites desta verificação: o gesto é roda de mouse, não toque real; `proximity` também passa no mesmo desenho de teste, portanto a escolha por `mandatory` não tem evidência de superioridade no Chromium, apenas de determinismo entre engines. Evidência registrada no histórico de testes E2E.
+Limits of this verification: the gesture is a mouse wheel, not real touch; `proximity` also passes on the same test design, so the choice of `mandatory` has no evidence of superiority in Chromium, only of determinism across engines. Evidence recorded in the E2E test history.
 
-### Verificação
+### Verification
 
-- `pnpm --filter learnvault-web check`: 0 erros, 0 warnings.
-- `pnpm --filter learnvault-web test`: 22 arquivos, 313 testes.
-- `pnpm --filter learnvault-web build` e `build:desktop`: passaram.
-- `pnpm exec playwright test tests/e2e/server.spec.ts --retries=0`: 7/7 cenários.
+- `pnpm --filter learnvault-web check`: 0 errors, 0 warnings.
+- `pnpm --filter learnvault-web test`: 22 files, 313 tests.
+- `pnpm --filter learnvault-web build` and `build:desktop`: passed.
+- `pnpm exec playwright test tests/e2e/server.spec.ts --retries=0`: 7/7 scenarios.
