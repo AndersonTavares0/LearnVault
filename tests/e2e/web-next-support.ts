@@ -4,7 +4,7 @@ import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 // Runs the React app (apps/web-next, epic #347) behind the real Rust server and its CSP.
 // The web-next build is the server web root after cutover (#340).
@@ -38,10 +38,15 @@ export async function basicLibrary(library: string) {
 }
 
 /** One server per test: the sign-in limiter counts attempts per address, so a shared server runs out of them. */
-export const createTest = (prepare: (library: string) => Promise<void>) => base.extend<{ origin: string }>({
-	origin: async ({}, use) => {
+export const createTest = (prepare: (library: string) => Promise<void>) => base.extend<{ origin: string; libraryDir: string }>({
+	/** The library root of this test's server, so a test can add a folder after the server started. */
+	libraryDir: async ({}, use) => {
 		const root = await mkdtemp(join(tmpdir(), 'learnvault-web-next-'));
-		const library = join(root, 'library');
+		await use(join(root, 'library'));
+	},
+	origin: async ({ libraryDir }, use) => {
+		const library = libraryDir;
+		const root = dirname(library);
 		// Each top-level folder under the library root is registered as a course, so the
 		// fixtures live inside one folder and their own folders become its modules.
 		await prepare(join(library, 'Course'));

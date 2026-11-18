@@ -1,4 +1,6 @@
 import { expect } from '@playwright/test';
+import { mkdir, readdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { basicLibrary, collectCspViolations, createTest, expectNoAxeViolations, PASSWORD, signIn } from './web-next-support';
 
 // Runs the React app (apps/web-next, epic #347) behind the real Rust server and its CSP.
@@ -277,4 +279,32 @@ test('the top bar fits a 320 px phone with every control inside the screen', asy
 	await page.getByRole('link', { name: 'My learning' }).first().waitFor({ state: 'attached' });
 	const rights = await page.locator('header button, header a').evaluateAll((elements) => elements.filter((element) => element.getBoundingClientRect().width > 0).map((element) => Math.round(element.getBoundingClientRect().right)));
 	expect(Math.max(...rights)).toBeLessThanOrEqual(320);
+});
+
+test('imports a course folder from the interface and refuses a folder outside the library', async ({ page, origin, libraryDir }) => {
+	await signIn(page, origin);
+	await page.getByRole('button', { name: 'Refresh courses' }).click();
+	await expect(page.getByText('Catalog updated.')).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Course', level: 3, exact: true })).toHaveCount(1);
+
+	// A second course appears on disk after the server started.
+	const folder = join(libraryDir, 'Second course');
+	await mkdir(join(folder, 'Part one'), { recursive: true });
+	await writeFile(join(folder, 'Part one', 'Intro.mp4'), Buffer.from('video-fixture'));
+
+	await page.getByRole('button', { name: 'Import course' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Import a course' });
+	await dialog.getByLabel(/folder|path/i).fill(join(libraryDir, '..', '..', 'not-in-the-library'));
+	await dialog.getByRole('button', { name: 'Import course' }).click();
+	await expect(dialog.getByRole('alert')).toBeVisible();
+	await expect(dialog).toBeVisible();
+
+	await dialog.getByLabel(/folder|path/i).fill(folder);
+	await dialog.getByRole('button', { name: 'Import course' }).click();
+	await expect(dialog).toBeHidden();
+	await page.getByRole('button', { name: 'Refresh courses' }).click();
+	await expect(page.getByRole('heading', { name: 'Second course', level: 3 })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Course', level: 3, exact: true })).toHaveCount(1);
+	// The folder on disk was only read.
+	expect((await readdir(folder)).sort()).toEqual(['Part one']);
 });
