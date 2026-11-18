@@ -427,7 +427,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 				</div>
 
 				{contentOpen && (
-					<aside aria-label={tr('Course content', 'Conteúdo do curso')} className={cn('min-w-0 space-y-3 rounded-[2rem] border bg-card p-4 [:root[data-sidebar=left]_&]:lg:order-first', !wide && 'lg:sticky lg:top-6 lg:max-h-[calc(100dvh-3rem)] lg:self-start lg:overflow-y-auto')}>
+					<aside aria-label={tr('Course content', 'Conteúdo do curso')} className={cn('min-w-0 space-y-3 rounded-[2rem] border bg-card p-4 [:root[data-sidebar=left]_&]:lg:order-first', !wide && 'lg:sticky lg:top-6 lg:max-h-[calc(100dvh-11rem)] lg:self-start lg:overflow-y-auto')}>
 						<div className="flex items-start justify-between gap-2 px-1">
 							<div>
 								<h2 className="text-[1.0625rem] font-bold">{tr('Course content', 'Conteúdo do curso')}</h2>
