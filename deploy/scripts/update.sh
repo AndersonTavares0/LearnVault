@@ -64,28 +64,28 @@ record_history() {
         printf "[\n  %s\n]\n" "$entry" > "$HISTORY_FILE"
     else
         tmp_history=$(mktemp)
-        # Remove a última linha que fecha o array ']'
+        # Remove the last line, which closes the array ']'
         sed '$d' "$HISTORY_FILE" > "$tmp_history"
         printf "  ,%s\n]\n" "$entry" >> "$tmp_history"
         mv "$tmp_history" "$HISTORY_FILE"
     fi
 }
 
-log "Iniciando verificação de atualização do LearnVault..."
+log "Starting the LearnVault update check..."
 
-# 1. Consulta versão atual
+# 1. Look up the current version
 current_health=$(docker compose exec -T "$CONTAINER" wget -q -O - http://127.0.0.1:8090/api/healthz 2>/dev/null || true)
-CURRENT_VERSION=$(printf "%s" "$current_health" | grep -o '"version":"[^"]*"' | cut -d'"' -f4 || echo "desconhecida")
+CURRENT_VERSION=$(printf "%s" "$current_health" | grep -o '"version":"[^"]*"' | cut -d'"' -f4 || echo "unknown")
 
-if [ -z "$CURRENT_VERSION" ] || [ "$CURRENT_VERSION" = "desconhecida" ]; then
-    log "Não foi possível obter a versão atual do container em execução."
+if [ -z "$CURRENT_VERSION" ] || [ "$CURRENT_VERSION" = "unknown" ]; then
+    log "Could not read the current version of the running container."
 fi
 
-log "Versão atual instalada: ${CURRENT_VERSION}"
+log "Installed version: ${CURRENT_VERSION}"
 
-# Se não foi fornecida versão alvo, consulta o endpoint interno ou o repositório oficial
+# If no target version was given, query the internal endpoint or the official repository
 if [ -z "$TARGET_VERSION" ]; then
-    log "Consultando versão mais recente disponível..."
+    log "Looking up the latest available version..."
     REPO="${LEARNVAULT_GITHUB_REPO:-AndersonTavares0/LearnVault}"
     if [ "$CHANNEL" = "stable" ]; then
         # The server only reports published stable releases, which is exactly this channel.
@@ -110,9 +110,9 @@ if [ -z "$TARGET_VERSION" ]; then
         fi
     fi
     if [ -n "$TARGET_VERSION" ]; then
-        log "Nova versão identificada: ${TARGET_VERSION}"
+        log "New version found: ${TARGET_VERSION}"
     else
-        log "Nenhuma nova versão identificada ou serviço temporariamente indisponível."
+        log "No new version found, or the service is temporarily unavailable."
         exit 0
     fi
 fi
@@ -160,7 +160,7 @@ if ! printf '%s\n' "$TARGET_VERSION" | grep -Eq "$version_pattern"; then
 fi
 
 if [ "$CURRENT_VERSION" = "$TARGET_VERSION" ]; then
-    log "O LearnVault já está na versão ${TARGET_VERSION}. Nenhuma ação necessária."
+    log "LearnVault is already on version ${TARGET_VERSION}. Nothing to do."
     exit 0
 fi
 
@@ -170,7 +170,7 @@ if printf '%s\n' "$CURRENT_VERSION" | grep -Eq "$version_pattern" && ! version_i
     exit 0
 fi
 
-log "Preparando atualização de ${CURRENT_VERSION} para ${TARGET_VERSION}..."
+log "Preparing the update from ${CURRENT_VERSION} to ${TARGET_VERSION}..."
 
 # 1b. Only an image signed by this project's release workflow is accepted (cosign keyless).
 # The signature is checked before anything is backed up, downloaded or changed, and the image
@@ -224,24 +224,24 @@ if [ "$VERIFY_SIGNATURE" = "true" ]; then
     log "Image signature verified (${verified_digest})."
 fi
 
-# 2. Backup pré-atualização com validação de integridade
+# 2. Pre-update backup with an integrity check
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 BACKUP_PATH="/data/backups/pre-update-${CURRENT_VERSION}-${TIMESTAMP}.sqlite"
 
-log "Criando backup pré-atualização em ${BACKUP_PATH}..."
+log "Creating the pre-update backup at ${BACKUP_PATH}..."
 if ! docker compose exec -T "$CONTAINER" /app/learnvault-server backup --database "$DATABASE_PATH" --output "$BACKUP_PATH"; then
-    log "ERRO: Falha ao gerar o backup pré-atualização. Atualização abortada para segurança dos dados."
-    record_history "failed_pre_backup" "$CURRENT_VERSION" "$TARGET_VERSION" "Falha no backup pré-atualização"
+    log "ERROR: Failed to create the pre-update backup. Update aborted to protect the data."
+    record_history "failed_pre_backup" "$CURRENT_VERSION" "$TARGET_VERSION" "Pre-update backup failed"
     exit 1
 fi
-log "Backup preventivo criado com sucesso."
+log "Pre-update backup created successfully."
 
-# 3. Baixa imagem da nova versão
+# 3. Pull the image of the new version
 NEW_IMAGE="${IMAGE_REPO}:${TARGET_VERSION}"
 if [ -n "$VERIFIED_IMAGE" ]; then
     NEW_IMAGE="$VERIFIED_IMAGE"
 fi
-log "Baixando nova imagem: ${NEW_IMAGE}..."
+log "Pulling the new image: ${NEW_IMAGE}..."
 
 if ! docker pull "$NEW_IMAGE" 2>/dev/null; then
     log "Target image download failed; the running service is unchanged."
@@ -249,7 +249,7 @@ if ! docker pull "$NEW_IMAGE" 2>/dev/null; then
     exit 1
 fi
 
-# 4. Aplica a nova imagem
+# 4. Apply the new image
 # Retain the immutable previous image, not a mutable image tag.
 PREVIOUS_IMAGE=$(docker inspect --format='{{.Image}}' "$CONTAINER" 2>/dev/null || true)
 if [ -z "$PREVIOUS_IMAGE" ]; then
@@ -262,8 +262,8 @@ if LEARNVAULT_IMAGE="$NEW_IMAGE" docker compose up -d --no-build "$CONTAINER"; t
     started=1
 fi
 
-# 5. Validação de Healthcheck com timeout
-log "Aguardando inicialização e validação de healthcheck (até 60s)..."
+# 5. Healthcheck validation with a timeout
+log "Waiting for startup and healthcheck validation (up to 60s)..."
 attempts=0
 max_attempts=30
 healthy=0
@@ -286,29 +286,29 @@ if [ "$healthy" -eq 1 ]; then
 fi
 
 if [ "$healthy" -eq 1 ]; then
-    log "SUCESSO: LearnVault atualizado para a versão ${NEW_ACTIVE_VERSION} e validado com sucesso!"
-    record_history "success" "$CURRENT_VERSION" "$NEW_ACTIVE_VERSION" "Atualização concluída com sucesso"
+    log "SUCCESS: LearnVault updated to version ${NEW_ACTIVE_VERSION} and validated!"
+    record_history "success" "$CURRENT_VERSION" "$NEW_ACTIVE_VERSION" "Update completed successfully"
     exit 0
 else
-    # 6. ROLLBACK AUTOMÁTICO SE FALHAR
-    log "ALERTA CRÍTICO: Healthcheck falhou na nova versão! Iniciando reversão segura (rollback)..."
+    # 6. AUTOMATIC ROLLBACK ON FAILURE
+    log "CRITICAL: The healthcheck failed on the new version! Starting a safe rollback..."
     
-    # Para o container com falha
+    # Stop the failed container
     docker compose stop "$CONTAINER"
     
-    # Restaura o banco de dados pré-atualização
-    log "Restaurando banco de dados a partir do backup preventivo ${BACKUP_PATH}..."
+    # Restore the pre-update database
+    log "Restoring the database from the pre-update backup ${BACKUP_PATH}..."
     LEARNVAULT_IMAGE="$PREVIOUS_IMAGE" docker compose run --rm --entrypoint /app/learnvault-server "$CONTAINER" restore --backup "$BACKUP_PATH" --database "$DATABASE_PATH"
     
-    # Reverte para a imagem anterior
+    # Go back to the previous image
     if [ -n "$PREVIOUS_IMAGE" ]; then
-        log "Restaurando imagem anterior: ${PREVIOUS_IMAGE}..."
+        log "Restoring the previous image: ${PREVIOUS_IMAGE}..."
         LEARNVAULT_IMAGE="$PREVIOUS_IMAGE" docker compose up -d "$CONTAINER"
     else
         docker compose start "$CONTAINER"
     fi
     
-    log "Reversão concluída. O banco de dados e a versão anterior foram restaurados."
-    record_history "rollback" "$CURRENT_VERSION" "$TARGET_VERSION" "Rollback executado após falha de healthcheck na nova versão"
+    log "Rollback complete. The database and the previous version were restored."
+    record_history "rollback" "$CURRENT_VERSION" "$TARGET_VERSION" "Rollback performed after a healthcheck failure on the new version"
     exit 1
 fi
