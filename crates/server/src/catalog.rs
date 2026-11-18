@@ -492,20 +492,7 @@ async fn run_rescan_courses(
         let course_path = course.root.as_path().to_path_buf();
         let scanned = tokio::task::spawn_blocking(move || {
             let _scan_permit = scan_permit;
-            match CourseRoot::resolve(&course_path) {
-                Ok(root) => {
-                    let outcome = learnvault_core::scan(root.as_path());
-                    Some((Some(root), outcome))
-                }
-                Err(CourseRootError::Missing) if course_entry_is_absent(&course_path) => Some((
-                    None,
-                    Ok(ScanOutcome {
-                        files: Vec::new(),
-                        inaccessible: Vec::new(),
-                    }),
-                )),
-                Err(_) => None,
-            }
+            scan_registered_course(&course_path)
         })
         .await
         .map_err(|_| RescanFailure::Failed)?;
@@ -566,9 +553,30 @@ async fn run_rescan_courses(
     Ok(response)
 }
 
+/// Scans a registered course root, treating an absent course entry under a readable
+/// canonical parent directory as a verified empty scan.
+pub(crate) fn scan_registered_course(
+    course_path: &Path,
+) -> Option<(Option<CourseRoot>, learnvault_core::Result<ScanOutcome>)> {
+    match CourseRoot::resolve(course_path) {
+        Ok(root) => {
+            let outcome = learnvault_core::scan(root.as_path());
+            Some((Some(root), outcome))
+        }
+        Err(CourseRootError::Missing) if course_entry_is_absent(course_path) => Some((
+            None,
+            Ok(ScanOutcome {
+                files: Vec::new(),
+                inaccessible: Vec::new(),
+            }),
+        )),
+        Err(_) => None,
+    }
+}
+
 /// An absent entry under a readable parent is covered by the scan. An inaccessible
 /// parent or a parent that now resolves elsewhere cannot establish that absence.
-fn course_entry_is_absent(path: &Path) -> bool {
+pub(crate) fn course_entry_is_absent(path: &Path) -> bool {
     let Some(parent) = path.parent() else {
         return false;
     };
