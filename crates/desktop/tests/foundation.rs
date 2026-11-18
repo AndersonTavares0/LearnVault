@@ -42,15 +42,15 @@ fn crate_root() -> PathBuf {
 
 fn read(path: &Path) -> String {
     fs::read_to_string(path)
-        .unwrap_or_else(|error| panic!("não foi possível ler {}: {error}", path.display()))
+        .unwrap_or_else(|error| panic!("could not read {}: {error}", path.display()))
 }
 
 fn rust_sources() -> Vec<PathBuf> {
     let root = crate_root();
     let mut sources = vec![root.join("build.rs")];
     let mut entries = fs::read_dir(root.join("src"))
-        .expect("o crate desktop precisa manter o diretório src/")
-        .map(|entry| entry.expect("entrada de src/ ilegível").path())
+        .expect("the desktop crate must keep the src/ directory")
+        .map(|entry| entry.expect("unreadable src/ entry").path())
         .filter(|path| path.extension().is_some_and(|ext| ext == "rs"))
         .collect::<Vec<_>>();
     entries.sort();
@@ -62,21 +62,21 @@ fn rust_sources() -> Vec<PathBuf> {
 fn config_embeds_frontend_for_production_without_dev_server() {
     let raw = read(&crate_root().join("tauri.conf.json"));
     let config: serde_json::Value =
-        serde_json::from_str(&raw).expect("tauri.conf.json precisa ser JSON válido");
+        serde_json::from_str(&raw).expect("tauri.conf.json must be valid JSON");
 
     assert_eq!(
         config["build"]["frontendDist"].as_str(),
         Some("frontend-dist"),
-        "o frontend precisa ser embutido a partir de frontend-dist"
+        "the frontend must be embedded from frontend-dist"
     );
     assert!(
         config["build"].get("devUrl").is_none(),
-        "devUrl não é necessário e não deve abrir porta em dev"
+        "devUrl is not required and must not open a port in development"
     );
     assert_eq!(
         config["app"]["windows"][0]["decorations"].as_bool(),
         Some(false),
-        "a janela sem decoração exige a titlebar personalizada"
+        "the undecorated window requires the custom titlebar"
     );
 
     let plugins = config.get("plugins").and_then(|value| value.as_object());
@@ -84,53 +84,53 @@ fn config_embeds_frontend_for_production_without_dev_server() {
         for key in plugins.keys() {
             assert_eq!(
                 key, "updater",
-                "apenas o plugin oficial de updater pode ser configurado"
+                "only the official updater plugin may be configured"
             );
         }
     }
 
     let csp = config["app"]["security"]["csp"]
         .as_str()
-        .expect("a CSP precisa ser explícita");
+        .expect("the CSP must be explicit");
     assert!(
         csp.contains("connect-src ipc: http://ipc.localhost"),
-        "a CSP precisa liberar o IPC do Tauri: {csp}"
+        "the CSP must allow the Tauri IPC: {csp}"
     );
     assert!(
         csp.contains("object-src 'none'"),
-        "a CSP precisa bloquear object/embed: {csp}"
+        "the CSP must block object/embed: {csp}"
     );
     assert!(
         !csp.contains("unsafe-eval"),
-        "a CSP não pode liberar unsafe-eval: {csp}"
+        "the CSP must not allow unsafe-eval: {csp}"
     );
     assert!(
         csp.contains("asset: http://asset.localhost"),
-        "a CSP precisa liberar o protocolo de asset para mídia: {csp}"
+        "the CSP must allow the asset protocol for media: {csp}"
     );
     assert!(
         csp.contains("blob:"),
-        "a CSP precisa liberar blob: para mídia: {csp}"
+        "the CSP must allow blob: for media: {csp}"
     );
     assert!(
         csp.contains("learnvault-media: http://learnvault-media.localhost"),
-        "a CSP precisa liberar o protocolo de mídia local: {csp}"
+        "the CSP must allow the local media protocol: {csp}"
     );
     assert!(
         csp.contains("learnvault-cover: http://learnvault-cover.localhost"),
-        "a CSP precisa liberar o protocolo de capas como imagem: {csp}"
+        "the CSP must allow the covers protocol as an image source: {csp}"
     );
 
     let window = &config["app"]["windows"][0];
     assert_eq!(
         window["label"].as_str(),
         Some("main"),
-        "a janela principal precisa ter o rótulo main"
+        "the main window must have the label main"
     );
     assert_eq!(
         window["url"].as_str(),
         Some("200.html"),
-        "a janela precisa carregar o shell embutido"
+        "the window must load the embedded shell"
     );
 }
 
@@ -138,65 +138,65 @@ fn config_embeds_frontend_for_production_without_dev_server() {
 fn windows_bundle_is_nsis_per_user_with_pt_br_and_english() {
     let raw = read(&crate_root().join("tauri.conf.json"));
     let config: serde_json::Value =
-        serde_json::from_str(&raw).expect("tauri.conf.json precisa ser JSON válido");
+        serde_json::from_str(&raw).expect("tauri.conf.json must be valid JSON");
 
     assert_eq!(
         config["bundle"]["active"].as_bool(),
         Some(true),
-        "o bundle precisa estar ativo para gerar o instalador"
+        "the bundle must be active to produce the installer"
     );
     assert_eq!(
         config["bundle"]["createUpdaterArtifacts"].as_str(),
         Some("v1Compatible"),
-        "o bundle precisa ativar createUpdaterArtifacts para gerar .nsis.zip e .sig"
+        "the bundle must enable createUpdaterArtifacts to produce .nsis.zip and .sig"
     );
     let targets = config["bundle"]["targets"]
         .as_array()
-        .expect("o bundle precisa declarar targets");
+        .expect("the bundle must declare targets");
     assert!(
         targets.iter().any(|target| target == "nsis"),
-        "o alvo Windows é o instalador NSIS: {targets:?}"
+        "the Windows target is the NSIS installer: {targets:?}"
     );
     let icons = config["bundle"]["icon"]
         .as_array()
-        .expect("o bundle precisa listar ícones");
+        .expect("the bundle must list icons");
     assert!(
         icons.iter().any(|icon| icon == "icons/icon.ico"),
-        "o instalador Windows precisa do ícone .ico: {icons:?}"
+        "the Windows installer requires the .ico icon: {icons:?}"
     );
 
     let nsis = &config["bundle"]["windows"]["nsis"];
     assert_eq!(
         nsis["installMode"].as_str(),
         Some("currentUser"),
-        "a instalação é por usuário, sem senha de administrador"
+        "the installation is per user, without an administrator password"
     );
     assert_eq!(
         nsis["displayLanguageSelector"].as_bool(),
         Some(true),
-        "o instalador precisa oferecer a escolha de idioma"
+        "the installer must offer the language choice"
     );
     let languages = nsis["languages"]
         .as_array()
-        .expect("o instalador precisa listar idiomas");
+        .expect("the installer must list languages");
     for language in ["PortugueseBR", "English"] {
         assert!(
             languages.iter().any(|candidate| candidate == language),
-            "o idioma '{language}' precisa estar no instalador: {languages:?}"
+            "the language '{language}' must be in the installer: {languages:?}"
         );
     }
     for key in ["installerIcon", "uninstallerIcon"] {
         assert_eq!(
             nsis[key].as_str(),
             Some("icons/icon.ico"),
-            "o instalador e o desinstalador precisam usar o ícone do aplicativo: {key}"
+            "the installer and uninstaller must use the application icon: {key}"
         );
     }
 
     assert_eq!(
         config["bundle"]["windows"]["webviewInstallMode"]["type"].as_str(),
         Some("downloadBootstrapper"),
-        "o WebView2 ausente é baixado pelo próprio instalador"
+        "the installer downloads WebView2 when it is missing"
     );
 }
 
@@ -204,40 +204,40 @@ fn windows_bundle_is_nsis_per_user_with_pt_br_and_english() {
 fn capability_is_deny_by_default_without_remote_sources() {
     let raw = read(&crate_root().join("capabilities/default.json"));
     let capability: serde_json::Value =
-        serde_json::from_str(&raw).expect("a capability precisa ser JSON válido");
+        serde_json::from_str(&raw).expect("the capability must be valid JSON");
 
     assert!(
         capability.get("remote").is_none(),
-        "capabilities remotas não são permitidas"
+        "remote capabilities are not allowed"
     );
     assert!(
         capability["identifier"].as_str().is_some(),
-        "a capability precisa de um identificador"
+        "the capability requires an identifier"
     );
 
     let windows = capability["windows"]
         .as_array()
-        .expect("a capability precisa listar janelas");
+        .expect("the capability must list windows");
     assert!(
         windows.iter().any(|window| window == "main"),
-        "a capability precisa cobrir a janela main"
+        "the capability must cover the main window"
     );
 
     let permissions = capability["permissions"]
         .as_array()
-        .expect("a capability precisa listar permissões");
+        .expect("the capability must list permissions");
     assert!(
         !permissions.is_empty(),
-        "a capability precisa conceder ao menos o conjunto padrão do núcleo"
+        "the capability must grant at least the core default set"
     );
     for permission in permissions {
         let identifier = permission.as_str().unwrap_or_default();
-        assert_ne!(identifier, "*", "curinga de permissão é proibido");
-        assert!(!identifier.ends_with(":all"), "permissão ampla é proibida");
+        assert_ne!(identifier, "*", "a permission wildcard is forbidden");
+        assert!(!identifier.ends_with(":all"), "broad permission forbidden");
         for forbidden in ["shell", "process", "http", "updater", "fs:", "scope"] {
             assert!(
                 !identifier.contains(forbidden),
-                "permissão privilegiada '{identifier}' é proibida no desktop"
+                "privileged permission '{identifier}' is forbidden in the desktop"
             );
         }
     }
@@ -248,7 +248,7 @@ fn build_registers_the_app_commands_in_the_acl_manifest() {
     let build = read(&crate_root().join("build.rs"));
     assert!(
         build.contains("app_manifest"),
-        "o build precisa declarar o AppManifest do ACL"
+        "the build must declare the ACL AppManifest"
     );
     for command in [
         "desktop_catalog",
@@ -306,7 +306,7 @@ fn build_registers_the_app_commands_in_the_acl_manifest() {
     ] {
         assert!(
             build.contains(command),
-            "o comando '{command}' precisa ser declarado no ACL app-defined"
+            "the command '{command}' must be declared in the app-defined ACL"
         );
     }
 }
@@ -315,10 +315,10 @@ fn build_registers_the_app_commands_in_the_acl_manifest() {
 fn capability_grants_only_the_core_default_and_the_app_commands() {
     let raw = read(&crate_root().join("capabilities/default.json"));
     let capability: serde_json::Value =
-        serde_json::from_str(&raw).expect("a capability precisa ser JSON válido");
+        serde_json::from_str(&raw).expect("the capability must be valid JSON");
     let permissions: Vec<&str> = capability["permissions"]
         .as_array()
-        .expect("a capability precisa listar permissões")
+        .expect("the capability must list permissions")
         .iter()
         .map(|permission| permission.as_str().unwrap_or_default())
         .collect();
@@ -383,7 +383,7 @@ fn capability_grants_only_the_core_default_and_the_app_commands() {
     assert_eq!(
         permissions.len(),
         58,
-        "a capability não pode ampliar além do núcleo, dos controles da titlebar e dos comandos do app: {permissions:?}"
+        "the capability must not extend beyond the core, the titlebar controls and the app commands: {permissions:?}"
     );
 }
 
@@ -391,16 +391,16 @@ fn capability_grants_only_the_core_default_and_the_app_commands() {
 fn capability_exposes_no_dialog_or_filesystem_permission() {
     let raw = read(&crate_root().join("capabilities/default.json"));
     let capability: serde_json::Value =
-        serde_json::from_str(&raw).expect("a capability precisa ser JSON válido");
+        serde_json::from_str(&raw).expect("the capability must be valid JSON");
     for permission in capability["permissions"]
         .as_array()
-        .expect("a capability precisa listar permissões")
+        .expect("the capability must list permissions")
     {
         let identifier = permission.as_str().unwrap_or_default();
         for forbidden in ["dialog", "fs", "store", "shell", "http", "persisted"] {
             assert!(
                 !identifier.contains(forbidden),
-                "o seletor nativo é interno ao Rust e não pode ser concedido ao webview: '{identifier}'"
+                "the native picker is internal to Rust and must not be granted to the webview: '{identifier}'"
             );
         }
     }
@@ -412,17 +412,17 @@ fn dialog_uses_the_xdg_portal_backend_only_on_linux() {
 
     assert!(
         manifest.contains("target.'cfg(target_os = \"linux\")'.dependencies"),
-        "o desktop precisa declarar uma configuração específica para Linux"
+        "the desktop must declare a Linux-specific configuration"
     );
     assert!(
         manifest.contains("features = [\"xdg-portal\"]"),
-        "Linux precisa usar o backend oficial xdg-portal"
+        "Linux must use the official xdg-portal backend"
     );
     assert!(
         manifest.contains(
             "target.'cfg(any(target_os = \"windows\", target_os = \"macos\"))'.dependencies",
         ),
-        "Windows e macOS precisam manter a dependência nativa"
+        "Windows and macOS must keep the native dependency"
     );
 }
 
@@ -433,7 +433,7 @@ fn flatpak_manifest_does_not_grant_broad_home_or_host_filesystem_access() {
     for entry in manifest.lines().map(str::trim) {
         assert!(
             !entry.starts_with("- --filesystem=home") && !entry.starts_with("- --filesystem=host"),
-            "o manifesto não pode conceder filesystem amplo: {entry}"
+            "the manifest must not grant broad filesystem access: {entry}"
         );
     }
 }
@@ -443,34 +443,34 @@ fn the_native_picker_is_registered_in_rust_only() {
     let lib = read(&crate_root().join("src/lib.rs"));
     assert!(
         lib.contains("tauri_plugin_dialog::init()"),
-        "o seletor nativo precisa ser registrado pelo Rust, sem plugin de fs nem store"
+        "the native picker must be registered by Rust, with no fs or store plugin"
     );
 
     let command = read(&crate_root().join("src/command.rs"));
     let marker = "pub async fn desktop_import_course";
     let start = command
         .find(marker)
-        .expect("desktop_import_course precisa existir como comando assíncrono");
+        .expect("desktop_import_course must exist as an async command");
     let rest = &command[start..];
     let signature = &rest[..rest
         .find('{')
-        .expect("a assinatura do comando precisa fechar")];
+        .expect("the command signature must be followed by an opening brace")];
     for forbidden in ["String", "Path", "path"] {
         assert!(
             !signature.contains(forbidden),
-            "o webview não pode enviar caminho: {signature}"
+            "the webview must not send a path: {signature}"
         );
     }
 
-    let body = &rest[..rest.find("\n}").expect("o comando precisa fechar o corpo")];
+    let body = &rest[..rest.find("\n}").expect("the command must close its body")];
     assert!(
         body.contains("state.import_course"),
-        "o comando delega a importação ao estado: {body}"
+        "the command delegates the import to the state: {body}"
     );
     for forbidden in ["rescan", "catalog", "database"] {
         assert!(
             !body.contains(forbidden),
-            "importar um curso não pode disparar rescan nem tocar no banco: {body}"
+            "importing a course must not trigger a rescan or touch the database: {body}"
         );
     }
 
@@ -479,7 +479,7 @@ fn the_native_picker_is_registered_in_rust_only() {
     let setup = setup_block(&lib);
     assert!(
         !setup.contains("rescan"),
-        "a inicialização não pode disparar rescan: {setup}"
+        "startup must not trigger a rescan: {setup}"
     );
 }
 
@@ -487,11 +487,11 @@ fn the_native_picker_is_registered_in_rust_only() {
 fn setup_block(lib: &str) -> &str {
     let start = lib
         .find(".setup(")
-        .expect("o lib.rs precisa registrar um setup");
+        .expect("lib.rs must register a setup block to start the application");
     let end = lib[start..]
         .find(".invoke_handler")
         .map(|offset| start + offset)
-        .expect("o setup precisa terminar antes do invoke_handler");
+        .expect("the setup must end before the invoke_handler");
     &lib[start..end]
 }
 
@@ -501,29 +501,29 @@ fn invoke_handler_registers_only_the_desktop_commands() {
     let marker = "generate_handler![";
     let start = lib
         .find(marker)
-        .expect("o lib.rs precisa registrar um invoke_handler")
+        .expect("lib.rs must register an invoke_handler")
         + marker.len();
     let rest = &lib[start..];
     let end = rest
         .find(']')
-        .expect("o invoke_handler precisa fechar a lista de comandos");
+        .expect("the invoke_handler must close the command list");
     let commands = &rest[..end];
 
     assert!(
         commands.contains("desktop_import_course"),
-        "o handler precisa registrar desktop_import_course: {commands}"
+        "the handler must register desktop_import_course: {commands}"
     );
     assert!(
         commands.contains("desktop_remove_course"),
-        "o handler precisa registrar desktop_remove_course: {commands}"
+        "the handler must register desktop_remove_course: {commands}"
     );
     assert!(
         commands.contains("desktop_catalog"),
-        "o handler precisa registrar desktop_catalog: {commands}"
+        "the handler must register desktop_catalog: {commands}"
     );
     assert!(
         commands.contains("desktop_rescan"),
-        "o handler precisa registrar o comando de rescan explícito: {commands}"
+        "the handler must register the explicit rescan command: {commands}"
     );
     for command in [
         "desktop_study_progress",
@@ -560,7 +560,7 @@ fn invoke_handler_registers_only_the_desktop_commands() {
     ] {
         assert!(
             commands.contains(command),
-            "o handler precisa registrar o comando '{command}': {commands}"
+            "the handler must register the command '{command}': {commands}"
         );
     }
 }
@@ -608,39 +608,39 @@ fn study_commands_are_async_blocking_and_never_accept_an_owner() {
     for (name, delegation) in expected {
         assert!(
             !command.contains(&format!("pub fn {name}")),
-            "{name} não pode ser síncrono (executaria o SQLite na main thread)"
+            "{name} must not be synchronous (it would run SQLite on the main thread)"
         );
         let marker = format!("pub async fn {name}");
         let start = command
             .find(&marker)
-            .unwrap_or_else(|| panic!("{name} precisa ser um comando assíncrono"));
+            .unwrap_or_else(|| panic!("{name} must be an async command"));
         let rest = &command[start..];
         let signature = &rest[..rest
             .find('{')
-            .unwrap_or_else(|| panic!("{name} precisa fechar a assinatura"))];
+            .unwrap_or_else(|| panic!("{name} must close the signature"))];
         // The owner of the progress is fixed in Rust: no study command accepts `owner_id`,
         // nor switches the owner by parameter, nor receives a path.
         for forbidden in ["owner", "owner_id", "Path", "path"] {
             assert!(
                 !signature.contains(forbidden),
-                "{name} não pode receber '{forbidden}': {signature}"
+                "{name} must not accept '{forbidden}': {signature}"
             );
         }
         let body = &rest[..rest
             .find("\n}")
-            .unwrap_or_else(|| panic!("{name} precisa fechar o corpo"))];
+            .unwrap_or_else(|| panic!("{name} must close the body"))];
         assert!(
             body.contains("tauri::async_runtime::spawn_blocking"),
-            "o SQLite bloqueante de {name} precisa rodar em spawn_blocking do Tauri: {body}"
+            "the blocking SQLite of {name} must run in Tauri spawn_blocking: {body}"
         );
         assert!(
             body.contains(delegation),
-            "{name} precisa delegar ao estado: {body}"
+            "{name} must delegate to the state: {body}"
         );
         // The owner is resolved in the adapter: the command neither names nor passes on the local owner.
         assert!(
             !body.contains("LOCAL_OWNER_ID"),
-            "{name} não pode passar o dono local ao estado: {body}"
+            "{name} must not pass the local owner to the state: {body}"
         );
     }
 
@@ -648,14 +648,14 @@ fn study_commands_are_async_blocking_and_never_accept_an_owner() {
     // parameter that would let it choose another library.
     let start = command
         .find("pub async fn desktop_recent_study")
-        .expect("desktop_recent_study precisa existir");
+        .expect("desktop_recent_study must exist");
     let rest = &command[start..];
     let signature = &rest[..rest
         .find('{')
-        .expect("a assinatura do comando precisa fechar")];
+        .expect("the command signature must be followed by an opening brace")];
     assert!(
         signature.contains("limit: Option<usize>"),
-        "o limite do histórico precisa ser opcional: {signature}"
+        "the history limit must be optional: {signature}"
     );
 }
 
@@ -669,26 +669,26 @@ fn catalog_command_offloads_blocking_sqlite_off_the_main_thread() {
     // as a direct dependency.
     assert!(
         !command.contains("pub fn desktop_catalog"),
-        "desktop_catalog não pode continuar síncrono (executaria o SQLite na main thread)"
+        "desktop_catalog must not stay synchronous (it would run SQLite on the main thread)"
     );
 
     let marker = "pub async fn desktop_catalog";
     let start = command
         .find(marker)
-        .expect("desktop_catalog precisa ser um comando assíncrono (pub async fn)");
+        .expect("desktop_catalog must be an async command (pub async fn)");
     let rest = &command[start..];
     let end = rest
         .find("\n}")
-        .expect("o comando desktop_catalog precisa fechar o corpo");
+        .expect("the desktop_catalog command must close its body");
     let body = &rest[..end];
 
     assert!(
         body.contains("tauri::async_runtime::spawn_blocking"),
-        "o SQLite bloqueante precisa rodar em spawn_blocking do Tauri: {body}"
+        "the blocking SQLite must run in Tauri spawn_blocking: {body}"
     );
     assert!(
         body.contains("state.catalog()"),
-        "o trabalho bloqueante continua sendo o catálogo do estado: {body}"
+        "the blocking work is still the state catalog: {body}"
     );
 }
 
@@ -701,34 +701,34 @@ fn rescan_command_offloads_the_blocking_scan_off_the_main_thread() {
     // `tokio`. The webview sends no path: the command has no argument at all.
     assert!(
         !command.contains("pub fn desktop_rescan"),
-        "desktop_rescan não pode ser síncrono (executaria a varredura na main thread)"
+        "desktop_rescan must not be synchronous (it would run the scan on the main thread)"
     );
 
     let marker = "pub async fn desktop_rescan";
     let start = command
         .find(marker)
-        .expect("desktop_rescan precisa ser um comando assíncrono (pub async fn)");
+        .expect("desktop_rescan must be an async command (pub async fn)");
     let rest = &command[start..];
     let signature = &rest[..rest
         .find('{')
-        .expect("a assinatura do comando precisa fechar")];
+        .expect("the command signature must be followed by an opening brace")];
     for forbidden in ["String", "Path", "path"] {
         assert!(
             !signature.contains(forbidden),
-            "o webview não pode enviar caminho ao rescan: {signature}"
+            "the webview must not send a path to the rescan: {signature}"
         );
     }
 
     let body = &rest[..rest
         .find("\n}")
-        .expect("o comando desktop_rescan precisa fechar o corpo")];
+        .expect("the desktop_rescan command must close its body")];
     assert!(
         body.contains("tauri::async_runtime::spawn_blocking"),
-        "a varredura bloqueante precisa rodar em spawn_blocking do Tauri: {body}"
+        "the blocking scan must run in Tauri spawn_blocking: {body}"
     );
     assert!(
         body.contains("state.rescan()"),
-        "o trabalho bloqueante continua sendo o rescan do estado: {body}"
+        "the blocking work is still the state rescan: {body}"
     );
 }
 
@@ -738,19 +738,19 @@ fn rescan_is_never_triggered_at_startup_or_after_selection() {
     let setup = setup_block(&lib);
     assert!(
         !setup.contains("rescan"),
-        "a inicialização do aplicativo não pode disparar rescan: {setup}"
+        "application startup must not trigger a rescan: {setup}"
     );
 
     let command = read(&crate_root().join("src/command.rs"));
     let marker = "pub async fn desktop_import_course";
     let start = command
         .find(marker)
-        .expect("desktop_import_course precisa existir como comando assíncrono");
+        .expect("desktop_import_course must exist as an async command");
     let rest = &command[start..];
-    let body = &rest[..rest.find("\n}").expect("o comando precisa fechar o corpo")];
+    let body = &rest[..rest.find("\n}").expect("the command must close its body")];
     assert!(
         !body.contains("rescan"),
-        "importar um curso nunca pode disparar um rescan automático: {body}"
+        "importing a course must never trigger an automatic rescan: {body}"
     );
 }
 
@@ -762,23 +762,23 @@ fn media_protocol_is_registered_without_a_new_capability() {
     let lib = read(&crate_root().join("src/lib.rs"));
     assert!(
         lib.contains("media::register"),
-        "o protocolo de mídia precisa ser registrado no builder: {lib}"
+        "the media protocol must be registered on the builder: {lib}"
     );
 
     let media = read(&crate_root().join("src/media.rs"));
     assert!(
         media.contains("register_uri_scheme_protocol"),
-        "o protocolo precisa ser registrado pela API oficial do Tauri"
+        "the protocol must be registered through the official Tauri API"
     );
     assert!(
         media.contains("MAIN_WEBVIEW_LABEL"),
-        "o protocolo precisa restringir a janela principal"
+        "the protocol must restrict the main window"
     );
 
     let raw = read(&crate_root().join("capabilities/default.json"));
     assert!(
         !raw.contains("learnvault-media"),
-        "o protocolo de mídia não pode ampliar a capability do webview"
+        "the media protocol must not widen the webview capability"
     );
 }
 
@@ -790,25 +790,25 @@ fn cover_protocol_is_registered_without_a_new_capability() {
     let lib = read(&crate_root().join("src/lib.rs"));
     assert!(
         lib.contains("covers::register"),
-        "o protocolo de capas precisa ser registrado no builder: {lib}"
+        "the covers protocol must be registered on the builder: {lib}"
     );
 
     let covers = read(&crate_root().join("src/covers.rs"));
     for token in ["register_uri_scheme_protocol", "MAIN_WEBVIEW_LABEL"] {
         assert!(
             covers.contains(token),
-            "o protocolo de capas precisa usar a API oficial do Tauri e restringir a janela principal: {token}"
+            "the covers protocol must use the official Tauri API and restrict the main window: {token}"
         );
     }
     assert!(
         covers.contains("apply_media_cors"),
-        "o protocolo de capas precisa reusar o CORS de origem exata da mídia"
+        "the covers protocol must reuse the exact-origin CORS from media"
     );
 
     let raw = read(&crate_root().join("capabilities/default.json"));
     assert!(
         !raw.contains("learnvault-cover"),
-        "o protocolo de capas não pode ampliar a capability do webview"
+        "the covers protocol must not widen the webview capability"
     );
 }
 
@@ -819,7 +819,7 @@ fn desktop_source_has_no_network_listener_or_http_server() {
         for token in FORBIDDEN_SOURCE_TOKENS {
             assert!(
                 !content.contains(token),
-                "{} não pode conter '{token}'",
+                "{} must not contain '{token}'",
                 source.display()
             );
         }
@@ -837,7 +837,7 @@ fn manifest_declares_no_privileged_plugin_or_network_stack() {
         for dependency in FORBIDDEN_MANIFEST_DEPS {
             assert!(
                 !trimmed.starts_with(dependency),
-                "a dependência '{dependency}' não pertence ao desktop"
+                "the dependency '{dependency}' does not belong in the desktop"
             );
         }
     }
