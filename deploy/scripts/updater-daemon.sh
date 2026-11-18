@@ -1,6 +1,6 @@
 #!/bin/sh
-# LearnVault - Daemon de Atualização Automática Opt-in
-# Respeita a janela de manutenção configurada (ex: AUTO_UPDATE_WINDOW="03:00-05:00")
+# LearnVault - opt-in automatic update daemon
+# Respects the configured maintenance window (e.g. AUTO_UPDATE_WINDOW="03:00-05:00")
 set -eu
 
 AUTO_UPDATE="${AUTO_UPDATE:-false}"
@@ -36,9 +36,9 @@ in_window() {
 }
 
 if [ "$AUTO_UPDATE" != "true" ]; then
-    log "AUTO_UPDATE está desativado (padrão seguro). O container updater ficará ocioso."
-    log "Para habilitar atualizações automáticas, defina AUTO_UPDATE=true no .env."
-    # Dorme aguardando sinal
+    log "AUTO_UPDATE is off (the safe default). The updater container will stay idle."
+    log "To enable automatic updates, set AUTO_UPDATE=true in .env."
+    # Sleeps, waiting for a signal
     while true; do sleep 86400; done
 fi
 
@@ -63,23 +63,23 @@ if [ -z "$CHECK_INTERVAL_SECONDS" ] || [ "$CHECK_INTERVAL_SECONDS" -gt 214748364
     log "CHECK_INTERVAL_SECONDS must be between 1 and 2147483647."
     exit 1
 fi
-# Assegura que o plugin do docker compose está presente se executando em Alpine/docker:cli
+# Ensures the docker compose plugin is present when running on Alpine/docker:cli
 if ! docker compose version >/dev/null 2>&1; then
     if command -v apk >/dev/null 2>&1; then
-        log "Instalando plugin do Docker Compose no container updater..."
+        log "Installing the Docker Compose plugin in the updater container..."
         apk add --no-cache docker-cli-compose >/dev/null 2>&1 || true
     fi
 fi
 
-log "Iniciando daemon de atualização automática (Janela: ${AUTO_UPDATE_WINDOW}, Intervalo: ${CHECK_INTERVAL_SECONDS}s)..."
+log "Starting the automatic update daemon (window: ${AUTO_UPDATE_WINDOW}, interval: ${CHECK_INTERVAL_SECONDS}s)..."
 
 
 while true; do
     if in_window "$AUTO_UPDATE_WINDOW"; then
-        log "Dentro da janela de manutenção (${AUTO_UPDATE_WINDOW}). Verificando atualizações..."
-        /scripts/update.sh || log "Aviso: processo de atualização retornou erro ou nenhuma atualização necessária."
+        log "Inside the maintenance window (${AUTO_UPDATE_WINDOW}). Checking for updates..."
+        /scripts/update.sh || log "Warning: the update process returned an error or no update was needed."
     else
-        log "Fora da janela de manutenção (${AUTO_UPDATE_WINDOW}). Aguardando próxima verificação..."
+        log "Outside the maintenance window (${AUTO_UPDATE_WINDOW}). Waiting for the next check..."
     fi
     sleep "$CHECK_INTERVAL_SECONDS"
 done

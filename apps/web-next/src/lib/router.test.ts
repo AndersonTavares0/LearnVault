@@ -37,35 +37,35 @@ describe('hash router', () => {
 		expect(routeFromHash('#/player/course-1/aula')).toBe('player');
 		expect(locationFromHash('#/course/course%20one')).toEqual({ route: 'course', courseId: 'course one', lessonPath: null });
 		expect(locationFromHash('#/course/course-1/modules/aula%20one')).toEqual({ route: 'course', courseId: 'course-1', lessonPath: 'modules/aula one' });
-		// Barra final não inventa uma aula de caminho vazio.
+		// A trailing slash does not invent a lesson with an empty path.
 		expect(locationFromHash('#/course/course-1/')).toEqual({ route: 'course', courseId: 'course-1', lessonPath: null });
 		expect(locationFromHash('#/player/course-1/modules/aula%20one')).toEqual({ route: 'player', courseId: 'course-1', lessonPath: 'modules/aula one' });
 		expect(locationFromHash('#/player/%E0%A4%A/aula')).toEqual({ route: 'player', courseId: null, lessonPath: 'aula' });
 
-		// Rota de anotações globais
+		// Global notes route
 		expect(routeFromHash('#/notes')).toBe('notes');
 		expect(locationFromHash('#/notes')).toEqual({ route: 'notes', courseId: null, lessonPath: null });
 		expect(destinationAfterLogin('#/notes')).toBe('#/notes');
 
-		// Histórico de aulas assistidas
+		// History of watched lessons
 		expect(routeFromHash('#/history')).toBe('history');
 		expect(locationFromHash('#/history')).toEqual({ route: 'history', courseId: null, lessonPath: null });
 		expect(destinationAfterLogin('#/history')).toBe('#/history');
 		expect(href('history')).toBe('#/history');
 
-		// Navegação com timestamp em query string ?t=
+		// Navigation with a timestamp in the query string ?t=
 		expect(locationFromHash('#/course/c1/aula?t=45')).toEqual({ route: 'course', courseId: 'c1', lessonPath: 'aula', positionSeconds: 45 });
 		expect(href('course', 'c1', 'aula', 45)).toBe('#/course/c1/aula?t=45');
 		expect(href('notes')).toBe('#/notes');
 	});
 
 	it('defaults unknown and login hashes to the fallback route of the build', () => {
-		// O desktop não tem sessão: login e endereços desconhecidos caem na tela inicial.
+		// The desktop has no session: sign-in and unknown addresses fall to the home screen.
 		expect(routeFromHash('', 'home')).toBe('home');
 		expect(routeFromHash('#/login', 'home')).toBe('home');
 		expect(routeFromHash('#/desconhecido', 'home')).toBe('home');
 		expect(locationFromHash('#/login', 'home')).toEqual({ route: 'home', courseId: null, lessonPath: null });
-		// Rotas nomeadas continuam valendo independentemente do padrão do build.
+		// Named routes keep applying regardless of the build's default.
 		expect(routeFromHash('#/settings', 'home')).toBe('settings');
 	});
 
@@ -107,7 +107,7 @@ describe('hash router', () => {
 		const data = catalog([course('course-1', [lessonNode('aula')]), course('course-2', [lessonNode('aula')])]);
 
 		expect(findLesson(data, 'course-2', 'aula')?.path).toBe('aula');
-		// O caminho relativo é o mesmo nos dois cursos: a identidade desempata.
+		// The relative path is the same in both courses: the identity breaks the tie.
 		expect(findLesson(data, 'course-2', 'missing')).toBeNull();
 		expect(findLesson(data, 'unknown', 'aula')).toBeNull();
 	});
@@ -155,9 +155,9 @@ describe('hash router', () => {
 		expect(findLesson(data, null, 'removido.mp4')).toBeNull();
 	});
 
-	// Portado do PR 121 (nós canônicos recursivos): o roteador é a única porta de entrada de
-	// uma aula, então um `kind` desconhecido não pode ficar inalcançável. A estrutura tem
-	// níveis aninhados (módulo dentro do curso) como na árvore canônica.
+	// Ported from PR 121 (recursive canonical nodes): the router is the only entry door to
+	// a lesson, so an unknown `kind` cannot become unreachable. The structure has
+	// nested levels (module inside the course) as in the canonical tree.
 	it('keeps an unknown-kind file reachable through open/deep-link and media id', () => {
 		const files: FileEntry[] = [
 			{ name: 'video.mp4', path: 'curso/mod/aula.mp4', size: 10, mediaId: 'm1', kind: 'media' },
@@ -187,7 +187,7 @@ describe('hash router', () => {
 		expect(cleanMediaTitle('01 - Hierarquia visual.mp4')).toBe('Hierarquia visual');
 		expect(cleanMediaTitle('02_Introdução.mkv')).toBe('Introdução');
 		expect(cleanMediaTitle('aula.mp4')).toBe('aula');
-		// Um nome que ficaria vazio após a limpeza cai no próprio nome, nunca num rótulo vazio.
+		// A name that would become empty after cleanup falls back to the name itself, never an empty label.
 		expect(cleanMediaTitle('01 - .mp4')).toBe('01 - .mp4');
 	});
 
@@ -219,7 +219,7 @@ describe('hash router', () => {
 	});
 
 	it('uses the nearest grouping as the module context and none directly under the course', () => {
-		// O primeiro nível sob o curso é servido com papel `category`; ainda é o módulo visível.
+		// The first level under the course is served with the `category` role; it is still the visible module.
 		const category: CatalogNode = { title: 'Modulo 1', path: 'Modulo 1', role: 'category', files: [], looseFiles: [], children: [lessonNode('Modulo 1/aula', 'm1')] };
 		const data = catalog([course('course-1', [category]), course('course-2', [lessonNode('aula', 'm2')])]);
 

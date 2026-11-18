@@ -67,16 +67,16 @@ describe('player media and subtitles', () => {
 	});
 	it('advertises study sync on both transports and keeps SRT conversion on HTTP', () => {
 		// Os dois transportes implementam Study: o HTTP pelas rotas e o desktop pelos
-		// comandos IPC. A conversão de SRT sob demanda continua dependendo de `fetch`.
+		// IPC commands. On-demand SRT conversion still depends on `fetch`.
 		expect(studySyncSupported).toBe(true);
 		expect(srtConversionSupported).toBe(__LEARNVAULT_TRANSPORT__ === 'http');
 	});
 	it('only syncs study when the transport delivers a media source', () => {
-		// HTTP: a fonte acompanha a mídia, então o player sincroniza como antes.
+		// HTTP: the source accompanies the media, so the player syncs as before.
 		expect(studySyncEnabled(true, 'm1', '/api/media?path=aula.mp4')).toBe(true);
-		// Desktop também entrega fonte por media_id, então a barra de estudo permanece ativa.
+		// The desktop also delivers a source by media_id, so the study bar stays active.
 		expect(studySyncEnabled(true, 'm1', 'learnvault-media://localhost/m1')).toBe(true);
-		// Sem mídia conhecida ou com o estudo desabilitado, nada é sincronizado.
+		// With no known media or with study disabled, nothing is synced.
 		expect(studySyncEnabled(true, null, '/api/media?path=aula.mp4')).toBe(false);
 		expect(studySyncEnabled(false, 'm1', '/api/media?path=aula.mp4')).toBe(false);
 	});

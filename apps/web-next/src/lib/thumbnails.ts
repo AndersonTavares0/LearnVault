@@ -163,7 +163,7 @@ export class ThumbnailCache {
 	}
 }
 
-/** Fila compartilhada que limita decodificações concorrentes e libera vagas após erros. */
+/** Shared queue that limits concurrent decodes and frees slots after errors. */
 export class ThumbnailTaskQueue {
 	private active = 0;
 	private readonly waiters: Array<() => void> = [];
@@ -185,7 +185,7 @@ export class ThumbnailTaskQueue {
 	}
 }
 
-/** Busca o cache antes de decodificar e só persiste capturas válidas. */
+/** Looks in the cache before decoding and only persists valid captures. */
 export async function getOrCreateThumbnail(
 	cache: ThumbnailCache,
 	queue: ThumbnailTaskQueue,
@@ -246,7 +246,7 @@ export function observeThumbnailVisibility(
 	};
 }
 
-/** Seleciona o primeiro vídeo confiável seguindo a ordem canônica da árvore. */
+/** Selects the first reliable video following the tree's canonical order. */
 export function selectThumbnailSource(course: CatalogNode): FileEntry | null {
 	function visit(nodes: CatalogNode[]): FileEntry | null {
 		for (const node of nodes) {
@@ -358,7 +358,7 @@ function canvasToJpeg(canvas: HTMLCanvasElement): Promise<Blob | null> {
 	return new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.82));
 }
 
-/** Decodifica uma mídia isolada e exporta um frame; qualquer falha preserva o fallback visual. */
+/** Decodes a single media and exports a frame; any failure preserves the visual fallback. */
 export async function captureVideoThumbnail(
 	mediaUrl: string,
 	dependencies: VideoCaptureDependencies = browserCaptureDependencies
@@ -407,8 +407,8 @@ export async function captureVideoThumbnail(
 
 /**
  * Selects and loads the course thumbnail without allowing optional media failures to escape.
- * Uma capa personalizada (upload da issue #237) tem precedência: quando presente, nenhuma
- * captura é feita, nem mesmo uma leitura de cache.
+ * A custom cover (upload from issue #237) takes precedence: when present, no
+ * capture is made, not even a cache read.
  */
 export async function loadCourseThumbnail(options: {
 	course: CatalogNode;

@@ -16,7 +16,7 @@ export type Statistics = {
 
 const DAY_SECONDS = 86_400;
 
-/** Agrega o catálogo e o histórico recente sem consultar o servidor de novo. */
+/** Aggregates the catalog and the recent history without querying the server again. */
 export function buildStatistics(catalog: Catalog | null, recent: StudyProgress[], now = Date.now()): Statistics {
 	const courses = (catalog?.nodes ?? []).map((course) => ({ course, counts: countCatalogNode(course) }));
 	const totals = courses.reduce<Statistics['totals']>(
@@ -54,7 +54,7 @@ export const DEFAULT_WEEKLY_GOAL = 3;
 export const MIN_WEEKLY_GOAL = 1;
 export const MAX_WEEKLY_GOAL = 7;
 
-/** Aceita apenas inteiros de 1 a 7; qualquer outro valor cai no padrão. */
+/** Accepts only integers from 1 to 7; any other value falls to the default. */
 export function parseWeeklyGoal(value: unknown): number {
 	const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN;
 	return Number.isInteger(parsed) && parsed >= MIN_WEEKLY_GOAL && parsed <= MAX_WEEKLY_GOAL ? parsed : DEFAULT_WEEKLY_GOAL;

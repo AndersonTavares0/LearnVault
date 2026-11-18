@@ -1,4 +1,4 @@
-# LearnVault - Proxy Reverso Caddy com HTTPS automático e cabeçalhos de segurança
+# LearnVault - Caddy reverse proxy with automatic HTTPS and security headers
 # Uso: docker compose -f compose.yaml -f compose.proxy.yaml up -d
 services:
   caddy:

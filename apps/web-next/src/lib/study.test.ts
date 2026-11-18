@@ -55,7 +55,7 @@ describe('position saver', () => {
 		const save = vi.fn().mockResolvedValue(progress('m1', 0));
 		const saver = createPositionSaver(save);
 		await Promise.all([saver.request('m1', 1), saver.request('m1', 2), saver.request('m1', 3)]);
-		// primeira + a última coalescida; as posições intermediárias são descartadas
+		// first + the last coalesced; the intermediate positions are discarded
 		expect(save).toHaveBeenCalledTimes(2);
 		expect(save).toHaveBeenLastCalledWith('m1', 3);
 	});
@@ -84,7 +84,7 @@ describe('position saver', () => {
 	});
 
 	it('ignores stale results by sequence when an older response arrives late', async () => {
-		// Simula uma resposta antiga que chega depois de uma nova já ter sido aplicada.
+		// Simulates an old response that arrives after a newer one has already been applied.
 		const { save, resolve } = deferredSave();
 		const saver = createPositionSaver(save);
 

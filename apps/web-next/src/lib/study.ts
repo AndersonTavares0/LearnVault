@@ -8,18 +8,18 @@ export type SaveResult =
 	| { kind: 'queued' };
 
 /**
- * Cria um salvador de posição que serializa as requisições e coalesca múltiplas
- * atualizações enquanto uma requisição está em voo.
+ * Creates a position saver that serializes requests and coalesces multiple
+ * updates while a request is in flight.
  *
- * Isso evita duas condições de corrida comuns no player:
- * 1. Duas requisições paralelas de `recordPosition` e a resposta mais antiga chega
- *    por último, sobrescrevendo o progresso com uma posição stale.
- * 2. Vários eventos `timeupdate` disparam requisições sucessivas, criando carga
- *    desnecessária no servidor.
+ * This avoids two common race conditions in the player:
+ * 1. Two parallel `recordPosition` requests where the older response arrives
+ *    last, overwriting the progress with a stale position.
+ * 2. Several `timeupdate` events firing successive requests, creating unnecessary
+ *    load on the server.
  *
- * Apenas uma requisição é enviada por vez. Se novas posições chegam durante o voo,
- * apenas a última é mantida e enviada assim que a anterior terminar. Uma sequência
- * numérica interna descarta respostas stale caso alguma requisição paralela escape.
+ * Only one request is sent at a time. If new positions arrive during the flight,
+ * only the last one is kept and sent as soon as the previous one finishes. An internal
+ * numeric sequence discards stale responses in case a parallel request slips through.
  */
 export function createPositionSaver(save: (mediaId: string, position: number) => Promise<StudyProgress>) {
 	let saving = false;

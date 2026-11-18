@@ -1,10 +1,10 @@
-# LearnVault - Serviço Companion de Atualização Automática (Opt-in)
-# O container da aplicação LearnVault NUNCA monta o socket do Docker. O updater também não:
-# ele fala com um proxy que filtra a API (docker-proxy), e só o proxy monta o socket.
-# Este container isolado executa com permissões estritas e validação de healthcheck com rollback.
+# LearnVault - companion service for automatic updates (opt-in)
+# The LearnVault application container NEVER mounts the Docker socket. Neither does the updater:
+# it talks to a proxy that filters the API (docker-proxy), and only the proxy mounts the socket.
+# This isolated container runs with strict permissions and healthcheck validation with rollback.
 #
-# Uso manual: docker compose -f compose.yaml -f compose.updater.yaml run --rm updater
-# Uso contínuo (agendado): docker compose -f compose.yaml -f compose.updater.yaml up -d updater
+# Manual use: docker compose -f compose.yaml -f compose.updater.yaml run --rm updater
+# Continuous use (scheduled): docker compose -f compose.yaml -f compose.updater.yaml up -d updater
 services:
   # Filters the Docker API: only the sections update.sh needs are allowed, everything else
   # (secrets, swarm, builds, plugins, commit...) is refused with 403. This narrows the
