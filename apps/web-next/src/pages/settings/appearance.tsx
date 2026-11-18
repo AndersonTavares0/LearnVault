@@ -44,7 +44,7 @@ export function AppearanceSettings() {
 			<Panel className="space-y-6 p-5 sm:p-6">
 				<h2 className="text-lg font-bold">{tr('Colour', 'Cor')}</h2>
 			<Choice legend={tr('Theme', 'Tema')} options={THEMES} value={value.theme} label={(option) => ({ light: tr('Light', 'Claro'), dark: tr('Dark', 'Escuro'), system: tr('Follow the system', 'Seguir o sistema') })[option]} onChange={(theme) => change({ theme })} />
-			<fieldset className="space-y-2.5">
+			<fieldset className="min-w-0 space-y-2.5">
 				<legend className="text-sm font-semibold">{tr('Surface palette', 'Paleta de fundo')}</legend>
 				<div className="flex flex-wrap gap-2">
 					{SURFACES.map((surface) => {
@@ -76,7 +76,7 @@ export function AppearanceSettings() {
 					})}
 				</div>
 			</fieldset>
-			<fieldset className="space-y-3">
+			<fieldset className="min-w-0 space-y-3">
 				<legend className="text-sm font-semibold">{tr('Accent color', 'Cor de destaque')}</legend>
 				<div className="flex flex-wrap gap-2">
 					{ACCENT_PRESETS.map((preset) => {
@@ -92,7 +92,7 @@ export function AppearanceSettings() {
 				<div className="flex flex-wrap items-end gap-3">
 					<div className="space-y-1.5">
 						<Label htmlFor="accent-custom" className="text-sm">{tr('Your own color', 'Sua própria cor')}</Label>
-						<div className="flex items-center gap-2">
+						<div className="flex flex-wrap items-center gap-2">
 							<input aria-label={tr('Pick a color', 'Escolher uma cor')} type="color" value={custom} onChange={(event) => { const hex = event.target.value.toUpperCase(); setCustom(hex); change({ accent: hex }); }} className="size-11 cursor-pointer rounded-lg border border-input bg-background p-1" />
 							<Input id="accent-custom" value={custom} onChange={(event) => setCustom(event.target.value.toUpperCase())} spellCheck={false} maxLength={7} className="w-32 font-mono" />
 							<Button variant="outline" disabled={!/^#[0-9A-F]{6}$/.test(custom)} onClick={() => change({ accent: custom })}>{tr('Use this color', 'Usar esta cor')}</Button>
@@ -131,7 +131,7 @@ export function AppearanceSettings() {
 					/>
 					<Choice legend={tr('Course content in a lesson', 'Conteúdo do curso na aula')} options={SIDEBARS} value={value.sidebar} label={(option) => (option === 'right' ? tr('On the right', 'À direita') : tr('On the left', 'À esquerda'))} onChange={(sidebar) => change({ sidebar })} />
 				</div>
-				<fieldset className="space-y-3">
+				<fieldset className="min-w-0 space-y-3">
 					<legend className="text-sm font-semibold">{tr('What My learning shows', 'O que Meu aprendizado mostra')}</legend>
 					<div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
 						<SwitchCard label={tr('Continue learning row', 'Linha “Continuar estudando”')} checked={value.showContinue} onChange={(showContinue) => change({ showContinue })} />
@@ -153,7 +153,7 @@ export function AppearanceSettings() {
 
 function Choice<T extends string>({ legend, options, value, label, onChange }: { legend: string; options: readonly T[]; value: T; label: (value: T) => ReactNode; onChange: (value: T) => void }) {
 	return (
-		<fieldset className="space-y-2">
+		<fieldset className="min-w-0 space-y-2">
 			<legend className="text-sm font-semibold">{legend}</legend>
 			<div className="flex flex-wrap gap-2">
 				{options.map((option) => (
