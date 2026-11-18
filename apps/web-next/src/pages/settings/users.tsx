@@ -19,7 +19,7 @@ function AccessPicker({ id, courses, unrestricted, selected, onChange }: { id: s
 	const visible = query ? courses.filter((course) => course.title.toLowerCase().includes(query)) : courses;
 	const toggle = (courseId: string, checked: boolean) => onChange({ unrestricted, selected: checked ? [...selected, courseId] : selected.filter((item) => item !== courseId) });
 	return (
-		<fieldset className="space-y-2">
+		<fieldset className="min-w-0 space-y-2">
 			<legend className="text-sm font-medium">{tr('Course access', 'Acesso a cursos')}</legend>
 			<label className="flex min-h-11 items-center gap-3 text-sm">
 				<input type="checkbox" className="size-5 accent-[var(--primary)]" checked={unrestricted} onChange={(event) => onChange({ unrestricted: event.target.checked, selected })} />

@@ -194,6 +194,8 @@ test('main pages keep their content inside narrow and desktop viewports', async 
 			), `${width}px ${route}: clipped content`).toEqual([]);
 			await page.screenshot({ path: testInfo.outputPath(`${width}-${route.replaceAll('/', '').replaceAll('#', '-') || 'home'}.png`), fullPage: true });
 			expect(await page.evaluate(() => document.documentElement.scrollWidth), `${width}px ${route}`).toBeLessThanOrEqual(width);
+			// The content region scrolls now, so a control wider than its card widens it without widening the document.
+			expect(await page.locator('#main').evaluate((element) => element.scrollWidth - element.clientWidth), `${width}px ${route}: content region scrolls sideways`).toBeLessThanOrEqual(1);
 		}
 	}
 });
