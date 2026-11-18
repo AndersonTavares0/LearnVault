@@ -151,7 +151,7 @@ The mark is the **Academy Portico**: a Greek school front with a gold arched doo
 | Importing a course | *Ad fontes* | Back to the sources |
 | An empty library | *ἀρχὴ ἥμισυ παντός* | The beginning is half of the whole |
 
-Logos, the banner and the icon sources are vector files in [`docs/design/branding/`](docs/design/branding/). The design record is [`DESIGN.md`](DESIGN.md) and the product record is [`PRODUCT.md`](PRODUCT.md).
+Logos, the seal, the banner and the icon sources are vector files in [`docs/design/branding/`](docs/design/branding/), with the usage rules in its [README](docs/design/branding/README.md). The design record is [`DESIGN.md`](DESIGN.md) and the product record is [`PRODUCT.md`](PRODUCT.md).
 
 ---
 
