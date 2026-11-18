@@ -340,3 +340,37 @@ for (const name of ['script', 'cycle', 'truncated']) {
 		expect(violations).toEqual([]);
 	});
 }
+
+test('the player shortcuts mute, change the volume and the speed, and play and pause', async ({ page, origin }) => {
+	await openVideoLesson(page, origin);
+	const video = page.locator('video');
+	const state = () => video.evaluate((element: HTMLVideoElement) => ({ paused: element.paused, muted: element.muted, volume: Math.round(element.volume * 100) / 100, rate: element.playbackRate }));
+	await page.getByRole('group', { name: 'Media player' }).focus();
+
+	await page.keyboard.press('m');
+	await expect.poll(async () => (await state()).muted).toBe(true);
+	await page.keyboard.press('m');
+	await expect.poll(async () => (await state()).muted).toBe(false);
+
+	await page.keyboard.press('ArrowDown');
+	await expect.poll(async () => (await state()).volume).toBe(0.9);
+	await page.keyboard.press('ArrowUp');
+	await expect.poll(async () => (await state()).volume).toBe(1);
+
+	await page.keyboard.press(']');
+	await expect.poll(async () => (await state()).rate).toBe(1.25);
+	await page.keyboard.press('[');
+	await expect.poll(async () => (await state()).rate).toBe(1);
+
+	await page.keyboard.press('Space');
+	await expect.poll(async () => (await state()).paused).toBe(false);
+	await page.keyboard.press('Space');
+	await expect.poll(async () => (await state()).paused).toBe(true);
+
+	// A shortcut typed into a field is text, not a command.
+	await page.getByRole('tab', { name: 'Notes' }).click();
+	await page.getByRole('button', { name: /Add note at/ }).click();
+	await page.getByLabel(/Note at/).fill('m] k');
+	expect((await state()).muted).toBe(false);
+	expect((await state()).rate).toBe(1);
+});
