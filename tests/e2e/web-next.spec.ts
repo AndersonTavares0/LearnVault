@@ -133,6 +133,56 @@ test('keeps legacy links working', async ({ page, origin }) => {
 	await expect(page.getByRole('heading', { name: 'Progress' })).toBeVisible();
 });
 
+test('keeps the sign-in page scrollable on a short viewport', async ({ page, origin }) => {
+	// About 400% browser zoom on a 1280 x 1024 window, or a phone held sideways. The document is not
+	// locked outside the shell, so the wheel still reaches the button (issue #607).
+	await page.setViewportSize({ width: 360, height: 260 });
+	await page.goto(`${origin}/#/notes`);
+	const signInButton = page.getByRole('button', { name: 'Sign in' });
+	await expect(signInButton).toBeVisible();
+	expect(await page.evaluate(() => getComputedStyle(document.documentElement).overflowY)).not.toBe('hidden');
+	await page.mouse.move(180, 130);
+	await page.mouse.wheel(0, 600);
+	await expect(signInButton).toBeInViewport();
+});
+
+test('pins the top bar and scrolls the content region below it', async ({ page, origin }) => {
+	await signIn(page, origin);
+	await page.goto(`${origin}/#/settings`);
+	await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+
+	// The document no longer scrolls: the region under the bar does (issue #607).
+	const bar = page.locator('header');
+	const scroller = page.locator('#main');
+	expect(await page.evaluate(() => getComputedStyle(document.documentElement).overflowY)).toBe('hidden');
+	await page.evaluate(() => window.scrollTo(0, 500));
+	expect(await page.evaluate(() => window.scrollY)).toBe(0);
+	expect(await scroller.evaluate((main) => getComputedStyle(main).overflowY)).toBe('auto');
+	expect(await scroller.evaluate((main) => main.scrollHeight > main.clientHeight)).toBe(true);
+
+	const barBox = (await bar.boundingBox())!;
+	const mainBox = (await scroller.boundingBox())!;
+	// The scrollbar belongs to the region under the bar, not to the whole window.
+	expect(mainBox.y).toBeGreaterThanOrEqual(barBox.y + barBox.height);
+
+	await scroller.evaluate((main) => { main.scrollTop = main.scrollHeight; });
+	await expect.poll(() => scroller.evaluate((main) => main.scrollTop)).toBeGreaterThan(0);
+	// Scrolling to the end leaves the bar and its account menu in place.
+	expect((await bar.boundingBox())!.y).toBe(barBox.y);
+	await expect(bar.getByRole('button', { name: 'Account: admin' })).toBeVisible();
+	await expectNoAxeViolations(page, 'settings scrolled');
+
+	// The phone tab bar keeps floating over the bottom edge, clear of the last content.
+	await page.setViewportSize({ width: 375, height: 700 });
+	const tabs = page.getByRole('navigation', { name: 'Sections', exact: true });
+	await expect(tabs).toBeVisible();
+	await scroller.evaluate((main) => { main.scrollTop = main.scrollHeight; });
+	await expect.poll(() => scroller.evaluate((main) => main.scrollTop)).toBeGreaterThan(0);
+	const tabsTop = (await tabs.boundingBox())!.y;
+	expect(await page.locator('#appearance').evaluate((section) => section.getBoundingClientRect().bottom)).toBeLessThanOrEqual(tabsTop);
+});
+
+
 test('admin settings pass axe and new accounts start with no course access', async ({ page, origin }) => {
 	const violations = collectCspViolations(page);
 	await page.emulateMedia({ reducedMotion: 'reduce' });

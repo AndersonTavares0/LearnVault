@@ -1,6 +1,6 @@
 import { BookOpen, ChartNoAxesColumn, History, Layers, LogOut, Moon, NotebookPen, Search, Settings, Sun, UserRound, type LucideIcon } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useState, type ReactNode } from 'react';
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { BrandMark } from '@/components/brand';
 import { DesktopTitlebar } from '@/components/desktop-titlebar';
@@ -36,6 +36,22 @@ const navItems = () => [
  * search and account menu; on phones a bottom tab bar replaces the topbar links.
  * Server builds require a session; the desktop build has a local identity.
  */
+/**
+ * Stops the document from scrolling while the shell is on screen (see app.css): the content region
+ * scrolls instead. The sign-in page and the route error page sit outside the shell, so they keep
+ * a scrollable document, which a short or zoomed viewport needs to reach their controls.
+ */
+function DocumentLock() {
+	useLayoutEffect(() => {
+		const root = document.documentElement;
+		root.dataset.appShell = '';
+		return () => {
+			delete root.dataset.appShell;
+		};
+	}, []);
+	return null;
+}
+
 export function AppShell() {
 	useLocale();
 	const session = useSession();
@@ -67,10 +83,13 @@ export function AppShell() {
 
 	const user = session.data.user;
 	return (
-		<div className="min-h-dvh pb-20 lg:pb-0">
+		// The bar and the banners stay put and the content region owns the scroll, so the page
+		// scrollbar starts below the top bar instead of crossing it (issue #607).
+		<div className="flex h-dvh flex-col print:block print:h-auto">
+			<DocumentLock />
 			<SkipLink />
 			<DesktopTitlebar />
-			<header className="border-b print:hidden">
+			<header className="shrink-0 border-b print:hidden">
 				<div className="mx-auto flex h-[4.5rem] max-w-[var(--container-max,88rem)] items-center gap-x-8 px-5 sm:px-10">
 					<Link to="/" className="inline-flex items-center gap-2.5 rounded-md font-heading text-2xl font-bold tracking-tight" aria-label={tr('LearnVault home', 'Início do LearnVault')}><BrandMark className="size-8 text-foreground" />LearnVault</Link>
 					<nav aria-label={tr('Main', 'Principal')} className="hidden flex-1 justify-center gap-1 lg:flex">
@@ -90,8 +109,11 @@ export function AppShell() {
 			</header>
 			<UpdateNotice isAdmin={Boolean(user.isAdmin)} />
 			<IndexingIndicator isAdmin={Boolean(user.isAdmin)} />
-			<main id="main" tabIndex={-1} className="mx-auto w-full max-w-[var(--container-max,88rem)] px-5 py-8 outline-none sm:px-10 sm:py-10">
-				<Outlet />
+			<main id="main" tabIndex={-1} className="app-scroll min-h-0 flex-1 overflow-y-auto outline-none print:overflow-visible">
+				{/* The phone tab bar floats over the bottom edge, hence the extra clearance. */}
+				<div className="mx-auto w-full max-w-[var(--container-max,88rem)] px-5 pt-8 pb-28 sm:px-10 sm:pt-10 sm:pb-32 lg:pb-10">
+					<Outlet />
+				</div>
 			</main>
 			<MobileTabs />
 		</div>
