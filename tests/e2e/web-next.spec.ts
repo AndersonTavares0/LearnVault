@@ -270,3 +270,20 @@ test('an unknown address lands on a working page instead of a blank screen', asy
 	await expect(page.getByRole('link', { name: 'My learning' }).first()).toBeVisible();
 	expect(errors).toEqual([]);
 });
+
+test('an expired session sends the visitor back to sign in and returns them to the page they were on', async ({ page, origin }) => {
+	await signIn(page, origin);
+	await page.getByRole('link', { name: 'My learning' }).first().waitFor();
+	// The session row disappears on the server (expiry, or a sign-out in another tab).
+	await page.request.post(`${origin}/api/logout`, { headers: { Origin: origin } });
+	let sessionChecks = 0;
+	page.on('request', (request) => { if (new URL(request.url()).pathname === '/api/me') sessionChecks += 1; });
+	await page.getByRole('link', { name: 'Notes' }).first().click();
+	await expect(page.getByRole('heading', { name: 'Sign in', level: 1 })).toBeVisible();
+	// One check answers the question; a loop of checks was the bug.
+	expect(sessionChecks).toBeLessThanOrEqual(2);
+	await page.getByLabel('Username').fill('admin');
+	await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
+	await page.getByRole('button', { name: 'Sign in' }).click();
+	await expect(page.getByRole('heading', { name: 'Notes', level: 1 })).toBeVisible();
+});
