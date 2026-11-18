@@ -1,4 +1,4 @@
-//! Testes do índice FTS5 e da busca global.
+//! Tests of the FTS5 index and of global search.
 
 use learnvault_core::{
     Database, MAX_SEARCH_QUERY_CHARS, create_study_note, delete_study_note, search,

@@ -1,11 +1,11 @@
-//! Importação explícita e limitada do banco SQLite do serviço Go.
+//! Explicit, limited import of the Go service's SQLite database.
 //!
-//! O importador nunca abre a origem para escrita, faz o backup antes de criar a saída,
-//! grava a saída em um arquivo temporário e só o promove depois de validar integridade,
-//! chaves estrangeiras e contagens. A raiz física da biblioteca não participa da operação.
-//! A entrada aceita somente o schema Go v8 completo. Tombstones órfãos e tombstones com
-//! `is_media` diferente de 1 são recusados: o schema Rust exige uma mídia real e não possui
-//! uma coluna equivalente, portanto inventá-la ou descartá-la perderia informação.
+//! The importer never opens the source for writing, takes the backup before creating the output,
+//! writes the output to a temporary file and only promotes it after validating integrity,
+//! foreign keys and counts. The library's physical root does not take part in the operation.
+//! The input accepts only the full Go schema v8. Orphan tombstones and tombstones with
+//! `is_media` different from 1 are refused: the Rust schema requires a real media and has no
+//! equivalent column, so inventing or discarding it would lose information.
 
 use std::{
     collections::BTreeMap,
@@ -27,35 +27,35 @@ use crate::{
     paths::{KeyMode, relative_path_key},
 };
 
-/// Entradas explícitas da conversão de um banco Go para um banco Rust.
+/// Explicit inputs of the conversion from a Go database to a Rust database.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LegacyImportOptions {
-    /// Banco SQLite Go, aberto somente para leitura.
+    /// Go SQLite database, opened read-only.
     pub input: PathBuf,
-    /// Caminho final do banco Rust.
+    /// Final path of the Rust database.
     pub output: PathBuf,
-    /// Cópia de segurança da origem, criada antes da importação.
+    /// Safety copy of the source, created before the import.
     pub backup: PathBuf,
-    /// Identidade da biblioteca a ser criada no banco Rust.
+    /// Identity of the library to be created in the Rust database.
     pub library_id: String,
 }
 
-/// Quantidades verificadas e promovidas pela importação.
+/// Counts verified and promoted by the import.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LegacyImportReport {
-    /// Usuários importados.
+    /// Users imported.
     pub users: usize,
-    /// Sessões importadas.
+    /// Sessions imported.
     pub sessions: usize,
-    /// Arquivos de catálogo importados como mídia.
+    /// Catalog files imported as media.
     pub media: usize,
-    /// Estados de estudo importados.
+    /// Study states imported.
     pub study_states: usize,
-    /// Remoções explícitas importadas.
+    /// Explicit removals imported.
     pub removals: usize,
 }
 
-/// Importa um banco Go sem alterar a origem nem a biblioteca física.
+/// Imports a Go database without changing the source or the physical library.
 pub fn import_go_database(options: LegacyImportOptions) -> Result<LegacyImportReport> {
     validate_paths(&options)?;
 

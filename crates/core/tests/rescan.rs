@@ -1,8 +1,8 @@
-//! Testes da política de rescan e da persistência da descoberta.
+//! Tests of the rescan policy and of discovery persistence.
 //!
-//! Cobrem a ausência confiável por subárvore, a reutilização de `media_id`, a ambiguidade
-//! de chaves, o histórico de varreduras com falha, a atomicidade da aplicação e a garantia
-//! de que a biblioteca física permanece intocada.
+//! They cover reliable absence per subtree, the reuse of `media_id`, key ambiguity,
+//! the history of failed scans, the atomicity of the application and the guarantee
+//! that the physical library stays untouched.
 
 use std::path::Path;
 
@@ -14,7 +14,7 @@ use learnvault_core::{
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
-/// Identificador da biblioteca usada na maioria dos testes.
+/// Identifier of the library used in most of the tests.
 const LIB: &str = "bib-1";
 
 fn scanned(path: &str, size: u64, mtime: i64, mode: KeyMode) -> ScannedFile {
@@ -45,7 +45,7 @@ fn count(db: &Database, table: &str) -> i64 {
         .expect("a contagem deve ser consultável")
 }
 
-/// Identidade, tamanho, mtime e disponibilidade de uma linha de mídia, por chave.
+/// Identity, size, mtime and availability of a media row, by key.
 fn media_row(db: &Database, key: &str) -> Option<(String, i64, i64, String)> {
     db.connection()
         .query_row(
@@ -100,7 +100,7 @@ fn progress_position(db: &Database, owner: &str, media_id: &str) -> Option<i64> 
         .ok()
 }
 
-/// Manifesto recursivo de uma árvore: caminho relativo, tamanho e mtime em nanossegundos.
+/// Recursive manifest of a tree: relative path, size and mtime in nanoseconds.
 fn manifest(root: &Path) -> Vec<(String, u64, u64)> {
     fn walk(base: &Path, current: &Path, entries: &mut Vec<(String, u64, u64)>) {
         let mut children: Vec<_> = std::fs::read_dir(current)
@@ -321,7 +321,7 @@ fn media_under_an_unreadable_subtree_is_preserved_while_absence_elsewhere_is_rec
         mode,
     )?;
 
-    // `A` não pôde ser lida e `C/aula.mp4` desapareceu de uma área verificada.
+    // `A` could not be read and `C/lesson.mp4` disappeared from a verified area.
     let summary = apply_scan(
         &mut db,
         LIB,
@@ -440,7 +440,7 @@ fn ambiguous_keys_are_reported_and_never_applied() -> TestResult {
     )?;
     let before = media_row(&db, "a/b.mp4").expect("mídia catalogada");
 
-    // No Unix, `a\b.mp4` é um nome de arquivo que produz a mesma chave de `a/b.mp4`.
+    // On Unix, `a\b.mp4` is a file name that produces the same key as `a/b.mp4`.
     let summary = apply_scan(
         &mut db,
         LIB,
@@ -572,9 +572,9 @@ fn a_failed_apply_rolls_the_whole_transaction_back() -> TestResult {
     let mut db = Database::open(&path)?;
     let mode = KeyMode::Sensitive;
 
-    // Injeção determinística de falha no meio da aplicação: um gatilho que aborta
-    // qualquer inserção de mídia. O gatilho é criado por outra conexão ao mesmo arquivo,
-    // sem expor acesso interno do `Database`.
+    // Deterministic failure injection in the middle of the application: a trigger that aborts
+    // any media insert. The trigger is created by another connection to the same file,
+    // without exposing the `Database`'s internal access.
     {
         let injected = rusqlite::Connection::open(&path)?;
         injected.execute_batch(
@@ -700,7 +700,7 @@ fn rescanning_a_real_tree_is_read_only_and_complete() -> TestResult {
         "a varredura não pode criar, alterar ou remover nada na biblioteca"
     );
 
-    // Segunda varredura sobre a mesma árvore: nada novo e nada marcado como ausente.
+    // Second scan over the same tree: nothing new and nothing marked as missing.
     let second = rescan(&mut db, LIB, root)?;
     assert_eq!(second.inserted, 0);
     assert_eq!(second.marked_missing, 0);
@@ -928,8 +928,8 @@ fn a_failed_scan_history_write_preserves_the_original_failure() -> TestResult {
     let path = dir.path().join("learnvault.sqlite");
     let mut db = Database::open(&path)?;
 
-    // O histórico também pode falhar. O gatilho é criado por outra conexão ao mesmo
-    // arquivo, sem expor acesso interno do `Database`.
+    // The history can also fail. The trigger is created by another connection to the same
+    // file, without exposing the `Database`'s internal access.
     {
         let injected = rusqlite::Connection::open(&path)?;
         injected.execute_batch(

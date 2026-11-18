@@ -1,48 +1,48 @@
-//! Normalização e resolução de caminhos relativos da biblioteca.
+//! Normalization and resolution of relative paths of the library.
 //!
-//! O domínio nunca trata uma string de caminho como identidade: a identidade é o
-//! `media_id`. O caminho relativo é apenas a localização atual do arquivo dentro da
-//! biblioteca, e a chave de comparação (`relative_path_key`) é derivada dele.
+//! The domain never treats a path string as identity: the identity is the
+//! `media_id`. The relative path is only the file's current location inside the
+//! library, and the comparison key (`relative_path_key`) is derived from it.
 //!
-//! A resolução é **puramente lexical**: estas funções não tocam o sistema de arquivos.
-//! O confinamento lexical é necessário, mas não é suficiente: a verificação do destino
-//! real do arquivo — links simbólicos e junctions — pertence à entrega de resolução de
-//! mídia, que confere o objeto aberto.
+//! Resolution is **purely lexical**: these functions do not touch the file system.
+//! Lexical confinement is necessary but not sufficient: checking the real target
+//! of the file — symbolic links and junctions — belongs to the media-resolution delivery,
+//! which checks the open object.
 //!
-//! No modo do Windows um componente que contenha `:` é recusado, porque `:` abre um
-//! fluxo alternativo de dados (`aula.mp4:fluxo`) em vez do arquivo previsto. Em sistemas
-//! Unix `:` é um caractere comum em nomes de arquivo e continua válido.
+//! In Windows mode a component containing `:` is refused, because `:` opens an alternate
+//! data stream (`lesson.mp4:stream`) instead of the intended file. On Unix systems
+//! `:` is an ordinary character in file names and stays valid.
 
 use std::path::{Path, PathBuf};
 
 use crate::error::{Error, Result};
 
-/// Modo de comparação de caminhos.
+/// Path comparison mode.
 ///
-/// O modo é um parâmetro explícito, e não uma consulta ao sistema operacional, para que
-/// os dois comportamentos possam ser verificados no mesmo ambiente de testes.
+/// The mode is an explicit parameter, not a query to the operating system, so that
+/// both behaviours can be verified in the same test environment.
 ///
-/// Neste projeto [`KeyMode::Insensitive`] corresponde ao modo do Windows: é o que
-/// [`KeyMode::for_host`] devolve lá e é o modo em que as regras de caminho específicas do
-/// Windows valem — em especial a recusa de componentes com `:`, que abririam um fluxo
-/// alternativo de dados. O modo insensível não deve ser confundido com uma montagem
-/// insensível a maiúsculas em outro sistema, que continua sem essas regras.
+/// In this project [`KeyMode::Insensitive`] corresponds to Windows mode: it is what
+/// [`KeyMode::for_host`] returns there and it is the mode in which the Windows-specific path rules
+/// apply — in particular the refusal of components with `:`, which would open an alternate
+/// data stream. The insensitive mode must not be confused with a case-insensitive mount
+/// on another system, which still does not have those rules.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeyMode {
-    /// Diferencia maiúsculas de minúsculas.
+    /// Case-sensitive.
     Sensitive,
-    /// Ignora maiúsculas de minúsculas.
+    /// Case-insensitive.
     Insensitive,
 }
 
 impl KeyMode {
-    /// Modo de comparação do sistema operacional atual.
+    /// Comparison mode of the current operating system.
     ///
-    /// O Windows não diferencia maiúsculas de minúsculas no caminho e, entre os alvos
-    /// declarados do projeto, é o único sistema onde isso é a regra. Os demais alvos
-    /// preservam a caixa no sistema de arquivos padrão; uma montagem que não preserve
-    /// (por exemplo um compartilhamento ou um volume montado) continua sendo tratada
-    /// como sensível, e isso está registrado como limitação conhecida.
+    /// Windows does not distinguish case in paths and, among the project's declared
+    /// targets, it is the only system where that is the rule. The other targets
+    /// preserve case on the default file system; a mount that does not preserve it
+    /// (for example a share or a mounted volume) is still treated
+    /// as sensitive, and this is recorded as a known limitation.
     pub fn for_host() -> Self {
         if cfg!(windows) {
             KeyMode::Insensitive
@@ -52,21 +52,21 @@ impl KeyMode {
     }
 }
 
-/// Normaliza um caminho relativo e produz a chave de comparação.
+/// Normalizes a relative path and produces the comparison key.
 ///
-/// O caminho precisa ser relativo e não pode conter componentes `.` ou `..`, componentes
-/// vazios, bytes nulos ou componentes com prefixo de unidade (`C:`). Separadores `\` e
-/// `/` são convertidos para `/`. No modo [`KeyMode::Insensitive`] apenas letras ASCII
-/// são dobradas para minúsculas, o mesmo comportamento de `COLLATE NOCASE` no SQLite.
+/// The path must be relative and cannot contain `.` or `..` components, empty
+/// components, null bytes or components with a drive prefix (`C:`). Separators `\` and
+/// `/` are converted to `/`. In [`KeyMode::Insensitive`] mode only ASCII letters
+/// are folded to lowercase, the same behaviour as `COLLATE NOCASE` in SQLite.
 ///
-/// Separações são normalizadas para `/` em qualquer sistema, para que a chave de um
-/// mesmo arquivo seja a mesma quando a biblioteca é usada em plataformas diferentes.
-/// Isso significa que um nome de arquivo que contenha `\` no Unix produz a mesma chave
-/// de um caminho aninhado equivalente; a colisão é detectada pela restrição de
-/// unicidade do banco, e o caso está registrado como limitação conhecida.
+/// Separators are normalized to `/` on any system, so the key of the same
+/// file is the same when the library is used on different platforms.
+/// This means that a file name containing `\` on Unix produces the same key
+/// as an equivalent nested path; the collision is detected by the database's
+/// uniqueness constraint, and the case is recorded as a known limitation.
 pub fn relative_path_key(path: &str, mode: KeyMode) -> Result<String> {
-    // O modo insensível é o modo do Windows (ver [`KeyMode::for_host`]), e é nele que a
-    // regra de fluxo alternativo de dados precisa valer.
+    // The insensitive mode is Windows mode (see [`KeyMode::for_host`]), and it is in it that the
+    // alternate-data-stream rule must apply.
     let normalized = normalize_relative(path, mode == KeyMode::Insensitive)?;
 
     Ok(match mode {
@@ -75,21 +75,21 @@ pub fn relative_path_key(path: &str, mode: KeyMode) -> Result<String> {
     })
 }
 
-/// Indica se uma chave de caminho está na área indicada — a própria área ou algo dentro
-/// dela.
+/// Tells whether a path key is in the indicated area — the area itself or something inside
+/// it.
 ///
-/// A comparação respeita a fronteira de componente: `A` cobre `A` e `A/x`, mas não `AB`.
-/// É usada pela política de rescan e pelo catálogo ao tratar áreas não verificadas.
+/// The comparison respects the component boundary: `A` covers `A` and `A/x`, but not `AB`.
+/// It is used by the rescan policy and by the catalog when handling unverified areas.
 pub(crate) fn is_under_area(key: &str, area: &str) -> bool {
     key == area
         || (key.len() > area.len() && key.starts_with(area) && key.as_bytes()[area.len()] == b'/')
 }
 
-/// Resolve um caminho relativo dentro da raiz da biblioteca.
+/// Resolves a relative path inside the library root.
 ///
-/// A função confina o resultado por análise lexical e recusa caminhos absolutos, com
-/// componentes `.` ou `..`, vazios, malformados ou com prefixo de unidade. Nenhum acesso
-/// ao sistema de arquivos é feito aqui.
+/// The function confines the result by lexical analysis and refuses absolute paths, those with
+/// `.` or `..` components, empty, malformed ones or with a drive prefix. No access
+/// to the file system is done here.
 pub fn resolve_within(root: &Path, relative: &str) -> Result<PathBuf> {
     let normalized = normalize_relative(relative, host_is_windows())?;
 
@@ -98,10 +98,10 @@ pub fn resolve_within(root: &Path, relative: &str) -> Result<PathBuf> {
         resolved.push(component);
     }
 
-    // Defesa em profundidade: no Windows, `PathBuf::push` descarta o caminho acumulado
-    // quando o componente tem prefixo próprio (por exemplo `C:`). A validação por
-    // componente já recusa esse caso; esta checagem mantém o contrato verdadeiro mesmo
-    // se a validação mudar.
+    // Defence in depth: on Windows, `PathBuf::push` discards the accumulated path
+    // when the component has its own prefix (for example `C:`). The per-component
+    // validation already refuses that case; this check keeps the contract true even
+    // if the validation changes.
     if !resolved.starts_with(root) {
         return Err(Error::InvalidRelativePath {
             path: relative.to_owned(),
@@ -111,7 +111,7 @@ pub fn resolve_within(root: &Path, relative: &str) -> Result<PathBuf> {
     Ok(resolved)
 }
 
-/// Indica se a plataforma atual é o Windows, onde `:` abre um fluxo alternativo de dados.
+/// Tells whether the current platform is Windows, where `:` opens an alternate data stream.
 fn host_is_windows() -> bool {
     cfg!(windows)
 }
@@ -125,8 +125,8 @@ fn normalize_relative(path: &str, windows: bool) -> Result<String> {
 
     let mut components = Vec::new();
     for component in path.split(['/', '\\']) {
-        // A validação é por componente, não apenas no início da string: um componente
-        // como `C:` no meio do caminho também descarta a raiz ao ser empilhado.
+        // The validation is per component, not only at the start of the string: a component
+        // such as `C:` in the middle of the path also discards the root when it is pushed.
         if component.is_empty()
             || component == "."
             || component == ".."

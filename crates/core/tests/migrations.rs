@@ -1,4 +1,4 @@
-//! Testes do schema criado pela migração inicial: restrições, chaves e unicidade.
+//! Tests of the schema created by the initial migration: constraints, keys and uniqueness.
 
 use learnvault_core::Database;
 
@@ -8,11 +8,11 @@ fn database() -> Database {
     Database::open_in_memory().expect("banco em memória deve abrir com o schema aplicado")
 }
 
-/// Afirma que a operação falhou por violação de restrição do SQLite.
+/// Asserts that the operation failed from a SQLite constraint violation.
 ///
-/// Verificar o tipo do erro em vez de apenas `is_err()` garante que o teste falhe pelo
-/// motivo certo: uma restrição declarada no schema, e não um erro de sintaxe, de tipo ou
-/// de coluna inexistente.
+/// Checking the error type instead of just `is_err()` guarantees the test fails for the
+/// right reason: a constraint declared in the schema, and not a syntax, type or
+/// missing-column error.
 fn assert_constraint_violation(result: rusqlite::Result<usize>, context: &str) {
     match result {
         Err(rusqlite::Error::SqliteFailure(error, message)) => assert_eq!(

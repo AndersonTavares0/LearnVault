@@ -1,4 +1,4 @@
-//! Contratos do diário de sincronização, do outbox local e das regras de conflito.
+//! Contracts of the sync journal, the local outbox and the conflict rules.
 
 use learnvault_core::{
     Database, ReviewRating, SyncOperation, SyncOperationInput, SyncPayload, acknowledge_operations,
@@ -208,14 +208,14 @@ fn progress_is_last_write_wins_with_clamping_and_monotonic_completion() -> TestR
         &[input("op-1", 100, progress("m1", 120, false))],
     )?;
 
-    // Escrita mais nova vence.
+    // A newer write wins.
     push_operations(
         &db,
         OWNER,
         "device-b",
         &[input("op-2", 200, progress("m1", 30, false))],
     )?;
-    // Escrita antiga não retrocede a posição.
+    // An old write does not move the position back.
     push_operations(
         &db,
         OWNER,
@@ -229,7 +229,7 @@ fn progress_is_last_write_wins_with_clamping_and_monotonic_completion() -> TestR
     )?;
     assert_eq!((position, completed), (30, 0));
 
-    // Concluir com um instante antigo ainda preserva a conclusão observada.
+    // Completing with an old instant still preserves the observed completion.
     push_operations(
         &db,
         OWNER,
@@ -243,8 +243,8 @@ fn progress_is_last_write_wins_with_clamping_and_monotonic_completion() -> TestR
     )?;
     assert_eq!((position, completed), (30, 1));
 
-    // Conclusão é monotônica: nem uma escrita mais nova desmarca o que já foi observado,
-    // e uma escrita antiga posterior não retrocede a posição.
+    // Completion is monotonic: not even a newer write unmarks what was already observed,
+    // and a later old write does not move the position back.
     push_operations(
         &db,
         OWNER,
@@ -264,7 +264,7 @@ fn progress_is_last_write_wins_with_clamping_and_monotonic_completion() -> TestR
     )?;
     assert_eq!((position, completed), (40, 1));
 
-    // Valores fora da faixa são limitados, não recusados.
+    // Out-of-range values are clamped, not refused.
     push_operations(
         &db,
         OWNER,
@@ -317,7 +317,7 @@ fn divergent_note_versions_keep_a_conflict_copy() -> TestResult {
     assert_eq!(copy, "primeiro", "o texto antigo nunca se perde");
     assert_eq!(count(&db, "study_note"), 2);
 
-    // Replay e conteúdo idêntico não criam cópias novas.
+    // Replay and identical content do not create new copies.
     push_operations(
         &db,
         OWNER,
@@ -332,7 +332,7 @@ fn divergent_note_versions_keep_a_conflict_copy() -> TestResult {
     )?;
     assert_eq!(count(&db, "study_note"), 2);
 
-    // Uma versão mais antiga também sobrevive como cópia.
+    // An older version also survives as a copy.
     push_operations(
         &db,
         OWNER,
@@ -469,7 +469,7 @@ fn bookmarks_are_idempotent_and_unknown_media_stays_in_the_log() -> TestResult {
     )?;
     assert_eq!(count(&db, "media_bookmark"), 1);
 
-    // Mídia desconhecida: a operação entra no diário, mas não há linha órfã.
+    // Unknown media: the operation enters the journal, but there is no orphan row.
     let outcome = push_operations(
         &db,
         OWNER,
@@ -497,7 +497,7 @@ fn outbox_survives_and_acknowledges_only_accepted_operations() -> TestResult {
     assert_eq!(pending[0].op_id, first);
     assert_eq!(pending[1].op_id, second);
 
-    // Um envio interrompido mantém a fila; o mesmo `op_id` é reenviado.
+    // An interrupted send keeps the queue; the same `op_id` is resent.
     assert_eq!(pending_operations(&db, OWNER, 10)?[0].op_id, first);
     let accepted = push_operations(&db, OWNER, &state.device_id, &pending)?;
     assert_eq!(accepted.applied, 2);
@@ -521,7 +521,7 @@ fn applying_pulled_operations_advances_the_cursor_once() -> TestResult {
     let batch = pull_operations(&server, "user-1", "device-b", 0, 10)?;
     assert_eq!(batch.items.len(), 2);
 
-    // O dispositivo replica o estado local de outro dono; a regra de conflito é a mesma.
+    // The device replicates another owner's local state; the conflict rule is the same.
     let local = database();
     let applied = apply_operations(&local, OWNER, &batch.items, batch.cursor)?;
     assert_eq!(applied, 2);
@@ -539,7 +539,7 @@ fn applying_pulled_operations_advances_the_cursor_once() -> TestResult {
     assert_eq!((position, completed), (77, 1));
     assert_eq!(count(&local, "study_note"), 1);
 
-    // Reaplicar a mesma página é inofensivo para progresso e anotações.
+    // Reapplying the same page is harmless for progress and notes.
     let retry: Vec<SyncOperation> = batch.items.clone();
     apply_operations(&local, OWNER, &retry, 1)?;
     assert_eq!(count(&local, "study_note"), 1);
@@ -595,7 +595,7 @@ fn two_devices_apply_note_versions_in_any_order_to_the_same_rows() -> TestResult
     let first = database();
     let second = database();
     apply_operations(&first, OWNER, &operations, operations.last().unwrap().seq)?;
-    // A segunda ordem chega fora de ordem e precisa terminar nas mesmas linhas.
+    // The second order arrives out of order and must end up in the same rows.
     let reordered: Vec<SyncOperation> = operations
         .iter()
         .rev()
@@ -743,7 +743,7 @@ fn a_stale_create_does_not_resurrect_a_deleted_note() -> TestResult {
     assert_eq!(count(&db, "study_note"), 0);
     assert_eq!(count(&db, "sync_tombstone"), 1);
 
-    // Um create antigo que chega atrasado é ignorado.
+    // An old create that arrives late is ignored.
     push_operations(
         &db,
         OWNER,
@@ -756,7 +756,7 @@ fn a_stale_create_does_not_resurrect_a_deleted_note() -> TestResult {
         "um create antigo não ressuscita a nota"
     );
 
-    // Uma edição mais nova que a exclusão ainda vence.
+    // An edit newer than the deletion still wins.
     push_operations(
         &db,
         OWNER,
@@ -798,7 +798,7 @@ fn a_deleted_bookmark_disappears_on_the_other_device() -> TestResult {
     apply_operations(&device_b, OWNER, &batch.items, batch.cursor)?;
     assert_eq!(count(&device_b, "media_bookmark"), 0);
 
-    // O mesmo create antigo reenviado não ressuscita o marcador no servidor.
+    // The same old create resent does not resurrect the marker on the server.
     push_operations(
         &server,
         OWNER,
@@ -900,7 +900,7 @@ fn card_updates_are_last_write_wins() -> TestResult {
         )],
     )?;
 
-    // Uma edição mais antiga não sobrescreve.
+    // An older edit does not overwrite.
     push_operations(
         &db,
         OWNER,
@@ -913,7 +913,7 @@ fn card_updates_are_last_write_wins() -> TestResult {
     )?;
     assert_eq!(card_front(&db, "card-1"), "original");
 
-    // Uma edição mais nova vence.
+    // A newer edit wins.
     push_operations(
         &db,
         OWNER,
@@ -956,7 +956,7 @@ fn a_deleted_card_leaves_a_tombstone_that_blocks_a_stale_create() -> TestResult 
     assert_eq!(count(&server, "flashcard"), 0);
     assert_eq!(count(&server, "sync_tombstone"), 1);
 
-    // Um create antigo que chega atrasado é ignorado.
+    // An old create that arrives late is ignored.
     push_operations(
         &server,
         OWNER,
@@ -1031,7 +1031,7 @@ fn a_future_client_clock_is_clamped_to_the_server_time() -> TestResult {
         "o instante recebido é limitado ao instante do servidor"
     );
 
-    // Uma escrita com o relógio real ainda vence a escrita futura.
+    // A write with the real clock still wins over the future write.
     push_operations(
         &db,
         OWNER,

@@ -1,24 +1,24 @@
-//! Política de rescan: persiste o resultado de uma varredura e decide o que muda.
+//! Rescan policy: persists the result of a scan and decides what changes.
 //!
-//! Uma varredura nunca exclui registros. Arquivos encontrados são inseridos ou
-//! atualizados; arquivos antes conhecidos e não encontrados só são marcados como
-//! ausentes quando a varredura realmente cobriu a área onde eles estavam. Se uma
-//! subárvore não pôde ser lida, os registros dela são preservados; se a localização do
-//! erro é imprecisa, nenhuma ausência é registrada nessa varredura.
+//! A scan never deletes records. Files found are inserted or
+//! updated; files previously known and not found are only marked as
+//! missing when the scan really covered the area where they were. If a
+//! subtree could not be read, its records are preserved; if the location of the
+//! error is imprecise, no absence is recorded in that scan.
 //!
-//! A identidade da mídia é o `media_id`, nunca o caminho. Um arquivo que reaparece na
-//! mesma chave normalizada reusa a linha existente e, com ela, o progresso associado: a
-//! linha ausente continua no banco e volta a ficar disponível.
+//! The identity of the media is the `media_id`, never the path. A file that reappears at the
+//! same normalized key reuses the existing row and, with it, the associated progress: the
+//! missing row stays in the database and becomes available again.
 //!
-//! Um arquivo que muda de caminho também mantém a identidade: quando a linha antiga está
-//! ausente e o arquivo novo não é conhecido, tamanho, mtime e um hash amostral do
-//! conteúdo reconhecem o mesmo arquivo. O hash é lido somente das pontas do arquivo, e
-//! apenas para arquivos novos ou com metadados alterados; sem ele (arquivo ilegível ou
-//! linha anterior à migração), a decisão cai para tamanho e mtime, e só é tomada quando o
-//! candidato é único.
+//! A file that changes path also keeps its identity: when the old row is
+//! missing and the new file is not known, size, mtime and a sampled hash of the
+//! content recognize the same file. The hash is read only from the ends of the file, and
+//! only for new files or files with changed metadata; without it (unreadable file or
+//! row from before the migration), the decision falls back to size and mtime, and is only taken when the
+//! candidate is unique.
 //!
-//! Toda a aplicação acontece em uma única transação. Ou a varredura inteira é
-//! registrada, ou nada muda — inclusive o histórico e o estado da biblioteca.
+//! The whole application happens in a single transaction. Either the entire scan is
+//! recorded, or nothing changes — including the history and the library's state.
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -35,50 +35,50 @@ use crate::ids::new_media_id;
 use crate::paths::{KeyMode, relative_path_key};
 use crate::scanner::{ScanOutcome, ScannedFile, scan};
 
-/// Bytes lidos em cada ponta do arquivo para o hash amostral.
+/// Bytes read at each end of the file for the sampled hash.
 const SAMPLE_BYTES: u64 = 64 * 1024;
 
-/// Resumo do que uma varredura mudou no catálogo.
+/// Summary of what a scan changed in the catalog.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct RescanSummary {
-    /// Identificador do registro criado na tabela `scan`.
+    /// Identifier of the record created in the `scan` table.
     pub scan_id: i64,
-    /// Indica se a varredura cobriu toda a biblioteca.
+    /// Tells whether the scan covered the whole library.
     ///
-    /// `false` significa que alguma área não pôde ser lida. Isso não impede o registro
-    /// de ausências nas áreas que foram verificadas.
+    /// `false` means some area could not be read. This does not prevent recording
+    /// absences in the areas that were verified.
     pub complete: bool,
-    /// Arquivos novos inseridos no catálogo.
+    /// New files inserted into the catalog.
     pub inserted: usize,
-    /// Registros já conhecidos que a varredura reafirmou.
+    /// Already-known records that the scan reaffirmed.
     pub updated: usize,
-    /// Registros cujo tamanho, mtime ou conteúdo mudou.
+    /// Records whose size, mtime or content changed.
     pub changed: usize,
-    /// Registros cujo arquivo mudou de caminho e manteve a identidade.
+    /// Records whose file changed path and kept its identity.
     pub moved: usize,
-    /// Registros marcados como ausentes.
+    /// Records marked as missing.
     pub marked_missing: usize,
-    /// Registros preservados por estarem em uma área não verificada.
+    /// Records preserved because they are in an unverified area.
     pub preserved: usize,
-    /// Chaves normalizadas disputadas por mais de um arquivo nesta varredura.
+    /// Normalized keys contested by more than one file in this scan.
     pub ambiguous: Vec<String>,
 }
 
-/// Aplica uma varredura já realizada ao catálogo, sem tocar o sistema de arquivos.
+/// Applies an already-performed scan to the catalog, without touching the file system.
 ///
-/// A função é pura em relação ao disco: recebe o resultado de [`scan`] e persiste as
-/// decisões. Isso permite testar a política sem montar uma biblioteca real e mantém a
-/// leitura do sistema de arquivos isolada na fronteira do scanner.
+/// The function is pure with respect to the disk: it receives the result of [`scan`] and persists the
+/// decisions. This allows testing the policy without assembling a real library and keeps
+/// the file-system read isolated at the scanner's boundary.
 ///
-/// Como não há raiz, arquivos novos ou alterados não recebem hash amostral; a detecção de
-/// movimento usa somente tamanho e mtime. [`apply_incremental_scan`] recebe a raiz e
-/// confirma o movimento pelo conteúdo.
+/// Since there is no root, new or changed files do not receive a sampled hash; move detection
+/// uses only size and mtime. [`apply_incremental_scan`] receives the root and
+/// confirms the move by content.
 ///
-/// `mode` precisa ser o mesmo modo com que o resultado foi produzido. As chaves dos
-/// arquivos já vêm prontas em [`ScanOutcome`], mas as áreas não verificadas são
-/// normalizadas aqui: usar um modo diferente do scanner faria um diretório ilegível não
-/// cobrir os registros que ele deveria proteger. [`rescan`] garante a coerência usando o
-/// modo do próprio host, o mesmo de [`scan`].
+/// `mode` must be the same mode with which the result was produced. The files' keys
+/// already come ready in [`ScanOutcome`], but the unverified areas are
+/// normalized here: using a different mode from the scanner would make an unreadable directory not
+/// cover the records it should protect. [`rescan`] guarantees coherence by using
+/// the host's own mode, the same as [`scan`].
 pub fn apply_scan(
     db: &mut Database,
     library_id: &str,
@@ -88,11 +88,11 @@ pub fn apply_scan(
     apply(db, library_id, outcome, mode, None)
 }
 
-/// Aplica uma varredura lendo a raiz somente para o hash amostral dos arquivos novos ou
-/// alterados.
+/// Applies a scan, reading the root only for the sampled hash of new or
+/// changed files.
 ///
-/// A biblioteca continua somente leitura: o hash é lido das pontas do arquivo, nunca
-/// escrito. É a forma usada por [`rescan`] e pela indexação automática.
+/// The library stays read-only: the hash is read from the ends of the file, never
+/// written. It is the form used by [`rescan`] and by automatic indexing.
 pub fn apply_incremental_scan(
     db: &mut Database,
     library_id: &str,
@@ -103,7 +103,7 @@ pub fn apply_incremental_scan(
     apply(db, library_id, outcome, mode, Some(root))
 }
 
-/// Linha de mídia já conhecida, lida em um único snapshot antes das decisões.
+/// Already-known media row, read in a single snapshot before the decisions.
 struct KnownMedia {
     media_id: String,
     size: i64,
@@ -121,7 +121,7 @@ fn apply(
 ) -> Result<RescanSummary> {
     let tx = db.conn.transaction()?;
 
-    // A biblioteca precisa existir antes da mídia e do histórico, que a referenciam.
+    // The library must exist before the media and the history, which reference it.
     tx.execute(
         "INSERT INTO library (library_id, available) VALUES (?1, 0)
          ON CONFLICT (library_id) DO NOTHING",
@@ -134,8 +134,8 @@ fn apply(
 
     let complete = outcome.inaccessible.is_empty();
     let scan_id = insert_scan(&tx, library_id, "completed", complete)?;
-    // O histórico é um conjunto de áreas, não uma lista: repetir o mesmo caminho não pode
-    // violar a chave primária e desfazer a varredura inteira por causa de uma duplicata.
+    // The history is a set of areas, not a list: repeating the same path must not
+    // violate the primary key and undo the whole scan because of a duplicate.
     let unverified_areas: BTreeSet<&str> =
         outcome.inaccessible.iter().map(String::as_str).collect();
     for path in unverified_areas {
@@ -145,9 +145,9 @@ fn apply(
         )?;
     }
 
-    // Arquivos encontrados, indexados pela chave normalizada. Uma chave disputada por
-    // mais de um arquivo é ambígua: nenhum dos dois é aplicado, porque escolher um
-    // arbitrariamente associaria a identidade de um arquivo ao conteúdo do outro.
+    // Files found, indexed by normalized key. A key contested by
+    // more than one file is ambiguous: neither is applied, because choosing one
+    // arbitrarily would tie the identity of one file to the content of the other.
     let mut found: BTreeMap<&str, &ScannedFile> = BTreeMap::new();
     let mut ambiguous: BTreeSet<String> = BTreeSet::new();
     for file in &outcome.files {
@@ -168,8 +168,8 @@ fn apply(
 
     let known = known_media(&tx, library_id)?;
     let moves = MoveIndex::new(&known, &found, &covered);
-    // Identidades já realocadas nesta varredura: a linha antiga não pode ser marcada como
-    // ausente depois de o arquivo ter sido encontrado no caminho novo.
+    // Identities already relocated in this scan: the old row cannot be marked as
+    // missing after the file was found at the new path.
     let mut moved_ids: BTreeSet<String> = BTreeSet::new();
 
     for (key, file) in &found {
@@ -189,7 +189,7 @@ fn apply(
                             content_changed = row.content_hash.as_deref() != Some(hash.as_str());
                             content_hash = Some(hash);
                         }
-                        // Sem hash o metadado já provou a mudança.
+                        // Without a hash, the metadata has already proven the change.
                         None => content_changed = true,
                     }
                 }
@@ -217,8 +217,8 @@ fn apply(
                 let hash = root.and_then(|root| sampled_hash(root, &file.relative_path));
                 match moves.moved(&moved_ids, size, file.mtime, hash.as_deref()) {
                     Some(media_id) => {
-                        // Mesmo arquivo em outro caminho: a identidade é preservada e,
-                        // com ela, as notas, os marcadores e o progresso.
+                        // Same file at another path: the identity is preserved and,
+                        // with it, the notes, the markers and the progress.
                         tx.execute(
                             "UPDATE media
                              SET relative_path = ?1, relative_path_key = ?2, size = ?3,
@@ -279,9 +279,9 @@ fn apply(
         summary.marked_missing += 1;
     }
 
-    // `available` significa apenas que a raiz foi alcançada nesta varredura; não afirma que
-    // o catálogo está íntegro. Uma varredura parcial também alcança a raiz — quem precisa
-    // saber se alguma área ficou fora da leitura consulta `complete`, no resumo.
+    // `available` only means that the root was reached in this scan; it does not claim that
+    // the catalog is intact. A partial scan also reaches the root — whoever needs to
+    // know whether some area was left out of the read consults `complete`, in the summary.
     tx.execute(
         "UPDATE library SET available = 1 WHERE library_id = ?1",
         rusqlite::params![library_id],
@@ -291,10 +291,10 @@ fn apply(
     Ok(summary)
 }
 
-/// Lê a biblioteca e aplica o resultado ao catálogo.
+/// Reads the library and applies the result to the catalog.
 ///
-/// Se a raiz não puder ser lida, a tentativa é registrada como uma varredura com falha,
-/// sem alterar a mídia, o estado de estudo ou a disponibilidade da biblioteca.
+/// If the root cannot be read, the attempt is recorded as a failed scan,
+/// without changing the media, the study state or the library's availability.
 pub fn rescan(db: &mut Database, library_id: &str, root: &Path) -> Result<RescanSummary> {
     apply_rescan_result(db, library_id, scan(root), root)
 }
@@ -316,11 +316,11 @@ pub fn apply_rescan_result(
     }
 }
 
-/// Aplica o resultado de uma fonte já percorrida, sem tocar a rede nem o disco.
+/// Applies the result of a source that has already been walked, without touching the network or the disk.
 ///
-/// Permite que um adaptador remoto leia a árvore fora do lock do banco e só então grave
-/// o catálogo. Uma falha da fonte é registrada no histórico exatamente como uma falha de
-/// varredura local, preservando a mídia e o progresso existentes.
+/// It lets a remote adapter read the tree outside the database lock and only then write
+/// the catalog. A failure of the source is recorded in the history exactly like a failure of a
+/// local scan, preserving the existing media and progress.
 pub fn apply_source_scan(
     db: &mut Database,
     library_id: &str,
@@ -332,7 +332,7 @@ pub fn apply_source_scan(
     }
 }
 
-/// Registra a tentativa que falhou, preservando a falha original como causa.
+/// Records the attempt that failed, preserving the original failure as the cause.
 fn record_failed_scan(db: &mut Database, library_id: &str, scan_error: Error) -> Error {
     match write_failed_scan(db, library_id) {
         Ok(()) => scan_error,
@@ -343,12 +343,12 @@ fn record_failed_scan(db: &mut Database, library_id: &str, scan_error: Error) ->
     }
 }
 
-/// Grava o histórico da tentativa que falhou em uma transação própria.
+/// Records the history of the attempt that failed in a transaction of its own.
 fn write_failed_scan(db: &mut Database, library_id: &str) -> rusqlite::Result<()> {
     let tx = db.conn.transaction()?;
 
-    // A linha da biblioteca é necessária para a chave estrangeira do histórico. Se ela
-    // já existir, nada muda: uma varredura com falha não altera a disponibilidade.
+    // The library row is needed for the history's foreign key. If it
+    // already exists, nothing changes: a failed scan does not alter availability.
     tx.execute(
         "INSERT INTO library (library_id, available) VALUES (?1, 0)
          ON CONFLICT (library_id) DO NOTHING",
@@ -363,7 +363,7 @@ fn write_failed_scan(db: &mut Database, library_id: &str) -> rusqlite::Result<()
     tx.commit()
 }
 
-/// Insere o registro da varredura e devolve o identificador gerado.
+/// Inserts the scan record and returns the generated identifier.
 fn insert_scan(
     tx: &rusqlite::Transaction<'_>,
     library_id: &str,
@@ -378,7 +378,7 @@ fn insert_scan(
     Ok(tx.last_insert_rowid())
 }
 
-/// Lista as linhas conhecidas da biblioteca, indexadas pela chave normalizada.
+/// Lists the library's known rows, indexed by normalized key.
 fn known_media(
     tx: &rusqlite::Transaction<'_>,
     library_id: &str,
@@ -408,11 +408,11 @@ fn known_media(
     Ok(collected)
 }
 
-/// Candidatos ausentes indexados por hash e por metadados.
+/// Missing candidates indexed by hash and by metadata.
 ///
-/// A varredura de uma biblioteca grande não pode comparar cada arquivo novo com cada linha
-/// antiga: o índice deixa a decisão de movimento em tempo constante e mantém a regra de
-/// recusar qualquer escolha ambígua.
+/// The scan of a large library cannot compare every new file with every old row:
+/// the index keeps the move decision at constant time and keeps the rule of
+/// refusing any ambiguous choice.
 struct MoveIndex<'a> {
     by_hash: BTreeMap<&'a str, Vec<&'a str>>,
     by_metadata: BTreeMap<(i64, i64), Vec<&'a str>>,
@@ -444,10 +444,10 @@ impl<'a> MoveIndex<'a> {
         index
     }
 
-    /// Devolve a identidade ausente que corresponde ao arquivo novo, quando a escolha é
-    /// única. O hash confirmado vence a comparação de metadados; duas linhas com o mesmo
-    /// conteúdo ou os mesmos metadados tornam a movimentação ambígua, porque escolher uma
-    /// associaria notas e progresso ao arquivo errado.
+    /// Returns the missing identity that matches the new file, when the choice is
+    /// unique. A confirmed hash wins over the metadata comparison; two rows with the same
+    /// content or the same metadata make the move ambiguous, because choosing one would
+    /// tie notes and progress to the wrong file.
     fn moved(
         &self,
         moved_ids: &BTreeSet<String>,
@@ -462,7 +462,7 @@ impl<'a> MoveIndex<'a> {
     }
 }
 
-/// Devolve o único identificador ainda não realocado, ou `None` quando há zero ou vários.
+/// Returns the only identifier not yet relocated, or `None` when there are zero or several.
 fn unique_unclaimed<'a>(ids: &[&'a str], moved_ids: &BTreeSet<String>) -> Option<&'a str> {
     let mut fresh = ids
         .iter()
@@ -474,14 +474,14 @@ fn unique_unclaimed<'a>(ids: &[&'a str], moved_ids: &BTreeSet<String>) -> Option
     }
 }
 
-/// Hash SHA-256 do tamanho e das pontas do arquivo.
+/// SHA-256 hash of the size and of the ends of the file.
 ///
-/// Arquivos de até duas amostras são lidos inteiros. Um arquivo ilegível não tem hash:
-/// a decisão de movimento cai para metadados e nunca falha a varredura por causa dele.
+/// Files of up to two samples are read whole. An unreadable file has no hash:
+/// the move decision falls back to metadata and never fails the scan because of it.
 ///
-/// shortcut: um arquivo alterado no meio sem mudar tamanho nem mtime não é detectado,
-/// porque o hash amostral só é calculado quando o metadado muda; revisitar quando houver
-/// uma origem de eventos com confiança suficiente para dispensar a comparação.
+/// shortcut: a file changed in the middle without changing size or mtime is not detected,
+/// because the sampled hash is only computed when the metadata changes; revisit when there is
+/// an event source reliable enough to dispense with the comparison.
 fn sampled_hash(root: &Path, relative_path: &str) -> Option<String> {
     let mut file = File::open(root.join(relative_path)).ok()?;
     let length = file.metadata().ok()?.len();
@@ -512,10 +512,10 @@ fn sampled_hash(root: &Path, relative_path: &str) -> Option<String> {
     )
 }
 
-/// Normaliza as áreas não verificadas em prefixos de chave.
+/// Normalizes the unverified areas into key prefixes.
 ///
-/// Uma entrada que não pode ser normalizada não pode corresponder a nenhuma linha
-/// existente; ela só torna a varredura parcial.
+/// An entry that cannot be normalized cannot match any existing row;
+/// it only makes the scan partial.
 fn unverified_prefixes(outcome: &ScanOutcome, mode: KeyMode) -> Vec<String> {
     outcome
         .inaccessible
@@ -525,7 +525,7 @@ fn unverified_prefixes(outcome: &ScanOutcome, mode: KeyMode) -> Vec<String> {
         .collect()
 }
 
-/// Indica se a chave está dentro de uma área que a varredura não verificou.
+/// Tells whether the key is inside an area the scan did not verify.
 fn is_covered_by_unverified(key: &str, unverified: &[String]) -> bool {
     unverified.iter().any(|prefix| {
         key == prefix
@@ -535,10 +535,10 @@ fn is_covered_by_unverified(key: &str, unverified: &[String]) -> bool {
     })
 }
 
-/// Converte o tamanho em bytes para o inteiro assinado usado pelo SQLite.
+/// Converts the size in bytes to the signed integer used by SQLite.
 ///
-/// Tamanhos acima de `i64::MAX` (inviáveis em qualquer sistema de arquivos real)
-/// saturam no limite em vez de falhar ou entrar em pânico.
+/// Sizes above `i64::MAX` (unfeasible on any real file system)
+/// saturate at the limit instead of failing or panicking.
 fn size_as_integer(size: u64) -> i64 {
     i64::try_from(size).unwrap_or(i64::MAX)
 }

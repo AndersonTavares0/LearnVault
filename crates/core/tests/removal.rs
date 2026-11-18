@@ -1,11 +1,11 @@
-//! Testes da remoção explícita de mídia.
+//! Tests of explicit media removal.
 //!
-//! A remoção é uma ação deliberada do usuário sobre um par `library_id` + `media_id`. Ela
-//! registra um fato separado da existência do registro: nada é apagado, o progresso de
-//! estudo é preservado e nenhum arquivo da biblioteca é tocado. A remoção persiste entre
-//! varreduras e não é desfeita por reencontrar o arquivo no disco.
+//! The removal is a deliberate user action on a `library_id` + `media_id` pair. It
+//! records a fact separate from the record's existence: nothing is deleted, study
+//! progress is preserved and no library file is touched. The removal persists across
+//! scans and is not undone by finding the file again on disk.
 //!
-//! Os casos que envolvem a biblioteca física usam diretórios temporários.
+//! The cases involving the physical library use temporary directories.
 
 use std::path::Path;
 
@@ -23,7 +23,7 @@ const OTHER_LIB: &str = "bib-2";
 const OWNER: &str = "aluno-1";
 const OTHER_OWNER: &str = "aluno-2";
 
-/// Instante conhecido gravado direto no banco, para provar preservação sem depender de espera.
+/// Known instant written straight to the database, to prove preservation without depending on waiting.
 const SEEDED_AT: i64 = 1_000;
 
 fn key(path: &str) -> String {
@@ -59,12 +59,12 @@ fn insert_media(
     )
 }
 
-/// Insere uma mídia disponível da biblioteca padrão.
+/// Inserts an available media of the default library.
 fn media(db: &Database, media_id: &str, path: &str) -> rusqlite::Result<usize> {
     insert_media(db, LIB, media_id, path, 1024, 1_760_000_000, "available")
 }
 
-/// Grava um estado de estudo com instante controlado, sem passar pela API.
+/// Writes a study state with a controlled instant, without going through the API.
 fn seed_progress(
     db: &Database,
     owner_id: &str,
@@ -85,7 +85,7 @@ fn seed_progress(
     )
 }
 
-/// Lê `(position_seconds, completed, updated_at)` do banco.
+/// Reads `(position_seconds, completed, updated_at)` from the database.
 fn progress_row(db: &Database, owner_id: &str, media_id: &str) -> Option<(i64, i64, i64)> {
     db.connection()
         .query_row(
@@ -137,7 +137,7 @@ fn only_media_id(db: &Database, library_id: &str) -> String {
         .expect("media deve ser consultável")
 }
 
-/// Coleta todos os arquivos do catálogo, em qualquer nível.
+/// Collects all files of the catalog, at any level.
 fn all_files(catalog: &Catalog) -> Vec<&CatalogFile> {
     fn collect<'a>(nodes: &'a [learnvault_core::CatalogNode], out: &mut Vec<&'a CatalogFile>) {
         for node in nodes {
@@ -160,7 +160,7 @@ fn write_file(root: &Path, relative: &str, bytes: &[u8]) -> std::io::Result<()> 
     std::fs::write(path, bytes)
 }
 
-/// Manifesto recursivo da árvore: caminho relativo e tamanho.
+/// Recursive manifest of the tree: relative path and size.
 fn manifest(root: &Path) -> Vec<(String, u64)> {
     fn walk(base: &Path, current: &Path, out: &mut Vec<(String, u64)>) -> std::io::Result<()> {
         for entry in std::fs::read_dir(current)? {
@@ -316,11 +316,11 @@ fn removal_is_isolated_between_libraries() -> TestResult {
     assert_eq!(removal_count(&db, OTHER_LIB), 0, "outra biblioteca intacta");
     assert_eq!(media_count(&db, OTHER_LIB), 1);
 
-    // A mídia da outra biblioteca continua visível no catálogo dela.
+    // The other library's media is still visible in its catalog.
     let other = build_catalog(&db, OTHER_LIB)?;
     assert!(all_files(&other).iter().any(|file| file.media_id == "m2"));
 
-    // E a mídia removida não é alcançável a partir da outra biblioteca.
+    // And the removed media is not reachable from the other library.
     match remove_media(&mut db, OTHER_LIB, "m1", false) {
         Err(Error::MediaNotFound { media_id }) => assert_eq!(media_id, "m1"),
         other => panic!("esperava Error::MediaNotFound, obtive {other:?}"),
@@ -376,8 +376,8 @@ fn recent_study_hides_removed_media_without_erasing_progress() -> TestResult {
     seed_progress(&db, OWNER, "m1", 10, false)?;
     seed_progress(&db, OWNER, "m2", 20, false)?;
 
-    // A mídia tem progresso, então a remoção exige confirmação: é justamente esse progresso
-    // que precisa sobreviver à remoção.
+    // The media has progress, so the removal requires confirmation: it is precisely that progress
+    // that must survive the removal.
     remove_media(&mut db, LIB, "m1", true)?;
 
     let recent = recent_study(&db, OWNER, 10)?;
@@ -484,7 +484,7 @@ fn a_failed_removal_rolls_back_and_preserves_the_progress() -> TestResult {
     media(&db, "m1", "Curso/Aula/aula.mp4")?;
     seed_progress(&db, OWNER, "m1", 42, true)?;
 
-    // Gatilho criado por uma segunda conexão ao mesmo arquivo: a remoção falha no meio.
+    // Trigger created by a second connection to the same file: the removal fails midway.
     {
         let conn = rusqlite::Connection::open(&path)?;
         conn.execute_batch(
@@ -510,8 +510,8 @@ fn a_failed_removal_rolls_back_and_preserves_the_progress() -> TestResult {
         "o progresso sobrevive à falha"
     );
 
-    // O rollback libera a transação: a conexão continua utilizável e a remoção volta a
-    // funcionar assim que o gatilho sai do caminho.
+    // The rollback frees the transaction: the connection stays usable and the removal works again
+    // as soon as the trigger is out of the way.
     {
         let conn = rusqlite::Connection::open(&path)?;
         conn.execute_batch("DROP TRIGGER falha_na_remocao;")?;
@@ -564,8 +564,8 @@ fn a_removed_media_is_refused_even_when_absent_or_gone() -> TestResult {
     let dir = tempfile::tempdir()?;
     let root = dir.path();
 
-    // Removida e marcada como ausente na última varredura, com o arquivo ainda no disco:
-    // a remoção é o motivo reportado, e não a disponibilidade.
+    // Removed and marked missing in the last scan, with the file still on disk:
+    // the removal is the reported reason, not the availability.
     let mut db = library_db()?;
     write_file(root, "Curso/Aula/aula.mp4", b"a")?;
     insert_media(
@@ -584,7 +584,7 @@ fn a_removed_media_is_refused_even_when_absent_or_gone() -> TestResult {
         other => panic!("esperava Error::MediaRemoved, obtive {other:?}"),
     }
 
-    // Removida com o arquivo já apagado: a remoção tem precedência sobre a ausência no disco.
+    // Removed with the file already deleted: the removal takes precedence over absence on disk.
     let dir2 = tempfile::tempdir()?;
     let root2 = dir2.path();
 
@@ -636,7 +636,7 @@ fn an_idempotent_repeat_does_not_require_confirmation() -> TestResult {
     assert!(first.removed_now);
     assert_eq!(first.preserved_owners, 1);
 
-    // Repetir sem confirmação é inofensivo: nada mudaria com a operação.
+    // Repeating without confirmation is harmless: nothing would change with the operation.
     let again = remove_media(&mut db, LIB, "m1", false)?;
     assert_eq!(again.media_id, "m1");
     assert!(!again.removed_now);
@@ -711,7 +711,7 @@ fn progress_of_a_removed_media_is_still_read_and_written() -> TestResult {
     seed_progress(&db, OWNER, "m1", 42, true)?;
     remove_media(&mut db, LIB, "m1", true)?;
 
-    // O progresso é preservado de propósito: a remoção não o apaga nem o torna ilegível.
+    // The progress is preserved on purpose: the removal neither deletes it nor makes it unreadable.
     assert_eq!(
         study_progress(&db, OWNER, "m1")?.map(|state| state.position_seconds),
         Some(42)
@@ -730,7 +730,7 @@ fn recent_study_applies_the_limit_after_hiding_removed_media() -> TestResult {
     seed_progress(&db, OWNER, "m2", 1, false)?;
     seed_progress(&db, OWNER, "m1", 2, false)?;
 
-    // m1 fica mais recente que m2.
+    // m1 ends up more recent than m2.
     db.connection().execute(
         "UPDATE study_state SET updated_at = ?1 WHERE owner_id = ?2 AND media_id = ?3",
         rusqlite::params![SEEDED_AT + 10, OWNER, "m1"],
@@ -763,8 +763,8 @@ fn recent_study_ignores_a_removal_recorded_for_another_library() -> TestResult {
     media(&db, "m1", "Curso/Aula/aula.mp4")?;
     seed_progress(&db, OWNER, "m1", 42, false)?;
 
-    // Uma remoção gravada com o par divergente (outra biblioteca, mesma mídia) não é a
-    // remoção desta mídia: o filtro confere o par, não apenas o identificador.
+    // A removal stored with a diverging pair (another library, same media) is not the
+    // removal of this media: the filter checks the pair, not just the identifier.
     db.connection().execute(
         "INSERT INTO media_removal (library_id, media_id, removed_at) VALUES (?1, ?2, ?3)",
         rusqlite::params![OTHER_LIB, "m1", SEEDED_AT],
