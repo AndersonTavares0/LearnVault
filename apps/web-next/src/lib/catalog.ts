@@ -1,8 +1,17 @@
 import { tr } from './i18n';
+import { selectPlayableMedia } from './player';
 import type { CatalogNode, FileEntry } from './transport';
 
 export type FileCounts = { videos: number; materials: number };
 export type CatalogCounts = FileCounts & { modules: number; lessons: number; missingLessons: number };
+
+/** Study data follows the selected media and retains its catalog ID when playback is unavailable. */
+export function lessonStudyMediaId(media: FileEntry[], preferredMediaId?: string): string | null {
+	const playable = selectPlayableMedia(media, preferredMediaId);
+	if (playable) return playable.mediaId ?? null;
+	const preferred = preferredMediaId && media.find((file) => file.mediaId === preferredMediaId);
+	return (preferred || media.find((file) => file.mediaId))?.mediaId ?? null;
+}
 
 /**
  * Media file that the last scan still finds on disk.
