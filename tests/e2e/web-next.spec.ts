@@ -286,4 +286,11 @@ test('an expired session sends the visitor back to sign in and returns them to t
 	await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
 	await page.getByRole('button', { name: 'Sign in' }).click();
 	await expect(page.getByRole('heading', { name: 'Notes', level: 1 })).toBeVisible();
+
+test('the top bar fits a 320 px phone with every control inside the screen', async ({ page, origin }) => {
+	await page.setViewportSize({ width: 320, height: 640 });
+	await signIn(page, origin);
+	await page.getByRole('link', { name: 'My learning' }).first().waitFor({ state: 'attached' });
+	const rights = await page.locator('header button, header a').evaluateAll((elements) => elements.filter((element) => element.getBoundingClientRect().width > 0).map((element) => Math.round(element.getBoundingClientRect().right)));
+	expect(Math.max(...rights)).toBeLessThanOrEqual(320);
 });

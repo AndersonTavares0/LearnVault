@@ -20,7 +20,10 @@ required before cutover.
 - [ ] A skip link to `main` is the first focusable element (2.4.1).
 - [ ] `header`, `nav`, `main`, and `aside` landmarks, with a unique accessible name when repeated.
 - [ ] One `h1` per route, and headings in order (1.3.1).
-- [ ] The document title changes on every route change, and focus moves to the new page heading (2.4.2).
+- [x] The document title identifies the current page in the interface language (2.4.2). Course and
+  lesson names retain their original language.
+- [x] On navigation between signed-in pages, focus moves to the new heading or falls back to
+  `main` while the heading is unavailable. In-page filter and fragment changes preserve focus (2.4.3).
 - [ ] Focus order follows the visual order (2.4.3).
 - [ ] The bottom tab bar on mobile and the topbar on desktop expose the same destinations.
 
