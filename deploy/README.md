@@ -68,12 +68,11 @@ LEARNVAULT_IMAGE=ghcr.io/andersontavares0/learnvault:0.9.2 docker compose up -d
 docker compose -f compose.yaml -f compose.build.yaml up -d --build
 ```
 
-> **Tag channels:** the first release that is not a GitHub pre-release moves `latest`, `stable`, and
-> the minor line. `0.9.0` is a pre-release and keeps only its exact tag, so until a later release
-> exists, Option A fails to pull; pin `LEARNVAULT_IMAGE`
-> to an exact published version as in Option B. Release candidates are no longer published, and the
-> `:rc` tag is not updated any more; the existing `0.9.0-rc.N` tags never move `latest`, `stable`, or
-> the minor line.
+> **Tag channels:** a release that is not a GitHub pre-release moves `latest`, `stable`, and the minor line.
+> Releases up to and including `0.9.4` were published as pre-releases and keep only their exact tag, so until the
+> next release `latest` is still the old `0.8.0` image (amd64 only). Pin `LEARNVAULT_IMAGE` to an exact published
+> version as in Option B. Release candidates are no longer published, and the `:rc` tag is not updated any more; the
+> existing `0.9.0-rc.N` image tags never move `latest`, `stable`, or the minor line.
 
 > **Upgrading from a setup that built the image locally:** if your `.env` still has `LEARNVAULT_IMAGE=learnvault-rust:local`, remove that line (the default is now the published image), or keep building by adding `-f compose.build.yaml` to every `docker compose` command.
 
