@@ -1,30 +1,30 @@
-//! Configuração de caminhos do desktop.
+//! Path configuration of the desktop.
 //!
-//! A situação de configuração exposta ao webview é apenas um booleano: o desktop sabe se
-//! uma raiz de biblioteca foi escolhida, mas nunca entrega o caminho. A raiz em si é
-//! selecionada e persistida por [`crate::library`], fora da biblioteca e fora do banco.
+//! The configuration state exposed to the webview is only a boolean: the desktop knows whether
+//! a library root was chosen, but never delivers the path. The root itself is
+//! selected and persisted by [`crate::library`], outside the library and outside the database.
 //!
-//! O único caminho resolvido aqui é o do banco local, que vive no diretório de dados do
-//! próprio aplicativo — nunca na biblioteca, que permanece externa e somente leitura.
+//! The only path resolved here is the local database's, which lives in the application's own
+//! data directory — never in the library, which stays external and read-only.
 
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
-/// Nome do arquivo do banco local dentro do diretório de dados.
+/// Name of the local database file inside the data directory.
 pub const DATABASE_FILE_NAME: &str = "learnvault.sqlite";
 
-/// Situação de configuração do desktop exposta ao webview.
+/// Configuration state of the desktop exposed to the webview.
 ///
-/// O shape é deliberadamente mínimo: o webview aprende apenas se há uma biblioteca
-/// configurada, nunca onde ela está.
+/// The shape is deliberately minimal: the webview learns only whether a library is
+/// configured, never where it is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct DesktopConfigDto {
-    /// Verdadeiro somente quando existe uma raiz de biblioteca configurada e válida.
+    /// True only when there is a configured, valid library root.
     pub configured: bool,
 }
 
-/// Caminho do banco local dentro do diretório de dados.
+/// Path of the local database inside the data directory.
 pub fn database_path(data_dir: &Path) -> PathBuf {
     data_dir.join(DATABASE_FILE_NAME)
 }

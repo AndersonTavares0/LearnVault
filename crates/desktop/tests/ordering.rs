@@ -1,20 +1,20 @@
-//! Ordenação manual de módulos e aulas no desktop (issue #239).
+//! Manual ordering of modules and lessons on the desktop (issue #239).
 //!
-//! Exercita as funções livres do estado, sem subir o webview: a ordem vive no diretório de
-//! dados do aplicativo, sobrevive a um rescan e a um reinício, e nunca toca na pasta do
-//! curso.
+//! It exercises the state's free functions, without bringing up the webview: the order lives in the
+//! application's data directory, survives a rescan and a restart, and never touches the course
+//! folder.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use learnvault_desktop::{DesktopState, IpcErrorCode};
 
-/// Estado desktop isolado em diretórios temporários.
+/// Desktop state isolated in temporary directories.
 fn desktop(root: &Path) -> DesktopState {
     DesktopState::open(&root.join("data"), &root.join("config")).unwrap()
 }
 
-/// Curso sintético com três módulos numerados, cada um com uma aula.
+/// Synthetic course with three numbered modules, each with one lesson.
 fn make_course(root: &Path) -> PathBuf {
     let course = root.join("curso");
     for module in ["Modulo 2", "Modulo 3", "Modulo 10"] {
@@ -37,7 +37,7 @@ fn owned(paths: &[&str]) -> Vec<String> {
     paths.iter().map(|path| (*path).to_owned()).collect()
 }
 
-/// Listagem recursiva de caminhos relativos do curso, para provar que nada muda.
+/// Recursive listing of the course's relative paths, to prove that nothing changes.
 fn snapshot(root: &Path) -> Vec<String> {
     let mut paths = Vec::new();
     let mut stack = vec![root.to_path_buf()];
@@ -81,10 +81,10 @@ fn manual_order_persists_across_rescan_and_restart_without_touching_files() {
     state.rescan().unwrap();
     assert_eq!(module_paths(&state), ["Modulo 10", "Modulo 2", "Modulo 3"]);
 
-    // A pasta do curso permanece somente leitura.
+    // The course folder stays read-only.
     assert_eq!(snapshot(&course), before, "a pasta do curso não pode mudar");
 
-    // Sobrevive a um reinício.
+    // Survives a restart.
     drop(state);
     let restarted = desktop(dir.path());
     assert_eq!(
@@ -141,6 +141,6 @@ fn order_rejects_non_permutations_and_unknown_courses() {
         .unwrap_err();
     assert_eq!(unknown.code, IpcErrorCode::CourseNotFound);
 
-    // Nada foi persistido: a ordem automática continua.
+    // Nothing was persisted: the automatic order continues.
     assert_eq!(module_paths(&state), ["Modulo 2", "Modulo 3", "Modulo 10"]);
 }

@@ -1,12 +1,12 @@
-//! Build script do crate desktop.
+//! Build script of the desktop crate.
 //!
-//! `try_build` lê `tauri.conf.json`, resolve o ACL a partir de `capabilities/` e, com
-//! [`tauri_build::AppManifest`], gera as permissões `allow-<comando>` dos comandos IPC do
-//! aplicativo (`desktop_catalog`, `desktop_import_course`, `desktop_remove_course`,
+//! `try_build` reads `tauri.conf.json`, resolves the ACL from `capabilities/` and, with
+//! [`tauri_build::AppManifest`], generates the `allow-<command>` permissions of the application's IPC commands
+//! (`desktop_catalog`, `desktop_import_course`, `desktop_remove_course`,
 //! `desktop_import_course_cover`, `desktop_remove_course_cover`, `desktop_rescan`,
-//! `desktop_study_progress`, `desktop_record_position`, `desktop_set_completed` e
-//! `desktop_recent_study`, `desktop_set_course_order` e `desktop_reset_course_order`). Ele
-//! não abre sockets nem depende de display; a validação de runtime pertence ao
+//! `desktop_study_progress`, `desktop_record_position`, `desktop_set_completed` and
+//! `desktop_recent_study`, `desktop_set_course_order` and `desktop_reset_course_order`). It
+//! opens no sockets nor depends on a display; runtime validation belongs to
 //! `tauri dev`/`tauri build`.
 
 fn main() {

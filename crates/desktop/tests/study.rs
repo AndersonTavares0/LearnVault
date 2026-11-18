@@ -1,12 +1,12 @@
-//! Testes da fronteira IPC de progresso de estudo do desktop.
+//! Tests of the desktop's study-progress IPC boundary.
 //!
-//! Não sobem o webview nem dependem de display: exercitam as funções livres
-//! `DesktopState::study_progress`, `record_position`, `set_completed` e `recent_study`, que
-//! os comandos `#[tauri::command]` apenas embrulham. O alvo é o contrato observável pelo
-//! frontend — shape snake_case, códigos de erro estáveis, mensagens sem identificadores nem
-//! caminhos — e as regras que o adaptador **não** pode reimplementar: dono local fixo,
-//! persistência, independência entre posição e conclusão, teto do núcleo e ausência de
-//! qualquer escrita no catálogo ou na biblioteca física.
+//! They do not bring up the webview nor depend on a display: they exercise the free functions
+//! `DesktopState::study_progress`, `record_position`, `set_completed` and `recent_study`, which
+//! the `#[tauri::command]` commands only wrap. The target is the contract observable by the
+//! frontend — snake_case shape, stable error codes, messages with no identifiers nor
+//! paths — and the rules the adapter **cannot** reimplement: fixed local owner,
+//! persistence, independence between position and completion, the core's ceiling and the absence of
+//! any write to the catalog or the physical library.
 
 use std::path::{Path, PathBuf};
 
@@ -16,38 +16,38 @@ use learnvault_desktop::{
     StudyProgressDto,
 };
 
-/// Estado desktop isolado em diretórios temporários, com dados e configuração separados.
+/// Desktop state isolated in temporary directories, with data and configuration separate.
 fn desktop(root: &Path) -> DesktopState {
     DesktopState::open(&root.join("data"), &root.join("config")).unwrap()
 }
 
-/// Caminho do banco local usado pelo estado.
+/// Path of the local database used by the state.
 fn database_path(root: &Path) -> PathBuf {
     root.join("data").join("learnvault.sqlite")
 }
 
-/// Segunda conexão ao banco local, como os testes de rescan fazem.
+/// Second connection to the local database, as the rescan tests do it.
 ///
-/// Serve para semear mídia (que no aplicativo vem do rescan) e para afirmar o que foi
-/// persistido sem passar pelo adaptador sob teste. O diretório de dados é criado por
-/// [`DesktopState::open`], então os testes precisam abrir o estado antes de semear.
+/// It serves to seed media (which in the application comes from the rescan) and to assert what was
+/// persisted without going through the adapter under test. The data directory is created by
+/// [`DesktopState::open`], so the tests must open the state before seeding.
 fn local(root: &Path) -> learnvault_core::Database {
     learnvault_core::Database::open(database_path(root)).unwrap()
 }
 
-/// Semeia a biblioteca local e uma mídia conhecida, como uma varredura faria.
+/// Seeds the local library and a known media, as a scan would do.
 ///
-/// A disponibilidade é sempre `available`; o teste que precisa de mídia ausente chama
+/// The availability is always `available`; the test that needs missing media calls
 /// [`seed_media_with_availability`].
 fn seed_media(root: &Path, media_id: &str) {
     seed_media_with_availability(root, media_id, "available");
 }
 
-/// Semeia a biblioteca local e uma mídia conhecida com disponibilidade explícita.
+/// Seeds the local library and a known media with explicit availability.
 ///
-/// Os valores são controlados pelo teste e restritos a ASCII minúsculo, como nos testes do
-/// servidor: o SQL é montado por `execute_batch` porque o crate desktop não depende de
-/// `rusqlite` diretamente.
+/// The values are controlled by the test and restricted to lowercase ASCII, as in the
+/// server's tests: the SQL is built with `execute_batch` because the desktop crate does not depend on
+/// `rusqlite` directly.
 fn seed_media_with_availability(root: &Path, media_id: &str, availability: &str) {
     let database = local(root);
     let path = format!("acervo/{media_id}.mp4");
@@ -62,10 +62,10 @@ fn seed_media_with_availability(root: &Path, media_id: &str, availability: &str)
         .unwrap();
 }
 
-/// Semeia uma linha de progresso com instante explícito, para controlar a ordenação.
+/// Seeds a progress row with an explicit instant, to control ordering.
 ///
-/// Reescreve a linha do par dono/mídia: a chave primária composta não admite duplicata, e o
-/// teste de ordenação precisa mover o instante da mesma mídia.
+/// It rewrites the owner/media pair's row: the composite primary key admits no duplicate, and the
+/// ordering test needs to move the instant of the same media.
 fn seed_state(
     root: &Path,
     owner_id: &str,
@@ -89,7 +89,7 @@ fn seed_state(
         .unwrap();
 }
 
-/// Dono gravado para uma mídia, lido direto do banco local.
+/// Owner stored for a media, read straight from the local database.
 fn stored_owner(root: &Path, media_id: &str) -> Option<String> {
     local(root)
         .connection()
@@ -101,7 +101,7 @@ fn stored_owner(root: &Path, media_id: &str) -> Option<String> {
         .ok()
 }
 
-/// Total de linhas de progresso no banco local.
+/// Total progress rows in the local database.
 fn state_rows(root: &Path) -> i64 {
     local(root)
         .connection()
@@ -109,7 +109,7 @@ fn state_rows(root: &Path) -> i64 {
         .unwrap()
 }
 
-/// Contagem de linhas de uma tabela do catálogo, para provar que o estudo não a toca.
+/// Row count of a catalog table, to prove that study does not touch it.
 fn table_rows(root: &Path, table: &str) -> i64 {
     local(root)
         .connection()
@@ -119,7 +119,7 @@ fn table_rows(root: &Path, table: &str) -> i64 {
         .unwrap()
 }
 
-/// Nomes dos itens do histórico recente, na ordem devolvida pelo adaptador.
+/// Names of the recent-history items, in the order the adapter returned them.
 fn recent_ids(recent: &RecentStudyDto) -> Vec<String> {
     recent
         .items
@@ -237,8 +237,8 @@ fn progress_is_persisted_under_the_fixed_local_owner() {
         "o dono gravado é o identificador local fixo do Rust"
     );
 
-    // O isolamento por dono continua sendo do núcleo: um dono diferente não enxerga o
-    // estado gravado pelo desktop.
+    // Isolation by owner is still the core's job: a different owner does not see the
+    // state written by the desktop.
     let database = local(dir.path());
     let other = learnvault_core::study_progress(&database, "outro-dono", "m1").unwrap();
     let own = learnvault_core::study_progress(&database, LOCAL_OWNER_ID, "m1").unwrap();
@@ -414,7 +414,7 @@ fn recent_study_is_ordered_by_the_last_real_change_with_a_deterministic_tie_brea
         ["m1", "m2", "m3"]
     );
 
-    // Um empate de instantes é desfeito pelo `media_id`, então a ordem é determinística.
+    // A tie between instants is broken by `media_id`, so the order is deterministic.
     seed_state(dir.path(), LOCAL_OWNER_ID, "m1", 11, false, 500);
     seed_state(dir.path(), LOCAL_OWNER_ID, "m2", 21, true, 500);
     assert_eq!(
@@ -674,7 +674,7 @@ fn desktop_study_notes_crud_and_isolation() {
     seed_media(dir.path(), "m1");
     seed_media(dir.path(), "m2");
 
-    // Cria anotações
+    // Creates notes
     let note1 = state
         .create_note("m1", 45, "Primeira nota na aula 1")
         .expect("criar nota 1 deve suceder");
@@ -690,26 +690,26 @@ fn desktop_study_notes_crud_and_isolation() {
         .create_note("m2", 15, "Nota na aula 2")
         .expect("criar nota 3 deve suceder");
 
-    // Listar filtrado por mídia
+    // List filtered by media
     let m1_notes = state.list_notes(Some("m1")).unwrap();
     assert_eq!(m1_notes.len(), 2);
     assert_eq!(m1_notes[0].note_id, note1.note_id);
     assert_eq!(m1_notes[1].note_id, note2.note_id);
 
-    // Listagem global (busca global de anotações)
+    // Global listing (global notes search)
     let all_notes = state.list_notes(None).unwrap();
     assert_eq!(all_notes.len(), 3);
-    // Na listagem global, relative_path está preenchido
+    // In the global listing, relative_path is filled in
     assert!(all_notes.iter().all(|n| n.relative_path.is_some()));
 
-    // Atualizar anotação
+    // Update a note
     let updated = state
         .update_note(&note1.note_id, "Conteúdo revisado")
         .expect("atualizar nota deve suceder");
     assert_eq!(updated.content, "Conteúdo revisado");
     assert_eq!(updated.note_id, note1.note_id);
 
-    // Excluir anotação
+    // Delete a note
     state
         .delete_note(&note2.note_id)
         .expect("excluir nota deve suceder");
@@ -717,7 +717,7 @@ fn desktop_study_notes_crud_and_isolation() {
     assert_eq!(remaining_m1.len(), 1);
     assert_eq!(remaining_m1[0].content, "Conteúdo revisado");
 
-    // Excluir nota inexistente retorna erro estável NoteNotFound
+    // Deleting a nonexistent note returns the stable error NoteNotFound
     let err = state.delete_note("nota-inexistente").unwrap_err();
     assert_eq!(err.code, learnvault_desktop::IpcErrorCode::NoteNotFound);
 }
