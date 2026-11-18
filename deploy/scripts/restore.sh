@@ -1,6 +1,6 @@
 #!/bin/sh
-# Restaura o banco de dados do LearnVault a partir de um backup verificado.
-# Executa cópia de segurança antes da substituição e valida integridade.
+# Restores the LearnVault database from a verified backup.
+# Takes a safety copy before the replacement and validates integrity.
 set -eu
 
 BACKUP_FILE="${1:-}"
@@ -12,7 +12,7 @@ if [ -z "$BACKUP_FILE" ]; then
     exit 1
 fi
 
-printf "Iniciando restauração segura do LearnVault a partir de %s...\n" "$BACKUP_FILE"
+printf "Starting the LearnVault restore from %s...\n" "$BACKUP_FILE"
 
 if [ -f "/app/learnvault-server" ]; then
     /app/learnvault-server restore --backup "$BACKUP_FILE" --database "$DATABASE_PATH"
@@ -22,4 +22,4 @@ else
     docker compose start "$CONTAINER"
 fi
 
-printf "Restauração concluída com sucesso.\n"
+printf "Restore completed successfully.\n"
