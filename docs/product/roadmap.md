@@ -18,8 +18,9 @@ Detailed requirements are in [requirements.md](requirements.md); technical archi
 - **Study Rules Engine:** shared progress tracking, streaks, and gamification across server, web UI, and desktop.
 - **Video & Audio Player:** media and subtitle selection per lesson, keyboard shortcuts (`J`/`K`/`L`, `0-9`, `M`, `N`, `F`, `P`, `[`/`]`), persistent playback rate, Picture-in-Picture, interactive timeline with note markers, optional auto-advance, on-demand FFmpeg remuxing/transcoding for extended formats (`.mkv`, `.avi`, `.wmv`, `.ts`, HEVC, AC3), and opening in the default system media player on desktop.
 - **Course Study View:** integrated player and lesson playlist, resuming last watched lesson, quick lesson completion toggle in the course tree, active module auto-expansion, module materials separated from the video playlist, and course administration actions.
-- **Study Notes & Flashcards:** timestamped study notes with one-click seeking, global note search with course filtering, and spaced repetition flashcards per lesson on both Web and desktop.
-- **Focus, Habits & 2.5D Study Forest:** idempotent Pomodoro focus timer with offline queue, study streak tracking, daily missions, weekly focus goals, and a 2.5D isometric forest powered by completed focus sessions.
+- **Study Notes & Flashcards:** timestamped study notes with one-click seeking, global note search with course filtering, Markdown export, and spaced repetition flashcards on Web and desktop.
+- **PDF Reader:** continuous or single-page reading, search within the open document, highlights, underlines, notes, and annotated PDF export. The original PDF stays unchanged.
+- **Focus & Habits:** Pomodoro timer with an offline queue, study streaks, daily missions, and a weekly study-day goal.
 - **Course Covers:** automatic title-based covers, root image detection (`cover.*`, `folder.*`, `poster.*`, `thumb.*`), and custom cover upload / native picker with PNG/JPEG/WebP validation, 4 MiB limit, and atomic file saving outside course folders.
 - **Administrative Backup & Restore:** secure SQLite database download and integrity-checked restore via the server admin interface.
 - **Multi-User Accounts & Course Access Permissions:** local student accounts, admin management, and granular course assignment.
