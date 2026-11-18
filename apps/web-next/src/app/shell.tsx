@@ -1,6 +1,6 @@
 import { BookOpen, ChartNoAxesColumn, History, Layers, LogOut, Moon, NotebookPen, Search, Settings, Sun, UserRound, type LucideIcon } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useLayoutEffect, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { BrandMark } from '@/components/brand';
 import { DesktopTitlebar } from '@/components/desktop-titlebar';
@@ -50,6 +50,43 @@ function DocumentLock() {
 		};
 	}, []);
 	return null;
+}
+
+function MainContent({ pathname }: { pathname: string }) {
+	const main = useRef<HTMLElement>(null);
+	const previousPath = useRef(pathname);
+	useLayoutEffect(() => {
+		if (previousPath.current === pathname) return;
+		previousPath.current = pathname;
+		const content = main.current;
+		if (!content) return;
+		const focusHeading = () => {
+			const heading = content.querySelector('h1');
+			if (!heading) return false;
+			heading.tabIndex = -1;
+			heading.focus();
+			return true;
+		};
+		if (focusHeading()) return;
+
+		// Give loading and error-only pages a focus target. Promote it to the heading
+		// when it arrives, but only if the learner has not moved focus elsewhere.
+		content.focus();
+		const observer = new MutationObserver(() => {
+			if (document.activeElement !== content || focusHeading()) observer.disconnect();
+		});
+		observer.observe(content, { childList: true, subtree: true });
+		return () => observer.disconnect();
+	}, [pathname]);
+
+	return (
+		<main ref={main} id="main" tabIndex={-1} className="app-scroll min-h-0 flex-1 overflow-y-auto focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring print:overflow-visible [&_h1:focus-visible]:outline-2 [&_h1:focus-visible]:outline-offset-4 [&_h1:focus-visible]:outline-ring">
+			{/* The phone tab bar floats over the bottom edge, hence the extra clearance. */}
+			<div className="mx-auto w-full max-w-[var(--container-max,88rem)] px-5 pt-8 pb-28 sm:px-10 sm:pt-10 sm:pb-32 lg:pb-10">
+				<Outlet />
+			</div>
+		</main>
+	);
 }
 
 export function AppShell() {
@@ -109,12 +146,7 @@ export function AppShell() {
 			</header>
 			<UpdateNotice isAdmin={Boolean(user.isAdmin)} />
 			<IndexingIndicator isAdmin={Boolean(user.isAdmin)} />
-			<main id="main" tabIndex={-1} className="app-scroll min-h-0 flex-1 overflow-y-auto outline-none print:overflow-visible">
-				{/* The phone tab bar floats over the bottom edge, hence the extra clearance. */}
-				<div className="mx-auto w-full max-w-[var(--container-max,88rem)] px-5 pt-8 pb-28 sm:px-10 sm:pt-10 sm:pb-32 lg:pb-10">
-					<Outlet />
-				</div>
-			</main>
+			<MainContent pathname={location.pathname} />
 			<MobileTabs />
 		</div>
 	);
