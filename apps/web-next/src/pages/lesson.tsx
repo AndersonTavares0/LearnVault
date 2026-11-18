@@ -18,6 +18,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { usePlayerPreferences } from '@/hooks/use-player-preferences';
 import { useLocale } from '@/hooks/use-locale';
+import { usePageTitle } from '@/hooks/use-page-title';
 import { useStore } from '@/hooks/use-store';
 import { courseProgress } from '@/lib/catalog';
 import { tr } from '@/lib/i18n';
@@ -205,9 +206,8 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 		if (breakPhase === 'break') player.current?.pause();
 	}, [breakPhase]);
 
-	useEffect(() => {
-		document.title = lesson ? `${lesson.title} · ${course.title} · LearnVault` : 'LearnVault';
-	}, [lesson, course.title]);
+	const missingTitle = tr('Lesson not found', 'Aula não encontrada');
+	usePageTitle(lesson ? `${lesson.title} · ${course.title}` : missingTitle);
 
 	const sequence = useMemo(() => lessonSequence([course]), [course]);
 	// One pass over the course, not one catalog walk per segment on every render.
@@ -220,7 +220,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 		return (
 			<div className="space-y-4">
 				<BackLink course={course} courseId={courseId} />
-				<h1 className="text-2xl font-semibold">{tr('Lesson not found', 'Aula não encontrada')}</h1>
+				<h1 className="text-2xl font-semibold">{missingTitle}</h1>
 				<p className="text-muted-foreground">{tr('It may have been renamed or removed. Pick a lesson from the course.', 'Ela pode ter sido renomeada ou removida. Escolha uma aula do curso.')}</p>
 			</div>
 		);
