@@ -270,3 +270,11 @@ test('an unknown address lands on a working page instead of a blank screen', asy
 	await expect(page.getByRole('link', { name: 'My learning' }).first()).toBeVisible();
 	expect(errors).toEqual([]);
 });
+
+test('the top bar fits a 320 px phone with every control inside the screen', async ({ page, origin }) => {
+	await page.setViewportSize({ width: 320, height: 640 });
+	await signIn(page, origin);
+	await page.getByRole('link', { name: 'My learning' }).first().waitFor({ state: 'attached' });
+	const rights = await page.locator('header button, header a').evaluateAll((elements) => elements.filter((element) => element.getBoundingClientRect().width > 0).map((element) => Math.round(element.getBoundingClientRect().right)));
+	expect(Math.max(...rights)).toBeLessThanOrEqual(320);
+});

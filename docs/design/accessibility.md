@@ -22,7 +22,8 @@ required before cutover.
 - [ ] One `h1` per route, and headings in order (1.3.1).
 - [x] The document title identifies the current page in the interface language (2.4.2). Course and
   lesson names retain their original language.
-- [ ] Focus moves to the new page heading on navigation (2.4.3).
+- [x] On navigation between signed-in pages, focus moves to the new heading or falls back to
+  `main` while the heading is unavailable. In-page filter and fragment changes preserve focus (2.4.3).
 - [ ] Focus order follows the visual order (2.4.3).
 - [ ] The bottom tab bar on mobile and the topbar on desktop expose the same destinations.
 
