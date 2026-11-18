@@ -1,7 +1,7 @@
-//! Testes da derivação do catálogo a partir dos dados persistidos.
+//! Tests of the catalog derivation from persisted data.
 //!
-//! Todos os casos partem de um banco em memória com linhas de `media` inseridas
-//! diretamente: o catálogo é uma função dos dados, não do sistema de arquivos.
+//! Every case starts from an in-memory database with `media` rows inserted
+//! directly: the catalog is a function of the data, not of the file system.
 
 use learnvault_core::paths::relative_path_key;
 use learnvault_core::{
@@ -120,8 +120,8 @@ fn a_missing_course_level_is_omitted() -> TestResult {
     let catalog = build_catalog(&db, LIB)?;
     let category = &catalog.categories[0];
 
-    // Aula = diretório com mídia; módulo = pai; curso = pai do módulo, que aqui é a
-    // própria categoria e por isso não é criado.
+    // Lesson = directory with media; module = parent; course = parent of the module, which here is the
+    // category itself and so is not created.
     let module = node(&category.children, "Cat/Curso");
     assert_eq!(module.role, NodeRole::Module);
     let lesson = node(&module.children, "Cat/Curso/Aula");
@@ -193,8 +193,8 @@ fn deeper_lessons_keep_every_file_and_nest_deterministically() -> TestResult {
     let module = node(&course.children, "Programação/Go Essencial/Módulo 1");
     assert_eq!(module.role, NodeRole::Module);
 
-    // A primeira aula reivindica `Aula 1` como aula; a segunda cria `extras` como
-    // outra aula, aninhada. Nenhum arquivo é descartado.
+    // The first lesson claims `Lesson 1` as a lesson; the second creates `extras` as
+    // another lesson, nested. No file is discarded.
     let lesson = node(&module.children, "Programação/Go Essencial/Módulo 1/Aula 1");
     assert_eq!(lesson.role, NodeRole::Lesson);
     assert_eq!(lesson.files.len(), 1);
@@ -220,7 +220,7 @@ fn titles_are_cleaned_and_the_path_keeps_the_identity() -> TestResult {
     assert_eq!(catalog.categories[1].title, "Programação");
     assert_eq!(catalog.categories[0].path, "01 - Programação");
     assert_eq!(catalog.categories[1].path, "03 - Programação");
-    // Títulos iguais em caminhos diferentes continuam sendo nós distintos.
+    // Equal titles at different paths are still distinct nodes.
     assert_ne!(
         catalog.categories[0].children[0].path,
         catalog.categories[1].children[0].path
@@ -285,8 +285,8 @@ fn files_under_an_unverified_area_are_flagged() -> TestResult {
 #[test]
 fn an_absent_file_is_not_flagged_as_unverified() -> TestResult {
     let db = library_db()?;
-    // Uma varredura completa não deixa área não verificada: o arquivo falta porque a
-    // biblioteca foi lida, não porque a área ficou fora do alcance.
+    // A complete scan leaves no unverified area: the file is missing because the
+    // library was read, not because the area was out of reach.
     insert_scan(&db, 1)?;
     insert_media(&db, "m1", "Cat/Aula/aula.mp4", 1024, "missing")?;
 
@@ -337,7 +337,7 @@ fn the_kind_is_derived_from_the_extension_including_the_typescript_rule() -> Tes
 #[test]
 fn the_catalog_is_built_only_from_persisted_data() -> TestResult {
     let db = library_db()?;
-    // O diretório `Fantasma` e o arquivo abaixo não existem no sistema de arquivos.
+    // The directory `Ghost` and the file below it do not exist in the file system.
     media(&db, "m1", "Fantasma/Inexistente/aula.mp4")?;
 
     let catalog = build_catalog(&db, LIB)?;
@@ -442,8 +442,8 @@ fn building_the_catalog_does_not_write() -> TestResult {
 
 #[test]
 fn a_node_role_does_not_depend_on_the_order_of_the_files() -> TestResult {
-    // A chave de `a-bonus/...` ordena antes da chave de `z.mp4`. O papel do diretório
-    // que contém mídia não pode depender de qual arquivo foi lido primeiro.
+    // The key of `a-bonus/...` sorts before the key of `z.mp4`. The role of the directory
+    // that contains media cannot depend on which file was read first.
     let db = library_db()?;
     media(&db, "m1", "Curso/Modulo1/a-bonus/x.mp4")?;
     media(&db, "m2", "Curso/Modulo1/z.mp4")?;
@@ -556,9 +556,9 @@ fn a_negative_size_fails_the_catalog_as_corrupt() -> TestResult {
     Ok(())
 }
 
-/// A ordenação deve ser natural em todos os níveis: "2" antes de "10", tanto em
-/// módulos quanto em aulas e materiais. A ordem é função do caminho registrado,
-/// nunca da ordem retornada pelo banco.
+/// Ordering must be natural at every level: "2" before "10", in modules as much as
+/// in lessons and materials. The order is a function of the recorded path,
+/// never of the order the database returns.
 #[test]
 fn catalog_ordering_is_natural_for_numbered_names() -> TestResult {
     let db = library_db()?;
@@ -611,7 +611,7 @@ fn catalog_ordering_is_natural_for_numbered_names() -> TestResult {
     Ok(())
 }
 
-/// Sem numeração, a ordem volta a ser alfabética: previsível e determinística.
+/// Without numbering, the order goes back to alphabetical: predictable and deterministic.
 #[test]
 fn ordering_falls_back_to_alphabetical_without_numbers() -> TestResult {
     let db = library_db()?;
@@ -629,8 +629,8 @@ fn ordering_falls_back_to_alphabetical_without_numbers() -> TestResult {
     Ok(())
 }
 
-/// Reindexar não muda a sequência: a ordem é função estável dos caminhos e a
-/// identidade (media_id) sobrevive à nova leitura.
+/// Reindexing does not change the sequence: the order is a stable function of the paths and the
+/// identity (media_id) survives the new read.
 #[test]
 fn reindexing_keeps_the_same_natural_order_and_identity() -> TestResult {
     let db = library_db()?;
@@ -844,7 +844,7 @@ fn flat_course_root_media_is_shaped_into_first_level_lessons() {
 #[test]
 fn large_directory_hierarchy_builds_fast_without_quadratic_slowdown() -> TestResult {
     let db = library_db()?;
-    // Insere 300 pastas com 2 aulas cada em profundidade 3
+    // Inserts 300 folders with 2 lessons each at depth 3
     for m in 1..=100 {
         for l in 1..=3 {
             let path = format!("Curso/Modulo {m:03}/Aula {l:02}/video.mp4");
@@ -858,7 +858,7 @@ fn large_directory_hierarchy_builds_fast_without_quadratic_slowdown() -> TestRes
 
     assert!(catalog.complete);
     assert_eq!(catalog.categories.len(), 1);
-    // Deve concluir em bem menos de 1 segundo (tipicamente < 50ms)
+    // Must finish in well under 1 second (typically < 50ms)
     assert!(
         elapsed < std::time::Duration::from_millis(800),
         "build_catalog demorou {elapsed:?}, indicando regressão quadrática"

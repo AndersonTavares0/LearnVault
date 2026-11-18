@@ -52,7 +52,7 @@ describe('generated course covers', () => {
 			expect(angle).toBeGreaterThanOrEqual(95);
 			expect(angle).toBeLessThanOrEqual(200);
 		}
-		// O mesmo título produz sempre o mesmo ângulo, e títulos distintos variam.
+		// The same title always produces the same angle, and distinct titles vary.
 		expect(courseCover('Física Quântica').angle).toBe(courseCover('Física Quântica').angle);
 		expect(new Set(angles).size).toBeGreaterThan(1);
 	});

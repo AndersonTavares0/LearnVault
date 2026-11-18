@@ -1,4 +1,4 @@
-//! Testes da abertura do banco e da aplicação da cadeia única de migrações.
+//! Tests of opening the database and applying the single migration chain.
 
 use learnvault_core::{Database, Error};
 
@@ -195,8 +195,8 @@ fn rejecting_a_newer_schema_leaves_the_database_untouched() -> TestResult {
         other => panic!("esperava Error::SchemaTooNew, obtive {other:?}"),
     }
 
-    // A recusa não pode ter efeito colateral: nem tabela criada, nem versão alterada,
-    // nem journal trocado em um banco que este binário não conhece.
+    // The refusal cannot have a side effect: no table created, no version changed,
+    // no journal switched in a database this binary does not know.
     let conn = rusqlite::Connection::open(&path)?;
     let tables: i64 = conn.query_row(
         "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
@@ -223,8 +223,8 @@ fn a_version_one_database_is_upgraded_additively_preserving_rows() -> TestResult
     let dir = tempfile::tempdir()?;
     let path = dir.path().join("learnvault.sqlite");
 
-    // Banco gravado pela versão 1 do schema: a tabela `scan` ainda não tem a coluna
-    // `complete` e a tabela `scan_inaccessible` não existe.
+    // Database written by schema version 1: the `scan` table does not yet have the column
+    // `complete` and the `scan_inaccessible` table does not exist.
     {
         let conn = rusqlite::Connection::open(&path)?;
         conn.execute_batch(
@@ -306,8 +306,8 @@ fn a_version_two_database_is_upgraded_additively_preserving_rows() -> TestResult
     let dir = tempfile::tempdir()?;
     let path = dir.path().join("learnvault.sqlite");
 
-    // Banco gravado pela versão 2 do schema: `scan` já tem `complete` e
-    // `scan_inaccessible` existe, mas `media_removal` ainda não.
+    // Database written by schema version 2: `scan` already has `complete` and
+    // `scan_inaccessible` exists, but `media_removal` does not yet.
     {
         let conn = rusqlite::Connection::open(&path)?;
         conn.execute_batch(
@@ -387,8 +387,8 @@ fn a_version_sixteen_database_is_upgraded_without_losing_notes() -> TestResult {
     let dir = tempfile::tempdir()?;
     let path = dir.path().join("learnvault.sqlite");
 
-    // Simula um banco gravado pela versão 16: o diário de sincronização ainda não existe
-    // e `study_note` não tem `sync_version`.
+    // Simulates a database written by version 16: the sync journal does not exist yet
+    // and `study_note` has no `sync_version`.
     {
         let db = Database::open(&path)?;
         db.connection().execute_batch(
@@ -453,8 +453,8 @@ fn a_drifted_schema_is_not_reported_as_current() -> TestResult {
     let db = Database::open_in_memory()?;
     assert!(db.has_current_schema()?);
 
-    // Qualquer desvio observável (aqui, um índice exigido que sumiu) precisa
-    // reprovar a prontidão em vez de confiar apenas na versão registrada.
+    // Any observable deviation (here, a required index that went missing) must
+    // fail readiness instead of trusting only the recorded version.
     db.connection()
         .execute("DROP INDEX session_expires_at_idx", [])?;
 

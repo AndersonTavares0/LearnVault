@@ -33,15 +33,15 @@ describe('session bootstrap', () => {
 	});
 
 	it('keeps the desktop local identity even without any imported course', () => {
-		// A tela inicial do desktop convida a importar um curso; ela não pode depender de
-		// uma configuração prévia nem cair no formulário de login.
+		// The desktop home screen invites you to import a course; it cannot depend on
+		// a prior configuration nor fall to the sign-in form.
 		expect(desktopLocalUser.isAdmin).toBe(true);
 	});
 });
 
 describe('build default route', () => {
 	it('starts the HTTP build at login and the desktop build at home', () => {
-		// O desktop não tem sessão para iniciar: um endereço de login não faz sentido nele.
+		// The desktop has no session to start: a sign-in address makes no sense there.
 		expect(defaultRoute('http')).toBe('login');
 		expect(defaultRoute('desktop')).toBe('home');
 	});

@@ -1,7 +1,7 @@
-//! Testes da varredura da biblioteca.
+//! Tests of the library scan.
 //!
-//! Todas as fixtures são criadas em diretórios temporários: nenhuma biblioteca
-//! real é acessada e nenhum arquivo original é modificado.
+//! All fixtures are created in temporary directories: no real library
+//! is accessed and no original file is modified.
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -38,10 +38,10 @@ fn kind_of(outcome: &ScanOutcome, relative: &str) -> MediaKind {
         .kind
 }
 
-/// Manifesto recursivo da árvore: par (caminho relativo, tamanho, instante de
-/// modificação) em ordem estável. No Windows, o NTFS atualiza o mtime de
-/// diretórios de forma preguiçosa, então `include_directories` é falso lá e a
-/// comparação fica restrita aos arquivos.
+/// Recursive manifest of the tree: (relative path, size, modification
+/// instant) triple in stable order. On Windows, NTFS updates the mtime of
+/// directories lazily, so `include_directories` is false there and the
+/// comparison is restricted to files.
 fn manifest(root: &Path, include_directories: bool) -> BTreeSet<(String, u64, u128)> {
     let mut entries = BTreeSet::new();
     collect_manifest(root, root, include_directories, &mut entries);
@@ -138,7 +138,7 @@ fn known_media_and_subtitle_extensions_are_classified() {
     for extension in subtitles {
         write_file(root, &format!("legenda/arquivo.{extension}"), b"x");
     }
-    // A extensão `.ts` exige tamanho mínimo e tem teste próprio.
+    // The `.ts` extension requires a minimum size and has its own test.
     write_file(root, "media/video.ts", &vec![0_u8; 2 * 1024 * 1024]);
 
     let outcome = scan(root).unwrap();
@@ -174,11 +174,11 @@ fn uppercase_extensions_are_classified() {
     assert_eq!(kind_of(&outcome, "LEGENDA.SRT"), MediaKind::Subtitle);
 }
 
-/// Um nome terminado em ponto tem extensão vazia e precisa ser material em
-/// qualquer sistema de arquivos. O NTFS não representa esse nome — normaliza
-/// `aula.` para `aula` — então a classificação é verificada diretamente no
-/// classificador, sem depender da representação do host. Regressão para a
-/// Issue #71: a checagem nunca é pulada por causa da plataforma.
+/// A name ending in a dot has an empty extension and must be material on
+/// any file system. NTFS does not represent that name — it normalizes
+/// `lesson.` to `lesson` — so the classification is checked directly in the
+/// classifier, without depending on the host's representation. Regression for
+/// Issue #71: the check is never skipped because of the platform.
 #[test]
 fn trailing_dot_names_are_material_regardless_of_filesystem() {
     assert_eq!(classify("aula.", 1), MediaKind::Material);
@@ -192,9 +192,9 @@ fn files_without_extension_or_with_trailing_dot_are_material() {
     let root = directory.path();
     write_file(root, "README", b"x");
     write_file(root, "aula.mp4.srt", b"x");
-    // O NTFS não representa nomes terminados em ponto: no Windows, "aula." é
-    // criado como "aula". Escrevemos a fixture de todo modo e verificamos o nome
-    // que o host realmente representa, em vez de pular a asserção.
+    // NTFS does not represent names ending in a dot: on Windows, "lesson." is
+    // created as "lesson". We write the fixture anyway and check the name
+    // the host actually represents, instead of skipping the assertion.
     write_file(root, "aula.", b"x");
     let represents_trailing_dot = fs::read_dir(root)
         .unwrap()
@@ -241,7 +241,7 @@ fn temporary_and_hidden_directories_are_not_walked() {
     write_file(root, ".git/config", b"x");
     write_file(root, ".obsidian/app.json", b"x");
     write_file(root, "Curso/aula.mp4", b"x");
-    // O filtro de diretórios ignorados não vale para arquivos com o mesmo nome.
+    // The ignored-directories filter does not apply to files with the same name.
     write_file(root, "Curso/temp.mp4", b"x");
 
     let outcome = scan(root).unwrap();

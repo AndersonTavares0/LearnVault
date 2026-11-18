@@ -1,37 +1,37 @@
-//! Progresso de estudo: posição de retomada e conclusão, por mídia e por dono.
+//! Study progress: resume position and completion, per media and per owner.
 //!
-//! O núcleo mantém, para cada par `owner_id` + `media_id`, onde a reprodução parou e se a
-//! aula foi concluída. O `owner_id` é opaco e explícito — no desktop é um identificador
-//! fixo, no servidor é o usuário autenticado — e é o único limite de isolamento entre
-//! dados de pessoas diferentes: nenhuma operação cruza donos.
+//! For each `owner_id` + `media_id` pair, the core keeps where playback stopped and whether the
+//! lesson was completed. The `owner_id` is opaque and explicit — on the desktop it is a fixed
+//! identifier, on the server it is the authenticated user — and it is the only isolation boundary between
+//! the data of different people: no operation crosses owners.
 //!
-//! # Regras
+//! # Rules
 //!
-//! - posição e conclusão são independentes: avançar não desfaz a conclusão e concluir não
-//!   move o ponto de retomada;
-//! - reenviar um valor idêntico não é uma alteração e **não** move `updated_at`, que
-//!   representa a última mudança real;
-//! - a mídia precisa existir no catálogo, tanto na leitura quanto na escrita; estar marcada
-//!   como ausente **não** impede ler nem gravar o progresso, porque a identidade da mídia
-//!   sobrevive à falta temporária do arquivo;
-//! - a primeira chamada para um par sem estado cria a linha e conta como atividade do
-//!   usuário, mesmo quando o valor enviado é neutro (posição zero ou não concluída);
-//! - cada mutação é uma única instrução SQL: não há leitura-modificação-escrita do estado, e
-//!   a existência da mídia é uma pré-checagem cuja garantia última é a chave estrangeira;
-//! - nenhuma operação escreve em `media`, `scan`, `library` ou na biblioteca física.
+//! - position and completion are independent: advancing does not undo completion and completing does not
+//!   move the resume point;
+//! - resending an identical value is not a change and does **not** move `updated_at`, which
+//!   represents the last real change;
+//! - the media must exist in the catalog, for both reads and writes; being marked
+//!   as missing does **not** prevent reading or saving progress, because the media's identity
+//!   survives the temporary absence of the file;
+//! - the first call for a pair with no state creates the row and counts as the user's
+//!   activity, even when the value sent is neutral (position zero or not completed);
+//! - each mutation is a single SQL statement: there is no read-modify-write of the state, and
+//!   the media's existence is a pre-check whose ultimate guarantee is the foreign key;
+//! - no operation writes to `media`, `scan`, `library` or the physical library.
 //!
-//! # Limites conhecidos
+//! # Known limits
 //!
-//! - `updated_at` tem resolução de um segundo: duas alterações reais no mesmo segundo gravam
-//!   o mesmo instante, e a ordem dos recentes cai no desempate por `media_id`. Um relógio que
-//!   retroceda também faz a alteração mais nova perder prioridade. Os dois casos exigiriam
-//!   uma precisão que a coluna não oferece.
-//! - o par `owner_id` + `media_id` é global: o núcleo não sabe a qual biblioteca a mídia
-//!   pertence, então decidir se um dono pode pedir aquela mídia é responsabilidade do
-//!   adaptador.
-//! - `owner_id` é usado exatamente como recebido e precisa ser canônico — o mesmo valor para
-//!   o mesmo dono em todas as chamadas. A coluna compara bytes, então `"a"` e `"a "` seriam
-//!   donos diferentes.
+//! - `updated_at` has one-second resolution: two real changes in the same second store
+//!   the same instant, and the order of recents falls back to the `media_id` tie-break. A clock that
+//!   goes backwards also makes the newer change lose priority. Both cases would require
+//!   a precision the column does not offer.
+//! - the `owner_id` + `media_id` pair is global: the core does not know which library the media
+//!   belongs to, so deciding whether an owner may ask for that media is the adapter's
+//!   responsibility.
+//! - `owner_id` is used exactly as received and must be canonical — the same value for the
+//!   same owner on every call. The column compares bytes, so `"a"` and `"a "` would be
+//!   different owners.
 
 use rusqlite::{Connection, OptionalExtension, params};
 use std::collections::HashSet;
@@ -39,32 +39,32 @@ use std::collections::HashSet;
 use crate::db::{Database, now_unix_seconds};
 use crate::error::{Error, Result};
 
-/// Teto de resultados de [`recent_study`].
+/// Ceiling of results of [`recent_study`].
 ///
-/// É um limite fixo de proteção contra consultas ilimitadas, e não uma configuração: o
-/// valor acompanha o código e muda só com uma decisão de projeto.
+/// It is a fixed protective limit against unbounded queries, not a setting: the
+/// value travels with the code and changes only with a design decision.
 pub const MAX_RECENT_STUDY: usize = 100;
 
-/// Progresso de estudo de uma mídia para um dono.
+/// Study progress of a media for an owner.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StudyProgress {
-    /// Identificador da mídia, a identidade que sobrevive a renomeações e ausências.
+    /// Identifier of the media, the identity that survives renames and absences.
     pub media_id: String,
-    /// Ponto de retomada em segundos.
+    /// Resume point in seconds.
     pub position_seconds: i64,
-    /// Indica que a aula foi concluída.
+    /// Tells whether the lesson was completed.
     pub completed: bool,
-    /// Instante da última alteração real, em segundos desde a época Unix.
+    /// Instant of the last real change, in seconds since the Unix epoch.
     ///
-    /// Resolução de um segundo: duas alterações no mesmo segundo gravam o mesmo instante.
+    /// One-second resolution: two changes in the same second store the same instant.
     pub updated_at: i64,
 }
 
-/// Lê o progresso registrado, se existir.
+/// Reads the recorded progress, if there is any.
 ///
-/// Ausência de progresso não é erro: significa que a mídia nunca foi estudada por este dono.
-/// Uma mídia que não existe no catálogo é reportada, para não confundir "desconhecida" com
-/// "nunca estudada".
+/// No progress is not an error: it means the media was never studied by this owner.
+/// A media that does not exist in the catalog is reported, so "unknown" is not confused with
+/// "never studied".
 pub fn study_progress(
     db: &Database,
     owner_id: &str,
@@ -85,7 +85,7 @@ pub fn study_progress(
     .map_err(Error::from)
 }
 
-/// Registra a posição de retomada, preservando a conclusão já registrada.
+/// Records the resume position, preserving the completion already recorded.
 pub fn record_position(
     db: &Database,
     owner_id: &str,
@@ -95,10 +95,10 @@ pub fn record_position(
     record_position_on(db.connection(), owner_id, media_id, position_seconds)
 }
 
-/// [`record_position`] sobre uma conexão já aberta.
+/// [`record_position`] over an already-open connection.
 ///
-/// A forma interna permite que uma transação do chamador agrupe a escrita de estudo e o
-/// registro da operação de sincronização.
+/// The internal form lets a caller's transaction group the study write and the
+/// record of the sync operation.
 pub(crate) fn record_position_on(
     conn: &Connection,
     owner_id: &str,
@@ -113,9 +113,9 @@ pub(crate) fn record_position_on(
 
     require_media(conn, media_id)?;
 
-    // `completed` não aparece no `DO UPDATE`, então a conclusão é preservada pela própria
-    // instrução. `updated_at` só avança quando a posição muda de fato: reenviar o mesmo
-    // valor é idempotente e não conta como alteração.
+    // `completed` does not appear in the `DO UPDATE`, so the completion is preserved by the statement
+    // itself. `updated_at` only advances when the position actually changes: resending the same
+    // value is idempotent and does not count as a change.
     conn.query_row(
         "INSERT INTO study_state (owner_id, media_id, position_seconds, completed, updated_at)
          VALUES (?1, ?2, ?3, 0, ?4)
@@ -133,7 +133,7 @@ pub(crate) fn record_position_on(
     .map_err(Error::from)
 }
 
-/// Marca ou desmarca a conclusão, preservando a posição de retomada.
+/// Marks or unmarks completion, preserving the resume position.
 pub fn set_completed(
     db: &Database,
     owner_id: &str,
@@ -143,7 +143,7 @@ pub fn set_completed(
     set_completed_on(db.connection(), owner_id, media_id, completed)
 }
 
-/// [`set_completed`] sobre uma conexão já aberta.
+/// [`set_completed`] over an already-open connection.
 pub(crate) fn set_completed_on(
     conn: &Connection,
     owner_id: &str,
@@ -154,8 +154,8 @@ pub(crate) fn set_completed_on(
 
     require_media(conn, media_id)?;
 
-    // Simétrico a [`record_position`]: `position_seconds` não é tocado pelo `DO UPDATE`, e
-    // o instante só avança quando a conclusão realmente muda.
+    // Symmetric to [`record_position`]: `position_seconds` is not touched by the `DO UPDATE`, and
+    // the instant only advances when the completion actually changes.
     conn.query_row(
         "INSERT INTO study_state (owner_id, media_id, position_seconds, completed, updated_at)
          VALUES (?1, ?2, 0, ?3, ?4)
@@ -173,11 +173,11 @@ pub(crate) fn set_completed_on(
     .map_err(Error::from)
 }
 
-/// Lista o progresso do dono, do alterado mais recentemente para o mais antigo.
+/// Lists the owner's progress, from most recently changed to oldest.
 ///
-/// O empate de instantes é desfeito pelo `media_id`, para que a ordem seja determinística.
-/// O limite é reduzido ao teto de [`MAX_RECENT_STUDY`]; um limite zero não consulta nada.
-/// Mídias removidas do catálogo não aparecem, mas o progresso delas continua gravado.
+/// Ties between instants are broken by `media_id`, so the order is deterministic.
+/// The limit is reduced to the ceiling of [`MAX_RECENT_STUDY`]; a zero limit queries nothing.
+/// Media removed from the catalog do not appear, but their progress stays stored.
 pub fn recent_study(db: &Database, owner_id: &str, limit: usize) -> Result<Vec<StudyProgress>> {
     validate_owner(owner_id)?;
 
@@ -212,7 +212,7 @@ pub fn recent_study(db: &Database, owner_id: &str, limit: usize) -> Result<Vec<S
     Ok(states)
 }
 
-/// Recusa um dono não identificado.
+/// Refuses an unidentified owner.
 pub(crate) fn validate_owner(owner_id: &str) -> Result<()> {
     if owner_id.trim().is_empty() {
         return Err(Error::InvalidOwnerId);
@@ -221,10 +221,10 @@ pub(crate) fn validate_owner(owner_id: &str) -> Result<()> {
     Ok(())
 }
 
-/// Recusa uma mídia que não existe no catálogo.
+/// Refuses a media that does not exist in the catalog.
 ///
-/// A disponibilidade do arquivo não é consultada: uma mídia ausente continua sendo uma
-/// mídia conhecida, com identidade e progresso próprios.
+/// The file's availability is not consulted: a missing media is still a
+/// known media, with its own identity and progress.
 pub(crate) fn require_media(conn: &rusqlite::Connection, media_id: &str) -> Result<()> {
     let exists = conn
         .query_row(
@@ -244,7 +244,7 @@ pub(crate) fn require_media(conn: &rusqlite::Connection, media_id: &str) -> Resu
     }
 }
 
-/// Traduz uma linha de `study_state` no estado de progresso.
+/// Translates a `study_state` row into the progress state.
 fn progress_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StudyProgress> {
     Ok(StudyProgress {
         media_id: row.get(0)?,
@@ -254,39 +254,39 @@ fn progress_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StudyProgress>
     })
 }
 
-/// Um dia da semana corrente e se ele teve atividade.
+/// A day of the current week and whether it had activity.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StudyDay {
     /// Data local no formato `YYYY-MM-DD`.
     pub day: String,
-    /// `true` quando houve progresso ou conclusão nesse dia.
+    /// `true` when there was progress or completion on that day.
     pub active: bool,
 }
 
-/// Resumo de ofensiva e da semana corrente.
+/// Summary of the streak and of the current week.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StudySummary {
-    /// Dias consecutivos até hoje (ou até ontem, quando a ofensiva está em risco).
+    /// Consecutive days up to today (or up to yesterday, when the streak is at risk).
     pub current_streak: i64,
-    /// Maior sequência já registrada.
+    /// Longest streak ever recorded.
     pub longest_streak: i64,
-    /// Dia local usado como hoje, no formato `YYYY-MM-DD`.
+    /// Local day used as today, in `YYYY-MM-DD` format.
     pub today: String,
-    /// Se houve atividade hoje.
+    /// Whether there was activity today.
     pub today_active: bool,
-    /// `true` quando hoje ainda não conta, mas a ofensiva de ontem segue viva.
+    /// `true` when today does not count yet, but yesterday's streak is still alive.
     pub at_risk: bool,
-    /// Dias ativos na semana corrente, de segunda a domingo.
+    /// Active days in the current week, from Monday to Sunday.
     pub week_active_days: i64,
-    /// Aulas atualmente marcadas como concluídas pelo dono.
+    /// Lessons currently marked as completed by the owner.
     pub completed_lessons: i64,
-    /// Os sete dias da semana corrente, de segunda a domingo.
+    /// The seven days of the current week, Monday to Sunday.
     pub days: Vec<StudyDay>,
-    /// Dias ativos nos últimos 365 dias até hoje, em ordem crescente, no formato `YYYY-MM-DD`.
+    /// Active days in the last 365 days up to today, in ascending order, in `YYYY-MM-DD` format.
     pub active_days_year: Vec<String>,
 }
 
-/// Resumo usando o dia local atual do banco.
+/// Summary using the database's current local day.
 pub fn study_summary(db: &Database, owner_id: &str) -> Result<StudySummary> {
     validate_owner(owner_id)?;
     let conn = db.connection();
@@ -294,10 +294,10 @@ pub fn study_summary(db: &Database, owner_id: &str) -> Result<StudySummary> {
     summary_for_connection(conn, owner_id, &today)
 }
 
-/// Resumo com um dia explícito, para testes determinísticos.
+/// Summary with an explicit day, for deterministic tests.
 ///
-/// O dia precisa ser uma data ISO canônica (`YYYY-MM-DD`); datas ambíguas como
-/// `2026-1-5` são recusadas em vez de normalizadas silenciosamente.
+/// The day must be a canonical ISO date (`YYYY-MM-DD`); ambiguous dates such as
+/// `2026-1-5` are refused instead of being silently normalized.
 pub fn study_summary_on(db: &Database, owner_id: &str, today: &str) -> Result<StudySummary> {
     validate_owner(owner_id)?;
     let conn = db.connection();
@@ -413,43 +413,43 @@ fn summary_for_connection(
     })
 }
 
-/// Anotação de estudo associada a uma mídia e um ponto da linha do tempo.
+/// Study note associated with a media and a point on the timeline.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StudyNote {
-    /// Identificador opaco da anotação (UUID v7).
+    /// Opaque identifier of the note (UUID v7).
     pub note_id: String,
-    /// Identificador da mídia vinculada.
+    /// Identifier of the linked media.
     pub media_id: String,
-    /// Posição no player de vídeo em segundos.
+    /// Position in the video player in seconds.
     pub position_seconds: i64,
-    /// Conteúdo textual da anotação.
+    /// Text content of the note.
     pub content: String,
-    /// Instante de criação em segundos desde a época Unix.
+    /// Creation instant in seconds since the Unix epoch.
     pub created_at: i64,
-    /// Instante da última edição em segundos desde a época Unix.
+    /// Instant of the last edit in seconds since the Unix epoch.
     pub updated_at: i64,
 }
 
-/// Anotação de estudo com metadados da mídia para navegação global.
+/// Study note with media metadata for global navigation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GlobalStudyNote {
-    /// Identificador opaco da anotação (UUID v7).
+    /// Opaque identifier of the note (UUID v7).
     pub note_id: String,
-    /// Identificador da mídia vinculada.
+    /// Identifier of the linked media.
     pub media_id: String,
-    /// Caminho relativo da mídia no catálogo.
+    /// Relative path of the media in the catalog.
     pub relative_path: String,
-    /// Posição no player de vídeo em segundos.
+    /// Position in the video player in seconds.
     pub position_seconds: i64,
-    /// Conteúdo textual da anotação.
+    /// Text content of the note.
     pub content: String,
-    /// Instante de criação em segundos desde a época Unix.
+    /// Creation instant in seconds since the Unix epoch.
     pub created_at: i64,
-    /// Instante da última edição em segundos desde a época Unix.
+    /// Instant of the last edit in seconds since the Unix epoch.
     pub updated_at: i64,
 }
 
-/// Lista as anotações do dono para uma mídia específica, ordenadas cronologicamente pelo timestamp da aula.
+/// Lists the owner's notes for a specific media, in chronological order by the lesson's timestamp.
 pub fn list_study_notes(db: &Database, owner_id: &str, media_id: &str) -> Result<Vec<StudyNote>> {
     validate_owner(owner_id)?;
     let conn = db.connection();
@@ -482,7 +482,7 @@ pub fn study_note_media_id(db: &Database, note_id: &str) -> Result<Option<String
         .optional()?)
 }
 
-/// Lista todas as anotações do dono em todo o catálogo, ordenadas da mais recente para a mais antiga.
+/// Lists all of the owner's notes across the whole catalog, from newest to oldest.
 pub fn list_all_study_notes(db: &Database, owner_id: &str) -> Result<Vec<GlobalStudyNote>> {
     validate_owner(owner_id)?;
     let conn = db.connection();
@@ -513,7 +513,7 @@ pub fn list_all_study_notes(db: &Database, owner_id: &str) -> Result<Vec<GlobalS
     Ok(notes)
 }
 
-/// Cria uma nova anotação de estudo com marcador de tempo.
+/// Creates a new study note with a time marker.
 pub fn create_study_note(
     db: &Database,
     owner_id: &str,
@@ -530,7 +530,7 @@ pub fn create_study_note(
     )
 }
 
-/// [`create_study_note`] sobre uma conexão já aberta.
+/// [`create_study_note`] over an already-open connection.
 pub(crate) fn create_study_note_on(
     conn: &Connection,
     owner_id: &str,
@@ -568,7 +568,7 @@ pub(crate) fn create_study_note_on(
     })
 }
 
-/// Atualiza o conteúdo de uma anotação existente do dono.
+/// Updates the content of an existing note of the owner.
 pub fn update_study_note(
     db: &Database,
     owner_id: &str,
@@ -578,7 +578,7 @@ pub fn update_study_note(
     update_study_note_on(db.connection(), owner_id, note_id, content)
 }
 
-/// [`update_study_note`] sobre uma conexão já aberta.
+/// [`update_study_note`] over an already-open connection.
 pub(crate) fn update_study_note_on(
     conn: &Connection,
     owner_id: &str,
@@ -609,7 +609,7 @@ pub(crate) fn update_study_note_on(
     })
 }
 
-/// Remove uma anotação de estudo pertencente ao dono.
+/// Removes a study note that belongs to the owner.
 ///
 /// The tombstone is recorded here, not in the sync adapter, so every deletion path —
 /// including the server handler, which is the journal itself and has no outbox to drain —
@@ -654,17 +654,17 @@ fn note_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StudyNote> {
     })
 }
 
-/// Avaliação de uma revisão de cartão de memorização.
+/// Rating of a flashcard review.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReviewRating {
-    /// O aluno errou ou precisa repetir logo.
+    /// The learner got it wrong or needs to repeat soon.
     Again,
-    /// O aluno acertou e entendeu o conceito.
+    /// The learner got it right and understood the concept.
     Good,
 }
 
 impl ReviewRating {
-    /// Converte de string ("again" ou "good"), case-insensitive.
+    /// Converts from a string ("again" or "good"), case-insensitive.
     pub fn parse(s: &str) -> Option<Self> {
         match s.trim().to_ascii_lowercase().as_str() {
             "again" => Some(Self::Again),
@@ -673,7 +673,7 @@ impl ReviewRating {
         }
     }
 
-    /// Retorna a representação estática em string.
+    /// Returns the static string representation.
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Again => "again",
@@ -682,32 +682,32 @@ impl ReviewRating {
     }
 }
 
-/// Cartão pessoal de estudo para repetição espaçada.
+/// Personal study card for spaced repetition.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Flashcard {
-    /// Identificador opaco do cartão (UUID v7).
+    /// Opaque identifier of the card (UUID v7).
     pub card_id: String,
-    /// Dono do cartão.
+    /// Owner of the card.
     pub owner_id: String,
-    /// Mídia vinculada.
+    /// Linked media.
     pub media_id: String,
-    /// Instante da aula em que o cartão foi criado, quando informado.
+    /// Instant of the lesson at which the card was created, when given.
     pub position_seconds: Option<i64>,
-    /// Pergunta ou conteúdo da frente.
+    /// Question or content of the front.
     pub front: String,
-    /// Resposta ou conteúdo do verso.
+    /// Answer or content of the back.
     pub back: String,
-    /// Intervalo atual de repetição em dias (0 a 365).
+    /// Current repetition interval in days (0 to 365).
     pub interval_days: i64,
-    /// Instante da próxima revisão em segundos Unix.
+    /// Instant of the next review in Unix seconds.
     pub next_due: i64,
-    /// Instante de criação em segundos Unix.
+    /// Creation instant in Unix seconds.
     pub created_at: i64,
-    /// Instante da última edição em segundos Unix.
+    /// Instant of the last edit in Unix seconds.
     pub updated_at: i64,
 }
 
-/// Valida o texto da frente ou do verso do cartão (1 a 4000 escalares Unicode, não-vazio).
+/// Validates the text of the front or back of the card (1 to 4000 Unicode scalars, non-empty).
 pub(crate) fn validate_card_text(text: &str) -> Result<String> {
     let trimmed = text.trim();
     if trimmed.is_empty() || trimmed.chars().count() > 4000 {
@@ -716,7 +716,7 @@ pub(crate) fn validate_card_text(text: &str) -> Result<String> {
     Ok(trimmed.to_owned())
 }
 
-/// Lista os cartões do dono para uma mídia específica, ordenados por vencimento (`next_due ASC, created_at ASC`).
+/// Lists the owner's cards for a specific media, ordered by due date (`next_due ASC, created_at ASC`).
 pub fn list_flashcards(db: &Database, owner_id: &str, media_id: &str) -> Result<Vec<Flashcard>> {
     validate_owner(owner_id)?;
     let conn = db.connection();
@@ -767,9 +767,9 @@ pub fn list_all_flashcards(db: &Database, owner_id: &str) -> Result<Vec<Flashcar
     Ok(cards)
 }
 
-/// Cria um novo cartão de estudo vinculado à aula.
+/// Creates a new study card linked to the lesson.
 ///
-/// O cartão novo vence imediatamente (`next_due = now`, `interval_days = 0`).
+/// The new card is due immediately (`next_due = now`, `interval_days = 0`).
 pub fn create_flashcard(
     db: &Database,
     owner_id: &str,
@@ -847,9 +847,9 @@ pub(crate) fn create_flashcard_on(
     })
 }
 
-/// Atualiza o texto da frente e/ou do verso de um cartão existente.
+/// Updates the text of the front and/or back of an existing card.
 ///
-/// Preserva o agendamento (`next_due` e `interval_days`) e atualiza `updated_at`.
+/// Preserves the schedule (`next_due` and `interval_days`) and updates `updated_at`.
 pub fn update_flashcard(
     db: &Database,
     owner_id: &str,
@@ -890,7 +890,7 @@ pub(crate) fn update_flashcard_on(
     })
 }
 
-/// Remove um cartão de estudo pertencente ao dono.
+/// Removes a study card that belongs to the owner.
 ///
 /// Records the tombstone for the same reason as [`delete_study_note`]: a card created
 /// offline must not resurrect a deleted one.
@@ -923,15 +923,15 @@ pub(crate) fn delete_flashcard_on(
     Ok(Some(deleted_at))
 }
 
-/// Registra uma revisão (Again ou Good) em um cartão existente.
+/// Records a review (Again or Good) on an existing card.
 ///
-/// Regras de agendamento:
-/// - `Again`: zera o intervalo (`interval_days = 0`) e agenda para daqui a 10 minutos (`next_due = now + 600`).
-/// - `Good`: se `interval_days == 0`, define 1 dia (`interval_days = 1`), caso contrário dobra o intervalo
-///   (`interval_days = min(interval_days * 2, 365)`), e agenda para `now + interval_days * 86400`.
+/// Scheduling rules:
+/// - `Again`: resets the interval (`interval_days = 0`) and schedules for 10 minutes from now (`next_due = now + 600`).
+/// - `Good`: if `interval_days == 0`, sets 1 day (`interval_days = 1`), otherwise doubles the interval
+///   (`interval_days = min(interval_days * 2, 365)`), and schedules for `now + interval_days * 86400`.
 ///
-/// O agendamento e o log de revisões mudam na mesma transação: ou a revisão inteira existe, ou
-/// nenhuma parte dela. O log é somente de acréscimo e guarda o intervalo anterior.
+/// The schedule and the review log change in the same transaction: either the whole review exists, or
+/// no part of it does. The log is append-only and keeps the previous interval.
 pub fn review_flashcard(
     db: &Database,
     owner_id: &str,
@@ -945,10 +945,10 @@ pub fn review_flashcard(
     Ok(card)
 }
 
-/// Próximo estado de agendamento de uma revisão: `(interval_days, next_due)`.
+/// Next scheduling state of a review: `(interval_days, next_due)`.
 ///
-/// Compartilhado pela revisão local e pela revisão que chega pelo diário de sincronização,
-/// para que as duas nunca divirjam.
+/// Shared by the local review and by the review that arrives through the sync journal,
+/// so the two never diverge.
 pub(crate) fn schedule_review(
     prev_interval: i64,
     rating: ReviewRating,
@@ -970,7 +970,7 @@ pub(crate) fn schedule_review(
     }
 }
 
-/// [`review_flashcard`] sobre uma conexão já dentro de uma transação.
+/// [`review_flashcard`] over a connection already inside a transaction.
 pub(crate) fn review_flashcard_on(
     conn: &Connection,
     owner_id: &str,
@@ -980,7 +980,7 @@ pub(crate) fn review_flashcard_on(
     validate_owner(owner_id)?;
     let now = now_unix_seconds();
 
-    // Consulta o cartão atual para obter o interval_days prévio
+    // Looks up the current card to get the previous interval_days
     let current_interval: Option<i64> = conn
         .query_row(
             "SELECT interval_days FROM flashcard WHERE owner_id = ?1 AND card_id = ?2",
@@ -1023,32 +1023,32 @@ pub(crate) fn review_flashcard_on(
     Ok(updated)
 }
 
-/// Uma revisão registrada no histórico de um cartão.
+/// A review recorded in a card's history.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FlashcardReview {
-    /// Identificador sequencial da revisão.
+    /// Sequential identifier of the review.
     pub review_id: i64,
-    /// Cartão revisado.
+    /// Card reviewed.
     pub card_id: String,
-    /// Avaliação dada pelo aluno.
+    /// Rating given by the learner.
     pub rating: ReviewRating,
-    /// Intervalo em dias antes desta revisão.
+    /// Interval in days before this review.
     pub previous_interval_days: i64,
-    /// Próximo vencimento calculado por esta revisão.
+    /// Next due date calculated by this review.
     pub next_due: i64,
-    /// Instante da revisão em segundos Unix.
+    /// Instant of the review in Unix seconds.
     pub reviewed_at: i64,
 }
 
-/// Teto de resultados de [`list_flashcard_reviews`].
+/// Ceiling of results of [`list_flashcard_reviews`].
 ///
-/// Acompanha o código e muda só com uma decisão de projeto, como [`MAX_RECENT_STUDY`].
+/// Travels with the code and changes only with a design decision, like [`MAX_RECENT_STUDY`].
 pub const MAX_FLASHCARD_REVIEWS: usize = 100;
 
-/// Lista as revisões mais recentes do dono para um cartão, da mais nova para a mais antiga.
+/// Lists the owner's most recent reviews for a card, from newest to oldest.
 ///
-/// O limite é reduzido ao teto de [`MAX_FLASHCARD_REVIEWS`]; um limite zero não consulta
-/// nada. O empate de instantes é desfeito por `review_id`, para uma ordem determinística.
+/// The limit is reduced to the ceiling of [`MAX_FLASHCARD_REVIEWS`]; a zero limit queries
+/// nothing. Ties between instants are broken by `review_id`, for a deterministic order.
 pub fn list_flashcard_reviews(
     db: &Database,
     owner_id: &str,
@@ -1101,7 +1101,7 @@ pub fn list_flashcard_reviews(
     Ok(reviews)
 }
 
-/// Conta todo o histórico de revisões de um cartão do dono, mesmo além do teto da listagem.
+/// Counts the whole review history of an owner's card, even beyond the listing's ceiling.
 pub fn count_flashcard_reviews(db: &Database, owner_id: &str, card_id: &str) -> Result<i64> {
     validate_owner(owner_id)?;
     Ok(db.connection().query_row(
@@ -1111,10 +1111,10 @@ pub fn count_flashcard_reviews(db: &Database, owner_id: &str, card_id: &str) -> 
     )?)
 }
 
-/// Conta os cartões do dono que estão vencidos agora, o mesmo predicado da fila de revisão.
+/// Counts the owner's cards that are due now, the same predicate as the review queue.
 ///
-/// Cartões nunca revisados e revisados no passado contam; um `next_due` futuro não. O dono
-/// é o único limite: a filtragem por acesso ao curso cabe ao adaptador.
+/// Cards never reviewed and cards reviewed in the past count; a future `next_due` does not. The owner
+/// is the only boundary: filtering by course access is the adapter's job.
 pub fn count_due_flashcards(db: &Database, owner_id: &str) -> Result<i64> {
     validate_owner(owner_id)?;
     Ok(db.connection().query_row(
@@ -1139,25 +1139,25 @@ fn card_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Flashcard> {
     })
 }
 
-/// Limite de caracteres do rótulo de um marcador de tempo.
+/// Character limit of a time marker's label.
 pub const MAX_BOOKMARK_LABEL_CHARS: usize = 200;
 
-/// Marcador de tempo de uma mídia, visível apenas para o dono.
+/// Time marker of a media, visible only to the owner.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MediaBookmark {
-    /// Identificador opaco do marcador (UUID v7).
+    /// Opaque identifier of the marker (UUID v7).
     pub bookmark_id: String,
-    /// Identificador da mídia vinculada.
+    /// Identifier of the linked media.
     pub media_id: String,
-    /// Instante da mídia em segundos.
+    /// Instant of the media in seconds.
     pub position_seconds: i64,
-    /// Rótulo curto escrito pelo aluno.
+    /// Short label written by the learner.
     pub label: String,
-    /// Instante de criação em segundos desde a época Unix.
+    /// Creation instant in seconds since the Unix epoch.
     pub created_at: i64,
 }
 
-/// Lista os marcadores do dono para uma mídia, em ordem cronológica.
+/// Lists the owner's markers for a media, in chronological order.
 pub fn list_media_bookmarks(
     db: &Database,
     owner_id: &str,
@@ -1182,7 +1182,7 @@ pub fn list_media_bookmarks(
     Ok(bookmarks)
 }
 
-/// Cria um marcador de tempo para o dono e a mídia.
+/// Creates a time marker for the owner and the media.
 pub fn create_media_bookmark(
     db: &Database,
     owner_id: &str,
@@ -1193,7 +1193,7 @@ pub fn create_media_bookmark(
     create_media_bookmark_on(db.connection(), owner_id, media_id, position_seconds, label)
 }
 
-/// [`create_media_bookmark`] sobre uma conexão já aberta.
+/// [`create_media_bookmark`] over an already-open connection.
 pub(crate) fn create_media_bookmark_on(
     conn: &Connection,
     owner_id: &str,
@@ -1230,7 +1230,7 @@ pub(crate) fn create_media_bookmark_on(
     })
 }
 
-/// Remove um marcador pertencente ao dono.
+/// Removes a marker that belongs to the owner.
 ///
 /// Records the tombstone for the same reason as [`delete_study_note`]: a bookmark created
 /// offline must not resurrect a deleted one. Tracked in #472.
@@ -1285,12 +1285,12 @@ fn bookmark_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MediaBookmark>
     })
 }
 
-/// Favoritos de cursos e aulas de um dono.
+/// Favourites of courses and lessons of an owner.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct StudyFavorites {
-    /// Identificadores de cursos favoritados, do mais recente ao mais antigo.
+    /// Identifiers of favourited courses, from newest to oldest.
     pub course_ids: Vec<String>,
-    /// Identificadores de mídias (aulas) favoritadas, do mais recente ao mais antigo.
+    /// Identifiers of favourited media (lessons), from newest to oldest.
     pub media_ids: Vec<String>,
 }
 
@@ -1302,9 +1302,9 @@ fn validate_favorite_target(target_id: &str) -> Result<String> {
     Ok(trimmed.to_owned())
 }
 
-/// Lista todos os cursos e aulas favoritados pelo dono.
+/// Lists all courses and lessons favourited by the owner.
 ///
-/// Aulas que foram explicitamente removidas do catálogo (`media_removal`) não aparecem.
+/// Lessons that were explicitly removed from the catalog (`media_removal`) do not appear.
 pub fn list_favorites(db: &Database, owner_id: &str) -> Result<StudyFavorites> {
     validate_owner(owner_id)?;
     let conn = db.connection();
@@ -1343,7 +1343,7 @@ pub fn list_favorites(db: &Database, owner_id: &str) -> Result<StudyFavorites> {
     })
 }
 
-/// Marca ou desmarca um curso (`course_id`) como favorito para o dono.
+/// Marks or unmarks a course (`course_id`) as a favourite for the owner.
 pub fn set_course_favorite(
     db: &Database,
     owner_id: &str,
@@ -1371,7 +1371,7 @@ pub fn set_course_favorite(
     }
 }
 
-/// Marca ou desmarca uma aula (`media_id`) como favorita para o dono.
+/// Marks or unmarks a lesson (`media_id`) as a favourite for the owner.
 pub fn set_lesson_favorite(
     db: &Database,
     owner_id: &str,

@@ -16,7 +16,7 @@ function node(role: string, title: string, children: CatalogNode[] = [], files: 
 	return { title, path: title, role, files, looseFiles: [], children };
 }
 
-/** Contagens de aulas isoladas: o resto fica zerado para não interferir no formato. */
+/** Isolated lesson counts: the rest stays zeroed so as not to interfere with the format. */
 function tally(lessons: number, missingLessons: number): CatalogCounts {
 	return { modules: 0, lessons, missingLessons, videos: 0, materials: 0 };
 }
@@ -83,8 +83,8 @@ describe('isLessonMissing', () => {
 	});
 
 	it('is true for a mixed lesson whose media is missing and whose subtitle is available', () => {
-		// Decisão: só a mídia decide. A legenda sobrevivente não torna a aula reproduzível,
-		// então a aula continua ausente — é o arquivo de mídia que a linha abre no player.
+		// Decision: only the media decides. The surviving subtitle does not make the lesson playable,
+		// so the lesson stays missing — it is the media file that the row opens in the player.
 		expect(isLessonMissing(node('lesson', 'Aula', [], [missing('a.mp4', 'media'), file('a.srt', 'subtitle')]))).toBe(true);
 	});
 
@@ -274,8 +274,8 @@ describe('lesson counting with missing media', () => {
 	it('keeps the meta readable when every lesson is missing', () => {
 		const onlyMissing = node('course', 'Curso', [node('module', 'Módulo', [node('lesson', 'Aula', [], [missing('aula.mp4', 'media')])])], [file('aviso.pdf', 'material')]);
 		const counts = countCatalogNode(onlyMissing);
-		// As somas de arquivos continuam descrevendo o que está catalogado; a aula ausente
-		// aparece na própria parte de aulas, sem sumir da meta nem virar rótulo vazio.
+		// The file sums keep describing what is catalogued; the missing lesson
+		// shows up in the lessons part itself, without vanishing from the meta nor becoming an empty label.
 		expect(counts).toEqual({ modules: 1, lessons: 0, missingLessons: 1, videos: 1, materials: 1 });
 		expect(formatCourseMeta(counts)).toBe('1 módulo · 0 aulas · 1 ausente · 1 material');
 		expect(formatCourseCardMeta(counts)).toBe('1 módulo · 0 aulas · 1 ausente');
@@ -286,9 +286,9 @@ describe('lesson counting with missing media', () => {
 		const catalog = node('course', 'Curso', [node('module', 'Módulo', [node('lesson', 'Aula', [], [media])])]);
 		expect(countCatalogNode(catalog)).toMatchObject({ lessons: 0, missingLessons: 1 });
 		expect(formatLessonCounts(countCatalogNode(catalog))).toBe('0 aulas · 1 ausente');
-		// A reindexação regrava `availability = 'available'` quando o arquivo volta ao disco
-		// (crates/core/src/rescan.rs). O cliente deriva tudo do payload que recebe: a aula
-		// volta a ser contada como disponível e o selo some sozinho.
+		// The reindex rewrites `availability = 'available'` when the file returns to the disk
+		// (crates/core/src/rescan.rs). The client derives everything from the payload it receives: the lesson
+		// goes back to being counted as available and the badge disappears on its own.
 		media.availability = 'available';
 		expect(isLessonMissing(catalog.children[0].children[0])).toBe(false);
 		expect(countCatalogNode(catalog)).toMatchObject({ lessons: 1, missingLessons: 0 });
@@ -303,16 +303,16 @@ describe('getCourseProgressStatus', () => {
 			node('lesson', 'L2', [], [file('l2.mp4', 'media')]),
 		]);
 
-		// Nenhum concluído ou em andamento
+		// None completed or in progress
 		expect(getCourseProgressStatus(testCourse, new Set())).toBe('not_started');
 
-		// 1 concluído, 1 pendente -> in_progress
+		// 1 completed, 1 pending -> in_progress
 		expect(getCourseProgressStatus(testCourse, new Set(['l1.mp4']))).toBe('in_progress');
 
-		// Nenhum concluído, mas 1 em andamento com tempo assistido -> in_progress
+		// None completed, but 1 in progress with watched time -> in_progress
 		expect(getCourseProgressStatus(testCourse, new Set(), new Set(['l1.mp4']))).toBe('in_progress');
 
-		// Todos concluídos -> completed
+		// All completed -> completed
 		expect(getCourseProgressStatus(testCourse, new Set(['l1.mp4', 'l2.mp4']))).toBe('completed');
 	});
 

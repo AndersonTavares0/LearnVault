@@ -1,40 +1,40 @@
-//! Derivação do catálogo a partir dos dados persistidos.
+//! Derivation of the catalog from persisted data.
 //!
-//! O catálogo é uma função do que está gravado: ele lê `media`, a última linha de `scan`
-//! e as áreas de `scan_inaccessible`. Nunca acessa o sistema de arquivos e nunca escreve
-//! no banco. A varredura (1.3) descobre os arquivos e a política de rescan (1.4) decide a
-//! disponibilidade; esta camada apenas organiza o que já está registrado.
+//! The catalog is a function of what is stored: it reads `media`, the last row of `scan`
+//! and the areas of `scan_inaccessible`. It never touches the file system and never writes
+//! to the database. The scan (1.3) discovers the files and the rescan policy (1.4) decides
+//! availability; this layer only organizes what is already recorded.
 //!
-//! A hierarquia é derivada de baixo para cima a partir dos caminhos persistidos:
+//! The hierarchy is derived bottom-up from the persisted paths:
 //!
-//! - **aula**: diretório que contém arquivos diretamente;
-//! - **módulo**: diretório-pai da aula;
-//! - **curso**: diretório-pai do módulo;
-//! - **categoria**: primeiro segmento do caminho.
+//! - **lesson**: directory that directly contains files;
+//! - **module**: parent directory of the lesson;
+//! - **course**: parent directory of the module;
+//! - **category**: first segment of the path.
 //!
-//! Níveis que não existem na biblioteca são omitidos, em vez de sintetizar nós
-//! artificiais: em `Categoria/Curso/aula.mp4` não há módulo e a aula fica diretamente sob
-//! a categoria.
+//! Levels that do not exist in the library are omitted, instead of synthesizing artificial
+//! nodes: in `Category/Course/lesson.mp4` there is no module and the lesson sits directly under
+//! the category.
 //!
-//! O papel de cada nó é decidido pela estrutura final, nunca pela ordem em que os arquivos
-//! foram lidos: um nó que recebe arquivos é aula, o nó que organiza aulas é módulo e o que
-//! organiza módulos é curso. Assim o papel de um diretório não muda por causa do nome de um
-//! arquivo vizinho.
+//! The role of each node is decided by the final structure, never by the order in which the files
+//! were read: a node that receives files is a lesson, the node that organizes lessons is a module and the one that
+//! organizes modules is a course. This way a directory's role does not change because of the name of a
+//! neighbouring file.
 //!
-//! Um diretório com mídia dentro de uma aula — por exemplo `Aula 1/extras/mais.mp4` — é
-//! outra aula, aninhada sob a primeira. Caminhos mais profundos que o modelo de quatro
-//! níveis não criam níveis extras: os segmentos entre a categoria e o curso ficam
-//! incorporados no caminho do nó de curso.
+//! A directory with media inside a lesson — for example `Lesson 1/extras/more.mp4` — is
+//! another lesson, nested under the first. Paths deeper than the four-level model do not
+//! create extra levels: the segments between the category and the course are folded
+//! into the path of the course node.
 //!
-//! Nenhum arquivo é descartado por estar em outra profundidade — o que não encontrar um nó
-//! correspondente é preservado em `Catalog::loose_files` (raiz da biblioteca) ou em
-//! `CatalogNode::loose_files` (arquivo direto na categoria).
+//! No file is discarded for being at another depth — whatever finds no matching node
+//! is preserved in `Catalog::loose_files` (library root) or in
+//! `CatalogNode::loose_files` (file directly in the category).
 //!
-//! Quando a última tentativa de varredura falhou, nada pôde ser verificado: o catálogo é
-//! marcado como incompleto e todos os arquivos ficam sinalizados como não verificados.
+//! When the last scan attempt failed, nothing could be verified: the catalog is
+//! marked incomplete and all files are flagged as unverified.
 //!
-//! Cada nó é identificado pelo **caminho relativo completo**, nunca pelo título: dois
-//! cursos com o mesmo nome em caminhos diferentes continuam sendo nós distintos.
+//! Each node is identified by the **full relative path**, never by the title: two
+//! courses with the same name at different paths remain distinct nodes.
 
 use std::collections::BTreeMap;
 
@@ -43,86 +43,86 @@ use crate::error::Result;
 use crate::paths::{KeyMode, is_under_area, relative_path_key};
 use crate::scanner::{MediaKind, classify};
 
-/// Disponibilidade de um arquivo segundo a última varredura.
+/// Availability of a file according to the last scan.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Availability {
-    /// O arquivo foi encontrado na última varredura.
+    /// The file was found in the last scan.
     Available,
-    /// O arquivo era conhecido e não foi encontrado. O registro e a identidade
-    /// continuam válidos.
+    /// The file was known and was not found. The record and the identity
+    /// remain valid.
     Missing,
 }
 
-/// Papel de um nó na hierarquia do catálogo.
+/// Role of a node in the catalog hierarchy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NodeRole {
-    /// Primeiro nível sob a raiz da biblioteca.
+    /// First level under the library root.
     Category,
-    /// Conjunto de módulos.
+    /// Set of modules.
     Course,
-    /// Conjunto de aulas.
+    /// Set of lessons.
     Module,
-    /// Diretório que contém os arquivos.
+    /// Directory that contains the files.
     Lesson,
 }
 
-/// Arquivo do catálogo.
+/// File of the catalog.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CatalogFile {
-    /// Identidade estável do arquivo, independente da localização.
+    /// Stable identity of the file, independent of its location.
     pub media_id: String,
-    /// Nome do arquivo, sem diretórios.
+    /// Name of the file, without directories.
     pub name: String,
-    /// Caminho relativo completo, usado como referência estrutural.
+    /// Full relative path, used as a structural reference.
     pub path: String,
-    /// Tamanho em bytes na última observação.
+    /// Size in bytes at the last observation.
     pub size: u64,
-    /// Modificação da mídia em segundos desde a época Unix na última observação.
+    /// Modification time of the media in seconds since the Unix epoch at the last observation.
     pub mtime_seconds: i64,
-    /// Tipo derivado do nome e do tamanho.
+    /// Type derived from the name and the size.
     pub kind: MediaKind,
-    /// Disponibilidade na última varredura.
+    /// Availability in the last scan.
     pub availability: Availability,
-    /// Verdadeiro quando o arquivo está sob uma área que a última varredura não
-    /// conseguiu verificar.
+    /// True when the file is under an area that the last scan could not
+    /// verify.
     pub unverified: bool,
 }
 
-/// Nó da árvore do catálogo.
+/// Node of the catalog tree.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CatalogNode {
-    /// Título apresentado, com prefixos numéricos e separadores removidos.
+    /// Displayed title, with numeric prefixes and separators removed.
     pub title: String,
-    /// Caminho relativo completo que identifica o nó.
+    /// Full relative path that identifies the node.
     pub path: String,
-    /// Papel do nó na hierarquia.
+    /// Role of the node in the hierarchy.
     pub role: NodeRole,
-    /// Arquivos do diretório. Só os nós com papel `Lesson` preenchem este campo.
+    /// Files of the directory. Only nodes with the `Lesson` role fill in this field.
     pub files: Vec<CatalogFile>,
-    /// Arquivos sem aula própria, como materiais e legendas sem mídia correspondente.
-    /// Categorias e módulos podem preenchê-lo.
+    /// Files without a lesson of their own, such as materials and subtitles with no matching media.
+    /// Categories and modules may fill it in.
     pub loose_files: Vec<CatalogFile>,
-    /// Nós filhos, ordenados por caminho.
+    /// Child nodes, ordered by path.
     pub children: Vec<CatalogNode>,
 }
 
-/// Catálogo derivado de uma biblioteca.
+/// Catalog derived from a library.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Catalog {
-    /// Verdadeiro quando a última varredura cobriu toda a biblioteca. Sem varredura
-    /// registrada, não há nada pendente e o valor é verdadeiro. Uma tentativa que falhou
-    /// deixa o valor falso.
+    /// True when the last scan covered the whole library. With no scan
+    /// recorded, nothing is pending and the value is true. A failed attempt
+    /// leaves the value false.
     pub complete: bool,
-    /// Arquivos na raiz da biblioteca, que não pertencem a nenhuma categoria.
+    /// Files at the library root, which belong to no category.
     pub loose_files: Vec<CatalogFile>,
-    /// Categorias, ordenadas por caminho.
+    /// Categories, ordered by path.
     pub categories: Vec<CatalogNode>,
 }
 
-/// Constrói o catálogo de uma biblioteca a partir dos dados persistidos.
+/// Builds the catalog of a library from the persisted data.
 ///
-/// Não recebe a raiz da biblioteca de propósito: sem um caminho, esta função não tem como
-/// ler o disco. Ela também não escreve no banco.
+/// It deliberately does not receive the library root: without a path, this function has no way to
+/// read the disk. It does not write to the database either.
 pub fn build_catalog(db: &Database, library_id: &str) -> Result<Catalog> {
     build_catalog_below(db, library_id, 0)
 }
@@ -161,7 +161,7 @@ pub fn build_catalog_below(db: &Database, library_id: &str, skip: usize) -> Resu
         };
 
         let mut segments: Vec<&str> = row.relative_path.split('/').collect();
-        // O último segmento é o nome do arquivo; o diretório é o restante.
+        // The last segment is the file name; the directory is the rest.
         segments.pop();
         // A course root starts below its own folder.
         segments.drain(..skip.min(segments.len()));
@@ -195,17 +195,17 @@ pub fn build_catalog_below(db: &Database, library_id: &str, skip: usize) -> Resu
     })
 }
 
-/// Nó em construção, antes de a árvore ser montada.
+/// Node under construction, before the tree is assembled.
 struct PendingNode {
     title: String,
     files: Vec<CatalogFile>,
     loose_files: Vec<CatalogFile>,
 }
 
-/// Devolve o nó do caminho indicado, criando-o se ainda não existir.
+/// Returns the node for the given path, creating it if it does not exist yet.
 ///
-/// O papel do nó não é decidido aqui: ele depende da estrutura final e é calculado
-/// quando a árvore é montada, em [`role_of`].
+/// The role of the node is not decided here: it depends on the final structure and is computed
+/// when the tree is assembled, in [`role_of`].
 fn ensure_node<'a>(
     nodes: &'a mut BTreeMap<String, PendingNode>,
     path: &str,
@@ -217,8 +217,8 @@ fn ensure_node<'a>(
     })
 }
 
-/// Monta a árvore a partir dos nós pendentes, ligando cada nó ao ancestral existente
-/// mais profundo.
+/// Assembles the tree from the pending nodes, linking each node to the deepest
+/// existing ancestor.
 fn assemble(nodes: &mut BTreeMap<String, PendingNode>) -> Vec<CatalogNode> {
     let children: BTreeMap<String, Vec<String>> = {
         let keys: Vec<&str> = nodes.keys().map(String::as_str).collect();
@@ -253,7 +253,7 @@ fn assemble(nodes: &mut BTreeMap<String, PendingNode>) -> Vec<CatalogNode> {
         .collect()
 }
 
-/// Remove o nó pendente e devolve-o já com os filhos montados.
+/// Removes the pending node and returns it with its children already assembled.
 fn take_node(
     path: &str,
     nodes: &mut BTreeMap<String, PendingNode>,
@@ -284,10 +284,10 @@ fn take_node(
     })
 }
 
-/// Papel de um nó, decidido pela estrutura final e nunca pela ordem de leitura.
+/// Role of a node, decided by the final structure and never by reading order.
 ///
-/// O primeiro nível é sempre a categoria. Abaixo dele, um nó que recebeu arquivos é uma
-/// aula, o nó que organiza aulas é um módulo e o que organiza módulos é um curso.
+/// The first level is always the category. Below it, a node that received files is a
+/// lesson, the node that organizes lessons is a module and the one that organizes modules is a course.
 fn role_of(path: &str, files: &[CatalogFile], children: &[CatalogNode]) -> NodeRole {
     if !path.contains('/') {
         return NodeRole::Category;
@@ -301,9 +301,9 @@ fn role_of(path: &str, files: &[CatalogFile], children: &[CatalogNode]) -> NodeR
     NodeRole::Module
 }
 
-/// Compara textos com ordenação natural: sequências de dígitos são lidas como número
-/// (com desempate pela notação, para total determinismo) e o restante é comparado
-/// caractere a caractere. "2" vem antes de "10" em qualquer nível da árvore.
+/// Compares texts with natural ordering: runs of digits are read as a number
+/// (tie-broken by notation, for total determinism) and the rest is compared
+/// character by character. "2" comes before "10" at every level of the tree.
 pub fn natural_cmp(left: &str, right: &str) -> std::cmp::Ordering {
     let (mut a, mut b) = (left, right);
     loop {
@@ -323,7 +323,7 @@ pub fn natural_cmp(left: &str, right: &str) -> std::cmp::Ordering {
     }
 }
 
-/// Primeira sequência homogênea da string (só dígitos ou nenhum dígito) e o restante.
+/// First homogeneous run of the string (only digits or no digits) and the rest.
 fn natural_segment(input: &str) -> Option<(&str, &str)> {
     if input.is_empty() {
         return None;
@@ -337,7 +337,7 @@ fn natural_segment(input: &str) -> Option<(&str, &str)> {
     Some((&input[..end], &input[end..]))
 }
 
-/// Compara duas sequências homogêneas, lendo pares de dígitos como número.
+/// Compares two homogeneous runs, reading pairs of digits as a number.
 fn compare_natural_segment(a: &str, b: &str) -> std::cmp::Ordering {
     if a.as_bytes()[0].is_ascii_digit() && b.as_bytes()[0].is_ascii_digit() {
         let number_a = a.trim_start_matches('0');
@@ -351,10 +351,10 @@ fn compare_natural_segment(a: &str, b: &str) -> std::cmp::Ordering {
     a.cmp(b)
 }
 
-/// Ancestral existente mais profundo de um caminho, se houver.
+/// Deepest existing ancestor of a path, if there is one.
 ///
-/// O percurso busca o ancestral removendo segmentos do caminho a partir do mais profundo,
-/// reduzindo o custo de busca de O(N) para O(profundidade × log N).
+/// The walk looks for the ancestor by removing segments from the path starting at the deepest,
+/// reducing the search cost from O(N) to O(depth × log N).
 fn deepest_existing_ancestor(path: &str, nodes: &BTreeMap<String, PendingNode>) -> Option<String> {
     let mut current = path;
     while let Some((parent, _)) = current.rsplit_once('/') {
@@ -366,23 +366,23 @@ fn deepest_existing_ancestor(path: &str, nodes: &BTreeMap<String, PendingNode>) 
     None
 }
 
-/// Último segmento de um caminho relativo.
+/// Last segment of a relative path.
 fn last_segment(path: &str) -> &str {
     path.rsplit('/').next().unwrap_or(path)
 }
 
-/// Título apresentado de um nó: sem prefixos numéricos nem separadores de ordenação.
+/// Displayed title of a node: without numeric prefixes or ordering separators.
 ///
-/// Compartilhada com o registro de cursos, que deriva o título do card do nome da pasta,
-/// e com a aula de arquivo, que limpa o nome do arquivo antes de estripar a extensão.
+/// Shared with the course registry, which derives the card's title from the folder name,
+/// and with the file lesson, which cleans the file name before stripping the extension.
 pub fn clean_title(name: &str) -> String {
     name.trim_start_matches(|character: char| "0123456789._- •\t".contains(character))
         .trim()
         .to_owned()
 }
 
-/// Título apresentado de um nó do catálogo ou aula: se a limpeza remover todos os
-/// caracteres (como em pastas ou arquivos chamados "01" ou "2024"), preserva o número.
+/// Displayed title of a catalog node or lesson: if the cleanup would remove all the
+/// characters (as with folders or files named "01" or "2024"), it keeps the number.
 pub fn clean_node_title(name: &str) -> String {
     let cleaned = crate::titles::presentable(&clean_title(name));
     if cleaned.is_empty() {
@@ -400,7 +400,7 @@ pub fn clean_node_title(name: &str) -> String {
     }
 }
 
-/// Título de aula derivado de um arquivo: sem extensão e sem prefixo de ordenação.
+/// Lesson title derived from a file: without extension and without ordering prefix.
 fn file_lesson_title(name: &str) -> String {
     let stem = match name.rfind('.') {
         Some(index) if index > 0 => &name[..index],
@@ -409,12 +409,12 @@ fn file_lesson_title(name: &str) -> String {
     clean_node_title(stem)
 }
 
-/// Recompõe cursos e módulos: arquivos de mídia diretamente no diretório viram aulas,
-/// acompanhados por legendas com o mesmo nome-base. Materiais e legendas sem mídia
-/// correspondente continuam disponíveis em `loose_files`.
+/// Recomposes courses and modules: media files directly in the directory become lessons,
+/// accompanied by subtitles with the same base name. Materials and subtitles with no matching
+/// media remain available in `loose_files`.
 ///
-/// A transformação é recursiva e não altera aulas que o indexador já derivou de
-/// diretórios, inclusive quando o módulo também contém arquivos diretamente.
+/// The transformation is recursive and does not alter lessons the indexer already derived from
+/// directories, including when the module also contains files directly.
 pub fn course_file_lessons(node: CatalogNode) -> CatalogNode {
     let CatalogNode {
         title,
@@ -491,12 +491,12 @@ fn promote_loose_media_to_lessons(
     (true, loose)
 }
 
-/// Prepara a subárvore e arquivos de um curso para apresentação uniforme:
-/// 1. Converte arquivos de mídia na raiz do curso em aulas de primeiro nível.
-/// 2. Associa legendas correspondentes a essas aulas.
-/// 3. Preserva materiais na raiz em `loose_files`.
-/// 4. Aplica recursivamente `course_file_lessons` a todas as categorias e módulos.
-/// 5. Devolve as aulas e módulos ordenados naturalmente e os materiais restantes.
+/// Prepares the subtree and files of a course for uniform presentation:
+/// 1. Converts media files at the course root into first-level lessons.
+/// 2. Associates matching subtitles with those lessons.
+/// 3. Preserves materials at the root in `loose_files`.
+/// 4. Recursively applies `course_file_lessons` to all categories and modules.
+/// 5. Returns the lessons and modules naturally ordered and the remaining materials.
 pub fn shape_course_catalog(catalog: Catalog) -> (Vec<CatalogNode>, Vec<CatalogFile>) {
     let mut children: Vec<CatalogNode> = catalog
         .categories
@@ -539,9 +539,9 @@ fn subtitle_belongs_to(media_stem: &str, subtitle_stem: &str) -> bool {
         })
 }
 
-/// Converte o estado gravado em `media.availability`.
+/// Converts the state stored in `media.availability`.
 ///
-/// É compartilhada com a remoção explícita, que relata a disponibilidade no impacto.
+/// Shared with explicit removal, which reports availability in the impact.
 pub(crate) fn availability_of(stored: &str) -> Availability {
     if stored == "missing" {
         Availability::Missing
@@ -550,12 +550,12 @@ pub(crate) fn availability_of(stored: &str) -> Availability {
     }
 }
 
-/// Indica se uma chave de caminho está sob alguma área não verificada.
+/// Tells whether a path key is under some unverified area.
 fn is_under_unverified(key: &str, areas: &[String]) -> bool {
     areas.iter().any(|area| is_under_area(key, area))
 }
 
-/// Linha de `media` necessária para montar o catálogo.
+/// `media` row needed to assemble the catalog.
 struct MediaRow {
     media_id: String,
     relative_path: String,
@@ -565,17 +565,17 @@ struct MediaRow {
     availability: String,
 }
 
-/// Estado da última varredura registrada para a biblioteca.
+/// State of the last scan recorded for the library.
 struct LastScan {
-    /// Verdadeiro quando a varredura cobriu toda a biblioteca.
+    /// True when the scan covered the whole library.
     complete: bool,
-    /// Verdadeiro quando a última tentativa falhou: nada pôde ser verificado.
+    /// True when the last attempt failed: nothing could be verified.
     failed: bool,
-    /// Áreas que a varredura não conseguiu verificar, já normalizadas.
+    /// Areas the scan could not verify, already normalized.
     areas: Vec<String>,
 }
 
-/// Lê a última varredura da biblioteca e as áreas que ela não conseguiu verificar.
+/// Reads the last scan of the library and the areas it could not verify.
 fn last_scan(db: &Database, library_id: &str, mode: KeyMode) -> Result<LastScan> {
     let connection = db.connection();
     let (scan_id, complete, status) = {
@@ -618,11 +618,11 @@ fn last_scan(db: &Database, library_id: &str, mode: KeyMode) -> Result<LastScan>
     })
 }
 
-/// Lê as linhas de mídia da biblioteca, já ordenadas por chave de caminho.
+/// Reads the library's media rows, already ordered by path key.
 ///
-/// As mídias removidas explicitamente ficam de fora: a remoção tira o item do catálogo
-/// sem apagar a linha, e por isso é filtrada aqui, na leitura, em vez de ser um estado da
-/// própria linha.
+/// Explicitly removed media are left out: the removal takes the item out of the catalog
+/// without deleting the row, and so it is filtered here, on read, instead of being a state of the
+/// row itself.
 fn media_rows(db: &Database, library_id: &str) -> Result<Vec<MediaRow>> {
     let mut statement = db.connection().prepare(
         "SELECT media_id, relative_path, relative_path_key, size, mtime, availability

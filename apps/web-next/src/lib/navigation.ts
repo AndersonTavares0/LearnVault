@@ -6,14 +6,14 @@ export type LessonSection = { title: string | null; lessons: LessonRef[] };
 type IndexedLesson = { ref: LessonRef; ancestors: CatalogNode[] };
 
 /**
- * Índice das aulas na ordem canônica do catálogo.
+ * Index of the lessons in the catalog's canonical order.
  *
- * A ordem é a da própria árvore (busca em profundidade), que é a ordem que o catálogo
- * Rust já entrega: categoria, curso, módulo e aula, com os módulos antes das aulas
- * soltas do curso. Percorrer a árvore em vez das categorias projetadas mantém uma única
- * fonte de verdade — a árvore canônica — e evita duplicar aulas quando as duas
- * projeções existem. Cada aula guarda a cadeia de ancestrais para que o agrupamento
- * saiba a qual curso ou módulo ela pertence sem uma segunda travessia.
+ * The order is that of the tree itself (depth-first search), which is the order the Rust
+ * catalog already delivers: category, course, module and lesson, with the modules before the
+ * course's loose lessons. Walking the tree instead of the projected categories keeps a single
+ * source of truth — the canonical tree — and avoids duplicating lessons when both
+ * projections exist. Each lesson keeps its chain of ancestors so that the grouping
+ * knows which course or module it belongs to without a second traversal.
  */
 function indexLessons(nodes: CatalogNode[]): IndexedLesson[] {
 	const indexed: IndexedLesson[] = [];
@@ -29,18 +29,18 @@ function indexLessons(nodes: CatalogNode[]): IndexedLesson[] {
 	return indexed;
 }
 
-/** Todas as aulas do catálogo, na ordem canônica, sem repetir nenhuma. */
+/** All the catalog's lessons, in canonical order, with none repeated. */
 export function lessonSequence(nodes: CatalogNode[]): LessonRef[] {
 	return indexLessons(nodes).map((entry) => entry.ref);
 }
 
 /**
- * Aula anterior e seguinte na ordem canônica do catálogo.
+ * Previous and next lesson in the catalog's canonical order.
  *
- * Os limites devolvem `null` em vez de dar a volta, para que a interface esconda o
- * controle em vez de prometer uma navegação que não existe. Um caminho ausente ou
- * desconhecido (por exemplo, depois de uma reindexação que removeu a aula) também
- * devolve os dois lados nulos: o player não inventa vizinhos para uma aula que sumiu.
+ * The limits return `null` instead of wrapping around, so that the interface hides the
+ * control instead of promising a navigation that does not exist. A missing or
+ * unknown path (for example, after a reindex that removed the lesson) also
+ * returns both sides null: the player does not invent neighbours for a lesson that vanished.
  */
 export function neighboringLessons(nodes: CatalogNode[], lessonPath: string | null): { previous: LessonRef | null; next: LessonRef | null } {
 	if (lessonPath === null) return { previous: null, next: null };
@@ -51,25 +51,25 @@ export function neighboringLessons(nodes: CatalogNode[], lessonPath: string | nu
 }
 
 /**
- * Contêiner de seção: o ancestral mais próximo que agrupa aulas — módulo, curso ou
+ * Section container: the nearest ancestor that groups lessons — module, course or
  * categoria.
  *
- * A seção é o agrupamento visível mais próximo da aula: `categoria/curso/módulo/aula`
- * fica sob o módulo; sem módulo, sob o curso; sem curso, sob a categoria. Aula sem
- * contêiner (árvore atípica, sem categorias) cai numa seção sem título, para o índice
- * continuar útil em vez de vazio.
+ * The section is the lesson's nearest visible grouping: `category/course/module/lesson`
+ * sits under the module; without a module, under the course; without a course, under the category. A lesson with no
+ * container (an atypical tree, without categories) falls into a section with no title, so the index
+ * stays useful instead of empty.
  */
 function sectionContainer(ancestors: CatalogNode[]): CatalogNode | null {
 	return [...ancestors].reverse().find((node) => node.role === 'course' || node.role === 'module' || node.role === 'category') ?? null;
 }
 
 /**
- * Seções do índice de aulas: todas as aulas do catálogo agrupadas pelo contêiner mais
- * próximo, na ordem canônica.
+ * Sections of the lesson index: all the catalog's lessons grouped by the nearest
+ * container, in canonical order.
  *
- * Contêineres são identificados pelo nó da árvore (caminho completo): dois cursos com o
- * mesmo título em caminhos diferentes não se fundem. A ordem das seções é a da primeira
- * aula de cada uma, então o índice nunca fica fora da ordem do catálogo.
+ * Containers are identified by the tree node (full path): two courses with the
+ * same title at different paths do not merge. The order of the sections is that of the first
+ * lesson of each, so the index never falls out of the catalog's order.
  */
 export function lessonSections(nodes: CatalogNode[]): LessonSection[] {
 	const sections: LessonSection[] = [];
@@ -87,22 +87,22 @@ export function lessonSections(nodes: CatalogNode[]): LessonSection[] {
 	return sections;
 }
 
-// Mídia tocável: um arquivo de mídia que a última varredura não marcou como ausente.
+// Playable media: a media file that the last scan did not mark as missing.
 function playableMedia(file: FileEntry): boolean {
 	return file.kind === 'media' && file.availability?.trim().toLowerCase() !== 'missing';
 }
 
-// Aula reproduzível: pelo menos uma mídia tocável entre os arquivos da própria aula.
+// Playable lesson: at least one playable media among the lesson's own files.
 function playableLesson(node: CatalogNode): boolean {
 	return [...node.files, ...node.looseFiles].some(playableMedia);
 }
 
 /**
- * Primeira aula disponível na ordem canônica.
+ * First available lesson in canonical order.
  *
- * Aulas têm preferência sobre mídia solta, porque é a aula que a lista lateral destaca.
- * Sem nenhuma aula reproduzível, o primeiro arquivo solto tocável também serve: um curso
- * só com mídia solta continua abrindo alguma coisa em vez de uma tela vazia.
+ * Lessons take precedence over loose media, because the lesson is what the side list highlights.
+ * With no playable lesson, the first playable loose file will do too: a course
+ * with only loose media still opens something instead of an empty screen.
  */
 export function firstAvailableLessonPath(nodes: CatalogNode[]): string | null {
 	function findLesson(list: CatalogNode[]): string | null {
@@ -128,11 +128,11 @@ export function firstAvailableLessonPath(nodes: CatalogNode[]): string | null {
 }
 
 /**
- * Caminho que contém um `media_id` na subárvore: a aula de uma mídia de aula ou o
- * arquivo solto de um contêiner.
+ * Path that contains a `media_id` in the subtree: the lesson of a lesson media or the
+ * loose file of a container.
  *
- * Só devolve caminhos que `findLesson` consegue abrir e ignora mídia marcada como
- * ausente, para que o histórico recente nunca escolha uma aula sem arquivo.
+ * Only returns paths that `findLesson` can open and ignores media marked as
+ * missing, so that the recent history never picks a lesson without a file.
  */
 export function lessonPathForMedia(nodes: CatalogNode[], mediaId: string | null): string | null {
 	if (!mediaId) return null;
@@ -151,11 +151,11 @@ export function lessonPathForMedia(nodes: CatalogNode[], mediaId: string | null)
 }
 
 /**
- * Caminho inicial de um curso: a mídia mais recente do histórico que ainda existe no
- * curso ou, sem histórico utilizável, a primeira aula disponível.
+ * Initial path of a course: the most recent media of the history that still exists in the
+ * course or, with no usable history, the first available lesson.
  *
- * `mediaIds` chega do mais recente para o mais antigo. O histórico é do usuário, não do
- * curso, então as mídias de outros cursos simplesmente não encontram caminho aqui.
+ * `mediaIds` arrives from newest to oldest. The history belongs to the user, not to the
+ * course, so media of other courses simply find no path here.
  */
 export function defaultLessonPath(nodes: CatalogNode[], mediaIds: string[]): string | null {
 	for (const mediaId of mediaIds) {
@@ -166,11 +166,11 @@ export function defaultLessonPath(nodes: CatalogNode[], mediaIds: string[]): str
 }
 
 /**
- * Contêiner visível mais próximo de uma aula ou mídia solta: módulo ou categoria.
+ * Nearest visible container of a lesson or loose media: module or category.
  *
- * Serve para mostrar os materiais do módulo da aula aberta fora da playlist, sem repetir
- * esses materiais em todas as linhas da lista lateral. Aula diretamente sob o curso não
- * tem contêiner e devolve `null`.
+ * It serves to show the materials of the open lesson's module outside the playlist, without repeating
+ * those materials on every row of the side list. A lesson directly under the course
+ * has no container and returns `null`.
  */
 export function lessonContainer(nodes: CatalogNode[], lessonPath: string | null): CatalogNode | null {
 	if (!lessonPath) return null;

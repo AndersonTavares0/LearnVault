@@ -1,4 +1,4 @@
-//! Persistência de sessões de foco e recompensas, sem acessar arquivos da biblioteca.
+//! Persistence of focus sessions and rewards, without touching the library's files.
 
 use learnvault_core::{
     Database, Error, FocusKind, FocusSessionInput, claim_daily_mission, focus_summary_on,

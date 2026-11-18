@@ -1,8 +1,8 @@
-//! Persistência tipada de usuários e sessões para adaptadores de autenticação.
+//! Typed persistence of users and sessions for authentication adapters.
 //!
-//! Este módulo não conhece hashing, cookies, HTTP ou políticas de autenticação. O servidor
-//! fornece o hash da senha, o hash do token e os instantes já calculados; o core apenas
-//! lê e grava os registros nas tabelas existentes do schema V1.
+//! This module knows nothing of hashing, cookies, HTTP or authentication policies. The server
+//! supplies the password hash, the token hash and the instants already computed; the core only
+//! reads and writes the records in the existing tables of the V1 schema.
 
 use rusqlite::{OptionalExtension, TransactionBehavior};
 
@@ -10,58 +10,58 @@ use crate::{Database, Error, Result};
 
 pub(crate) const NO_COURSE_ACCESS_SENTINEL: &str = "__none__";
 
-/// Resumo de um usuário local para administração e permissões de cursos.
+/// Summary of a local user for administration and course permissions.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocalUserSummary {
-    /// Identificador estável do usuário.
+    /// Stable identifier of the user.
     pub user_id: String,
-    /// Nome de usuário persistido.
+    /// Persisted user name.
     pub username: String,
-    /// Indica se o usuário é administrador.
+    /// Tells whether the user is an administrator.
     pub is_admin: bool,
-    /// Segundos Unix de criação da conta.
+    /// Unix seconds of the account's creation.
     pub created_at: i64,
-    /// `None` quando o usuário possui acesso irrestrito a todos os cursos;
-    /// `Some(ids)` quando o acesso é restrito apenas aos `course_id` listados.
+    /// `None` when the user has unrestricted access to every course;
+    /// `Some(ids)` when access is restricted to only the listed `course_id`s.
     pub allowed_course_ids: Option<Vec<String>>,
 }
 
-/// Usuário persistido necessário para autenticação.
+/// Persisted user needed for authentication.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AuthUser {
-    /// Identificador estável do usuário.
+    /// Stable identifier of the user.
     pub user_id: String,
-    /// Nome de usuário normalizado pelo schema (`COLLATE NOCASE`).
+    /// User name normalized by the schema (`COLLATE NOCASE`).
     pub username: String,
-    /// Hash PHC da senha, sem a senha em texto claro.
+    /// PHC hash of the password, without the plain-text password.
     pub password_hash: String,
-    /// Indica se o usuário pode executar ações administrativas.
+    /// Tells whether the user may perform administrative actions.
     pub is_admin: bool,
-    /// Indica se o usuário precisa trocar as credenciais temporárias.
+    /// Tells whether the user must change the temporary credentials.
     pub must_change_credentials: bool,
 }
 
-/// Identidade derivada de uma sessão válida.
+/// Identity derived from a valid session.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AuthSession {
-    /// Identificador do usuário autenticado.
+    /// Identifier of the authenticated user.
     pub user_id: String,
-    /// Nome de usuário autenticado.
+    /// Name of the authenticated user.
     pub username: String,
-    /// Hash PHC da senha persistida, usado apenas para validar a troca inicial.
+    /// PHC hash of the persisted password, used only to validate the initial change.
     pub password_hash: String,
-    /// Indica se o usuário autenticado é administrador.
+    /// Tells whether the authenticated user is an administrator.
     pub is_admin: bool,
-    /// Indica se a sessão está limitada à troca das credenciais temporárias.
+    /// Tells whether the session is limited to changing the temporary credentials.
     pub must_change_credentials: bool,
-    /// Instante de expiração da sessão em segundos Unix.
+    /// Expiry instant of the session in Unix seconds.
     pub expires_at: i64,
 }
 
-/// Cria o primeiro administrador, sem substituir um administrador existente.
+/// Creates the first administrator, without replacing an existing administrator.
 ///
-/// A verificação e a inserção usam a mesma transação imediata para que dois processos que
-/// inicializem o servidor ao mesmo tempo não criem administradores concorrentes.
+/// The check and the insert use the same immediate transaction so that two processes that
+/// start the server at the same time do not create concurrent administrators.
 pub fn bootstrap_admin(
     db: &mut Database,
     user_id: &str,
@@ -72,7 +72,7 @@ pub fn bootstrap_admin(
     bootstrap_admin_with_change_required(db, user_id, username, password_hash, created_at, true)
 }
 
-/// Cria o administrador inicial, permitindo distinguir credencial temporária de configurada.
+/// Creates the initial administrator, allowing a temporary credential to be told apart from a configured one.
 pub fn bootstrap_admin_with_change_required(
     db: &mut Database,
     user_id: &str,
@@ -104,7 +104,7 @@ pub fn bootstrap_admin_with_change_required(
     Ok(true)
 }
 
-/// Procura um usuário pelo nome, sem revelar se a ausência é de usuário ou senha ao caller.
+/// Looks a user up by name, without telling the caller whether the user or the password is the one that is absent.
 pub fn find_user_by_username(db: &Database, username: &str) -> Result<Option<AuthUser>> {
     Ok(db
         .connection()
@@ -126,7 +126,7 @@ pub fn find_user_by_username(db: &Database, username: &str) -> Result<Option<Aut
         .optional()?)
 }
 
-/// Informa se o banco já possui pelo menos um administrador.
+/// Tells whether the database already has at least one administrator.
 pub fn has_admin(db: &Database) -> Result<bool> {
     Ok(db.connection().query_row(
         "SELECT EXISTS (SELECT 1 FROM user WHERE is_admin = 1)",
@@ -135,7 +135,7 @@ pub fn has_admin(db: &Database) -> Result<bool> {
     )?)
 }
 
-/// Grava o hash de um token de sessão até o instante de expiração informado.
+/// Stores the hash of a session token until the given expiry instant.
 pub fn create_session(
     db: &mut Database,
     token_hash: &str,
@@ -149,7 +149,7 @@ pub fn create_session(
     Ok(())
 }
 
-/// Retorna a identidade associada a uma sessão ainda válida.
+/// Returns the identity associated with a session that is still valid.
 pub fn session_user(db: &Database, token_hash: &str, now: i64) -> Result<Option<AuthSession>> {
     Ok(db
         .connection()
@@ -174,7 +174,7 @@ pub fn session_user(db: &Database, token_hash: &str, now: i64) -> Result<Option<
         .optional()?)
 }
 
-/// Renova o prazo de uma sessão existente.
+/// Renews the deadline of an existing session.
 pub fn touch_session(db: &Database, token_hash: &str, expires_at: i64) -> Result<usize> {
     Ok(db.connection().execute(
         "UPDATE session SET expires_at = ?2 WHERE token_hash = ?1",
@@ -182,14 +182,14 @@ pub fn touch_session(db: &Database, token_hash: &str, expires_at: i64) -> Result
     )?)
 }
 
-/// Remove as sessões expiradas, mantendo a tabela limitada aos logins ativos.
+/// Removes expired sessions, keeping the table limited to active logins.
 pub fn prune_expired_sessions(db: &Database, now: i64) -> Result<usize> {
     Ok(db
         .connection()
         .execute("DELETE FROM session WHERE expires_at <= ?1", [now])?)
 }
 
-/// Atualiza credenciais e cria a sessão substituta na mesma transação.
+/// Updates credentials and creates the replacement session in the same transaction.
 pub fn update_credentials_and_session(
     db: &mut Database,
     user_id: &str,
@@ -211,7 +211,7 @@ pub fn update_credentials_and_session(
     Ok(())
 }
 
-/// Atualiza as credenciais e invalida as sessões existentes do usuário.
+/// Updates the credentials and invalidates the user's existing sessions.
 pub fn update_credentials(
     db: &mut Database,
     user_id: &str,
@@ -227,17 +227,17 @@ pub fn update_credentials(
     Ok(())
 }
 
-/// Invalida uma sessão pelo hash persistido do token.
+/// Invalidates a session by the persisted hash of its token.
 pub fn delete_session(db: &mut Database, token_hash: &str) -> Result<()> {
     db.connection()
         .execute("DELETE FROM session WHERE token_hash = ?1", [token_hash])?;
     Ok(())
 }
 
-/// Lista as permissões explícitas de cursos para um usuário.
+/// Lists the explicit course permissions for a user.
 ///
-/// Retorna `Ok(None)` quando o usuário possui acesso irrestrito a todos os cursos, ou
-/// `Ok(Some(ids))` quando o acesso está restrito aos cursos listados.
+/// Returns `Ok(None)` when the user has unrestricted access to every course, or
+/// `Ok(Some(ids))` when access is restricted to the listed courses.
 pub fn list_user_course_access(db: &Database, user_id: &str) -> Result<Option<Vec<String>>> {
     let mut stmt = db.connection().prepare(
         "SELECT course_id FROM user_course_access WHERE user_id = ?1 ORDER BY course_id ASC",
@@ -255,10 +255,10 @@ pub fn list_user_course_access(db: &Database, user_id: &str) -> Result<Option<Ve
     Ok(Some(filtered))
 }
 
-/// Verifica se o usuário tem permissão para acessar um curso específico.
+/// Checks whether the user is allowed to access a specific course.
 ///
-/// Administradores e usuários sem restrição explícita em `user_course_access` podem acessar
-/// qualquer curso; usuários com restrição ativa só acessam os cursos concedidos.
+/// Administrators and users with no explicit restriction in `user_course_access` can access
+/// any course; users with an active restriction only access the courses granted.
 pub fn can_user_access_course(
     db: &Database,
     user_id: &str,
@@ -274,7 +274,7 @@ pub fn can_user_access_course(
     }
 }
 
-/// Lista todos os usuários locais com suas permissões de acesso a cursos.
+/// Lists all local users with their course-access permissions.
 pub fn list_users(db: &Database) -> Result<Vec<LocalUserSummary>> {
     let mut stmt = db.connection().prepare(
         "SELECT user_id, username, is_admin, created_at
@@ -322,7 +322,7 @@ fn normalize_course_ids(ids: &[String]) -> Vec<String> {
     normalized
 }
 
-/// Cria uma nova conta local de estudante, aplicando opcionalmente restrições de acesso a cursos.
+/// Creates a new local student account, optionally applying course-access restrictions.
 pub fn create_user(
     db: &mut Database,
     user_id: &str,
@@ -379,10 +379,10 @@ pub fn create_user(
     })
 }
 
-/// Atualiza as permissões de acesso a cursos de um usuário estudante.
+/// Updates the course-access permissions of a student user.
 ///
-/// Passar `None` concede acesso irrestrito a todos os cursos; passar `Some(ids)` restringe
-/// o acesso apenas aos identificadores informados.
+/// Passing `None` grants unrestricted access to every course; passing `Some(ids)` restricts
+/// access to only the given identifiers.
 pub fn set_user_course_access(
     db: &mut Database,
     user_id: &str,
@@ -434,9 +434,9 @@ pub fn set_user_course_access(
     Ok(final_allowed)
 }
 
-/// Remove uma conta local de estudante e invalida suas sessões e permissões.
+/// Removes a local student account and invalidates its sessions and permissions.
 ///
-/// Contas de administrador não podem ser removidas por esta operação.
+/// Administrator accounts cannot be removed by this operation.
 pub fn delete_user(db: &mut Database, user_id: &str) -> Result<bool> {
     let tx = db
         .conn

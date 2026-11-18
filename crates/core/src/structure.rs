@@ -1,57 +1,57 @@
-//! Confiança na organização de um curso.
+//! Confidence in the organization of a course.
 //!
-//! Mede quão claro é o arranjo de uma pasta de curso a partir do catálogo já derivado:
-//! se há aulas com mídia, se a ordem vem de numeração e se algum material ficou solto. Não
-//! lê o disco nem escreve no banco, e não altera a árvore; o resultado serve para o usuário
-//! entender por que a organização pode estar diferente do esperado.
+//! It measures how clear the arrangement of a course folder is from the already-derived catalog:
+//! whether there are lessons with media, whether the order comes from numbering and whether any material was left loose. It does not
+//! read the disk nor write to the database, and does not change the tree; the result lets the user
+//! understand why the organization may differ from what was expected.
 
 use crate::catalog::{CatalogFile, CatalogNode, NodeRole};
 use crate::scanner::MediaKind;
 
-/// Quão confiável é a organização detectada.
+/// How trustworthy the detected organization is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Confidence {
-    /// Nenhuma preocupação de estrutura.
+    /// No structure concern.
     High,
-    /// Uma preocupação de ordem ou de materiais.
+    /// One concern about order or materials.
     Medium,
-    /// Vídeo fora de aula, ausência de aulas ou mais de uma preocupação.
+    /// Video outside a lesson, no lessons, or more than one concern.
     Low,
 }
 
-/// Motivo que reduz a confiança. Só os fatos aparecem aqui; o texto é da interface.
+/// Reason that lowers confidence. Only the facts appear here; the text belongs to the interface.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Concern {
-    /// Nenhuma aula contém um vídeo.
+    /// No lesson contains a video.
     NoLessons,
-    /// Há vídeo fora de qualquer aula, então ele não aparece na lista de aulas.
+    /// There is a video outside any lesson, so it does not appear in the list of lessons.
     LooseMedia,
-    /// A maioria das aulas não tem número no nome, então a ordem é alfabética.
+    /// Most lessons have no number in the name, so the order is alphabetical.
     LessonsWithoutNumbering,
-    /// Há materiais que não pertencem a nenhuma aula.
+    /// There are materials that belong to no lesson.
     LooseMaterials,
 }
 
-/// Avaliação de um curso: o nível e os motivos, na ordem em que foram encontrados.
+/// Assessment of a course: the level and the reasons, in the order they were found.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StructureAssessment {
-    /// Nível de confiança resultante.
+    /// Resulting confidence level.
     pub confidence: Confidence,
-    /// Preocupações encontradas, na ordem de detecção.
+    /// Concerns found, in detection order.
     pub concerns: Vec<Concern>,
 }
 
-/// Avalia a organização de um curso a partir da sua árvore de catálogo.
+/// Assesses the organization of a course from its catalog tree.
 ///
-/// Vídeo fora de aula ou ausência total de aulas leva a `Low`. Caso contrário, cada
-/// preocupação de ordem ou de materiais conta: nenhuma é `High`, uma é `Medium` e duas ou
-/// mais são `Low`.
+/// A video outside a lesson or a total absence of lessons leads to `Low`. Otherwise each
+/// concern about order or materials counts: none is `High`, one is `Medium` and two or
+/// more are `Low`.
 pub fn assess(course: &CatalogNode) -> StructureAssessment {
     assess_parts(&course.children, &course.loose_files)
 }
 
-/// Avalia um curso a partir dos módulos e aulas e dos arquivos soltos no topo, sem exigir
-/// o nó de curso montado. Usado pelo servidor, que já tem essas partes separadas.
+/// Assesses a course from the modules and lessons and the loose files at the top, without requiring
+/// the course node to be assembled. Used by the server, which already has these parts separate.
 pub fn assess_parts(children: &[CatalogNode], loose_files: &[CatalogFile]) -> StructureAssessment {
     let mut lessons = Vec::new();
     let mut loose_media = false;
@@ -103,7 +103,7 @@ pub fn assess_parts(children: &[CatalogNode], loose_files: &[CatalogFile]) -> St
     }
 }
 
-/// Coleta as aulas da árvore e marca vídeo ou material fora de qualquer aula.
+/// Collects the lessons of the tree and flags a video or material outside any lesson.
 fn collect<'a>(
     node: &'a CatalogNode,
     lessons: &mut Vec<&'a CatalogNode>,
@@ -139,7 +139,7 @@ fn has_media(lesson: &CatalogNode) -> bool {
         .any(|file| file.kind == MediaKind::Media)
 }
 
-/// Verdadeiro quando o último segmento do caminho começa com dígito, como `01 Intro`.
+/// True when the last segment of the path starts with a digit, like `01 Intro`.
 fn starts_with_number(path: &str) -> bool {
     path.rsplit('/')
         .next()
