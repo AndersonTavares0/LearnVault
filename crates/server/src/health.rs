@@ -35,8 +35,8 @@ pub(crate) async fn healthz(State(state): State<AppState>) -> Response {
         )
             .into_response()
     };
-    // A saúde é pública e sem dados sensíveis, mas nunca deve ser armazenada:
-    // um 200 ou 503 em cache poderia mascarar uma indisponibilidade já resolvida.
+    // Health is public and carries no sensitive data, but must never be stored:
+    // a cached 200 or 503 could mask an unavailability that has already been resolved.
     response
         .headers_mut()
         .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));

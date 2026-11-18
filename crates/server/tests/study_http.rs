@@ -1,9 +1,9 @@
-//! Testes HTTP do progresso de estudo.
+//! HTTP tests of study progress.
 //!
-//! O dono do progresso é sempre o usuário da sessão: cada caso prova que o adaptador
-//! deriva o dono da autenticação, valida o corpo tipado, traduz os erros do núcleo e
-//! persiste no banco SQLite real (sobrevivendo a um reinício equivalente do servidor).
-//! Nenhum caso lê ou escreve a biblioteca física.
+//! The owner of the progress is always the session's user: each case proves that the adapter
+//! derives the owner from authentication, validates the typed body, translates the core's errors and
+//! persists to the real SQLite database (surviving an equivalent restart of the server).
+//! No case reads or writes the physical library.
 
 use axum::{
     body::Body,
@@ -21,9 +21,9 @@ const ADMIN_PASSWORD: &str = "uma senha local muito segura";
 const READER: &str = "reader";
 const READER_PASSWORD: &str = "senha local longa para aluno";
 
-/// Usuário criado pelo bootstrap do servidor; dono do progresso do administrador.
+/// User created by the server bootstrap; owner of the administrator's progress.
 const ADMIN_ID: &str = "usr-admin";
-/// Usuário comum criado pelo próprio teste, para provar o isolamento por dono.
+/// Ordinary user created by the test itself, to prove isolation by owner.
 const READER_ID: &str = "usr-reader";
 
 fn config(temp: &TempDir) -> Config {
@@ -45,10 +45,10 @@ fn database_path(temp: &TempDir) -> std::path::PathBuf {
     temp.path().join("study.sqlite")
 }
 
-/// Prepara diretório de dados, mídia conhecida e, opcionalmente, estado de estudo inicial.
+/// Prepares the data directory, known media and, optionally, initial study state.
 ///
-/// O banco é gravado antes do `AppState` abrir: as linhas de mídia precisam existir para
-/// que o progresso seja aceito pela chave estrangeira do schema.
+/// The database is written before the `AppState` opens: the media rows must exist so
+/// that progress is accepted by the schema's foreign key.
 fn seed(temp: &TempDir, media: &[&str], states: &[(&str, &str, i64, bool, i64)]) {
     let db = Database::open(database_path(temp)).unwrap();
     db.connection()
@@ -75,7 +75,7 @@ fn seed(temp: &TempDir, media: &[&str], states: &[(&str, &str, i64, bool, i64)])
     }
 }
 
-/// Cria um usuário comum antes do `AppState` abrir o banco.
+/// Creates an ordinary user before the `AppState` opens the database.
 fn seed_user(temp: &TempDir, user_id: &str, username: &str, password: &str) {
     let hash = hash_password(password).unwrap();
     Database::open(database_path(temp))
@@ -219,11 +219,11 @@ async fn study_requires_authentication() {
     }
 }
 
-/// O endpoint de capacidades é o contrato explícito de detecção de recursos do Study. Ele
-/// tem o mesmo shape do serviço Go de referência, mas relata os valores reais deste
-/// servidor: a identidade de mídia do Rust é o `media_id` opaco, que sobrevive a
-/// renomeações, então `stable_media_identity` é `true` (o Go de referência relata o
-/// `relative_path`, não estável). A resposta exige sessão e não é armazenável.
+/// The capabilities endpoint is the explicit contract for Study feature detection. It
+/// has the same shape as the reference Go service, but reports this server's real
+/// values: Rust's media identity is the opaque `media_id`, which survives
+/// renames, so `stable_media_identity` is `true` (the reference Go reports the
+/// `relative_path`, which is not stable). The response requires a session and is not cacheable.
 #[tokio::test]
 async fn study_capabilities_reports_the_feature_contract() {
     let temp = tempfile::tempdir().unwrap();
@@ -248,7 +248,7 @@ async fn study_capabilities_reports_the_feature_contract() {
         Some(learnvault_core::MAX_RECENT_STUDY as u64)
     );
     assert_eq!(body["removal_keeps_progress"], true);
-    // O contrato é fechado: nada além dos campos acordados é exposto.
+    // The contract is closed: nothing beyond the agreed fields is exposed.
     assert_eq!(body.as_object().unwrap().len(), 6);
 }
 
@@ -682,7 +682,7 @@ async fn progress_is_isolated_between_authenticated_users() {
     );
     assert_eq!(reader_read["completed"], false);
 
-    // A escrita de um dono não pode tocar a linha do outro.
+    // One owner's write cannot touch the other's row.
     let written = app
         .clone()
         .oneshot(post_json(
@@ -741,7 +741,7 @@ async fn progress_persists_across_a_server_restart() {
     drop(first_app);
     drop(first_state);
 
-    // Reinício equivalente: um novo processo abriria o mesmo arquivo SQLite.
+    // Equivalent restart: a new process would open the same SQLite file.
     let second_state = AppState::initialize(config(&temp)).await.unwrap();
     let second_app = build_router(second_state);
     let cookie = login(&second_app, ADMIN, ADMIN_PASSWORD).await;
@@ -767,8 +767,8 @@ async fn credentials_pending_flag_blocks_study_until_changed() {
     {
         AppState::initialize(setup).await.unwrap();
     }
-    // O bootstrap não marca mais a troca pendente; o gate segue valendo para
-    // usuários legados importados com `must_change_credentials = 1`.
+    // The bootstrap no longer marks the change as pending; the gate still applies to
+    // legacy users imported with `must_change_credentials = 1`.
     {
         let database = learnvault_core::Database::open(database_path(&temp)).unwrap();
         database
@@ -798,8 +798,8 @@ async fn credentials_pending_flag_blocks_study_until_changed() {
         "credentials_change_required"
     );
 
-    // O endpoint de capacidades segue a mesma fronteira de sessão: a sessão temporária
-    // precisa trocar as credenciais antes de qualquer leitura do Study.
+    // The capabilities endpoint follows the same session boundary: the temporary session
+    // must change its credentials before any Study read.
     let capabilities = app
         .clone()
         .oneshot(get_with_cookie("/api/study/capabilities", &cookie))
@@ -813,10 +813,10 @@ async fn credentials_pending_flag_blocks_study_until_changed() {
     );
 }
 
-/// Uma base persistida já sai da cadeia de migrações na versão atual e **já contém**
-/// `study_state` e `study_day`: a primeira nasce na V1 e a segunda na V5. Este teste
-/// prova isso no arquivo real (não em memória) e verifica as restrições que o adaptador
-/// HTTP depende.
+/// A persisted database already comes out of the migration chain at the current version and **already contains**
+/// `study_state` and `study_day`: the first is born in V1 and the second in V5. This test
+/// proves it on the real file (not in memory) and checks the constraints the HTTP
+/// adapter depends on.
 #[tokio::test]
 async fn current_database_carries_study_tables_and_constraints() {
     let temp = tempfile::tempdir().unwrap();
@@ -847,7 +847,7 @@ async fn current_database_carries_study_tables_and_constraints() {
         .unwrap();
     assert_eq!(day_present, 1, "a versão 5 contém study_day");
 
-    // Chave estrangeira: uma mídia inexistente é recusada e nada é gravado.
+    // Foreign key: a nonexistent media is refused and nothing is written.
     assert!(
         db.connection()
             .execute(
@@ -858,7 +858,7 @@ async fn current_database_carries_study_tables_and_constraints() {
             .is_err(),
         "a chave estrangeira para media deve recusar mídia inexistente"
     );
-    // Chave primária composta (owner_id, media_id): o par duplicado é recusado.
+    // Composite primary key (owner_id, media_id): the duplicate pair is refused.
     db.connection()
         .execute_batch(
             "INSERT INTO study_state (owner_id, media_id, position_seconds, completed, updated_at)
@@ -875,7 +875,7 @@ async fn current_database_carries_study_tables_and_constraints() {
             .is_err(),
         "o par dono/mídia deve ser único"
     );
-    // CHECK: `completed` só aceita 0 ou 1.
+    // CHECK: `completed` only accepts 0 or 1.
     assert!(
         db.connection()
             .execute(
@@ -893,7 +893,7 @@ async fn current_database_carries_study_tables_and_constraints() {
     assert_eq!(rows, 1, "apenas a linha válida persiste");
     drop(db);
 
-    // O servidor sobre uma base persistida lê e grava progresso pela API.
+    // The server over a persisted database reads and writes progress through the API.
     let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
     let cookie = login(&app, ADMIN, ADMIN_PASSWORD).await;
     let written = app
@@ -914,10 +914,10 @@ async fn current_database_carries_study_tables_and_constraints() {
     assert_eq!(json_body(read).await["position_seconds"], 7);
 }
 
-/// Várias escritas concorrentes para o mesmo par dono/mídia precisam ser serializadas
-/// sem duplicar a linha nem falhar. O servidor mantém uma única conexão SQLite atrás de
-/// um `Mutex`, então a concorrência é resolvida antes do banco; o teste prova a
-/// invariante observável (upsert único e respostas íntegras).
+/// Several concurrent writes for the same owner/media pair must be serialized
+/// without duplicating the row or failing. The server keeps a single SQLite connection behind
+/// a `Mutex`, so concurrency is resolved before the database; the test proves the
+/// observable invariant (a single upsert and intact responses).
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn concurrent_progress_writes_are_serialized_without_corruption() {
     let temp = tempfile::tempdir().unwrap();
@@ -976,10 +976,10 @@ async fn concurrent_progress_writes_are_serialized_without_corruption() {
     );
 }
 
-/// Decisão explícita do adaptador: uma mídia removida do catálogo continua aceitando
-/// leitura e escrita de progresso — a identidade sobrevive à remoção —, mas deixa de
-/// aparecer em `/api/study/recent`, como no núcleo de remoção. Nenhuma política nova é
-/// introduzida: o servidor apenas espelha a semântica existente.
+/// Explicit decision of the adapter: a media removed from the catalog still accepts
+/// progress reads and writes — the identity survives the removal —, but stops
+/// appearing in `/api/study/recent`, as in the removal core. No new policy is
+/// introduced: the server only mirrors the existing semantics.
 #[tokio::test]
 async fn removed_catalog_media_keeps_progress_but_leaves_recent() {
     let temp = tempfile::tempdir().unwrap();
@@ -1349,7 +1349,7 @@ async fn favorites_endpoints_persist_courses_and_lessons_for_authenticated_user(
     assert_eq!(after_body["course_ids"], serde_json::json!(["Curso Rust"]));
     assert_eq!(after_body["media_ids"], serde_json::json!(["m1"]));
 
-    // Isolamento entre usuários autenticados
+    // Isolation between authenticated users
     let reader_favs = app
         .clone()
         .oneshot(get_with_cookie("/api/study/favorites", &reader_cookie))

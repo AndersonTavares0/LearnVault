@@ -1,8 +1,8 @@
-//! Transcodificação e streaming sob demanda para múltiplos codecs e contêineres de vídeo.
+//! On-demand transcoding and streaming for multiple video codecs and containers.
 //!
-//! Permite a reprodução direta no navegador de formatos que normalmente não são suportados
-//! nativamente pela tag `<video>` (como MKV, HEVC sem aceleração, áudio AC3, etc.) através
-//! do remuxing ou recodificação sob demanda usando FFmpeg para Fragmented MP4 em pipe.
+//! It allows direct playback in the browser of formats that are normally not natively supported
+//! by the `<video>` tag (such as MKV, HEVC without acceleration, AC3 audio, etc.) through
+//! remuxing or re-encoding on demand using FFmpeg to Fragmented MP4 on a pipe.
 
 use std::{
     path::PathBuf,
@@ -34,7 +34,7 @@ const FFMPEG_INPUT_PROTOCOL_WHITELIST: &str = "pipe,crypto,data";
 
 static FFMPEG_AVAILABLE: OnceLock<bool> = OnceLock::new();
 
-/// Retorna o executável do ffmpeg a ser utilizado.
+/// Returns the ffmpeg executable to be used.
 pub(crate) fn ffmpeg_path() -> PathBuf {
     if let Ok(path) = std::env::var("FFMPEG_PATH") {
         PathBuf::from(path)
@@ -43,7 +43,7 @@ pub(crate) fn ffmpeg_path() -> PathBuf {
     }
 }
 
-/// Verifica se o FFmpeg está instalado e acessível no ambiente.
+/// Checks whether FFmpeg is installed and reachable in the environment.
 pub(crate) fn is_ffmpeg_available() -> bool {
     *FFMPEG_AVAILABLE.get_or_init(|| {
         let binary = ffmpeg_path();
@@ -59,14 +59,14 @@ pub(crate) fn is_ffmpeg_available() -> bool {
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct TranscodeQuery {
-    /// Identidade do curso.
+    /// Identity of the course.
     course: String,
-    /// Caminho relativo dentro do curso.
+    /// Relative path inside the course.
     path: String,
-    /// Ponto inicial para seek em segundos.
+    /// Starting point for seek in seconds.
     #[serde(default)]
     start: Option<f64>,
-    /// Forçar recodificação completa do fluxo de vídeo para H.264.
+    /// Force a full re-encode of the video stream to H.264.
     #[serde(default)]
     reencode: Option<bool>,
 }
@@ -77,7 +77,7 @@ pub(crate) struct MediaCapabilitiesResponse {
     pub(crate) supported_codecs: Vec<&'static str>,
 }
 
-/// `GET /api/media/capabilities` — reporta as capacidades de reprodução e transcodificação do servidor.
+/// `GET /api/media/capabilities` — reports the server's playback and transcoding capabilities.
 pub(crate) async fn media_capabilities(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -110,8 +110,8 @@ pub(crate) async fn media_capabilities(
         .into_response()
 }
 
-/// Stream que encapsula o stdout do processo e o processo filho com `kill_on_drop(true)`
-/// e deadline de leitura contra travamento de processos filhos.
+/// Stream that wraps the process's stdout and the child process with `kill_on_drop(true)`
+/// and a read deadline against hung child processes.
 struct ProcessStdoutStream {
     stdout: tokio::process::ChildStdout,
     _child: tokio::process::Child,
@@ -154,7 +154,7 @@ impl AsyncRead for ProcessStdoutStream {
     }
 }
 
-/// `GET /api/media/transcode` — entrega streaming de vídeo transcodificado ou remuxado sob demanda em fMP4.
+/// `GET /api/media/transcode` — delivers on-demand transcoded or remuxed video streaming as fMP4.
 pub(crate) async fn media_transcode(
     State(state): State<AppState>,
     raw_query: RawQuery,
@@ -395,12 +395,12 @@ fn media_error_status(error: &learnvault_core::Error) -> StatusCode {
     }
 }
 
-/// Argumentos do FFmpeg para o modo de transcodificação sob demanda.
+/// FFmpeg arguments for the on-demand transcoding mode.
 ///
-/// `-ss` vem antes de `-i` para que a busca seja de entrada: com `pipe:0` o FFmpeg descarta
-/// pacotes até o ponto de retomada em vez de decodificar e recodificar o arquivo inteiro
-/// desde o começo. O tremor de timestamps é o mesmo: o áudio e o vídeo continuam saindo
-/// como Fragmented MP4 começando em zero.
+/// `-ss` comes before `-i` so that the seek is an input seek: with `pipe:0` FFmpeg discards
+/// packets up to the resume point instead of decoding and re-encoding the whole file
+/// from the start. The timestamp jitter is the same: audio and video keep coming out
+/// as Fragmented MP4 starting at zero.
 fn transcode_args(start: f64, reencode: bool) -> Vec<String> {
     let mut args: Vec<String> = [
         "-hide_banner",
@@ -429,7 +429,7 @@ fn transcode_args(start: f64, reencode: bool) -> Vec<String> {
             .map(|argument| (*argument).to_owned()),
         );
     } else {
-        // Modo inteligente: copia fluxo de vídeo diretamente (zero CPU) e assegura áudio em AAC (compatível com navegadores)
+        // Smart mode: copies the video stream directly (zero CPU) and ensures AAC audio (browser-compatible)
         args.extend(
             ["-c:v", "copy", "-c:a", "aac", "-b:a", "192k"]
                 .iter()

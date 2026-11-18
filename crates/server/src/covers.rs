@@ -1,24 +1,24 @@
-//! Capas personalizadas dos cursos: upload administrativo, leitura autenticada e remoção.
+//! Custom course covers: administrative upload, authenticated read and removal.
 //!
-//! Uma capa é um único arquivo por curso, guardado no diretório de dados do servidor (ao
-//! lado do banco), jamais dentro da pasta somente-leitura do curso. O tipo é decidido
-//! apenas pelos bytes iniciais (magic bytes): nenhum decodificador de imagem é embarcado.
-//! O caminho físico nunca cruza a API; a interface conhece só a identidade opaca do curso.
+//! A cover is a single file per course, kept in the server's data directory (next to the
+//! database), never inside the course's read-only folder. The type is decided only
+//! by the initial bytes (magic bytes): no image decoder is shipped.
+//! The physical path never crosses the API; the interface knows only the course's opaque identity.
 //!
-//! ## Leiaute em disco
+//! ## Layout on disk
 //!
-//! As capas ficam em `<diretório de dados>/covers/<id do curso>.cover`, ou seja no mesmo
-//! diretório do arquivo de registro (`courses.json`), derivado de
-//! [`crate::courses::registry_path`]. O nome do arquivo é apenas a identidade opaca do
-//! curso mais um sufixo: a identidade é validada como um único segmento de caminho seguro
-//! ([`valid_course_id`]) antes de qualquer acesso ao disco, então nenhuma identidade
-//! recebida pela API pode escapar do diretório de capas.
+//! Covers live in `<data directory>/covers/<course id>.cover`, that is, in the same
+//! directory as the registry file (`courses.json`), derived from
+//! [`crate::courses::registry_path`]. The file name is just the course's opaque
+//! identity plus a suffix: the identity is validated as a single safe path segment
+//! ([`valid_course_id`]) before any disk access, so no identity
+//! received through the API can escape the covers directory.
 //!
-//! A gravação é atômica (arquivo temporário exclusivo + troca por `rename`), para que uma
-//! leitura concorrente nunca veja uma capa truncada. A "versão" devolvida ao cliente é o
-//! *mtime* do arquivo em segundos: é o suficiente para invalidar a URL (`?v=`) do webview e
-//! é derivada do arquivo em disco, não de um contador em memória que se perderia no
-//! reinício do processo.
+//! Writing is atomic (exclusive temporary file + swap by `rename`), so that a
+//! concurrent read never sees a truncated cover. The "version" returned to the client is the
+//! file's *mtime* in seconds: it is enough to invalidate the webview's URL (`?v=`) and
+//! it is derived from the file on disk, not from an in-memory counter that would be lost on
+//! process restart.
 
 use std::{
     fs::{self, Metadata, OpenOptions},
@@ -48,19 +48,19 @@ use crate::{
     courses::replace_file,
 };
 
-/// Tamanho máximo aceito para uma capa personalizada (4 MiB).
+/// Maximum size accepted for a custom cover (4 MiB).
 pub(crate) const MAX_COVER_BYTES: usize = 4 * 1024 * 1024;
 
-/// Nome do diretório de capas dentro do diretório de dados do servidor.
+/// Name of the covers directory inside the server's data directory.
 pub(crate) const COVERS_DIR_NAME: &str = "covers";
 
-/// Sufixo do arquivo de capa de um curso dentro do diretório de capas.
+/// Suffix of a course's cover file inside the covers directory.
 const COVER_FILE_SUFFIX: &str = ".cover";
 
-/// Comprimento máximo aceito para a identidade de um curso usada como segmento de caminho.
+/// Maximum length accepted for a course identity used as a path segment.
 const MAX_COURSE_ID_LEN: usize = 128;
 
-/// Tipo de imagem reconhecido pelos bytes iniciais do arquivo.
+/// Image type recognized by the file's initial bytes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ImageType {
     Png,
@@ -69,7 +69,7 @@ pub(crate) enum ImageType {
 }
 
 impl ImageType {
-    /// `Content-Type` correspondente ao tipo detectado.
+    /// `Content-Type` matching the detected type.
     pub(crate) const fn content_type(self) -> &'static str {
         match self {
             ImageType::Png => "image/png",
@@ -79,20 +79,20 @@ impl ImageType {
     }
 }
 
-/// Falha estável das operações de capa. Nunca carrega caminho.
+/// Stable failure of the cover operations. It never carries a path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CoverError {
-    /// O conteúdo foi recusado antes de tocar o disco (tipo não suportado ou acima do limite).
+    /// The content was refused before touching the disk (unsupported type or above the limit).
     Rejected,
-    /// A gravação ou a remoção não pôde concluir.
+    /// The write or the removal could not complete.
     WriteFailed,
-    /// A capa guardada não pôde ser lida.
+    /// The stored cover could not be read.
     Unreadable,
-    /// A capa guardada não é uma imagem suportada (corrupção ou adulteração no disco).
+    /// The stored cover is not a supported image (corruption or tampering on disk).
     Corrupt,
 }
 
-/// Diretório de capas, ao lado do arquivo de registro de cursos (e do banco).
+/// Covers directory, next to the course registry file (and the database).
 pub(crate) fn covers_dir(database_path: &Path) -> PathBuf {
     let parent = crate::courses::registry_path(database_path)
         .parent()
@@ -101,18 +101,18 @@ pub(crate) fn covers_dir(database_path: &Path) -> PathBuf {
     parent.join(COVERS_DIR_NAME)
 }
 
-/// Caminho físico da capa de um curso. Só é chamado com uma identidade já validada.
+/// Physical path of a course's cover. Only called with an already-validated identity.
 fn cover_file(covers_dir: &Path, course_id: &str) -> PathBuf {
     covers_dir.join(format!("{course_id}{COVER_FILE_SUFFIX}"))
 }
 
-/// Aceita apenas um segmento de caminho seguro (identidade opaca do curso).
+/// Accepts only a safe path segment (the course's opaque identity).
 ///
-/// Toda identidade que o servidor pode emitir é `course-` + um UUID (hexadecimal e hífens,
-/// de [`learnvault_core::course_id_from_path`]) ou a identidade legada `library-1`, então o
-/// conjunto `[A-Za-z0-9_-]` cobre todos os cursos reais. Qualquer outra coisa é recusada:
-/// vazio, `.`/`..`, separadores de caminho, caracteres de controle (incluindo NUL),
-/// espaços, `%` (separador percent-encoded) e valores longos demais.
+/// Every identity the server can issue is `course-` + a UUID (hexadecimal and hyphens,
+/// from [`learnvault_core::course_id_from_path`]) or the legacy identity `library-1`, so the
+/// set `[A-Za-z0-9_-]` covers all real courses. Anything else is refused:
+/// empty, `.`/`..`, path separators, control characters (including NUL),
+/// spaces, `%` (the percent-encoded separator) and values that are too long.
 pub(crate) fn valid_course_id(course_id: &str) -> bool {
     if course_id.is_empty() || course_id.len() > MAX_COURSE_ID_LEN {
         return false;
@@ -122,7 +122,7 @@ pub(crate) fn valid_course_id(course_id: &str) -> bool {
         .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
 }
 
-/// Detecta o tipo da imagem apenas pelos bytes iniciais.
+/// Detects the image type only from the initial bytes.
 pub(crate) fn detect_image_type(bytes: &[u8]) -> Option<ImageType> {
     const PNG: &[u8] = &[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
     const JPEG: &[u8] = &[0xFF, 0xD8, 0xFF];
@@ -135,18 +135,18 @@ pub(crate) fn detect_image_type(bytes: &[u8]) -> Option<ImageType> {
     if bytes.starts_with(JPEG) {
         return Some(ImageType::Jpeg);
     }
-    // `RIFF<4 bytes de tamanho>WEBP`: os quatro bytes entre os marcadores são o tamanho
-    // declarado do contêiner e não participam da identificação do formato.
+    // `RIFF<4 bytes of size>WEBP`: the four bytes between the markers are the container's
+    // declared size and do not take part in identifying the format.
     if bytes.len() >= 12 && bytes.starts_with(RIFF) && &bytes[8..12] == WEBP {
         return Some(ImageType::Webp);
     }
     None
 }
 
-/// Versão (mtime em segundos) da capa de um curso, quando existir.
+/// Version (mtime in seconds) of a course's cover, when it exists.
 ///
-/// Um caminho que não seja um arquivo comum (diretório, link ou junction) não tem versão:
-/// a listagem nunca anuncia uma capa que [`read_cover`] recusaria.
+/// A path that is not a regular file (directory, link or junction) has no version:
+/// the listing never announces a cover that [`read_cover`] would refuse.
 pub(crate) fn cover_version(covers_dir: &Path, course_id: &str) -> Option<i64> {
     if !valid_course_id(course_id) {
         return None;
@@ -158,12 +158,12 @@ pub(crate) fn cover_version(covers_dir: &Path, course_id: &str) -> Option<i64> {
     modified_seconds(&metadata)
 }
 
-/// Grava a capa de forma atômica e devolve a versão resultante.
+/// Writes the cover atomically and returns the resulting version.
 ///
-/// O temporário é criado exclusivamente (`create_new`), sincronizado e trocado pelo destino
-/// com [`replace_file`]; nenhum leitor observa um arquivo parcial e nenhum temporário fica
-/// para trás. O conteúdo é revalidado aqui (tipo suportado e abaixo do limite), para que a
-/// primitiva nunca grave algo que a leitura recusaria.
+/// The temporary file is created exclusively (`create_new`), synced and swapped into the destination
+/// with [`replace_file`]; no reader observes a partial file and no temporary file is left
+/// behind. The content is revalidated here (supported type and below the limit), so the
+/// primitive never writes something that the read would refuse.
 pub(crate) fn store_cover(
     covers_dir: &Path,
     course_id: &str,
@@ -200,11 +200,11 @@ pub(crate) fn store_cover(
     cover_version(covers_dir, course_id).ok_or(CoverError::WriteFailed)
 }
 
-/// Lê a capa e redetecta o tipo pelos bytes.
+/// Reads the cover and redetects the type from the bytes.
 ///
-/// O `Content-Type` devolvido vem sempre do arquivo guardado, nunca do pedido de upload.
-/// Um caminho ausente ou que não seja um arquivo comum é ausência de capa; um arquivo
-/// comum que não seja uma imagem suportada (ou acima do limite) é corrupção.
+/// The `Content-Type` returned always comes from the stored file, never from the upload request.
+/// A path that is absent or not a regular file means no cover; a regular
+/// file that is not a supported image (or is above the limit) is corruption.
 pub(crate) fn read_cover(
     covers_dir: &Path,
     course_id: &str,
@@ -231,7 +231,7 @@ pub(crate) fn read_cover(
     Ok(Some((bytes, image_type)))
 }
 
-/// Remove a capa e informa se algo foi apagado.
+/// Removes the cover and reports whether anything was deleted.
 pub(crate) fn remove_cover(covers_dir: &Path, course_id: &str) -> Result<bool, CoverError> {
     if !valid_course_id(course_id) {
         return Ok(false);
@@ -243,18 +243,18 @@ pub(crate) fn remove_cover(covers_dir: &Path, course_id: &str) -> Result<bool, C
     }
 }
 
-/// Segundos de modificação de um arquivo, quando representáveis.
+/// Modification seconds of a file, when representable.
 pub(crate) fn modified_seconds(metadata: &Metadata) -> Option<i64> {
     let modified = metadata.modified().ok()?;
     let seconds = modified.duration_since(UNIX_EPOCH).ok()?.as_secs();
     i64::try_from(seconds).ok()
 }
 
-/// Detecta automaticamente uma capa local na raiz da pasta do curso e a armazena em `covers_dir`.
+/// Automatically detects a local cover at the root of the course folder and stores it in `covers_dir`.
 ///
-/// Não substitui capa já existente em `covers_dir`. Prioriza os nomes `cover.*`, `folder.*`,
-/// `poster.*`, `thumb.*` e `thumbnail.*` com extensões suportadas (`.jpg`, `.jpeg`, `.png`, `.webp`).
-/// O diretório do curso é lido de forma estritamente somente-leitura.
+/// It does not replace a cover already in `covers_dir`. It prioritizes the names `cover.*`, `folder.*`,
+/// `poster.*`, `thumb.*` and `thumbnail.*` with supported extensions (`.jpg`, `.jpeg`, `.png`, `.webp`).
+/// The course directory is read strictly read-only.
 pub(crate) fn auto_detect_course_cover(
     covers_dir: &Path,
     course_id: &str,
@@ -405,7 +405,7 @@ fn extract_fallback_video_cover(course_root: &Path) -> Option<Vec<u8>> {
     None
 }
 
-/// Verdadeiro quando a identidade é segura e corresponde a um curso registrado.
+/// True when the identity is safe and matches a registered course.
 fn course_is_registered(state: &AppState, course_id: &str) -> bool {
     valid_course_id(course_id)
         && state
@@ -414,19 +414,19 @@ fn course_is_registered(state: &AppState, course_id: &str) -> bool {
             .any(|course| course.id == course_id)
 }
 
-/// Corpo do pedido de upload. É lido com limite explícito, fora do limite padrão do roteador.
+/// Body of the upload request. It is read with an explicit limit, outside the router's default limit.
 enum CoverBodyError {
-    /// O corpo excedeu [`MAX_COVER_BYTES`].
+    /// The body exceeded [`MAX_COVER_BYTES`].
     TooLarge,
-    /// O corpo não pôde ser lido até o fim.
+    /// The body could not be read to the end.
     Unreadable,
 }
 
-/// Consome o corpo do pedido acumulando no máximo [`MAX_COVER_BYTES`].
+/// Consumes the request body, accumulating at most [`MAX_COVER_BYTES`].
 ///
-/// O limite padrão do roteador só é aplicado por extratores que o respeitam; um handler que
-/// consome o `Body` diretamente precisa impor o próprio limite, e é isso que torna o `413`
-/// determinístico em vez de depender do tamanho dos chunks do transporte.
+/// The router's default limit is only applied by extractors that respect it; a handler that
+/// consumes the `Body` directly must enforce its own limit, and that is what makes the `413`
+/// deterministic instead of depending on the size of the transport's chunks.
 async fn read_cover_body(body: Body) -> Result<Vec<u8>, CoverBodyError> {
     let mut stream = std::pin::pin!(body.into_data_stream());
     let mut bytes: Vec<u8> = Vec::new();
@@ -457,18 +457,18 @@ struct ErrorBody {
     error: &'static str,
 }
 
-/// Erro JSON estável, com a política de cache privada.
+/// Stable JSON error, with the private cache policy.
 fn json_error(status: StatusCode, message: &'static str) -> Response {
     private_no_store((status, Json(ErrorBody { error: message })).into_response())
 }
 
-/// `PUT /api/admin/courses/{id}/cover` — grava a capa personalizada de um curso.
+/// `PUT /api/admin/courses/{id}/cover` — stores a course's custom cover.
 ///
-/// Somente administrador com credenciais já definidas e mesma origem. O curso precisa estar
-/// registrado: uma identidade desconhecida (ou insegura) responde `404` sem revelar nada. O
-/// upload é aceito apenas se os bytes iniciais forem de PNG, JPEG ou WebP e o corpo couber
-/// em [`MAX_COVER_BYTES`]; a gravação roda fora das threads Tokio, com a reserva de
-/// capacidade de tarefas blocking mantida até o fim do trabalho.
+/// Administrator only, with credentials already set and same origin. The course must be
+/// registered: an unknown (or unsafe) identity answers `404` without revealing anything. The
+/// upload is accepted only if the initial bytes are PNG, JPEG or WebP and the body fits
+/// in [`MAX_COVER_BYTES`]; the write runs off the Tokio threads, with the reservation of
+/// blocking-task capacity held until the work ends.
 pub(crate) async fn put_cover(
     State(state): State<AppState>,
     AxumPath(course_id): AxumPath<String>,
@@ -489,7 +489,7 @@ pub(crate) async fn put_cover(
     if user.must_change_credentials {
         return credentials_required();
     }
-    // Evita ler o corpo só para devolver 503 sob saturação operacional.
+    // Avoids reading the body just to return 503 under operational saturation.
     if !state.has_blocking_capacity() {
         return service_unavailable();
     }
@@ -538,11 +538,11 @@ pub(crate) async fn put_cover(
     }
 }
 
-/// `DELETE /api/admin/courses/{id}/cover` — remove a capa personalizada de um curso.
+/// `DELETE /api/admin/courses/{id}/cover` — removes a course's custom cover.
 ///
-/// Mesmas exigências do upload. Remover um curso desconhecido responde `404`; remover a capa
-/// de um curso sem capa responde `200` com `removed: false`, para que a interface seja
-/// idempotente.
+/// Same requirements as the upload. Removing an unknown course answers `404`; removing the cover
+/// of a course with no cover answers `200` with `removed: false`, so the interface is
+/// idempotent.
 pub(crate) async fn delete_cover(
     State(state): State<AppState>,
     AxumPath(course_id): AxumPath<String>,
@@ -585,11 +585,11 @@ pub(crate) async fn delete_cover(
     }
 }
 
-/// `GET /api/courses/{id}/cover` — serve a capa personalizada de um curso.
+/// `GET /api/courses/{id}/cover` — serves a course's custom cover.
 ///
-/// Qualquer usuário autenticado com credenciais definidas. A resposta carrega o
-/// `Content-Type` derivado dos bytes guardados e nunca é armazenável; a ausência de capa é
-/// um `404` sem corpo, para que nem o caminho nem a razão da falha cruzem a API.
+/// Any authenticated user with credentials set. The response carries the
+/// `Content-Type` derived from the stored bytes and is never cacheable; the absence of a cover is
+/// a `404` with no body, so neither the path nor the reason for the failure crosses the API.
 pub(crate) async fn get_cover(
     State(state): State<AppState>,
     AxumPath(course_id): AxumPath<String>,
@@ -694,7 +694,7 @@ mod tests {
         assert_eq!(detect_image_type(b"not an image"), None);
         assert_eq!(detect_image_type(b"\x89PNG"), None);
         assert_eq!(detect_image_type(b"RIFF\x20\x00\x00\x00WEB"), None);
-        // Um GIF não é aceito: só PNG, JPEG e WebP.
+        // A GIF is not accepted: only PNG, JPEG and WebP.
         assert_eq!(detect_image_type(b"GIF89a"), None);
     }
 
@@ -721,10 +721,10 @@ mod tests {
         assert!(!valid_course_id("a\\b"));
         assert!(!valid_course_id("café"));
         assert!(!valid_course_id(&"a".repeat(129)));
-        // Um separador percent-encoded decodificado também precisa ser recusado.
+        // A decoded percent-encoded separator must also be refused.
         assert!(!valid_course_id("a%2Fb"));
         assert!(!valid_course_id("a b"));
-        // NUL e caracteres de controle nunca podem virar parte de um nome de arquivo.
+        // NUL and control characters can never become part of a file name.
         assert!(!valid_course_id("a\0b"));
         assert!(!valid_course_id("a\nb"));
         assert!(!valid_course_id("a\tb"));
@@ -740,7 +740,7 @@ mod tests {
             covers_dir(&data.join("learnvault.sqlite")),
             data.join("covers")
         );
-        // Um banco sem diretório pai usa o diretório atual, como o registro.
+        // A database with no parent directory uses the current directory, like the registry.
         assert_eq!(
             covers_dir(&std::path::PathBuf::from("learnvault.sqlite")),
             std::path::Path::new(".").join("covers")
@@ -825,7 +825,7 @@ mod tests {
         .unwrap();
         assert_eq!(read_cover(&covers, "library-2"), Err(CoverError::Corrupt));
 
-        // Um diretório com o nome da capa não é uma capa.
+        // A directory with the cover's name is not a cover.
         fs::create_dir_all(covers.join("library-3.cover")).unwrap();
         assert_eq!(read_cover(&covers, "library-3").unwrap(), None);
         assert_eq!(cover_version(&covers, "library-3"), None);
@@ -854,7 +854,7 @@ mod tests {
         let course_dir = temp.path().join("curso_web");
         fs::create_dir_all(&course_dir).unwrap();
 
-        // 1. Sem imagens -> não detecta
+        // 1. No images -> does not detect
         assert!(!auto_detect_course_cover(&covers, "course-web", &course_dir).unwrap());
         assert!(cover_version(&covers, "course-web").is_none());
 
@@ -867,7 +867,7 @@ mod tests {
         assert_eq!(stored_bytes, png_bytes);
         assert_eq!(image_type, ImageType::Png);
 
-        // 3. Imagem cover.jpg com prioridade mais alta adicionada depois -> não sobrescreve
+        // 3. A cover.jpg image with higher priority added later -> does not overwrite
         fs::write(course_dir.join("cover.jpg"), jpeg()).unwrap();
         assert!(!auto_detect_course_cover(&covers, "course-web", &course_dir).unwrap());
         let (stored_bytes_after, _) = read_cover(&covers, "course-web").unwrap().unwrap();

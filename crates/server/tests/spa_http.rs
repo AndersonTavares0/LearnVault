@@ -561,16 +561,16 @@ async fn idle_spa_streams_release_asset_capacity_without_reading_the_body() {
         .unwrap();
     assert_eq!(saturated.status(), StatusCode::SERVICE_UNAVAILABLE);
 
-    // O deadline ocioso de 30s só é observado pelo produtor depois que o IO de
-    // leitura real termina; avançar o relógio virtual e afirmar logo em seguida
-    // era racy sob carga (issue #154: `left: 503, right: 200`, os produtores
-    // podiam não ter alcançado o `select` de envio a tempo). Em vez de apenas
-    // avançar o tempo, aguardamos o *evento de liberação*: cada `acquire` resolve
-    // exatamente quando o watchdog devolve uma reserva — com o relógio virtual
-    // avançando sozinho até o deadline enquanto o executor fica ocioso — sem que
-    // ninguém leia os bodies. Aguardar as três reservas torna a saturação e a
-    // recuperação determinísticas; uma saturação genuína (sem watchdog) jamais
-    // resolveria o `acquire`.
+    // The idle 30s deadline is only observed by the producer after the real read
+    // I/O finishes; advancing the virtual clock and asserting right after
+    // was racy under load (issue #154: `left: 503, right: 200`, the producers
+    // might not have reached the send `select` in time). Instead of merely
+    // advancing time, we wait for the *release event*: each `acquire` resolves
+    // exactly when the watchdog returns a reservation — with the virtual clock
+    // advancing on its own to the deadline while the executor is idle — without
+    // anyone reading the bodies. Waiting for the three reservations makes saturation and
+    // recovery deterministic; a genuine saturation (no watchdog) would never
+    // resolve the `acquire`.
     let released = [
         state.acquire_spa_asset_stream_permit().await,
         state.acquire_spa_asset_stream_permit().await,
@@ -588,12 +588,12 @@ async fn idle_spa_streams_release_asset_capacity_without_reading_the_body() {
         .unwrap();
     assert_eq!(recovered.status(), StatusCode::OK);
 
-    // Um stream encerrado pelo watchdog termina de forma limpa: nenhum chunk
-    // pode chegar como erro de I/O. A *quantidade* de chunks entregues antes do
-    // encerramento depende do agendamento do thread produtor e não é observável
-    // de forma determinística, então o teste trava o contrato observável — nunca
-    // um erro, e o body fecha — em vez de afirmar uma contagem que só existe por
-    // acaso (era a origem do flake que derrubava a CI sob carga).
+    // A stream ended by the watchdog finishes cleanly: no chunk
+    // may arrive as an I/O error. The *number* of chunks delivered before
+    // the end depends on the producer thread's scheduling and is not observable
+    // deterministically, so the test locks the observable contract — never
+    // an error, and the body closes — instead of asserting a count that only exists by
+    // chance (it was the origin of the flake that brought CI down under load).
     for mut idle in idle_responses {
         while let Some(frame) = idle.body_mut().frame().await {
             assert!(

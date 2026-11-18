@@ -1,8 +1,8 @@
-//! Ordenação manual de módulos e aulas exposta por HTTP (issue #239).
+//! Manual ordering of modules and lessons exposed over HTTP (issue #239).
 //!
-//! Os casos usam uma biblioteca sintética com módulos numerados, registrada como o curso
-//! semente, e verificam persistência entre reinício e rescan, além da recusa de listas
-//! que não sejam uma permutação dos irmãos.
+//! The cases use a synthetic library with numbered modules, registered as the seed
+//! course, and check persistence across restart and rescan, plus the refusal of lists
+//! that are not a permutation of the siblings.
 
 use std::path::Path;
 
@@ -31,7 +31,7 @@ fn config(temp: &TempDir, library: &Path) -> Config {
     config
 }
 
-/// Cria um módulo numerado com uma aula, dentro da biblioteca sintética.
+/// Creates a numbered module with one lesson, inside the synthetic library.
 fn write_module(library: &Path, module: &str) {
     let directory = library.join(module).join("Aula 1");
     std::fs::create_dir_all(&directory).unwrap();
@@ -46,8 +46,8 @@ fn library(temp: &TempDir) -> std::path::PathBuf {
     library
 }
 
-/// Registra a biblioteca inteira como o curso `library-1`, sem depender da semeadura por
-/// pasta de topo. Os módulos ficam na raiz do curso, que é o que estes casos ordenam.
+/// Registers the whole library as the `library-1` course, without depending on seeding by
+/// top-level folder. The modules sit at the course root, which is what these cases order.
 fn seed_registry(temp: &TempDir, library: &Path) {
     let registry = serde_json::json!({
         "version": 1,
@@ -164,7 +164,7 @@ async fn delete_order(app: &axum::Router, cookie: &str, query: &str) -> Response
         .unwrap()
 }
 
-/// Listagem recursiva de caminhos relativos da biblioteca, para provar que nada muda.
+/// Recursive listing of the library's relative paths, to prove that nothing changes.
 fn snapshot(root: &Path) -> Vec<String> {
     let mut paths = Vec::new();
     let mut stack = vec![root.to_path_buf()];
@@ -254,17 +254,17 @@ async fn order_round_trips_persists_across_rescan_and_restart() {
         ["Modulo 10", "Modulo 2", "Modulo 3"]
     );
 
-    // A preferência sobrevive a um rescan.
+    // The preference survives a rescan.
     rescan(&app, &cookie).await;
     assert_eq!(
         module_paths(&catalog(&app, &cookie).await),
         ["Modulo 10", "Modulo 2", "Modulo 3"]
     );
 
-    // Nenhum arquivo do curso foi criado, movido ou alterado.
+    // No course file was created, moved or changed.
     assert_eq!(snapshot(&library), before, "a biblioteca é somente leitura");
 
-    // E sobrevive a um reinício: um novo estado abre o mesmo banco e arquivo de ordem.
+    // And it survives a restart: a new state opens the same database and order file.
     let restarted = build_router(AppState::initialize(config(&temp, &library)).await.unwrap());
     let cookie = login(&restarted).await;
     assert_eq!(
@@ -282,7 +282,7 @@ async fn order_rejects_lists_that_are_not_a_permutation_of_siblings() {
     let cookie = login(&app).await;
     rescan(&app, &cookie).await;
 
-    // Um caminho de fora do conjunto de irmãos.
+    // A path from outside the set of siblings.
     let foreign = put_order(
         &app,
         &cookie,
@@ -294,15 +294,15 @@ async fn order_rejects_lists_that_are_not_a_permutation_of_siblings() {
     assert_eq!(foreign.status(), StatusCode::UNPROCESSABLE_ENTITY);
     assert_private_no_store(&foreign);
 
-    // Um pai desconhecido.
+    // An unknown parent.
     let unknown_parent = put_order(&app, &cookie, "library-1", "Modulo X", &["Modulo 2"]).await;
     assert_eq!(unknown_parent.status(), StatusCode::UNPROCESSABLE_ENTITY);
 
-    // Um filho de outro pai.
+    // A child of another parent.
     let wrong_child = put_order(&app, &cookie, "library-1", "Modulo 2", &["Modulo 3"]).await;
     assert_eq!(wrong_child.status(), StatusCode::UNPROCESSABLE_ENTITY);
 
-    // A ordem automática continua intacta.
+    // The automatic order stays intact.
     assert_eq!(
         module_paths(&catalog(&app, &cookie).await),
         ["Modulo 2", "Modulo 3", "Modulo 10"]
@@ -356,7 +356,7 @@ async fn reset_restores_the_automatic_order() {
         ["Modulo 2", "Modulo 3", "Modulo 10"]
     );
 
-    // Repetir a restauração é idempotente.
+    // Repeating the restoration is idempotent.
     let again = delete_order(&app, &cookie, "").await;
     let json: serde_json::Value =
         serde_json::from_slice(&again.into_body().collect().await.unwrap().to_bytes()).unwrap();
@@ -367,8 +367,8 @@ async fn reset_restores_the_automatic_order() {
 async fn order_accepts_a_large_sibling_list_above_the_default_body_limit() {
     let temp = tempfile::tempdir().unwrap();
     let library = temp.path().join("library");
-    // 200 módulos com nomes longos: o corpo do pedido passa de 8 KiB (o limite padrão do
-    // roteador), então a rota precisa do limite próprio para não responder 413.
+    // 200 modules with long names: the request body goes past 8 KiB (the router's
+    // default limit), so the route needs its own limit not to answer 413.
     let modules: Vec<String> = (0..200)
         .map(|index| format!("Modulo {index:040}"))
         .collect();

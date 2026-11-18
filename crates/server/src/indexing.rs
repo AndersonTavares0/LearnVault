@@ -1,18 +1,18 @@
-//! Indexação automática e incremental das bibliotecas registradas.
+//! Automatic, incremental indexing of the registered libraries.
 //!
-//! O trabalho roda fora do caminho de requisição, com um único job por vez: eventos do
-//! sistema de arquivos (com debounce) disparam uma execução, e um intervalo periódico
-//! reconcilia o catálogo mesmo quando o sistema não entrega eventos — o caso de montagens
-//! de rede, onde o observador só degrada a latência e nunca a correção.
+//! The work runs off the request path, with a single job at a time: file-system events
+//! (debounced) trigger a run, and a periodic interval reconciles the catalog even when the
+//! system does not deliver events — the case of network mounts, where the watcher only
+//! degrades latency and never correctness.
 //!
-//! Cada curso é varrido sem segurar o banco e aplicado em uma transação própria; entre
-//! cursos o banco é liberado e a reserva de trabalho pesado é devolvida, para que uma
-//! requisição normal nunca espere a biblioteca inteira. A gravação usa a mesma política de
-//! rescan do domínio, então um arquivo ausente é apenas marcado como indisponível e nenhum
-//! histórico é apagado.
+//! Each course is scanned without holding the database and applied in a transaction of its own; between
+//! courses the database is released and the heavy-work reservation is returned, so that an
+//! ordinary request never waits for the whole library. The write uses the same
+//! rescan policy as the domain, so a missing file is only marked as unavailable and no
+//! history is erased.
 //!
-//! O status é mantido em memória, não no banco: é observação efêmera da execução atual, e
-//! o histórico persistente continua sendo a tabela `scan` do domínio.
+//! The status is kept in memory, not in the database: it is an ephemeral observation of the current run, and
+//! the persistent history remains the domain's `scan` table.
 
 use std::{
     path::{Path, PathBuf},
@@ -44,46 +44,46 @@ use crate::{
     courses::RegisteredCourse,
 };
 
-/// Intervalo da reconciliação periódica, inclusive quando o observador está ativo.
+/// Interval of the periodic reconciliation, including when the watcher is active.
 const RECONCILE_INTERVAL: Duration = Duration::from_secs(300);
 
-/// Janela de silêncio que agrupa uma rajada de eventos em uma única varredura.
+/// Quiet window that groups a burst of events into a single scan.
 const DEBOUNCE: Duration = Duration::from_millis(1_500);
 
-/// Situação do job de indexação.
+/// State of the indexing job.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum IndexingStatus {
-    /// Nenhum job executou desde o início do processo.
+    /// No job has run since the process started.
     #[default]
     Idle,
-    /// O job está em execução.
+    /// The job is running.
     Running,
-    /// O job terminou de percorrer os cursos.
+    /// The job finished walking the courses.
     Done,
-    /// O job foi interrompido por um pedido de cancelamento.
+    /// The job was interrupted by a cancellation request.
     Cancelled,
-    /// O job terminou com erro em pelo menos um curso.
+    /// The job finished with an error in at least one course.
     Error,
 }
 
-/// Contagem de arquivos classificada pela última execução.
+/// Count of files classified by the last run.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) struct IndexingProgress {
-    /// Arquivos vistos nas varreduras concluídas.
+    /// Files seen in the completed scans.
     pub files_seen: u64,
-    /// Arquivos novos inseridos no catálogo.
+    /// New files inserted into the catalog.
     pub added: u64,
-    /// Arquivos cujo conteúdo ou metadados mudou.
+    /// Files whose content or metadata changed.
     pub changed: u64,
-    /// Arquivos marcados como ausentes.
+    /// Files marked as missing.
     pub removed: u64,
-    /// Arquivos que mudaram de caminho mantendo a identidade.
+    /// Files that changed path while keeping their identity.
     pub moved: u64,
 }
 
-/// Retrato imutável do job, como a API o expõe.
+/// Immutable snapshot of the job, as the API exposes it.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 pub(crate) struct IndexingSnapshot {
     pub status: IndexingStatus,
@@ -92,11 +92,11 @@ pub(crate) struct IndexingSnapshot {
     pub progress: IndexingProgress,
     pub courses_total: usize,
     pub courses_completed: usize,
-    /// Código estável do último erro; nunca contém caminho nem mensagem do sistema.
+    /// Stable code of the last error; it never contains a path nor a system message.
     pub last_error: Option<&'static str>,
 }
 
-/// Estado compartilhado do job de indexação.
+/// Shared state of the indexing job.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Indexer {
     inner: Arc<IndexerState>,
@@ -110,22 +110,22 @@ struct IndexerState {
 }
 
 impl Indexer {
-    /// Inicia o laço de indexação em segundo plano.
+    /// Starts the indexing loop in the background.
     pub(crate) fn start(&self, app: AppState) {
         let indexer = self.clone();
         tokio::spawn(async move { indexer.run(app).await });
     }
 
-    /// Retrato atual do job.
+    /// Current snapshot of the job.
     pub(crate) async fn snapshot(&self) -> IndexingSnapshot {
         self.inner.snapshot.lock().await.clone()
     }
 
-    /// Pede o cancelamento do job em execução; devolve `false` quando não há job ativo.
+    /// Requests cancellation of the running job; returns `false` when there is no active job.
     pub(crate) async fn cancel(&self) -> bool {
-        // A bandeira é gravada sob o mesmo cadeado da conclusão: ou o job ainda está em
-        // execução e verá o pedido, ou já terminou e o pedido é recusado. Nunca sobra uma
-        // bandeira ligada para a execução seguinte.
+        // The flag is written under the same lock as the completion: either the job is still
+        // running and will see the request, or it has already finished and the request is refused. A
+        // flag is never left on for the next run.
         let snapshot = self.inner.snapshot.lock().await;
         if snapshot.status != IndexingStatus::Running {
             return false;
@@ -134,7 +134,7 @@ impl Indexer {
         true
     }
 
-    /// Laço único: reconciliação periódica e eventos debounced compartilham o mesmo job.
+    /// Single loop: periodic reconciliation and debounced events share the same job.
     async fn run(self, app: AppState) {
         let mut watch = self.watch(&app);
         let mut timer = tokio::time::interval(RECONCILE_INTERVAL);
@@ -151,8 +151,8 @@ impl Indexer {
         }
     }
 
-    /// Um observador que não pode ser criado (limite do inotify, sistema sem suporte)
-    /// simplesmente deixa a reconciliação periódica como único gatilho.
+    /// A watcher that cannot be created (inotify limit, unsupported system)
+    /// simply leaves the periodic reconciliation as the only trigger.
     fn watch(&self, app: &AppState) -> Option<CourseWatch> {
         let wake = self.inner.wake.clone();
         let watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
@@ -169,11 +169,11 @@ impl Indexer {
         Some(watch)
     }
 
-    /// Executa uma varredura completa. Um rescan manual em andamento adia esta execução.
+    /// Runs a full scan. A manual rescan in progress postpones this run.
     async fn execute(&self, app: &AppState) {
-        // O mesmo cadeado do rescan manual garante um único escritor do catálogo por vez.
-        // Um rescan manual em andamento apenas adia esta execução: desistir aqui descartaria
-        // o evento que acordou o job e adiaria a atualização até a reconciliação periódica.
+        // The same lock as the manual rescan guarantees a single catalog writer at a time.
+        // A manual rescan in progress only postpones this run: giving up here would discard
+        // the event that woke the job and delay the update until the periodic reconciliation.
         let _manual_rescan = loop {
             match app.rescan_lock.clone().try_lock_owned() {
                 Ok(guard) => break guard,
@@ -222,9 +222,9 @@ impl Indexer {
             self.publish(progress.clone(), completed).await;
         }
 
-        // A conclusão e o cancelamento disputam o mesmo cadeado do retrato: um pedido de
-        // cancelamento aceito enquanto o status é `running` nunca se perde, e a bandeira
-        // nunca sobra para a execução seguinte.
+        // The completion and the cancellation contend for the same snapshot lock: a cancellation
+        // request accepted while the status is `running` is never lost, and the flag
+        // is never left over for the next run.
         let mut snapshot = self.inner.snapshot.lock().await;
         let cancel_requested = self.inner.cancel.swap(false, Ordering::SeqCst);
         let cancelled = cancel_requested && completed < courses.len();
@@ -239,7 +239,7 @@ impl Indexer {
         snapshot.last_error = if cancelled { None } else { error };
     }
 
-    /// Publica o progresso sem sobrescrever um status já finalizado.
+    /// Publishes progress without overwriting an already-finalized status.
     async fn publish(&self, progress: IndexingProgress, completed: usize) {
         let mut snapshot = self.inner.snapshot.lock().await;
         if snapshot.status == IndexingStatus::Running {
@@ -249,17 +249,17 @@ impl Indexer {
     }
 }
 
-/// Raízes observadas pelo sistema de arquivos.
+/// Roots watched by the file system.
 struct CourseWatch {
     watcher: notify::RecommendedWatcher,
     roots: Vec<PathBuf>,
 }
 
 impl CourseWatch {
-    /// Reassina o observador apenas quando o registro de cursos mudou.
+    /// Resubscribes the watcher only when the course registry has changed.
     ///
-    /// Uma raiz que o sistema recusa (por exemplo uma montagem de rede sem suporte a
-    /// eventos) continua coberta pela reconciliação periódica.
+    /// A root the system refuses (for example a network mount without support for
+    /// events) is still covered by the periodic reconciliation.
     fn sync(&mut self, courses: &[RegisteredCourse]) {
         let roots: Vec<PathBuf> = courses
             .iter()
@@ -282,7 +282,7 @@ impl CourseWatch {
     }
 }
 
-/// Varre um curso fora das threads Tokio, sem segurar o banco.
+/// Scans a course off the Tokio threads, without holding the database.
 async fn scan_course(app: &AppState, root: &Path) -> Option<ScanOutcome> {
     let permit = app.try_acquire_blocking_task()?;
     let root = root.to_path_buf();
@@ -295,7 +295,7 @@ async fn scan_course(app: &AppState, root: &Path) -> Option<ScanOutcome> {
     .flatten()
 }
 
-/// Aplica um curso em uma transação própria, liberando o banco entre cursos.
+/// Applies a course in a transaction of its own, releasing the database between courses.
 async fn apply_course(
     app: &AppState,
     library_id: &str,
@@ -310,7 +310,7 @@ async fn apply_course(
     tokio::task::spawn_blocking(move || {
         let _permit = permit;
         let mut database = database;
-        // O modo vem do host, o mesmo usado pelo scanner da varredura.
+        // The mode comes from the host, the same one the scan's scanner uses.
         let summary = learnvault_core::apply_incremental_scan(
             &mut database,
             &library_id,
@@ -327,7 +327,7 @@ async fn apply_course(
     .flatten()
 }
 
-/// `GET /api/indexing` — situação do job para qualquer sessão autenticada.
+/// `GET /api/indexing` — state of the job for any authenticated session.
 pub(crate) async fn status(State(state): State<AppState>, headers: HeaderMap) -> Response {
     match authenticated_user(&state, &headers).await {
         Ok(Some(user)) if !user.must_change_credentials => {
@@ -344,7 +344,7 @@ struct CancelResponse {
     cancelled: bool,
 }
 
-/// `POST /api/indexing/cancel` — interrompe o job em execução (somente administrador).
+/// `POST /api/indexing/cancel` — interrupts the running job (administrator only).
 pub(crate) async fn cancel(State(state): State<AppState>, headers: HeaderMap) -> Response {
     let user = match authenticated_user(&state, &headers).await {
         Ok(Some(user)) => user,
@@ -466,7 +466,7 @@ mod tests {
         fs::write(root.path().join("Curso/aula.mp4"), b"conteudo").unwrap();
         let indexer = Indexer::default();
 
-        // Simula um cancelamento aceito enquanto o job ainda estava em execução.
+        // Simulates a cancellation accepted while the job was still running.
         indexer.inner.snapshot.lock().await.status = IndexingStatus::Running;
         assert!(indexer.cancel().await);
         indexer.execute(&state).await;
