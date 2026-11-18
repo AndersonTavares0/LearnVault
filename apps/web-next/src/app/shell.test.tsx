@@ -1,15 +1,59 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { cleanup, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { transport, type StudyNote } from '@/lib/transport';
 import { renderApp } from '@/test/render-app';
 
-afterEach(cleanup);
+afterEach(() => {
+	cleanup();
+	vi.restoreAllMocks();
+});
 
 // The shell is one column: the bar first, then the region that scrolls (issue #607). While the
 // document was the scroller, the bar scrolled away and the window scrollbar crossed it.
 describe('app shell', () => {
+	it('moves focus from the navigation link to the new page heading and on Back', async () => {
+		const { router } = renderApp('/');
+		const nav = screen.getByRole('navigation', { name: 'Main' });
+		const link = within(nav).getByRole('link', { name: 'Progress' });
+		expect(document.activeElement).toBe(document.body);
+		link.focus();
+		fireEvent.click(link);
+		const heading = await screen.findByRole('heading', { level: 1, name: 'Your progress' });
+		expect(document.activeElement).toBe(heading);
+		expect(heading.tabIndex).toBe(-1);
+
+		await act(() => router.navigate(-1));
+		expect(document.activeElement).toBe(screen.getByRole('heading', { level: 1, name: 'My learning' }));
+	});
+
+	it('keeps the current focus on search and hash changes within a page', async () => {
+		const { router } = renderApp('/settings');
+		const search = screen.getByRole('combobox', { name: 'Search notes, courses and lessons' });
+		search.focus();
+		await act(() => router.navigate('/settings#focus'));
+		expect(document.activeElement).toBe(search);
+		await act(() => router.navigate('/settings?q=study#focus'));
+		expect(document.activeElement).toBe(search);
+	});
+
+	it.each([false, true])('handles a delayed heading without stealing focus (user moved: %s)', async (userMoved) => {
+		let resolveNotes!: (notes: StudyNote[]) => void;
+		vi.spyOn(transport, 'listNotes').mockReturnValue(new Promise((resolve) => { resolveNotes = resolve; }));
+		const { router } = renderApp('/');
+		await act(() => router.navigate('/notes'));
+		expect(screen.getByText('Loading notes…')).toBeTruthy();
+		expect(document.activeElement).toBe(screen.getByRole('main'));
+
+		const search = screen.getByRole('combobox', { name: 'Search notes, courses and lessons' });
+		if (userMoved) search.focus();
+		resolveNotes([]);
+		const heading = await screen.findByRole('heading', { level: 1, name: 'Notes' });
+		await waitFor(() => expect(document.activeElement).toBe(userMoved ? search : heading));
+	});
+
 	it('scrolls the content region instead of the document', () => {
 		renderApp('/');
 		const bar = screen.getByRole('banner');
