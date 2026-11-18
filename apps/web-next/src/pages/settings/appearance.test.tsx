@@ -62,9 +62,11 @@ describe('AppearanceSettings', () => {
 	it('follows the reward colour choice', () => {
 		render(<AppearanceSettings />);
 		press('Rewards (streak, XP, badges)', 'Same as accent');
-		expect(root.style.getPropertyValue('--reward')).toBe('var(--brand)');
+		expect(root.style.getPropertyValue('--reward')).toBe('var(--brand-ink)');
+		expect(root.style.getPropertyValue('--reward-fill')).toBe('var(--brand)');
 		press('Rewards (streak, XP, badges)', 'Amber');
-		expect(root.style.getPropertyValue('--reward')).toBe('#A8761F');
+		expect(root.style.getPropertyValue('--reward')).toBe('#795514');
+		expect(root.style.getPropertyValue('--reward-fill')).toBe('#A8761F');
 	});
 
 	it.each([
