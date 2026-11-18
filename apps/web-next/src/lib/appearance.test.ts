@@ -83,6 +83,12 @@ describe('brand palette', () => {
 		}
 	});
 
+	it.each(['light', 'dark'] as const)('keeps small reward text at least 4.5:1 on its %s tint', (theme) => {
+		const root = document.createElement('html');
+		applyAppearance({ ...DEFAULT_APPEARANCE, theme }, root);
+		expect(contrast(root.style.getPropertyValue('--reward'), root.style.getPropertyValue('--reward-tint'))).toBeGreaterThanOrEqual(4.5);
+	});
+
 	it('puts ink on the gold reward fill, the higher-contrast choice on each page', () => {
 		// The text colour on the fill is not used by any component today. On the light page the gold is
 		// only 4.4:1 under ink, which is enough for large text and UI parts but not for body text, so it
