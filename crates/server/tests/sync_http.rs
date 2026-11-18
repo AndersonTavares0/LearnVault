@@ -1,8 +1,8 @@
-//! Testes HTTP do diário de sincronização.
+//! HTTP tests of the sync journal.
 //!
-//! O dono é sempre o usuário da sessão: os casos provam o isolamento por dono, a
-//! idempotência do `op_id`, o cursor monotônico e a leitura que ignora o próprio
-//! dispositivo. Nenhum caso toca a biblioteca física.
+//! The owner is always the session's user: the cases prove isolation by owner, the
+//! idempotence of `op_id`, the monotonic cursor and the read that ignores the device
+//! itself. No case touches the physical library.
 
 use axum::{
     body::Body,

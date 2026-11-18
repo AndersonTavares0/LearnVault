@@ -1,20 +1,20 @@
-//! Varredura da biblioteca física.
+//! Scan of the physical library.
 //!
-//! O scanner percorre a raiz já resolvida pela integração de plataforma e devolve uma
-//! lista plana e ordenada de arquivos, com a chave de localização de cada um. A
-//! hierarquia de cursos, seções e aulas é derivada dessa lista pelo catálogo; o scanner
-//! não a monta.
+//! The scanner walks the root already resolved by the platform integration and returns a
+//! flat, ordered list of files, with the location key of each. The
+//! hierarchy of courses, sections and lessons is derived from that list by the catalog; the scanner
+//! does not assemble it.
 //!
-//! A varredura é estritamente de leitura: nenhum arquivo ou diretório da biblioteca é
-//! criado, alterado ou removido. Links simbólicos não são seguidos — nem a raiz, nem
-//! diretórios ou arquivos internos — para que a varredura não alcance nada fora da raiz. A
-//! raiz é resolvida e validada pela integração de plataforma; se ainda assim for um link, a
-//! varredura não o segue (a raiz é confiada apenas quando é um diretório real).
+//! The scan is strictly read-only: no file or directory of the library is
+//! created, changed or removed. Symbolic links are not followed — neither the root, nor
+//! inner directories or files — so the scan reaches nothing outside the root. The
+//! root is resolved and validated by the platform integration; if it is still a link, the
+//! scan does not follow it (the root is trusted only when it is a real directory).
 //!
-//! Diretórios ou arquivos ilegíveis são registrados em [`ScanOutcome::inaccessible`] e a
-//! varredura continua, sem interromper a biblioteca inteira por causa de um item. Se a
-//! própria raiz não puder ser lida, a varredura falha com erro tipado em vez de se
-//! apresentar como uma biblioteca vazia.
+//! Unreadable directories or files are recorded in [`ScanOutcome::inaccessible`] and the
+//! scan continues, without interrupting the whole library because of one item. If the
+//! root itself cannot be read, the scan fails with a typed error instead of presenting
+//! itself as an empty library.
 
 use std::path::Path;
 use std::time::UNIX_EPOCH;
@@ -24,72 +24,72 @@ use walkdir::WalkDir;
 use crate::error::{Error, Result};
 use crate::paths::{KeyMode, relative_path_key};
 
-/// Extensões reconhecidas como mídia reproduzível.
+/// Extensions recognized as playable media.
 const MEDIA_EXTENSIONS: &[&str] = &[
     "mp4", "m4v", "mov", "webm", "mkv", "m3u8", "ts", "ogv", "avi", "wmv", "flv", "mp3", "wav",
     "ogg", "oga", "m4a", "flac", "aac", "opus", "weba", "wma",
 ];
 
-/// Extensões reconhecidas como legenda.
+/// Extensions recognized as subtitles.
 const SUBTITLE_EXTENSIONS: &[&str] = &["srt", "vtt", "ass", "ssa", "sub"];
 
-/// Tamanho mínimo para que um arquivo `.ts` seja tratado como mídia.
+/// Minimum size for a `.ts` file to be treated as media.
 ///
-/// A extensão `.ts` também é usada por código-fonte TypeScript; arquivos pequenos são
-/// material e não vídeo.
+/// The `.ts` extension is also used by TypeScript source code; small files are
+/// material and not video.
 const MIN_TS_MEDIA_SIZE: u64 = 1024 * 1024;
 
-/// Nomes de diretório ignorados durante a varredura.
+/// Directory names ignored during the scan.
 const IGNORED_DIRECTORY_NAMES: &[&str] = &["temp", "0____"];
 
-/// Prefixo de diretório ignorado durante a varredura.
+/// Directory prefix ignored during the scan.
 const IGNORED_DIRECTORY_PREFIX: &str = "temp_";
 
-/// Classificação de um arquivo encontrado.
+/// Classification of a file found.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MediaKind {
-    /// Arquivo reproduzível (vídeo ou fluxo).
+    /// Playable file (video or stream).
     Media,
-    /// Arquivo de legenda.
+    /// Subtitle file.
     Subtitle,
-    /// Qualquer outro arquivo de apoio.
+    /// Any other supporting file.
     Material,
 }
 
-/// Arquivo encontrado durante a varredura.
+/// File found during the scan.
 #[derive(Debug, Clone)]
 pub struct ScannedFile {
-    /// Caminho relativo à raiz, com separadores `/` e a caixa original.
+    /// Path relative to the root, with `/` separators and the original case.
     pub relative_path: String,
-    /// Chave de comparação derivada do caminho, normalizada conforme o sistema.
+    /// Comparison key derived from the path, normalized according to the system.
     pub relative_path_key: String,
-    /// Classificação do arquivo.
+    /// Classification of the file.
     pub kind: MediaKind,
-    /// Tamanho em bytes.
+    /// Size in bytes.
     pub size: u64,
-    /// Instante de modificação em segundos desde a época Unix.
+    /// Modification instant in seconds since the Unix epoch.
     ///
-    /// Vale `0` quando o sistema de arquivos não informa o instante ou quando o valor é
-    /// anterior à época Unix. `0` significa "desconhecido", nunca "muito antigo".
+    /// It is `0` when the file system does not report the instant or when the value is
+    /// before the Unix epoch. `0` means "unknown", never "very old".
     pub mtime: i64,
 }
 
-/// Resultado de uma varredura.
+/// Result of a scan.
 #[derive(Debug, Clone)]
 pub struct ScanOutcome {
-    /// Arquivos encontrados, ordenados por caminho relativo.
+    /// Files found, ordered by relative path.
     pub files: Vec<ScannedFile>,
-    /// Caminhos relativos que não puderam ser lidos nem catalogados.
+    /// Relative paths that could not be read nor catalogued.
     ///
-    /// Inclui diretórios e arquivos ilegíveis e nomes que o domínio recusa. Nunca
-    /// contém caminho absoluto; a própria raiz é representada por `.`.
+    /// It includes unreadable directories and files and names the domain refuses. It never
+    /// contains an absolute path; the root itself is represented by `.`.
     pub inaccessible: Vec<String>,
 }
 
-/// Percorre a biblioteca e devolve os arquivos encontrados.
+/// Walks the library and returns the files found.
 ///
-/// A raiz precisa existir, ser um diretório e poder ser lida; caso contrário, devolve
-/// [`Error::LibraryRootMissing`], [`Error::LibraryRootNotDirectory`] ou
+/// The root must exist, be a directory and be readable; otherwise it returns
+/// [`Error::LibraryRootMissing`], [`Error::LibraryRootNotDirectory`] or
 /// [`Error::LibraryRootUnreadable`].
 pub fn scan(root: &Path) -> Result<ScanOutcome> {
     if !root.exists() {
@@ -102,9 +102,9 @@ pub fn scan(root: &Path) -> Result<ScanOutcome> {
             path: root.to_path_buf(),
         });
     }
-    // Confirma a leitura da raiz antes de percorrê-la: sem isto, uma raiz ilegível
-    // devolveria uma varredura vazia e seria indistinguível de uma biblioteca sem
-    // arquivos — e a política de rescan interpretaria a falha de acesso como ausência.
+    // Confirms the root can be read before walking it: without this, an unreadable root
+    // would return an empty scan and be indistinguishable from a library with no
+    // files — and the rescan policy would interpret the access failure as absence.
     std::fs::read_dir(root).map_err(|source| Error::LibraryRootUnreadable {
         path: root.to_path_buf(),
         source,
@@ -116,8 +116,8 @@ pub fn scan(root: &Path) -> Result<ScanOutcome> {
 
     let mut walker = WalkDir::new(root)
         .follow_links(false)
-        // A raiz não é seguida quando é um link: sem isto, `follow_links(false)` ainda
-        // seguiria um symlink/junction no topo e a varredura alcançaria outra árvore.
+        // The root is not followed when it is a link: without this, `follow_links(false)` would still
+        // follow a symlink/junction at the top and the scan would reach another tree.
         .follow_root_links(false)
         .min_depth(1)
         .into_iter();
@@ -133,7 +133,7 @@ pub fn scan(root: &Path) -> Result<ScanOutcome> {
 
         let file_type = entry.file_type();
 
-        // Um link simbólico é ignorado por completo: nem é seguido, nem é reportado.
+        // A symbolic link is ignored entirely: it is neither followed nor reported.
         if file_type.is_symlink() {
             continue;
         }
@@ -165,8 +165,8 @@ pub fn scan(root: &Path) -> Result<ScanOutcome> {
 
         let relative_path = relative_to_root(root, Some(entry.path()));
         let Ok(key) = relative_path_key(&relative_path, mode) else {
-            // Um nome que o domínio recusa não pode derrubar a biblioteca inteira: o
-            // item é registrado como não catalogado e a varredura continua.
+            // A name the domain refuses cannot bring down the whole library: the
+            // item is recorded as not catalogued and the scan continues.
             inaccessible.push(relative_path);
             continue;
         };
@@ -188,11 +188,11 @@ pub fn scan(root: &Path) -> Result<ScanOutcome> {
     })
 }
 
-/// Classifica um arquivo a partir do nome e do tamanho em bytes.
+/// Classifies a file from its name and its size in bytes.
 ///
-/// É a única fonte da verdade da classificação: o scanner usa durante a varredura e o
-/// catálogo reusa sobre os dados persistidos, para que o mesmo arquivo nunca apareça com
-/// tipos diferentes conforme a camada que o apresenta.
+/// It is the single source of truth for classification: the scanner uses it during the scan and the
+/// catalog reuses it over the persisted data, so the same file never appears with
+/// different types depending on the layer that presents it.
 pub fn classify(name: &str, size: u64) -> MediaKind {
     match extension(name).as_deref() {
         Some(extension) if SUBTITLE_EXTENSIONS.contains(&extension) => MediaKind::Subtitle,
@@ -205,8 +205,8 @@ pub fn classify(name: &str, size: u64) -> MediaKind {
     }
 }
 
-/// Nomes que são vitrine do curso e não aula: o nome inteiro, sem extensão, precisa ser um
-/// desses termos. Um título que só contém a palavra (como "Trailer tips") continua sendo aula.
+/// Names that are a course showcase and not a lesson: the whole name, without extension, must be one of
+/// these terms. A title that merely contains the word (like "Trailer tips") is still a lesson.
 const SHOWCASE_NAMES: &[&str] = &[
     "trailer",
     "preview",
@@ -243,7 +243,7 @@ fn extension(name: &str) -> Option<String> {
     Some(extension.to_ascii_lowercase())
 }
 
-/// Indica se um diretório é ignorado pela varredura (temporários).
+/// Tells whether a directory is ignored by the scan (temporary ones).
 pub fn is_ignored_directory(name: &str) -> bool {
     let name = name.to_ascii_lowercase();
     IGNORED_DIRECTORY_NAMES.contains(&name.as_str()) || name.starts_with(IGNORED_DIRECTORY_PREFIX)
@@ -258,10 +258,10 @@ pub(crate) fn mtime_seconds(metadata: &std::fs::Metadata) -> i64 {
         .unwrap_or(0)
 }
 
-/// Converte um caminho da varredura em caminho relativo à raiz.
+/// Converts a path from the scan into a path relative to the root.
 ///
-/// Nunca devolve caminho absoluto: quando o caminho não pode ser convertido, ou quando
-/// é a própria raiz, devolve `.`.
+/// It never returns an absolute path: when the path cannot be converted, or when
+/// it is the root itself, it returns `.`.
 fn relative_to_root(root: &Path, path: Option<&Path>) -> String {
     let Some(path) = path else {
         return ".".to_owned();

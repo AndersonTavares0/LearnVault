@@ -1,4 +1,4 @@
-//! Endpoints de situação e cancelamento da indexação automática.
+//! Endpoints for the state and cancellation of automatic indexing.
 
 use axum::{
     body::Body,
@@ -124,7 +124,7 @@ async fn indexing_cancel_requires_origin_and_an_active_job() {
     assert_eq!(without_origin.status(), StatusCode::FORBIDDEN);
     assert_private_no_store(&without_origin);
 
-    // Sem job em execução, o cancelamento é um conflito previsível.
+    // With no job running, cancellation is a predictable conflict.
     let idle = app
         .oneshot(
             Request::post("/api/indexing/cancel")

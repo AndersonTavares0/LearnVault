@@ -434,8 +434,8 @@ async fn credentials_current_password_matches_the_go_service_bounds() {
     let (status, cookie) = login(&app, "admin", "admin").await;
     assert_eq!(status, StatusCode::OK);
 
-    // Uma senha atual acima de 1024 caracteres é recusada antes do Argon2 e
-    // nunca aparece na resposta.
+    // A current password above 1024 characters is refused before Argon2 and
+    // never appears in the response.
     let oversized = "p".repeat(1025);
     let response = app
         .clone()
@@ -462,7 +462,7 @@ async fn credentials_current_password_matches_the_go_service_bounds() {
     assert_eq!(payload["error"], "invalid_credentials_format");
     assert!(!payload.to_string().contains(&oversized));
 
-    // A senha atual vazia segue o mesmo limite inferior do serviço Go.
+    // An empty current password follows the same lower bound as the Go service.
     let empty = app
         .clone()
         .oneshot(
@@ -485,7 +485,7 @@ async fn credentials_current_password_matches_the_go_service_bounds() {
     assert_eq!(empty.status(), StatusCode::UNPROCESSABLE_ENTITY);
     assert_eq!(body(empty).await["error"], "invalid_credentials_format");
 
-    // A proteção CSRF continua obrigatória na troca de credenciais.
+    // CSRF protection remains mandatory on the credentials change.
     let csrf = app
         .oneshot(
             Request::post("/api/account/credentials")
@@ -510,8 +510,8 @@ async fn credentials_current_password_matches_the_go_service_bounds() {
 #[tokio::test]
 async fn credentials_pending_flag_blocks_protected_endpoints_until_changed() {
     let temp = tempfile::tempdir().unwrap();
-    // O bootstrap não cria mais a troca pendente; o gate continua valendo para
-    // usuários legados importados com `must_change_credentials = 1`.
+    // The bootstrap no longer creates the pending change; the gate still applies to
+    // legacy users imported with `must_change_credentials = 1`.
     let db_path = temp.path().join("learnvault.sqlite");
     {
         let mut setup = config(&temp, true);
@@ -549,7 +549,7 @@ async fn login_rejections_before_the_handler_are_never_cacheable() {
     let temp = tempfile::tempdir().unwrap();
     let app = build_router(AppState::initialize(config(&temp, true)).await.unwrap());
 
-    // JSON inválido: o extractor rejeita antes do handler (400).
+    // Invalid JSON: the extractor rejects before the handler (400).
     let malformed = app
         .clone()
         .oneshot(
@@ -564,7 +564,7 @@ async fn login_rejections_before_the_handler_are_never_cacheable() {
     assert_eq!(malformed.status(), StatusCode::BAD_REQUEST);
     assert_eq!(malformed.headers()["cache-control"], "no-store");
 
-    // Content-Type ausente: 415 do extractor `Json`.
+    // Content-Type missing: 415 from the `Json` extractor.
     let unsupported = app
         .clone()
         .oneshot(
@@ -580,7 +580,7 @@ async fn login_rejections_before_the_handler_are_never_cacheable() {
     assert_eq!(unsupported.status(), StatusCode::UNSUPPORTED_MEDIA_TYPE);
     assert_eq!(unsupported.headers()["cache-control"], "no-store");
 
-    // Payload acima de 8 KiB: 413 do `DefaultBodyLimit`, antes do handler.
+    // Payload above 8 KiB: 413 from `DefaultBodyLimit`, before the handler.
     let oversized = app
         .oneshot(
             Request::post("/api/login")
@@ -603,7 +603,7 @@ async fn credentials_rejections_before_the_handler_are_never_cacheable() {
     let temp = tempfile::tempdir().unwrap();
     let app = build_router(AppState::initialize(config(&temp, false)).await.unwrap());
 
-    // JSON inválido: o extractor rejeita antes do handler (400).
+    // Invalid JSON: the extractor rejects before the handler (400).
     let malformed = app
         .clone()
         .oneshot(
@@ -619,7 +619,7 @@ async fn credentials_rejections_before_the_handler_are_never_cacheable() {
     assert_eq!(malformed.headers()["cache-control"], "no-store");
     assert_eq!(malformed.headers()["x-content-type-options"], "nosniff");
 
-    // Payload acima de 8 KiB: 413 do `DefaultBodyLimit`, antes do handler.
+    // Payload above 8 KiB: 413 from `DefaultBodyLimit`, before the handler.
     let oversized = app
         .oneshot(
             Request::post("/api/account/credentials")

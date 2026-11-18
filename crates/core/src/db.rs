@@ -1,4 +1,4 @@
-//! Abertura do banco de dados e garantia do schema.
+//! Opening the database and guaranteeing the schema.
 
 use std::{
     path::{Path, PathBuf},
@@ -11,18 +11,18 @@ use rusqlite::{Connection, OptionalExtension, params};
 use crate::error::{Error, Result};
 use crate::migrations::{SCHEMA_VERSION, migrate_to_latest, schema_version};
 
-/// Conexão SQLite com o schema do domínio aplicado.
+/// SQLite connection with the domain schema applied.
 ///
-/// A estrutura garante três invariantes em toda conexão: chaves estrangeiras
-/// habilitadas, `journal_mode` em WAL solicitado aos bancos persistentes e schema na
-/// versão conhecida por este programa. Um banco gravado por uma versão mais nova é
-/// recusado antes de qualquer escrita.
+/// The structure guarantees three invariants on every connection: foreign keys
+/// enabled, `journal_mode` WAL requested for persistent databases and schema at the
+/// version known to this program. A database written by a newer version is
+/// refused before any write.
 #[derive(Debug)]
 pub struct Database {
     pub(crate) conn: Connection,
 }
 
-/// Versão do schema que este binário consegue servir.
+/// Schema version this binary can serve.
 pub const CURRENT_SCHEMA_VERSION: usize = SCHEMA_VERSION;
 const MAX_SCHEMA_SQL_BYTES: i64 = 64 * 1024;
 
@@ -41,7 +41,7 @@ pub fn file_schema_version(path: impl AsRef<Path>) -> Result<usize> {
 }
 
 impl Database {
-    /// Abre (ou cria) o banco em `path` e aplica a cadeia de migrações.
+    /// Opens (or creates) the database at `path` and applies the migration chain.
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref();
         let conn = Connection::open(path).map_err(|source| Error::OpenDatabase {
@@ -51,30 +51,30 @@ impl Database {
         Self::from_connection(conn, true)
     }
 
-    /// Abre um banco em memória com o schema aplicado.
+    /// Opens an in-memory database with the schema applied.
     ///
-    /// Útil para execuções efêmeras e para os testes. Não habilita WAL, que só faz
-    /// sentido em arquivos persistentes.
+    /// Useful for ephemeral runs and for tests. It does not enable WAL, which only makes
+    /// sense on persistent files.
     pub fn open_in_memory() -> Result<Self> {
         let conn = Connection::open_in_memory()?;
         Self::from_connection(conn, false)
     }
 
-    /// Empresta a conexão para leitura e escrita.
+    /// Lends the connection for reading and writing.
     pub fn connection(&self) -> &Connection {
         &self.conn
     }
 
-    /// Versão do schema registrada no banco (`PRAGMA user_version`).
+    /// Schema version recorded in the database (`PRAGMA user_version`).
     pub fn schema_version(&self) -> Result<usize> {
         schema_version(&self.conn).map_err(read_schema_version)
     }
 
-    /// Verifica se o banco está exatamente no schema suportado e mantém as tabelas essenciais.
+    /// Checks that the database is exactly on the supported schema and keeps the essential tables.
     ///
-    /// A distinção entre `NoneSet`, versões anteriores e versões posteriores é intencional:
-    /// nenhuma delas é uma dependência pronta para o servidor HTTP, mesmo quando a leitura da
-    /// versão não produz erro.
+    /// The distinction between `NoneSet`, earlier versions and later versions is intentional:
+    /// none of them is a ready dependency for the HTTP server, even when reading the
+    /// version produces no error.
     pub fn has_current_schema(&self) -> Result<bool> {
         if schema_version(&self.conn).map_err(read_schema_version)? != CURRENT_SCHEMA_VERSION {
             return Ok(false);
@@ -198,16 +198,16 @@ impl Database {
         conn.busy_timeout(Duration::from_secs(5))?;
         conn.set_db_config(DbConfig::SQLITE_DBCONFIG_ENABLE_FKEY, true)?;
 
-        // A assinatura legada é lida antes de qualquer alteração no arquivo. Isso precisa
-        // ocorrer antes da versão para que um banco Go nunca seja tratado como uma migração
-        // Rust, ainda que o arquivo tenha uma versão SQLite inesperada.
+        // The legacy signature is read before any change to the file. This must happen
+        // before the version so that a Go database is never treated as a Rust
+        // migration, even if the file has an unexpected SQLite version.
         if is_legacy_go_database(&conn)? {
             return Err(Error::LegacyGoDatabase);
         }
 
-        // A versão é lida antes de qualquer alteração no arquivo. Recusar um schema mais
-        // novo precisa ser uma operação sem efeito colateral: nada de trocar o journal ou
-        // criar tabelas em um banco que este binário não conhece.
+        // The version is read before any change to the file. Refusing a newer
+        // schema must be an operation with no side effect: no switching the journal or
+        // creating tables in a database this binary does not know.
         let found = schema_version(&conn).map_err(read_schema_version)?;
         if found > SCHEMA_VERSION {
             return Err(Error::SchemaTooNew {
@@ -226,11 +226,11 @@ impl Database {
         Ok(Self { conn })
     }
 
-    /// Cria uma cópia de segurança transacional e íntegra do banco de dados em `destination`.
+    /// Creates a transactional, intact safety copy of the database at `destination`.
     ///
-    /// Utiliza a API de backup online do SQLite para capturar o estado atual da conexão,
-    /// incluindo páginas ativas do journal WAL, gravando atomicamente no destino final e
-    /// validando com `PRAGMA integrity_check`.
+    /// It uses SQLite's online backup API to capture the connection's current state,
+    /// including active pages of the WAL journal, writing atomically to the final destination and
+    /// validating with `PRAGMA integrity_check`.
     pub fn backup_to(&self, destination: impl AsRef<Path>) -> Result<()> {
         let dest_path = destination.as_ref();
         if let Some(parent) = dest_path.parent().filter(|p| !p.as_os_str().is_empty()) {
@@ -296,11 +296,11 @@ impl Database {
         Ok(())
     }
 
-    /// Restaura um banco de dados a partir de um arquivo de backup em `backup_path`.
+    /// Restores a database from a backup file at `backup_path`.
     ///
-    /// Valida a integridade (`PRAGMA integrity_check`) e o schema antes de aplicar,
-    /// cria uma cópia de segurança prévia se o banco de destino já existia, e substitui
-    /// atomicamente o banco alvo.
+    /// It validates integrity (`PRAGMA integrity_check`) and the schema before applying,
+    /// creates a prior safety copy if the destination database already existed, and atomically
+    /// replaces the target database.
     pub fn restore_from(
         backup_path: impl AsRef<Path>,
         target_path: impl AsRef<Path>,
@@ -895,9 +895,9 @@ fn expected_foreign_keys(
         "study_state" => &[("media_id", "media", "media_id", "NO ACTION")],
         "session" => &[("user_id", "user", "user_id", "NO ACTION")],
         "scan_inaccessible" => &[("scan_id", "scan", "scan_id", "NO ACTION")],
-        // `pragma_foreign_key_list` devolve as chaves na ordem inversa da declaração no
-        // DDL, e o SQLite não promete outra ordem; o esperado acompanha a ordem
-        // observada em vez de depender de `id` como se fosse semântico.
+        // `pragma_foreign_key_list` returns the keys in the reverse order of declaration in the
+        // DDL, and SQLite promises no other order; the expectation follows the observed
+        // order instead of depending on `id` as if it were semantic.
         "media_removal" => &[
             ("media_id", "media", "media_id", "NO ACTION"),
             ("library_id", "library", "library_id", "NO ACTION"),
@@ -1107,8 +1107,8 @@ fn tokenize_sql(sql: &str) -> Option<Vec<String>> {
     Some(tokens)
 }
 
-/// Reconhece a assinatura do banco Go sem criar schema, alterar pragmas persistentes ou
-/// consultar tabelas que possam não existir. A checagem acontece antes do bootstrap.
+/// Recognizes the signature of the Go database without creating schema, changing persistent pragmas or
+/// querying tables that may not exist. The check happens before the bootstrap.
 fn is_legacy_go_database(conn: &Connection) -> Result<bool> {
     let has_signature: i64 = conn.query_row(
         "SELECT (
@@ -1122,16 +1122,16 @@ fn is_legacy_go_database(conn: &Connection) -> Result<bool> {
     Ok(has_signature != 0)
 }
 
-/// Traduz a falha de leitura da versão do schema, que não é uma migração.
+/// Translates the failure to read the schema version, which is not a migration.
 fn read_schema_version(source: rusqlite::Error) -> Error {
     Error::ReadSchemaVersion { source }
 }
 
-/// Instante atual em segundos desde a época Unix.
+/// Current instant in seconds since the Unix epoch.
 ///
-/// Um relógio anterior à época Unix é registrado como `0`, que o domínio documenta como
-/// "momento desconhecido". É a fonte única das colunas de tempo do domínio (`completed_at`
-/// na varredura e `updated_at` no progresso de estudo).
+/// A clock before the Unix epoch is recorded as `0`, which the domain documents as
+/// "unknown moment". It is the single source of the domain's time columns (`completed_at`
+/// in the scan and `updated_at` in study progress).
 pub(crate) fn now_unix_seconds() -> i64 {
     match SystemTime::now().duration_since(UNIX_EPOCH) {
         Ok(elapsed) => i64::try_from(elapsed.as_secs()).unwrap_or(i64::MAX),

@@ -1,12 +1,12 @@
-//! Fontes de curso somente leitura.
+//! Read-only course sources.
 //!
-//! Uma fonte expõe uma árvore de arquivos sem revelar se ela vive no disco local ou em um
-//! servidor remoto. A varredura usa a mesma política de nomes e a mesma classificação da
-//! biblioteca local, então um curso remoto produz o mesmo [`ScanOutcome`] que um curso
-//! local com os mesmos arquivos.
+//! A source exposes a file tree without revealing whether it lives on the local disk or on a
+//! remote server. The scan uses the same naming policy and the same classification as the
+//! local library, so a remote course produces the same [`ScanOutcome`] as a local
+//! course with the same files.
 //!
-//! O contrato é estritamente de leitura: `list` e `read_range` são as únicas operações.
-//! Nenhuma implementação pode criar, alterar, renomear, mover ou remover itens da fonte.
+//! The contract is strictly read-only: `list` and `read_range` are the only operations.
+//! No implementation may create, change, rename, move or remove items of the source.
 
 use std::{
     collections::VecDeque,
@@ -22,73 +22,73 @@ use crate::error::Error;
 use crate::paths::{KeyMode, relative_path_key, resolve_within};
 use crate::scanner::{ScanOutcome, ScannedFile, classify, is_ignored_directory};
 
-/// Profundidade máxima de diretórios percorridos em uma fonte.
+/// Maximum depth of directories walked in a source.
 ///
-/// Protege a varredura de árvores patológicas (inclusive remotas) sem limitar cursos
-/// reais, que raramente passam de poucos níveis.
+/// It protects the scan from pathological trees (remote ones included) without limiting real
+/// courses, which rarely go beyond a few levels.
 pub const MAX_SOURCE_DEPTH: usize = 32;
 
-/// Quantidade máxima de arquivos que uma varredura aceita de uma fonte.
+/// Maximum number of files a scan accepts from a source.
 pub const MAX_SOURCE_FILES: usize = 200_000;
 
-/// Maior bloco que [`CourseSource::read_range`] devolve de uma vez.
+/// Largest block that [`CourseSource::read_range`] returns at once.
 pub const MAX_SOURCE_READ: usize = 8 * 1024 * 1024;
 
-/// Item de uma listagem de diretório de uma fonte.
+/// Item of a directory listing of a source.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceEntry {
-    /// Caminho relativo à raiz da fonte, com separadores `/` e a caixa original.
+    /// Path relative to the source root, with `/` separators and the original case.
     pub path: String,
-    /// Verdadeiro quando o item é um diretório.
+    /// True when the item is a directory.
     pub is_dir: bool,
-    /// Tamanho em bytes. Zero para diretórios e quando a fonte não informa.
+    /// Size in bytes. Zero for directories and when the source does not report it.
     pub size: u64,
-    /// Modificação em segundos desde a época Unix. `0` significa desconhecido.
+    /// Modification time in seconds since the Unix epoch. `0` means unknown.
     pub mtime: i64,
 }
 
-/// Falha sanitizada de uma fonte.
+/// Sanitized failure of a source.
 ///
-/// As variantes não carregam URLs, caminhos locais nem credenciais: o adaptador HTTP
-/// escolhe a mensagem apresentada ao cliente.
+/// The variants carry no URLs, local paths or credentials: the HTTP adapter
+/// chooses the message shown to the client.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum SourceError {
-    /// A fonte não pôde ser alcançada.
+    /// The source could not be reached.
     #[error("a fonte não está acessível")]
     Unreachable,
-    /// A fonte recusou a autenticação ou a autorização.
+    /// The source refused authentication or authorization.
     #[error("a fonte recusou o acesso")]
     Denied,
-    /// O item pedido não existe na fonte.
+    /// The requested item does not exist in the source.
     #[error("o item não existe na fonte")]
     NotFound,
-    /// A fonte devolveu uma resposta que não pôde ser interpretada.
+    /// The source returned a response that could not be interpreted.
     #[error("a resposta da fonte é inválida")]
     InvalidResponse,
-    /// A fonte excedeu um limite de segurança da varredura.
+    /// The source exceeded a scan safety limit.
     #[error("a fonte excedeu o limite permitido")]
     Limit,
 }
 
-/// Resultado de uma operação de fonte.
+/// Result of a source operation.
 pub type SourceResult<T> = Result<T, SourceError>;
 
-/// Árvore de curso somente leitura.
+/// Read-only course tree.
 ///
-/// Os métodos devolvem futuros porque fontes remotas fazem rede. O trait continua
-/// utilizável como objeto (`&dyn CourseSource`) para que a varredura não conheça o
-/// transporte.
+/// The methods return futures because remote sources use the network. The trait stays
+/// usable as an object (`&dyn CourseSource`) so the scan does not know the
+/// transport.
 pub trait CourseSource: Send + Sync {
-    /// Lista os itens diretamente dentro de `directory`.
+    /// Lists the items directly inside `directory`.
     ///
-    /// A raiz é a string vazia. Cada item devolve o caminho relativo completo, nunca um
-    /// caminho absoluto ou fora da raiz.
+    /// The root is the empty string. Each item returns the full relative path, never an
+    /// absolute path or one outside the root.
     fn list<'a>(
         &'a self,
         directory: &'a str,
     ) -> Pin<Box<dyn Future<Output = SourceResult<Vec<SourceEntry>>> + Send + 'a>>;
 
-    /// Lê até `length` bytes de `path` a partir de `offset`.
+    /// Reads up to `length` bytes of `path` starting at `offset`.
     fn read_range<'a>(
         &'a self,
         path: &'a str,
@@ -97,19 +97,19 @@ pub trait CourseSource: Send + Sync {
     ) -> Pin<Box<dyn Future<Output = SourceResult<Vec<u8>>> + Send + 'a>>;
 }
 
-/// Fonte local, confinada à raiz informada.
+/// Local source, confined to the given root.
 #[derive(Debug, Clone)]
 pub struct LocalSource {
     root: PathBuf,
 }
 
 impl LocalSource {
-    /// Cria uma fonte local enraizada em `root`.
+    /// Creates a local source rooted at `root`.
     pub fn new(root: impl Into<PathBuf>) -> Self {
         Self { root: root.into() }
     }
 
-    /// Raiz da fonte.
+    /// Root of the source.
     pub fn root(&self) -> &std::path::Path {
         &self.root
     }
@@ -136,7 +136,7 @@ impl CourseSource for LocalSource {
     ) -> Pin<Box<dyn Future<Output = SourceResult<Vec<SourceEntry>>> + Send + 'a>> {
         Box::pin(async move {
             let path = self.directory_path(directory)?;
-            // A raiz nunca é seguida quando é um link, a mesma regra da varredura local.
+            // The root is never followed when it is a link, the same rule as the local scan.
             if directory.is_empty() {
                 let metadata =
                     std::fs::symlink_metadata(&path).map_err(|_| SourceError::NotFound)?;
@@ -154,7 +154,7 @@ impl CourseSource for LocalSource {
                 let entry = entry.map_err(|_| SourceError::Denied)?;
                 let name = entry.file_name().to_string_lossy().into_owned();
                 let file_type = entry.file_type().map_err(|_| SourceError::Denied)?;
-                // Links não são seguidos nem reportados, como na varredura local.
+                // Links are neither followed nor reported, as in the local scan.
                 if file_type.is_symlink() {
                     continue;
                 }
@@ -222,12 +222,12 @@ const SCAN_CONCURRENCY: usize = 8;
 /// Extra attempts for a directory whose listing failed on the network.
 const LIST_RETRIES: usize = 2;
 
-/// Percorre `source` e devolve o mesmo resultado que [`crate::scanner::scan`] para uma
-/// árvore local equivalente.
+/// Walks `source` and returns the same result as [`crate::scanner::scan`] for an
+/// equivalent local tree.
 ///
-/// Diretórios ocultos, diretórios temporários e links seguem a política da biblioteca.
-/// Uma falha na raiz interrompe a varredura; uma falha em uma subárvore é registrada em
-/// [`ScanOutcome::inaccessible`] e a varredura continua.
+/// Hidden directories, temporary directories and links follow the library's policy.
+/// A failure at the root interrupts the scan; a failure in a subtree is recorded in
+/// [`ScanOutcome::inaccessible`] and the scan continues.
 pub async fn scan_source(source: &dyn CourseSource) -> SourceResult<ScanOutcome> {
     let mode = KeyMode::for_host();
     let mut files = Vec::new();
@@ -315,8 +315,8 @@ pub async fn scan_source(source: &dyn CourseSource) -> SourceResult<ScanOutcome>
     })
 }
 
-/// Converte uma falha de fonte em um erro do domínio, para que o histórico de varredura
-/// registre a tentativa sem esconder a causa.
+/// Converts a source failure into a domain error, so the scan history
+/// records the attempt without hiding the cause.
 impl From<SourceError> for Error {
     fn from(error: SourceError) -> Self {
         Error::SourceUnavailable { source: error }
@@ -334,7 +334,7 @@ mod tests {
     use super::{CourseSource, LocalSource, SourceEntry, SourceError, scan_source};
     use crate::scanner::{MediaKind, scan};
 
-    /// Executa um futuro que nunca suspende de verdade (testes locais e fixtures).
+    /// Runs a future that never truly suspends (local tests and fixtures).
     fn block_on<F: Future>(future: F) -> F::Output {
         let mut future = Box::pin(future);
         let waker = Waker::noop();

@@ -21,7 +21,7 @@ const ADMIN_PASSWORD: &str = "uma senha local muito segura";
 const READER: &str = "reader";
 const READER_PASSWORD: &str = "senha local longa para aluno";
 
-/// Usuário comum criado pelo próprio teste, para provar o isolamento por dono.
+/// Ordinary user created by the test itself, to prove isolation by owner.
 const READER_ID: &str = "usr-reader";
 
 fn config(temp: &TempDir) -> Config {
@@ -43,10 +43,10 @@ fn database_path(temp: &TempDir) -> std::path::PathBuf {
     temp.path().join("study.sqlite")
 }
 
-/// Prepara diretório de dados, mídia conhecida e, opcionalmente, estado de estudo inicial.
+/// Prepares the data directory, known media and, optionally, initial study state.
 ///
-/// O banco é gravado antes do `AppState` abrir: as linhas de mídia precisam existir para
-/// que o progresso seja aceito pela chave estrangeira do schema.
+/// The database is written before the `AppState` opens: the media rows must exist so
+/// that progress is accepted by the schema's foreign key.
 fn seed(temp: &TempDir, media: &[&str], states: &[(&str, &str, i64, bool, i64)]) {
     let db = Database::open(database_path(temp)).unwrap();
     db.connection()
@@ -73,7 +73,7 @@ fn seed(temp: &TempDir, media: &[&str], states: &[(&str, &str, i64, bool, i64)])
     }
 }
 
-/// Cria um usuário comum antes do `AppState` abrir o banco.
+/// Creates an ordinary user before the `AppState` opens the database.
 fn seed_user(temp: &TempDir, user_id: &str, username: &str, password: &str) {
     let hash = hash_password(password).unwrap();
     Database::open(database_path(temp))

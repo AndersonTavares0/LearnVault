@@ -1,4 +1,4 @@
-//! Operações de backup e restauração do banco SQLite do LearnVault.
+//! Backup and restore operations of LearnVault's SQLite database.
 
 use std::{
     path::PathBuf,
@@ -20,19 +20,19 @@ use crate::{
     study::user_or_response,
 };
 
-/// Executa a criação de um backup consistente do banco via CLI.
+/// Runs the creation of a consistent database backup via the CLI.
 pub fn execute_backup(options: &BackupOptions) -> Result<PathBuf, learnvault_core::Error> {
     let db = learnvault_core::Database::open(&options.database_path)?;
     db.backup_to(&options.output_path)?;
     Ok(options.output_path.clone())
 }
 
-/// Restaura o banco de dados a partir de um backup via CLI.
+/// Restores the database from a backup via the CLI.
 pub fn execute_restore(options: &RestoreOptions) -> Result<(), learnvault_core::Error> {
     learnvault_core::Database::restore_from(&options.backup_path, &options.database_path)
 }
 
-/// Arquivo temporário apagado quando a resposta termina, mesmo se o cliente desistir.
+/// Temporary file deleted when the response ends, even if the client gives up.
 struct CleanupFile {
     file: tokio::fs::File,
     path: PathBuf,
@@ -54,7 +54,7 @@ impl Drop for CleanupFile {
     }
 }
 
-/// Handler HTTP autenticado (administrador) para download do backup transacional do banco.
+/// Authenticated (administrator) HTTP handler to download the database's transactional backup.
 pub(crate) async fn download_backup(State(state): State<AppState>, headers: HeaderMap) -> Response {
     let user = match user_or_response(&state, &headers).await {
         Ok(user) => user,

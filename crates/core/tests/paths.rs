@@ -1,7 +1,7 @@
-//! Testes de normalização e resolução de caminhos relativos da biblioteca.
+//! Tests of normalization and resolution of relative paths of the library.
 //!
-//! Todos os casos usam dados em memória ou diretórios temporários: nenhuma
-//! biblioteca real é acessada.
+//! Every case uses in-memory data or temporary directories: no real
+//! library is accessed.
 
 use learnvault_core::Error;
 use learnvault_core::paths::{KeyMode, relative_path_key, resolve_within};
@@ -48,7 +48,7 @@ fn absolute_paths_are_rejected() {
 
 #[test]
 fn drive_prefixed_components_are_rejected_even_in_the_middle() {
-    // No Windows, empilhar um componente com prefixo próprio descarta a raiz acumulada.
+    // On Windows, pushing a component with its own prefix discards the accumulated root.
     for path in ["curso/C:/Windows", "x/C:", "C:"] {
         assert!(
             relative_path_key(path, KeyMode::Sensitive).is_err(),

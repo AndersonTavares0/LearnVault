@@ -5,26 +5,26 @@ export type FileCounts = { videos: number; materials: number };
 export type CatalogCounts = FileCounts & { modules: number; lessons: number; missingLessons: number };
 
 /**
- * Arquivo de mídia que a última varredura ainda encontra no disco.
+ * Media file that the last scan still finds on disk.
  *
- * A comparação é tolerante (espaços e caixa) e um campo `availability` ausente vale como
- * disponível — a mesma regra tolerante já usada pelo roteador (`findLesson`) e pela lista
- * de arquivos soltos: um arquivo sem o campo nunca é tratado como ausente por omissão.
+ * The comparison is tolerant (whitespace and case) and a missing `availability` field counts as
+ * available — the same tolerant rule already used by the router (`findLesson`) and by the list
+ * of loose files: a file without the field is never treated as missing by omission.
  */
 function isFileAvailable(file: FileEntry): boolean {
 	return file.availability?.trim().toLowerCase() !== 'missing';
 }
 
 /**
- * Aula sem nenhuma mídia reproduzível.
+ * Lesson with no playable media.
  *
- * Uma aula é ausente quando tem pelo menos um arquivo de mídia (`kind === 'media'`) e
- * nenhum deles está disponível. Só a mídia decide: legendas e materiais não reabrem uma
- * aula cuja mídia desapareceu, porque é a mídia que a linha abre no player — uma aula com
- * a mídia ausente e a legenda presente continua ausente para quem vai estudar.
+ * A lesson is missing when it has at least one media file (`kind === 'media'`) and
+ * none of them is available. Only the media decides: subtitles and materials do not reopen a
+ * lesson whose media disappeared, because the media is what the row opens in the player — a lesson with
+ * the media missing and the subtitle present is still missing for the person who is going to study.
  *
- * Uma aula sem nenhum arquivo de mídia (só material, ou vazia) nunca é ausente: não há
- * mídia para faltar.
+ * A lesson with no media file at all (only material, or empty) is never missing: there is no
+ * media to be missing.
  */
 export function isLessonMissing(node: CatalogNode): boolean {
 	const media = [...node.files, ...node.looseFiles].filter((file) => file.kind === 'media');
@@ -32,12 +32,12 @@ export function isLessonMissing(node: CatalogNode): boolean {
 }
 
 /**
- * Arquivos do próprio nó, sem descer nos filhos.
+ * Files of the node itself, without descending into the children.
  *
- * Legendas entram em `materials` de propósito: para quem estuda, elas são um recurso da
- * aula, não uma aula. É a contagem que descreve o que a linha de aula abre no player —
- * uma aula com subpastas de bônus conta os arquivos das subpastas em cada linha filha,
- * não na linha pai.
+ * Subtitles go into `materials` on purpose: for the person studying, they are a resource of the
+ * lesson, not a lesson. This is the count that describes what the lesson row opens in the player —
+ * a lesson with bonus subfolders counts the subfolders' files in each child row,
+ * not in the parent row.
  */
 export function countCatalogFiles(node: CatalogNode): FileCounts {
 	const counts: FileCounts = { videos: 0, materials: 0 };
@@ -49,11 +49,11 @@ export function countCatalogFiles(node: CatalogNode): FileCounts {
 }
 
 /**
- * Mídias da subárvore que o último rescan marcou como ausentes.
+ * Media in the subtree that the last rescan marked as missing.
  *
- * A contagem de vídeos inclui registros ausentes de propósito (o catálogo não os apaga),
- * mas a ficha precisa dizer quantos realmente abrem — do contrário "2 vídeos" ao lado de
- * "1 aula" parece um erro. As aulas já usam a mesma distinção.
+ * The video count includes missing records on purpose (the catalog does not delete them),
+ * but the fact sheet must say how many actually open — otherwise "2 videos" next to
+ * "1 lesson" looks like a mistake. Lessons already use the same distinction.
  */
 export function countMissingVideos(node: CatalogNode): number {
 	let missing = 0;
@@ -68,16 +68,16 @@ export function countMissingVideos(node: CatalogNode): number {
 }
 
 /**
- * Contagens de um nó e de toda a sua subárvore.
+ * Counts of a node and of its whole subtree.
  *
- * `modules` conta nós por papel; `videos` e `materials` somam os arquivos do nó e dos
- * descendentes. O próprio nó entra na contagem quando é uma aula, para que a meta de um
- * curso descreva a subárvore inteira.
+ * `modules` counts nodes by role; `videos` and `materials` add up the files of the node and of the
+ * descendants. The node itself enters the count when it is a lesson, so that a
+ * course's meta describes the whole subtree.
  *
- * As aulas são contadas em duas somas: `lessons` traz as que têm mídia disponível e
- * `missingLessons` as que a varredura marcou como ausentes. A aula ausente continua
- * catalogada, listada e contada — só não se mistura com as que o aluno consegue abrir,
- * e por isso não infla a contagem de disponíveis.
+ * Lessons are counted in two sums: `lessons` holds those with available media and
+ * `missingLessons` those the scan marked as missing. A missing lesson stays
+ * catalogued, listed and counted — it just does not mix with the ones the learner can open,
+ * and so it does not inflate the count of available ones.
  */
 export function countCatalogNode(node: CatalogNode): CatalogCounts {
 	const counts: CatalogCounts = { modules: 0, lessons: 0, missingLessons: 0, videos: 0, materials: 0 };
@@ -97,17 +97,17 @@ export function countCatalogNode(node: CatalogNode): CatalogCounts {
 }
 
 /**
- * Contagem de aulas de uma subárvore: as disponíveis e, quando houver, as ausentes.
+ * Lesson count of a subtree: the available ones and, when there are any, the missing ones.
  *
- * `4 aulas`, `4 aulas · 4 ausentes`, `1 aula · 3 ausentes`, `0 aulas · 4 ausentes`. A
- * contagem de disponíveis aparece sempre para que o total do catálogo continue legível;
- * a de ausentes só aparece quando existe, para não poluir um catálogo íntegro.
+ * `4 lessons`, `4 lessons · 4 missing`, `1 lesson · 3 missing`, `0 lessons · 4 missing`.
+ * The available count always appears so that the catalog total stays legible;
+ * the missing one only appears when it exists, so as not to clutter an intact catalog.
  *
- * Uma pasta-aula pode conter vários arquivos de mídia distintos (o modelo de catálogo
- * trata qualquer pasta-folha com arquivos como uma única aula, documentado em
- * `role_of` no núcleo Rust). Quando isso acontece, `videos` passa de `lessons +
- * missingLessons`, e a contagem de vídeos aparece ao lado para que "12 aulas" não pareça
- * baixo demais diante de um curso com 20 vídeos empacotados nessas 12 pastas.
+ * A lesson folder can contain several distinct media files (the catalog model
+ * treats any leaf folder with files as a single lesson, documented in
+ * `role_of` in the Rust core). When that happens, `videos` exceeds `lessons +
+ * missingLessons`, and the video count appears alongside so that "12 lessons" does not look
+ * too low next to a course with 20 videos packed into those 12 folders.
  */
 export function formatLessonCounts(counts: CatalogCounts): string {
 	return joinParts([
@@ -126,7 +126,7 @@ export function formatCount(value: number, singular: string, plural: string): st
 export type CourseProgressStatus = 'all' | 'in_progress' | 'not_started' | 'completed';
 
 /**
- * Determina o status de estudo de um curso com base nas aulas concluídas e em andamento.
+ * Determines the study status of a course based on completed and in-progress lessons.
  */
 export function getCourseProgressStatus(
 	courseNode: CatalogNode,
@@ -210,11 +210,11 @@ export function formatLessonMeta(counts: FileCounts): string {
 }
 
 /**
- * Materiais (não mídia) de um curso inteiro, sem repetir o mesmo caminho.
+ * Materials (not media) of a whole course, without repeating the same path.
  *
- * A ficha do curso mostra tudo o que acompanha as aulas, inclusive o que está dentro de
- * módulos, em uma lista única. Legendas e arquivos de apoio entram; os vídeos ficam de
- * fora porque já são as aulas.
+ * The course fact sheet shows everything that accompanies the lessons, including what is inside
+ * modules, in a single list. Subtitles and support files go in; videos are left
+ * out because they are already the lessons.
  */
 export function collectMaterials(node: CatalogNode): FileEntry[] {
 	const byPath = new Map<string, FileEntry>();
@@ -228,16 +228,16 @@ export function collectMaterials(node: CatalogNode): FileEntry[] {
 	return [...byPath.values()];
 }
 
-/** Contexto de origem de um item recente: o curso e, quando houver, o módulo. */
+/** Origin context of a recent item: the course and, when there is one, the module. */
 export function formatLocationContext(courseTitle: string, moduleTitle: string | null): string {
 	return joinParts([courseTitle, moduleTitle ?? '']);
 }
 
 /**
- * Remove prefixos numéricos e separadores de pastas de categoria para exibição legível.
+ * Removes numeric prefixes and separators of category folders for a readable display.
  *
- * Ex: "01 - Programacao e Desenvolvimento" -> "Programacao e Desenvolvimento"
- *     "02. Design de Interfaces" -> "Design de Interfaces"
+ * Ex: "01 - Programming and Development" -> "Programming and Development"
+ *     "02. Interface Design" -> "Interface Design"
  */
 export function formatCategoryName(folder: string): string {
 	const trimmed = folder.trim();

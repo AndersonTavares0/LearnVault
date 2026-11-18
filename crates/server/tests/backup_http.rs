@@ -138,7 +138,7 @@ async fn backup_endpoint_requires_admin_and_serves_valid_sqlite_stream() {
     let state = AppState::initialize(cfg).await.unwrap();
     let app = build_router(state);
 
-    // Sem autenticação -> 401
+    // Without authentication -> 401
     let unauth = app
         .clone()
         .oneshot(
@@ -150,7 +150,7 @@ async fn backup_endpoint_requires_admin_and_serves_valid_sqlite_stream() {
         .unwrap();
     assert_eq!(unauth.status(), StatusCode::UNAUTHORIZED);
 
-    // Com login admin -> 200 OK e download válido
+    // With admin login -> 200 OK and a valid download
     let cookie = login(&app).await;
     let response = app
         .clone()
@@ -183,7 +183,7 @@ async fn backup_endpoint_requires_admin_and_serves_valid_sqlite_stream() {
     let body = response.into_body().collect().await.unwrap().to_bytes();
     assert!(body.starts_with(b"SQLite format 3\0"));
 
-    // O arquivo temporário sai do disco quando o corpo termina de ser consumido.
+    // The temporary file leaves the disk when the body finishes being consumed.
     let leftovers = std::fs::read_dir(temp.path())
         .unwrap()
         .filter_map(Result::ok)

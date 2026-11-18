@@ -1,9 +1,9 @@
-//! Criptografia das credenciais de fontes remotas em repouso.
+//! Encryption of remote-source credentials at rest.
 //!
-//! A chave é um arquivo de 32 bytes em base64 ao lado do banco (`sources.key`), criado
-//! com permissão `0600` na primeira gravação de uma senha. O segredo em si é gravado como
-//! `v1:<base64(nonce || ChaCha20-Poly1305)>`; nem a senha nem a chave aparecem em logs,
-//! mensagens de erro ou respostas HTTP.
+//! The key is a 32-byte base64 file next to the database (`sources.key`), created
+//! with `0600` permission on the first write of a password. The secret itself is stored as
+//! `v1:<base64(nonce || ChaCha20-Poly1305)>`; neither the password nor the key appears in logs,
+//! error messages or HTTP responses.
 
 use std::{
     fs,
@@ -17,23 +17,23 @@ use ring::{
     rand::{SecureRandom, SystemRandom},
 };
 
-/// Tamanho da chave simétrica.
+/// Size of the symmetric key.
 const KEY_LEN: usize = 32;
-/// Prefixo de formato do segredo cifrado.
+/// Format prefix of the encrypted secret.
 const SECRET_PREFIX: &str = "v1:";
 
-/// Falha sanitizada do armazenamento de segredos.
+/// Sanitized failure of the secret store.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum SecretError {
-    /// A chave não existe ou não pôde ser lida.
+    /// The key does not exist or could not be read.
     #[error("a chave de segredos não está disponível")]
     KeyUnavailable,
-    /// O valor gravado não pôde ser decifrado.
+    /// The stored value could not be decrypted.
     #[error("o segredo gravado não pôde ser decifrado")]
     Undecryptable,
 }
 
-/// Chave simétrica usada para cifrar e decifrar segredos de fontes.
+/// Symmetric key used to encrypt and decrypt source secrets.
 pub(crate) struct SecretKey {
     key: LessSafeKey,
 }
@@ -45,7 +45,7 @@ impl std::fmt::Debug for SecretKey {
 }
 
 impl SecretKey {
-    /// Caminho padrão da chave para um banco.
+    /// Default path of the key for a database.
     pub(crate) fn path_for(database_path: &Path) -> PathBuf {
         let parent = database_path
             .parent()
@@ -54,7 +54,7 @@ impl SecretKey {
         parent.join("sources.key")
     }
 
-    /// Carrega uma chave existente.
+    /// Loads an existing key.
     pub(crate) fn load(path: &Path) -> Result<Self, SecretError> {
         let raw = fs::read_to_string(path).map_err(|_| SecretError::KeyUnavailable)?;
         let bytes = STANDARD
@@ -63,7 +63,7 @@ impl SecretKey {
         Self::from_bytes(&bytes)
     }
 
-    /// Carrega a chave existente ou cria uma nova com permissão restrita.
+    /// Loads the existing key or creates a new one with restricted permission.
     pub(crate) fn load_or_create(path: &Path) -> Result<Self, SecretError> {
         if path.exists() {
             return Self::load(path);
@@ -76,8 +76,8 @@ impl SecretKey {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).map_err(|_| SecretError::KeyUnavailable)?;
         }
-        // `create_new` garante que duas gravações concorrentes não escolham chaves
-        // diferentes; a perdedora lê a chave da vencedora.
+        // `create_new` guarantees that two concurrent writes do not choose different
+        // keys; the loser reads the winner's key.
         match restricted_file(path) {
             Ok(mut file) => {
                 file.write_all(encoded.as_bytes())
@@ -97,7 +97,7 @@ impl SecretKey {
         })
     }
 
-    /// Cifra um segredo para gravação.
+    /// Encrypts a secret for storage.
     pub(crate) fn encrypt(&self, plaintext: &str) -> Result<String, SecretError> {
         let mut nonce_bytes = [0_u8; NONCE_LEN];
         SystemRandom::new()
@@ -113,7 +113,7 @@ impl SecretKey {
         Ok(format!("{SECRET_PREFIX}{}", STANDARD.encode(payload)))
     }
 
-    /// Decifra um segredo gravado.
+    /// Decrypts a stored secret.
     pub(crate) fn decrypt(&self, stored: &str) -> Result<String, SecretError> {
         let payload = stored
             .strip_prefix(SECRET_PREFIX)

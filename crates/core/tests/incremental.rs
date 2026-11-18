@@ -1,8 +1,8 @@
-//! Testes da detecção incremental: novo, alterado, movido e ausente.
+//! Tests of incremental detection: new, changed, moved and missing.
 //!
-//! A identidade da aula é o `media_id`. Um arquivo que muda de caminho continua sendo a
-//! mesma aula, com as mesmas notas, marcadores e progresso; um arquivo que desaparece é
-//! marcado como ausente sem apagar histórico. A biblioteca física permanece intocada.
+//! The lesson's identity is the `media_id`. A file that changes path is still the
+//! same lesson, with the same notes, markers and progress; a file that disappears is
+//! marked as missing without erasing history. The physical library stays untouched.
 
 use std::{
     fs::{self, FileTimes},
@@ -55,7 +55,7 @@ fn count(db: &Database, table: &str) -> i64 {
         .expect("a contagem deve ser consultável")
 }
 
-/// Progresso, notas e marcadores do dono, para provar que a identidade preserva histórico.
+/// The owner's progress, notes and markers, to prove that the identity preserves history.
 fn history(db: &Database, media_id: &str) -> (i64, usize, usize) {
     let position = db
         .connection()
@@ -104,7 +104,7 @@ fn a_moved_file_keeps_identity_notes_and_progress_even_when_mtime_changes() -> T
     let id = media_id(&db, "Curso/antigo-nome.mp4").expect("a aula deve estar catalogada");
     seed_history(&db, &id)?;
 
-    // O arquivo muda de caminho e de mtime, mas o conteúdo é o mesmo.
+    // The file changes path and mtime, but the content is the same.
     let old_path = root.join("Curso/antigo-nome.mp4");
     fs::remove_file(&old_path)?;
     write(root, "Curso/novo-nome.mp4", b"conteudo exclusivo da aula")?;
@@ -126,8 +126,8 @@ fn a_moved_file_keeps_identity_notes_and_progress_even_when_mtime_changes() -> T
     assert_eq!(history(&db, &id), (42, 1, 1));
     assert_eq!(availability(&db, &id).as_deref(), Some("available"));
 
-    // O índice FTS acompanha o novo caminho: a busca antiga não encontra aula e a nova
-    // devolve a mesma identidade.
+    // The FTS index follows the new path: the old search finds no lesson and the new one
+    // returns the same identity.
     assert!(search(&db, OWNER, false, "antigo", 10)?.lessons.is_empty());
     let found = search(&db, OWNER, false, "novo", 10)?;
     assert_eq!(found.lessons.len(), 1);
@@ -142,8 +142,8 @@ fn an_ambiguous_move_is_not_applied_to_any_row() -> TestResult {
     let library = tempfile::tempdir()?;
     let root = library.path();
 
-    // Duas aulas com o mesmo conteúdo e o mesmo mtime: nenhuma pista distingue qual delas
-    // foi movida.
+    // Two lessons with the same content and the same mtime: no clue tells which of them
+    // was moved.
     write(root, "Curso/a.mp4", b"conteudo repetido")?;
     write(root, "Curso/b.mp4", b"conteudo repetido")?;
     set_mtime(
@@ -211,7 +211,7 @@ fn a_metadata_only_touch_is_not_a_content_change() -> TestResult {
     write(root, "Curso/aula.mp4", b"conteudo estavel")?;
     rescan(&mut db, LIB, root)?;
 
-    // Mesmo conteúdo e mesmo tamanho, mas outro mtime: é um toque, não uma alteração.
+    // Same content and same size, but another mtime: it is a touch, not a change.
     set_mtime(
         &root.join("Curso/aula.mp4"),
         SystemTime::UNIX_EPOCH + Duration::from_secs(2_000),
@@ -256,7 +256,7 @@ fn rescanning_with_hashes_never_writes_to_the_library() -> TestResult {
     let before = snapshot(root);
 
     rescan(&mut db, LIB, root)?;
-    // Uma segunda varredura exerce o caminho de hash sobre arquivos já conhecidos.
+    // A second scan exercises the hash path over already-known files.
     write(root, "Curso/outra.mp4", b"outra aula")?;
     let expected = snapshot(root);
     assert_ne!(before, expected, "o teste precisa de uma árvore diferente");
@@ -275,7 +275,7 @@ fn set_mtime(path: &Path, time: SystemTime) -> std::io::Result<()> {
     file.set_times(FileTimes::new().set_modified(time))
 }
 
-/// Caminho, tamanho e bytes de cada arquivo da árvore.
+/// Path, size and bytes of each file in the tree.
 fn snapshot(root: &Path) -> Vec<(String, u64, Vec<u8>)> {
     fn walk(base: &Path, current: &Path, entries: &mut Vec<(String, u64, Vec<u8>)>) {
         let mut children: Vec<_> = fs::read_dir(current)

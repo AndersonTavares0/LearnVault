@@ -79,7 +79,7 @@ async fn avatar_endpoints_require_authentication_and_csrf() {
     let state = AppState::initialize(test_config(&temp)).await.unwrap();
     let app = build_router(state);
 
-    // GET sem autenticação: 401
+    // GET without authentication: 401
     let get_res = app
         .clone()
         .oneshot(
@@ -91,7 +91,7 @@ async fn avatar_endpoints_require_authentication_and_csrf() {
         .unwrap();
     assert_eq!(get_res.status(), StatusCode::UNAUTHORIZED);
 
-    // PUT sem autenticação: 401
+    // PUT without authentication: 401
     let put_res = app
         .clone()
         .oneshot(
@@ -104,7 +104,7 @@ async fn avatar_endpoints_require_authentication_and_csrf() {
         .unwrap();
     assert_eq!(put_res.status(), StatusCode::UNAUTHORIZED);
 
-    // PUT autenticado sem origin (CSRF): 403
+    // Authenticated PUT without origin (CSRF): 403
     let cookie = login(&app, ADMIN, ADMIN_PASSWORD).await;
     let csrf_res = app
         .clone()
@@ -128,7 +128,7 @@ async fn avatar_crud_isolation_and_type_validation_flow() {
     let admin_cookie = login(&app, ADMIN, ADMIN_PASSWORD).await;
     let student_cookie = login(&app, STUDENT, STUDENT_PASSWORD).await;
 
-    // 1. Inicialmente 404 (sem avatar cadastrado)
+    // 1. Initially 404 (no avatar registered)
     let initial = app
         .clone()
         .oneshot(
@@ -141,7 +141,7 @@ async fn avatar_crud_isolation_and_type_validation_flow() {
         .unwrap();
     assert_eq!(initial.status(), StatusCode::NOT_FOUND);
 
-    // 2. Rejeição de arquivo com tipo não suportado
+    // 2. Rejection of a file with an unsupported type
     let invalid_type = app
         .clone()
         .oneshot(
@@ -155,7 +155,7 @@ async fn avatar_crud_isolation_and_type_validation_flow() {
         .unwrap();
     assert_eq!(invalid_type.status(), StatusCode::UNSUPPORTED_MEDIA_TYPE);
 
-    // 3. Upload bem-sucedido de PNG para o admin
+    // 3. Successful PNG upload for the admin
     let png = sample_png();
     let put_ok = app
         .clone()
@@ -173,7 +173,7 @@ async fn avatar_crud_isolation_and_type_validation_flow() {
     let put_json: serde_json::Value = serde_json::from_slice(&put_bytes).unwrap();
     assert!(put_json["version"].as_i64().is_some());
 
-    // 4. Download do avatar do admin
+    // 4. Download of the admin's avatar
     let get_admin = app
         .clone()
         .oneshot(
@@ -203,7 +203,7 @@ async fn avatar_crud_isolation_and_type_validation_flow() {
     let downloaded = get_admin.into_body().collect().await.unwrap().to_bytes();
     assert_eq!(downloaded.as_ref(), png.as_slice());
 
-    // 4b. Revalidação condicional (304 Not Modified) quando If-None-Match coincide
+    // 4b. Conditional revalidation (304 Not Modified) when If-None-Match matches
     let get_not_modified = app
         .clone()
         .oneshot(
@@ -217,7 +217,7 @@ async fn avatar_crud_isolation_and_type_validation_flow() {
         .unwrap();
     assert_eq!(get_not_modified.status(), StatusCode::NOT_MODIFIED);
 
-    // 5. Isolamento: o estudante continua sem avatar (404)
+    // 5. Isolation: the student still has no avatar (404)
     let get_student = app
         .clone()
         .oneshot(
@@ -230,7 +230,7 @@ async fn avatar_crud_isolation_and_type_validation_flow() {
         .unwrap();
     assert_eq!(get_student.status(), StatusCode::NOT_FOUND);
 
-    // 6. Remoção do avatar do admin
+    // 6. Removal of the admin's avatar
     let delete_res = app
         .clone()
         .oneshot(
@@ -244,7 +244,7 @@ async fn avatar_crud_isolation_and_type_validation_flow() {
         .unwrap();
     assert_eq!(delete_res.status(), StatusCode::NO_CONTENT);
 
-    // 7. Após remoção, volta a responder 404
+    // 7. After removal, it answers 404 again
     let after_delete = app
         .clone()
         .oneshot(

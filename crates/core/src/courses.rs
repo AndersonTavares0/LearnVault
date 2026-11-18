@@ -1,30 +1,30 @@
-//! Cursos registrados: raiz validada, identidade estável e título derivado.
+//! Registered courses: validated root, stable identity and derived title.
 //!
-//! A raiz física de cada curso é configuração da plataforma, não dado do domínio. Este
-//! módulo concentra o que o servidor e o desktop precisam compartilhar: a validação segura
-//! da pasta escolhida, a identidade estável usada como `library_id` no banco e o título
-//! apresentado nos cards.
+//! The physical root of each course is platform configuration, not domain data. This
+//! module gathers what the server and the desktop need to share: the safe validation
+//! of the chosen folder, the stable identity used as the `library_id` in the database and the title
+//! shown on the cards.
 //!
-//! A pasta de um curso é externa e **somente leitura**: resolver uma raiz nunca cria,
-//! move nem altera nada dentro dela.
+//! A course's folder is external and **read-only**: resolving a root never creates,
+//! moves or changes anything inside it.
 
 use std::fmt;
 use std::path::{Path, PathBuf};
 
-/// Raiz de um curso já validada e canonicalizada.
+/// Root of a course, already validated and canonicalized.
 ///
-/// O caminho é privado de propósito: ele existe apenas para o Rust e nunca é serializado
-/// para o webview. O `Debug` também oculta o caminho, para que um registro de diagnóstico
-/// não vaze a localização do curso.
+/// The path is private on purpose: it exists only for Rust and is never serialized
+/// to the webview. `Debug` also hides the path, so that a diagnostic log
+/// does not leak the course's location.
 #[derive(Clone, PartialEq, Eq)]
 pub struct CourseRoot(PathBuf);
 
 impl CourseRoot {
-    /// Valida e canonicaliza um caminho candidato a raiz de curso.
+    /// Validates and canonicalizes a candidate path for a course root.
     ///
-    /// O caminho precisa existir, ser um diretório, não ser um link simbólico, junction
-    /// ou ponto de reparse no próprio topo, e ser legível (`read_dir`). O resultado é a
-    /// forma canônica — a única forma persistida. Nenhum arquivo é criado ou modificado.
+    /// The path must exist, be a directory, not be a symbolic link, junction
+    /// or reparse point at the top itself, and be readable (`read_dir`). The result is the
+    /// canonical form — the only form persisted. No file is created or modified.
     pub fn resolve(path: &Path) -> Result<Self, CourseRootError> {
         let metadata = match std::fs::symlink_metadata(path) {
             Ok(metadata) => metadata,
@@ -47,7 +47,7 @@ impl CourseRoot {
         Ok(Self(canonical))
     }
 
-    /// Caminho canônico da raiz, somente para uso interno do Rust.
+    /// Canonical path of the root, for internal Rust use only.
     pub fn as_path(&self) -> &Path {
         &self.0
     }
@@ -59,16 +59,16 @@ impl fmt::Debug for CourseRoot {
     }
 }
 
-/// Falha estável da validação de uma raiz de curso. Nunca carrega caminho.
+/// Stable failure of validating a course root. It never carries a path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CourseRootError {
-    /// O caminho escolhido não existe.
+    /// The chosen path does not exist.
     Missing,
-    /// O caminho escolhido não é um diretório.
+    /// The chosen path is not a directory.
     NotADirectory,
-    /// O caminho escolhido não pôde ser lido (canonicalização ou listagem).
+    /// The chosen path could not be read (canonicalization or listing).
     NotReadable,
-    /// O caminho escolhido é um link, junction ou ponto de reparse.
+    /// The chosen path is a link, junction or reparse point.
     Link,
 }
 
@@ -85,18 +85,18 @@ impl fmt::Display for CourseRootError {
 
 impl std::error::Error for CourseRootError {}
 
-/// Identificador legado da primeira biblioteca.
+/// Legacy identifier of the first library.
 ///
-/// A raiz configurada pela implantação antiga (e a raiz persistida pelo desktop antes dos
-/// cursos individuais) continua associada a esta identidade, para que as mídias, varreduras
-/// e o progresso de estudo já gravados não se percam quando o curso é recarregado.
+/// The root configured by the old deployment (and the root persisted by the desktop before
+/// individual courses) stays associated with this identity, so that the media, scans
+/// and study progress already stored are not lost when the course is reloaded.
 pub const LEGACY_LIBRARY_ID: &str = "library-1";
 
-/// Identidade estável de um curso derivado do caminho canônico.
+/// Stable identity of a course derived from the canonical path.
 ///
-/// A identidade precisa ser estável entre execuções para que reimportar a mesma pasta
-/// reencontre as mídias e o progresso de estudo já persistidos, e precisa ser opaca para
-/// que o caminho do sistema de arquivos nunca cruze a fronteira do webview.
+/// The identity must be stable across runs so that re-importing the same folder
+/// finds again the media and the study progress already persisted, and it must be opaque so
+/// that the file-system path never crosses the webview boundary.
 pub fn course_id_from_path(path: &Path) -> String {
     let digest = uuid::Uuid::new_v5(
         &uuid::Uuid::NAMESPACE_URL,
@@ -105,10 +105,10 @@ pub fn course_id_from_path(path: &Path) -> String {
     format!("course-{digest}")
 }
 
-/// Título apresentado de um curso: o nome da pasta, sem prefixos de ordenação.
+/// Displayed title of a course: the folder name, without ordering prefixes.
 ///
-/// Uma pasta sem nome utilizável (por exemplo a raiz de um volume) recebe um título
-/// neutro, para que o card nunca fique vazio.
+/// A folder with no usable name (for example the root of a volume) gets a neutral
+/// title, so the card never ends up empty.
 pub fn course_title(root: &Path) -> String {
     let fallback = "Curso";
     let Some(name) = root.file_name().and_then(|name| name.to_str()) else {
@@ -118,8 +118,8 @@ pub fn course_title(root: &Path) -> String {
     if !cleaned.is_empty() {
         return crate::titles::presentable(&cleaned);
     }
-    // Uma pasta chamada "2024" ou "01" perde tudo na limpeza; o número é o único título
-    // que diferencia os cursos de uma biblioteca por ano, então ele é preservado.
+    // A folder named "2024" or "01" loses everything in the cleanup; the number is the only title
+    // that tells apart the courses of a library organized by year, so it is preserved.
     let trimmed = name
         .trim()
         .trim_end_matches(|character: char| "._- •\t".contains(character))
@@ -131,7 +131,7 @@ pub fn course_title(root: &Path) -> String {
     }
 }
 
-/// Nome da pasta pai imediata de um curso no disco, sem expor caminhos completos.
+/// Name of a course's immediate parent folder on disk, without exposing full paths.
 pub fn course_source_folder(root: &Path) -> Option<String> {
     root.parent()
         .and_then(|p| p.file_name())
@@ -139,7 +139,7 @@ pub fn course_source_folder(root: &Path) -> Option<String> {
         .map(str::to_owned)
 }
 
-/// Verdadeiro quando o metadado marca um ponto de reparse (junction ou symlink) no Windows.
+/// True when the metadata marks a reparse point (junction or symlink) on Windows.
 #[cfg(windows)]
 fn is_reparse_point(metadata: &std::fs::Metadata) -> bool {
     use std::os::windows::fs::MetadataExt;
@@ -148,7 +148,7 @@ fn is_reparse_point(metadata: &std::fs::Metadata) -> bool {
     metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
 }
 
-/// Fora do Windows, junctions e pontos de reparse não existem; links já são detectados.
+/// Outside Windows, junctions and reparse points do not exist; links are already detected.
 #[cfg(not(windows))]
 fn is_reparse_point(_metadata: &std::fs::Metadata) -> bool {
     false
@@ -163,8 +163,8 @@ mod tests {
 
     #[test]
     fn keeps_a_numeric_folder_name_as_the_course_title() {
-        // Uma biblioteca organizada por ano usa pastas como "2024"; a limpeza remove
-        // todo o nome, e sem preservar o numero todos os cursos ficariam iguais.
+        // A library organized by year uses folders such as "2024"; the cleanup removes
+        // the whole name, and without preserving the number all the courses would end up the same.
         assert_eq!(course_title(Path::new("/cursos/ENEM/2024")), "2024");
         assert_eq!(course_title(Path::new("/cursos/ENEM/01")), "01");
         assert_eq!(
@@ -232,7 +232,7 @@ mod tests {
     #[test]
     fn title_falls_back_when_the_folder_has_no_usable_name() {
         assert_eq!(course_title(Path::new("/")), "Curso");
-        // Um nome puramente numerico e um titulo valido: so a ausencia de nome cai no neutro.
+        // A purely numeric name is a valid title: only the absence of a name falls to the neutral one.
         assert_eq!(course_title(Path::new("42")), "42");
     }
 }

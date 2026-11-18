@@ -1,4 +1,4 @@
-//! Testes das primitivas de identidade opaca da mídia.
+//! Tests of the media's opaque identity primitives.
 
 use std::collections::HashSet;
 use std::thread::sleep;
@@ -20,8 +20,8 @@ fn assert_uuid_v7(id: &str) {
     }
 
     assert_eq!(bytes[14], b'7', "versão 7 esperada em {id}");
-    // Bits de variante do RFC 9562: o primeiro nibble do quarto grupo precisa estar
-    // entre 8 e b.
+    // RFC 9562 variant bits: the first nibble of the fourth group must be
+    // between 8 and b.
     let variant = bytes[19];
     assert!(
         (b'8'..=b'b').contains(&variant),

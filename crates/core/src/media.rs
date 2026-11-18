@@ -27,30 +27,30 @@ use crate::paths::resolve_within;
 use crate::paths::{KeyMode, relative_path_key};
 use crate::scanner::{MediaKind, classify, mtime_seconds};
 
-/// Referência persistida usada pelo adaptador HTTP para abrir uma mídia.
+/// Persisted reference used by the HTTP adapter to open a media.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MediaReference {
-    /// Biblioteca que contém o arquivo.
+    /// Library that contains the file.
     pub library_id: String,
-    /// Identidade estável do arquivo.
+    /// Stable identity of the file.
     pub media_id: String,
-    /// Caminho relativo persistido, nunca um caminho absoluto.
+    /// Persisted relative path, never an absolute path.
     pub relative_path: String,
     size: u64,
     mtime: i64,
 }
 
 impl MediaReference {
-    /// Tamanho em bytes observado na última varredura.
+    /// Size in bytes observed in the last scan.
     pub fn size(&self) -> u64 {
         self.size
     }
 }
 
-/// Resolve um caminho relativo indexado sem acessar o sistema de arquivos.
+/// Resolves an indexed relative path without touching the file system.
 ///
-/// A função só retorna mídias disponíveis e recusa componentes que poderiam transformar a
-/// entrada HTTP em um caminho fora da biblioteca. A abertura e a validação final ficam em
+/// The function only returns available media and refuses components that could turn the
+/// HTTP input into a path outside the library. The opening and the final validation stay in
 /// [`open_media`].
 pub fn find_media_by_path(
     db: &Database,
@@ -74,10 +74,10 @@ pub fn find_media_by_path(
     let normalized = parts.join("/");
     let key = match relative_path_key(&normalized, KeyMode::for_host()) {
         Ok(key) => key,
-        // A chave lexical pode recusar um caminho que a varredura de componentes do host
-        // não reconheceu como travessia (por exemplo `..\x` no Unix, onde `\` é um
-        // caractere comum). Para o cliente isso continua sendo ausência de mídia, nunca
-        // corrupção do servidor — e o resultado não pode depender da plataforma.
+        // The lexical key may refuse a path that the host's component scan
+        // did not recognize as a traversal (for example `..\x` on Unix, where `\` is an
+        // ordinary character). For the client this is still an absent media, never
+        // a server corruption — and the result cannot depend on the platform.
         Err(Error::InvalidRelativePath { .. }) => return Ok(None),
         Err(error) => return Err(error),
     };
@@ -114,11 +114,11 @@ pub fn find_media_by_path(
         .transpose()
 }
 
-/// Descobre a biblioteca que contém uma mídia pelo identificador estável.
+/// Finds the library that contains a media by its stable identifier.
 ///
-/// O desktop entrega mídia por `media_id` opaco sem conhecer a raiz: esta consulta liga a
-/// identidade à biblioteca registrada, e a abertura em [`open_media`] revalida a raiz
-/// correspondente. Não acessa o sistema de arquivos.
+/// The desktop delivers media by opaque `media_id` without knowing the root: this query links the
+/// identity to the registered library, and the opening in [`open_media`] revalidates the corresponding
+/// root. It does not touch the file system.
 pub fn find_media_library_id(db: &Database, media_id: &str) -> Result<Option<String>> {
     Ok(db
         .connection()
@@ -130,40 +130,40 @@ pub fn find_media_library_id(db: &Database, media_id: &str) -> Result<Option<Str
         .optional()?)
 }
 
-/// Mídia resolvida e já aberta para leitura.
+/// Media resolved and already open for reading.
 #[derive(Debug)]
 pub struct OpenMedia {
-    /// Identificador da mídia.
+    /// Identifier of the media.
     pub media_id: String,
-    /// Arquivo aberto em modo somente leitura, posicionado no início.
+    /// File opened read-only, positioned at the start.
     pub file: File,
-    /// Tamanho em bytes, lido do descritor aberto.
+    /// Size in bytes, read from the open descriptor.
     pub size: u64,
-    /// Modificação em segundos desde a época Unix, lida do descritor aberto.
+    /// Modification time in seconds since the Unix epoch, read from the open descriptor.
     pub mtime: i64,
-    /// Classificação derivada do nome do arquivo.
+    /// Classification derived from the file name.
     pub kind: MediaKind,
-    /// Nome do arquivo (apenas o componente final, nunca um caminho).
+    /// File name (only the final component, never a path).
     ///
-    /// É a única informação de localização exposta a um adaptador, e serve para decisões
-    /// de tipo de conteúdo (por exemplo a allowlist de MIME do protocolo de mídia do
-    /// desktop). O caminho completo nunca cruza a fronteira do núcleo.
+    /// It is the only location information exposed to an adapter, and it serves content-type
+    /// decisions (for example the MIME allowlist of the desktop's media protocol).
+    /// The full path never crosses the core's boundary.
     pub name: String,
-    /// Verdadeiro quando o arquivo difere do que a última varredura registrou.
+    /// True when the file differs from what the last scan recorded.
     pub changed: bool,
 }
 
-/// Abre uma mídia da biblioteca para leitura.
+/// Opens a media of the library for reading.
 ///
-/// A mídia é identificada por `library_id` e `media_id`. A raiz vem da integração de
-/// plataforma, já resolvida; esta função apenas confirma que o arquivo está sob ela.
+/// The media is identified by `library_id` and `media_id`. The root comes from the platform
+/// integration, already resolved; this function only confirms that the file is under it.
 ///
-/// Devolve erro tipado quando o identificador é desconhecido, quando a mídia foi removida
-/// do catálogo, quando a linha está marcada como ausente, quando o arquivo desapareceu do
-/// disco, quando o caminho armazenado é inválido ou escapa da biblioteca, quando o
-/// resultado não é um arquivo comum, quando o componente final é um link simbólico ou
-/// ponto de reparse, quando a abertura falha ou quando o arquivo aberto não corresponde ao
-/// caminho validado.
+/// It returns a typed error when the identifier is unknown, when the media was removed
+/// from the catalog, when the row is marked as missing, when the file disappeared from the
+/// disk, when the stored path is invalid or escapes the library, when the
+/// result is not a regular file, when the final component is a symbolic link or
+/// reparse point, when the opening fails or when the opened file does not match the
+/// validated path.
 pub fn open_media(
     db: &Database,
     library_id: &str,
@@ -173,7 +173,7 @@ pub fn open_media(
     let canonical_root = canonical_root(root)?;
     let stored = media_row(db, library_id, media_id)?;
 
-    // Uma mídia removida saiu do catálogo por decisão explícita: ela não é entregue.
+    // A removed media left the catalog by explicit decision: it is not delivered.
     if is_removed(db, library_id, media_id)? {
         return Err(Error::MediaRemoved {
             media_id: media_id.to_owned(),
@@ -186,8 +186,8 @@ pub fn open_media(
         });
     }
 
-    // O caminho vem do banco e não é confiado: a validação lexical é repetida aqui, e um
-    // caminho que escaparia da raiz é recusado antes de qualquer acesso ao disco.
+    // The path comes from the database and is not trusted: the lexical validation is repeated here, and a
+    // path that would escape the root is refused before any disk access.
     let candidate = resolve_within(&canonical_root, &stored.relative_path)?;
 
     let on_path = std::fs::symlink_metadata(&candidate).map_err(|source| match source.kind() {
@@ -200,19 +200,19 @@ pub fn open_media(
         },
     })?;
 
-    // `symlink_metadata` não segue o link, então o tipo do próprio componente final é
-    // observável. Links não são seguidos na indexação, portanto não são mídia conhecida.
+    // `symlink_metadata` does not follow the link, so the type of the final component itself is
+    // observable. Links are not followed during indexing, so they are not known media.
     if on_path.file_type().is_symlink() || is_reparse_point(&on_path) {
         return Err(Error::MediaIsSymlink {
             media_id: media_id.to_owned(),
         });
     }
 
-    // Classifica o tipo antes de abrir: no Windows, abrir um diretório falha com
-    // PermissionDenied e seria reportado como `MediaUnreadable`, enquanto no Unix a
-    // abertura funciona e a recusa viria só do `metadata.is_file()` pós-abertura. Usar o
-    // tipo já observado no caminho mantém `MediaNotAFile` idêntico nas duas plataformas e
-    // preserva `MediaUnreadable` para falhas reais de abertura de um arquivo comum.
+    // Classifies the type before opening: on Windows, opening a directory fails with
+    // PermissionDenied and would be reported as `MediaUnreadable`, while on Unix the
+    // open works and the refusal would only come from the post-open `metadata.is_file()`. Using the
+    // type already observed on the path keeps `MediaNotAFile` identical on both platforms and
+    // preserves `MediaUnreadable` for real failures to open a regular file.
     if !on_path.is_file() {
         return Err(Error::MediaNotAFile {
             media_id: media_id.to_owned(),
@@ -229,8 +229,8 @@ pub fn open_media(
         },
     })?;
 
-    // A canonicalização resolve links intermediários; a comparação por componente garante
-    // que o destino real continua dentro da biblioteca.
+    // Canonicalization resolves intermediate links; the per-component comparison guarantees
+    // that the real target is still inside the library.
     if !is_inside(&resolved, &canonical_root) {
         return Err(Error::MediaOutsideLibrary {
             media_id: media_id.to_owned(),
@@ -239,7 +239,7 @@ pub fn open_media(
 
     let file = open_readonly(&canonical_root, &stored.relative_path, &resolved, media_id)?;
 
-    // Os metadados e a classificação vêm do descritor aberto, nunca do caminho.
+    // The metadata and the classification come from the open descriptor, never from the path.
     let metadata = file.metadata().map_err(|source| Error::MediaUnreadable {
         media_id: media_id.to_owned(),
         source,
@@ -270,9 +270,9 @@ pub fn open_media(
     })
 }
 
-/// Valida a disponibilidade e o estado de uma referência de mídia no catálogo.
+/// Validates the availability and state of a media reference in the catalog.
 ///
-/// Não acessa o sistema de arquivos nem abre descritores em disco.
+/// It does not touch the file system nor open descriptors on disk.
 pub fn validate_media_reference(db: &Database, reference: &MediaReference) -> Result<()> {
     let media_id = &reference.media_id;
     let stored = media_row(db, &reference.library_id, media_id)?;
@@ -294,10 +294,10 @@ pub fn validate_media_reference(db: &Database, reference: &MediaReference) -> Re
     Ok(())
 }
 
-/// Abre o arquivo físico no disco para uma referência de mídia previamente validada.
+/// Opens the physical file on disk for a previously validated media reference.
 ///
-/// Não acessa o banco de dados nem exige lock sobre a conexão SQLite, permitindo que
-/// a abertura e o streaming ocorram de forma totalmente desacoplada da persistência.
+/// It does not access the database nor require a lock on the SQLite connection, allowing
+/// the opening and the streaming to happen fully decoupled from persistence.
 pub fn open_media_file(reference: &MediaReference, root: &Path) -> Result<OpenMedia> {
     let canonical_root = canonical_root(root)?;
     let media_id = &reference.media_id;
@@ -316,11 +316,11 @@ pub fn open_media_file(reference: &MediaReference, root: &Path) -> Result<OpenMe
             media_id: media_id.to_owned(),
         });
     }
-    // Classifica o tipo antes de abrir: no Windows, abrir um diretório falha com
-    // PermissionDenied e seria reportado como `MediaUnreadable`, enquanto no Unix a
-    // abertura funciona e a recusa viria só do `metadata.is_file()` pós-abertura. Usar o
-    // tipo já observado no caminho mantém `MediaNotAFile` idêntico nas duas plataformas e
-    // preserva `MediaUnreadable` para falhas reais de abertura de um arquivo comum.
+    // Classifies the type before opening: on Windows, opening a directory fails with
+    // PermissionDenied and would be reported as `MediaUnreadable`, while on Unix the
+    // open works and the refusal would only come from the post-open `metadata.is_file()`. Using the
+    // type already observed on the path keeps `MediaNotAFile` identical on both platforms and
+    // preserves `MediaUnreadable` for real failures to open a regular file.
     if !on_path.is_file() {
         return Err(Error::MediaNotAFile {
             media_id: media_id.to_owned(),
@@ -370,9 +370,9 @@ pub fn open_media_file(reference: &MediaReference, root: &Path) -> Result<OpenMe
     })
 }
 
-/// Abre uma referência recém-lida do catálogo.
+/// Opens a reference freshly read from the catalog.
 ///
-/// Revalida a referência no catálogo e abre o descritor no disco.
+/// Revalidates the reference in the catalog and opens the descriptor on disk.
 pub fn open_media_reference(
     db: &Database,
     reference: &MediaReference,
@@ -382,13 +382,13 @@ pub fn open_media_reference(
     open_media_file(reference, root)
 }
 
-/// Estado de disponibilidade registrado pela última varredura.
+/// Availability state recorded by the last scan.
 const AVAILABLE: &str = "available";
 
-/// A mídia foi removida explicitamente do catálogo.
+/// The media was explicitly removed from the catalog.
 ///
-/// A remoção é lida da tabela própria, e não de `availability`: são fatos separados, e uma
-/// mídia removida continua com a disponibilidade que a última varredura registrou.
+/// The removal is read from its own table, not from `availability`: they are separate facts, and a
+/// removed media keeps the availability the last scan recorded.
 fn is_removed(db: &Database, library_id: &str, media_id: &str) -> Result<bool> {
     let mut statement = db.connection().prepare(
         "SELECT 1
@@ -400,7 +400,7 @@ fn is_removed(db: &Database, library_id: &str, media_id: &str) -> Result<bool> {
     Ok(rows.next()?.is_some())
 }
 
-/// Linha de mídia relevante para a resolução.
+/// Media row relevant to the resolution.
 struct StoredMedia {
     relative_path: String,
     size: u64,
@@ -408,7 +408,7 @@ struct StoredMedia {
     availability: String,
 }
 
-/// Lê a linha de mídia da biblioteca indicada.
+/// Reads the media row of the given library.
 fn media_row(db: &Database, library_id: &str, media_id: &str) -> Result<StoredMedia> {
     let mut statement = db.connection().prepare(
         "SELECT relative_path, size, mtime, availability
@@ -436,15 +436,15 @@ fn media_row(db: &Database, library_id: &str, media_id: &str) -> Result<StoredMe
     }
 }
 
-/// Valida a raiz e devolve o caminho canônico dela.
+/// Validates the root and returns its canonical path.
 ///
-/// A raiz já chega canonicalizada pela integração de plataforma. Se o componente final
-/// virou um link simbólico, junction ou ponto de reparse, seguir o alvo autorizaria
-/// arquivos fora da biblioteca: a substituição é recusada, nunca resolvida.
+/// The root already arrives canonicalized from the platform integration. If the final component
+/// became a symbolic link, junction or reparse point, following the target would authorize
+/// files outside the library: the replacement is refused, never resolved.
 fn canonical_root(root: &Path) -> Result<PathBuf> {
     let path = root.to_path_buf();
-    // `symlink_metadata` não segue o link, então o tipo do próprio componente final da raiz
-    // é observável antes de qualquer canonicalização que o seguiria.
+    // `symlink_metadata` does not follow the link, so the type of the root's own final component
+    // is observable before any canonicalization that would follow it.
     let metadata = std::fs::symlink_metadata(&path).map_err(|source| match source.kind() {
         io::ErrorKind::NotFound => Error::LibraryRootMissing { path: path.clone() },
         _ => Error::LibraryRootUnreadable {
@@ -464,12 +464,12 @@ fn canonical_root(root: &Path) -> Result<PathBuf> {
     std::fs::canonicalize(&path).map_err(|source| Error::LibraryRootUnreadable { path, source })
 }
 
-/// Indica se o caminho está estritamente sob a raiz, comparando componentes.
+/// Tells whether the path is strictly under the root, comparing components.
 fn is_inside(path: &Path, root: &Path) -> bool {
     path != root && path.starts_with(root)
 }
 
-/// Confere, onde o sistema permite, que o descritor aberto é o arquivo do caminho validado.
+/// Checks, where the system allows, that the open descriptor is the file of the validated path.
 #[cfg(unix)]
 fn verify_identity(resolved: &Path, opened: &Metadata, media_id: &str) -> Result<()> {
     use std::os::unix::fs::MetadataExt;
@@ -607,7 +607,7 @@ fn open_readonly(_root: &Path, _relative_path: &str, _path: &Path, media_id: &st
     }
 }
 
-/// Verdadeiro quando o metadado marca um ponto de reparse (symlink ou junction) no Windows.
+/// True when the metadata marks a reparse point (symlink or junction) on Windows.
 #[cfg(windows)]
 fn is_reparse_point(metadata: &Metadata) -> bool {
     use std::os::windows::fs::MetadataExt;
@@ -615,7 +615,7 @@ fn is_reparse_point(metadata: &Metadata) -> bool {
     metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
 }
 
-/// Fora do Windows apenas links simbólicos existem, e já são detectados por `is_symlink`.
+/// Outside Windows only symbolic links exist, and they are already detected by `is_symlink`.
 #[cfg(not(windows))]
 fn is_reparse_point(_metadata: &Metadata) -> bool {
     false
@@ -637,7 +637,7 @@ const FILE_SHARE_READ: u32 = 0x0000_0001;
 #[cfg(windows)]
 const FILE_SHARE_WRITE: u32 = 0x0000_0002;
 
-/// Nome do arquivo no fim do caminho, para a classificação por extensão.
+/// File name at the end of the path, for classification by extension.
 fn file_name(path: &Path) -> String {
     path.file_name()
         .map(|name| name.to_string_lossy().into_owned())

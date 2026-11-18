@@ -1,48 +1,48 @@
-//! Remoção explícita de mídia do catálogo.
+//! Explicit removal of media from the catalog.
 //!
-//! A remoção existe para o item sair do catálogo por decisão de quem usa o produto. Ela é
-//! deliberada e persistente: nenhuma varredura cria ou desfaz uma remoção, e encontrar o
-//! arquivo novamente no mesmo caminho não devolve a mídia ao catálogo.
+//! The removal exists so the item leaves the catalog by the decision of whoever uses the product. It is
+//! deliberate and persistent: no scan creates or undoes a removal, and finding the
+//! file again at the same path does not return the media to the catalog.
 //!
-//! A remoção vale para a identidade atual da mídia (`media_id`), não para o conteúdo do
-//! arquivo. Mover ou renomear o arquivo faz a varredura seguinte criar uma identidade nova
-//! — é a política de rescan aprovada, em que o mesmo caminho reutiliza a identidade e um
-//! caminho novo gera outra —, de modo que o item reaparece no catálogo como registro
-//! distinto, sem a remoção anterior.
+//! The removal applies to the media's current identity (`media_id`), not to the content of the
+//! file. Moving or renaming the file makes the next scan create a new identity
+//! — that is the approved rescan policy, in which the same path reuses the identity and a
+//! new path generates another —, so the item reappears in the catalog as a
+//! distinct record, without the earlier removal.
 //!
-//! # O que a remoção faz e o que ela não faz
+//! # What the removal does and does not do
 //!
-//! - o catálogo deixa de montar a mídia (`crate::build_catalog` filtra as removidas);
-//! - a mídia deixa de ser entregue (`crate::open_media` devolve [`Error::MediaRemoved`]);
-//! - os recentes deixam de listá-la (`crate::recent_study` filtra as removidas);
-//! - a linha de `media`, o progresso em `study_state` e o arquivo físico permanecem
-//!   exatamente como estavam.
+//! - the catalog stops assembling the media (`crate::build_catalog` filters the removed ones);
+//! - the media stops being delivered (`crate::open_media` returns [`Error::MediaRemoved`]);
+//! - the recents stop listing it (`crate::recent_study` filters the removed ones);
+//! - the `media` row, the progress in `study_state` and the physical file stay
+//!   exactly as they were.
 //!
-//! A distinção entre mídia ausente e mídia removida é explícita: `availability` continua
-//! com dois estados e a remoção é um fato separado, guardado em `media_removal`. Uma
-//! mídia pode estar ausente, removida, ou as duas coisas, sem que uma condição
-//! contamine a outra.
+//! The distinction between missing media and removed media is explicit: `availability` keeps
+//! two states and the removal is a separate fact, stored in `media_removal`. A
+//! media can be missing, removed, or both, without one condition
+//! contaminating the other.
 //!
-//! # Confirmação
+//! # Confirmation
 //!
-//! Retirar do catálogo uma mídia com progresso associado exige confirmação explícita,
-//! porque o progresso é preservado e a mídia sai da vista de quem estudava. A recusa
-//! devolve [`Error::MediaRemovalNeedsConfirmation`] sem alterar nada.
+//! Taking a media with associated progress out of the catalog requires explicit confirmation,
+//! because the progress is preserved and the media leaves the view of whoever was studying. The refusal
+//! returns [`Error::MediaRemovalNeedsConfirmation`] without changing anything.
 //!
-//! # Autorização
+//! # Authorization
 //!
-//! O núcleo não autoriza: ele não sabe quem está chamando. Decidir quem pode retirar uma
-//! mídia do catálogo — e quem pode consultar o impacto, que revela quantos donos têm
-//! progresso — é responsabilidade do adaptador de plataforma.
+//! The core does not authorize: it does not know who is calling. Deciding who may take a
+//! media out of the catalog — and who may query the impact, which reveals how many owners have
+//! progress — is the platform adapter's responsibility.
 //!
-//! # Consistência e concorrência
+//! # Consistency and concurrency
 //!
-//! Todas as operações recebem `library_id` e `media_id`; o par nunca é confiado ao
-//! chamador. A inserção seleciona o par diretamente de `media`, então o `library_id`
-//! gravado é o da própria mídia, e uma combinação inconsistente simplesmente não encontra
-//! a linha. A confirmação e a checagem de progresso acontecem na mesma instrução, dentro
-//! de uma transação `IMMEDIATE`, de modo que um progresso gravado por outro processo não
-//! pode ser removido sem confirmação.
+//! All operations receive `library_id` and `media_id`; the pair is never trusted to the
+//! caller. The insert selects the pair straight from `media`, so the stored `library_id`
+//! is that of the media itself, and an inconsistent combination simply does not find
+//! the row. The confirmation and the progress check happen in the same statement, inside
+//! an `IMMEDIATE` transaction, so progress written by another process
+//! cannot be removed without confirmation.
 
 use rusqlite::{OptionalExtension, Transaction, TransactionBehavior};
 
@@ -50,36 +50,36 @@ use crate::catalog::{Availability, availability_of};
 use crate::db::{Database, now_unix_seconds};
 use crate::error::{Error, Result};
 
-/// O que a remoção de uma mídia afeta, para a interface decidir se pede confirmação.
+/// What removing a media affects, so the interface can decide whether to ask for confirmation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MediaRemovalImpact {
     /// Identificador consultado.
     pub media_id: String,
-    /// Caminho relativo atual da mídia, para confirmar o item certo.
+    /// Current relative path of the media, to confirm the right item.
     pub relative_path: String,
-    /// Disponibilidade da mídia na última varredura.
+    /// Availability of the media in the last scan.
     pub availability: Availability,
-    /// Quantidade de donos distintos com progresso nesta mídia.
+    /// Number of distinct owners with progress on this media.
     pub progress_owners: usize,
-    /// A mídia já estava removida do catálogo.
+    /// The media was already removed from the catalog.
     pub already_removed: bool,
 }
 
-/// Resultado de uma remoção.
+/// Result of a removal.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MediaRemovalOutcome {
     /// Identificador removido.
     pub media_id: String,
-    /// A remoção foi gravada agora; falso quando a mídia já estava removida.
+    /// The removal was recorded now; false when the media was already removed.
     pub removed_now: bool,
-    /// Quantidade de donos distintos cujo progresso foi preservado.
+    /// Number of distinct owners whose progress was preserved.
     pub preserved_owners: usize,
 }
 
-/// Relata o efeito de remover uma mídia do catálogo.
+/// Reports the effect of removing a media from the catalog.
 ///
-/// Não altera nada e não exige confirmação: é o dado que a interface usa para montar a
-/// pergunta. A mídia precisa existir na biblioteca, mesmo que esteja ausente no disco.
+/// It changes nothing and does not require confirmation: it is the data the interface uses to build the
+/// question. The media must exist in the library, even if it is missing on disk.
 pub fn media_removal_impact(
     db: &Database,
     library_id: &str,
@@ -127,11 +127,11 @@ pub fn media_removal_impact(
     })
 }
 
-/// Remove uma mídia do catálogo, preservando o progresso e o arquivo.
+/// Removes a media from the catalog, preserving the progress and the file.
 ///
-/// Quando existe progresso associado, a remoção só acontece com `confirm_progress`; sem
-/// ele, devolve [`Error::MediaRemovalNeedsConfirmation`] e nada é gravado. Repetir a
-/// remoção de uma mídia já removida é inofensivo: devolve `removed_now` falso, sem erro.
+/// When there is associated progress, the removal only happens with `confirm_progress`; without
+/// it, it returns [`Error::MediaRemovalNeedsConfirmation`] and nothing is written. Repeating the
+/// removal of a media already removed is harmless: it returns `removed_now` false, with no error.
 pub fn remove_media(
     db: &mut Database,
     library_id: &str,
@@ -158,9 +158,9 @@ pub fn remove_media(
         });
     }
 
-    // A confirmação e a checagem de progresso ficam na mesma instrução: o par gravado vem
-    // da própria linha de `media`, e um progresso que apareça antes do commit impede a
-    // remoção sem confirmação.
+    // The confirmation and the progress check live in the same statement: the stored pair comes
+    // from the `media` row itself, and progress that appears before the commit prevents
+    // the removal without confirmation.
     let inserted = tx.execute(
         "INSERT INTO media_removal (library_id, media_id, removed_at)
          SELECT m.library_id, m.media_id, ?3
@@ -192,7 +192,7 @@ pub fn remove_media(
     })
 }
 
-/// A mídia existe na biblioteca, independentemente da disponibilidade no disco.
+/// The media exists in the library, regardless of availability on disk.
 fn media_exists(tx: &Transaction<'_>, library_id: &str, media_id: &str) -> rusqlite::Result<bool> {
     Ok(tx
         .query_row(
@@ -204,7 +204,7 @@ fn media_exists(tx: &Transaction<'_>, library_id: &str, media_id: &str) -> rusql
         .is_some())
 }
 
-/// A mídia já está registrada como removida.
+/// The media is already recorded as removed.
 fn removal_exists(
     tx: &Transaction<'_>,
     library_id: &str,
@@ -220,7 +220,7 @@ fn removal_exists(
         .is_some())
 }
 
-/// Quantidade de donos distintos com progresso preservado nesta mídia.
+/// Number of distinct owners with progress preserved on this media.
 fn owners_with_progress(tx: &Transaction<'_>, media_id: &str) -> rusqlite::Result<usize> {
     let owners = tx.query_row(
         "SELECT COUNT(DISTINCT owner_id) FROM study_state WHERE media_id = ?1",
@@ -231,7 +231,7 @@ fn owners_with_progress(tx: &Transaction<'_>, media_id: &str) -> rusqlite::Resul
     Ok(as_usize(owners))
 }
 
-/// Converte uma contagem do SQLite, saturando em vez de falhar.
+/// Converts a SQLite count, saturating instead of failing.
 fn as_usize(value: i64) -> usize {
     usize::try_from(value).unwrap_or(usize::MAX)
 }
