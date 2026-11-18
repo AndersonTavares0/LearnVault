@@ -1,43 +1,43 @@
 [package]
 name = "learnvault-desktop"
-description = "Aplicativo desktop do LearnVault: webview Tauri 2 offline, sem portas de rede."
+description = "LearnVault desktop application: offline Tauri 2 webview, no network ports."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 publish = false
 
-# O crate desktop existe para embutir a SPA e falar com o núcleo por IPC. Ele nunca
-# abre sockets de rede nem embute um servidor HTTP.
+# The desktop crate exists to embed the SPA and talk to the core over IPC. It never
+# opens network sockets nor embeds an HTTP server.
 #
-# `learnvault-core` entrou com a integração de domínio: o desktop deriva o catálogo, o
-# resumo do rescan e o progresso de estudo do mesmo núcleo usado pelo servidor, sem
-# duplicar regras. O IPC expõe a configuração, a seleção da raiz da biblioteca, o catálogo,
-# o rescan explícito e o progresso de estudo do dono local fixo; mídia e autenticação
-# pertencem a fatias posteriores.
+# `learnvault-core` came in with the domain integration: the desktop derives the catalog, the
+# rescan summary and the study progress from the same core the server uses, without
+# duplicating rules. The IPC exposes the configuration, the selection of the library root, the catalog,
+# the explicit rescan and the study progress of the fixed local owner; media and authentication
+# belong to later slices.
 #
-# `tauri-plugin-dialog` fornece o seletor nativo de diretórios usado **internamente no
-# Rust**. Ele não é concedido ao webview em `capabilities/`, então não expõe diálogo nem
-# filesystem à SPA.
-# `tauri-plugin-updater` fornece a verificação e instalação oficial de atualizações assinadas
-# (Ed25519) via GitHub Releases no Windows/Desktop.
+# `tauri-plugin-dialog` provides the native directory picker used **internally in
+# Rust**. It is not granted to the webview in `capabilities/`, so it exposes neither a dialog nor
+# the file system to the SPA.
+# `tauri-plugin-updater` provides the official check and installation of signed updates
+# (Ed25519) through GitHub Releases on Windows/Desktop.
 
 [dependencies]
-# Tauri 2.12.x. Os crates do Tauri não compartilham o número minor: `tauri` está em
-# 2.12.4 e `tauri-build` em 2.7.3, que é a versão de build mais recente da linha 2.
-# As versões resolvidas ficam travadas no `Cargo.lock` do workspace. O CLI do Tauri
-# gerencia a lista `features` conforme o `tauri.conf.json` a cada `tauri dev`/`tauri build`;
-# mantê-la explícita evita que o manifesto seja reescrito no primeiro `pnpm dev:tauri`.
+# Tauri 2.12.x. The Tauri crates do not share the minor number: `tauri` is at
+# 2.12.4 and `tauri-build` at 2.7.3, which is the newest build version of the 2 line.
+# The resolved versions are pinned in the workspace's `Cargo.lock`. The Tauri CLI
+# manages the `features` list according to `tauri.conf.json` on every `tauri dev`/`tauri build`;
+# keeping it explicit prevents the manifest from being rewritten on the first `pnpm dev:tauri`.
 tauri = { version = "2.12.4", features = [] }
 tauri-plugin-updater = "2"
-# Núcleo compartilhado: catálogo e banco SQLite do domínio.
+# Shared core: catalog and the domain's SQLite database.
 learnvault-core = { path = "../core" }
 serde = { version = "1", features = ["derive"] }
-# Serialização da configuração versionada da raiz da biblioteca.
+# Serialization of the versioned configuration of the library root.
 serde_json = "1"
-# Cliente HTTP do desktop para sincronizar com o servidor local. Mesmas features do
-# servidor: sem TLS nativo/OpenSSL, com o provedor `ring` instalado em processo. Sem
-# redirecionamentos e com timeout por requisição.
+# The desktop's HTTP client to sync with the local server. Same features as the
+# server's: no native TLS/OpenSSL, with the `ring` provider installed in process. No
+# redirects and with a per-request timeout.
 reqwest = { version = "0.13", default-features = false, features = ["blocking", "rustls-no-provider"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 
@@ -45,14 +45,14 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 tauri-build = { version = "2.7.3", features = [] }
 
 [dev-dependencies]
-# Os testes de integração constroem bancos em memória e temporários via o núcleo.
+# The integration tests build in-memory and temporary databases through the core.
 learnvault-core = { path = "../core" }
 tempfile = "3"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-# No Linux, o seletor usa o portal oficial e não requer acesso amplo ao filesystem do sandbox.
+# On Linux, the picker uses the official portal and does not require broad access to the sandbox's file system.
 tauri-plugin-dialog = { version = "2", default-features = false, features = ["xdg-portal"] }
 
 [target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
-# Windows e macOS mantêm o backend nativo atual (o recurso GTK não tem efeito neles).
+# Windows and macOS keep the current native backend (the GTK feature has no effect on them).
 tauri-plugin-dialog = "2"

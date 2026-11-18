@@ -1,17 +1,17 @@
-# Workspace Rust do LearnVault.
+# LearnVault Rust workspace.
 #
-# O núcleo de domínio vive em `crates/core` e é compartilhado pelo servidor Axum
-# (`crates/server`) e pelo aplicativo desktop Tauri (`crates/desktop`).
+# The domain core lives in `crates/core` and is shared by the Axum server
+# (`crates/server`) and by the Tauri desktop application (`crates/desktop`).
 #
-# A versão de release é de propriedade do Release Please, no nível do repositório.
-# Os crates Rust não são publicados, por isso a versão daqui não é fonte de verdade.
+# The release version is owned by Release Please, at the repository level.
+# The Rust crates are not published, so the version here is not a source of truth.
 
 [workspace]
 members = ["crates/core", "crates/server", "crates/desktop"]
-# O crate desktop depende do webview do sistema (WebView2 no Windows, WebKitGTK no
-# Linux) e de um shell frontend já construído. Ele fica fora dos membros padrão para
-# que `cargo build`, `cargo clippy` e `cargo test` no núcleo e no servidor continuem
-# sem dependências gráficas. Use `cargo ... -p learnvault-desktop` quando for o caso.
+# The desktop crate depends on the system webview (WebView2 on Windows, WebKitGTK on
+# Linux) and on an already-built frontend shell. It is kept outside the default members so
+# that `cargo build`, `cargo clippy` and `cargo test` on the core and the server stay
+# free of graphical dependencies. Use `cargo ... -p learnvault-desktop` when that is what you need.
 default-members = ["crates/core", "crates/server"]
 resolver = "3"
 
@@ -21,12 +21,12 @@ edition = "2024"
 license = "MIT"
 rust-version = "1.99"
 
-# O Argon2 é lento por decisão de segurança (m=64MiB, t=2) e domina o tempo dos
-# testes de autenticação. Otimizar somente o caminho Argon2id nos builds de
-# teste/dev reduz o custo por hash de ~1,3s para ~60ms, sem alterar parâmetros
-# nem releases. O `blake2` é a função de compressão do Argon2id e responde pela
-# maior parte do tempo restante; `debug = false` evita gerar informação de
-# depuração que os testes não consomem.
+# Argon2 is slow by security decision (m=64MiB, t=2) and dominates the time of the
+# authentication tests. Optimizing only the Argon2id path in test/dev
+# builds cuts the cost per hash from ~1.3s to ~60ms, without changing parameters
+# or releases. `blake2` is Argon2id's compression function and accounts for the
+# bulk of the remaining time; `debug = false` avoids generating debug
+# information that the tests do not consume.
 [profile.dev.package.argon2]
 opt-level = 3
 debug = false
