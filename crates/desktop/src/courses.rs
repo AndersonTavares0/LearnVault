@@ -1,26 +1,26 @@
-//! Registro local e persistência segura dos cursos do desktop.
+//! Local registry and safe persistence of the desktop's courses.
 //!
-//! Cada curso é uma pasta externa escolhida pelo usuário por um seletor nativo acionado
-//! pelo Rust. O webview nunca envia nem recebe um caminho: os únicos dados que cruzam o
-//! IPC são a identidade opaca do curso e o booleano de configuração.
+//! Each course is an external folder chosen by the user through a native picker triggered
+//! by Rust. The webview never sends nor receives a path: the only data that crosses the
+//! IPC are the course's opaque identity and the configuration boolean.
 //!
-//! Esta camada resolve um caminho escolhido para a forma canônica, recusa pastas que não
-//! sejam diretórios legíveis (inclusive links simbólicos, junctions e pontos de reparse no
-//! topo) e grava a lista canonicalizada em um arquivo de configuração versionado do
-//! próprio aplicativo.
+//! This layer resolves a chosen path to its canonical form, refuses folders that are not
+//! readable directories (including symbolic links, junctions and reparse points at
+//! the top) and writes the canonicalized list to a versioned configuration file of the
+//! application itself.
 //!
-//! Regras de segurança preservadas aqui:
+//! Security rules preserved here:
 //!
-//! - os cursos são externos e **somente leitura**: nada é criado, movido ou modificado
-//!   dentro deles, nem quando uma escolha é recusada;
-//! - a configuração vive fora das pastas de curso e fora do banco SQLite;
-//! - a gravação é serializada: o temporário é criado exclusivamente (`create_new`, sem
-//!   seguir link nem reaproveitar arquivo existente) e a troca usa `rename`; no Windows,
-//!   como as APIs padrão não substituem um destino existente, ele é removido imediatamente
-//!   antes da troca, deixando uma janela inevitável em que a configuração pode não existir;
-//! - a leitura revalida cada raiz no startup: configuração ausente, corrompida, em versão
-//!   desconhecida ou com pasta removida/inacessível simplesmente não produz aquele curso;
-//! - nenhuma mensagem de erro carrega caminho do sistema de arquivos.
+//! - the courses are external and **read-only**: nothing is created, moved or modified
+//!   inside them, not even when a choice is refused;
+//! - the configuration lives outside the course folders and outside the SQLite database;
+//! - the write is serialized: the temporary file is created exclusively (`create_new`, without
+//!   following a link or reusing an existing file) and the swap uses `rename`; on Windows,
+//!   since the standard APIs do not replace an existing destination, it is removed immediately
+//!   before the swap, leaving an unavoidable window in which the configuration may not exist;
+//! - reading revalidates each root at startup: a configuration that is missing, corrupted, of an
+//!   unknown version or with a removed/inaccessible folder simply does not produce that course;
+//! - no error message carries a file-system path.
 
 use std::fs;
 use std::io::Write;
@@ -30,37 +30,37 @@ use std::sync::Mutex;
 use learnvault_core::{CourseRoot, LEGACY_LIBRARY_ID, course_id_from_path, course_title};
 use serde::{Deserialize, Serialize};
 
-/// Serializa as gravações da configuração no processo inteiro.
+/// Serializes the configuration writes across the whole process.
 ///
-/// Sem o cadeado, duas gravações concorrentes competiriam pelo mesmo destino e poderiam
-/// intercalar temporários; com ele, a configuração em disco é sempre o resultado de uma
-/// gravação completa, na ordem de chegada. O cadeado é desta função, nunca do SQLite.
+/// Without the lock, two concurrent writes would compete for the same destination and could
+/// interleave temporary files; with it, the configuration on disk is always the result of a
+/// complete write, in arrival order. The lock belongs to this function, never to SQLite.
 static STORE_LOCK: Mutex<()> = Mutex::new(());
 
-/// Número máximo de nomes de temporário tentados antes de desistir da gravação.
+/// Maximum number of temporary names tried before giving up on the write.
 const MAX_TEMP_ATTEMPTS: u32 = 32;
 
-/// Versão do formato de configuração dos cursos.
+/// Version of the courses' configuration format.
 pub const CONFIG_VERSION: u32 = 2;
 
-/// Nome do arquivo de configuração dentro do diretório de configuração do app.
+/// Name of the configuration file inside the app's configuration directory.
 pub const CONFIG_FILE_NAME: &str = "library.json";
 
-/// Curso registrado no desktop: identidade estável e raiz já validada.
+/// Course registered on the desktop: stable identity and an already-validated root.
 ///
-/// O caminho é privado de propósito: ele existe apenas para o Rust e nunca é serializado
-/// para o webview. O `Debug` também oculta o caminho, para que um registro de diagnóstico
-/// não vaze a localização do curso.
+/// The path is private on purpose: it exists only for Rust and is never serialized
+/// to the webview. `Debug` also hides the path, so that a diagnostic log
+/// does not leak the course's location.
 #[derive(Clone, PartialEq, Eq)]
 pub struct CourseEntry {
-    /// Identidade estável usada como `library_id` no banco.
+    /// Stable identity used as the `library_id` in the database.
     pub id: String,
-    /// Raiz canônica validada do curso.
+    /// Validated canonical root of the course.
     pub root: CourseRoot,
 }
 
 impl CourseEntry {
-    /// Cria a entrada derivando a identidade do caminho canônico.
+    /// Creates the entry, deriving the identity from the canonical path.
     pub fn from_root(root: CourseRoot) -> Self {
         Self {
             id: course_id_from_path(root.as_path()),
@@ -68,7 +68,7 @@ impl CourseEntry {
         }
     }
 
-    /// Título apresentado, derivado do nome da pasta do curso.
+    /// Displayed title, derived from the course folder's name.
     pub fn title(&self) -> String {
         course_title(self.root.as_path())
     }
@@ -84,10 +84,10 @@ impl std::fmt::Debug for CourseEntry {
     }
 }
 
-/// Falha estável da persistência da configuração. Nunca carrega caminho.
+/// Stable failure of the configuration persistence. It never carries a path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LibraryError {
-    /// A configuração não pôde ser gravada com segurança.
+    /// The configuration could not be written safely.
     WriteFailed,
 }
 
@@ -101,37 +101,37 @@ impl std::fmt::Display for LibraryError {
 
 impl std::error::Error for LibraryError {}
 
-/// Formato serializado da configuração, versionado para permitir migração futura.
+/// Serialized format of the configuration, versioned to allow a future migration.
 #[derive(Debug, Serialize, Deserialize)]
 struct StoredConfig {
     version: u32,
     courses: Vec<StoredCourse>,
 }
 
-/// Entrada persistida de um curso. O caminho é a única informação durável.
+/// Persisted entry of a course. The path is the only durable information.
 #[derive(Debug, Serialize, Deserialize)]
 struct StoredCourse {
     id: String,
     path: PathBuf,
 }
 
-/// Formato anterior (versão 1): uma única raiz de biblioteca.
+/// Earlier format (version 1): a single library root.
 ///
-/// A raiz antiga vira um único curso com a identidade histórica
-/// ([`LEGACY_LIBRARY_ID`]), para que as mídias, varreduras e o progresso de estudo já
-/// gravados continuem associados ao mesmo `library_id`.
+/// The old root becomes a single course with the historical identity
+/// ([`LEGACY_LIBRARY_ID`]), so that the media, scans and study progress already
+/// stored stay associated with the same `library_id`.
 #[derive(Debug, Deserialize)]
 struct LegacyConfig {
     version: u32,
     library_root: PathBuf,
 }
 
-/// Carrega e revalida os cursos persistidos.
+/// Loads and revalidates the persisted courses.
 ///
-/// Devolve lista vazia quando a configuração está ausente, corrompida ou em versão
-/// desconhecida, e descarta cada curso cuja pasta não passa mais na validação (removida,
-/// inacessível ou transformada em link). A leitura nunca falha de forma fatal nem cria
-/// nada no sistema de arquivos.
+/// It returns an empty list when the configuration is missing, corrupted or of an unknown
+/// version, and drops each course whose folder no longer passes validation (removed,
+/// inaccessible or turned into a link). Reading never fails fatally nor creates
+/// anything in the file system.
 pub fn load_courses(config_dir: &Path) -> Vec<CourseEntry> {
     let Ok(raw) = fs::read(config_dir.join(CONFIG_FILE_NAME)) else {
         return Vec::new();
@@ -171,13 +171,13 @@ pub fn load_courses(config_dir: &Path) -> Vec<CourseEntry> {
     courses
 }
 
-/// Grava a lista canonicalizada no diretório de configuração.
+/// Writes the canonicalized list to the configuration directory.
 ///
-/// Se `config_dir` estiver dentro de algum curso — uma configuração errada — a gravação é
-/// recusada **antes** de qualquer criação, para que nada seja criado dentro das pastas de
-/// curso. O diretório de configuração é criado fora das raízes, e o arquivo é escrito em
-/// um temporário e depois renomeado sobre o destino. No Windows, o destino é removido
-/// imediatamente antes da troca, deixando uma pequena janela não atômica.
+/// If `config_dir` is inside some course — a wrong configuration — the write is
+/// refused **before** any creation, so that nothing is created inside the course
+/// folders. The configuration directory is created outside the roots, and the file is written to
+/// a temporary file and then renamed over the destination. On Windows, the destination is removed
+/// immediately before the swap, leaving a small non-atomic window.
 pub fn store_courses(config_dir: &Path, courses: &[CourseEntry]) -> Result<(), LibraryError> {
     if config_dir_is_inside(config_dir, courses) {
         return Err(LibraryError::WriteFailed);
@@ -200,12 +200,12 @@ pub fn store_courses(config_dir: &Path, courses: &[CourseEntry]) -> Result<(), L
     write_atomically(&config_dir.join(CONFIG_FILE_NAME), &payload)
 }
 
-/// Indica se o diretório de configuração está dentro de algum curso registrado.
+/// Tells whether the configuration directory is inside some registered course.
 ///
-/// Compara formas canônicas do ancestral existente mais próximo, então funciona mesmo
-/// quando o diretório de configuração ainda não existe. A comparação é contra as raízes
-/// já canonicalizadas, evitando falsos negativos por diferença de prefixo (por exemplo o
-/// prefixo verbatim do Windows).
+/// It compares canonical forms of the nearest existing ancestor, so it works even
+/// when the configuration directory does not exist yet. The comparison is against the already
+/// canonicalized roots, avoiding false negatives from a prefix difference (for example the
+/// Windows verbatim prefix).
 fn config_dir_is_inside(config_dir: &Path, courses: &[CourseEntry]) -> bool {
     let mut probe = config_dir;
     let resolved = loop {
@@ -225,11 +225,11 @@ fn config_dir_is_inside(config_dir: &Path, courses: &[CourseEntry]) -> bool {
     })
 }
 
-/// Escreve `bytes` em `dest` de forma serializada.
+/// Writes `bytes` to `dest` in a serialized way.
 ///
-/// O temporário é criado com `create_new` e depois trocado por `rename`. O cadeado
-/// [`STORE_LOCK`] garante que gravações concorrentes não se intercalem. No Windows, o
-/// destino é removido imediatamente antes de `rename`, deixando uma janela sem o arquivo.
+/// The temporary file is created with `create_new` and then swapped by `rename`. The lock
+/// [`STORE_LOCK`] guarantees that concurrent writes do not interleave. On Windows, the
+/// destination is removed immediately before `rename`, leaving a window without the file.
 fn write_atomically(dest: &Path, bytes: &[u8]) -> Result<(), LibraryError> {
     let directory = dest.parent().ok_or(LibraryError::WriteFailed)?;
     let _guard = STORE_LOCK.lock().map_err(|_| LibraryError::WriteFailed)?;
@@ -243,13 +243,13 @@ fn write_atomically(dest: &Path, bytes: &[u8]) -> Result<(), LibraryError> {
     Ok(())
 }
 
-/// Cria um temporário **novo** com o conteúdo, sem seguir link nem reaproveitar arquivo
-/// existente.
+/// Creates a **new** temporary file with the content, without following a link or reusing an existing
+/// file.
 ///
-/// Cada tentativa abre com `create_new`, que recusa qualquer caminho já existente — um
-/// arquivo comum, um symlink ou uma junction. Assim um temporário pré-existente nunca é
-/// sobrescrito nem usado como destino da escrita; a gravação simplesmente tenta o próximo
-/// nome. O conteúdo é sincronizado antes da troca.
+/// Each attempt opens with `create_new`, which refuses any path that already exists — a regular
+/// file, a symlink or a junction. This way a pre-existing temporary file is never
+/// overwritten nor used as the target of the write; the write simply tries the next
+/// name. The content is synced before the swap.
 fn create_temporary(directory: &Path, bytes: &[u8]) -> Result<PathBuf, LibraryError> {
     for attempt in 0..MAX_TEMP_ATTEMPTS {
         let candidate = temporary_candidate(directory, attempt);
@@ -276,11 +276,11 @@ fn create_temporary(directory: &Path, bytes: &[u8]) -> Result<PathBuf, LibraryEr
     Err(LibraryError::WriteFailed)
 }
 
-/// Nome candidato de temporário dentro do diretório de configuração.
+/// Candidate name of a temporary file inside the configuration directory.
 ///
-/// O primeiro mantém o formato histórico `.{CONFIG_FILE_NAME}.{pid}.tmp`; as tentativas
-/// seguintes acrescentam um contador, para não colidir com um temporário deixado por uma
-/// execução anterior ou por outra gravação.
+/// The first keeps the historical format `.{CONFIG_FILE_NAME}.{pid}.tmp`; the following
+/// attempts add a counter, so as not to collide with a temporary file left by an earlier
+/// run or by another write.
 fn temporary_candidate(directory: &Path, attempt: u32) -> PathBuf {
     if attempt == 0 {
         directory.join(format!(".{CONFIG_FILE_NAME}.{}.tmp", std::process::id()))
@@ -293,12 +293,12 @@ fn temporary_candidate(directory: &Path, attempt: u32) -> PathBuf {
     }
 }
 
-/// Substitui o destino usando apenas APIs padrão.
+/// Replaces the destination using only standard APIs.
 ///
-/// Fora do Windows, `fs::rename` troca o nome no mesmo sistema de arquivos e substitui o
-/// destino. No Windows, a API padrão não substitui um destino existente: removê-lo
-/// imediatamente antes de `rename` deixa uma janela não atômica em que o destino pode não
-/// existir.
+/// Outside Windows, `fs::rename` swaps the name on the same file system and replaces the
+/// destination. On Windows, the standard API does not replace an existing destination: removing it
+/// immediately before `rename` leaves a non-atomic window in which the destination may not
+/// exist.
 fn replace_file(source: &Path, dest: &Path) -> Result<(), LibraryError> {
     #[cfg(windows)]
     {

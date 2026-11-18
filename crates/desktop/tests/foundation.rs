@@ -474,8 +474,8 @@ fn the_native_picker_is_registered_in_rust_only() {
         );
     }
 
-    // O rescan é explícito: nem a inicialização do aplicativo nem a seleção da raiz podem
-    // disparar uma varredura. Só a invocação do comando dedicado faz isso.
+    // The rescan is explicit: neither the application's startup nor the root selection may
+    // trigger a scan. Only invoking the dedicated command does that.
     let setup = setup_block(&lib);
     assert!(
         !setup.contains("rescan"),
@@ -483,7 +483,7 @@ fn the_native_picker_is_registered_in_rust_only() {
     );
 }
 
-/// Extrai o bloco de `setup` do `lib.rs` até o `invoke_handler`.
+/// Extracts the `setup` block of `lib.rs` up to the `invoke_handler`.
 fn setup_block(lib: &str) -> &str {
     let start = lib
         .find(".setup(")
@@ -618,8 +618,8 @@ fn study_commands_are_async_blocking_and_never_accept_an_owner() {
         let signature = &rest[..rest
             .find('{')
             .unwrap_or_else(|| panic!("{name} precisa fechar a assinatura"))];
-        // O dono do progresso é fixo no Rust: nenhum comando de estudo aceita `owner_id`,
-        // nem alterna o dono por parâmetro, nem recebe caminho.
+        // The owner of the progress is fixed in Rust: no study command accepts `owner_id`,
+        // nor switches the owner by parameter, nor receives a path.
         for forbidden in ["owner", "owner_id", "Path", "path"] {
             assert!(
                 !signature.contains(forbidden),
@@ -637,15 +637,15 @@ fn study_commands_are_async_blocking_and_never_accept_an_owner() {
             body.contains(delegation),
             "{name} precisa delegar ao estado: {body}"
         );
-        // O dono é resolvido no adaptador: o comando não nomeia nem repassa o dono local.
+        // The owner is resolved in the adapter: the command neither names nor passes on the local owner.
         assert!(
             !body.contains("LOCAL_OWNER_ID"),
             "{name} não pode passar o dono local ao estado: {body}"
         );
     }
 
-    // O comando de histórico recebe apenas um limite opcional: nada de caminho, dono ou
-    // parâmetro que permita escolher outra biblioteca.
+    // The history command receives only an optional limit: no path, owner or
+    // parameter that would let it choose another library.
     let start = command
         .find("pub async fn desktop_recent_study")
         .expect("desktop_recent_study precisa existir");
@@ -663,10 +663,10 @@ fn study_commands_are_async_blocking_and_never_accept_an_owner() {
 fn catalog_command_offloads_blocking_sqlite_off_the_main_thread() {
     let command = read(&crate_root().join("src/command.rs"));
 
-    // O catálogo lê o SQLite de forma bloqueante. Um `#[tauri::command]` síncrono roda na
-    // main thread do webview e travaria a UI; o comando precisa ser `async` e executar o
-    // trabalho bloqueante em `spawn_blocking` do runtime do Tauri, sem adicionar `tokio`
-    // como dependência direta.
+    // The catalog reads SQLite in a blocking way. A synchronous `#[tauri::command]` runs on the
+    // webview's main thread and would freeze the UI; the command must be `async` and run the
+    // blocking work in `spawn_blocking` of the Tauri runtime, without adding `tokio`
+    // as a direct dependency.
     assert!(
         !command.contains("pub fn desktop_catalog"),
         "desktop_catalog não pode continuar síncrono (executaria o SQLite na main thread)"
@@ -696,9 +696,9 @@ fn catalog_command_offloads_blocking_sqlite_off_the_main_thread() {
 fn rescan_command_offloads_the_blocking_scan_off_the_main_thread() {
     let command = read(&crate_root().join("src/command.rs"));
 
-    // A varredura lê o sistema de arquivos e o SQLite de forma bloqueante. Como o catálogo,
-    // o comando precisa ser `async` e executar o trabalho em `spawn_blocking`, sem
-    // `tokio` direto. O webview não envia caminho: o comando não tem argumento algum.
+    // The scan reads the file system and SQLite in a blocking way. Like the catalog,
+    // the command must be `async` and run the work in `spawn_blocking`, with no direct
+    // `tokio`. The webview sends no path: the command has no argument at all.
     assert!(
         !command.contains("pub fn desktop_rescan"),
         "desktop_rescan não pode ser síncrono (executaria a varredura na main thread)"
@@ -756,9 +756,9 @@ fn rescan_is_never_triggered_at_startup_or_after_selection() {
 
 #[test]
 fn media_protocol_is_registered_without_a_new_capability() {
-    // O protocolo de mídia é registrado no builder do Tauri, restrito à janela principal
-    // por rótulo. Ele não é uma capability: o ACL continua deny-by-default e nenhuma
-    // permissão é ampliada.
+    // The media protocol is registered on the Tauri builder, restricted to the main window
+    // by label. It is not a capability: the ACL stays deny-by-default and no
+    // permission is widened.
     let lib = read(&crate_root().join("src/lib.rs"));
     assert!(
         lib.contains("media::register"),
@@ -784,9 +784,9 @@ fn media_protocol_is_registered_without_a_new_capability() {
 
 #[test]
 fn cover_protocol_is_registered_without_a_new_capability() {
-    // O protocolo de capas é registrado no builder do Tauri, restrito à janela principal por
-    // rótulo, e reusa o CORS de origem exata da mídia. Ele não é uma capability: o ACL
-    // continua deny-by-default e nenhuma permissão de plugin é ampliada.
+    // The covers protocol is registered on the Tauri builder, restricted to the main window by
+    // label, and reuses media's exact-origin CORS. It is not a capability: the ACL
+    // stays deny-by-default and no plugin permission is widened.
     let lib = read(&crate_root().join("src/lib.rs"));
     assert!(
         lib.contains("covers::register"),

@@ -1,18 +1,18 @@
-//! Progresso de estudo do desktop sobre o IPC.
+//! Desktop study progress over the IPC.
 //!
-//! Este adaptador não reimplementa nenhuma regra: cada operação delega a
-//! [`learnvault_core::study`] e apenas fixa o dono. O `owner_id` do desktop é um
-//! identificador local fixo ([`LOCAL_OWNER_ID`]) resolvido pelo Rust; ele nunca é recebido
-//! do webview, então o contrato de comandos não oferece — nem aceita — um `owner_id` como
-//! argumento, e o webview não pode ler nem gravar o progresso de outro dono.
+//! This adapter reimplements no rule: each operation delegates to
+//! [`learnvault_core::study`] and only fixes the owner. The desktop's `owner_id` is a fixed
+//! local identifier ([`LOCAL_OWNER_ID`]) resolved by Rust; it is never received
+//! from the webview, so the command contract neither offers — nor accepts — an `owner_id` as an
+//! argument, and the webview can neither read nor write another owner's progress.
 //!
-//! Como o adaptador HTTP, o erro do núcleo é traduzido para um código estável e o
-//! `Display` do domínio não é ecoado: o identificador de mídia consultado nunca aparece na
-//! resposta enviada ao webview.
+//! Like the HTTP adapter, the core's error is translated into a stable code and the
+//! domain's `Display` is not echoed: the media identifier queried never appears in the
+//! response sent to the webview.
 //!
-//! Limitação conhecida desta fatia: o desktop atende um único dono local. Vários donos
-//! locais e a seleção entre eles pertencem a uma fatia posterior — o núcleo já isola por
-//! dono, mas aqui não existe sessão nem seletor local.
+//! Known limitation of this slice: the desktop serves a single local owner. Several local
+//! owners and the selection among them belong to a later slice — the core already isolates by
+//! owner, but here there is neither a session nor a local selector.
 
 use learnvault_core::{Database, FocusSessionInput, ReviewRating};
 
@@ -24,29 +24,29 @@ use crate::dto::{
 };
 use crate::error::IpcError;
 
-/// Dono local fixo do progresso de estudo do desktop.
+/// Fixed local owner of the desktop's study progress.
 ///
-/// O núcleo trata `owner_id` como opaco, canônico e global: o desktop escolhe um valor
-/// estável, em vez de derivá-lo de algo que possa variar entre execuções, para que o
-/// progresso sobreviva a reinicializações. O valor não é um identificador de usuário do
-/// servidor e não é aceito de fora do Rust.
+/// The core treats `owner_id` as opaque, canonical and global: the desktop picks a stable
+/// value, instead of deriving it from something that may vary between runs, so that
+/// progress survives restarts. The value is not a server user identifier
+/// and is not accepted from outside Rust.
 pub const LOCAL_OWNER_ID: &str = "desktop-local";
 
-/// Limite padrão do histórico recente quando o webview não informa um.
+/// Default limit of the recent history when the webview gives none.
 ///
-/// Acompanha o padrão do adaptador HTTP; o teto real continua sendo
-/// [`learnvault_core::MAX_RECENT_STUDY`], aplicado pelo núcleo, e não uma configuração.
+/// It follows the HTTP adapter's default; the real ceiling remains
+/// [`learnvault_core::MAX_RECENT_STUDY`], applied by the core, and not a setting.
 pub const DEFAULT_RECENT_LIMIT: usize = 20;
 
-/// Limite padrão do histórico de revisões quando o webview não informa um.
+/// Default limit of the review history when the webview gives none.
 ///
-/// O teto real continua sendo [`learnvault_core::MAX_FLASHCARD_REVIEWS`], aplicado pelo núcleo.
+/// The real ceiling remains [`learnvault_core::MAX_FLASHCARD_REVIEWS`], applied by the core.
 pub const DEFAULT_REVIEW_LIMIT: usize = 20;
 
-/// Lê o progresso do dono local em uma mídia conhecida.
+/// Reads the local owner's progress on a known media.
 ///
-/// Ausência de progresso não é erro: uma mídia conhecida sem estado devolve o registro
-/// neutro com `recorded: false`. Uma mídia desconhecida no catálogo vira
+/// No progress is not an error: a known media with no state returns the neutral
+/// record with `recorded: false`. A media unknown to the catalog becomes
 /// [`IpcError::media_not_found`].
 pub fn progress(database: &Database, media_id: &str) -> Result<StudyProgressDto, IpcError> {
     match learnvault_core::study_progress(database, LOCAL_OWNER_ID, media_id) {
@@ -56,7 +56,7 @@ pub fn progress(database: &Database, media_id: &str) -> Result<StudyProgressDto,
     }
 }
 
-/// Registra a posição de retomada do dono local, preservando a conclusão registrada.
+/// Records the local owner's resume position, preserving the recorded completion.
 pub fn record_position(
     database: &Database,
     media_id: &str,
@@ -74,7 +74,7 @@ pub fn record_position(
     .map_err(study_error)
 }
 
-/// Marca ou desmarca a conclusão do dono local, preservando a posição de retomada.
+/// Marks or unmarks the local owner's completion, preserving the resume position.
 pub fn set_completed(
     database: &Database,
     media_id: &str,
@@ -86,10 +86,10 @@ pub fn set_completed(
         .map_err(study_error)
 }
 
-/// Lista o progresso do dono local, do alterado mais recentemente ao mais antigo.
+/// Lists the local owner's progress, from most recently changed to oldest.
 ///
-/// Sem limite informado, aplica [`DEFAULT_RECENT_LIMIT`]; o teto do núcleo continua valendo
-/// para qualquer valor recebido.
+/// With no limit given, it applies [`DEFAULT_RECENT_LIMIT`]; the core's ceiling still holds
+/// for any value received.
 pub fn recent(database: &Database, limit: Option<usize>) -> Result<RecentStudyDto, IpcError> {
     learnvault_core::recent_study(
         database,
@@ -102,14 +102,14 @@ pub fn recent(database: &Database, limit: Option<usize>) -> Result<RecentStudyDt
     .map_err(study_error)
 }
 
-/// Resumo de ofensiva e meta semanal do dono local.
+/// Summary of the local owner's streak and weekly goal.
 pub fn summary(database: &Database) -> Result<StudySummaryDto, IpcError> {
     learnvault_core::study_summary(database, LOCAL_OWNER_ID)
         .map(StudySummaryDto::from)
         .map_err(study_error)
 }
 
-/// Grava sessão do timer de forma idempotente para o dono local.
+/// Writes a timer session idempotently for the local owner.
 pub fn record_focus_session(
     database: &Database,
     input: FocusSessionInput,
@@ -119,7 +119,7 @@ pub fn record_focus_session(
         .map_err(focus_error)
 }
 
-/// Lista sessões de foco persistidas do dono local, da mais recente para a mais antiga.
+/// Lists the local owner's persisted focus sessions, from newest to oldest.
 pub fn list_focus_sessions(
     database: &Database,
     limit: Option<usize>,
@@ -129,38 +129,38 @@ pub fn list_focus_sessions(
         .map_err(focus_error)
 }
 
-/// Lê estatísticas persistidas do timer do dono local.
+/// Reads the local owner's persisted timer statistics.
 pub fn focus_summary(database: &Database) -> Result<FocusSummaryDto, IpcError> {
     learnvault_core::focus_summary(database, LOCAL_OWNER_ID)
         .map(FocusSummaryDto::from)
         .map_err(focus_error)
 }
 
-/// Lê XP e progresso de missões persistidos do dono local.
+/// Reads the local owner's persisted XP and mission progress.
 pub fn reward_summary(database: &Database) -> Result<RewardSummaryDto, IpcError> {
     learnvault_core::reward_summary(database, LOCAL_OWNER_ID)
         .map(RewardSummaryDto::from)
         .map_err(focus_error)
 }
 
-/// Resgata uma missão diária para o dono local.
+/// Redeems a daily mission for the local owner.
 pub fn claim_daily_mission(database: &Database, mission_id: &str) -> Result<bool, IpcError> {
     learnvault_core::claim_daily_mission_today(database, LOCAL_OWNER_ID, mission_id)
         .map_err(focus_error)
 }
 
-/// Lê a meta semanal persistida do dono local.
+/// Reads the local owner's persisted weekly goal.
 pub fn weekly_goal(database: &Database) -> Result<i64, IpcError> {
     learnvault_core::weekly_goal(database, LOCAL_OWNER_ID).map_err(focus_error)
 }
 
-/// Atualiza a meta semanal persistida do dono local.
+/// Updates the local owner's persisted weekly goal.
 pub fn set_weekly_goal(database: &Database, goal: i64) -> Result<i64, IpcError> {
     learnvault_core::set_weekly_goal(database, LOCAL_OWNER_ID, goal).map_err(focus_error)
 }
 
-/// Lista anotações do dono local. Quando `media_id` é fornecido, filtra pela mídia;
-/// caso contrário, devolve todas as anotações do usuário com caminhos relativos para busca global.
+/// Lists the local owner's notes. When `media_id` is given, it filters by the media;
+/// otherwise, it returns all of the user's notes with relative paths for global search.
 pub fn list_notes(
     database: &Database,
     media_id: Option<&str>,
@@ -176,7 +176,7 @@ pub fn list_notes(
     }
 }
 
-/// Cria uma anotação de estudo vinculada a uma mídia e timestamp para o dono local.
+/// Creates a study note linked to a media and timestamp for the local owner.
 pub fn create_note(
     database: &Database,
     media_id: &str,
@@ -196,7 +196,7 @@ pub fn create_note(
     .map_err(study_error)
 }
 
-/// Atualiza o texto de uma anotação pertencente ao dono local.
+/// Updates the text of a note that belongs to the local owner.
 pub fn update_note(
     database: &Database,
     note_id: &str,
@@ -208,7 +208,7 @@ pub fn update_note(
         .map_err(study_error)
 }
 
-/// Exclui uma anotação de estudo do dono local. Devolve erro se a anotação não existir.
+/// Deletes a study note of the local owner. Returns an error if the note does not exist.
 ///
 /// The deletion enters the outbox in the same transaction as the local delete, so another
 /// device stops showing the note instead of pulling it back.
@@ -301,7 +301,7 @@ pub fn delete_pdf_annotation(database: &Database, annotation_id: &str) -> Result
     }
 }
 
-/// Lista os cartões de memorização do dono local para uma mídia específica.
+/// Lists the local owner's memorization cards for a specific media.
 pub fn list_flashcards(database: &Database, media_id: &str) -> Result<Vec<FlashcardDto>, IpcError> {
     learnvault_core::list_flashcards(database, LOCAL_OWNER_ID, media_id)
         .map(|cards| cards.into_iter().map(FlashcardDto::from).collect())
@@ -315,7 +315,7 @@ pub fn list_all_flashcards(database: &Database) -> Result<Vec<FlashcardDto>, Ipc
         .map_err(study_error)
 }
 
-/// Cria um novo cartão de memorização para o dono local.
+/// Creates a new memorization card for the local owner.
 pub fn create_flashcard(
     database: &Database,
     media_id: &str,
@@ -337,7 +337,7 @@ pub fn create_flashcard(
     .map_err(study_error)
 }
 
-/// Atualiza a frente e o verso de um cartão de memorização do dono local.
+/// Updates the front and back of a memorization card of the local owner.
 pub fn update_flashcard(
     database: &Database,
     card_id: &str,
@@ -350,7 +350,7 @@ pub fn update_flashcard(
         .map_err(study_error)
 }
 
-/// Exclui um cartão de memorização pertencente ao dono local.
+/// Deletes a memorization card that belongs to the local owner.
 ///
 /// The deletion enters the outbox in the same transaction as the local delete, so another
 /// device stops showing the card instead of pulling it back.
@@ -366,8 +366,8 @@ pub fn delete_flashcard(database: &Database, card_id: &str) -> Result<(), IpcErr
     }
 }
 
-/// Lista o histórico recente de um cartão do dono local, da revisão mais nova para a mais
-/// antiga, junto da contagem completa.
+/// Lists the recent history of a card of the local owner, from the newest review to the
+/// oldest, together with the full count.
 pub fn list_flashcard_reviews(
     database: &Database,
     card_id: &str,
@@ -384,12 +384,12 @@ pub fn list_flashcard_reviews(
     })
 }
 
-/// Conta os cartões do dono local vencidos agora.
+/// Counts the local owner's cards that are due now.
 pub fn count_due_flashcards(database: &Database) -> Result<i64, IpcError> {
     learnvault_core::count_due_flashcards(database, LOCAL_OWNER_ID).map_err(study_error)
 }
 
-/// Registra uma revisão ("again" ou "good") em um cartão de memorização do dono local.
+/// Records a review ("again" or "good") on a memorization card of the local owner.
 pub fn review_flashcard(
     database: &Database,
     card_id: &str,
@@ -404,14 +404,14 @@ pub fn review_flashcard(
         .map_err(study_error)
 }
 
-/// Lista os cursos e aulas favoritados pelo dono local.
+/// Lists the courses and lessons favourited by the local owner.
 pub fn list_favorites(database: &Database) -> Result<StudyFavoritesDto, IpcError> {
     learnvault_core::list_favorites(database, LOCAL_OWNER_ID)
         .map(StudyFavoritesDto::from)
         .map_err(study_error)
 }
 
-/// Marca ou desmarca um curso como favorito para o dono local.
+/// Marks or unmarks a course as a favourite for the local owner.
 pub fn set_course_favorite(
     database: &Database,
     course_id: &str,
@@ -421,7 +421,7 @@ pub fn set_course_favorite(
         .map_err(study_error)
 }
 
-/// Marca ou desmarca uma aula (mídia) como favorita para o dono local.
+/// Marks or unmarks a lesson (media) as a favourite for the local owner.
 pub fn set_lesson_favorite(
     database: &Database,
     media_id: &str,
@@ -507,11 +507,11 @@ pub fn save_playback_preference(
     .map_err(study_error)
 }
 
-/// Traduz o erro do núcleo para o erro IPC estável, sem ecoar o identificador consultado.
+/// Translates the core's error into the stable IPC error, without echoing the identifier queried.
 ///
-/// Uma mídia desconhecida e uma posição negativa são falhas de entrada com código próprio,
-/// como no adaptador HTTP. Qualquer outro erro é operacional e não pode virar "mídia
-/// desconhecida", para não confundir ausência legítima com banco indisponível.
+/// An unknown media and a negative position are input failures with a code of their own,
+/// as in the HTTP adapter. Any other error is operational and cannot become "unknown
+/// media", so as not to confuse legitimate absence with an unavailable database.
 fn study_error(error: learnvault_core::Error) -> IpcError {
     use learnvault_core::Error;
 

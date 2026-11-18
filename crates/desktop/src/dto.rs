@@ -1,9 +1,9 @@
-//! DTOs serializáveis do catálogo e do progresso de estudo do desktop.
+//! Serializable DTOs of the desktop's catalog and study progress.
 //!
-//! Os tipos do núcleo não são serializados diretamente: cada enum vira uma string estável
-//! e o shape snake_case (`loose_files`, `media_id`, ...) é idêntico ao do adaptador HTTP,
-//! de modo que o `normalizeCatalog` e o `normalizeStudyProgress` da SPA aceitam o payload do
-//! desktop sem alteração.
+//! The core's types are not serialized directly: each enum becomes a stable string
+//! and the snake_case shape (`loose_files`, `media_id`, ...) is identical to the HTTP adapter's,
+//! so the SPA's `normalizeCatalog` and `normalizeStudyProgress` accept the desktop's
+//! payload unchanged.
 
 use learnvault_core::{
     Availability, Catalog, CatalogFile, CatalogNode, FocusKind, FocusSession, FocusSummary,
@@ -12,65 +12,65 @@ use learnvault_core::{
 };
 use serde::{Deserialize, Serialize};
 
-/// Catálogo do desktop derivado do banco local.
+/// Desktop catalog derived from the local database.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct CatalogDto {
-    /// Verdadeiro quando a última varredura cobriu todos os cursos.
+    /// True when the last scan covered all the courses.
     pub complete: bool,
-    /// Arquivos soltos de uma biblioteca global. O desktop agrega cursos e mantém esta
-    /// lista vazia: arquivos soltos pertencem ao nó do curso correspondente.
+    /// Loose files of a global library. The desktop aggregates courses and keeps this
+    /// list empty: loose files belong to the corresponding course node.
     pub loose_files: Vec<CatalogFileDto>,
-    /// Árvore recursiva canônica, o contrato preferido pela SPA.
+    /// Canonical recursive tree, the contract preferred by the SPA.
     pub nodes: Vec<CatalogNodeDto>,
-    /// Cursos, na ordem de importação. Cada nó de topo tem papel `course`.
+    /// Courses, in import order. Each top-level node has the `course` role.
     pub categories: Vec<CatalogNodeDto>,
 }
 
-/// Nó da árvore do catálogo.
+/// Node of the catalog tree.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct CatalogNodeDto {
-    /// Título apresentado, sem prefixos numéricos nem separadores de ordenação.
+    /// Displayed title, without numeric prefixes or ordering separators.
     pub title: String,
-    /// Caminho relativo completo que identifica o nó. Vazio no nó de topo do curso.
+    /// Full relative path that identifies the node. Empty on the course's top-level node.
     pub path: String,
-    /// Papel do nó: `category`, `course`, `module` ou `lesson`.
+    /// Role of the node: `category`, `course`, `module` or `lesson`.
     pub role: &'static str,
-    /// Identidade do curso que contém o nó, presente apenas no nó de topo.
+    /// Identity of the course that contains the node, present only on the top-level node.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub course_id: Option<String>,
-    /// Segundos de modificação da capa personalizada do curso, quando existir. É a versão
-    /// usada pela SPA para invalidar a URL (`?v=`); ausente quando não há capa.
+    /// Modification seconds of the course's custom cover, when it exists. It is the version
+    /// the SPA uses to invalidate the URL (`?v=`); absent when there is no cover.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cover_version: Option<i64>,
-    /// Nome da pasta de origem do curso no disco (diretório pai), sem expor caminhos absolutos.
+    /// Name of the course's source folder on disk (parent directory), without exposing absolute paths.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_folder: Option<String>,
-    /// Arquivos da aula; vazio fora de nós `lesson`.
+    /// Files of the lesson; empty outside `lesson` nodes.
     pub files: Vec<CatalogFileDto>,
-    /// Arquivos diretamente no nó, sem pertencer a uma aula.
+    /// Files directly on the node, not belonging to a lesson.
     pub loose_files: Vec<CatalogFileDto>,
-    /// Nós filhos, ordenados por caminho.
+    /// Child nodes, ordered by path.
     pub children: Vec<CatalogNodeDto>,
 }
 
-/// Arquivo do catálogo.
+/// File of the catalog.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct CatalogFileDto {
-    /// Identidade estável do arquivo, independente da localização.
+    /// Stable identity of the file, independent of its location.
     pub media_id: String,
-    /// Nome do arquivo, sem diretórios.
+    /// Name of the file, without directories.
     pub name: String,
-    /// Caminho relativo completo, usado como referência estrutural.
+    /// Full relative path, used as a structural reference.
     pub path: String,
-    /// Tamanho em bytes na última observação.
+    /// Size in bytes at the last observation.
     pub size: u64,
-    /// Modificação da mídia em segundos desde a época Unix na última observação.
+    /// Modification time of the media in seconds since the Unix epoch at the last observation.
     pub mtime_seconds: i64,
-    /// Tipo do arquivo: `media`, `subtitle` ou `material`.
+    /// Kind of the file: `media`, `subtitle` or `material`.
     pub kind: &'static str,
-    /// Disponibilidade na última varredura: `available` ou `missing`.
+    /// Availability in the last scan: `available` or `missing`.
     pub availability: &'static str,
-    /// Verdadeiro quando o arquivo está sob uma área não verificada.
+    /// True when the file is under an unverified area.
     pub unverified: bool,
 }
 
@@ -99,8 +99,8 @@ impl From<CatalogNode> for CatalogNodeDto {
 }
 
 impl CatalogNodeDto {
-    /// Nó de topo de um curso registrado: identidade opaca, título da pasta, a versão da
-    /// capa personalizada (quando existir) e a subárvore derivada dos dados persistidos.
+    /// Top-level node of a registered course: opaque identity, folder title, the custom
+    /// cover's version (when it exists) and the subtree derived from the persisted data.
     pub fn course(
         course_id: &str,
         title: &str,
@@ -145,7 +145,7 @@ impl From<CatalogFile> for CatalogFileDto {
     }
 }
 
-/// Traduz o papel de um nó para a string estável do contrato.
+/// Translates a node's role into the contract's stable string.
 fn node_role(role: NodeRole) -> &'static str {
     match role {
         NodeRole::Category => "category",
@@ -155,7 +155,7 @@ fn node_role(role: NodeRole) -> &'static str {
     }
 }
 
-/// Traduz o tipo de um arquivo para a string estável do contrato.
+/// Translates a file's kind into the contract's stable string.
 fn media_kind(kind: MediaKind) -> &'static str {
     match kind {
         MediaKind::Media => "media",
@@ -164,7 +164,7 @@ fn media_kind(kind: MediaKind) -> &'static str {
     }
 }
 
-/// Traduz a disponibilidade de um arquivo para a string estável do contrato.
+/// Translates a file's availability into the contract's stable string.
 fn availability(value: Availability) -> &'static str {
     match value {
         Availability::Available => "available",
@@ -172,30 +172,30 @@ fn availability(value: Availability) -> &'static str {
     }
 }
 
-/// Resumo de um rescan explícito dos cursos, sem caminho do sistema de arquivos.
+/// Summary of an explicit rescan of the courses, with no file-system path.
 ///
-/// É a projeção serializável agregada de [`learnvault_core::RescanSummary`]: só as
-/// contagens do contrato, sem o identificador interno do histórico. Nenhum campo carrega
-/// localização.
+/// It is the aggregated serializable projection of [`learnvault_core::RescanSummary`]: only the
+/// contract's counts, without the history's internal identifier. No field carries
+/// a location.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct RescanSummaryDto {
-    /// Verdadeiro quando todas as varreduras cobriram os cursos inteiros.
+    /// True when all the scans covered the courses entirely.
     pub complete: bool,
-    /// Quantidade de cursos considerados na agregação.
+    /// Number of courses considered in the aggregation.
     pub courses: usize,
-    /// Quantidade de cursos cuja pasta não pôde ser varrida.
+    /// Number of courses whose folder could not be scanned.
     pub failed: usize,
-    /// Arquivos novos inseridos no catálogo.
+    /// New files inserted into the catalog.
     pub inserted: usize,
-    /// Registros já conhecidos que a varredura reafirmou.
+    /// Already-known records that the scan reaffirmed.
     pub updated: usize,
-    /// Registros marcados como ausentes.
+    /// Records marked as missing.
     pub marked_missing: usize,
-    /// Registros preservados por estarem em uma área não verificada.
+    /// Records preserved because they are in an unverified area.
     pub preserved: usize,
-    /// Quantidade de chaves relativas ambíguas recusadas nesta varredura.
+    /// Number of ambiguous relative keys refused in this scan.
     ///
-    /// É apenas a contagem: as chaves em si são caminhos relativos e nunca cruzam o IPC.
+    /// It is only the count: the keys themselves are relative paths and never cross the IPC.
     pub ambiguous_count: usize,
 }
 
@@ -214,23 +214,23 @@ impl From<RescanSummary> for RescanSummaryDto {
     }
 }
 
-/// Progresso de estudo do dono local do desktop em uma mídia.
+/// Study progress of the desktop's local owner on a media.
 ///
-/// O shape é o mesmo contrato snake_case do adaptador HTTP, então o
-/// `normalizeStudyProgress` da SPA aceita o payload do desktop sem alteração. `recorded`
-/// distingue "nunca estudada" de "estudada na posição zero": a ausência de progresso não é
-/// um erro do domínio, e o campo evita que a interface confunda as duas situações.
+/// The shape is the same snake_case contract as the HTTP adapter's, so the SPA's
+/// `normalizeStudyProgress` accepts the desktop's payload unchanged. `recorded`
+/// tells "never studied" from "studied at position zero": the absence of progress is not
+/// a domain error, and the field keeps the interface from confusing the two situations.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct StudyProgressDto {
-    /// Identidade estável da mídia, nunca o caminho do arquivo.
+    /// Stable identity of the media, never the file's path.
     pub media_id: String,
-    /// Ponto de retomada em segundos.
+    /// Resume point in seconds.
     pub position_seconds: i64,
-    /// Indica que a aula foi concluída.
+    /// Tells whether the lesson was completed.
     pub completed: bool,
-    /// Instante da última alteração real, ou `None` quando nada foi gravado.
+    /// Instant of the last real change, or `None` when nothing was written.
     pub updated_at: Option<i64>,
-    /// Verdadeiro quando existe estado persistido para a mídia.
+    /// True when there is persisted state for the media.
     pub recorded: bool,
 }
 
@@ -247,7 +247,7 @@ impl From<StudyProgress> for StudyProgressDto {
 }
 
 impl StudyProgressDto {
-    /// Estado neutro de uma mídia conhecida sem progresso: nada foi gravado ainda.
+    /// Neutral state of a known media with no progress: nothing has been written yet.
     pub fn absent(media_id: &str) -> Self {
         Self {
             media_id: media_id.to_owned(),
@@ -259,13 +259,13 @@ impl StudyProgressDto {
     }
 }
 
-/// Histórico recente de estudo do dono local do desktop.
+/// Recent study history of the desktop's local owner.
 ///
-/// É a projeção serializável do mesmo contrato `{ items: [...] }` do adaptador HTTP, do
-/// mais recente ao mais antigo. Só mídias presentes no catálogo local aparecem.
+/// It is the serializable projection of the same `{ items: [...] }` contract as the HTTP adapter's, from
+/// newest to oldest. Only media present in the local catalog appear.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct RecentStudyDto {
-    /// Itens de progresso, já ordenados pelo núcleo.
+    /// Progress items, already ordered by the core.
     pub items: Vec<StudyProgressDto>,
 }
 
@@ -413,23 +413,23 @@ pub struct NewPdfAnnotationDto {
     pub content: String,
 }
 
-/// Anotação de estudo associada a uma aula/mídia para o dono local.
+/// Study note associated with a lesson/media for the local owner.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StudyNoteDto {
-    /// Identidade estável da anotação.
+    /// Stable identity of the note.
     pub note_id: String,
-    /// Identidade da mídia à qual a anotação pertence.
+    /// Identity of the media the note belongs to.
     pub media_id: String,
-    /// Caminho relativo da mídia, presente apenas na listagem global de anotações.
+    /// Relative path of the media, present only in the global listing of notes.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub relative_path: Option<String>,
-    /// Ponto da mídia em segundos onde a anotação foi registrada.
+    /// Point of the media in seconds where the note was recorded.
     pub position_seconds: i64,
-    /// Texto da anotação.
+    /// Text of the note.
     pub content: String,
-    /// Data de criação em segundos Unix.
+    /// Creation date in Unix seconds.
     pub created_at: i64,
-    /// Data da última alteração em segundos Unix.
+    /// Date of the last change in Unix seconds.
     pub updated_at: i64,
 }
 
@@ -461,18 +461,18 @@ impl From<learnvault_core::GlobalStudyNote> for StudyNoteDto {
     }
 }
 
-/// Marcador de tempo de uma aula para o dono local.
+/// Time marker of a lesson for the local owner.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MediaBookmarkDto {
-    /// Identidade estável do marcador.
+    /// Stable identity of the marker.
     pub bookmark_id: String,
-    /// Identidade da mídia à qual o marcador pertence.
+    /// Identity of the media the marker belongs to.
     pub media_id: String,
-    /// Instante da mídia em segundos.
+    /// Instant of the media in seconds.
     pub position_seconds: i64,
-    /// Rótulo curto escrito pelo aluno.
+    /// Short label written by the learner.
     pub label: String,
-    /// Data de criação em segundos Unix.
+    /// Creation date in Unix seconds.
     pub created_at: i64,
 }
 
@@ -488,26 +488,26 @@ impl From<MediaBookmark> for MediaBookmarkDto {
     }
 }
 
-/// Cartão de memorização (flashcard) associado a uma aula/mídia para o dono local.
+/// Memorization card (flashcard) associated with a lesson/media for the local owner.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FlashcardDto {
-    /// Identidade estável do cartão.
+    /// Stable identity of the card.
     pub card_id: String,
-    /// Identidade da mídia à qual o cartão pertence.
+    /// Identity of the media the card belongs to.
     pub media_id: String,
-    /// Instante da aula em que o cartão foi criado, quando informado.
+    /// Instant of the lesson at which the card was created, when given.
     pub position_seconds: Option<i64>,
-    /// Pergunta ou frente do cartão.
+    /// Question or front of the card.
     pub front: String,
-    /// Resposta ou verso do cartão.
+    /// Answer or back of the card.
     pub back: String,
-    /// Intervalo atual de repetição em dias (0 a 365).
+    /// Current repetition interval in days (0 to 365).
     pub interval_days: i64,
-    /// Instante da próxima revisão em segundos Unix.
+    /// Instant of the next review in Unix seconds.
     pub next_due: i64,
-    /// Data de criação em segundos Unix.
+    /// Creation date in Unix seconds.
     pub created_at: i64,
-    /// Data da última alteração em segundos Unix.
+    /// Date of the last change in Unix seconds.
     pub updated_at: i64,
 }
 
@@ -527,20 +527,20 @@ impl From<learnvault_core::Flashcard> for FlashcardDto {
     }
 }
 
-/// Uma revisão registrada no histórico de um cartão do dono local.
+/// A review recorded in the history of a card of the local owner.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FlashcardReviewDto {
-    /// Identificador sequencial da revisão.
+    /// Sequential identifier of the review.
     pub review_id: i64,
-    /// Cartão revisado.
+    /// Card reviewed.
     pub card_id: String,
-    /// Avaliação dada pelo aluno, `again` ou `good`.
+    /// Rating given by the learner, `again` or `good`.
     pub rating: &'static str,
-    /// Intervalo em dias antes desta revisão.
+    /// Interval in days before this review.
     pub previous_interval_days: i64,
-    /// Próximo vencimento calculado por esta revisão.
+    /// Next due date calculated by this review.
     pub next_due: i64,
-    /// Instante da revisão em segundos Unix.
+    /// Instant of the review in Unix seconds.
     pub reviewed_at: i64,
 }
 
@@ -557,42 +557,42 @@ impl From<learnvault_core::FlashcardReview> for FlashcardReviewDto {
     }
 }
 
-/// Histórico recente de um cartão com a contagem completa do log.
+/// Recent history of a card with the full count of the log.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FlashcardReviewsDto {
-    /// Revisões da mais nova para a mais antiga, até o limite pedido.
+    /// Reviews from newest to oldest, up to the requested limit.
     pub items: Vec<FlashcardReviewDto>,
-    /// Total de revisões registradas, mesmo além do limite.
+    /// Total reviews recorded, even beyond the limit.
     pub total: i64,
 }
 
-/// Um dia da semana corrente na ofensiva de estudo.
+/// A day of the current week in the study streak.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct StudyDayDto {
     /// Data local no formato `YYYY-MM-DD`.
     pub day: String,
-    /// Indica que houve progresso real nesse dia.
+    /// Indicates there was real progress on that day.
     pub active: bool,
 }
 
-/// Resumo de ofensiva e meta semanal do dono local do desktop.
+/// Summary of the streak and weekly goal of the desktop's local owner.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct StudySummaryDto {
-    /// Dias consecutivos até hoje, ou até ontem quando `at_risk`.
+    /// Consecutive days up to today, or up to yesterday when `at_risk`.
     pub current_streak: i64,
-    /// Maior sequência já registrada.
+    /// Longest streak ever recorded.
     pub longest_streak: i64,
-    /// Dia local usado como hoje, no formato `YYYY-MM-DD`.
+    /// Local day used as today, in `YYYY-MM-DD` format.
     pub today: String,
-    /// Houve progresso real hoje.
+    /// There was real progress today.
     pub today_active: bool,
-    /// A ofensiva ainda vale, mas depende de estudar hoje.
+    /// The streak still holds, but depends on studying today.
     pub at_risk: bool,
-    /// Dias ativos na semana corrente (segunda a domingo).
+    /// Active days in the current week (Monday to Sunday).
     pub week_active_days: i64,
-    /// Aulas atualmente concluídas pelo dono local.
+    /// Lessons currently completed by the local owner.
     pub completed_lessons: i64,
-    /// Os sete dias da semana corrente, de segunda a domingo.
+    /// The seven days of the current week, Monday to Sunday.
     pub days: Vec<StudyDayDto>,
 }
 
@@ -618,20 +618,20 @@ impl From<learnvault_core::StudySummary> for StudySummaryDto {
     }
 }
 
-/// Sessão Pomodoro persistida para o dono local.
+/// Persisted Pomodoro session for the local owner.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FocusSessionDto {
-    /// Chave idempotente do timer.
+    /// Idempotent key of the timer.
     pub id: String,
-    /// Tipo: `focus`, `short` ou `long`.
+    /// Kind: `focus`, `short` or `long`.
     pub kind: &'static str,
-    /// Duração planejada em segundos.
+    /// Planned duration in seconds.
     pub planned_seconds: i64,
-    /// Duração real em segundos.
+    /// Actual duration in seconds.
     pub actual_seconds: i64,
-    /// Se o timer concluiu normalmente.
+    /// Whether the timer completed normally.
     pub completed: bool,
-    /// Início Unix.
+    /// Unix start.
     pub started_at: i64,
     /// Fim Unix.
     pub ended_at: i64,
@@ -655,35 +655,35 @@ impl From<FocusSession> for FocusSessionDto {
     }
 }
 
-/// Dia de foco dentro da semana atual.
+/// Focus day within the current week.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FocusDayDto {
     /// Data local `YYYY-MM-DD`.
     pub day: String,
-    /// Minutos focados concluídos.
+    /// Focused minutes completed.
     pub minutes: i64,
-    /// Sessões concluídas.
+    /// Sessions completed.
     pub sessions: i64,
 }
 
-/// Estatísticas persistidas do Pomodoro.
+/// Persisted Pomodoro statistics.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FocusSummaryDto {
-    /// Minutos de foco concluídos hoje.
+    /// Focus minutes completed today.
     pub today_minutes: i64,
-    /// Minutos de foco na semana.
+    /// Focus minutes in the week.
     pub week_minutes: i64,
-    /// Sessões de foco concluídas na semana.
+    /// Focus sessions completed in the week.
     pub week_sessions: i64,
-    /// Minutos de foco acumulados no histórico.
+    /// Focus minutes accumulated in the history.
     pub total_minutes: i64,
-    /// Total histórico de sessões concluídas.
+    /// Historical total of completed sessions.
     pub total_sessions: i64,
-    /// Taxa de conclusão em percentual.
+    /// Completion rate as a percentage.
     pub completion_rate: i64,
-    /// Dia mais produtivo desta semana, se houver.
+    /// Most productive day of this week, if there is one.
     pub best_day: Option<String>,
-    /// Segunda a domingo.
+    /// Monday to Sunday.
     pub days: Vec<FocusDayDto>,
 }
 
@@ -710,31 +710,31 @@ impl From<FocusSummary> for FocusSummaryDto {
     }
 }
 
-/// Progresso serializável de uma missão diária.
+/// Serializable progress of a daily mission.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct DailyMissionDto {
-    /// Identificador estável.
+    /// Stable identifier.
     pub id: String,
-    /// Progresso do dia.
+    /// Progress of the day.
     pub progress: i64,
-    /// Alvo de conclusão.
+    /// Completion target.
     pub target: i64,
-    /// Se o bônus já foi resgatado.
+    /// Whether the bonus was already redeemed.
     pub claimed: bool,
 }
 
-/// XP persistido, marcos e missões do dono local.
+/// Persisted XP, milestones and missions of the local owner.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct RewardSummaryDto {
     /// XP acumulado.
     pub xp: i64,
-    /// Aulas concluídas ao menos uma vez.
+    /// Lessons completed at least once.
     pub completed_lessons: i64,
-    /// Meta semanal configurada.
+    /// Configured weekly goal.
     pub weekly_goal: i64,
-    /// Missões do dia.
+    /// Missions of the day.
     pub missions: Vec<DailyMissionDto>,
-    /// Ofensiva/atividade compartilhada com o resumo de estudo.
+    /// Streak/activity shared with the study summary.
     pub study: StudySummaryDto,
 }
 
@@ -759,18 +759,18 @@ impl From<RewardSummary> for RewardSummaryDto {
     }
 }
 
-/// DTO do impacto de remoção de mídia.
+/// DTO of the impact of removing a media.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct MediaRemovalImpactDto {
-    /// Identificador da mídia consultada.
+    /// Identifier of the media queried.
     pub media_id: String,
-    /// Caminho relativo da mídia no catálogo.
+    /// Relative path of the media in the catalog.
     pub relative_path: String,
-    /// Disponibilidade segundo a última varredura ("available" ou "missing").
+    /// Availability according to the last scan ("available" or "missing").
     pub availability: &'static str,
-    /// Quantidade de donos distintos com progresso nesta mídia.
+    /// Number of distinct owners with progress on this media.
     pub progress_owners: usize,
-    /// Se a mídia já havia sido removida do catálogo.
+    /// Whether the media had already been removed from the catalog.
     pub already_removed: bool,
 }
 
@@ -786,14 +786,14 @@ impl From<learnvault_core::MediaRemovalImpact> for MediaRemovalImpactDto {
     }
 }
 
-/// DTO do resultado de remoção de mídia.
+/// DTO of the result of removing a media.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct MediaRemovalOutcomeDto {
-    /// Identificador da mídia removida.
+    /// Identifier of the media removed.
     pub media_id: String,
-    /// Verdadeiro quando a remoção foi gravada agora; falso se já estava removida.
+    /// True when the removal was recorded now; false if it was already removed.
     pub removed_now: bool,
-    /// Quantidade de donos com progresso preservado.
+    /// Number of owners with progress preserved.
     pub preserved_owners: usize,
 }
 
@@ -807,60 +807,60 @@ impl From<learnvault_core::MediaRemovalOutcome> for MediaRemovalOutcomeDto {
     }
 }
 
-/// DTO da capa personalizada de um curso.
+/// DTO of a course's custom cover.
 ///
-/// Carrega apenas a versão (segundos de modificação) que a SPA usa para invalidar a URL da
-/// imagem. Nem o caminho do arquivo nem o diretório de capas cruzam o IPC.
+/// It carries only the version (modification seconds) that the SPA uses to invalidate the image's
+/// URL. Neither the file's path nor the covers directory crosses the IPC.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct CoverDto {
-    /// Versão da capa do curso; ausente quando o curso ainda não tem capa.
+    /// Version of the course's cover; absent when the course does not have a cover yet.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cover_version: Option<i64>,
 }
 
-/// DTO do resultado da remoção da capa.
+/// DTO of the result of removing the cover.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct CoverRemovalDto {
-    /// Verdadeiro quando havia uma capa e ela foi removida agora.
+    /// True when there was a cover and it was removed now.
     pub removed: bool,
 }
 
-/// DTO informativo sobre atualizações do aplicativo desktop.
+/// Informational DTO about updates of the desktop application.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DesktopUpdateInfoDto {
-    /// Se há uma atualização mais recente disponível para download.
+    /// Whether a newer update is available for download.
     pub available: bool,
-    /// Versão atualmente em execução no aplicativo.
+    /// Version currently running in the application.
     pub current_version: String,
-    /// Nova versão disponível (se houver).
+    /// New version available (if any).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
-    /// Data de publicação da nova versão (se disponível).
+    /// Publication date of the new version (if available).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub date: Option<String>,
-    /// Notas de lançamento / changelog (se disponível).
+    /// Release notes / changelog (if available).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub body: Option<String>,
 }
 
-/// DTO com as capacidades de mídia e reprodução no ambiente desktop.
+/// DTO with the media and playback capabilities in the desktop environment.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DesktopMediaCapabilitiesDto {
-    /// Se há suporte a transcodificação local (ex.: FFmpeg detectado).
+    /// Whether local transcoding is supported (e.g. FFmpeg detected).
     pub transcoding: bool,
-    /// Se há suporte a abertura no reprodutor padrão do sistema operacional.
+    /// Whether opening in the operating system's default player is supported.
     pub system_player: bool,
 }
 
-/// DTO dos cursos e aulas favoritados pelo dono local.
+/// DTO of the courses and lessons favourited by the local owner.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StudyFavoritesDto {
-    /// Identificadores dos cursos favoritados.
+    /// Identifiers of the favourited courses.
     pub course_ids: Vec<String>,
-    /// Identificadores das aulas (mídias) favoritadas.
+    /// Identifiers of the favourited lessons (media).
     pub media_ids: Vec<String>,
 }
 

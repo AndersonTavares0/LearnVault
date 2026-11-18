@@ -1,13 +1,13 @@
-//! Estado compartilhado do aplicativo desktop.
+//! Shared state of the desktop application.
 //!
-//! O estado guarda dois recursos independentes: o banco SQLite local protegido por um
-//! mutex e a lista de cursos registrados, protegida por um mutex próprio. Separar os
-//! cadeados é deliberado: o seletor nativo e a persistência da configuração não podem
-//! segurar o cadeado do SQLite, e a leitura do catálogo continua fora da main thread.
+//! The state holds two independent resources: the local SQLite database protected by a
+//! mutex and the list of registered courses, protected by a mutex of its own. Separating the
+//! locks is deliberate: the native picker and configuration persistence cannot
+//! hold the SQLite lock, and reading the catalog stays off the main thread.
 //!
-//! Cada curso é apenas um caminho canonicalizado com identidade estável; o estado nunca
-//! escreve dentro dele. A configuração é gravada no diretório de configuração do
-//! aplicativo, nunca no banco nem nas pastas de curso.
+//! Each course is just a canonicalized path with a stable identity; the state never
+//! writes inside it. The configuration is written to the application's configuration directory,
+//! never to the database nor to the course folders.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -35,7 +35,7 @@ use crate::search;
 use crate::study;
 use crate::sync::{self, SyncFailure, SyncFlight, SyncSettings};
 
-/// Estado Tauri do desktop: banco local e cursos registrados.
+/// Tauri state of the desktop: local database and registered courses.
 #[derive(Clone)]
 pub struct DesktopState {
     database: Arc<Mutex<Database>>,
@@ -62,13 +62,13 @@ pub(crate) struct PendingUpdate {
 }
 
 impl DesktopState {
-    /// Abre o banco local e carrega os cursos registrados do diretório de configuração.
+    /// Opens the local database and loads the registered courses from the configuration directory.
     ///
-    /// O diretório de dados pertence ao aplicativo; as pastas de curso são externas e
-    /// nunca são criadas, lidas nem escritas por esta operação. A configuração é
-    /// revalidada: cursos com raiz removida ou inválida são descartados, sem falha fatal.
-    /// As capas personalizadas vivem em um subdiretório de capas do diretório de dados,
-    /// criado sob demanda na primeira gravação.
+    /// The data directory belongs to the application; the course folders are external and
+    /// are never created, read or written by this operation. The configuration is
+    /// revalidated: courses with a removed or invalid root are dropped, without a fatal failure.
+    /// Custom covers live in a covers subdirectory of the data directory,
+    /// created on demand at the first write.
     pub fn open(data_dir: &Path, config_dir: &Path) -> Result<Self, IpcError> {
         std::fs::create_dir_all(data_dir).map_err(|_| IpcError::database_unavailable())?;
         let database_file = database_path(data_dir);
@@ -120,12 +120,12 @@ impl DesktopState {
             .take())
     }
 
-    /// Diretório das capas personalizadas. Uso interno do Rust: nunca cruza o IPC.
+    /// Directory of the custom covers. Internal Rust use: it never crosses the IPC.
     pub(crate) fn covers_dir(&self) -> PathBuf {
         self.covers_dir.clone()
     }
 
-    /// Constrói o catálogo a partir do banco local.
+    /// Builds the catalog from the local database.
     pub fn catalog(&self) -> Result<CatalogDto, IpcError> {
         let database = self
             .database
@@ -139,7 +139,7 @@ impl DesktopState {
         )
     }
 
-    /// Fotografia imutável das preferências de ordenação. Uso interno do Rust.
+    /// Immutable snapshot of the ordering preferences. Internal Rust use.
     fn orders_snapshot(&self) -> CourseOrders {
         self.orders
             .lock()
@@ -147,12 +147,12 @@ impl DesktopState {
             .unwrap_or_default()
     }
 
-    /// Define a ordem manual dos irmãos de um nó do curso.
+    /// Sets the manual order of the siblings of a course node.
     ///
-    /// A lista precisa ser uma permutação exata dos irmãos do caminho `parent` (vazio para
-    /// os módulos diretamente sob o curso): um caminho de fora ou uma lista parcial é
-    /// recusado com [`IpcError::invalid_order`]. O curso precisa estar registrado. A ordem
-    /// vive no diretório de dados; nenhum arquivo do curso é lido além do catálogo.
+    /// The list must be an exact permutation of the siblings at path `parent` (empty for
+    /// the modules directly under the course): a path from outside or a partial list is
+    /// refused with [`IpcError::invalid_order`]. The course must be registered. The order
+    /// lives in the data directory; no course file is read beyond the catalog.
     pub fn set_course_order(
         &self,
         course_id: &str,
@@ -189,9 +189,9 @@ impl DesktopState {
         Ok(())
     }
 
-    /// Restaura a ordem automática de um pai específico (`Some`) ou de todo o curso (`None`).
+    /// Restores the automatic order of a specific parent (`Some`) or of the whole course (`None`).
     ///
-    /// É idempotente: restaurar o que já estava automático devolve `false`.
+    /// It is idempotent: restoring what was already automatic returns `false`.
     pub fn reset_course_order(
         &self,
         course_id: &str,
@@ -225,14 +225,14 @@ impl DesktopState {
         Ok(true)
     }
 
-    /// Executa o seletor nativo de imagens e grava a capa do curso escolhido.
+    /// Runs the native image picker and stores the chosen course's cover.
     ///
-    /// `pick` devolve o arquivo bruto escolhido pelo usuário ou `None` quando o seletor é
-    /// cancelado. O cancelamento preserva a capa anterior e devolve a versão atual. O curso
-    /// precisa estar registrado: uma identidade desconhecida ou insegura é recusada sem
-    /// tocar o disco nem o seletor. O arquivo é reaberto e revalidado no Rust (tipo pelos
-    /// magic bytes e limite de tamanho) antes da gravação atômica; nada é escrito dentro da
-    /// pasta do curso.
+    /// `pick` returns the raw file chosen by the user or `None` when the picker is
+    /// cancelled. Cancelling preserves the previous cover and returns the current version. The course
+    /// must be registered: an unknown or unsafe identity is refused without
+    /// touching the disk or the picker. The file is reopened and revalidated in Rust (type by
+    /// magic bytes and size limit) before the atomic write; nothing is written inside the
+    /// course folder.
     pub fn import_course_cover(
         &self,
         course_id: &str,
@@ -253,10 +253,10 @@ impl DesktopState {
         Ok(self.cover_status(course_id))
     }
 
-    /// Remove a capa personalizada de um curso registrado.
+    /// Removes the custom cover of a registered course.
     ///
-    /// A remoção não toca na pasta do curso e é idempotente: um curso sem capa devolve
-    /// `removed: false`. Uma identidade desconhecida é recusada com um erro estável.
+    /// The removal does not touch the course folder and is idempotent: a course with no cover returns
+    /// `removed: false`. An unknown identity is refused with a stable error.
     pub fn remove_course_cover(&self, course_id: &str) -> Result<CoverRemovalDto, IpcError> {
         if self.course(course_id).is_none() {
             return Err(IpcError::course_not_found());
@@ -266,21 +266,21 @@ impl DesktopState {
         Ok(CoverRemovalDto { removed })
     }
 
-    /// Situação atual da capa de um curso, sem caminho.
+    /// Current state of a course's cover, with no path.
     fn cover_status(&self, course_id: &str) -> CoverDto {
         CoverDto {
             cover_version: cover_version(&self.covers_dir, course_id),
         }
     }
 
-    /// Situação de configuração exposta ao webview: só o booleano, nunca um caminho.
+    /// Configuration state exposed to the webview: only the boolean, never a path.
     ///
-    /// As raízes são revalidadas em cada consulta para que um curso removido, inacessível
-    /// ou revogado pelo sandbox não continue sendo anunciado como configurado durante a
-    /// vida do processo. A configuração persistida e a lista em memória não são apagadas
-    /// aqui: uma falha transitória ou um cancelamento continuam preservando o estado
-    /// anterior, enquanto operações que usam as raízes fazem sua própria revalidação antes
-    /// de prosseguir.
+    /// The roots are revalidated on every query so that a course that was removed, became inaccessible
+    /// or was revoked by the sandbox is not still announced as configured during the
+    /// process's life. The persisted configuration and the in-memory list are not erased
+    /// here: a transient failure or a cancellation still preserve the previous
+    /// state, while operations that use the roots do their own revalidation before
+    /// proceeding.
     pub fn config_status(&self) -> DesktopConfigDto {
         DesktopConfigDto {
             configured: self
@@ -290,7 +290,7 @@ impl DesktopState {
         }
     }
 
-    /// Fotografia imutável dos cursos registrados. Uso interno do Rust.
+    /// Immutable snapshot of the registered courses. Internal Rust use.
     pub fn courses(&self) -> Vec<CourseEntry> {
         self.courses
             .lock()
@@ -298,17 +298,17 @@ impl DesktopState {
             .unwrap_or_default()
     }
 
-    /// Curso registrado com a identidade informada, se houver. Uso interno da mídia.
+    /// Registered course with the given identity, if there is one. Internal media use.
     pub fn course(&self, course_id: &str) -> Option<CourseEntry> {
         self.courses()
             .into_iter()
             .find(|course| course.id == course_id)
     }
 
-    /// Toma o cadeado do banco local para uma leitura. Uso interno da entrega de mídia.
+    /// Takes the local database lock for a read. Internal use of media delivery.
     ///
-    /// O cadeado serializa a revalidação do catálogo com remoções concorrentes durante a
-    /// abertura da mídia, exatamente como no adaptador HTTP.
+    /// The lock serializes the catalog revalidation with concurrent removals during the
+    /// opening of the media, exactly as in the HTTP adapter.
     pub(crate) fn lock_database(
         &self,
     ) -> Result<std::sync::MutexGuard<'_, learnvault_core::Database>, IpcError> {
@@ -317,14 +317,14 @@ impl DesktopState {
             .map_err(|_| IpcError::database_unavailable())
     }
 
-    /// Executa o seletor nativo e persiste a pasta escolhida como um curso.
+    /// Runs the native picker and persists the chosen folder as a course.
     ///
-    /// `pick` devolve o caminho bruto escolhido pelo usuário ou `None` quando o seletor é
-    /// cancelado. O cancelamento preserva a lista anterior e devolve o estado atual. Uma
-    /// escolha inválida ou uma falha de gravação também preserva o estado e devolve um
-    /// erro IPC sanitizado. Escolher uma pasta já registrada é idempotente: a lista
-    /// permanece com um único registro. Em nenhum caso o caminho é escrito dentro da
-    /// pasta de curso, e o cadeado do SQLite nunca é adquirido aqui.
+    /// `pick` returns the raw path chosen by the user or `None` when the picker is
+    /// cancelled. Cancelling preserves the previous list and returns the current state. An
+    /// invalid choice or a write failure also preserves the state and returns a
+    /// sanitized IPC error. Choosing a folder already registered is idempotent: the list
+    /// keeps a single record. In no case is the path written inside the
+    /// course folder, and the SQLite lock is never acquired here.
     pub fn import_course(
         &self,
         pick: impl FnOnce() -> Option<PathBuf>,
@@ -336,9 +336,9 @@ impl DesktopState {
         let root = CourseRoot::resolve(&picked).map_err(|_| IpcError::course_path_invalid())?;
         let entry = CourseEntry::from_root(root);
 
-        // O cadeado da lista cobre a gravação e a atualização em memória: duas importações
-        // concorrentes não podem terminar com a memória divergente do arquivo persistido.
-        // É o cadeado da configuração, nunca o do SQLite.
+        // The list lock covers the write and the in-memory update: two concurrent
+        // imports cannot end with memory diverging from the persisted file.
+        // It is the configuration lock, never SQLite's.
         let mut guard = self
             .courses
             .lock()
@@ -355,10 +355,10 @@ impl DesktopState {
         Ok(DesktopConfigDto { configured: true })
     }
 
-    /// Remove um curso do registro, sem tocar nos arquivos.
+    /// Removes a course from the registry, without touching the files.
     ///
-    /// Remover uma identidade desconhecida é idempotente e não altera a lista. A gravação
-    /// e a atualização em memória acontecem sob o cadeado da lista.
+    /// Removing an unknown identity is idempotent and does not change the list. The write
+    /// and the in-memory update happen under the list lock.
     pub fn remove_course(&self, course_id: &str) -> Result<DesktopConfigDto, IpcError> {
         let mut guard = self
             .courses
@@ -378,11 +378,11 @@ impl DesktopState {
         Ok(self.config_status())
     }
 
-    /// Lê o progresso de estudo do dono local em uma mídia conhecida.
+    /// Reads the local owner's study progress on a known media.
     ///
-    /// O dono é o identificador local fixo do desktop: o webview nunca o envia. A leitura
-    /// bloqueante do SQLite é serializada pelo cadeado do banco, como as demais operações
-    /// do estado, e não consulta nem altera o catálogo.
+    /// The owner is the desktop's fixed local identifier: the webview never sends it. The
+    /// blocking SQLite read is serialized by the database lock, like the state's other operations,
+    /// and it neither queries nor changes the catalog.
     pub fn study_progress(&self, media_id: &str) -> Result<StudyProgressDto, IpcError> {
         let database = self
             .database
@@ -391,10 +391,10 @@ impl DesktopState {
         study::progress(&database, media_id)
     }
 
-    /// Registra a posição de retomada do dono local, preservando a conclusão.
+    /// Records the local owner's resume position, preserving completion.
     ///
-    /// A regra de posição e conclusão independentes pertence ao núcleo; o estado apenas
-    /// delega com o dono fixo sob o cadeado do banco.
+    /// The rule of independent position and completion belongs to the core; the state only
+    /// delegates with the fixed owner under the database lock.
     pub fn record_position(
         &self,
         media_id: &str,
@@ -410,7 +410,7 @@ impl DesktopState {
         Ok(result)
     }
 
-    /// Marca ou desmarca a conclusão do dono local, preservando a posição de retomada.
+    /// Marks or unmarks the local owner's completion, preserving the resume position.
     pub fn set_completed(
         &self,
         media_id: &str,
@@ -426,10 +426,10 @@ impl DesktopState {
         Ok(result)
     }
 
-    /// Lista o progresso de estudo do dono local, do mais recente ao mais antigo.
+    /// Lists the local owner's study progress, from newest to oldest.
     ///
-    /// O limite é opcional: sem ele, o adaptador aplica o padrão do contrato e o teto do
-    /// núcleo continua valendo para qualquer valor recebido.
+    /// The limit is optional: without it, the adapter applies the contract's default and the
+    /// core's ceiling still holds for any value received.
     pub fn recent_study(&self, limit: Option<usize>) -> Result<RecentStudyDto, IpcError> {
         let database = self
             .database
@@ -438,7 +438,7 @@ impl DesktopState {
         study::recent(&database, limit)
     }
 
-    /// Resume a ofensiva e a semana corrente do dono local.
+    /// Summarizes the local owner's streak and current week.
     pub fn study_summary(&self) -> Result<StudySummaryDto, IpcError> {
         let database = self
             .database
@@ -447,7 +447,7 @@ impl DesktopState {
         study::summary(&database)
     }
 
-    /// Lê as preferências de reprodução persistidas do dono local.
+    /// Reads the local owner's persisted playback preferences.
     pub fn playback_preference(&self) -> Result<PlaybackPreferencesDto, IpcError> {
         let database = self
             .database
@@ -456,7 +456,7 @@ impl DesktopState {
         study::playback_preference(&database)
     }
 
-    /// Grava as preferências de reprodução e as enfileira para o servidor.
+    /// Writes the playback preferences and queues them for the server.
     pub fn save_playback_preference(
         &self,
         video_speed: i64,
@@ -478,7 +478,7 @@ impl DesktopState {
         Ok(result)
     }
 
-    /// Identidade local do dispositivo e cursor já aplicado.
+    /// Local identity of the device and the cursor already applied.
     pub fn sync_state(&self) -> Result<SyncStateDto, IpcError> {
         let (device_id, pull_cursor, pending) = {
             let database = self
@@ -511,8 +511,8 @@ impl DesktopState {
         })
     }
 
-    /// Configura a URL do servidor. Trocar de servidor apaga a sessão guardada, para que
-    /// um cookie de outra origem nunca seja enviado ao novo endereço.
+    /// Sets the server URL. Switching servers erases the stored session, so that
+    /// a cookie from another origin is never sent to the new address.
     pub fn sync_configure(&self, server_url: &str) -> Result<SyncStateDto, IpcError> {
         let normalized = sync::validate_server_url(server_url)?;
         {
@@ -526,7 +526,7 @@ impl DesktopState {
         self.sync_state()
     }
 
-    /// Entra no servidor configurado e guarda a sessão em disco.
+    /// Signs in to the configured server and stores the session on disk.
     pub fn sync_login(&self, username: &str, password: &str) -> Result<SyncStateDto, IpcError> {
         let settings = self
             .sync
@@ -539,7 +539,7 @@ impl DesktopState {
         let session = sync::login(&settings.server_url, username, password)?;
         {
             let mut guard = self.sync.lock().map_err(|_| IpcError::sync_unavailable())?;
-            // A URL pode ter mudado durante a requisição; não grave um cookie de outra origem.
+            // The URL may have changed during the request; do not store a cookie from another origin.
             if guard.server_url != settings.server_url {
                 return Err(IpcError::invalid_sync_server());
             }
@@ -549,7 +549,7 @@ impl DesktopState {
         self.sync_state()
     }
 
-    /// Encerra a sessão no servidor (melhor esforço) e apaga a cópia local.
+    /// Ends the session on the server (best effort) and erases the local copy.
     pub fn sync_logout(&self) -> Result<SyncStateDto, IpcError> {
         let settings = self
             .sync
@@ -571,8 +571,8 @@ impl DesktopState {
         self.sync_state()
     }
 
-    /// Executa uma sincronização completa. Nunca sobrepõe outra execução: nesse caso
-    /// devolve apenas o resumo com `sync_in_progress`.
+    /// Runs a full sync. It never overlaps another run: in that case it
+    /// returns only the summary with `sync_in_progress`.
     pub fn sync_now(&self) -> Result<SyncResultDto, IpcError> {
         let Some(_flight) = self.sync_flight.try_begin() else {
             return self.summary_with_error("sync_in_progress");
@@ -630,10 +630,10 @@ impl DesktopState {
         }
     }
 
-    /// Dispara uma sincronização em segundo plano quando há servidor e sessão.
+    /// Fires a sync in the background when there is a server and a session.
     ///
-    /// Chamado depois de cada escrita enfileirada e na inicialização. Se outra execução
-    /// já estiver em andamento, a chamada não faz nada.
+    /// Called after each queued write and at startup. If another run
+    /// is already in progress, the call does nothing.
     pub(crate) fn request_sync(&self) {
         let ready = self
             .sync
@@ -649,7 +649,7 @@ impl DesktopState {
         });
     }
 
-    /// Operações ainda pendentes no outbox local.
+    /// Operations still pending in the local outbox.
     pub fn sync_pending(&self, limit: Option<usize>) -> Result<Vec<SyncOperationInput>, IpcError> {
         let database = self
             .database
@@ -658,7 +658,7 @@ impl DesktopState {
         sync::pending(&database, limit.unwrap_or(learnvault_core::MAX_SYNC_BATCH))
     }
 
-    /// Remove do outbox as operações aceitas pelo servidor.
+    /// Removes from the outbox the operations accepted by the server.
     pub fn sync_acknowledge(&self, op_ids: &[String]) -> Result<usize, IpcError> {
         let database = self
             .database
@@ -667,7 +667,7 @@ impl DesktopState {
         sync::acknowledge(&database, op_ids)
     }
 
-    /// Aplica as operações recebidas e grava o cursor na mesma transação.
+    /// Applies the operations received and stores the cursor in the same transaction.
     pub fn sync_apply(&self, operations: &[SyncOperation], cursor: i64) -> Result<usize, IpcError> {
         let database = self
             .database
@@ -676,7 +676,7 @@ impl DesktopState {
         sync::apply(&database, operations, cursor)
     }
 
-    /// Lista anotações do dono local, filtrando por mídia ou trazendo todas com caminhos relativos.
+    /// Lists the local owner's notes, filtering by media or bringing all of them with relative paths.
     pub fn list_notes(&self, media_id: Option<&str>) -> Result<Vec<StudyNoteDto>, IpcError> {
         let database = self
             .database
@@ -685,10 +685,10 @@ impl DesktopState {
         study::list_notes(&database, media_id)
     }
 
-    /// Busca notas e catálogo no banco local do dono fixo.
+    /// Searches notes and catalog in the fixed owner's local database.
     ///
-    /// Os títulos dos cursos vêm do registro, então o índice é sincronizado a cada busca;
-    /// a consulta e o limite são validados pelo núcleo.
+    /// Course titles come from the registry, so the index is synced on every search;
+    /// the query and the limit are validated by the core.
     pub fn search(&self, query: &str, limit: Option<usize>) -> Result<SearchResultsDto, IpcError> {
         let database = self
             .database
@@ -702,7 +702,7 @@ impl DesktopState {
         search::search(&database, &courses, query, limit)
     }
 
-    /// Cria uma nova anotação de estudo associada a uma mídia.
+    /// Creates a new study note associated with a media.
     pub fn create_note(
         &self,
         media_id: &str,
@@ -719,7 +719,7 @@ impl DesktopState {
         Ok(result)
     }
 
-    /// Atualiza o conteúdo de uma anotação existente.
+    /// Updates the content of an existing note.
     pub fn update_note(&self, note_id: &str, content: &str) -> Result<StudyNoteDto, IpcError> {
         let database = self
             .database
@@ -731,7 +731,7 @@ impl DesktopState {
         Ok(result)
     }
 
-    /// Remove uma anotação de estudo do usuário local.
+    /// Removes a study note of the local user.
     pub fn delete_note(&self, note_id: &str) -> Result<(), IpcError> {
         let database = self
             .database
@@ -826,7 +826,7 @@ impl DesktopState {
         study::delete_pdf_annotation(&database, annotation_id)
     }
 
-    /// Lista os cartões de memorização do dono local para uma mídia específica.
+    /// Lists the local owner's memorization cards for a specific media.
     pub fn list_flashcards(&self, media_id: &str) -> Result<Vec<FlashcardDto>, IpcError> {
         let database = self
             .database
@@ -866,7 +866,7 @@ impl DesktopState {
         study::count_due_flashcards(&database)
     }
 
-    /// Cria um novo cartão de memorização associado a uma mídia.
+    /// Creates a new memorization card associated with a media.
     pub fn create_flashcard(
         &self,
         media_id: &str,
@@ -884,7 +884,7 @@ impl DesktopState {
         Ok(result)
     }
 
-    /// Atualiza a frente e o verso de um cartão de memorização existente.
+    /// Updates the front and back of an existing memorization card.
     pub fn update_flashcard(
         &self,
         card_id: &str,
@@ -901,7 +901,7 @@ impl DesktopState {
         Ok(result)
     }
 
-    /// Remove um cartão de memorização pertencente ao usuário local.
+    /// Removes a memorization card that belongs to the local user.
     pub fn delete_flashcard(&self, card_id: &str) -> Result<(), IpcError> {
         let database = self
             .database
@@ -913,7 +913,7 @@ impl DesktopState {
         Ok(())
     }
 
-    /// Registra uma revisão em um cartão de memorização pertencente ao usuário local.
+    /// Records a review on a memorization card that belongs to the local user.
     pub fn review_flashcard(&self, card_id: &str, rating: &str) -> Result<FlashcardDto, IpcError> {
         let database = self
             .database
@@ -925,7 +925,7 @@ impl DesktopState {
         Ok(result)
     }
 
-    /// Lista os cursos e aulas favoritados pelo dono local.
+    /// Lists the courses and lessons favourited by the local owner.
     pub fn list_favorites(&self) -> Result<StudyFavoritesDto, IpcError> {
         let database = self
             .database
@@ -934,7 +934,7 @@ impl DesktopState {
         study::list_favorites(&database)
     }
 
-    /// Marca ou desmarca um curso como favorito para o dono local.
+    /// Marks or unmarks a course as a favourite for the local owner.
     pub fn set_course_favorite(&self, course_id: &str, favorite: bool) -> Result<bool, IpcError> {
         let database = self
             .database
@@ -943,7 +943,7 @@ impl DesktopState {
         study::set_course_favorite(&database, course_id, favorite)
     }
 
-    /// Marca ou desmarca uma aula (mídia) como favorita para o dono local.
+    /// Marks or unmarks a lesson (media) as a favourite for the local owner.
     pub fn set_lesson_favorite(&self, media_id: &str, favorite: bool) -> Result<bool, IpcError> {
         let database = self
             .database
@@ -952,7 +952,7 @@ impl DesktopState {
         study::set_lesson_favorite(&database, media_id, favorite)
     }
 
-    /// Persiste uma sessão Pomodoro do dono local.
+    /// Persists a Pomodoro session of the local owner.
     pub fn record_focus_session(
         &self,
         input: learnvault_core::FocusSessionInput,
@@ -964,7 +964,7 @@ impl DesktopState {
         study::record_focus_session(&database, input)
     }
 
-    /// Lista as sessões de foco persistidas do dono local, da mais recente para a mais antiga.
+    /// Lists the local owner's persisted focus sessions, from newest to oldest.
     pub fn list_focus_sessions(
         &self,
         limit: Option<usize>,
@@ -976,7 +976,7 @@ impl DesktopState {
         study::list_focus_sessions(&database, limit)
     }
 
-    /// Lê o resumo de foco persistido do dono local.
+    /// Reads the local owner's persisted focus summary.
     pub fn focus_summary(&self) -> Result<FocusSummaryDto, IpcError> {
         let database = self
             .database
@@ -985,7 +985,7 @@ impl DesktopState {
         study::focus_summary(&database)
     }
 
-    /// Lê o resumo de recompensas persistido do dono local.
+    /// Reads the local owner's persisted rewards summary.
     pub fn reward_summary(&self) -> Result<RewardSummaryDto, IpcError> {
         let database = self
             .database
@@ -994,7 +994,7 @@ impl DesktopState {
         study::reward_summary(&database)
     }
 
-    /// Resgata uma missão diária do dono local.
+    /// Redeems a daily mission of the local owner.
     pub fn claim_daily_mission(&self, mission_id: &str) -> Result<bool, IpcError> {
         let database = self
             .database
@@ -1003,7 +1003,7 @@ impl DesktopState {
         study::claim_daily_mission(&database, mission_id)
     }
 
-    /// Lê a meta semanal configurada do dono local.
+    /// Reads the local owner's configured weekly goal.
     pub fn weekly_goal(&self) -> Result<i64, IpcError> {
         let database = self
             .database
@@ -1012,7 +1012,7 @@ impl DesktopState {
         study::weekly_goal(&database)
     }
 
-    /// Salva a meta semanal configurada do dono local.
+    /// Saves the local owner's configured weekly goal.
     pub fn set_weekly_goal(&self, goal: i64) -> Result<i64, IpcError> {
         let database = self
             .database
@@ -1021,7 +1021,7 @@ impl DesktopState {
         study::set_weekly_goal(&database, goal)
     }
 
-    /// Consulta o impacto da remoção de uma mídia do catálogo local.
+    /// Queries the impact of removing a media from the local catalog.
     pub fn media_removal_impact(&self, media_id: &str) -> Result<MediaRemovalImpactDto, IpcError> {
         let database = self
             .database
@@ -1038,7 +1038,7 @@ impl DesktopState {
         Ok(impact.into())
     }
 
-    /// Remove explicitamente uma mídia do catálogo local (tombstone persistente).
+    /// Explicitly removes a media from the local catalog (persistent tombstone).
     pub fn remove_media(
         &self,
         media_id: &str,
@@ -1063,7 +1063,7 @@ impl DesktopState {
         Ok(outcome.into())
     }
 
-    /// Abre a mídia especificada no reprodutor padrão do sistema operacional.
+    /// Opens the specified media in the operating system's default player.
     pub fn open_in_system_player(&self, media_id: &str) -> Result<bool, IpcError> {
         let database = self
             .database
@@ -1073,12 +1073,12 @@ impl DesktopState {
         crate::command::open_in_system_player(&database, &courses, media_id)
     }
 
-    /// Reserva o estado de rescan, devolvendo um guarda que o libera no `Drop`.
+    /// Reserves the rescan state, returning a guard that releases it on `Drop`.
     ///
-    /// A troca é atômica: a primeira chamada vence e as concorrentes recebem
-    /// [`IpcError::rescan_in_progress`], sem esperar nem entrar em paralelo. Enquanto o
-    /// guarda existe, nenhuma outra varredura pode começar — o estado não é cancelado nem
-    /// corrompido, apenas recusado. É o estado ocupado do rescan, nunca o cadeado do SQLite.
+    /// The swap is atomic: the first call wins and the concurrent ones receive
+    /// [`IpcError::rescan_in_progress`], without waiting or running in parallel. While the
+    /// guard exists, no other scan can start — the state is neither cancelled nor
+    /// corrupted, only refused. It is the rescan's busy state, never the SQLite lock.
     pub fn begin_rescan(&self) -> Result<RescanGuard, IpcError> {
         self.rescanning
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
@@ -1088,19 +1088,19 @@ impl DesktopState {
         })
     }
 
-    /// Lê as pastas de curso registradas e aplica a varredura a cada catálogo local.
+    /// Reads the registered course folders and applies the scan to each local catalog.
     ///
-    /// Só é executado por ação explícita: nem a inicialização nem a importação o chamam.
-    /// Sem cursos registrados devolve [`IpcError::no_courses_registered`]; um curso cuja
-    /// pasta sumiu, virou link/junction ou ficou inacessível conta como falha na agregação
-    /// e não impede os demais. Cada raiz é revalidada imediatamente antes da varredura e
-    /// nenhum cadeado da configuração é mantido durante a leitura; o banco permanece fora
-    /// das pastas e elas permanecem somente leitura. Chamadas concorrentes devolvem
-    /// [`IpcError::rescan_in_progress`] sem tocar o catálogo.
+    /// It only runs by explicit action: neither startup nor import calls it.
+    /// With no registered courses it returns [`IpcError::no_courses_registered`]; a course whose
+    /// folder vanished, became a link/junction or became inaccessible counts as a failure in the aggregation
+    /// and does not stop the others. Each root is revalidated immediately before the scan and
+    /// no configuration lock is held during the read; the database stays outside
+    /// the folders and they stay read-only. Concurrent calls return
+    /// [`IpcError::rescan_in_progress`] without touching the catalog.
     ///
-    /// Limitação conhecida desta fatia: o cadeado do banco SQLite é mantido durante toda a
-    /// varredura, então uma leitura de catálogo concorrente aguarda a indexação terminar.
-    /// O estado ocupado recusa um segundo rescan, mas não paraleliza a leitura do catálogo.
+    /// Known limitation of this slice: the SQLite database lock is held during the whole
+    /// scan, so a concurrent catalog read waits for the indexing to finish.
+    /// The busy state refuses a second rescan, but does not parallelize the catalog read.
     pub fn rescan(&self) -> Result<RescanSummaryDto, IpcError> {
         let _guard = self.begin_rescan()?;
 
@@ -1125,9 +1125,9 @@ impl DesktopState {
             ambiguous_count: 0,
         };
         for course in &courses {
-            // Revalida a raiz imediatamente antes de varrer: se o diretório foi removido,
-            // substituído por um link/junction ou deixou de ser legível desde a importação,
-            // a varredura é recusada sem seguir o alvo.
+            // Revalidates the root immediately before scanning: if the directory was removed,
+            // replaced by a link/junction or stopped being readable since the import,
+            // the scan is refused without following the target.
             let Ok(root) = CourseRoot::resolve(course.root.as_path()) else {
                 summary.failed += 1;
                 summary.complete = false;
@@ -1157,10 +1157,10 @@ impl DesktopState {
     }
 }
 
-/// Guarda do estado ocupado do rescan.
+/// Guard of the rescan's busy state.
 ///
-/// Libera o estado ao ser descartado, inclusive em caso de erro ou pânico. Não expõe o
-/// caminho nem o banco: é apenas o ciclo de vida da exclusão mútua do rescan.
+/// It releases the state when dropped, including on error or panic. It does not expose the
+/// path nor the database: it is only the lifecycle of the rescan's mutual exclusion.
 pub struct RescanGuard {
     rescanning: Arc<AtomicBool>,
 }

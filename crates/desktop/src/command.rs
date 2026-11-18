@@ -1,14 +1,14 @@
-//! Comandos IPC do desktop e as funções livres que eles embrulham.
+//! Desktop IPC commands and the free functions they wrap.
 //!
-//! Cada wrapper `#[tauri::command]` é fino: delega para uma função livre que não conhece
-//! o Tauri. Os testes exercitam as funções livres; o runtime do webview fica fora delas.
+//! Each `#[tauri::command]` wrapper is thin: it delegates to a free function that knows nothing of
+//! Tauri. The tests exercise the free functions; the webview runtime stays outside them.
 //!
-//! O comando de importação não aceita argumentos: o webview apenas dispara o seletor
-//! nativo, que roda no Rust, e recebe de volta somente o booleano de configuração. A
-//! remoção aceita apenas a identidade opaca do curso — nunca um caminho.
+//! The import command takes no arguments: the webview only triggers the native
+//! picker, which runs in Rust, and gets back only the configuration boolean. The
+//! removal takes only the course's opaque identity — never a path.
 //!
-//! Os comandos de estudo aceitam apenas dados do catálogo (`media_id`, posição, conclusão e
-//! limite). O dono do progresso é fixo no Rust: nenhum comando aceita `owner_id`.
+//! The study commands take only catalog data (`media_id`, position, completion and
+//! limit). The owner of the progress is fixed in Rust: no command accepts an `owner_id`.
 
 use std::path::{Path, PathBuf};
 
@@ -41,16 +41,16 @@ pub struct FocusSessionRequest {
     ended_at: i64,
 }
 
-/// Constrói o DTO do catálogo agregado a partir dos dados persistidos no banco local.
+/// Builds the aggregated catalog DTO from the data persisted in the local database.
 ///
-/// Função livre e testável: não conhece o Tauri e qualquer falha do núcleo é traduzida
-/// para um erro IPC sanitizado, sem ecoar o erro de `Display` do domínio. Cada curso
-/// registrado vira um nó de topo com identidade opaca, título derivado da pasta e a versão
-/// da capa personalizada (derivada do diretório de capas, nunca de um caminho do curso),
-/// exposto como `nodes` (árvore canônica) e como `categories` (lista de cursos de topo).
+/// A free, testable function: it knows nothing of Tauri and any failure of the core is translated
+/// into a sanitized IPC error, without echoing the domain's `Display` error. Each registered
+/// course becomes a top-level node with an opaque identity, a title derived from the folder and the
+/// custom cover's version (derived from the covers directory, never from a path of the course),
+/// exposed as `nodes` (canonical tree) and as `categories` (list of top-level courses).
 ///
-/// A preferência de ordenação é aplicada por sobreposição sobre a ordem natural da
-/// subárvore de cada curso; um curso sem preferência permanece na ordem automática.
+/// The ordering preference is applied as an overlay over the natural order of each
+/// course's subtree; a course with no preference stays in the automatic order.
 pub fn catalog(
     database: &Database,
     courses: &[CourseEntry],
@@ -59,7 +59,7 @@ pub fn catalog(
     catalog_with_orders(database, courses, &CourseOrders::new(), covers_dir)
 }
 
-/// Como [`catalog`], aplicando as preferências de ordenação manual por curso.
+/// Like [`catalog`], applying the per-course manual ordering preferences.
 pub fn catalog_with_orders(
     database: &Database,
     courses: &[CourseEntry],
@@ -109,19 +109,19 @@ pub fn catalog_with_orders(
     Ok(CatalogDto {
         complete,
         loose_files: Vec::new(),
-        // O mesmo nó de topo de curso alimenta os dois campos: `nodes` é a árvore canônica
-        // e `categories` é a lista de cursos de topo do contrato do IPC.
+        // The same top-level course node feeds both fields: `nodes` is the canonical tree
+        // and `categories` is the list of top-level courses of the IPC contract.
         nodes: nodes.clone(),
         categories: nodes,
     })
 }
 
-/// Comando IPC: devolve o catálogo do desktop.
+/// IPC command: returns the desktop's catalog.
 ///
-/// O comando é `async` de propósito: um comando síncrono do Tauri roda na main thread do
-/// webview, e a leitura bloqueante do SQLite travaria a UI. O trabalho é deslocado para
-/// `spawn_blocking` do runtime do Tauri — sem adicionar `tokio` como dependência direta —
-/// mantendo o contrato, os erros, o estado e as funções livres testáveis.
+/// The command is `async` on purpose: a synchronous Tauri command runs on the webview's main
+/// thread, and the blocking SQLite read would freeze the UI. The work is moved to
+/// the Tauri runtime's `spawn_blocking` — without adding `tokio` as a direct dependency —
+/// keeping the contract, the errors, the state and the free functions testable.
 #[tauri::command]
 pub async fn desktop_catalog(state: State<'_, DesktopState>) -> Result<CatalogDto, IpcError> {
     let state = state.inner().clone();
@@ -130,11 +130,11 @@ pub async fn desktop_catalog(state: State<'_, DesktopState>) -> Result<CatalogDt
         .map_err(|_| IpcError::database_unavailable())?
 }
 
-/// Comando IPC: abre o seletor nativo e registra a pasta escolhida como um curso.
+/// IPC command: opens the native picker and registers the chosen folder as a course.
 ///
-/// Sem argumentos: o webview não envia caminho algum. O seletor e a gravação rodam em
-/// `spawn_blocking` para não prender a main thread, e o resultado é apenas o booleano de
-/// configuração. Cancelar preserva o estado anterior; uma falha vira erro sanitizado.
+/// No arguments: the webview sends no path at all. The picker and the write run in
+/// `spawn_blocking` so as not to hold the main thread, and the result is only the configuration
+/// boolean. Cancelling preserves the previous state; a failure becomes a sanitized error.
 #[tauri::command]
 pub async fn desktop_import_course(
     app: tauri::AppHandle,
@@ -146,12 +146,12 @@ pub async fn desktop_import_course(
         .map_err(|_| IpcError::courses_config_unavailable())?
 }
 
-/// Comando IPC: abre o seletor nativo de imagens e registra a capa de um curso.
+/// IPC command: opens the native image picker and registers a course's cover.
 ///
-/// O webview envia apenas a identidade opaca do curso — nunca um caminho. O seletor, a
-/// leitura e a gravação atômica rodam em `spawn_blocking` para não prender a main thread. O
-/// tipo (magic bytes) e o tamanho são validados no Rust: uma imagem fora do contrato vira
-/// `invalid_cover` e nada é gravado. Cancelar preserva a capa anterior.
+/// The webview sends only the course's opaque identity — never a path. The picker, the
+/// read and the atomic write run in `spawn_blocking` so as not to hold the main thread. The
+/// type (magic bytes) and the size are validated in Rust: an image outside the contract becomes
+/// `invalid_cover` and nothing is written. Cancelling preserves the previous cover.
 #[tauri::command]
 pub async fn desktop_import_course_cover(
     app: tauri::AppHandle,
@@ -166,10 +166,10 @@ pub async fn desktop_import_course_cover(
     .map_err(|_| IpcError::cover_unavailable())?
 }
 
-/// Comando IPC: remove a capa personalizada de um curso pela identidade opaca.
+/// IPC command: removes a course's custom cover by its opaque identity.
 ///
-/// A remoção não toca na pasta do curso e é idempotente: um curso sem capa devolve
-/// `removed: false`. Nenhum caminho cruza o IPC em nenhuma direção.
+/// The removal does not touch the course folder and is idempotent: a course with no cover returns
+/// `removed: false`. No path crosses the IPC in either direction.
 #[tauri::command]
 pub async fn desktop_remove_course_cover(
     state: State<'_, DesktopState>,
@@ -181,10 +181,10 @@ pub async fn desktop_remove_course_cover(
         .map_err(|_| IpcError::cover_unavailable())?
 }
 
-/// Comando IPC: remove um curso do registro pela identidade opaca.
+/// IPC command: removes a course from the registry by its opaque identity.
 ///
-/// A remoção não toca nos arquivos e é idempotente: uma identidade desconhecida apenas
-/// devolve o estado atual. O webview nunca envia nem recebe um caminho.
+/// The removal does not touch the files and is idempotent: an unknown identity only
+/// returns the current state. The webview never sends nor receives a path.
 #[tauri::command]
 pub async fn desktop_remove_course(
     state: State<'_, DesktopState>,
@@ -196,12 +196,12 @@ pub async fn desktop_remove_course(
         .map_err(|_| IpcError::courses_config_unavailable())?
 }
 
-/// Comando IPC: define a ordem manual dos irmãos de um nó do curso.
+/// IPC command: sets the manual order of the siblings of a course node.
 ///
-/// O webview envia apenas a identidade opaca do curso, o caminho relativo do pai e a
-/// ordem desejada dos filhos (caminhos relativos). Nenhum caminho do sistema de arquivos
-/// cruza o IPC. A validação (permutação exata dos irmãos) e a gravação atômica rodam no
-/// Rust, em `spawn_blocking`; uma lista inválida vira `invalid_order` sem gravar nada.
+/// The webview sends only the course's opaque identity, the parent's relative path and the
+/// desired order of the children (relative paths). No file-system path
+/// crosses the IPC. The validation (exact permutation of the siblings) and the atomic write run in
+/// Rust, in `spawn_blocking`; an invalid list becomes `invalid_order` without writing anything.
 #[tauri::command]
 pub async fn desktop_set_course_order(
     state: State<'_, DesktopState>,
@@ -217,10 +217,10 @@ pub async fn desktop_set_course_order(
     .map_err(|_| IpcError::order_unavailable())?
 }
 
-/// Comando IPC: restaura a ordem automática de um pai específico ou de todo o curso.
+/// IPC command: restores the automatic order of a specific parent or of the whole course.
 ///
-/// `parent` ausente restaura o curso inteiro. A resposta diz se havia uma preferência a
-/// remover, para que a interface seja idempotente sem tocar nos arquivos do curso.
+/// An absent `parent` restores the whole course. The response says whether there was a preference to
+/// remove, so the interface is idempotent without touching the course files.
 #[tauri::command]
 pub async fn desktop_reset_course_order(
     state: State<'_, DesktopState>,
@@ -235,14 +235,14 @@ pub async fn desktop_reset_course_order(
     .map_err(|_| IpcError::order_unavailable())?
 }
 
-/// Comando IPC: executa o rescan explícito da biblioteca configurada.
+/// IPC command: runs the explicit rescan of the configured library.
 ///
-/// Sem argumentos: o webview não envia caminho nem parâmetro algum, apenas dispara a
-/// indexação quando o usuário pede. A varredura lê o sistema de arquivos e o SQLite de
-/// forma bloqueante, então roda em `spawn_blocking` — como o catálogo —, sem `tokio`
-/// direto. O resultado é o resumo sanitizado do núcleo; sem raiz configurada ou com a
-/// raiz inacessível a falha vira um erro estável. Chamadas concorrentes devolvem
-/// `rescan_in_progress`, sem cancelar nem corromper o estado.
+/// No arguments: the webview sends no path nor any parameter, it only triggers the
+/// indexing when the user asks. The scan reads the file system and SQLite in a
+/// blocking way, so it runs in `spawn_blocking` — like the catalog —, without direct
+/// `tokio`. The result is the core's sanitized summary; with no configured root or with the
+/// root inaccessible the failure becomes a stable error. Concurrent calls return
+/// `rescan_in_progress`, without cancelling or corrupting the state.
 #[tauri::command]
 pub async fn desktop_rescan(state: State<'_, DesktopState>) -> Result<RescanSummaryDto, IpcError> {
     let state = state.inner().clone();
@@ -251,10 +251,10 @@ pub async fn desktop_rescan(state: State<'_, DesktopState>) -> Result<RescanSumm
         .map_err(|_| IpcError::rescan_unavailable())?
 }
 
-/// Comando IPC: busca notas e catálogo no banco local.
+/// IPC command: searches notes and catalog in the local database.
 ///
-/// Os títulos dos cursos vêm do registro, então o índice é sincronizado antes da consulta;
-/// a validação do texto e do limite fica no núcleo.
+/// Course titles come from the registry, so the index is synced before the query;
+/// the validation of the text and the limit is in the core.
 #[tauri::command]
 pub async fn desktop_search(
     state: State<'_, DesktopState>,
@@ -267,13 +267,13 @@ pub async fn desktop_search(
         .map_err(|_| IpcError::study_unavailable())?
 }
 
-/// Comando IPC: lê o progresso de estudo do dono local em uma mídia conhecida.
+/// IPC command: reads the local owner's study progress on a known media.
 ///
-/// O único argumento é o `media_id` vindo do catálogo: o dono é o identificador local fixo
-/// resolvido no Rust ([`crate::study::LOCAL_OWNER_ID`]) e nunca cruza o IPC. Como o
-/// catálogo, a leitura bloqueante do SQLite roda em `spawn_blocking` para não prender a
-/// main thread. Uma mídia conhecida sem progresso responde com `recorded: false`; uma
-/// mídia desconhecida vira o erro estável `media_not_found`.
+/// The only argument is the `media_id` coming from the catalog: the owner is the fixed local identifier
+/// resolved in Rust ([`crate::study::LOCAL_OWNER_ID`]) and never crosses the IPC. Like the
+/// catalog, the blocking SQLite read runs in `spawn_blocking` so as not to hold the
+/// main thread. A known media with no progress answers `recorded: false`; an
+/// unknown media becomes the stable error `media_not_found`.
 #[tauri::command]
 pub async fn desktop_study_progress(
     state: State<'_, DesktopState>,
@@ -285,11 +285,11 @@ pub async fn desktop_study_progress(
         .map_err(|_| IpcError::study_unavailable())?
 }
 
-/// Comando IPC: registra a posição de retomada do dono local, preservando a conclusão.
+/// IPC command: records the local owner's resume position, preserving completion.
 ///
-/// O webview envia apenas `media_id` e `position_seconds` — nunca o dono. A regra de
-/// independência entre posição e conclusão, a validação da posição negativa e a
-/// idempotência de um valor repetido pertencem ao núcleo; o comando apenas delega em
+/// The webview sends only `media_id` and `position_seconds` — never the owner. The rule of
+/// independence between position and completion, the validation of a negative position and the
+/// idempotence of a repeated value belong to the core; the command only delegates in
 /// `spawn_blocking`.
 #[tauri::command]
 pub async fn desktop_record_position(
@@ -303,10 +303,10 @@ pub async fn desktop_record_position(
         .map_err(|_| IpcError::study_unavailable())?
 }
 
-/// Comando IPC: marca ou desmarca a conclusão do dono local, preservando a posição.
+/// IPC command: marks or unmarks the local owner's completion, preserving the position.
 ///
-/// O webview envia apenas `media_id` e `completed`; o dono permanece no Rust. Uma mídia
-/// desconhecida vira o erro estável `media_not_found` e nada é gravado.
+/// The webview sends only `media_id` and `completed`; the owner stays in Rust. An unknown
+/// media becomes the stable error `media_not_found` and nothing is written.
 #[tauri::command]
 pub async fn desktop_set_completed(
     state: State<'_, DesktopState>,
@@ -319,10 +319,10 @@ pub async fn desktop_set_completed(
         .map_err(|_| IpcError::study_unavailable())?
 }
 
-/// Comando IPC: lista o progresso de estudo do dono local, do mais recente ao mais antigo.
+/// IPC command: lists the local owner's study progress, from newest to oldest.
 ///
-/// O limite é opcional; sem ele o adaptador aplica o padrão do contrato e o teto do núcleo
-/// continua valendo. O histórico é sempre do dono local: o webview não envia `owner_id`.
+/// The limit is optional; without it the adapter applies the contract's default and the core's ceiling
+/// still holds. The history always belongs to the local owner: the webview does not send `owner_id`.
 #[tauri::command]
 pub async fn desktop_recent_study(
     state: State<'_, DesktopState>,
@@ -334,10 +334,10 @@ pub async fn desktop_recent_study(
         .map_err(|_| IpcError::study_unavailable())?
 }
 
-/// Comando IPC: resumo de ofensiva e dias ativos do dono local.
+/// IPC command: summary of the local owner's streak and active days.
 ///
-/// O webview não envia `owner_id`; o resumo cobre todo o histórico local e a semana
-/// corrente, sempre no fuso do desktop.
+/// The webview does not send `owner_id`; the summary covers the whole local history and the current
+/// week, always in the desktop's time zone.
 #[tauri::command]
 pub async fn desktop_study_summary(
     state: State<'_, DesktopState>,
@@ -348,10 +348,10 @@ pub async fn desktop_study_summary(
         .map_err(|_| IpcError::study_unavailable())?
 }
 
-/// Comando IPC: lista as anotações do dono local.
+/// IPC command: lists the local owner's notes.
 ///
-/// Se `mediaId` for informado, filtra por essa mídia; caso contrário, devolve todas
-/// as anotações registradas para busca global.
+/// If `mediaId` is given, it filters by that media; otherwise, it returns all
+/// the notes recorded for global search.
 #[tauri::command]
 pub async fn desktop_list_notes(
     state: State<'_, DesktopState>,
@@ -363,7 +363,7 @@ pub async fn desktop_list_notes(
         .map_err(|_| IpcError::study_unavailable())?
 }
 
-/// Comando IPC: cria uma nova anotação de estudo para o dono local.
+/// IPC command: creates a new study note for the local owner.
 #[tauri::command]
 pub async fn desktop_create_note(
     state: State<'_, DesktopState>,
@@ -379,7 +379,7 @@ pub async fn desktop_create_note(
     .map_err(|_| IpcError::study_unavailable())?
 }
 
-/// Comando IPC: atualiza o texto de uma anotação pertencente ao dono local.
+/// IPC command: updates the text of a note that belongs to the local owner.
 #[tauri::command]
 pub async fn desktop_update_note(
     state: State<'_, DesktopState>,
@@ -392,7 +392,7 @@ pub async fn desktop_update_note(
         .map_err(|_| IpcError::study_unavailable())?
 }
 
-/// Comando IPC: exclui uma anotação de estudo pertencente ao dono local.
+/// IPC command: deletes a study note that belongs to the local owner.
 #[tauri::command]
 pub async fn desktop_delete_note(
     state: State<'_, DesktopState>,
@@ -497,7 +497,7 @@ pub async fn desktop_delete_pdf_annotation(
         .map_err(|_| IpcError::study_unavailable())?
 }
 
-/// Comando IPC: lista os cartões de memorização do dono local para uma mídia específica.
+/// IPC command: lists the local owner's memorization cards for a specific media.
 #[tauri::command]
 pub async fn desktop_list_flashcards(
     state: State<'_, DesktopState>,
@@ -542,7 +542,7 @@ pub async fn desktop_due_flashcard_count(state: State<'_, DesktopState>) -> Resu
         .map_err(|_| IpcError::study_unavailable())?
 }
 
-/// Comando IPC: cria um novo cartão de memorização para o dono local.
+/// IPC command: creates a new memorization card for the local owner.
 #[tauri::command]
 pub async fn desktop_create_flashcard(
     state: State<'_, DesktopState>,
@@ -559,7 +559,7 @@ pub async fn desktop_create_flashcard(
     .map_err(|_| IpcError::study_unavailable())?
 }
 
-/// Comando IPC: atualiza o texto da frente e do verso de um cartão pertencente ao dono local.
+/// IPC command: updates the front and back text of a card that belongs to the local owner.
 #[tauri::command]
 pub async fn desktop_update_flashcard(
     state: State<'_, DesktopState>,
@@ -573,7 +573,7 @@ pub async fn desktop_update_flashcard(
         .map_err(|_| IpcError::study_unavailable())?
 }
 
-/// Comando IPC: exclui um cartão de memorização pertencente ao dono local.
+/// IPC command: deletes a memorization card that belongs to the local owner.
 #[tauri::command]
 pub async fn desktop_delete_flashcard(
     state: State<'_, DesktopState>,
@@ -585,7 +585,7 @@ pub async fn desktop_delete_flashcard(
         .map_err(|_| IpcError::study_unavailable())?
 }
 
-/// Comando IPC: registra uma revisão ("again" ou "good") em um cartão pertencente ao dono local.
+/// IPC command: records a review ("again" or "good") on a card that belongs to the local owner.
 #[tauri::command]
 pub async fn desktop_review_flashcard(
     state: State<'_, DesktopState>,
@@ -598,7 +598,7 @@ pub async fn desktop_review_flashcard(
         .map_err(|_| IpcError::study_unavailable())?
 }
 
-/// Comando IPC: lista os cursos e aulas favoritados pelo dono local.
+/// IPC command: lists the courses and lessons favourited by the local owner.
 #[tauri::command]
 pub async fn desktop_list_favorites(
     state: State<'_, DesktopState>,
@@ -609,7 +609,7 @@ pub async fn desktop_list_favorites(
         .map_err(|_| IpcError::study_unavailable())?
 }
 
-/// Comando IPC: marca ou desmarca um curso como favorito para o dono local.
+/// IPC command: marks or unmarks a course as a favourite for the local owner.
 #[tauri::command]
 pub async fn desktop_set_course_favorite(
     state: State<'_, DesktopState>,
@@ -622,7 +622,7 @@ pub async fn desktop_set_course_favorite(
         .map_err(|_| IpcError::study_unavailable())?
 }
 
-/// Comando IPC: marca ou desmarca uma aula (mídia) como favorita para o dono local.
+/// IPC command: marks or unmarks a lesson (media) as a favourite for the local owner.
 #[tauri::command]
 pub async fn desktop_set_lesson_favorite(
     state: State<'_, DesktopState>,
@@ -635,7 +635,7 @@ pub async fn desktop_set_lesson_favorite(
         .map_err(|_| IpcError::study_unavailable())?
 }
 
-/// Persiste uma sessão Pomodoro idempotente para o perfil local.
+/// Persists an idempotent Pomodoro session for the local profile.
 #[tauri::command]
 pub async fn desktop_record_focus_session(
     state: State<'_, DesktopState>,
@@ -662,7 +662,7 @@ pub async fn desktop_record_focus_session(
         .map_err(|_| IpcError::study_unavailable())?
 }
 
-/// Lista as sessões de foco persistidas no banco local, da mais recente para a mais antiga.
+/// Lists the focus sessions persisted in the local database, from newest to oldest.
 #[tauri::command]
 pub async fn desktop_list_focus_sessions(
     state: State<'_, DesktopState>,
@@ -674,7 +674,7 @@ pub async fn desktop_list_focus_sessions(
         .map_err(|_| IpcError::study_unavailable())?
 }
 
-/// Lê as métricas de foco persistidas no banco local.
+/// Reads the focus metrics persisted in the local database.
 #[tauri::command]
 pub async fn desktop_focus_summary(
     state: State<'_, DesktopState>,
@@ -685,7 +685,7 @@ pub async fn desktop_focus_summary(
         .map_err(|_| IpcError::study_unavailable())?
 }
 
-/// Lê XP, metas e missões persistidos no banco local.
+/// Reads XP, goals and missions persisted in the local database.
 #[tauri::command]
 pub async fn desktop_reward_summary(
     state: State<'_, DesktopState>,
@@ -696,7 +696,7 @@ pub async fn desktop_reward_summary(
         .map_err(|_| IpcError::study_unavailable())?
 }
 
-/// Resgata uma missão diária do perfil local.
+/// Redeems a daily mission of the local profile.
 #[tauri::command]
 pub async fn desktop_claim_daily_mission(
     state: State<'_, DesktopState>,
@@ -708,7 +708,7 @@ pub async fn desktop_claim_daily_mission(
         .map_err(|_| IpcError::study_unavailable())?
 }
 
-/// Lê a meta semanal do perfil local.
+/// Reads the local profile's weekly goal.
 #[tauri::command]
 pub async fn desktop_weekly_goal(state: State<'_, DesktopState>) -> Result<i64, IpcError> {
     let state = state.inner().clone();
@@ -717,7 +717,7 @@ pub async fn desktop_weekly_goal(state: State<'_, DesktopState>) -> Result<i64, 
         .map_err(|_| IpcError::study_unavailable())?
 }
 
-/// Atualiza a meta semanal do perfil local.
+/// Updates the local profile's weekly goal.
 #[tauri::command]
 pub async fn desktop_set_weekly_goal(
     state: State<'_, DesktopState>,
@@ -729,7 +729,7 @@ pub async fn desktop_set_weekly_goal(
         .map_err(|_| IpcError::study_unavailable())?
 }
 
-/// Comando IPC: consulta o impacto da remoção de uma mídia.
+/// IPC command: queries the impact of removing a media.
 #[tauri::command]
 pub async fn desktop_media_removal_impact(
     state: State<'_, DesktopState>,
@@ -741,7 +741,7 @@ pub async fn desktop_media_removal_impact(
         .map_err(|_| IpcError::database_unavailable())?
 }
 
-/// Comando IPC: remove uma mídia do catálogo local (tombstone persistente).
+/// IPC command: removes a media from the local catalog (persistent tombstone).
 #[tauri::command]
 pub async fn desktop_remove_media(
     state: State<'_, DesktopState>,
@@ -754,10 +754,10 @@ pub async fn desktop_remove_media(
         .map_err(|_| IpcError::database_unavailable())?
 }
 
-/// Abre o seletor nativo de diretórios e devolve o caminho escolhido, se houver.
+/// Opens the native directory picker and returns the chosen path, if any.
 ///
-/// O diálogo é interno ao Rust (`tauri-plugin-dialog`); ele não é exposto ao webview.
-/// Cancelar devolve `None`, sem caminho nem erro.
+/// The dialog is internal to Rust (`tauri-plugin-dialog`); it is not exposed to the webview.
+/// Cancelling returns `None`, with no path or error.
 fn pick_folder(app: &tauri::AppHandle) -> Option<PathBuf> {
     use tauri_plugin_dialog::DialogExt;
 
@@ -767,11 +767,11 @@ fn pick_folder(app: &tauri::AppHandle) -> Option<PathBuf> {
         .and_then(|path| path.into_path().ok())
 }
 
-/// Abre o seletor nativo de imagens e devolve o arquivo escolhido, se houver.
+/// Opens the native image picker and returns the chosen file, if any.
 ///
-/// Filtro por extensão apenas para orientar o usuário: a decisão real do formato é dos
-/// bytes iniciais do arquivo ([`crate::covers::detect_image_type`]), nunca do nome. Como o
-/// seletor de pastas, o diálogo é interno ao Rust e não é exposto ao webview.
+/// The extension filter is only to guide the user: the real decision of the format belongs to the
+/// file's initial bytes ([`crate::covers::detect_image_type`]), never to the name. Like the
+/// folder picker, the dialog is internal to Rust and is not exposed to the webview.
 fn pick_cover(app: &tauri::AppHandle) -> Option<PathBuf> {
     use tauri_plugin_dialog::DialogExt;
 
@@ -783,21 +783,21 @@ fn pick_cover(app: &tauri::AppHandle) -> Option<PathBuf> {
         .and_then(|path| path.into_path().ok())
 }
 
-/// Dentro de um Flatpak a atualização é entregue pela loja/Flathub e o instalado não pode trocar
-/// o próprio binário. `FLATPAK_ID` é definido pelo runtime do Flatpak.
+/// Inside a Flatpak the update is delivered by the store/Flathub and the installed app cannot replace
+/// its own binary. `FLATPAK_ID` is set by the Flatpak runtime.
 pub(crate) fn runs_in_flatpak() -> bool {
     std::env::var_os("FLATPAK_ID").is_some()
 }
 
-/// O updater embutido só roda fora do Flatpak.
+/// The built-in updater only runs outside Flatpak.
 pub(crate) fn updater_enabled(in_flatpak: bool) -> bool {
     !in_flatpak
 }
 
-/// Consulta a disponibilidade de nova versão via tauri-plugin-updater de forma não-bloqueante e segura.
+/// Queries the availability of a new version through tauri-plugin-updater in a non-blocking, safe way.
 ///
-/// Diferencia a ausência de atualização (`available: false`) de falhas de conexão/rede (`IpcError::update_check_failed()`),
-/// mantendo o aplicativo totalmente funcional em modo offline sem travar nem expor dados sensíveis.
+/// It tells the absence of an update (`available: false`) from connection/network failures (`IpcError::update_check_failed()`),
+/// keeping the application fully functional offline without hanging or exposing sensitive data.
 #[tauri::command]
 pub async fn desktop_check_update(
     app: tauri::AppHandle,
@@ -903,7 +903,7 @@ pub async fn desktop_restart_to_update(
     app.restart();
 }
 
-/// Consulta capacidades nativas de reprodução no ambiente desktop.
+/// Queries the native playback capabilities in the desktop environment.
 #[tauri::command]
 pub async fn desktop_media_capabilities()
 -> Result<crate::dto::DesktopMediaCapabilitiesDto, IpcError> {
@@ -913,13 +913,13 @@ pub async fn desktop_media_capabilities()
     })
 }
 
-/// Abre o arquivo físico da mídia no player padrão do sistema operacional de forma desacoplada e somente-leitura.
+/// Opens the media's physical file in the operating system's default player in a decoupled, read-only way.
 pub fn open_in_system_player(
     database: &Database,
     courses: &[CourseEntry],
     media_id: &str,
 ) -> Result<bool, IpcError> {
-    // Dentro do Flatpak o caminho do arquivo é do host e não está no sandbox: não tentamos abri-lo.
+    // Inside Flatpak the file path belongs to the host and is not in the sandbox: we do not try to open it.
     if runs_in_flatpak() {
         return Ok(false);
     }
@@ -972,7 +972,7 @@ pub fn open_in_system_player(
     Ok(spawned.map(|_| true).unwrap_or(false))
 }
 
-/// Comando IPC para abrir a mídia no player padrão do sistema operacional.
+/// IPC command to open the media in the operating system's default player.
 #[tauri::command]
 pub async fn desktop_open_in_system_player(
     state: State<'_, DesktopState>,
@@ -984,7 +984,7 @@ pub async fn desktop_open_in_system_player(
         .map_err(|_| IpcError::study_unavailable())?
 }
 
-/// Comando IPC: lê as preferências de reprodução do dono local.
+/// IPC command: reads the local owner's playback preferences.
 #[tauri::command]
 pub async fn desktop_playback_preferences(
     state: State<'_, DesktopState>,
@@ -995,7 +995,7 @@ pub async fn desktop_playback_preferences(
         .map_err(|_| IpcError::study_unavailable())?
 }
 
-/// Comando IPC: grava as preferências de reprodução e as enfileira para o servidor.
+/// IPC command: writes the playback preferences and queues them for the server.
 #[tauri::command]
 pub async fn desktop_save_playback_preferences(
     state: State<'_, DesktopState>,
@@ -1011,7 +1011,7 @@ pub async fn desktop_save_playback_preferences(
     .map_err(|_| IpcError::study_unavailable())?
 }
 
-/// Comando IPC: identidade do dispositivo e cursor já aplicado.
+/// IPC command: device identity and the cursor already applied.
 #[tauri::command]
 pub async fn desktop_sync_state(state: State<'_, DesktopState>) -> Result<SyncStateDto, IpcError> {
     let state = state.inner().clone();
@@ -1020,7 +1020,7 @@ pub async fn desktop_sync_state(state: State<'_, DesktopState>) -> Result<SyncSt
         .map_err(|_| IpcError::sync_unavailable())?
 }
 
-/// Comando IPC: configura a URL do servidor de sincronização.
+/// IPC command: sets the sync server's URL.
 #[tauri::command]
 pub async fn desktop_sync_configure(
     state: State<'_, DesktopState>,
@@ -1032,7 +1032,7 @@ pub async fn desktop_sync_configure(
         .map_err(|_| IpcError::sync_unavailable())?
 }
 
-/// Comando IPC: entra no servidor configurado e guarda a sessão localmente.
+/// IPC command: signs in to the configured server and stores the session locally.
 #[tauri::command]
 pub async fn desktop_sync_login(
     state: State<'_, DesktopState>,
@@ -1045,7 +1045,7 @@ pub async fn desktop_sync_login(
         .map_err(|_| IpcError::sync_unavailable())?
 }
 
-/// Comando IPC: encerra a sessão de sincronização.
+/// IPC command: ends the sync session.
 #[tauri::command]
 pub async fn desktop_sync_logout(state: State<'_, DesktopState>) -> Result<SyncStateDto, IpcError> {
     let state = state.inner().clone();
@@ -1054,7 +1054,7 @@ pub async fn desktop_sync_logout(state: State<'_, DesktopState>) -> Result<SyncS
         .map_err(|_| IpcError::sync_unavailable())?
 }
 
-/// Comando IPC: executa uma sincronização e devolve o resumo, mesmo quando falha.
+/// IPC command: runs a sync and returns the summary, even when it fails.
 #[tauri::command]
 pub async fn desktop_sync_now(state: State<'_, DesktopState>) -> Result<SyncResultDto, IpcError> {
     let state = state.inner().clone();

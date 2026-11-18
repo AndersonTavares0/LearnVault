@@ -1,11 +1,11 @@
-//! Testes do protocolo de capas e do ciclo de importação/remoção do desktop.
+//! Tests of the covers protocol and of the desktop's import/removal cycle.
 //!
-//! Não sobem o webview: exercitam o parsing puro (sem sistema de arquivos), a função livre
-//! `DesktopState::serve_cover`, que o handler do protocolo apenas embrulha, e as funções de
-//! estado `import_course_cover`/`remove_course_cover`. O alvo é o contrato observável — só
-//! a identidade opaca autorizada, validação por magic bytes e limite de tamanho, gravação
-//! fora da pasta do curso, status/headers corretos (200/HEAD/404/500), CORS de origem exata
-//! e nenhuma exposição de caminho.
+//! They do not bring up the webview: they exercise pure parsing (no file system), the free function
+//! `DesktopState::serve_cover`, which the protocol handler only wraps, and the state functions
+//! `import_course_cover`/`remove_course_cover`. The target is the observable contract — only
+//! the authorized opaque identity, validation by magic bytes and size limit, writing
+//! outside the course folder, correct status/headers (200/HEAD/404/500), exact-origin CORS
+//! and no path exposure.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -17,19 +17,19 @@ use learnvault_desktop::{
     valid_course_id,
 };
 
-/// Capa PNG sintética: só os bytes iniciais importam para a detecção.
+/// Synthetic PNG cover: only the initial bytes matter for detection.
 const PNG_BYTES: &[u8] = b"\x89PNG\r\n\x1a\n capa pequena";
-/// Capa JPEG sintética.
+/// Synthetic JPEG cover.
 const JPEG_BYTES: &[u8] = b"\xFF\xD8\xFF\xE0\x00\x10JFIF\x00 capa";
-/// Capa WebP sintética: `RIFF` + tamanho declarado + `WEBP`.
+/// Synthetic WebP cover: `RIFF` + declared size + `WEBP`.
 const WEBP_BYTES: &[u8] = b"RIFF\x20\x00\x00\x00WEBP capa";
 
-/// Estado desktop isolado em diretórios temporários, com dados e configuração separados.
+/// Desktop state isolated in temporary directories, with data and configuration separate.
 fn desktop(root: &Path) -> DesktopState {
     DesktopState::open(&root.join("data"), &root.join("config")).unwrap()
 }
 
-/// Estado desktop com um curso externo importado e persistido.
+/// Desktop state with an external course imported and persisted.
 fn configured(root: &Path) -> (DesktopState, PathBuf) {
     let state = desktop(root);
     let library = root.join("Acervo privado");
@@ -38,17 +38,17 @@ fn configured(root: &Path) -> (DesktopState, PathBuf) {
     (state, library)
 }
 
-/// Identidade do curso das fixtures, derivada do caminho canônico.
+/// Course identity of the fixtures, derived from the canonical path.
 fn course_id(root: &Path) -> String {
     learnvault_core::course_id_from_path(&fs::canonicalize(root.join("Acervo privado")).unwrap())
 }
 
-/// Diretório de capas do aplicativo (subdiretório do diretório de dados).
+/// The application's covers directory (a subdirectory of the data directory).
 fn covers_dir(root: &Path) -> PathBuf {
     root.join("data").join(COVERS_DIR_NAME)
 }
 
-/// Requisição crua com os campos do contrato padrão, prontos para sobrescrever.
+/// Raw request with the standard contract fields, ready to override.
 fn raw<'a>(method: &'a str, path: &'a str) -> RawCoverRequest<'a> {
     RawCoverRequest {
         method,
@@ -60,7 +60,7 @@ fn raw<'a>(method: &'a str, path: &'a str) -> RawCoverRequest<'a> {
     }
 }
 
-/// Entrega uma capa pelo caminho do protocolo, montando a URI canônica.
+/// Delivers a cover through the protocol path, building the canonical URI.
 fn serve(state: &DesktopState, course: &str, method: &str) -> MediaResponse {
     let path = format!("/{course}");
     state.serve_cover(&RawCoverRequest {
@@ -73,7 +73,7 @@ fn serve(state: &DesktopState, course: &str, method: &str) -> MediaResponse {
     })
 }
 
-/// Manifesto dos arquivos da árvore, usado para provar que a capa não escreve no curso.
+/// Manifest of the files in the tree, used to prove that the cover does not write to the course.
 fn manifest(root: &Path) -> Vec<(String, u64)> {
     fn walk(base: &Path, current: &Path, out: &mut Vec<(String, u64)>) {
         let mut entries: Vec<_> = fs::read_dir(current)
@@ -100,7 +100,7 @@ fn manifest(root: &Path) -> Vec<(String, u64)> {
     out
 }
 
-// --- Parsing puro: nenhum acesso ao sistema de arquivos -------------------------------
+// --- Pure parsing: no file-system access -------------------------------
 
 #[test]
 fn parses_the_canonical_cover_request() {
@@ -141,8 +141,8 @@ fn rejects_a_foreign_scheme_host_or_invalid_query() {
         CoverRejection::Malformed
     );
 
-    // A versão da capa chega como `v=<dígitos>` e é aceita como cache-buster; qualquer
-    // outra query é recusada.
+    // The cover's version arrives as `v=<digits>` and is accepted as a cache-buster; any
+    // other query is refused.
     let mut version = raw("GET", "/course-1");
     version.query = Some("v=123");
     assert_eq!(parse_cover_request(&version).unwrap().course_id, "course-1");
@@ -179,7 +179,7 @@ fn rejects_invalid_course_identities() {
             CoverRejection::Malformed,
             "identidade inválida aceita: {invalid:?}"
         );
-        // A mesma regra vale fora do protocolo: nenhum identificador inseguro vira caminho.
+        // The same rule applies outside the protocol: no unsafe identifier becomes a path.
         assert!(!valid_course_id(invalid), "identidade aceita: {invalid:?}");
     }
 
@@ -264,11 +264,11 @@ fn imports_and_serves_the_cover_byte_for_byte() {
     );
     assert_eq!(response.body, PNG_BYTES);
 
-    // A capa fica no diretório de dados do aplicativo, nunca dentro da pasta do curso.
+    // The cover stays in the application's data directory, never inside the course folder.
     assert!(covers_dir(dir.path()).join(format!("{id}.cover")).is_file());
     assert_eq!(manifest(&library), Vec::new());
 
-    // Nenhum header pode carregar caminho, raiz ou nome da pasta do curso.
+    // No header may carry a path, root or the course folder's name.
     for (name, value) in &response.headers {
         assert!(
             !value.contains("Acervo privado") && !value.contains("segredo"),
@@ -310,7 +310,7 @@ fn the_content_type_comes_from_the_stored_bytes_not_the_file_name() {
     let (state, _library) = configured(dir.path());
     let id = course_id(dir.path());
 
-    // O seletor aceita o nome com extensão enganosa: o formato é decidido pelos bytes.
+    // The picker accepts the name with a misleading extension: the format is decided by the bytes.
     let misleading = dir.path().join("capa.png");
     fs::write(&misleading, WEBP_BYTES).unwrap();
     state.import_course_cover(&id, || Some(misleading)).unwrap();
@@ -332,7 +332,7 @@ fn an_unknown_course_or_a_missing_cover_is_not_found_without_a_body() {
     assert_eq!(missing.status, 404);
     assert!(missing.body.is_empty());
 
-    // Sem protocolo válido, o status é o da recusa estável.
+    // Without a valid protocol, the status is that of the stable refusal.
     let mut foreign = raw("GET", "/course-1");
     foreign.scheme = "https";
     assert_eq!(state.serve_cover(&foreign).status, 400);
@@ -366,7 +366,7 @@ fn a_corrupt_stored_cover_is_an_internal_error_without_a_body() {
     }
 }
 
-// --- Importação e remoção pelo estado --------------------------------------------------
+// --- Import and removal through the state --------------------------------------------------
 
 #[test]
 fn importing_rejects_unsupported_oversized_and_unreadable_files() {
@@ -394,7 +394,7 @@ fn importing_rejects_unsupported_oversized_and_unreadable_files() {
         .unwrap_err();
     assert_eq!(unreadable.code, IpcErrorCode::CoverUnavailable);
 
-    // Nenhuma tentativa pode ter gravado algo.
+    // No attempt can have written anything.
     assert!(!covers_dir(dir.path()).exists());
 }
 
@@ -420,7 +420,7 @@ fn cancelling_the_picker_and_replacing_a_cover_only_keep_one_file() {
     let (state, _library) = configured(dir.path());
     let id = course_id(dir.path());
 
-    // Cancelar antes de existir capa preserva o estado e não cria nada.
+    // Cancelling before a cover exists preserves the state and creates nothing.
     let cancelled = state.import_course_cover(&id, || None).unwrap();
     assert_eq!(cancelled.cover_version, None);
     assert!(!covers_dir(dir.path()).exists());
@@ -429,12 +429,12 @@ fn cancelling_the_picker_and_replacing_a_cover_only_keep_one_file() {
     let version = state.import_course_cover(&id, || Some(first)).unwrap();
     assert!(version.cover_version.is_some());
 
-    // Cancelar com capa existente devolve a versão atual, sem apagar nada.
+    // Cancelling with an existing cover returns the current version, without deleting anything.
     let cancelled = state.import_course_cover(&id, || None).unwrap();
     assert_eq!(cancelled.cover_version, version.cover_version);
     assert_eq!(serve(&state, &id, "GET").body, PNG_BYTES);
 
-    // Trocar a capa mantém exatamente um arquivo, sem temporários.
+    // Replacing the cover keeps exactly one file, with no temporary files.
     let second = write_jpeg(dir.path(), JPEG_BYTES);
     state.import_course_cover(&id, || Some(second)).unwrap();
     let mut entries: Vec<String> = fs::read_dir(covers_dir(dir.path()))
@@ -520,7 +520,7 @@ fn cover_cors_withholds_the_allow_origin_outside_success_statuses() {
     let (state, _library) = configured(dir.path());
     let window_origin = "http://tauri.localhost";
 
-    // 404 (sem capa) e 500 (capa corrompida) nunca recebem ACAO, mas sempre variam por origem.
+    // 404 (no cover) and 500 (corrupted cover) never get ACAO, but always vary by origin.
     for response in [
         serve(&state, &course_id(dir.path()), "GET"),
         serve(&state, "curso-desconhecido", "GET"),
@@ -532,14 +532,14 @@ fn cover_cors_withholds_the_allow_origin_outside_success_statuses() {
     }
 }
 
-/// Grava um arquivo de fixture e devolve seu caminho.
+/// Writes a fixture file and returns its path.
 fn write_png(dir: &Path, bytes: &[u8]) -> PathBuf {
     let path = dir.join("escolhida.png");
     fs::write(&path, bytes).unwrap();
     path
 }
 
-/// Grava um arquivo de fixture JPEG e devolve seu caminho.
+/// Writes a JPEG fixture file and returns its path.
 fn write_jpeg(dir: &Path, bytes: &[u8]) -> PathBuf {
     let path = dir.join("escolhida.jpeg");
     fs::write(&path, bytes).unwrap();

@@ -1,25 +1,25 @@
-//! Capas personalizadas dos cursos no desktop: escolha nativa, validação e entrega local.
+//! Custom course covers on the desktop: native picking, validation and local delivery.
 //!
-//! A capa é uma única imagem por curso, guardada no diretório de dados do próprio
-//! aplicativo (`<dados do app>/covers/<id do curso>.cover`), nunca dentro da pasta do curso,
-//! que permanece externa e somente leitura. O caminho nunca cruza a fronteira do webview: a
-//! SPA pede a capa por um esquema próprio (`learnvault-cover://localhost/<id do curso>`) e o
-//! handler do Tauri resolve a identidade opaca para um arquivo dentro do diretório de capas.
+//! The cover is a single image per course, kept in the application's own data directory
+//! (`<app data>/covers/<course id>.cover`), never inside the course folder,
+//! which stays external and read-only. The path never crosses the webview boundary: the
+//! SPA asks for the cover through a scheme of its own (`learnvault-cover://localhost/<course id>`) and the
+//! Tauri handler resolves the opaque identity to a file inside the covers directory.
 //!
-//! Regras de segurança preservadas aqui:
+//! Security rules preserved here:
 //!
-//! - só PNG, JPEG e WebP são aceitos, e o tipo é decidido **apenas pelos bytes iniciais**
-//!   (magic bytes): nenhum decodificador de imagem é embarcado e a extensão do arquivo
-//!   escolhido não decide nada;
-//! - o limite de [`MAX_COVER_BYTES`] vale na escolha e na leitura, e a gravação é atômica
-//!   (temporário exclusivo + `rename`), então nenhuma leitura observa uma capa truncada;
-//! - a identidade do curso é validada como um único segmento de caminho seguro antes de
-//!   qualquer acesso ao disco, e o curso precisa estar registrado;
-//! - nenhuma resposta carrega caminho do sistema de arquivos: uma capa ausente é `404` sem
-//!   corpo e qualquer falha interna é `500` sem corpo, sempre com `Cache-Control: no-store`;
-//! - o CORS do esquema é o mesmo da mídia ([`crate::media::apply_media_cors`]): reflete
-//!   somente a origem exata da janela, marca `Vary: Origin` quando há `Origin` e nunca usa
-//!   curinga nem credenciais. Nenhuma permissão de capability é concedida ao webview.
+//! - only PNG, JPEG and WebP are accepted, and the type is decided **only by the initial bytes**
+//!   (magic bytes): no image decoder is shipped and the chosen file's extension
+//!   decides nothing;
+//! - the [`MAX_COVER_BYTES`] limit applies on picking and on reading, and the write is atomic
+//!   (exclusive temporary file + `rename`), so no read observes a truncated cover;
+//! - the course's identity is validated as a single safe path segment before
+//!   any disk access, and the course must be registered;
+//! - no response carries a file-system path: an absent cover is a `404` with no
+//!   body and any internal failure is a `500` with no body, always with `Cache-Control: no-store`;
+//! - the scheme's CORS is the same as media's ([`crate::media::apply_media_cors`]): it reflects
+//!   only the window's exact origin, marks `Vary: Origin` when there is an `Origin` and never uses
+//!   a wildcard or credentials. No capability permission is granted to the webview.
 
 use std::fs::{self, Metadata, OpenOptions};
 use std::io::Write;
@@ -34,41 +34,41 @@ use crate::media::{
 };
 use crate::state::DesktopState;
 
-/// Esquema do protocolo customizado das capas.
+/// Scheme of the covers' custom protocol.
 pub const COVER_SCHEME: &str = "learnvault-cover";
 
-/// Host canônico do protocolo customizado.
+/// Canonical host of the custom protocol.
 ///
-/// Como no protocolo de mídia, o handler sempre recebe a URI já revertida para
-/// `learnvault-cover://localhost/...`: no Windows/Android o webview usa o prefixo
-/// `http://learnvault-cover.localhost`, que o runtime reverte antes de chamar o handler.
+/// As with the media protocol, the handler always receives the URI already reverted to
+/// `learnvault-cover://localhost/...`: on Windows/Android the webview uses the prefix
+/// `http://learnvault-cover.localhost`, which the runtime reverts before calling the handler.
 pub const COVER_HOST: &str = "localhost";
 
-/// Nome do diretório de capas dentro do diretório de dados do aplicativo.
+/// Name of the covers directory inside the application's data directory.
 pub const COVERS_DIR_NAME: &str = "covers";
 
-/// Tamanho máximo aceito para uma capa personalizada (4 MiB).
+/// Maximum size accepted for a custom cover (4 MiB).
 pub const MAX_COVER_BYTES: u64 = 4 * 1024 * 1024;
 
-/// Sufixo do arquivo de capa de um curso dentro do diretório de capas.
+/// Suffix of a course's cover file inside the covers directory.
 const COVER_FILE_SUFFIX: &str = ".cover";
 
-/// Comprimento máximo aceito para a identidade de um curso usada como segmento de caminho.
+/// Maximum length accepted for a course identity used as a path segment.
 const MAX_COURSE_ID_LEN: usize = 128;
 
-/// Tipo de imagem reconhecido pelos bytes iniciais do arquivo.
+/// Image type recognized by the file's initial bytes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ImageType {
     /// PNG (`\x89PNG\r\n\x1a\n`).
     Png,
     /// JPEG (`\xFF\xD8\xFF`).
     Jpeg,
-    /// WebP (`RIFF` + tamanho + `WEBP`).
+    /// WebP (`RIFF` + size + `WEBP`).
     Webp,
 }
 
 impl ImageType {
-    /// `Content-Type` correspondente ao tipo detectado.
+    /// `Content-Type` matching the detected type.
     pub const fn content_type(self) -> &'static str {
         match self {
             ImageType::Png => "image/png",
@@ -78,41 +78,41 @@ impl ImageType {
     }
 }
 
-/// Falha estável das operações de capa. Nunca carrega caminho.
+/// Stable failure of the cover operations. It never carries a path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CoverError {
-    /// O conteúdo foi recusado antes de tocar o disco (tipo não suportado ou acima do limite).
+    /// The content was refused before touching the disk (unsupported type or above the limit).
     Rejected,
-    /// A gravação ou a remoção não pôde concluir.
+    /// The write or the removal could not complete.
     WriteFailed,
-    /// A capa guardada não pôde ser lida.
+    /// The stored cover could not be read.
     Unreadable,
-    /// A capa guardada não é uma imagem suportada (corrupção ou adulteração no disco).
+    /// The stored cover is not a supported image (corruption or tampering on disk).
     Corrupt,
 }
 
-/// Métodos aceitos pelo protocolo de capas.
+/// Methods accepted by the covers protocol.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CoverMethod {
-    /// Requisição com corpo.
+    /// Request with a body.
     Get,
-    /// Requisição somente de cabeçalhos.
+    /// Headers-only request.
     Head,
 }
 
-/// Recusa de parsing, antes de qualquer acesso ao sistema de arquivos.
+/// Parsing refusal, before any file-system access.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CoverRejection {
-    /// A requisição não veio da janela principal do aplicativo.
+    /// The request did not come from the application's main window.
     Forbidden,
-    /// Esquema, host, caminho, query ou identidade inválidos.
+    /// Invalid scheme, host, path, query or identity.
     Malformed,
-    /// Método diferente de `GET`/`HEAD`.
+    /// Method other than `GET`/`HEAD`.
     MethodNotAllowed,
 }
 
 impl CoverRejection {
-    /// Status HTTP estável da recusa.
+    /// Stable HTTP status of the refusal.
     pub fn status(self) -> u16 {
         match self {
             CoverRejection::Forbidden => COVER_STATUS_FORBIDDEN,
@@ -122,50 +122,50 @@ impl CoverRejection {
     }
 }
 
-/// Requisição crua do handler, já normalizada em campos simples e testáveis.
+/// Raw request of the handler, already normalized into simple, testable fields.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RawCoverRequest<'a> {
-    /// Método como enviado pelo webview.
+    /// Method as sent by the webview.
     pub method: &'a str,
-    /// Esquema da URI.
+    /// Scheme of the URI.
     pub scheme: &'a str,
-    /// Host da URI, se houver.
+    /// Host of the URI, if any.
     pub host: Option<&'a str>,
-    /// Caminho da URI, começando por `/`.
+    /// Path of the URI, starting with `/`.
     pub path: &'a str,
-    /// Query da URI, se houver (sempre recusada; a versão da capa não chega ao handler).
+    /// Query of the URI, if any (always refused; the cover's version does not reach the handler).
     pub query: Option<&'a str>,
-    /// Rótulo do webview que originou a requisição.
+    /// Label of the webview that originated the request.
     pub webview_label: &'a str,
 }
 
-/// Requisição validada: método e identidade opaca do curso.
+/// Validated request: method and the course's opaque identity.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoverRequest {
-    /// Método validado.
+    /// Validated method.
     pub method: CoverMethod,
-    /// Identidade opaca autorizada, sem caminho.
+    /// Authorized opaque identity, with no path.
     pub course_id: String,
 }
 
-/// Status HTTP usados pelo protocolo de capas.
+/// HTTP statuses used by the covers protocol.
 const COVER_STATUS_OK: u16 = 200;
-/// Requisição inválida.
+/// Invalid request.
 const COVER_STATUS_BAD_REQUEST: u16 = 400;
-/// Requisição de outra janela.
+/// Request from another window.
 const COVER_STATUS_FORBIDDEN: u16 = 403;
-/// Capa ausente ou curso desconhecido.
+/// Missing cover or unknown course.
 const COVER_STATUS_NOT_FOUND: u16 = 404;
-/// Método não suportado.
+/// Unsupported method.
 const COVER_STATUS_METHOD_NOT_ALLOWED: u16 = 405;
-/// Falha interna de leitura ou de estado.
+/// Internal failure of reading or of state.
 const COVER_STATUS_INTERNAL_SERVER_ERROR: u16 = 500;
 
-/// Aceita apenas um segmento de caminho seguro (identidade opaca do curso).
+/// Accepts only a safe path segment (the course's opaque identity).
 ///
-/// O identificador real é `course-` + um UUID (hexadecimal e hífens) ou a identidade legada
-/// `library-1`, então o alfabeto seguro cobre todos os cursos. Um `%` indicaria uma tentativa
-/// de escapar a forma canônica do esquema e é recusado, nunca decodificado.
+/// The real identifier is `course-` + a UUID (hexadecimal and hyphens) or the legacy identity
+/// `library-1`, so the safe alphabet covers all courses. A `%` would indicate an attempt
+/// to escape the scheme's canonical form and is refused, never decoded.
 pub fn valid_course_id(course_id: &str) -> bool {
     if course_id.is_empty() || course_id.len() > MAX_COURSE_ID_LEN {
         return false;
@@ -175,7 +175,7 @@ pub fn valid_course_id(course_id: &str) -> bool {
         .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
 }
 
-/// Detecta o tipo da imagem apenas pelos bytes iniciais.
+/// Detects the image type only from the initial bytes.
 pub fn detect_image_type(bytes: &[u8]) -> Option<ImageType> {
     const PNG: &[u8] = &[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
     const JPEG: &[u8] = &[0xFF, 0xD8, 0xFF];
@@ -188,20 +188,20 @@ pub fn detect_image_type(bytes: &[u8]) -> Option<ImageType> {
     if bytes.starts_with(JPEG) {
         return Some(ImageType::Jpeg);
     }
-    // `RIFF<4 bytes de tamanho>WEBP`: os quatro bytes entre os marcadores são o tamanho
-    // declarado do contêiner e não participam da identificação do formato.
+    // `RIFF<4 bytes of size>WEBP`: the four bytes between the markers are the container's
+    // declared size and do not take part in identifying the format.
     if bytes.len() >= 12 && bytes.starts_with(RIFF) && &bytes[8..12] == WEBP {
         return Some(ImageType::Webp);
     }
     None
 }
 
-/// Caminho físico da capa de um curso, ou `None` quando a identidade é insegura.
+/// Physical path of a course's cover, or `None` when the identity is unsafe.
 pub fn cover_file(covers_dir: &Path, course_id: &str) -> Option<PathBuf> {
     valid_course_id(course_id).then(|| covers_dir.join(format!("{course_id}{COVER_FILE_SUFFIX}")))
 }
 
-/// Versão (mtime em segundos) da capa de um curso, quando existir.
+/// Version (mtime in seconds) of a course's cover, when it exists.
 pub fn cover_version(covers_dir: &Path, course_id: &str) -> Option<i64> {
     let metadata = fs::symlink_metadata(cover_file(covers_dir, course_id)?).ok()?;
     if !metadata.is_file() {
@@ -210,11 +210,11 @@ pub fn cover_version(covers_dir: &Path, course_id: &str) -> Option<i64> {
     modified_seconds(&metadata)
 }
 
-/// Detecta automaticamente uma capa local na raiz da pasta do curso e a armazena em `covers_dir`.
+/// Automatically detects a local cover at the root of the course folder and stores it in `covers_dir`.
 ///
-/// Não substitui capa já existente em `covers_dir`. Prioriza os nomes `cover.*`, `folder.*`,
-/// `poster.*`, `thumb.*` e `thumbnail.*` com extensões suportadas (`.jpg`, `.jpeg`, `.png`, `.webp`).
-/// O diretório do curso é lido de forma estritamente somente-leitura.
+/// It does not replace a cover already in `covers_dir`. It prioritizes the names `cover.*`, `folder.*`,
+/// `poster.*`, `thumb.*` and `thumbnail.*` with supported extensions (`.jpg`, `.jpeg`, `.png`, `.webp`).
+/// The course directory is read strictly read-only.
 pub fn auto_detect_course_cover(
     covers_dir: &Path,
     course_id: &str,
@@ -276,7 +276,7 @@ pub fn auto_detect_course_cover(
     Ok(false)
 }
 
-/// Grava a capa de forma atômica, revalidando tipo e tamanho antes de tocar o disco.
+/// Writes the cover atomically, revalidating type and size before touching the disk.
 pub fn store_cover(covers_dir: &Path, course_id: &str, bytes: &[u8]) -> Result<(), CoverError> {
     let Some(destination) = cover_file(covers_dir, course_id) else {
         return Err(CoverError::Rejected);
@@ -308,10 +308,10 @@ pub fn store_cover(covers_dir: &Path, course_id: &str, bytes: &[u8]) -> Result<(
     Ok(())
 }
 
-/// Lê a capa e redetecta o tipo pelos bytes.
+/// Reads the cover and redetects the type from the bytes.
 ///
-/// Um caminho ausente ou que não seja um arquivo comum é ausência de capa; um arquivo comum
-/// que não seja uma imagem suportada (ou acima do limite) é corrupção.
+/// A path that is absent or not a regular file means no cover; a regular file
+/// that is not a supported image (or is above the limit) is corruption.
 pub fn read_cover(
     covers_dir: &Path,
     course_id: &str,
@@ -337,7 +337,7 @@ pub fn read_cover(
     Ok(Some((bytes, image_type)))
 }
 
-/// Remove a capa e informa se algo foi apagado.
+/// Removes the cover and reports whether anything was deleted.
 pub fn remove_cover(covers_dir: &Path, course_id: &str) -> Result<bool, CoverError> {
     let Some(path) = cover_file(covers_dir, course_id) else {
         return Ok(false);
@@ -349,7 +349,7 @@ pub fn remove_cover(covers_dir: &Path, course_id: &str) -> Result<bool, CoverErr
     }
 }
 
-/// Lê o arquivo escolhido no seletor nativo, recusando acima do limite antes de ler.
+/// Reads the file chosen in the native picker, refusing above the limit before reading.
 pub fn read_picked_cover(path: &Path) -> Result<Vec<u8>, CoverError> {
     let metadata = fs::metadata(path).map_err(|_| CoverError::Unreadable)?;
     if !metadata.is_file() || metadata.len() > MAX_COVER_BYTES {
@@ -362,19 +362,19 @@ pub fn read_picked_cover(path: &Path) -> Result<Vec<u8>, CoverError> {
     Ok(bytes)
 }
 
-/// Segundos de modificação de um arquivo, quando representáveis.
+/// Modification seconds of a file, when representable.
 fn modified_seconds(metadata: &Metadata) -> Option<i64> {
     let modified = metadata.modified().ok()?;
     let seconds = modified.duration_since(UNIX_EPOCH).ok()?.as_secs();
     i64::try_from(seconds).ok()
 }
 
-/// Substitui o destino usando apenas APIs padrão.
+/// Replaces the destination using only standard APIs.
 ///
-/// Fora do Windows, `fs::rename` troca o nome no mesmo sistema de arquivos e substitui o
-/// destino. No Windows, a API padrão não substitui um destino existente: removê-lo
-/// imediatamente antes de `rename` deixa uma janela não atômica em que o destino pode não
-/// existir.
+/// Outside Windows, `fs::rename` swaps the name on the same file system and replaces the
+/// destination. On Windows, the standard API does not replace an existing destination: removing it
+/// immediately before `rename` leaves a non-atomic window in which the destination may not
+/// exist.
 #[cfg(windows)]
 fn replace_file(source: &Path, dest: &Path) -> std::io::Result<()> {
     match fs::remove_file(dest) {
@@ -385,17 +385,17 @@ fn replace_file(source: &Path, dest: &Path) -> std::io::Result<()> {
     fs::rename(source, dest)
 }
 
-/// Substitui o destino usando apenas APIs padrão.
+/// Replaces the destination using only standard APIs.
 #[cfg(not(windows))]
 fn replace_file(source: &Path, dest: &Path) -> std::io::Result<()> {
     fs::rename(source, dest)
 }
 
-/// Valida e normaliza a requisição crua, sem tocar o sistema de arquivos.
+/// Validates and normalizes the raw request, without touching the file system.
 ///
-/// Recusa qualquer coisa que não seja exatamente o protocolo registrado para a janela
-/// principal: outro esquema, outro host, query fora de `v=<dígitos>`, caminho com mais de
-/// um segmento e identidades fora do alfabeto seguro.
+/// It refuses anything that is not exactly the protocol registered for the main
+/// window: another scheme, another host, a query other than `v=<digits>`, a path with more than
+/// one segment and identities outside the safe alphabet.
 pub fn parse_cover_request(raw: &RawCoverRequest<'_>) -> Result<CoverRequest, CoverRejection> {
     if raw.webview_label != MAIN_WEBVIEW_LABEL {
         return Err(CoverRejection::Forbidden);
@@ -425,11 +425,11 @@ pub fn parse_cover_request(raw: &RawCoverRequest<'_>) -> Result<CoverRequest, Co
     })
 }
 
-/// A versão da capa é opcional e só pode chegar como `v=<dígitos>`.
+/// The cover's version is optional and can only arrive as `v=<digits>`.
 ///
-/// A SPA usa o valor para trocar a URL do `<img>` quando a capa muda; o handler o ignora
-/// na resolução e continua respondendo com `Cache-Control: no-store`. Qualquer outra
-/// query é recusada em vez de silenciosamente descartada.
+/// The SPA uses the value to change the `<img>` URL when the cover changes; the handler ignores it
+/// in the resolution and keeps answering with `Cache-Control: no-store`. Any other
+/// query is refused instead of silently discarded.
 fn valid_cover_version(query: Option<&str>) -> bool {
     let Some(query) = query else {
         return true;
@@ -440,11 +440,11 @@ fn valid_cover_version(query: Option<&str>) -> bool {
     !version.is_empty() && version.len() <= 20 && version.bytes().all(|byte| byte.is_ascii_digit())
 }
 
-/// Registra o protocolo de capas no builder do Tauri.
+/// Registers the covers protocol on the Tauri builder.
 ///
-/// O protocolo é global, mas cada requisição é restrita à janela principal pelo rótulo do
-/// webview, e o CORS é o mesmo da mídia: origem exata da janela, jamais curinga nem
-/// credenciais. Nenhuma permissão de capability é concedida: o ACL continua deny-by-default.
+/// The protocol is global, but each request is restricted to the main window by the
+/// webview's label, and the CORS is the same as media's: the window's exact origin, never a wildcard or
+/// credentials. No capability permission is granted: the ACL stays deny-by-default.
 pub fn register<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
     builder.register_uri_scheme_protocol(COVER_SCHEME, |context, request| {
         let state = context.app_handle().state::<DesktopState>();
@@ -467,7 +467,7 @@ pub fn register<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
     })
 }
 
-/// Constrói a requisição crua a partir da requisição HTTP do Tauri.
+/// Builds the raw request from Tauri's HTTP request.
 fn raw_cover_request<'a>(
     webview_label: &'a str,
     request: &'a Request<Vec<u8>>,
@@ -484,11 +484,11 @@ fn raw_cover_request<'a>(
 }
 
 impl DesktopState {
-    /// Entrega a capa autorizada pelo protocolo customizado.
+    /// Delivers the cover authorized by the custom protocol.
     ///
-    /// O parsing é puro e prefere a recusa estável; só depois de validada a requisição o
-    /// registro de cursos e o diretório de capas são consultados. Um curso não registrado
-    /// responde como uma capa ausente, sem revelar nada.
+    /// Parsing is pure and prefers the stable refusal; only after the request is validated are the
+    /// course registry and the covers directory queried. An unregistered course
+    /// answers like an absent cover, revealing nothing.
     pub fn serve_cover(&self, raw: &RawCoverRequest<'_>) -> MediaResponse {
         match parse_cover_request(raw) {
             Ok(request) => self.open_cover_request(&request),
@@ -496,7 +496,7 @@ impl DesktopState {
         }
     }
 
-    /// Monta a resposta da capa de um curso registrado.
+    /// Assembles the response for a registered course's cover.
     fn open_cover_request(&self, request: &CoverRequest) -> MediaResponse {
         if self.course(&request.course_id).is_none() {
             return MediaResponse::empty(COVER_STATUS_NOT_FOUND);
@@ -550,7 +550,7 @@ mod tests {
                 webview_label: MAIN_WEBVIEW_LABEL,
             }
         );
-        // A versão na query é aceita pela SPA como cache-buster e não altera a resolução.
+        // The version in the query is accepted by the SPA as a cache-buster and does not change the resolution.
         assert_eq!(
             parse_cover_request(&raw).unwrap().course_id,
             "course-1".to_owned()
@@ -575,7 +575,7 @@ mod tests {
     fn read_picked_cover_rejects_directories_missing_files_and_non_images() {
         let temp = tempfile::tempdir().unwrap();
 
-        // Um diretório escolhido não é uma imagem.
+        // A chosen directory is not an image.
         assert!(read_picked_cover(temp.path()).is_err());
         assert!(read_picked_cover(&temp.path().join("nao-existe.png")).is_err());
 
@@ -597,11 +597,11 @@ mod tests {
         let course_dir = temp.path().join("curso_rust");
         std::fs::create_dir_all(&course_dir).unwrap();
 
-        // 1. Sem imagens na pasta do curso -> não detecta
+        // 1. No images in the course folder -> does not detect
         assert!(!auto_detect_course_cover(&covers_dir, "rust-101", &course_dir).unwrap());
         assert!(cover_version(&covers_dir, "rust-101").is_none());
 
-        // 2. Imagem folder.png presente -> detecta e salva em covers_dir
+        // 2. A folder.png image present -> detects and saves to covers_dir
         let png_bytes = b"\x89PNG\r\n\x1a\nfake-png-data";
         std::fs::write(course_dir.join("folder.png"), png_bytes).unwrap();
         assert!(auto_detect_course_cover(&covers_dir, "rust-101", &course_dir).unwrap());
@@ -610,7 +610,7 @@ mod tests {
         assert_eq!(stored_bytes, png_bytes);
         assert_eq!(image_type, crate::covers::ImageType::Png);
 
-        // 3. Imagem cover.jpg com prioridade mais alta adicionada depois -> não sobrescreve capa existente
+        // 3. A cover.jpg image with higher priority added later -> does not overwrite an existing cover
         let jpeg_bytes = b"\xff\xd8\xff\xe0fake-jpeg";
         std::fs::write(course_dir.join("cover.jpg"), jpeg_bytes).unwrap();
         assert!(!auto_detect_course_cover(&covers_dir, "rust-101", &course_dir).unwrap());

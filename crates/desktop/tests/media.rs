@@ -1,10 +1,10 @@
-//! Testes do protocolo de mídia do desktop.
+//! Tests of the desktop's media protocol.
 //!
-//! Não sobem o webview: exercitam o parsing puro (sem sistema de arquivos) e a função
-//! livre `DesktopState::serve_media`, que o handler do protocolo apenas embrulha. O alvo é
-//! o contrato observável — somente `media_id` autorizado, sem caminho vindo do webview,
-//! imagens/materiais pequenos e mídia por faixa, status/headers corretos (200/HEAD/206/416),
-//! e nenhuma exposição de caminho ou erro de IO.
+//! They do not bring up the webview: they exercise pure parsing (no file system) and the free
+//! function `DesktopState::serve_media`, which the protocol handler only wraps. The target is
+//! the observable contract — only an authorized `media_id`, no path coming from the webview,
+//! small images/materials and media by range, correct status/headers (200/HEAD/206/416),
+//! and no exposure of a path or an I/O error.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -15,15 +15,15 @@ use learnvault_desktop::media::{
     MediaRejection, MediaResponse, RawMediaRequest, apply_media_cors, parse_media_request,
 };
 
-/// Conteúdo sintético pequeno com extensão de imagem para as fixtures.
+/// Small synthetic content with an image extension for the fixtures.
 const PNG_BYTES: &[u8] = b"\x89PNG\r\n\x1a\n pequeno";
 
-/// Estado desktop isolado em diretórios temporários, com dados e configuração separados.
+/// Desktop state isolated in temporary directories, with data and configuration separate.
 fn desktop(root: &Path) -> DesktopState {
     DesktopState::open(&root.join("data"), &root.join("config")).unwrap()
 }
 
-/// Estado desktop com um curso externo importado e persistido.
+/// Desktop state with an external course imported and persisted.
 fn configured(root: &Path) -> (DesktopState, PathBuf) {
     let state = desktop(root);
     let library = root.join("Acervo privado");
@@ -32,7 +32,7 @@ fn configured(root: &Path) -> (DesktopState, PathBuf) {
     (state, library)
 }
 
-/// Biblioteca indexada com uma imagem pequena, um material pequeno e mídia do curso.
+/// Library indexed with a small image, a small material and course media.
 fn library(root: &Path) -> (DesktopState, PathBuf) {
     let (state, library) = configured(root);
     fs::create_dir_all(library.join("Curso")).unwrap();
@@ -45,17 +45,17 @@ fn library(root: &Path) -> (DesktopState, PathBuf) {
     (state, library)
 }
 
-/// Caminho do banco local usado pelo estado.
+/// Path of the local database used by the state.
 fn database_path(root: &Path) -> PathBuf {
     root.join("data").join("learnvault.sqlite")
 }
 
-/// Identidade do curso indexado nas fixtures, derivada do caminho canônico.
+/// Identity of the indexed course in the fixtures, derived from the canonical path.
 fn course_id(root: &Path) -> String {
     learnvault_core::course_id_from_path(&fs::canonicalize(root.join("Acervo privado")).unwrap())
 }
 
-/// Identidade autorizada de um arquivo indexado.
+/// Authorized identity of an indexed file.
 fn media_id(root: &Path, relative_path: &str) -> String {
     let database = learnvault_core::Database::open(database_path(root)).unwrap();
     learnvault_core::find_media_by_path(&database, &course_id(root), relative_path)
@@ -64,7 +64,7 @@ fn media_id(root: &Path, relative_path: &str) -> String {
         .media_id
 }
 
-/// Requisição crua com os campos do contrato padrão, prontos para sobrescrever.
+/// Raw request with the standard contract fields, ready to override.
 fn raw<'a>(method: &'a str, path: &'a str) -> RawMediaRequest<'a> {
     RawMediaRequest {
         method,
@@ -216,7 +216,7 @@ fn media_cors_withholds_the_allow_origin_outside_success_statuses() {
     assert_eq!(response.header("Vary"), Some("Origin"));
 }
 
-/// Entrega uma mídia pelo caminho do protocolo, montando a URI canônica.
+/// Delivers a media through the protocol path, building the canonical URI.
 fn serve(state: &DesktopState, media_id: &str, method: &str, range: Option<&str>) -> MediaResponse {
     let path = format!("/{media_id}");
     state.serve_media(&RawMediaRequest {
@@ -230,7 +230,7 @@ fn serve(state: &DesktopState, media_id: &str, method: &str, range: Option<&str>
     })
 }
 
-/// Manifesto dos arquivos da árvore, usado para provar que a entrega não escreve.
+/// Manifest of the files in the tree, used to prove that the delivery does not write.
 fn manifest(root: &Path) -> Vec<(String, u64)> {
     fn walk(base: &Path, current: &Path, out: &mut Vec<(String, u64)>) {
         let mut entries: Vec<_> = fs::read_dir(current)
@@ -257,10 +257,10 @@ fn manifest(root: &Path) -> Vec<(String, u64)> {
     out
 }
 
-/// Cria um symlink de arquivo apontando para `target`.
+/// Creates a file symlink pointing to `target`.
 ///
-/// No Windows criar um symlink exige privilégio; quando a plataforma recusa, o teste é
-/// pulado com registro, como nos demais testes de link do repositório.
+/// On Windows creating a symlink requires privilege; when the platform refuses, the test is
+/// skipped with a log, like the repository's other link tests.
 #[cfg(unix)]
 fn link_file(target: &Path, link: &Path) -> bool {
     std::os::unix::fs::symlink(target, link).is_ok()
@@ -271,7 +271,7 @@ fn link_file(target: &Path, link: &Path) -> bool {
     std::os::windows::fs::symlink_file(target, link).is_ok()
 }
 
-/// Cria um symlink de diretório apontando para `target`.
+/// Creates a directory symlink pointing to `target`.
 #[cfg(unix)]
 fn link_dir(target: &Path, link: &Path) -> bool {
     std::os::unix::fs::symlink(target, link).is_ok()
@@ -282,7 +282,7 @@ fn link_dir(target: &Path, link: &Path) -> bool {
     std::os::windows::fs::symlink_dir(target, link).is_ok()
 }
 
-// --- Parsing puro: nenhum acesso ao sistema de arquivos -------------------------------
+// --- Pure parsing: no file-system access -------------------------------
 
 #[test]
 fn parses_the_canonical_small_file_request() {
@@ -416,7 +416,7 @@ fn serves_a_small_image_with_200_and_safe_headers() {
         "uma resposta completa não pode declarar Content-Range"
     );
 
-    // Nenhum header pode carregar caminho, raiz ou nome da pasta da biblioteca.
+    // No header may carry a path, root or the library folder's name.
     for (name, value) in &response.headers {
         assert!(
             !value.contains("Curso") && !value.contains("foto.png"),
@@ -717,8 +717,8 @@ fn a_root_replaced_by_a_directory_link_is_refused() {
     let (state, library) = library(dir.path());
     let id = media_id(dir.path(), "Curso/foto.png");
 
-    // A raiz persistida é trocada por um link para uma pasta externa com o mesmo caminho
-    // relativo: o alvo não pode ser seguido nem servido.
+    // The persisted root is swapped for a link to an external folder with the same relative
+    // path: the target cannot be followed nor served.
     fs::remove_dir_all(&library).unwrap();
     let outside = dir.path().join("fora");
     fs::create_dir_all(outside.join("Curso")).unwrap();

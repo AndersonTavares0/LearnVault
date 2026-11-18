@@ -1,9 +1,9 @@
-//! Testes da persistência de cursos do desktop.
+//! Tests of the desktop's course persistence.
 //!
-//! Exercitam a camada de configuração diretamente: round-trip do arquivo versionado,
-//! migração do formato antigo (raiz única → um curso), revalidação de pastas removidas,
-//! recusa de escrever a configuração dentro de um curso e serialização de gravações
-//! concorrentes. Nenhum caminho cruza o IPC; nenhum teste toca dados reais.
+//! They exercise the configuration layer directly: round trip of the versioned file,
+//! migration of the old format (single root → one course), revalidation of removed folders,
+//! refusal to write the configuration inside a course and serialization of concurrent
+//! writes. No path crosses the IPC; no test touches real data.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -11,14 +11,14 @@ use std::path::{Path, PathBuf};
 use learnvault_core::CourseRoot;
 use learnvault_desktop::{CourseEntry, LibraryError, load_courses, store_courses};
 
-/// Cria um diretório de curso válido e devolve o caminho escolhido.
+/// Creates a valid course directory and returns the chosen path.
 fn make_course(root: &Path, name: &str) -> PathBuf {
     let course = root.join(name);
     fs::create_dir_all(&course).unwrap();
     course
 }
 
-/// Curso registrado com identidade derivada do caminho canônico.
+/// Registered course with an identity derived from the canonical path.
 fn entry(path: &Path) -> CourseEntry {
     CourseEntry::from_root(CourseRoot::resolve(path).unwrap())
 }
@@ -37,7 +37,7 @@ fn round_trip_preserves_courses_and_drops_removed_roots() {
     assert_eq!(loaded[0].id, courses[0].id);
     assert_eq!(loaded[1].id, courses[1].id);
 
-    // A pasta removida antes da recarga é descartada em silêncio, sem reescrever o arquivo.
+    // The folder removed before the reload is silently dropped, without rewriting the file.
     fs::remove_dir_all(&second).unwrap();
     let reloaded = load_courses(&config);
     assert_eq!(reloaded.len(), 1);

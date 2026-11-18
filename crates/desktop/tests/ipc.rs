@@ -1,9 +1,9 @@
-//! Testes da fronteira IPC do desktop: DTOs, erros e catálogo.
+//! Tests of the desktop's IPC boundary: DTOs, errors and catalog.
 //!
-//! Não sobem o webview nem dependem de display: exercitam as funções livres e os tipos
-//! serializáveis que os comandos `#[tauri::command]` apenas embrulham. O alvo é o
-//! contrato observável pelo frontend — shape snake_case, códigos de erro estáveis e
-//! mensagens sem caminhos — e não o runtime do Tauri.
+//! They do not bring up the webview nor depend on a display: they exercise the free functions and the
+//! serializable types that the `#[tauri::command]` commands only wrap. The target is the
+//! contract observable by the frontend — snake_case shape, stable error codes and
+//! messages with no paths — and not the Tauri runtime.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -16,24 +16,24 @@ use learnvault_desktop::{
     load_courses,
 };
 
-/// Estado desktop isolado em diretórios temporários, com dados e configuração separados.
+/// Desktop state isolated in temporary directories, with data and configuration separate.
 fn desktop(root: &Path) -> DesktopState {
     DesktopState::open(&root.join("data"), &root.join("config")).unwrap()
 }
 
-/// Cria um diretório de curso válido e devolve o caminho escolhido.
+/// Creates a valid course directory and returns the chosen path.
 fn make_course(root: &Path) -> PathBuf {
     let course = root.join("curso");
     fs::create_dir_all(&course).unwrap();
     course
 }
 
-/// Forma canônica de um caminho para comparação.
+/// Canonical form of a path for comparison.
 fn canonical(path: &Path) -> PathBuf {
     fs::canonicalize(path).unwrap()
 }
 
-/// Curso registrado de teste, com identidade explícita.
+/// Registered test course, with an explicit identity.
 fn entry(id: &str, path: &Path) -> CourseEntry {
     CourseEntry {
         id: id.to_owned(),
@@ -41,7 +41,7 @@ fn entry(id: &str, path: &Path) -> CourseEntry {
     }
 }
 
-/// Arquivo de catálogo de teste, com localização fixa e verificável.
+/// Test catalog file, with a fixed, verifiable location.
 fn file(
     media_id: &str,
     kind: MediaKind,
@@ -60,7 +60,7 @@ fn file(
     }
 }
 
-/// Nó de catálogo de teste com papel, arquivos e filhos explícitos.
+/// Test catalog node with explicit role, files and children.
 fn node(
     title: &str,
     path: &str,
@@ -164,14 +164,14 @@ fn catalog_dto_uses_the_snake_case_spa_contract() {
         json["categories"][0]["children"][0]["files"][0]["kind"],
         "media"
     );
-    // O desktop agrega cursos: a lista solta de topo fica vazia e os arquivos soltos vivem
-    // no nó do curso.
+    // The desktop aggregates courses: the top-level loose list stays empty and the loose files live
+    // on the course node.
     assert_eq!(json["loose_files"], serde_json::json!([]));
 
-    // `nodes` é a árvore recursiva canônica, o contrato preferido pela SPA, e carrega o
-    // mesmo nó de topo de curso: identidade opaca, identidade de mídia, caminhos relativos,
-    // disponibilidade e verificação dos arquivos seguem preservados, e a aula continua
-    // alcançável sob o curso sem depender de nenhuma projeção legada.
+    // `nodes` is the canonical recursive tree, the contract preferred by the SPA, and carries the
+    // same top-level course node: opaque identity, media identity, relative paths,
+    // availability and verification of the files stay preserved, and the lesson is still
+    // reachable under the course without depending on any legacy projection.
     assert_eq!(json["nodes"], json["categories"]);
     let node = &json["nodes"][0];
     assert_eq!(node["title"], "Curso");
@@ -277,7 +277,7 @@ fn catalog_failure_is_a_stable_sanitized_error() {
             [],
         )
         .unwrap();
-    // Tamanho negativo é corrupção: o catálogo precisa falhar alto, sem vazar o caminho.
+    // A negative size is corruption: the catalog must fail loudly, without leaking the path.
     database
         .connection()
         .execute(
@@ -558,7 +558,7 @@ fn removing_a_course_updates_memory_disk_and_status() {
         "remover um curso nunca pode apagar arquivos"
     );
 
-    // Remover de novo é idempotente.
+    // Removing again is idempotent.
     let again = state.remove_course(&id).unwrap();
     assert!(!again.configured);
 }
@@ -636,7 +636,7 @@ fn media_removal_impact_and_removal_flow_in_desktop() {
         .media_id
         .clone();
 
-    // 1. Impacto inicial sem progresso
+    // 1. Initial impact with no progress
     let impact = state.media_removal_impact(&media_id).unwrap();
     assert_eq!(impact.media_id, media_id);
     assert_eq!(impact.progress_owners, 0);
@@ -645,35 +645,35 @@ fn media_removal_impact_and_removal_flow_in_desktop() {
     // 2. Grava progresso no desktop
     state.record_position(&media_id, 25).unwrap();
 
-    // 3. Impacto agora acusa 1 dono com progresso
+    // 3. The impact now reports 1 owner with progress
     let impact = state.media_removal_impact(&media_id).unwrap();
     assert_eq!(impact.progress_owners, 1);
 
-    // 4. Tentar remover sem confirmação deve falhar com MediaRemovalNeedsConfirmation
+    // 4. Trying to remove without confirmation must fail with MediaRemovalNeedsConfirmation
     let err = state.remove_media(&media_id, false).unwrap_err();
     assert_eq!(err.code, IpcErrorCode::MediaRemovalNeedsConfirmation);
 
-    // 5. Remover com confirmação tem sucesso
+    // 5. Removing with confirmation succeeds
     let outcome = state.remove_media(&media_id, true).unwrap();
     assert_eq!(outcome.media_id, media_id);
     assert!(outcome.removed_now);
     assert_eq!(outcome.preserved_owners, 1);
 
-    // 6. Repetir remoção é idempotente
+    // 6. Repeating the removal is idempotent
     let repeat = state.remove_media(&media_id, true).unwrap();
     assert_eq!(repeat.media_id, media_id);
     assert!(!repeat.removed_now);
 
-    // 7. Catálogo passa a omitir a mídia
+    // 7. The catalog now omits the media
     let cat_after = state.catalog().unwrap();
     assert!(cat_after.categories[0].children.is_empty());
 
-    // 8. Rescan não desfaz a remoção
+    // 8. A rescan does not undo the removal
     state.rescan().unwrap();
     let cat_rescan = state.catalog().unwrap();
     assert!(cat_rescan.categories[0].children.is_empty());
 
-    // 9. Progresso continua legível e preservado
+    // 9. Progress is still readable and preserved
     let progress = state.study_progress(&media_id).unwrap();
     assert!(progress.recorded);
     assert_eq!(progress.position_seconds, 25);
@@ -684,11 +684,11 @@ fn open_in_system_player_validates_media_id_and_rejects_unknown() {
     let dir = tempfile::tempdir().unwrap();
     let state = desktop(dir.path());
 
-    // Mídia desconhecida retorna erro de media_not_found
+    // Unknown media returns a media_not_found error
     let err = state.open_in_system_player("unknown-media").unwrap_err();
     assert_eq!(err.code, IpcErrorCode::MediaNotFound);
 
-    // Com curso importado e mídia real
+    // With an imported course and real media
     let course_dir = make_course(dir.path());
     let aula_dir = course_dir.join("Aula 1");
     fs::create_dir_all(&aula_dir).unwrap();
@@ -702,7 +702,7 @@ fn open_in_system_player_validates_media_id_and_rejects_unknown() {
     assert!(res.is_ok());
     assert!(res.unwrap());
 
-    // Arquivos que não são de mídia de áudio/vídeo (materiais) são categoricamente rejeitados
+    // Files that are not audio/video media (materials) are categorically rejected
     fs::write(aula_dir.join("material.pdf"), b"pdf content").unwrap();
     state.rescan().unwrap();
     let cat2 = state.catalog().unwrap();
@@ -730,7 +730,7 @@ fn flashcards_and_focus_sessions_work_over_desktop_state() {
     let cat = state.catalog().unwrap();
     let media_id = &cat.categories[0].children[0].children[0].files[0].media_id;
 
-    // 1. Flashcards CRUD + revisão
+    // 1. Flashcards CRUD + review
     assert!(state.list_flashcards(media_id).unwrap().is_empty());
 
     let card = state
@@ -788,7 +788,7 @@ fn flashcards_and_focus_sessions_work_over_desktop_state() {
     assert_eq!(listed[0].id, "focus-1");
     assert!(listed[0].completed);
 
-    // 3. Favoritos de cursos e aulas
+    // 3. Favourites of courses and lessons
     let favs0 = state.list_favorites().unwrap();
     assert!(favs0.course_ids.is_empty());
     assert!(favs0.media_ids.is_empty());
