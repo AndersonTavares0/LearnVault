@@ -317,7 +317,7 @@
   --secondary-foreground: #3E3A54;
   --accent-foreground: #3E3A54;
   --muted: color-mix(in oklch, var(--brand-tone) 5%, #F2E9E4);
-  --muted-foreground: #68627E;
+  --muted-foreground: #5E5974;
   --panel: color-mix(in oklch, var(--brand-tone) 9%, #F4ECE7);
   --border: color-mix(in oklch, var(--brand-tone) 12%, #E4D8DB);
 }
@@ -329,7 +329,7 @@
   --secondary-foreground: #2E3F44;
   --accent-foreground: #2E3F44;
   --muted: color-mix(in oklch, var(--brand-tone) 5%, #F1E9D2);
-  --muted-foreground: #586E75;
+  --muted-foreground: #4C6067;
   --panel: color-mix(in oklch, var(--brand-tone) 9%, #F3EBD4);
   --border: color-mix(in oklch, var(--brand-tone) 12%, #E4DBC0);
 }
