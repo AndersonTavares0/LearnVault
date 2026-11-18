@@ -19,7 +19,7 @@ They apply to every maintainer, contributor and agent. The mechanics of cutting 
    - the HTTP API ([`docs/reference/api.md`](../../docs/reference/api.md)) and the database migrations are documented
      and upgrades from the previous release have been exercised;
    - the manual keyboard and screen-reader pass owed in [`DESIGN.md`](../../DESIGN.md) has been done;
-   - the release and update path has been verified end to end on a stable (non-pre-release) release.
+   - the release and update path has been verified end to end on a release that moves `latest`.
 
    The maintainer may amend this list in a pull request that updates this policy.
 
@@ -34,9 +34,12 @@ They apply to every maintainer, contributor and agent. The mechanics of cutting 
 
 ## Pre-releases and retention
 
-1. While `prerelease: true` is set in the Release Please configuration, every `0.y.z` GitHub release is a pre-release.
-   Pre-releases are not served by `releases/latest`, so the desktop updater endpoint and the `latest` and `stable`
-   container tags do not move to them. Removing `prerelease` is a maintainer decision recorded in a pull request.
+1. Releases are normal (non-pre-release) GitHub releases: `prerelease` is `false` in the Release Please configuration.
+   Each one becomes `releases/latest`, so the desktop updater endpoint serves it, and it moves the `latest`, `stable`
+   and minor-line container tags. Releases up to and including `0.9.4` were published as pre-releases and did not move
+   them, so until the first release made under this rule `latest` still resolves to the `0.8.0` image.
+   Turning `prerelease` back on, for example to publish a risky release without offering it to installed copies, is a
+   maintainer decision recorded in a pull request.
 2. A release numbered `vMAJOR.MINOR.PATCH` is permanent history. It is not deleted or re-tagged.
 3. Release candidates (`-rc.N`) and draft releases are temporary. Once a numbered release supersedes them and the
    changelog records what they carried, they may be removed together with their tags. The removal is listed in the
