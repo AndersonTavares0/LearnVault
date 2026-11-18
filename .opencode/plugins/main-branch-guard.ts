@@ -1,20 +1,20 @@
 /**
- * Guarda preventiva do agente opencode para as branches `main`/`master`.
+ * Preventive guard for the opencode agent on the `main`/`master` branches.
  *
- * Proteção simples e previsível: bloqueia as ferramentas de escrita e os comandos git
- * mutantes mais comuns quando a branch atual é protegida, e opera em fail-closed quando
- * não é possível confirmar a branch. A leitura da branch usa `node:child_process`
- * diretamente — o shell `$` do runtime deixou de devolver a branch de forma confiável em
- * versões recentes do aplicativo, e a guarda não pode depender dele. Quando a verificação
- * falha, um diagnóstico é gravado em arquivo temporário e o caminho aparece no erro.
- * O módulo exporta apenas a função do plugin: o carregador do opencode trata cada export
- * do arquivo como um plugin e exige uma função, então um export a mais derruba o
- * carregamento inteiro.
- * Não substitui a branch protection do GitHub nem cobre todas as formas de escrita via
- * shell (`bash`/`shell`) — veja o README deste diretório.
- * A guarda reconhece a ferramenta de shell pelos nomes `bash` e `shell`, e a de patch
- * pelos nomes `apply_patch` e `patch`: o opencode v2 renomeou as duas e, sem os dois
- * nomes, a proteção não dispararia.
+ * Simple and predictable protection: it blocks the write tools and the most common
+ * mutating git commands when the current branch is protected, and it fails closed when
+ * the branch cannot be confirmed. The branch is read with `node:child_process`
+ * directly — the runtime's `$` shell stopped returning the branch reliably in recent
+ * versions of the application, and the guard cannot depend on it. When the check
+ * fails, a diagnostic is written to a temporary file and its path appears in the error.
+ * The module exports only the plugin function: opencode's loader treats every export
+ * of the file as a plugin and requires a function, so one extra export brings down the
+ * whole load.
+ * It does not replace GitHub's branch protection nor cover every way of writing through
+ * the shell (`bash`/`shell`) — see the README of this directory.
+ * The guard recognizes the shell tool by the names `bash` and `shell`, and the patch tool
+ * by the names `apply_patch` and `patch`: opencode v2 renamed both and, without both
+ * names, the protection would not fire.
  */
 
 import { execFile } from "node:child_process"
@@ -39,12 +39,12 @@ const GIT_BRANCH_SWITCH =
 const GITHUB_PR_MERGE = /\bgh\b[^|;&\n]*\s+pr\s+merge\b/
 const PATCH_TARGET = /^\*\*\* (?:Add File|Update File|Delete File|Move to): (.+)$/gm
 
-/** Arquivo de diagnóstico da verificação de branch, fora do repositório. */
+/** Diagnostic file of the branch check, outside the repository. */
 const DIAGNOSTIC_LOG = path.join(tmpdir(), "learnvault-main-branch-guard.log")
 
 type GitResult = { root: string; exitCode: number; stdout: string; stderr: string }
 
-// Executa git sem shell intermediário e resolve sempre: a guarda nunca lança daqui.
+// Runs git without an intermediate shell and always resolves: the guard never throws from here.
 function runGit(root: string, args: string[]): Promise<GitResult> {
   return new Promise((resolve) => {
     execFile(
@@ -68,18 +68,18 @@ function runGit(root: string, args: string[]): Promise<GitResult> {
   })
 }
 
-// Diagnóstico best-effort: nunca pode quebrar a guarda nem tocar o repositório.
+// Best-effort diagnostic: it must never break the guard nor touch the repository.
 function diagnose(lines: string[]): void {
   try {
     appendFileSync(DIAGNOSTIC_LOG, `${new Date().toISOString()} ${lines.join(" | ")}\n`)
   } catch {
-    // Sem diagnóstico, a guarda continua fail-closed.
+    // Without a diagnostic, the guard still fails closed.
   }
 }
 
-// Diz se um caminho está dentro de uma raiz. Só o primeiro segmento ".." tira o
-// arquivo do repositório: um nome que começa com dois pontos (ex.: "..env") continua
-// dentro e precisa ser bloqueado como qualquer outro arquivo.
+// Tells whether a path is inside a root. Only a first ".." segment takes the
+// file out of the repository: a name that starts with two dots (e.g. "..env") is still
+// inside and must be blocked like any other file.
 function isInside(base: string, target: string): boolean {
   const relative = path.relative(base, target)
   if (relative === "") return true
@@ -89,11 +89,11 @@ function isInside(base: string, target: string): boolean {
 
 export const MainBranchGuard: Plugin = async ({ directory, worktree }) => {
   const root = worktree || directory
-  // O caminho recebido do agente é relativo ao diretório do projeto: essa é a base
-  // correta para resolvê-lo, mesmo quando o worktree aponta para outro lugar.
+  // The path received from the agent is relative to the project directory: that is the
+  // correct base to resolve it, even when the worktree points somewhere else.
   const projectRoot = typeof directory === "string" && directory.length > 0 ? directory : root
-  // Em uso normal `worktree` e `directory` são o mesmo repositório; tentar os dois
-  // protege contra mudanças de valor entre versões do aplicativo.
+  // In normal use `worktree` and `directory` are the same repository; trying both
+  // protects against value changes between versions of the application.
   const roots = [worktree, directory].filter(
     (value, index, all): value is string =>
       typeof value === "string" && value.length > 0 && all.indexOf(value) === index
@@ -108,7 +108,7 @@ export const MainBranchGuard: Plugin = async ({ directory, worktree }) => {
       if (result.exitCode === 0 && branch) return branch
     }
     diagnose([
-      "não foi possível confirmar a branch atual",
+      "could not confirm the current branch",
       `worktree=${worktree}`,
       `directory=${directory}`,
       ...attempts.map((attempt) => `${attempt.root}: exit=${attempt.exitCode} stderr=${attempt.stderr.slice(0, 300)}`)
@@ -118,10 +118,10 @@ export const MainBranchGuard: Plugin = async ({ directory, worktree }) => {
 
   const touchesWorktree = (filePath: unknown): boolean => {
     if (typeof filePath !== "string" || filePath.length === 0) return true
-    // O caminho recebido é resolvido a partir do diretório do projeto e comparado com
-    // as raízes conhecidas. Comparar contra uma raiz diferente da que resolve o
-    // caminho desligaria a proteção: no caso em que o worktree não é o repositório,
-    // todo caminho interno pareceria externo e a escrita passaria.
+    // The received path is resolved from the project directory and compared with
+    // the known roots. Comparing against a root different from the one that resolves the
+    // path would switch the protection off: when the worktree is not the repository,
+    // every internal path would look external and the write would go through.
     const target = path.resolve(projectRoot, filePath)
     return roots.some((base) => isInside(base, target))
   }
@@ -137,8 +137,8 @@ export const MainBranchGuard: Plugin = async ({ directory, worktree }) => {
     if (PATCH_TOOLS.has(tool)) return patchTouchesWorktree(args?.patchText)
     if (!SHELL_TOOLS.has(tool)) return false
     const command = args?.command
-    // Comando ausente ou em formato inesperado é tratado como mutante: a guarda não pode
-    // falhar aberta quando não entende o que a ferramenta vai executar.
+    // A missing command, or one in an unexpected format, is treated as mutating: the guard cannot
+    // fail open when it does not understand what the tool is going to run.
     if (typeof command !== "string") return true
     return GIT_MUTATION.test(command) || GIT_BRANCH_SWITCH.test(command) || GITHUB_PR_MERGE.test(command)
   }
@@ -155,17 +155,17 @@ export const MainBranchGuard: Plugin = async ({ directory, worktree }) => {
       const branch = await currentBranch()
       if (branch === null) {
         deny(
-          "Não foi possível confirmar a branch atual (a verificação com git falhou), então esta operação foi bloqueada por segurança. " +
-            `O diagnóstico está em ${DIAGNOSTIC_LOG}. ` +
-            "Não tente contornar com outros comandos. Informe o usuário e pergunte o que fazer antes de repetir.",
+          "Could not confirm the current branch (the git check failed), so this operation was blocked for safety. " +
+            `The diagnostic is at ${DIAGNOSTIC_LOG}. ` +
+            "Do not try to work around it with other commands. Inform the user and ask what to do before repeating.",
         )
       }
       if (PROTECTED_BRANCHES.has(branch)) {
         deny(
-          `A branch "${branch}" é protegida: esta operação pode modificá-la. ` +
-            "Não tente contornar com outros comandos nem criar uma branch por conta própria. " +
-            "Informe o usuário e pergunte se você pode criar uma branch de trabalho " +
-            "(por exemplo, `git checkout -b chore/minha-mudanca`) antes de criar qualquer branch ou repetir a operação.",
+          `The branch "${branch}" is protected: this operation could modify it. ` +
+            "Do not try to work around it with other commands nor create a branch on your own. " +
+            "Inform the user and ask whether you may create a working branch " +
+            "(for example, `git checkout -b chore/my-change`) before creating any branch or repeating the operation.",
         )
       }
     },

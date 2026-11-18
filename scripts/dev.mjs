@@ -1,8 +1,8 @@
-// Atalhos de desenvolvimento do LearnVault.
+// LearnVault development shortcuts.
 //
-// Uso: node scripts/dev.mjs [localhost|tauri]
-//   localhost (padrão): servidor Rust + Vite com proxy de `/api`.
-//   tauri:             rebuild contínuo do frontend desktop + aplicativo Tauri offline.
+// Usage: node scripts/dev.mjs [localhost|tauri]
+//   localhost (default): Rust server + Vite with a `/api` proxy.
+//   tauri:             continuous rebuild of the desktop frontend + offline Tauri application.
 
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -15,7 +15,7 @@ const isWindows = process.platform === 'win32';
 const mode = process.argv[2] ?? 'localhost';
 
 if (!['localhost', 'tauri'].includes(mode)) {
-	console.error(`Modo desconhecido: ${mode}. Use "localhost" (padrão) ou "tauri".`);
+	console.error(`Unknown mode: ${mode}. Use "localhost" (default) or "tauri".`);
 	process.exit(1);
 }
 
@@ -34,7 +34,7 @@ function run(command, args, options = {}) {
 	child.on('exit', (code, signal) => {
 		children.delete(child);
 		if (exiting) return;
-		console.error(`\nUm processo encerrou (${signal ?? `código ${code}`}); encerrando os demais.`);
+		console.error(`\nA process exited (${signal ?? `code ${code}`}); stopping the others.`);
 		shutdown(code ?? 1);
 	});
 	return child;
@@ -65,11 +65,11 @@ process.on('SIGTERM', () => shutdown(0));
 
 if (mode === 'localhost') {
 	const listenAddr = process.env.LEARNVAULT_LISTEN_ADDR ?? '127.0.0.1:8090';
-	console.log('LearnVault em desenvolvimento:');
+	console.log('LearnVault in development:');
 	console.log(`  API (Rust):  http://${listenAddr}`);
 	console.log('  SPA (Vite):  http://localhost:5174');
-	console.log('  Sem configuração, o primeiro acesso usa admin / admin.');
-	console.log('  A primeira execução compila o servidor e pode demorar.\n');
+	console.log('  With no configuration, the first sign-in uses admin / admin.');
+	console.log('  The first run compiles the server and can take a while.\n');
 	run('cargo', [
 		'run', '-p', 'learnvault-server', '--',
 		'--listen-addr', listenAddr,
@@ -86,21 +86,21 @@ if (mode === 'localhost') {
 	const tauri = path.join(root, 'node_modules', '.bin', isWindows ? 'tauri.cmd' : 'tauri');
 
 	if (!existsSync(tauri)) {
-		console.error('Tauri CLI não encontrado. Rode "pnpm install" na raiz do repositório.');
+		console.error('Tauri CLI not found. Run "pnpm install" at the repository root.');
 		process.exit(1);
 	}
 
-	console.log('LearnVault desktop (Tauri), sem portas de rede.');
-	console.log('O primeiro build compila o crate desktop; edições da SPA recarregam sozinhas.');
-	console.log('Primeiro uso: use "Importar curso" e escolha a pasta de um curso.\n');
+	console.log('LearnVault desktop (Tauri), no network ports.');
+	console.log('The first build compiles the desktop crate; SPA edits reload on their own.');
+	console.log('First use: choose "Import course" and pick a course folder.\n');
 
 	run('pnpm', ['--filter', 'learnvault-web-next', 'dev:tauri']);
 
-	console.log('Aguardando o build inicial do frontend desktop...');
+	console.log('Waiting for the initial desktop frontend build...');
 	const deadline = Date.now() + 120_000;
 	while (!existsSync(shell)) {
 		if (Date.now() > deadline) {
-			console.error('O frontend desktop não foi gerado em 2 minutos.');
+			console.error('The desktop frontend was not generated within 2 minutes.');
 			shutdown(1);
 			break;
 		}

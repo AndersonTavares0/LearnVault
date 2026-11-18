@@ -249,7 +249,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
-            throw "A chave secreta TAURI_SIGNING_PRIVATE_KEY é obrigatória para assinar os artefatos de release do Windows"
+            throw "The secret TAURI_SIGNING_PRIVATE_KEY is required to sign the Windows release artifacts"
           }
           $releaseVersion = $env:RELEASE_TAG.Substring(1)
           $configPath = Join-Path $PWD "tauri.release.json"
@@ -285,7 +285,7 @@ jobs:
           Copy-Item $sigs[0].FullName (Join-Path $PWD "dist/learnvault-windows-$env:RELEASE_TAG.nsis.zip.sig")
           $sigContent = (Get-Content $sigs[0].FullName -Raw).Trim()
           if ([string]::IsNullOrWhiteSpace($sigContent)) {
-            throw "A assinatura do updater gerada em $($sigs[0].FullName) está vazia"
+            throw "The updater signature generated at $($sigs[0].FullName) is empty"
           }
           $assetUrl = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:RELEASE_TAG/learnvault-windows-$env:RELEASE_TAG.nsis.zip"
           $releaseNotes = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:RELEASE_NOTES_BASE64))
@@ -306,7 +306,7 @@ jobs:
           }
           $latest | ConvertTo-Json -Depth 4 | Set-Content -Path (Join-Path $PWD "dist/latest.json") -Encoding UTF8
           if (-not (Test-Path (Join-Path $PWD "dist/latest.json"))) {
-            throw "Falha ao gerar o manifesto dist/latest.json obrigatório"
+            throw "Failed to generate the required manifest dist/latest.json"
           }
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
