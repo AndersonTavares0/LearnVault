@@ -34,6 +34,21 @@ describe('session guard', () => {
 		expect(events).toBe(0);
 	});
 
+	it('does not treat the answer of the session check itself as news about the session', async () => {
+		vi.stubGlobal('fetch', respond(401));
+		installSessionGuard();
+		await fetch('/api/me');
+		await fetch('/api/me?x=1');
+		expect(events).toBe(0);
+	});
+
+	it('still announces a 401 from other routes that start with the same letters', async () => {
+		vi.stubGlobal('fetch', respond(401));
+		installSessionGuard();
+		await fetch('/api/media/abc');
+		expect(events).toBe(1);
+	});
+
 	it('ignores non-API responses', async () => {
 		vi.stubGlobal('fetch', respond(401));
 		installSessionGuard();
