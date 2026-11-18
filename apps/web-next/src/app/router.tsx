@@ -1,4 +1,8 @@
 import { createHashRouter, Navigate, useLocation, type RouteObject } from 'react-router';
+import type { ReactNode } from 'react';
+import { useLocale } from '@/hooks/use-locale';
+import { usePageTitle } from '@/hooks/use-page-title';
+import { tr } from '@/lib/i18n';
 import { href, locationFromHash } from '@/lib/router';
 import { defaultRoute } from '@/lib/session';
 import { transportKind } from '@/lib/transport';
@@ -31,20 +35,26 @@ function LegacyRedirect() {
 	return <Navigate to={transportKind === 'desktop' ? '/' : '/login'} replace />;
 }
 
+function TitledPage({ en, ptBr, children }: { en: string; ptBr: string; children: ReactNode }) {
+	useLocale();
+	usePageTitle(tr(en, ptBr));
+	return children;
+}
+
 export const routes: RouteObject[] = [
-	...(transportKind === 'http' ? [{ path: '/login', element: <LoginPage /> }] : []),
+	...(transportKind === 'http' ? [{ path: '/login', element: <TitledPage en="Sign in" ptBr="Entrar"><LoginPage /></TitledPage> }] : []),
 	{
 		element: <AppShell />,
 		errorElement: <RouteError />,
 		children: [
-			{ index: true, element: <HomePage /> },
+			{ index: true, element: <TitledPage en="My learning" ptBr="Meu aprendizado"><HomePage /></TitledPage> },
 			{ path: 'home', element: <Navigate to="/" replace /> },
 			{ path: 'course/:courseId/*', element: <CourseRoute /> },
-			{ path: 'progress', element: <ProgressPage /> },
-			{ path: 'review', element: <ReviewPage /> },
-			{ path: 'notes', element: <NotesPage /> },
-			{ path: 'history', element: <HistoryPage /> },
-			{ path: 'settings', element: <SettingsPage /> }
+			{ path: 'progress', element: <TitledPage en="Your progress" ptBr="Seu progresso"><ProgressPage /></TitledPage> },
+			{ path: 'review', element: <TitledPage en="Review" ptBr="Revisão"><ReviewPage /></TitledPage> },
+			{ path: 'notes', element: <TitledPage en="Notes" ptBr="Notas"><NotesPage /></TitledPage> },
+			{ path: 'history', element: <TitledPage en="Watch history" ptBr="Histórico de aulas"><HistoryPage /></TitledPage> },
+			{ path: 'settings', element: <TitledPage en="Settings" ptBr="Ajustes"><SettingsPage /></TitledPage> }
 		]
 	},
 	{ path: '*', element: <LegacyRedirect /> }

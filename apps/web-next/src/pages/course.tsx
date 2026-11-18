@@ -11,6 +11,7 @@ import { Materials } from '@/components/materials';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useLocale } from '@/hooks/use-locale';
+import { usePageTitle } from '@/hooks/use-page-title';
 import { useStore } from '@/hooks/use-store';
 import { collectMaterials, countCatalogNode, formatCourseMeta } from '@/lib/catalog';
 import { courseCategoriesStore, resolveCourseCategory } from '@/lib/course-categories';
@@ -55,9 +56,11 @@ export function CourseRoute() {
 }
 
 function NotFound() {
+	const title = tr('Course not found', 'Curso não encontrado');
+	usePageTitle(title);
 	return (
 		<div className="space-y-4">
-			<h1 className="text-2xl font-semibold">{tr('Course not found', 'Curso não encontrado')}</h1>
+			<h1 className="text-2xl font-semibold">{title}</h1>
 			<p className="text-muted-foreground">{tr('It may have been removed from the library or you may not have access to it.', 'Ele pode ter sido removido da biblioteca ou você pode não ter acesso a ele.')}</p>
 			<Link to="/" className={buttonVariants({ variant: 'outline' })}>{tr('Back to My learning', 'Voltar para Meu aprendizado')}</Link>
 		</div>
@@ -65,6 +68,7 @@ function NotFound() {
 }
 
 function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: string }) {
+	usePageTitle(course.title);
 	const navigate = useNavigate();
 	const session = useSession();
 	const catalog = useCatalog();
