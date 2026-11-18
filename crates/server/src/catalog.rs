@@ -11,7 +11,10 @@ use axum::{
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
-use learnvault_core::{Availability, CatalogFile, CatalogNode, MediaKind, NodeRole, RescanSummary};
+use learnvault_core::{
+    Availability, CatalogFile, CatalogNode, CourseRoot, CourseRootError, MediaKind, NodeRole,
+    RescanSummary, ScanOutcome,
+};
 use serde::Serialize;
 
 use crate::{
@@ -489,9 +492,20 @@ async fn run_rescan_courses(
         let course_path = course.root.as_path().to_path_buf();
         let scanned = tokio::task::spawn_blocking(move || {
             let _scan_permit = scan_permit;
-            let root = learnvault_core::CourseRoot::resolve(&course_path).ok()?;
-            let outcome = learnvault_core::scan(root.as_path());
-            Some((root, outcome))
+            match CourseRoot::resolve(&course_path) {
+                Ok(root) => {
+                    let outcome = learnvault_core::scan(root.as_path());
+                    Some((Some(root), outcome))
+                }
+                Err(CourseRootError::Missing) if course_entry_is_absent(&course_path) => Some((
+                    None,
+                    Ok(ScanOutcome {
+                        files: Vec::new(),
+                        inaccessible: Vec::new(),
+                    }),
+                )),
+                Err(_) => None,
+            }
         })
         .await
         .map_err(|_| RescanFailure::Failed)?;
@@ -507,6 +521,7 @@ async fn run_rescan_courses(
             .try_acquire_blocking_task()
             .ok_or(RescanFailure::Capacity)?;
         let course_id = course.id.clone();
+        let registered_root = course.root.clone();
         let covers_dir = covers_dir.to_path_buf();
         let applied = tokio::task::spawn_blocking(move || {
             let _db_permit = db_permit;
@@ -514,9 +529,9 @@ async fn run_rescan_courses(
                 &mut database,
                 &course_id,
                 outcome,
-                root.as_path(),
+                root.as_ref().unwrap_or(&registered_root).as_path(),
             );
-            if result.is_ok() {
+            if let (Ok(_), Some(root)) = (&result, root) {
                 let _ = crate::covers::auto_detect_course_cover(
                     &covers_dir,
                     &course_id,
@@ -549,6 +564,17 @@ async fn run_rescan_courses(
     response.courses = courses.len();
     response.failed_courses = failed_courses;
     Ok(response)
+}
+
+/// An absent entry under a readable parent is covered by the scan. An inaccessible
+/// parent or a parent that now resolves elsewhere cannot establish that absence.
+fn course_entry_is_absent(path: &Path) -> bool {
+    let Some(parent) = path.parent() else {
+        return false;
+    };
+    CourseRoot::resolve(parent).is_ok_and(|root| root.as_path() == parent)
+        && std::fs::symlink_metadata(path)
+            .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
 }
 
 pub(crate) async fn authenticated_user(
