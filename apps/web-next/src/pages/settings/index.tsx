@@ -210,7 +210,7 @@ function Section({ id, title, description, children, framed = true }: { id: stri
 
 function Choice<T extends string>({ legend, options, value, label, disabled = false, onChange }: { legend: string; options: readonly T[]; value: T; label: (value: T) => string; disabled?: boolean; onChange: (value: T) => void }) {
 	return (
-		<fieldset className="space-y-2">
+		<fieldset className="min-w-0 space-y-2">
 			<legend className="text-sm font-medium">{legend}</legend>
 			<div className="flex flex-wrap gap-2">
 				{options.map((option) => (
