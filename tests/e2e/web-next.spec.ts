@@ -231,3 +231,42 @@ test('admin settings pass axe and new accounts start with no course access', asy
 	await expect(page.getByRole('heading', { name: 'Accounts and course access' })).toHaveCount(0);
 	expect(violations).toEqual([]);
 });
+
+test('the sign-in page shows the brand mark and the Sapere aude motto in both languages', async ({ page, origin }) => {
+	await page.goto(`${origin}/#/login`);
+	const motto = page.locator('[lang="la"]', { hasText: 'Sapere aude' });
+	await expect(motto).toBeVisible();
+	await expect(page.getByText('Dare to know')).toBeVisible();
+	await expect(page.locator('main svg, form svg, svg').first()).toBeVisible();
+
+	await page.getByRole('button', { name: /Switch language to/ }).click();
+	await expect(page.getByText('Ouse saber')).toBeVisible();
+	// The Latin quotation is not translated and keeps its language tag.
+	await expect(motto).toBeVisible();
+	await expectNoAxeViolations(page, 'login pt-BR');
+
+	// The choice survives a reload.
+	await page.reload();
+	await expect(page.getByText('Ouse saber')).toBeVisible();
+});
+
+test('the sign-in form works from the keyboard alone', async ({ page, origin }) => {
+	await page.goto(`${origin}/#/login`);
+	await page.getByLabel('Username').focus();
+	await page.keyboard.type('admin');
+	await page.keyboard.press('Tab');
+	await expect(page.getByLabel('Password', { exact: true })).toBeFocused();
+	await page.keyboard.type(PASSWORD);
+	await page.keyboard.press('Enter');
+	await expect(page.getByRole('link', { name: 'My learning' }).first()).toBeVisible();
+});
+
+test('an unknown address lands on a working page instead of a blank screen', async ({ page, origin }) => {
+	const errors: string[] = [];
+	page.on('pageerror', (error) => errors.push(error.message));
+	await signIn(page, origin);
+	await page.goto(`${origin}/#/this/route/does/not/exist`);
+	await expect(page.locator('#main')).toBeVisible();
+	await expect(page.getByRole('link', { name: 'My learning' }).first()).toBeVisible();
+	expect(errors).toEqual([]);
+});
