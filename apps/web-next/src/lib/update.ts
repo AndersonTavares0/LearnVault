@@ -55,8 +55,8 @@ export function updateMessage(status: UpdateStatus): string {
 	}
 }
 
-// Só oferece o link da versão informada no repositório oficial, nunca outro destino
-// HTTPS recebido na resposta e nunca um link quando já se está atualizado.
+// Only offers the link of the reported version in the official repository, never another
+// HTTPS destination received in the response and never a link when already up to date.
 export function updateReleaseUrl(status: UpdateStatus): string | null {
 	const url = status.available ? status.url : null;
 	if (!url || !status.latest) return null;

@@ -39,7 +39,7 @@ export function createDefaultPlayerPreferences(): PlayerPreferences {
 	return { audioSpeed: 1, videoSpeed: 1, autoNext: false, subtitleLanguage: '', pdfView: 'continuous', pdfTheme: 'paper', lessons: {} };
 }
 
-/** Preferências web são separadas por usuário; o desktop tem um perfil local fixo. */
+/** Web preferences are separated per user; the desktop has a fixed local profile. */
 export function playerPreferencesScope(kind: TransportKind, userId: string | null | undefined): string | null {
 	if (kind === 'desktop') return 'desktop-local';
 	const normalizedUserId = userId?.trim();
@@ -50,7 +50,7 @@ export function playerPreferencesKey(scope: string): string {
 	return `${STORAGE_KEY_PREFIX}${encodeURIComponent(scope)}`;
 }
 
-/** A tupla JSON evita colisões entre IDs/caminhos que contenham separadores. */
+/** The JSON tuple avoids collisions between IDs/paths that contain separators. */
 export function lessonPreferenceKey(courseId: string, lessonPath: string): string {
 	return JSON.stringify([courseId, lessonPath]);
 }
@@ -114,7 +114,7 @@ function normalizePreferences(value: unknown): PlayerPreferences {
 	};
 }
 
-/** Storage pode estar bloqueado ou corrompido; preferências nunca impedem a reprodução. */
+/** Storage may be blocked or corrupted; preferences never prevent playback. */
 export function readPlayerPreferences(storage: PlayerPreferenceStorage | null, scope: string | null): PlayerPreferences {
 	if (!storage || !scope) return createDefaultPlayerPreferences();
 	try {
