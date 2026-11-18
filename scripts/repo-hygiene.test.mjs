@@ -28,7 +28,9 @@ test('hygiene checker catches prohibited directory prefixes', () => {
 		'.github/tdd/scratch.md',
 		'docs/design/screenshots/shot.png',
 		'docs/design/prototypes/test.html',
-		'docs/qa/test.webp'
+		'docs/qa/test.webp',
+		'.pnpm-store/v11/index.db',
+		'node_modules/pkg/index.js'
 	];
 
 	const violations = checkTrackedFiles(syntheticFiles, { root });
