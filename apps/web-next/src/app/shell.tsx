@@ -67,10 +67,12 @@ export function AppShell() {
 
 	const user = session.data.user;
 	return (
-		<div className="min-h-dvh pb-20 lg:pb-0">
+		// The bar and the banners stay put and the content region owns the scroll, so the page
+		// scrollbar starts below the top bar instead of crossing it (issue #607).
+		<div className="flex h-dvh flex-col print:block print:h-auto">
 			<SkipLink />
 			<DesktopTitlebar />
-			<header className="border-b print:hidden">
+			<header className="shrink-0 border-b print:hidden">
 				<div className="mx-auto flex h-[4.5rem] max-w-[var(--container-max,88rem)] items-center gap-x-8 px-5 sm:px-10">
 					<Link to="/" className="inline-flex items-center gap-2.5 rounded-md font-heading text-2xl font-bold tracking-tight" aria-label={tr('LearnVault home', 'Início do LearnVault')}><BrandMark className="size-8 text-foreground" />LearnVault</Link>
 					<nav aria-label={tr('Main', 'Principal')} className="hidden flex-1 justify-center gap-1 lg:flex">
@@ -90,8 +92,11 @@ export function AppShell() {
 			</header>
 			<UpdateNotice isAdmin={Boolean(user.isAdmin)} />
 			<IndexingIndicator isAdmin={Boolean(user.isAdmin)} />
-			<main id="main" tabIndex={-1} className="mx-auto w-full max-w-[var(--container-max,88rem)] px-5 py-8 outline-none sm:px-10 sm:py-10">
-				<Outlet />
+			<main id="main" tabIndex={-1} className="app-scroll min-h-0 flex-1 overflow-y-auto outline-none print:overflow-visible">
+				{/* The phone tab bar floats over the bottom edge, hence the extra clearance. */}
+				<div className="mx-auto w-full max-w-[var(--container-max,88rem)] px-5 pt-8 pb-28 sm:px-10 sm:pt-10 sm:pb-32 lg:pb-10">
+					<Outlet />
+				</div>
 			</main>
 			<MobileTabs />
 		</div>

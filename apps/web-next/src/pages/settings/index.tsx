@@ -54,7 +54,7 @@ export function SettingsPage() {
 		<PageHeader icon={Settings} title={tr('Settings', 'Ajustes')} />
 		<div className="lg:grid lg:grid-cols-[12rem_1fr] lg:gap-10">
 			{/* Buttons, not `#id` links: the hash belongs to the router. */}
-			<nav aria-label={tr('Settings sections', 'Seções dos ajustes')} className="mb-6 lg:sticky lg:top-24 lg:mb-0 lg:self-start">
+			<nav aria-label={tr('Settings sections', 'Seções dos ajustes')} className="mb-6 lg:sticky lg:top-6 lg:mb-0 lg:self-start">
 				<div className="space-y-2 lg:hidden">
 					<label htmlFor="settings-section" className="block text-sm font-medium">{tr('Settings section', 'Seção dos ajustes')}</label>
 					<select id="settings-section" value={active} onChange={(event) => setActive(event.target.value)} className="h-11 w-full rounded-lg border border-input bg-background px-3 text-sm">

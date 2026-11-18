@@ -440,7 +440,10 @@
 }
 
 html, body { overflow-x: clip; }
-html {
+
+/* The app scrolls its content region, not the document (issue #607): the bar starts below the
+   top bar instead of crossing it, and it follows the learner's palette like the reader's. */
+.app-scroll {
   scrollbar-color: var(--border-strong) transparent;
   scrollbar-width: thin;
 }
