@@ -1,17 +1,17 @@
-// Checks de PR da SPA e do Rust em um único comando.
+// PR checks for the SPA and for Rust in a single command.
 //
 // Uso: node scripts/verify.mjs [--fast] [--list]
-//   --fast  pula os builds e o audit, mantendo type-check, testes e lints.
-//   --list  imprime os comandos que seriam executados e sai sem rodar nada.
+//   --fast  skips the builds and the audit, keeping type-check, tests and lints.
+//   --list  prints the commands that would run and exits without running anything.
 //
-// Este script é o destino de `pnpm verify`. O alias precisa existir porque no
-// Windows `verify` é um comando interno do cmd.exe que sai com código 0 sem
-// verificar nada; sem a entrada em package.json o `pnpm verify` cairia nele e
-// reportaria sucesso falso. Falhas de spawn (ferramenta ausente) também viram
-// erro explícito, nunca sucesso silencioso.
+// This script is the target of `pnpm verify`. The alias must exist because on
+// Windows `verify` is a built-in cmd.exe command that exits with code 0 without
+// checking anything; without the entry in package.json, `pnpm verify` would fall into it and
+// report a false success. Spawn failures (missing tool) also become an
+// explicit error, never a silent success.
 //
-// O crate desktop fica fora dos membros padrão do workspace; use `pnpm dev:tauri`
-// ou `cargo test -p learnvault-desktop` quando a mudança tocar o desktop.
+// The desktop crate is outside the workspace's default members; use `pnpm dev:tauri`
+// or `cargo test -p learnvault-desktop` when the change touches the desktop.
 
 import { spawn } from 'node:child_process';
 import path from 'node:path';
@@ -36,8 +36,8 @@ export function buildSteps({ fast = false } = {}) {
 	return fast ? steps.filter((step) => !step.slow) : steps;
 }
 
-// Executa os passos em sequência e devolve o código de saída (0 = tudo passou).
-// Interrompe no primeiro erro e nunca devolve 0 quando um passo não roda.
+// Runs the steps in sequence and returns the exit code (0 = everything passed).
+// Stops at the first error and never returns 0 when a step does not run.
 export async function runSteps(steps, {
 	cwd = root,
 	spawnImpl = spawn,
@@ -52,14 +52,14 @@ export async function runSteps(steps, {
 				stdio: 'inherit',
 				shell: process.platform === 'win32'
 			});
-			// Ferramenta ausente (ENOENT) emite 'error' sem 'exit'; sem este tratador a
-			// promessa nunca resolveria e `pnpm verify` travaria em vez de falhar.
+			// A missing tool (ENOENT) emits 'error' without 'exit'; without this handler the
+			// promise would never resolve and `pnpm verify` would hang instead of failing.
 			child.on('error', () => resolve(1));
 			child.on('close', (exitCode, signal) => resolve(exitCode ?? (signal ? 1 : 0)));
 		});
 
 		if (code !== 0) {
-			errorLog(`\nFalhou: ${step.label}\n`);
+			errorLog(`\nFailed: ${step.label}\n`);
 			return 1;
 		}
 	}
@@ -82,13 +82,13 @@ if (isMain) {
 		process.exit(0);
 	}
 
-	console.log(`Verificação LearnVault (${fast ? 'rápida: sem builds e sem audit' : 'completa'})`);
-	console.log('O crate desktop fica de fora por requerer dependências nativas (WebKit/GTK); use os comandos dedicados quando a mudança o tocar.\n');
+	console.log(`LearnVault verification (${fast ? 'fast: no builds and no audit' : 'full'})`);
+	console.log('The desktop crate is left out because it needs native dependencies (WebKit/GTK); use the dedicated commands when the change touches it.\n');
 
 	const code = await runSteps(steps);
 
 	if (code === 0) {
-		console.log('\nTodos os checks passaram.');
+		console.log('\nAll checks passed.');
 	}
 	process.exit(code);
 }

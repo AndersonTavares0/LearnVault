@@ -1,7 +1,7 @@
 name: Labeler
 
-# Somente metadados do evento: sem checkout, sem segredos e sem execução de código da PR.
-# A configuração .github/labeler.yml é lida da base confiável, nunca do head da PR.
+# Event metadata only: no checkout, no secrets and no execution of PR code.
+# The .github/labeler.yml configuration is read from the trusted base, never from the PR head.
 on:
   pull_request_target:
     types: [opened, synchronize, reopened]
@@ -15,9 +15,9 @@ concurrency:
 
 jobs:
   labeler:
-    name: Classificar PR por arquivos alterados
-    # Job informacional: não é check obrigatório e não bloqueia merge.
-    # Forks não fazem parte do fluxo do repositório; execuções de fork são ignoradas.
+    name: Label pull request by changed files
+    # Informational job: not a required check and does not block merge.
+    # Forks are not part of the repository's flow; fork runs are ignored.
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -25,8 +25,8 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - name: Aplicar labels por arquivos alterados
-        # SHA completo verificado; o comentário mantém a atualização do Dependabot previsível.
+      - name: Apply labels by changed files
+        # Full SHA verified; the comment keeps Dependabot updates predictable.
         uses: actions/labeler@bf12e9b00b37c5c0ca2b87b79b2daf7891dbda13 # v7.0.0
         with:
           configuration-path: .github/labeler.yml
