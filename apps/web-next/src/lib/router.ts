@@ -14,17 +14,17 @@ function decodeSegment(value: string | undefined): string | null {
 }
 
 /**
- * Interpreta o hash da localização.
+ * Parses the location hash.
  *
- * `#/course/<id>` abre um curso e `#/course/<id>/<caminho>` abre a aula indicada dentro
- * dele: o caminho relativo da aula só é único por curso, então a identidade do curso faz
- * parte da rota. `#/player/<id>/<caminho>` é a forma legada da mesma tela e continua
- * aceita. `#/settings` abre as preferências locais, `#/statistics` o resumo do
- * estudo e `#/notes` o painel global de anotações; nenhum deles identifica curso.
- * Parâmetro opcional `?t=<segundos>` posiciona o player diretamente no timestamp da anotação.
- * `#/player/<caminho>` é a forma legada de um arquivo solto sem curso dono;
- * o caminho deve começar a busca global. Qualquer outro valor cai na rota padrão do build:
- * o login no servidor e a tela inicial no desktop, que não tem sessão.
+ * `#/course/<id>` opens a course and `#/course/<id>/<path>` opens the lesson indicated inside
+ * it: a lesson's relative path is only unique per course, so the course's identity is
+ * part of the route. `#/player/<id>/<path>` is the legacy form of the same screen and stays
+ * accepted. `#/settings` opens the local preferences, `#/statistics` the study
+ * summary and `#/notes` the global notes panel; none of them identifies a course.
+ * The optional parameter `?t=<seconds>` positions the player directly at the note's timestamp.
+ * `#/player/<path>` is the legacy form of a loose file with no owning course;
+ * the path must start the global search. Any other value falls to the build's default route:
+ * the server sign-in and the home screen on the desktop, which has no session.
  */
 export function locationFromHash(hash: string, fallback: Route = 'login'): HashLocation {
 	const [cleanHash, queryString] = hash.replace(/^#\/?/, '').split('?');
@@ -91,7 +91,7 @@ export function routeFromHash(hash: string, fallback: Route = 'login'): Route {
 	return locationFromHash(hash, fallback).route;
 }
 
-/** Monta o hash canônico de uma rota. */
+/** Builds the canonical hash of a route. */
 export function href(route: Route, courseId?: string, lessonPath?: string, positionSeconds?: number | null): string {
 	const query = positionSeconds !== undefined && positionSeconds !== null && positionSeconds >= 0 ? `?t=${Math.floor(positionSeconds)}` : '';
 	if (route === 'course' && courseId !== undefined) {
@@ -107,7 +107,7 @@ export function href(route: Route, courseId?: string, lessonPath?: string, posit
 	return `#/${route}` + query;
 }
 
-/** Destino seguro depois do login, preservando uma rota já navegável. */
+/** Safe destination after sign-in, preserving an already navigable route. */
 export function destinationAfterLogin(hash: string): string {
 	const location = locationFromHash(hash);
 	if (location.route === 'home' || location.route === 'course' || location.route === 'settings' || location.route === 'statistics' || location.route === 'notes' || location.route === 'history') return href(location.route, location.courseId ?? undefined, location.lessonPath ?? undefined);
@@ -122,19 +122,19 @@ export function destinationAfterLogin(hash: string): string {
 	return href('home');
 }
 
-/** Curso de topo do catálogo pela identidade opaca (ou pelo caminho no formato legado). */
+/** Top-level course of the catalog by opaque identity (or by path in the legacy format). */
 export function findCourse(catalog: Catalog | null, courseId: string | null): CatalogNode | null {
 	if (!catalog || !courseId) return null;
 	return catalog.nodes.find((node) => courseIdOf(node) === courseId) ?? null;
 }
 
 /**
- * Aula dentro de um curso pelo caminho relativo.
+ * Lesson inside a course by relative path.
  *
- * A busca é restrita à subárvore do curso: dois cursos podem ter o mesmo caminho
- * relativo, e a identidade do curso desempata. Sem curso (arquivo solto da raiz), a
- * busca é global com `media_id` e caminho exato como critério, e nunca devolve
- * materiais ausentes.
+ * The search is restricted to the course's subtree: two courses may have the same relative
+ * path, and the course's identity breaks the tie. Without a course (a loose file at the root), the
+ * search is global with `media_id` and the exact path as the criterion, and never returns
+ * missing materials.
  */
 export function findLesson(catalog: Catalog | null, courseId: string | null, lessonPath: string | null): Lesson | null {
 	if (!catalog || !lessonPath) return null;
@@ -163,7 +163,7 @@ export function findLesson(catalog: Catalog | null, courseId: string | null, les
 	return standaloneMedia(catalog, (file) => file.path === lessonPath);
 }
 
-/** Localização de uma aula pelo `media_id`: o curso, o módulo (quando houver) e a aula. */
+/** Location of a lesson by `media_id`: the course, the module (when there is one) and the lesson. */
 export type LessonLocation = {
 	courseId: string;
 	courseTitle: string;
@@ -171,22 +171,22 @@ export type LessonLocation = {
 	lesson: Lesson;
 };
 
-// Mídia tocável: um arquivo de mídia que a última varredura não marcou como ausente.
+// Playable media: a media file that the last scan did not mark as missing.
 function playableMedia(file: FileEntry): boolean {
 	return file.kind === 'media' && file.availability?.trim().toLowerCase() !== 'missing';
 }
 
-// Agrupador visível de aulas na árvore canônica: módulo ou categoria. O primeiro nível sob o
-// curso é servido com papel `category`, então ele também conta como contexto de módulo.
+// Visible grouping of lessons in the canonical tree: module or category. The first level under the
+// course is served with the `category` role, so it also counts as module context.
 function groupsLessons(node: CatalogNode): boolean {
 	return node.role === 'module' || node.role === 'category';
 }
 
 /**
- * Título apresentado de uma mídia solta: sem prefixo numérico nem extensão.
+ * Presented title of a loose media: without a numeric prefix or extension.
  *
- * Repete a limpeza que o catálogo aplica ao título de uma aula derivada de arquivo, para que
- * a rede de segurança do cliente nunca mostre o nome cru do arquivo na tela inicial.
+ * Repeats the cleanup the catalog applies to the title of a lesson derived from a file, so that
+ * the client's safety net never shows the raw file name on the home screen.
  */
 export function cleanMediaTitle(name: string): string {
 	const lastDot = name.lastIndexOf('.');
@@ -196,12 +196,12 @@ export function cleanMediaTitle(name: string): string {
 }
 
 /**
- * Localização de uma aula pelo `media_id`: o curso, o módulo (quando houver) e a aula.
+ * Location of a lesson by `media_id`: the course, the module (when there is one) and the lesson.
  *
- * O curso é o nó de topo que contém a mídia. O módulo é o agrupador mais próximo da aula —
- * módulo ou categoria — e é `null` quando a aula está diretamente sob o curso. Mídia solta na
- * raiz do curso continua sendo um item avulso (o catálogo a mantém em `loose_files`), resolvida
- * com o título limpo e sem módulo.
+ * The course is the top-level node that contains the media. The module is the grouping nearest the lesson —
+ * module or category — and is `null` when the lesson sits directly under the course. Loose media at the
+ * course root remains a standalone item (the catalog keeps it in `loose_files`), resolved
+ * with the cleaned title and no module.
  */
 export function findLessonLocation(catalog: Catalog | null, mediaId: string | null): LessonLocation | null {
 	if (!catalog || !mediaId) return null;
@@ -217,7 +217,7 @@ function locateInCourse(course: CatalogNode, mediaId: string): LessonLocation | 
 		if (node.role === 'lesson' && [...node.files, ...node.looseFiles].some((file) => file.mediaId === mediaId)) {
 			return { moduleTitle, lesson: lessonFromNode(node) };
 		}
-		// A própria raiz do curso nunca conta como módulo: só o agrupamento abaixo dela.
+		// The course root itself never counts as a module: only the grouping below it.
 		const nested = !isRoot && groupsLessons(node) ? node.title : moduleTitle;
 		for (const child of node.children) {
 			const found = visit(child, nested, false);
@@ -239,7 +239,7 @@ function locateInCourse(course: CatalogNode, mediaId: string): LessonLocation | 
 	return null;
 }
 
-// Arquivos de mídia fora de uma aula usam o mesmo player, sem navegar para a URL crua.
+// Media files outside a lesson use the same player, without navigating to the raw URL.
 function standaloneMedia(catalog: Catalog, matches: (file: FileEntry) => boolean): Lesson | null {
 	function fromFiles(files: FileEntry[]): Lesson | null {
 		const file = files.find((entry) => entry.kind === 'media' && entry.availability?.trim().toLowerCase() !== 'missing' && matches(entry));

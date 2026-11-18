@@ -1,10 +1,10 @@
 /**
- * Capa gerada de um curso, sem imagens: cor e tipografia derivadas do título.
+ * Generated cover of a course, with no images: colour and typography derived from the title.
  *
- * O visual parte da identidade editorial do LearnVault — papel quente, verde profundo e
- * terracota — restringindo o matiz a uma faixa terrosa e usando o monograma em serifa
- * como elemento gráfico. A função é determinística: o mesmo título produz sempre a mesma
- * capa, e dois cursos com títulos diferentes quase sempre produzem capas distinguíveis.
+ * The look starts from LearnVault's editorial identity — warm paper, deep green and
+ * terracotta — restricting the hue to an earthy band and using the serif monogram
+ * as the graphic element. The function is deterministic: the same title always produces the same
+ * cover, and two courses with different titles almost always produce distinguishable covers.
  */
 
 /** Cloth colors for generated covers: moss, olive, ochre, brick, ink blue, slate teal and plum. */
@@ -13,24 +13,24 @@ const HUES = [28, 38, 14, 140, 100, 195, 345];
 export type CourseCoverPattern = 'grid' | 'arcs' | 'lines' | 'dots' | 'blocks' | 'wave';
 
 export type CourseCover = {
-	/** Cor inicial do gradiente. */
+	/** Starting colour of the gradient. */
 	from: string;
-	/** Cor final do gradiente. */
+	/** End colour of the gradient. */
 	to: string;
 	/** Iniciais exibidas na capa. */
 	monogram: string;
 	/**
-	 * Ângulo do gradiente em graus, determinístico por título.
+	 * Angle of the gradient in degrees, deterministic per title.
 	 *
-	 * Varia entre 95° e 200° para que cada capa tenha uma inclinação própria e legível,
-	 * sem depender de aleatoriedade nem de ordem de renderização.
+	 * Varies between 95° and 200° so that each cover has its own readable tilt,
+	 * without depending on randomness or on render order.
 	 */
 	angle: number;
-	/** Padrão geométrico da capa, determinístico por título. */
+	/** Geometric pattern of the cover, deterministic per title. */
 	pattern: CourseCoverPattern;
 };
 
-/** Hash FNV-1a de 32 bits, estável entre execuções. */
+/** 32-bit FNV-1a hash, stable across runs. */
 function hashTitle(value: string): number {
 	let hash = 0x811c9dc5;
 	for (let index = 0; index < value.length; index += 1) {
@@ -40,15 +40,15 @@ function hashTitle(value: string): number {
 	return hash >>> 0;
 }
 
-/** Palavras de ligação ignoradas nas iniciais, para o monograma ficar significativo. */
+/** Connecting words ignored in the initials, so the monogram stays meaningful. */
 const STOPWORDS = new Set(['a', 'o', 'as', 'os', 'de', 'da', 'do', 'das', 'dos', 'e', 'em', 'com', 'para', 'por', 'no', 'na']);
 
-/** Normaliza o título para comparação e iniciais, removendo acentos. */
+/** Normalizes the title for comparison and initials, removing accents. */
 function normalize(value: string): string {
 	return value.normalize('NFD').replace(/\p{Diacritic}/gu, '').trim();
 }
 
-/** Iniciais: até duas palavras relevantes (com letras, sem ligações), em maiúsculas. */
+/** Initials: up to two relevant words (with letters, no connectives), in capitals. */
 export function courseMonogram(title: string): string {
 	const words = normalize(title)
 		.split(/[\s._-]+/)
@@ -61,13 +61,13 @@ export function courseMonogram(title: string): string {
 	return initials || digits || '?';
 }
 
-/** Fonte efetiva da capa, na ordem de precedência definida na ADR 0002. */
+/** Effective source of the cover, in the order of precedence defined in ADR 0002. */
 export type CourseCoverSource = 'manual' | 'thumbnail' | 'generated';
 
 /**
- * Resolve a capa a exibir: capa personalizada tem precedência, seguida da miniatura
- * automática e, como fallback, da capa gerada pelo título. Valores vazios contam como
- * ausentes, então a futura fonte de upload (issue #237) só precisa informar uma URL.
+ * Resolves the cover to show: a custom cover takes precedence, followed by the automatic
+ * thumbnail and, as a fallback, the cover generated from the title. Empty values count as
+ * absent, so the future upload source (issue #237) only needs to supply a URL.
  */
 export function selectCourseCoverSource(input: {
 	manualCoverUrl?: string | null;
@@ -80,12 +80,12 @@ export function selectCourseCoverSource(input: {
 
 const PATTERNS: CourseCoverPattern[] = ['grid', 'arcs', 'lines', 'dots', 'blocks', 'wave'];
 
-/** Capa determinística do curso. */
+/** Deterministic cover of the course. */
 export function courseCover(title: string): CourseCover {
 	const hash = hashTitle(normalize(title).toLowerCase());
 	const hue = HUES[hash % HUES.length];
 	const shift = 8 + (hash % 8);
-	// Bits altos do hash alimentam o ângulo, para que ele varie mesmo quando o matiz repete.
+	// High bits of the hash feed the angle, so that it varies even when the hue repeats.
 	const angle = 95 + ((hash >>> 8) % 106);
 	return {
 		from: `hsl(${hue} 30% 34%)`,

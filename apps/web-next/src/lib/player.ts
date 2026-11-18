@@ -1,33 +1,33 @@
 import type { FileEntry } from './transport';
 
 /**
- * Indica se a conversão de legendas SRT sob demanda está disponível.
+ * Tells whether on-demand conversion of SRT subtitles is available.
  *
- * O desktop é offline: o caminho que baixa o SRT com `fetch` só existe no build HTTP.
- * A constante é resolvida em tempo de compilação por `__LEARNVAULT_TRANSPORT__`, para
- * que o código do `fetch` saia do bundle desktop por dead-code elimination. A decisão
- * fica fora do componente Svelte porque ali `===` vira uma chamada de runtime que o
- * minificador não consegue dobrar.
+ * The desktop is offline: the path that downloads the SRT with `fetch` only exists in the HTTP build.
+ * The constant is resolved at compile time by `__LEARNVAULT_TRANSPORT__`, so
+ * that the `fetch` code leaves the desktop bundle through dead-code elimination. The decision
+ * lives outside the Svelte component because there `===` becomes a runtime call that the
+ * minifier cannot fold.
  */
 export const srtConversionSupported: boolean = __LEARNVAULT_TRANSPORT__ === 'http';
 
 /**
- * Indica se o transporte implementa o progresso de estudo.
+ * Tells whether the transport implements study progress.
  *
- * Os dois transportes implementam: o HTTP pelas rotas autenticadas e o desktop pelos
+ * Both transports implement it: HTTP through the authenticated routes and the desktop through the
  * comandos IPC (`desktop_study_progress`, `desktop_record_position`,
- * `desktop_set_completed`, `desktop_recent_study`), sem `fetch`. A constante fala apenas da
- * capacidade do transporte — quem decide se há progresso a sincronizar é
- * [`studySyncEnabled`], que também exige uma fonte de mídia entregue pelo transporte.
+ * `desktop_set_completed`, `desktop_recent_study`), with no `fetch`. The constant speaks only of the
+ * transport's capability — whether there is progress to sync is decided by
+ * [`studySyncEnabled`], which also requires a media source delivered by the transport.
  */
 export const studySyncSupported: boolean = true;
 
 /**
- * Decide se o player pode ler e gravar progresso de estudo na mídia atual.
+ * Decides whether the player may read and write study progress for the current media.
  *
- * Exige três coisas: o transporte implementa Study, o estudo está habilitado na sessão e o
- * transporte entregou uma fonte para a mídia (`source`). A fonte pode ser HTTP ou o protocolo
- * opaco do desktop; em ambos os casos a posição representa reprodução real.
+ * It requires three things: the transport implements Study, study is enabled in the session and the
+ * transport delivered a source for the media (`source`). The source can be HTTP or the desktop's
+ * opaque protocol; in both cases the position represents real playback.
  */
 export function studySyncEnabled(studyEnabled: boolean, mediaId: string | null, source: string | null): boolean {
 	return studySyncSupported && studyEnabled && mediaId !== null && source !== null;
@@ -61,7 +61,7 @@ export type PlayerShortcutAction =
 	| 'open-notes'
 	| { type: 'seek-percent'; percent: number };
 
-/** Atalhos só são aplicados quando o contêiner do player, e não um controle interno, tem foco. */
+/** Shortcuts only apply when the player's container, not an inner control, has focus. */
 export function playerShortcutAction(key: string, playerRootHasFocus: boolean): PlayerShortcutAction | null {
 	if (!playerRootHasFocus) return null;
 	if (key === ' ' || key === 'Spacebar' || key === 'k' || key === 'K') return 'toggle-playback';
@@ -77,14 +77,14 @@ export function playerShortcutAction(key: string, playerRootHasFocus: boolean): 
 	return null;
 }
 
-/** Ajusta o volume em passos de 10% mantendo entre 0 e 1. */
+/** Adjusts the volume in steps of 10%, keeping it between 0 and 1. */
 export function stepVolume(currentVolume: number, direction: 'up' | 'down'): number {
 	const step = direction === 'up' ? 0.1 : -0.1;
 	const next = Math.round((currentVolume + step) * 10) / 10;
 	return Math.max(0, Math.min(1, next));
 }
 
-/** Calcula a posição de reprodução a partir de uma porcentagem (0-100%). */
+/** Computes the playback position from a percentage (0-100%). */
 export function seekPercentPosition(duration: number, percent: number): number {
 	if (!Number.isFinite(duration) || duration <= 0) return 0;
 	const clamped = Math.max(0, Math.min(100, percent));
@@ -92,10 +92,10 @@ export function seekPercentPosition(duration: number, percent: number): number {
 }
 
 /**
- * Onde a reprodução deve começar.
+ * Where playback should start.
  *
- * Clampa a posição salva à duração conhecida e evita retomar a menos de dois segundos do
- * fim: aí a aula já terminou, então recomeça do zero em vez de parar no crédito final.
+ * Clamps the saved position to the known duration and avoids resuming less than two seconds from
+ * the end: by then the lesson has already finished, so it restarts from zero instead of stopping at the final credits.
  */
 export function resumeTarget(position: number, duration: number): number {
 	if (!Number.isFinite(position) || position <= 0) return 0;
@@ -104,12 +104,12 @@ export function resumeTarget(position: number, duration: number): number {
 	return duration - target < 2 ? 0 : target;
 }
 
-/** O relógio periódico grava no máximo a cada `intervalMs`; eventos discretos são forçados. */
+/** The periodic clock saves at most every `intervalMs`; discrete events are forced. */
 export function shouldSavePosition(lastSavedAt: number, now: number, intervalMs = 5000): boolean {
 	return now - lastSavedAt >= intervalMs;
 }
 
-/** Não há avanço automático se a preferência estiver desligada ou a sequência terminou. */
+/** There is no automatic advance if the preference is off or the sequence has ended. */
 export function shouldAutoAdvance(enabled: boolean, hasNextLesson: boolean): boolean {
 	return enabled && hasNextLesson;
 }
@@ -134,15 +134,15 @@ export function selectPlayableMedia(media: FileEntry[], preferredMediaId?: strin
 }
 
 /**
- * Estado da mídia de uma aula, derivado apenas do catálogo.
+ * State of a lesson's media, derived only from the catalog.
  *
- * `playable`: existe mídia disponível. `missing`: a aula tem mídia catalogada e nenhuma
- * está disponível — o arquivo saiu do disco (disco externo desconectado, arquivo
- * renomeado) e a varredura marcou `availability = 'missing'`, preservando a aula e o
- * progresso. `absent`: a aula não tem nenhum arquivo de mídia no catálogo.
+ * `playable`: there is available media. `missing`: the lesson has catalogued media and none of it
+ * is available — the file left the disk (external drive disconnected, file
+ * renamed) and the scan marked `availability = 'missing'`, preserving the lesson and the
+ * progress. `absent`: the lesson has no media file at all in the catalog.
  *
- * A distinção existe para a mensagem do player ser factual: uma aula cuja mídia
- * desapareceu do disco não é a mesma coisa que uma aula sem mídia nenhuma.
+ * The distinction exists so the player's message is factual: a lesson whose media
+ * disappeared from the disk is not the same thing as a lesson with no media at all.
  */
 export type MediaAvailability = 'playable' | 'missing' | 'absent';
 
@@ -178,8 +178,8 @@ export function subtitleLanguage(name: string): string | null {
 export type MediaPlaybackKind = 'video' | 'audio';
 
 /**
- * Identifica formatos que comumente necessitam de compatibilidade ou transcodificação
- * sob demanda quando o navegador não dispõe de decodificadores nativos.
+ * Identifies formats that commonly need compatibility or on-demand
+ * transcoding when the browser has no native decoders.
  */
 export function requiresTranscodingProbe(fileName: string): boolean {
 	const ext = fileName.split(/[?#]/, 1)[0].split('.').pop()?.toLowerCase() ?? '';

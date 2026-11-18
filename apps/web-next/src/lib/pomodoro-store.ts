@@ -119,7 +119,7 @@ function persist(state: PomodoroState): void {
 		};
 		storage()?.setItem(POMODORO_TIMER_KEY, JSON.stringify(timer));
 	} catch {
-		// A timer continua válido em memória quando o armazenamento está bloqueado.
+		// The timer stays valid in memory when storage is blocked.
 	}
 }
 
@@ -248,7 +248,7 @@ function complete(): void {
 	if (state.status !== 'running') return;
 	recordSession(state, true);
 
-	// Notificação sonora e de navegador (opt-in)
+	// Sound and browser notification (opt-in)
 	if (state.settings.alarmEnabled) {
 		playPomodoroAlarm(state.settings.alarmSound, state.settings.alarmVolume, state.settings.alarmRepeats);
 	}
@@ -258,7 +258,7 @@ function complete(): void {
 			const body = state.mode === 'focus' ? tr('Time for a break. Your lesson is paused.', 'Hora da pausa. Sua aula está pausada.') : tr('Ready to pick the lesson back up?', 'Pronto para retomar a aula?');
 			new Notification(title, { body });
 		} catch {
-			// Ignora falha de notificação do navegador
+			// Ignores a browser notification failure
 		}
 	}
 
@@ -316,10 +316,10 @@ export function resetTimer(): void {
 }
 
 /**
- * Abandono explícito da sessão de foco ativa.
+ * Explicit abandonment of the active focus session.
  *
- * Apenas esta ação deliberada de desistência gera uma sessão incompleta (árvore seca).
- * Interrupções de rede, fechamento de aba, reinício ou pausas preservam a tentativa.
+ * Only this deliberate give-up action produces an incomplete session (withered tree).
+ * Network interruptions, tab closing, restarts or pauses preserve the attempt.
  */
 export function abandonTimer(): void {
 	const state = pomodoro.get();

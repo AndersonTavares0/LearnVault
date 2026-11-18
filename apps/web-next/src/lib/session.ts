@@ -2,26 +2,26 @@ import { tr } from './i18n';
 import type { Route } from './router';
 import type { TransportKind, User } from './transport';
 
-/** Estado inicial resolvido na montagem do aplicativo. */
+/** Initial state resolved when the application mounts. */
 export type SessionBootstrap = {
-	/** Sessão atual; o desktop recebe uma identidade local sem login. */
+	/** Current session; the desktop receives a local identity with no login. */
 	user: User | null;
-	/** Mensagem legível de falha na leitura da sessão, ou string vazia. */
+	/** Readable message of a failure reading the session, or an empty string. */
 	error: string;
 };
 
 /**
- * Rota inicial do build quando o hash não nomeia uma rota navegável.
+ * Initial route of the build when the hash does not name a navigable route.
  *
- * O servidor começa no login: sem sessão, o formulário é o ponto de partida. O desktop
- * não tem sessão nem login, então qualquer endereço de login ou desconhecido cai na
- * tela inicial em vez de abrir um formulário que não consegue autenticar.
+ * The server starts at the sign-in: without a session, the form is the starting point. The desktop
+ * has no session or sign-in, so any sign-in or unknown address falls to the
+ * home screen instead of opening a form that cannot authenticate.
  */
 export function defaultRoute(kind: TransportKind): Route {
 	return kind === 'desktop' ? 'home' : 'login';
 }
 
-/** Identidade local, sem credenciais e sem dados do caminho dos cursos. */
+/** Local identity, with no credentials and no data about the courses' paths. */
 export const desktopLocalUser: User = {
 	userId: 'local',
 	username: 'Biblioteca local',
@@ -31,13 +31,13 @@ export const desktopLocalUser: User = {
 };
 
 /**
- * Resolve a sessão inicial do aplicativo.
+ * Resolves the application's initial session.
  *
- * O desktop é sempre local: sem credenciais e sem portas de rede, ele usa a identidade
- * sintética e segue direto para a aplicação, mesmo sem nenhum curso importado (a tela
- * inicial convida a importar). O HTTP lê a sessão do servidor e, em caso de falha de
- * rede, mantém o formulário de login com uma mensagem apropriada em vez de declarar a
- * sessão encerrada.
+ * The desktop is always local: with no credentials and no network ports, it uses the
+ * synthetic identity and goes straight to the application, even with no course imported (the home
+ * screen invites you to import). HTTP reads the session from the server and, on a network
+ * failure, keeps the sign-in form with an appropriate message instead of declaring the
+ * session ended.
  */
 export async function resolveSession(
 	readSession: () => Promise<User | null>,

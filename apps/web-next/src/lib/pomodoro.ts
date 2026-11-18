@@ -143,7 +143,7 @@ export function playPomodoroAlarm(sound: AlarmSound, volume: number, repeats: nu
 			oscillator.stop(start + 0.25);
 		}
 	} catch {
-		// Falha de áudio segura
+		// Safe audio failure
 	}
 }
 

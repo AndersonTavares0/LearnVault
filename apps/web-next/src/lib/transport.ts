@@ -1,6 +1,6 @@
-// O `invoke` do Tauri entra apenas no bundle desktop: no bundle HTTP o `DesktopStub` é
-// eliminado por dead-code elimination junto com este import, de modo que nem o Tauri entra
-// na SPA web nem um `fetch` entra no desktop.
+// Tauri's `invoke` enters only the desktop bundle: in the HTTP bundle the `DesktopStub` is
+// eliminated by dead-code elimination together with this import, so neither Tauri enters
+// the web SPA nor does a `fetch` enter the desktop.
 import { invoke } from '@tauri-apps/api/core';
 import { isSourceFailure, sourceFailure } from '@/lib/source-failure';
 import { tr } from './i18n';
@@ -18,14 +18,14 @@ export type SourceRootsResult = { created: SourceRootEntry[]; skipped: { path: s
 export type SourceScanSummary = { complete: boolean; inserted: number };
 export type FileEntry = { name: string; path: string; size: number; mediaId?: string; mtimeSeconds?: number; kind?: string; availability?: string; unverified?: boolean };
 export type Lesson = { title: string; path: string; media: FileEntry[]; subtitles: FileEntry[]; materials: FileEntry[]; availability?: string; unverified?: boolean };
-// Cada nó de topo do catálogo é um curso com identidade opaca (`courseId`). Nós internos
-// não carregam a identidade: a árvore inteira pertence ao curso do topo.
+// Each top-level catalog node is a course with an opaque identity (`courseId`). Inner nodes
+// do not carry the identity: the whole tree belongs to the top-level course.
 /** How clear the course folder's organization is, and the facts that lowered it. */
 export type CourseStructure = { confidence: 'high' | 'medium' | 'low'; concerns: string[] };
 export type CatalogNode = { title: string; path: string; role: string; courseId?: string; coverVersion?: number; sourceFolder?: string; remote?: boolean; structure?: CourseStructure; files: FileEntry[]; looseFiles: FileEntry[]; children: CatalogNode[] };
 export type Catalog = { complete: boolean; looseFiles: FileEntry[]; nodes: CatalogNode[] };
-// A seleção nativa de uma pasta de curso é específica do desktop: no HTTP o servidor
-// registra cursos por caminho e nenhum caminho cruza o frontend.
+// Native selection of a course folder is desktop-specific: over HTTP the server
+// registers courses by path and no path crosses the frontend.
 export type TransportKind = 'http' | 'desktop';
 export type StudyProgress = { mediaId: string; positionSeconds: number; completed: boolean; updatedAt: number | null; recorded: boolean };
 /** Per-user playback preferences. Speeds arrive as percentages of normal speed. */
@@ -41,7 +41,7 @@ export type StudySummary = {
 	weekActiveDays: number;
 	completedLessons: number;
 	days: StudyDay[];
-	/** Dias com atividade nos últimos 365 dias, em ordem crescente (`YYYY-MM-DD`). */
+	/** Days with activity in the last 365 days, in ascending order (`YYYY-MM-DD`). */
 	activeDaysYear: string[];
 };
 export type FocusKind = 'focus' | 'short' | 'long';
@@ -52,10 +52,10 @@ export type FocusSummary = { todayMinutes: number; weekMinutes: number; weekSess
 export type MissionId = 'lesson' | 'focus-two' | 'focus-fifty';
 export type DailyMission = { id: MissionId; progress: number; target: number; claimed: boolean };
 export type RewardSummary = { xp: number; completedLessons: number; weeklyGoal: number; missions: DailyMission[]; study: StudySummary };
-// Estado da verificação de atualização, tal como o servidor local devolve em `/api/update`.
-// Uma falha de rede do servidor nunca vira erro HTTP: chega como `error` preenchido e
-// `available: false`. `enabled: false` significa que a checagem está desligada por
-// configuração (nenhuma chamada de rede acontece).
+// State of the update check, as the local server returns it from `/api/update`.
+// A network failure on the server never becomes an HTTP error: it arrives as a filled-in `error` and
+// `available: false`. `enabled: false` means the check is turned off by
+// configuration (no network call happens).
 export type UpdateStatus = {
 	current: string;
 	enabled: boolean;
@@ -74,7 +74,7 @@ export type UpdateHistoryEntry = {
 	to: string;
 	message: string;
 };
-/** Estado do job de indexação automática do servidor (o desktop indexa só por rescan). */
+/** State of the server's automatic indexing job (the desktop indexes only through rescan). */
 export type IndexingStatus = 'idle' | 'running' | 'done' | 'cancelled' | 'error';
 export type IndexingSnapshot = {
 	status: IndexingStatus;
@@ -187,27 +187,27 @@ export type MediaCapabilities = {
 	supportedCodecs?: string[];
 };
 
-// Protocolo customizado do desktop para mídia local. O webview aponta somente pelo
-// `mediaId` autorizado; nenhum caminho cruza a fronteira do webview.
+// Custom desktop protocol for local media. The webview points only at the authorized
+// `mediaId`; no path crosses the webview boundary.
 export const DESKTOP_MEDIA_SCHEME = 'learnvault-media';
 export const DESKTOP_MEDIA_HOST = 'localhost';
 
-// Protocolo customizado do desktop para as capas personalizadas dos cursos. O webview aponta
-// somente pela identidade opaca do curso: o handler do Rust resolve o arquivo no diretório de
-// capas do próprio aplicativo.
+// Custom desktop protocol for the courses' custom covers. The webview points only at
+// the course's opaque identity: the Rust handler resolves the file in the application's own
+// covers directory.
 export const DESKTOP_COVER_SCHEME = 'learnvault-cover';
 
-// Formatos e limite aceitos para uma capa personalizada. A validação real acontece nos bytes
-// iniciais (magic bytes) no servidor/Rust; aqui a lista apenas orienta o seletor de arquivos.
+// Formats and limit accepted for a custom cover. The real validation happens on the initial bytes
+// (magic bytes) on the server/Rust side; here the list only guides the file picker.
 export const COVER_ACCEPT = 'image/png,image/jpeg,image/webp';
 export const MAX_COVER_BYTES = 4 * 1024 * 1024;
 
-// No Chromium embutido (WebView2 no Windows e o webview do Android) um esquema customizado
-// do Tauri só é resolvido na forma `http://<esquema>.localhost`; o runtime reverte esse
-// prefixo por requisição antes de chamar o handler, que continua vendo
-// `learnvault-media://localhost/...`. No Linux (WebKitGTK) e no macOS (WKWebView) o esquema
-// é resolvido direto. Sem o prefixo correto o Chromium não resolve o esquema e o recurso não
-// carrega. A detecção usa apenas o `userAgent` do webview atual, sem dependência nova.
+// In the embedded Chromium (WebView2 on Windows and the Android webview) a custom Tauri
+// scheme is only resolved in the form `http://<scheme>.localhost`; the runtime reverts that
+// prefix per request before calling the handler, which keeps seeing
+// `learnvault-media://localhost/...`. On Linux (WebKitGTK) and macOS (WKWebView) the scheme
+// is resolved directly. Without the right prefix Chromium does not resolve the scheme and the resource does not
+// load. Detection uses only the current webview's `userAgent`, with no new dependency.
 function desktopProtocolBase(scheme: string, userAgent: string): string {
 	return /Windows|Android/i.test(userAgent) ? `http://${scheme}.localhost` : `${scheme}://${DESKTOP_MEDIA_HOST}`;
 }
@@ -216,7 +216,7 @@ export function desktopMediaUrl(mediaId: string, userAgent: string): string {
 	return `${desktopProtocolBase(DESKTOP_MEDIA_SCHEME, userAgent)}/${encodeURIComponent(mediaId)}`;
 }
 
-/** URL da capa personalizada no desktop, endereçada pela identidade opaca do curso. */
+/** URL of the custom cover on the desktop, addressed by the course's opaque identity. */
 export function desktopCoverUrl(courseId: string, userAgent: string): string {
 	return `${desktopProtocolBase(DESKTOP_COVER_SCHEME, userAgent)}/${encodeURIComponent(courseId)}`;
 }
@@ -226,16 +226,16 @@ export interface Transport {
 	login(username: string, password: string): Promise<User>;
 	logout(): Promise<void>;
 	catalog(): Promise<Catalog>;
-	// Desktop: dispara o seletor nativo e registra a pasta escolhida como um curso.
+	// Desktop: triggers the native picker and registers the chosen folder as a course.
 	importCourse(): Promise<void>;
-	// Servidor: registra um curso pelo caminho informado pelo admin.
+	// Server: registers a course by the path the admin gives.
 	importCoursePath(path: string): Promise<void>;
-	// Remove um curso do registro, sem tocar nos arquivos.
+	// Removes a course from the registry, without touching the files.
 	removeCourse(courseId: string): Promise<void>;
 	rescan(): Promise<void>;
-	/** Estado do job de indexação automática; o desktop devolve `idle`. */
+	/** State of the automatic indexing job; the desktop returns `idle`. */
 	indexingStatus(): Promise<IndexingSnapshot>;
-	/** Pede o cancelamento do job em execução; `false` quando não havia job ativo. */
+	/** Requests cancellation of the running job; `false` when there was no active job. */
 	cancelIndexing(): Promise<boolean>;
 	updateCredentials(username: string, password: string, currentPassword?: string): Promise<User>;
 	listUsers?(): Promise<LocalUser[]>;
@@ -300,7 +300,7 @@ export interface Transport {
 	userAvatarUrl(version?: number | null): string;
 	uploadUserAvatar(file: File | Blob): Promise<{ version: number }>;
 	deleteUserAvatar(): Promise<void>;
-	// Verifica a atualização; `force` ignora o intervalo mínimo de cache do servidor.
+	// Checks for the update; `force` ignores the server's minimum cache interval.
 	checkUpdate(force?: boolean): Promise<UpdateStatus>;
 	// Desktop: fetch the signed update and hold it, then install it and restart on request.
 	downloadUpdate?(): Promise<boolean>;
@@ -310,19 +310,19 @@ export interface Transport {
 	mediaUrl(file: FileEntry, courseId?: string): string | null;
 	transcodeUrl(file: FileEntry, courseId?: string, startSeconds?: number, reencode?: boolean): string | null;
 	openInSystemPlayer?(file: FileEntry): Promise<boolean>;
-	// URL da capa personalizada, derivada da versão exposta pelo catálogo. Sem versão (sem
-	// capa) devolve `null`, e a interface cai na miniatura ou na capa gerada.
+	// URL of the custom cover, derived from the version the catalog exposes. Without a version (no
+	// cover) it returns `null`, and the interface falls back to the thumbnail or the generated cover.
 	coverUrl(courseId: string, coverVersion?: number | null): string | null;
-	// Desktop: dispara o seletor nativo de imagens no Rust (o arquivo não cruza o IPC).
-	// Servidor: envia o arquivo escolhido pelo usuário no navegador.
+	// Desktop: triggers the native image picker in Rust (the file does not cross the IPC).
+	// Server: uploads the file the user chose in the browser.
 	importCourseCover(courseId: string, file?: File | null): Promise<void>;
 	removeCourseCover(courseId: string): Promise<boolean>;
-	// Ordenação manual de módulos e aulas entre irmãos. `parent` é o caminho relativo do
-	// nó pai (vazio para a lista de topo); `children` é a ordem desejada dos filhos, que
-	// precisa ser uma permutação exata dos irmãos.
+	// Manual ordering of modules and lessons among siblings. `parent` is the relative path of the
+	// parent node (empty for the top-level list); `children` is the desired order of the children, which
+	// must be an exact permutation of the siblings.
 	setCourseOrder(courseId: string, parent: string, children: string[]): Promise<void>;
-	// Restaura a ordem automática de um pai específico ou, sem `parent`, do curso inteiro.
-	// Devolve `true` quando havia uma preferência a remover.
+	// Restores the automatic order of a specific parent or, without `parent`, of the whole course.
+	// Returns `true` when there was a preference to remove.
 	resetCourseOrder(courseId: string, parent?: string): Promise<boolean>;
 }
 
@@ -338,14 +338,14 @@ function invalidPayload(en: string, ptBr: string): Error {
 	return error;
 }
 
-// Limites explícitos da normalização do catálogo. Um payload hostil não pode esgotar a pilha
-// (profundidade) nem a memória (nós e arquivos): o payload que ultrapassa um limite é recusado
-// inteiro, nunca truncado. São generosos para uma biblioteca real e valem para os dois
-// transportes, já que ambos passam por `normalizeCatalog`.
+// Explicit limits of catalog normalization. A hostile payload must not exhaust the stack
+// (depth) nor memory (nodes and files): a payload that exceeds a limit is refused
+// whole, never truncated. They are generous for a real library and apply to both
+// transports, since both go through `normalizeCatalog`.
 export const CATALOG_LIMITS = { depth: 32, nodes: 50_000, files: 200_000 } as const;
 
-// Orçamento compartilhado pela normalização de um catálogo: conta nós e arquivos de forma
-// determinística para recusar payloads grandes demais antes de amplificá-los.
+// Budget shared by the normalization of one catalog: it counts nodes and files
+// deterministically to refuse oversized payloads before amplifying them.
 type CatalogBudget = { nodes: number; files: number };
 
 function newCatalogBudget(): CatalogBudget { return { nodes: 0, files: 0 }; }
@@ -368,13 +368,13 @@ export function fileStatus(file: FileEntry): string {
 	].filter(Boolean).join(' · ');
 }
 
-/** Identidade de um curso no catálogo: a opaca do contrato ou o caminho do nó legado. */
+/** Identity of a course in the catalog: the contract's opaque one or the legacy node's path. */
 export function courseIdOf(node: CatalogNode): string {
 	return node.courseId ?? node.path;
 }
 
-// Campo opcional presente de um arquivo: aceita ausência, mas um valor presente com tipo
-// incorreto (por exemplo `media_id: 42`) é recusado em vez de vazar para a interface.
+// Optional field present on a file: it accepts absence, but a present value of the wrong
+// type (for example `media_id: 42`) is refused instead of leaking into the interface.
 function optionalFileString(value: unknown, key: string): string | undefined {
 	if (value === undefined) return undefined;
 	if (typeof value !== 'string') throw invalidPayload(`invalid ${key} field in file.`, `campo ${key} do arquivo inválido.`);
@@ -387,16 +387,16 @@ function optionalFileBoolean(value: unknown, key: string): boolean | undefined {
 	return value;
 }
 
-// O contrato declara o tamanho como `u64`: precisa ser um inteiro seguro e não negativo.
-// Um valor fracionário, negativo ou além do inteiro seguro do JavaScript é recusado em vez
-// de renderizar um tamanho impossível.
+// The contract declares the size as `u64`: it must be a safe, non-negative integer.
+// A fractional or negative value, or one beyond JavaScript's safe integer, is refused instead
+// of rendering an impossible size.
 function fileSize(value: unknown): number {
 	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw invalidPayload('file has an invalid size.', 'arquivo com tamanho inválido.');
 	return value;
 }
 
-// Revisões antigas podem omitir mtime; um valor presente precisa ser um segundo Unix inteiro
-// representável com segurança pelo JavaScript.
+// Old revisions may omit mtime; a present value must be a whole Unix second
+// safely representable by JavaScript.
 function optionalMtimeSeconds(value: unknown): number | undefined {
 	if (value === undefined) return undefined;
 	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
@@ -405,8 +405,8 @@ function optionalMtimeSeconds(value: unknown): number | undefined {
 	return value;
 }
 
-// Arquivo do contrato canônico Rust/desktop: exige identidade `media_id` não vazia para que
-// o arquivo seja endereçável.
+// File of the canonical Rust/desktop contract: requires a non-empty `media_id` identity so that
+// the file is addressable.
 function normalizeFile(value: unknown): FileEntry {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalidPayload('invalid file.', 'arquivo inválido.');
 	const file = value as RustFile;
@@ -427,7 +427,7 @@ function normalizeFile(value: unknown): FileEntry {
 	};
 }
 
-// Arquivo de um nó canônico Rust: consome o orçamento de arquivos.
+// File of a canonical Rust node: consumes the file budget.
 function normalizeRustFile(value: unknown, budget: CatalogBudget): FileEntry {
 	countFile(budget);
 	return normalizeFile(value);
@@ -438,26 +438,26 @@ function lesson(title: string, path: string, files: FileEntry[]): Lesson {
 		title, path,
 		media: files.filter((file) => file.kind === 'media'),
 		subtitles: files.filter((file) => file.kind === 'subtitle'),
-		// `materials` é o balde catch-all da gramática legada: um `kind` desconhecido (ou
-		// ausente) não pode fazer um arquivo útil sumir da aula.
+		// `materials` is the catch-all bucket of the legacy grammar: an unknown (or
+		// missing) `kind` must not make a useful file disappear from the lesson.
 		materials: files.filter((file) => file.kind !== 'media' && file.kind !== 'subtitle')
 	};
 }
 
 function nodeFiles(node: CatalogNode): FileEntry[] { return [...node.files, ...node.looseFiles]; }
 
-// Aula de um nó canônico. `materials` é o balde catch-all (ver `lesson`), então um `kind`
-// desconhecido continua acessível: esta é a rotina única usada pela projeção, pelo roteador e
-// pela UI, para que abrir ou rotear uma aula nunca descarte um arquivo.
+// Lesson of a canonical node. `materials` is the catch-all bucket (see `lesson`), so an unknown
+// `kind` stays reachable: this is the single routine used by the projection, the router and
+// the UI, so that opening or routing a lesson never drops a file.
 export function lessonFromNode(node: CatalogNode): Lesson {
 	const files = nodeFiles(node);
 	return { ...lesson(node.title, node.path, files), availability: files.find((file) => file.availability)?.availability, unverified: files.some((file) => file.unverified) };
 }
 
-// Resolve um par espelhado snake_case/camelCase de forma determinística. A ausência dos dois
-// campos vale como lista vazia; um `null` explícito ou um tipo que não seja lista é recusado
-// (nunca tratado como ausente). Quando os dois vêm preenchidos, o snake_case é o contrato
-// canônico; valores divergentes são recusados como payload ambíguo em vez de escolher um lado.
+// Resolves a mirrored snake_case/camelCase pair deterministically. The absence of both
+// fields counts as an empty list; an explicit `null` or a non-list type is refused
+// (never treated as absent). When both are filled in, snake_case is the canonical
+// contract; diverging values are refused as an ambiguous payload instead of picking a side.
 function mirroredArray(source: object, snake: string, camel: string): unknown[] {
 	const record = source as Record<string, unknown>;
 	const hasSnake = Object.prototype.hasOwnProperty.call(record, snake);
@@ -469,8 +469,8 @@ function mirroredArray(source: object, snake: string, camel: string): unknown[] 
 	return raw;
 }
 
-// Campo de nós opcional: ausente vale como lista vazia; `null` explícito ou
-// tipo incorreto é recusado em vez de descartado silenciosamente.
+// Optional node field: absent counts as an empty list; an explicit `null` or
+// a wrong type is refused instead of silently discarded.
 function optionalArray(source: object, key: string): unknown[] {
 	const record = source as Record<string, unknown>;
 	if (!Object.prototype.hasOwnProperty.call(record, key) || record[key] === undefined) return [];
@@ -479,8 +479,8 @@ function optionalArray(source: object, key: string): unknown[] {
 	return raw;
 }
 
-// Versão da capa personalizada de um curso: um segundo Unix inteiro não negativo. Uma
-// revisão antiga do servidor simplesmente não envia o campo (sem capa).
+// Version of a course's custom cover: a non-negative whole Unix second. An old
+// server revision simply does not send the field (no cover).
 function optionalCoverVersion(value: unknown): number | undefined {
 	if (value === undefined) return undefined;
 	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw invalidPayload('course has an invalid cover version.', 'curso com versão de capa inválida.');
@@ -517,10 +517,10 @@ function normalizeRustNode(value: unknown, depth: number, budget: CatalogBudget)
 	};
 }
 
-// Árvore canônica de um payload Rust: `nodes` é preferido. Quando a chave `nodes` está
-// presente, o valor precisa ser uma lista — um `null`, string ou qualquer tipo que não seja
-// lista é recusado em vez de mascarado por `categories`. Um `nodes` vazio cai de volta para
-// `categories` (compatibilidade com projeção de categorias) e, sem `categories`, vale como lista vazia.
+// Canonical tree of a Rust payload: `nodes` is preferred. When the `nodes` key is
+// present, the value must be a list — a `null`, string or any non-list type is
+// refused instead of being masked by `categories`. An empty `nodes` falls back to
+// `categories` (compatibility with the categories projection) and, without `categories`, counts as an empty list.
 function canonicalNodeList(value: RustCatalog): unknown {
 	const record = value as Record<string, unknown>;
 	const hasNodes = Object.prototype.hasOwnProperty.call(record, 'nodes') && record.nodes !== undefined;
@@ -753,8 +753,8 @@ function normalizeClaim(value: unknown): boolean {
 	return (value as { claimed: boolean }).claimed;
 }
 
-// Campo de atualização opcional: `null`/ausente valem como nulo; um tipo que não seja
-// string é recusado em vez de vazar para a interface.
+// Optional update field: `null`/absent count as null; a type that is not a
+// string is refused instead of leaking into the interface.
 function optionalUpdateString(value: unknown, key: string): string | null {
 	if (value === undefined || value === null) return null;
 	if (typeof value !== 'string') throw invalidPayload(`invalid update field ${key}.`, `campo ${key} da atualização inválido.`);
@@ -1034,12 +1034,12 @@ export function normalizeStudyFavorites(raw: unknown): StudyFavorites {
 	};
 }
 
-// Envelope de categoria da projeção de categorias: `{ children }`.
+// Category envelope of the categories projection: `{ children }`.
 function isCategoryEnvelope(item: unknown): boolean {
 	return item !== null && typeof item === 'object' && !Array.isArray(item) && 'children' in item;
 }
 
-// `categories[].courses` era o shape legado exclusivo do serviço Go descontinuado.
+// `categories[].courses` was the legacy shape exclusive to the discontinued Go service.
 function hasLegacyCourses(categories: unknown): boolean {
 	if (!Array.isArray(categories) || categories.length === 0) return false;
 	for (const item of categories) {
@@ -1053,29 +1053,29 @@ function hasLegacyCourses(categories: unknown): boolean {
 export function normalizeCatalog(value: unknown): Catalog {
 	if (!value || typeof value !== 'object') throw invalidPayload('missing catalog.', 'catálogo ausente.');
 	const record = value as Record<string, unknown>;
-	// O contrato canônico Rust/desktop exige explicitamente `complete: bool`.
-	// Payloads sem o marcador ou com valor não booleano são rejeitados (fail-closed).
+	// The canonical Rust/desktop contract explicitly requires `complete: bool`.
+	// Payloads without the marker, or with a non-boolean value, are rejected (fail-closed).
 	const hasComplete = Object.prototype.hasOwnProperty.call(record, 'complete') && record.complete !== undefined;
 	if (!hasComplete || typeof record.complete !== 'boolean') throw invalidPayload('missing or invalid complete field.', 'campo complete ausente ou inválido.');
 
-	// `nodes` presente precisa ser lista: `null`, string ou tipo inválido é payload malformado e
-	// nunca pode ser escondido por um fallback silencioso para `categories`.
+	// A present `nodes` must be a list: `null`, a string or an invalid type is a malformed payload and
+	// can never be hidden by a silent fallback to `categories`.
 	const hasNodes = Object.prototype.hasOwnProperty.call(record, 'nodes') && record.nodes !== undefined;
 	if (hasNodes && !Array.isArray(record.nodes)) throw invalidPayload('invalid nodes field.', 'campo nodes inválido.');
 	const payload = value as { categories?: unknown };
 
-	// Com nós canônicos, `categories` é a projeção legada e é ignorada.
+	// With canonical nodes, `categories` is the legacy projection and is ignored.
 	if (Array.isArray(record.nodes) && record.nodes.length > 0) return normalizeRustCatalog(value as RustCatalog);
 
-	// Sem nós canônicos, campos só-do-Go (`categories[].courses`) não podem ser consumidos
-	// como nós nem virar conteúdo vazio: falha fechada.
+	// Without canonical nodes, Go-only fields (`categories[].courses`) must not be consumed
+	// as nodes nor become empty content: fail closed.
 	if (hasLegacyCourses(payload.categories)) throw invalidPayload('canonical catalog with legacy Go fields.', 'catálogo canônico com campos legados do Go.');
 	if (Array.isArray(payload.categories) && payload.categories.every(isCategoryEnvelope)) return normalizeRustCatalog(value as RustCatalog);
 	if (hasNodes || Array.isArray(payload.categories)) return normalizeRustCatalog(value as RustCatalog);
 	throw invalidPayload('unknown catalog format.', 'formato de catálogo desconhecido.');
 }
 
-// Lê o `error` estável do corpo JSON de uma resposta falha, quando existir.
+// Reads the stable `error` from the JSON body of a failed response, when there is one.
 async function responseError(response: Response): Promise<string | null> {
 	try {
 		const payload = await response.json() as { error?: unknown };
@@ -1122,8 +1122,8 @@ async function rootsErrorMessage(response: Response, fallback: string): Promise<
 	}
 }
 
-// Mensagem acionável para o upload de capa. O servidor decide o formato pelos bytes iniciais,
-// então `415` cobre também o arquivo renomeado com uma extensão de imagem.
+// Actionable message for the cover upload. The server decides the format from the initial bytes,
+// so `415` also covers a file renamed with an image extension.
 function coverUploadErrorMessage(status: number): string {
 	if (status === 403) return 'credentials_change_required';
 	if (status === 404) return tr('Course not found.', 'Curso não encontrado.');
@@ -1133,15 +1133,15 @@ function coverUploadErrorMessage(status: number): string {
 	return tr('Could not save course cover.', 'Não foi possível salvar a capa do curso.');
 }
 
-// O valor de `removed` vem do corpo JSON; uma resposta sem corpo válido vale como `false`,
-// nunca como sucesso silencioso de uma remoção que não aconteceu.
+// The value of `removed` comes from the JSON body; a response without a valid body counts as `false`,
+// never as a silent success of a removal that did not happen.
 async function removalFlag(response: Response): Promise<boolean> {
 	const payload = await response.json().catch(() => null) as { removed?: unknown } | null;
 	return payload?.removed === true;
 }
 
-// Mensagem acionável para os endpoints de ordenação. Um `422` indica lista desatualizada
-// (não é mais uma permutação dos irmãos), então a interface precisa recarregar.
+// Actionable message for the ordering endpoints. A `422` indicates a stale list
+// (no longer a permutation of the siblings), so the interface must reload.
 function orderErrorMessage(status: number): string {
 	if (status === 403) return 'credentials_change_required';
 	if (status === 404) return tr('Course not found.', 'Curso não encontrado.');
@@ -1515,8 +1515,8 @@ export class HttpTransport implements Transport {
 	async rewardSummary() { const response = await fetch('/api/rewards/summary'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not load your rewards.', 'Não foi possível carregar suas recompensas.')); return normalizeRewardSummary(await response.json()); }
 	async claimDailyMission(missionId: MissionId) { const response = await fetch(`/api/rewards/missions/${encodeURIComponent(missionId)}/claim`, { method: 'POST' }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 409 ? tr('Complete the mission before claiming it.', 'Conclua a missão antes de resgatá-la.') : tr('Could not claim mission.', 'Não foi possível resgatar a missão.')); return normalizeClaim(await response.json()); }
 	async setWeeklyGoal(goal: number) { if (!Number.isInteger(goal) || goal < 1 || goal > 7) throw new Error(tr('Weekly goal must be between 1 and 7 days.', 'A meta semanal precisa ser de 1 a 7 dias.')); const response = await fetch('/api/rewards/weekly-goal', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ weekly_goal: goal }) }); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : response.status === 422 ? tr('Weekly goal must be between 1 and 7 days.', 'A meta semanal precisa ser de 1 a 7 dias.') : tr('Could not save weekly goal.', 'Não foi possível salvar a meta semanal.')); return normalizeWeeklyGoal(await response.json()); }
-	// O servidor local faz a checagem por HTTPS e devolve o estado; o navegador só o exibe.
-	// `force=1` (checagem manual) ignora o intervalo mínimo de cache do servidor.
+	// The local server does the check over HTTPS and returns the state; the browser only displays it.
+	// `force=1` (manual check) ignores the server's minimum cache interval.
 	async checkUpdate(force = false) { const response = await fetch(force ? '/api/update?force=1' : '/api/update'); if (!response.ok) throw new Error(response.status === 403 ? 'credentials_change_required' : tr('Could not check for updates.', 'Não foi possível verificar a atualização.')); return normalizeUpdateStatus(await response.json()); }
 	async updateHistory(): Promise<UpdateHistoryEntry[]> {
 		const response = await fetch('/api/update/history');
@@ -1559,15 +1559,15 @@ export class HttpTransport implements Transport {
 	openInSystemPlayer(_file: FileEntry): Promise<boolean> {
 		return Promise.resolve(false);
 	}
-	// A versão (mtime em segundos) exposta pelo catálogo entra como `?v=` para invalidar a
-	// imagem em cache do navegador quando a capa é trocada. Sem capa, não há URL manual.
+	// The version (mtime in seconds) the catalog exposes goes in as `?v=` to invalidate the
+	// browser's cached image when the cover is replaced. Without a cover, there is no manual URL.
 	coverUrl(courseId: string, coverVersion?: number | null) {
 		if (coverVersion === undefined || coverVersion === null) return null;
 		return `/api/courses/${encodeURIComponent(courseId)}/cover?v=${coverVersion}`;
 	}
 	async importCourseCover(courseId: string, file?: File | null) {
 		if (!file) throw new Error(tr('Choose an image for the cover.', 'Escolha uma imagem para a capa.'));
-		// O limite é verificado antes de enviar: um arquivo grande demais nunca ocupa a rede.
+		// The limit is checked before sending: a file that is too large never occupies the network.
 		if (file.size > MAX_COVER_BYTES) throw new Error(tr('The image is larger than 4 MiB.', 'A imagem é maior que 4 MiB.'));
 		const response = await fetch(`/api/admin/courses/${encodeURIComponent(courseId)}/cover`, { method: 'PUT', body: file });
 		if (!response.ok) throw new Error(coverUploadErrorMessage(response.status));
@@ -1589,9 +1589,9 @@ export class HttpTransport implements Transport {
 	}
 }
 
-// Códigos estáveis de erro IPC e a mensagem sanitizada correspondente. Um código
-// desconhecido ou ausente nunca repassa o texto recebido: cai no fallback da chamada,
-// para que nenhuma mensagem arbitrária (potencialmente com caminhos) chegue à interface.
+// Stable IPC error codes and the matching sanitized message. An unknown
+// or missing code never passes on the received text: it falls to the call's fallback,
+// so that no arbitrary message (potentially with paths) reaches the interface.
 function desktopErrorMessage(code: string): string | null {
 	switch (code) {
 		case 'catalog_unavailable': return tr('Catalog unavailable.', 'catálogo indisponível');
@@ -1632,7 +1632,7 @@ function desktopErrorMessage(code: string): string | null {
 	}
 }
 
-// O comando devolve o erro como objeto serializado `{ code, message }`, não como `Error`.
+// The command returns the error as a serialized `{ code, message }` object, not as an `Error`.
 function desktopError(cause: unknown, fallback: string): Error {
 	const payload = cause as { code?: unknown } | null;
 	if (payload && typeof payload === 'object' && payload.code === 'focus_session_conflict') return new FocusSessionConflict();
@@ -1649,31 +1649,31 @@ export class DesktopStub implements Transport {
 	login() { return Promise.reject(new Error(tr('Desktop transport not yet implemented.', 'Transporte desktop ainda não implementado.'))); }
 	logout() { return Promise.resolve(); }
 	async catalog() { try { return normalizeCatalog(await invoke<unknown>('desktop_catalog')); } catch (cause) { throw desktopError(cause, tr('Could not load catalog.', 'Não foi possível carregar o catálogo.')); } }
-	// O webview apenas dispara o seletor nativo no Rust; nenhum caminho é enviado nem
-	// devolvido. Cancelar preserva a lista anterior de cursos.
+	// The webview only triggers the native picker in Rust; no path is sent or
+	// returned. Cancelling preserves the previous list of courses.
 	async importCourse() { try { await invoke<unknown>('desktop_import_course'); } catch (cause) { throw desktopError(cause, tr('Could not import course.', 'Não foi possível importar o curso.')); } }
 	importCoursePath(_path: string) { return Promise.reject(new Error(tr('On desktop the folder is chosen by the native system picker.', 'No desktop a pasta é escolhida pelo seletor nativo do sistema.'))); }
-	// A remoção envia somente a identidade opaca do curso, nunca um caminho.
+	// The removal sends only the course's opaque identity, never a path.
 	async removeCourse(courseId: string) { try { await invoke<unknown>('desktop_remove_course', { courseId }); } catch (cause) { throw desktopError(cause, tr('Could not remove course.', 'Não foi possível remover o curso.')); } }
-	// O rescan desktop é sempre explícito: o webview só o dispara a pedido do usuário. A
-	// resposta é um resumo sanitizado que não interessa ao shell, que recarrega o catálogo.
+	// The desktop rescan is always explicit: the webview only triggers it at the user's request. The
+	// response is a sanitized summary that does not matter to the shell, which reloads the catalog.
 	async rescan() { try { await invoke<unknown>('desktop_rescan'); } catch (cause) { throw desktopError(cause, tr('Could not index courses.', 'Não foi possível indexar os cursos.')); } }
 	indexingStatus() { return Promise.resolve(IDLE_INDEXING); }
 	cancelIndexing() { return Promise.resolve(false); }
 	updateCredentials() { return Promise.reject(new Error(tr('Desktop transport not yet implemented.', 'Transporte desktop ainda não implementado.'))); }
-	// O progresso de estudo do desktop é o do dono local fixo, escolhido no Rust: o webview
-	// envia apenas o `mediaId`, a posição, a conclusão e o limite, e nunca um `owner_id` nem
-	// qualquer caminho. Os comandos devolvem o mesmo contrato snake_case do HTTP, então a
-	// normalização é a mesma e nenhum `fetch` entra no bundle desktop.
+	// Desktop study progress belongs to the fixed local owner, chosen in Rust: the webview
+	// sends only the `mediaId`, the position, the completion and the limit, and never an `owner_id` nor
+	// any path. The commands return the same snake_case contract as HTTP, so the
+	// normalization is the same and no `fetch` enters the desktop bundle.
 	async studyProgress(mediaId: string) { try { return normalizeStudyProgress(await invoke<unknown>('desktop_study_progress', { mediaId })); } catch (cause) { throw desktopError(cause, tr('Could not read progress.', 'Não foi possível ler o progresso.')); } }
 	async recordPosition(mediaId: string, positionSeconds: number) { try { return normalizeStudyProgress(await invoke<unknown>('desktop_record_position', { mediaId, positionSeconds })); } catch (cause) { throw desktopError(cause, tr('Could not save progress.', 'Não foi possível salvar o progresso.')); } }
 	async setCompleted(mediaId: string, completed: boolean) { try { return normalizeStudyProgress(await invoke<unknown>('desktop_set_completed', { mediaId, completed })); } catch (cause) { throw desktopError(cause, tr('Could not update completion status.', 'Não foi possível atualizar a conclusão.')); } }
-	// Sem limite informado, o comando usa o padrão do contrato; por isso o argumento é
-	// omitido em vez de enviado como `undefined`.
+	// Without a limit given, the command uses the contract's default; that is why the argument is
+	// omitted instead of being sent as `undefined`.
 	async recentStudy(limit?: number) { try { return normalizeRecentStudy(await invoke<unknown>('desktop_recent_study', limit === undefined ? {} : { limit })); } catch (cause) { throw desktopError(cause, tr('Could not load study history.', 'Não foi possível carregar o histórico de estudo.')); } }
 	async studySummary() { try { return normalizeStudySummary(await invoke<unknown>('desktop_study_summary')); } catch (cause) { throw desktopError(cause, tr('Could not load your progress summary.', 'Não foi possível carregar sua evolução.')); } }
-	// As preferências vivem no banco local e entram na fila de sincronização; o
-	// armazenamento do webview continua sendo a cópia imediata e o fallback offline.
+	// Preferences live in the local database and enter the sync queue; the
+	// webview's storage remains the immediate copy and the offline fallback.
 	async getPlaybackPreferences() {
 		try {
 			return normalizePlaybackPreferences(await invoke<unknown>('desktop_playback_preferences'));
@@ -1701,8 +1701,8 @@ export class DesktopStub implements Transport {
 			throw desktopError(cause, tr('Could not load notes.', 'Não foi possível carregar as anotações.'));
 		}
 	}
-	// Sem limite informado, o comando usa o padrão do contrato; por isso o argumento é
-	// omitido em vez de enviado como `undefined`.
+	// Without a limit given, the command uses the contract's default; that is why the argument is
+	// omitted instead of being sent as `undefined`.
 	async search(query: string, limit?: number): Promise<SearchResults> {
 		try {
 			const res = await invoke<unknown>('desktop_search', limit === undefined ? { query } : { query, limit });
@@ -1875,7 +1875,7 @@ export class DesktopStub implements Transport {
 	async rewardSummary() { try { return normalizeRewardSummary(await invoke<unknown>('desktop_reward_summary')); } catch (cause) { throw desktopError(cause, tr('Could not load your rewards.', 'Não foi possível carregar suas recompensas.')); } }
 	async claimDailyMission(missionId: MissionId) { try { return await invoke<boolean>('desktop_claim_daily_mission', { missionId }); } catch (cause) { throw desktopError(cause, tr('Could not claim mission.', 'Não foi possível resgatar a missão.')); } }
 	async setWeeklyGoal(goal: number) { try { if (!Number.isInteger(goal) || goal < 1 || goal > 7) throw new Error(); const saved = await invoke<unknown>('desktop_set_weekly_goal', { weeklyGoal: goal }); if (!Number.isInteger(saved) || (saved as number) < 1 || (saved as number) > 7) throw invalidPayload('invalid weekly goal.', 'meta semanal inválida.'); return saved as number; } catch (cause) { if (cause instanceof Error && cause.name === 'InvalidPayloadError') throw cause; throw desktopError(cause, tr('Could not save weekly goal.', 'Não foi possível salvar a meta semanal.')); } }
-	// A senha só existe na chamada de login: nenhum estado ou segredo volta para o webview.
+	// The password exists only in the login call: no state or secret returns to the webview.
 	async syncState() { try { return normalizeSyncState(await invoke<unknown>('desktop_sync_state')); } catch (cause) { throw desktopError(cause, tr('Could not read sync state.', 'Não foi possível ler o estado da sincronização.')); } }
 	async syncConfigure(serverUrl: string) { try { return normalizeSyncState(await invoke<unknown>('desktop_sync_configure', { serverUrl })); } catch (cause) { throw desktopError(cause, tr('Could not save the server address.', 'Não foi possível salvar o endereço do servidor.')); } }
 	async syncSignIn(username: string, password: string) { try { return normalizeSyncState(await invoke<unknown>('desktop_sync_login', { username, password })); } catch (cause) { throw desktopError(cause, tr('Could not sign in to the sync server.', 'Não foi possível entrar no servidor de sincronização.')); } }
@@ -1884,7 +1884,7 @@ export class DesktopStub implements Transport {
 	userAvatarUrl(_version?: number | null) { return ''; }
 	uploadUserAvatar(_file: File | Blob): Promise<{ version: number }> { return Promise.resolve({ version: 1 }); }
 	deleteUserAvatar(): Promise<void> { return Promise.resolve(); }
-	// O desktop verifica atualizações oficiais via plugin oficial do Tauri 2 e IPC nativo.
+	// The desktop checks for official updates through Tauri 2's official plugin and native IPC.
 	async checkUpdate(_force = false): Promise<UpdateStatus> {
 		try {
 			const info = await invoke<{
@@ -1927,7 +1927,7 @@ export class DesktopStub implements Transport {
 			throw desktopError(cause, tr('Could not download the update.', 'Não foi possível baixar a atualização.'));
 		}
 	}
-	// Reinicia com os bytes já baixados; um erro aqui nunca inclui caminho nem URL.
+	// Restarts with the bytes already downloaded; an error here never includes a path or URL.
 	async restartToUpdate(): Promise<boolean> {
 		try {
 			return await invoke<boolean>('desktop_restart_to_update');
@@ -1947,8 +1947,8 @@ export class DesktopStub implements Transport {
 			return { transcoding: false, systemPlayer: true };
 		}
 	}
-	// Toda mídia entregue ao player usa a identidade autorizada. O caminho catalogado é
-	// deliberadamente ignorado, inclusive no desktop, para que ele nunca atravesse o webview.
+	// Every media delivered to the player uses the authorized identity. The catalogued path is
+	// deliberately ignored, including on the desktop, so that it never crosses the webview.
 	mediaUrl(file: FileEntry, _courseId?: string) {
 		if (!file.mediaId || !['media', 'subtitle', 'material'].includes(file.kind ?? '')) return null;
 		return desktopMediaUrl(file.mediaId, navigator.userAgent);
@@ -1964,21 +1964,21 @@ export class DesktopStub implements Transport {
 			return false;
 		}
 	}
-	// A capa é endereçada pela identidade opaca do curso no protocolo `learnvault-cover://`,
-	// com a mesma inversão de prefixo por plataforma da mídia.
+	// The cover is addressed by the course's opaque identity in the `learnvault-cover://` protocol,
+	// with the same per-platform prefix inversion as media.
 	coverUrl(courseId: string, coverVersion?: number | null) {
 		if (coverVersion === undefined || coverVersion === null) return null;
 		return `${desktopCoverUrl(courseId, navigator.userAgent)}?v=${coverVersion}`;
 	}
-	// O seletor nativo roda no Rust: o webview envia apenas a identidade do curso e nenhum
-	// byte de arquivo cruza o IPC. O parâmetro é mantido para o contrato comum dos transportes.
+	// The native picker runs in Rust: the webview sends only the course's identity and no
+	// file byte crosses the IPC. The parameter is kept for the transports' common contract.
 	async importCourseCover(courseId: string, _file?: File | null) { try { await invoke<unknown>('desktop_import_course_cover', { courseId }); } catch (cause) { throw desktopError(cause, tr('Could not save course cover.', 'Não foi possível salvar a capa do curso.')); } }
 	async removeCourseCover(courseId: string) { try { const result = await invoke<{ removed?: unknown } | null>('desktop_remove_course_cover', { courseId }); return result?.removed === true; } catch (cause) { throw desktopError(cause, tr('Could not remove course cover.', 'Não foi possível remover a capa do curso.')); } }
-	// A ordem é endereçada pela identidade opaca do curso e por caminhos relativos já
-	// catalogados; nenhum caminho do sistema de arquivos cruza o IPC.
+	// The order is addressed by the course's opaque identity and by already-catalogued
+	// relative paths; no file-system path crosses the IPC.
 	async setCourseOrder(courseId: string, parent: string, children: string[]) { try { await invoke<unknown>('desktop_set_course_order', { courseId, parent, children }); } catch (cause) { throw desktopError(cause, tr('Could not save order.', 'Não foi possível salvar a ordem.')); } }
-	// Sem `parent`, o comando restaura o curso inteiro; o argumento é omitido em vez de
-	// enviado como `undefined`.
+	// Without `parent`, the command restores the whole course; the argument is omitted instead of
+	// sent as `undefined`.
 	async resetCourseOrder(courseId: string, parent?: string) { try { const result = await invoke<boolean | null>('desktop_reset_course_order', parent === undefined ? { courseId } : { courseId, parent }); return result === true; } catch (cause) { throw desktopError(cause, tr('Could not restore order.', 'Não foi possível restaurar a ordem.')); } }
 }
 
