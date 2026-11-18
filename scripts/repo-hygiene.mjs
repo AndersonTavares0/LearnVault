@@ -16,7 +16,9 @@ export const PROHIBITED_PATH_PREFIXES = [
 	'.github/tdd/',
 	'docs/design/screenshots/',
 	'docs/design/prototypes/',
-	'docs/qa/'
+	'docs/qa/',
+	'.pnpm-store/',
+	'node_modules/'
 ];
 
 export const ALLOWED_IMAGE_DIRS = [
