@@ -105,13 +105,13 @@ test('customizing the look passes axe for every accent and breaks no CSP rule', 
 	for (const theme of ['Light', 'Dark']) {
 		await page.getByRole('group', { name: 'Theme' }).getByRole('button', { name: theme }).click();
 		await expect(page.locator('html')).toHaveAttribute('data-theme', theme.toLowerCase());
-		for (const accent of ['Brown', 'Amber', 'Forest', 'Terracotta', 'Navy', 'Plum', 'Teal', 'Slate']) {
+		for (const accent of ['Ink', 'Brown', 'Amber', 'Forest', 'Terracotta', 'Navy', 'Plum', 'Teal', 'Slate']) {
 			await page.getByRole('group', { name: 'Accent color' }).getByRole('button', { name: accent }).click();
 			brand.add(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--brand').trim()));
 			await expectNoAxeViolations(page, `settings/${theme}/${accent}`);
 		}
 	}
-	expect(brand.size).toBe(16);
+	expect(brand.size).toBe(18);
 	await page.getByRole('group', { name: 'Theme' }).getByRole('button', { name: 'Light' }).click();
 	for (const choice of [['Corners', 'Round'], ['Density', 'Compact'], ['Text size', 'Large'], ['Font', 'System font']]) {
 		await page.getByRole('group', { name: choice[0] }).getByRole('button', { name: choice[1] }).click();
@@ -124,6 +124,25 @@ test('customizing the look passes axe for every accent and breaks no CSP rule', 
 	await page.reload();
 	await expect(page.locator('html')).toHaveAttribute('data-radius', 'round');
 	expect(violations).toEqual([]);
+});
+
+test('every surface palette passes axe on the light and the dark page', async ({ page, origin }) => {
+	// Reduced motion turns transitions off, so axe measures settled colours, not mid-fade ones.
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	await signIn(page, origin);
+	await page.goto(`${origin}/#/settings`);
+	await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+
+	const surfaces = [['Warm paper', 'warm'], ['Cool stone', 'stone'], ['Crisp contrast', 'crisp'], ['Kindle sepia', 'sepia'], ['Forest mist', 'sage'], ['Nord frost', 'nord'], ['Rosé pine', 'rose'], ['Solarized', 'solarized']];
+	for (const theme of ['Light', 'Dark']) {
+		await page.getByRole('group', { name: 'Theme' }).getByRole('button', { name: theme }).click();
+		await expect(page.locator('html')).toHaveAttribute('data-theme', theme.toLowerCase());
+		for (const [name, id] of surfaces) {
+			await page.getByRole('group', { name: 'Surface palette' }).getByRole('button', { name }).click();
+			await expect(page.locator('html')).toHaveAttribute('data-surface', id);
+			await expectNoAxeViolations(page, `settings/${theme}/${name}`);
+		}
+	}
 });
 
 test('keeps legacy links working', async ({ page, origin }) => {
