@@ -1,103 +1,103 @@
-//! Erro IPC do desktop: serializável, estável e sanitizado.
+//! Desktop IPC error: serializable, stable and sanitized.
 //!
-//! Cada falha vira um objeto `{ code, message }`. O `code` é o contrato do frontend e não
-//! muda sem versionamento; a `message` é curta e nunca contém caminhos do sistema de
-//! arquivos nem segredos. A mensagem de diagnóstico do núcleo (`Display`) é local e não é
-//! enviada ao webview.
+//! Each failure becomes a `{ code, message }` object. The `code` is the frontend's contract and does not
+//! change without versioning; the `message` is short and never contains file-system
+//! paths or secrets. The core's diagnostic message (`Display`) is local and is not
+//! sent to the webview.
 
 use serde::Serialize;
 
-/// Código estável de erro IPC consumido pelo frontend.
+/// Stable IPC error code consumed by the frontend.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum IpcErrorCode {
-    /// O catálogo não pôde ser derivado dos dados locais.
+    /// The catalog could not be derived from the local data.
     CatalogUnavailable,
-    /// O banco de dados local não pôde ser aberto ou lido.
+    /// The local database could not be opened or read.
     DatabaseUnavailable,
-    /// A pasta escolhida para um curso é inválida.
+    /// The folder chosen for a course is invalid.
     CoursePathInvalid,
-    /// A configuração de cursos do aplicativo não pôde ser gravada.
+    /// The application's course configuration could not be written.
     CoursesConfigUnavailable,
-    /// Nenhum curso está registrado para indexar.
+    /// No course is registered to index.
     NoCoursesRegistered,
-    /// Já existe um rescan em andamento.
+    /// A rescan is already in progress.
     RescanInProgress,
-    /// A varredura da biblioteca não pôde ser concluída.
+    /// The library scan could not be completed.
     RescanUnavailable,
-    /// O progresso de estudo do dono local não pôde ser lido nem gravado.
+    /// The local owner's study progress could not be read or written.
     StudyUnavailable,
-    /// A mídia consultada não existe no catálogo local.
+    /// The queried media does not exist in the local catalog.
     MediaNotFound,
-    /// A posição de retomada enviada é inválida.
+    /// The resume position sent is invalid.
     InvalidPosition,
-    /// Uma sessão Pomodoro enviada é inválida.
+    /// A Pomodoro session sent is invalid.
     InvalidFocusSession,
-    /// A chave de uma sessão já foi usada com outro conteúdo.
+    /// The key of a session was already used with other content.
     FocusSessionConflict,
-    /// A missão diária ainda não está pronta para resgate.
+    /// The daily mission is not yet ready to be redeemed.
     MissionNotComplete,
-    /// A meta semanal está fora da faixa de 1 a 7 dias.
+    /// The weekly goal is outside the range of 1 to 7 days.
     InvalidWeeklyGoal,
-    /// A remoção exige confirmação porque existe progresso associado.
+    /// The removal requires confirmation because there is associated progress.
     MediaRemovalNeedsConfirmation,
-    /// A remoção de mídia não pôde ser concluída.
+    /// The media removal could not be completed.
     MediaRemovalUnavailable,
-    /// O curso informado não está registrado no aplicativo.
+    /// The course given is not registered in the application.
     CourseNotFound,
-    /// A imagem escolhida para a capa não é PNG, JPEG ou WebP, ou excede o limite.
+    /// The image chosen for the cover is not PNG, JPEG or WebP, or exceeds the limit.
     InvalidCover,
-    /// A capa do curso não pôde ser gravada nem removida.
+    /// The course's cover could not be written or removed.
     CoverUnavailable,
-    /// A ordem informada não é uma permutação válida dos irmãos.
+    /// The order given is not a valid permutation of the siblings.
     InvalidOrder,
-    /// A ordem manual do curso não pôde ser gravada nem removida.
+    /// The course's manual order could not be written or removed.
     OrderUnavailable,
-    /// A verificação de atualização falhou por erro de rede ou endpoint inacessível.
+    /// The update check failed because of a network error or an unreachable endpoint.
     UpdateCheckFailed,
-    /// A verificação ou instalação de atualização não pôde ser concluída.
+    /// The update check or installation could not be completed.
     UpdateUnavailable,
-    /// A anotação solicitada não foi encontrada ou não pertence ao usuário.
+    /// The requested note was not found or does not belong to the user.
     NoteNotFound,
-    /// O conteúdo da anotação é inválido ou excede o limite aceito.
+    /// The content of the note is invalid or exceeds the accepted limit.
     InvalidNote,
     /// The PDF annotation was not found or does not belong to the user.
     PdfAnnotationNotFound,
     /// The PDF annotation has an invalid page, kind, color, rectangle or text.
     InvalidPdfAnnotation,
-    /// O cartão de memorização solicitado não foi encontrado ou não pertence ao usuário.
+    /// The requested memorization card was not found or does not belong to the user.
     FlashcardNotFound,
-    /// O conteúdo do cartão de memorização é inválido ou excede o limite aceito.
+    /// The content of the memorization card is invalid or exceeds the accepted limit.
     InvalidFlashcard,
-    /// A avaliação informada na revisão do cartão é inválida.
+    /// The rating given in the card review is invalid.
     InvalidReviewRating,
-    /// O alvo de favorito (curso ou mídia) é inválido.
+    /// The favourite target (course or media) is invalid.
     InvalidFavoriteTarget,
-    /// O marcador de tempo não foi encontrado ou não pertence ao usuário.
+    /// The time marker was not found or does not belong to the user.
     BookmarkNotFound,
-    /// O rótulo do marcador é vazio ou excede o limite aceito.
+    /// The marker's label is empty or exceeds the accepted limit.
     InvalidBookmarkLabel,
-    /// As preferências de reprodução estão fora da faixa aceita.
+    /// The playback preferences are outside the accepted range.
     InvalidPlayerPreference,
-    /// A fila de sincronização local não pôde ser lida nem gravada.
+    /// The local sync queue could not be read or written.
     SyncUnavailable,
-    /// A URL do servidor de sincronização é inválida.
+    /// The sync server's URL is invalid.
     InvalidSyncServer,
-    /// O servidor recusou as credenciais de sincronização.
+    /// The server refused the sync credentials.
     SyncLoginFailed,
 }
 
-/// Erro IPC serializável devolvido ao webview.
+/// Serializable IPC error returned to the webview.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct IpcError {
-    /// Código estável consumido pelo frontend.
+    /// Stable code consumed by the frontend.
     pub code: IpcErrorCode,
-    /// Mensagem curta, sem caminhos nem segredos.
+    /// Short message, with no paths or secrets.
     pub message: &'static str,
 }
 
 impl IpcError {
-    /// Catálogo indisponível: a derivação falhou sobre os dados locais.
+    /// Catalog unavailable: the derivation failed over the local data.
     pub fn catalog_unavailable() -> Self {
         Self {
             code: IpcErrorCode::CatalogUnavailable,
@@ -105,7 +105,7 @@ impl IpcError {
         }
     }
 
-    /// Banco de dados local indisponível.
+    /// Local database unavailable.
     pub fn database_unavailable() -> Self {
         Self {
             code: IpcErrorCode::DatabaseUnavailable,
@@ -113,7 +113,7 @@ impl IpcError {
         }
     }
 
-    /// A pasta escolhida para um curso é inválida.
+    /// The folder chosen for a course is invalid.
     pub fn course_path_invalid() -> Self {
         Self {
             code: IpcErrorCode::CoursePathInvalid,
@@ -121,7 +121,7 @@ impl IpcError {
         }
     }
 
-    /// A configuração de cursos do aplicativo não pôde ser gravada.
+    /// The application's course configuration could not be written.
     pub fn courses_config_unavailable() -> Self {
         Self {
             code: IpcErrorCode::CoursesConfigUnavailable,
@@ -129,7 +129,7 @@ impl IpcError {
         }
     }
 
-    /// Nenhum curso está registrado para indexar.
+    /// No course is registered to index.
     pub fn no_courses_registered() -> Self {
         Self {
             code: IpcErrorCode::NoCoursesRegistered,
@@ -137,7 +137,7 @@ impl IpcError {
         }
     }
 
-    /// Já existe um rescan em andamento.
+    /// A rescan is already in progress.
     pub fn rescan_in_progress() -> Self {
         Self {
             code: IpcErrorCode::RescanInProgress,
@@ -145,7 +145,7 @@ impl IpcError {
         }
     }
 
-    /// A varredura da biblioteca não pôde ser concluída.
+    /// The library scan could not be completed.
     pub fn rescan_unavailable() -> Self {
         Self {
             code: IpcErrorCode::RescanUnavailable,
@@ -153,7 +153,7 @@ impl IpcError {
         }
     }
 
-    /// O progresso de estudo do dono local não pôde ser lido nem gravado.
+    /// The local owner's study progress could not be read or written.
     pub fn study_unavailable() -> Self {
         Self {
             code: IpcErrorCode::StudyUnavailable,
@@ -161,7 +161,7 @@ impl IpcError {
         }
     }
 
-    /// A mídia consultada não existe no catálogo local.
+    /// The queried media does not exist in the local catalog.
     pub fn media_not_found() -> Self {
         Self {
             code: IpcErrorCode::MediaNotFound,
@@ -169,7 +169,7 @@ impl IpcError {
         }
     }
 
-    /// A posição de retomada enviada é inválida.
+    /// The resume position sent is invalid.
     pub fn invalid_position() -> Self {
         Self {
             code: IpcErrorCode::InvalidPosition,
@@ -177,7 +177,7 @@ impl IpcError {
         }
     }
 
-    /// Dados inválidos de sessão Pomodoro.
+    /// Invalid Pomodoro session data.
     pub fn invalid_focus_session() -> Self {
         Self {
             code: IpcErrorCode::InvalidFocusSession,
@@ -185,7 +185,7 @@ impl IpcError {
         }
     }
 
-    /// A mesma chave de sessão foi enviada com dados diferentes.
+    /// The same session key was sent with different data.
     pub fn focus_session_conflict() -> Self {
         Self {
             code: IpcErrorCode::FocusSessionConflict,
@@ -193,7 +193,7 @@ impl IpcError {
         }
     }
 
-    /// A missão ainda não atingiu o progresso necessário.
+    /// The mission has not yet reached the required progress.
     pub fn mission_not_complete() -> Self {
         Self {
             code: IpcErrorCode::MissionNotComplete,
@@ -201,7 +201,7 @@ impl IpcError {
         }
     }
 
-    /// Meta semanal fora do intervalo aceito.
+    /// Weekly goal outside the accepted range.
     pub fn invalid_weekly_goal() -> Self {
         Self {
             code: IpcErrorCode::InvalidWeeklyGoal,
@@ -209,7 +209,7 @@ impl IpcError {
         }
     }
 
-    /// A remoção exige confirmação porque existe progresso associado.
+    /// The removal requires confirmation because there is associated progress.
     pub fn media_removal_needs_confirmation() -> Self {
         Self {
             code: IpcErrorCode::MediaRemovalNeedsConfirmation,
@@ -217,7 +217,7 @@ impl IpcError {
         }
     }
 
-    /// A remoção de mídia não pôde ser concluída.
+    /// The media removal could not be completed.
     pub fn media_removal_unavailable() -> Self {
         Self {
             code: IpcErrorCode::MediaRemovalUnavailable,
@@ -225,7 +225,7 @@ impl IpcError {
         }
     }
 
-    /// O curso informado não está registrado no aplicativo.
+    /// The course given is not registered in the application.
     pub fn course_not_found() -> Self {
         Self {
             code: IpcErrorCode::CourseNotFound,
@@ -233,7 +233,7 @@ impl IpcError {
         }
     }
 
-    /// A imagem escolhida para a capa não é PNG, JPEG ou WebP, ou excede o limite.
+    /// The image chosen for the cover is not PNG, JPEG or WebP, or exceeds the limit.
     pub fn invalid_cover() -> Self {
         Self {
             code: IpcErrorCode::InvalidCover,
@@ -241,7 +241,7 @@ impl IpcError {
         }
     }
 
-    /// A capa do curso não pôde ser gravada nem removida.
+    /// The course's cover could not be written or removed.
     pub fn cover_unavailable() -> Self {
         Self {
             code: IpcErrorCode::CoverUnavailable,
@@ -249,7 +249,7 @@ impl IpcError {
         }
     }
 
-    /// A ordem informada não é uma permutação válida dos irmãos.
+    /// The order given is not a valid permutation of the siblings.
     pub fn invalid_order() -> Self {
         Self {
             code: IpcErrorCode::InvalidOrder,
@@ -257,7 +257,7 @@ impl IpcError {
         }
     }
 
-    /// A ordem manual do curso não pôde ser gravada nem removida.
+    /// The course's manual order could not be written or removed.
     pub fn order_unavailable() -> Self {
         Self {
             code: IpcErrorCode::OrderUnavailable,
@@ -265,7 +265,7 @@ impl IpcError {
         }
     }
 
-    /// A verificação de atualização falhou por erro de rede ou endpoint inacessível.
+    /// The update check failed because of a network error or an unreachable endpoint.
     pub fn update_check_failed() -> Self {
         Self {
             code: IpcErrorCode::UpdateCheckFailed,
@@ -273,7 +273,7 @@ impl IpcError {
         }
     }
 
-    /// A verificação ou instalação de atualização não pôde ser concluída.
+    /// The update check or installation could not be completed.
     pub fn update_unavailable() -> Self {
         Self {
             code: IpcErrorCode::UpdateUnavailable,
@@ -281,7 +281,7 @@ impl IpcError {
         }
     }
 
-    /// A anotação solicitada não foi encontrada ou não pertence ao usuário.
+    /// The requested note was not found or does not belong to the user.
     pub fn note_not_found() -> Self {
         Self {
             code: IpcErrorCode::NoteNotFound,
@@ -289,7 +289,7 @@ impl IpcError {
         }
     }
 
-    /// O conteúdo da anotação é inválido.
+    /// The content of the note is invalid.
     pub fn invalid_note() -> Self {
         Self {
             code: IpcErrorCode::InvalidNote,
@@ -313,7 +313,7 @@ impl IpcError {
         }
     }
 
-    /// O cartão de memorização solicitado não foi encontrado.
+    /// The requested memorization card was not found.
     pub fn flashcard_not_found() -> Self {
         Self {
             code: IpcErrorCode::FlashcardNotFound,
@@ -321,7 +321,7 @@ impl IpcError {
         }
     }
 
-    /// O conteúdo do cartão de memorização é inválido.
+    /// The content of the memorization card is invalid.
     pub fn invalid_flashcard() -> Self {
         Self {
             code: IpcErrorCode::InvalidFlashcard,
@@ -329,7 +329,7 @@ impl IpcError {
         }
     }
 
-    /// A avaliação da revisão do cartão é inválida.
+    /// The rating of the card review is invalid.
     pub fn invalid_review_rating() -> Self {
         Self {
             code: IpcErrorCode::InvalidReviewRating,
@@ -337,7 +337,7 @@ impl IpcError {
         }
     }
 
-    /// O alvo de favorito (curso ou mídia) é inválido.
+    /// The favourite target (course or media) is invalid.
     pub fn invalid_favorite_target() -> Self {
         Self {
             code: IpcErrorCode::InvalidFavoriteTarget,
@@ -345,7 +345,7 @@ impl IpcError {
         }
     }
 
-    /// O marcador de tempo solicitado não foi encontrado.
+    /// The requested time marker was not found.
     pub fn bookmark_not_found() -> Self {
         Self {
             code: IpcErrorCode::BookmarkNotFound,
@@ -353,7 +353,7 @@ impl IpcError {
         }
     }
 
-    /// O rótulo do marcador é inválido.
+    /// The marker's label is invalid.
     pub fn invalid_bookmark_label() -> Self {
         Self {
             code: IpcErrorCode::InvalidBookmarkLabel,
@@ -361,7 +361,7 @@ impl IpcError {
         }
     }
 
-    /// As preferências de reprodução estão fora da faixa aceita.
+    /// The playback preferences are outside the accepted range.
     pub fn invalid_player_preference() -> Self {
         Self {
             code: IpcErrorCode::InvalidPlayerPreference,
@@ -369,7 +369,7 @@ impl IpcError {
         }
     }
 
-    /// A fila de sincronização local não pôde ser lida nem gravada.
+    /// The local sync queue could not be read or written.
     pub fn sync_unavailable() -> Self {
         Self {
             code: IpcErrorCode::SyncUnavailable,
@@ -377,7 +377,7 @@ impl IpcError {
         }
     }
 
-    /// A URL do servidor de sincronização é inválida.
+    /// The sync server's URL is invalid.
     pub fn invalid_sync_server() -> Self {
         Self {
             code: IpcErrorCode::InvalidSyncServer,
@@ -385,7 +385,7 @@ impl IpcError {
         }
     }
 
-    /// O servidor recusou as credenciais de sincronização.
+    /// The server refused the sync credentials.
     pub fn sync_login_failed() -> Self {
         Self {
             code: IpcErrorCode::SyncLoginFailed,

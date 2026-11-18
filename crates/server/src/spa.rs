@@ -15,12 +15,12 @@ use tokio_util::io::StreamReader;
 
 use crate::{AppState, stream::idle_timeout_stream};
 
-/// Arquivos estáticos permanecem pequenos para que uma raiz web mal configurada não esgote
-/// recursos. Após validar os metadados, o arquivo é transmitido sem carregá-lo em memória.
+/// Static files stay small so that a misconfigured web root does not exhaust
+/// resources. After validating the metadata, the file is streamed without loading it into memory.
 const MAX_SPA_FILE_SIZE: u64 = 16 * 1024 * 1024;
 const SPA_STREAM_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// Entrega arquivos da SPA sem permitir que a requisição saia da raiz configurada.
+/// Delivers SPA files without letting the request leave the configured root.
 pub(crate) async fn serve(State(state): State<AppState>, uri: Uri) -> Response {
     let Some(root) = state.config.web_root.as_deref() else {
         return error_no_store(StatusCode::NOT_FOUND);
@@ -46,9 +46,9 @@ pub(crate) async fn serve(State(state): State<AppState>, uri: Uri) -> Response {
             });
     }
 
-    // Rotas sem extensão podem depender do fallback para o shell. Verifique o limite dele antes
-    // de reservar capacidade para um possível asset, para não mascarar uma configuração inválida
-    // (413) como saturação operacional (503).
+    // Extensionless routes may depend on the fallback to the shell. Check its limit before
+    // reserving capacity for a possible asset, so as not to mask an invalid configuration
+    // (413) as operational saturation (503).
     if Path::new(path).extension().is_none() && state.spa_shell_is_too_large() {
         return error_no_store(StatusCode::PAYLOAD_TOO_LARGE);
     }
@@ -72,8 +72,8 @@ pub(crate) async fn serve(State(state): State<AppState>, uri: Uri) -> Response {
     }
 }
 
-/// Erros estáticos nunca devem ser armazenados por proxies: um 503 ou 404
-/// obsoleto prolongaria uma indisponibilidade já resolvida.
+/// Static errors must never be stored by proxies: a stale 503 or 404
+/// would prolong an unavailability that has already been resolved.
 fn error_no_store(status: StatusCode) -> Response {
     let mut response = status.into_response();
     response
@@ -101,15 +101,15 @@ async fn serve_shell(state: &AppState) -> Result<Response, FileError> {
     let Some(stream_permit) = state.try_acquire_spa_stream(true) else {
         return Err(FileError::Busy);
     };
-    // O shell já foi conferido contra o cache de hashes acima. Recriar um reader a partir desses
-    // bytes mantém a reserva até o body ser consumido, descartado ou ficar ocioso, sem reabrir o
-    // caminho e sem introduzir uma segunda janela TOCTOU.
+    // The shell was already checked against the hash cache above. Recreating a reader from those
+    // bytes keeps the reservation until the body is consumed, dropped or goes idle, without reopening the
+    // path and without introducing a second TOCTOU window.
     let reader = StreamReader::new(tokio_stream::once(Ok::<_, std::io::Error>(
         Bytes::copy_from_slice(&bytes),
     )));
     let Some(web_root) = state.config.web_root.as_deref() else {
-        // `serve` só chama esta função com `web_root` configurado; a ausência aqui
-        // indica estado inconsistente, tratada como shell ausente, sem `panic`.
+        // `serve` only calls this function with `web_root` configured; the absence here
+        // indicates an inconsistent state, treated as a missing shell, without `panic`.
         return Err(FileError::Missing);
     };
     Ok(file_response(
@@ -141,15 +141,15 @@ fn requested_path(root: &Path, path: &str) -> Option<PathBuf> {
     Some(root.join(relative))
 }
 
-/// Abre e valida o arquivo antes de transmitir *o mesmo handle*.
+/// Opens and validates the file before streaming *the same handle*.
 ///
-/// A raiz web configurada (`--web-root`) é canonicalizada na inicialização e deve permanecer um
-/// limite de deploy confiável e somente leitura. Cada requisição rejeita symlinks (e reparse
-/// points no Windows) no caminho,
-/// então valida o handle aberto. Isso impede escapes óbvios por links e não reabre o caminho após
-/// a validação. APIs seguras e portáveis de Rust não oferecem contenção atômica contra um processo
-/// hostil substituindo diretórios concorrentemente; portanto, o deploy não pode conceder escrita
-/// não confiável sobre a raiz web.
+/// The configured web root (`--web-root`) is canonicalized at startup and must remain a trusted,
+/// read-only deploy boundary. Each request rejects symlinks (and reparse
+/// points on Windows) in the path,
+/// then validates the open handle. This prevents obvious escapes through links and does not reopen the path after
+/// validation. Safe, portable Rust APIs do not offer atomic containment against a hostile process
+/// replacing directories concurrently; therefore, the deploy must not grant untrusted write access
+/// to the web root.
 async fn open_file(
     state: &AppState,
     root: &Path,
@@ -168,9 +168,9 @@ async fn open_file(
     })
     .await
     .map_err(|_| FileError::Busy)??;
-    // Só reserve um stream após confirmar que o arquivo existe. Rotas SPA extensionless
-    // verificam primeiro um possível asset e então fazem fallback para o shell; consumir a
-    // reserva de assets nessa verificação faria assets lentos bloquearem o fallback.
+    // Only reserve a stream after confirming that the file exists. Extensionless SPA routes
+    // first check for a possible asset and then fall back to the shell; consuming the
+    // asset reservation in that check would make slow assets block the fallback.
     let Some(stream_permit) = state.try_acquire_spa_stream(shell) else {
         return Err(FileError::Busy);
     };

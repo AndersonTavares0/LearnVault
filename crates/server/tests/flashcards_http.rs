@@ -1,7 +1,7 @@
-//! Testes HTTP dos cartões de estudo pessoais com repetição espaçada (Flashcards).
+//! HTTP tests of personal study cards with spaced repetition (Flashcards).
 //!
-//! Valida autenticação, CSRF (same-origin), criação de cartões, listagem por vencimento,
-//! edição, exclusão, revisão com agendamento espaçado (Again/Good) e isolamento estrito entre usuários.
+//! Validates authentication, CSRF (same-origin), card creation, listing by due date,
+//! editing, deletion, review with spaced scheduling (Again/Good) and strict isolation between users.
 
 use axum::{
     body::Body,
@@ -85,7 +85,7 @@ async fn flashcards_endpoints_require_authentication() {
     let state = AppState::initialize(config).await.unwrap();
     let app = build_router(state);
 
-    // Listagem sem cookie
+    // Listing without a cookie
     let list = app
         .clone()
         .oneshot(
@@ -97,7 +97,7 @@ async fn flashcards_endpoints_require_authentication() {
         .unwrap();
     assert_eq!(list.status(), StatusCode::UNAUTHORIZED);
 
-    // Criação sem cookie
+    // Creation without a cookie
     let create = app
         .clone()
         .oneshot(
@@ -113,7 +113,7 @@ async fn flashcards_endpoints_require_authentication() {
         .unwrap();
     assert_eq!(create.status(), StatusCode::UNAUTHORIZED);
 
-    // Edição sem cookie
+    // Edit without a cookie
     let update = app
         .clone()
         .oneshot(
@@ -127,7 +127,7 @@ async fn flashcards_endpoints_require_authentication() {
         .unwrap();
     assert_eq!(update.status(), StatusCode::UNAUTHORIZED);
 
-    // Exclusão sem cookie
+    // Deletion without a cookie
     let delete = app
         .clone()
         .oneshot(
@@ -140,7 +140,7 @@ async fn flashcards_endpoints_require_authentication() {
         .unwrap();
     assert_eq!(delete.status(), StatusCode::UNAUTHORIZED);
 
-    // Revisão sem cookie
+    // Review without a cookie
     let review = app
         .clone()
         .oneshot(
@@ -164,7 +164,7 @@ async fn flashcards_mutations_require_csrf_same_origin() {
     let app = build_router(state);
     let cookie = login(&app, ADMIN, ADMIN_PASSWORD).await;
 
-    // POST sem header origin
+    // POST without an origin header
     let create = app
         .clone()
         .oneshot(
@@ -180,7 +180,7 @@ async fn flashcards_mutations_require_csrf_same_origin() {
         .unwrap();
     assert_eq!(create.status(), StatusCode::FORBIDDEN);
 
-    // POST com origin malicioso
+    // POST with a malicious origin
     let evil = app
         .clone()
         .oneshot(
@@ -209,7 +209,7 @@ async fn flashcards_crud_and_review_flow() {
     let admin_cookie = login(&app, ADMIN, ADMIN_PASSWORD).await;
     let student_cookie = login(&app, STUDENT, STUDENT_PASSWORD).await;
 
-    // 1. Criar cartão para o aluno
+    // 1. Create a card for the learner
     let create_resp = app
         .clone()
         .oneshot(
@@ -232,7 +232,7 @@ async fn flashcards_crud_and_review_flow() {
     assert_eq!(card["interval_days"], 0);
     assert_eq!(card["position_seconds"], 125);
 
-    // 2. Listar cartões do aluno
+    // 2. List the learner's cards
     let list_resp = app
         .clone()
         .oneshot(
@@ -249,7 +249,7 @@ async fn flashcards_crud_and_review_flow() {
     assert_eq!(list_json["items"].as_array().unwrap().len(), 1);
     assert_eq!(list_json["items"][0]["position_seconds"], 125);
 
-    // 3. Isolamento: Admin não vê os cartões do aluno
+    // 3. Isolation: Admin does not see the learner's cards
     let admin_list_resp = app
         .clone()
         .oneshot(
@@ -269,7 +269,7 @@ async fn flashcards_crud_and_review_flow() {
     let admin_json: serde_json::Value = serde_json::from_slice(&admin_body).unwrap();
     assert_eq!(admin_json["items"].as_array().unwrap().len(), 0);
 
-    // 4. Revisar cartão (Good): intervalo passa de 0 para 1 dia
+    // 4. Review the card (Good): the interval goes from 0 to 1 day
     let review_resp = app
         .clone()
         .oneshot(
@@ -287,7 +287,7 @@ async fn flashcards_crud_and_review_flow() {
     let rev_json: serde_json::Value = serde_json::from_slice(&rev_body).unwrap();
     assert_eq!(rev_json["interval_days"], 1);
 
-    // 5. Revisar cartão com 'again': intervalo zera para 0
+    // 5. Review the card with 'again': the interval resets to 0
     let again_resp = app
         .clone()
         .oneshot(
@@ -305,7 +305,7 @@ async fn flashcards_crud_and_review_flow() {
     let again_json: serde_json::Value = serde_json::from_slice(&again_body).unwrap();
     assert_eq!(again_json["interval_days"], 0);
 
-    // 6. Atualizar texto do cartão
+    // 6. Update the card's text
     let update_resp = app
         .clone()
         .oneshot(
@@ -325,7 +325,7 @@ async fn flashcards_crud_and_review_flow() {
     let up_json: serde_json::Value = serde_json::from_slice(&up_body).unwrap();
     assert_eq!(up_json["front"], "O que é TDD? (atualizado)");
 
-    // 7. Excluir cartão
+    // 7. Delete the card
     let del_resp = app
         .clone()
         .oneshot(
@@ -339,7 +339,7 @@ async fn flashcards_crud_and_review_flow() {
         .unwrap();
     assert_eq!(del_resp.status(), StatusCode::NO_CONTENT);
 
-    // Confirmar exclusão na listagem
+    // Confirm the deletion in the listing
     let list_after = app
         .clone()
         .oneshot(

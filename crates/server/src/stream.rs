@@ -15,9 +15,9 @@ use tokio_stream::{Stream, wrappers::ReceiverStream};
 
 const CHUNK_SIZE: usize = 8 * 1024;
 
-/// Produz o corpo fora do `Body`, para que o prazo de ociosidade continue valendo mesmo quando o
-/// transporte deixa de consultar o stream. O produtor é dono do reader e do permit: ao expirar,
-/// ambos são descartados e o canal é fechado, encerrando o body após qualquer chunk já enfileirado.
+/// Produces the body outside the `Body`, so that the idle deadline keeps applying even when the
+/// transport stops polling the stream. The producer owns the reader and the permit: on expiry,
+/// both are dropped and the channel is closed, ending the body after any chunk already queued.
 pub(crate) fn idle_timeout_stream<R>(
     reader: R,
     permit: OwnedSemaphorePermit,
@@ -36,16 +36,16 @@ where
         let mut deadline: std::pin::Pin<Box<Sleep>> = Box::pin(tokio::time::sleep(timeout));
 
         loop {
-            // A leitura é I/O da origem, não ociosidade do consumidor. O watchdog mede
-            // apenas quanto tempo o transporte deixa de retirar dados, então a leitura
-            // NÃO disputa o deadline: um chunk já lido nunca é descartado só porque o
-            // deadline expirou no mesmo instante (era a origem do flake da CI, que via o
-            // body terminar vazio antes de qualquer frame).
+            // The read is the source's I/O, not consumer idleness. The watchdog measures
+            // only how long the transport stops taking data, so the read
+            // does NOT contend for the deadline: a chunk already read is never discarded just because the
+            // deadline expired at the same instant (that was the origin of the CI flake, which saw the
+            // body end empty before any frame).
             let read = match reader.read(&mut buffer).await {
                 Ok(read) => read,
                 Err(error) => {
-                    // Erro de origem é terminal; entregue-o ainda sob a guarda de
-                    // ociosidade para não reter capacidade se o consumidor já parou.
+                    // A source error is terminal; deliver it still under the idle
+                    // guard so as not to hold capacity if the consumer has already stopped.
                     tokio::select! {
                         _ = sender.send(Err(error)) => {}
                         _ = &mut deadline => {}
@@ -57,26 +57,26 @@ where
             if read == 0 {
                 drop(reader);
                 drop(sender);
-                // O produtor pode descobrir EOF antes de o transporte consultar o último frame.
-                // Mantenha o slot enquanto o body ainda está retido; `poll_next` libera-o assim
-                // que o consumidor observa `None`, e drop/timeout cobrem os demais casos.
+                // The producer may discover EOF before the transport polls the last frame.
+                // Keep the slot while the body is still held; `poll_next` releases it as
+                // soon as the consumer observes `None`, and drop/timeout cover the other cases.
                 deadline.as_mut().await;
                 release_permit(&task_permit);
                 return;
             }
 
             let chunk = Bytes::copy_from_slice(&buffer[..read]);
-            // `biased` prioriza a entrega: se o deadline expirou mas ainda há espaço no
-            // canal, o chunk disponível é enviado em vez de descartado pelo timeout. O
-            // deadline só encerra quando o envio realmente bloquearia (consumidor parado).
+            // `biased` prioritizes delivery: if the deadline expired but there is still room in the
+            // channel, the available chunk is sent instead of being dropped by the timeout. The
+            // deadline only ends things when the send would really block (stalled consumer).
             tokio::select! {
                 biased;
                 sent = sender.send(Ok(chunk)) => {
                     if sent.is_err() {
                         return;
                     }
-                    // O primeiro chunk apenas ocupa o buffer. Cada envio seguinte só completa
-                    // depois que o consumidor retirou o anterior, portanto é progresso real.
+                    // The first chunk only occupies the buffer. Each following send only completes
+                    // after the consumer took the previous one, so it is real progress.
                     if sent_chunk {
                         deadline.as_mut().reset(Instant::now() + timeout);
                     }
@@ -97,9 +97,9 @@ where
 }
 
 fn release_permit(permit: &Arc<Mutex<Option<OwnedSemaphorePermit>>>) {
-    // `Mutex` padrão nunca é envenenado por `panic` em outro executor aqui, mas um
-    // `expect` em `poll_next`/`Drop` transformaria veneno em `panic` por request:
-    // recupere o guarda e libere o permit de qualquer forma.
+    // A standard `Mutex` is never poisoned by a `panic` in another executor here, but an
+    // `expect` in `poll_next`/`Drop` would turn poison into a `panic` per request:
+    // recover the guard and release the permit anyway.
     drop(
         permit
             .lock()
@@ -121,8 +121,8 @@ impl Stream for IdleTimeoutStream {
         let this = self.get_mut();
         match Pin::new(&mut this.receiver).poll_next(cx) {
             Poll::Ready(None) => {
-                // EOF observado pelo consumidor encerra a vida útil do body. O produtor pode
-                // já ter terminado, mas não deve reter a capacidade até o timeout ocioso.
+                // EOF observed by the consumer ends the body's lifetime. The producer may
+                // have already finished, but must not hold the capacity until the idle timeout.
                 release_permit(&this.permit);
                 Poll::Ready(None)
             }
@@ -157,8 +157,8 @@ mod tests {
 
     use super::{CHUNK_SIZE, idle_timeout_stream};
 
-    /// Leitor cuja primeira leitura só completa depois de `delay`: simula o IO de
-    /// arquivo que termina no mesmo instante (ou depois) do deadline ocioso expirar.
+    /// Reader whose first read only completes after `delay`: it simulates the file
+    /// I/O that finishes at the same instant as (or after) the idle deadline expires.
     struct DelayedReader {
         chunk: Option<Vec<u8>>,
         sleep: Pin<Box<Sleep>>,
@@ -192,13 +192,13 @@ mod tests {
         }
     }
 
-    /// Causa-raiz do flake de
-    /// `idle_media_streams_release_capacity_without_reading_the_body`: o watchdog
-    /// encerrava o body quando o deadline expirava no mesmo instante em que a leitura
-    /// terminava, descartando um chunk já lido e deixando o body vazio (`frame()`
-    /// devolvia `None`). A leitura é IO da origem, não ociosidade do consumidor, então
-    /// não pode disputar o deadline. Aqui a leitura só completa 1s depois do deadline e
-    /// ainda assim é entregue — o que falhava antes da correção.
+    /// Root cause of the flake in
+    /// `idle_media_streams_release_capacity_without_reading_the_body`: the watchdog
+    /// ended the body when the deadline expired at the same instant the read
+    /// finished, discarding a chunk already read and leaving the body empty (`frame()`
+    /// returned `None`). The read is the source's I/O, not consumer idleness, so it
+    /// cannot contend for the deadline. Here the read only completes 1s after the deadline and
+    /// is still delivered — which failed before the fix.
     #[tokio::test(start_paused = true)]
     async fn idle_timeout_stream_delivers_a_chunk_read_after_the_deadline() {
         let timeout = Duration::from_secs(30);

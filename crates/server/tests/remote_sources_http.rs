@@ -1,5 +1,5 @@
-//! Testes HTTP das fontes remotas: configuração, segredo, teste de conexão, varredura,
-//! catálogo e entrega de faixa de mídia contra um WebDAV sintético em processo.
+//! HTTP tests of remote sources: configuration, secret, connection test, scan,
+//! catalog and media-range delivery against a synthetic in-process WebDAV.
 
 use axum::{
     body::Body,
@@ -72,7 +72,7 @@ fn response(status: &str, headers: &[(&str, &str)], body: &str) -> Vec<u8> {
     response.into_bytes()
 }
 
-/// WebDAV sintético: uma pasta `Modulo1` com `aula.mp4` de 10 bytes.
+/// Synthetic WebDAV: a `Modulo1` folder with a 10-byte `aula.mp4`.
 async fn dav_server() -> (String, tokio::task::JoinHandle<()>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();

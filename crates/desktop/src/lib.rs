@@ -1,42 +1,42 @@
-//! Aplicativo desktop do LearnVault (Tauri 2).
+//! LearnVault desktop application (Tauri 2).
 //!
-//! Esta fatia expõe a fronteira IPC de cursos, catálogo, rescan e progresso de estudo: o
-//! webview importa (`desktop_import_course`) e remove (`desktop_remove_course`) cursos,
-//! lê o catálogo agregado (`desktop_catalog`), aciona a indexação explícita
-//! (`desktop_rescan`) e sincroniza o estudo por `desktop_study_progress`,
-//! `desktop_record_position`, `desktop_set_completed` e `desktop_recent_study`. O catálogo,
-//! o resumo do rescan e o progresso são derivados pelo núcleo `learnvault-core` sobre um
-//! banco SQLite local, no diretório de dados do aplicativo.
+//! This slice exposes the IPC boundary for courses, catalog, rescan and study progress: the
+//! webview imports (`desktop_import_course`) and removes (`desktop_remove_course`) courses,
+//! reads the aggregated catalog (`desktop_catalog`), triggers the explicit indexing
+//! (`desktop_rescan`) and syncs study through `desktop_study_progress`,
+//! `desktop_record_position`, `desktop_set_completed` and `desktop_recent_study`. The catalog,
+//! the rescan summary and the progress are derived by the `learnvault-core` core over a local
+//! SQLite database, in the application's data directory.
 //!
-//! O dono do progresso de estudo é um identificador local fixo escolhido pelo Rust: nenhum
-//! comando de estudo aceita `owner_id`, então o webview só lê e grava o progresso do dono
-//! local e nunca o de outro dono.
+//! The owner of the study progress is a fixed local identifier chosen by Rust: no
+//! study command accepts `owner_id`, so the webview only reads and writes the local owner's
+//! progress and never another owner's.
 //!
-//! Além do IPC, o desktop entrega imagens/thumbnails, materiais pequenos, vídeo, áudio e
-//! legendas por um protocolo customizado do Tauri 2 (`learnvault-media://localhost/...`, ver
-//! [`media`]). A entrega é por `media_id` opaco, justificada apenas no catálogo, com allowlist
-//! de tipo de conteúdo, suporte a faixas HTTP e limite explícito por resposta.
+//! Beyond the IPC, the desktop delivers images/thumbnails, small materials, video, audio and
+//! subtitles through a custom Tauri 2 protocol (`learnvault-media://localhost/...`, see
+//! [`media`]). Delivery is by opaque `media_id`, justified only by the catalog, with a
+//! content-type allowlist, support for HTTP ranges and an explicit limit per response.
 //!
-//! As capas personalizadas dos cursos usam um segundo protocolo (`learnvault-cover://...`,
-//! ver [`covers`]): a imagem escolhida pelo usuário em um seletor nativo é validada pelos
-//! bytes iniciais, gravada atomicamente no diretório de dados do aplicativo e entregue por
-//! identidade opaca de curso, sem que nenhum caminho cruze o webview.
+//! Courses' custom covers use a second protocol (`learnvault-cover://...`,
+//! see [`covers`]): the image the user chooses in a native picker is validated by the
+//! initial bytes, written atomically to the application's data directory and delivered by
+//! the course's opaque identity, with no path crossing the webview.
 //!
-//! Cada curso é escolhido por um seletor nativo acionado pelo Rust (`tauri-plugin-dialog`,
-//! interno e não concedido ao webview) e persistido de forma atômica e versionada no
-//! diretório de configuração do aplicativo — nunca dentro das pastas de curso nem no
-//! SQLite. O webview nunca envia nem recebe um caminho: só identidades opacas e o booleano
+//! Each course is chosen by a native picker triggered by Rust (`tauri-plugin-dialog`,
+//! internal and not granted to the webview) and persisted atomically and versioned in the
+//! application's configuration directory — never inside the course folders nor in
+//! SQLite. The webview never sends nor receives a path: only opaque identities and the boolean
 //! `configured`.
 //!
-//! O rescan é sempre explícito: nem a inicialização nem a importação o disparam, e
-//! chamadas concorrentes são recusadas com um erro estável enquanto uma varredura está em
-//! andamento. Não há worker, progresso nem cancelamento nesta fatia.
+//! The rescan is always explicit: neither startup nor import triggers it, and
+//! concurrent calls are refused with a stable error while a scan is in
+//! progress. There is no worker, progress or cancellation in this slice.
 //!
-//! Não há listener de rede, servidor HTTP, plugin de shell, filesystem, http ou updater,
-//! nem autenticação nesta fatia. O player do desktop reproduz mídia local pelo protocolo
-//! customizado e sincroniza posição/conclusão por IPC. As pastas de curso permanecem
-//! externas e somente leitura: o rescan e a entrega de mídia apenas as leem e nenhum
-//! caminho de curso é escrito.
+//! There is no network listener, HTTP server, shell, filesystem, http or updater plugin,
+//! nor authentication in this slice. The desktop player plays local media through the custom
+//! protocol and syncs position/completion over IPC. The course folders stay
+//! external and read-only: the rescan and the media delivery only read them and no
+//! course path is written.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -102,13 +102,13 @@ pub use study::{DEFAULT_RECENT_LIMIT, LOCAL_OWNER_ID};
 
 use tauri::Manager;
 
-/// Inicializa o webview Tauri apontando para a SPA embutida em `frontend-dist`.
+/// Initializes the Tauri webview pointing at the SPA embedded in `frontend-dist`.
 ///
-/// No `setup`, o estado abre o banco local no diretório de dados do aplicativo, carrega e
-/// revalida os cursos do diretório de configuração, e registra apenas os comandos de
-/// cursos, catálogo, rescan e estudo. O plugin de diálogo é registrado para uso interno do
-/// Rust e não é concedido ao webview pelo ACL. O deny-by-default do ACL garante que nada
-/// fora das permissões declaradas em `capabilities/` seja executável pelo webview.
+/// In `setup`, the state opens the local database in the application's data directory, loads and
+/// revalidates the courses from the configuration directory, and registers only the commands for
+/// courses, catalog, rescan and study. The dialog plugin is registered for Rust's internal use
+/// and is not granted to the webview by the ACL. The ACL's deny-by-default guarantees that nothing
+/// outside the permissions declared in `capabilities/` is executable by the webview.
 pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -120,7 +120,7 @@ pub fn run() {
                 std::io::Error::other("learnvault desktop: banco de dados local indisponível")
             })?;
             app.manage(state.clone());
-            // Uma sincronização no start cobre o que ficou na fila da execução anterior.
+            // A sync at start covers whatever was left in the queue from the previous run.
             state.request_sync();
             Ok(())
         });

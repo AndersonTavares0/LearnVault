@@ -1,14 +1,14 @@
-//! Domínio do LearnVault.
+//! LearnVault domain.
 //!
-//! Este crate concentra as regras de domínio compartilhadas pelo servidor (Axum) e pelo
-//! aplicativo desktop (Tauri). Ele não conhece HTTP, Tauri, async ou formatos de resposta:
-//! expõe operações e erros tipados e recebe, como parâmetros explícitos, a raiz da
-//! biblioteca já resolvida pela integração de plataforma, o `library_id` e o `owner_id`.
+//! This crate holds the domain rules shared by the server (Axum) and the desktop
+//! application (Tauri). It knows nothing of HTTP, Tauri, async or response formats:
+//! it exposes typed operations and errors and receives, as explicit parameters, the library
+//! root already resolved by the platform integration, the `library_id` and the `owner_id`.
 //!
-//! Estado atual: workspace e persistência SQLite com cadeia única de migrações (1.2),
-//! scanner da biblioteca e identidade de mídia (1.3), política de rescan (1.4), catálogo
-//! derivado (1.5), resolução segura de mídia (1.6), progresso de estudo (1.7) e remoção
-//! explícita de mídia (1.8).
+//! Current state: workspace and SQLite persistence with a single migration chain (1.2),
+//! library scanner and media identity (1.3), rescan policy (1.4), derived catalog
+//! (1.5), safe media resolution (1.6), study progress (1.7) and explicit media
+//! removal (1.8).
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]

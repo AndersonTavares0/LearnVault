@@ -1,7 +1,7 @@
-//! Testes HTTP das anotações de estudo (Study Notes).
+//! HTTP tests of study notes (Study Notes).
 //!
-//! Valida autenticação, CSRF (same-origin), criação de notas na linha do tempo,
-//! listagem cronológica, edição, exclusão e isolamento estrito entre usuários.
+//! Validates authentication, CSRF (same-origin), creation of notes on the timeline,
+//! chronological listing, editing, deletion and strict isolation between users.
 
 use axum::{
     body::Body,
@@ -146,7 +146,7 @@ async fn notes_crud_and_isolation_flow() {
     let admin_cookie = login(&app, ADMIN, ADMIN_PASSWORD).await;
     let student_cookie = login(&app, STUDENT, STUDENT_PASSWORD).await;
 
-    // 1. Cria duas notas com o admin
+    // 1. Create two notes with the admin
     let create_res1 = app
         .clone()
         .oneshot(
@@ -182,7 +182,7 @@ async fn notes_crud_and_isolation_flow() {
         .unwrap();
     assert_eq!(create_res2.status(), StatusCode::CREATED);
 
-    // 2. Lista notas do admin: devem vir ordenadas por position_seconds (15s antes de 60s)
+    // 2. List the admin's notes: they must come ordered by position_seconds (15s before 60s)
     let list_res = app
         .clone()
         .oneshot(
@@ -201,7 +201,7 @@ async fn notes_crud_and_isolation_flow() {
     assert_eq!(items[0]["position_seconds"], 15);
     assert_eq!(items[1]["position_seconds"], 60);
 
-    // 3. O estudante consulta as notas: não deve ver nenhuma do admin
+    // 3. The student queries the notes: must not see any of the admin's
     let student_list_res = app
         .clone()
         .oneshot(
@@ -221,7 +221,7 @@ async fn notes_crud_and_isolation_flow() {
     let student_list: serde_json::Value = serde_json::from_slice(&student_bytes).unwrap();
     assert_eq!(student_list["items"].as_array().unwrap().len(), 0);
 
-    // 4. Estudante tenta editar a nota do admin: 404
+    // 4. Student tries to edit the admin's note: 404
     let fail_edit = app
         .clone()
         .oneshot(
@@ -236,7 +236,7 @@ async fn notes_crud_and_isolation_flow() {
         .unwrap();
     assert_eq!(fail_edit.status(), StatusCode::NOT_FOUND);
 
-    // 5. Admin edita a própria nota: 200
+    // 5. Admin edits their own note: 200
     let ok_edit = app
         .clone()
         .oneshot(
@@ -265,7 +265,7 @@ async fn notes_crud_and_isolation_flow() {
         .unwrap();
     assert_eq!(delete_res.status(), StatusCode::NO_CONTENT);
 
-    // 7. Lista novamente: apenas 1 nota remanescente
+    // 7. List again: only 1 note remaining
     let final_list = app
         .clone()
         .oneshot(
@@ -280,7 +280,7 @@ async fn notes_crud_and_isolation_flow() {
     let final_json: serde_json::Value = serde_json::from_slice(&final_bytes).unwrap();
     assert_eq!(final_json["items"].as_array().unwrap().len(), 1);
 
-    // 8. Lista global de notas (sem media_id): deve retornar com relative_path
+    // 8. Global list of notes (without media_id): must return with relative_path
     let global_list = app
         .clone()
         .oneshot(
@@ -298,7 +298,7 @@ async fn notes_crud_and_isolation_flow() {
     assert_eq!(global_items.len(), 1);
     assert_eq!(global_items[0]["relative_path"], "curso/aula1.mp4");
 
-    // 9. Lista global do estudante continua isolada
+    // 9. The student's global list stays isolated
     let student_global = app
         .clone()
         .oneshot(

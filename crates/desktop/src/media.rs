@@ -1,34 +1,34 @@
-//! Entrega de materiais e mídia do curso pelo protocolo customizado do webview.
+//! Delivery of course materials and media through the webview's custom protocol.
 //!
-//! A entrega usa um protocolo `URI scheme` próprio do Tauri 2,
-//! `learnvault-media://localhost/<media-id>`. Materiais continuam limitados a respostas
-//! pequenas; vídeo, áudio e legendas usam a mesma resolução segura por identificador opaco e
-//! suportam faixas únicas, como requerem elementos HTML de mídia.
+//! The delivery uses Tauri 2's own `URI scheme` protocol,
+//! `learnvault-media://localhost/<media-id>`. Materials stay limited to small
+//! responses; video, audio and subtitles use the same safe resolution by opaque identifier and
+//! support single ranges, as HTML media elements require.
 //!
-//! # Contrato de segurança
+//! # Security contract
 //!
-//! - o webview só informa um **identificador opaco** (`media_id`); nenhum caminho cruza a
-//!   fronteira. O parsing é estrito: esquema e host exatamente os registrados, método
-//!   `GET`/`HEAD`, caminho com um único segmento opaco, sem query, sem fragmento, sem
-//!   segmentos extras e com identificador de caracteres seguros;
-//! - o `media_id` é resolvido **somente** pelo catálogo persistido, e a mídia é aberta
-//!   exatamente uma vez por [`learnvault_core::open_media`], que revalida a raiz, a
-//!   disponibilidade, o confinamento sob a raiz, o componente final (link simbólico) e a
-//!   identidade do descritor aberto. O [`std::fs::File`] já aberto é o que é lido;
-//! - materiais têm o limite explícito de [`MAX_SMALL_FILE_BYTES`]; mídia de curso é entregue
-//!   por faixas, com cada resposta limitada por [`MAX_MEDIA_RESPONSE_BYTES`];
-//! - só extensões e tipos de conteúdo em allowlist (materiais, vídeo, áudio e legendas) são
-//!   servidos;
-//! - nenhum corpo ou header carrega caminho do sistema de arquivos nem mensagem de erro de
-//!   IO: as falhas viram apenas o status, com `Cache-Control: no-store`;
-//! - a entrega é **somente leitura**: a única operação sobre a biblioteca é abrir e ler o
-//!   arquivo.
+//! - the webview only supplies an **opaque identifier** (`media_id`); no path crosses the
+//!   boundary. Parsing is strict: scheme and host exactly the ones registered, method
+//!   `GET`/`HEAD`, path with a single opaque segment, no query, no fragment, no
+//!   extra segments and with an identifier of safe characters;
+//! - the `media_id` is resolved **only** through the persisted catalog, and the media is opened
+//!   exactly once by [`learnvault_core::open_media`], which revalidates the root, the
+//!   availability, the confinement under the root, the final component (symbolic link) and the
+//!   identity of the open descriptor. The already-open [`std::fs::File`] is what is read;
+//! - materials have the explicit limit of [`MAX_SMALL_FILE_BYTES`]; course media is delivered
+//!   by ranges, with each response limited by [`MAX_MEDIA_RESPONSE_BYTES`];
+//! - only allowlisted extensions and content types (materials, video, audio and subtitles) are
+//!   served;
+//! - no body or header carries a file-system path or an I/O error message:
+//!   failures become only the status, with `Cache-Control: no-store`;
+//! - the delivery is **read-only**: the only operation on the library is opening and reading the
+//!   file.
 //!
-//! # Escopo da resposta
+//! # Scope of the response
 //!
-//! `200`/`HEAD`/`206`/`416` são suportados com `Range` de faixa única. Um pedido multi-faixa
-//! ou insatisfazível vira `416` com `Content-Range: bytes */<tamanho>`. O `Content-Range` de
-//! sucesso é `bytes <início>-<fim>/<tamanho>`.
+//! `200`/`HEAD`/`206`/`416` are supported with a single-range `Range`. A multi-range
+//! or unsatisfiable request becomes `416` with `Content-Range: bytes */<size>`. The successful
+//! `Content-Range` is `bytes <start>-<end>/<size>`.
 
 use std::borrow::Cow;
 use std::io::{Read, Seek, SeekFrom};
@@ -39,87 +39,87 @@ use tauri::{Manager, Runtime, Url};
 
 use crate::state::DesktopState;
 
-/// Esquema do protocolo customizado de mídia do desktop.
+/// Scheme of the desktop's custom media protocol.
 pub const MEDIA_SCHEME: &str = "learnvault-media";
 
-/// Host canônico do protocolo customizado.
+/// Canonical host of the custom protocol.
 ///
-/// Em todas as plataformas suportadas o handler recebe a URI já revertida para
-/// `learnvault-media://localhost/...`: no Windows/Android o webview usa o prefixo
-/// `http://learnvault-media.localhost`, que o runtime reverte antes de chamar o handler.
+/// On all supported platforms the handler receives the URI already reverted to
+/// `learnvault-media://localhost/...`: on Windows/Android the webview uses the prefix
+/// `http://learnvault-media.localhost`, which the runtime reverts before calling the handler.
 pub const MEDIA_HOST: &str = "localhost";
 
-/// Rótulo da única janela que pode requisitar o protocolo.
+/// Label of the only window that may request the protocol.
 pub const MAIN_WEBVIEW_LABEL: &str = "main";
 
-/// Limite explícito de resposta para materiais pequenos.
+/// Explicit response limit for small materials.
 ///
-/// A resposta é bufferizada em memória pela API do Tauri; arquivos acima deste limite
-/// (ou uma faixa que o exceda) são recusados sem serem lidos por inteiro. Mídia de curso
-/// (vídeo, áudio e legendas) usa o limite de resposta [`MAX_MEDIA_RESPONSE_BYTES`].
+/// The response is buffered in memory by Tauri's API; files above this limit
+/// (or a range that exceeds it) are refused without being read in full. Course media
+/// (video, audio and subtitles) uses the response limit [`MAX_MEDIA_RESPONSE_BYTES`].
 pub const MAX_SMALL_FILE_BYTES: u64 = 8 * 1024 * 1024;
 
-/// Limite de bytes materializados em uma única resposta de mídia.
+/// Limit of bytes materialized in a single media response.
 ///
-/// O protocolo do Tauri recebe o corpo como `Vec<u8>`, portanto tanto uma resposta completa
-/// quanto uma faixa explícita precisam ser limitadas antes da alocação.
+/// Tauri's protocol receives the body as a `Vec<u8>`, so both a complete response
+/// and an explicit range must be limited before allocation.
 pub const MAX_MEDIA_RESPONSE_BYTES: u64 = 8 * 1024 * 1024;
 
-/// Comprimento máximo aceito para o identificador opaco de mídia.
+/// Maximum length accepted for the opaque media identifier.
 const MAX_MEDIA_ID_LEN: usize = 128;
 
-/// Métodos HTTP aceitos pelo protocolo.
+/// HTTP methods accepted by the protocol.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MediaMethod {
-    /// Requisição com corpo.
+    /// Request with a body.
     Get,
-    /// Requisição somente de cabeçalhos.
+    /// Headers-only request.
     Head,
 }
 
-/// Requisição crua do handler, já normalizada em campos simples e testáveis.
+/// Raw request of the handler, already normalized into simple, testable fields.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RawMediaRequest<'a> {
-    /// Método como enviado pelo webview.
+    /// Method as sent by the webview.
     pub method: &'a str,
-    /// Esquema da URI.
+    /// Scheme of the URI.
     pub scheme: &'a str,
-    /// Host da URI, se houver.
+    /// Host of the URI, if any.
     pub host: Option<&'a str>,
-    /// Caminho da URI, começando por `/`.
+    /// Path of the URI, starting with `/`.
     pub path: &'a str,
-    /// Query da URI, se houver (sempre recusada).
+    /// Query of the URI, if any (always refused).
     pub query: Option<&'a str>,
-    /// Cabeçalho `Range`, se houver.
+    /// `Range` header, if any.
     pub range: Option<&'a str>,
-    /// Rótulo do webview que originou a requisição.
+    /// Label of the webview that originated the request.
     pub webview_label: &'a str,
 }
 
-/// Requisição validada: método, identificador opaco e faixa opcional.
+/// Validated request: method, opaque identifier and optional range.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MediaRequest {
-    /// Método validado.
+    /// Validated method.
     pub method: MediaMethod,
-    /// Identificador opaco autorizado, sem caminho.
+    /// Authorized opaque identifier, with no path.
     pub media_id: String,
-    /// `Range` repassado verbatim para a validação de faixa.
+    /// `Range` passed verbatim to the range validation.
     pub range: Option<String>,
 }
 
-/// Recusa de parsing, antes de qualquer acesso ao sistema de arquivos.
+/// Parsing refusal, before any file-system access.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MediaRejection {
-    /// A requisição não veio da janela principal do aplicativo.
+    /// The request did not come from the application's main window.
     Forbidden,
-    /// Esquema, host, caminho, query ou identificador inválidos.
+    /// Invalid scheme, host, path, query or identifier.
     Malformed,
-    /// Método diferente de `GET`/`HEAD`.
+    /// Method other than `GET`/`HEAD`.
     MethodNotAllowed,
 }
 
 impl MediaRejection {
-    /// Status HTTP estável da recusa.
+    /// Stable HTTP status of the refusal.
     pub fn status(self) -> u16 {
         match self {
             MediaRejection::Forbidden => status::FORBIDDEN,
@@ -129,22 +129,22 @@ impl MediaRejection {
     }
 }
 
-/// Resposta pronta do protocolo, sem conhecer o runtime do Tauri.
+/// Ready response of the protocol, knowing nothing of the Tauri runtime.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MediaResponse {
     /// Status HTTP.
     pub status: u16,
-    /// Headers, na ordem de emissão.
+    /// Headers, in emission order.
     pub headers: Vec<(String, String)>,
-    /// Corpo da resposta.
+    /// Body of the response.
     pub body: Vec<u8>,
 }
 
 impl MediaResponse {
-    /// Resposta sem corpo e sem headers.
+    /// Response with no body and no headers.
     ///
-    /// Compartilhada com as capas ([`crate::covers`]): as duas entregas do protocolo
-    /// customizado falam o mesmo contrato de resposta e recebem o mesmo CORS.
+    /// Shared with the covers ([`crate::covers`]): the two deliveries of the custom
+    /// protocol speak the same response contract and get the same CORS.
     pub(crate) fn bare(status: u16) -> Self {
         Self {
             status,
@@ -153,19 +153,19 @@ impl MediaResponse {
         }
     }
 
-    /// Resposta de erro estável: apenas o status e `Cache-Control: no-store`.
+    /// Stable error response: only the status and `Cache-Control: no-store`.
     pub(crate) fn empty(status: u16) -> Self {
         let mut response = Self::bare(status);
         response.push("Cache-Control", "no-store");
         response
     }
 
-    /// Acrescenta um header.
+    /// Adds a header.
     pub(crate) fn push(&mut self, name: &str, value: impl Into<String>) {
         self.headers.push((name.to_owned(), value.into()));
     }
 
-    /// Valor de um header, comparando o nome sem diferenciar maiúsculas.
+    /// Value of a header, comparing the name case-insensitively.
     pub fn header(&self, name: &str) -> Option<&str> {
         self.headers
             .iter()
@@ -174,15 +174,15 @@ impl MediaResponse {
     }
 }
 
-/// Adiciona CORS apenas para a origem exata da janela que solicitou a mídia.
+/// Adds CORS only for the exact origin of the window that requested the media.
 ///
-/// CORS controla a leitura dos pixels pelo canvas; não é autorização da mídia e, por isso,
-/// uma origem ausente ou não correspondente não altera status nem corpo da resposta.
+/// CORS controls the reading of pixels by the canvas; it is not authorization of the media and, so,
+/// a missing or non-matching origin does not change the response's status or body.
 ///
-/// Nenhum `Access-Control-Allow-Origin` herdado é refletido: o cabeçalho só é emitido na
-/// correspondência exata. Toda requisição que traz `Origin` marca a resposta com
-/// `Vary: Origin`, porque o cabeçalho CORS (e portanto a representação) depende da origem
-/// mesmo quando o ACAO não é emitido.
+/// No inherited `Access-Control-Allow-Origin` is reflected: the header is only emitted on an
+/// exact match. Every request that carries `Origin` marks the response with
+/// `Vary: Origin`, because the CORS header (and therefore the representation) depends on the origin
+/// even when the ACAO is not emitted.
 pub fn apply_media_cors(
     mut response: MediaResponse,
     request_origin: Option<&str>,
@@ -228,7 +228,7 @@ pub fn apply_media_cors(
     response
 }
 
-/// Valida uma origem serializada com o parser URL e retorna sua forma canônica.
+/// Validates a serialized origin with the URL parser and returns its canonical form.
 fn parse_serialized_origin(origin: &str) -> Option<String> {
     if origin.is_empty() || origin.trim() != origin || origin.eq_ignore_ascii_case("null") {
         return None;
@@ -254,9 +254,9 @@ fn parse_serialized_origin(origin: &str) -> Option<String> {
     (canonical == origin).then_some(canonical)
 }
 
-/// Extrai a origem da URL da janela sem depender de uma origem fixa por plataforma.
+/// Extracts the origin from the window's URL without depending on a fixed origin per platform.
 ///
-/// Compartilhada com as capas ([`crate::covers`]), que aplicam o mesmo CORS de origem exata.
+/// Shared with the covers ([`crate::covers`]), which apply the same exact-origin CORS.
 pub(crate) fn window_url_origin(url: &Url) -> Option<String> {
     let serialized = url.origin().ascii_serialization();
     if serialized != "null" {
@@ -267,31 +267,31 @@ pub(crate) fn window_url_origin(url: &Url) -> Option<String> {
         .then(|| format!("{}://{}", url.scheme(), host.to_ascii_lowercase()))
 }
 
-/// Status HTTP usados pelo protocolo.
+/// HTTP statuses used by the protocol.
 mod status {
-    /// Requisição inválida.
+    /// Invalid request.
     pub const BAD_REQUEST: u16 = 400;
-    /// Requisição de outra janela.
+    /// Request from another window.
     pub const FORBIDDEN: u16 = 403;
-    /// Mídia ausente, indisponível, removida ou sem raiz configurada.
+    /// Media missing, unavailable, removed or with no root configured.
     pub const NOT_FOUND: u16 = 404;
-    /// Método não suportado.
+    /// Unsupported method.
     pub const METHOD_NOT_ALLOWED: u16 = 405;
-    /// Arquivo acima do limite de resposta.
+    /// File above the response limit.
     pub const PAYLOAD_TOO_LARGE: u16 = 413;
-    /// Tipo de conteúdo fora da allowlist.
+    /// Content type outside the allowlist.
     pub const UNSUPPORTED_MEDIA_TYPE: u16 = 415;
-    /// Faixa insatisfazível.
+    /// Unsatisfiable range.
     pub const RANGE_NOT_SATISFIABLE: u16 = 416;
-    /// Falha interna de leitura ou de estado.
+    /// Internal failure of reading or of state.
     pub const INTERNAL_SERVER_ERROR: u16 = 500;
-    /// Resposta completa.
+    /// Full response.
     pub const OK: u16 = 200;
-    /// Resposta parcial.
+    /// Partial response.
     pub const PARTIAL_CONTENT: u16 = 206;
 }
 
-/// Allowlist de extensões e seus tipos de conteúdo.
+/// Allowlist of extensions and their content types.
 const ALLOWED_TYPES: &[(&str, &str)] = &[
     ("png", "image/png"),
     ("jpg", "image/jpeg"),
@@ -330,11 +330,11 @@ const ALLOWED_TYPES: &[(&str, &str)] = &[
     ("sub", "text/plain; charset=utf-8"),
 ];
 
-/// Valida e normaliza a requisição crua, sem tocar o sistema de arquivos.
+/// Validates and normalizes the raw request, without touching the file system.
 ///
-/// Recusa qualquer coisa que não seja exatamente o protocolo registrado para a janela
-/// principal: outro esquema, outro host, query, fragmento (ausente do caminho), caminho
-/// com mais de um segmento e identificadores fora do conjunto de caracteres seguro.
+/// It refuses anything that is not exactly the protocol registered for the main
+/// window: another scheme, another host, a query, a fragment (absent from the path), a path
+/// with more than one segment and identifiers outside the safe character set.
 pub fn parse_media_request(raw: &RawMediaRequest<'_>) -> Result<MediaRequest, MediaRejection> {
     if raw.webview_label != MAIN_WEBVIEW_LABEL {
         return Err(MediaRejection::Forbidden);
@@ -364,11 +364,11 @@ pub fn parse_media_request(raw: &RawMediaRequest<'_>) -> Result<MediaRequest, Me
     })
 }
 
-/// Um identificador opaco válido é um único segmento de caracteres seguros.
+/// A valid opaque identifier is a single segment of safe characters.
 ///
-/// O identificador real é um UUID gerado pelo domínio, mas a validação aceita o
-/// alfabeto seguro sem decodificar percent-encoding: um `%` indicaria uma tentativa de
-/// escapar a forma canônica e é recusado, nunca decodificado.
+/// The real identifier is a UUID generated by the domain, but the validation accepts the
+/// safe alphabet without decoding percent-encoding: a `%` would indicate an attempt to
+/// escape the canonical form and is refused, never decoded.
 fn valid_media_id(media_id: &str) -> bool {
     !media_id.is_empty()
         && media_id.len() <= MAX_MEDIA_ID_LEN
@@ -377,11 +377,11 @@ fn valid_media_id(media_id: &str) -> bool {
         })
 }
 
-/// Registra o protocolo de mídia no builder do Tauri.
+/// Registers the media protocol on the Tauri builder.
 ///
-/// O protocolo é global, mas cada requisição é restrita à janela principal pelo rótulo do
-/// webview — o handler recusa qualquer outra origem. Nenhuma permissão de capability é
-/// concedida: o ACL continua deny-by-default.
+/// The protocol is global, but each request is restricted to the main window by the
+/// webview's label — the handler refuses any other origin. No capability permission is
+/// granted: the ACL stays deny-by-default.
 pub fn register<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
     builder.register_uri_scheme_protocol(MEDIA_SCHEME, |context, request| {
         let state = context.app_handle().state::<DesktopState>();
@@ -404,7 +404,7 @@ pub fn register<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
     })
 }
 
-/// Constrói a requisição crua a partir da requisição HTTP do Tauri.
+/// Builds the raw request from Tauri's HTTP request.
 fn raw_request<'a>(webview_label: &'a str, request: &'a Request<Vec<u8>>) -> RawMediaRequest<'a> {
     let uri = request.uri();
     RawMediaRequest {
@@ -421,7 +421,7 @@ fn raw_request<'a>(webview_label: &'a str, request: &'a Request<Vec<u8>>) -> Raw
     }
 }
 
-/// Converte a resposta do protocolo na resposta HTTP do runtime.
+/// Converts the protocol's response into the runtime's HTTP response.
 pub(crate) fn http_response(response: MediaResponse) -> Response<Cow<'static, [u8]>> {
     let status = StatusCode::from_u16(response.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
     let mut builder = Response::builder().status(status);
@@ -433,8 +433,8 @@ pub(crate) fn http_response(response: MediaResponse) -> Response<Cow<'static, [u
         .unwrap_or_else(|_| fallback_response())
 }
 
-/// Resposta mínima usada apenas se a construção de headers falhar (nunca acontece com
-/// valores próprios, mas mantém o handler livre de `panic`).
+/// Minimal response used only if building the headers fails (it never happens with
+/// our own values, but it keeps the handler free of `panic`).
 fn fallback_response() -> Response<Cow<'static, [u8]>> {
     Response::builder()
         .status(StatusCode::INTERNAL_SERVER_ERROR)
@@ -443,11 +443,11 @@ fn fallback_response() -> Response<Cow<'static, [u8]>> {
 }
 
 impl DesktopState {
-    /// Entrega uma mídia autorizada pelo protocolo customizado.
+    /// Delivers a media authorized by the custom protocol.
     ///
-    /// O parsing é puro e prefere a recusa estável; só depois de validada a requisição a
-    /// raiz configurada e o catálogo são consultados. Sem raiz configurada, a resposta é
-    /// `404`, sem expor estado algum.
+    /// Parsing is pure and prefers the stable refusal; only after the request is validated are the
+    /// configured root and the catalog queried. With no root configured, the response is
+    /// `404`, exposing no state at all.
     pub fn serve_media(&self, raw: &RawMediaRequest<'_>) -> MediaResponse {
         match parse_media_request(raw) {
             Ok(request) => self.open_media_request(&request),
@@ -455,13 +455,13 @@ impl DesktopState {
         }
     }
 
-    /// Abre a mídia autorizada uma única vez e monta a resposta.
+    /// Opens the authorized media once and assembles the response.
     fn open_media_request(&self, request: &MediaRequest) -> MediaResponse {
         let Ok(database) = self.lock_database() else {
             return MediaResponse::empty(status::INTERNAL_SERVER_ERROR);
         };
-        // A identidade opaca liga a mídia à biblioteca do curso registrado; sem curso
-        // correspondente, a resposta é `404`, sem expor estado algum.
+        // The opaque identity links the media to the registered course's library; with no matching
+        // course, the response is `404`, exposing no state at all.
         let Some(library_id) =
             (match learnvault_core::find_media_library_id(&database, &request.media_id) {
                 Ok(library_id) => library_id,
@@ -473,15 +473,15 @@ impl DesktopState {
         let Some(course) = self.course(&library_id) else {
             return MediaResponse::empty(status::NOT_FOUND);
         };
-        // A raiz persistida é revalidada imediatamente antes da abertura, preservando a
-        // semântica da importação: uma pasta removida, inacessível ou substituída por
-        // link/junction é recusada, sem seguir o alvo.
+        // The persisted root is revalidated immediately before the open, preserving the
+        // import's semantics: a folder removed, inaccessible or replaced by a
+        // link/junction is refused, without following the target.
         let Ok(root) = CourseRoot::resolve(course.root.as_path()) else {
             return MediaResponse::empty(status::INTERNAL_SERVER_ERROR);
         };
 
-        // A abertura única revalida raiz, disponibilidade, confinamento, link simbólico e
-        // identidade do descritor. O `File` já aberto é o que será lido.
+        // The single open revalidates root, availability, confinement, symbolic link and
+        // descriptor identity. The already-open `File` is what will be read.
         let opened = match learnvault_core::open_media(
             &database,
             &library_id,
@@ -503,7 +503,7 @@ impl DesktopState {
     }
 }
 
-/// Monta a resposta de sucesso (`200`/`206`) a partir da mídia já aberta.
+/// Assembles the success response (`200`/`206`) from the already-open media.
 fn build_response(
     request: &MediaRequest,
     opened: OpenMedia,
@@ -558,10 +558,10 @@ fn build_response(
     response
 }
 
-/// Valida uma faixa `Range` de faixa única.
+/// Validates a single-range `Range`.
 ///
-/// Devolve `Ok(None)` quando não há `Range`, `Ok(Some((início, fim)))` para uma faixa
-/// válida e `Err(())` quando a faixa é multi-faixa, vazia, malformada ou insatisfazível.
+/// It returns `Ok(None)` when there is no `Range`, `Ok(Some((start, end)))` for a valid
+/// range and `Err(())` when the range is multi-range, empty, malformed or unsatisfiable.
 fn single_range(value: Option<&str>, size: u64) -> Result<Option<(u64, u64)>, ()> {
     let Some(value) = value else {
         return Ok(None);
@@ -594,17 +594,17 @@ fn single_range(value: Option<&str>, size: u64) -> Result<Option<(u64, u64)>, ()
     Ok(Some((start, end)))
 }
 
-/// Resposta `416` estável, com a sonda de tamanho total e sem corpo.
+/// Stable `416` response, with the total-size probe and no body.
 fn range_not_satisfiable(size: u64) -> MediaResponse {
     let mut response = MediaResponse::empty(status::RANGE_NOT_SATISFIABLE);
     response.push("Content-Range", format!("bytes */{size}"));
     response
 }
 
-/// Traduz o erro do núcleo em um status estável, sem vazar a causa.
+/// Translates the core's error into a stable status, without leaking the cause.
 ///
-/// Ausência legítima vira `404`; integridade e falhas operacionais viram `500`, como no
-/// adaptador HTTP, para não confundir ausência real com catálogo/sistema inconsistente.
+/// Legitimate absence becomes `404`; integrity and operational failures become `500`, as in the
+/// HTTP adapter, so as not to confuse real absence with an inconsistent catalog/system.
 fn media_error_status(error: &Error) -> u16 {
     match error {
         Error::MediaNotFound { .. }
@@ -616,7 +616,7 @@ fn media_error_status(error: &Error) -> u16 {
     }
 }
 
-/// Tipo de conteúdo permitido para um nome de arquivo, ou `None` se fora da allowlist.
+/// Content type allowed for a file name, or `None` if outside the allowlist.
 fn content_type(name: &str) -> Option<&'static str> {
     let (_, extension) = name.rsplit_once('.')?;
     let extension = extension.to_ascii_lowercase();

@@ -1,14 +1,14 @@
-//! Ordenação manual de módulos e aulas do catálogo (issue #239).
+//! Manual ordering of the catalog's modules and lessons (issue #239).
 //!
-//! A biblioteca de cursos é **somente leitura**: a ordem escolhida pelo usuário vive em um
-//! arquivo versionado ao lado do banco (o mesmo diretório do registro de cursos e das
-//! capas), nunca dentro das pastas de curso. Cada curso tem a sua própria preferência,
-//! identificada pela identidade opaca do curso; as entradas apontam apenas para os caminhos
-//! relativos já catalogados.
+//! The course library is **read-only**: the order chosen by the user lives in a
+//! versioned file next to the database (the same directory as the course registry and the
+//! covers), never inside the course folders. Each course has its own preference,
+//! identified by the course's opaque identity; the entries point only to already-catalogued
+//! relative paths.
 //!
-//! A ordem automática (natural, determinística) continua sendo o padrão: a preferência é
-//! aplicada por sobreposição em [`learnvault_core::apply_order`] antes de a árvore ser
-//! servida. Por isso remover a preferência restaura a ordem automática sem reescrever nada.
+//! The automatic order (natural, deterministic) stays the default: the preference is
+//! applied as an overlay in [`learnvault_core::apply_order`] before the tree is
+//! served. That is why removing the preference restores the automatic order without rewriting anything.
 
 use std::{
     collections::BTreeMap,
@@ -38,25 +38,25 @@ use crate::{
     courses::replace_file,
 };
 
-/// Nome do arquivo de ordenação dentro do diretório de dados do servidor.
+/// Name of the ordering file inside the server's data directory.
 pub const ORDER_FILE_NAME: &str = "catalog-order.json";
 
-/// Versão do formato do arquivo de ordenação.
+/// Version of the ordering file's format.
 pub const ORDER_VERSION: u32 = 1;
 
-/// Preferências de ordenação de todos os cursos, por identidade opaca do curso.
+/// Ordering preferences of all courses, by the course's opaque identity.
 pub type CourseOrders = BTreeMap<String, CatalogOrder>;
 
-/// Formato serializado do arquivo de ordenação.
+/// Serialized format of the ordering file.
 #[derive(Debug, Serialize, Deserialize)]
 struct OrderFile {
     version: u32,
-    /// Curso -> (caminho do pai -> ordem desejada dos filhos).
+    /// Course -> (parent path -> desired order of the children).
     courses: BTreeMap<String, BTreeMap<String, Vec<String>>>,
 }
 
-/// Caminho do arquivo de ordenação para um banco. Fica ao lado do banco, no diretório de
-/// dados, como o registro de cursos e as capas.
+/// Path of the ordering file for a database. It sits next to the database, in the data directory,
+/// like the course registry and the covers.
 pub(crate) fn order_path(database_path: &Path) -> PathBuf {
     let parent = database_path
         .parent()
@@ -65,10 +65,10 @@ pub(crate) fn order_path(database_path: &Path) -> PathBuf {
     parent.join(ORDER_FILE_NAME)
 }
 
-/// Carrega as preferências persistidas.
+/// Loads the persisted preferences.
 ///
-/// Arquivo ausente, corrompido ou em versão desconhecida resulta em nenhuma preferência
-/// (ordem automática); nenhuma mensagem carrega caminho.
+/// A missing, corrupted or unknown-version file results in no preference
+/// (automatic order); no message carries a path.
 pub(crate) fn load_orders(path: &Path) -> CourseOrders {
     let Ok(raw) = std::fs::read(path) else {
         return CourseOrders::new();
@@ -87,10 +87,10 @@ pub(crate) fn load_orders(path: &Path) -> CourseOrders {
         .collect()
 }
 
-/// Grava as preferências de forma serializada e atômica.
+/// Writes the preferences in a serialized, atomic way.
 ///
-/// O temporário é criado exclusivamente (`create_new`) e trocado por `rename` via
-/// [`replace_file`]. A serialização é responsabilidade do cadeado de escrita do estado.
+/// The temporary file is created exclusively (`create_new`) and swapped by `rename` via
+/// [`replace_file`]. Serialization is the responsibility of the state's write lock.
 pub(crate) fn store_orders(path: &Path, orders: &CourseOrders) -> Result<(), OrderError> {
     let directory = path.parent().unwrap_or_else(|| Path::new("."));
     std::fs::create_dir_all(directory).map_err(|_| OrderError::WriteFailed)?;
@@ -129,35 +129,35 @@ pub(crate) fn store_orders(path: &Path, orders: &CourseOrders) -> Result<(), Ord
     Ok(())
 }
 
-/// Falha estável da persistência da ordenação. Nunca carrega caminho.
+/// Stable failure of ordering persistence. It never carries a path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum OrderError {
-    /// A ordenação não pôde ser gravada com segurança.
+    /// The ordering could not be written safely.
     WriteFailed,
 }
 
-/// Falha da camada de ordenação, antes da tradução para HTTP.
+/// Failure of the ordering layer, before translation to HTTP.
 enum OrderFailure {
-    /// O caminho do pai não existe no catálogo do curso.
+    /// The parent's path does not exist in the course's catalog.
     UnknownParent,
-    /// A lista não é uma permutação exata dos irmãos.
+    /// The list is not an exact permutation of the siblings.
     InvalidOrder,
-    /// A leitura do catálogo falhou.
+    /// Reading the catalog failed.
     Core,
-    /// A gravação da preferência falhou.
+    /// Writing the preference failed.
     WriteFailed,
 }
 
-/// Corpo do pedido de ordenação: o caminho do pai e a ordem desejada dos seus filhos.
+/// Body of the ordering request: the parent's path and the desired order of its children.
 #[derive(Debug, Deserialize)]
 pub(crate) struct OrderRequest {
-    /// Caminho relativo do nó pai; vazio para a lista de topo (módulos do curso).
+    /// Relative path of the parent node; empty for the top-level list (the course's modules).
     parent: String,
-    /// Caminhos dos filhos, na ordem desejada. Precisa ser uma permutação exata.
+    /// Paths of the children, in the desired order. Must be an exact permutation.
     children: Vec<String>,
 }
 
-/// Consulta da restauração: um pai específico ou todos quando ausente.
+/// Restore query: a specific parent, or all of them when absent.
 #[derive(Debug, Deserialize)]
 pub(crate) struct ResetQuery {
     parent: Option<String>,
@@ -179,11 +179,11 @@ struct ErrorBody {
     error: &'static str,
 }
 
-/// `PUT /api/admin/courses/{id}/order` — define a ordem dos irmãos de um nó do curso.
+/// `PUT /api/admin/courses/{id}/order` — sets the order of the siblings of a course node.
 ///
-/// Somente administrador com credenciais definidas e mesma origem. O curso precisa estar
-/// registrado; um caminho de pai desconhecido, uma lista que não seja uma permutação exata
-/// dos irmãos ou um curso desconhecido respondem `404`/`422` sem revelar caminhos físicos.
+/// Administrator only, with credentials set and same origin. The course must be
+/// registered; an unknown parent path, a list that is not an exact permutation
+/// of the siblings or an unknown course answer `404`/`422` without revealing physical paths.
 pub(crate) async fn put_order(
     State(state): State<AppState>,
     AxumPath(course_id): AxumPath<String>,
@@ -240,11 +240,11 @@ pub(crate) async fn put_order(
     }
 }
 
-/// `DELETE /api/admin/courses/{id}/order` — restaura a ordem automática.
+/// `DELETE /api/admin/courses/{id}/order` — restores the automatic order.
 ///
-/// Sem `parent`, remove toda a preferência do curso; com `parent`, remove a preferência
-/// daquele nó. É idempotente: restaurar o que já estava automático responde
-/// `removed: false`. As mesmas exigências de autenticação e mesma origem do `PUT`.
+/// Without `parent`, it removes the course's whole preference; with `parent`, it removes the preference
+/// of that node. It is idempotent: restoring what was already automatic answers
+/// `removed: false`. The same authentication and same-origin requirements as the `PUT`.
 pub(crate) async fn reset_order(
     State(state): State<AppState>,
     AxumPath(course_id): AxumPath<String>,
@@ -290,7 +290,7 @@ pub(crate) async fn reset_order(
     }
 }
 
-/// Valida a lista contra os irmãos do pai e persiste a preferência.
+/// Validates the list against the parent's siblings and persists the preference.
 fn set_course_order(
     database: &learnvault_core::Database,
     orders: &std::sync::RwLock<CourseOrders>,
@@ -320,7 +320,7 @@ fn set_course_order(
     })
 }
 
-/// Remove a preferência de um pai (ou de todo o curso) e persiste a mudança.
+/// Removes a parent's preference (or the whole course's) and persists the change.
 fn clear_course_order(
     orders: &std::sync::RwLock<CourseOrders>,
     orders_file: &Path,
@@ -346,7 +346,7 @@ fn clear_course_order(
     Ok(true)
 }
 
-/// Verdadeiro quando a identidade corresponde a um curso registrado.
+/// True when the identity matches a registered course.
 fn course_registered(state: &AppState, course_id: &str) -> bool {
     state
         .courses_snapshot()
@@ -354,7 +354,7 @@ fn course_registered(state: &AppState, course_id: &str) -> bool {
         .any(|course| course.id == course_id)
 }
 
-/// Erro JSON estável, sem política de cache adicional.
+/// Stable JSON error, with no additional cache policy.
 fn json_error(status: StatusCode, message: &'static str) -> Response {
     private_no_store((status, Json(ErrorBody { error: message })).into_response())
 }

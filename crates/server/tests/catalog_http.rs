@@ -16,8 +16,8 @@ use std::{
 use tempfile::TempDir;
 use tower::ServiceExt;
 
-/// Deadline generoso para a sincronização entre processos do teste de lock de
-/// rescan. Um valor curto (segundos) vira flake em runners de CI carregados.
+/// Generous deadline for the synchronization between processes of the rescan
+/// lock test. A short value (seconds) becomes a flake on loaded CI runners.
 const RESCAN_LOCK_TIMEOUT: Duration = Duration::from_secs(60);
 
 fn config(temp: &TempDir) -> Config {
@@ -58,7 +58,7 @@ async fn login(app: &axum::Router) -> String {
         .to_owned()
 }
 
-/// O catálogo é revalidado por `ETag`, então pode ficar no cache privado do navegador.
+/// The catalog is revalidated by `ETag`, so it may stay in the browser's private cache.
 fn assert_private_no_cache(response: &Response) {
     assert_eq!(
         response
@@ -251,8 +251,8 @@ async fn admin_rescan_populates_the_authenticated_catalog() {
     let library = temp.path().join("library");
     std::fs::create_dir_all(library.join("Categoria/Curso")).unwrap();
     std::fs::write(library.join("Categoria/Curso/lesson.mp4"), b"video").unwrap();
-    // Arquivo solto diretamente na categoria: a projeção legada não tem onde guardá-lo, mas
-    // ele precisa continuar acessível na árvore canônica `nodes`.
+    // Loose file directly in the category: the legacy projection has nowhere to keep it, but
+    // it must stay accessible in the canonical `nodes` tree.
     std::fs::write(library.join("Categoria/nota.pdf"), b"nota").unwrap();
     let mut server_config = Config::from_args([
         "learnvault-server",
@@ -301,10 +301,10 @@ async fn admin_rescan_populates_the_authenticated_catalog() {
     assert_eq!(rescan_json["failed_courses"], 0);
     assert_eq!(rescan_json["inserted"], 2);
     assert!(rescan_json["scan_id"].as_i64().unwrap() > 0);
-    // Resposta sanitizada: expõe apenas a contagem de chaves ambíguas, nunca os caminhos
-    // relativos que as compõem. Produzir ambiguidade real por HTTP não é portável (depende
-    // da normalização de separadores por plataforma); o caso com caminho é coberto de forma
-    // determinística pelo teste unitário de `RescanResponse::from` em `catalog.rs`.
+    // Sanitized response: it exposes only the count of ambiguous keys, never the relative
+    // paths that make them up. Producing real ambiguity over HTTP is not portable (it depends on
+    // per-platform separator normalization); the case with a path is covered deterministically
+    // by the unit test of `RescanResponse::from` in `catalog.rs`.
     assert!(
         rescan_json["ambiguous_count"].is_u64(),
         "ambiguous_count precisa ser uma contagem numérica: {rescan_json}"
@@ -336,8 +336,8 @@ async fn admin_rescan_populates_the_authenticated_catalog() {
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(json["complete"], true);
 
-    // A raiz da biblioteca registra cada pasta de topo como um curso: aqui `Categoria`
-    // vira o curso, e o nó de topo é a árvore relativa a ele.
+    // The library root registers each top-level folder as a course: here `Category`
+    // becomes the course, and the top-level node is the tree relative to it.
     let course = &json["nodes"][0];
     assert_eq!(course["title"], "Categoria");
     assert_eq!(course["path"], "");
@@ -351,8 +351,8 @@ async fn admin_rescan_populates_the_authenticated_catalog() {
         "a pasta de topo é o próprio curso"
     );
     assert_eq!(course["source_folder"], "library");
-    // `nodes` é a árvore recursiva canônica, o contrato preferido pela SPA: a aula fica
-    // sob o módulo, com identidade de mídia, caminhos relativos e verificação.
+    // `nodes` is the canonical recursive tree, the contract preferred by the SPA: the lesson sits
+    // under the module, with media identity, relative paths and verification.
     let module = &course["children"][0];
     assert_eq!(module["title"], "Curso");
     assert_eq!(module["path"], "Curso");
@@ -377,8 +377,8 @@ async fn admin_rescan_populates_the_authenticated_catalog() {
         node_file["media_id"].is_string(),
         "a identidade de mídia precisa sobreviver em nodes"
     );
-    // O arquivo solto do curso não pertence a nenhuma aula: ele continua acessível, sem
-    // perda, nos arquivos soltos do próprio nó do curso.
+    // The course's loose file belongs to no lesson: it stays accessible, with no
+    // loss, in the loose files of the course node itself.
     let loose = &course["loose_files"][0];
     assert_eq!(loose["name"], "nota.pdf");
     assert_eq!(loose["path"], "nota.pdf");
@@ -387,7 +387,7 @@ async fn admin_rescan_populates_the_authenticated_catalog() {
         "o arquivo solto também carrega identidade de mídia em nodes"
     );
 
-    // Cada nó de topo tem papel `course`, `course_id` opaco e a subárvore escaneada sob ele.
+    // Each top-level node has the `course` role, an opaque `course_id` and the scanned subtree under it.
     assert_eq!(json["nodes"][0]["role"], "course");
     assert_eq!(json["nodes"][0]["course_id"], course["course_id"]);
     let file = find_file(&json["nodes"][0]).expect("lesson file in catalog");
@@ -462,8 +462,8 @@ async fn rescan_reports_a_missing_course_root_as_failed_without_exposing_paths()
         )
         .await
         .unwrap();
-    // Uma raiz removida não derruba os demais cursos: a resposta agrega a falha sem
-    // seguir o alvo e sem expor o caminho.
+    // A removed root does not bring down the other courses: the response aggregates the failure without
+    // following the target and without exposing the path.
     assert_eq!(response.status(), StatusCode::OK);
     assert_private_no_store(&response);
     let body = response.into_body().collect().await.unwrap().to_bytes();
@@ -484,10 +484,10 @@ async fn rescan_returns_conflict_while_another_process_holds_its_lock() {
     let lock_path = temp.path().join("catalog.sqlite.rescan.lock");
     let ready_path = temp.path().join("lock-ready");
 
-    // Bootstrap (Argon2id do admin) e login (Argon2id) são deliberadamente lentos
-    // e podem levar segundos num runner de CI carregado. Prepare-os antes de
-    // spawnar o filho para que a janela entre `lock-ready` e o release cubra
-    // apenas o request, e não o trabalho pesado de startup.
+    // Bootstrap (the admin's Argon2id) and login (Argon2id) are deliberately slow
+    // and can take seconds on a loaded CI runner. Prepare them before
+    // spawning the child so that the window between `lock-ready` and the release covers
+    // only the request, and not the heavy startup work.
     let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
     let cookie = login(&app).await;
 
@@ -497,9 +497,9 @@ async fn rescan_returns_conflict_while_another_process_holds_its_lock() {
         .env("LEARNVAULT_RESCAN_LOCK_HELPER", "1")
         .env("LEARNVAULT_RESCAN_LOCK_PATH", &lock_path)
         .env("LEARNVAULT_RESCAN_LOCK_READY", &ready_path)
-        // O release é sinalizado pelo canal de stdin do filho, não por um arquivo
-        // com deadline: um canal real é determinístico e libera o processo no
-        // fechamento mesmo se o pai falhar, sem deixar auxiliar órfão preso.
+        // The release is signalled through the child's stdin channel, not by a file
+        // with a deadline: a real channel is deterministic and frees the process on
+        // close even if the parent fails, without leaving an orphaned helper stuck.
         .stdin(Stdio::piped())
         .spawn()
         .unwrap();
@@ -516,9 +516,9 @@ async fn rescan_returns_conflict_while_another_process_holds_its_lock() {
         .await
         .unwrap();
 
-    // Fechar o stdin do filho faz o `read_line` retornar EOF e o auxiliar encerrar.
-    // `Stdio::piped()` é invariante do teste: se sumir, `wait()` travaria para
-    // sempre, então falhe alto em vez de pendurar a suíte.
+    // Closing the child's stdin makes `read_line` return EOF and the helper exit.
+    // `Stdio::piped()` is a test invariant: if it went away, `wait()` would hang
+    // forever, so fail loudly instead of hanging the suite.
     let stdin = child
         .stdin
         .take()
@@ -534,9 +534,9 @@ async fn rescan_returns_conflict_while_another_process_holds_its_lock() {
 
 #[test]
 fn rescan_lock_helper() {
-    // Marcador dedicado: só o processo auxiliar spawnado por este arquivo o define.
-    // Sem ele, o teste nunca executa o corpo, evitando travar em `read_line` quando
-    // rodado dentro da suíte principal (regressão que o poll com deadline continha).
+    // Dedicated marker: only the helper process spawned by this file sets it.
+    // Without it, the test never runs the body, avoiding a hang in `read_line` when
+    // run inside the main suite (a regression the deadline poll used to contain).
     if std::env::var("LEARNVAULT_RESCAN_LOCK_HELPER").as_deref() != Ok("1") {
         return;
     }
@@ -552,16 +552,16 @@ fn rescan_lock_helper() {
     _lock.lock().unwrap();
     fs::write(ready_path, []).unwrap();
 
-    // Segura o lock até o pai sinalizar o release pelo canal de stdin. Um
-    // `read_line` bloqueante (ou EOF) substitui o polling com deadline: o filho
-    // nunca faz `sleep` e nunca fica preso além do fechamento do pai.
+    // Holds the lock until the parent signals the release through the stdin channel. A
+    // blocking `read_line` (or EOF) replaces polling with a deadline: the child
+    // never `sleep`s and never stays stuck beyond the parent closing.
     let mut release = String::new();
     let _ = std::io::stdin().read_line(&mut release);
 }
 
-/// Espera por um arquivo de sincronização entre processos com um deadline
-/// generoso: em CI carregado, o processo auxiliar pode demorar bem mais que
-/// alguns segundos para ser spawnado e sinalizar `lock-ready`.
+/// Waits for a synchronization file between processes with a generous deadline:
+/// on loaded CI, the helper process can take much longer than a few
+/// seconds to be spawned and signal `lock-ready`.
 fn wait_for_file(path: &Path) {
     let deadline = Instant::now() + RESCAN_LOCK_TIMEOUT;
     while !path.exists() {

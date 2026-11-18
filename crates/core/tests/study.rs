@@ -1,8 +1,8 @@
-//! Testes da persistência e da atualização do progresso de estudo.
+//! Tests of the persistence and update of study progress.
 //!
-//! O núcleo recebe `owner_id` e `media_id` — identificadores opacos — e mantém a posição de
-//! retomada e a conclusão da aula. O `owner_id` é o limite de isolamento: dados de um dono
-//! nunca são visíveis para outro. Nenhum caso acessa o sistema de arquivos.
+//! The core receives `owner_id` and `media_id` — opaque identifiers — and keeps the resume
+//! position and the lesson's completion. The `owner_id` is the isolation boundary: one owner's data
+//! is never visible to another. No case touches the file system.
 
 use learnvault_core::paths::relative_path_key;
 use learnvault_core::{
@@ -17,8 +17,8 @@ const LIB: &str = "bib-1";
 const OWNER: &str = "aluno-1";
 const OTHER: &str = "aluno-2";
 
-/// Instante conhecido gravado direto no banco. Qualquer escrita real usa o relógio do
-/// sistema, que é ordens de grandeza maior, então a comparação não depende de espera.
+/// Known instant written straight to the database. Any real write uses the system
+/// clock, which is orders of magnitude larger, so the comparison does not depend on waiting.
 const SEEDED_AT: i64 = 1_000;
 
 fn key(path: &str) -> String {
@@ -43,7 +43,7 @@ fn insert_media(db: &Database, media_id: &str, availability: &str) -> rusqlite::
     )
 }
 
-/// Grava um estado de estudo com `updated_at` controlado, sem passar pela API.
+/// Writes a study state with a controlled `updated_at`, without going through the API.
 fn seed(
     db: &Database,
     owner_id: &str,
@@ -65,7 +65,7 @@ fn seed(
     )
 }
 
-/// Marca um dia ativo direto em `study_day`, sem depender do relógio do sistema.
+/// Marks an active day straight in `study_day`, without depending on the system clock.
 fn seed_day(db: &Database, owner_id: &str, day: &str) -> rusqlite::Result<usize> {
     db.connection().execute(
         "INSERT INTO study_day (owner_id, day, last_at) VALUES (?1, ?2, ?3)",
@@ -73,7 +73,7 @@ fn seed_day(db: &Database, owner_id: &str, day: &str) -> rusqlite::Result<usize>
     )
 }
 
-/// Lê `(position_seconds, completed, updated_at)` direto do banco.
+/// Reads `(position_seconds, completed, updated_at)` straight from the database.
 fn row(db: &Database, owner_id: &str, media_id: &str) -> Option<(i64, i64, i64)> {
     db.connection()
         .query_row(
@@ -101,7 +101,7 @@ fn count(db: &Database, table: &str) -> i64 {
         .expect("contagem")
 }
 
-/// Conteúdo das linhas de mídia, para provar que o progresso não altera nenhuma coluna.
+/// Content of the media rows, to prove that progress does not change any column.
 fn media_snapshot(db: &Database) -> Vec<(String, String, String, i64, i64, String)> {
     let conn = db.connection();
     let mut statement = conn
@@ -480,7 +480,7 @@ fn a_failed_write_leaves_the_previous_state_intact() -> TestResult {
     insert_media(&db, "m1", "available")?;
     seed(&db, OWNER, "m1", 10, false, SEEDED_AT)?;
 
-    // Injeção determinística de falha, criada por outra conexão ao mesmo arquivo.
+    // Deterministic failure injection, created by another connection to the same file.
     {
         let injected = rusqlite::Connection::open(&path)?;
         injected.execute_batch(
@@ -829,14 +829,14 @@ fn study_notes_crud_and_isolation() -> TestResult {
     insert_media(&db, "m1", "available")?;
     insert_media(&db, "m2", "available")?;
 
-    // Cria anotações fora de ordem temporal para validar ordenação
+    // Creates notes out of time order to validate ordering
     let note2 = create_study_note(&db, OWNER, "m1", 120, "Segundo ponto importante")?;
     let note1 = create_study_note(&db, OWNER, "m1", 30, "Primeiro ponto da aula")?;
 
-    // Anotação para outro aluno
+    // Note for another learner
     create_study_note(&db, OTHER, "m1", 45, "Nota do outro aluno")?;
 
-    // Anotação em outra mídia
+    // Note on another media
     create_study_note(&db, OWNER, "m2", 10, "Nota de outra aula")?;
 
     let notes = list_study_notes(&db, OWNER, "m1")?;
@@ -851,27 +851,27 @@ fn study_notes_crud_and_isolation() -> TestResult {
     assert_eq!(notes[1].note_id, note2.note_id);
     assert_eq!(notes[1].position_seconds, 120);
 
-    // Atualização de anotação
+    // Note update
     let updated = update_study_note(&db, OWNER, &note1.note_id, "Primeiro ponto revisado")?;
     assert_eq!(updated.content, "Primeiro ponto revisado");
 
-    // Outro dono não consegue atualizar a anotação
+    // Another owner cannot update the note
     assert!(matches!(
         update_study_note(&db, OTHER, &note1.note_id, "Tentativa indevida"),
         Err(Error::StudyNoteNotFound { .. })
     ));
 
-    // Exclusão de anotação
+    // Note deletion
     assert!(delete_study_note(&db, OWNER, &note2.note_id)?);
     let remaining = list_study_notes(&db, OWNER, "m1")?;
     assert_eq!(remaining.len(), 1);
     assert_eq!(remaining[0].note_id, note1.note_id);
 
-    // Outro dono não consegue excluir a anotação remanescente
+    // Another owner cannot delete the remaining note
     assert!(!delete_study_note(&db, OTHER, &note1.note_id)?);
     assert_eq!(list_study_notes(&db, OWNER, "m1")?.len(), 1);
 
-    // Listagem global de anotações do dono (m1 e m2) enriquecida com relative_path
+    // Global listing of the owner's notes (m1 and m2) enriched with relative_path
     let all_notes = list_all_study_notes(&db, OWNER)?;
     assert_eq!(
         all_notes.len(),
@@ -883,7 +883,7 @@ fn study_notes_crud_and_isolation() -> TestResult {
     assert_eq!(all_notes[1].content, "Nota de outra aula");
     assert_eq!(all_notes[1].relative_path, "curso/m2.mp4");
 
-    // Listagem global do outro aluno deve conter apenas a nota dele
+    // The other learner's global listing must contain only their note
     let other_notes = list_all_study_notes(&db, OTHER)?;
     assert_eq!(other_notes.len(), 1);
     assert_eq!(other_notes[0].content, "Nota do outro aluno");
@@ -896,25 +896,25 @@ fn study_notes_validation_rules() -> TestResult {
     let db = library_db()?;
     insert_media(&db, "m1", "available")?;
 
-    // Posição negativa
+    // Negative position
     assert!(matches!(
         create_study_note(&db, OWNER, "m1", -1, "Conteúdo"),
         Err(Error::InvalidStudyPosition { .. })
     ));
 
-    // Conteúdo vazio ou apenas espaços
+    // Empty content or only spaces
     assert!(matches!(
         create_study_note(&db, OWNER, "m1", 10, "   "),
         Err(Error::InvalidStudyNoteContent)
     ));
 
-    // Dono inválido
+    // Invalid owner
     assert!(matches!(
         create_study_note(&db, "   ", "m1", 10, "Conteúdo"),
         Err(Error::InvalidOwnerId)
     ));
 
-    // Mídia inexistente
+    // Nonexistent media
     assert!(matches!(
         create_study_note(&db, OWNER, "m-inexistente", 10, "Conteúdo"),
         Err(Error::MediaNotFound { .. })

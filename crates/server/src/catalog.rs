@@ -1,4 +1,4 @@
-//! Endpoints HTTP do catálogo, do rescan administrativo e do registro de cursos.
+//! HTTP endpoints of the catalog, of the administrative rescan and of the course registry.
 
 use std::{
     fs::{File, OpenOptions},
@@ -22,11 +22,11 @@ use crate::{
     sources::RemoteSource,
 };
 
-/// Limite de corpo da requisição de ordenação, acima do limite padrão do roteador (8 KiB).
+/// Body limit of the ordering request, above the router's default limit (8 KiB).
 ///
-/// Reordenar um módulo com muitas aulas (ou um curso com muitos módulos) gera um corpo com
-/// um caminho relativo por irmão; o limite generoso evita um `413` surpresa numa biblioteca
-/// grande, sem afetar as demais rotas.
+/// Reordering a module with many lessons (or a course with many modules) produces a body with
+/// one relative path per sibling; the generous limit avoids a surprise `413` on a large
+/// library, without affecting the other routes.
 pub(crate) const ORDER_BODY_LIMIT: usize = 512 * 1024;
 
 enum RescanFailure {
@@ -44,7 +44,7 @@ struct ErrorResponse {
 struct CatalogResponse {
     complete: bool,
     loose_files: Vec<CatalogFileResponse>,
-    /// Árvore recursiva canônica: os cursos de topo e suas subárvores.
+    /// Canonical recursive tree: the top-level courses and their subtrees.
     nodes: Vec<CatalogNodeResponse>,
 }
 
@@ -55,19 +55,19 @@ struct CatalogNodeResponse {
     role: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     course_id: Option<String>,
-    /// Segundos de modificação da capa personalizada do curso, quando existir. É a
-    /// versão usada pela SPA para invalidar a URL (`?v=`); ausente quando não há capa.
+    /// Modification seconds of the course's custom cover, when it exists. It is the
+    /// version the SPA uses to invalidate the URL (`?v=`); absent when there is no cover.
     #[serde(skip_serializing_if = "Option::is_none")]
     cover_version: Option<i64>,
-    /// Nome da pasta de origem imediata do curso no disco (diretório pai), sem expor caminhos absolutos.
+    /// Name of the course's immediate source folder on disk (parent directory), without exposing absolute paths.
     #[serde(skip_serializing_if = "Option::is_none")]
     source_folder: Option<String>,
-    /// Avaliação da organização do curso. Presente só nos nós de curso.
+    /// Assessment of the course's organization. Present only on course nodes.
     #[serde(skip_serializing_if = "Option::is_none")]
     structure: Option<StructureResponse>,
-    /// Verdadeiro nos cursos que vivem em uma fonte remota (a fonte ou uma pasta escolhida dela).
-    /// Ausente nos cursos locais; a SPA usa o campo para não oferecer ações que só existem para
-    /// cursos locais (capa, ordem, remoção do registro).
+    /// True on courses that live in a remote source (the source or a folder chosen from it).
+    /// Absent on local courses; the SPA uses the field to avoid offering actions that only exist for
+    /// local courses (cover, order, removal from the registry).
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     remote: bool,
     files: Vec<CatalogFileResponse>,
@@ -75,7 +75,7 @@ struct CatalogNodeResponse {
     children: Vec<CatalogNodeResponse>,
 }
 
-/// Nível de confiança da organização do curso e os motivos que o reduziram.
+/// Confidence level of the course's organization and the reasons that lowered it.
 #[derive(Serialize, Clone)]
 struct StructureResponse {
     confidence: &'static str,
@@ -127,9 +127,9 @@ pub(crate) struct RescanResponse {
     pub(crate) updated: usize,
     pub(crate) marked_missing: usize,
     pub(crate) preserved: usize,
-    /// Quantidade de chaves relativas ambíguas recusadas nesta varredura.
+    /// Number of ambiguous relative keys refused in this scan.
     ///
-    /// É apenas a contagem: as chaves em si são caminhos relativos e nunca cruzam a API.
+    /// It is only the count: the keys themselves are relative paths and never cross the API.
     pub(crate) ambiguous_count: usize,
 }
 
@@ -141,7 +141,7 @@ pub(crate) async fn catalog(State(state): State<AppState>, headers: HeaderMap) -
         Ok(None) | Err(_) => return status_private_no_store(StatusCode::UNAUTHORIZED),
     };
 
-    // Evita segurar o mutex do banco só para devolver 503 sob saturação.
+    // Avoids holding the database mutex just to return 503 under saturation.
     if !state.has_blocking_capacity() {
         return service_unavailable();
     }
@@ -185,11 +185,11 @@ pub(crate) async fn catalog(State(state): State<AppState>, headers: HeaderMap) -
     }
 }
 
-/// Serializa o catálogo uma única vez e deixa o cliente revalidar pelo `ETag`.
+/// Serializes the catalog only once and lets the client revalidate through the `ETag`.
 ///
-/// A resposta continua sendo sempre revalidada (`private, no-cache`), então um `304`
-/// nunca serve dados velhos: ele só evita retransmitir a árvore inteira quando nada mudou.
-/// O hash cobre o corpo serializado, que inclui a ordenação e as capas aplicadas.
+/// The response is still always revalidated (`private, no-cache`), so a `304`
+/// never serves stale data: it only avoids retransmitting the whole tree when nothing changed.
+/// The hash covers the serialized body, which includes the ordering and the covers applied.
 fn catalog_response(request: &HeaderMap, catalog: CatalogResponse) -> Response {
     let Ok(body) = serde_json::to_string(&catalog) else {
         return internal_error("catalog unavailable");
@@ -226,15 +226,15 @@ fn catalog_response(request: &HeaderMap, catalog: CatalogResponse) -> Response {
     response
 }
 
-/// Agrega o catálogo dos cursos registrados.
+/// Aggregates the catalog of the registered courses.
 ///
-/// Cada curso vira um nó de topo com papel `course`, identidade própria e a subárvore
-/// derivada dos dados persistidos. Os arquivos soltos da pasta do curso ficam no próprio
-/// nó; não existe mais uma raiz global de arquivos soltos. Um curso sem varredura aparece
-/// vazio, e a resposta é marcada como incompleta se qualquer curso estiver incompleto.
+/// Each course becomes a top-level node with the `course` role, its own identity and the subtree
+/// derived from the persisted data. The loose files of the course folder stay on the course
+/// node itself; there is no longer a global root of loose files. A course with no scan shows up
+/// empty, and the response is flagged as incomplete if any course is incomplete.
 ///
-/// Cada subárvore recebe a preferência de ordenação manual do curso ([`CourseOrders`]),
-/// aplicada por sobreposição sobre a ordem natural; cursos continuam na ordem automática.
+/// Each subtree receives the course's manual ordering preference ([`CourseOrders`]),
+/// applied as an overlay over the natural order; courses stay in the automatic order.
 fn build_course_catalog(
     database: &learnvault_core::Database,
     courses: &[RegisteredCourse],
@@ -286,12 +286,12 @@ fn build_course_catalog(
             children: children.into_iter().map(Into::into).collect(),
         });
     }
-    // Fontes remotas usam o mesmo catálogo derivado do banco; não têm pasta local, capa
-    // personalizada nem pasta de origem. A ordenação manual continua por identidade.
+    // Remote sources use the same catalog derived from the database; they have no local folder, custom
+    // cover nor source folder. Manual ordering still works by identity.
     //
-    // Uma fonte sem raízes é um curso só. Com raízes (ADR 0004), cada pasta escolhida é um
-    // curso próprio, com a identidade da raiz, e o resto da fonte continua visível como o
-    // curso da fonte enquanto tiver algum arquivo. O acesso é decidido por identidade.
+    // A source with no roots is a single course. With roots (ADR 0004), each chosen folder is a
+    // course of its own, with the root's identity, and the rest of the source stays visible as the
+    // source's course for as long as it has any file. Access is decided by identity.
     let mut sources: Vec<&RemoteSource> = sources.iter().collect();
     sources.sort_by(|left, right| {
         learnvault_core::natural_cmp(&left.name, &right.name).then_with(|| left.id.cmp(&right.id))
@@ -424,7 +424,7 @@ pub(crate) async fn rescan(State(state): State<AppState>, headers: HeaderMap) ->
     if user.must_change_credentials {
         return credentials_required();
     }
-    // Evita segurar locks só para devolver 503 sob saturação.
+    // Avoids holding locks just to return 503 under saturation.
     if !state.has_blocking_capacity() {
         return service_unavailable();
     }
@@ -678,15 +678,15 @@ impl From<RescanSummary> for RescanResponse {
         Self {
             scan_id: summary.scan_id,
             complete: summary.complete,
-            // Um resumo descreve um único curso; a agregação de vários cursos substitui as
-            // duas contagens depois da conversão, como o DTO do desktop.
+            // A summary describes a single course; the aggregation of several courses replaces the
+            // two counts after the conversion, like the desktop's DTO.
             courses: 1,
             failed_courses: 0,
             inserted: summary.inserted,
             updated: summary.updated,
             marked_missing: summary.marked_missing,
             preserved: summary.preserved,
-            // Nunca serializa as chaves: a resposta expõe só a contagem, como o desktop.
+            // Never serializes the keys: the response exposes only the count, like the desktop.
             ambiguous_count: summary.ambiguous.len(),
         }
     }
@@ -722,8 +722,8 @@ mod tests {
 
     #[test]
     fn rescan_response_exposes_only_the_ambiguous_count() {
-        // O resumo carrega caminhos relativos nas chaves ambíguas; a resposta nunca pode
-        // serializá-los, expondo apenas a contagem (como o DTO do desktop).
+        // The summary carries relative paths in the ambiguous keys; the response must never
+        // serialize them, exposing only the count (like the desktop's DTO).
         let summary = RescanSummary {
             ambiguous: vec!["Cursos secretos/aula.mp4".to_owned()],
             ..RescanSummary::default()

@@ -1,4 +1,4 @@
-//! Contratos de persistência tipada para autenticação e sessões.
+//! Contracts of typed persistence for authentication and sessions.
 
 use learnvault_core::{
     AuthSession, AuthUser, Database, Error, bootstrap_admin, can_user_access_course,
@@ -133,7 +133,7 @@ fn local_users_and_course_permissions_lifecycle() -> TestResult {
     let mut db = Database::open_in_memory()?;
     bootstrap_admin(&mut db, USER_ID, USERNAME, PASSWORD_HASH, 1_700_000_000)?;
 
-    // Cria estudante com acesso irrestrito inicial (None)
+    // Creates a student with initial unrestricted access (None)
     let alice = create_user(
         &mut db,
         "usr-alice",
@@ -148,7 +148,7 @@ fn local_users_and_course_permissions_lifecycle() -> TestResult {
     assert!(can_user_access_course(&db, "usr-alice", false, "course-a")?);
     assert!(can_user_access_course(&db, "usr-alice", false, "course-b")?);
 
-    // Duplicidade case-insensitive é recusada
+    // Case-insensitive duplication is refused
     let dup = create_user(
         &mut db,
         "usr-alice-2",
@@ -159,7 +159,7 @@ fn local_users_and_course_permissions_lifecycle() -> TestResult {
     );
     assert!(matches!(dup, Err(Error::UsernameTaken)));
 
-    // Restringe Alice apenas a course-a
+    // Restricts Alice to only course-a
     let restricted = set_user_course_access(&mut db, "usr-alice", Some(&["course-a".to_owned()]))?;
     assert_eq!(restricted, Some(vec!["course-a".to_owned()]));
     assert!(can_user_access_course(&db, "usr-alice", false, "course-a")?);
@@ -170,7 +170,7 @@ fn local_users_and_course_permissions_lifecycle() -> TestResult {
         "course-b"
     )?);
 
-    // Restringe Alice a zero cursos
+    // Restricts Alice to zero courses
     let zero_courses = set_user_course_access(&mut db, "usr-alice", Some(&[]))?;
     assert_eq!(zero_courses, Some(Vec::new()));
     assert!(!can_user_access_course(
@@ -180,12 +180,12 @@ fn local_users_and_course_permissions_lifecycle() -> TestResult {
         "course-a"
     )?);
 
-    // Restaura acesso irrestrito (None)
+    // Restores unrestricted access (None)
     let unrestricted = set_user_course_access(&mut db, "usr-alice", None)?;
     assert_eq!(unrestricted, None);
     assert!(can_user_access_course(&db, "usr-alice", false, "course-b")?);
 
-    // Não permite restringir nem remover administrador
+    // Does not allow restricting or removing an administrator
     assert!(matches!(
         set_user_course_access(&mut db, USER_ID, Some(&[])),
         Err(Error::CannotModifyAdminUser)

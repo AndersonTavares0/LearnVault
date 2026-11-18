@@ -1,16 +1,16 @@
-//! Testes da busca global do desktop na fronteira IPC.
+//! Tests of the desktop's global search at the IPC boundary.
 //!
-//! Não sobem o webview: exercitam `DesktopState::search`, que o comando
-//! `#[tauri::command]` apenas embrulha. O alvo é o contrato observável pelo frontend —
-//! shape snake_case idêntico ao do servidor, dono local fixo, notas de outro dono fora do
-//! resultado e nenhuma influência sobre a biblioteca física.
+//! They do not bring up the webview: they exercise `DesktopState::search`, which the
+//! `#[tauri::command]` command only wraps. The target is the contract observable by the frontend —
+//! snake_case shape identical to the server's, fixed local owner, another owner's notes left out of the
+//! result and no influence on the physical library.
 
 use std::fs;
 use std::path::Path;
 
 use learnvault_desktop::{DesktopState, SearchResultsDto};
 
-/// Estado desktop com um curso externo importado e varrido.
+/// Desktop state with an external course imported and scanned.
 fn configured(root: &Path) -> DesktopState {
     let state = DesktopState::open(&root.join("data"), &root.join("config")).unwrap();
     let course = root.join("Acervo privado");
@@ -21,7 +21,7 @@ fn configured(root: &Path) -> DesktopState {
     state
 }
 
-/// Identidade da única mídia varrida, lida direto do banco local.
+/// Identity of the only media scanned, read straight from the local database.
 fn media_id(root: &Path) -> String {
     let database =
         learnvault_core::Database::open(root.join("data").join("learnvault.sqlite")).unwrap();

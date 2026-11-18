@@ -1,13 +1,13 @@
-//! Registro de cursos do servidor e os endpoints administrativos que o mantêm.
+//! Server course registry and the administrative endpoints that maintain it.
 //!
-//! Cada curso é uma pasta externa registrada individualmente e permanece **somente
-//! leitura**: registrar não copia, move nem altera nada dentro dela. O registro vive em um
-//! arquivo de configuração versionado ao lado do banco, nunca no banco nem dentro dos
-//! cursos — a raiz física é configuração da plataforma, não dado do domínio.
+//! Each course is an external folder registered individually and stays **read-only**:
+//! registering does not copy, move or change anything inside it. The registry lives in a
+//! versioned configuration file next to the database, never in the database nor inside the
+//! courses — the physical root is platform configuration, not domain data.
 //!
-//! A identidade de cada curso é derivada do caminho canônico ([`course_id_from_path`]),
-//! de modo que reimportar a mesma pasta reencontra as mídias e o progresso de estudo já
-//! persistidos. O caminho nunca cruza a fronteira HTTP: a interface conhece apenas `id` e
+//! The identity of each course is derived from the canonical path ([`course_id_from_path`]),
+//! so re-importing the same folder finds again the media and study progress already
+//! persisted. The path never crosses the HTTP boundary: the interface knows only `id` and
 //! `title`.
 
 use std::{
@@ -35,39 +35,39 @@ use crate::{
     },
 };
 
-/// Nome do arquivo de registro dentro do diretório de dados do servidor.
+/// Name of the registry file inside the server's data directory.
 pub const REGISTRY_FILE_NAME: &str = "courses.json";
 
-/// Versão do formato do arquivo de registro.
+/// Version of the registry file's format.
 pub const REGISTRY_VERSION: u32 = 1;
 
-/// Curso registrado: identidade estável, título apresentado e raiz já validada.
+/// Registered course: stable identity, displayed title and an already-validated root.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RegisteredCourse {
-    /// Identidade estável usada como `library_id` no banco.
+    /// Stable identity used as the `library_id` in the database.
     pub id: String,
-    /// Título apresentado nos cards.
+    /// Title displayed on the cards.
     pub title: String,
-    /// Raiz canônica validada do curso. Nunca serializada para o cliente.
+    /// Validated canonical root of the course. Never serialized to the client.
     pub root: CourseRoot,
 }
 
-/// Formato serializado do arquivo de registro.
+/// Serialized format of the registry file.
 #[derive(Debug, Serialize, Deserialize)]
 struct RegistryFile {
     version: u32,
     courses: Vec<StoredCourse>,
 }
 
-/// Entrada persistida de um curso. O caminho é a única informação durável.
+/// Persisted entry of a course. The path is the only durable information.
 #[derive(Debug, Serialize, Deserialize)]
 struct StoredCourse {
     id: String,
     path: PathBuf,
 }
 
-/// Caminho do arquivo de registro para um banco. Fica ao lado do banco, no diretório de
-/// dados; um banco sem diretório pai usa o diretório atual.
+/// Path of the registry file for a database. It sits next to the database, in the data directory;
+/// a database with no parent directory uses the current directory.
 pub(crate) fn registry_path(database_path: &Path) -> PathBuf {
     let parent = database_path
         .parent()
@@ -76,12 +76,12 @@ pub(crate) fn registry_path(database_path: &Path) -> PathBuf {
     parent.join(REGISTRY_FILE_NAME)
 }
 
-/// Carrega o registro persistido.
+/// Loads the persisted registry.
 ///
-/// Arquivo ausente, corrompido ou em versão desconhecida resulta em registro vazio; cada
-/// entrada é revalidada com [`CourseRoot::resolve`] e uma raiz removida, inacessível ou
-/// substituída por link é descartada em silêncio (a lista persistida não é reescrita por
-/// uma leitura). Nenhum caminho aparece em mensagens.
+/// A missing, corrupted or unknown-version file results in an empty registry; each
+/// entry is revalidated with [`CourseRoot::resolve`] and a root that was removed, became inaccessible or was
+/// replaced by a link is silently dropped (the persisted list is not rewritten by
+/// a read). No path appears in messages.
 pub(crate) fn load_registry(path: &Path) -> Vec<RegisteredCourse> {
     let Ok(raw) = fs::read(path) else {
         return Vec::new();
@@ -110,8 +110,8 @@ pub(crate) fn load_registry(path: &Path) -> Vec<RegisteredCourse> {
     courses
 }
 
-/// Curso semente do modo legado: a raiz configurada por `--library-root`/`LIBRARY_DIR`
-/// usa a identidade histórica para preservar mídias, varreduras e progresso já gravados.
+/// Seed course of legacy mode: the root configured by `--library-root`/`LIBRARY_DIR`
+/// uses the historical identity to preserve media, scans and progress already stored.
 pub(crate) fn legacy_seed(root: &Path) -> Option<RegisteredCourse> {
     let root = CourseRoot::resolve(root).ok()?;
     Some(RegisteredCourse {
@@ -131,13 +131,13 @@ fn is_ignored_seed_dir(path: &Path) -> bool {
         || name.eq_ignore_ascii_case("System Volume Information")
 }
 
-/// Cursos semeados a partir da raiz configurada no primeiro start.
+/// Courses seeded from the configured root on first start.
 ///
-/// Cada pasta de primeiro nível sob a raiz vira um curso: uma biblioteca de cursos
-/// costuma ser um diretório com uma pasta por curso, e exigir um import manual por pasta
-/// deixava a biblioteca vazia logo depois do deploy. Quando não há subpasta válida, a
-/// própria raiz é semeada como antes, preservando layouts que guardam as mídias
-/// diretamente nela e a identidade histórica `library-1`.
+/// Each first-level folder under the root becomes a course: a library of courses
+/// is usually a directory with one folder per course, and requiring a manual import per folder
+/// left the library empty right after deploy. When there is no valid subfolder, the
+/// root itself is seeded as before, preserving layouts that keep the media
+/// directly in it and the historical identity `library-1`.
 pub(crate) fn seeded_courses(root: &Path) -> Vec<RegisteredCourse> {
     const MAX_AUTO_NESTED: usize = 100;
 
@@ -150,7 +150,7 @@ pub(crate) fn seeded_courses(root: &Path) -> Vec<RegisteredCourse> {
         .map(|entry| entry.path())
         .filter(|path| !is_ignored_seed_dir(path))
         .collect();
-    // A ordem do sistema de arquivos varia; ordenar mantém a lista semeada estável.
+    // File-system order varies; sorting keeps the seeded list stable.
     folders.sort();
     let mut courses: Vec<RegisteredCourse> = Vec::new();
     for folder in folders {
@@ -196,11 +196,11 @@ fn push_seeded_course_root(courses: &mut Vec<RegisteredCourse>, root: CourseRoot
     }
 }
 
-/// Grava o registro de forma serializada e atômica.
+/// Writes the registry in a serialized, atomic way.
 ///
-/// O temporário é criado exclusivamente (`create_new`) e trocado por `rename`; no Windows,
-/// como a API padrão não substitui um destino existente, o destino é removido imediatamente
-/// antes da troca. A serialização é responsabilidade do cadeado de escrita do estado.
+/// The temporary file is created exclusively (`create_new`) and swapped by `rename`; on Windows,
+/// since the standard API does not replace an existing destination, the destination is removed immediately
+/// before the swap. Serialization is the responsibility of the state's write lock.
 pub(crate) fn store_registry(
     path: &Path,
     courses: &[RegisteredCourse],
@@ -245,11 +245,11 @@ pub(crate) fn store_registry(
     Ok(())
 }
 
-/// Troca o temporário pelo destino usando apenas APIs padrão.
+/// Swaps the temporary file into the destination using only standard APIs.
 ///
-/// Compartilhado com o armazenamento de capas ([`crate::covers`]) para que a troca atômica
-/// de um arquivo no diretório de dados tenha uma única implementação, com o mesmo cuidado
-/// no Windows (a API padrão não substitui um destino existente).
+/// Shared with the cover storage ([`crate::covers`]) so that the atomic swap
+/// of a file in the data directory has a single implementation, with the same care
+/// on Windows (the standard API does not replace an existing destination).
 pub(crate) fn replace_file(source: &Path, dest: &Path) -> std::io::Result<()> {
     #[cfg(windows)]
     {
@@ -262,14 +262,14 @@ pub(crate) fn replace_file(source: &Path, dest: &Path) -> std::io::Result<()> {
     fs::rename(source, dest)
 }
 
-/// Falha estável do registro. Nunca carrega caminho.
+/// Stable failure of the registry. It never carries a path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum RegistryError {
-    /// O registro não pôde ser gravado com segurança.
+    /// The registry could not be written safely.
     WriteFailed,
 }
 
-/// Resposta de um curso registrado, sem o caminho.
+/// Response for a registered course, without the path.
 #[derive(Serialize)]
 struct CourseResponse {
     id: String,
@@ -285,7 +285,7 @@ impl From<&RegisteredCourse> for CourseResponse {
     }
 }
 
-/// Corpo do pedido de importação: o caminho da pasta do curso no servidor.
+/// Body of the import request: the path of the course folder on the server.
 #[derive(Deserialize)]
 pub(crate) struct ImportRequest {
     path: String,
@@ -301,11 +301,11 @@ struct RemoveResponse {
     removed: bool,
 }
 
-/// `POST /api/admin/courses` — registra uma pasta como curso.
+/// `POST /api/admin/courses` — registers a folder as a course.
 ///
-/// A pasta precisa existir, ser um diretório legível e não ser um link/junction. A
-/// validação e a gravação rodam fora das threads Tokio; o curso passa a existir no
-/// catálogo após a próxima indexação. Uma pasta já registrada é recusada com `400`.
+/// The folder must exist, be a readable directory and not be a link/junction. The
+/// validation and the write run off the Tokio threads; the course starts to exist in the
+/// catalog after the next indexing. A folder already registered is refused with `400`.
 pub(crate) async fn import(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -359,10 +359,10 @@ pub(crate) async fn import(
     }
 }
 
-/// `DELETE /api/admin/courses/{id}` — remove um curso do registro.
+/// `DELETE /api/admin/courses/{id}` — removes a course from the registry.
 ///
-/// Remove apenas o registro: os arquivos permanecem intactos e o catálogo do curso deixa
-/// de ser servido. Remover um curso desconhecido responde `200` com `removed: false`.
+/// It removes only the registration: the files stay intact and the course's catalog stops
+/// being served. Removing an unknown course answers `200` with `removed: false`.
 pub(crate) async fn remove(
     State(state): State<AppState>,
     AxumPath(course_id): AxumPath<String>,
@@ -410,10 +410,10 @@ enum ImportFailure {
     WriteFailed,
 }
 
-/// Valida a pasta, registra o curso e persiste a lista sob o cadeado de escrita.
+/// Validates the folder, registers the course and persists the list under the write lock.
 ///
-/// A lista em memória só é trocada depois de a gravação concluir: uma falha de escrita não
-/// deixa o estado divergente do arquivo.
+/// The in-memory list is only swapped after the write completes: a write failure does not
+/// leave the state diverging from the file.
 fn import_course(
     courses: &std::sync::RwLock<Vec<RegisteredCourse>>,
     courses_file: &Path,
@@ -438,7 +438,7 @@ fn import_course(
     Ok(course)
 }
 
-/// Remove o curso do registro e persiste a lista restante.
+/// Removes the course from the registry and persists the remaining list.
 fn remove_course(
     courses: &std::sync::RwLock<Vec<RegisteredCourse>>,
     courses_file: &Path,
@@ -458,7 +458,7 @@ fn remove_course(
     Ok(removed)
 }
 
-/// Erro JSON estável, sem política de cache adicional.
+/// Stable JSON error, with no additional cache policy.
 fn json_error(status: StatusCode, message: &'static str) -> Response {
     private_no_store((status, Json(ErrorBody { error: message })).into_response())
 }
@@ -495,8 +495,8 @@ mod tests {
         let seeded = seeded_courses(&library);
         let titles: Vec<&str> = seeded.iter().map(|course| course.title.as_str()).collect();
         assert_eq!(titles, ["Física", "Matemática"]);
-        // Nomes que a limpeza zeraria continuam distintos: sem isso uma biblioteca por
-        // ano registraria varios cursos chamados "Curso".
+        // Names that the cleanup would zero out stay distinct: without this, a library organized by
+        // year would register several courses named "Course".
         std::fs::create_dir(library.join("2024")).unwrap();
         std::fs::create_dir(library.join("2025")).unwrap();
         let years: Vec<String> = seeded_courses(&library)
@@ -607,7 +607,7 @@ mod tests {
         assert_eq!(first.title, "Física");
         assert_eq!(second.title, "Matemática");
 
-        // A pasta removida antes da recarga é descartada em silêncio.
+        // The folder removed before the reload is silently dropped.
         std::fs::remove_dir(&course_b).unwrap();
         let loaded = load_registry(&registry);
         assert_eq!(loaded.len(), 1);

@@ -1,25 +1,25 @@
-//! Testes do rescan explícito da biblioteca desktop.
+//! Tests of the explicit rescan of the desktop library.
 //!
-//! Não sobem o webview: exercitam a função livre `DesktopState::rescan`, que o comando
-//! `#[tauri::command]` apenas embrulha. O alvo é o contrato observável — rescan somente
-//! explícito, sobre a raiz persistida, com a biblioteca externa intocada, o banco fora da
-//! raiz, a política do núcleo (`learnvault_core::rescan`) preservada e a serialização por
-//! estado ocupado devolvendo um erro estável. Nenhuma mensagem de erro carrega caminho.
+//! They do not bring up the webview: they exercise the free function `DesktopState::rescan`, which the
+//! `#[tauri::command]` command only wraps. The target is the observable contract — an explicit-only
+//! rescan, over the persisted root, with the external library untouched, the database outside the
+//! root, the core's policy (`learnvault_core::rescan`) preserved and the busy-state
+//! serialization returning a stable error. No error message carries a path.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use learnvault_desktop::{DesktopState, IpcErrorCode, RescanSummaryDto};
 
-/// Estado desktop isolado em diretórios temporários, com dados e configuração separados.
+/// Desktop state isolated in temporary directories, with data and configuration separate.
 fn desktop(root: &Path) -> DesktopState {
     DesktopState::open(&root.join("data"), &root.join("config")).unwrap()
 }
 
-/// Estado desktop com um curso externo importado e persistido.
+/// Desktop state with an external course imported and persisted.
 ///
-/// O diretório tem um nome que não existe em nenhuma mensagem do contrato, para que os
-/// testes possam provar que nenhum caminho vaza pelo IPC.
+/// The directory has a name that appears in no message of the contract, so that the
+/// tests can prove that no path leaks through the IPC.
 fn configured(root: &Path) -> (DesktopState, PathBuf) {
     let state = desktop(root);
     let course = root.join("Acervo privado");
@@ -28,12 +28,12 @@ fn configured(root: &Path) -> (DesktopState, PathBuf) {
     (state, course)
 }
 
-/// Caminho do banco local usado pelo estado.
+/// Path of the local database used by the state.
 fn database_path(root: &Path) -> PathBuf {
     root.join("data").join("learnvault.sqlite")
 }
 
-/// Árvore de arquivos e diretórios relativos à raiz, ordenada, para provar leitura pura.
+/// Tree of files and directories relative to the root, sorted, to prove a pure read.
 fn tree(root: &Path) -> Vec<String> {
     fn walk(base: &Path, current: &Path, out: &mut Vec<String>) {
         let mut entries: Vec<_> = fs::read_dir(current)
@@ -58,7 +58,7 @@ fn tree(root: &Path) -> Vec<String> {
     out
 }
 
-/// Conta mídias marcadas como ausentes diretamente no banco local.
+/// Counts media marked as missing straight in the local database.
 fn missing_rows(root: &Path) -> i64 {
     let database = learnvault_core::Database::open(database_path(root)).unwrap();
     database
@@ -71,7 +71,7 @@ fn missing_rows(root: &Path) -> i64 {
         .unwrap()
 }
 
-/// Conta todas as mídias persistidas no banco local.
+/// Counts all media persisted in the local database.
 fn media_rows(root: &Path) -> i64 {
     let database = learnvault_core::Database::open(database_path(root)).unwrap();
     database
@@ -80,10 +80,10 @@ fn media_rows(root: &Path) -> i64 {
         .unwrap()
 }
 
-/// Cria um link de diretório em `link` apontando para `target`.
+/// Creates a directory link at `link` pointing to `target`.
 ///
-/// No Windows criar um symlink/junction exige privilégio; quando a plataforma recusa, o
-/// teste é pulado com registro, como nos demais testes de link do repositório.
+/// On Windows creating a symlink/junction requires privilege; when the platform refuses, the
+/// test is skipped with a log, like the repository's other link tests.
 #[cfg(unix)]
 fn link_dir(target: &Path, link: &Path) -> bool {
     std::os::unix::fs::symlink(target, link).is_ok()
@@ -145,8 +145,8 @@ fn a_root_replaced_by_a_link_is_refused_before_scanning() {
     state.rescan().unwrap();
     assert_eq!(media_rows(dir.path()), 1);
 
-    // A raiz é trocada por um link para outra pasta depois da importação: a revalidação
-    // imediata precisa recusar a varredura sem seguir o link.
+    // The root is swapped for a link to another folder after the import: the immediate
+    // revalidation must refuse the scan without following the link.
     fs::remove_dir_all(&course).unwrap();
     let outside = dir.path().join("fora");
     fs::create_dir_all(&outside).unwrap();
@@ -298,8 +298,8 @@ fn concurrent_rescans_do_not_run_together_and_return_a_stable_error() {
     let (state, library) = configured(dir.path());
     fs::write(library.join("aula.mp4"), b"video").unwrap();
 
-    // O estado ocupado é mantido enquanto a biblioteca está sendo lida: chamadas
-    // concorrentes não podem entrar em paralelo nem corromper o catálogo.
+    // The busy state is held while the library is being read: concurrent calls
+    // cannot run in parallel nor corrupt the catalog.
     let guard = state.begin_rescan().unwrap();
 
     let codes: Vec<IpcErrorCode> = std::thread::scope(|scope| {
@@ -340,20 +340,20 @@ fn a_failed_course_releases_the_busy_state_and_recovers_when_restored() {
     state.rescan().unwrap();
     assert_eq!(media_rows(dir.path()), 1);
 
-    // A raiz some depois da importação: a agregação reporta a falha sem prender o estado.
+    // The root vanishes after the import: the aggregation reports the failure without locking up the state.
     fs::remove_dir_all(&library).unwrap();
     let first = state.rescan().unwrap();
     assert_eq!(first.failed, 1);
     assert!(!first.complete);
 
-    // O guarda ocupado foi liberado: a segunda chamada agrega de novo, sem devolver
+    // The busy guard was released: the second call aggregates again, without returning
     // `rescan_in_progress`.
     let second = state.rescan().unwrap();
     assert_eq!(second.failed, 1);
 
-    // Restaurando a raiz, um novo rescan inicia e conclui normalmente. O conteúdo é
-    // diferente de propósito: um arquivo idêntico ao anterior seria reconhecido como o
-    // mesmo arquivo em outro caminho (a detecção incremental preserva a identidade).
+    // Restoring the root, a new rescan starts and completes normally. The content is
+    // different on purpose: a file identical to the previous one would be recognized as the
+    // same file at another path (incremental detection preserves the identity).
     fs::create_dir_all(&library).unwrap();
     fs::write(library.join("aula-2.mp4"), b"outro video").unwrap();
     let recovered = state.rescan().unwrap();
@@ -371,7 +371,7 @@ fn two_real_concurrent_rescans_stay_consistent_and_free_the_busy_state() {
         fs::write(library.join(format!("aula-{index}.mp4")), b"video").unwrap();
     }
 
-    // Concorrência real: as duas chamadas são `state.rescan()`, não um guarda manual.
+    // Real concurrency: both calls are `state.rescan()`, not a manual guard.
     let outcomes: Vec<Result<RescanSummaryDto, IpcErrorCode>> = std::thread::scope(|scope| {
         let handles: Vec<_> = (0..2)
             .map(|_| {
@@ -385,8 +385,8 @@ fn two_real_concurrent_rescans_stay_consistent_and_free_the_busy_state() {
             .collect()
     });
 
-    // Cada chamada real ou indexa, ou é recusada pelo estado ocupado — nunca por outra
-    // causa, e nunca em paralelo.
+    // Each real call either indexes or is refused by the busy state — never for another
+    // cause, and never in parallel.
     for outcome in &outcomes {
         match outcome {
             Ok(summary) => assert_eq!(
@@ -402,8 +402,8 @@ fn two_real_concurrent_rescans_stay_consistent_and_free_the_busy_state() {
         "ao menos uma chamada real precisa indexar: {outcomes:?}"
     );
 
-    // O catálogo ficou íntegro e o estado ocupado foi liberado: uma chamada posterior
-    // inicia e reafirma os 50 arquivos sem inserir duplicatas.
+    // The catalog stayed intact and the busy state was released: a later call
+    // starts and reaffirms the 50 files without inserting duplicates.
     assert_eq!(media_rows(dir.path()), 50);
     let final_summary = state.rescan().unwrap();
     assert_eq!(final_summary.inserted, 0);

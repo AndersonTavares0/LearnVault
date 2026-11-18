@@ -1,4 +1,4 @@
-//! Entrega autenticada e somente leitura de mídia.
+//! Authenticated, read-only delivery of media.
 
 use std::{io::SeekFrom, time::Duration};
 
@@ -25,9 +25,9 @@ use crate::{
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct MediaQuery {
-    /// Identidade do curso registrado que contém a mídia.
+    /// Identity of the registered course that contains the media.
     course: String,
-    /// Caminho relativo dentro da pasta do curso.
+    /// Relative path inside the course folder.
     path: String,
 }
 
@@ -64,8 +64,8 @@ pub(crate) async fn media(
         .into_iter()
         .find(|course| course.id == query.course)
     else {
-        // A mesma rota serve os cursos locais e as fontes remotas: a identidade opaca do
-        // curso decide qual adaptador entrega os bytes.
+        // The same route serves local courses and remote sources: the course's opaque
+        // identity decides which adapter delivers the bytes.
         if let Some(source) = state
             .sources_snapshot()
             .into_iter()
@@ -98,12 +98,12 @@ pub(crate) async fn media(
     let path = query.path;
     let lookup_path = path.clone();
     let library_id = course.id.clone();
-    // Evita segurar recursos só para devolver 503 sob saturação.
+    // Avoids holding resources just to return 503 under saturation.
     if !state.has_blocking_capacity() {
         return service_unavailable();
     }
-    // A validação de registro no banco ocorre em escopo restrito e libera o lock do
-    // SQLite imediatamente, antes de qualquer operação no sistema de arquivos.
+    // The registry validation in the database happens in a narrow scope and releases the
+    // SQLite lock immediately, before any file-system operation.
     let reference = {
         let database = state.database.clone().lock_owned().await;
         let Some(blocking_task) = state.try_acquire_blocking_task() else {
@@ -127,7 +127,7 @@ pub(crate) async fn media(
         Ok(Ok(Some(reference))) => reference,
         Ok(Ok(None)) => return error_private_no_store(StatusCode::NOT_FOUND),
         Ok(Err(error)) => return media_error_response(&error),
-        // A tarefa abortada é uma indisponibilidade operacional, não ausência de mídia.
+        // The aborted task is an operational unavailability, not an absent media.
         Err(_) => return service_unavailable(),
     };
 
@@ -144,8 +144,8 @@ pub(crate) async fn media(
         return service_unavailable();
     };
 
-    // Abertura do arquivo físico FORA do lock do banco, com timeout delimitado para
-    // que discos lentos ou placeholders de nuvem não bloqueiem o processo indefinidamente.
+    // Opening the physical file OUTSIDE the database lock, with a bounded timeout so that
+    // slow disks or cloud placeholders do not block the process indefinitely.
     let opened = match tokio::time::timeout(
         MEDIA_OPEN_TIMEOUT,
         tokio::task::spawn_blocking(move || {
@@ -181,8 +181,8 @@ pub(crate) async fn media(
         Body::empty()
     } else {
         let Some(stream) = stream else {
-            // Só é `None` para `HEAD`; um `GET` sem stream indica estado
-            // interno inconsistente, nunca ausência de mídia.
+            // It is only `None` for `HEAD`; a `GET` without a stream indicates an
+            // inconsistent internal state, never an absent media.
             return error_private_no_store(StatusCode::INTERNAL_SERVER_ERROR);
         };
         Body::from_stream(stream)
@@ -245,11 +245,11 @@ async fn source_of_root(
     }))
 }
 
-/// Entrega uma faixa de uma mídia de uma fonte WebDAV.
+/// Delivers a range of a media from a WebDAV source.
 ///
-/// Só caminhos já catalogados no banco são repassados ao servidor remoto: o cliente HTTP
-/// nunca escolhe livremente um caminho no WebDAV. O corpo é transmitido em streaming, sem
-/// buffer do arquivo inteiro.
+/// Only paths already catalogued in the database are passed on to the remote server: the HTTP client
+/// never freely chooses a path on the WebDAV. The body is streamed, with no
+/// buffering of the whole file.
 async fn remote_media(
     state: AppState,
     user: learnvault_core::AuthSession,
@@ -332,7 +332,7 @@ async fn remote_media(
             }
             match permit {
                 Some(permit) => Body::from_stream(upstream.bytes_stream().map(move |chunk| {
-                    // O permit vive enquanto o corpo for consumido e é liberado ao final.
+                    // The permit lives while the body is consumed and is released at the end.
                     let _ = &permit;
                     chunk.map_err(std::io::Error::other)
                 })),
@@ -432,7 +432,7 @@ fn media_error_response(error: &learnvault_core::Error) -> Response {
     error_private_no_store(media_error_status(error))
 }
 
-/// Erros da superfície autenticada nunca devem ser armazenados por proxies.
+/// Errors of the authenticated surface must never be stored by proxies.
 fn error_private_no_store(status: StatusCode) -> Response {
     error_response_private_no_store(status.into_response())
 }
@@ -594,7 +594,7 @@ struct RemovalNeedsConfirmationResponse {
     progress_owners: usize,
 }
 
-/// `GET /api/admin/media/{id}/impact` — consulta o impacto da remoção de uma mídia.
+/// `GET /api/admin/media/{id}/impact` — queries the impact of removing a media.
 pub(crate) async fn impact(
     State(state): State<AppState>,
     AxumPath(media_id): AxumPath<String>,
@@ -656,7 +656,7 @@ pub(crate) async fn impact(
     }
 }
 
-/// `DELETE /api/admin/media/{id}` — remove uma mídia do catálogo (tombstone persistente).
+/// `DELETE /api/admin/media/{id}` — removes a media from the catalog (persistent tombstone).
 pub(crate) async fn remove_media(
     State(state): State<AppState>,
     AxumPath(media_id): AxumPath<String>,
@@ -846,8 +846,8 @@ mod tests {
             Error::MediaIdentityMismatch {
                 media_id: "media-1".to_owned(),
             },
-            // Corrupção de catálogo nunca pode virar 404: isso confundiria ausência
-            // legítima com um banco corrompido e criaria um oráculo de existência.
+            // Catalog corruption can never become a 404: that would confuse legitimate
+            // absence with a corrupted database and create an existence oracle.
             Error::MediaCorruptSize {
                 media_id: "media-1".to_owned(),
             },

@@ -1,4 +1,4 @@
-//! Primitivas de autenticação do servidor.
+//! Authentication primitives of the server.
 
 use crate::{
     AppState, StateError,
@@ -26,24 +26,24 @@ const ARGON_OUTPUT_BYTES: usize = 32;
 const SESSION_TOKEN_BYTES: usize = 32;
 static TRUSTED_PROXY_IPS: OnceLock<Vec<IpAddr>> = OnceLock::new();
 
-/// Erros internos das primitivas de autenticação.
+/// Internal errors of the authentication primitives.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum AuthError {
-    /// O nome de usuário não atende aos limites do produto.
+    /// The user name does not meet the product's limits.
     #[error("invalid username")]
     InvalidUsername,
-    /// A senha inicial não atende aos limites do produto.
+    /// The initial password does not meet the product's limits.
     #[error("invalid password")]
     InvalidPassword,
-    /// O hashing Argon2id falhou.
+    /// The Argon2id hashing failed.
     #[error("password hashing failed")]
     PasswordHashing,
-    /// A geração criptograficamente segura do token falhou.
+    /// The cryptographically secure generation of the token failed.
     #[error("secure session token generation failed")]
     TokenGeneration,
 }
 
-/// Gera um hash PHC Argon2id compatível com os dados legados do Go.
+/// Generates an Argon2id PHC hash compatible with the Go legacy data.
 pub fn hash_password(password: &str) -> Result<String, AuthError> {
     validate_password(password)?;
     hash_password_unchecked(password)
@@ -64,7 +64,7 @@ pub(crate) fn hash_password_unchecked(password: &str) -> Result<String, AuthErro
         .map_err(|_| AuthError::PasswordHashing)
 }
 
-/// Verifica uma senha sem diferenciar senha errada de hash persistido inválido.
+/// Verifies a password without telling a wrong password from an invalid persisted hash.
 pub fn verify_password(password: &str, encoded_hash: &str) -> Result<bool, AuthError> {
     let Ok(parsed) = PasswordHash::new(encoded_hash) else {
         return Ok(false);
@@ -74,7 +74,7 @@ pub fn verify_password(password: &str, encoded_hash: &str) -> Result<bool, AuthE
         .is_ok())
 }
 
-/// Valida o limite público do nome de usuário sem revelar dados da configuração.
+/// Validates the public limit of the user name without revealing configuration data.
 pub fn validate_username(username: &str) -> Result<(), AuthError> {
     let length = username.chars().count();
     if !(2..=64).contains(&length)
@@ -86,7 +86,7 @@ pub fn validate_username(username: &str) -> Result<(), AuthError> {
     Ok(())
 }
 
-/// Valida o limite público da senha inicial ou de login.
+/// Validates the public limit of the initial or login password.
 pub fn validate_password(password: &str) -> Result<(), AuthError> {
     let length = password.chars().count();
     if !(12..=1024).contains(&length) {
@@ -95,10 +95,10 @@ pub fn validate_password(password: &str) -> Result<(), AuthError> {
     Ok(())
 }
 
-/// Valida o limite público da senha atual informada na troca de credenciais.
+/// Validates the public limit of the current password given when changing credentials.
 ///
-/// Espelha a checagem do serviço Go (`1..=1024` runas) para que uma senha
-/// vazia ou acima do limite seja recusada antes de chegar ao Argon2.
+/// Mirrors the Go service's check (`1..=1024` runes) so that an empty
+/// password or one above the limit is refused before reaching Argon2.
 pub fn validate_current_password(password: &str) -> Result<(), AuthError> {
     let length = password.chars().count();
     if !(1..=1024).contains(&length) {
@@ -107,14 +107,14 @@ pub fn validate_current_password(password: &str) -> Result<(), AuthError> {
     Ok(())
 }
 
-/// Gera um token de sessão opaco, codificado em hexadecimal.
+/// Generates an opaque session token, hexadecimal-encoded.
 pub fn generate_session_token() -> Result<String, AuthError> {
     let mut token = [0u8; SESSION_TOKEN_BYTES];
     getrandom::fill(&mut token).map_err(|_| AuthError::TokenGeneration)?;
     Ok(hex_encode(&token))
 }
 
-/// Calcula o hash SHA-256 que será persistido, nunca o token em claro.
+/// Computes the SHA-256 hash that will be persisted, never the token in the clear.
 pub fn hash_session_token(token: &str) -> String {
     let digest = Sha256::digest(token.as_bytes());
     hex_encode(&digest)
@@ -148,7 +148,7 @@ struct UserResponse {
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct CredentialsRequest {
-    /// Senha atualmente usada, exigida para impedir troca por uma sessão roubada.
+    /// Password currently in use, required to prevent a change by a stolen session.
     current_password: String,
     username: String,
     password: String,
@@ -389,9 +389,9 @@ fn login_source(
     peer.ip().to_string()
 }
 
-/// Endereço do cliente informado por um proxy confiável. `X-Real-IP` tem precedência;
-/// caso contrário usa a última entrada de `X-Forwarded-For`, que é a acrescentada pelo
-/// proxy mais próximo. Entradas anteriores são controladas pelo cliente e não entram.
+/// Client address reported by a trusted proxy. `X-Real-IP` takes precedence;
+/// otherwise it uses the last entry of `X-Forwarded-For`, which is the one added by the
+/// nearest proxy. Earlier entries are controlled by the client and do not count.
 fn forwarded_client_ip(headers: &HeaderMap) -> Option<IpAddr> {
     let direct = headers
         .get("x-real-ip")
@@ -804,8 +804,8 @@ fn session_cookie(state: &AppState, token: &str, clear: bool) -> Option<HeaderVa
     if state.config.cookie_secure {
         value.push_str("; Secure");
     }
-    // O token é hexadecimal por construção, então a conversão é infalível na
-    // prática; ainda assim, nunca faça `panic` num caminho de resposta.
+    // The token is hexadecimal by construction, so the conversion is infallible in
+    // practice; even so, never `panic` on a response path.
     HeaderValue::from_str(&value).ok()
 }
 
@@ -865,8 +865,8 @@ mod tests {
         assert_eq!(parsed.params.get_decimal("m").unwrap(), 65_536);
         assert_eq!(parsed.params.get_decimal("t").unwrap(), 2);
         assert_eq!(parsed.params.get_decimal("p").unwrap(), 1);
-        // `Salt` agora armazena os bytes decodificados; 16 bytes é o tamanho do
-        // salt recomendado e o mesmo produzido pelo argon2 0.5.
+        // `Salt` now stores the decoded bytes; 16 bytes is the recommended salt
+        // size and the same one produced by argon2 0.5.
         assert_eq!(parsed.salt.unwrap().as_ref().len(), 16);
         assert_eq!(parsed.hash.unwrap().as_bytes().len(), 32);
         assert!(

@@ -1,5 +1,5 @@
-//! Fila offline do desktop: durabilidade, replay com o mesmo `op_id` e aplicação do
-//! que chega do servidor.
+//! The desktop's offline queue: durability, replay with the same `op_id` and application of
+//! what arrives from the server.
 
 use learnvault_core::{
     Database, KeyMode, SyncOperation, SyncOperationInput, SyncPayload, apply_operations,
@@ -9,12 +9,12 @@ use learnvault_desktop::{IpcErrorCode, study, sync};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
-/// Converte o erro IPC (que não implementa `Error`) em um erro de teste.
+/// Converts the IPC error (which does not implement `Error`) into a test error.
 fn ok<T>(result: Result<T, learnvault_desktop::IpcError>) -> Result<T, Box<dyn std::error::Error>> {
     result.map_err(|error| format!("{error:?}").into())
 }
 
-/// Abre (ou reabre) o banco local do desktop.
+/// Opens (or reopens) the desktop's local database.
 fn database(path: &std::path::Path) -> Database {
     Database::open(path).expect("o banco local deve abrir")
 }
@@ -54,7 +54,7 @@ fn every_syncable_write_lands_in_the_durable_outbox() -> TestResult {
         ok(study::create_bookmark(&db, "m1", 30, "marcador"))?;
         ok(study::save_playback_preference(&db, 125, 100, "pt-BR"))?;
 
-        // As exclusões também são escritas sincronizáveis.
+        // Deletions are also syncable writes.
         let deleted_note = ok(study::create_note(&db, "m1", 20, "nota descartada"))?;
         ok(study::delete_note(&db, &deleted_note.note_id))?;
         let deleted_card = ok(study::create_flashcard(&db, "m1", "frente", "verso", None))?;
@@ -97,7 +97,7 @@ fn every_syncable_write_lands_in_the_durable_outbox() -> TestResult {
                 "bookmark_deleted",
             ]
         );
-        // A versão sincronizada fica marcada na linha local.
+        // The synced version is marked on the local row.
         let version: Option<String> = db.connection().query_row(
             "SELECT sync_version FROM study_note WHERE note_id = ?1",
             [&note.note_id],
@@ -109,7 +109,7 @@ fn every_syncable_write_lands_in_the_durable_outbox() -> TestResult {
         );
     }
 
-    // Reabrir o aplicativo preserva a fila e a identidade do dispositivo.
+    // Reopening the application preserves the queue and the device identity.
     let db = database(&path);
     let pending = ok(sync::pending(&db, 100))?;
     assert_eq!(pending.len(), 14, "o outbox sobrevive à reinicialização");
@@ -135,7 +135,7 @@ fn a_retried_batch_is_not_duplicated_on_the_server() -> TestResult {
         "a segunda escrita de progresso substitui a primeira na fila"
     );
 
-    // O servidor é outro banco; o mesmo lote é enviado duas vezes.
+    // The server is another database; the same batch is sent twice.
     let server_dir = tempfile::tempdir()?;
     let server = database(&server_dir.path().join("server.sqlite"));
     seed(&server);
@@ -144,7 +144,7 @@ fn a_retried_batch_is_not_duplicated_on_the_server() -> TestResult {
     let retry = push_operations(&server, "usr-1", &state.device_id, &batch)?;
     assert_eq!((retry.applied, retry.duplicated), (0, 1));
 
-    // Somente depois do aceite o desktop limpa a fila.
+    // Only after the acceptance does the desktop clear the queue.
     let accepted: Vec<String> = batch
         .iter()
         .map(|operation| operation.op_id.clone())
@@ -168,7 +168,7 @@ fn pulled_operations_apply_locally_and_advance_the_cursor() -> TestResult {
     seed(&desktop);
     let local = ok(sync::state(&desktop))?;
 
-    // O servidor recebeu uma escrita de outro dispositivo.
+    // The server received a write from another device.
     let server_dir = tempfile::tempdir()?;
     let server = database(&server_dir.path().join("server.sqlite"));
     seed(&server);
@@ -197,7 +197,7 @@ fn pulled_operations_apply_locally_and_advance_the_cursor() -> TestResult {
     assert_eq!(progress.position_seconds, 120);
     assert!(progress.completed);
 
-    // Reaplicar a mesma página não duplica o efeito.
+    // Reapplying the same page does not duplicate the effect.
     ok(sync::apply(&desktop, &page.items, page.cursor))?;
     assert_eq!(ok(study::progress(&desktop, "m1"))?.position_seconds, 120);
     Ok(())
@@ -252,7 +252,7 @@ fn applying_remote_operations_keeps_a_cursor_even_without_effect() -> TestResult
     let db = database(&dir.path().join("desktop.sqlite"));
     seed(&db);
 
-    // Operação cuja mídia não existe localmente: não falha e não perde o cursor.
+    // Operation whose media does not exist locally: it does not fail and does not lose the cursor.
     let operations = vec![SyncOperation {
         seq: 4,
         op_id: "op-ghost".to_owned(),

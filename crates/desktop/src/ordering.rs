@@ -1,13 +1,13 @@
-//! Ordenação manual de módulos e aulas no desktop (issue #239).
+//! Manual ordering of modules and lessons on the desktop (issue #239).
 //!
-//! Como no servidor, a ordem escolhida pelo usuário é um estado do LearnVault: ela vive no
-//! arquivo versionado `catalog-order.json`, dentro do diretório de dados do aplicativo (ao
-//! lado do banco e das capas), nunca dentro das pastas de curso, que permanecem externas e
-//! somente leitura.
+//! As on the server, the order chosen by the user is LearnVault state: it lives in the
+//! versioned file `catalog-order.json`, inside the application's data directory (next to the
+//! database and the covers), never inside the course folders, which stay external and
+//! read-only.
 //!
-//! A preferência é aplicada por sobreposição em [`learnvault_core::apply_order`] sobre a
-//! ordem automática, derivada a cada leitura; remover a preferência restaura a ordem
-//! automática sem tocar em nenhum arquivo do curso.
+//! The preference is applied as an overlay in [`learnvault_core::apply_order`] over the
+//! automatic order, derived on every read; removing the preference restores the automatic
+//! order without touching any course file.
 
 use std::{
     collections::BTreeMap,
@@ -18,39 +18,39 @@ use std::{
 
 use learnvault_core::CatalogOrder;
 
-/// Nome do arquivo de ordenação dentro do diretório de dados do aplicativo.
+/// Name of the ordering file inside the application's data directory.
 pub const ORDER_FILE_NAME: &str = "catalog-order.json";
 
-/// Versão do formato do arquivo de ordenação.
+/// Version of the ordering file's format.
 pub const ORDER_VERSION: u32 = 1;
 
-/// Preferências de ordenação de todos os cursos, por identidade opaca do curso.
+/// Ordering preferences of all courses, by the course's opaque identity.
 pub type CourseOrders = BTreeMap<String, CatalogOrder>;
 
-/// Falha estável da persistência da ordenação. Nunca carrega caminho.
+/// Stable failure of ordering persistence. It never carries a path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OrderError {
-    /// A ordenação não pôde ser gravada com segurança.
+    /// The ordering could not be written safely.
     WriteFailed,
 }
 
-/// Formato serializado do arquivo de ordenação.
+/// Serialized format of the ordering file.
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 struct OrderFile {
     version: u32,
-    /// Curso -> (caminho do pai -> ordem desejada dos filhos).
+    /// Course -> (parent path -> desired order of the children).
     courses: BTreeMap<String, BTreeMap<String, Vec<String>>>,
 }
 
-/// Caminho do arquivo de ordenação dentro do diretório de dados.
+/// Path of the ordering file inside the data directory.
 pub fn order_path(data_dir: &Path) -> PathBuf {
     data_dir.join(ORDER_FILE_NAME)
 }
 
-/// Carrega as preferências persistidas.
+/// Loads the persisted preferences.
 ///
-/// Arquivo ausente, corrompido ou em versão desconhecida resulta em nenhuma preferência
-/// (ordem automática); nenhuma mensagem carrega caminho.
+/// A missing, corrupted or unknown-version file results in no preference
+/// (automatic order); no message carries a path.
 pub fn load_orders(data_dir: &Path) -> CourseOrders {
     let Ok(raw) = std::fs::read(order_path(data_dir)) else {
         return CourseOrders::new();
@@ -69,7 +69,7 @@ pub fn load_orders(data_dir: &Path) -> CourseOrders {
         .collect()
 }
 
-/// Grava as preferências de forma serializada e atômica.
+/// Writes the preferences in a serialized, atomic way.
 pub fn store_orders(data_dir: &Path, orders: &CourseOrders) -> Result<(), OrderError> {
     let stored = OrderFile {
         version: ORDER_VERSION,
@@ -83,7 +83,7 @@ pub fn store_orders(data_dir: &Path, orders: &CourseOrders) -> Result<(), OrderE
     write_atomically(&order_path(data_dir), &payload)
 }
 
-/// Escreve `bytes` no destino de forma atômica, criando o diretório de dados se preciso.
+/// Writes `bytes` to the destination atomically, creating the data directory if needed.
 fn write_atomically(dest: &Path, bytes: &[u8]) -> Result<(), OrderError> {
     let directory = dest.parent().ok_or(OrderError::WriteFailed)?;
     std::fs::create_dir_all(directory).map_err(|_| OrderError::WriteFailed)?;
@@ -108,7 +108,7 @@ fn write_atomically(dest: &Path, bytes: &[u8]) -> Result<(), OrderError> {
     Ok(())
 }
 
-/// Substitui o destino usando apenas APIs padrão.
+/// Replaces the destination using only standard APIs.
 #[cfg(windows)]
 fn replace_file(source: &Path, dest: &Path) -> std::io::Result<()> {
     match std::fs::remove_file(dest) {
@@ -119,7 +119,7 @@ fn replace_file(source: &Path, dest: &Path) -> std::io::Result<()> {
     std::fs::rename(source, dest)
 }
 
-/// Substitui o destino usando apenas APIs padrão.
+/// Replaces the destination using only standard APIs.
 #[cfg(not(windows))]
 fn replace_file(source: &Path, dest: &Path) -> std::io::Result<()> {
     std::fs::rename(source, dest)
