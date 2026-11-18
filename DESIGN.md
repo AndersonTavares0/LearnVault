@@ -52,6 +52,7 @@ LearnVault is a private academy kept in a vault: the learner's own course librar
 | `docs/design/branding/learnvault-icon.svg` | App icon: the full mark on a warm-ink tile. Source of `crates/desktop/icons/icon.png` and the 48 px and larger `icon.ico` sizes |
 | `apps/web-next/public/favicon.svg` | The reduced cut on the tile. Source of the 16 px and 32 px `icon.ico` sizes |
 | `docs/design/branding/learnvault-banner.svg`, `learnvault-banner-light.svg` | README header, text converted to outlines so it needs no font |
+| `docs/design/branding/learnvault-seal.svg`, `learnvault-seal-dark.svg` | The mark inside a ring that reads LEARNVAULT · SAPERE AUDE, for large placements (72 px and up). Usage rules: [`docs/design/branding/README.md`](docs/design/branding/README.md) |
 
 Brand colours: warm ink `#1C1815`, cream `#F5EEE2`, gold `#E0A83E` on dark surfaces and `#A8761F` on light ones. The assets use them directly. The app's reward colour uses the same golds, and its default accent (the Ink preset) is the logo's ink. The page, panels and tints are mixed from `--brand-tone`, which is the accent itself except for Ink on the light page, where it stays brown: a near-black accent would darken every tint (the muted text fell to 4.3:1 on panels) and, with almost no chroma, turn them pink in `oklch`. A learner who saved another accent keeps it.
 
