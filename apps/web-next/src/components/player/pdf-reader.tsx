@@ -49,8 +49,8 @@ const DEFAULT_RATIO = 1.414;
 /** Paper, sepia and night surfaces; the night one is a warm near-black, never pure black. */
 const PAGE_SURFACES: Record<PdfTheme, string> = {
 	paper: '#fff',
-	sepia: 'color-mix(in oklch, var(--brand) 8%, #FFFDF9)',
-	night: 'color-mix(in oklch, var(--brand) 22%, black)'
+	sepia: 'color-mix(in oklch, var(--brand-tone) 8%, #FFFDF9)',
+	night: 'color-mix(in oklch, var(--brand-tone) 22%, black)'
 };
 
 /** Night dims and re-hues the page instead of a plain invert, so ink stays readable and photos keep their hue. */
