@@ -43,7 +43,7 @@ export function FocusSettings() {
 
 	return (
 		<form onSubmit={submit} className="space-y-6">
-			<fieldset className="space-y-2.5">
+			<fieldset className="min-w-0 space-y-2.5">
 				<legend className="text-sm font-semibold">{tr('Preset', 'Predefinição')}</legend>
 				<div className="grid gap-2.5 sm:grid-cols-3">
 					{PRESETS.map((preset) => {
