@@ -1,129 +1,129 @@
-# ADR 0001: reescrever o LearnVault em Rust com núcleo compartilhado
+# ADR 0001: Rewrite LearnVault in Rust with a shared core
 
 ## Status
 
-Accepted — 2026-10-14 (Implementado — 2026-10-17)
+Accepted — 2026-10-14 (Implemented — 2026-10-17)
 
-Este ADR registra a **arquitetura aprovada**. A reescrita em Rust foi concluída nas Fases 1 a 5,
-e a implementação legada em Go foi integralmente removida do repositório no PR #206, consolidando
-o Rust como backend único do LearnVault.
+This ADR records the **approved architecture**. The Rust rewrite was completed in Phases 1 to 5,
+and the legacy Go implementation was fully removed from the repository in PR #206, making Rust
+the single backend of LearnVault.
 
 ## Context
 
-O LearnVault transforma pastas locais de cursos em uma plataforma pessoal de estudos, usada de
-duas formas: como aplicativo desktop offline e como servidor self-hosted com WebUI. A
-implementação atual é um serviço Go com SQLite e uma SPA SvelteKit embutida.
+LearnVault turns local course folders into a personal study platform, used in two ways: as an
+offline desktop application and as a self-hosted server with a web UI. The current implementation
+is a Go service with SQLite and an embedded SvelteKit SPA.
 
-O mantenedor decidiu adotar Rust como stack de longo prazo, com um único núcleo de domínio
-compartilhado entre servidor e desktop, e o Tauri 2 como tecnologia do desktop. A decisão é
-**tecnológica e deliberada**: não existe limitação concreta do Go que force a troca, e Go com
-Wails atenderia aos dois modos com menos trabalho.
+The maintainer decided to adopt Rust as the long-term stack, with a single domain core shared
+between the server and the desktop, and Tauri 2 as the desktop technology. The decision is
+**technological and deliberate**: there is no concrete Go limitation that forces the change, and Go
+with Wails would serve both modes with less work.
 
 ## Decision
 
-O LearnVault passa a ser um workspace Rust:
+LearnVault becomes a Rust workspace:
 
-- `crates/core` — bibliotecas, catálogo, scanner, identidade de arquivos, política de rescan,
-  persistência SQLite com cadeia única de migrações e estado de estudo. Expõe operações e erros
-  tipados, não conhece HTTP nem Tauri, e recebe a raiz da biblioteca já resolvida, o `library_id`
-  e o `owner_id` do estado de estudo.
-- `crates/server` — servidor Axum com autenticação Argon2id, sessões, cookies, autorização de
-  acesso, entrega de mídia com `Range` (206/416), cabeçalhos de segurança e entrega da SPA.
-- `crates/desktop` — aplicativo Tauri 2 com comandos IPC, integração com o sistema de arquivos,
-  seleção de diretórios e protocolo de reprodução de mídia. Sem HTTP, sem cookies, sem portas de
-  rede e sem autenticação.
-- `apps/web/` — uma única SPA em Svelte 5 + TypeScript + Vite, sem SvelteKit, com roteamento por
-  hash e dois builds que selecionam o transporte em tempo de compilação.
+- `crates/core` — libraries, catalog, scanner, file identity, rescan policy, SQLite persistence
+  with a single migration chain, and study state. It exposes typed operations and errors, knows
+  nothing about HTTP or Tauri, and receives the already-resolved library root, the `library_id`
+  and the study-state `owner_id`.
+- `crates/server` — Axum server with Argon2id authentication, sessions, cookies, access
+  authorization, media delivery with `Range` (206/416), security headers and SPA delivery.
+- `crates/desktop` — Tauri 2 application with IPC commands, file system integration, directory
+  selection and a media playback protocol. No HTTP, no cookies, no network ports and no
+  authentication.
+- `apps/web/` — a single SPA in Svelte 5 + TypeScript + Vite, without SvelteKit, with hash
+  routing and two builds that select the transport at compile time.
 
-### Estado após a migração
+### State after the migration
 
-Em 2026-10-19, as fases de implementação do stack foram registradas como concluídas na issue #41.
-O serviço Go foi removido na PR #206; o importador explícito de bancos Go legados permanece. A
-janela Tauri e as fatias de IPC descritas em `docs/architecture/overview.md` estão implementadas.
-Isso não conclui a distribuição: Flatpak/Linux desktop segue pendente de validação em sandbox, e
-outros alvos pendentes estão listados em `docs/product/roadmap.md` e
+On 2026-10-19, the implementation phases of the stack were recorded as complete in issue #41.
+The Go service was removed in PR #206; the explicit importer for legacy Go databases remains. The
+Tauri window and the IPC slices described in `docs/architecture/overview.md` are implemented.
+This does not complete distribution: the Flatpak/Linux desktop build is still pending sandbox
+validation, and other pending targets are listed in `docs/product/roadmap.md` and
 `docs/operations/distribution.md`.
 
-Decisões de domínio que a reescrita mantém:
+Domain decisions that the rewrite keeps:
 
-- Identidade de mídia (`media_id`) separada da localização física. `relative_path` é a
-  localização atual, não a chave, e a comparação é normalizada conforme o sistema operacional.
-- A raiz da biblioteca é configuração da plataforma, não dado do domínio.
-- Emenda (issue #182): a unidade de configuração da plataforma passa a ser a **pasta de cada
-  curso**, registrada individualmente — no servidor em um arquivo ao lado do banco, no desktop em
-  `library.json` v2 — e o catálogo agrega um nó de topo por curso. O `library_id` continua sendo
-  identidade do domínio, a pasta continua externa e somente leitura, e a raiz semeada pela
-  implantação antiga preserva a identidade `library-1` para não perder mídias, varreduras e
-  progresso de estudo já gravados.
-- O rescan nunca exclui registros automaticamente: arquivo ausente é marcado como ausente e
-  arquivo que reaparece no mesmo caminho reutiliza o `media_id`. Remoção só por ação explícita.
-- A biblioteca física permanece externa e somente leitura.
-- O estado de estudo é identificado por um `owner_id` opaco: o desktop usa um dono local fixo e
-  o servidor usa o identificador do usuário autenticado.
+- Media identity (`media_id`) is separate from physical location. `relative_path` is the current
+  location, not the key, and comparison is normalized according to the operating system.
+- The library root is platform configuration, not domain data.
+- Amendment (issue #182): the platform configuration unit becomes the **folder of each course**,
+  registered individually — on the server in a file next to the database, on the desktop in
+  `library.json` v2 — and the catalog aggregates one top-level node per course. The `library_id`
+  remains a domain identity, the folder remains external and read-only, and the root seeded by the
+  old deployment keeps the `library-1` identity so that media, scans and study progress already
+  recorded are not lost.
+- Rescan never deletes records automatically: a missing file is marked as missing, and a file that
+  reappears at the same path reuses its `media_id`. Removal happens only through an explicit action.
+- The physical library remains external and read-only.
+- Study state is identified by an opaque `owner_id`: the desktop uses a fixed local owner and the
+  server uses the identifier of the authenticated user.
 
-Distribuição: instalador NSIS no Windows; **Flatpak como formato Linux preferencial**, sujeito à
-validação técnica de permissões, acesso persistente às bibliotecas e reprodução de mídia; imagem
-OCI mais binário nativo para instalação self-hosted. Uma única versão por release.
+Distribution: an NSIS installer on Windows; **Flatpak as the preferred Linux format**, subject to
+technical validation of permissions, persistent access to libraries and media playback; an OCI
+image plus a native binary for self-hosted installation. One version per release.
 
-A execução acontece por fases: governança, `crates/core`, `crates/server`, `apps/web/`,
-`crates/desktop` e distribuição, com a remoção do serviço Go em pull request próprio.
+Execution happens in phases: governance, `crates/core`, `crates/server`, `apps/web/`,
+`crates/desktop` and distribution, with the removal of the Go service in its own pull request.
 
-## Alternativas consideradas
+## Alternatives considered
 
-### Permanecer em Go
+### Stay on Go
 
-- **Prós:** nenhum trabalho de reescrita; a implementação atual já cobre autenticação, catálogo,
-  mídia com `Range` e deploy.
-- **Contras:** não atende à decisão de stack do mantenedor nem à reutilização de um núcleo único
-  com o desktop pelo Tauri.
-- **Por que não:** a adoção de Rust é uma decisão deliberada e de longo prazo.
+- **Pros:** no rewrite work; the current implementation already covers authentication, catalog,
+  media with `Range` and deployment.
+- **Cons:** it does not meet the maintainer's stack decision nor the reuse of a single core with
+  the desktop through Tauri.
+- **Why not:** adopting Rust is a deliberate, long-term decision.
 
-### Go com Wails no desktop
+### Go with Wails on the desktop
 
-- **Prós:** reutilizaria o núcleo, os testes e o pipeline de release existentes, com uma única
+- **Pros:** it would reuse the existing core, tests and release pipeline, with a single
   toolchain.
-- **Contras:** escolheria a stack pelo atrito da migração, não pelo destino desejado.
-- **Por que não:** o mantenedor prefere o Tauri 2 e aceita o custo inicial maior.
+- **Cons:** it would choose the stack for the friction of the migration, not for the desired
+  destination.
+- **Why not:** the maintainer prefers Tauri 2 and accepts the larger initial cost.
 
-### Migração incremental do serviço Go
+### Incremental migration of the Go service
 
-- **Prós:** reduziria o risco ao manter os dois backends em paralelo.
-- **Contras:** exigiria manter duas pilhas e infraestrutura de testes duplicada durante toda a
-  transição.
-- **Por que não:** decidiu-se reescrever do zero, usando o Go apenas como referência.
+- **Pros:** it would reduce risk by keeping both backends running in parallel.
+- **Cons:** it would require maintaining two stacks and duplicated test infrastructure for the
+  whole transition.
+- **Why not:** it was decided to rewrite from scratch, using Go only as a reference.
 
 ## Consequences
 
 ### Positive
 
-- Um único núcleo de domínio para os dois modos de uso.
-- Desktop offline sem expor portas de rede.
-- Stack única de longo prazo para servidor e desktop.
+- A single domain core for both modes of use.
+- An offline desktop that exposes no network ports.
+- A single long-term stack for server and desktop.
 
 ### Negative
 
-- Reescrita completa antes de existir paridade funcional.
-- O domínio, a persistência e a API não são aproveitados da implementação atual.
-- O aplicativo desktop no Linux depende do webview do sistema.
+- A complete rewrite before functional parity exists.
+- The domain, persistence and API are not reused from the current implementation.
+- The desktop application on Linux depends on the system webview.
 
 ### Risks
 
-- **Empacotamento Flatpak:** tratado como formato preferencial, não definitivo; permissões,
-  acesso persistente às bibliotecas e reprodução de mídia precisam de validação técnica.
-- **Reprodução no Linux desktop empacotado:** o protocolo e os testes existem, mas o Flatpak ainda
-  precisa de smoke test real para validar permissões persistentes e reprodução dentro do sandbox.
-- **Versão única entre binários:** exige uma fonte única de verdade para o número de versão; a
-  versão do servidor já é exposta em `--version` e `/api/healthz`.
+- **Flatpak packaging:** treated as the preferred format, not the definitive one; permissions,
+  persistent access to libraries and media playback need technical validation.
+- **Playback on the packaged Linux desktop:** the protocol and the tests exist, but Flatpak still
+  needs a real smoke test to validate persistent permissions and playback inside the sandbox.
+- **A single version across binaries:** it requires a single source of truth for the version
+  number; the server version is already exposed in `--version` and `/api/healthz`.
 
 ## Validation and rollback
 
-Validação prevista: cobertura de testes Rust de pelo menos 80% medida com `cargo-llvm-cov`,
-`cargo fmt --check`, `cargo clippy` sem avisos, builds da SPA nos dois modos e execução dos
-artefatos de distribuição antes de cada release.
+Planned validation: Rust test coverage of at least 80% measured with `cargo-llvm-cov`,
+`cargo fmt --check`, `cargo clippy` without warnings, SPA builds in both modes, and running the
+distribution artifacts before each release.
 
-Registro histórico: durante a reescrita, o serviço Go permaneceu disponível até sua remoção na PR
-#206, em 2026-10-17. Hoje o runtime Go não está no repositório. A importação de bancos SQLite
-legados é explícita e backup-first; o procedimento e os limites estão em
-`docs/operations/migration-go-to-rust.md`. Não houve ensaio comprovado de cutover/rollback com
-volumes reais; isso continua sendo uma tarefa operacional separada, não uma etapa de código ainda
-por implementar.
+Historical record: during the rewrite, the Go service remained available until its removal in
+PR #206, on 2026-10-17. Today the Go runtime is not in the repository. Importing legacy SQLite
+databases is explicit and backup-first; the procedure and its limits are in
+`docs/operations/migration-go-to-rust.md`. There was no proven cutover/rollback rehearsal with
+real volumes; that remains a separate operational task, not a code step still to be implemented.
