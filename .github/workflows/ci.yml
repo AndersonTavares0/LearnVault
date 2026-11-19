@@ -356,6 +356,7 @@ jobs:
       - e2e-server
       - rust-container
       - rust
+      - windows-core
       - desktop
       - rust-audit
     if: ${{ always() }}
