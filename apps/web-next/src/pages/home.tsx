@@ -396,7 +396,6 @@ export function LibraryActions({ onMessage }: { onMessage: (message: string) => 
 	const [importPath, setImportPath] = useState('');
 	const [importError, setImportError] = useState('');
 	const failure = (error: unknown) => {
-		const code = error instanceof Error ? error.message : '';
 		if (isCredentialsChange(error)) return tr('Change your password on the server before managing courses.', 'Troque sua senha no servidor antes de gerenciar cursos.');
 		// The transport already worded these two for the user; any other error stays generic.
 		if (error instanceof Error && (error.name === 'NoCoursesError' || error.name === 'RescanBusyError')) return error.message;
