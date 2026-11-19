@@ -15,7 +15,7 @@ The Flatpak is the desktop app only. The server keeps its tarball and container 
 
 ## What exists
 
-- `deploy/packages/app.learnvault.desktop.yml`: manifest on `org.gnome.Platform` 48, installs a prebuilt `target/release/learnvault-desktop`, the `.desktop` file, the metainfo and the icon. Grants IPC, Wayland, X11 fallback and DRI only.
+- `deploy/packages/app.learnvault.desktop.yml`: manifest on `org.gnome.Platform` 48, installs a prebuilt `target/release/learnvault-desktop`, the `.desktop` file, the metainfo and the icon. Grants IPC, Wayland, X11 fallback and DRI only, and sets `WEBKIT_DISABLE_DMABUF_RENDERER=1`: without it the app exits immediately with `Gdk-Message: Error 71 (Protocol error) dispatching to Wayland display` on NVIDIA + Wayland sessions (reproduced on an RTX 3060 Ti with the GNOME 51 runtime).
 - `crates/desktop/tests/foundation.rs`: fails if the manifest grants broad `home` or `host` filesystem access.
 - `crates/desktop/tauri.conf.json`: `bundle.targets` is `["nsis"]`, so no Linux bundle is produced.
 - The folder picker uses `tauri-plugin-dialog`. Under Flatpak it must go through `xdg-desktop-portal` (FileChooser).

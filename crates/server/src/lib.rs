@@ -745,7 +745,7 @@ mod tests {
     #[tokio::test]
     async fn healthz_is_public_and_returns_status_and_version() {
         let temp = tempfile::tempdir().unwrap();
-        let app = build_router(AppState::new(config_fixture(&temp)));
+        let app = build_router(AppState::initialize(config_fixture(&temp)).await.unwrap());
 
         let response = app
             .oneshot(Request::get("/api/healthz").body(Body::empty()).unwrap())
@@ -762,9 +762,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn healthz_reports_unavailable_without_database_details() {
+    async fn healthz_stays_ready_while_database_lock_is_held() {
         let temp = tempfile::tempdir().unwrap();
-        let state = AppState::new(config_fixture(&temp));
+        let state = AppState::initialize(config_fixture(&temp)).await.unwrap();
         let app = build_router(state.clone());
         let _database = state.database.clone().lock_owned().await;
 
@@ -773,17 +773,44 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(response.headers()["cache-control"], "no-store");
         let body = response.into_body().collect().await.unwrap().to_bytes();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(json, serde_json::json!({"status": "unavailable"}));
+        assert_eq!(json["status"], "ok");
+    }
+
+    #[tokio::test]
+    async fn healthz_stays_ready_during_an_uncommitted_file_write() {
+        let temp = tempfile::tempdir().unwrap();
+        let state = AppState::initialize(config_fixture(&temp)).await.unwrap();
+        let app = build_router(state.clone());
+        let database = state.database.clone().lock_owned().await;
+        database
+            .connection()
+            .execute_batch(
+                "BEGIN IMMEDIATE;
+                 INSERT INTO library (library_id, available) VALUES ('healthz-writer', 1);",
+            )
+            .unwrap();
+
+        let response = app
+            .oneshot(Request::get("/api/healthz").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()["cache-control"], "no-store");
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["status"], "ok");
+        database.connection().execute_batch("ROLLBACK;").unwrap();
     }
 
     #[tokio::test]
     async fn healthz_reports_unavailable_when_database_check_capacity_is_busy() {
         let temp = tempfile::tempdir().unwrap();
-        let state = AppState::new(config_fixture(&temp));
+        let state = AppState::initialize(config_fixture(&temp)).await.unwrap();
         let app = build_router(state.clone());
         let _permits: Vec<_> = std::iter::from_fn(|| state.try_acquire_blocking_task()).collect();
 
@@ -794,6 +821,32 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(response.headers()["cache-control"], "no-store");
+    }
+
+    #[tokio::test]
+    async fn healthz_reports_unavailable_when_database_file_is_missing_or_corrupt() {
+        for corrupt in [false, true] {
+            let temp = tempfile::tempdir().unwrap();
+            let config = config_fixture(&temp);
+            if corrupt {
+                fs::write(&config.database_path, b"not a SQLite database").unwrap();
+            }
+            let app = build_router(AppState::new(config));
+
+            let response = app
+                .oneshot(Request::get("/api/healthz").body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+
+            assert_eq!(
+                response.status(),
+                StatusCode::SERVICE_UNAVAILABLE,
+                "corrupt={corrupt}"
+            );
+            let body = response.into_body().collect().await.unwrap().to_bytes();
+            let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(json, serde_json::json!({"status": "unavailable"}));
+        }
     }
 
     #[tokio::test]
@@ -813,7 +866,7 @@ mod tests {
             ),
         ] {
             let temp = tempfile::tempdir().unwrap();
-            let state = AppState::new(config_fixture(&temp));
+            let state = AppState::initialize(config_fixture(&temp)).await.unwrap();
             {
                 let database = state.database.lock().await;
                 database.connection().execute_batch(setup).unwrap();
@@ -875,7 +928,7 @@ mod tests {
         ];
         for (name, setup) in cases {
             let temp = tempfile::tempdir().unwrap();
-            let state = AppState::new(config_fixture(&temp));
+            let state = AppState::initialize(config_fixture(&temp)).await.unwrap();
             {
                 let database = state.database.lock().await;
                 database.connection().execute_batch(setup).unwrap();
@@ -892,7 +945,7 @@ mod tests {
     #[tokio::test]
     async fn healthz_rejects_schema_sql_over_byte_bound() {
         let temp = tempfile::tempdir().unwrap();
-        let state = AppState::new(config_fixture(&temp));
+        let state = AppState::initialize(config_fixture(&temp)).await.unwrap();
         let comment = "é".repeat(40_000);
         let setup = format!(
             "DROP TABLE library; CREATE TABLE library (library_id TEXT PRIMARY KEY NOT NULL, available INTEGER NOT NULL CHECK (available IN (0, 1)) /*{comment}*/)",
