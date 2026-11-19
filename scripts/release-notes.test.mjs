@@ -91,6 +91,10 @@ test('the template lists the asset names the release workflow publishes', () => 
 		assert.ok(template.includes(name), `template lists ${name}`);
 		assert.ok(workflow.includes(name), `release workflow publishes ${name}`);
 	}
+	assert.ok(template.includes('learnvault-{{tag}}.sbom.cdx.json'));
+	assert.ok(workflow.includes('learnvault-${{ needs.validate-tag.outputs.tag }}.sbom.cdx.json'));
+	assert.ok(template.includes('SHA256SUMS.sigstore.json'));
+	assert.ok(workflow.includes('dist/SHA256SUMS.sigstore.json'));
 	assert.ok(workflow.includes('learnvault-windows-$env:RELEASE_TAG.exe'));
 	assert.ok(template.includes('learnvault-windows-{{tag}}.exe') && template.includes('learnvault-windows-{{tag}}.nsis.zip'));
 });

@@ -192,6 +192,26 @@ test('real-server CI smoke runs after the SPA build and retains Playwright cache
     assert.match(e2eBlock, /pnpm exec playwright install chromium/);
 });
 
+test('release publishes the source SBOM, keyless checksum bundle, and binary attestations', () => {
+    const publish = workflow.slice(workflow.indexOf('\n  publish:\n'));
+    assert.match(publish, /id-token: write/);
+    assert.match(publish, /attestations: write/);
+    assert.match(publish, /scan-type: fs[\s\S]*?format: cyclonedx[\s\S]*?output: dist\/learnvault-/);
+    assert.match(publish, /cosign sign-blob --yes --bundle dist\/SHA256SUMS\.sigstore\.json dist\/SHA256SUMS/);
+    assert.match(publish, /uses: actions\/attest-build-provenance@[0-9a-f]{40}/);
+    assert.match(publish, /uses: actions\/attest-sbom@[0-9a-f]{40}/);
+    assert.ok(publish.indexOf('- name: Sign SHA256SUMS (keyless)') < publish.indexOf('- name: Attest build provenance'));
+    assert.ok(publish.indexOf('- name: Attest SBOM for release binaries') < publish.indexOf('- name: Upload assets to the published release'));
+
+    const process = readFileSync(join(root, 'docs/releases/process.md'), 'utf8');
+    for (const command of ['cosign verify-blob SHA256SUMS', 'sha256sum -c SHA256SUMS --ignore-missing', 'gh attestation verify learnvault-linux-amd64.tar.gz', '--predicate-type https://cyclonedx.org/bom']) {
+        assert.ok(process.includes(command), `release instructions include ${command}`);
+    }
+    assert.ok(process.includes('github[.]com'));
+    assert.equal(process.includes('github\\\\.com'), false, 'consumer regex must not double-escape dots');
+    assert.match(workflow, /"v\$release_version" != "\$RELEASE_TAG"/);
+});
+
 test('pre-releases never move stable, latest or minor image tags and no rc tag is applied', () => {
     const stableOnly = "needs.validate-tag.outputs.prerelease == 'false'";
     assert.equal(workflow.split(stableOnly).length - 1, 6);
