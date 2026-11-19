@@ -121,3 +121,9 @@ pub use sync::{
     queue_flashcard_update, queue_note_create, queue_note_delete, queue_note_update,
     queue_position, queue_preference, queue_review, sync_state,
 };
+
+/// Exposes the raw SQLite migration steps for integration tests.
+#[doc(hidden)]
+pub fn migration_steps_for_test() -> &'static [&'static str] {
+    migrations::MIGRATIONS
+}
