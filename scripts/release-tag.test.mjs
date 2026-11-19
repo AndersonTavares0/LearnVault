@@ -260,4 +260,6 @@ process.on('SIGTERM', () => server.close(() => process.exit(0)));
     assert.equal(runSmoke('0.9.5', { STUB_VERSION: '0.9.5' }).status, 0);
     assert.notEqual(runSmoke('v0.9.5', { STUB_VERSION: '0.9.5' }).status, 0);
     assert.notEqual(runSmoke('v0.9.5', { STUB_VERSION: 'v0.9.5', STUB_HEALTHZ_VERSION: '0.0.0' }).status, 0);
+    const ciWorkflow = readFileSync(join(root, '.github/workflows/ci.yml'), 'utf8');
+    assert.match(ciWorkflow, /Smoke test real server binary[\s\S]*\.\/scripts\/smoke-release-binary\.sh \.\/target\/debug\/learnvault-server "\$expected_version" crates\/server\/web\/build/);
 });

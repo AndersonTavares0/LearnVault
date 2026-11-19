@@ -160,6 +160,11 @@ jobs:
       # The server serves the shell from `--web-root` on disk, not from the compiled binary, so
       # this job builds the SPA here instead of downloading `spa-build` and waiting for that job.
       - run: pnpm --filter learnvault-web-next build
+      - name: Smoke test real server binary
+        run: |
+          set -euo pipefail
+          expected_version="$(./target/debug/learnvault-server --version | awk '{print $2}')"
+          ./scripts/smoke-release-binary.sh ./target/debug/learnvault-server "$expected_version" crates/server/web/build
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm exec playwright test
       - name: Upload E2E diagnostics
