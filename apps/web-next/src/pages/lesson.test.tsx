@@ -150,6 +150,27 @@ describe('lesson page', () => {
 		expect(screen.getByRole('heading', { level: 1, name: 'Gone' })).toBeTruthy();
 	});
 
+	it('keeps saved completion and notes reachable when the lesson media is missing', async () => {
+		const studyProgress = vi.spyOn(transport, 'studyProgress').mockResolvedValue({
+			mediaId: 'gone.mp4', positionSeconds: 42, completed: true, updatedAt: 1, recorded: true
+		});
+		const listNotes = vi.spyOn(transport, 'listNotes').mockResolvedValue([
+			{ noteId: 'n1', mediaId: 'gone.mp4', positionSeconds: 12, content: 'Saved note on missing video', createdAt: 1, updatedAt: 1 }
+		]);
+		renderApp('/course/c/c%2FGone', { catalog });
+		expect(await screen.findByText('Media unavailable')).toBeTruthy();
+		expect(document.querySelector('video')).toBeNull();
+		expect(screen.queryByRole('button', { name: 'Play' })).toBeNull();
+		expect(screen.queryByRole('button', { name: /^Resume from/ })).toBeNull();
+		const completedButton = await screen.findByRole('button', { name: 'Completed' });
+		expect(completedButton.getAttribute('aria-pressed')).toBe('true');
+		const notesTab = await screen.findByRole('tab', { name: 'Notes (1)' });
+		fireEvent.click(notesTab);
+		expect(await within(screen.getByRole('tabpanel', { name: 'Notes (1)' })).findByText('Saved note on missing video')).toBeTruthy();
+		expect(studyProgress).toHaveBeenCalledWith('gone.mp4');
+		expect(listNotes).toHaveBeenCalledWith('gone.mp4');
+	});
+
 	describe('study workspace', () => {
 		const finishRound = (mode: 'focus' | 'short', at: number) => act(() => { pomodoro.update((state) => ({ ...state, mode: mode === 'focus' ? 'short' : 'focus', status: 'idle', remainingSeconds: 300, totalSeconds: 300, lastCompleted: { mode, at } })); });
 
