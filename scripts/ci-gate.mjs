@@ -32,6 +32,12 @@ function isSafeRelativePath(file) {
   return file.split('/').every((segment) => segment !== '' && segment !== '.' && segment !== '..');
 }
 
+function isBrandingRuntimeAsset(file) {
+  // Vector branding assets under docs/design/branding/ are imported by the SPA and copied into
+  // the container build; Markdown documentation (e.g. docs/design/branding/README.md) is not.
+  return file.startsWith('docs/design/branding/') && !file.endsWith('.md');
+}
+
 export function classifyDocsReleaseOnly(paths) {
   return (
     Array.isArray(paths) &&
@@ -39,6 +45,7 @@ export function classifyDocsReleaseOnly(paths) {
     paths.every(
       (file) =>
         isSafeRelativePath(file) &&
+        !isBrandingRuntimeAsset(file) &&
         (file.startsWith('docs/') || file.endsWith('.md') || file.startsWith('.github/release-please/')),
     )
   );

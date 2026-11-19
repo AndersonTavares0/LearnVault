@@ -52,6 +52,9 @@
             "context": "Container build (Rust)"
           },
           {
+            "context": "Dependency review"
+          },
+          {
             "context": "CI gate"
           }
         ]
