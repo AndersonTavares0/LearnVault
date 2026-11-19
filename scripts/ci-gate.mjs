@@ -5,6 +5,7 @@ const expectedJobs = [
   'e2eServer',
   'rustContainer',
   'rust',
+  'windowsCore',
   'desktop',
   'rustAudit',
 ];
@@ -13,6 +14,7 @@ const filterableJobs = new Set([
   'e2eServer',
   'rustContainer',
   'rust',
+  'windowsCore',
   'desktop',
   'rustAudit',
 ]);
@@ -79,6 +81,7 @@ const githubNeedsJobs = [
   'e2e-server',
   'rust-container',
   'rust',
+  'windows-core',
   'desktop',
   'rust-audit',
 ];
@@ -112,6 +115,7 @@ export function evaluateCiGateFromNeeds(needs, { workflowCancelled = false } = {
       e2eServer: needs['e2e-server']?.result,
       rustContainer: needs['rust-container']?.result,
       rust: needs.rust?.result,
+      windowsCore: needs['windows-core']?.result,
       desktop: needs.desktop?.result,
       rustAudit: needs['rust-audit']?.result,
     },

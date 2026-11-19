@@ -43,6 +43,9 @@
             "context": "Rust tests and lints"
           },
           {
+            "context": "Windows core tests"
+          },
+          {
             "context": "Desktop crate compile and guards"
           },
           {
