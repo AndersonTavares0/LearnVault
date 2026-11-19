@@ -150,7 +150,7 @@ Native installations configure runtime options via environment variables or CLI 
 - `PORT`: HTTP port.
 - `ADMIN_USERNAME` / `ADMIN_PASSWORD` (or `ADMIN_USERNAME_FILE` / `ADMIN_PASSWORD_FILE`): Initial admin credentials.
 - A network listener requires explicit initial admin credentials. Loopback-only first startup may use the temporary `admin/admin` account, which must change its password before accessing protected endpoints.
-- `TRUSTED_PROXY_IPS`: Optional comma-separated IP addresses of reverse proxies allowed to supply `X-Real-IP` or `X-Forwarded-For` for login rate limiting. Forwarded headers from other peers are ignored; configure the proxy address as stable and ensure it overwrites both headers. When `X-Real-IP` is absent, the last `X-Forwarded-For` entry is used.
+- `TRUSTED_PROXY_IPS`: Optional comma-separated IP addresses of reverse proxies trusted for login rate limiting. Only `X-Forwarded-For` is used; `X-Real-IP` is ignored. When the direct socket peer is trusted, the server walks the `X-Forwarded-For` chain right to left, skips addresses in `TRUSTED_PROXY_IPS`, and uses the first untrusted address. If no usable untrusted address is present, it uses the socket peer. Configure each trusted proxy to append the address it observed, and list every trusted hop; earlier client-supplied entries are ignored by this right-to-left resolution.
 
 Course folders remain external and read-only across all platforms. Installers never copy course folders.
 

@@ -26,6 +26,7 @@ use crate::{
 const SESSION_LIFETIME_SECONDS: i64 = 12 * 60 * 60;
 const MAX_BLOCKING_TASKS: usize = 4;
 const LOGIN_ATTEMPT_WINDOW: Duration = Duration::from_secs(60);
+const MAX_LOGIN_ATTEMPTS_PER_WINDOW: u32 = 5;
 const MAX_LOGIN_ATTEMPT_BUCKETS: usize = 1024;
 const MAX_SPA_SHELL_SIZE: u64 = 16 * 1024 * 1024;
 const MAX_SPA_ASSET_STREAMS: usize = 3;
@@ -391,11 +392,11 @@ impl AppState {
     }
 
     async fn allow_login_attempt_at(&self, source: &str, now: Instant) -> bool {
-        allow_attempt_at(&self.login_attempts, source, now).await
+        allow_attempt_at(&self.login_attempts, source, now, true).await
     }
 
     async fn allow_credential_attempt_at(&self, key: &str, now: Instant) -> bool {
-        allow_attempt_at(&self.credential_attempts, key, now).await
+        allow_attempt_at(&self.credential_attempts, key, now, false).await
     }
 
     pub(crate) async fn user(&self, username: String) -> Result<Option<AuthUser>, StateError> {
@@ -797,20 +798,31 @@ async fn allow_attempt_at(
     table: &Mutex<HashMap<String, (u32, Instant)>>,
     key: &str,
     now: Instant,
+    evict_unthrottled_at_capacity: bool,
 ) -> bool {
     let mut attempts = table.lock().await;
     attempts
         .retain(|_, (_, started)| now.saturating_duration_since(*started) < LOGIN_ATTEMPT_WINDOW);
     let key = key.to_owned();
     if attempts.len() >= MAX_LOGIN_ATTEMPT_BUCKETS && !attempts.contains_key(&key) {
-        // Keep the table bounded without evicting an active source bucket.
-        return false;
+        if !evict_unthrottled_at_capacity {
+            return false;
+        }
+        let oldest_unthrottled = attempts
+            .iter()
+            .filter(|(_, (count, _))| *count < MAX_LOGIN_ATTEMPTS_PER_WINDOW)
+            .min_by_key(|(_, (_, started))| *started)
+            .map(|(source, _)| source.clone());
+        let Some(source) = oldest_unthrottled else {
+            return false;
+        };
+        attempts.remove(&source);
     }
     let entry = attempts.entry(key).or_insert((0, now));
     if now.saturating_duration_since(entry.1) >= LOGIN_ATTEMPT_WINDOW {
         *entry = (0, now);
     }
-    if entry.0 >= 5 {
+    if entry.0 >= MAX_LOGIN_ATTEMPTS_PER_WINDOW {
         return false;
     }
     entry.0 += 1;
@@ -934,7 +946,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn distinct_sources_do_not_evict_an_active_login_bucket() {
+    async fn full_login_table_admits_new_sources_without_evicting_throttled_buckets() {
         let state = AppState::new(config());
         let now = Instant::now();
 
@@ -949,12 +961,13 @@ mod tests {
             );
         }
 
-        assert!(!state.allow_login_attempt_at("new-user", now).await);
+        assert!(state.allow_login_attempt_at("new-user", now).await);
         assert!(!state.allow_login_attempt_at("admin", now).await);
         let attempts = state.login_attempts.lock().await;
         assert_eq!(attempts.len(), 1024);
         assert!(attempts.contains_key("admin"));
-        assert!(!attempts.contains_key("new-user"));
+        assert!(attempts.contains_key("new-user"));
+        assert_eq!(attempts["admin"].0, 5);
     }
 
     #[tokio::test]

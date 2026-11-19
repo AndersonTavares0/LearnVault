@@ -39,11 +39,15 @@ described below. The desktop application is single-user and has no accounts.
   a PHC string. Verification returns a boolean and never leaks hash details
   (`crates/core/src/auth.rs`).
 - Username and password bounds are validated before hashing, so oversized input never reaches Argon2.
-- Every login runs the same-origin check and a per-source rate limit: 5 failed attempts per 60-second
-  window, with the tracking table capped at 1024 sources. Excess requests receive `429 try again
-  later` (`crates/server/src/state.rs`).
-- The client address comes from forwarding headers only for explicitly configured trusted proxies;
-  otherwise the socket address is used, so a client cannot spoof its way out of the limit.
+- Every login runs the same-origin check and a per-source rate limit: 5 attempts per 60-second
+  window, with the tracking table capped at 1024 sources. At capacity, the oldest non-throttled
+  source bucket is evicted to admit a new source; throttled buckets stay in place. Excess requests
+  receive `429 try again later` (`crates/server/src/state.rs`).
+- The socket address is used unless the direct peer is in `TRUSTED_PROXY_IPS`. For a trusted peer,
+  only `X-Forwarded-For` is used: the server walks the chain right to left, skips configured trusted
+  proxy addresses, and selects the first untrusted address. `X-Real-IP` is ignored. Proxies must
+  append the address they observed, and every trusted hop must be listed; if no usable untrusted
+  address is present, the socket peer is used.
 - A wrong username and a wrong password return the same generic `invalid credentials`, so the app
   does not reveal which accounts exist.
 - Session tokens are 32 random bytes. Only the SHA-256 hash is persisted; the raw token exists only
