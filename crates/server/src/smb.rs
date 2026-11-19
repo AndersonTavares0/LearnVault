@@ -168,7 +168,9 @@ impl SmbSource {
         .await
         .map_err(|_| SourceError::Unreachable)??;
         let mut last = SourceError::Unreachable;
-        for address in addresses {
+        // `resolve_allowed` validates the complete answer set before sorting. Prefer IPv4
+        // for dual-stack NAS hosts because it has the broadest SMB client compatibility.
+        for address in ipv4_first(addresses) {
             match self.connect(address).await {
                 Ok(session) => {
                     *slot = Some(session.clone());
@@ -191,8 +193,7 @@ impl SmbSource {
             },
             ..Default::default()
         });
-        let base = UncPath::from_str(&format!("\\\\{address}\\{}", self.location.share))
-            .map_err(|_| SourceError::NotFound)?;
+        let base = unc_base(address, &self.location.share)?;
         let connected = tokio::time::timeout(
             CONNECT_TIMEOUT,
             client.share_connect(
@@ -430,6 +431,19 @@ impl SmbSource {
     }
 }
 
+/// Orders already validated SMB endpoints with IPv4 first, retaining resolver order within
+/// each address family.
+fn ipv4_first(mut addresses: Vec<SocketAddr>) -> Vec<SocketAddr> {
+    addresses.sort_by_key(|address| !address.is_ipv4());
+    addresses
+}
+
+/// Builds an SMB UNC from a resolved endpoint. `UncPath` stores the server token verbatim;
+/// smb 0.12.1's transport parser accepts both `IPv4:port` and `[IPv6]:port` tokens.
+fn unc_base(address: SocketAddr, share: &str) -> SourceResult<UncPath> {
+    UncPath::from_str(&format!("\\\\{address}\\{share}")).map_err(|_| SourceError::NotFound)
+}
+
 impl CourseSource for SmbSource {
     fn list<'a>(
         &'a self,
@@ -508,7 +522,10 @@ fn status_error(status: u32) -> SourceError {
 
 #[cfg(test)]
 mod tests {
-    use super::{FILETIME_UNIX_OFFSET, SmbLocation, SmbSource, status_error, unix_seconds};
+    use super::{
+        FILETIME_UNIX_OFFSET, SmbLocation, SmbSource, ipv4_first, status_error, unc_base,
+        unix_seconds,
+    };
     use learnvault_core::{CourseSource, SourceError};
     use std::{str::FromStr, sync::Arc};
 
@@ -595,6 +612,47 @@ mod tests {
         let parsed = smb::UncPath::from_str(&location.base.to_string()).unwrap();
         assert_eq!(parsed.server(), "nas");
         assert_eq!(parsed.share(), Some("Cursos"));
+    }
+
+    #[test]
+    fn resolved_ipv4_and_ipv6_endpoints_build_valid_unc_paths() {
+        let ipv4 = unc_base("192.168.1.20:445".parse().unwrap(), "Cursos").unwrap();
+        assert_eq!(ipv4.to_string(), r"\\192.168.1.20:445\Cursos");
+        assert_eq!(ipv4.server(), "192.168.1.20:445");
+        assert_eq!(
+            smb::transport::utils::TransportUtils::parse_socket_address(ipv4.server()).unwrap(),
+            "192.168.1.20:445".parse().unwrap()
+        );
+
+        let ipv6 = unc_base("[fe80::1]:445".parse().unwrap(), "Cursos").unwrap();
+        assert_eq!(ipv6.to_string(), r"\\[fe80::1]:445\Cursos");
+        assert_eq!(ipv6.server(), "[fe80::1]:445");
+        assert_eq!(
+            smb::transport::utils::TransportUtils::parse_socket_address(ipv6.server()).unwrap(),
+            "[fe80::1]:445".parse().unwrap()
+        );
+    }
+
+    #[test]
+    fn validated_smb_endpoints_try_ipv4_before_ipv6() {
+        let input = vec![
+            "[fe80::1]:445".parse().unwrap(),
+            "192.168.1.20:445".parse().unwrap(),
+            "[::1]:1445".parse().unwrap(),
+            "192.168.1.21:445".parse().unwrap(),
+        ];
+
+        let ordered = ipv4_first(input);
+
+        assert_eq!(
+            ordered,
+            vec![
+                "192.168.1.20:445".parse().unwrap(),
+                "192.168.1.21:445".parse().unwrap(),
+                "[fe80::1]:445".parse().unwrap(),
+                "[::1]:1445".parse().unwrap(),
+            ]
+        );
     }
 
     #[tokio::test]
