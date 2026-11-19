@@ -337,6 +337,7 @@ impl Database {
                 known: SCHEMA_VERSION,
             });
         }
+        validate_restore_schema(&backup_conn, found)?;
 
         if let Some(parent) = target_path.parent().filter(|p| !p.as_os_str().is_empty()) {
             std::fs::create_dir_all(parent).map_err(|source| Error::BackupIo {
@@ -352,19 +353,41 @@ impl Database {
                 .map(|d| d.as_secs())
                 .unwrap_or(0);
             let copy_path = target_path.with_extension(format!("rollback.{timestamp}.bak"));
-            let (_directory, mut copy) = private_staging_file(target_path)?;
-            let copy_result = (|| -> std::io::Result<()> {
-                std::io::copy(&mut std::fs::File::open(target_path)?, copy.as_file_mut())?;
-                copy.as_file().sync_all()?;
-                copy.persist_noclobber(&copy_path)
-                    .map_err(|error| error.error)?;
-                Ok(())
-            })();
-            copy_result.map_err(|source| Error::BackupIo {
-                operation: "create rollback copy".to_owned(),
-                path: copy_path.clone(),
-                source,
-            })?;
+            let (_directory, copy) = private_staging_file(&copy_path)?;
+            let copy_temp_path = copy.path().to_path_buf();
+            let mut copy_conn =
+                Connection::open(&copy_temp_path).map_err(|source| Error::OpenDatabase {
+                    path: copy_temp_path.clone(),
+                    source,
+                })?;
+            copy_conn.busy_timeout(Duration::from_secs(5))?;
+            let source_conn =
+                Connection::open(target_path).map_err(|source| Error::OpenDatabase {
+                    path: target_path.to_path_buf(),
+                    source,
+                })?;
+            source_conn.busy_timeout(Duration::from_secs(5))?;
+            backup_connection(&source_conn, &mut copy_conn)?;
+            let integrity: String =
+                copy_conn.query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
+            if integrity != "ok" {
+                return Err(Error::BackupIntegrityFailed(integrity));
+            }
+            drop(source_conn);
+            drop(copy_conn);
+            std::fs::File::open(&copy_temp_path)
+                .and_then(|file| file.sync_all())
+                .map_err(|source| Error::BackupIo {
+                    operation: "sync rollback copy".to_owned(),
+                    path: copy_path.clone(),
+                    source,
+                })?;
+            copy.persist_noclobber(&copy_path)
+                .map_err(|error| Error::BackupIo {
+                    operation: "create rollback copy".to_owned(),
+                    path: copy_path.clone(),
+                    source: error.error,
+                })?;
         }
 
         let (_staging_directory, staging_file) = private_staging_file(target_path)?;
@@ -407,11 +430,6 @@ impl Database {
         drop(backup_conn);
         drop(dest_conn);
 
-        let wal = target_path.with_extension("sqlite-wal");
-        let shm = target_path.with_extension("sqlite-shm");
-        let _ = std::fs::remove_file(&wal);
-        let _ = std::fs::remove_file(&shm);
-
         staging_file
             .persist(target_path)
             .map_err(|error| Error::BackupIo {
@@ -420,7 +438,91 @@ impl Database {
                 source: error.error,
             })?;
 
+        remove_sqlite_sidecar(target_path, "-wal")?;
+        remove_sqlite_sidecar(target_path, "-shm")?;
+
         Ok(())
+    }
+}
+
+/// Checks the staged backup without changing it. Testing a migrated copy means that an older
+/// valid schema remains restorable while incomplete or unrelated files are refused.
+fn validate_restore_schema(conn: &Connection, version: usize) -> Result<()> {
+    if version == 0 || version > SCHEMA_VERSION {
+        return Err(Error::RestoreInvalidSchema);
+    }
+
+    let has_foreign_key_violation = conn
+        .query_row("PRAGMA foreign_key_check", [], |_| Ok(()))
+        .optional()
+        .map_err(|_| Error::RestoreInvalidSchema)?
+        .is_some();
+    if has_foreign_key_violation {
+        return Err(Error::RestoreInvalidSchema);
+    }
+
+    let mut validation_copy = Connection::open_in_memory()?;
+    backup_connection(conn, &mut validation_copy)?;
+    migrate_to_latest(&mut validation_copy).map_err(|_| Error::RestoreInvalidSchema)?;
+    if !restore_has_required_schema(&validation_copy)? {
+        return Err(Error::RestoreInvalidSchema);
+    }
+    Ok(())
+}
+
+fn restore_has_required_schema(conn: &Connection) -> Result<bool> {
+    for definition in REQUIRED_TABLES {
+        if !definition_matches(conn, definition)? {
+            return Ok(false);
+        }
+    }
+    for table in REQUIRED_FTS_TABLES {
+        let found: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM pragma_table_list
+             WHERE schema = 'main' AND type = 'virtual' AND name = ?1",
+            [table],
+            |row| row.get(0),
+        )?;
+        if found != 1 {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+/// Copies a live SQLite connection with the online backup API, including committed WAL pages.
+fn backup_connection(source: &Connection, destination: &mut Connection) -> Result<()> {
+    let backup = rusqlite::backup::Backup::new(source, destination)?;
+    let mut retries = 0;
+    loop {
+        match backup.step(256)? {
+            rusqlite::backup::StepResult::Done => break,
+            rusqlite::backup::StepResult::More => continue,
+            rusqlite::backup::StepResult::Busy | rusqlite::backup::StepResult::Locked => {
+                retries += 1;
+                if retries > 300 {
+                    return Err(Error::BackupTimeout);
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            _ => return Err(Error::BackupFailed("unexpected backup result".to_owned())),
+        }
+    }
+    Ok(())
+}
+
+fn remove_sqlite_sidecar(database_path: &Path, suffix: &str) -> Result<()> {
+    let mut sidecar_name = database_path.as_os_str().to_os_string();
+    sidecar_name.push(suffix);
+    let sidecar_path = PathBuf::from(sidecar_name);
+    match std::fs::remove_file(&sidecar_path) {
+        Ok(()) => Ok(()),
+        Err(source) if source.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(source) => Err(Error::BackupIo {
+            operation: "remove database sidecar".to_owned(),
+            path: sidecar_path,
+            source,
+        }),
     }
 }
 

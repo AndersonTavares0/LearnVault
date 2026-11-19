@@ -88,6 +88,10 @@ pub enum Error {
     #[error("arquivo de backup não encontrado em {0}")]
     BackupFileNotFound(PathBuf),
 
+    /// The backup does not contain a recognized LearnVault schema.
+    #[error("backup does not contain a valid LearnVault database schema")]
+    RestoreInvalidSchema,
+
     /// The backup's integrity check failed.
     #[error("falha na integridade do backup SQLite: {0}")]
     BackupIntegrityFailed(String),
