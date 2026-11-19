@@ -12,11 +12,11 @@ TARGET_OUTPUT="${1:-/data/backups/${OUTPUT_NAME}}"
 printf "Starting the LearnVault backup...\n"
 
 if [ -f "/app/learnvault-server" ]; then
-    # Executando internamente no container
+    # Running inside the container
     mkdir -p "$(dirname "$TARGET_OUTPUT")"
     /app/learnvault-server backup --database "$DATABASE_PATH" --output "$TARGET_OUTPUT"
 else
-    # Executando no host via docker compose
+    # Running on the host via docker compose
     docker compose exec -T "$CONTAINER" /app/learnvault-server backup --database "$DATABASE_PATH" --output "$TARGET_OUTPUT"
 fi
 
