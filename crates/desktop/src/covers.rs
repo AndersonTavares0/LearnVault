@@ -22,7 +22,7 @@
 //!   a wildcard or credentials. No capability permission is granted to the webview.
 
 use std::fs::{self, Metadata, OpenOptions};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
@@ -233,14 +233,14 @@ pub fn auto_detect_course_cover(
 
     let priority_stems = ["cover", "folder", "poster", "thumb", "thumbnail"];
     let allowed_exts = ["jpg", "jpeg", "png", "webp"];
-    let mut candidates: Vec<(usize, PathBuf)> = Vec::new();
+    let mut candidates: Vec<(usize, String)> = Vec::new();
 
     for entry in read_dir.flatten() {
-        let path = entry.path();
-        if !path.is_file() {
+        // The directory entry type does not follow links: a link is never a candidate.
+        if !entry.file_type().is_ok_and(|kind| kind.is_file()) {
             continue;
         }
-        let Some(name) = path.file_name().and_then(|s| s.to_str()) else {
+        let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
             continue;
         };
         let lower = name.to_ascii_lowercase();
@@ -251,22 +251,34 @@ pub fn auto_detect_course_cover(
             continue;
         }
         if let Some(priority) = priority_stems.iter().position(|&s| s == stem) {
-            candidates.push((priority, path));
+            candidates.push((priority, name));
         }
     }
 
-    candidates.sort_by_key(|(p, _)| *p);
+    candidates.sort();
 
-    for (_, candidate_path) in candidates {
-        let Ok(meta) = fs::symlink_metadata(&candidate_path) else {
+    for (_, name) in candidates {
+        // Opened through the confined media opener and judged on the opened handle, so a
+        // candidate swapped for a link after discovery is refused instead of followed.
+        let Ok(file) = learnvault_core::media::open_confined_file(course_root, &name) else {
             continue;
         };
-        if !meta.is_file() || meta.len() > MAX_COVER_BYTES {
+        if file
+            .metadata()
+            .ok()
+            .is_none_or(|meta| meta.len() > MAX_COVER_BYTES)
+        {
             continue;
         }
-        let Ok(bytes) = fs::read(&candidate_path) else {
+        let mut bytes = Vec::new();
+        if file
+            .take(MAX_COVER_BYTES + 1)
+            .read_to_end(&mut bytes)
+            .is_err()
+            || bytes.len() as u64 > MAX_COVER_BYTES
+        {
             continue;
-        };
+        }
         if detect_image_type(&bytes).is_some() {
             store_cover(covers_dir, course_id, &bytes)?;
             return Ok(true);

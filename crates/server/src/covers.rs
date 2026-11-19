@@ -23,7 +23,7 @@
 use std::{
     ffi::OsString,
     fs::{self, Metadata, OpenOptions},
-    io::Write,
+    io::{Read, Write},
     path::{Path, PathBuf},
     process::{Command, Stdio},
     time::UNIX_EPOCH,
@@ -261,6 +261,19 @@ pub(crate) fn auto_detect_course_cover(
     course_id: &str,
     course_root: &Path,
 ) -> Result<bool, CoverError> {
+    auto_detect_course_cover_with(covers_dir, course_id, course_root, &|_| {})
+}
+
+/// `auto_detect_course_cover` with a seam called after a candidate is chosen and before it is opened.
+///
+/// Candidates are opened through the confined media opener and judged on the opened handle, so
+/// a candidate swapped for a link between discovery and open is refused, never followed.
+fn auto_detect_course_cover_with(
+    covers_dir: &Path,
+    course_id: &str,
+    course_root: &Path,
+    before_open: &dyn Fn(&Path),
+) -> Result<bool, CoverError> {
     if !valid_course_id(course_id) {
         return Ok(false);
     }
@@ -274,14 +287,14 @@ pub(crate) fn auto_detect_course_cover(
 
     let priority_stems = ["cover", "folder", "poster", "thumb", "thumbnail"];
     let allowed_exts = ["jpg", "jpeg", "png", "webp"];
-    let mut candidates: Vec<(usize, PathBuf)> = Vec::new();
+    let mut candidates: Vec<(usize, String)> = Vec::new();
 
     for entry in read_dir.flatten() {
-        let path = entry.path();
-        if !path.is_file() {
+        // The directory entry type does not follow links: a link is never a candidate.
+        if !entry.file_type().is_ok_and(|kind| kind.is_file()) {
             continue;
         }
-        let Some(name) = path.file_name().and_then(|s| s.to_str()) else {
+        let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
             continue;
         };
         let lower = name.to_ascii_lowercase();
@@ -292,20 +305,15 @@ pub(crate) fn auto_detect_course_cover(
             continue;
         }
         if let Some(priority) = priority_stems.iter().position(|&s| s == stem) {
-            candidates.push((priority, path));
+            candidates.push((priority, name));
         }
     }
 
-    candidates.sort_by_key(|(p, _)| *p);
+    candidates.sort();
 
-    for (_, candidate_path) in candidates {
-        let Ok(meta) = fs::symlink_metadata(&candidate_path) else {
-            continue;
-        };
-        if !meta.is_file() || meta.len() > MAX_COVER_BYTES as u64 {
-            continue;
-        }
-        let Ok(bytes) = fs::read(&candidate_path) else {
+    for (_, name) in candidates {
+        before_open(&course_root.join(&name));
+        let Some(bytes) = read_confined_image(course_root, &name) else {
             continue;
         };
         if detect_image_type(&bytes).is_some() {
@@ -314,7 +322,7 @@ pub(crate) fn auto_detect_course_cover(
         }
     }
 
-    if let Some(bytes) = extract_fallback_video_cover(course_root) {
+    if let Some(bytes) = extract_fallback_video_cover_with(course_root, before_open) {
         store_cover(covers_dir, course_id, &bytes)?;
         return Ok(true);
     }
@@ -322,8 +330,21 @@ pub(crate) fn auto_detect_course_cover(
     Ok(false)
 }
 
-/// Input protocol whitelist for fallback cover extraction, restricting FFmpeg to local file reads.
-const COVER_FFMPEG_PROTOCOL_WHITELIST: &str = "file";
+/// Reads at most `MAX_COVER_BYTES` from a regular file opened inside the course root.
+fn read_confined_image(course_root: &Path, relative_path: &str) -> Option<Vec<u8>> {
+    let file = learnvault_core::media::open_confined_file(course_root, relative_path).ok()?;
+    if file.metadata().ok()?.len() > MAX_COVER_BYTES as u64 {
+        return None;
+    }
+    let mut bytes = Vec::new();
+    file.take(MAX_COVER_BYTES as u64 + 1)
+        .read_to_end(&mut bytes)
+        .ok()?;
+    (bytes.len() <= MAX_COVER_BYTES).then_some(bytes)
+}
+
+/// Input protocol whitelist for fallback cover extraction, restricting FFmpeg to the already-open descriptor handed on stdin.
+const COVER_FFMPEG_PROTOCOL_WHITELIST: &str = "fd";
 
 /// Maps a supported video extension to its single-file FFmpeg input demuxer.
 ///
@@ -358,12 +379,16 @@ fn cover_ffmpeg_args(video_path: &Path, seek: &str) -> Option<Vec<OsString>> {
         demuxer,
         "-ss",
         seek,
+        "-fd",
+        "0",
         "-i",
     ]
     .into_iter()
     .map(OsString::from)
     .collect();
-    args.push(video_path.as_os_str().to_os_string());
+    // The video arrives as an already-opened, confined handle on stdin (`-fd 0 -i fd:`): FFmpeg never
+    // receives a pathname it could resolve again.
+    args.push(OsString::from("fd:"));
     args.extend(
         [
             "-frames:v",
@@ -406,7 +431,7 @@ fn find_first_video_file(course_root: &Path) -> Option<PathBuf> {
             let Ok(meta) = fs::symlink_metadata(&path) else {
                 continue;
             };
-            if meta.file_type().is_symlink() {
+            if learnvault_core::media::is_link_or_reparse_point(&meta) {
                 continue;
             }
             if meta.is_file() {
@@ -427,13 +452,25 @@ fn find_first_video_file(course_root: &Path) -> Option<PathBuf> {
 
 /// Extracts a single JPEG frame from the course's first video via `ffmpeg`, returning `None`
 /// when no video exists or `ffmpeg` cannot decode a frame (e.g., unavailable or dummy file).
-fn extract_fallback_video_cover(course_root: &Path) -> Option<Vec<u8>> {
+fn extract_fallback_video_cover_with(
+    course_root: &Path,
+    before_open: &dyn Fn(&Path),
+) -> Option<Vec<u8>> {
     let video_path = find_first_video_file(course_root)?;
+    let relative = video_path
+        .strip_prefix(course_root)
+        .ok()?
+        .to_str()?
+        .to_owned();
     for seek in ["00:00:05", "00:00:00"] {
         let args = cover_ffmpeg_args(&video_path, seek)?;
+        before_open(&video_path);
+        // Each attempt gets its own handle (own offset), opened confined and inspected as a
+        // regular file; it is the only way FFmpeg sees the video.
+        let video = learnvault_core::media::open_confined_file(course_root, &relative).ok()?;
         let output = Command::new("ffmpeg")
             .args(args)
-            .stdin(Stdio::null())
+            .stdin(Stdio::from(video))
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .output()
@@ -977,7 +1014,7 @@ mod tests {
                 whitelist_idx < input_idx,
                 "-protocol_whitelist must precede -i: {args:?}"
             );
-            assert_eq!(args[whitelist_idx + 1], "file");
+            assert_eq!(args[whitelist_idx + 1], "fd");
             assert!(
                 demuxer_idx < input_idx,
                 "input -f must precede -i: {args:?}"
@@ -985,7 +1022,9 @@ mod tests {
             assert_eq!(args[demuxer_idx + 1], expected_demuxer);
             assert!(seek_idx < input_idx, "-ss must precede -i: {args:?}");
             assert_eq!(args[seek_idx + 1], "00:00:05");
-            assert_eq!(args[input_idx + 1], file);
+            assert_eq!(args[input_idx + 1], "fd:");
+            assert_eq!(args[input_idx - 2], "-fd");
+            assert_eq!(args[input_idx - 1], "0");
 
             let out_fmt_idx = args[input_idx + 2..]
                 .iter()
@@ -1000,7 +1039,7 @@ mod tests {
     fn cover_ffmpeg_args_rejects_unsupported_extensions() {
         use std::path::Path;
 
-        use super::{cover_ffmpeg_args, extract_fallback_video_cover};
+        use super::{cover_ffmpeg_args, extract_fallback_video_cover_with};
 
         for unsupported in [
             "playlist.m3u8",
@@ -1017,7 +1056,10 @@ mod tests {
         fs::create_dir_all(&course_dir).unwrap();
         fs::write(course_dir.join("playlist.m3u8"), b"#EXTM3U\n").unwrap();
         fs::write(course_dir.join("concat.txt"), b"ffconcat version 1.0\n").unwrap();
-        assert_eq!(extract_fallback_video_cover(&course_dir), None);
+        assert_eq!(
+            extract_fallback_video_cover_with(&course_dir, &|_| {}),
+            None
+        );
     }
 
     fn has_ffmpeg() -> bool {
@@ -1086,7 +1128,7 @@ mod tests {
     #[test]
     fn extract_fallback_video_cover_rejects_concat_playlist_disguised_as_mp4() {
         use super::{
-            auto_detect_course_cover, extract_fallback_video_cover, find_first_video_file,
+            auto_detect_course_cover, extract_fallback_video_cover_with, find_first_video_file,
         };
 
         if !has_ffmpeg() {
@@ -1109,8 +1151,93 @@ mod tests {
         .unwrap();
 
         assert_eq!(find_first_video_file(&course_dir), Some(disguised));
-        assert_eq!(extract_fallback_video_cover(&course_dir), None);
+        assert_eq!(
+            extract_fallback_video_cover_with(&course_dir, &|_| {}),
+            None
+        );
         assert!(!auto_detect_course_cover(&covers, "course-concat", &course_dir).unwrap());
         assert_eq!(cover_version(&covers, "course-concat"), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn image_candidate_swapped_for_an_outside_link_is_never_consumed() {
+        use super::auto_detect_course_cover_with;
+
+        let temp = tempdir().unwrap();
+        let covers = covers_dir(&temp.path().join("learnvault.sqlite"));
+        let course_dir = temp.path().join("course_swap");
+        let outside = temp.path().join("outside-marker.png");
+        fs::create_dir_all(&course_dir).unwrap();
+        fs::write(course_dir.join("cover.png"), png()).unwrap();
+        fs::write(&outside, jpeg()).unwrap();
+
+        // The seam swaps the discovered candidate for a link to a file outside the root.
+        let swapped = auto_detect_course_cover_with(&covers, "course-swap", &course_dir, &|path| {
+            fs::remove_file(path).unwrap();
+            std::os::unix::fs::symlink(&outside, path).unwrap();
+        })
+        .unwrap();
+
+        assert!(!swapped, "the outside marker must not become a cover");
+        assert_eq!(cover_version(&covers, "course-swap"), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn image_candidate_in_a_swapped_directory_link_is_never_consumed() {
+        use super::read_confined_image;
+
+        let temp = tempdir().unwrap();
+        let course_dir = temp.path().join("course_dir_swap");
+        let outside = temp.path().join("outside");
+        fs::create_dir_all(&course_dir).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        fs::write(outside.join("cover.png"), png()).unwrap();
+        std::os::unix::fs::symlink(&outside, course_dir.join("alias")).unwrap();
+
+        assert_eq!(read_confined_image(&course_dir, "alias/cover.png"), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn video_candidate_swapped_for_an_outside_link_is_never_handed_to_ffmpeg() {
+        use super::extract_fallback_video_cover_with;
+
+        if !has_ffmpeg() {
+            return;
+        }
+        let temp = tempdir().unwrap();
+        let course_dir = temp.path().join("course_video_swap");
+        let outside = temp.path().join("outside-marker.mp4");
+        fs::create_dir_all(&course_dir).unwrap();
+        fs::write(course_dir.join("01.mp4"), b"placeholder").unwrap();
+        write_synthetic_mp4(&outside);
+
+        let cover = extract_fallback_video_cover_with(&course_dir, &|path| {
+            let _ = fs::remove_file(path);
+            std::os::unix::fs::symlink(&outside, path).unwrap();
+        });
+
+        assert_eq!(
+            cover, None,
+            "a real video outside the root must not be decoded"
+        );
+    }
+
+    #[test]
+    fn oversized_image_candidate_is_skipped() {
+        use super::read_confined_image;
+
+        let temp = tempdir().unwrap();
+        let course_dir = temp.path().join("course_big");
+        fs::create_dir_all(&course_dir).unwrap();
+        fs::write(
+            course_dir.join("cover.png"),
+            vec![0_u8; super::MAX_COVER_BYTES + 1],
+        )
+        .unwrap();
+
+        assert_eq!(read_confined_image(&course_dir, "cover.png"), None);
     }
 }

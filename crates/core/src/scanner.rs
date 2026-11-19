@@ -138,6 +138,21 @@ pub fn scan(root: &Path) -> Result<ScanOutcome> {
             continue;
         }
 
+        // On Windows a junction or other reparse point may not report as a symlink: refuse it
+        // explicitly, without descending into it.
+        #[cfg(windows)]
+        {
+            let linked = entry
+                .metadata()
+                .is_ok_and(|metadata| crate::media::is_link_or_reparse_point(&metadata));
+            if linked {
+                if file_type.is_dir() {
+                    walker.skip_current_dir();
+                }
+                continue;
+            }
+        }
+
         if file_type.is_dir() {
             let name = entry.file_name().to_string_lossy().into_owned();
             if name.starts_with('.') || is_ignored_directory(&name) {
