@@ -156,6 +156,7 @@ pub(crate) struct CredentialsRequest {
 
 pub(crate) async fn credentials(
     State(state): State<AppState>,
+    peer: Option<Extension<ConnectInfo<SocketAddr>>>,
     headers: HeaderMap,
     Json(request): Json<CredentialsRequest>,
 ) -> Response {
@@ -179,6 +180,23 @@ pub(crate) async fn credentials(
                 StatusCode::UNPROCESSABLE_ENTITY,
                 Json(ErrorResponse {
                     error: "invalid_credentials_format",
+                }),
+            )
+                .into_response(),
+        );
+    }
+    let source = login_source(
+        peer.map(|Extension(ConnectInfo(address))| address),
+        &headers,
+        trusted_proxy_ips(),
+    );
+    let throttle_key = format!("{}\x00{source}", user.user_id);
+    if !state.allow_credential_attempt(&throttle_key).await {
+        return private_no_store(
+            (
+                StatusCode::TOO_MANY_REQUESTS,
+                Json(ErrorResponse {
+                    error: "try again later",
                 }),
             )
                 .into_response(),
