@@ -8,7 +8,7 @@ CONTAINER="${CONTAINER:-learnvault}"
 DATABASE_PATH="${DATABASE_PATH:-/data/learnvault.sqlite}"
 
 if [ -z "$BACKUP_FILE" ]; then
-    printf "Uso: %s <caminho-do-backup.sqlite>\n" "$0" >&2
+    printf "Usage: %s <backup-path.sqlite>\n" "$0" >&2
     exit 1
 fi
 
