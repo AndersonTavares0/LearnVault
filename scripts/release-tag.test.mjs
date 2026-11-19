@@ -180,6 +180,16 @@ test('release smoke is tied to trusted helper code and independent tagged versio
     assert.match(workflow.slice(smokeIndex, digestIndex), /RELEASE_TAG: \$\{\{ needs\.validate-tag\.outputs\.tag \}\}/);
 });
 
+test('release binary smoke retries only transient health readiness failures', () => {
+    const smoke = readFileSync(join(root, 'scripts/smoke-release-binary.sh'), 'utf8');
+    assert.match(smoke, /for attempt in \$\(seq 1 40\)/);
+    assert.match(smoke, /curl -fsS "http:\/\/\$\{addr\}\/api\/healthz"/);
+    assert.match(smoke, /sleep 0\.5/);
+    assert.match(smoke, /Unexpected \/api\/healthz response/);
+    assert.match(smoke, /curl -sS -o "\$smoke_dir\/spa\.html"/);
+    assert.match(smoke, /curl -sS -o "\$smoke_dir\/login\.json"/);
+});
+
 test('real-server CI smoke runs after the SPA build and retains Playwright cache and ffmpeg setup', () => {
     const ci = readFileSync(join(root, '.github/workflows/ci.yml'), 'utf8');
     const e2eStart = ci.indexOf('  e2e-server:');
@@ -281,6 +291,9 @@ test('post-publication verification binds this run digest to targeted aliases an
     assert.match(verify, /manifest unknown\|no such manifest\|404 Not Found/);
     assert.match(verify, /sleep 5/);
     assert.match(verify, /verify-release-index-attestations\.mjs/);
+    assert.match(verify, /imagetools inspect --raw "\$\{IMAGE\}@\$\{push_digest\}"/);
+    assert.match(verify, /\.platform\.os == "linux" and \.platform\.architecture == \$architecture/);
+    assert.match(verify, /amd64-push-index\.json/);
     assert.match(verify, /sha256sum -c SHA256SUMS/);
     assert.match(verify, /"learnvault-\$\{RELEASE_TAG\}\.sbom\.cdx\.json"/);
     assert.match(verify, /"SHA256SUMS\.sigstore\.json"/);

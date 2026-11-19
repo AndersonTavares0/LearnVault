@@ -109,7 +109,7 @@ Provenance and the SBOM are attached to the same digest; inspect them with `dock
 
 The release publishes a keyless Sigstore bundle for `SHA256SUMS`, a CycloneDX SBOM generated from the tagged source and lockfiles with `trivy fs .`, and GitHub Artifact Attestations. The SBOM describes source and dependency metadata; it is not a scan of the compiled binaries. The build provenance covers each file in the release asset directory, and the SBOM attestation covers each Linux server archive, Windows installer/updater bundle, and Flatpak bundle.
 
-Download all assets for the chosen tag with `gh release download <tag> --repo AndersonTavares0/LearnVault`, then verify the checksum manifest signature:
+Download all assets for the chosen tag with `gh release download <tag> --repo AndersonTavares0/LearnVault`, then verify the checksum manifest signature with Cosign v3 or newer. Cosign 2.x cannot verify the published bundle because it does not contain the certificate in the format that version expects:
 
 ```sh
 cosign verify-blob SHA256SUMS \
