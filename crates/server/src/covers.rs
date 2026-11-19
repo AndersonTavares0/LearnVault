@@ -21,6 +21,7 @@
 //! process restart.
 
 use std::{
+    ffi::OsString,
     fs::{self, Metadata, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
@@ -321,11 +322,70 @@ pub(crate) fn auto_detect_course_cover(
     Ok(false)
 }
 
+/// Input protocol whitelist for fallback cover extraction, restricting FFmpeg to local file reads.
+const COVER_FFMPEG_PROTOCOL_WHITELIST: &str = "file";
+
+/// Maps a supported video extension to its single-file FFmpeg input demuxer.
+///
+/// Forcing an explicit container demuxer prevents FFmpeg from content-probing multi-file formats
+/// such as `concat` that could open secondary local files outside the checked course traversal.
+/// MOV external references (`enable_drefs`) remain at FFmpeg's disabled default.
+fn cover_input_demuxer(video_path: &Path) -> Option<&'static str> {
+    let ext = video_path.extension()?.to_str()?;
+    match ext.to_ascii_lowercase().as_str() {
+        "mp4" | "mov" | "m4v" => Some("mov"),
+        "mkv" | "webm" => Some("matroska"),
+        "avi" => Some("avi"),
+        "ts" => Some("mpegts"),
+        _ => None,
+    }
+}
+
+/// Builds the hardened `ffmpeg` argument list for extracting a single JPEG cover frame.
+///
+/// Places `-protocol_whitelist file` and the extension-mapped `-f <demuxer>` before `-i` so
+/// FFmpeg cannot probe playlist/concat demuxers or follow external protocols. Returns `None`
+/// when `video_path` does not have a safely mapped single-file video extension.
+fn cover_ffmpeg_args(video_path: &Path, seek: &str) -> Option<Vec<OsString>> {
+    let demuxer = cover_input_demuxer(video_path)?;
+    let mut args: Vec<OsString> = [
+        "-nostdin",
+        "-loglevel",
+        "error",
+        "-protocol_whitelist",
+        COVER_FFMPEG_PROTOCOL_WHITELIST,
+        "-f",
+        demuxer,
+        "-ss",
+        seek,
+        "-i",
+    ]
+    .into_iter()
+    .map(OsString::from)
+    .collect();
+    args.push(video_path.as_os_str().to_os_string());
+    args.extend(
+        [
+            "-frames:v",
+            "1",
+            "-vf",
+            "scale=640:-2:force_original_aspect_ratio=decrease",
+            "-f",
+            "image2pipe",
+            "-vcodec",
+            "mjpeg",
+            "pipe:1",
+        ]
+        .into_iter()
+        .map(OsString::from),
+    );
+    Some(args)
+}
+
 /// Finds the first regular video file within a bounded depth under `course_root`,
 /// skipping hidden folders and symlinks so the read-only course boundary is preserved.
 fn find_first_video_file(course_root: &Path) -> Option<PathBuf> {
     const MAX_DEPTH: usize = 4;
-    const VIDEO_EXTS: &[&str] = &["mp4", "mkv", "webm", "mov", "avi", "m4v", "ts"];
 
     let mut stack = vec![(course_root.to_path_buf(), 0usize)];
     while let Some((dir, depth)) = stack.pop() {
@@ -350,11 +410,7 @@ fn find_first_video_file(course_root: &Path) -> Option<PathBuf> {
                 continue;
             }
             if meta.is_file() {
-                let is_video = path
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .is_some_and(|ext| VIDEO_EXTS.contains(&ext.to_ascii_lowercase().as_str()));
-                if is_video {
+                if cover_input_demuxer(&path).is_some() {
                     return Some(path);
                 }
             } else if meta.is_dir() && depth < MAX_DEPTH {
@@ -374,20 +430,9 @@ fn find_first_video_file(course_root: &Path) -> Option<PathBuf> {
 fn extract_fallback_video_cover(course_root: &Path) -> Option<Vec<u8>> {
     let video_path = find_first_video_file(course_root)?;
     for seek in ["00:00:05", "00:00:00"] {
+        let args = cover_ffmpeg_args(&video_path, seek)?;
         let output = Command::new("ffmpeg")
-            .args(["-nostdin", "-loglevel", "error", "-ss", seek, "-i"])
-            .arg(&video_path)
-            .args([
-                "-frames:v",
-                "1",
-                "-vf",
-                "scale=640:-2:force_original_aspect_ratio=decrease",
-                "-f",
-                "image2pipe",
-                "-vcodec",
-                "mjpeg",
-                "pipe:1",
-            ])
+            .args(args)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
@@ -889,5 +934,183 @@ mod tests {
         assert_eq!(find_first_video_file(&course_dir), Some(expected));
         // Dummy non-video bytes must gracefully return Ok(false) without failing scans.
         assert!(!auto_detect_course_cover(&covers, "course-video", &course_dir).unwrap());
+    }
+
+    #[test]
+    fn cover_ffmpeg_args_hardens_protocol_whitelist_and_demuxer_before_input() {
+        use std::path::Path;
+
+        use super::cover_ffmpeg_args;
+
+        let cases = [
+            ("lesson.mp4", "mov"),
+            ("lesson.MP4", "mov"),
+            ("lesson.mov", "mov"),
+            ("lesson.m4v", "mov"),
+            ("lesson.mkv", "matroska"),
+            ("lesson.webm", "matroska"),
+            ("lesson.avi", "avi"),
+            ("lesson.ts", "mpegts"),
+        ];
+
+        for (file, expected_demuxer) in cases {
+            let args = cover_ffmpeg_args(Path::new(file), "00:00:05")
+                .unwrap_or_else(|| panic!("expected hardened argv for {file}"));
+            let input_idx = args
+                .iter()
+                .position(|arg| arg == "-i")
+                .expect("argv must contain -i");
+            let whitelist_idx = args
+                .iter()
+                .position(|arg| arg == "-protocol_whitelist")
+                .expect("argv must contain -protocol_whitelist");
+            let demuxer_idx = args
+                .iter()
+                .position(|arg| arg == "-f")
+                .expect("argv must contain input -f");
+            let seek_idx = args
+                .iter()
+                .position(|arg| arg == "-ss")
+                .expect("argv must contain -ss");
+
+            assert!(
+                whitelist_idx < input_idx,
+                "-protocol_whitelist must precede -i: {args:?}"
+            );
+            assert_eq!(args[whitelist_idx + 1], "file");
+            assert!(
+                demuxer_idx < input_idx,
+                "input -f must precede -i: {args:?}"
+            );
+            assert_eq!(args[demuxer_idx + 1], expected_demuxer);
+            assert!(seek_idx < input_idx, "-ss must precede -i: {args:?}");
+            assert_eq!(args[seek_idx + 1], "00:00:05");
+            assert_eq!(args[input_idx + 1], file);
+
+            let out_fmt_idx = args[input_idx + 2..]
+                .iter()
+                .position(|arg| arg == "-f")
+                .map(|offset| input_idx + 2 + offset)
+                .expect("argv must keep output -f image2pipe");
+            assert_eq!(args[out_fmt_idx + 1], "image2pipe");
+        }
+    }
+
+    #[test]
+    fn cover_ffmpeg_args_rejects_unsupported_extensions() {
+        use std::path::Path;
+
+        use super::{cover_ffmpeg_args, extract_fallback_video_cover};
+
+        for unsupported in [
+            "playlist.m3u8",
+            "concat.txt",
+            "clip.flv",
+            "video.ogv",
+            "no_extension",
+        ] {
+            assert_eq!(cover_ffmpeg_args(Path::new(unsupported), "00:00:00"), None);
+        }
+
+        let temp = tempdir().unwrap();
+        let course_dir = temp.path().join("unsupported_only");
+        fs::create_dir_all(&course_dir).unwrap();
+        fs::write(course_dir.join("playlist.m3u8"), b"#EXTM3U\n").unwrap();
+        fs::write(course_dir.join("concat.txt"), b"ffconcat version 1.0\n").unwrap();
+        assert_eq!(extract_fallback_video_cover(&course_dir), None);
+    }
+
+    fn has_ffmpeg() -> bool {
+        std::process::Command::new("ffmpeg")
+            .arg("-version")
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .is_ok_and(|status| status.success())
+    }
+
+    fn write_synthetic_mp4(path: &std::path::Path) {
+        let output = std::process::Command::new("ffmpeg")
+            .args([
+                "-nostdin",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "color=c=blue:s=64x64:d=1",
+                "-c:v",
+                "mpeg4",
+                "-pix_fmt",
+                "yuv420p",
+                "-f",
+                "mp4",
+            ])
+            .arg(path)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::piped())
+            .output()
+            .expect("ffmpeg should execute when available");
+        assert!(
+            output.status.success(),
+            "failed to generate synthetic mp4: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[test]
+    fn extract_fallback_video_cover_decodes_synthetic_video_when_ffmpeg_is_available() {
+        use super::auto_detect_course_cover;
+
+        if !has_ffmpeg() {
+            return;
+        }
+
+        let temp = tempdir().unwrap();
+        let covers = covers_dir(&temp.path().join("learnvault.sqlite"));
+        let course_dir = temp.path().join("course_synthetic");
+        fs::create_dir_all(&course_dir).unwrap();
+        write_synthetic_mp4(&course_dir.join("01.mp4"));
+
+        assert!(auto_detect_course_cover(&covers, "course-synthetic", &course_dir).unwrap());
+        let (bytes, image_type) = read_cover(&covers, "course-synthetic")
+            .unwrap()
+            .expect("synthetic video should produce a stored cover");
+        assert!(!bytes.is_empty());
+        assert_eq!(image_type, ImageType::Jpeg);
+    }
+
+    #[test]
+    fn extract_fallback_video_cover_rejects_concat_playlist_disguised_as_mp4() {
+        use super::{
+            auto_detect_course_cover, extract_fallback_video_cover, find_first_video_file,
+        };
+
+        if !has_ffmpeg() {
+            return;
+        }
+
+        let temp = tempdir().unwrap();
+        let covers = covers_dir(&temp.path().join("learnvault.sqlite"));
+        let course_dir = temp.path().join("course_concat");
+        fs::create_dir_all(&course_dir).unwrap();
+
+        // Store a real video under a non-video extension so traversal skips it, while a
+        // concat playlist masquerading as `01.mp4` tries to make FFmpeg open it indirectly.
+        write_synthetic_mp4(&course_dir.join("target.bin"));
+        let disguised = course_dir.join("01.mp4");
+        fs::write(
+            &disguised,
+            b"ffconcat version 1.0\nfile 'target.bin'\nduration 1\nfile 'target.bin'\nduration 1\n",
+        )
+        .unwrap();
+
+        assert_eq!(find_first_video_file(&course_dir), Some(disguised));
+        assert_eq!(extract_fallback_video_cover(&course_dir), None);
+        assert!(!auto_detect_course_cover(&covers, "course-concat", &course_dir).unwrap());
+        assert_eq!(cover_version(&covers, "course-concat"), None);
     }
 }
