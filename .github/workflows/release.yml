@@ -157,6 +157,52 @@ jobs:
           grep -qx "web/200.html" /tmp/learnvault-linux-amd64.list
           rm "dist/learnvault-linux-amd64" dist/LICENSE
           rm -rf dist/web
+      - name: Smoke test packaged Linux amd64 binary
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          smoke_dir="$(mktemp -d)"
+          smoke_pid=""
+          trap 'if [[ -n "$smoke_pid" ]]; then kill "$smoke_pid" 2>/dev/null || true; wait "$smoke_pid" 2>/dev/null || true; fi; rm -rf "$smoke_dir"' EXIT
+          tar -xzf "dist/learnvault-linux-amd64.tar.gz" -C "$smoke_dir"
+          smoke_ver="$("$smoke_dir/learnvault-linux-amd64" --version)"
+          if [[ "$smoke_ver" != "learnvault-server ${RELEASE_TAG}" ]]; then
+            echo "::error::Unexpected amd64 binary version: $smoke_ver" >&2
+            exit 1
+          fi
+          mkdir -p "$smoke_dir/lib"
+          ADMIN_USERNAME=admin ADMIN_PASSWORD=smoke-test-password-1234 \
+            "$smoke_dir/learnvault-linux-amd64" \
+              --listen-addr 127.0.0.1:0 \
+              --database "$smoke_dir/db.sqlite" \
+              --library-root "$smoke_dir/lib" \
+              --web-root "$smoke_dir/web" \
+              --insecure-http \
+              --no-update-check \
+              >"$smoke_dir/stdout.log" 2>"$smoke_dir/stderr.log" &
+          smoke_pid=$!
+          ready_line=""
+          for _ in $(seq 1 100); do
+            if grep -m1 '^LEARNVAULT_READY ' "$smoke_dir/stdout.log" >"$smoke_dir/ready"; then
+              ready_line="$(cat "$smoke_dir/ready")"
+              break
+            fi
+            if ! kill -0 "$smoke_pid" 2>/dev/null; then
+              echo "::error::learnvault-linux-amd64 exited before becoming ready" >&2
+              cat "$smoke_dir/stderr.log" >&2 || true
+              exit 1
+            fi
+            sleep 0.1
+          done
+          if [[ -z "$ready_line" ]]; then
+            echo "::error::learnvault-linux-amd64 did not emit LEARNVAULT_READY within 10s" >&2
+            cat "$smoke_dir/stderr.log" >&2 || true
+            exit 1
+          fi
+          addr="${ready_line#LEARNVAULT_READY }"
+          curl -fsS "http://${addr}/api/healthz" | jq -e --arg v "$RELEASE_TAG" '.status == "ok" and .version == $v' >/dev/null
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-linux-amd64
@@ -210,6 +256,52 @@ jobs:
           grep -qx "web/200.html" /tmp/learnvault-linux-arm64.list
           rm "dist/learnvault-linux-arm64" dist/LICENSE
           rm -rf dist/web
+      - name: Smoke test packaged Linux arm64 binary
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          smoke_dir="$(mktemp -d)"
+          smoke_pid=""
+          trap 'if [[ -n "$smoke_pid" ]]; then kill "$smoke_pid" 2>/dev/null || true; wait "$smoke_pid" 2>/dev/null || true; fi; rm -rf "$smoke_dir"' EXIT
+          tar -xzf "dist/learnvault-linux-arm64.tar.gz" -C "$smoke_dir"
+          smoke_ver="$("$smoke_dir/learnvault-linux-arm64" --version)"
+          if [[ "$smoke_ver" != "learnvault-server ${RELEASE_TAG}" ]]; then
+            echo "::error::Unexpected arm64 binary version: $smoke_ver" >&2
+            exit 1
+          fi
+          mkdir -p "$smoke_dir/lib"
+          ADMIN_USERNAME=admin ADMIN_PASSWORD=smoke-test-password-1234 \
+            "$smoke_dir/learnvault-linux-arm64" \
+              --listen-addr 127.0.0.1:0 \
+              --database "$smoke_dir/db.sqlite" \
+              --library-root "$smoke_dir/lib" \
+              --web-root "$smoke_dir/web" \
+              --insecure-http \
+              --no-update-check \
+              >"$smoke_dir/stdout.log" 2>"$smoke_dir/stderr.log" &
+          smoke_pid=$!
+          ready_line=""
+          for _ in $(seq 1 100); do
+            if grep -m1 '^LEARNVAULT_READY ' "$smoke_dir/stdout.log" >"$smoke_dir/ready"; then
+              ready_line="$(cat "$smoke_dir/ready")"
+              break
+            fi
+            if ! kill -0 "$smoke_pid" 2>/dev/null; then
+              echo "::error::learnvault-linux-arm64 exited before becoming ready" >&2
+              cat "$smoke_dir/stderr.log" >&2 || true
+              exit 1
+            fi
+            sleep 0.1
+          done
+          if [[ -z "$ready_line" ]]; then
+            echo "::error::learnvault-linux-arm64 did not emit LEARNVAULT_READY within 10s" >&2
+            cat "$smoke_dir/stderr.log" >&2 || true
+            exit 1
+          fi
+          addr="${ready_line#LEARNVAULT_READY }"
+          curl -fsS "http://${addr}/api/healthz" | jq -e --arg v "$RELEASE_TAG" '.status == "ok" and .version == $v' >/dev/null
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-linux-arm64
@@ -423,6 +515,16 @@ jobs:
           format: table
           severity: HIGH,CRITICAL
           exit-code: '1'
+      - name: Smoke test the pushed ${{ matrix.arch }} image
+        shell: bash
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}@${{ steps.push.outputs.digest }}
+          CONTAINER: learnvault-release-smoke-${{ matrix.arch }}-${{ github.run_id }}
+          SKIP_BUILD: '1'
+        run: |
+          set -euo pipefail
+          docker pull "$IMAGE"
+          ./scripts/verify-rust-oci.sh
       - name: Keep the scanned digest for the index
         shell: bash
         env:

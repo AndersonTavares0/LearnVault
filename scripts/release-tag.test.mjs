@@ -204,3 +204,18 @@ test('a release must be published and not a draft; a pre-release is flagged so i
     assert.equal(run('v0.9.0', '{"isDraft":false,"isPrerelease":true}').status, 0);
     assert.match(readFileSync(output, 'utf8'), /prerelease=false\nprerelease=true\n$/);
 });
+
+test('packaged Linux binaries and container images are smoke-tested before upload or index tagging', () => {
+    for (const arch of ['amd64', 'arm64']) {
+        const block = runBlock(`Smoke test packaged Linux ${arch} binary`);
+        assert.match(block, /--version/);
+        assert.match(block, /--listen-addr 127\.0\.0\.1:0/);
+        assert.match(block, /--no-update-check/);
+        assert.match(block, /LEARNVAULT_READY/);
+        assert.match(block, /\/api\/healthz/);
+    }
+    const ociBlock = runBlock('Smoke test the pushed ${{ matrix.arch }} image');
+    assert.match(ociBlock, /docker pull "\$IMAGE"/);
+    assert.match(ociBlock, /\.\/scripts\/verify-rust-oci\.sh/);
+    assert.match(workflow, /SKIP_BUILD: '1'/);
+});
