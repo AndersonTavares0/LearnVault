@@ -158,7 +158,7 @@ impl UpdateChecker {
         let mut cache = self.cache.lock().await;
         cache.last_attempt = Some(Instant::now());
         match fetched {
-            Ok(release) => match evaluate(&release, VERSION) {
+            Ok(release) => match evaluate(&release, comparison_version()) {
                 Ok(evaluation) => {
                     let success = success_from(&release, evaluation, checked_at_now());
                     cache.success = Some(success.clone());
@@ -385,6 +385,16 @@ fn evaluate(release: &ReleaseInfo, current: &str) -> Result<Evaluation, String> 
     } else {
         Evaluation::UpToDate
     })
+}
+
+/// SemVer-safe value of the running version for comparisons: a source build (`dev`) ranks
+/// below every release, as the former `0.0.0` placeholder did. It is never displayed.
+fn comparison_version() -> &'static str {
+    if VERSION == crate::DEV_VERSION {
+        "0.0.0"
+    } else {
+        VERSION
+    }
 }
 
 /// Parses the JSON body of GitHub's release endpoint.
@@ -624,7 +634,7 @@ fn github_client() -> Result<&'static reqwest::Client, String> {
 pub(crate) fn github_fetcher() -> Fetcher {
     Arc::new(|| {
         Box::pin(async {
-            if VERSION == "0.0.0" {
+            if VERSION == crate::DEV_VERSION {
                 return Err("versão local indisponível para comparação".to_owned());
             }
             let client = github_client()?;

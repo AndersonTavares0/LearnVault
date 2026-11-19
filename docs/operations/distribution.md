@@ -23,7 +23,7 @@ If you are developing or studying the architecture, start with the [README](../.
 
 ### Update Notifications
 
-When enabled in configuration, the server queries the public GitHub Releases API over HTTPS and compares the latest stable tag with the local running version using strict SemVer. The check times out after 5 seconds, consumes at most 64 KiB, and caches results in-process for 1 hour. No binaries or files are ever downloaded or installed automatically. Local builds (`0.0.0`) skip remote checks.
+When enabled in configuration, the server queries the public GitHub Releases API over HTTPS and compares the latest stable tag with the local running version using strict SemVer. The check times out after 5 seconds, consumes at most 64 KiB, and caches results in-process for 1 hour. No binaries or files are ever downloaded or installed automatically. Source builds report the version `dev` (the manifest placeholder `0.0.0` is never shown) and skip remote checks.
 
 ### Desktop Automatic Update Checks
 
