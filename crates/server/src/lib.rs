@@ -56,12 +56,25 @@ use axum::{
 use tokio::net::TcpListener;
 use tower::ServiceBuilder;
 
+/// Version shown by builds that carry neither an injected version nor a real manifest version.
+pub const DEV_VERSION: &str = "dev";
+
+/// Picks the version identity: an injected release version wins; the workspace manifest's
+/// placeholder `0.0.0` (source builds) is reported as `dev` instead of a misleading number.
+const fn resolve_version(injected: Option<&'static str>, manifest: &'static str) -> &'static str {
+    match injected {
+        Some(version) if !version.is_empty() => version,
+        _ if matches!(manifest.as_bytes(), b"0.0.0") => DEV_VERSION,
+        _ => manifest,
+    }
+}
+
 /// Version identity of the server: Release Please owns the release version;
 /// the manifest's `0.0.0` must never be published, and packaged builds inject the version.
-pub const VERSION: &str = match option_env!("LEARNVAULT_BUILD_VERSION") {
-    Some(version) if !version.is_empty() => version,
-    _ => env!("CARGO_PKG_VERSION"),
-};
+pub const VERSION: &str = resolve_version(
+    option_env!("LEARNVAULT_BUILD_VERSION"),
+    env!("CARGO_PKG_VERSION"),
+);
 
 /// Assembles the server's minimal public routes.
 pub fn build_router(state: AppState) -> Router {
@@ -397,7 +410,8 @@ mod tests {
     use tower::ServiceExt;
 
     use super::{
-        AppState, Command, Config, VERSION, build_router, parse_command, serve, with_request_limits,
+        AppState, Command, Config, DEV_VERSION, VERSION, build_router, parse_command,
+        resolve_version, serve, with_request_limits,
     };
 
     async fn media_app() -> (axum::Router, tempfile::TempDir, AppState) {
@@ -465,13 +479,13 @@ mod tests {
     }
 
     #[test]
-    fn version_identity_uses_injected_value_or_manifest_version() {
+    fn version_identity_prefers_injection_and_hides_the_manifest_placeholder() {
         assert!(!VERSION.is_empty());
-        let expected = match option_env!("LEARNVAULT_BUILD_VERSION") {
-            Some(version) if !version.is_empty() => version,
-            _ => env!("CARGO_PKG_VERSION"),
-        };
-        assert_eq!(VERSION, expected);
+        assert_ne!(VERSION, "0.0.0");
+        assert_eq!(resolve_version(Some("1.2.3"), "0.0.0"), "1.2.3");
+        assert_eq!(resolve_version(Some(""), "0.0.0"), DEV_VERSION);
+        assert_eq!(resolve_version(None, "0.0.0"), DEV_VERSION);
+        assert_eq!(resolve_version(None, "0.9.5"), "0.9.5");
     }
 
     #[tokio::test]
