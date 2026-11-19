@@ -43,7 +43,7 @@ mod migrations;
 pub use annotations::{
     MAX_PDF_PAGE, MAX_PDF_RECTS, NewPdfAnnotation, PdfAnnotation, PdfAnnotationColor,
     PdfAnnotationKind, PdfRect, create_pdf_annotation, delete_pdf_annotation, list_pdf_annotations,
-    update_pdf_annotation,
+    pdf_annotation_media_id, update_pdf_annotation,
 };
 pub use auth::{
     AuthSession, AuthUser, LocalUserSummary, bootstrap_admin, bootstrap_admin_with_change_required,

@@ -1,8 +1,8 @@
 import { tr } from './i18n';
-import { selectPlayableMedia } from './player';
+import { mediaPlaybackKind, selectPlayableMedia } from './player';
 import type { CatalogNode, FileEntry } from './transport';
 
-export type FileCounts = { videos: number; materials: number };
+export type FileCounts = { videos: number; audios?: number; materials: number };
 export type CatalogCounts = FileCounts & { modules: number; lessons: number; missingLessons: number };
 
 /** Study data follows the selected media and retains its catalog ID when playback is unavailable. */
@@ -49,10 +49,12 @@ export function isLessonMissing(node: CatalogNode): boolean {
  * not in the parent row.
  */
 export function countCatalogFiles(node: CatalogNode): FileCounts {
-	const counts: FileCounts = { videos: 0, materials: 0 };
+	const counts: FileCounts = { videos: 0, audios: 0, materials: 0 };
 	for (const file of [...node.files, ...node.looseFiles]) {
-		if (file.kind === 'media') counts.videos += 1;
-		else if (file.kind === 'subtitle' || file.kind === 'material') counts.materials += 1;
+		if (file.kind === 'media') {
+			if (mediaPlaybackKind(file) === 'audio') counts.audios = (counts.audios ?? 0) + 1;
+			else counts.videos += 1;
+		} else if (file.kind === 'subtitle' || file.kind === 'material') counts.materials += 1;
 	}
 	return counts;
 }
@@ -97,7 +99,7 @@ export function countCatalogNode(node: CatalogNode): CatalogCounts {
 			else counts.lessons += 1;
 		}
 		const files = countCatalogFiles(current);
-		counts.videos += files.videos;
+		counts.videos += files.videos + (files.audios ?? 0);
 		counts.materials += files.materials;
 		for (const child of current.children) walk(child);
 	}
@@ -210,10 +212,12 @@ export function formatCourseCardMeta(counts: CatalogCounts): string {
 	]);
 }
 
-/** Lesson row metadata: videos and materials in the node itself, omitting zero counts. */
+/** Lesson row metadata: videos, audios, and materials in the node itself, omitting zero counts. */
 export function formatLessonMeta(counts: FileCounts): string {
+	const audios = counts.audios ?? 0;
 	return joinParts([
 		counts.videos > 0 ? formatCount(counts.videos, tr('video', 'vídeo'), tr('videos', 'vídeos')) : '',
+		audios > 0 ? formatCount(audios, tr('audio', 'áudio'), tr('audios', 'áudios')) : '',
 		counts.materials > 0 ? formatCount(counts.materials, tr('material', 'material'), tr('materials', 'materiais')) : ''
 	]);
 }

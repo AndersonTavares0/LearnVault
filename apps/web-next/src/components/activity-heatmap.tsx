@@ -114,7 +114,14 @@ export function ActivityHeatmap({ today, activeDays, activity }: { today: string
 				<div aria-hidden="true" className="mt-7 mb-2 grid w-6 shrink-0 grid-rows-7 gap-[3px] text-xs leading-none text-muted-foreground">
 					{weekdays.map((day, index) => <span key={index} className="flex items-center">{day}</span>)}
 				</div>
-				<div ref={scroller} className="min-w-0 flex-1 overflow-x-auto pb-2">
+				<div
+					ref={scroller}
+					role="region"
+					aria-label={tr('Study activity heatmap', 'Mapa de atividade de estudo')}
+					// eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- scrollable region must be keyboard-focusable
+					tabIndex={0}
+					className="min-w-0 flex-1 overflow-x-auto rounded-lg pb-2 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring"
+				>
 					<div aria-hidden="true" className="w-max sm:w-full">
 						<div className="relative mb-3 h-4 text-xs whitespace-nowrap text-muted-foreground">
 							{months.map((month) => <span key={month.key} className="absolute" style={{ left: `${(month.week / WEEKS) * 100}%` }}>{month.label}</span>)}

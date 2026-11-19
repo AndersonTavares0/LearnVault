@@ -81,7 +81,12 @@ export function ReviewPage() {
 				{due > 0 && <Link to={`/review?course=${ALL}`} className={buttonVariants({ className: 'rounded-full' })}>{tr(`Review all due cards (${due})`, `Revisar todos os cartões a vencer (${due})`)}</Link>}
 				{exportUrl && <a href={exportUrl} download="learnvault-cards.tsv" className="inline-flex h-11 items-center gap-2 rounded-full border bg-card px-5 text-sm font-medium hover:bg-brand-tint"><Download className="size-4" aria-hidden="true" />{tr('Export for Anki', 'Exportar para o Anki')}</a>}
 			</>}
-			footer={(id) => tr(`${decks.get(id)?.due ?? 0} due · ${decks.get(id)?.total ?? 0} cards`, `${decks.get(id)?.due ?? 0} vencem · ${decks.get(id)?.total ?? 0} cartões`)}
+			footer={(id) => {
+				const deck = decks.get(id);
+				const dueCount = deck?.due ?? 0;
+				const totalCount = deck?.total ?? 0;
+				return `${tr(`${dueCount} due`, `${dueCount} ${dueCount === 1 ? 'vence' : 'vencem'}`)} · ${formatCount(totalCount, tr('card', 'cartão'), tr('cards', 'cartões'))}`;
+			}}
 			to={(id) => `/review?course=${encodeURIComponent(id)}`}
 			hasGone={decks.has(GONE)}
 		/>

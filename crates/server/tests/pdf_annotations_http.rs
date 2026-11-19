@@ -383,3 +383,300 @@ async fn annotations_need_a_session_and_the_same_origin() {
         .unwrap();
     assert_eq!(malformed.status(), StatusCode::BAD_REQUEST);
 }
+
+fn seed_course_media(temp: &TempDir, library_id: &str, media: &[&str]) {
+    let db = Database::open(database_path(temp)).unwrap();
+    db.connection()
+        .execute_batch(&format!(
+            "INSERT INTO library (library_id, available) VALUES ('{library_id}', 1);"
+        ))
+        .unwrap();
+    for media_id in media {
+        let path = format!("{library_id}/{media_id}.pdf");
+        let key = learnvault_core::paths::relative_path_key(&path, KeyMode::for_host()).unwrap();
+        db.connection()
+            .execute_batch(&format!(
+                "INSERT INTO media (media_id, library_id, relative_path, relative_path_key, size, mtime, availability)
+                 VALUES ('{media_id}', '{library_id}', '{path}', '{key}', 1024, 1760000000, 'available');"
+            ))
+            .unwrap();
+    }
+}
+
+#[tokio::test]
+async fn annotations_enforce_course_access_grants() {
+    let temp = tempfile::tempdir().unwrap();
+    seed_user(&temp, READER_ID, READER, READER_PASSWORD);
+    seed_course_media(&temp, "course-1", &["m1"]);
+    seed_course_media(&temp, "course-2", &["m2"]);
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let admin = login(&app, ADMIN, ADMIN_PASSWORD).await;
+    let reader = login(&app, READER, READER_PASSWORD).await;
+
+    // Restrict reader to course-1 only.
+    let grant = app
+        .clone()
+        .oneshot(put_json(
+            &format!("/api/admin/users/{READER_ID}/courses"),
+            &admin,
+            r#"{"allowed_course_ids":["course-1"]}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(grant.status(), StatusCode::OK);
+
+    // Admin retains full access to course-2.
+    let admin_m2 = app
+        .clone()
+        .oneshot(post_json(
+            "/api/study/pdf-annotations",
+            &admin,
+            &HIGHLIGHT.replace("m1", "m2"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(admin_m2.status(), StatusCode::CREATED);
+    let admin_m2_id = json_body(admin_m2).await["annotation_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+
+    // Granted course (course-1) works for reader.
+    let reader_m1 = app
+        .clone()
+        .oneshot(post_json("/api/study/pdf-annotations", &reader, HIGHLIGHT))
+        .await
+        .unwrap();
+    assert_eq!(reader_m1.status(), StatusCode::CREATED);
+    let reader_m1_id = json_body(reader_m1).await["annotation_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+
+    let listed_m1 = app
+        .clone()
+        .oneshot(get_with_cookie(
+            "/api/study/pdf-annotations?media_id=m1",
+            &reader,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(listed_m1.status(), StatusCode::OK);
+    assert_eq!(
+        json_body(listed_m1).await["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+
+    let edited_m1 = app
+        .clone()
+        .oneshot(put_json(
+            &format!("/api/study/pdf-annotations/{reader_m1_id}"),
+            &reader,
+            r#"{"color":"blue"}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(edited_m1.status(), StatusCode::OK);
+
+    let deleted_m1 = app
+        .clone()
+        .oneshot(delete(
+            &format!("/api/study/pdf-annotations/{reader_m1_id}"),
+            &reader,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(deleted_m1.status(), StatusCode::NO_CONTENT);
+
+    // Ungranted course (course-2) is denied with 404 media_not_found,
+    // indistinguishable from a nonexistent media_id.
+    let list_ungranted = app
+        .clone()
+        .oneshot(get_with_cookie(
+            "/api/study/pdf-annotations?media_id=m2",
+            &reader,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(list_ungranted.status(), StatusCode::NOT_FOUND);
+    let list_ungranted_body = json_body(list_ungranted).await;
+
+    let list_missing = app
+        .clone()
+        .oneshot(get_with_cookie(
+            "/api/study/pdf-annotations?media_id=ghost",
+            &reader,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(list_missing.status(), StatusCode::NOT_FOUND);
+    assert_eq!(list_ungranted_body, json_body(list_missing).await);
+
+    let create_ungranted = app
+        .clone()
+        .oneshot(post_json(
+            "/api/study/pdf-annotations",
+            &reader,
+            &HIGHLIGHT.replace("m1", "m2"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(create_ungranted.status(), StatusCode::NOT_FOUND);
+    let create_ungranted_body = json_body(create_ungranted).await;
+
+    let create_missing = app
+        .clone()
+        .oneshot(post_json(
+            "/api/study/pdf-annotations",
+            &reader,
+            &HIGHLIGHT.replace("m1", "ghost"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(create_missing.status(), StatusCode::NOT_FOUND);
+    assert_eq!(create_ungranted_body, json_body(create_missing).await);
+
+    let update_ungranted = app
+        .clone()
+        .oneshot(put_json(
+            &format!("/api/study/pdf-annotations/{admin_m2_id}"),
+            &reader,
+            r#"{"color":"pink"}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(update_ungranted.status(), StatusCode::NOT_FOUND);
+
+    let delete_ungranted = app
+        .oneshot(delete(
+            &format!("/api/study/pdf-annotations/{admin_m2_id}"),
+            &reader,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(delete_ungranted.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn annotations_become_inaccessible_after_course_revocation() {
+    let temp = tempfile::tempdir().unwrap();
+    seed_user(&temp, READER_ID, READER, READER_PASSWORD);
+    seed_course_media(&temp, "course-1", &["m1"]);
+    seed_course_media(&temp, "course-2", &["m2"]);
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let admin = login(&app, ADMIN, ADMIN_PASSWORD).await;
+    let reader = login(&app, READER, READER_PASSWORD).await;
+
+    // Grant both courses initially so reader creates an annotation on course-2.
+    let grant = app
+        .clone()
+        .oneshot(put_json(
+            &format!("/api/admin/users/{READER_ID}/courses"),
+            &admin,
+            r#"{"allowed_course_ids":["course-1","course-2"]}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(grant.status(), StatusCode::OK);
+
+    let created = app
+        .clone()
+        .oneshot(post_json(
+            "/api/study/pdf-annotations",
+            &reader,
+            &HIGHLIGHT.replace("m1", "m2"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let annotation_id = json_body(created).await["annotation_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+
+    // Admin revokes course-2.
+    let revoke = app
+        .clone()
+        .oneshot(put_json(
+            &format!("/api/admin/users/{READER_ID}/courses"),
+            &admin,
+            r#"{"allowed_course_ids":["course-1"]}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(revoke.status(), StatusCode::OK);
+
+    // Reader can no longer list, create, update, or delete annotations on m2.
+    let listed = app
+        .clone()
+        .oneshot(get_with_cookie(
+            "/api/study/pdf-annotations?media_id=m2",
+            &reader,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(listed.status(), StatusCode::NOT_FOUND);
+
+    let created_again = app
+        .clone()
+        .oneshot(post_json(
+            "/api/study/pdf-annotations",
+            &reader,
+            &HIGHLIGHT.replace("m1", "m2"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(created_again.status(), StatusCode::NOT_FOUND);
+
+    let updated = app
+        .clone()
+        .oneshot(put_json(
+            &format!("/api/study/pdf-annotations/{annotation_id}"),
+            &reader,
+            r#"{"color":"green","content":"changed while revoked"}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(updated.status(), StatusCode::NOT_FOUND);
+
+    let deleted = app
+        .clone()
+        .oneshot(delete(
+            &format!("/api/study/pdf-annotations/{annotation_id}"),
+            &reader,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(deleted.status(), StatusCode::NOT_FOUND);
+
+    // Re-granting course-2 confirms the original annotation was untouched.
+    let regrant = app
+        .clone()
+        .oneshot(put_json(
+            &format!("/api/admin/users/{READER_ID}/courses"),
+            &admin,
+            r#"{"allowed_course_ids":["course-1","course-2"]}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(regrant.status(), StatusCode::OK);
+
+    let restored = app
+        .oneshot(get_with_cookie(
+            "/api/study/pdf-annotations?media_id=m2",
+            &reader,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(restored.status(), StatusCode::OK);
+    let items = json_body(restored).await["items"]
+        .as_array()
+        .unwrap()
+        .clone();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["annotation_id"], annotation_id);
+    assert_eq!(items[0]["color"], "yellow");
+}
