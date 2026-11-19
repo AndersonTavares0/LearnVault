@@ -10,6 +10,7 @@ const docsOnlyResults = {
 	e2eServer: "skipped",
 	rustContainer: "skipped",
 	rust: "skipped",
+	windowsCore: "skipped",
 	desktop: "skipped",
 	rustAudit: "skipped",
 };
@@ -24,6 +25,7 @@ const docsOnlyNeeds = {
 	"e2e-server": { result: "skipped" },
 	"rust-container": { result: "skipped" },
 	rust: { result: "skipped" },
+	"windows-core": { result: "skipped" },
 	desktop: { result: "skipped" },
 	"rust-audit": { result: "skipped" },
 };
