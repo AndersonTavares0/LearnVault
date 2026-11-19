@@ -636,3 +636,85 @@ async fn credentials_rejections_before_the_handler_are_never_cacheable() {
     assert_eq!(oversized.status(), StatusCode::PAYLOAD_TOO_LARGE);
     assert_eq!(oversized.headers()["cache-control"], "no-store");
 }
+
+#[tokio::test(start_paused = true)]
+async fn credentials_change_is_rate_limited_without_affecting_login() {
+    let temp = tempfile::tempdir().unwrap();
+    let app = build_router(AppState::initialize(config(&temp, false)).await.unwrap());
+    let (status, cookie) = login(&app, "admin", "admin").await;
+    assert_eq!(status, StatusCode::OK);
+
+    for _ in 0..5 {
+        let failed = app
+            .clone()
+            .oneshot(
+                Request::post("/api/account/credentials")
+                    .header("content-type", "application/json")
+                    .header("origin", "http://localhost")
+                    .header("cookie", &cookie)
+                    .body(Body::from(
+                        serde_json::json!({
+                            "current_password": "wrong current password",
+                            "username": "owner",
+                            "password": "uma senha nova muito segura"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(failed.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    // Over the limit within the window: 429 Too Many Requests.
+    let throttled = app
+        .clone()
+        .oneshot(
+            Request::post("/api/account/credentials")
+                .header("content-type", "application/json")
+                .header("origin", "http://localhost")
+                .header("cookie", &cookie)
+                .body(Body::from(
+                    serde_json::json!({
+                        "current_password": "admin",
+                        "username": "owner",
+                        "password": "uma senha nova muito segura"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(throttled.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(throttled.headers()["cache-control"], "private, no-store");
+    assert_eq!(body(throttled).await["error"], "try again later");
+
+    // Login throttling from the same source remains unaffected.
+    let (login_status, _) = login(&app, "admin", "admin").await;
+    assert_eq!(login_status, StatusCode::OK);
+
+    // After the rate-limit window expires, a correct current password succeeds.
+    tokio::time::advance(std::time::Duration::from_secs(61)).await;
+    let allowed = app
+        .oneshot(
+            Request::post("/api/account/credentials")
+                .header("content-type", "application/json")
+                .header("origin", "http://localhost")
+                .header("cookie", &cookie)
+                .body(Body::from(
+                    serde_json::json!({
+                        "current_password": "admin",
+                        "username": "owner",
+                        "password": "uma senha nova muito segura"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(allowed.status(), StatusCode::OK);
+    assert_eq!(body(allowed).await["username"], "owner");
+}
