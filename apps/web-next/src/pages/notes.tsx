@@ -179,12 +179,12 @@ function Notebook({ courseId }: { courseId: string | null }) {
 			<div className={cn('grid items-start gap-8', courses.length > 1 && 'lg:grid-cols-[15rem_minmax(0,1fr)]')}>
 				{courses.length > 1 && (
 					<aside aria-label={tr('Courses', 'Cursos')} className="hidden space-y-1 lg:block">
-						<button type="button" onClick={() => setParams({})} className={cn('flex min-h-11 w-full items-center justify-between gap-2 rounded-xl px-3.5 py-2 text-left text-sm transition-colors duration-150', courseId === null ? 'bg-panel font-semibold text-foreground' : 'text-muted-foreground hover:bg-brand-tint hover:text-foreground')}>
+						<button type="button" onClick={() => setParams({})} aria-pressed={courseId === null} className={cn('flex min-h-11 w-full items-center justify-between gap-2 rounded-xl px-3.5 py-2 text-left text-sm transition-colors duration-150', courseId === null ? 'bg-panel font-semibold text-foreground' : 'text-muted-foreground hover:bg-brand-tint hover:text-foreground')}>
 							<span className="truncate">{tr('All courses', 'Todos os cursos')}</span>
 							<span className="shrink-0 text-xs tabular-nums">{totalNotes}</span>
 						</button>
 						{courses.map((course) => (
-							<button key={course.id} type="button" onClick={() => setParams({ course: course.id })} className={cn('flex min-h-11 w-full items-center justify-between gap-2 rounded-xl px-3.5 py-2 text-left text-sm transition-colors duration-150', courseId === course.id ? 'bg-panel font-semibold text-foreground' : 'text-muted-foreground hover:bg-brand-tint hover:text-foreground')}>
+							<button key={course.id} type="button" onClick={() => setParams({ course: course.id })} aria-pressed={courseId === course.id} className={cn('flex min-h-11 w-full items-center justify-between gap-2 rounded-xl px-3.5 py-2 text-left text-sm transition-colors duration-150', courseId === course.id ? 'bg-panel font-semibold text-foreground' : 'text-muted-foreground hover:bg-brand-tint hover:text-foreground')}>
 								<span className="line-clamp-2 min-w-0">{course.title}</span>
 								<span className="shrink-0 text-xs tabular-nums">{course.count}</span>
 							</button>
