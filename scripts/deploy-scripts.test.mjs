@@ -1,9 +1,184 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
+import path, { resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
+
+function normalizeCopyPath(rawPath) {
+    return rawPath.trim().replace(/^\.\/+/, '').replace(/\/+$/, '');
+}
+
+export function parseContainerfileStageCopies(containerfileSource) {
+    const stages = new Map();
+    let currentStage = null;
+
+    for (const rawLine of containerfileSource.split(/\r?\n/)) {
+        const line = rawLine.trim();
+        if (!line || line.startsWith('#')) continue;
+
+        const fromMatch = /^FROM\s+\S+(?:\s+AS\s+([A-Za-z0-9_-]+))?/i.exec(line);
+        if (fromMatch) {
+            currentStage = fromMatch[1] ?? null;
+            if (currentStage && !stages.has(currentStage)) {
+                stages.set(currentStage, []);
+            }
+            continue;
+        }
+
+        if (!currentStage || !/^COPY\s+/i.test(line)) continue;
+        const tokens = line.replace(/^COPY\s+/i, '').trim().split(/\s+/);
+        const args = tokens.filter((token) => !token.startsWith('--'));
+        if (tokens.some((token) => token.startsWith('--from=')) || args.length < 2) continue;
+
+        const destination = normalizeCopyPath(args.at(-1));
+        const sources = args.slice(0, -1).map(normalizeCopyPath);
+
+        if (sources.length === 1 && destination === sources[0]) {
+            stages.get(currentStage).push(sources[0]);
+            continue;
+        }
+
+        for (const source of sources) {
+            const destPath = destination === '' ? source : `${destination}/${path.posix.basename(source)}`;
+            if (destPath === source) {
+                stages.get(currentStage).push(source);
+            }
+        }
+    }
+
+    return stages;
+}
+
+function isCoveredByCopiedPaths(targetPath, copiedPaths) {
+    return copiedPaths.some((copied) => targetPath === copied || targetPath.startsWith(`${copied}/`));
+}
+
+function collectFiles(dirPath, predicate) {
+    const results = [];
+    for (const entry of readdirSync(dirPath, { withFileTypes: true })) {
+        if (entry.name === 'node_modules' || entry.name === 'target' || entry.name === 'dist') continue;
+        const fullPath = path.join(dirPath, entry.name);
+        if (entry.isDirectory()) {
+            results.push(...collectFiles(fullPath, predicate));
+        } else if (entry.isFile() && predicate(fullPath)) {
+            results.push(fullPath);
+        }
+    }
+    return results.sort();
+}
+
+function stripComments(source) {
+    return source
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/^\s*\/\/.*$/gm, '');
+}
+
+function extractRelativeSpecifiers(filePath, source) {
+    const clean = stripComments(source);
+    const specifiers = [];
+
+    if (filePath.endsWith('.rs')) {
+        const rustMacroRe = /\b(?:include_str|include_bytes|include)!\s*\(\s*"([^"]+)"\s*\)/g;
+        for (const match of clean.matchAll(rustMacroRe)) {
+            if (match[1].startsWith('.')) specifiers.push(match[1]);
+        }
+        const pathAttrRe = /#\[\s*path\s*=\s*"([^"]+)"\s*\]/g;
+        for (const match of clean.matchAll(pathAttrRe)) {
+            if (match[1].startsWith('.')) specifiers.push(match[1]);
+        }
+        return specifiers;
+    }
+
+    if (filePath.endsWith('.html')) {
+        const htmlRefRe = /\b(?:src|href)\s*=\s*["'](\.[^"']+)["']/g;
+        for (const match of clean.matchAll(htmlRefRe)) {
+            specifiers.push(match[1]);
+        }
+        return specifiers;
+    }
+
+    if (filePath.endsWith('.css')) {
+        const cssImportRe = /@import\s+(?:url\(\s*)?['"](\.[^'"]+)['"]\s*\)?/g;
+        for (const match of clean.matchAll(cssImportRe)) {
+            specifiers.push(match[1]);
+        }
+        const cssUrlRe = /\burl\(\s*['"]?(\.[^)'"\s]+)['"]?\s*\)/g;
+        for (const match of clean.matchAll(cssUrlRe)) {
+            specifiers.push(match[1]);
+        }
+        return specifiers;
+    }
+
+    const importExportRe = /\b(?:import|export)\s+(?:[^'"]*?\s+from\s+)?['"](\.[^'"]+)['"]/g;
+    for (const match of clean.matchAll(importExportRe)) {
+        specifiers.push(match[1]);
+    }
+    const dynamicImportRe = /\bimport\s*\(\s*['"](\.[^'"]+)['"]\s*\)/g;
+    for (const match of clean.matchAll(dynamicImportRe)) {
+        specifiers.push(match[1]);
+    }
+    const urlImportRe = /\bnew\s+URL\s*\(\s*['"](\.[^'"]+)['"]\s*,\s*import\.meta\.url\s*\)/g;
+    for (const match of clean.matchAll(urlImportRe)) {
+        specifiers.push(match[1]);
+    }
+    return specifiers;
+}
+
+export function auditContainerfileBuildInputs({
+    containerfileSource,
+    rootDir = root
+} = {}) {
+    const stages = parseContainerfileStageCopies(containerfileSource);
+    const webCopies = stages.get('web-build') ?? [];
+    const rustCopies = stages.get('rust-build') ?? [];
+    const errors = [];
+
+    const webFiles = collectFiles(
+        path.join(rootDir, 'apps/web-next'),
+        (file) =>
+            /\.(?:[cm]?[jt]sx?|css|html)$/.test(file) &&
+            !/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(file) &&
+            path.basename(file) !== 'vite.config.ts' &&
+            path.basename(file) !== 'eslint.config.js'
+    );
+
+    const rustFiles = [
+        ...collectFiles(path.join(rootDir, 'crates/core/src'), (file) => file.endsWith('.rs')),
+        ...collectFiles(path.join(rootDir, 'crates/server/src'), (file) => file.endsWith('.rs'))
+    ];
+
+    const checkFiles = (files, boundaryPrefix, stageName, copiedPaths) => {
+        for (const fullFile of files) {
+            const relFile = path.relative(rootDir, fullFile).split(path.sep).join('/');
+            const fileDir = path.posix.dirname(relFile);
+            const source = readFileSync(fullFile, 'utf8');
+
+            for (const rawSpec of extractRelativeSpecifiers(relFile, source)) {
+                const cleanSpec = rawSpec.split('?')[0].split('#')[0];
+                if (!cleanSpec) continue;
+                const targetPath = path.posix.normalize(path.posix.join(fileDir, cleanSpec));
+                if (targetPath === boundaryPrefix || targetPath.startsWith(`${boundaryPrefix}/`)) {
+                    continue;
+                }
+                if (targetPath.startsWith('../')) {
+                    errors.push(`${relFile} imports "${rawSpec}" outside the repository root (${targetPath})`);
+                    continue;
+                }
+                if (!isCoveredByCopiedPaths(targetPath, copiedPaths)) {
+                    errors.push(
+                        `${relFile} imports "${rawSpec}" (resolved to "${targetPath}"), which escapes "${boundaryPrefix}/" and is not copied into Containerfile stage "${stageName}"`
+                    );
+                }
+            }
+        }
+    };
+
+    checkFiles(webFiles, 'apps/web-next', 'web-build', webCopies);
+    checkFiles(rustFiles, 'crates', 'rust-build', rustCopies);
+
+    return errors;
+}
 
 test('deploy scripts and configs exist and have proper security settings', () => {
     const composePath = resolve(root, 'deploy/compose/compose.yaml');
@@ -78,4 +253,30 @@ test('release workflow mandates signed Windows updater assets and latest.json', 
     assert.match(content, /docker\/login-action@[0-9a-f]{40}/, 'login-action must use a full commit SHA');
     assert.match(content, /docker\/metadata-action@[0-9a-f]{40}/, 'metadata-action must use a full commit SHA');
     assert.match(content, /docker\/build-push-action@[0-9a-f]{40}/, 'build-push-action must use a full commit SHA');
+});
+
+test('Containerfile copies every repository file referenced by relative imports escaping apps/web-next or crates', () => {
+    const containerfilePath = resolve(root, 'deploy/container/Containerfile');
+    assert.ok(existsSync(containerfilePath), 'Containerfile must exist');
+    const containerfileSource = readFileSync(containerfilePath, 'utf8');
+
+    assert.deepEqual(
+        auditContainerfileBuildInputs({ containerfileSource, rootDir: root }),
+        [],
+        'Every relative import or compile-time include escaping apps/web-next/ or crates/ must be copied into the corresponding Containerfile stage'
+    );
+
+    const preFixContainerfile = containerfileSource
+        .split(/\r?\n/)
+        .filter((line) => !line.includes('docs/design/branding'))
+        .join('\n');
+    const regressions = auditContainerfileBuildInputs({
+        containerfileSource: preFixContainerfile,
+        rootDir: root
+    });
+
+    assert.equal(regressions.length, 2, 'Removing COPY docs/design/branding must flag both light and dark seal imports');
+    assert.match(regressions[0], /apps\/web-next\/src\/pages\/settings\/about\.tsx/);
+    assert.match(regressions[0], /docs\/design\/branding\/learnvault-seal\.svg/);
+    assert.match(regressions[1], /docs\/design\/branding\/learnvault-seal-dark\.svg/);
 });
