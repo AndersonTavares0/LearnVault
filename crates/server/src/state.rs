@@ -3,13 +3,14 @@ use std::{
     fs,
     path::{Path, PathBuf},
     sync::{Arc, RwLock},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use learnvault_core::{AuthSession, AuthUser, Database, Error as CoreError};
 use sha2::{Digest, Sha256};
 use tokio::sync::{Mutex, OwnedSemaphorePermit, Semaphore};
+use tokio::time::Instant;
 
 use crate::{
     Config,
@@ -53,6 +54,7 @@ pub struct AppState {
     pub(crate) source_key_path: PathBuf,
     pub(crate) database: Arc<Mutex<Database>>,
     pub(crate) login_attempts: Arc<Mutex<HashMap<String, (u32, Instant)>>>,
+    pub(crate) credential_attempts: Arc<Mutex<HashMap<String, (u32, Instant)>>>,
     pub(crate) rescan_lock: Arc<Mutex<()>>,
     /// Automatic indexing job. Inert until [`Indexer::start`] is called by the server.
     pub(crate) indexer: Indexer,
@@ -116,6 +118,7 @@ impl AppState {
             config,
             database: Arc::new(Mutex::new(database)),
             login_attempts: Arc::new(Mutex::new(HashMap::new())),
+            credential_attempts: Arc::new(Mutex::new(HashMap::new())),
             rescan_lock: Arc::new(Mutex::new(())),
             indexer: Indexer::default(),
             blocking_tasks: Arc::new(Semaphore::new(MAX_BLOCKING_TASKS)),
@@ -243,6 +246,7 @@ impl AppState {
             source_key_path,
             database: Arc::new(Mutex::new(database)),
             login_attempts: Arc::new(Mutex::new(HashMap::new())),
+            credential_attempts: Arc::new(Mutex::new(HashMap::new())),
             rescan_lock: Arc::new(Mutex::new(())),
             indexer: Indexer::default(),
             inline_script_hashes: inline_script_hashes.into(),
@@ -382,23 +386,16 @@ impl AppState {
         self.allow_login_attempt_at(source, Instant::now()).await
     }
 
+    pub(crate) async fn allow_credential_attempt(&self, key: &str) -> bool {
+        self.allow_credential_attempt_at(key, Instant::now()).await
+    }
+
     async fn allow_login_attempt_at(&self, source: &str, now: Instant) -> bool {
-        let mut attempts = self.login_attempts.lock().await;
-        attempts.retain(|_, (_, started)| now.duration_since(*started) < LOGIN_ATTEMPT_WINDOW);
-        let key = source.to_owned();
-        if attempts.len() >= MAX_LOGIN_ATTEMPT_BUCKETS && !attempts.contains_key(&key) {
-            // Keep the table bounded without evicting an active source bucket.
-            return false;
-        }
-        let entry = attempts.entry(key).or_insert((0, now));
-        if now.duration_since(entry.1) >= LOGIN_ATTEMPT_WINDOW {
-            *entry = (0, now);
-        }
-        if entry.0 >= 5 {
-            return false;
-        }
-        entry.0 += 1;
-        true
+        allow_attempt_at(&self.login_attempts, source, now).await
+    }
+
+    async fn allow_credential_attempt_at(&self, key: &str, now: Instant) -> bool {
+        allow_attempt_at(&self.credential_attempts, key, now).await
     }
 
     pub(crate) async fn user(&self, username: String) -> Result<Option<AuthUser>, StateError> {
@@ -796,6 +793,30 @@ fn has_src_attribute(tag: &[u8]) -> bool {
     false
 }
 
+async fn allow_attempt_at(
+    table: &Mutex<HashMap<String, (u32, Instant)>>,
+    key: &str,
+    now: Instant,
+) -> bool {
+    let mut attempts = table.lock().await;
+    attempts
+        .retain(|_, (_, started)| now.saturating_duration_since(*started) < LOGIN_ATTEMPT_WINDOW);
+    let key = key.to_owned();
+    if attempts.len() >= MAX_LOGIN_ATTEMPT_BUCKETS && !attempts.contains_key(&key) {
+        // Keep the table bounded without evicting an active source bucket.
+        return false;
+    }
+    let entry = attempts.entry(key).or_insert((0, now));
+    if now.saturating_duration_since(entry.1) >= LOGIN_ATTEMPT_WINDOW {
+        *entry = (0, now);
+    }
+    if entry.0 >= 5 {
+        return false;
+    }
+    entry.0 += 1;
+    true
+}
+
 fn unix_now() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -805,8 +826,9 @@ fn unix_now() -> i64 {
 
 #[cfg(test)]
 mod tests {
-    use std::{path::PathBuf, time::Instant};
+    use std::path::PathBuf;
     use tempfile::tempdir;
+    use tokio::time::Instant;
 
     use super::{AppState, StateError, attribute_values};
     use crate::Config;
@@ -944,6 +966,28 @@ mod tests {
         }
         assert!(!state.allow_login_attempt_at("192.0.2.10", now).await);
         assert!(state.allow_login_attempt_at("192.0.2.11", now).await);
+    }
+
+    #[tokio::test]
+    async fn credential_attempt_table_saturation_does_not_affect_login_attempts() {
+        let state = AppState::new(config());
+        let now = Instant::now();
+
+        for index in 0..1024 {
+            assert!(
+                state
+                    .allow_credential_attempt_at(&format!("usr-{index}\x00192.0.2.10"), now)
+                    .await
+            );
+        }
+        assert!(
+            !state
+                .allow_credential_attempt_at("usr-overflow\x00192.0.2.10", now)
+                .await
+        );
+        assert!(state.allow_login_attempt_at("192.0.2.10", now).await);
+        assert_eq!(state.credential_attempts.lock().await.len(), 1024);
+        assert_eq!(state.login_attempts.lock().await.len(), 1);
     }
 
     #[test]
