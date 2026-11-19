@@ -41,11 +41,22 @@ test('classifies documentation and release metadata changes as skippable', () =>
   assert.equal(
     classifyDocsReleaseOnly([
       'docs/operations/distribution.md',
+      'docs/design/branding/README.md',
       '.github/release-please/release-please-manifest.json',
       'docs/releases/CHANGELOG.md',
     ]),
     true,
   )
+})
+
+test('treats non-markdown branding assets as runtime inputs, not docs-only', () => {
+  assert.equal(classifyDocsReleaseOnly(['docs/design/branding/learnvault-seal.svg']), false)
+  assert.equal(classifyDocsReleaseOnly(['docs/design/branding/learnvault-seal-dark.svg']), false)
+  assert.equal(
+    classifyDocsReleaseOnly(['docs/design/branding/README.md', 'docs/design/branding/learnvault-seal.svg']),
+    false,
+  )
+  assert.equal(classifyDocsReleaseOnly(['docs/design/branding/README.md']), true)
 })
 
 test('accepts Conventional Commit PR titles and rejects malformed titles', () => {
