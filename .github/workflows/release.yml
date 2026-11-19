@@ -763,3 +763,88 @@ jobs:
             fi
             gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --notes-file "$notes"
           fi
+
+  verify-published:
+    name: Verify published release
+    needs: [validate-tag, publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      attestations: read
+      packages: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.validate-tag.outputs.commit_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Download published release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p verify-dist
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir verify-dist
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Verify published checksums, signature, and provenance
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          cosign verify-blob verify-dist/SHA256SUMS \
+            --bundle verify-dist/SHA256SUMS.sigstore.json \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity-regexp "^https://github\\.com/${REPOSITORY//./\\.}/\\.github/workflows/release\\.yml@refs/(tags/v[0-9]+\\.[0-9]+\\.[0-9]+|heads/main)$" >/dev/null
+          (cd verify-dist && sha256sum -c SHA256SUMS)
+          gh attestation verify verify-dist/learnvault-linux-amd64.tar.gz --repo "$REPOSITORY"
+      - name: Verify published container image signature
+        shell: bash
+        env:
+          REPOSITORY: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+          PRERELEASE: ${{ needs.validate-tag.outputs.prerelease }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          IMAGE="ghcr.io/${REPOSITORY,,}"
+          VERSION="${RELEASE_TAG#v}"
+          IDENTITY="^https://github\\.com/${REPOSITORY//./\\.}/\\.github/workflows/release\\.yml@refs/(tags/v[0-9]+\\.[0-9]+\\.[0-9]+|heads/main)$"
+          cosign verify "${IMAGE}:${VERSION}" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity-regexp "$IDENTITY" >/dev/null
+          if [[ "$PRERELEASE" == "false" && "$EVENT_NAME" == "release" ]]; then
+            for tag in stable latest; do
+              cosign verify "${IMAGE}:${tag}" \
+                --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+                --certificate-identity-regexp "$IDENTITY" >/dev/null
+            done
+          fi
+      - name: Smoke test downloaded Linux amd64 binary
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          smoke_dir="$(mktemp -d)"
+          trap 'rm -rf "$smoke_dir"' EXIT
+          tar -xzf verify-dist/learnvault-linux-amd64.tar.gz -C "$smoke_dir"
+          ./scripts/smoke-release-binary.sh "$smoke_dir/learnvault-linux-amd64" "$RELEASE_TAG" "$smoke_dir/web"
+      - name: Notify loudly on post-publication verification failure
+        if: failure()
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          echo "::error::Post-publication verification failed for ${RELEASE_TAG}. Trigger the Rollback workflow (.github/workflows/rollback.yml) to repoint GHCR :stable/:latest and minor tags to the previous verified release." >&2
+          {
+            echo "## Post-publication verification FAILED for ${RELEASE_TAG}"
+            echo ""
+            echo "Action required: trigger the **Rollback** workflow (\`.github/workflows/rollback.yml\`) to repoint GHCR \`:stable\`, \`:latest\`, and minor tags to the previous verified digest, and follow the updater recovery steps in \`docs/releases/process.md\`."
+          } >> "$GITHUB_STEP_SUMMARY"

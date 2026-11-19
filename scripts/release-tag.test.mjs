@@ -271,3 +271,18 @@ test('publish signs SHA256SUMS with keyless cosign and attests provenance and SB
     assert.match(workflow, /learnvault-\$\{\{ needs\.validate-tag\.outputs\.tag \}\}\.sbom\.cdx\.json/);
     assert.match(workflow, /"dist\/SHA256SUMS\.sigstore\.json"/);
 });
+
+test('verify-published downloads and verifies published assets, attestations, OCI image, and binary health', () => {
+    assert.match(workflow, /\n  verify-published:\n[\s\S]*needs: \[validate-tag, publish\]/);
+    const dlBlock = runBlock('Download published release assets');
+    assert.match(dlBlock, /gh release download "\$RELEASE_TAG"/);
+    const verifyBlock = runBlock('Verify published checksums, signature, and provenance');
+    assert.match(verifyBlock, /cosign verify-blob verify-dist\/SHA256SUMS/);
+    assert.match(verifyBlock, /sha256sum -c SHA256SUMS/);
+    assert.match(verifyBlock, /gh attestation verify verify-dist\/learnvault-linux-amd64\.tar\.gz/);
+    const smokeBlock = runBlock('Smoke test downloaded Linux amd64 binary');
+    assert.match(smokeBlock, /\.\/scripts\/smoke-release-binary\.sh/);
+    assert.match(smokeBlock, /learnvault-linux-amd64/);
+    const failBlock = runBlock('Notify loudly on post-publication verification failure');
+    assert.match(failBlock, /rollback\.yml/);
+});
