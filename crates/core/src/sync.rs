@@ -372,6 +372,36 @@ pub fn pull_operations(
     cursor: i64,
     limit: usize,
 ) -> Result<SyncBatch> {
+    pull_in(db, owner_id, None, device_id, cursor, limit)
+}
+
+/// Like [`pull_operations`], but applies the owner's *current* course grants.
+///
+/// Operations that reference known media outside the user's access are not returned. The
+/// cursor still advances across them, so a page made only of filtered operations neither
+/// stalls nor repeats. Operations without media (deletions, preferences, reviews) and
+/// operations on unknown media are returned as before. Granting the course again makes the
+/// journal entries visible again to devices whose cursor has not passed them; copies already
+/// downloaded are not purged.
+pub fn pull_operations_for_user(
+    db: &Database,
+    owner_id: &str,
+    is_admin: bool,
+    device_id: &str,
+    cursor: i64,
+    limit: usize,
+) -> Result<SyncBatch> {
+    pull_in(db, owner_id, Some(is_admin), device_id, cursor, limit)
+}
+
+fn pull_in(
+    db: &Database,
+    owner_id: &str,
+    grants_for_admin: Option<bool>,
+    device_id: &str,
+    cursor: i64,
+    limit: usize,
+) -> Result<SyncBatch> {
     validate_owner(owner_id)?;
     validate_id(device_id, "device")?;
     let limit = limit.clamp(1, MAX_PULL_BATCH) as i64;
@@ -391,38 +421,57 @@ pub fn pull_operations(
           ORDER BY seq ASC
           LIMIT ?4",
     )?;
-    let rows = statement.query_map(params![owner_id, cursor.max(0), device_id, limit], |row| {
-        Ok((
-            row.get::<_, i64>(0)?,
-            row.get::<_, String>(1)?,
-            row.get::<_, String>(2)?,
-            row.get::<_, i64>(3)?,
-            row.get::<_, String>(4)?,
-        ))
-    })?;
 
     let mut items = Vec::new();
-    for row in rows {
-        let (seq, op_id, device_id, client_at, payload) = row?;
-        items.push(SyncOperation {
-            seq,
-            op_id,
-            device_id,
-            client_at,
-            payload: decode(&payload)?,
-        });
+    let mut next_cursor = cursor.max(0);
+    let mut has_more;
+    loop {
+        let rows = statement
+            .query_map(params![owner_id, next_cursor, device_id, limit], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, i64>(3)?,
+                    row.get::<_, String>(4)?,
+                ))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        let scanned = rows.len() as i64;
+        for (seq, op_id, device_id, client_at, payload) in rows {
+            next_cursor = seq;
+            let payload = decode(&payload)?;
+            if let Some(is_admin) = grants_for_admin
+                && !media_visible(db, owner_id, is_admin, payload.media_id())?
+            {
+                continue;
+            }
+            items.push(SyncOperation {
+                seq,
+                op_id,
+                device_id,
+                client_at,
+                payload,
+            });
+        }
+        // A page that was entirely filtered keeps scanning; the cursor already moved past it.
+        has_more = scanned == limit;
+        if !items.is_empty() || !has_more {
+            break;
+        }
     }
-    let next_cursor = items.last().map_or(cursor.max(0), |item| item.seq);
-    let has_more = conn
-        .query_row(
-            "SELECT 1 FROM sync_operation
-              WHERE owner_id = ?1 AND seq > ?2 AND device_id <> ?3
-              LIMIT 1",
-            params![owner_id, next_cursor, device_id],
-            |_| Ok(()),
-        )
-        .optional()?
-        .is_some();
+    if has_more {
+        has_more = conn
+            .query_row(
+                "SELECT 1 FROM sync_operation
+                  WHERE owner_id = ?1 AND seq > ?2 AND device_id <> ?3
+                  LIMIT 1",
+                params![owner_id, next_cursor, device_id],
+                |_| Ok(()),
+            )
+            .optional()?
+            .is_some();
+    }
 
     drop(statement);
     transaction.commit()?;
@@ -431,6 +480,22 @@ pub fn pull_operations(
         has_more,
         items,
     })
+}
+
+/// Whether an operation's media is outside the user's current grant; media-less and unknown media pass.
+fn media_visible(
+    db: &Database,
+    owner_id: &str,
+    is_admin: bool,
+    media_id: Option<&str>,
+) -> Result<bool> {
+    let Some(media_id) = media_id else {
+        return Ok(true);
+    };
+    let Some(library_id) = crate::find_media_library_id(db, media_id)? else {
+        return Ok(true);
+    };
+    crate::can_user_access_course(db, owner_id, is_admin, &library_id)
 }
 
 /// Applies the received operations locally and stores the cursor, in one transaction.

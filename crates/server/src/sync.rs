@@ -7,7 +7,8 @@
 //!
 //! Media is not synced. An operation that references media known but outside the user's
 //! access is refused as missing media; unknown media is accepted and kept in the journal,
-//! because the other device may know it.
+//! because the other device may know it. The read applies the current grant too: operations
+//! on media the user can no longer access are skipped (the cursor still advances).
 
 use axum::{
     Json,
@@ -89,10 +90,12 @@ pub(crate) async fn pull(
         return error_response(StatusCode::UNPROCESSABLE_ENTITY, "invalid_sync_operation");
     }
     let owner = user.user_id;
+    let admin = user.is_admin;
     match run_study(&state, move |db| {
-        let batch = learnvault_core::pull_operations(
+        let batch = learnvault_core::pull_operations_for_user(
             db,
             &owner,
+            admin,
             &query.device,
             query.cursor.unwrap_or(0),
             query.limit.unwrap_or(DEFAULT_PULL_LIMIT),
