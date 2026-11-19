@@ -270,6 +270,41 @@ pub fn open_media(
     })
 }
 
+/// Opens a regular file of a course tree for reading, confined to `root`.
+///
+/// Shared by cover discovery and scan hashing so no caller reopens a pathname it only
+/// inspected. Every component is opened relative to its parent directory capability and
+/// links are refused, then the OPENED handle is inspected: it must be a regular file and
+/// not a reparse point. `relative_path` is revalidated lexically and must stay inside `root`.
+pub fn open_confined_file(root: &Path, relative_path: &str) -> Result<File> {
+    let canonical_root = canonical_root(root)?;
+    let candidate = resolve_within(&canonical_root, relative_path)?;
+    let file = open_readonly(&canonical_root, relative_path, &candidate, relative_path)?;
+    let metadata = file.metadata().map_err(|source| Error::MediaUnreadable {
+        media_id: relative_path.to_owned(),
+        source,
+    })?;
+    if is_reparse_point(&metadata) {
+        return Err(Error::MediaIsSymlink {
+            media_id: relative_path.to_owned(),
+        });
+    }
+    if !metadata.is_file() {
+        return Err(Error::MediaNotAFile {
+            media_id: relative_path.to_owned(),
+        });
+    }
+    Ok(file)
+}
+
+/// True when the entry is a symbolic link or, on Windows, any reparse point (junction included).
+///
+/// Directory walks use it so a link is never followed, on every platform.
+#[must_use]
+pub fn is_link_or_reparse_point(metadata: &Metadata) -> bool {
+    metadata.file_type().is_symlink() || is_reparse_point(metadata)
+}
+
 /// Validates the availability and state of a media reference in the catalog.
 ///
 /// It does not touch the file system nor open descriptors on disk.

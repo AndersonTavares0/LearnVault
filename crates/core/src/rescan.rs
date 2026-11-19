@@ -22,7 +22,6 @@
 
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs::File,
     io::{Read, Seek, SeekFrom},
     path::Path,
 };
@@ -483,7 +482,20 @@ fn unique_unclaimed<'a>(ids: &[&'a str], moved_ids: &BTreeSet<String>) -> Option
 /// because the sampled hash is only computed when the metadata changes; revisit when there is
 /// an event source reliable enough to dispense with the comparison.
 fn sampled_hash(root: &Path, relative_path: &str) -> Option<String> {
-    let mut file = File::open(root.join(relative_path)).ok()?;
+    sampled_hash_with(root, relative_path, |_| {})
+}
+
+/// `sampled_hash` with a seam called after the walk chose the file and before it is opened.
+///
+/// The file is opened through the confined opener and inspected on the handle, so a candidate
+/// replaced by a link in between is refused instead of followed.
+fn sampled_hash_with(
+    root: &Path,
+    relative_path: &str,
+    before_open: impl FnOnce(&Path),
+) -> Option<String> {
+    before_open(&root.join(relative_path));
+    let mut file = crate::media::open_confined_file(root, relative_path).ok()?;
     let length = file.metadata().ok()?.len();
     let sample_len = usize::try_from(SAMPLE_BYTES).ok()?;
     let mut sample = Vec::with_capacity(sample_len.saturating_mul(2));
@@ -541,4 +553,50 @@ fn is_covered_by_unverified(key: &str, unverified: &[String]) -> bool {
 /// saturate at the limit instead of failing or panicking.
 fn size_as_integer(size: u64) -> i64 {
     i64::try_from(size).unwrap_or(i64::MAX)
+}
+
+#[cfg(all(test, unix))]
+mod hashing_confinement_tests {
+    use super::{sampled_hash, sampled_hash_with};
+
+    #[test]
+    fn hashes_a_regular_file_inside_the_root() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().join("library");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("lesson.mp4"), b"synthetic").unwrap();
+
+        assert!(sampled_hash(&root, "lesson.mp4").is_some());
+    }
+
+    #[test]
+    fn candidate_swapped_for_an_outside_link_is_never_hashed() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().join("library");
+        let outside = directory.path().join("outside-marker.bin");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("lesson.mp4"), b"synthetic").unwrap();
+        std::fs::write(&outside, b"outside marker").unwrap();
+
+        let hash = sampled_hash_with(&root, "lesson.mp4", |path| {
+            std::fs::remove_file(path).unwrap();
+            std::os::unix::fs::symlink(&outside, path).unwrap();
+        });
+
+        assert_eq!(hash, None, "the outside marker must never be read");
+    }
+
+    #[test]
+    fn candidate_behind_a_swapped_directory_link_is_never_hashed() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().join("library");
+        let outside = directory.path().join("outside");
+        std::fs::create_dir_all(root.join("Course")).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(outside.join("lesson.mp4"), b"outside marker").unwrap();
+        std::fs::remove_dir(root.join("Course")).unwrap();
+        std::os::unix::fs::symlink(&outside, root.join("Course")).unwrap();
+
+        assert_eq!(sampled_hash(&root, "Course/lesson.mp4"), None);
+    }
 }
