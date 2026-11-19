@@ -40,6 +40,10 @@ LearnVault no longer publishes release candidates. Changes are reviewed and veri
 
 The Linux server binary (`crates/server`) embeds static web assets directly from the canonical build output directory `crates/server/web/build`, produced by the web SPA build (`apps/web-next`). The `linux` job in the release workflow compiles `crates/server` for target architectures (`x86_64` and `aarch64`) with embedded SPA assets.
 
+## Rollback
+
+To return to a known-good release, follow the [rollback runbook](../operations/rollback.md). Record the GitHub latest release and the GHCR alias digests before every release.
+
 ## Asset Repair & Manual Triggers
 
 On a GitHub `release` event, Actions executes the workflow definition from the **tagged commit**, not `main`. If a release was tagged before a workflow fix reached `main`, the workflow can be triggered manually by repository maintainers:
