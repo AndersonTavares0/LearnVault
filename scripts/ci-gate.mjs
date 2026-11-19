@@ -5,6 +5,7 @@ const expectedJobs = [
   'e2eServer',
   'rustContainer',
   'rust',
+  'windowsCore',
   'desktop',
   'rustAudit',
 ];
@@ -13,6 +14,7 @@ const filterableJobs = new Set([
   'e2eServer',
   'rustContainer',
   'rust',
+  'windowsCore',
   'desktop',
   'rustAudit',
 ]);
@@ -30,6 +32,12 @@ function isSafeRelativePath(file) {
   return file.split('/').every((segment) => segment !== '' && segment !== '.' && segment !== '..');
 }
 
+function isBrandingRuntimeAsset(file) {
+  // Vector branding assets under docs/design/branding/ are imported by the SPA and copied into
+  // the container build; Markdown documentation (e.g. docs/design/branding/README.md) is not.
+  return file.startsWith('docs/design/branding/') && !file.endsWith('.md');
+}
+
 export function classifyDocsReleaseOnly(paths) {
   return (
     Array.isArray(paths) &&
@@ -37,6 +45,7 @@ export function classifyDocsReleaseOnly(paths) {
     paths.every(
       (file) =>
         isSafeRelativePath(file) &&
+        !isBrandingRuntimeAsset(file) &&
         (file.startsWith('docs/') || file.endsWith('.md') || file.startsWith('.github/release-please/')),
     )
   );
@@ -79,6 +88,7 @@ const githubNeedsJobs = [
   'e2e-server',
   'rust-container',
   'rust',
+  'windows-core',
   'desktop',
   'rust-audit',
 ];
@@ -112,6 +122,7 @@ export function evaluateCiGateFromNeeds(needs, { workflowCancelled = false } = {
       e2eServer: needs['e2e-server']?.result,
       rustContainer: needs['rust-container']?.result,
       rust: needs.rust?.result,
+      windowsCore: needs['windows-core']?.result,
       desktop: needs.desktop?.result,
       rustAudit: needs['rust-audit']?.result,
     },

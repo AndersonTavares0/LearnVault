@@ -15,6 +15,7 @@ const successfulResults = {
   e2eServer: 'success',
   rustContainer: 'success',
   rust: 'success',
+  windowsCore: 'success',
   desktop: 'success',
   rustAudit: 'success',
 }
@@ -30,6 +31,7 @@ function githubNeeds(results = successfulResults, docsReleaseOnly = false) {
     'e2e-server': { result: results.e2eServer },
     'rust-container': { result: results.rustContainer },
     rust: { result: results.rust },
+    'windows-core': { result: results.windowsCore },
     desktop: { result: results.desktop },
     'rust-audit': { result: results.rustAudit },
   }
@@ -39,11 +41,22 @@ test('classifies documentation and release metadata changes as skippable', () =>
   assert.equal(
     classifyDocsReleaseOnly([
       'docs/operations/distribution.md',
+      'docs/design/branding/README.md',
       '.github/release-please/release-please-manifest.json',
       'docs/releases/CHANGELOG.md',
     ]),
     true,
   )
+})
+
+test('treats non-markdown branding assets as runtime inputs, not docs-only', () => {
+  assert.equal(classifyDocsReleaseOnly(['docs/design/branding/learnvault-seal.svg']), false)
+  assert.equal(classifyDocsReleaseOnly(['docs/design/branding/learnvault-seal-dark.svg']), false)
+  assert.equal(
+    classifyDocsReleaseOnly(['docs/design/branding/README.md', 'docs/design/branding/learnvault-seal.svg']),
+    false,
+  )
+  assert.equal(classifyDocsReleaseOnly(['docs/design/branding/README.md']), true)
 })
 
 test('accepts Conventional Commit PR titles and rejects malformed titles', () => {
@@ -80,6 +93,7 @@ test('allows filterable jobs to skip for documentation and release changes', () 
     e2eServer: 'skipped',
     rustContainer: 'skipped',
     rust: 'skipped',
+    windowsCore: 'skipped',
     desktop: 'skipped',
     rustAudit: 'skipped',
   }
@@ -114,6 +128,7 @@ test('fails on any failed job or failed change detection', () => {
     ['web', 'failure'],
     ['rustContainer', 'failure'],
     ['rust', 'failure'],
+    ['windowsCore', 'failure'],
   ]) {
     const result = evaluateCiGate({
       docsReleaseOnly: true,

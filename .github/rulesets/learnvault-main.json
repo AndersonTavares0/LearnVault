@@ -43,10 +43,16 @@
             "context": "Rust tests and lints"
           },
           {
+            "context": "Windows core tests"
+          },
+          {
             "context": "Desktop crate compile and guards"
           },
           {
             "context": "Container build (Rust)"
+          },
+          {
+            "context": "Dependency review"
           },
           {
             "context": "CI gate"

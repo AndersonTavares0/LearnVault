@@ -7,7 +7,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 permissions:
   contents: read
@@ -356,6 +356,7 @@ jobs:
       - e2e-server
       - rust-container
       - rust
+      - windows-core
       - desktop
       - rust-audit
     if: ${{ always() }}
