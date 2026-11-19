@@ -144,8 +144,14 @@ pub fn search(
 
     let mut lessons = Vec::new();
     {
+        // Over-fetch before classifying so non-media rows (markdown, subtitles, small .ts,
+        // showcase videos) do not starve the requested lesson limit.
+        const LESSON_OVERFETCH_FACTOR: usize = 4;
+        let fetch_limit = limit
+            .saturating_mul(LESSON_OVERFETCH_FACTOR)
+            .min(MAX_SEARCH_RESULTS * LESSON_OVERFETCH_FACTOR);
         let mut statement = conn.prepare(&format!(
-            "SELECT m.media_id, m.library_id, m.relative_path
+            "SELECT m.media_id, m.library_id, m.relative_path, m.size
              FROM media_fts
              JOIN media m ON m.rowid = media_fts.rowid
              WHERE media_fts MATCH ?1
@@ -159,17 +165,34 @@ pub fn search(
             access_predicate = access_predicate("m.library_id"),
         ))?;
         let rows = statement.query_map(
-            rusqlite::params![match_query, owner_id, is_admin, limit as i64],
+            rusqlite::params![match_query, owner_id, is_admin, fetch_limit as i64],
             |row| {
-                Ok(SearchLessonHit {
-                    media_id: row.get(0)?,
-                    course_id: row.get(1)?,
-                    relative_path: row.get(2)?,
-                })
+                Ok((
+                    SearchLessonHit {
+                        media_id: row.get(0)?,
+                        course_id: row.get(1)?,
+                        relative_path: row.get(2)?,
+                    },
+                    row.get::<_, i64>(3)?,
+                ))
             },
         )?;
         for row in rows {
-            lessons.push(row?);
+            let (hit, raw_size) = row?;
+            let Ok(size) = u64::try_from(raw_size) else {
+                continue;
+            };
+            let file_name = hit
+                .relative_path
+                .rsplit('/')
+                .next()
+                .unwrap_or(&hit.relative_path);
+            if crate::scanner::classify(file_name, size) == crate::scanner::MediaKind::Media {
+                lessons.push(hit);
+                if lessons.len() >= limit {
+                    break;
+                }
+            }
         }
     }
 
