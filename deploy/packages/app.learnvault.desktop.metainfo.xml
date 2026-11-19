@@ -2,14 +2,16 @@
 <component type="desktop-application">
   <id>app.learnvault.desktop</id>
   <name>LearnVault</name>
-  <summary>Biblioteca de estudos local</summary>
+  <summary>Local study library</summary>
+  <summary xml:lang="pt-BR">Biblioteca de estudos local</summary>
   <metadata_license>CC0-1.0</metadata_license>
   <developer id="app.learnvault">
     <name>LearnVault</name>
   </developer>
   <project_license>MIT</project_license>
   <description>
-    <p>Aplicativo desktop offline para organizar e estudar uma biblioteca local.</p>
+    <p>Offline desktop application for organizing and studying a local course library.</p>
+    <p xml:lang="pt-BR">Aplicativo desktop offline para organizar e estudar uma biblioteca local.</p>
   </description>
   <url type="homepage">https://github.com/AndersonTavares0/LearnVault</url>
   <url type="bugtracker">https://github.com/AndersonTavares0/LearnVault/issues</url>

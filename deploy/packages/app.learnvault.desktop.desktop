@@ -1,6 +1,7 @@
 [Desktop Entry]
 Name=LearnVault
-Comment=Biblioteca de estudos local
+Comment=Local study library
+Comment[pt_BR]=Biblioteca de estudos local
 Exec=learnvault-desktop
 Icon=app.learnvault.desktop
 Terminal=false
