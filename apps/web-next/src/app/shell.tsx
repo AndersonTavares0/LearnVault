@@ -80,7 +80,7 @@ function MainContent({ pathname }: { pathname: string }) {
 	}, [pathname]);
 
 	return (
-		<main ref={main} id="main" tabIndex={-1} className="app-scroll min-h-0 flex-1 overflow-y-auto focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring print:overflow-visible [&_h1:focus-visible]:outline-2 [&_h1:focus-visible]:outline-offset-4 [&_h1:focus-visible]:outline-ring">
+		<main ref={main} id="main" tabIndex={-1} className="app-scroll min-h-0 flex-1 overflow-y-auto scroll-pb-[calc(4.5rem+env(safe-area-inset-bottom))] focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring lg:scroll-pb-4 print:overflow-visible [&_h1:focus-visible]:outline-2 [&_h1:focus-visible]:outline-offset-4 [&_h1:focus-visible]:outline-ring">
 			{/* The phone tab bar floats over the bottom edge, hence the extra clearance. */}
 			<div className="mx-auto w-full max-w-[var(--container-max,88rem)] px-5 pt-8 pb-28 sm:px-10 sm:pt-10 sm:pb-32 lg:pb-10">
 				<Outlet />
