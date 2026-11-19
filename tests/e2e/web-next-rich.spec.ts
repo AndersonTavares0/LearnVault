@@ -1,7 +1,7 @@
 import { expect, type Page } from '@playwright/test';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { TINY_WEBM_BASE64 } from './fixtures/tiny-webm';
+import { TINY_VP9_WEBM_BASE64, TINY_WEBM_BASE64 } from './fixtures/tiny-webm';
 import { makeHostilePdfs, makePdf } from './fixtures/make-pdf';
 import { collectCspViolations, createTest, expectNoAxeViolations, signIn } from './web-next-support';
 
@@ -9,7 +9,8 @@ import { collectCspViolations, createTest, expectNoAxeViolations, signIn } from 
 // the PDF editor and the dark theme. The library has one playable video lesson and one PDF lesson.
 const test = createTest(async (library) => {
 	await mkdir(join(library, '01 Video'), { recursive: true });
-	await writeFile(join(library, '01 Video', 'Lesson.webm'), Buffer.from(TINY_WEBM_BASE64, 'base64'));
+	// VP9 video-only WebM works both natively and through ffmpeg's `-c:v copy -f mp4` smart remux in Chromium.
+	await writeFile(join(library, '01 Video', 'Lesson.webm'), Buffer.from(TINY_VP9_WEBM_BASE64, 'base64'));
 	// A language-suffixed sidecar subtitle must reach the lesson as a selectable caption track.
 	await writeFile(join(library, '01 Video', 'Lesson.en.vtt'), 'WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nHello\n');
 	// A lesson that holds two videos: switching between them changes the player's source.
@@ -307,6 +308,7 @@ test('turning transcoding on and seeking keeps the bar in step with the video', 
 	const transcode = page.getByRole('menuitem', { name: 'Play with transcoding' });
 	await expect(transcode).toBeVisible();
 	await transcode.click();
+	await expect(page.locator('video')).toHaveAttribute('src', /^\/api\/media\/transcode\?/);
 	await expectBarMatchesVideo(page);
 	await page.getByRole('slider', { name: 'Seek' }).focus();
 	await page.keyboard.press('ArrowRight');

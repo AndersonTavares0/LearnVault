@@ -160,6 +160,8 @@ jobs:
       # The server serves the shell from `--web-root` on disk, not from the compiled binary, so
       # this job builds the SPA here instead of downloading `spa-build` and waiting for that job.
       - run: pnpm --filter learnvault-web-next build
+      - name: Install system ffmpeg for transcoding E2E
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm exec playwright test
       - name: Upload E2E diagnostics
