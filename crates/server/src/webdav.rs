@@ -8,7 +8,7 @@ use std::{
     future::Future,
     net::{IpAddr, Ipv4Addr},
     pin::Pin,
-    sync::OnceLock,
+    sync::{Arc, OnceLock},
     time::Duration,
 };
 
@@ -21,6 +21,8 @@ use reqwest::{
     header::{AUTHORIZATION, CONTENT_TYPE, HeaderValue, RANGE},
 };
 use url::Url;
+
+use crate::source_dns::{AddressResolver, PolicyResolver, SystemResolver};
 
 /// Largest source URL accepted, in characters.
 const MAX_SOURCE_URL_CHARS: usize = 2048;
@@ -121,8 +123,9 @@ pub(crate) fn parse_source_url(input: &str) -> Result<Url, SourceUrlError> {
 /// metadata address), multicast, broadcast, and unspecified addresses.
 ///
 /// Loopback and private ranges stay allowed on purpose. A source is normally a NAS on the
-/// same LAN, so blocking them would break the main use case. Names are resolved only when
-/// a request runs, so a name that later resolves to a refused address is not caught here.
+/// same LAN, so blocking them would break the main use case. Only literals are checked
+/// here; a name is resolved on every connection by [`crate::source_dns`], which applies
+/// [`is_unsafe_address`] to every address it returns.
 fn reject_unsafe_host(host: &str) -> Result<(), SourceUrlError> {
     // `Url::host_str` keeps the brackets around IPv6 literals.
     let host = host.trim_end_matches('.');
@@ -142,7 +145,7 @@ fn reject_unsafe_host(host: &str) -> Result<(), SourceUrlError> {
 }
 
 /// Classifies an address that never hosts a course source.
-fn is_unsafe_address(address: IpAddr) -> bool {
+pub(crate) fn is_unsafe_address(address: IpAddr) -> bool {
     match address {
         IpAddr::V4(address) => is_unsafe_v4(address),
         IpAddr::V6(address) => {
@@ -221,6 +224,7 @@ fn normalize_smb_url(url: &mut Url) -> Result<(), SourceUrlError> {
 /// WebDAV client of a source.
 #[derive(Clone)]
 pub(crate) struct WebDavClient {
+    http: Client,
     base: Url,
     authorization: Option<HeaderValue>,
 }
@@ -256,9 +260,17 @@ impl WebDavClient {
             _ => None,
         };
         Ok(Self {
+            http: client().map_err(|_| SourceError::Unreachable)?.clone(),
             base,
             authorization,
         })
+    }
+
+    /// Replaces the HTTP client; tests use it to inject a fake name resolver.
+    #[cfg(test)]
+    fn with_http(mut self, http: Client) -> Self {
+        self.http = http;
+        self
     }
 
     fn directory_url(&self, directory: &str) -> Result<Url, SourceError> {
@@ -281,7 +293,7 @@ impl WebDavClient {
         let url = self.directory_url(directory)?;
         let response = self
             .authorize(
-                client().map_err(|_| SourceError::Unreachable)?.request(
+                self.http.request(
                     reqwest::Method::from_bytes(b"PROPFIND")
                         .map_err(|_| SourceError::InvalidResponse)?,
                     url.clone(),
@@ -397,19 +409,26 @@ impl CourseSource for WebDavClient {
 fn client() -> Result<&'static Client, ()> {
     static CLIENT: OnceLock<Result<Client, ()>> = OnceLock::new();
     CLIENT
-        .get_or_init(|| {
-            // Same provider as the rest of the server: `ring`, without OpenSSL or CMake.
-            let _ = rustls::crypto::ring::default_provider().install_default();
-            Client::builder()
-                .connect_timeout(CONNECT_TIMEOUT)
-                .read_timeout(READ_TIMEOUT)
-                // Cross-origin redirects would take the authorization header to another
-                // host. The source must point to the final URL.
-                .redirect(reqwest::redirect::Policy::none())
-                .build()
-                .map_err(|_| ())
-        })
+        .get_or_init(|| build_client(Arc::new(SystemResolver)))
         .as_ref()
+        .map_err(|_| ())
+}
+
+/// Builds the HTTP client; names are resolved by `resolver` on every new connection and
+/// every answer must pass the address policy.
+fn build_client(resolver: Arc<dyn AddressResolver>) -> Result<Client, ()> {
+    // Same provider as the rest of the server: `ring`, without OpenSSL or CMake.
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    Client::builder()
+        .connect_timeout(CONNECT_TIMEOUT)
+        .read_timeout(READ_TIMEOUT)
+        // Cross-origin redirects would take the authorization header to another
+        // host. The source must point to the final URL.
+        .redirect(reqwest::redirect::Policy::none())
+        // The URL keeps the host name (SNI, certificate, `Host`); only the address the
+        // socket connects to comes from the validated answer.
+        .dns_resolver(Arc::new(PolicyResolver(resolver)))
+        .build()
         .map_err(|_| ())
 }
 
@@ -1029,5 +1048,81 @@ mod tests {
             client.list_directory("").await.unwrap_err(),
             SourceError::Unreachable
         );
+    }
+
+    fn named_client(
+        port: u16,
+        resolver: Arc<crate::source_dns::tests::FakeResolver>,
+    ) -> WebDavClient {
+        let base = url::Url::parse(&format!("http://nas.test:{port}/dav/")).unwrap();
+        WebDavClient::new(base, None, None)
+            .unwrap()
+            .with_http(super::build_client(resolver).unwrap())
+    }
+
+    fn empty_listing(request: &str) -> Vec<u8> {
+        // The name must reach the server as the Host header, not the validated address.
+        assert!(
+            request.to_ascii_lowercase().contains("\r\nhost: nas.test:"),
+            "{request}"
+        );
+        response(
+            "207 Multi-Status",
+            &[("content-type", "application/xml"), ("connection", "close")],
+            r#"<D:multistatus xmlns:D="DAV:"/>"#,
+        )
+    }
+
+    #[tokio::test]
+    async fn a_name_resolved_to_a_permitted_address_connects_and_keeps_the_host_header() {
+        let (address, task) = server(empty_listing).await;
+        let resolver = crate::source_dns::tests::FakeResolver::new(
+            "nas.test",
+            vec![vec!["127.0.0.1".parse().unwrap()]],
+        );
+        let client = named_client(address.port(), Arc::clone(&resolver));
+
+        assert!(client.list_directory("").await.unwrap().is_empty());
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn a_name_with_one_denied_address_is_refused_even_if_another_is_permitted() {
+        let (address, task) = server(empty_listing).await;
+        let resolver = crate::source_dns::tests::FakeResolver::new(
+            "nas.test",
+            vec![vec![
+                "127.0.0.1".parse().unwrap(),
+                "169.254.169.254".parse().unwrap(),
+            ]],
+        );
+        let client = named_client(address.port(), Arc::clone(&resolver));
+
+        assert_eq!(
+            client.list_directory("").await.unwrap_err(),
+            SourceError::Unreachable
+        );
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn a_record_that_changes_to_a_denied_address_is_caught_on_the_next_connection() {
+        let (address, task) = server(empty_listing).await;
+        let resolver = crate::source_dns::tests::FakeResolver::new(
+            "nas.test",
+            vec![
+                vec!["127.0.0.1".parse().unwrap()],
+                vec!["169.254.169.254".parse().unwrap()],
+            ],
+        );
+        let client = named_client(address.port(), Arc::clone(&resolver));
+
+        assert!(client.list_directory("").await.is_ok());
+        assert_eq!(
+            client.list_directory("").await.unwrap_err(),
+            SourceError::Unreachable
+        );
+        assert_eq!(*resolver.lookups.lock().unwrap(), 2);
+        task.abort();
     }
 }

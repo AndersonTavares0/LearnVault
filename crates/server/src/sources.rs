@@ -96,18 +96,18 @@ impl RemoteSource {
 /// Adapter chosen by the URL scheme of the source.
 pub(crate) enum RemoteClient {
     WebDav(WebDavClient),
-    Smb(SmbSource),
+    Smb(Box<SmbSource>),
 }
 
 impl RemoteClient {
     /// Creates the client of the matching transport.
     pub(crate) fn new(source: &RemoteSource) -> Result<Self, SourceError> {
         if source.url.scheme() == "smb" {
-            return Ok(Self::Smb(SmbSource::new(
+            return Ok(Self::Smb(Box::new(SmbSource::new(
                 source.url.clone(),
                 source.username.as_deref(),
                 source.password(),
-            )?));
+            )?)));
         }
         Ok(Self::WebDav(WebDavClient::new(
             source.url.clone(),

@@ -20,6 +20,7 @@ mod reviews;
 mod search;
 mod secret;
 mod smb;
+mod source_dns;
 mod source_roots;
 mod sources;
 mod spa;

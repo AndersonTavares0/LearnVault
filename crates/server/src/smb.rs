@@ -7,7 +7,7 @@
 //! No write operation is issued: the client only opens existing resources with
 //! `GENERIC_READ`, lists directories and reads ranges.
 
-use std::{future::Future, io, pin::Pin, str::FromStr, sync::Arc, time::Duration};
+use std::{future::Future, io, net::SocketAddr, pin::Pin, str::FromStr, sync::Arc, time::Duration};
 
 use learnvault_core::{CourseSource, MAX_SOURCE_READ, SourceEntry, SourceError, SourceResult};
 use smb::{
@@ -18,8 +18,12 @@ use tokio::sync::Mutex;
 use tokio_stream::{Stream, StreamExt, wrappers::ReceiverStream};
 use url::Url;
 
+use crate::source_dns::{AddressResolver, SystemResolver, resolve_allowed};
+
 /// Maximum time to resolve and establish the SMB connection.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+/// Default SMB port, used when the URL has none.
+const SMB_PORT: u16 = 445;
 /// Maximum time of a listing or of a read block.
 const OPERATION_TIMEOUT: Duration = Duration::from_secs(30);
 /// Maximum items accepted in a single directory listing.
@@ -44,11 +48,16 @@ fn unix_seconds(ticks: u64) -> i64 {
 pub(crate) struct SmbLocation {
     /// Host and optional port, in the format accepted by the SMB client.
     server: String,
+    /// Host name or IP literal, without brackets or port.
+    host: String,
+    /// Port of the URL, if any; SMB defaults to 445.
+    port: Option<u16>,
     /// Share name, without slashes.
     share: String,
     /// Initial path inside the share, with `/` and no trailing slash.
     prefix: String,
-    /// Resolved UNC of the share.
+    /// UNC of the share by name; connections use the validated IP instead (see `Session`).
+    #[cfg_attr(not(test), allow(dead_code))]
     base: UncPath,
 }
 
@@ -76,6 +85,8 @@ impl SmbLocation {
             .map_err(|_| SourceError::NotFound)?;
         Ok(Self {
             server,
+            host: host.to_owned(),
+            port: url.port(),
             share: share.clone(),
             prefix: prefix.join("/"),
             base,
@@ -88,7 +99,18 @@ pub(crate) struct SmbSource {
     location: SmbLocation,
     username: Option<String>,
     password: Option<String>,
-    client: Mutex<Option<Arc<Client>>>,
+    client: Mutex<Option<Session>>,
+    resolver: Arc<dyn AddressResolver>,
+}
+
+/// Connected session, addressed by the validated IP the connection was made to.
+///
+/// The SMB client resolves the server name of every UNC path it receives, so a path that
+/// kept the host name would be resolved again, and could change, after the policy check.
+#[derive(Clone)]
+struct Session {
+    client: Arc<Client>,
+    base: UncPath,
 }
 
 impl std::fmt::Debug for SmbSource {
@@ -111,7 +133,17 @@ impl SmbSource {
         username: Option<&str>,
         password: Option<&str>,
     ) -> SourceResult<Self> {
+        Self::with_resolver(url, username, password, Arc::new(SystemResolver))
+    }
+
+    pub(crate) fn with_resolver(
+        url: Url,
+        username: Option<&str>,
+        password: Option<&str>,
+        resolver: Arc<dyn AddressResolver>,
+    ) -> SourceResult<Self> {
         Ok(Self {
+            resolver,
             location: SmbLocation::from_url(&url)?,
             username: username.map(str::to_owned),
             password: password.map(str::to_owned),
@@ -119,11 +151,36 @@ impl SmbSource {
         })
     }
 
-    async fn client(&self) -> SourceResult<Arc<Client>> {
+    /// Returns the cached session or connects to a validated address of the host.
+    ///
+    /// The name is resolved on each new connection and every answer must pass the address
+    /// policy; the session is then addressed by the IP that accepted the connection.
+    async fn session(&self) -> SourceResult<Session> {
         let mut slot = self.client.lock().await;
-        if let Some(client) = slot.as_ref() {
-            return Ok(Arc::clone(client));
+        if let Some(session) = slot.as_ref() {
+            return Ok(session.clone());
         }
+        let port = self.location.port.unwrap_or(SMB_PORT);
+        let addresses = tokio::time::timeout(
+            CONNECT_TIMEOUT,
+            resolve_allowed(self.resolver.as_ref(), &self.location.host, port),
+        )
+        .await
+        .map_err(|_| SourceError::Unreachable)??;
+        let mut last = SourceError::Unreachable;
+        for address in addresses {
+            match self.connect(address).await {
+                Ok(session) => {
+                    *slot = Some(session.clone());
+                    return Ok(session);
+                }
+                Err(error) => last = error,
+            }
+        }
+        Err(last)
+    }
+
+    async fn connect(&self, address: SocketAddr) -> SourceResult<Session> {
         let client = Client::new(ClientConfig {
             // A DFS reference would take the credentials to another server.
             dfs: false,
@@ -134,10 +191,12 @@ impl SmbSource {
             },
             ..Default::default()
         });
+        let base = UncPath::from_str(&format!("\\\\{address}\\{}", self.location.share))
+            .map_err(|_| SourceError::NotFound)?;
         let connected = tokio::time::timeout(
             CONNECT_TIMEOUT,
             client.share_connect(
-                &self.location.base,
+                &base,
                 self.username.as_deref().unwrap_or(""),
                 self.password.clone().unwrap_or_default(),
             ),
@@ -148,9 +207,10 @@ impl SmbSource {
             Ok(Err(error)) => return Err(map_smb_error(&error)),
             Err(_) => return Err(SourceError::Unreachable),
         }
-        let client = Arc::new(client);
-        *slot = Some(Arc::clone(&client));
-        Ok(client)
+        Ok(Session {
+            client: Arc::new(client),
+            base,
+        })
     }
 
     /// Discards the cached session after a transport failure.
@@ -181,11 +241,11 @@ impl SmbSource {
         Ok(segments.join("/"))
     }
 
-    fn unc(&self, path: &str) -> UncPath {
+    fn unc(base: &UncPath, path: &str) -> UncPath {
         if path.is_empty() {
-            self.location.base.clone()
+            base.clone()
         } else {
-            self.location.base.clone().with_path(path)
+            base.clone().with_path(path)
         }
     }
 
@@ -213,10 +273,10 @@ impl SmbSource {
     }
 
     async fn list_inner(&self, directory: &str) -> SourceResult<Vec<SourceEntry>> {
-        let client = self.client().await?;
+        let Session { client, base } = self.session().await?;
         let path = self.join(directory)?;
         let resource = client
-            .create_file(&self.unc(&path), &Self::open_args())
+            .create_file(&Self::unc(&base, &path), &Self::open_args())
             .await
             .map_err(|error| map_smb_error(&error))?;
         let directory = match resource {
@@ -271,10 +331,10 @@ impl SmbSource {
         if path.is_empty() {
             return Err(SourceError::NotFound);
         }
-        let client = self.client().await?;
+        let Session { client, base } = self.session().await?;
         let resource = timed(async {
             client
-                .create_file(&self.unc(&path), &Self::open_args())
+                .create_file(&Self::unc(&base, &path), &Self::open_args())
                 .await
                 .map_err(|error| map_smb_error(&error))
         })
@@ -450,7 +510,7 @@ fn status_error(status: u32) -> SourceError {
 mod tests {
     use super::{FILETIME_UNIX_OFFSET, SmbLocation, SmbSource, status_error, unix_seconds};
     use learnvault_core::{CourseSource, SourceError};
-    use std::str::FromStr;
+    use std::{str::FromStr, sync::Arc};
 
     fn parsed(input: &str) -> url::Url {
         crate::webdav::parse_source_url(input).unwrap()
@@ -553,6 +613,60 @@ mod tests {
                 .await
                 .unwrap()
                 .is_empty()
+        );
+    }
+
+    fn named_source(resolver: Arc<crate::source_dns::tests::FakeResolver>) -> SmbSource {
+        // Port 1 on loopback refuses the connection at once.
+        SmbSource::with_resolver(parsed("smb://nas.test:1/Cursos"), None, None, resolver).unwrap()
+    }
+
+    #[tokio::test]
+    async fn a_name_with_one_denied_address_is_refused_before_connecting() {
+        let resolver = crate::source_dns::tests::FakeResolver::new(
+            "nas.test",
+            vec![vec![
+                "127.0.0.1".parse().unwrap(),
+                "169.254.169.254".parse().unwrap(),
+            ]],
+        );
+        let source = named_source(resolver);
+
+        assert_eq!(source.probe().await.unwrap_err(), SourceError::Denied);
+    }
+
+    #[tokio::test]
+    async fn a_permitted_name_is_attempted_and_a_changed_record_is_refused_next_time() {
+        let resolver = crate::source_dns::tests::FakeResolver::new(
+            "nas.test",
+            vec![
+                vec!["127.0.0.1".parse().unwrap()],
+                vec!["169.254.169.254".parse().unwrap()],
+            ],
+        );
+        let source = named_source(Arc::clone(&resolver));
+
+        // Permitted address: the connection is attempted and fails only on the closed port.
+        assert_eq!(source.probe().await.unwrap_err(), SourceError::Unreachable);
+        // The failed session was not cached, so the changed record is resolved again.
+        assert_eq!(source.probe().await.unwrap_err(), SourceError::Denied);
+        assert_eq!(*resolver.lookups.lock().unwrap(), 2);
+    }
+
+    #[tokio::test]
+    async fn a_denied_literal_ip_is_still_refused() {
+        let resolver = crate::source_dns::tests::FakeResolver::new("unused.test", vec![vec![]]);
+        let source = SmbSource::with_resolver(
+            url::Url::parse("smb://169.254.169.254/Cursos").unwrap(),
+            None,
+            None,
+            resolver,
+        );
+        // The URL parser already refuses it; a hand-built URL must be refused too.
+        assert!(crate::webdav::parse_source_url("smb://169.254.169.254/Cursos").is_err());
+        assert_eq!(
+            source.unwrap().probe().await.unwrap_err(),
+            SourceError::Denied
         );
     }
 }
