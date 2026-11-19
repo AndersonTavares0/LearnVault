@@ -817,9 +817,9 @@ jobs:
     needs: [validate-tag, container, publish]
     if: >-
       ${{ always() && needs.validate-tag.result == 'success' &&
-      (needs.container.outputs.tag_move_started == 'true' ||
-       needs.publish.outputs.asset_upload_started == 'true' ||
-       needs.publish.result == 'success') }}
+      (needs.publish.outputs.asset_upload_started == 'true' ||
+       (needs.publish.result != 'failure' &&
+        (needs.container.outputs.tag_move_started == 'true' || needs.publish.result == 'success'))) }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
@@ -980,8 +980,10 @@ jobs:
             "learnvault-windows-${RELEASE_TAG}.nsis.zip.sig"
             "learnvault-linux-desktop-amd64.flatpak"
             "learnvault-linux-desktop-arm64.flatpak"
+            "learnvault-${RELEASE_TAG}.sbom.cdx.json"
             "latest.json"
             "SHA256SUMS"
+            "SHA256SUMS.sigstore.json"
           )
           for asset in "${expected[@]}"; do
             error_file="$(mktemp)"
@@ -1017,6 +1019,39 @@ jobs:
           tar -xzf verify-dist/learnvault-linux-amd64.tar.gz -C "$smoke_dir"
           ./.trusted-workflow/scripts/smoke-release-binary.sh \
             "$smoke_dir/learnvault-linux-amd64" "$RELEASE_TAG" "$smoke_dir/web"
+      - name: Verify signed checksums and published binary provenance
+        if: ${{ needs.publish.outputs.asset_upload_started == 'true' || needs.publish.result == 'success' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          cosign verify-blob verify-dist/SHA256SUMS \
+            --bundle verify-dist/SHA256SUMS.sigstore.json \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity-regexp "^https://github[.]com/${REPOSITORY//./[.]}/[.]github/workflows/release[.]yml@refs/(tags/v[0-9]+[.][0-9]+[.][0-9]+|heads/main)$"
+
+          error_file="$(mktemp)"
+          for attempt in 1 2 3 4 5 6; do
+            if gh attestation verify verify-dist/learnvault-linux-amd64.tar.gz \
+              --repo "$REPOSITORY" \
+              --signer-workflow "$REPOSITORY/.github/workflows/release.yml" \
+              --predicate-type https://slsa.dev/provenance/v1 2>"$error_file"; then
+              break
+            fi
+            if ! grep -Eqi 'HTTP 404|404 Not Found|status code: 404' "$error_file"; then
+              cat "$error_file" >&2
+              exit 1
+            fi
+            if (( attempt == 6 )); then
+              echo "::error::Release provenance was not available after bounded propagation retries" >&2
+              cat "$error_file" >&2
+              exit 1
+            fi
+            echo "::notice::Release provenance is not visible yet; retrying propagation check ($attempt/6)."
+            sleep 5
+          done
       - name: Alert on partial publication or verification failure
         if: >-
           ${{ always() &&
@@ -1030,6 +1065,6 @@ jobs:
           {
             echo "## Release publication or verification failed for ${RELEASE_TAG}"
             echo ""
-            echo "The release run held the repository's Release concurrency lock. Review its job outputs and registry state, then follow the rollback preflight in `.github/workflows/rollback.yml` if aliases moved partially."
+            echo "The release run held the repository's Release concurrency lock. Review its job outputs and registry state, then follow the rollback preflight in .github/workflows/rollback.yml if aliases moved partially."
           } >> "$GITHUB_STEP_SUMMARY"
           exit 1
