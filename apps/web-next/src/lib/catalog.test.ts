@@ -94,8 +94,13 @@ describe('countCatalogFiles', () => {
 	it('counts only the files of the node itself', () => {
 		const parent = node('lesson', 'Aula', [], [file('a.mp4', 'media')]);
 		parent.children = [node('lesson', 'Bônus', [], [file('b.mp4', 'media'), file('b.pdf', 'material')])];
-		expect(countCatalogFiles(parent)).toEqual({ videos: 1, materials: 0 });
-		expect(countCatalogFiles(parent.children[0])).toEqual({ videos: 1, materials: 1 });
+		expect(countCatalogFiles(parent)).toEqual({ videos: 1, audios: 0, materials: 0 });
+		expect(countCatalogFiles(parent.children[0])).toEqual({ videos: 1, audios: 0, materials: 1 });
+	});
+
+	it('separates audio media from video media', () => {
+		const audioLesson = node('lesson', 'Audio', [], [file('talk.wav', 'media'), file('notes.mp3', 'media'), file('slides.pdf', 'material')]);
+		expect(countCatalogFiles(audioLesson)).toEqual({ videos: 0, audios: 2, materials: 1 });
 	});
 });
 
@@ -258,6 +263,15 @@ describe('formatLessonMeta', () => {
 		expect(formatLessonMeta({ videos: 0, materials: 5 })).toBe('5 materiais');
 		expect(formatLessonMeta({ videos: 4, materials: 0 })).toBe('4 vídeos');
 		expect(formatLessonMeta({ videos: 0, materials: 0 })).toBe('');
+	});
+
+	it('formats audio counts with singular and plural in English and Portuguese', () => {
+		expect(formatLessonMeta({ videos: 0, audios: 1, materials: 0 })).toBe('1 audio');
+		expect(formatLessonMeta({ videos: 0, audios: 2, materials: 1 })).toBe('2 audios · 1 material');
+
+		setLocale('pt-BR');
+		expect(formatLessonMeta({ videos: 0, audios: 1, materials: 0 })).toBe('1 áudio');
+		expect(formatLessonMeta({ videos: 0, audios: 2, materials: 1 })).toBe('2 áudios · 1 material');
 	});
 });
 
