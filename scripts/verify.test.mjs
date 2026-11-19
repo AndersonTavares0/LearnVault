@@ -22,9 +22,11 @@ const root = path.resolve(scriptsDir, '..');
 // fake spawn: records the calls and resolves each child with the requested result.
 function fakeSpawn(results) {
 	const calls = [];
-	const spawnImpl = (command, args) => {
+	const optionsList = [];
+	const spawnImpl = (command, args, options) => {
 		const index = calls.length;
 		calls.push([command, ...args]);
+		optionsList.push(options);
 		const { code = 0, error } = results[index] ?? {};
 		const child = new EventEmitter();
 		// Emitting in a microtask guarantees that runSteps has already attached the listeners.
@@ -37,7 +39,7 @@ function fakeSpawn(results) {
 		});
 		return child;
 	};
-	return { spawnImpl, calls };
+	return { spawnImpl, calls, optionsList };
 }
 
 test('the default plan runs the intended checks, without Go or desktop', () => {
@@ -61,6 +63,26 @@ test('--fast keeps check, tests and lints, and removes builds and audit', () => 
 	assert.ok(!labels.includes('pnpm run build'));
 	assert.ok(!labels.includes('pnpm run build:desktop'));
 	assert.ok(!labels.includes('pnpm audit --audit-level=low'));
+});
+
+test('full plan reuses prebuilt SPA outputs in Vitest while --fast leaves Vitest to build them', async () => {
+	const fullPlan = buildSteps({ fast: false });
+	const fullTestIndex = fullPlan.findIndex((step) => step.label === 'pnpm --filter learnvault-web-next test');
+	const fullBuildIndex = fullPlan.findIndex((step) => step.label === 'pnpm run build');
+	const fullDesktopBuildIndex = fullPlan.findIndex((step) => step.label === 'pnpm run build:desktop');
+
+	assert.ok(fullBuildIndex >= 0 && fullDesktopBuildIndex >= 0, 'full plan must build both SPA targets');
+	assert.ok(fullBuildIndex < fullTestIndex && fullDesktopBuildIndex < fullTestIndex, 'both builds must run before Vitest');
+	assert.deepEqual(fullPlan[fullTestIndex].env, { LEARNVAULT_PREBUILT_OUTPUTS: '1' });
+
+	const { spawnImpl, optionsList } = fakeSpawn(fullPlan.map(() => ({ code: 0 })));
+	const code = await runSteps(fullPlan, { spawnImpl, log() {}, errorLog() {} });
+	assert.equal(code, 0);
+	assert.equal(optionsList[fullTestIndex]?.env?.LEARNVAULT_PREBUILT_OUTPUTS, '1');
+
+	const fastPlan = buildSteps({ fast: true });
+	const fastTestStep = fastPlan.find((step) => step.label === 'pnpm --filter learnvault-web-next test');
+	assert.equal(fastTestStep?.env, undefined, '--fast skips pre-builds, so Vitest must not assume prebuilt outputs');
 });
 
 test('runSteps returns 0 and runs in order when everything passes', async () => {
