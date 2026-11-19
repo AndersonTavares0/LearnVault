@@ -610,6 +610,80 @@ fn restore_removes_sidecars_for_custom_database_extensions() -> TestResult {
 }
 
 #[test]
+fn restore_replaces_stale_wal_and_leaves_an_intact_database() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let backup_path = dir.path().join("backup.sqlite");
+    let target_path = dir.path().join("target.sqlite");
+    let backup = Database::open_in_memory()?;
+    backup.connection().execute(
+        "INSERT INTO library (library_id, available) VALUES ('restored-row', 1)",
+        [],
+    )?;
+    backup.backup_to(&backup_path)?;
+
+    let target = Database::open(&target_path)?;
+    target
+        .connection()
+        .pragma_update(None, "wal_autocheckpoint", 0)?;
+    target.connection().execute(
+        "INSERT INTO library (library_id, available) VALUES ('stale-row', 1)",
+        [],
+    )?;
+    let wal_path = appended_sidecar(&target_path, "-wal");
+    assert!(wal_path.exists());
+
+    Database::restore_from(&backup_path, &target_path)?;
+    drop(target);
+
+    assert!(!wal_path.exists());
+    let restored = Database::open(&target_path)?;
+    let integrity: String =
+        restored
+            .connection()
+            .query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
+    assert_eq!(integrity, "ok");
+    let restored_count: i64 = restored.connection().query_row(
+        "SELECT COUNT(*) FROM library WHERE library_id = 'restored-row'",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(restored_count, 1);
+    let stale_count: i64 = restored.connection().query_row(
+        "SELECT COUNT(*) FROM library WHERE library_id = 'stale-row'",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(stale_count, 0);
+    Ok(())
+}
+
+#[test]
+fn restore_fails_when_destination_cannot_be_checkpointed_without_replacing_it() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let backup_path = dir.path().join("backup.sqlite");
+    let target_path = dir.path().join("target.sqlite");
+    Database::open_in_memory()?.backup_to(&backup_path)?;
+    drop(Database::open(&target_path)?);
+    let original = std::fs::read(&target_path)?;
+
+    let mut locked_connection = rusqlite::Connection::open(&target_path)?;
+    locked_connection.pragma_update(None, "journal_mode", "WAL")?;
+    let transaction = locked_connection.transaction()?;
+    transaction.execute(
+        "INSERT INTO library (library_id, available) VALUES ('uncommitted-row', 1)",
+        [],
+    )?;
+
+    assert!(matches!(
+        Database::restore_from(&backup_path, &target_path),
+        Err(Error::RestoreCheckpointFailed)
+    ));
+    assert_eq!(std::fs::read(&target_path)?, original);
+    drop(transaction);
+    Ok(())
+}
+
+#[test]
 fn restore_rejects_a_too_new_schema_version() -> TestResult {
     let dir = tempfile::tempdir()?;
     let backup_path = dir.path().join("future.sqlite");

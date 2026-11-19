@@ -390,6 +390,12 @@ impl Database {
                 })?;
         }
 
+        if target_path.exists() {
+            checkpoint_restore_destination(target_path)?;
+        }
+        remove_sqlite_sidecar(target_path, "-wal")?;
+        remove_sqlite_sidecar(target_path, "-shm")?;
+
         let (_staging_directory, staging_file) = private_staging_file(target_path)?;
         let temp_target = staging_file.path().to_path_buf();
         let mut dest_conn =
@@ -438,8 +444,8 @@ impl Database {
                 source: error.error,
             })?;
 
-        remove_sqlite_sidecar(target_path, "-wal")?;
-        remove_sqlite_sidecar(target_path, "-shm")?;
+        let _ = remove_sqlite_sidecar(target_path, "-wal");
+        let _ = remove_sqlite_sidecar(target_path, "-shm");
 
         Ok(())
     }
@@ -524,6 +530,22 @@ fn remove_sqlite_sidecar(database_path: &Path, suffix: &str) -> Result<()> {
             source,
         }),
     }
+}
+
+fn checkpoint_restore_destination(database_path: &Path) -> Result<()> {
+    let conn = Connection::open(database_path).map_err(|_| Error::RestoreCheckpointFailed)?;
+    conn.busy_timeout(Duration::from_secs(5))
+        .map_err(|_| Error::RestoreCheckpointFailed)?;
+    let (busy, log_frames, checkpointed_frames): (i64, i64, i64) = conn
+        .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        })
+        .map_err(|_| Error::RestoreCheckpointFailed)?;
+    if busy != 0 || (log_frames >= 0 && checkpointed_frames < log_frames) {
+        return Err(Error::RestoreCheckpointFailed);
+    }
+    drop(conn);
+    Ok(())
 }
 
 struct TableDefinition {

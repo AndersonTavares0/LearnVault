@@ -92,6 +92,10 @@ pub enum Error {
     #[error("backup does not contain a valid LearnVault database schema")]
     RestoreInvalidSchema,
 
+    /// The current destination could not be checkpointed before replacement.
+    #[error("could not checkpoint the destination database before restore")]
+    RestoreCheckpointFailed,
+
     /// The backup's integrity check failed.
     #[error("falha na integridade do backup SQLite: {0}")]
     BackupIntegrityFailed(String),
