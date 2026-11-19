@@ -1,6 +1,6 @@
 {
   "identifier": "main-window",
-  "description": "Permissoes minimas do nucleo do Tauri para a janela principal do LearnVault desktop. Alem dos comandos IPC do aplicativo, a titlebar usa permissoes de janela para minimizar, maximizar/restaurar, fechar, arrastar e consultar estado. O seletor nativo de curso e capa roda no Rust; o rescan e explicito, o dono do estudo e fixo no Rust e a ordem manual vive no diretorio do aplicativo. Sem shell, process, http, fs amplo, dialog, store, remote ou permissoes diretas de updater.",
+  "description": "Minimal Tauri core permissions for the LearnVault desktop main window. In addition to the application's IPC commands, the title bar uses window permissions to minimize, maximize or restore, close, drag, and query its state. The native course and cover picker runs in Rust; rescanning is explicit, the study owner is fixed in Rust, and manual ordering lives in the application directory. No shell, process, HTTP, broad filesystem, dialog, store, remote, or direct updater permissions.",
   "windows": [
     "main"
   ],

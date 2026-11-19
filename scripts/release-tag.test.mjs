@@ -164,6 +164,34 @@ test('release tags accept strict stable versions only', t => {
     }
 });
 
+test('release smoke is tied to trusted helper code and independent tagged version metadata', () => {
+    assert.match(workflow, /ref: \$\{\{ github\.workflow_sha \}\}/);
+    assert.match(workflow, /\.github\/release-please\/version\.txt/);
+    assert.match(workflow, /"v\$release_version" != "\$RELEASE_TAG"/);
+    for (const arch of ['amd64', 'arm64']) {
+        const block = runBlock(`Smoke test packaged Linux ${arch} binary`);
+        assert.match(block, /\.\/\.trusted-workflow\/scripts\/smoke-release-binary\.sh/);
+        assert.match(block, new RegExp(`learnvault-linux-${arch}\\.tar\\.gz`));
+    }
+    const smokeIndex = workflow.indexOf('- name: Smoke test the pushed ${{ matrix.arch }} image');
+    const digestIndex = workflow.indexOf('- name: Keep the scanned digest for the index');
+    assert.ok(smokeIndex >= 0 && smokeIndex < digestIndex, 'image smoke gates the digest accepted by the publish job');
+    assert.match(workflow.slice(smokeIndex, digestIndex), /docker pull "\$IMAGE"/);
+    assert.match(workflow.slice(smokeIndex, digestIndex), /RELEASE_TAG: \$\{\{ needs\.validate-tag\.outputs\.tag \}\}/);
+});
+
+test('real-server CI smoke runs after the SPA build and retains Playwright cache and ffmpeg setup', () => {
+    const ci = readFileSync(join(root, '.github/workflows/ci.yml'), 'utf8');
+    const e2eStart = ci.indexOf('  e2e-server:');
+    const e2eBlock = ci.slice(e2eStart);
+    const smokeIndex = e2eBlock.indexOf('- name: Smoke test real server binary');
+    assert.ok(smokeIndex >= 0 && e2eBlock.indexOf('pnpm --filter learnvault-web-next build') < smokeIndex);
+    assert.match(e2eBlock, /name: Restore Cargo registry and target/);
+    assert.match(e2eBlock, /cache: pnpm/);
+    assert.match(e2eBlock, /name: Install system ffmpeg for transcoding E2E/);
+    assert.match(e2eBlock, /pnpm exec playwright install chromium/);
+});
+
 test('pre-releases never move stable, latest or minor image tags and no rc tag is applied', () => {
     const stableOnly = "needs.validate-tag.outputs.prerelease == 'false'";
     assert.equal(workflow.split(stableOnly).length - 1, 6);

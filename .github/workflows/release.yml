@@ -32,6 +32,7 @@ jobs:
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
       commit_sha: ${{ steps.commit.outputs.commit_sha }}
+      package_version: ${{ steps.version.outputs.package_version }}
       release_notes_base64: ${{ steps.release-notes.outputs.release_notes_base64 }}
       prerelease: ${{ steps.release-kind.outputs.prerelease }}
     steps:
@@ -111,6 +112,19 @@ jobs:
             exit 1
           fi
           echo "commit_sha=$COMMIT_SHA" >> "$GITHUB_OUTPUT"
+      - name: Match tag to packaged server metadata
+        id: version
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          release_version="$(tr -d '\r\n' < .github/release-please/version.txt)"
+          if [[ ! "$release_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ || "v$release_version" != "$RELEASE_TAG" ]]; then
+            echo "::error::Release tag $RELEASE_TAG does not match Release Please version metadata $release_version" >&2
+            exit 1
+          fi
+          echo "package_version=$release_version" >> "$GITHUB_OUTPUT"
 
   linux:
     name: Build Linux assets
@@ -122,6 +136,12 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ needs.validate-tag.outputs.commit_sha }}
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .trusted-workflow
+          sparse-checkout: scripts
           persist-credentials: false
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -158,6 +178,16 @@ jobs:
           grep -qx "web/200.html" /tmp/learnvault-linux-amd64.list
           rm "dist/learnvault-linux-amd64" dist/LICENSE
           rm -rf dist/web
+      - name: Smoke test packaged Linux amd64 binary
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          smoke_dir="$(mktemp -d)"
+          trap 'rm -rf "$smoke_dir"' EXIT
+          tar -xzf "dist/learnvault-linux-amd64.tar.gz" -C "$smoke_dir"
+          ./.trusted-workflow/scripts/smoke-release-binary.sh "$smoke_dir/learnvault-linux-amd64" "$RELEASE_TAG" "$smoke_dir/web"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-linux-amd64
@@ -174,6 +204,12 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ needs.validate-tag.outputs.commit_sha }}
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .trusted-workflow
+          sparse-checkout: scripts
           persist-credentials: false
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -211,6 +247,16 @@ jobs:
           grep -qx "web/200.html" /tmp/learnvault-linux-arm64.list
           rm "dist/learnvault-linux-arm64" dist/LICENSE
           rm -rf dist/web
+      - name: Smoke test packaged Linux arm64 binary
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          smoke_dir="$(mktemp -d)"
+          trap 'rm -rf "$smoke_dir"' EXIT
+          tar -xzf "dist/learnvault-linux-arm64.tar.gz" -C "$smoke_dir"
+          ./.trusted-workflow/scripts/smoke-release-binary.sh "$smoke_dir/learnvault-linux-arm64" "$RELEASE_TAG" "$smoke_dir/web"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-linux-arm64
@@ -358,6 +404,12 @@ jobs:
           ref: ${{ needs.validate-tag.outputs.commit_sha }}
           fetch-depth: 0
           persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .trusted-workflow
+          sparse-checkout: scripts
+          persist-credentials: false
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Log in to GitHub Container Registry
@@ -424,6 +476,17 @@ jobs:
           format: table
           severity: HIGH,CRITICAL
           exit-code: '1'
+      - name: Smoke test the pushed ${{ matrix.arch }} image
+        shell: bash
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}@${{ steps.push.outputs.digest }}
+          CONTAINER: learnvault-release-smoke-${{ matrix.arch }}-${{ github.run_id }}
+          SKIP_BUILD: '1'
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          docker pull "$IMAGE"
+          ./.trusted-workflow/scripts/verify-rust-oci.sh
       - name: Keep the scanned digest for the index
         shell: bash
         env:
