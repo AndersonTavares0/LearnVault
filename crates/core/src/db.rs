@@ -375,8 +375,8 @@ impl Database {
             }
             drop(source_conn);
             drop(copy_conn);
-            std::fs::File::open(&copy_temp_path)
-                .and_then(|file| file.sync_all())
+            copy.as_file()
+                .sync_all()
                 .map_err(|source| Error::BackupIo {
                     operation: "sync rollback copy".to_owned(),
                     path: copy_path.clone(),

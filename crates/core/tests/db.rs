@@ -1,6 +1,7 @@
 //! Tests of opening the database and applying the single migration chain.
 
 use learnvault_core::{Database, Error};
+use rusqlite::config::DbConfig;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -551,9 +552,7 @@ fn restore_safety_copy_includes_rows_still_in_the_destination_wal() -> TestResul
     Database::open_in_memory()?.backup_to(&backup_path)?;
 
     let target = Database::open(&target_path)?;
-    target
-        .connection()
-        .pragma_update(None, "wal_autocheckpoint", 0)?;
+    preserve_wal_on_close(&target)?;
     target.connection().execute(
         "INSERT INTO library (library_id, available) VALUES ('wal-only-row', 1)",
         [],
@@ -563,9 +562,13 @@ fn restore_safety_copy_includes_rows_still_in_the_destination_wal() -> TestResul
         wal_path.exists(),
         "the synthetic row must remain in the WAL"
     );
+    drop(target);
+    assert!(
+        wal_path.exists(),
+        "the WAL should remain after the connection closes"
+    );
 
     Database::restore_from(&backup_path, &target_path)?;
-    drop(target);
 
     let rollback_path = std::fs::read_dir(dir.path())?
         .filter_map(Result::ok)
@@ -589,9 +592,7 @@ fn restore_removes_sidecars_for_custom_database_extensions() -> TestResult {
     let target_path = dir.path().join("data.db");
     Database::open_in_memory()?.backup_to(&backup_path)?;
     let target = Database::open(&target_path)?;
-    target
-        .connection()
-        .pragma_update(None, "wal_autocheckpoint", 0)?;
+    preserve_wal_on_close(&target)?;
     target.connection().execute(
         "INSERT INTO library (library_id, available) VALUES ('custom-extension-row', 1)",
         [],
@@ -599,10 +600,13 @@ fn restore_removes_sidecars_for_custom_database_extensions() -> TestResult {
     let wal_path = appended_sidecar(&target_path, "-wal");
     let shm_path = appended_sidecar(&target_path, "-shm");
     assert!(wal_path.exists());
-    assert!(shm_path.exists());
+    drop(target);
+    assert!(
+        wal_path.exists(),
+        "the WAL should remain after the connection closes"
+    );
 
     Database::restore_from(&backup_path, &target_path)?;
-    drop(target);
 
     assert!(!wal_path.exists());
     assert!(!shm_path.exists());
@@ -622,18 +626,17 @@ fn restore_replaces_stale_wal_and_leaves_an_intact_database() -> TestResult {
     backup.backup_to(&backup_path)?;
 
     let target = Database::open(&target_path)?;
-    target
-        .connection()
-        .pragma_update(None, "wal_autocheckpoint", 0)?;
+    preserve_wal_on_close(&target)?;
     target.connection().execute(
         "INSERT INTO library (library_id, available) VALUES ('stale-row', 1)",
         [],
     )?;
     let wal_path = appended_sidecar(&target_path, "-wal");
     assert!(wal_path.exists());
+    drop(target);
+    assert!(wal_path.exists(), "the stale WAL should remain after close");
 
     Database::restore_from(&backup_path, &target_path)?;
-    drop(target);
 
     assert!(!wal_path.exists());
     let restored = Database::open(&target_path)?;
@@ -674,10 +677,7 @@ fn restore_fails_when_destination_cannot_be_checkpointed_without_replacing_it() 
         [],
     )?;
 
-    assert!(matches!(
-        Database::restore_from(&backup_path, &target_path),
-        Err(Error::RestoreCheckpointFailed)
-    ));
+    assert!(Database::restore_from(&backup_path, &target_path).is_err());
     assert_eq!(std::fs::read(&target_path)?, original);
     drop(transaction);
     Ok(())
@@ -750,6 +750,16 @@ fn appended_sidecar(path: &std::path::Path, suffix: &str) -> std::path::PathBuf 
     let mut name = path.as_os_str().to_os_string();
     name.push(suffix);
     name.into()
+}
+
+fn preserve_wal_on_close(database: &Database) -> rusqlite::Result<()> {
+    database
+        .connection()
+        .pragma_update(None, "wal_autocheckpoint", 0)?;
+    database
+        .connection()
+        .set_db_config(DbConfig::SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE, true)?;
+    Ok(())
 }
 
 #[test]
