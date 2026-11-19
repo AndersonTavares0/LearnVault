@@ -237,6 +237,51 @@ test('pushing and publishing wait for approval in the release environment', () =
     }
 });
 
+test('post-publication verification binds this run digest to targeted aliases and handles partial mutation', () => {
+    const start = workflow.indexOf('\n  verify-published:\n');
+    assert.ok(start >= 0, 'missing Verify published release job');
+    const verify = workflow.slice(start);
+    assert.match(verify, /always\(\)/);
+    assert.match(verify, /needs\.container\.outputs\.tag_move_started == 'true'/);
+    assert.match(verify, /needs\.publish\.outputs\.asset_upload_started == 'true'/);
+    assert.match(
+        verify,
+        /\(needs\.publish\.outputs\.asset_upload_started == 'true' \|\|\s*\(needs\.publish\.result != 'failure' &&\s*\(needs\.container\.outputs\.tag_move_started == 'true'/,
+        'a rejected publish environment approval must not start verification'
+    );
+    assert.match(workflow, /index_digest: \$\{\{ steps\.index\.outputs\.digest \}\}/);
+    assert.match(workflow, /image_tags: \$\{\{ steps\.meta\.outputs\.tags \}\}/);
+    assert.match(verify, /EXPECTED_DIGEST: \$\{\{ needs\.container\.outputs\.index_digest \}\}/);
+    assert.match(verify, /docker buildx imagetools inspect --format '\{\{\.Manifest\.Digest\}\}'/);
+    assert.match(verify, /observed" != "\$EXPECTED_DIGEST/);
+    assert.match(verify, /cosign verify "\$\{IMAGE\}@\$\{EXPECTED_DIGEST\}"/);
+    assert.doesNotMatch(verify, /cosign verify "\$IMAGE:\$\{alias\}"/);
+    assert.match(verify, /manifest unknown\|no such manifest\|404 Not Found/);
+    assert.match(verify, /sleep 5/);
+    assert.match(verify, /verify-release-index-attestations\.mjs/);
+    assert.match(verify, /sha256sum -c SHA256SUMS/);
+    assert.match(verify, /"learnvault-\$\{RELEASE_TAG\}\.sbom\.cdx\.json"/);
+    assert.match(verify, /"SHA256SUMS\.sigstore\.json"/);
+    assert.match(verify, /cosign verify-blob verify-dist\/SHA256SUMS/);
+    assert.match(verify, /--certificate-identity-regexp "\^https:\/\/github\[\.\]com\/\$\{REPOSITORY\/\/\.\/\[\.\]\}/);
+    const checksumVerification = verify.slice(verify.indexOf('cosign verify-blob'), verify.indexOf('error_file="$(mktemp)"'));
+    assert.doesNotMatch(checksumVerification, /\\\\\./, 'checksum verification must not retain doubled escape sequences');
+    assert.match(verify, /gh attestation verify verify-dist\/learnvault-linux-amd64\.tar\.gz/);
+    assert.match(verify, /--predicate-type https:\/\/slsa\.dev\/provenance\/v1/);
+    assert.match(verify, /HTTP 404\|404 Not Found\|status code: 404/);
+    assert.match(verify, /Alert on partial publication or verification failure/);
+    assert.doesNotMatch(verify, /^  concurrency:/m, 'verification remains inside the Release run and its existing concurrency lock');
+});
+
+test('partial-publication alert does not run rollback path text as shell command substitution', () => {
+    const verify = workflow.slice(workflow.indexOf('\n  verify-published:\n'));
+    const alert = verify.slice(verify.indexOf('- name: Alert on partial publication or verification failure'));
+    const run = alert.match(/\n        run: \|\n([\s\S]*?)(?=\n  [a-z-]+:\n|$)/)?.[1];
+    assert.ok(run, 'alert step run block not found');
+    assert.doesNotMatch(run, /"[^"\n]*(?<!\\)`[^"\n]*"/, 'unescaped backticks inside double-quoted strings invoke command substitution');
+    assert.match(run, /\.github\/workflows\/rollback\.yml/);
+});
+
 test('a release must be published and not a draft; a pre-release is flagged so it keeps the moving tags', t => {
     const { directory } = fixture(t);
     const script = runBlock('Require an existing published release');
