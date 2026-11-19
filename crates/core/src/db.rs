@@ -48,6 +48,8 @@ pub fn file_has_current_schema(path: impl AsRef<Path>) -> Result<bool> {
             path: PathBuf::from(path),
             source,
         })?;
+    // Wait briefly for transient SQLite lock contention while keeping probes bounded.
+    conn.busy_timeout(Duration::from_millis(500))?;
     Database { conn }.has_current_schema()
 }
 

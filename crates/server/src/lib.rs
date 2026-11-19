@@ -781,6 +781,33 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn healthz_stays_ready_during_an_uncommitted_file_write() {
+        let temp = tempfile::tempdir().unwrap();
+        let state = AppState::initialize(config_fixture(&temp)).await.unwrap();
+        let app = build_router(state.clone());
+        let database = state.database.clone().lock_owned().await;
+        database
+            .connection()
+            .execute_batch(
+                "BEGIN IMMEDIATE;
+                 INSERT INTO library (library_id, available) VALUES ('healthz-writer', 1);",
+            )
+            .unwrap();
+
+        let response = app
+            .oneshot(Request::get("/api/healthz").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()["cache-control"], "no-store");
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["status"], "ok");
+        database.connection().execute_batch("ROLLBACK;").unwrap();
+    }
+
+    #[tokio::test]
     async fn healthz_reports_unavailable_when_database_check_capacity_is_busy() {
         let temp = tempfile::tempdir().unwrap();
         let state = AppState::initialize(config_fixture(&temp)).await.unwrap();
