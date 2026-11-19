@@ -432,27 +432,9 @@ async fn catalog_reports_database_errors_without_caching_or_leaking_paths() {
     );
 }
 
-#[tokio::test]
-async fn rescan_reports_a_missing_course_root_as_failed_without_exposing_paths() {
-    let temp = tempfile::tempdir().unwrap();
-    let library = temp.path().join("library");
-    fs::create_dir(&library).unwrap();
-    let mut server_config = Config::from_args([
-        "learnvault-server",
-        "--database",
-        temp.path().join("catalog.sqlite").to_str().unwrap(),
-        "--library-root",
-        library.to_str().unwrap(),
-    ])
-    .unwrap();
-    server_config.admin_username = Some("admin".to_owned());
-    server_config.admin_password = Some("uma senha local muito segura".to_owned());
-    server_config.cookie_secure = false;
-    let app = build_router(AppState::initialize(server_config).await.unwrap());
-    let cookie = login(&app).await;
-    fs::remove_dir(&library).unwrap();
-
+async fn course_rescan(app: &axum::Router, cookie: &str) -> serde_json::Value {
     let response = app
+        .clone()
         .oneshot(
             Request::post("/api/admin/catalog/rescan")
                 .header("origin", "http://localhost")
@@ -462,20 +444,151 @@ async fn rescan_reports_a_missing_course_root_as_failed_without_exposing_paths()
         )
         .await
         .unwrap();
-    // A removed root does not bring down the other courses: the response aggregates the failure without
-    // following the target and without exposing the path.
     assert_eq!(response.status(), StatusCode::OK);
     assert_private_no_store(&response);
     let body = response.into_body().collect().await.unwrap().to_bytes();
-    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(json["complete"], false);
-    assert_eq!(json["courses"], 1);
-    assert_eq!(json["failed_courses"], 1);
-    assert!(
-        !body
-            .windows(library.to_str().unwrap().len())
-            .any(|window| { window == library.to_str().unwrap().as_bytes() })
+    serde_json::from_slice(&body).unwrap()
+}
+
+async fn scanned_course(
+    temp: &TempDir,
+) -> (axum::Router, String, std::path::PathBuf, Database, String) {
+    let course = temp.path().join("library/Course");
+    fs::create_dir_all(&course).unwrap();
+    fs::write(course.join("lesson.webm"), b"video fixture").unwrap();
+    let mut config = config(temp);
+    config.library_root = Some(temp.path().join("library"));
+    let app = build_router(AppState::initialize(config).await.unwrap());
+    let cookie = login(&app).await;
+    let summary = course_rescan(&app, &cookie).await;
+    assert_eq!(summary["inserted"], 1);
+    let database = Database::open(temp.path().join("catalog.sqlite")).unwrap();
+    let media_id = database
+        .connection()
+        .query_row("SELECT media_id FROM media", [], |row| row.get(0))
+        .unwrap();
+    (app, cookie, course, database, media_id)
+}
+
+fn media_availability(database: &Database, media_id: &str) -> String {
+    database
+        .connection()
+        .query_row(
+            "SELECT availability FROM media WHERE media_id = ?1",
+            [media_id],
+            |row| row.get(0),
+        )
+        .unwrap()
+}
+
+#[tokio::test]
+async fn rescan_marks_a_renamed_course_missing_and_restores_its_media_and_progress() {
+    let temp = tempfile::tempdir().unwrap();
+    let (app, cookie, course, database, media_id) = scanned_course(&temp).await;
+    let complete = app
+        .clone()
+        .oneshot(
+            Request::post("/api/study/completed")
+                .header("origin", "http://localhost")
+                .header("cookie", &cookie)
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({ "media_id": media_id, "completed": true }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(complete.status(), StatusCode::OK);
+
+    let moved = course.with_file_name("Moved course");
+    fs::rename(&course, &moved).unwrap();
+    let summary = course_rescan(&app, &cookie).await;
+    assert_eq!(summary["complete"], true);
+    assert_eq!(summary["failed_courses"], 0);
+    assert_eq!(summary["marked_missing"], 1);
+    assert_eq!(media_availability(&database, &media_id), "missing");
+
+    fs::rename(&moved, &course).unwrap();
+    let summary = course_rescan(&app, &cookie).await;
+    assert_eq!(summary["updated"], 1);
+    assert_eq!(summary["inserted"], 0);
+    assert_eq!(media_availability(&database, &media_id), "available");
+
+    let progress = app
+        .oneshot(
+            Request::get(format!("/api/study/progress?media_id={media_id}"))
+                .header("cookie", &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(progress.status(), StatusCode::OK);
+    let body = progress.into_body().collect().await.unwrap().to_bytes();
+    let progress: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(progress["recorded"], true);
+    assert_eq!(progress["completed"], true);
+}
+
+#[tokio::test]
+async fn rescan_marks_a_removed_course_missing_without_exposing_paths() {
+    let temp = tempfile::tempdir().unwrap();
+    let (app, cookie, course, database, media_id) = scanned_course(&temp).await;
+    fs::remove_dir_all(&course).unwrap();
+
+    let summary = course_rescan(&app, &cookie).await;
+    assert_eq!(summary["marked_missing"], 1);
+    assert_eq!(summary["failed_courses"], 0);
+    assert_eq!(media_availability(&database, &media_id), "missing");
+    assert!(!summary.to_string().contains(course.to_str().unwrap()));
+}
+
+#[tokio::test]
+async fn rescan_preserves_media_if_the_course_parent_is_gone() {
+    let temp = tempfile::tempdir().unwrap();
+    let (app, cookie, course, database, media_id) = scanned_course(&temp).await;
+    fs::rename(
+        course.parent().unwrap(),
+        temp.path().join("Offline library"),
+    )
+    .unwrap();
+
+    let summary = course_rescan(&app, &cookie).await;
+    assert_eq!(summary["complete"], false);
+    assert_eq!(summary["failed_courses"], 1);
+    assert_eq!(summary["marked_missing"], 0);
+    assert_eq!(media_availability(&database, &media_id), "available");
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn rescan_preserves_media_if_the_course_root_has_no_read_permissions() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp = tempfile::tempdir().unwrap();
+    let (app, cookie, course, database, media_id) = scanned_course(&temp).await;
+    let original = fs::metadata(&course).unwrap().permissions();
+    fs::set_permissions(&course, fs::Permissions::from_mode(0o000)).unwrap();
+    let listing = fs::read_dir(&course);
+    if listing.is_ok() {
+        // Privileged runners can bypass the mode bits.
+        eprintln!(
+            "Skipping permission-denial assertions because the runner can list a mode-000 directory."
+        );
+        fs::set_permissions(&course, original).unwrap();
+        return;
+    }
+    let summary = course_rescan(&app, &cookie).await;
+    fs::set_permissions(&course, original).unwrap();
+    assert_eq!(
+        listing.unwrap_err().kind(),
+        std::io::ErrorKind::PermissionDenied
     );
+    assert_eq!(summary["complete"], false);
+    assert_eq!(summary["failed_courses"], 1);
+    assert_eq!(summary["marked_missing"], 0);
+    assert_eq!(media_availability(&database, &media_id), "available");
 }
 
 #[tokio::test]

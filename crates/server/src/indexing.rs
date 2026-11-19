@@ -39,7 +39,7 @@ use crate::{
     auth::same_origin,
     catalog::{
         authenticated_user, credentials_required, csrf_failed, private_no_store,
-        service_unavailable, status_private_no_store,
+        scan_registered_course, service_unavailable, status_private_no_store,
     },
     courses::RegisteredCourse,
 };
@@ -200,16 +200,12 @@ impl Indexer {
             if self.inner.cancel.load(Ordering::SeqCst) {
                 break;
             }
-            let Ok(root) = CourseRoot::resolve(course.root.as_path()) else {
-                error = Some("course_unavailable");
-                continue;
-            };
-            let Some(outcome) = scan_course(app, root.as_path()).await else {
+            let Some((root, outcome)) = scan_course(app, course.root.as_path()).await else {
                 error = Some("course_unavailable");
                 continue;
             };
             progress.files_seen += outcome.files.len() as u64;
-            match apply_course(app, &course.id, outcome, root.as_path()).await {
+            match apply_course(app, &course.id, outcome, &course.root, root).await {
                 Some(summary) => {
                     progress.added += summary.inserted as u64;
                     progress.changed += summary.changed as u64;
@@ -283,12 +279,16 @@ impl CourseWatch {
 }
 
 /// Scans a course off the Tokio threads, without holding the database.
-async fn scan_course(app: &AppState, root: &Path) -> Option<ScanOutcome> {
+async fn scan_course(
+    app: &AppState,
+    course_path: &Path,
+) -> Option<(Option<CourseRoot>, ScanOutcome)> {
     let permit = app.try_acquire_blocking_task()?;
-    let root = root.to_path_buf();
+    let course_path = course_path.to_path_buf();
     tokio::task::spawn_blocking(move || {
         let _permit = permit;
-        learnvault_core::scan(&root).ok()
+        let (root, outcome) = scan_registered_course(&course_path)?;
+        Some((root, outcome.ok()?))
     })
     .await
     .ok()
@@ -300,12 +300,13 @@ async fn apply_course(
     app: &AppState,
     library_id: &str,
     outcome: ScanOutcome,
-    root: &Path,
+    registered_root: &CourseRoot,
+    root: Option<CourseRoot>,
 ) -> Option<RescanSummary> {
     let database = app.database.clone().lock_owned().await;
     let permit = app.try_acquire_blocking_task()?;
     let library_id = library_id.to_owned();
-    let root = root.to_path_buf();
+    let registered_root = registered_root.clone();
     let covers_dir = crate::covers::covers_dir(&app.config.database_path);
     tokio::task::spawn_blocking(move || {
         let _permit = permit;
@@ -316,10 +317,13 @@ async fn apply_course(
             &library_id,
             &outcome,
             KeyMode::for_host(),
-            &root,
+            root.as_ref().unwrap_or(&registered_root).as_path(),
         )
         .ok()?;
-        let _ = crate::covers::auto_detect_course_cover(&covers_dir, &library_id, &root);
+        if let Some(root) = root {
+            let _ =
+                crate::covers::auto_detect_course_cover(&covers_dir, &library_id, root.as_path());
+        }
         Some(summary)
     })
     .await
@@ -505,14 +509,14 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let state = state(&root);
         let missing = tempfile::tempdir().unwrap();
-        let missing_root = missing.path().join("Curso");
+        let missing_root = missing.path().join("library/Curso");
         fs::create_dir_all(&missing_root).unwrap();
         state.courses.write().unwrap().push(RegisteredCourse {
             id: "curso-1".to_owned(),
             title: "Curso".to_owned(),
             root: learnvault_core::CourseRoot::resolve(&missing_root).unwrap(),
         });
-        fs::remove_dir_all(&missing_root).unwrap();
+        fs::remove_dir_all(missing.path().join("library")).unwrap();
         let indexer = Indexer::default();
 
         indexer.execute(&state).await;
@@ -521,6 +525,83 @@ mod tests {
         assert_eq!(snapshot.status, IndexingStatus::Error);
         assert_eq!(snapshot.last_error, Some("course_unavailable"));
         assert_eq!(snapshot.courses_completed, 0);
+        let json = serde_json::to_string(&snapshot).unwrap();
+        assert!(!json.contains(missing.path().to_str().unwrap()));
+    }
+
+    #[tokio::test]
+    async fn a_renamed_course_root_is_marked_missing_and_restored_with_progress_intact() {
+        let root = tempfile::tempdir().unwrap();
+        let state = state(&root);
+        register(&state, &root);
+        let indexer = Indexer::default();
+        let course = root.path().join("Curso");
+        let moved = root.path().join("Curso movido");
+        fs::write(course.join("aula.mp4"), b"conteudo").unwrap();
+
+        indexer.execute(&state).await;
+        assert_eq!(indexer.snapshot().await.progress.added, 1);
+
+        let media_id: String = {
+            let db = state.database.try_lock().unwrap();
+            let media_id: String = db
+                .connection()
+                .query_row("SELECT media_id FROM media", [], |row| row.get(0))
+                .unwrap();
+            learnvault_core::record_position(&db, "owner-1", &media_id, 42).unwrap();
+            learnvault_core::set_completed(&db, "owner-1", &media_id, true).unwrap();
+            media_id
+        };
+
+        fs::rename(&course, &moved).unwrap();
+        indexer.execute(&state).await;
+        let after_rename = indexer.snapshot().await;
+        assert_eq!(after_rename.status, IndexingStatus::Done);
+        assert_eq!(after_rename.last_error, None);
+        assert_eq!(after_rename.courses_completed, 1);
+        assert_eq!(after_rename.progress.removed, 1);
+        let serialized = serde_json::to_string(&after_rename).unwrap();
+        assert!(!serialized.contains(root.path().to_str().unwrap()));
+        assert!(!serialized.contains("Curso"));
+
+        {
+            let db = state.database.try_lock().unwrap();
+            let availability: String = db
+                .connection()
+                .query_row(
+                    "SELECT availability FROM media WHERE media_id = ?1",
+                    [&media_id],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(availability, "missing");
+        }
+
+        fs::rename(&moved, &course).unwrap();
+        indexer.execute(&state).await;
+        let after_restore = indexer.snapshot().await;
+        assert_eq!(after_restore.status, IndexingStatus::Done);
+        assert_eq!(after_restore.last_error, None);
+        assert_eq!(after_restore.courses_completed, 1);
+        assert_eq!(after_restore.progress.added, 0);
+
+        {
+            let db = state.database.try_lock().unwrap();
+            let availability: String = db
+                .connection()
+                .query_row(
+                    "SELECT availability FROM media WHERE media_id = ?1",
+                    [&media_id],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(availability, "available");
+            let progress = learnvault_core::study_progress(&db, "owner-1", &media_id)
+                .unwrap()
+                .expect("study progress must stay intact");
+            assert_eq!(progress.position_seconds, 42);
+            assert!(progress.completed);
+        }
     }
 
     #[tokio::test]
