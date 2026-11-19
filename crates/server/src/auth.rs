@@ -400,30 +400,29 @@ fn login_source(
         return "unbound-test-client".to_owned();
     };
     if trusted_proxies.contains(&peer.ip())
-        && let Some(client_ip) = forwarded_client_ip(headers)
+        && let Some(client_ip) = forwarded_client_ip(headers, trusted_proxies)
     {
         return client_ip.to_string();
     }
     peer.ip().to_string()
 }
 
-/// Client address reported by a trusted proxy. `X-Real-IP` takes precedence;
-/// otherwise it uses the last entry of `X-Forwarded-For`, which is the one added by the
-/// nearest proxy. Earlier entries are controlled by the client and do not count.
-fn forwarded_client_ip(headers: &HeaderMap) -> Option<IpAddr> {
-    let direct = headers
-        .get("x-real-ip")
-        .and_then(|value| value.to_str().ok())
-        .and_then(parse_ip);
-    direct.or_else(|| {
-        let last = headers
-            .get_all("x-forwarded-for")
-            .iter()
-            .fold(None, |_, value| Some(value));
-        last.and_then(|value| value.to_str().ok())
-            .and_then(|value| value.split(',').next_back())
-            .and_then(parse_ip)
-    })
+/// Resolves a client address from the canonical forwarding header. Trusted proxy hops
+/// are skipped from the right so a shared upstream proxy does not become every client's key.
+fn forwarded_client_ip(headers: &HeaderMap, trusted_proxies: &[IpAddr]) -> Option<IpAddr> {
+    headers
+        .get_all("x-forwarded-for")
+        .iter()
+        .rev()
+        .find_map(|value| {
+            value
+                .to_str()
+                .ok()?
+                .split(',')
+                .rev()
+                .filter_map(parse_ip)
+                .find(|address| !trusted_proxies.contains(address))
+        })
 }
 
 fn parse_ip(value: &str) -> Option<IpAddr> {
@@ -439,7 +438,7 @@ mod login_rate_limit_tests {
     #[test]
     fn client_ip_headers_are_used_only_from_explicitly_trusted_proxies() {
         let peer: SocketAddr = "192.0.2.1:8090".parse().unwrap();
-        let client: IpAddr = "198.51.100.7".parse().unwrap();
+        let client: IpAddr = "203.0.113.9".parse().unwrap();
         let mut headers = HeaderMap::new();
         headers.insert("x-real-ip", HeaderValue::from_static("198.51.100.7"));
         headers.insert("x-forwarded-for", HeaderValue::from_static("203.0.113.9"));
@@ -448,6 +447,46 @@ mod login_rate_limit_tests {
         assert_eq!(
             login_source(Some(peer), &headers, &[peer.ip()]),
             client.to_string()
+        );
+    }
+
+    #[test]
+    fn proxy_that_strips_forwarded_headers_uses_the_socket_peer() {
+        let peer: SocketAddr = "192.0.2.1:8090".parse().unwrap();
+        let headers = HeaderMap::new();
+
+        assert_eq!(
+            login_source(Some(peer), &headers, &[peer.ip()]),
+            "192.0.2.1"
+        );
+    }
+
+    #[test]
+    fn sanitized_forwarded_for_is_canonical_even_if_real_ip_is_present() {
+        let peer: SocketAddr = "192.0.2.1:8090".parse().unwrap();
+        let mut headers = HeaderMap::new();
+        headers.insert("x-real-ip", HeaderValue::from_static("203.0.113.250"));
+        headers.insert("x-forwarded-for", HeaderValue::from_static("198.51.100.7"));
+
+        assert_eq!(
+            login_source(Some(peer), &headers, &[peer.ip()]),
+            "198.51.100.7"
+        );
+    }
+
+    #[test]
+    fn multi_hop_forwarded_for_skips_trusted_proxies_from_the_right() {
+        let peer: SocketAddr = "192.0.2.1:8090".parse().unwrap();
+        let trusted_upstream: IpAddr = "192.0.2.2".parse().unwrap();
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "x-forwarded-for",
+            HeaderValue::from_static("198.51.100.7, 192.0.2.2"),
+        );
+
+        assert_eq!(
+            login_source(Some(peer), &headers, &[peer.ip(), trusted_upstream]),
+            "198.51.100.7"
         );
     }
 
