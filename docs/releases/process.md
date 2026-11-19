@@ -52,7 +52,7 @@ The repair workflow never moves or recreates tags. The Contributors section is i
 
 ## Published Release Assets
 
-Each release publishes nine files on GitHub Releases, alongside the OCI container image on GHCR (`ghcr.io/andersontavares0/learnvault`):
+Each release publishes eleven files on GitHub Releases, alongside the OCI container image on GHCR (`ghcr.io/andersontavares0/learnvault`):
 
 | Asset | File Name |
 | --- | --- |
@@ -64,7 +64,9 @@ Each release publishes nine files on GitHub Releases, alongside the OCI containe
 | Windows Updater Bundle | `learnvault-windows-vMAJOR.MINOR.PATCH.nsis.zip` |
 | Windows Updater Ed25519 Signature | `learnvault-windows-vMAJOR.MINOR.PATCH.nsis.zip.sig` |
 | Tauri 2 Updater Manifest | `latest.json` |
+| CycloneDX Source/Lockfile SBOM (`trivy fs .`) | `learnvault-vMAJOR.MINOR.PATCH.sbom.cdx.json` |
 | SHA-256 Checksums | `SHA256SUMS` |
+| Keyless Cosign Bundle for `SHA256SUMS` | `SHA256SUMS.sigstore.json` |
 
 Asset naming rules:
 - Prefix is always `learnvault-`; never use alternative suffixes or architecture aliases (`x64`, `win64`).
@@ -98,6 +100,31 @@ cosign verify ghcr.io/andersontavares0/learnvault:<tag> \
 ```
 
 Provenance and the SBOM are attached to the same digest; inspect them with `docker buildx imagetools inspect ghcr.io/andersontavares0/learnvault:<tag>`.
+
+## Verifying Release Binaries
+
+Release assets are covered by a keyless Sigstore signature over `SHA256SUMS` (`SHA256SUMS.sigstore.json`), a CycloneDX source/lockfile SBOM (`learnvault-vMAJOR.MINOR.PATCH.sbom.cdx.json`, generated from the tagged repository via `trivy fs .` rather than scanning individual compiled binaries), and GitHub Artifact Attestations (build provenance and SBOM).
+
+1. Verify `SHA256SUMS` with `cosign`:
+
+```sh
+cosign verify-blob SHA256SUMS \
+  --bundle SHA256SUMS.sigstore.json \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp '^https://github\.com/AndersonTavares0/LearnVault/\.github/workflows/release\.yml@refs/(tags/v[0-9]+\.[0-9]+\.[0-9]+|heads/main)$'
+```
+
+2. Verify the downloaded asset checksum against `SHA256SUMS`:
+
+```sh
+sha256sum -c SHA256SUMS --ignore-missing
+```
+
+3. Verify the GitHub build provenance attestation with `gh`:
+
+```sh
+gh attestation verify learnvault-linux-amd64.tar.gz --repo AndersonTavares0/LearnVault
+```
 
 ## Troubleshooting
 

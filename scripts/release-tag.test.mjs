@@ -261,3 +261,13 @@ process.on('SIGTERM', () => server.close(() => process.exit(0)));
     assert.notEqual(runSmoke('v0.9.5', { STUB_VERSION: '0.9.5' }).status, 0);
     assert.notEqual(runSmoke('v0.9.5', { STUB_VERSION: 'v0.9.5', STUB_HEALTHZ_VERSION: '0.0.0' }).status, 0);
 });
+
+test('publish signs SHA256SUMS with keyless cosign and attests provenance and SBOM', () => {
+    const signBlock = runBlock('Sign SHA256SUMS (keyless)');
+    assert.match(signBlock, /cosign sign-blob --yes --bundle dist\/SHA256SUMS\.sigstore\.json dist\/SHA256SUMS/);
+    assert.match(signBlock, /cosign verify-blob dist\/SHA256SUMS/);
+    assert.match(workflow, /uses: actions\/attest-build-provenance@[0-9a-f]{40}/);
+    assert.match(workflow, /uses: actions\/attest-sbom@[0-9a-f]{40}/);
+    assert.match(workflow, /learnvault-\$\{\{ needs\.validate-tag\.outputs\.tag \}\}\.sbom\.cdx\.json/);
+    assert.match(workflow, /"dist\/SHA256SUMS\.sigstore\.json"/);
+});
