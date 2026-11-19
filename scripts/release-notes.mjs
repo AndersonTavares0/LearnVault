@@ -11,6 +11,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { parseMigrations } from './migrations-append-only.mjs';
 
 export const REPOSITORY_URL = 'https://github.com/AndersonTavares0/LearnVault';
 export const MIGRATIONS_FILE = 'crates/core/src/migrations.rs';
@@ -85,6 +86,13 @@ export function renderMigrations(changed) {
 		: 'No database migrations.';
 }
 
+export function hasMigrationChanges(baseSource, headSource) {
+	const base = parseMigrations(baseSource).hashes;
+	const head = parseMigrations(headSource).hashes;
+	return Object.keys(base).length !== Object.keys(head).length
+		|| Object.keys(head).some((name) => base[name] !== head[name]);
+}
+
 /** Fills the template. A section whose value is empty is removed together with its heading. */
 export function renderNotes(template, values) {
 	let output = template;
@@ -115,7 +123,9 @@ export function generate({ tag, from, stable, root = process.cwd() }) {
 	if (!base) throw new Error(`No earlier release tag found before ${tag}; pass --from.`);
 	const head = tags.includes(tag) ? tag : 'HEAD';
 	const version = tag.slice(1);
-	const migrationsChanged = git('diff', '--name-only', `${base}..${head}`, '--', MIGRATIONS_FILE).trim() !== '';
+	const baseMigrations = git('show', `${base}:${MIGRATIONS_FILE}`);
+	const headMigrations = git('show', `${head}:${MIGRATIONS_FILE}`);
+	const migrationsChanged = hasMigrationChanges(baseMigrations, headMigrations);
 	const highlightsPath = resolve(root, 'docs/releases/highlights', `${version}.md`);
 	const { summary, highlights } = existsSync(highlightsPath) ? splitHighlights(readFileSync(highlightsPath, 'utf8')) : { summary: '', highlights: '' };
 	const template = readFileSync(resolve(root, 'docs/releases/release-notes.template.md'), 'utf8');

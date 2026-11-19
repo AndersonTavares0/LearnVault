@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import test from 'node:test';
-import { groupCommits, isPrerelease, parseCommit, parseTag, previousTag, renderChanges, renderMigrations, renderNotes, splitHighlights } from './release-notes.mjs';
+import { groupCommits, hasMigrationChanges, isPrerelease, parseCommit, parseTag, previousTag, renderChanges, renderMigrations, renderNotes, splitHighlights } from './release-notes.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const read = (path) => readFileSync(resolve(root, path), 'utf8');
@@ -57,6 +57,20 @@ test('splits a highlights file into a summary and a list', () => {
 test('always states whether the release changes the database', () => {
 	assert.equal(renderMigrations(false), 'No database migrations.');
 	assert.match(renderMigrations(true), /Back up the data directory/);
+});
+
+test('migration notes ignore Rust comments and detect newly appended SQL migrations', () => {
+	const source = read('crates/core/src/migrations.rs');
+	const commentOnly = source.replace('//! Single migration chain of the SQLite database.', '//! Single, ordered migration chain for the SQLite database.');
+	assert.equal(hasMigrationChanges(source, commentOnly), false);
+	assert.equal(renderMigrations(hasMigrationChanges(source, commentOnly)), 'No database migrations.');
+
+	const withNewMigration = source.replace(
+		'pub(crate) const MIGRATIONS: &[&str] = &[',
+		'const V22: &str = "\nCREATE TABLE migration_smoke (id INTEGER PRIMARY KEY);\n";\npub(crate) const MIGRATIONS: &[&str] = &['
+	).replace('V19, V20, V21,', 'V19, V20, V21, V22,');
+	assert.equal(hasMigrationChanges(source, withNewMigration), true);
+	assert.match(renderMigrations(hasMigrationChanges(source, withNewMigration)), /changes the schema migrations/);
 });
 
 test('drops the Highlights heading when no highlights were written', () => {

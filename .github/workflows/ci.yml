@@ -160,6 +160,12 @@ jobs:
       # The server serves the shell from `--web-root` on disk, not from the compiled binary, so
       # this job builds the SPA here instead of downloading `spa-build` and waiting for that job.
       - run: pnpm --filter learnvault-web-next build
+      - name: Smoke test real server binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_version="$(cargo metadata --no-deps --format-version=1 | jq -r '.packages[] | select(.name == "learnvault-server") | .version')"
+          ./scripts/smoke-release-binary.sh ./target/debug/learnvault-server "$expected_version" crates/server/web/build
       - name: Install system ffmpeg for transcoding E2E
         timeout-minutes: 4
         run: |

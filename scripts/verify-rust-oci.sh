@@ -131,7 +131,9 @@ skip() { printf 'SKIP: %s\n' "$1"; }
 
 printf '\nChecking the packaged binary ...\n'
 version_output=$("$engine" run --rm "$IMAGE" --version 2>/dev/null || true)
-if printf '%s' "$version_output" | grep -q '^learnvault-server '; then
+if [ -n "${RELEASE_TAG:-}" ] && [ "$version_output" != "learnvault-server $RELEASE_TAG" ]; then
+	fail "binary reports $version_output, expected learnvault-server $RELEASE_TAG"
+elif printf '%s' "$version_output" | grep -q '^learnvault-server '; then
 	pass "binary reports its version ($version_output)"
 else
 	fail "binary did not report a version (got: ${version_output:-<empty>})"
@@ -146,8 +148,8 @@ printf '\nStarting the container ...\n'
 	-e "ADMIN_USERNAME=$ADMIN_USERNAME" \
 	-e "ADMIN_PASSWORD=$ADMIN_PASSWORD" \
 	-e "PORT=$PORT" \
-	-v "$(host_path "$library"):/library:ro" \
-	-v "$(host_path "$data"):/data:rw" \
+	-v "$(host_path "$library"):/library:ro,z" \
+	-v "$(host_path "$data"):/data:rw,z" \
 	"$IMAGE" \
 	--listen-addr "0.0.0.0:$PORT" \
 	--database /data/learnvault.sqlite \
@@ -184,20 +186,28 @@ else
 	else
 		fail '/api/healthz is missing the no-store cache policy'
 	fi
-	health_status=none
-	health_wait=0
-	while [ "$health_wait" -lt 60 ]; do
-		health_status=$("$engine" inspect --format '{{.State.Health.Status}}' "$CONTAINER" 2>/dev/null || printf 'none')
-		if [ "$health_status" = healthy ]; then
-			break
+	if "$engine" --version 2>/dev/null | grep -qi podman; then
+		if "$engine" healthcheck run "$CONTAINER" >/dev/null 2>&1; then
+			pass 'image HEALTHCHECK command succeeds'
+		else
+			skip 'Podman does not expose the image HEALTHCHECK command; /api/healthz is checked directly'
 		fi
-		health_wait=$((health_wait + 1))
-		sleep 1
-	done
-	if [ "$health_status" = healthy ]; then
-		pass 'image HEALTHCHECK reaches healthy'
 	else
-		fail "image HEALTHCHECK did not reach healthy (got: $health_status)"
+		health_status=none
+		health_wait=0
+		while [ "$health_wait" -lt 60 ]; do
+			health_status=$("$engine" inspect --format '{{.State.Health.Status}}' "$CONTAINER" 2>/dev/null || printf 'none')
+			if [ "$health_status" = healthy ]; then
+				break
+			fi
+			health_wait=$((health_wait + 1))
+			sleep 1
+		done
+		if [ "$health_status" = healthy ]; then
+			pass 'image HEALTHCHECK reaches healthy'
+		else
+			fail "image HEALTHCHECK did not reach healthy (got: $health_status)"
+		fi
 	fi
 	if "$engine" exec "$CONTAINER" wget -q -S -O /dev/null \
 		"http://127.0.0.1:$PORT/api/catalog" 2>&1 | grep -q ' 401'; then
