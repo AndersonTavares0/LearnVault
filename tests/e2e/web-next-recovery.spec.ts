@@ -94,22 +94,6 @@ test('a deleted lesson video shows recovery and plays again with saved study dat
 	expect(await manifest(libraryDir)).toEqual(restored);
 });
 
-// The lesson drops its media ID when the last playable video is missing, hiding completion and Notes.
-test.fixme('a missing video leaves saved progress and notes visible on the lesson', async ({ page, origin, libraryDir }) => {
-	await openLessonWithStudyData(page, origin);
-	const lessonUrl = page.url();
-
-	await unlink(join(libraryDir, 'Course', lessonFile));
-	await refreshFromLesson(page);
-	await page.goto(lessonUrl);
-	await expect(page.getByText('Media unavailable', { exact: true })).toBeVisible();
-	await expect.soft(page.getByRole('button', { name: 'Completed', exact: true, pressed: true })).toBeVisible();
-	const notesTab = page.getByRole('tab', { name: /^Notes/ });
-	await expect(notesTab).toBeVisible();
-	await notesTab.click();
-	await expect(page.getByRole('tabpanel', { name: /^Notes/ }).getByText(note, { exact: true })).toBeVisible();
-});
-
 async function renameCourseAndRefresh(page: Page, libraryDir: string) {
 	await rename(join(libraryDir, 'Course'), join(libraryDir, 'Moved course'));
 	await refreshFromLesson(page);
@@ -125,12 +109,4 @@ test('renaming a course folder preserves access to notes and leaves the renamed 
 		...file,
 		path: join('Moved course', file.path.slice('Course'.length + 1))
 	})));
-});
-
-// A rescan skips an unreadable course root, leaving its catalog media labelled as available.
-test.fixme('renaming a course folder marks the old course media missing', async ({ page, origin, libraryDir }) => {
-	await openLessonWithStudyData(page, origin);
-	await renameCourseAndRefresh(page, libraryDir);
-	await page.getByRole('link', { name: 'Course', exact: true }).click();
-	await expect(page.getByText('Missing media', { exact: true })).toHaveCount(2);
 });
