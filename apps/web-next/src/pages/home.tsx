@@ -420,12 +420,17 @@ export function LibraryActions({ onMessage }: { onMessage: (message: string) => 
 
 	return (
 		<>
-			<Button variant="outline" disabled={rescan.isPending} onClick={() => { onMessage(tr('Reading courses…', 'Lendo os cursos…')); rescan.mutate({ onProgress: onMessage }, { onSuccess: (outcome) => onMessage(refreshMessage(outcome)), onError: (error) => onMessage(failure(error)) }); }}>
-				<RefreshCw className={cn(rescan.isPending && 'motion-safe:animate-spin')} />{tr('Refresh courses', 'Atualizar cursos')}
-			</Button>
-			<Button disabled={importCourse.isPending} aria-haspopup={transportKind === 'http' ? 'dialog' : undefined} onClick={() => (transportKind === 'desktop' ? runImport() : setImportOpen(true))}>
-				<FolderPlus />{tr('Import course', 'Importar curso')}
-			</Button>
+			<div className="flex flex-col gap-1.5">
+				<div className="flex flex-wrap gap-2">
+					<Button variant="outline" disabled={rescan.isPending} aria-describedby="refresh-courses-help" onClick={() => { onMessage(tr('Reading courses…', 'Lendo os cursos…')); rescan.mutate({ onProgress: onMessage }, { onSuccess: (outcome) => onMessage(refreshMessage(outcome)), onError: (error) => onMessage(failure(error)) }); }}>
+						<RefreshCw className={cn(rescan.isPending && 'motion-safe:animate-spin')} />{tr('Refresh courses', 'Atualizar cursos')}
+					</Button>
+					<Button disabled={importCourse.isPending} aria-haspopup={transportKind === 'http' ? 'dialog' : undefined} onClick={() => (transportKind === 'desktop' ? runImport() : setImportOpen(true))}>
+						<FolderPlus />{tr('Import course', 'Importar curso')}
+					</Button>
+				</div>
+				<p id="refresh-courses-help" className="max-w-xs text-xs text-muted-foreground">{tr('Refresh courses rereads the courses already in your library. To add a new folder, use Import course.', 'Atualizar cursos relê os cursos que já estão na sua biblioteca. Para adicionar uma nova pasta, use Importar curso.')}</p>
+			</div>
 			<Dialog open={importOpen} onOpenChange={(open) => { setImportOpen(open); if (!open) { setImportError(''); importCourse.reset(); } }}>
 				<DialogContent className="sm:max-w-lg">
 					<DialogHeader>

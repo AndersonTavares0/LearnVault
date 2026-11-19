@@ -156,6 +156,13 @@ describe('Sign in', () => {
 			vi.spyOn(transport, 'recentStudy').mockResolvedValue({ items: [] });
 		});
 
+		it('explains that refreshing keeps the same courses and new folders come from Import course', async () => {
+			renderApp('/', { catalog });
+			const refresh = await screen.findByRole('button', { name: 'Refresh courses' });
+			const help = document.getElementById(refresh.getAttribute('aria-describedby') ?? '');
+			expect(help?.textContent).toBe('Refresh courses rereads the courses already in your library. To add a new folder, use Import course.');
+		});
+
 		it('also reads the remote sources and says so', async () => {
 			const rescan = vi.spyOn(transport, 'rescan').mockResolvedValue();
 			vi.spyOn(transport, 'listSources').mockResolvedValue([remote]);
