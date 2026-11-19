@@ -107,7 +107,7 @@ function LessonRow({ node, courseId, completed, favorites, activePath, compact }
 	const isDone = Boolean(mediaId && completed.has(mediaId));
 	const isFavorite = Boolean(mediaId && favorites.has(mediaId));
 	const active = activePath === node.path;
-	const Icon = active ? CirclePlay : counts.videos > 0 ? PlayCircle : FileText;
+	const Icon = active ? CirclePlay : counts.videos > 0 || (counts.audios ?? 0) > 0 ? PlayCircle : FileText;
 	const row = useRef<HTMLLIElement>(null);
 	// In the player sidebar, bring the open lesson into view inside the panel (never the page).
 	useEffect(() => {
