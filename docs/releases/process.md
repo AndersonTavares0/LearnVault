@@ -56,7 +56,7 @@ The repair workflow never moves or recreates tags. The Contributors section is i
 
 ## Published Release Assets
 
-Each release publishes nine files on GitHub Releases, alongside the OCI container image on GHCR (`ghcr.io/andersontavares0/learnvault`):
+Each release publishes eleven files on GitHub Releases, alongside the OCI container image on GHCR (`ghcr.io/andersontavares0/learnvault`):
 
 | Asset | File Name |
 | --- | --- |
@@ -68,7 +68,9 @@ Each release publishes nine files on GitHub Releases, alongside the OCI containe
 | Windows Updater Bundle | `learnvault-windows-vMAJOR.MINOR.PATCH.nsis.zip` |
 | Windows Updater Ed25519 Signature | `learnvault-windows-vMAJOR.MINOR.PATCH.nsis.zip.sig` |
 | Tauri 2 Updater Manifest | `latest.json` |
+| CycloneDX source and lockfile SBOM | `learnvault-vMAJOR.MINOR.PATCH.sbom.cdx.json` |
 | SHA-256 Checksums | `SHA256SUMS` |
+| Keyless Cosign Bundle for `SHA256SUMS` | `SHA256SUMS.sigstore.json` |
 
 Asset naming rules:
 - Prefix is always `learnvault-`; never use alternative suffixes or architecture aliases (`x64`, `win64`).
@@ -98,10 +100,41 @@ Verify an image before deploying it:
 ```sh
 cosign verify ghcr.io/andersontavares0/learnvault:<tag> \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  --certificate-identity-regexp '^https://github\.com/AndersonTavares0/LearnVault/\.github/workflows/release\.yml@refs/(tags/v[0-9]+\.[0-9]+\.[0-9]+(-rc\.(0|[1-9][0-9]*))?|heads/main)$'
+  --certificate-identity-regexp '^https://github[.]com/AndersonTavares0/LearnVault/[.]github/workflows/release[.]yml@refs/(tags/v[0-9]+[.][0-9]+[.][0-9]+(-rc[.](0|[1-9][0-9]*))?|heads/main)$'
 ```
 
 Provenance and the SBOM are attached to the same digest; inspect them with `docker buildx imagetools inspect ghcr.io/andersontavares0/learnvault:<tag>`.
+
+## Verifying Release Binaries
+
+The release publishes a keyless Sigstore bundle for `SHA256SUMS`, a CycloneDX SBOM generated from the tagged source and lockfiles with `trivy fs .`, and GitHub Artifact Attestations. The SBOM describes source and dependency metadata; it is not a scan of the compiled binaries. The build provenance covers each file in the release asset directory, and the SBOM attestation covers each Linux server archive, Windows installer/updater bundle, and Flatpak bundle.
+
+Download all assets for the chosen tag with `gh release download <tag> --repo AndersonTavares0/LearnVault`, then verify the checksum manifest signature:
+
+```sh
+cosign verify-blob SHA256SUMS \
+  --bundle SHA256SUMS.sigstore.json \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp '^https://github[.]com/AndersonTavares0/LearnVault/[.]github/workflows/release[.]yml@refs/(tags/v[0-9]+[.][0-9]+[.][0-9]+|heads/main)$'
+```
+
+Verify downloaded assets against the signed manifest:
+
+```sh
+sha256sum -c SHA256SUMS --ignore-missing
+```
+
+Verify provenance and the CycloneDX SBOM attestation for an asset:
+
+```sh
+gh attestation verify learnvault-linux-amd64.tar.gz \
+  --repo AndersonTavares0/LearnVault \
+  --signer-workflow AndersonTavares0/LearnVault/.github/workflows/release.yml
+gh attestation verify learnvault-linux-amd64.tar.gz \
+  --repo AndersonTavares0/LearnVault \
+  --signer-workflow AndersonTavares0/LearnVault/.github/workflows/release.yml \
+  --predicate-type https://cyclonedx.org/bom
+```
 
 ## Troubleshooting
 
