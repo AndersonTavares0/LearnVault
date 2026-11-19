@@ -1,4 +1,4 @@
-import { BookOpen, Check, Cloud, Database, Download, Flame, Palette, RefreshCw, Server, Settings, Timer, UserRound, Users } from 'lucide-react';
+import { BookOpen, Check, Cloud, Database, Download, Flame, Info, Palette, RefreshCw, Server, Settings, Timer, UserRound, Users } from 'lucide-react';
 import { createContext, useContext, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router';
 import { Panel } from '@/components/panel';
@@ -11,6 +11,7 @@ import { MAX_WEEKLY_GOAL, MIN_WEEKLY_GOAL } from '@/lib/statistics';
 import { transportKind } from '@/lib/transport';
 import { useCatalog, useRewards, useSession, useSetWeeklyGoal } from '@/app/data';
 import { PageHeader } from '@/app/shell';
+import { AboutSettings } from './about';
 import { AppearanceSettings } from './appearance';
 import { AvatarSettings, CredentialsForm } from './account';
 import { FocusSettings } from './focus';
@@ -43,7 +44,8 @@ export function SettingsPage() {
 		{ id: 'focus', label: tr('Focus timer', 'Timer de foco'), icon: Timer },
 		...(!server || admin ? [{ id: 'updates', label: tr('Updates', 'Atualizações'), icon: RefreshCw }] : []),
 		...(!server ? [{ id: 'sync', label: tr('Sync', 'Sincronização'), icon: Cloud }] : []),
-		...(server && admin ? [{ id: 'users', label: tr('Users', 'Usuários'), icon: Users }, { id: 'sources', label: tr('Remote sources', 'Fontes remotas'), icon: Server }, { id: 'backup', label: tr('Backup', 'Backup'), icon: Database }] : [])
+		...(server && admin ? [{ id: 'users', label: tr('Users', 'Usuários'), icon: Users }, { id: 'sources', label: tr('Remote sources', 'Fontes remotas'), icon: Server }, { id: 'backup', label: tr('Backup', 'Backup'), icon: Database }] : []),
+		{ id: 'about', label: tr('About', 'Sobre'), icon: Info }
 	];
 	const requested = picked.id && picked.hash === location.hash ? picked.id : location.hash.slice(1) || 'appearance';
 	const active = sections.some((section) => section.id === requested) ? requested : 'appearance';
@@ -129,6 +131,9 @@ export function SettingsPage() {
 					</Section>
 				</>
 			)}
+			<Section id="about" title={tr('About', 'Sobre')}>
+				<AboutSettings />
+			</Section>
 			</div>
 		</div>
 		</div>

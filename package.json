@@ -15,7 +15,7 @@
     "verify": "node scripts/verify.mjs",
     "release:notes": "node scripts/release-notes.mjs",
     "test:scripts": "node --test \"scripts/*.test.mjs\" \".opencode/plugins/*.test.mjs\"",
-    "e2e:server": "pnpm run build && cargo build -p learnvault-server && pnpm exec playwright test tests/e2e/web-next.spec.ts tests/e2e/web-next-rich.spec.ts"
+    "e2e:server": "pnpm run build && cargo build -p learnvault-server && pnpm exec playwright test"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.14.0",
