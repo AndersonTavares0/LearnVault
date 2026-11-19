@@ -388,7 +388,7 @@ function Filters(props: { categories: string[]; category: string | null; onCateg
 	);
 }
 
-export function LibraryActions({ onMessage }: { onMessage: (message: string) => void }) {
+export function LibraryActions({ onMessage, help = true }: { onMessage: (message: string) => void; help?: boolean }) {
 	const rescan = useRescan();
 	const importCourse = useImportCourse();
 	const navigate = useNavigate();
@@ -418,19 +418,25 @@ export function LibraryActions({ onMessage }: { onMessage: (message: string) => 
 		if (importPath.trim()) runImport(importPath);
 	};
 
+	const actions = (
+		<>
+			<Button variant="outline" disabled={rescan.isPending} aria-describedby={help ? 'refresh-courses-help' : undefined} onClick={() => { onMessage(tr('Reading courses…', 'Lendo os cursos…')); rescan.mutate({ onProgress: onMessage }, { onSuccess: (outcome) => onMessage(refreshMessage(outcome)), onError: (error) => onMessage(failure(error)) }); }}>
+				<RefreshCw className={cn(rescan.isPending && 'motion-safe:animate-spin')} />{tr('Refresh courses', 'Atualizar cursos')}
+			</Button>
+			<Button disabled={importCourse.isPending} aria-haspopup={transportKind === 'http' ? 'dialog' : undefined} onClick={() => (transportKind === 'desktop' ? runImport() : setImportOpen(true))}>
+				<FolderPlus />{tr('Import course', 'Importar curso')}
+			</Button>
+		</>
+	);
+
 	return (
 		<>
-			<div className="flex flex-col gap-1.5">
-				<div className="flex flex-wrap gap-2">
-					<Button variant="outline" disabled={rescan.isPending} aria-describedby="refresh-courses-help" onClick={() => { onMessage(tr('Reading courses…', 'Lendo os cursos…')); rescan.mutate({ onProgress: onMessage }, { onSuccess: (outcome) => onMessage(refreshMessage(outcome)), onError: (error) => onMessage(failure(error)) }); }}>
-						<RefreshCw className={cn(rescan.isPending && 'motion-safe:animate-spin')} />{tr('Refresh courses', 'Atualizar cursos')}
-					</Button>
-					<Button disabled={importCourse.isPending} aria-haspopup={transportKind === 'http' ? 'dialog' : undefined} onClick={() => (transportKind === 'desktop' ? runImport() : setImportOpen(true))}>
-						<FolderPlus />{tr('Import course', 'Importar curso')}
-					</Button>
+			{help ? (
+				<div className="flex flex-col gap-1.5">
+					<div className="flex flex-wrap gap-2">{actions}</div>
+					<p id="refresh-courses-help" className="max-w-xs text-xs text-muted-foreground">{tr('Refresh courses rereads the courses already in your library. To add a new folder, use Import course.', 'Atualizar cursos relê os cursos que já estão na sua biblioteca. Para adicionar uma nova pasta, use Importar curso.')}</p>
 				</div>
-				<p id="refresh-courses-help" className="max-w-xs text-xs text-muted-foreground">{tr('Refresh courses rereads the courses already in your library. To add a new folder, use Import course.', 'Atualizar cursos relê os cursos que já estão na sua biblioteca. Para adicionar uma nova pasta, use Importar curso.')}</p>
-			</div>
+			) : actions}
 			<Dialog open={importOpen} onOpenChange={(open) => { setImportOpen(open); if (!open) { setImportError(''); importCourse.reset(); } }}>
 				<DialogContent className="sm:max-w-lg">
 					<DialogHeader>
@@ -467,7 +473,7 @@ function EmptyLibrary({ isAdmin, onMessage }: { isAdmin: boolean; onMessage: (me
 					? tr('Pick a folder of videos and documents. LearnVault builds the lessons, remembers where you stopped and never touches your files.', 'Escolha uma pasta de vídeos e documentos. O LearnVault monta as aulas, lembra onde você parou e nunca mexe nos seus arquivos.')
 					: tr('Ask an administrator to give you access to a course.', 'Peça a um administrador acesso a um curso.')}
 			</p>
-			{isAdmin && <div className="flex flex-wrap justify-center gap-2"><LibraryActions onMessage={onMessage} /></div>}
+			{isAdmin && <div className="flex flex-wrap justify-center gap-2"><LibraryActions onMessage={onMessage} help={false} /></div>}
 			<Motto name="archeHemisy" />
 		</div>
 	);

@@ -61,6 +61,8 @@ describe('My learning', () => {
 		renderApp('/');
 		expect(await screen.findByRole('button', { name: 'Import course' })).toBeTruthy();
 		expect(screen.getByRole('button', { name: 'Refresh courses' })).toBeTruthy();
+		// With no courses yet there is nothing to "reread": the hint belongs to a populated library only.
+		expect(screen.queryByText(/rereads the courses already in your library/)).toBeNull();
 	});
 
 	it('shows course management on library cards for admins without opening the course', async () => {
