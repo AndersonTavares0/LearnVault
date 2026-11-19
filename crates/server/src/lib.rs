@@ -561,6 +561,141 @@ mod tests {
         assert_eq!(json["error"], serde_json::Value::Null);
     }
 
+    #[tokio::test(start_paused = true)]
+    async fn update_endpoint_ignores_force_for_non_admins_and_allows_admins_to_refetch() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+
+        let temp = tempfile::tempdir().unwrap();
+        let mut state = AppState::initialize(config_fixture(&temp)).await.unwrap();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let results = Arc::new(tokio::sync::Mutex::new(vec![
+            Ok(crate::update::ReleaseInfo {
+                tag_name: "v9.9.9".to_owned(),
+                published_at: Some("2026-10-17T12:00:00Z".to_owned()),
+                draft: false,
+                prerelease: false,
+                changelog: None,
+            }),
+            Ok(crate::update::ReleaseInfo {
+                tag_name: "v9.9.10".to_owned(),
+                published_at: Some("2026-10-18T12:00:00Z".to_owned()),
+                draft: false,
+                prerelease: false,
+                changelog: None,
+            }),
+        ]));
+        let fetcher: crate::update::Fetcher = {
+            let calls = calls.clone();
+            let results = results.clone();
+            Arc::new(move || {
+                let calls = calls.clone();
+                let results = results.clone();
+                Box::pin(async move {
+                    calls.fetch_add(1, Ordering::SeqCst);
+                    results.lock().await.remove(0)
+                })
+            })
+        };
+        state.update = crate::update::UpdateChecker::new(true, fetcher);
+        let app = build_router(state);
+
+        let admin_cookie = media_cookie(&app).await;
+        let create_reader = app
+            .clone()
+            .oneshot(
+                Request::post("/api/admin/users")
+                    .header("origin", "http://localhost")
+                    .header("cookie", &admin_cookie)
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        r#"{"username":"reader","password":"reader-local-password-123"}"#,
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(create_reader.status(), StatusCode::CREATED);
+
+        let reader_login = app
+            .clone()
+            .oneshot(
+                Request::post("/api/login")
+                    .header("origin", "http://localhost")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        r#"{"username":"reader","password":"reader-local-password-123"}"#,
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(reader_login.status(), StatusCode::OK);
+        let reader_cookie = reader_login.headers()["set-cookie"]
+            .to_str()
+            .unwrap()
+            .split(';')
+            .next()
+            .unwrap()
+            .to_owned();
+
+        // First non-admin request populates the cache (1 fetch).
+        let first = app
+            .clone()
+            .oneshot(
+                Request::get("/api/update?force=1")
+                    .header("cookie", &reader_cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(first.status(), StatusCode::OK);
+        let first_body = first.into_body().collect().await.unwrap().to_bytes();
+        let first_json: serde_json::Value = serde_json::from_slice(&first_body).unwrap();
+        assert_eq!(first_json["latest"], "9.9.9");
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+
+        // Advance time so a genuine force would not coalesce with the first call.
+        tokio::time::advance(Duration::from_millis(1)).await;
+
+        // Second non-admin request with ?force=1 must ignore force and serve the cached snapshot.
+        let second = app
+            .clone()
+            .oneshot(
+                Request::get("/api/update?force=1")
+                    .header("cookie", &reader_cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(second.status(), StatusCode::OK);
+        let second_body = second.into_body().collect().await.unwrap().to_bytes();
+        let second_json: serde_json::Value = serde_json::from_slice(&second_body).unwrap();
+        assert_eq!(second_json["latest"], "9.9.9");
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+
+        // Admin request with ?force=1 bypasses the cache interval and refetches.
+        tokio::time::advance(Duration::from_millis(1)).await;
+        let admin_forced = app
+            .oneshot(
+                Request::get("/api/update?force=1")
+                    .header("cookie", &admin_cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(admin_forced.status(), StatusCode::OK);
+        let admin_body = admin_forced.into_body().collect().await.unwrap().to_bytes();
+        let admin_json: serde_json::Value = serde_json::from_slice(&admin_body).unwrap();
+        assert_eq!(admin_json["latest"], "9.9.10");
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+    }
+
     #[tokio::test]
     async fn update_history_endpoint_reads_entries_and_requires_auth() {
         let temp = tempfile::tempdir().unwrap();
