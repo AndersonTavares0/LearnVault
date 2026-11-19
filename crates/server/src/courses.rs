@@ -174,7 +174,26 @@ pub(crate) fn seeded_courses(root: &Path) -> Vec<RegisteredCourse> {
         push_seeded_course_root(&mut courses, folder_root);
     }
     if courses.is_empty() {
-        return legacy_seed(root).into_iter().collect();
+        let has_direct_course_content = CourseRoot::resolve(root)
+            .ok()
+            .and_then(|root| learnvault_core::scan(root.as_path()).ok())
+            .is_some_and(|outcome| {
+                outcome.files.iter().any(|file| {
+                    std::path::Path::new(&file.relative_path)
+                        .components()
+                        .count()
+                        == 1
+                        && matches!(
+                            file.kind,
+                            learnvault_core::MediaKind::Media
+                                | learnvault_core::MediaKind::Material
+                        )
+                })
+            });
+        if has_direct_course_content {
+            return legacy_seed(root).into_iter().collect();
+        }
+        return Vec::new();
     }
     courses
 }
@@ -572,6 +591,15 @@ mod tests {
         let seeded = seeded_courses(&library);
         let titles: Vec<&str> = seeded.iter().map(|course| course.title.as_str()).collect();
         assert_eq!(titles, ["Course"]);
+    }
+
+    #[test]
+    fn seeding_does_not_register_an_empty_library_root() {
+        let temp = tempdir().unwrap();
+        let library = temp.path().join("library");
+        std::fs::create_dir(&library).unwrap();
+
+        assert!(seeded_courses(&library).is_empty());
     }
 
     #[test]
