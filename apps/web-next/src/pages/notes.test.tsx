@@ -92,8 +92,14 @@ describe('notes', () => {
 		vi.mocked(transport.listNotes).mockResolvedValue([note('n1', 'Borrow checker rules'), note('n3', 'Goroutines are cheap', 'ch')]);
 		renderApp('/notes', { catalog: other });
 		const aside = await screen.findByRole('complementary', { name: 'Courses' });
-		fireEvent.click(within(aside).getByRole('button', { name: /Go/ }));
+		const all = within(aside).getByRole('button', { name: /All courses/ });
+		const go = within(aside).getByRole('button', { name: /Go/ });
+		expect(all.getAttribute('aria-pressed')).toBe('true');
+		expect(go.getAttribute('aria-pressed')).toBe('false');
+		fireEvent.click(go);
 		expect(await screen.findByRole('heading', { level: 1, name: /Go notes/ })).toBeTruthy();
+		expect(go.getAttribute('aria-pressed')).toBe('true');
+		expect(all.getAttribute('aria-pressed')).toBe('false');
 		expect(screen.getByText('Goroutines are cheap')).toBeTruthy();
 		expect(screen.queryByText('Borrow checker rules')).toBeNull();
 	});

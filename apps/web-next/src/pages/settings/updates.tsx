@@ -4,6 +4,20 @@ import { tr } from '@/lib/i18n';
 import { transport, transportKind } from '@/lib/transport';
 import { updateMessage, updateOutcome, updateReleaseUrl } from '@/lib/update';
 
+const ERROR_CODE = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/;
+
+/** Maps transport error identifiers to localized text; messages already localized pass through. */
+function updateErrorText(error: Error | null): string | null {
+	if (!error) return null;
+	if (error.message === 'credentials_change_required') {
+		return tr('Change your password on the server before checking for updates.', 'Troque sua senha no servidor antes de verificar atualizações.');
+	}
+	if (ERROR_CODE.test(error.message)) {
+		return tr('Could not complete the update request. Try again.', 'Não foi possível concluir a solicitação de atualização. Tente novamente.');
+	}
+	return error.message || tr('Could not complete the update request. Try again.', 'Não foi possível concluir a solicitação de atualização. Tente novamente.');
+}
+
 /** Version, update check, desktop install and (server) update history. Admin-only on the server. */
 export function UpdateSettings() {
 	const status = useQuery({ queryKey: ['update'], queryFn: () => transport.checkUpdate(false), retry: false });
@@ -24,7 +38,7 @@ export function UpdateSettings() {
 				)}
 			</div>
 			{data && <p role="status" className="text-sm">{updateMessage(data)} {releaseUrl && <a href={releaseUrl} target="_blank" rel="noopener noreferrer" className="font-medium text-primary underline-offset-4 hover:underline">{tr('Release notes', 'Notas da versão')}</a>}</p>}
-			{(check.error || install.error) && <p role="alert" className="text-sm text-destructive">{(check.error ?? install.error)?.message}</p>}
+			{(check.error || install.error) && <p role="alert" className="text-sm text-destructive">{updateErrorText(check.error ?? install.error)}</p>}
 			{outcome === 'available' && data?.changelog && (
 				<details className="rounded-lg border p-3">
 					<summary className="min-h-11 cursor-pointer content-center font-medium">{tr('What’s new', 'Novidades')}</summary>
