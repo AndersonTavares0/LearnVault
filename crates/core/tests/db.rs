@@ -1,6 +1,7 @@
 //! Tests of opening the database and applying the single migration chain.
 
 use learnvault_core::{Database, Error};
+use rusqlite::config::DbConfig;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -520,6 +521,244 @@ fn restore_from_recovers_database_and_preserves_schema() -> TestResult {
         |r| r.get(0),
     )?;
     assert_eq!(count, 1);
+    Ok(())
+}
+
+#[test]
+fn restore_from_rejects_unrelated_sqlite_without_touching_destination() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let backup_path = dir.path().join("unrelated.sqlite");
+    let target_path = dir.path().join("target.sqlite");
+
+    Database::open_in_memory()?.backup_to(&target_path)?;
+    let original = std::fs::read(&target_path)?;
+    rusqlite::Connection::open(&backup_path)?.execute_batch(
+        "CREATE TABLE unrelated (value TEXT); INSERT INTO unrelated VALUES ('synthetic');",
+    )?;
+
+    assert!(matches!(
+        Database::restore_from(&backup_path, &target_path),
+        Err(Error::RestoreInvalidSchema)
+    ));
+    assert_eq!(std::fs::read(&target_path)?, original);
+    Ok(())
+}
+
+#[test]
+fn restore_safety_copy_includes_rows_still_in_the_destination_wal() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let target_path = dir.path().join("target.sqlite");
+    let backup_path = dir.path().join("replacement.sqlite");
+    Database::open_in_memory()?.backup_to(&backup_path)?;
+
+    let target = Database::open(&target_path)?;
+    preserve_wal_on_close(&target)?;
+    target.connection().execute(
+        "INSERT INTO library (library_id, available) VALUES ('wal-only-row', 1)",
+        [],
+    )?;
+    let wal_path = appended_sidecar(&target_path, "-wal");
+    assert!(
+        wal_path.exists(),
+        "the synthetic row must remain in the WAL"
+    );
+    drop(target);
+    assert!(
+        wal_path.exists(),
+        "the WAL should remain after the connection closes"
+    );
+
+    Database::restore_from(&backup_path, &target_path)?;
+
+    let rollback_path = std::fs::read_dir(dir.path())?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .find(|path| path.to_string_lossy().contains("rollback."))
+        .expect("restore creates a safety copy");
+    let rollback = Database::open(rollback_path)?;
+    let count: i64 = rollback.connection().query_row(
+        "SELECT COUNT(*) FROM library WHERE library_id = 'wal-only-row'",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(count, 1);
+    Ok(())
+}
+
+#[test]
+fn restore_removes_sidecars_for_custom_database_extensions() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let backup_path = dir.path().join("backup.sqlite");
+    let target_path = dir.path().join("data.db");
+    Database::open_in_memory()?.backup_to(&backup_path)?;
+    let target = Database::open(&target_path)?;
+    preserve_wal_on_close(&target)?;
+    target.connection().execute(
+        "INSERT INTO library (library_id, available) VALUES ('custom-extension-row', 1)",
+        [],
+    )?;
+    let wal_path = appended_sidecar(&target_path, "-wal");
+    let shm_path = appended_sidecar(&target_path, "-shm");
+    assert!(wal_path.exists());
+    drop(target);
+    assert!(
+        wal_path.exists(),
+        "the WAL should remain after the connection closes"
+    );
+
+    Database::restore_from(&backup_path, &target_path)?;
+
+    assert!(!wal_path.exists());
+    assert!(!shm_path.exists());
+    Ok(())
+}
+
+#[test]
+fn restore_replaces_stale_wal_and_leaves_an_intact_database() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let backup_path = dir.path().join("backup.sqlite");
+    let target_path = dir.path().join("target.sqlite");
+    let backup = Database::open_in_memory()?;
+    backup.connection().execute(
+        "INSERT INTO library (library_id, available) VALUES ('restored-row', 1)",
+        [],
+    )?;
+    backup.backup_to(&backup_path)?;
+
+    let target = Database::open(&target_path)?;
+    preserve_wal_on_close(&target)?;
+    target.connection().execute(
+        "INSERT INTO library (library_id, available) VALUES ('stale-row', 1)",
+        [],
+    )?;
+    let wal_path = appended_sidecar(&target_path, "-wal");
+    assert!(wal_path.exists());
+    drop(target);
+    assert!(wal_path.exists(), "the stale WAL should remain after close");
+
+    Database::restore_from(&backup_path, &target_path)?;
+
+    assert!(!wal_path.exists());
+    let restored = Database::open(&target_path)?;
+    let integrity: String =
+        restored
+            .connection()
+            .query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
+    assert_eq!(integrity, "ok");
+    let restored_count: i64 = restored.connection().query_row(
+        "SELECT COUNT(*) FROM library WHERE library_id = 'restored-row'",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(restored_count, 1);
+    let stale_count: i64 = restored.connection().query_row(
+        "SELECT COUNT(*) FROM library WHERE library_id = 'stale-row'",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(stale_count, 0);
+    Ok(())
+}
+
+#[test]
+fn restore_fails_when_destination_cannot_be_checkpointed_without_replacing_it() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let backup_path = dir.path().join("backup.sqlite");
+    let target_path = dir.path().join("target.sqlite");
+    Database::open_in_memory()?.backup_to(&backup_path)?;
+    drop(Database::open(&target_path)?);
+    let original = std::fs::read(&target_path)?;
+
+    let mut locked_connection = rusqlite::Connection::open(&target_path)?;
+    locked_connection.pragma_update(None, "journal_mode", "WAL")?;
+    let transaction = locked_connection.transaction()?;
+    transaction.execute(
+        "INSERT INTO library (library_id, available) VALUES ('uncommitted-row', 1)",
+        [],
+    )?;
+
+    assert!(Database::restore_from(&backup_path, &target_path).is_err());
+    assert_eq!(std::fs::read(&target_path)?, original);
+    drop(transaction);
+    Ok(())
+}
+
+#[test]
+fn restore_rejects_a_too_new_schema_version() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let backup_path = dir.path().join("future.sqlite");
+    let target_path = dir.path().join("target.sqlite");
+    Database::open_in_memory()?.backup_to(&backup_path)?;
+    rusqlite::Connection::open(&backup_path)?.pragma_update(None, "user_version", 999)?;
+
+    assert!(matches!(
+        Database::restore_from(&backup_path, &target_path),
+        Err(Error::SchemaTooNew {
+            found: 999,
+            known: 21
+        })
+    ));
+    assert!(!target_path.exists());
+    Ok(())
+}
+
+#[test]
+fn restore_rejects_foreign_key_violations() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let backup_path = dir.path().join("orphaned.sqlite");
+    let target_path = dir.path().join("target.sqlite");
+    let database = Database::open_in_memory()?;
+    database
+        .connection()
+        .pragma_update(None, "foreign_keys", "OFF")?;
+    database.connection().execute(
+        "INSERT INTO media (media_id, library_id, relative_path, relative_path_key, size, mtime, availability)
+         VALUES ('orphan-media', 'missing-library', 'lesson.mp4', 'lesson.mp4', 1, 0, 'available')",
+        [],
+    )?;
+    database.backup_to(&backup_path)?;
+
+    assert!(matches!(
+        Database::restore_from(&backup_path, &target_path),
+        Err(Error::RestoreInvalidSchema)
+    ));
+    assert!(!target_path.exists());
+    Ok(())
+}
+
+#[test]
+fn restore_accepts_an_older_valid_schema_for_migration_on_next_open() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let backup_path = dir.path().join("version-20.sqlite");
+    let target_path = dir.path().join("restored.sqlite");
+    let database = Database::open_in_memory()?;
+    database
+        .connection()
+        .execute("DROP TABLE library_root_dismissed", [])?;
+    database
+        .connection()
+        .pragma_update(None, "user_version", 20)?;
+    database.backup_to(&backup_path)?;
+
+    Database::restore_from(&backup_path, &target_path)?;
+    assert_eq!(learnvault_core::file_schema_version(&target_path)?, 20);
+    assert_eq!(Database::open(&target_path)?.schema_version()?, 21);
+    Ok(())
+}
+
+fn appended_sidecar(path: &std::path::Path, suffix: &str) -> std::path::PathBuf {
+    let mut name = path.as_os_str().to_os_string();
+    name.push(suffix);
+    name.into()
+}
+
+fn preserve_wal_on_close(database: &Database) -> rusqlite::Result<()> {
+    database
+        .connection()
+        .pragma_update(None, "wal_autocheckpoint", 0)?;
+    database
+        .connection()
+        .set_db_config(DbConfig::SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE, true)?;
     Ok(())
 }
 
