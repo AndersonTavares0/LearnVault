@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { setLocale } from './i18n';
-import { collectMaterials, countCatalogFiles, countCatalogNode, countMissingVideos, courseProgress, formatCategoryName, formatCount, formatCourseCardMeta, formatCourseMeta, formatLessonCounts, formatLessonMeta, getCourseProgressStatus, isLessonMissing } from './catalog';
+import { collectMaterials, countCatalogFiles, countCatalogNode, countMissingVideos, courseProgress, formatCategoryName, formatCount, formatCourseCardMeta, formatCourseMeta, formatLessonCounts, formatLessonMeta, getCourseProgressStatus, isLessonMissing, lessonStudyMediaId } from './catalog';
 import type { CatalogCounts } from './catalog';
 import type { CatalogNode, FileEntry } from './transport';
 
@@ -11,6 +11,33 @@ function file(name: string, kind: string, availability = 'available'): FileEntry
 function missing(name: string, kind: string): FileEntry {
 	return file(name, kind, 'missing');
 }
+
+describe('lessonStudyMediaId', () => {
+	const first = file('first.webm', 'media');
+	const second = file('second.webm', 'media');
+	const missingFirst = { ...first, availability: ' MISSING ' };
+	const missingSecond = { ...second, availability: 'missing' };
+
+	it('follows the playable selection when a video is available', () => {
+		expect(lessonStudyMediaId([first, second], second.mediaId)).toBe(second.mediaId);
+		expect(lessonStudyMediaId([missingFirst, second], first.mediaId)).toBe(second.mediaId);
+	});
+
+	it('keeps the preferred catalog identity when all videos are missing', () => {
+		expect(lessonStudyMediaId([missingFirst, missingSecond], second.mediaId)).toBe(second.mediaId);
+	});
+
+	it('falls back to the first catalogued ID when the preference is absent or stale', () => {
+		const media = [{ ...missingFirst, mediaId: undefined }, missingSecond];
+		expect(lessonStudyMediaId(media)).toBe(second.mediaId);
+		expect(lessonStudyMediaId(media, 'stale-id')).toBe(second.mediaId);
+	});
+
+	it('returns null when there is no catalogued identity', () => {
+		expect(lessonStudyMediaId([])).toBeNull();
+		expect(lessonStudyMediaId([{ ...missingFirst, mediaId: undefined }])).toBeNull();
+	});
+});
 
 function node(role: string, title: string, children: CatalogNode[] = [], files: FileEntry[] = []): CatalogNode {
 	return { title, path: title, role, files, looseFiles: [], children };

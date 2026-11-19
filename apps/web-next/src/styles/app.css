@@ -96,7 +96,7 @@
   --brand-ink: color-mix(in oklch, var(--brand) 60%, black);
   --brand-tint: color-mix(in oklch, var(--brand-tone) 12%, var(--background));
   --brand-soft: color-mix(in oklch, var(--brand-tone) 22%, var(--background));
-  --reward: #A8761F;
+  --reward: #795514;
   --reward-fill: #A8761F;
   --reward-fill-fg: #1C1815;
   --reward-tint: #F3E3CB;

@@ -205,7 +205,7 @@ export function applyAppearance(appearance: Appearance, root: HTMLElement = docu
 	root.style.setProperty('--brand-tone', dark ? accent : toneFor(appearance.accent) ?? accent);
 	root.style.setProperty('--brand-fg', dark ? '#1C1209' : '#FFFFFF');
 	const own = appearance.reward === 'accent';
-	root.style.setProperty('--reward', own ? 'var(--brand)' : dark ? '#E0A83E' : '#A8761F');
+	root.style.setProperty('--reward', own ? 'var(--brand-ink)' : dark ? '#E0A83E' : '#795514');
 	root.style.setProperty('--reward-fill', own ? 'var(--brand)' : dark ? '#E0A83E' : '#A8761F');
 	root.style.setProperty('--reward-fill-fg', own ? 'var(--brand-fg)' : '#1C1815');
 	root.style.setProperty('--reward-tint', own ? 'var(--brand-tint)' : dark ? '#3A2A18' : '#F3E3CB');

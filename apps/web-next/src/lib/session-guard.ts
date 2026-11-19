@@ -31,8 +31,10 @@ export function installSessionGuard(): void {
 function isApiRequest(input: RequestInfo | URL): boolean {
 	const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
 	const path = url.startsWith('http') ? new URL(url).pathname : url;
-	// A rejected sign-in is a normal flow, not an expiry.
-	return path.startsWith('/api/') && !path.startsWith('/api/login');
+	// A rejected sign-in is a normal flow, not an expiry. A 401 from `/api/me` is the answer to "is there
+	// still a session?", not news about one: reporting it would refetch `/api/me` again, forever, and each
+	// refetch cancels the one before it, so the shell would never learn that the session is gone.
+	return path.startsWith('/api/') && !path.startsWith('/api/login') && path.split('?')[0] !== '/api/me';
 }
 
 /** Copy shown once after the guard reports an expiry; empty on the desktop build. */

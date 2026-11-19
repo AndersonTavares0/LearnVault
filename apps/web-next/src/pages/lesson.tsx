@@ -20,13 +20,13 @@ import { usePlayerPreferences } from '@/hooks/use-player-preferences';
 import { useLocale } from '@/hooks/use-locale';
 import { usePageTitle } from '@/hooks/use-page-title';
 import { useStore } from '@/hooks/use-store';
-import { courseProgress } from '@/lib/catalog';
+import { courseProgress, lessonStudyMediaId } from '@/lib/catalog';
 import { tr } from '@/lib/i18n';
 import { plainTextMarkdown } from '@/lib/markdown';
 import { lessonSequence, neighboringLessons } from '@/lib/navigation';
 import { findLessonPdf, formatFileSize } from '@/lib/pdf';
 import { findLessonText, loadText } from '@/lib/text-lesson';
-import { formatDuration, selectPlayableMedia, shouldAutoAdvance, studySyncSupported } from '@/lib/player';
+import { formatDuration, mediaAvailability, shouldAutoAdvance, studySyncSupported } from '@/lib/player';
 import { lessonPreferenceKey, type PlayerPreferences } from '@/lib/player-preferences';
 import { normalizeForSearch } from '@/lib/search';
 import { pomodoro, resetTimer, skipTimer, startTimer } from '@/lib/pomodoro-store';
@@ -83,7 +83,8 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 		return media?.mediaId ? findLessonLocation(catalog.data ?? null, media.mediaId) : null;
 	}, [catalog.data, lesson, pdf]);
 	const { previous, next } = neighboringLessons([course], lessonPath);
-	const mediaId = pdf?.mediaId ?? (lesson ? selectPlayableMedia(lesson.media, preferences.lessons[lessonPreferenceKey(courseId, lessonPath)]?.mediaId)?.mediaId ?? null : null);
+	const playableMedia = lesson ? mediaAvailability(lesson.media) === 'playable' : false;
+	const mediaId = pdf?.mediaId ?? (lesson ? lessonStudyMediaId(lesson.media, preferences.lessons[lessonPreferenceKey(courseId, lessonPath)]?.mediaId) : null);
 	const completed = useMemo(() => new Set((recent.data ?? []).filter((item) => item.completed).map((item) => item.mediaId)), [recent.data]);
 	const favoriteMedia = useMemo(() => new Set(favorites.data?.mediaIds ?? []), [favorites.data]);
 	const progress = useQuery({ queryKey: ['progress', mediaId], enabled: Boolean(mediaId) && studySyncSupported, queryFn: () => transport.studyProgress(mediaId!) });
@@ -384,7 +385,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 							<TabsTrigger value="materials">{tr('Materials', 'Materiais')}{lesson.materials.length + lesson.subtitles.length > 0 && ` (${lesson.materials.length + lesson.subtitles.length})`}</TabsTrigger>
 						</TabsList>
 						<TabsContent value="lessons" className="space-y-4 pt-5">
-							{!pdf && resumeAt !== null && time < resumeAt && (
+							{!pdf && playableMedia && resumeAt !== null && time < resumeAt && (
 									<Button variant="secondary" onClick={() => player.current?.seek(resumeAt)}>{tr(`Resume from ${formatDuration(resumeAt)}`, `Retomar de ${formatDuration(resumeAt)}`)}</Button>
 								)}
 							<div className="grid gap-4 md:grid-cols-3">
