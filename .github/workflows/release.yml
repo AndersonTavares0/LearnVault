@@ -943,7 +943,12 @@ jobs:
           docker buildx imagetools inspect --raw "${IMAGE}@${EXPECTED_INDEX_DIGEST}" > "$verify_dir/index.json"
 
           for architecture in amd64 arm64; do
-            expected_digest="$(tr -d '[:space:]' < "verify-digests/${architecture}.txt")"
+            push_digest="$(tr -d '[:space:]' < "verify-digests/${architecture}.txt")"
+            [[ "$push_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+            docker buildx imagetools inspect --raw "${IMAGE}@${push_digest}" > "$verify_dir/${architecture}-push-index.json"
+            expected_digest="$(jq -er --arg architecture "$architecture" '
+              [.manifests[] | select(.platform.os == "linux" and .platform.architecture == $architecture and .annotations["vnd.docker.reference.type"] != "attestation-manifest") | .digest] | if length == 1 then .[0] else error("expected exactly one platform image manifest") end
+            ' "$verify_dir/${architecture}-push-index.json")"
             [[ "$expected_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
             attestation_digests="$(jq -r --arg digest "$expected_digest" \
               '.manifests[] | select(.annotations["vnd.docker.reference.type"] == "attestation-manifest" and .annotations["vnd.docker.reference.digest"] == $digest) | .digest' \
@@ -962,6 +967,8 @@ jobs:
 
           node .trusted-workflow/scripts/verify-release-index-attestations.mjs \
             "$verify_dir/index.json" \
+            "$verify_dir/amd64-push-index.json" \
+            "$verify_dir/arm64-push-index.json" \
             "$(tr -d '[:space:]' < verify-digests/amd64.txt)" \
             "$(tr -d '[:space:]' < verify-digests/arm64.txt)" \
             "$verify_dir/amd64" "$verify_dir/arm64"

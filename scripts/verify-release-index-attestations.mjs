@@ -31,7 +31,7 @@ export function verifyReleaseIndexAttestations(index, expectedDigests, attestati
 		const descriptors = (index.manifests ?? []).filter((manifest) =>
 			manifest.annotations?.['vnd.docker.reference.type'] === 'attestation-manifest'
 			&& manifest.annotations?.['vnd.docker.reference.digest'] === expectedDigest);
-		assert.ok(descriptors.length > 0, `No build attestations in the index refer to linux/${architecture} digest ${expectedDigest}`);
+		assert.equal(descriptors.length, 1, `Expected exactly one indexed attestation manifest for linux/${architecture} digest ${expectedDigest}`);
 
 		const supplied = attestationManifests[architecture] ?? {};
 		const expectedAttestationDigests = descriptors.map((descriptor) => descriptor.digest).sort();
@@ -51,6 +51,17 @@ export function verifyReleaseIndexAttestations(index, expectedDigests, attestati
 	return true;
 }
 
+export function resolveArchitectureImageDigest(index, architecture) {
+	if (architecture !== 'amd64' && architecture !== 'arm64') throw new Error(`Unsupported architecture: ${architecture}`);
+	const manifests = (index.manifests ?? []).filter((manifest) =>
+		manifest.platform?.os === 'linux'
+		&& manifest.platform?.architecture === architecture
+		&& manifest.annotations?.['vnd.docker.reference.type'] !== 'attestation-manifest');
+	assert.equal(manifests.length, 1, `Expected exactly one linux/${architecture} image manifest in the per-architecture index`);
+	assert.match(manifests[0].digest ?? '', DIGEST, `Invalid linux/${architecture} image manifest digest`);
+	return manifests[0].digest;
+}
+
 export function readIndexedAttestationManifests(index, architecture, directory) {
 	if (architecture !== 'amd64' && architecture !== 'arm64') throw new Error(`Unsupported architecture: ${architecture}`);
 	const platform = (index.manifests ?? []).find((manifest) =>
@@ -66,16 +77,24 @@ export function readIndexedAttestationManifests(index, architecture, directory) 
 }
 
 function main(args) {
-	if (args.length !== 5) {
-		throw new Error('Usage: verify-release-index-attestations.mjs <index.json> <amd64-digest> <arm64-digest> <amd64-attestations-dir> <arm64-attestations-dir>');
+	if (args.length !== 7) {
+		throw new Error('Usage: verify-release-index-attestations.mjs <published-index.json> <amd64-push-index.json> <arm64-push-index.json> <amd64-push-digest> <arm64-push-digest> <amd64-attestations-dir> <arm64-attestations-dir>');
 	}
-	const [indexPath, amd64Digest, arm64Digest, amd64Dir, arm64Dir] = args;
+	const [indexPath, amd64PushIndexPath, arm64PushIndexPath, amd64PushDigest, arm64PushDigest, amd64Dir, arm64Dir] = args;
 	const index = readJson(resolve(indexPath));
+	const amd64PushIndex = readJson(resolve(amd64PushIndexPath));
+	const arm64PushIndex = readJson(resolve(arm64PushIndexPath));
+	const expectedDigests = {
+		amd64: resolveArchitectureImageDigest(amd64PushIndex, 'amd64'),
+		arm64: resolveArchitectureImageDigest(arm64PushIndex, 'arm64')
+	};
+	assert.match(amd64PushDigest, DIGEST, 'Missing valid amd64 build index digest');
+	assert.match(arm64PushDigest, DIGEST, 'Missing valid arm64 build index digest');
 	const attestationManifests = {
 		amd64: readIndexedAttestationManifests(index, 'amd64', resolve(amd64Dir)),
 		arm64: readIndexedAttestationManifests(index, 'arm64', resolve(arm64Dir))
 	};
-	verifyReleaseIndexAttestations(index, { amd64: amd64Digest, arm64: arm64Digest }, attestationManifests);
+	verifyReleaseIndexAttestations(index, expectedDigests, attestationManifests);
 	console.log('Verified published amd64 and arm64 manifests, SLSA provenance, and SBOM attestations.');
 }
 

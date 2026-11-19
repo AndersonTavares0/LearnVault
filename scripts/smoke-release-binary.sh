@@ -77,7 +77,17 @@ if [[ -z "$ready_line" ]]; then
 fi
 
 addr="${ready_line#LEARNVAULT_READY }"
-health_json="$(curl -fsS "http://${addr}/api/healthz")"
+health_json=""
+for attempt in $(seq 1 40); do
+  if health_json="$(curl -fsS "http://${addr}/api/healthz" 2>/dev/null)"; then
+    break
+  fi
+  if (( attempt == 40 )); then
+    echo "::error::/api/healthz did not become healthy after 40 attempts" >&2
+    exit 1
+  fi
+  sleep 0.5
+done
 if ! printf '%s' "$health_json" | jq -e --arg v "$expected_tag" '.status == "ok" and .version == $v' >/dev/null; then
   echo "::error::Unexpected /api/healthz response (expected status=ok, version=${expected_tag}): ${health_json}" >&2
   exit 1
