@@ -815,11 +815,14 @@ jobs:
     # Run in this same Release workflow/concurrency group. Rollback refuses to proceed while a
     # Release run is active, so verification cannot race with alias movement or rollback.
     needs: [validate-tag, container, publish]
+    # Any mutation that started must be verified: when the container job moved the GHCR aliases and
+    # the publish job then failed (or its environment approval was rejected), the aliases already
+    # point at this run's digest, so gating on publish success would leave them unchecked. The
+    # per-step conditions below decide which mutation is actually verified.
     if: >-
       ${{ always() && needs.validate-tag.result == 'success' &&
-      (needs.publish.outputs.asset_upload_started == 'true' ||
-       (needs.publish.result != 'failure' &&
-        (needs.container.outputs.tag_move_started == 'true' || needs.publish.result == 'success'))) }}
+      (needs.container.outputs.tag_move_started == 'true' ||
+       needs.publish.outputs.asset_upload_started == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
