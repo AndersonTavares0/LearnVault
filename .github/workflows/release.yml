@@ -606,6 +606,30 @@ jobs:
           done
           test "${#args[@]}" -gt 0
           docker buildx imagetools create "${args[@]}" "${IMAGE}@${DIGEST}"
+      # Only delete a package version whose sole tag is staging-<run_id> (orphaned by a failed run).
+      # On a successful run the release tags share the same digest/version, so deleting it would delete the release.
+      - name: Clean up temporary staging tag
+        if: ${{ !cancelled() && steps.index.outputs.digest != '' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          owner="${REPOSITORY%%/*}"
+          pkg="${REPOSITORY#*/}"
+          pkg="${pkg,,}"
+          staging_tag="staging-${RUN_ID}"
+          version_id="$(
+            gh api --paginate "/users/${owner}/packages/container/${pkg}/versions" \
+              --jq ".[] | select((.metadata.container.tags // []) == [\"${staging_tag}\"]) | .id" \
+              | head -n 1 || true
+          )"
+          if [[ -n "$version_id" ]]; then
+            gh api -X DELETE "/users/${owner}/packages/container/${pkg}/versions/${version_id}" || \
+              echo "::warning::Failed to delete orphaned GHCR staging tag ${staging_tag} (version ${version_id})" >&2
+          fi
 
   publish:
     name: Publish release assets

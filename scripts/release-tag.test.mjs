@@ -286,3 +286,58 @@ test('verify-published downloads and verifies published assets, attestations, OC
     const failBlock = runBlock('Notify loudly on post-publication verification failure');
     assert.match(failBlock, /rollback\.yml/);
 });
+
+test('rollback workflow repoints moving GHCR tags after cosign verification and staging cleanup never deletes released versions', t => {
+    const rollback = readFileSync(join(root, '.github/workflows/rollback.yml'), 'utf8');
+    assert.match(rollback, /workflow_dispatch:/);
+    assert.match(rollback, /environment: release/);
+    assert.match(rollback, /refs\/heads\/main/);
+    assert.match(rollback, /cosign verify "\$\{IMAGE\}@\$\{digest\}"/);
+    assert.match(rollback, /--tag "\$\{IMAGE\}:stable"/);
+    assert.match(rollback, /--tag "\$\{IMAGE\}:latest"/);
+    assert.doesNotMatch(rollback, /--tag "\$\{IMAGE\}:\$\{VERSION\}"/);
+    assert.doesNotMatch(rollback, /gh api -X DELETE/);
+
+    const { directory } = fixture(t);
+    const cleanupBlock = runBlock('Clean up temporary staging tag');
+    const runCleanup = (versionsJson) => {
+        const callsLog = join(directory, `calls-${Math.random().toString(36).slice(2)}.log`);
+        const ghStub = `gh() {
+  if [[ "$1" == "api" && "$2" == "--paginate" ]]; then
+    local jq_expr="$5"
+    printf '%s' "$GH_VERSIONS_JSON" | jq -r "$jq_expr"
+    return 0
+  fi
+  if [[ "$1" == "api" && "$2" == "-X" && "$3" == "DELETE" ]]; then
+    printf 'DELETE %s\\n' "$4" >> "$GH_CALLS_LOG"
+    return 0
+  fi
+  return 1
+}
+`;
+        const result = spawnSync('bash', ['-c', `${ghStub}\n${cleanupBlock}`], {
+            cwd: directory,
+            encoding: 'utf8',
+            env: {
+                PATH: process.env.PATH,
+                GH_TOKEN: 'synthetic',
+                REPOSITORY: 'Owner/LearnVault',
+                RUN_ID: '123',
+                GH_VERSIONS_JSON: versionsJson,
+                GH_CALLS_LOG: callsLog
+            }
+        });
+        assert.equal(result.status, 0, result.stderr);
+        try {
+            return readFileSync(callsLog, 'utf8');
+        } catch {
+            return '';
+        }
+    };
+
+    const sharedVersion = JSON.stringify([{ id: 41, metadata: { container: { tags: ['staging-123', '0.9.5', 'latest'] } } }]);
+    assert.equal(runCleanup(sharedVersion), '', 'must NOT delete a version carrying staging + release tags');
+
+    const orphanedVersion = JSON.stringify([{ id: 42, metadata: { container: { tags: ['staging-123'] } } }]);
+    assert.equal(runCleanup(orphanedVersion), 'DELETE /users/Owner/packages/container/learnvault/versions/42\n');
+});

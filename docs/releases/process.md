@@ -131,5 +131,13 @@ gh attestation verify learnvault-linux-amd64.tar.gz --repo AndersonTavares0/Lear
 - **Desktop update is not offered after a release.** The release must be published (not a draft) and not a pre-release, and `latest.json` must carry a version greater than the installed app. Check with `gh release view <tag> --json isDraft,isPrerelease`.
 - **The release workflow refuses the tag.** The tag must match `vX.Y.Z` exactly and be a published, non-draft release.
 - **Signature verification fails in the updater or in `update.sh`.** The image or the update file was not signed by this repository's release workflow on a release tag or `main`. Re-run the release workflow for the tag instead of editing the assets by hand.
-- **The container image has no version tag.** Each architecture is pushed by digest and scanned before anything names it. The combined index is then given a temporary `staging-<run id>` tag (it is not a release tag and is never used by a deployment), and the release tags are applied only after the signature check passes. If the scan fails, no release tag is applied, which is intended. Staging tags are left in GHCR and can be removed by hand.
+- **The container image has no version tag.** Each architecture is pushed by digest and scanned before anything names it. The combined index is then given a temporary `staging-<run id>` tag (it is not a release tag and is never used by a deployment), and the release tags are applied only after the signature check passes. If the scan fails, no release tag is applied, which is intended. On a successful run, `staging-<run id>` shares the released digest/version and is left in place as a harmless pointer; only orphaned `staging-<run id>` versions (carrying no release tags) are deleted automatically.
 - **Windows installer build fails.** Check the NSIS build log. A failure stops before the publish job, so nothing is published.
+
+## Rollback
+
+Published versions (`vMAJOR.MINOR.PATCH`) are never deleted, moved, or retagged (see [release policy](../../.agents/policies/releases.md)). If a published release is faulty:
+
+1. Run **Actions → Rollback → Run workflow** (`.github/workflows/rollback.yml`) from `main` with `target_version` set to the previous verified `vX.Y.Z` release and a short `reason`. After approval in the `release` environment, the workflow verifies the target image's `cosign` signature and repoints GHCR `:stable`, `:latest`, and `<major>.<minor>` to that verified digest.
+2. To stop the Tauri desktop updater from serving the faulty `latest.json` via `releases/latest`, mark the faulty GitHub Release as a pre-release (`gh release edit <bad-tag> --prerelease`) so `releases/latest` falls back to the previous stable release's `latest.json`, and add a warning note to the faulty release.
+3. Publish a new higher patch release (`vMAJOR.MINOR.PATCH`) so any users who already upgraded can move forward.

@@ -1,0 +1,137 @@
+name: Rollback
+
+# Repoints GHCR moving tags (:stable, :latest, and <major>.<minor>) to a previously
+# verified release digest without modifying or retagging any published vMAJOR.MINOR.PATCH version.
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_version:
+        description: Previous verified release tag to repoint :stable, :latest, and minor tags to (strict vX.Y.Z)
+        required: true
+        type: string
+      reason:
+        description: Short reason for the rollback
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  rollback:
+    name: Repoint GHCR moving tags
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: release
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Require trusted workflow ref and strict SemVer target
+        id: target
+        shell: bash
+        env:
+          WORKFLOW_REF: ${{ github.ref }}
+          TARGET_TAG: ${{ inputs.target_version }}
+        run: |
+          set -euo pipefail
+          if [[ "$WORKFLOW_REF" != "refs/heads/main" ]]; then
+            echo "::error::Rollback must run from main" >&2
+            exit 1
+          fi
+          if [[ ! "$TARGET_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::Unexpected target_version format: $TARGET_TAG" >&2
+            exit 1
+          fi
+          version="${TARGET_TAG#v}"
+          minor="${version%.*}"
+          {
+            echo "tag=$TARGET_TAG"
+            echo "version=$version"
+            echo "minor=$minor"
+          } >> "$GITHUB_OUTPUT"
+      - name: Require an existing published non-prerelease target
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_TAG: ${{ steps.target.outputs.tag }}
+        run: |
+          set -euo pipefail
+          meta="$(gh release view "$TARGET_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease)"
+          if [[ "$(jq -r .isDraft <<<"$meta")" != "false" ]]; then
+            echo "::error::$TARGET_TAG must be a published release (not a draft)" >&2
+            exit 1
+          fi
+          if [[ "$(jq -r .isPrerelease <<<"$meta")" != "false" ]]; then
+            echo "::error::$TARGET_TAG is a pre-release and cannot serve as :stable/:latest" >&2
+            exit 1
+          fi
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Verify target image digest, platforms, and cosign signature
+        id: verify
+        shell: bash
+        env:
+          REPOSITORY: ${{ github.repository }}
+          VERSION: ${{ steps.target.outputs.version }}
+        run: |
+          set -euo pipefail
+          IMAGE="ghcr.io/${REPOSITORY,,}"
+          digest="$(docker buildx imagetools inspect "${IMAGE}:${VERSION}" --format '{{.Manifest.Digest}}')"
+          if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::Could not resolve digest for ${IMAGE}:${VERSION}" >&2
+            exit 1
+          fi
+          raw="$(docker buildx imagetools inspect --raw "${IMAGE}@${digest}")"
+          printf '%s' "$raw" | jq -e '[.manifests[] | select(.platform.os == "linux" and .platform.architecture == "amd64")] | length >= 1' >/dev/null
+          printf '%s' "$raw" | jq -e '[.manifests[] | select(.platform.os == "linux" and .platform.architecture == "arm64")] | length >= 1' >/dev/null
+          cosign verify "${IMAGE}@${digest}" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity-regexp "^https://github\\.com/${REPOSITORY//./\\.}/\\.github/workflows/release\\.yml@refs/(tags/v[0-9]+\\.[0-9]+\\.[0-9]+|heads/main)$" >/dev/null
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - name: Repoint moving GHCR tags to the verified digest
+        shell: bash
+        env:
+          IMAGE: ${{ steps.verify.outputs.image }}
+          DIGEST: ${{ steps.verify.outputs.digest }}
+          MINOR: ${{ steps.target.outputs.minor }}
+        run: |
+          set -euo pipefail
+          docker buildx imagetools create \
+            --tag "${IMAGE}:${MINOR}" \
+            --tag "${IMAGE}:stable" \
+            --tag "${IMAGE}:latest" \
+            "${IMAGE}@${DIGEST}"
+      - name: Document rollback and desktop updater recovery
+        shell: bash
+        env:
+          TARGET_TAG: ${{ steps.target.outputs.tag }}
+          IMAGE: ${{ steps.verify.outputs.image }}
+          DIGEST: ${{ steps.verify.outputs.digest }}
+          MINOR: ${{ steps.target.outputs.minor }}
+          REASON: ${{ inputs.reason }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## GHCR rollback completed"
+            echo ""
+            echo "- **Target release:** \`${TARGET_TAG}\`"
+            echo "- **Verified digest:** \`${DIGEST}\`"
+            echo "- **Repointed tags:** \`${IMAGE}:${MINOR}\`, \`${IMAGE}:stable\`, \`${IMAGE}:latest\`"
+            echo "- **Reason:** ${REASON}"
+            echo ""
+            echo "### Desktop updater (\`latest.json\`) recovery"
+            echo "Published versions are never deleted or retagged. If a bad release is currently served by \`releases/latest\`:"
+            echo "1. Mark the bad GitHub Release as a pre-release (\`gh release edit <bad-tag> --prerelease\`) so \`releases/latest\` falls back to \`${TARGET_TAG}\` and its \`latest.json\`."
+            echo "2. Add a warning note to the bad release and publish a new higher patch release (\`vMAJOR.MINOR.PATCH\`) for users who already upgraded."
+          } >> "$GITHUB_STEP_SUMMARY"
