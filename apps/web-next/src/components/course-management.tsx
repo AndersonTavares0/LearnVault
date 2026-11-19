@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { formatCount } from '@/lib/catalog';
 import { tr } from '@/lib/i18n';
-import { COVER_ACCEPT, MAX_COVER_BYTES, transportKind, type CatalogNode } from '@/lib/transport';
+import { COVER_ACCEPT, MAX_COVER_BYTES, isCredentialsChange, transportKind, type CatalogNode } from '@/lib/transport';
 import { useCourseCover, useRemoveCourse, useResetCourseOrder } from '@/app/data';
 
 type Props = {
@@ -19,7 +19,7 @@ type Props = {
 };
 
 function actionError(error: unknown, fallback: string): string {
-	if (error instanceof Error && error.message === 'credentials_change_required') {
+	if (isCredentialsChange(error)) {
 		return tr('Change your password on the server before managing courses.', 'Troque sua senha no servidor antes de gerenciar cursos.');
 	}
 	return fallback;
