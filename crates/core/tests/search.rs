@@ -19,10 +19,19 @@ fn database() -> Result<Database, Box<dyn std::error::Error>> {
 }
 
 fn insert_media(db: &Database, media_id: &str, path: &str) -> rusqlite::Result<usize> {
+    insert_media_with_size(db, media_id, path, 1024)
+}
+
+fn insert_media_with_size(
+    db: &Database,
+    media_id: &str,
+    path: &str,
+    size: i64,
+) -> rusqlite::Result<usize> {
     db.connection().execute(
         "INSERT INTO media (media_id, library_id, relative_path, relative_path_key, size, mtime, availability)
-         VALUES (?1, ?2, ?3, ?3, 1024, 1760000000, 'available')",
-        rusqlite::params![media_id, LIB, path],
+         VALUES (?1, ?2, ?3, ?3, ?4, 1760000000, 'available')",
+        rusqlite::params![media_id, LIB, path, size],
     )
 }
 
@@ -266,6 +275,71 @@ fn rebuild_backfills_rows_that_predate_the_index() -> TestResult {
             .lessons
             .len(),
         1
+    );
+    Ok(())
+}
+
+#[test]
+fn lesson_search_excludes_markdown_and_keeps_video() -> TestResult {
+    let db = database()?;
+    insert_media(&db, "media-mp4", "Course/01 - Rust Basics.mp4")?;
+    insert_media(&db, "media-md", "Course/01 - Rust Notes.md")?;
+
+    let results = search(&db, "teacher", false, "rust", 20)?;
+    assert_eq!(results.lessons.len(), 1);
+    assert_eq!(results.lessons[0].media_id, "media-mp4");
+    Ok(())
+}
+
+#[test]
+fn lesson_search_excludes_small_ts_files() -> TestResult {
+    let db = database()?;
+    insert_media_with_size(&db, "ts-small", "Course/01 - Ownership.ts", 1024)?;
+    insert_media_with_size(&db, "ts-large", "Course/02 - Ownership.ts", 2 * 1024 * 1024)?;
+
+    let results = search(&db, "teacher", false, "ownership", 20)?;
+    assert_eq!(results.lessons.len(), 1);
+    assert_eq!(results.lessons[0].media_id, "ts-large");
+    Ok(())
+}
+
+#[test]
+fn lesson_search_excludes_showcase_videos() -> TestResult {
+    let db = database()?;
+    insert_media(&db, "showcase", "Showcase/Trailer.mp4")?;
+    insert_media(&db, "lesson", "Showcase/01 - Intro.mp4")?;
+
+    let results = search(&db, "teacher", false, "showcase", 20)?;
+    assert_eq!(results.lessons.len(), 1);
+    assert_eq!(results.lessons[0].media_id, "lesson");
+    Ok(())
+}
+
+#[test]
+fn lesson_search_respects_limit_after_filtering_non_media() -> TestResult {
+    let db = database()?;
+    for index in 0..6 {
+        insert_media(
+            &db,
+            &format!("doc-{index}"),
+            &format!("Course/{index:02} - Guide.md"),
+        )?;
+    }
+    for index in 0..3 {
+        insert_media(
+            &db,
+            &format!("vid-{index}"),
+            &format!("Course/{index:02} - Guide.mp4"),
+        )?;
+    }
+
+    let results = search(&db, "teacher", false, "guide", 2)?;
+    assert_eq!(results.lessons.len(), 2);
+    assert!(
+        results
+            .lessons
+            .iter()
+            .all(|hit| hit.relative_path.ends_with(".mp4"))
     );
     Ok(())
 }
