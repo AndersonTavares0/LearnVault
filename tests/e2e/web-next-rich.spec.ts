@@ -295,9 +295,17 @@ test('switching to another video of the lesson keeps the bar in step and clears 
 test('turning transcoding on and seeking keeps the bar in step with the video', async ({ page, origin }) => {
 	await page.emulateMedia({ reducedMotion: 'reduce' });
 	await openVideoLesson(page, origin);
-	const transcode = page.getByRole('button', { name: 'Transcode', exact: true });
-	test.skip(!(await transcode.isVisible().catch(() => false)), 'the server has no ffmpeg, so transcoding is not offered');
+	const capabilities = await page.request.get(`${origin}/api/media/capabilities`);
+	expect(capabilities.ok()).toBe(true);
+	const { transcoding } = (await capabilities.json()) as { transcoding?: boolean };
+	if (process.env.CI) {
+		expect(transcoding, 'CI e2e-server must have ffmpeg installed so transcoding is tested').toBe(true);
+	}
+	test.skip(!transcoding, 'the server has no ffmpeg, so transcoding is not offered');
 	await page.getByRole('button', { name: 'Play', exact: true }).click();
+	await page.getByRole('button', { name: 'Player settings' }).click();
+	const transcode = page.getByRole('menuitem', { name: 'Play with transcoding' });
+	await expect(transcode).toBeVisible();
 	await transcode.click();
 	await expectBarMatchesVideo(page);
 	await page.getByRole('slider', { name: 'Seek' }).focus();
