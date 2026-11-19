@@ -1,0 +1,48 @@
+name: Main CI failure alert
+
+on:
+  workflow_run:
+    workflows: [CI]
+    branches: [main]
+    types: [completed]
+
+concurrency:
+  group: main-ci-alert
+  cancel-in-progress: false
+
+permissions:
+  issues: write
+
+jobs:
+  alert:
+    name: Open or update main CI failure issue
+    if: ${{ github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Notify via GitHub Issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          short_sha="${HEAD_SHA:0:7}"
+          existing="$(gh issue list --repo "$REPOSITORY" --state open --label ci-main-failure --json number --jq '.[0].number // ""')"
+          body=$(cat <<EOF
+          Main branch CI failed on commit \`${HEAD_SHA}\`.
+
+          - Workflow run: ${RUN_URL}
+          - Run ID: \`${RUN_ID}\`
+
+          Pause new merges until \`main\` is green again.
+          EOF
+          )
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$REPOSITORY" --body "$body"
+          else
+            gh label create ci-main-failure --repo "$REPOSITORY" --color B60205 --description "Main branch CI failure" --force
+            gh issue create --repo "$REPOSITORY" --title "ci: main branch failed on ${short_sha}" --label ci-main-failure --body "$body"
+          fi
