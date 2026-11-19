@@ -25,6 +25,11 @@ on:
         required: false
         default: ''
         type: string
+      allow_unsigned_legacy:
+        description: 'Accept an unsigned known-good image (only a release <= v0.8.0, and only if recorded_aliases has its exact version, e.g. "0.8.0", equal to the live digest)'
+        required: true
+        default: false
+        type: boolean
       dry_run:
         description: Print the plan without changing anything
         required: true
@@ -34,10 +39,10 @@ on:
 permissions:
   contents: read
 
-# Shared with the Release workflow: both move the same aliases, so they must never run at the same time.
-# Queue, never cancel: a running release must not be interrupted.
+# Its own group (Release keeps one group per tag). scripts/rollback.mjs refuses to plan or apply while any
+# Release run is in progress, queued or waiting, so the two never move aliases at the same time.
 concurrency:
-  group: release-pipeline
+  group: rollback
   cancel-in-progress: false
 
 jobs:
@@ -48,6 +53,7 @@ jobs:
     permissions:
       contents: read
       packages: read
+      actions: read
     steps:
       - name: Require the trusted workflow ref
         shell: bash
@@ -82,6 +88,7 @@ jobs:
           BAD_TAG: ${{ inputs.bad_version }}
           RECORDED_ALIASES: ${{ inputs.recorded_aliases }}
           STAGING_RUN: ${{ inputs.staging_run }}
+          ALLOW_UNSIGNED_LEGACY: ${{ inputs.allow_unsigned_legacy }}
         run: |
           set -euo pipefail
           node scripts/rollback.mjs plan rollback-plan.json | tee -a "$GITHUB_STEP_SUMMARY"
@@ -102,6 +109,7 @@ jobs:
     permissions:
       contents: write
       packages: write
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

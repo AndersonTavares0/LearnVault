@@ -47,18 +47,37 @@ export function aliasNames(targetTag, badTag) {
 
 // `recorded` must name every alias explicitly: a digest, or null for "did not exist".
 // A missing key is rejected so a typo can never be read as "absent".
-export function validateRecorded(recorded, aliases) {
+export function validateRecorded(recorded, aliases, optionalKey) {
     if (!recorded || typeof recorded !== 'object' || Array.isArray(recorded)) throw new Error('Recorded aliases must be a JSON object');
-    const extra = Object.keys(recorded).filter(key => !aliases.includes(key));
+    const allowed = optionalKey ? [...aliases, optionalKey] : aliases;
+    const extra = Object.keys(recorded).filter(key => !allowed.includes(key));
     const missing = aliases.filter(alias => !(alias in recorded));
     if (extra.length || missing.length) {
         throw new Error(`Recorded aliases must be exactly [${aliases.join(', ')}] (missing: [${missing}], unexpected: [${extra}])`);
     }
-    for (const alias of aliases) {
+    for (const alias of allowed.filter(key => key in recorded)) {
         const value = recorded[alias];
         if (value !== null && !DIGEST.test(value)) throw new Error(`Recorded alias ${alias} is neither null nor a sha256 digest`);
     }
-    return Object.fromEntries(aliases.map(alias => [alias, recorded[alias]]));
+    return Object.fromEntries(allowed.filter(key => key in recorded).map(alias => [alias, recorded[alias]]));
+}
+
+// Images published before keyless signing existed (v0.8.0 and older) carry no signature at all.
+export const isLegacyTag = tag => {
+    const [major, minor, patch] = parseTag(tag).version.split('.').map(Number);
+    return major === 0 && (minor < 8 || (minor === 8 && patch === 0));
+};
+const UNSIGNED = /no signatures found/i;
+
+// Never mutate while a Release run could be moving the same aliases. A failed lookup counts as busy.
+export function assertNoActiveRelease(run, repository) {
+    for (const status of ['in_progress', 'queued', 'waiting']) {
+        const out = sh(run, 'gh', ['run', 'list', '--repo', repository, '--workflow', 'release.yml', '--status', status, '--json', 'databaseId', '--limit', '100']).stdout;
+        let runs;
+        try { runs = JSON.parse(out); } catch { throw new Error('Could not read the Release workflow runs'); }
+        if (!Array.isArray(runs)) throw new Error('Could not read the Release workflow runs');
+        if (runs.length) throw new Error(`A Release workflow run is ${status} (${runs.map(r => r.databaseId).join(', ')}); wait for it to finish`);
+    }
 }
 
 // Compare the live registry with the recorded state, alias by alias.
@@ -102,18 +121,23 @@ export function snapshotAliases(run, image, aliases) {
 }
 
 // Each platform present in the index must resolve, and the index must carry a valid signature.
-export function verifyDigest(run, image, digest, repository) {
+// `allowUnsigned` skips ONLY the "no signatures found" outcome; a wrong identity or any other
+// cosign/registry error still fails. Returns { platforms, unsigned }.
+export function verifyDigest(run, image, digest, repository, { allowUnsigned = false } = {}) {
     const raw = sh(run, 'docker', ['buildx', 'imagetools', 'inspect', '--raw', `${image}@${digest}`]).stdout;
     const platforms = platformsOf(raw);
     for (const [platform, child] of Object.entries(platforms)) {
         if (inspectDigest(run, `${image}@${child}`) !== child) throw new Error(`Platform ${platform} of ${digest} does not resolve`);
     }
-    sh(run, 'cosign', [
+    const result = sh(run, 'cosign', [
         'verify', `${image}@${digest}`,
         '--certificate-oidc-issuer', OIDC_ISSUER,
         '--certificate-identity-regexp', certIdentityRegex(repository),
-    ]);
-    return platforms;
+    ], { allowFail: allowUnsigned });
+    if (result.status === 0) return { platforms, unsigned: false };
+    const text = `${result.stderr}${result.stdout}`;
+    if (UNSIGNED.test(text) && !/expected identities|certificate/i.test(text)) return { platforms, unsigned: true };
+    throw new Error(`cosign could not confirm ${digest}: ${text.trim()}`);
 }
 
 function releaseMeta(run, repository, tag) {
@@ -125,14 +149,15 @@ function releaseMeta(run, repository, tag) {
 }
 
 export function buildPlan(run, env) {
-    const { repository, targetTag, badTag, stagingRun } = env;
+    const { repository, targetTag, badTag, stagingRun, allowUnsignedLegacy = false } = env;
     const target = parseTag(targetTag);
     const bad = parseTag(badTag);
     if (target.tag === bad.tag) throw new Error('The known-good and bad releases must differ');
     if (stagingRun && !/^[0-9]+$/.test(stagingRun)) throw new Error('staging_run must be a numeric workflow run id');
     const image = `ghcr.io/${repository.toLowerCase()}`;
     const aliases = aliasNames(target.tag, bad.tag);
-    const recorded = validateRecorded(env.recorded, aliases);
+    const recorded = validateRecorded(env.recorded, aliases, target.version);
+    assertNoActiveRelease(run, repository);
 
     if (releaseMeta(run, repository, target.tag).isPrerelease) throw new Error(`${target.tag} is a pre-release and cannot be the known-good release`);
     releaseMeta(run, repository, bad.tag);
@@ -140,21 +165,32 @@ export function buildPlan(run, env) {
 
     const targetDigest = inspectDigest(run, `${image}:${target.version}`);
     if (!targetDigest) throw new Error(`${image}:${target.version} does not exist`);
-    const verified = {};
-    for (const digest of new Set([targetDigest, ...Object.values(recorded).filter(Boolean)])) {
-        verified[digest] = verifyDigest(run, image, digest, repository);
+    // Unsigned legacy: explicit flag, a release <= v0.8.0, and the live digest must equal the digest the
+    // operator recorded for that exact version. Only that digest may skip the signature.
+    const legacyOk = allowUnsignedLegacy && isLegacyTag(target.tag) && recorded[target.version] === targetDigest;
+    if (allowUnsignedLegacy && !legacyOk) {
+        throw new Error(`allow_unsigned_legacy needs a release <= v0.8.0 and recorded_aliases["${target.version}"] equal to the live digest ${targetDigest}`);
     }
+    const verified = {};
+    const unsignedDigests = [];
+    for (const digest of new Set([targetDigest, ...Object.values(recorded).filter(Boolean)])) {
+        verified[digest] = verifyDigest(run, image, digest, repository, { allowUnsigned: legacyOk && digest === targetDigest });
+        if (verified[digest].unsigned) unsignedDigests.push(digest);
+    }
+    const aliasRecord = Object.fromEntries(aliases.map(alias => [alias, recorded[alias]]));
     const snapshot = snapshotAliases(run, image, aliases);
     return {
         repository, image, target, bad, stagingRun: stagingRun || '',
-        targetDigest, platforms: verified[targetDigest], recorded, snapshot,
-        actions: planAliases(recorded, snapshot),
+        targetDigest, platforms: verified[targetDigest].platforms, recorded: aliasRecord, snapshot,
+        allowUnsignedLegacy: legacyOk, unsignedDigests,
+        actions: planAliases(aliasRecord, snapshot),
         github: { currentLatest, markPrerelease: bad.tag, restoreLatest: target.tag },
     };
 }
 
 export function formatPlan(plan) {
     const lines = [
+        ...(plan.unsignedDigests?.length ? [`::warning::UNSIGNED LEGACY IMAGE: ${plan.unsignedDigests.join(', ')} has no cosign signature. It is accepted only because allow_unsigned_legacy was set, the release is <= v0.8.0 and the digest equals the operator record. Platforms were still verified.`] : []),
         `Known-good release: ${plan.target.tag} (${plan.targetDigest}; ${Object.keys(plan.platforms).join(', ')})`,
         `Bad release: ${plan.bad.tag}; current GitHub latest: ${plan.github.currentLatest}`,
         ...plan.actions.map(a => a.action === 'keep'
@@ -192,11 +228,15 @@ function deleteVersionWithExactTag(run, plan, tag, allowed) {
 export function applyPlan(run, plan, log = console.log) {
     const { image, repository } = plan;
     const aliases = Object.keys(plan.recorded);
+    assertNoActiveRelease(run, repository);
     // The approval wait can be long: refuse to act on a registry that changed since the plan.
     const now = snapshotAliases(run, image, aliases);
     if (JSON.stringify(now) !== JSON.stringify(plan.snapshot)) throw new Error('Alias state changed since the plan was made; re-run the dry run');
     if (inspectDigest(run, `${image}:${plan.target.version}`) !== plan.targetDigest) throw new Error('Target digest changed since the plan was made');
-    for (const digest of new Set([plan.targetDigest, ...Object.values(plan.recorded).filter(Boolean)])) verifyDigest(run, image, digest, repository);
+    for (const digest of new Set([plan.targetDigest, ...Object.values(plan.recorded).filter(Boolean)])) {
+        const { unsigned } = verifyDigest(run, image, digest, repository, { allowUnsigned: plan.allowUnsignedLegacy && digest === plan.targetDigest });
+        if (unsigned && !(plan.unsignedDigests ?? []).includes(digest)) throw new Error(`${digest} is unsigned but was not accepted by the plan`);
+    }
 
     for (const step of plan.actions) {
         if (step.action === 'repoint') {
@@ -206,7 +246,8 @@ export function applyPlan(run, plan, log = console.log) {
             sh(run, 'docker', ['buildx', 'imagetools', 'create', '--annotation', `index:org.opencontainers.image.description=rollback tombstone ${step.alias}`,
                 '--tag', `${image}:${step.alias}`, `${image}@${step.from}`]);
             const tomb = inspectDigest(run, `${image}:${step.alias}`);
-            if (!tomb || tomb === step.from) throw new Error(`Alias ${step.alias} could not be detached from ${step.from}`);
+            const others = new Set([plan.targetDigest, ...Object.values(plan.snapshot), ...Object.values(plan.recorded)].filter(Boolean));
+            if (!tomb || others.has(tomb)) throw new Error(`Alias ${step.alias} could not be detached from ${step.from}`);
             const outcome = deleteVersionWithExactTag(run, plan, step.alias, tags => canDeleteExactly(tags, step.alias));
             if (outcome !== 'deleted') throw new Error(`Refusing to delete alias ${step.alias}: version outcome ${outcome}`);
         }
@@ -238,7 +279,7 @@ function cli(argv, env) {
         let recorded;
         try { recorded = JSON.parse(env.RECORDED_ALIASES ?? ''); } catch { throw new Error('RECORDED_ALIASES is not valid JSON'); }
         const plan = buildPlan(realRun, {
-            repository: env.REPOSITORY, targetTag: env.TARGET_TAG, badTag: env.BAD_TAG, stagingRun: env.STAGING_RUN, recorded,
+            repository: env.REPOSITORY, targetTag: env.TARGET_TAG, badTag: env.BAD_TAG, stagingRun: env.STAGING_RUN, recorded, allowUnsignedLegacy: env.ALLOW_UNSIGNED_LEGACY === 'true',
         });
         writeFileSync(file, JSON.stringify(plan, null, 2));
         console.log(formatPlan(plan));

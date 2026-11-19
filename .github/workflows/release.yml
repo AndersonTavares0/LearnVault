@@ -14,12 +14,12 @@ permissions:
   contents: read
 
 # A published release and a manual repair of the same tag must not interleave: both build a
-# digest and then move the same tags and `gh release upload --clobber` the same asset names. The
-# Rollback workflow moves the same GHCR aliases, so every run shares one group. Queue instead of
-# cancelling, so a running release is never interrupted. Waiting for the `release`
+# digest and then move the same tags and `gh release upload --clobber` the same asset names.
+# Queue instead of cancelling, so the last run wins as a whole. The Rollback workflow has its own
+# group and refuses to run while a Release run is active. Waiting for the `release`
 # environment approval is outside the job timeout, so a long review does not cancel anything.
 concurrency:
-  group: release-pipeline
+  group: release-${{ github.event.release.tag_name || inputs.tag }}
   cancel-in-progress: false
 
 jobs:

@@ -1,9 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import {
-    applyPlan, buildPlan, canDeleteStaging, certIdentityRegex, formatPlan, parseTag, planAliases, platformsOf, validateRecorded,
+    applyPlan, assertNoActiveRelease, buildPlan, isLegacyTag, canDeleteStaging, certIdentityRegex, formatPlan, parseTag, planAliases, platformsOf, validateRecorded,
 } from './rollback.mjs';
 
 const root = resolve(import.meta.dirname, '..');
@@ -28,7 +29,7 @@ const indexOf = (children, withAttestation = true) => JSON.stringify({
 });
 
 // A synthetic GHCR + GitHub backend that answers the exact commands the script issues.
-function backend({ tags, signed = [GOOD, BAD], draft = false, releases } = {}) {
+function backend({ tags, signed = [GOOD, BAD], draft = false, releases, activeRuns = {}, cosignError } = {}) {
     const state = {
         tags: { ...tags },
         versions: new Map(),
@@ -65,7 +66,7 @@ function backend({ tags, signed = [GOOD, BAD], draft = false, releases } = {}) {
                 if (args[i] !== '--tag') continue;
                 const tag = args[i + 1].split(':')[1];
                 if (annotation) {
-                    tombstones[tag] = d(String(tag.length % 9));
+                    tombstones[tag] = `sha256:${createHash('sha256').update(`${tag}${source}`).digest('hex')}`;
                     state.raw[tombstones[tag]] = state.raw[source];
                     state.tags[tag] = tombstones[tag];
                 } else {
@@ -77,7 +78,14 @@ function backend({ tags, signed = [GOOD, BAD], draft = false, releases } = {}) {
         if (command === 'cosign') {
             const digest = args[1].split('@')[1];
             assert.equal(args[args.indexOf('--certificate-identity-regexp') + 1], certIdentityRegex(REPO));
-            return signed.includes(digest) ? ok('') : fail('no matching signatures');
+            if (cosignError) return fail(cosignError);
+            return signed.includes(digest) ? ok('') : fail('Error: no signatures found');
+        }
+        if (command === 'gh' && args[0] === 'run' && args[1] === 'list') {
+            assert.equal(args[args.indexOf('--workflow') + 1], 'release.yml');
+            const status = args[args.indexOf('--status') + 1];
+            if (activeRuns.error) return fail('HTTP 500');
+            return ok(JSON.stringify((activeRuns[status] ?? []).map(databaseId => ({ databaseId }))));
         }
         if (command === 'gh' && args[0] === 'release' && args[1] === 'view') {
             const release = state.releases[args[2]];
@@ -218,7 +226,7 @@ test('unrelated prior state: stable present, minor absent', () => {
 });
 
 test('fail closed: unsigned target, uncertain lookups, bad releases, drift', () => {
-    assert.throws(() => buildPlan(backend({ tags: REAL, signed: [BAD] }).run, planEnv(REAL_RECORD)), /no matching signatures/);
+    assert.throws(() => buildPlan(backend({ tags: REAL, signed: [BAD] }).run, planEnv(REAL_RECORD)), /no signatures found/);
     assert.throws(() => buildPlan(backend({ tags: REAL, releases: { 'v0.8.0': { isPrerelease: true }, 'v0.9.5': { isPrerelease: false } } }).run, planEnv(REAL_RECORD)), /pre-release/);
     assert.throws(() => buildPlan(backend({ tags: REAL, draft: true }).run, planEnv(REAL_RECORD)), /published release/);
     assert.throws(() => buildPlan(backend({ tags: { ...REAL, '0.8.0': undefined } }).run, planEnv(REAL_RECORD)), /does not exist/);
@@ -266,16 +274,80 @@ test('staging cleanup deletes a lone staging tag and skips one that shares a dig
     assert.ok(!shared.state.log.some(entry => entry[0] === 'DELETED'));
 });
 
-test('workflow: dry_run defaults to true, shares the Release lock without cancelling, never touches git tags', () => {
+test('workflow: dry_run defaults to true, own non-cancelling group, Release keeps its per-tag group, never touches git tags', () => {
     assert.match(rollbackYml, /dry_run:[\s\S]*?default: true\n\s+type: boolean/);
-    const group = text => /concurrency:\n  group: (\S+)\n  cancel-in-progress: (\w+)/.exec(text).slice(1);
-    assert.deepEqual(group(rollbackYml), ['release-pipeline', 'false']);
-    assert.deepEqual(group(releaseYml), ['release-pipeline', 'false']);
+    const group = text => /concurrency:\n  group: (.+)\n  cancel-in-progress: (\w+)/.exec(text).slice(1);
+    assert.deepEqual(group(rollbackYml), ['rollback', 'false']);
+    assert.match(rollbackYml, /allow_unsigned_legacy:[\s\S]*?default: false\n\s+type: boolean/);
+    assert.equal(group(releaseYml)[0], 'release-${{ github.event.release.tag_name || inputs.tag }}');
+    assert.equal(group(releaseYml)[1], 'false');
     assert.match(rollbackYml, /apply:\n[\s\S]*?if: \$\{\{ !inputs\.dry_run \}\}[\s\S]*?environment: release/);
     assert.doesNotMatch(rollbackYml.split('\n').filter(line => !line.trim().startsWith('#')).join('\n'), /git (tag|push)|--delete-tag|--cleanup-tag|gh release delete/);
     assert.match(rollbackYml, /refs\/heads\/main/);
     // Mutating permissions only in the approved apply job.
     assert.equal((rollbackYml.match(/packages: write/g) ?? []).length, 1);
+});
+
+const LEGACY_RECORD = { ...REAL_RECORD, '0.8.0': GOOD };
+const legacyRun = (opts = {}) => backend({ tags: REAL, signed: [BAD], ...opts });
+
+test('unsigned legacy v0.8.0 is allowed only with the flag and a matching recorded digest', () => {
+    assert.ok(isLegacyTag('v0.8.0') && isLegacyTag('v0.7.9') && !isLegacyTag('v0.8.1') && !isLegacyTag('v0.9.0') && !isLegacyTag('v1.0.0'));
+    // Without the flag the unsigned target fails closed.
+    assert.throws(() => buildPlan(legacyRun().run, planEnv(LEGACY_RECORD)), /cosign could not confirm|no signatures found/);
+    // With flag and digest match: planned with a loud warning, platforms still verified, then applied.
+    const { run, state } = legacyRun();
+    const plan = buildPlan(run, planEnv(LEGACY_RECORD, { allowUnsignedLegacy: true }));
+    assert.deepEqual(plan.unsignedDigests, [GOOD]);
+    assert.match(formatPlan(plan), /::warning::UNSIGNED LEGACY IMAGE: sha256:a+/);
+    assert.deepEqual(plan.recorded, REAL_RECORD);
+    applyPlan(run, plan, () => {});
+    assert.equal(state.tags.latest, GOOD);
+    assert.equal(state.latest, 'v0.8.0');
+});
+
+test('unsigned legacy: digest mismatch, missing record, too-new release or uncertain cosign still fail', () => {
+    const flag = { allowUnsignedLegacy: true };
+    assert.throws(() => buildPlan(legacyRun().run, planEnv({ ...REAL_RECORD, '0.8.0': d('c') }, flag)), /allow_unsigned_legacy needs/);
+    assert.throws(() => buildPlan(legacyRun().run, planEnv(REAL_RECORD, flag)), /allow_unsigned_legacy needs/);
+    assert.throws(() => buildPlan(legacyRun({ releases: { 'v0.9.5': { isPrerelease: false }, 'v0.10.0': { isPrerelease: false } } }).run, planEnv({ latest: BAD, stable: BAD, '0.9': BAD, '0.10': BAD, '0.9.5': BAD }, { ...flag, targetTag: 'v0.9.5', badTag: 'v0.10.0' })), /allow_unsigned_legacy needs/);
+    // Signed by the wrong identity, or any cosign/registry error that is not "no signatures found", is uncertain.
+    for (const cosignError of ['Error: no matching signatures: none of the expected identities matched what was in the certificate', 'Error: i/o timeout', 'Error: getting signed payload: 500']) {
+        assert.throws(() => buildPlan(legacyRun({ cosignError }).run, planEnv(LEGACY_RECORD, flag)), /cosign could not confirm/);
+    }
+    // The flag never relaxes a platform check, nor the signature of a different recorded digest.
+    const missingChild = legacyRun();
+    delete missingChild.state.raw[GOOD];
+    assert.throws(() => buildPlan(missingChild.run, planEnv(LEGACY_RECORD, flag)));
+    assert.throws(() => buildPlan(legacyRun({ signed: [] }).run, planEnv({ ...LEGACY_RECORD, '0.9': BAD }, flag)), /cosign could not confirm|no signatures found/);
+});
+
+test('refuses to plan or apply while a Release run is in progress, queued or waiting, or if the check fails', () => {
+    for (const status of ['in_progress', 'queued', 'waiting']) {
+        const busy = backend({ tags: REAL, activeRuns: { [status]: [42] } });
+        assert.throws(() => assertNoActiveRelease(busy.run, REPO), new RegExp(`${status} \\(42\\)`));
+        assert.throws(() => buildPlan(busy.run, planEnv(REAL_RECORD)), /Release workflow run/);
+        assert.deepEqual(mutations(busy.state), []);
+    }
+    assert.throws(() => assertNoActiveRelease(backend({ tags: REAL, activeRuns: { error: true } }).run, REPO), /failed/);
+    assert.doesNotThrow(() => assertNoActiveRelease(backend({ tags: REAL }).run, REPO));
+    // A release that starts after the plan blocks the apply before any mutation.
+    const { run, state } = backend({ tags: REAL });
+    const plan = buildPlan(run, planEnv(REAL_RECORD));
+    state.activeRuns = null;
+    const busy = (command, args) => (command === 'gh' && args[0] === 'run' && args[args.indexOf('--status') + 1] === 'queued'
+        ? { status: 0, stdout: '[{"databaseId":7}]', stderr: '' } : run(command, args));
+    assert.throws(() => applyPlan(busy, plan, () => {}), /queued/);
+    assert.deepEqual(mutations(state), []);
+});
+
+test('tombstones are distinct per alias and never collide with another known digest', () => {
+    const { run, state } = backend({ tags: REAL });
+    applyPlan(run, buildPlan(run, planEnv(REAL_RECORD)), () => {});
+    const created = state.log.filter(entry => entry[1] === 'buildx' && entry[3] === 'create' && entry.includes('--annotation'));
+    const annotations = created.map(entry => entry[entry.indexOf('--annotation') + 1]);
+    assert.equal(new Set(annotations).size, created.length);
+    assert.equal(created.length, 2);
 });
 
 test('parseTag is strict', () => {
