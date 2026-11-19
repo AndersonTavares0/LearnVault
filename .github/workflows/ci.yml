@@ -161,7 +161,34 @@ jobs:
       # this job builds the SPA here instead of downloading `spa-build` and waiting for that job.
       - run: pnpm --filter learnvault-web-next build
       - name: Install system ffmpeg for transcoding E2E
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+        timeout-minutes: 4
+        run: |
+          sudo tee /etc/apt/apt.conf.d/99ci-resilience >/dev/null <<'EOF'
+          Acquire::Retries "3";
+          Acquire::http::Timeout "20";
+          Acquire::https::Timeout "20";
+          EOF
+          apt_opts=(-o Acquire::Retries=3 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
+          for attempt in 1 2 3; do
+            if sudo env DEBIAN_FRONTEND=noninteractive timeout --kill-after=10 75 bash -euo pipefail -c '
+              apt-get "$@" update
+              apt-get "$@" install -y --no-install-recommends ffmpeg
+            ' _ "${apt_opts[@]}"; then
+              ffmpeg -version | sed -n '1p'
+              exit 0
+            fi
+            echo "::warning::ffmpeg apt install attempt ${attempt}/3 failed or timed out."
+            if [ "${attempt}" -lt 3 ]; then
+              sudo dpkg --configure -a || true
+              if [ -s /etc/apt/apt-mirrors.txt ] && [ "$(wc -l < /etc/apt/apt-mirrors.txt)" -gt 1 ]; then
+                echo "::warning::Dropping slow top mirror from /etc/apt/apt-mirrors.txt before retry."
+                sudo sed -i '1d' /etc/apt/apt-mirrors.txt
+              fi
+              sleep 5
+            fi
+          done
+          echo "::error::Failed to install system ffmpeg after 3 attempts."
+          exit 1
       - name: Resolve Playwright version
         id: playwright-version
         run: echo "version=$(node -p "require('./node_modules/@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
@@ -172,7 +199,24 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
       - name: Install Chromium system dependencies
-        run: pnpm exec playwright install-deps chromium
+        timeout-minutes: 4
+        run: |
+          for attempt in 1 2 3; do
+            if sudo -H env "PATH=$PATH" DEBIAN_FRONTEND=noninteractive timeout --kill-after=10 75 pnpm exec playwright install-deps chromium; then
+              exit 0
+            fi
+            echo "::warning::playwright install-deps attempt ${attempt}/3 failed or timed out."
+            if [ "${attempt}" -lt 3 ]; then
+              sudo dpkg --configure -a || true
+              if [ -s /etc/apt/apt-mirrors.txt ] && [ "$(wc -l < /etc/apt/apt-mirrors.txt)" -gt 1 ]; then
+                echo "::warning::Dropping slow top mirror from /etc/apt/apt-mirrors.txt before retry."
+                sudo sed -i '1d' /etc/apt/apt-mirrors.txt
+              fi
+              sleep 5
+            fi
+          done
+          echo "::error::Failed to install Chromium system dependencies after 3 attempts."
+          exit 1
       - name: Install Chromium browser binary
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: pnpm exec playwright install chromium
