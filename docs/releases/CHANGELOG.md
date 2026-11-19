@@ -19,6 +19,9 @@ A maintenance release: security hardening, recovery when course files go missing
 - **Small fixes:** audio lessons are labelled by media kind instead of video, review deck counts use singular and plural forms, tab titles follow navigation, and an expired session returns to sign-in instead of repeating errors.
 - **Brand and About:** the default accent uses the brand ink, with the brand gold as its dark theme colour and reward colour; other presets are unchanged. Settings has an About section with the installed version, the round seal, *Sapere aude*, the read-only statement and a link to the repository.
 - **Deploy files:** the remaining Portuguese text in the deployment files is now English, with Brazilian Portuguese kept as localized entries.
+- **Release channel:** from this release, LearnVault releases are normal GitHub releases instead of pre-releases. Installed desktop apps are offered this update through the in-app updater (except installs still on v0.8.0, see above), and the container image tags `latest`, `stable` and `0.9` now move to it; until now `latest` still pointed at 0.8.0. Pin an exact version tag to stay put.
+- **Backups:** restoring a backup now checks that the file really is a LearnVault database (known schema, intact relations) before touching anything, keeps a complete safety copy of the current database, and refuses a database that is in use. Older valid backups still restore and are upgraded on the next start.
+- **Signed releases:** the release checksums are signed, release files carry build provenance and a software bill of materials, and the container image is signed and checked again after publishing. The verification commands are in `docs/releases/process.md`.
 - **Database:** no schema migrations in this release.
 
 
@@ -52,6 +55,15 @@ A maintenance release: security hardening, recovery when course files go missing
 * **web:** preserve study data access for missing lesson media ([#649](https://github.com/AndersonTavares0/LearnVault/issues/649)) ([e641e9c](https://github.com/AndersonTavares0/LearnVault/commit/e641e9c90cbaf7dc21e71d33671373b01dc09823))
 * **web:** use singular/plural card counts in review deck footer ([#674](https://github.com/AndersonTavares0/LearnVault/issues/674)) ([8499264](https://github.com/AndersonTavares0/LearnVault/commit/84992642f57dd49fe6620f1a3bb6fed77bb2a992))
 * **web:** wrap lesson tool tabs on narrow screens ([#641](https://github.com/AndersonTavares0/LearnVault/issues/641)) ([9644588](https://github.com/AndersonTavares0/LearnVault/commit/96445881b7c28d5a8baf47de863d9a7f43ef8985))
+
+### Maintenance and release engineering
+
+* **release:** publish releases as normal releases instead of pre-releases (#606)
+* **release:** smoke-test the packaged Linux binaries and container images before publishing (#677); attest release assets and sign the checksums (#678); verify the published image aliases, attestations and assets, also after a failed publish (#679, #683); add a verified manual rollback workflow (#676); link release note PR numbers to pull requests (#687)
+* **ci:** require the Windows core tests and dependency review in the merge gate (#655, #658); keep main runs and alert on failures (#657); retries and timeouts for apt steps (#671); Playwright browser cache (#664); prebuilt SPA outputs in verify (#654); discover all server browser specs (#648)
+* **test:** end-to-end coverage for transcoding (#652), missing-course recovery (#644), course import (#636), player shortcuts (#627), brand motto and keyboard sign-in (#624); append-only migration guard and upgrade integrity test (#659); Containerfile copy check (#653)
+* **deps:** rusqlite 0.42 (#612), uuid 1.29.2 (#611), frontend non-major group (#610)
+* **docs:** documentation, comments and deployment files translated to English (#609, #616-#623, #651); branding seal and guidelines (#615); roadmap (#635); branch naming policy (#680); 0.9.5 highlights (#681)
 
 ## [0.9.4](https://github.com/AndersonTavares0/LearnVault/compare/v0.9.3...v0.9.4) (2026-11-17)
 
