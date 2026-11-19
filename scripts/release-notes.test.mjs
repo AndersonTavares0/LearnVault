@@ -29,7 +29,7 @@ test('keeps only user-visible commit types and links pull requests', () => {
 	];
 	const grouped = groupCommits(commits);
 	assert.deepEqual(grouped.groups.map((group) => group.title), ['Features', 'Bug Fixes']);
-	assert.match(grouped.groups[0].lines[0], /^- \*\*branding:\*\* add the portico \(\[#599\]\(https:\/\/github\.com\/AndersonTavares0\/LearnVault\/issues\/599\)\)$/);
+	assert.match(grouped.groups[0].lines[0], /^- \*\*branding:\*\* add the portico \(\[#599\]\(https:\/\/github\.com\/AndersonTavares0\/LearnVault\/pull\/599\)\)$/);
 	assert.equal(renderChanges({ breaking: [], groups: [] }), 'No user-visible changes.');
 });
 

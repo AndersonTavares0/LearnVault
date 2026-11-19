@@ -54,14 +54,14 @@ export function parseCommit(subject, body = '') {
 
 const line = (commit) => {
 	const scope = commit.scope ? `**${commit.scope}:** ` : '';
-	const pr = commit.pr ? ` ([#${commit.pr}](${REPOSITORY_URL}/issues/${commit.pr}))` : '';
+	const pr = commit.pr ? ` ([#${commit.pr}](${REPOSITORY_URL}/pull/${commit.pr}))` : '';
 	return `- ${scope}${commit.subject}${pr}`;
 };
 
 /** Groups user-visible commits. chore, docs, ci, test, build, style and refactor stay out of the notes. */
 export function groupCommits(commits) {
 	const groups = SECTIONS.map(([type, title]) => ({ title, lines: commits.filter((commit) => commit.type === type).map(line) }));
-	const breaking = commits.filter((commit) => commit.breaking).map((commit) => `- ${commit.breakingNote ?? commit.subject}${commit.pr ? ` ([#${commit.pr}](${REPOSITORY_URL}/issues/${commit.pr}))` : ''}`);
+	const breaking = commits.filter((commit) => commit.breaking).map((commit) => `- ${commit.breakingNote ?? commit.subject}${commit.pr ? ` ([#${commit.pr}](${REPOSITORY_URL}/pull/${commit.pr}))` : ''}`);
 	return { breaking, groups: groups.filter((group) => group.lines.length > 0) };
 }
 
