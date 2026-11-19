@@ -72,7 +72,9 @@ describe('app shell', () => {
 		const order = Array.from(shell.children);
 		expect(order.indexOf(bar)).toBeLessThan(order.indexOf(main));
 
-		// The phone tab bar floats over the bottom edge, so the scroller keeps the clearance.
+		// The phone tab bar floats over the bottom edge, so the scroller keeps both padding and
+		// scroll-padding clearance (including safe-area-inset-bottom) so focused controls stay visible.
+		expect(main.className).toContain('scroll-pb-[calc(4.5rem+env(safe-area-inset-bottom))]');
 		expect(main.firstElementChild?.className).toContain('pb-28');
 	});
 
