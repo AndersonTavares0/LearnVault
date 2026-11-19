@@ -66,7 +66,15 @@ jobs:
           set -euo pipefail
           pnpm install --frozen-lockfile
           pnpm run build:desktop
-          cargo build --release --locked -p learnvault-desktop
+          # The workspace version is 0.0.0; the release version is injected into the Tauri config exactly as the
+          # Windows job does, otherwise Settings > Updates shows "Installed version: 0.0.0".
+          release_version="$(tr -d '\r\n' < .github/release-please/version.txt)"
+          if [[ ! "$release_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::Unexpected release version metadata: $release_version" >&2
+            exit 1
+          fi
+          printf '{"version":"%s"}' "$release_version" > tauri.release.json
+          pnpm exec tauri build --no-bundle --config crates/desktop/tauri.conf.json --config tauri.release.json -- --locked
           test -x target/release/learnvault-desktop
       - name: Validate the AppStream metainfo
         run: appstreamcli validate --no-net deploy/packages/app.learnvault.desktop.metainfo.xml
@@ -99,6 +107,10 @@ jobs:
           fi
           if ! grep -q 'pulseaudio' <<<"$perms"; then
             echo "::error::the bundle does not grant audio (pulseaudio)" >&2
+            exit 1
+          fi
+          if ! grep -q 'WEBKIT_DISABLE_DMABUF_RENDERER=1' <<<"$perms"; then
+            echo "::error::the bundle does not disable the WebKitGTK DMA-BUF renderer (crashes on NVIDIA + Wayland)" >&2
             exit 1
           fi
       - name: "Sandbox: start the app under a virtual display"
